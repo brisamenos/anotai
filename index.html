@@ -104,17 +104,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);hei
 .kol-body::-webkit-scrollbar{width:3px}
 .kol-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:99px}
 .kol-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;opacity:.5;font-size:12px;text-align:center;line-height:1.5;padding:20px}
-.order-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:9px 10px;cursor:pointer;transition:all .15s}
+.order-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:8px 10px;cursor:pointer;transition:all .15s}
 .order-card:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2)}
 .oc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px}
-.oc-id{font-weight:700;font-size:12px}
+.oc-id{font-weight:700;font-size:12.5px}
 .oc-badge{display:none}
-.oc-client{font-size:11.5px;color:rgba(255,255,255,.7);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.oc-items{font-size:10.5px;color:rgba(255,255,255,.5);margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.oc-bot{display:flex;align-items:center;justify-content:space-between}
-.oc-total{font-weight:700;font-size:12px;color:#4ade80}
-.oc-time{font-size:10px;color:rgba(255,255,255,.4)}
+.oc-client{font-size:11px;color:rgba(255,255,255,.65);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.oc-items{font-size:10.5px;color:rgba(255,255,255,.45);margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.oc-bot{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.oc-total{font-weight:700;font-size:12.5px;color:#4ade80;white-space:nowrap}
+.oc-time{font-size:10px;color:rgba(255,255,255,.4);white-space:nowrap}
+.oc-addr{font-size:10px;color:rgba(255,255,255,.35);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
 .oc-actions{display:flex;gap:4px;margin-top:6px}
+.oc-btn{flex:1;border:none;border-radius:6px;padding:4px 6px;font-size:10.5px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;white-space:nowrap}
+.oc-btn-ok{background:rgba(34,197,94,.18);color:#86efac;border:1px solid rgba(34,197,94,.25)}.oc-btn-ok:hover{background:rgba(34,197,94,.3)}
+.oc-btn-no{background:rgba(239,68,68,.14);color:#fca5a5;border:1px solid rgba(239,68,68,.2)}.oc-btn-no:hover{background:rgba(239,68,68,.25)}
+.oc-btn-fin{background:rgba(139,92,246,.15);color:#c4b5fd;border:1px solid rgba(139,92,246,.25)}.oc-btn-fin:hover{background:rgba(139,92,246,.25)}
 .kol-config{background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:10px 12px;margin:0 8px 8px;font-size:11.5px;color:rgba(255,255,255,.6)}
 .kol-config strong{display:block;margin-bottom:3px;color:rgba(255,255,255,.8);font-size:12px}
 
@@ -633,10 +638,10 @@ td:first-child{padding-left:16px}
     <div><div class="pt">Meus Pedidos</div></div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:3px">
-        <button class="btn" style="padding:4px 10px;font-size:11.5px;background:var(--accent);color:#fff;border:none">Todos</button>
-        <button class="btn bg" style="padding:4px 10px;font-size:11.5px;border:none" onclick="showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 8L8 2l6 6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 7v7h3v-4h2v4h3V7" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','Filtro: Balcão')"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 8L8 2l6 6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 7v7h3v-4h2v4h3V7" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-        <button class="btn bg" style="padding:4px 10px;font-size:11.5px;border:none" onclick="showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','Filtro: Delivery')"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-        <button class="btn bg" style="padding:4px 10px;font-size:11.5px;border:none" onclick="showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M9 2H4a1 1 0 0 0-.7.3L2 3.6A1 1 0 0 0 2 5l7 7a1 1 0 0 0 1.4 0l4-4a1 1 0 0 0 0-1.4L7.3 2.3A1 1 0 0 0 6.7 2H9z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="5.5" cy="5.5" r="1" fill="currentColor"/></svg>','Filtro: Tag')"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M9 2H4a1 1 0 0 0-.7.3L2 3.6A1 1 0 0 0 2 5l7 7a1 1 0 0 0 1.4 0l4-4a1 1 0 0 0 0-1.4L7.3 2.3A1 1 0 0 0 6.7 2H9z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="5.5" cy="5.5" r="1" fill="currentColor"/></svg></button>
+        <button class="btn" style="padding:4px 10px;font-size:11.5px;background:var(--accent);color:#fff;border:none" onclick="filterKanban('')">Todos</button>
+        <button class="btn bg" style="padding:4px 10px;font-size:11.5px;border:none" onclick="filterKanban('balcao')" title="Balcão">🏠 Balcão</button>
+        <button class="btn bg" style="padding:4px 10px;font-size:11.5px;border:none" onclick="filterKanban('delivery')" title="Delivery">🛵 Delivery</button>
+        <button class="btn bg" style="padding:4px 10px;font-size:11.5px;border:none" onclick="filterKanban('mesa')" title="Mesa">🍽️ Mesa</button>
       </div>
       <div class="sbox"><svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><rect x="3" y="3" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M6 6h4M6 9h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><input placeholder="Nº Pedido" style="width:80px"></div>
       <div class="sbox"><svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><input placeholder="Buscar pelo cliente" style="width:130px"></div>
@@ -1761,6 +1766,18 @@ function switchTab(btn,id){
   if(sec) sec.classList.add('on');
 }
 
+let _kanbanFilter = '';
+function filterKanban(type) {
+  _kanbanFilter = type;
+  // Update button active state
+  document.querySelectorAll('#page-pedidos .btn[onclick^="filterKanban"]').forEach(b => {
+    const t = b.getAttribute('onclick').match(/'([^']*)'/)?.[1] || '';
+    b.style.background = t === type ? 'var(--accent)' : '';
+    b.style.color = t === type ? '#fff' : '';
+  });
+  renderKanban();
+}
+
 // ─────────────────────────────────────────
 // KANBAN
 // ─────────────────────────────────────────
@@ -1769,27 +1786,37 @@ function renderKanban(){
   statuses.forEach(st=>{
     const col=document.getElementById('col-'+st);
     const cnt=document.getElementById('cnt-'+st);
-    const filtered=ordersKanban.filter(o=>o.status===st);
+    let filtered=ordersKanban.filter(o=>o.status===st);
+    if(_kanbanFilter==='delivery') filtered=filtered.filter(o=>o.addr&&!o.addr.includes('Mesa')&&!o.addr.includes('balcão'));
+    if(_kanbanFilter==='balcao')   filtered=filtered.filter(o=>!o.addr||o.addr.includes('balcão'));
+    if(_kanbanFilter==='mesa')     filtered=filtered.filter(o=>o.addr&&o.addr.includes('Mesa'));
     if(cnt) cnt.textContent=filtered.length;
     if(!col) return;
     if(filtered.length===0){
-      col.innerHTML=`<div class="kol-empty">Nenhum pedido no momento.<br>Receba pedidos e visualize aqui.</div>`;
+      col.innerHTML='<div class="kol-empty">Nenhum pedido no momento.<br>Receba pedidos e visualize aqui.</div>';
     } else {
       col.innerHTML=filtered.map(o=>{
-        const bdgCls=st==='analise'?'badge-analise':st==='producao'?'badge-producao':'badge-pronto';
-        const bdgLbl=st==='analise'?'Em análise':st==='producao'?'Em produção':'Pronto';
-        const itemStr=o.items.map(i=>`${i.qty}x ${i.name}`).join(', ');
-        return `<div class="order-card" onclick="openOrderDetail(${o.id})">
-          <div class="oc-top"><span class="oc-id">Pedido #${o.id}</span><span class="oc-badge ${bdgCls}">${bdgLbl}</span></div>
-          <div class="oc-client"><svg width=&quot;12&quot; height=&quot;12&quot; viewBox=&quot;0 0 16 16&quot; fill=&quot;none&quot; style=&quot;display:inline-block;vertical-align:middle;flex-shrink:0&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;><circle cx=&quot;8&quot; cy=&quot;5&quot; r=&quot;3&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg> ${o.client} ${o.phone?'• '+o.phone:''}</div>
-          <div class="oc-items">${itemStr}</div>
-          <div class="oc-bot"><span class="oc-total">R$ ${(o.total+o.taxa).toFixed(2).replace('.',',')}</span><span class="oc-time"><svg width=&quot;11&quot; height=&quot;11&quot; viewBox=&quot;0 0 16 16&quot; fill=&quot;none&quot; style=&quot;display:inline-block;vertical-align:middle;flex-shrink:0&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;><circle cx=&quot;8&quot; cy=&quot;9&quot; r=&quot;5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M8 6.5V9l1.5 1.5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M6 2h4M8 2v2&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg> ${o.time}</span></div>
-          <div class="oc-actions">
-            ${st==='analise'?`<button class="btn bs" style="flex:1;justify-content:center;font-size:11px;padding:4px" onclick="event.stopPropagation();advanceOrderById(${o.id})"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar</button><button class="btn bd" style="flex:1;justify-content:center;font-size:11px;padding:4px" onclick="event.stopPropagation();cancelOrderById(${o.id})"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Cancelar</button>`:''}
-            ${st==='producao'?`<button class="btn bs" style="flex:1;justify-content:center;font-size:11px;padding:4px" onclick="event.stopPropagation();advanceOrderById(${o.id})"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Pronto!</button>`:''}
-            ${st==='pronto'?`<button class="btn" style="flex:1;justify-content:center;font-size:11px;padding:4px;background:rgba(139,92,246,.15);color:var(--purple);border:1px solid rgba(139,92,246,.3)" onclick="event.stopPropagation();finishOrderById(${o.id})">✓ Finalizar</button>`:''}
-          </div>
-        </div>`;
+        const itemStr=o.items.map(i=>i.qty+'x '+i.name).join(', ');
+        const total='R$ '+(o.total+o.taxa).toFixed(2).replace('.',',');
+        let actionBtn='';
+        if(st==='analise'){
+          actionBtn=
+            '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById('+o.id+')">✔ Confirmar</button>'+
+            '<button class="oc-btn oc-btn-no" onclick="event.stopPropagation();cancelOrderById('+o.id+')">✕ Cancelar</button>';
+        } else if(st==='producao'){
+          actionBtn='<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById('+o.id+')">🚀 Pronto!</button>';
+        } else {
+          actionBtn='<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById('+o.id+')">✔ Finalizar</button>';
+        }
+        return '<div class="order-card" onclick="openOrderDetail('+o.id+')">'+
+          '<div class="oc-top"><span class="oc-id">#'+o.id+'</span><span class="oc-time">⏱ '+o.time+'</span></div>'+
+          '<div class="oc-client">👤 '+o.client+(o.phone?' · '+o.phone:'')+'</div>'+
+          '<div class="oc-items">'+itemStr+'</div>'+
+          '<div class="oc-bot"><span class="oc-total">'+total+'</span>'+
+            (o.addr?'<span class="oc-addr">📍 '+o.addr+'</span>':'')+
+          '</div>'+
+          '<div class="oc-actions">'+actionBtn+'</div>'+
+        '</div>';
       }).join('');
     }
     col.addEventListener('dragover',e=>e.preventDefault());
