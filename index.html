@@ -42,7 +42,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);hei
 .sidebar{width:var(--sw);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:10px 8px;gap:1px;overflow-y:auto;flex-shrink:0}
 .sidebar::-webkit-scrollbar{width:3px}
 .sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:99px}
-.shead{font-size:9.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);padding:8px 8px 3px}
+.shead{font-size:9.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);padding:8px 8px 3px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-radius:6px;transition:background .15s;user-select:none}
+.shead:hover{background:var(--surface2)}
+.shead-arrow{font-size:10px;transition:transform .2s;opacity:.5}
+.shead.collapsed .shead-arrow{transform:rotate(-90deg)}
+.sidebar-group{overflow:hidden;transition:max-height .25s ease,opacity .25s ease;max-height:400px;opacity:1}
+.sidebar-group.collapsed{max-height:0!important;opacity:0}
 .si{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:7px;font-size:12.5px;font-weight:400;color:var(--muted);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .15s;position:relative;font-family:'DM Sans',sans-serif}
 .si svg{width:14px;height:14px;flex-shrink:0}
 .si:hover{background:var(--surface2);color:var(--text)}
@@ -99,20 +104,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);hei
 .kol-body::-webkit-scrollbar{width:3px}
 .kol-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:99px}
 .kol-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;opacity:.5;font-size:12px;text-align:center;line-height:1.5;padding:20px}
-.order-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px;cursor:pointer;transition:all .15s}
+.order-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:9px 10px;cursor:pointer;transition:all .15s}
 .order-card:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2)}
-.oc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.oc-id{font-weight:700;font-size:13px}
-.oc-badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:99px}
-.badge-analise{background:rgba(249,115,22,.3);color:#fed7aa}
-.badge-producao{background:rgba(245,158,11,.3);color:#fde68a}
-.badge-pronto{background:rgba(34,197,94,.3);color:#bbf7d0}
-.oc-client{font-size:12px;color:rgba(255,255,255,.7);margin-bottom:4px}
-.oc-items{font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.oc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px}
+.oc-id{font-weight:700;font-size:12px}
+.oc-badge{display:none}
+.oc-client{font-size:11.5px;color:rgba(255,255,255,.7);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.oc-items{font-size:10.5px;color:rgba(255,255,255,.5);margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .oc-bot{display:flex;align-items:center;justify-content:space-between}
-.oc-total{font-weight:700;font-size:13px;color:#4ade80}
-.oc-time{font-size:10.5px;color:rgba(255,255,255,.4)}
-.oc-actions{display:flex;gap:5px;margin-top:8px}
+.oc-total{font-weight:700;font-size:12px;color:#4ade80}
+.oc-time{font-size:10px;color:rgba(255,255,255,.4)}
+.oc-actions{display:flex;gap:4px;margin-top:6px}
 .kol-config{background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:10px 12px;margin:0 8px 8px;font-size:11.5px;color:rgba(255,255,255,.6)}
 .kol-config strong{display:block;margin-bottom:3px;color:rgba(255,255,255,.8);font-size:12px}
 
@@ -480,7 +482,8 @@ td:first-child{padding-left:16px}
 <aside class="sidebar">
   <div style="padding:7px 8px 4px"><div style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><input placeholder="Procurando por algo?" style="background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text);width:100%"></div></div>
 
-  <div class="shead">Seu dia a dia</div>
+  <div class="shead" onclick="toggleSideGroup('sg-dia')" id="sh-dia">Seu dia a dia <span class="shead-arrow">▾</span></div>
+  <div class="sidebar-group" id="sg-dia">
   <button class="si on" id="sn-pedidos" onclick="nav('pedidos')">
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Meus pedidos <span class="sbc" id="pedidos-badge">2</span>
@@ -493,8 +496,10 @@ td:first-child{padding-left:16px}
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="2" rx="1"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="8" y1="4" x2="8" y2="2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Pedidos mesa
   </button>
+  </div>
 
-  <div class="shead" style="margin-top:4px">Cardápio</div>
+  <div class="shead" style="margin-top:4px" onclick="toggleSideGroup('sg-cardapio')" id="sh-cardapio">Cardápio <span class="shead-arrow">▾</span></div>
+  <div class="sidebar-group" id="sg-cardapio">
   <button class="si" id="sn-gestor" onclick="nav('gestor')">
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 8h6M5 5h3M5 11h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Gestor de cardápio
@@ -511,8 +516,10 @@ td:first-child{padding-left:16px}
     <svg viewBox="0 0 16 16" fill="none"><rect x="3" y="5" width="10" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="9" r="1" fill="currentColor"/><circle cx="10" cy="9" r="1" fill="currentColor"/><path d="M6 5V3.5M10 5V3.5M6 3.5H10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Robô
   </button>
+  </div>
 
-  <div class="shead" style="margin-top:4px">Venda mais</div>
+  <div class="shead" style="margin-top:4px" onclick="toggleSideGroup('sg-venda')" id="sh-venda">Venda mais <span class="shead-arrow">▾</span></div>
+  <div class="sidebar-group" id="sg-venda">
   <button class="si" id="sn-qrcode" onclick="nav('qrcode')">
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="3.5" y="3.5" width="2" height="2" fill="currentColor" rx=".3"/><rect x="10.5" y="3.5" width="2" height="2" fill="currentColor" rx=".3"/><rect x="3.5" y="10.5" width="2" height="2" fill="currentColor" rx=".3"/><path d="M9 9h1.5v1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M11.5 11.5H14v3H9v-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
     QR Code
@@ -537,8 +544,10 @@ td:first-child{padding-left:16px}
     <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Modo Garçom
   </button>
+  </div>
 
-  <div class="shead" style="margin-top:4px">Gestão avançada</div>
+  <div class="shead" style="margin-top:4px" onclick="toggleSideGroup('sg-gestao')" id="sh-gestao">Gestão avançada <span class="shead-arrow">▾</span></div>
+  <div class="sidebar-group" id="sg-gestao">
   <button class="si" id="sn-kds" onclick="nav('kds')">
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M5 15h6M8 12v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Cozinha (KDS) <span style="font-size:9px;background:var(--accent3);color:#000;padding:1px 4px;border-radius:4px;margin-left:2px;font-weight:700">NOVO</span>
@@ -563,6 +572,7 @@ td:first-child{padding-left:16px}
     <svg viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="10" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="8" r="1" fill="currentColor"/></svg>
     Impressão automática
   </button>
+  </div>
 
   <div class="sfoot">
     <div class="urow">
@@ -1390,6 +1400,18 @@ async function loadAllData() {
 }
 
 // ── Realtime orders ──────────────────────────────────
+function requestNotifPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function sendBrowserNotif(title, body) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(title, { body, icon: '' });
+  }
+}
+
 function subscribeOrders() {
   sb.channel('orders-rt')
     .on('postgres_changes', {event:'INSERT', schema:'public', table:'orders'}, p => {
@@ -1399,6 +1421,9 @@ function subscribeOrders() {
         playOrderSound();
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
+        const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
+        showToast('🛎️', `Novo pedido #${p.new.id} — ${p.new.client}`);
+        sendBrowserNotif(`🛎️ Novo pedido #${p.new.id}`, `${p.new.client} — ${items}`);
       }
     })
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, p => {
@@ -1408,6 +1433,19 @@ function subscribeOrders() {
     .on('postgres_changes', {event:'DELETE', schema:'public', table:'orders'}, p => {
       ordersKanban = ordersKanban.filter(o => o.id !== p.old.id);
       renderKanban();
+    })
+    .subscribe(status => {
+      if (status === 'SUBSCRIBED') console.log('[RT] orders channel subscribed');
+    });
+
+  // Subscribe to store_config changes
+  sb.channel('store-config-rt')
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'store_config'}, p => {
+      const st = document.getElementById('status-txt');
+      if (!st) return;
+      const open = p.new.store_open;
+      st.style.color = open ? 'var(--success)' : 'var(--danger)';
+      st.textContent = open ? 'Online' : 'Offline';
     })
     .subscribe();
 }
@@ -2722,12 +2760,55 @@ document.querySelectorAll('.modal-bg').forEach(m=>{
 // ─────────────────────────────────────────
 // STATUS & SOUND
 // ─────────────────────────────────────────
-function toggleStatus(){
+// sidebar state saved in store_config.sidebar_state (jsonb)
+let _sidebarState = {};
+
+async function loadSidebarState() {
+  try {
+    const { data } = await sb.from('store_config').select('sidebar_state').eq('id',1).single();
+    _sidebarState = (data && data.sidebar_state) ? data.sidebar_state : {};
+  } catch(e) { _sidebarState = {}; }
+  ['sg-dia','sg-cardapio','sg-venda','sg-gestao'].forEach(id => {
+    if (_sidebarState[id]) {
+      const group = document.getElementById(id);
+      const headId = 'sh-' + id.replace('sg-','');
+      const head   = document.getElementById(headId);
+      if (group) group.classList.add('collapsed');
+      if (head)  head.classList.add('collapsed');
+    }
+  });
+}
+
+async function saveSidebarState() {
+  try {
+    await sb.from('store_config').upsert({ id: 1, sidebar_state: _sidebarState });
+  } catch(e) { console.warn('sidebar state save:', e); }
+}
+
+function toggleSideGroup(id) {
+  const group  = document.getElementById(id);
+  const headId = 'sh-' + id.replace('sg-','');
+  const head   = document.getElementById(headId);
+  if (!group) return;
+  const collapsed = group.classList.toggle('collapsed');
+  if (head) head.classList.toggle('collapsed', collapsed);
+  _sidebarState[id] = collapsed;
+  saveSidebarState();
+}
+
+function initSidebarState() { loadSidebarState(); }
+
+async function toggleStatus(){
   const st=document.getElementById('status-txt');
   const on=st.style.color==='var(--success)';
-  st.style.color=on?'var(--danger)':'var(--success)';
-  st.textContent=on?'Offline':'Online';
-  showToast(on?'⏸️':'⚡',on?'Loja pausada':'Loja aberta para pedidos!');
+  const newOpen = on ? false : true;
+  st.style.color = newOpen ? 'var(--success)' : 'var(--danger)';
+  st.textContent = newOpen ? 'Online' : 'Offline';
+  showToast(newOpen?'⚡':'⏸️', newOpen?'Loja aberta para pedidos!':'Loja pausada');
+  // sync to Supabase store_config table (upsert row id=1)
+  try {
+    await sb.from('store_config').upsert({ id: 1, store_open: newOpen });
+  } catch(e) { console.warn('store_config sync:', e); }
 }
 
 function playOrderSound(){
@@ -2761,6 +2842,8 @@ function showToast(icon,msg){
 // INIT
 // ─────────────────────────────────────────
 buildEmojiGrid();
+initSidebarState();
+requestNotifPermission();
 loadAllData();
 </script>
 </body>
