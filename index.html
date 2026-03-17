@@ -1446,7 +1446,14 @@ td:first-child{padding-left:16px}
 const SUPA_URL  = 'https://lhrzwccbvdintqgebisq.supabase.co';
 const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxocnp3Y2NidmRpbnRxZ2ViaXNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1ODY0NzEsImV4cCI6MjA4OTE2MjQ3MX0.gbljgt0rzOf9eBoTcXxxfl0e_0Y-6XYxve-HGY7meJo';
 const { createClient } = window.supabase;
-const sb = createClient(SUPA_URL, SUPA_ANON);
+const sb = createClient(SUPA_URL, SUPA_ANON, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false
+  },
+  realtime: { params: { eventsPerSecond: 10 } }
+});
 
 // ── Loading overlay ──────────────────────────────────
 function sbLoading(show) {
@@ -1502,18 +1509,21 @@ function mapOrder(o) {
 async function loadAllData() {
   sbLoading(true);
   try {
+    // Run all queries independently so one failure doesn't block others
+    const safe = q => q.then(r => r).catch(e => ({ data: null, error: e }));
+
     const [
       itemsRes, catsRes, ordersRes, movsRes,
       cuponsRes, mesasRes, estoqueRes, fidRes
     ] = await Promise.all([
-      sb.from('menu_items').select('*').order('id'),
-      sb.from('categories').select('*').order('sort_order'),
-      sb.from('orders').select('*').in('status',['analise','producao','pronto']).order('id',{ascending:false}),
-      sb.from('movimentos').select('*').gte('created_at', new Date().toISOString().split('T')[0]).order('created_at'),
-      sb.from('cupons').select('*').order('id'),
-      sb.from('mesas').select('*').order('num'),
-      sb.from('estoque').select('*').order('id'),
-      sb.from('fidelidade').select('*').order('pts',{ascending:false})
+      safe(sb.from('menu_items').select('*').order('id')),
+      safe(sb.from('categories').select('*').order('sort_order')),
+      safe(sb.from('orders').select('*').in('status',['analise','producao','pronto']).order('id',{ascending:false})),
+      safe(sb.from('movimentos').select('*').gte('created_at', new Date().toISOString().split('T')[0]).order('created_at')),
+      safe(sb.from('cupons').select('*').order('id')),
+      safe(sb.from('mesas').select('*').order('num')),
+      safe(sb.from('estoque').select('*').order('id')),
+      safe(sb.from('fidelidade').select('*').order('pts',{ascending:false}))
     ]);
 
     if (itemsRes.data?.length)    items         = itemsRes.data.map(mapItem);
@@ -1962,41 +1972,48 @@ function printOrderDetail(){
 // GESTOR DE CARDÁPIO
 // ─────────────────────────────────────────
 function renderGestor(){
-  const cl=document.getElementById('cat-list');
-  if(!cl) return;
-  cl.innerHTML=categories.map(cat=>{
-    const catItems=items.filter(i=>i.catKey===cat.name||i.cat===cat.name);
-    return `
-    ${cat.promo?`<div class="cat-promo-banner">promo</div>`:''}
-    <div class="cat-row">
-      <div class="cat-head" onclick="toggleCat(${cat.id})">
-        <span class="cat-drag"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="5.5" cy="5" r=".8" fill="currentColor"/><circle cx="5.5" cy="9" r=".8" fill="currentColor"/><circle cx="5.5" cy="13" r=".8" fill="currentColor"/><circle cx="10.5" cy="5" r=".8" fill="currentColor"/><circle cx="10.5" cy="9" r=".8" fill="currentColor"/><circle cx="10.5" cy="13" r=".8" fill="currentColor"/></svg></span>
-        <div>
-          <div class="cat-name">${cat.label}</div>
-          <span class="cat-badge">Itens principais</span>
-        </div>
-        <div class="cat-actions">
-          <div class="sw"><select onclick="event.stopPropagation()" style="font-size:11.5px;padding:4px 22px 4px 9px" onchange="handleCatAction(${cat.id},this.value)"><option value="">Ações categoria ▾</option><option value="edit">Editar</option><option value="pause">Pausar</option><option value="delete">Excluir</option></select></div>
-          <div class="cat-toggle${cat.open?' open':''}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        </div>
-      </div>
-      ${cat.open?`<div class="cat-items">
-        ${catItems.map(item=>`
-          <div class="cat-item-row" onclick="openEditItem(${item.id})">
-            <div class="cat-item-thumb">${item.emoji}</div>
-            <div style="flex:1">
-              <div class="cat-item-name">${item.name}${item.promo?' <span class="ptag">promo</span>':''}${item.itemType==='pizza'?' <span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--accent3);border-radius:4px;padding:1px 4px;font-weight:700;margin-left:2px">🍕 PIZZA</span>':''}</div>
-              <div class="cat-item-price">A partir de R$ ${item.price.toFixed(2).replace('.',',')}</div>
-            </div>
-            <input class="cat-item-id" value="ID Externo" onclick="event.stopPropagation()" style="cursor:text">
-            <button class="btn bg" style="font-size:11px;padding:3px 8px" onclick="event.stopPropagation();showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><path d=&quot;M7 9l-2 2a3 3 0 0 1-4.2-4.2l2-2A3 3 0 0 1 5.9 4&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M9 7l2-2a3 3 0 0 1 4.2 4.2l-2 2A3 3 0 0 1 10.1 12&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M6 10l4-4&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>','Link copiado!')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M7 9l-2 2a3 3 0 0 1-4.2-4.2l2-2A3 3 0 0 1 5.9 4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 7l2-2a3 3 0 0 1 4.2 4.2l-2 2A3 3 0 0 1 10.1 12" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 10l4-4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Link</button>
-            <span onclick="event.stopPropagation()" style="cursor:pointer;font-size:18px;color:var(--muted)" onclick="toggleItem(${item.id})">▼</span>
+  try {
+    const cl=document.getElementById('cat-list');
+    if(!cl) return;
+    if(!categories.length){
+      cl.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:13px">Nenhuma categoria ainda.<br>Clique em <strong style="color:var(--accent)">Nova categoria</strong> para começar.</div>';
+      return;
+    }
+    cl.innerHTML=categories.map(cat=>{
+      const catItems=items.filter(i=>i.catKey===cat.name||i.cat===cat.name);
+      return `
+      ${cat.promo?'<div class="cat-promo-banner">promo</div>':''}
+      <div class="cat-row">
+        <div class="cat-head" onclick="toggleCat(${cat.id})">
+          <span class="cat-drag">⠿</span>
+          <div>
+            <div class="cat-name">${cat.label}</div>
+            <span class="cat-badge">${catItems.length} ite${catItems.length===1?'m':'ns'}</span>
           </div>
-        `).join('')}
-        <div class="cat-add" onclick="openModal('modal-add-item')"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Adicionar Item</div>
-      </div>`:''}
-    </div>`;
-  }).join('');
+          <div class="cat-actions">
+            <div class="sw"><select onclick="event.stopPropagation()" style="font-size:11.5px;padding:4px 22px 4px 9px" onchange="handleCatAction(${cat.id},this.value)"><option value="">Ações ▾</option><option value="edit">Editar</option><option value="pause">Pausar</option><option value="delete">Excluir</option></select></div>
+            <div class="cat-toggle${cat.open?' open':''}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+        ${cat.open?`<div class="cat-items">
+          ${catItems.map(item=>`
+            <div class="cat-item-row" onclick="openEditItem(${item.id})">
+              <div class="cat-item-thumb">${item.imageUrl?`<img src="${item.imageUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`:(item.emoji||'🍽️')}</div>
+              <div style="flex:1;min-width:0">
+                <div class="cat-item-name">${item.name}${item.promo?' <span class="ptag">promo</span>':''}${item.itemType==='pizza'?' <span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--accent3);border-radius:4px;padding:1px 4px;font-weight:700;margin-left:2px">🍕</span>':''}</div>
+                <div class="cat-item-price">R$ ${item.price.toFixed(2).replace('.',',')} · ${item.status==='active'?'<span style="color:var(--success)">Disponível</span>':item.status==='esgotado'?'<span style="color:var(--danger)">Esgotado</span>':'<span style="color:var(--accent3)">Pausado</span>'}</div>
+              </div>
+              <button class="btn bg" style="font-size:10.5px;padding:3px 8px;flex-shrink:0" onclick="event.stopPropagation();openEditItem(${item.id})">✏️ Editar</button>
+            </div>
+          `).join('')}
+          <div class="cat-add" onclick="openModal('modal-add-item')">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            Adicionar Item
+          </div>
+        </div>`:''}
+      </div>`;
+    }).join('');
+  } catch(e) { console.error('renderGestor error:', e); }
 }
 
 function toggleCat(id){
