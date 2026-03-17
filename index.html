@@ -1804,32 +1804,6 @@ function advanceOrder(){
   closeModal('modal-order-detail');
 }
 
-function advanceOrderById(id){
-  const o=ordersKanban.find(x=>x.id===id);
-  if(!o) return;
-  if(o.status==='analise') o.status='producao';
-  else if(o.status==='producao') o.status='pronto';
-  playOrderSound();
-  renderKanban();
-  showToast('✅',`Pedido #${id} avançado!`);
-}
-
-function cancelOrderById(id){
-  ordersKanban=ordersKanban.filter(o=>o.id!==id);
-  renderKanban();
-  showToast('❌',`Pedido #${id} cancelado`);
-}
-
-function finishOrderById(id){
-  const o=ordersKanban.find(x=>x.id===id);
-  if(o){
-    movimentos.push({desc:`Pedido #${o.id} – ${o.client}`,tipo:'entrada',val:o.total+o.taxa,pag:o.pag||'<svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="1" width="8" height="14" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="12" r=".8" fill="currentColor"/></svg> PIX',time:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})});
-  }
-  ordersKanban=ordersKanban.filter(x=>x.id!==id);
-  renderKanban();
-  showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><circle cx=&quot;8&quot; cy=&quot;8&quot; r=&quot;6&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M5.5 8l2 2 3-3&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>',`Pedido #${id} finalizado!`);
-}
-
 // ─────────────────────────────────────────
 // ORDERS
 // ─────────────────────────────────────────
