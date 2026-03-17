@@ -877,22 +877,47 @@ const TAXA_DELIVERY = 5;
 async function init() {
   renderMenuWrap('<div class="loading-wrap"><div class="spinner"></div><span>Carregando cardápio…</span></div>');
   try {
-    const [itemsRes, catsRes, cuponsRes] = await Promise.all([
+    const [itemsRes, catsRes, cuponsRes, configRes] = await Promise.all([
       sb.from('menu_items').select('*').neq('status','pausado').order('id'),
       sb.from('categories').select('*').order('sort_order'),
-      sb.from('cupons').select('*').eq('ativo', true)
+      sb.from('cupons').select('*').eq('ativo', true),
+      sb.from('store_config').select('*').eq('id', 1).single()
     ]);
     allItems  = (itemsRes.data  || []);
     allCats   = (catsRes.data   || []);
     allCupons = (cuponsRes.data || []);
 
+    // Apply store open/close status
+    if (configRes.data) applyStoreStatus(configRes.data.store_open);
+
     buildCatTabs();
     renderMenu();
     checkPromos();
+    subscribeStoreStatus();
   } catch(e) {
     console.error(e);
     renderMenuWrap('<div class="loading-wrap"><div style="font-size:32px">⚠️</div><span>Erro ao carregar cardápio. Tente novamente.</span></div>');
   }
+}
+
+function applyStoreStatus(open) {
+  const dot = document.querySelector('.hero-badge .dot');
+  const txt = document.getElementById('store-status-text');
+  if (dot) dot.style.background = open ? 'var(--green)' : '#ef4444';
+  if (txt) txt.textContent = open ? 'Aberto agora' : 'Fechado no momento';
+  const confirmBtn = document.getElementById('confirm-btn');
+  if (confirmBtn) {
+    confirmBtn.disabled = !open;
+    if (!open) confirmBtn.innerHTML = '🔴 Loja fechada no momento';
+  }
+}
+
+function subscribeStoreStatus() {
+  sb.channel('store-config-cardapio')
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'store_config'}, p => {
+      applyStoreStatus(p.new.store_open);
+    })
+    .subscribe();
 }
 
 // ═══════════════════════════════════════════════
@@ -1176,35 +1201,71 @@ async function submitOrder() {
     qty: i.qty, name: i.name, price: i.price, obs: ''
   }));
 
-  const { data, error } = await sb.from('orders').insert({
-    client: name,
-    phone:  phone || null,
-    addr:   addrFull,
-    items:  itemsArr,
-    total:  grandTotal(),
-    taxa:   getTaxa(),
-    status: 'analise',
-    time,
-    pag:    selectedPay
-  }).select().single();
+  try {
+    // 1. Save/update customer in DB
+    if (name) {
+      const { data: existingCustomer } = await sb.from('customers')
+        .select('id, orders_count, total_spent')
+        .eq('phone', phone || name)
+        .single().catch(() => ({ data: null }));
 
-  btn.disabled = false;
-  btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar Pedido`;
+      if (existingCustomer) {
+        await sb.from('customers').update({
+          name,
+          addr: addrFull || existingCustomer.addr,
+          orders_count: (existingCustomer.orders_count || 0) + 1,
+          total_spent: (parseFloat(existingCustomer.total_spent) || 0) + grandTotal(),
+          last_order_at: new Date().toISOString()
+        }).eq('id', existingCustomer.id);
+      } else {
+        await sb.from('customers').insert({
+          name,
+          phone: phone || null,
+          addr: addrFull || null,
+          orders_count: 1,
+          total_spent: grandTotal(),
+          last_order_at: new Date().toISOString()
+        });
+      }
+    }
 
-  if (error) {
-    console.error(error);
-    showToast('❌', 'Erro ao enviar pedido. Tente novamente.');
-    return;
+    // 2. Insert the order
+    const { data, error } = await sb.from('orders').insert({
+      client: name,
+      phone:  phone || null,
+      addr:   addrFull,
+      items:  itemsArr,
+      total:  grandTotal(),
+      taxa:   getTaxa(),
+      status: 'analise',
+      time,
+      pag:    selectedPay
+    }).select().single();
+
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar Pedido`;
+
+    if (error) {
+      console.error(error);
+      showToast('❌', 'Erro ao enviar pedido. Tente novamente.');
+      return;
+    }
+
+    // show success
+    document.getElementById('cart-content').style.display = 'none';
+    const ss = document.getElementById('success-screen');
+    ss.classList.add('show');
+    document.getElementById('success-id').textContent = '#' + String(data.id).padStart(3, '0');
+    cart = [];
+    appliedCupom = null;
+    updateCartFloat();
+
+  } catch(err) {
+    console.error(err);
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar Pedido`;
+    showToast('❌', 'Erro inesperado. Tente novamente.');
   }
-
-  // show success
-  document.getElementById('cart-content').style.display = 'none';
-  const ss = document.getElementById('success-screen');
-  ss.classList.add('show');
-  document.getElementById('success-id').textContent = '#' + String(data.id).padStart(3, '0');
-  cart = [];
-  appliedCupom = null;
-  updateCartFloat();
 }
 
 function resetOrder() {
