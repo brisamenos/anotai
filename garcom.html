@@ -1278,7 +1278,7 @@ async function confirmarFinalizarMesa() {
     await sb.from('orders')
       .update({ status: 'entregue' })
       .eq('mesa_num', finalizarMesaNum)
-      .not('status', 'eq', 'entregue');
+      .neq('status', 'entregue');
 
     // 2. Marca mesa como aguardando pagamento
     await sb.from('mesas').update({
