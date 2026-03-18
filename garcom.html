@@ -442,7 +442,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
     <div class="topbar-sep"></div>
     <div class="topbar-garcom" id="topbar-garcom-name">—</div>
     <div class="topbar-right">
-      <div class="topbar-status"><div class="dot"></div><span>Online</span></div>
+      <div class="topbar-status"><div class="dot" id="rt-dot"></div><span id="rt-txt">Conectando...</span></div>
       <button class="topbar-btn" onclick="doLogout()">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M10 3h3a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-3M7 11l-3-3 3-3M4 8h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Sair
@@ -689,26 +689,47 @@ async function loadData() {
   buildCatPills();
 }
 
-// ══ REALTIME MESAS ═══════════════════════
+// ══ REALTIME ═════════════════════════════
+let _rtChannels = [];
+let _rtConnected = false;
+
+function setRtStatus(ok) {
+  _rtConnected = ok;
+  const dot = document.getElementById('rt-dot');
+  const txt = document.getElementById('rt-txt');
+  if (dot) dot.style.background = ok ? 'var(--green)' : 'var(--red)';
+  if (txt) txt.textContent = ok ? 'Ao vivo' : 'Reconectando...';
+}
+
+function unsubscribeAll() {
+  _rtChannels.forEach(ch => { try { sb.removeChannel(ch); } catch(e){} });
+  _rtChannels = [];
+}
+
 function subscribeRealtime() {
-  // Canal de mesas — qualquer mudança recarrega a lista inteira
-  sb.channel('garcom-mesas-' + (currentGarcom?.id || 'g'))
+  unsubscribeAll();
+
+  const gid = currentGarcom?.id || 'g';
+
+  const chMesas = sb.channel('garcom-mesas-' + gid)
     .on('postgres_changes', { event:'*', schema:'public', table:'mesas' }, () => {
       sb.from('mesas').select('*').order('num').then(({ data }) => {
         if (!data) return;
         tables = data;
         renderMesas();
-        // Sempre recarrega pedidos com a lista de mesas atualizada —
-        // se a mesa virou 'free', os pedidos antigos somem automaticamente
         loadPedidosDaMesa();
       });
-    }).subscribe();
+    })
+    .subscribe(status => {
+      setRtStatus(status === 'SUBSCRIBED');
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        setTimeout(() => subscribeRealtime(), 3000);
+      }
+    });
 
-  // Canal de pedidos — INSERT novo / UPDATE de status / DELETE
-  sb.channel('garcom-orders-' + (currentGarcom?.id || 'g'))
+  const chOrders = sb.channel('garcom-orders-' + gid)
     .on('postgres_changes', { event:'*', schema:'public', table:'orders' }, p => {
       if (p.eventType === 'INSERT') {
-        // Só adiciona se for pedido deste garçom e não estiver na lista
         if (p.new.garcom_id === currentGarcom?.id && !myOrders.find(o => o.id === p.new.id)) {
           myOrders.unshift(p.new);
           renderMyOrders();
@@ -716,7 +737,6 @@ function subscribeRealtime() {
       } else if (p.eventType === 'UPDATE') {
         const idx = myOrders.findIndex(o => o.id === p.new.id);
         if (idx !== -1) {
-          // Se pedido foi finalizado ou cancelado, remove da lista do garçom
           if (['entregue', 'cancelado'].includes(p.new.status)) {
             myOrders.splice(idx, 1);
           } else {
@@ -728,8 +748,22 @@ function subscribeRealtime() {
         myOrders = myOrders.filter(o => o.id !== p.old.id);
         renderMyOrders();
       }
-    }).subscribe();
+    })
+    .subscribe();
+
+  _rtChannels = [chMesas, chOrders];
 }
+
+// Sync ao voltar para a aba (ex: celular minimizou o browser)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && currentGarcom) {
+    sb.from('mesas').select('*').order('num').then(({ data }) => {
+      if (data) { tables = data; renderMesas(); }
+    });
+    loadPedidosDaMesa();
+    if (!_rtConnected) subscribeRealtime();
+  }
+});
 
 // ══ TABS ═════════════════════════════════
 // switchTab defined in MEUS PEDIDOS section
