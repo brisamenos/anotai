@@ -131,7 +131,8 @@ db.exec(`
     store_cor TEXT DEFAULT '#3b82f6',
     store_tempo_entrega TEXT DEFAULT '30-45 min',
     store_avaliacao TEXT DEFAULT '5.0',
-    store_whatsapp TEXT
+    store_whatsapp TEXT,
+    gestor_tema TEXT
   );
   CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -280,6 +281,11 @@ const MIGRATIONS = [
       `ALTER TABLE store_config ADD COLUMN store_whatsapp TEXT`
     ]
   },
+  {
+    version: 6,
+    description: 'Adiciona gestor_tema em store_config',
+    up: `ALTER TABLE store_config ADD COLUMN gestor_tema TEXT`
+  },
 ]
 
 function runMigrations() {
@@ -397,7 +403,7 @@ function emit(tenantId, table, record, type) {
 const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','expires_at','created_at'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
-  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_tempo_entrega','store_avaliacao','store_whatsapp'],
+  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_tempo_entrega','store_avaliacao','store_whatsapp','gestor_tema'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
