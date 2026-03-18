@@ -13,6 +13,39 @@
   --pink:#ec4899;--orange:#f97316;--text:#f1f5f9;--muted:#64748b;
   --sw:220px;
 }
+/* ── TEMA CLARO ─────────────────────── */
+[data-theme="light"]{
+  --bg:#f0f2f5;--surface:#ffffff;--surface2:#f5f7fa;--surface3:#edf0f4;
+  --border:rgba(0,0,0,.09);--accent:#3b82f6;--accent2:#06b6d4;
+  --accent3:#d97706;--danger:#ef4444;--success:#16a34a;--purple:#7c3aed;
+  --pink:#db2777;--orange:#ea580c;--text:#0f172a;--muted:#94a3b8;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12)}
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.22)}
+[data-theme="light"] .order-card{background:rgba(0,0,0,.03);border-color:rgba(0,0,0,.08)}
+[data-theme="light"] .order-card:hover{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.15)}
+[data-theme="light"] .kol-analise{background:rgba(249,115,22,.1)}
+[data-theme="light"] .kol-producao{background:rgba(245,158,11,.09)}
+[data-theme="light"] .kol-pronto{background:rgba(34,197,94,.09)}
+[data-theme="light"] .kol-preparando{background:rgba(59,130,246,.08)}
+[data-theme="light"] .kol-servido{background:rgba(34,197,94,.08)}
+[data-theme="light"] .kol-analise .kol-title{color:#c2410c}
+[data-theme="light"] .kol-producao .kol-title{color:#b45309}
+[data-theme="light"] .kol-pronto .kol-title{color:#15803d}
+[data-theme="light"] .kol-preparando .kol-title{color:#1d4ed8}
+[data-theme="light"] .kol-servido .kol-title{color:#15803d}
+[data-theme="light"] .kol-empty{color:var(--muted)}
+[data-theme="light"] .modal{box-shadow:0 20px 60px rgba(0,0,0,.15)}
+[data-theme="light"] .sc:hover{border-color:rgba(59,130,246,.4)}
+[data-theme="light"] .si:hover{background:var(--surface3)}
+[data-theme="light"] .si.on{background:rgba(59,130,246,.1)}
+[data-theme="light"] .oc-client{color:rgba(0,0,0,.55)}
+[data-theme="light"] .oc-items{color:rgba(0,0,0,.4)}
+[data-theme="light"] .oc-time{color:rgba(0,0,0,.35)}
+[data-theme="light"] .pdvb-item:hover,[data-theme="light"] .pdvb-item.focused{background:rgba(59,130,246,.07)}
+[data-theme="light"] .pdvb-item-img{background:var(--surface3)}
+[data-theme="light"] .notif-panel{box-shadow:0 8px 30px rgba(0,0,0,.12)}
+
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
 
@@ -713,6 +746,10 @@ td:first-child{padding-left:16px}
       <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M8 2a5 5 0 0 1 5 5c0 2.5-.8 4-2 5H5c-1.2-1-2-2.5-2-5a5 5 0 0 1 5-5Z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13.5a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>
       <span class="nbadge" id="notif-count" style="display:none">0</span>
     </div>
+    <div class="ibtn" id="theme-btn" onclick="toggleTheme()" title="Alternar tema claro/escuro">
+      <svg id="theme-icon-dark" viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M8 3V1M8 15v-2M3 8H1M15 8h-2M4.22 4.22L2.81 2.81M13.19 13.19l-1.41-1.41M4.22 11.78l-1.41 1.41M13.19 2.81l-1.41 1.41" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.4"/></svg>
+      <svg id="theme-icon-light" viewBox="0 0 16 16" fill="none" width="14" height="14" style="display:none"><path d="M13 8.5A5 5 0 1 1 7.5 3c-.5 1-.8 2.1-.8 3.2 0 2.5 1.8 4.6 4.2 5.2C11.6 11.8 12.3 10.2 13 8.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+    </div>
   </div>
 </nav>
 
@@ -1234,10 +1271,39 @@ td:first-child{padding-left:16px}
   </div>
 </div>
 
+<!-- MODAL: Seleção de Mesa PDV -->
+<div class="modal-bg" id="modal-pdvb-mesa">
+  <div class="modal" style="width:580px;max-height:85vh">
+    <button class="modal-close" onclick="closeModal('modal-pdvb-mesa')">✕</button>
+    <h2 style="margin-bottom:14px">Selecione uma mesa</h2>
+
+    <!-- Sub-tabs -->
+    <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:14px">
+      <div id="pdvb-mesa-sub-mesas" onclick="pdvbMesaSubSwitch('mesas')" style="padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid var(--accent);color:var(--accent);margin-bottom:-2px">Mesas</div>
+      <div id="pdvb-mesa-sub-comandas" onclick="pdvbMesaSubSwitch('comandas')" style="padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);margin-bottom:-2px">Comandas</div>
+    </div>
+
+    <!-- Search -->
+    <div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:14px">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <input id="pdvb-mesa-search" placeholder="Mesa..." style="background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);flex:1" oninput="pdvbRenderMesaModal()">
+    </div>
+
+    <!-- Grid de mesas -->
+    <div id="pdvb-mesa-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-height:340px;overflow-y:auto;padding-right:4px"></div>
+
+    <!-- Confirmar -->
+    <button id="pdvb-mesa-confirm-btn" class="btn bp" disabled
+      style="width:100%;justify-content:center;margin-top:16px;padding:11px;font-size:13.5px"
+      onclick="pdvbConfirmMesa()">
+      Selecione uma mesa
+    </button>
+  </div>
+</div>
+
 <!-- MODAL: Observação PDV -->
 <div class="modal-bg" id="modal-pdvb-obs">
   <div class="modal" style="width:420px">
-    <button class="modal-close" onclick="closeModal('modal-pdvb-obs')">✕</button>
     <h2>Observação do item</h2>
     <div class="form-row" style="margin-bottom:4px">
       <label class="form-label">Item selecionado</label>
@@ -1330,6 +1396,12 @@ td:first-child{padding-left:16px}
 </div>
 
 
+
+
+</div><!-- end page-pdv-balcao -->
+
+<!-- TAXA DE ENTREGA -->
+<div class="page" id="page-taxa">
   <div class="ph">
     <div>
       <div class="pt">Taxa de Entrega</div>
@@ -5633,6 +5705,32 @@ function toggleSideGroup(id) {
 }
 
 // ═══════════════════════════════════════════
+// TEMA CLARO / ESCURO
+// ═══════════════════════════════════════════
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') !== 'light';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.getElementById('theme-icon-dark').style.display  = isDark ? 'none'  : '';
+  document.getElementById('theme-icon-light').style.display = isDark ? ''      : 'none';
+  localStorage.setItem('tema', isDark ? 'light' : 'dark');
+}
+
+// Aplica tema salvo ao carregar
+(function(){
+  const t = localStorage.getItem('tema') || 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  if (t === 'light') {
+    document.addEventListener('DOMContentLoaded', () => {
+      const di = document.getElementById('theme-icon-dark');
+      const li = document.getElementById('theme-icon-light');
+      if (di) di.style.display = 'none';
+      if (li) li.style.display = '';
+    });
+  }
+})();
+
+// ═══════════════════════════════════════════
 // PDV BALCÃO — COMPLETO
 // ═══════════════════════════════════════════
 let pdvbCart        = [];    // [{...item, qty, obs}]
@@ -5642,6 +5740,7 @@ let pdvbFilter      = 'todos';
 let pdvbEntregaTipo = 'balcao';
 let pdvbEntregaTaxa = 0;
 let pdvbEntregaAddr = '';
+let pdvbMesaNum     = null;
 let pdvbPagamento   = 'Dinheiro';
 let pdvbDesconto    = 0;     // valor em R$
 let pdvbFocusIdx    = -1;    // item focado pelo teclado
@@ -5758,6 +5857,10 @@ function pdvbRenderOrder() {
   const total = Math.max(0, sub + pdvbEntregaTaxa - pdvbDesconto);
   document.getElementById('pdvb-subtotal').textContent = 'R$ ' + sub.toFixed(2).replace('.',',');
   document.getElementById('pdvb-total').textContent = 'R$ ' + total.toFixed(2).replace('.',',');
+
+  // Indicador de mesa no campo cliente
+  const cl = document.getElementById('pdvb-client');
+  if (cl && pdvbMesaNum && !cl.value) cl.value = `Mesa ${pdvbMesaNum}`;
   document.getElementById('pdvb-entrega').textContent = pdvbEntregaTaxa > 0
     ? 'R$ ' + pdvbEntregaTaxa.toFixed(2).replace('.',',')
     : 'Grátis';
@@ -5786,6 +5889,8 @@ function pdvbClearCart() {
   pdvbEntregaTipo = 'balcao';
   pdvbEntregaAddr = '';
   pdvbPagamento = 'Dinheiro';
+  pdvbMesaNum = null;
+  pdvbMesaSelecionada = null;
   const ph = document.getElementById('pdvb-phone');
   const cl = document.getElementById('pdvb-client');
   if (ph) ph.value = '';
@@ -5801,8 +5906,117 @@ function pdvbSwitchTab(tab) {
     document.getElementById('pdvb-tab-'+t)?.classList.toggle('on', t === tab);
   });
   if (tab === 'm') {
-    // Vai para a página de pedidos de mesa
-    nav('pedidos-mesa');
+    pdvbOpenMesaModal();
+  }
+}
+
+// ── Mesa selector modal ─────────────────
+let pdvbMesaSubtab = 'mesas'; // 'mesas' | 'comandas'
+let pdvbMesaSelecionada = null;
+
+function pdvbOpenMesaModal() {
+  pdvbMesaSelecionada = null;
+  pdvbMesaSubtab = 'mesas';
+  pdvbRenderMesaModal();
+  openModal('modal-pdvb-mesa');
+}
+
+function pdvbMesaSubSwitch(tab) {
+  pdvbMesaSubtab = tab;
+  document.getElementById('pdvb-mesa-sub-mesas')?.classList.toggle('on', tab === 'mesas');
+  document.getElementById('pdvb-mesa-sub-comandas')?.classList.toggle('on', tab === 'comandas');
+  pdvbRenderMesaModal();
+}
+
+function pdvbRenderMesaModal() {
+  const grid = document.getElementById('pdvb-mesa-grid');
+  if (!grid) return;
+
+  const q = (document.getElementById('pdvb-mesa-search') || {}).value?.toLowerCase() || '';
+
+  if (pdvbMesaSubtab === 'mesas') {
+    const fil = tables.filter(t => !q || String(t.num).includes(q) || `mesa ${t.num}`.includes(q));
+    if (!fil.length) {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:30px;font-size:13px">Nenhuma mesa encontrada</div>';
+      return;
+    }
+    grid.innerHTML = fil.map(t => {
+      const isFree = t.status === 'free';
+      const isWait = t.status === 'waiting';
+      const statusLabel = isFree ? 'Livre' : isWait ? 'Aguard. pag.' : 'Ocupada';
+      const selected = pdvbMesaSelecionada?.num === t.num;
+      const borderColor = selected
+        ? 'var(--accent)'
+        : isFree ? 'rgba(34,197,94,.35)' : isWait ? 'rgba(245,158,11,.35)' : 'rgba(239,68,68,.35)';
+      const bgColor = selected
+        ? 'rgba(59,130,246,.1)'
+        : isFree ? 'rgba(34,197,94,.07)' : isWait ? 'rgba(245,158,11,.07)' : 'rgba(239,68,68,.07)';
+      const statusColor = isFree ? 'var(--success)' : isWait ? 'var(--accent3)' : 'var(--danger)';
+      return `
+        <div onclick="pdvbSelectMesa(${t.num},'${t.status}')" style="
+          border:2px solid ${borderColor};background:${bgColor};
+          border-radius:12px;padding:18px 14px;cursor:pointer;transition:all .15s;text-align:center">
+          <div style="font-size:15px;font-weight:700;margin-bottom:6px;color:${selected?'var(--accent)':'var(--text)'}">Mesa ${t.num}</div>
+          ${t.guests ? `<div style="font-size:11px;color:var(--muted);margin-bottom:4px">👥 ${t.guests} pessoas</div>` : ''}
+          <div style="font-size:11.5px;font-weight:700;color:${statusColor}">${statusLabel}</div>
+          ${t.total ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">R$ ${parseFloat(t.total).toFixed(2).replace('.',',')}</div>` : ''}
+        </div>`;
+    }).join('');
+  } else {
+    // Comandas = mesas ocupadas com pedidos
+    const ocupadas = tables.filter(t => t.status !== 'free' && (!q || `mesa ${t.num}`.includes(q)));
+    if (!ocupadas.length) {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:30px;font-size:13px">Nenhuma comanda aberta</div>';
+      return;
+    }
+    grid.innerHTML = ocupadas.map(t => {
+      const selected = pdvbMesaSelecionada?.num === t.num;
+      return `
+        <div onclick="pdvbSelectMesa(${t.num},'${t.status}')" style="
+          border:2px solid ${selected ? 'var(--accent)' : 'rgba(255,255,255,.1)'};
+          background:${selected ? 'rgba(59,130,246,.1)' : 'var(--surface2)'};
+          border-radius:12px;padding:18px 14px;cursor:pointer;transition:all .15s;text-align:center">
+          <div style="font-size:15px;font-weight:700;margin-bottom:6px">Comanda ${t.num}</div>
+          <div style="font-size:11.5px;font-weight:700;color:var(--accent3)">Aberta</div>
+          ${t.total ? `<div style="font-size:12px;font-weight:600;color:var(--success);margin-top:4px">R$ ${parseFloat(t.total).toFixed(2).replace('.',',')}</div>` : ''}
+        </div>`;
+    }).join('');
+  }
+}
+
+function pdvbSelectMesa(num, status) {
+  pdvbMesaSelecionada = { num, status };
+  pdvbRenderMesaModal();
+  // Atualiza botão confirmar
+  const btn = document.getElementById('pdvb-mesa-confirm-btn');
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = `Confirmar Mesa ${num}`;
+  }
+}
+
+function pdvbConfirmMesa() {
+  if (!pdvbMesaSelecionada) { sbToast('err','Selecione uma mesa'); return; }
+  const { num, status } = pdvbMesaSelecionada;
+  closeModal('modal-pdvb-mesa');
+  // Mantém aba M ativa pois o pedido é de mesa
+  const cl = document.getElementById('pdvb-client');
+  if (cl) cl.value = `Mesa ${num}`;
+  pdvbMesaNum = num;
+  pdvbEntregaTipo = 'mesa';
+  pdvbEntregaTaxa = 0;
+  pdvbEntregaAddr = `Mesa ${num}`;
+  sbToast('ok', `Mesa ${num} selecionada — adicione os itens e gere o pedido!`);
+  pdvbRenderOrder();
+}
+
+function pdvbCancelMesaModal() {
+  closeModal('modal-pdvb-mesa');
+  // Se não confirmou mesa, volta aba D
+  if (!pdvbMesaNum) {
+    pdvbActiveTab = 'd';
+    document.getElementById('pdvb-tab-d')?.classList.add('on');
+    document.getElementById('pdvb-tab-m')?.classList.remove('on');
   }
 }
 
@@ -5950,8 +6164,8 @@ async function pdvbGerarPedido() {
   sbLoading(true);
   try {
     // 1. Criar pedido no banco
-    const { data: ord, error: ordErr } = await sb.from('orders').insert({
-      client: client || 'Balcão',
+    const orderPayload = {
+      client: client || (pdvbMesaNum ? `Mesa ${pdvbMesaNum}` : 'Balcão'),
       phone,
       items: itemsData,
       total,
@@ -5960,8 +6174,18 @@ async function pdvbGerarPedido() {
       addr,
       pag: pdvbPagamento,
       time
-    }).select().single();
+    };
+    if (pdvbMesaNum) orderPayload.mesa_num = pdvbMesaNum;
+
+    const { data: ord, error: ordErr } = await sb.from('orders').insert(orderPayload).select().single();
     if (ordErr) throw ordErr;
+
+    // 1b. Se for mesa, marcar como ocupada
+    if (pdvbMesaNum) {
+      await sb.from('mesas').update({ status: 'busy' }).eq('num', pdvbMesaNum);
+      const t = tables.find(x => x.num === pdvbMesaNum);
+      if (t) t.status = 'busy';
+    }
 
     // 2. Registrar no caixa
     await sb.from('movimentos').insert({
