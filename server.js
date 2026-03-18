@@ -598,20 +598,13 @@ const server = http.createServer(async (req,res) => {
   // SSE — canal inclui tenant: /sse/orders-rt:TENANT_ID
   if(upath.startsWith('/sse/')){sseSubscribe(upath.slice(5),res);return}
 
-  // REST API
-  if(upath.startsWith('/rest/v1/')||upath.startsWith('/api/')){
-    const table = upath.split('/')[upath.startsWith('/api/')?2:3]
-    const body  = ['POST','PATCH'].includes(req.method)?await readBody(req):{}
-    await handleREST(req,res,table,params,body); return
-  }
-
-  // Info do tenant para cardápio público
+  // Info do tenant para cardápio público ── ANTES do bloco genérico /api/
   if(req.method==='GET'&&upath==='/api/tenant-info'){
     const info = handleTenantInfo(params)
     send(res, info.error?404:200, info); return
   }
 
-  // Criar tenant + store_config automaticamente ao cadastrar no admin
+  // Criar tenant + store_config + usuário gestor ── ANTES do bloco genérico /api/
   if(req.method==='POST'&&upath==='/api/criar-tenant'){
     const body = await readBody(req)
     const {nome,plano,slug,email,senha,role,nomeGestor} = body
@@ -620,25 +613,20 @@ const server = http.createServer(async (req,res) => {
       const hash = crypto.createHash('sha256').update(senha).digest('hex')
       const slugBase = slug || nome.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'')
 
-      // ── Garante slug único: se já existir, acrescenta sufixo numérico ──
       let slugFinal = slugBase
       let suffix = 2
       while (db.prepare("SELECT id FROM tenants WHERE slug=?").get(slugFinal)) {
         slugFinal = `${slugBase}-${suffix++}`
       }
-      // Avisa se o slug foi alterado (slug informado pelo usuário já em uso)
       if (slug && slugFinal !== slug) {
         send(res,400,{error:`O identificador (slug) "${slug}" já está em uso. Sugerimos: "${slugFinal}"`})
         return
       }
-
-      // ── Valida e-mail duplicado ──
       if (db.prepare("SELECT id FROM sys_users WHERE email=?").get(email)) {
         send(res,400,{error:`O e-mail "${email}" já está cadastrado no sistema.`})
         return
       }
-
-      const nomeUsuario = nomeGestor || nome  // usa nome do gestor se fornecido, senão usa nome do restaurante
+      const nomeUsuario = nomeGestor || nome
       db.prepare("INSERT INTO tenants (nome,plano,slug) VALUES (?,?,?)").run(nome,plano||'basic',slugFinal)
       const t = db.prepare("SELECT id FROM tenants WHERE slug=?").get(slugFinal)
       db.prepare("INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)").run(t.id)
@@ -647,6 +635,13 @@ const server = http.createServer(async (req,res) => {
       send(res,201,{ok:true,tenant_id:t.id,slug:slugFinal})
     } catch(e){ send(res,400,{error:e.message}) }
     return
+  }
+
+  // REST API genérico ── /rest/v1/:table  e  /api/:table
+  if(upath.startsWith('/rest/v1/')||upath.startsWith('/api/')){
+    const table = upath.split('/')[upath.startsWith('/api/')?2:3]
+    const body  = ['POST','PATCH'].includes(req.method)?await readBody(req):{}
+    await handleREST(req,res,table,params,body); return
   }
 
   // Upload
