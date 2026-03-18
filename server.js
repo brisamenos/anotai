@@ -130,7 +130,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    name TEXT NOT NULL, emoji TEXT, sort_order INTEGER DEFAULT 0, ativo INTEGER DEFAULT 1
+    name TEXT NOT NULL, label TEXT, type TEXT DEFAULT 'Itens principais',
+    promo INTEGER DEFAULT 0, emoji TEXT, sort_order INTEGER DEFAULT 0, ativo INTEGER DEFAULT 1
   );
   CREATE TABLE IF NOT EXISTS menu_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -209,9 +210,67 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_fidelidade_tenant ON fidelidade(tenant_id);
 `)
 
-// Migrations automáticas (bancos já existentes)
-try { db.exec("ALTER TABLE tenants ADD COLUMN expires_at TEXT") } catch(e) {}
-try { db.exec("ALTER TABLE store_config ADD COLUMN evo_instance TEXT") } catch(e) {}
+// ════════════════════════════════════════════════════════
+// MIGRATIONS — versionadas via PRAGMA user_version
+// Para adicionar colunas/índices no futuro:
+//   1. Crie um novo bloco { version: N, up: `SQL` }
+//   2. Incremente o número — nunca edite migrations existentes
+// ════════════════════════════════════════════════════════
+const MIGRATIONS = [
+  {
+    version: 1,
+    description: 'Adiciona expires_at em tenants',
+    up: `ALTER TABLE tenants ADD COLUMN expires_at TEXT`
+  },
+  {
+    version: 2,
+    description: 'Adiciona evo_instance em store_config',
+    up: `ALTER TABLE store_config ADD COLUMN evo_instance TEXT`
+  },
+  {
+    version: 3,
+    description: 'Adiciona label, type e promo em categories',
+    up: [
+      `ALTER TABLE categories ADD COLUMN label TEXT`,
+      `ALTER TABLE categories ADD COLUMN type TEXT DEFAULT 'Itens principais'`,
+      `ALTER TABLE categories ADD COLUMN promo INTEGER DEFAULT 0`,
+      // Preenche label com name para categorias já existentes
+      `UPDATE categories SET label = name WHERE label IS NULL`
+    ]
+  },
+]
+
+function runMigrations() {
+  const currentVersion = db.pragma('user_version', { simple: true })
+  const pending = MIGRATIONS.filter(m => m.version > currentVersion)
+
+  if (!pending.length) {
+    log('✅', `Schema atualizado (v${currentVersion}) — nenhuma migration pendente`)
+    return
+  }
+
+  log('🔄', `Rodando ${pending.length} migration(s) (banco em v${currentVersion})...`)
+
+  for (const migration of pending) {
+    try {
+      db.transaction(() => {
+        const sqls = Array.isArray(migration.up) ? migration.up : [migration.up]
+        for (const sql of sqls) db.exec(sql)
+        db.pragma(`user_version = ${migration.version}`)
+      })()
+      log('✅', `  [v${migration.version}] ${migration.description}`)
+    } catch(e) {
+      log('❌', `  [v${migration.version}] Falhou: ${e.message}`)
+      // Interrompe para não deixar o banco em estado inconsistente
+      break
+    }
+  }
+
+  const newVersion = db.pragma('user_version', { simple: true })
+  log('💾', `Schema agora em v${newVersion}`)
+}
+
+runMigrations()
 
 // ── Restaurar backup se o banco for novo ──────────────
 if (!_dbExistia) {
@@ -285,7 +344,7 @@ const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','expires_at','created_at'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
   store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance'],
-  categories:   ['id','tenant_id','name','emoji','sort_order','ativo'],
+  categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','category_id','image_url','status','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','updated_at'],
