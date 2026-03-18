@@ -2055,7 +2055,7 @@ let mesaOrdersCache = [];
 function _updateMesaOrdersCache(newOrder) {
   const idx = mesaOrdersCache.findIndex(o => o.id === newOrder.id);
   if (idx !== -1) {
-    if (newOrder.status === 'cancelado') {
+    if (['entregue','cancelado'].includes(newOrder.status)) {
       mesaOrdersCache.splice(idx, 1);
     } else {
       mesaOrdersCache[idx] = newOrder;
@@ -2088,8 +2088,8 @@ function _renderMesaPageFromCache() {
   // Filtra por sessão usando cache local
   const sessionOrders = mesaOrdersCache.filter(o => {
     const mesa = activeTables.find(t => t.num === parseInt(o.mesa_num));
-    if (!mesa || !mesa.updated_at) return true;
-    return new Date(o.created_at || 0).getTime() >= new Date(mesa.updated_at).getTime() - 5000;
+    if (!mesa || !mesa.opened_at) return true;
+    return new Date(o.created_at || 0).getTime() >= new Date(mesa.opened_at).getTime() - 5000;
   });
 
   // Popula o cache local com os dados frescos do banco
@@ -2126,7 +2126,7 @@ function subscribeOrders() {
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, p => {
       const idx = ordersKanban.findIndex(x => x.id === p.new.id);
       if (idx !== -1) {
-        if (p.new.status === 'cancelado') {
+        if (['entregue','cancelado'].includes(p.new.status)) {
           ordersKanban.splice(idx, 1);
         } else {
           ordersKanban[idx] = mapOrder(p.new);
@@ -2178,13 +2178,22 @@ function subscribeOrders() {
   _rtChannels = [chOrders, chMesas, chConfig];
 }
 
-// Sync ao voltar para a aba (tab do browser ficou em background)
+// Sync ao voltar para a aba
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     loadAllData();
     if (!_rtConnected) subscribeOrders();
   }
 });
+
+// Polling de 8s como fallback garantido (complementa o WebSocket)
+setInterval(() => {
+  if (document.visibilityState !== 'visible') return;
+  const pg = document.getElementById('page-pedidos-mesa');
+  if (pg && pg.classList.contains('on')) {
+    renderMesasPage();
+  }
+}, 8000);
 
 // Registra SW e pede permissão de notificação ao carregar
 requestNotifPermission();
@@ -3434,15 +3443,15 @@ async function renderMesasPage() {
 
   const allOrders = orders || [];
 
-  // Filtra por sessão: só pedidos criados após última abertura da mesa
+  // Filtra por sessão usando opened_at (campo dedicado — nunca muda durante a sessão)
   const sessionOrders = allOrders.filter(o => {
     const mesa = activeTables.find(t => t.num === parseInt(o.mesa_num));
-    if (!mesa || !mesa.updated_at) return true;
-    return new Date(o.created_at || 0).getTime() >= new Date(mesa.updated_at).getTime() - 5000;
+    if (!mesa || !mesa.opened_at) return true;
+    return new Date(o.created_at || 0).getTime() >= new Date(mesa.opened_at).getTime() - 5000;
   });
 
-  // Popula o cache local com os dados frescos do banco
-  mesaOrdersCache = allOrders;
+  // Popula o cache local com os dados da sessão atual (já filtrados)
+  mesaOrdersCache = sessionOrders;
 
   grid.innerHTML = activeTables
     .sort((a, b) => a.num - b.num)
@@ -3539,9 +3548,7 @@ async function mesaAdvanceOrder(id) {
 }
 
 async function mesaServOrder(id) {
-  // Marca como 'cancelado' no banco (status aceito pela constraint) para remover do fluxo ativo.
-  // O histórico fica preservado e o total da sessão já foi calculado antes desta ação.
-  const { error } = await sb.from('orders').update({ status: 'cancelado' }).eq('id', id);
+  const { error } = await sb.from('orders').update({ status: 'entregue' }).eq('id', id);
   if (!error) {
     ordersKanban = ordersKanban.filter(x => x.id !== id);
     mesaOrdersCache = mesaOrdersCache.filter(x => x.id !== id);
@@ -3727,10 +3734,11 @@ async function submitGarcomOrder(){
       status: mesaAutoAccept ? 'producao' : 'analise', time, pag:'Mesa'
     }).select().single();
     if(oErr) throw oErr;
-    // Só seta updated_at se mesa não estava busy (preserva o marco de sessão)
+    // Só seta opened_at se mesa não estava busy (preserva o marco de sessão)
     const _mesaGarcom = tables.find(t => t.num === garcomMesa);
     if (!_mesaGarcom || _mesaGarcom.status !== 'busy') {
-      await sb.from('mesas').update({status:'busy', updated_at:new Date().toISOString()}).eq('num', garcomMesa);
+      const _now = new Date().toISOString();
+      await sb.from('mesas').update({ status:'busy', opened_at: _now, updated_at: _now }).eq('num', garcomMesa);
     }
     if(t){t.status='busy'; t.guests=t.guests||2;}
     ordersKanban.push(mapOrder(orderData));
@@ -4334,9 +4342,9 @@ async function fecharMesa(num) {
       .filter(o => parseInt(o.mesa_num) === numInt)
       .reduce((s, o) => s + parseFloat(o.total || 0), 0);
 
-    // 1. Marca pedidos ativos como 'cancelado' (status aceito pelo banco)
+    // 1. Finaliza todos os pedidos ativos da mesa
     const { error: ordErr } = await sb.from('orders')
-      .update({ status: 'cancelado' })
+      .update({ status: 'entregue' })
       .eq('mesa_num', numInt)
       .in('status', ['analise', 'producao', 'pronto']);
     if (ordErr) throw ordErr;
@@ -4346,6 +4354,7 @@ async function fecharMesa(num) {
       status: 'waiting',
       total: 'R$ ' + sessionTotal.toFixed(2).replace('.', ','),
       updated_at: new Date().toISOString()
+      // opened_at não muda — sessão continua sendo a mesma até liberar
     }).eq('num', numInt);
     if (mesaErr) throw mesaErr;
 
@@ -4376,7 +4385,7 @@ function openRegistrarPagamento(num, totalJaCalculado) {
   // Fallback: se não foi passado, calcula do cache local
   if (!totalJaCalculado) {
     const mesa = tables.find(x => parseInt(x.num) === parseInt(num));
-    const sessionStart = mesa?.updated_at ? new Date(mesa.updated_at).getTime() - 5000 : 0;
+    const sessionStart = mesa?.opened_at ? new Date(mesa.opened_at).getTime() - 5000 : 0;
     totalVal = mesaOrdersCache
       .filter(o => parseInt(o.mesa_num) === parseInt(num))
       .filter(o => new Date(o.created_at || 0).getTime() >= sessionStart)
@@ -4408,9 +4417,9 @@ async function confirmarPagamentoMesa() {
 
   sbLoading(true);
   try {
-    // 1. Finalizar pedidos ativos da mesa (usa 'cancelado' — status aceito pelo banco)
+    // 1. Finaliza todos os pedidos ativos da mesa
     const { error: ordErr } = await sb.from('orders')
-      .update({ status: 'cancelado' })
+      .update({ status: 'entregue' })
       .eq('mesa_num', num)
       .in('status', ['analise', 'producao', 'pronto']);
     if (ordErr) { console.error('orders update error:', ordErr); throw ordErr; }
@@ -4418,7 +4427,7 @@ async function confirmarPagamentoMesa() {
     // 2. Liberar mesa
     const { error: mesaErr } = await sb.from('mesas').update({
       status: 'free', total: null, pag_forma: null,
-      guests: null, updated_at: new Date().toISOString()
+      guests: null, opened_at: null, updated_at: new Date().toISOString()
     }).eq('num', num);
     if (mesaErr) { console.error('mesas update error:', mesaErr); throw mesaErr; }
 
