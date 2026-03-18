@@ -974,13 +974,8 @@ body {
     </div>
 
     <!-- Quantos sabores -->
-    <div class="pz-flavors-label" style="margin-bottom:10px">QUANTOS SABORES?</div>
-    <div class="pz-size-tabs">
-      <button class="pz-size-tab on" onclick="pzSetSlices(1,this)">🍕 Inteira</button>
-      <button class="pz-size-tab" onclick="pzSetSlices(2,this)">½ + ½</button>
-      <button class="pz-size-tab" onclick="pzSetSlices(3,this)">3 sabores</button>
-      <button class="pz-size-tab" onclick="pzSetSlices(4,this)">4 sabores</button>
-    </div>
+    <div class="pz-flavors-label" style="margin-bottom:10px">COMO VOCÊ QUER?</div>
+    <div class="pz-size-tabs" id="pz-size-tabs"></div>
 
     <!-- Slot cards -->
     <div class="pz-flavors-label" style="margin:16px 0 10px">SEUS SABORES</div>
@@ -1489,13 +1484,30 @@ let pz = { item: null, slices: 1, selected: [], activeSlot: -1 };
 function openPizzaModal(itemId) {
   const item = allItems.find(i => i.id === itemId);
   if (!item) return;
-  pz = { item, slices: 1, selected: [null], activeSlot: -1 };
+  const maxFlavors = item.max_flavors || 1;
+  const allowHalf  = !!item.allow_half || maxFlavors >= 2;
+  pz = { item, slices: 1, selected: [null], activeSlot: -1, maxFlavors };
+
   document.getElementById('pz-pizza-name').textContent = item.name;
-  document.querySelectorAll('.pz-size-tab').forEach((b,i) => b.classList.toggle('on', i===0));
+  document.getElementById('pz-sub').textContent = maxFlavors === 1
+    ? 'Escolha o sabor da pizza'
+    : `Escolha até ${maxFlavors} sabores`;
+
+  // Build size tabs dynamically based on max_flavors
+  const tabsEl = document.getElementById('pz-size-tabs');
+  const tabLabels = ['🍕 Inteira', '½ + ½', '⅓ cada', '¼ cada'];
+  tabsEl.innerHTML = '';
+  for (let i = 1; i <= maxFlavors; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'pz-size-tab' + (i === 1 ? ' on' : '');
+    btn.textContent = i === 1 ? tabLabels[0] : tabLabels[i-1] || `${i} sabores`;
+    btn.onclick = () => pzSetSlices(i, btn);
+    tabsEl.appendChild(btn);
+  }
+
   document.getElementById('pz-picker-wrap').style.display = 'none';
   document.getElementById('pizza-modal-bg').classList.add('on');
-  pzRenderSlots();
-  pzUpdateConfirm();
+  pzSetSlices(1, tabsEl.firstChild);
 }
 
 function closePizzaModal() {
@@ -1507,10 +1519,9 @@ function onPizzaBgClick(e) {
 }
 
 function pzSetSlices(n, el) {
-  document.querySelectorAll('.pz-size-tab').forEach(b => b.classList.remove('on'));
-  el.classList.add('on');
+  document.querySelectorAll('#pz-size-tabs .pz-size-tab').forEach(b => b.classList.remove('on'));
+  if (el) el.classList.add('on');
   pz.slices = n;
-  // keep existing selections, resize array
   while (pz.selected.length < n) pz.selected.push(null);
   pz.selected = pz.selected.slice(0, n);
   pz.activeSlot = -1;
