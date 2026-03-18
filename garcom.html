@@ -796,7 +796,7 @@ function subscribeRealtime() {
       } else if (p.eventType === 'UPDATE') {
         const idx = myOrders.findIndex(o => o.id === p.new.id);
         if (idx !== -1) {
-          if (['entregue', 'cancelado'].includes(p.new.status)) {
+          if (p.new.status === 'cancelado') {
             myOrders.splice(idx, 1);
           } else {
             myOrders[idx] = p.new;
@@ -1276,7 +1276,7 @@ async function confirmarFinalizarMesa() {
   try {
     // 1. Finaliza TODOS os pedidos da mesa sem filtro de status
     await sb.from('orders')
-      .update({ status: 'entregue' })
+      .update({ status: 'cancelado' })
       .eq('mesa_num', finalizarMesaNum)
       .neq('status', 'entregue');
 
