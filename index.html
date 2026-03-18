@@ -579,7 +579,8 @@ body {
   border-radius: 24px 24px 0 0;
   width: 100%;
   max-width: 600px;
-  max-height: 90vh;
+  height: 92vh;
+  max-height: 92vh;
   display: flex;
   flex-direction: column;
   animation: drawerIn .28s cubic-bezier(.34,1.56,.64,1);
@@ -1193,20 +1194,15 @@ body {
 
           <!-- DELIVERY ADDRESS -->
           <div id="addr-block">
-            <div class="addr-cep-row">
-              <input class="form-input" id="f-cep" placeholder="CEP *" maxlength="9" inputmode="numeric" oninput="maskCep(this);saveCustomerData()" onblur="fetchCep()">
-              <button class="addr-cep-btn" id="cep-btn" onclick="fetchCep()" type="button">Buscar</button>
-            </div>
-            <div class="addr-auto-filled" id="addr-filled-hint"></div>
-            <div class="form-row2" style="margin-top:8px">
-              <input class="form-input" id="f-street" placeholder="Rua / Avenida *" autocomplete="street-address" oninput="saveCustomerData()">
+            <input class="form-input" id="f-street" placeholder="Rua / Avenida *" autocomplete="street-address" oninput="saveCustomerData()">
+            <div class="form-row2">
               <input class="form-input" id="f-num" placeholder="Número *" inputmode="numeric" oninput="saveCustomerData()">
+              <input class="form-input" id="f-comp" placeholder="Complemento" oninput="saveCustomerData()">
             </div>
-            <input class="form-input" id="f-comp" placeholder="Complemento (apto, bloco...)" oninput="saveCustomerData()">
             <input class="form-input" id="f-bairro" placeholder="Bairro" oninput="saveCustomerData()">
             <div class="form-row2">
-              <input class="form-input" id="f-city" placeholder="Cidade" readonly style="opacity:.7">
-              <input class="form-input" id="f-state" placeholder="UF" readonly style="opacity:.7;width:70px">
+              <input class="form-input" id="f-city" placeholder="Cidade" oninput="saveCustomerData()">
+              <input class="form-input" id="f-state" placeholder="UF" maxlength="2" style="text-transform:uppercase" oninput="saveCustomerData()">
             </div>
           </div>
           <div id="mesa-block" style="display:none">
@@ -1220,7 +1216,6 @@ body {
             <button class="pay-opt" data-pay="Dinheiro" onclick="setPay(this)">💵 Dinheiro</button>
           </div>
         </div>
-      </div>
       </div><!-- end drawer-body -->
 
       <div class="drawer-foot">
@@ -1427,18 +1422,12 @@ function loadCustomerData() {
     const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
     set('f-name',   d.name);
     set('f-phone',  d.phone);
-    set('f-cep',    d.cep);
     set('f-street', d.street);
     set('f-num',    d.num);
     set('f-comp',   d.comp);
     set('f-bairro', d.bairro);
     set('f-city',   d.city);
     set('f-state',  d.state);
-    // Show address hint if address is pre-filled
-    if (d.street && d.city) {
-      const hint = document.getElementById('addr-filled-hint');
-      if (hint) { hint.textContent = '📍 ' + [d.street, d.bairro, d.city, d.state].filter(Boolean).join(', '); hint.classList.add('show'); }
-    }
   } catch(e) {}
 }
 
@@ -1853,11 +1842,9 @@ function resetOrder() {
   document.getElementById('cart-content').style.display = '';
   document.getElementById('success-screen').classList.remove('show');
   document.getElementById('register-success-box').style.display = 'none';
-  ['f-name','f-phone','f-cep','f-street','f-num','f-comp','f-bairro','f-mesa'].forEach(id => {
+  ['f-name','f-phone','f-street','f-num','f-comp','f-bairro','f-city','f-state','f-mesa'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value='';
   });
-  ['f-city','f-state'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
-  document.getElementById('addr-filled-hint').classList.remove('show');
   document.getElementById('cupom-input').value = '';
   document.getElementById('cupom-feedback').innerHTML = '';
   renderCartDrawer();
@@ -2297,40 +2284,9 @@ function addUpsellItem(id) {
 function closeUpsell() {
   document.getElementById('upsell-overlay').classList.remove('show');
 }
-// ═══════════════════════════════════════════════
-// CEP AUTO-FILL (ViaCEP)
-// ═══════════════════════════════════════════════
-function maskCep(el) {
-  let v = el.value.replace(/\D/g,'').slice(0,8);
-  if (v.length > 5) v = v.slice(0,5)+'-'+v.slice(5);
-  el.value = v;
-}
-
-async function fetchCep() {
-  const cep = document.getElementById('f-cep').value.replace(/\D/g,'');
-  if (cep.length !== 8) return;
-  const btn = document.getElementById('cep-btn');
-  btn.disabled = true; btn.textContent = '...';
-  try {
-    const r = await fetch('https://viacep.com.br/ws/'+cep+'/json/');
-    const d = await r.json();
-    if (d.erro) { showToast('⚠️','CEP não encontrado'); return; }
-    document.getElementById('f-street').value = d.logradouro||'';
-    document.getElementById('f-bairro').value  = d.bairro||'';
-    document.getElementById('f-city').value    = d.localidade||'';
-    document.getElementById('f-state').value   = d.uf||'';
-    const hint = document.getElementById('addr-filled-hint');
-    hint.textContent = '📍 '+d.logradouro+', '+d.bairro+' — '+d.localidade+'/'+d.uf;
-    hint.classList.add('show');
-    document.getElementById('f-num').focus();
-    saveCustomerData();
-  } catch(e) { showToast('⚠️','Erro ao buscar CEP'); }
-  finally { btn.disabled=false; btn.textContent='Buscar'; }
-}
-
 function buildAddrFull() {
   const s = (id) => document.getElementById(id)?.value.trim()||'';
-  return [s('f-street'),s('f-num'),s('f-comp'),s('f-bairro'),s('f-city'),s('f-state'),s('f-cep')].filter(Boolean).join(', ');
+  return [s('f-street'),s('f-num'),s('f-comp'),s('f-bairro'),s('f-city'),s('f-state')].filter(Boolean).join(', ');
 }
 
 // ═══════════════════════════════════════════════
