@@ -546,6 +546,16 @@ td:first-child{padding-left:16px}
 ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:99px}
 ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.16)}
 .divider{height:1px;background:var(--border);margin:16px 0}
+
+/* MESA KANBAN */
+.mesa-kanban{display:grid;grid-template-columns:1fr 1fr;gap:14px;height:calc(100vh - 260px)}
+.kol-preparando{background:rgba(59,130,246,.14)}
+.kol-servido{background:rgba(34,197,94,.14)}
+.kol-preparando .kol-title{color:#bfdbfe}
+.kol-servido .kol-title{color:#bbf7d0}
+.pm-tabs{display:flex;gap:3px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:3px;margin-bottom:16px}
+.pm-tab{flex:1;padding:6px 12px;border-radius:7px;font-size:12.5px;font-weight:600;cursor:pointer;border:none;background:none;color:var(--muted);font-family:'DM Sans',sans-serif;transition:all .18s;text-align:center}
+.pm-tab.on{background:var(--surface2);color:var(--text)}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -784,8 +794,8 @@ td:first-child{padding-left:16px}
 <!-- PEDIDOS MESA -->
 <div class="page" id="page-pedidos-mesa">
   <div class="ph">
-    <div><div class="pt">Pedidos Mesa</div><div class="ps">Pedidos ativos agrupados por mesa</div></div>
-    <div style="display:flex;gap:8px">
+    <div><div class="pt">Pedidos Mesa</div><div class="ps">Kanban de pedidos por mesa</div></div>
+    <div style="display:flex;gap:8px;align-items:center">
       <button class="btn bg" onclick="renderMesasPage()">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M3 8a5 5 0 1 1 2 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M3 11V8H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Atualizar
@@ -797,27 +807,60 @@ td:first-child{padding-left:16px}
     </div>
   </div>
 
-  <!-- Stats rápidos -->
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px">
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;text-align:center">
-      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--success)" id="pm-stat-livres">0</div>
+  <!-- Stats -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px;text-align:center">
+      <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--success)" id="pm-stat-livres">0</div>
       <div style="font-size:11px;color:var(--muted)">Livres</div>
     </div>
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;text-align:center">
-      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--danger)" id="pm-stat-ocupadas">0</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px;text-align:center">
+      <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--danger)" id="pm-stat-ocupadas">0</div>
       <div style="font-size:11px;color:var(--muted)">Ocupadas</div>
     </div>
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;text-align:center">
-      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--accent3)" id="pm-stat-aguardando">0</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px;text-align:center">
+      <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--accent3)" id="pm-stat-aguardando">0</div>
       <div style="font-size:11px;color:var(--muted)">Aguard. pag.</div>
     </div>
   </div>
 
-  <!-- Filtro de mesas -->
-  <div id="pm-filter-bar" style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:10px;margin-bottom:4px"></div>
+  <!-- Tabs -->
+  <div class="pm-tabs">
+    <button class="pm-tab on" id="pm-tab-pedidos" onclick="switchPmTab('pedidos')">🛎️ Pedidos</button>
+    <button class="pm-tab" id="pm-tab-mesas" onclick="switchPmTab('mesas')">🍽️ Mesas</button>
+  </div>
 
-  <!-- Lista de pedidos por mesa -->
-  <div id="pm-orders-list"></div>
+  <!-- TAB: PEDIDOS (Kanban) -->
+  <div id="pm-sec-pedidos">
+    <!-- Auto-aceite + filtro por mesa -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;flex-shrink:0">
+        <div class="toggle" id="mesa-auto-accept" onclick="toggleMesaAutoAccept(this)"></div>
+        <span style="font-size:12px;font-weight:500">Aceitar automaticamente</span>
+      </label>
+      <div id="pm-filter-bar" style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;flex:1"></div>
+    </div>
+    <!-- Kanban 2 colunas -->
+    <div class="mesa-kanban">
+      <div class="kol kol-preparando">
+        <div class="kol-head">
+          <div class="kol-title">🍳 Preparando <div class="kol-cnt" id="mesa-cnt-preparando">0</div></div>
+        </div>
+        <div class="kol-body" id="mesa-col-preparando"></div>
+      </div>
+      <div class="kol kol-servido">
+        <div class="kol-head">
+          <div class="kol-title">✅ Servido <div class="kol-cnt" id="mesa-cnt-servido">0</div></div>
+        </div>
+        <div class="kol-body" id="mesa-col-servido"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: MESAS -->
+  <div id="pm-sec-mesas" style="display:none">
+    <div id="pm-filter-bar-mesas" style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:10px;margin-bottom:4px"></div>
+    <div id="pm-orders-list"></div>
+  </div>
 </div>
 
 <!-- MODAL EDITAR MESA -->
@@ -3219,16 +3262,33 @@ async function confirmDeleteMesa() {
 
 // MESAS PAGE — pedidos agrupados por mesa
 let pmFilter = 'todas';
+let pmTab = 'pedidos';
+let mesaAutoAccept = false;
+
+function switchPmTab(tab) {
+  pmTab = tab;
+  document.getElementById('pm-tab-pedidos').classList.toggle('on', tab==='pedidos');
+  document.getElementById('pm-tab-mesas').classList.toggle('on', tab==='mesas');
+  document.getElementById('pm-sec-pedidos').style.display = tab==='pedidos' ? '' : 'none';
+  document.getElementById('pm-sec-mesas').style.display   = tab==='mesas'   ? '' : 'none';
+  renderMesasPage();
+}
+
+function toggleMesaAutoAccept(el) {
+  el.classList.toggle('on');
+  mesaAutoAccept = el.classList.contains('on');
+  sbToast('ok', mesaAutoAccept ? 'Pedidos aceitos automaticamente' : 'Aceite automático desativado');
+}
 
 async function renderMesasPage() {
-  // Update stats
+  // Stats
   const livres     = tables.filter(t=>t.status==='free').length;
   const ocupadas   = tables.filter(t=>t.status==='busy').length;
   const aguardando = tables.filter(t=>t.status==='waiting').length;
-  const el = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
-  el('pm-stat-livres', livres);
-  el('pm-stat-ocupadas', ocupadas);
-  el('pm-stat-aguardando', aguardando);
+  const elv = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
+  elv('pm-stat-livres', livres);
+  elv('pm-stat-ocupadas', ocupadas);
+  elv('pm-stat-aguardando', aguardando);
 
   // Load active orders for mesas
   const { data: orders } = await sb.from('orders')
@@ -3236,35 +3296,113 @@ async function renderMesasPage() {
     .not('mesa_num', 'is', null)
     .in('status', ['analise','producao','pronto'])
     .order('id', { ascending: false });
-
   const mesaOrders = orders || [];
 
-  // Build filter pills — mesas ocupadas/waiting
+  // Active tables
   const activeTables = tables.filter(t=>t.status!=='free');
-  const filterBar = document.getElementById('pm-filter-bar');
-  if (filterBar) {
-    filterBar.innerHTML = [
-      `<button class="btn ${pmFilter==='todas'?'bp':'bg'}" style="font-size:11.5px;padding:5px 12px;white-space:nowrap" onclick="setPmFilter('todas')">Todas</button>`,
-      ...activeTables.map(t => {
-        const waiting = t.status==='waiting';
-        const color   = waiting ? 'style="border-color:rgba(245,158,11,.5);color:var(--accent3)"' : '';
-        return `<button class="btn bg" ${color} style="font-size:11.5px;padding:5px 12px;white-space:nowrap;${pmFilter===t.num?'background:rgba(59,130,246,.12);border-color:var(--accent);color:var(--accent)':''}" onclick="setPmFilter(${t.num})">
-          Mesa ${t.num}${waiting?' ⏳':''}
-        </button>`;
-      })
-    ].join('');
-  }
 
-  // Render orders list
+  if (pmTab === 'pedidos') {
+    // Filter pills (kanban tab)
+    const filterBar = document.getElementById('pm-filter-bar');
+    if (filterBar) {
+      filterBar.innerHTML = [
+        `<button class="btn ${pmFilter==='todas'?'bp':'bg'}" style="font-size:11.5px;padding:5px 12px;white-space:nowrap" onclick="setPmFilter('todas')">Todas</button>`,
+        ...activeTables.map(t => {
+          const waiting = t.status==='waiting';
+          const active  = pmFilter===t.num;
+          return `<button class="btn bg" style="font-size:11.5px;padding:5px 12px;white-space:nowrap;${waiting?'border-color:rgba(245,158,11,.5);color:var(--accent3)':''}${active?';background:rgba(59,130,246,.12);border-color:var(--accent);color:var(--accent)':''}" onclick="setPmFilter(${t.num})">Mesa ${t.num}${waiting?' ⏳':''}</button>`;
+        })
+      ].join('');
+    }
+    renderMesaKanban(mesaOrders);
+  } else {
+    // Mesas tab — filter pills
+    const filterBar2 = document.getElementById('pm-filter-bar-mesas');
+    if (filterBar2) {
+      filterBar2.innerHTML = [
+        `<button class="btn ${pmFilter==='todas'?'bp':'bg'}" style="font-size:11.5px;padding:5px 12px;white-space:nowrap" onclick="setPmFilter('todas')">Todas</button>`,
+        ...activeTables.map(t => {
+          const waiting = t.status==='waiting';
+          const active  = pmFilter===t.num;
+          return `<button class="btn bg" style="font-size:11.5px;padding:5px 12px;white-space:nowrap;${waiting?'border-color:rgba(245,158,11,.5);color:var(--accent3)':''}${active?';background:rgba(59,130,246,.12);border-color:var(--accent);color:var(--accent)':''}" onclick="setPmFilter(${t.num})">Mesa ${t.num}${waiting?' ⏳':''}</button>`;
+        })
+      ].join('');
+    }
+    renderMesasList(mesaOrders, activeTables);
+  }
+}
+
+function renderMesaKanban(mesaOrders) {
+  const colPrep = document.getElementById('mesa-col-preparando');
+  const colServ = document.getElementById('mesa-col-servido');
+  const cntPrep = document.getElementById('mesa-cnt-preparando');
+  const cntServ = document.getElementById('mesa-cnt-servido');
+  if (!colPrep || !colServ) return;
+
+  let filtered = mesaOrders;
+  if (pmFilter !== 'todas') filtered = filtered.filter(o=>o.mesa_num===pmFilter);
+
+  const preparando = filtered.filter(o=>o.status==='analise'||o.status==='producao');
+  const servido    = filtered.filter(o=>o.status==='pronto');
+
+  if (cntPrep) cntPrep.textContent = preparando.length;
+  if (cntServ) cntServ.textContent = servido.length;
+
+  const cardHtml = (o, col) => {
+    const itemsArr = Array.isArray(o.items) ? o.items : [];
+    const itemStr  = itemsArr.map(i=>`${i.qty}× ${i.name}`).join(', ');
+    const total    = 'R$ '+(parseFloat(o.total)||0).toFixed(2).replace('.',',');
+    const isAnalise = o.status === 'analise';
+    let actionBtn = '';
+    if (col === 'preparando') {
+      if (isAnalise) {
+        actionBtn = `<div class="oc-actions">
+          <button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();mesaAdvanceOrder(${o.id})">✔ Confirmar</button>
+          <button class="oc-btn oc-btn-no" onclick="event.stopPropagation();mesaCancelOrder(${o.id})">✕ Cancelar</button>
+        </div>`;
+      } else {
+        actionBtn = `<div class="oc-actions">
+          <button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();mesaServOrder(${o.id})">🍽️ Servido</button>
+        </div>`;
+      }
+    } else {
+      actionBtn = `<div class="oc-actions">
+        <button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();fecharMesa(${o.mesa_num})">💰 Fechar Mesa ${o.mesa_num}</button>
+      </div>`;
+    }
+    const statusDot = isAnalise
+      ? `<span style="font-size:9px;background:rgba(249,115,22,.2);color:#fed7aa;padding:1px 5px;border-radius:99px;font-weight:700">NOVO</span>`
+      : '';
+    return `<div class="order-card" onclick="openOrderDetail(${o.id})">
+      <div class="oc-top">
+        <span class="oc-id">Mesa ${o.mesa_num} · #${o.id}</span>
+        <span class="oc-time">⏱ ${o.time||''}</span>
+      </div>
+      ${statusDot ? `<div style="margin-bottom:3px">${statusDot}</div>` : ''}
+      <div class="oc-items">${itemStr}</div>
+      <div class="oc-bot">
+        <span class="oc-total">${total}</span>
+      </div>
+      ${actionBtn}
+    </div>`;
+  };
+
+  colPrep.innerHTML = preparando.length
+    ? preparando.map(o=>cardHtml(o,'preparando')).join('')
+    : '<div class="kol-empty">Nenhum pedido em preparo</div>';
+  colServ.innerHTML = servido.length
+    ? servido.map(o=>cardHtml(o,'servido')).join('')
+    : '<div class="kol-empty">Nenhum pedido servido ainda</div>';
+}
+
+function renderMesasList(mesaOrders, activeTables) {
   const list = document.getElementById('pm-orders-list');
   if (!list) return;
 
-  // Gather all mesa nums that have orders or are busy/waiting
   const mesaNums = [...new Set([
     ...activeTables.map(t=>t.num),
     ...mesaOrders.map(o=>o.mesa_num).filter(Boolean)
   ])].sort((a,b)=>a-b);
-
   const filtered = pmFilter === 'todas' ? mesaNums : mesaNums.filter(n=>n===pmFilter);
 
   if (!filtered.length) {
@@ -3273,24 +3411,23 @@ async function renderMesasPage() {
   }
 
   list.innerHTML = filtered.map(num => {
-    const t         = tables.find(x=>x.num===num);
-    const isFree    = !t || t.status==='free';
-    const isWaiting = t?.status==='waiting';
-    const tableOrders = mesaOrders.filter(o=>o.mesa_num===num);
-    const total     = tableOrders.reduce((s,o)=>s+parseFloat(o.total||0),0);
-    const statusColor = isWaiting ? 'var(--accent3)' : 'var(--danger)';
-    const statusLabel = isWaiting ? '⏳ Aguardando pagamento' : '🔴 Ocupada';
+    const t          = tables.find(x=>x.num===num);
+    const isWaiting  = t?.status==='waiting';
+    const tableOrders= mesaOrders.filter(o=>o.mesa_num===num);
+    const total      = tableOrders.reduce((s,o)=>s+parseFloat(o.total||0),0);
+    const statusColor= isWaiting ? 'var(--accent3)' : 'var(--danger)';
+    const statusLabel= isWaiting ? '⏳ Aguardando pagamento' : '🔴 Ocupada';
 
     const ordersHtml = tableOrders.length
       ? tableOrders.map(o => {
-          const itemsArr  = Array.isArray(o.items) ? o.items : [];
-          const isFood    = o.status==='producao'||o.status==='analise';
-          const stColor   = isFood?'var(--accent)':o.status==='pronto'?'var(--success)':'var(--muted)';
-          const stLabel   = isFood?'🍳 Em produção':o.status==='pronto'?'🥤 Pronto':'—';
+          const itemsArr = Array.isArray(o.items) ? o.items : [];
+          const isFood   = o.status==='producao'||o.status==='analise';
+          const stColor  = isFood?'var(--accent)':o.status==='pronto'?'var(--success)':'var(--muted)';
+          const stLabel  = isFood?'🍳 Preparando':o.status==='pronto'?'✅ Servido':'—';
           return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:7px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
               <span style="font-size:10.5px;font-weight:700;color:${stColor};background:${stColor}18;padding:2px 7px;border-radius:99px">${stLabel}</span>
-              <span style="font-size:11px;color:var(--muted)">${o.time||''} ${o.garcom_nome?'· '+o.garcom_nome:''}</span>
+              <span style="font-size:11px;color:var(--muted)">${o.time||''}</span>
             </div>
             <div style="font-size:12.5px;line-height:1.6">
               ${itemsArr.map(i=>`<span style="display:inline-block;background:rgba(255,255,255,.05);border-radius:5px;padding:1px 6px;margin:1px 2px 1px 0;font-size:11.5px">${i.qty}× ${i.name}</span>`).join('')}
@@ -3305,12 +3442,8 @@ async function renderMesasPage() {
           💰 Registrar pagamento — R$ ${total.toFixed(2).replace('.',',')}
         </button>`
       : `<div style="display:flex;gap:8px;margin-top:8px">
-          <button onclick="openGarcomMesa(${num})" class="btn bp" style="flex:1;justify-content:center;font-size:12px">
-            ➕ Lançar pedido
-          </button>
-          <button onclick="fecharMesa(${num})" class="btn" style="flex:1;justify-content:center;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;border:none;font-size:12px;font-weight:700">
-            💰 Fechar mesa
-          </button>
+          <button onclick="openGarcomMesa(${num})" class="btn bp" style="flex:1;justify-content:center;font-size:12px">➕ Lançar pedido</button>
+          <button onclick="fecharMesa(${num})" class="btn" style="flex:1;justify-content:center;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;border:none;font-size:12px;font-weight:700">💰 Fechar mesa</button>
         </div>`;
 
     return `<div style="background:var(--surface);border:1.5px solid ${isWaiting?'rgba(245,158,11,.35)':'var(--border)'};border-radius:14px;padding:16px;margin-bottom:14px">
@@ -3328,6 +3461,32 @@ async function renderMesasPage() {
       ${actionBtn}
     </div>`;
   }).join('');
+}
+
+async function mesaAdvanceOrder(id) {
+  const o = ordersKanban.find(x=>x.id===id);
+  if (!o) return;
+  const { error } = await sb.from('orders').update({status:'producao'}).eq('id',id);
+  if (!error) { o.status='producao'; renderMesasPage(); }
+  else sbToast('err','Erro ao atualizar pedido');
+}
+
+async function mesaServOrder(id) {
+  const o = ordersKanban.find(x=>x.id===id);
+  if (!o) return;
+  const { error } = await sb.from('orders').update({status:'pronto'}).eq('id',id);
+  if (!error) { o.status='pronto'; renderMesasPage(); sbToast('ok','Pedido servido!'); }
+  else sbToast('err','Erro ao atualizar pedido');
+}
+
+async function mesaCancelOrder(id) {
+  if (!confirm('Cancelar este pedido?')) return;
+  const { error } = await sb.from('orders').update({status:'cancelado'}).eq('id',id);
+  if (!error) {
+    ordersKanban = ordersKanban.filter(x=>x.id!==id);
+    renderMesasPage();
+    sbToast('ok','Pedido cancelado');
+  } else sbToast('err','Erro ao cancelar');
 }
 
 function setPmFilter(val) {
@@ -3497,7 +3656,7 @@ async function submitGarcomOrder(){
     const { data: orderData, error: oErr } = await sb.from('orders').insert({
       client:`Mesa ${garcomMesa}`, phone:'', addr:`Mesa ${garcomMesa}`,
       mesa_num: garcomMesa, items:itemsArr, total:tot, taxa:0,
-      status:'producao', time, pag:'Mesa'
+      status: mesaAutoAccept ? 'producao' : 'analise', time, pag:'Mesa'
     }).select().single();
     if(oErr) throw oErr;
     await sb.from('mesas').update({status:'busy', updated_at:new Date().toISOString()}).eq('num', garcomMesa);
