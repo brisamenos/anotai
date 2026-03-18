@@ -714,6 +714,8 @@ td:first-child{padding-left:16px}
 .print-ticket .pt-large  { font-size: 14px; font-weight: bold; }
 .print-ticket .pt-hr     { border: none; border-top: 1px dashed #000; margin: 6px 0; }
 .print-ticket .pt-row    { display: flex; justify-content: space-between; }
+#page-robo.on{display:flex!important;flex-direction:column}
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -1353,42 +1355,237 @@ td:first-child{padding-left:16px}
 </div>
 
 <!-- ROBÔ -->
-<div class="page" id="page-robo">
-  <div class="ph"><div><div class="pt">Atendente Virtual (Robô)</div><div class="ps">Configure e teste seu chatbot 24/7</div></div><button class="btn bp" onclick="showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><path d=&quot;M2 12l3-3 2.5 2.5L12 5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M9 5h3v3&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>','Robô publicado com sucesso!')"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 12l3-3 2.5 2.5L12 5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 5h3v3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Publicar alterações</button></div>
-  <div class="chat-wrap">
-    <div class="chat-left">
-      <div class="chat-header">
-        <div class="robot-av"><svg width="28" height="28" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="5" width="10" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="5.5" cy="9" r="1" fill="currentColor"/><circle cx="10.5" cy="9" r="1" fill="currentColor"/><path d="M6 5V3.5A.5.5 0 0 1 6.5 3h3a.5.5 0 0 1 .5.5V5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="3" r=".5" fill="currentColor"/><path d="M6 13v2M10 13v2M5 13h6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        <div><div style="font-weight:600;font-size:13.5px">Robô Estima Food</div><div style="font-size:11.5px;color:var(--success)">● Online • respondendo em ~5s</div></div>
-        <div style="margin-left:auto"><button class="btn bg" style="font-size:11.5px;padding:4px 9px" onclick="clearChat()">Limpar</button></div>
-      </div>
-      <div class="chat-msgs" id="chat-msgs"></div>
-      <div class="chat-input">
-        <input type="text" id="chat-in" placeholder="Simule uma mensagem de cliente..." onkeydown="if(event.key==='Enter')sendChat()">
-        <button class="btn bp" onclick="sendChat()">Enviar</button>
-      </div>
-    </div>
-    <div class="chat-right">
-      <div class="bot-config">
-        <div class="bc-title">Configurações do Robô</div>
-        <div class="bc-row"><span>Atendimento ativo</span><div class="toggle on" onclick="this.classList.toggle('on');showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><rect x=&quot;3&quot; y=&quot;5&quot; width=&quot;10&quot; height=&quot;8&quot; rx=&quot;1.5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><circle cx=&quot;5.5&quot; cy=&quot;9&quot; r=&quot;1&quot; fill=&quot;currentColor&quot;/><circle cx=&quot;10.5&quot; cy=&quot;9&quot; r=&quot;1&quot; fill=&quot;currentColor&quot;/><path d=&quot;M6 5V3.5A.5.5 0 0 1 6.5 3h3a.5.5 0 0 1 .5.5V5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>',this.classList.contains('on')?'Robô ativado!':'Robô pausado')"></div></div>
-        <div class="bc-row"><span>Resposta boas-vindas</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
-        <div class="bc-row"><span>Enviar cardápio</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
-        <div class="bc-row"><span>Aceitar pedidos</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
-        <div class="bc-row"><span>Informar taxa</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
-        <div class="bc-row"><span>Modo fora do horário</span><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
-        <div class="divider"></div>
-        <div style="font-size:11.5px;color:var(--muted);margin-bottom:7px">Horário de atendimento</div>
-        <div style="display:flex;gap:5px;margin-bottom:7px">
-          <input class="form-input" style="flex:1;font-size:11.5px;padding:5px 9px" value="08:00">
-          <span style="color:var(--muted);align-self:center">–</span>
-          <input class="form-input" style="flex:1;font-size:11.5px;padding:5px 9px" value="22:00">
+<div class="page" id="page-robo" style="padding:0;overflow:hidden;height:calc(100vh - 52px);display:none;flex-direction:column">
+
+  <!-- Tabs -->
+  <div style="display:flex;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;padding:0 24px">
+    <div class="pdvb-tab on" id="robo-tab-wp"   onclick="roboTab('wp')">📱 WhatsApp</div>
+    <div class="pdvb-tab"     id="robo-tab-auto" onclick="roboTab('auto')">⚡ Automações</div>
+    <div class="pdvb-tab"     id="robo-tab-msgs" onclick="roboTab('msgs')">💬 Mensagens</div>
+    <div class="pdvb-tab"     id="robo-tab-chat" onclick="roboTab('chat')">🤖 Simulador</div>
+  </div>
+
+  <div style="flex:1;overflow:auto;padding:24px 28px">
+
+    <!-- ══ TAB: WHATSAPP / CONEXÃO ══ -->
+    <div id="robo-section-wp">
+
+      <div class="ph" style="margin-bottom:20px">
+        <div><div class="pt">Conexão WhatsApp</div><div class="ps">Conecte seu número via Evolution API para envio de mensagens automáticas</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div id="evo-status-badge" style="display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);font-size:12px;font-weight:600;color:var(--muted)">
+            <div id="evo-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--muted)"></div>
+            <span id="evo-status-txt">Verificando...</span>
+          </div>
+          <button class="btn bg" onclick="evoCheckStatus()">🔄 Atualizar</button>
         </div>
-        <div style="font-size:11.5px;color:var(--muted);margin-bottom:5px">Taxa de entrega (R$)</div>
-        <input class="form-input" style="font-size:11.5px;padding:5px 9px" value="5,00" id="taxa-input">
-        <button class="btn bp" style="width:100%;justify-content:center;font-size:11.5px;margin-top:10px" onclick="showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><path d=&quot;M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M5 2v5h6V2&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><rect x=&quot;5&quot; y=&quot;9&quot; width=&quot;6&quot; height=&quot;5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>','Config salva!')">Salvar config</button>
+      </div>
+
+      <!-- Config da instância -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+        <div class="card" style="padding:20px">
+          <div class="card-title" style="margin-bottom:14px">⚙️ Configuração da Instância</div>
+          <div class="form-row">
+            <label class="form-label">Nome da instância</label>
+            <input class="form-input" id="evo-instance" placeholder="estima-food" value="estima-food">
+          </div>
+          <div class="form-row">
+            <label class="form-label">URL da Evolution API</label>
+            <input class="form-input" id="evo-url" value="https://projeto-evolution-api.xtknqq.easypanel.host" placeholder="https://...">
+          </div>
+          <div class="form-row">
+            <label class="form-label">API Key</label>
+            <input class="form-input" id="evo-apikey" value="429683C4C977415CAAFCCE10F7D57E11" type="password" placeholder="Sua API Key">
+            <div style="margin-top:4px;display:flex;gap:5px">
+              <button class="btn bg" style="font-size:11px;padding:3px 9px" onclick="document.getElementById('evo-apikey').type=document.getElementById('evo-apikey').type==='password'?'text':'password'">👁 Ver</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="btn bp" style="flex:1;justify-content:center" onclick="evoCriarInstancia()">➕ Criar instância</button>
+            <button class="btn bg" style="flex:1;justify-content:center" onclick="evoCheckStatus()">🔍 Verificar</button>
+          </div>
+        </div>
+
+        <!-- QR Code / Status -->
+        <div class="card" style="padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:280px" id="evo-qr-card">
+          <div id="evo-qr-area" style="text-align:center">
+            <div style="font-size:48px;margin-bottom:12px">📱</div>
+            <div style="font-size:14px;font-weight:600;margin-bottom:6px">Aguardando conexão</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Clique em "Conectar WhatsApp" para gerar o QR Code</div>
+            <button class="btn bp" onclick="evoConectar()">📲 Conectar WhatsApp</button>
+          </div>
+          <div id="evo-connected-area" style="display:none;text-align:center">
+            <div style="font-size:56px;margin-bottom:12px">✅</div>
+            <div style="font-size:15px;font-weight:700;color:var(--success);margin-bottom:4px">WhatsApp Conectado!</div>
+            <div id="evo-phone-display" style="font-size:12px;color:var(--muted);margin-bottom:16px">—</div>
+            <button class="btn bd" style="font-size:12px" onclick="evoDesconectar()">⛔ Desconectar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Teste de envio -->
+      <div class="card" style="padding:20px">
+        <div class="card-title" style="margin-bottom:14px">🧪 Testar Envio de Mensagem</div>
+        <div style="display:grid;grid-template-columns:1fr 2fr auto;gap:10px;align-items:flex-end">
+          <div class="form-row" style="margin:0">
+            <label class="form-label">Número (com DDD)</label>
+            <input class="form-input" id="evo-test-phone" placeholder="85912345678">
+          </div>
+          <div class="form-row" style="margin:0">
+            <label class="form-label">Mensagem</label>
+            <input class="form-input" id="evo-test-msg" value="Olá! Teste do sistema Estima Food 🍕">
+          </div>
+          <button class="btn bp" onclick="evoTestarEnvio()" style="white-space:nowrap">📤 Enviar teste</button>
+        </div>
+        <div id="evo-test-result" style="margin-top:10px;font-size:12.5px;display:none"></div>
       </div>
     </div>
+
+    <!-- ══ TAB: AUTOMAÇÕES ══ -->
+    <div id="robo-section-auto" style="display:none">
+      <div class="ph" style="margin-bottom:20px">
+        <div><div class="pt">Automações</div><div class="ps">Configure quando e o que o sistema envia automaticamente</div></div>
+        <button class="btn bp" onclick="evoSalvarAutomacoes()">💾 Salvar automações</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px">
+
+        <!-- Pedido confirmado -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(59,130,246,.15);display:flex;align-items:center;justify-content:center;font-size:18px">✅</div>
+              <div><div style="font-weight:600;font-size:13.5px">Pedido Confirmado</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando o pedido passa para "Em produção"</div></div>
+            </div>
+            <div class="toggle on" id="auto-toggle-confirmado" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-confirmado" rows="3" style="font-size:12.5px">✅ Olá {nome}! Seu pedido #{id} foi confirmado e está sendo preparado com carinho! 🍕
+Itens: {itens}
+Total: R$ {total}
+Tempo estimado: 30-40 min ⏱️</textarea>
+        </div>
+
+        <!-- Pedido pronto -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(34,197,94,.15);display:flex;align-items:center;justify-content:center;font-size:18px">🛎️</div>
+              <div><div style="font-weight:600;font-size:13.5px">Pedido Pronto</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando o pedido está pronto para retirada ou saiu para entrega</div></div>
+            </div>
+            <div class="toggle on" id="auto-toggle-pronto" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-pronto" rows="3" style="font-size:12.5px">🛎️ {nome}, seu pedido #{id} está PRONTO!
+{tipo_entrega}
+Qualquer dúvida, estamos aqui! 😊</textarea>
+        </div>
+
+        <!-- Saiu para entrega -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(249,115,22,.15);display:flex;align-items:center;justify-content:center;font-size:18px">🛵</div>
+              <div><div style="font-weight:600;font-size:13.5px">Saiu para Entrega</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando o pedido delivery saiu para entrega</div></div>
+            </div>
+            <div class="toggle on" id="auto-toggle-entrega" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-entrega" rows="3" style="font-size:12.5px">🛵 {nome}, seu pedido #{id} saiu para entrega!
+Endereço: {endereco}
+Nosso entregador está a caminho! 🏍️💨</textarea>
+        </div>
+
+        <!-- Pedido cancelado -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(239,68,68,.15);display:flex;align-items:center;justify-content:center;font-size:18px">❌</div>
+              <div><div style="font-weight:600;font-size:13.5px">Pedido Cancelado</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando um pedido é cancelado</div></div>
+            </div>
+            <div class="toggle" id="auto-toggle-cancelado" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-cancelado" rows="2" style="font-size:12.5px">😔 {nome}, infelizmente seu pedido #{id} foi cancelado. Entre em contato conosco para mais informações.</textarea>
+        </div>
+
+        <!-- Aniversário -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(139,92,246,.15);display:flex;align-items:center;justify-content:center;font-size:18px">🎂</div>
+              <div><div style="font-weight:600;font-size:13.5px">Felicitação de Aniversário</div><div style="font-size:11.5px;color:var(--muted)">Enviado automaticamente no dia do aniversário do cliente (requer data cadastrada)</div></div>
+            </div>
+            <div class="toggle on" id="auto-toggle-aniversario" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-aniversario" rows="4" style="font-size:12.5px">🎉🎂 Feliz Aniversário, {nome}!
+A equipe Estima Food deseja um dia incrível para você!
+
+🎁 Presente especial: use o cupom ANIVER10 e ganhe 10% OFF no seu próximo pedido!
+Válido hoje apenas para você! 💛</textarea>
+          <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+            <div style="font-size:12px;color:var(--muted)">Horário de envio:</div>
+            <input class="form-input" style="width:90px;font-size:12px;padding:4px 8px" value="09:00" id="auto-aniv-hora">
+            <button class="btn bp" style="font-size:11.5px;padding:4px 12px" onclick="evoEnviarAniversariantesHoje()">🎂 Enviar para aniversariantes de hoje</button>
+          </div>
+        </div>
+
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;font-size:12px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+        <span>📌</span>
+        <span>Variáveis disponíveis: <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{nome}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{id}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{itens}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{total}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{endereco}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{tipo_entrega}</code></span>
+      </div>
+    </div>
+
+    <!-- ══ TAB: HISTÓRICO MENSAGENS ══ -->
+    <div id="robo-section-msgs" style="display:none">
+      <div class="ph" style="margin-bottom:20px">
+        <div><div class="pt">Histórico de Mensagens</div><div class="ps">Todas as mensagens enviadas pelo sistema</div></div>
+        <button class="btn bg" onclick="evoCarregarHistorico()">🔄 Atualizar</button>
+      </div>
+      <div class="tw">
+        <div class="tmeta"><span id="msgs-count" style="font-size:12.5px;color:var(--muted)">—</span></div>
+        <table>
+          <thead><tr><th>Destinatário</th><th>Tipo</th><th>Mensagem</th><th>Status</th><th>Horário</th></tr></thead>
+          <tbody id="msgs-tbody"><tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted);font-size:13px">Clique em "Atualizar" para carregar o histórico</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══ TAB: SIMULADOR ══ -->
+    <div id="robo-section-chat" style="display:none">
+      <div class="chat-wrap" style="height:calc(100vh - 220px)">
+        <div class="chat-left">
+          <div class="chat-header">
+            <div class="robot-av">🤖</div>
+            <div><div style="font-weight:600;font-size:13.5px">Simulador do Robô</div><div style="font-size:11.5px;color:var(--success)" id="robo-sim-status">● Simulando respostas</div></div>
+            <div style="margin-left:auto"><button class="btn bg" style="font-size:11.5px;padding:4px 9px" onclick="clearChat()">Limpar</button></div>
+          </div>
+          <div class="chat-msgs" id="chat-msgs"></div>
+          <div class="chat-input">
+            <input type="text" id="chat-in" placeholder="Simule uma mensagem de cliente..." onkeydown="if(event.key==='Enter')sendChat()">
+            <button class="btn bp" onclick="sendChat()">Enviar</button>
+          </div>
+        </div>
+        <div class="chat-right">
+          <div class="bot-config">
+            <div class="bc-title">Config do Robô</div>
+            <div class="bc-row"><span>Atendimento ativo</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="bc-row"><span>Boas-vindas</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="bc-row"><span>Enviar cardápio</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="bc-row"><span>Aceitar pedidos</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="bc-row"><span>Informar taxa</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="bc-row"><span>Fora do horário</span><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+            <div class="divider"></div>
+            <div style="font-size:11.5px;color:var(--muted);margin-bottom:7px">Horário</div>
+            <div style="display:flex;gap:5px;margin-bottom:7px">
+              <input class="form-input" style="flex:1;font-size:11.5px;padding:5px 9px" value="08:00">
+              <span style="color:var(--muted);align-self:center">–</span>
+              <input class="form-input" style="flex:1;font-size:11.5px;padding:5px 9px" value="22:00">
+            </div>
+            <div style="font-size:11.5px;color:var(--muted);margin-bottom:5px">Taxa entrega (R$)</div>
+            <input class="form-input" style="font-size:11.5px;padding:5px 9px" value="5,00" id="taxa-input">
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -6473,6 +6670,192 @@ async function deleteGarcom(id) {
 // ─────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────
+function initSidebarState() { loadSidebarState(); evoCarregarAutomacoesSalvas(); }
+
+// ═══════════════════════════════════════
+// EVOLUTION API — WhatsApp Integration
+// ═══════════════════════════════════════
+const EVO = {
+  get url()     { return (document.getElementById('evo-url')?.value||'').replace(/\/$/,''); },
+  get key()     { return document.getElementById('evo-apikey')?.value||''; },
+  get instance(){ return document.getElementById('evo-instance')?.value||'estima-food'; },
+  headers()     { return { 'Content-Type':'application/json', 'apikey': this.key }; },
+  async req(method, path, body) {
+    try {
+      const r = await fetch(`${this.url}${path}`, { method, headers: this.headers(), body: body ? JSON.stringify(body) : undefined });
+      return { ok: r.ok, status: r.status, data: await r.json().catch(()=>({})) };
+    } catch(e) { return { ok: false, error: e.message }; }
+  },
+  async sendText(number, text) {
+    const phone = number.replace(/\D/g,'');
+    const jid   = phone.startsWith('55') ? `${phone}@s.whatsapp.net` : `55${phone}@s.whatsapp.net`;
+    return this.req('POST', `/message/sendText/${this.instance}`, {
+      number: jid,
+      options: { delay: 1200, presence: 'composing' },
+      textMessage: { text }
+    });
+  }
+};
+
+let evoMsgHistory = [];
+let evoConnected  = false;
+let evoQrInterval = null;
+
+function roboTab(tab) {
+  ['wp','auto','msgs','chat'].forEach(t => {
+    document.getElementById('robo-tab-'+t)?.classList.toggle('on', t===tab);
+    const s = document.getElementById('robo-section-'+t);
+    if (s) s.style.display = t===tab ? '' : 'none';
+  });
+  if (tab==='msgs') evoCarregarHistorico();
+  if (tab==='wp')   evoCheckStatus();
+}
+
+async function evoCriarInstancia() {
+  sbLoading(true);
+  const r = await EVO.req('POST', '/instance/create', { instanceName: EVO.instance, qrcode: true, integration: 'WHATSAPP-BAILEYS' });
+  sbLoading(false);
+  if (r.ok) { sbToast('ok', `Instância "${EVO.instance}" criada!`); evoCheckStatus(); }
+  else { const m = r.data?.message||r.data?.error||`Erro ${r.status}`; sbToast('err','Erro: '+(typeof m==='string'?m:JSON.stringify(m))); }
+}
+
+async function evoCheckStatus() {
+  _evoSetStatus('loading','Verificando...');
+  const r = await EVO.req('GET', `/instance/connectionState/${EVO.instance}`);
+  if (!r.ok) { _evoSetStatus('disconnected','Desconectado'); return; }
+  const state = r.data?.instance?.state || r.data?.state || 'close';
+  if (state==='open') { evoConnected=true; _evoSetStatus('connected','Conectado'); _evoShowConnected(r.data?.instance?.profileName||r.data?.me?.pushName||'WhatsApp'); }
+  else { evoConnected=false; _evoSetStatus('disconnected','Desconectado'); _evoShowQRPrompt(); }
+}
+
+async function evoConectar() {
+  const qrArea = document.getElementById('evo-qr-area');
+  if (qrArea) qrArea.innerHTML='<div style="font-size:32px;margin-bottom:10px">⏳</div><div style="font-size:13px;color:var(--muted)">Gerando QR Code...</div>';
+  const r = await EVO.req('GET', `/instance/connect/${EVO.instance}`);
+  if (!r.ok || !r.data?.code) {
+    if (qrArea) qrArea.innerHTML=`<div style="font-size:13px;color:var(--danger);margin-bottom:12px">❌ ${r.data?.message||'Erro ao gerar QR. Crie a instância primeiro.'}</div><button class="btn bp" onclick="evoCriarInstancia()">➕ Criar instância</button>`;
+    return;
+  }
+  if (qrArea) {
+    if (r.data.base64) {
+      qrArea.innerHTML=`<div style="font-size:13px;font-weight:600;margin-bottom:12px">📲 Escaneie com seu WhatsApp</div><img src="${r.data.base64}" style="width:220px;height:220px;border-radius:12px;border:3px solid var(--accent);margin-bottom:12px"><div style="font-size:11px;color:var(--muted);margin-bottom:12px">QR Code expira em 60 segundos</div><button class="btn bg" style="font-size:11.5px" onclick="evoConectar()">🔄 Novo QR Code</button>`;
+    } else {
+      qrArea.innerHTML=`<div style="font-size:12px;word-break:break-all;padding:10px;background:var(--surface2);border-radius:8px;margin-bottom:12px;color:var(--muted)">${(r.data.code||'').slice(0,80)}...</div><button class="btn bg" onclick="evoConectar()">🔄 Novo QR</button>`;
+    }
+  }
+  if (evoQrInterval) clearInterval(evoQrInterval);
+  let tries=0;
+  evoQrInterval = setInterval(async()=>{
+    tries++;
+    const s = await EVO.req('GET', `/instance/connectionState/${EVO.instance}`);
+    const state = s.data?.instance?.state||s.data?.state||'close';
+    if (state==='open') { clearInterval(evoQrInterval); evoConnected=true; _evoSetStatus('connected','Conectado'); _evoShowConnected(s.data?.instance?.profileName||'WhatsApp'); sbToast('ok','✅ WhatsApp conectado!'); }
+    if (tries>30) clearInterval(evoQrInterval);
+  }, 4000);
+}
+
+async function evoDesconectar() {
+  if (!confirm('Desconectar WhatsApp?')) return;
+  await EVO.req('DELETE', `/instance/logout/${EVO.instance}`);
+  evoConnected=false; _evoSetStatus('disconnected','Desconectado'); _evoShowQRPrompt(); sbToast('ok','WhatsApp desconectado');
+}
+
+async function evoTestarEnvio() {
+  const phone = document.getElementById('evo-test-phone')?.value?.replace(/\D/g,'');
+  const msg   = document.getElementById('evo-test-msg')?.value;
+  const res   = document.getElementById('evo-test-result');
+  if (!phone) { sbToast('err','Informe o número'); return; }
+  if (!evoConnected) { sbToast('err','WhatsApp não conectado'); return; }
+  if (res) { res.style.display='block'; res.innerHTML='<span style="color:var(--muted)">Enviando...</span>'; }
+  const r = await EVO.sendText(phone, msg);
+  if (r.ok) {
+    if (res) res.innerHTML='<span style="color:var(--success)">✅ Mensagem enviada!</span>';
+    sbToast('ok','Teste enviado!');
+    evoMsgHistory.unshift({ to:phone, tipo:'Teste', msg:(msg||'').slice(0,60), status:'enviado', time: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) });
+  } else {
+    const err=r.data?.message||r.error||'Erro';
+    if (res) res.innerHTML=`<span style="color:var(--danger)">❌ ${err}</span>`;
+    sbToast('err','Erro ao enviar: '+err);
+  }
+}
+
+async function evoEnviarMensagem(phone, tipo, vars={}) {
+  if (!evoConnected) return false;
+  const toggle = document.getElementById(`auto-toggle-${tipo}`);
+  if (toggle && !toggle.classList.contains('on')) return false;
+  const msgEl = document.getElementById(`auto-msg-${tipo}`);
+  if (!msgEl) return false;
+  let text = msgEl.value;
+  Object.entries(vars).forEach(([k,v])=>{ text=text.replaceAll(`{${k}}`,v||''); });
+  const r = await EVO.sendText(phone, text);
+  evoMsgHistory.unshift({ to:phone, tipo:tipo.charAt(0).toUpperCase()+tipo.slice(1), msg:text.slice(0,60)+'...', status:r.ok?'enviado':'falhou', time:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) });
+  return r.ok;
+}
+
+async function evoEnviarAniversariantesHoje() {
+  if (!evoConnected) { sbToast('err','WhatsApp não conectado'); return; }
+  const today=new Date();
+  const todayMD=`${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const anivs=fidClients.filter(c=>c.birthday&&c.birthday.slice(5)===todayMD&&c.phone);
+  if (!anivs.length) { sbToast('ok','Nenhum aniversariante com telefone hoje'); return; }
+  sbLoading(true);
+  let ok=0,fail=0;
+  for (const c of anivs) { const sent=await evoEnviarMensagem(c.phone,'aniversario',{nome:c.name}); sent?ok++:fail++; }
+  sbLoading(false);
+  sbToast('ok',`🎂 Enviado para ${ok} aniversariante(s)${fail?` | ${fail} falhou`:''}`);
+}
+
+function evoSalvarAutomacoes() {
+  const data={};
+  ['confirmado','pronto','entrega','cancelado','aniversario'].forEach(tipo=>{
+    data[tipo]={ on:document.getElementById(`auto-toggle-${tipo}`)?.classList.contains('on'), msg:document.getElementById(`auto-msg-${tipo}`)?.value };
+  });
+  localStorage.setItem('evo_automacoes',JSON.stringify(data));
+  sbToast('ok','✅ Automações salvas!');
+}
+
+function evoCarregarAutomacoesSalvas() {
+  try {
+    const data=JSON.parse(localStorage.getItem('evo_automacoes')||'{}');
+    Object.entries(data).forEach(([tipo,cfg])=>{
+      const t=document.getElementById(`auto-toggle-${tipo}`), m=document.getElementById(`auto-msg-${tipo}`);
+      if (t) { cfg.on?t.classList.add('on'):t.classList.remove('on'); }
+      if (m&&cfg.msg) m.value=cfg.msg;
+    });
+  } catch(e){}
+}
+
+function evoCarregarHistorico() {
+  const tbody=document.getElementById('msgs-tbody'), count=document.getElementById('msgs-count');
+  if (!tbody) return;
+  if (!evoMsgHistory.length) { tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--muted);font-size:13px">Nenhuma mensagem enviada ainda</td></tr>'; if(count)count.textContent='0 mensagens'; return; }
+  if (count) count.textContent=`${evoMsgHistory.length} mensagem(s)`;
+  tbody.innerHTML=evoMsgHistory.map(m=>`<tr>
+    <td style="font-size:12.5px">${m.to}</td>
+    <td><span style="font-size:11px;background:rgba(59,130,246,.1);color:var(--accent);padding:2px 7px;border-radius:99px;font-weight:600">${m.tipo}</span></td>
+    <td style="font-size:12px;color:var(--muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.msg}</td>
+    <td><span style="font-size:11px;font-weight:600;color:${m.status==='enviado'?'var(--success)':'var(--danger)'}">${m.status==='enviado'?'✅ Enviado':'❌ Falhou'}</span></td>
+    <td style="font-size:12px;color:var(--muted)">${m.time}</td>
+  </tr>`).join('');
+}
+
+function _evoSetStatus(type,txt) {
+  const dot=document.getElementById('evo-status-dot'), span=document.getElementById('evo-status-txt'), badge=document.getElementById('evo-status-badge');
+  const colors={connected:'var(--success)',disconnected:'var(--danger)',loading:'var(--accent3)'};
+  if(dot) dot.style.background=colors[type]||'var(--muted)';
+  if(span) span.textContent=txt;
+  if(badge){ badge.style.borderColor=type==='connected'?'rgba(34,197,94,.3)':'var(--border)'; badge.style.color=type==='connected'?'var(--success)':'var(--muted)'; }
+}
+function _evoShowConnected(name) {
+  const qr=document.getElementById('evo-qr-area'), cn=document.getElementById('evo-connected-area'), ph=document.getElementById('evo-phone-display');
+  if(qr) qr.style.display='none'; if(cn) cn.style.display='block'; if(ph) ph.textContent=name;
+}
+function _evoShowQRPrompt() {
+  const qr=document.getElementById('evo-qr-area'), cn=document.getElementById('evo-connected-area');
+  if(qr){ qr.style.display='block'; qr.innerHTML='<div style="font-size:48px;margin-bottom:12px">📱</div><div style="font-size:14px;font-weight:600;margin-bottom:6px">WhatsApp desconectado</div><div style="font-size:12px;color:var(--muted);margin-bottom:16px">Clique para gerar o QR Code</div><button class="btn bp" onclick="evoConectar()">📲 Conectar WhatsApp</button>'; }
+  if(cn) cn.style.display='none';
+}
+
 buildEmojiGrid();
 initSidebarState();
 requestNotifPermission();
