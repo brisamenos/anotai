@@ -403,6 +403,69 @@ body {
 .ci-remove { background:none; border:none; color:var(--muted); cursor:pointer; font-size:18px; padding:4px 6px; border-radius:6px; transition:all .15s; flex-shrink:0; line-height:1; }
 .ci-remove:hover { background:rgba(239,68,68,.15); color:var(--red); }
 
+/* ── UPSELL MODAL ────────────────────── */
+.upsell-overlay {
+  display: none; position: fixed; inset: 0; z-index: 700;
+  background: rgba(0,0,0,.82); backdrop-filter: blur(6px);
+  align-items: flex-end; justify-content: center;
+}
+.upsell-overlay.show { display: flex; }
+.upsell-modal {
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  width: 100%; max-width: 520px;
+  padding: 0 0 32px;
+  animation: slideUp .3s cubic-bezier(.34,1.56,.64,1);
+  max-height: 80vh; overflow-y: auto;
+}
+.upsell-handle { width: 40px; height: 4px; border-radius: 99px; background: rgba(255,255,255,.15); margin: 12px auto 0; }
+.upsell-header { padding: 18px 20px 14px; }
+.upsell-added {
+  display: flex; align-items: center; gap: 12px;
+  background: rgba(34,197,94,.08); border: 1px solid rgba(34,197,94,.2);
+  border-radius: 12px; padding: 10px 14px; margin-bottom: 16px;
+}
+.upsell-added-icon { font-size: 24px; }
+.upsell-added-text { font-size: 12.5px; }
+.upsell-added-name { font-weight: 700; color: var(--green); }
+.upsell-title { font-family: 'Syne', sans-serif; font-size: 17px; font-weight: 800; margin-bottom: 4px; }
+.upsell-sub { font-size: 12px; color: var(--muted); }
+.upsell-list { display: flex; flex-direction: column; gap: 0; }
+.upsell-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 20px; cursor: pointer;
+  border-bottom: 1px solid var(--border); transition: background .15s;
+}
+.upsell-item:hover { background: rgba(255,255,255,.03); }
+.upsell-item:last-child { border-bottom: none; }
+.upsell-item-img {
+  width: 52px; height: 52px; border-radius: 10px;
+  background: var(--surface2); border: 1px solid var(--border);
+  overflow: hidden; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 26px;
+}
+.upsell-item-img img { width: 100%; height: 100%; object-fit: cover; }
+.upsell-item-info { flex: 1; min-width: 0; }
+.upsell-item-name { font-weight: 600; font-size: 13.5px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.upsell-item-desc { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.upsell-item-price { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; color: var(--amber); flex-shrink: 0; }
+.upsell-add-btn {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--accent); border: none; color: #fff;
+  font-size: 20px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s; flex-shrink: 0;
+}
+.upsell-add-btn:hover { background: #2563eb; transform: scale(1.1); }
+.upsell-skip {
+  width: calc(100% - 40px); margin: 16px 20px 0;
+  background: none; border: 1.5px solid var(--border);
+  color: var(--muted); border-radius: 10px; padding: 11px;
+  font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all .15s;
+}
+.upsell-skip:hover { border-color: rgba(255,255,255,.2); color: var(--text); }
+
 .item-modal-bg {
   display: none; position: fixed; inset: 0;
   background: rgba(0,0,0,.85); z-index: 550;
@@ -1121,6 +1184,26 @@ body {
 <div class="toast" id="toast">
   <span id="toast-icon">✓</span>
   <span id="toast-msg"></span>
+</div>
+
+<!-- UPSELL MODAL -->
+<div class="upsell-overlay" id="upsell-overlay" onclick="if(event.target===this)closeUpsell()">
+  <div class="upsell-modal">
+    <div class="upsell-handle"></div>
+    <div class="upsell-header">
+      <div class="upsell-added">
+        <div class="upsell-added-icon" id="upsell-added-icon">✓</div>
+        <div class="upsell-added-text">
+          <div class="upsell-added-name" id="upsell-added-name">Item adicionado!</div>
+          <div style="font-size:11px;color:var(--muted)">Adicionado ao seu carrinho</div>
+        </div>
+      </div>
+      <div class="upsell-title">🥤 Que tal um acompanhamento?</div>
+      <div class="upsell-sub">Escolhe uma bebida para completar seu pedido</div>
+    </div>
+    <div class="upsell-list" id="upsell-list"></div>
+    <button class="upsell-skip" onclick="closeUpsell()">Não, obrigado</button>
+  </div>
 </div>
 
 <!-- MOTOBOY DELIVERY ANIMATION -->
@@ -1842,15 +1925,12 @@ function confirmPizza() {
   if (!filled.length || !pz.selected.every(Boolean)) return;
   const maxP  = Math.max(...filled.map(f => f.price));
   const names = filled.map(f => f.name).join(' + ');
-  cart.push({
-    id: 'pizza_' + Date.now(),
-    name: '🍕 ' + names,
-    price: maxP, qty: 1,
-    image_url: null, _isPizza: true
-  });
+  const pizzaItem = { id: 'pizza_' + Date.now(), name: '🍕 ' + names, price: maxP, qty: 1, image_url: null, emoji: '🍕', _isPizza: true };
+  cart.push(pizzaItem);
   updateCartFloat();
-  showToast('🍕', 'Pizza adicionada!');
   closePizzaModal();
+  // Always suggest drink after pizza
+  setTimeout(() => openUpsell(pizzaItem), 350);
 }
 
 // ═══════════════════════════════════════════════
@@ -2017,13 +2097,86 @@ function itemModalConfirm() {
   if (existing) existing.qty += _itemModalQty;
   else cart.push({ ...i, qty: _itemModalQty });
   updateCartFloat();
-  showToast('🛒', `${i.name} adicionado!`);
   closeItemModal();
+
+  // Upsell if it's a food item (not a drink)
+  if (shouldShowUpsell(i)) {
+    setTimeout(() => openUpsell(i), 320);
+  } else {
+    showToast('🛒', `${i.name} adicionado!`);
+  }
 }
 
 // ═══════════════════════════════════════════════
-// REMOVER ITEM DO CARRINHO
+// UPSELL — Acompanhamentos
 // ═══════════════════════════════════════════════
+const UPSELL_TRIGGERS = ['pizza','hamburger','hotdog','chicken','steak','fries','kebab'];
+const UPSELL_DRINKS   = ['drink','juice','beer','water','wine','milkshake'];
+
+function getUpsellSuggestions() {
+  // Get drinks/accompaniments not already in cart
+  const cartIds = new Set(cart.map(c => c.id));
+  const drinks  = allItems.filter(i =>
+    i.status === 'active' &&
+    !cartIds.has(i.id) &&
+    UPSELL_DRINKS.includes(detectFoodType(i))
+  );
+  // Also include any item with category name matching bebidas/drinks
+  const beverages = allItems.filter(i =>
+    i.status === 'active' &&
+    !cartIds.has(i.id) &&
+    (i.cat_key === 'bebidas' || i.cat === 'bebidas' || i.cat_key === 'drinks')
+  );
+  // Merge, deduplicate, shuffle, take up to 4
+  const all = [...new Map([...drinks,...beverages].map(x=>[x.id,x])).values()];
+  return all.sort(() => Math.random() - .5).slice(0, 4);
+}
+
+function shouldShowUpsell(item) {
+  const type = detectFoodType(item);
+  return UPSELL_TRIGGERS.includes(type);
+}
+
+function openUpsell(addedItem) {
+  const suggestions = getUpsellSuggestions();
+  if (!suggestions.length) return; // nothing to suggest
+
+  document.getElementById('upsell-added-icon').textContent = addedItem.emoji || '✓';
+  document.getElementById('upsell-added-name').textContent = addedItem.name;
+
+  const list = document.getElementById('upsell-list');
+  list.innerHTML = suggestions.map(s => {
+    const imgHtml = s.image_url
+      ? `<div class="upsell-item-img"><img src="${s.image_url}" alt="${s.name}"></div>`
+      : `<div class="upsell-item-img">${s.emoji || '🥤'}</div>`;
+    return `<div class="upsell-item" onclick="addUpsellItem(${s.id})">
+      ${imgHtml}
+      <div class="upsell-item-info">
+        <div class="upsell-item-name">${s.name}</div>
+        <div class="upsell-item-desc">${s.description || 'Perfeito para acompanhar!'}</div>
+      </div>
+      <div class="upsell-item-price">R$ ${fmtN(s.price)}</div>
+      <button class="upsell-add-btn" onclick="event.stopPropagation();addUpsellItem(${s.id})">+</button>
+    </div>`;
+  }).join('');
+
+  document.getElementById('upsell-overlay').classList.add('show');
+}
+
+function addUpsellItem(id) {
+  const item = allItems.find(i => i.id === id);
+  if (!item) return;
+  const existing = cart.find(c => c.id === id);
+  if (existing) existing.qty++;
+  else cart.push({ ...item, qty: 1 });
+  updateCartFloat();
+  showToast('🥤', `${item.name} adicionado!`);
+  closeUpsell();
+}
+
+function closeUpsell() {
+  document.getElementById('upsell-overlay').classList.remove('show');
+}
 function removeCartItem(id) {
   const item = cart.find(c => c.id === id);
   if (!item) return;
