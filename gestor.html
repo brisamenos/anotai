@@ -2892,7 +2892,7 @@ async function loadAllData(silent = false) {
 
     if (itemsRes.data?.length)    items         = itemsRes.data.map(mapItem);
     if (catsRes.data?.length)     categories    = catsRes.data.map(c => ({
-      id: c.id, name: c.name, label: c.label,
+      id: c.id, name: c.name, label: c.label || c.name,
       type: c.type||'Itens principais', promo:!!c.promo, open:false
     }));
     if (ordersRes.data?.length)   ordersKanban  = ordersRes.data.map(mapOrder);
@@ -3954,8 +3954,8 @@ async function addCategory() {
   sbLoading(false);
   if (error) { sbToast('err','Erro ao criar categoria'); console.error(error); return; }
   categories.push({
-    id: data.id, name: data.name, label: data.label,
-    type: data.type, promo: false, open: false
+    id: data.id, name: data.name, label: data.label || data.name,
+    type: data.type || 'Itens principais', promo: false, open: false
   });
   closeModal('modal-add-cat');
   document.getElementById('cat-name-input').value = '';
