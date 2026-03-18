@@ -3486,21 +3486,32 @@ function garcomAddItem(id,el){
     +`<br><strong style="color:var(--success)">Total: R$ ${garcomCart.reduce((s,c)=>s+c.price*c.qty,0).toFixed(2).replace('.',',')}</strong>`;
 }
 
-function submitGarcomOrder(){
-  if(garcomCart.length===0){showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><path d=&quot;M8 2L14 13H2L8 2z&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M8 6v3&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><circle cx=&quot;8&quot; cy=&quot;11&quot; r=&quot;.6&quot; fill=&quot;currentColor&quot;/></svg>','Selecione itens');return;}
+async function submitGarcomOrder(){
+  if(garcomCart.length===0){sbToast('err','Selecione itens');return;}
   const tot=garcomCart.reduce((s,c)=>s+c.price*c.qty,0);
   const t=tables.find(x=>x.num===garcomMesa);
-  if(t){t.status='busy';t.guests=t.guests||2;t.total='R$ '+tot.toFixed(2).replace('.',',');}
-  const id=orderIdSeq++;
   const itemsArr=garcomCart.map(c=>({qty:c.qty,name:c.name,price:c.price,obs:''}));
   const time=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-  ordersKanban.push({id,client:`Mesa ${garcomMesa}`,items:itemsArr,total:tot,taxa:0,status:'producao',time,addr:`Mesa ${garcomMesa}`,pag:'<svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 6.5h.5M11.5 6.5H12M4 10.5h.5M11.5 10.5H12" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Dinheiro'});
-  movimentos.push({desc:`Garçom Mesa ${garcomMesa}`,tipo:'entrada',val:tot,pag:'<svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 6.5h.5M11.5 6.5H12M4 10.5h.5M11.5 10.5H12" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Dinheiro',time});
-  document.getElementById('cnt-producao').textContent=ordersKanban.filter(o=>o.status==='producao').length;
-  closeModal('modal-garcom-mesa');
-  renderGarcom();
-  playOrderSound();
-  showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><circle cx=&quot;8&quot; cy=&quot;8&quot; r=&quot;5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M5.5 8a2.5 2.5 0 0 1 5 0&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M8 5v6&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>',`Pedido Mesa ${garcomMesa} enviado para cozinha!`);
+  sbLoading(true);
+  try {
+    const { data: orderData, error: oErr } = await sb.from('orders').insert({
+      client:`Mesa ${garcomMesa}`, phone:'', addr:`Mesa ${garcomMesa}`,
+      mesa_num: garcomMesa, items:itemsArr, total:tot, taxa:0,
+      status:'producao', time, pag:'Mesa'
+    }).select().single();
+    if(oErr) throw oErr;
+    await sb.from('mesas').update({status:'busy', updated_at:new Date().toISOString()}).eq('num', garcomMesa);
+    if(t){t.status='busy'; t.guests=t.guests||2;}
+    ordersKanban.push(mapOrder(orderData));
+    closeModal('modal-garcom-mesa');
+    renderGarcom();
+    renderMesasPage();
+    playOrderSound();
+    sbToast('ok',`Pedido Mesa ${garcomMesa} enviado para cozinha!`);
+  } catch(e){
+    sbToast('err','Erro ao enviar pedido');
+    console.error(e);
+  } finally { sbLoading(false); }
 }
 
 // ─────────────────────────────────────────
@@ -4099,13 +4110,18 @@ async function fecharMesa(num) {
   }
 }
 
-function openRegistrarPagamento(num) {
+async function openRegistrarPagamento(num) {
   const t = tables.find(x => x.num === num);
   if (!t) return;
+  // Buscar total real somando os pedidos ativos da mesa
+  const { data: orders } = await sb.from('orders')
+    .select('total')
+    .eq('mesa_num', num)
+    .in('status', ['analise','producao','pronto']);
+  const totalVal = (orders || []).reduce((s,o)=>s+parseFloat(o.total||0),0);
   document.getElementById('modal-pag-mesa-title').textContent = `💰 Registrar Pagamento — Mesa ${num}`;
-  document.getElementById('modal-pag-total').textContent = t.total || 'R$ 0,00';
+  document.getElementById('modal-pag-total').textContent = 'R$ ' + totalVal.toFixed(2).replace('.',',');
   document.getElementById('modal-pag-mesa-num').value = num;
-  // Pre-select forma if garçom sent one
   if (t.pag_forma) {
     const sel = document.getElementById('modal-pag-forma');
     for (let i=0;i<sel.options.length;i++) {
@@ -4120,36 +4136,40 @@ async function confirmarPagamentoMesa() {
   const forma = document.getElementById('modal-pag-forma').value;
   const t     = tables.find(x=>x.num===num);
   if (!t) return;
-  const totalStr = t.total || 'R$ 0,00';
+  // Usar o total mostrado no modal (já calculado a partir dos pedidos reais)
+  const totalStr = document.getElementById('modal-pag-total').textContent || 'R$ 0,00';
   const totalVal = parseFloat(totalStr.replace('R$ ','').replace(',','.')) || 0;
   const time     = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 
   sbLoading(true);
   try {
-    // 1. Liberar mesa
+    // 1. Finalizar todos os pedidos ativos da mesa pelo campo mesa_num
+    await sb.from('orders')
+      .update({ status: 'entregue' })
+      .eq('mesa_num', num)
+      .in('status', ['analise','producao','pronto']);
+
+    // 2. Liberar mesa
     await sb.from('mesas').update({
       status: 'free', total: null, pag_forma: null,
       guests: null, updated_at: new Date().toISOString()
     }).eq('num', num);
 
-    // 2. Registrar entrada no caixa
+    // 3. Registrar entrada no caixa
     await sb.from('movimentos').insert({
       description: `Mesa ${num} — Pagamento`,
       tipo: 'entrada', val: totalVal, pag: forma, time,
       created_at: new Date().toISOString()
     });
 
-    // 3. Marcar pedidos da mesa como finalizados
-    await sb.from('orders')
-      .update({ status: 'entregue' })
-      .eq('addr', `Mesa ${num}`)
-      .in('status', ['producao','pronto','analise']);
-
-    // Update local state
+    // Atualizar estado local
     t.status = 'free'; t.total = null; t.guests = null;
+    // Remover pedidos da mesa do kanban local
+    ordersKanban = ordersKanban.filter(o => o.addr !== `Mesa ${num}` && o.mesa_num !== num);
     tables.sort((a,b)=>a.num-b.num);
     closeModal('modal-pag-mesa');
     renderMesasPage();
+    renderKanban();
     renderQR();
     sbToast('ok', `Mesa ${num} liberada — R$ ${totalVal.toFixed(2).replace('.',',')} registrado no caixa!`);
   } catch(e) {
