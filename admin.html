@@ -368,8 +368,8 @@ function navTo(id) {
 // ── CARREGAR DADOS ───────────────────────
 async function loadAll() {
   const [cr, ur] = await Promise.all([
-    sb.from('tenants').select('*').neq('slug','_admin').order('criado_em',{ascending:false}),
-    sb.from('sys_users').select('*,tenants(nome)').neq('role','superadmin').order('criado_em',{ascending:false})
+    sb.from('tenants').select('*').neq('slug','_admin').order('created_at',{ascending:false}),
+    sb.from('sys_users').select('*,tenants(nome)').neq('role','superadmin').order('created_at',{ascending:false})
   ]);
   _clientes = cr.data || [];
   _usuarios = ur.data || [];
