@@ -1728,14 +1728,57 @@ async function resolveTenant() {
     if (match && match[1] !== 'index.html') {
       const res = await fetch(`/api/tenant-info?slug=${match[1]}`);
       const data = await res.json();
-      if (data.id) { _tenantId = data.id; return true; }
+      if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
     }
     return false;
   }
   const res  = await fetch(`/api/tenant-info?slug=${slug}`);
   const data = await res.json();
-  if (data.id) { _tenantId = data.id; return true; }
+  if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
   return false;
+}
+
+function applyBranding(b, tenantNome) {
+  if (!b) return;
+  const nome = b.store_name || tenantNome || 'Cardápio';
+  const cor  = b.store_cor  || '#3b82f6';
+
+  // Nome e descrição
+  const logoEl = document.querySelector('.hero-logo');
+  if (logoEl) logoEl.textContent = nome;
+  document.title = nome;
+  const subEl = document.querySelector('.hero-sub');
+  if (subEl && b.store_descricao) subEl.textContent = b.store_descricao;
+
+  // Cor principal (CSS variable)
+  document.documentElement.style.setProperty('--accent', cor);
+
+  // Banner de fundo do hero
+  const hero = document.querySelector('.hero');
+  if (hero && b.store_banner_url) {
+    hero.style.background = `linear-gradient(160deg,rgba(0,0,0,.7) 0%,rgba(0,0,0,.45) 100%), url('${b.store_banner_url}') center/cover no-repeat`;
+  } else if (hero) {
+    // Usa cor do branding como gradiente
+    const hex = cor.replace('#','');
+    const r = parseInt(hex.slice(0,2),16), g = parseInt(hex.slice(2,4),16), bv = parseInt(hex.slice(4,6),16);
+    hero.style.background = `linear-gradient(160deg,#0f1117 0%,rgba(${r},${g},${bv},.25) 60%,#181b24 100%)`;
+  }
+
+  // Logo circular no hero
+  if (b.store_logo_url) {
+    const info = document.querySelector('.hero-info');
+    if (info) {
+      const img = document.createElement('img');
+      img.src = b.store_logo_url;
+      img.style.cssText = 'width:56px;height:56px;border-radius:12px;object-fit:cover;margin-bottom:10px;border:2px solid rgba(255,255,255,.15);display:block';
+      info.insertBefore(img, info.firstChild);
+    }
+  }
+
+  // Tempo de entrega e avaliação
+  const badges = document.querySelectorAll('.hero-badge');
+  if (badges[1] && b.store_tempo_entrega) badges[1].innerHTML = `🛵 ${b.store_tempo_entrega}`;
+  if (badges[2] && b.store_avaliacao)     badges[2].innerHTML = `⭐ ${b.store_avaliacao}`;
 }
 
 function sbTenant() {
