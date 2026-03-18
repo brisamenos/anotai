@@ -784,19 +784,40 @@ td:first-child{padding-left:16px}
 <!-- PEDIDOS MESA -->
 <div class="page" id="page-pedidos-mesa">
   <div class="ph">
-    <div><div class="pt">Pedidos Mesa</div><div class="ps">Pedidos feitos via QR Code ou garçom</div></div>
+    <div><div class="pt">Pedidos Mesa</div><div class="ps">Pedidos ativos agrupados por mesa</div></div>
     <div style="display:flex;gap:8px">
+      <button class="btn bg" onclick="renderMesasPage()">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M3 8a5 5 0 1 1 2 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M3 11V8H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Atualizar
+      </button>
       <button class="btn bp" onclick="openModalNovaMesa()">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         Nova Mesa
       </button>
-      <button class="btn bg" onclick="nav('garcom')">
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        Modo Garçom
-      </button>
     </div>
   </div>
-  <div class="garcom-wrap" id="mesa-grid"></div>
+
+  <!-- Stats rápidos -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;text-align:center">
+      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--success)" id="pm-stat-livres">0</div>
+      <div style="font-size:11px;color:var(--muted)">Livres</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;text-align:center">
+      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--danger)" id="pm-stat-ocupadas">0</div>
+      <div style="font-size:11px;color:var(--muted)">Ocupadas</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;text-align:center">
+      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--accent3)" id="pm-stat-aguardando">0</div>
+      <div style="font-size:11px;color:var(--muted)">Aguard. pag.</div>
+    </div>
+  </div>
+
+  <!-- Filtro de mesas -->
+  <div id="pm-filter-bar" style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:10px;margin-bottom:4px"></div>
+
+  <!-- Lista de pedidos por mesa -->
+  <div id="pm-orders-list"></div>
 </div>
 
 <!-- MODAL EDITAR MESA -->
@@ -1922,6 +1943,11 @@ async function loadAllData() {
   }
 }
 
+function _refreshMesaPageIfActive() {
+  const pg = document.getElementById('page-pedidos-mesa');
+  if (pg && pg.classList.contains('on')) renderMesasPage();
+}
+
 // ── Realtime orders ──────────────────────────────────
 function requestNotifPermission() {
   if ('Notification' in window && Notification.permission === 'default') {
@@ -1941,6 +1967,8 @@ function subscribeOrders() {
       if (!ordersKanban.find(x => x.id === p.new.id)) {
         ordersKanban.unshift(mapOrder(p.new));
         renderKanban();
+        // If order has mesa_num, also refresh mesa page if active
+        if (p.new.mesa_num) _refreshMesaPageIfActive();
         playOrderSound();
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
@@ -1952,6 +1980,7 @@ function subscribeOrders() {
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, p => {
       const idx = ordersKanban.findIndex(x => x.id === p.new.id);
       if (idx !== -1) { ordersKanban[idx] = mapOrder(p.new); renderKanban(); }
+      if (p.new.mesa_num) _refreshMesaPageIfActive();
     })
     .on('postgres_changes', {event:'DELETE', schema:'public', table:'orders'}, p => {
       ordersKanban = ordersKanban.filter(o => o.id !== p.old.id);
@@ -1960,6 +1989,15 @@ function subscribeOrders() {
     .subscribe(status => {
       if (status === 'SUBSCRIBED') console.log('[RT] orders channel subscribed');
     });
+
+  // Subscribe to mesas changes
+  sb.channel('mesas-rt')
+    .on('postgres_changes', {event:'*', schema:'public', table:'mesas'}, () => {
+      sb.from('mesas').select('*').order('num').then(({ data }) => {
+        if (data) { tables = data; _refreshMesaPageIfActive(); renderQR(); }
+      });
+    }).subscribe();
+}
 
   // Subscribe to store_config changes
   sb.channel('store-config-rt')
@@ -3180,34 +3218,122 @@ async function confirmDeleteMesa() {
   sbToast('ok',`Mesa ${num} excluída!`);
 }
 
-// MESAS PAGE
-function renderMesasPage(){
-  const g=document.getElementById('mesa-grid');
-  if(!g) return;
-  if (!tables.length) {
-    g.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px"><div style="font-size:36px;margin-bottom:10px">🍽️</div>Nenhuma mesa cadastrada.<br>Clique em <strong>Nova Mesa</strong> para adicionar.</div>';
+// MESAS PAGE — pedidos agrupados por mesa
+let pmFilter = 'todas';
+
+async function renderMesasPage() {
+  // Update stats
+  const livres     = tables.filter(t=>t.status==='free').length;
+  const ocupadas   = tables.filter(t=>t.status==='busy').length;
+  const aguardando = tables.filter(t=>t.status==='waiting').length;
+  const el = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
+  el('pm-stat-livres', livres);
+  el('pm-stat-ocupadas', ocupadas);
+  el('pm-stat-aguardando', aguardando);
+
+  // Load active orders for mesas
+  const { data: orders } = await sb.from('orders')
+    .select('*')
+    .not('mesa_num', 'is', null)
+    .in('status', ['analise','producao','pronto'])
+    .order('id', { ascending: false });
+
+  const mesaOrders = orders || [];
+
+  // Build filter pills — mesas ocupadas/waiting
+  const activeTables = tables.filter(t=>t.status!=='free');
+  const filterBar = document.getElementById('pm-filter-bar');
+  if (filterBar) {
+    filterBar.innerHTML = [
+      `<button class="btn ${pmFilter==='todas'?'bp':'bg'}" style="font-size:11.5px;padding:5px 12px;white-space:nowrap" onclick="setPmFilter('todas')">Todas</button>`,
+      ...activeTables.map(t => {
+        const waiting = t.status==='waiting';
+        const color   = waiting ? 'style="border-color:rgba(245,158,11,.5);color:var(--accent3)"' : '';
+        return `<button class="btn bg" ${color} style="font-size:11.5px;padding:5px 12px;white-space:nowrap;${pmFilter===t.num?'background:rgba(59,130,246,.12);border-color:var(--accent);color:var(--accent)':''}" onclick="setPmFilter(${t.num})">
+          Mesa ${t.num}${waiting?' ⏳':''}
+        </button>`;
+      })
+    ].join('');
+  }
+
+  // Render orders list
+  const list = document.getElementById('pm-orders-list');
+  if (!list) return;
+
+  // Gather all mesa nums that have orders or are busy/waiting
+  const mesaNums = [...new Set([
+    ...activeTables.map(t=>t.num),
+    ...mesaOrders.map(o=>o.mesa_num).filter(Boolean)
+  ])].sort((a,b)=>a-b);
+
+  const filtered = pmFilter === 'todas' ? mesaNums : mesaNums.filter(n=>n===pmFilter);
+
+  if (!filtered.length) {
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px"><div style="font-size:36px;margin-bottom:10px">🍽️</div>Nenhuma mesa ocupada no momento</div>';
     return;
   }
-  g.innerHTML=tables.map(t=>{
-    const isFree    = t.status==='free';
-    const isWaiting = t.status==='waiting';
-    const isBusy    = t.status==='busy';
-    const sc  = isFree?'qr-free':isWaiting?'qr-waiting':'qr-busy';
-    const sl  = isFree?'Livre':isWaiting?'Aguardando pagamento':'Ocupada';
-    const bg  = isFree?'rgba(34,197,94,.08)':isWaiting?'rgba(245,158,11,.1)':'rgba(239,68,68,.08)';
-    const border = isWaiting?'border:1.5px solid rgba(245,158,11,.3)':'';
-    const payBtn = isWaiting
-      ? `<button onclick="event.stopPropagation();openRegistrarPagamento(${t.num})" style="width:100%;margin-top:9px;padding:7px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-family:'DM Sans',sans-serif;font-size:11.5px;font-weight:700;cursor:pointer">💰 Registrar pagamento</button>`
-      : '';
-    return`<div class="garcom-mesa" style="background:${bg};${border};position:relative">
-      <button onclick="event.stopPropagation();openEditMesa(${t.num})" style="position:absolute;top:7px;right:7px;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px" title="Editar mesa">✎</button>
-      <div class="gm-num" onclick="${!isWaiting?`openGarcomMesa(${t.num})`:''}" style="${!isWaiting?'cursor:pointer':''}">Mesa ${t.num}</div>
-      <div class="gm-guests">${t.guests?t.guests+' pessoas':''}</div>
-      <div class="gm-status ${sc}">${sl}</div>
-      ${(t.total&&!isFree)?`<div style="font-size:13px;font-weight:700;color:var(--accent3);margin-top:5px">${t.total}</div>`:''}
-      ${payBtn}
+
+  list.innerHTML = filtered.map(num => {
+    const t         = tables.find(x=>x.num===num);
+    const isFree    = !t || t.status==='free';
+    const isWaiting = t?.status==='waiting';
+    const tableOrders = mesaOrders.filter(o=>o.mesa_num===num);
+    const total     = tableOrders.reduce((s,o)=>s+parseFloat(o.total||0),0);
+    const statusColor = isWaiting ? 'var(--accent3)' : 'var(--danger)';
+    const statusLabel = isWaiting ? '⏳ Aguardando pagamento' : '🔴 Ocupada';
+
+    const ordersHtml = tableOrders.length
+      ? tableOrders.map(o => {
+          const itemsArr  = Array.isArray(o.items) ? o.items : [];
+          const isFood    = o.status==='producao'||o.status==='analise';
+          const stColor   = isFood?'var(--accent)':o.status==='pronto'?'var(--success)':'var(--muted)';
+          const stLabel   = isFood?'🍳 Em produção':o.status==='pronto'?'🥤 Pronto':'—';
+          return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:7px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span style="font-size:10.5px;font-weight:700;color:${stColor};background:${stColor}18;padding:2px 7px;border-radius:99px">${stLabel}</span>
+              <span style="font-size:11px;color:var(--muted)">${o.time||''} ${o.garcom_nome?'· '+o.garcom_nome:''}</span>
+            </div>
+            <div style="font-size:12.5px;line-height:1.6">
+              ${itemsArr.map(i=>`<span style="display:inline-block;background:rgba(255,255,255,.05);border-radius:5px;padding:1px 6px;margin:1px 2px 1px 0;font-size:11.5px">${i.qty}× ${i.name}</span>`).join('')}
+            </div>
+            <div style="font-size:12px;font-weight:700;color:var(--accent3);text-align:right;margin-top:5px">R$ ${(parseFloat(o.total)||0).toFixed(2).replace('.',',')}</div>
+          </div>`;
+        }).join('')
+      : `<div style="color:var(--muted);font-size:12.5px;text-align:center;padding:12px">Nenhum pedido lançado ainda</div>`;
+
+    const actionBtn = isWaiting
+      ? `<button onclick="openRegistrarPagamento(${num})" class="btn" style="width:100%;justify-content:center;padding:11px;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-size:13px;font-weight:700;border:none;margin-top:4px">
+          💰 Registrar pagamento — R$ ${total.toFixed(2).replace('.',',')}
+        </button>`
+      : `<div style="display:flex;gap:8px;margin-top:8px">
+          <button onclick="openGarcomMesa(${num})" class="btn bp" style="flex:1;justify-content:center;font-size:12px">
+            ➕ Lançar pedido
+          </button>
+          <button onclick="openRegistrarPagamento(${num})" class="btn" style="flex:1;justify-content:center;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;border:none;font-size:12px;font-weight:700">
+            💰 Fechar mesa
+          </button>
+        </div>`;
+
+    return `<div style="background:var(--surface);border:1.5px solid ${isWaiting?'rgba(245,158,11,.35)':'var(--border)'};border-radius:14px;padding:16px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:900">Mesa ${num}</div>
+          ${t?.guests?`<span style="font-size:11.5px;color:var(--muted)">${t.guests} pessoas</span>`:''}
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:900;color:var(--accent3)">R$ ${total.toFixed(2).replace('.',',')}</div>
+          <div style="font-size:11px;font-weight:700;color:${statusColor}">${statusLabel}</div>
+        </div>
+      </div>
+      ${ordersHtml}
+      ${actionBtn}
     </div>`;
   }).join('');
+}
+
+function setPmFilter(val) {
+  pmFilter = val;
+  renderMesasPage();
 }
 
 // ─────────────────────────────────────────
