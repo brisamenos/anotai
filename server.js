@@ -618,7 +618,26 @@ const server = http.createServer(async (req,res) => {
     if(!nome||!email||!senha){send(res,400,{error:'nome, email e senha obrigatórios'});return}
     try {
       const hash = crypto.createHash('sha256').update(senha).digest('hex')
-      const slugFinal = slug || nome.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-')
+      const slugBase = slug || nome.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'')
+
+      // ── Garante slug único: se já existir, acrescenta sufixo numérico ──
+      let slugFinal = slugBase
+      let suffix = 2
+      while (db.prepare("SELECT id FROM tenants WHERE slug=?").get(slugFinal)) {
+        slugFinal = `${slugBase}-${suffix++}`
+      }
+      // Avisa se o slug foi alterado (slug informado pelo usuário já em uso)
+      if (slug && slugFinal !== slug) {
+        send(res,400,{error:`O identificador (slug) "${slug}" já está em uso. Sugerimos: "${slugFinal}"`})
+        return
+      }
+
+      // ── Valida e-mail duplicado ──
+      if (db.prepare("SELECT id FROM sys_users WHERE email=?").get(email)) {
+        send(res,400,{error:`O e-mail "${email}" já está cadastrado no sistema.`})
+        return
+      }
+
       db.prepare("INSERT INTO tenants (nome,plano,slug) VALUES (?,?,?)").run(nome,plano||'basic',slugFinal)
       const t = db.prepare("SELECT id FROM tenants WHERE slug=?").get(slugFinal)
       db.prepare("INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)").run(t.id)
