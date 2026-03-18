@@ -3131,7 +3131,22 @@ async function advanceOrderById(id) {
   if (!o) return;
   const newStatus = o.status === 'analise' ? 'producao' : 'pronto';
   const { error } = await sb.from('orders').update({status: newStatus}).eq('id', id);
-  if (!error) o.status = newStatus;
+  if (!error) {
+    o.status = newStatus;
+    // ── Disparo WhatsApp automático ──
+    if (o.phone) {
+      const vars = {
+        nome: o.client || 'Cliente',
+        id: o.id,
+        itens: Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '',
+        total: (o.total||0).toFixed(2).replace('.',','),
+        endereco: o.addr || '',
+        tipo_entrega: (o.addr||'').includes('Mesa') ? '🪑 Será servido na mesa' : (o.addr||'').includes('alcão') ? '🏪 Pronto para retirada no balcão' : '🛵 Saindo para entrega em breve'
+      };
+      if (newStatus === 'producao') evoEnviarMensagem(o.phone, 'confirmado', vars);
+      if (newStatus === 'pronto')   evoEnviarMensagem(o.phone, 'pronto', vars);
+    }
+  }
   playOrderSound();
   renderKanban();
   sbToast('ok',`Pedido #${id} avançado!`);
@@ -3139,8 +3154,20 @@ async function advanceOrderById(id) {
 
 // ── cancelOrderById ──────────────────────────────────
 async function cancelOrderById(id) {
+  const o = ordersKanban.find(x => x.id === id);
   const { error } = await sb.from('orders').update({status:'cancelado'}).eq('id', id);
-  if (!error) ordersKanban = ordersKanban.filter(o => o.id !== id);
+  if (!error) {
+    // ── Disparo WhatsApp cancelamento ──
+    if (o?.phone) {
+      evoEnviarMensagem(o.phone, 'cancelado', {
+        nome: o.client || 'Cliente',
+        id: o.id,
+        itens: Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '',
+        total: (o.total||0).toFixed(2).replace('.',',')
+      });
+    }
+    ordersKanban = ordersKanban.filter(x => x.id !== id);
+  }
   renderKanban();
   showToast(_ICON_TRS,`Pedido #${id} cancelado`);
 }
@@ -6798,7 +6825,7 @@ async function evoTestarEnvio() {
 }
 
 async function evoEnviarMensagem(phone, tipo, vars={}) {
-  if (!evoConnected) return false;
+  // Verifica se o toggle da automação está ativo
   const toggle = document.getElementById(`auto-toggle-${tipo}`);
   if (toggle && !toggle.classList.contains('on')) return false;
   const msgEl = document.getElementById(`auto-msg-${tipo}`);
@@ -6806,7 +6833,14 @@ async function evoEnviarMensagem(phone, tipo, vars={}) {
   let text = msgEl.value;
   Object.entries(vars).forEach(([k,v])=>{ text=text.replaceAll(`{${k}}`,v||''); });
   const r = await EVO.sendText(phone, text);
-  evoMsgHistory.unshift({ to:phone, tipo:tipo.charAt(0).toUpperCase()+tipo.slice(1), msg:text.slice(0,60)+'...', status:r.ok?'enviado':'falhou', time:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) });
+  console.log(`[EVO AUTO] tipo=${tipo} para=${phone}`, r.ok ? '✅' : '❌', r);
+  evoMsgHistory.unshift({
+    to: phone,
+    tipo: tipo.charAt(0).toUpperCase()+tipo.slice(1),
+    msg: text.slice(0,60)+'...',
+    status: r.ok ? 'enviado' : 'falhou',
+    time: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+  });
   return r.ok;
 }
 
