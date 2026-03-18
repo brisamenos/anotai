@@ -277,25 +277,61 @@ body {
   text-decoration: line-through;
   margin-right: 4px;
 }
-.add-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: none;
-  color: #fff;
-  font-size: 18px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all .15s;
-  flex-shrink: 0;
-  line-height: 1;
+/* ── ITEM DETAIL MODAL ────────────────── */
+.item-modal-bg {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.85); z-index: 550;
+  align-items: flex-end; justify-content: center;
+  backdrop-filter: blur(6px);
 }
-.add-btn:hover { background: #2563eb; transform: scale(1.1); }
-.add-btn:disabled { background: var(--surface3); color: var(--muted); cursor: not-allowed; transform: none; }
+.item-modal-bg.on { display: flex; }
+.item-modal {
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  width: 100%; max-width: 520px;
+  max-height: 90vh; overflow-y: auto;
+  animation: slideUp .28s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+.item-modal-img {
+  width: 100%; height: 220px;
+  background: var(--surface2);
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 72px;
+}
+.item-modal-img img { width: 100%; height: 100%; object-fit: cover; }
+.item-modal-close {
+  position: absolute; top: 12px; right: 12px;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: rgba(0,0,0,.5); border: none; color: #fff;
+  font-size: 16px; cursor: pointer; display: flex;
+  align-items: center; justify-content: center; z-index: 2;
+}
+.item-modal-body { padding: 20px 20px 24px; }
+.item-modal-name { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; margin-bottom: 6px; }
+.item-modal-desc { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 12px; }
+.item-modal-ingr { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.item-modal-ingr-chip {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 99px; padding: 3px 10px;
+  font-size: 11.5px; color: var(--muted);
+}
+.item-modal-price-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.item-modal-price { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 800; color: var(--amber); }
+.item-modal-add-btn {
+  width: 100%; padding: 15px;
+  background: var(--accent); color: #fff; border: none;
+  border-radius: 12px; font-family: 'DM Sans', sans-serif;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  transition: all .18s; display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.item-modal-add-btn:hover { background: #2563eb; transform: translateY(-1px); }
+.item-modal-add-btn.pizza { background: linear-gradient(135deg,#f59e0b,#d97706); color: #000; }
+.item-modal-add-btn:disabled { background: var(--surface3); color: var(--muted); cursor: not-allowed; transform: none; }
+
+/* ── ITEM CARD — remove + button ──────── */
+.add-btn { display: none; }
 
 /* ── FLOATING CART ────────────────────── */
 .cart-float {
@@ -962,6 +998,36 @@ body {
   <span id="toast-msg"></span>
 </div>
 
+<!-- ITEM DETAIL MODAL -->
+<div class="item-modal-bg" id="item-modal-bg" onclick="if(event.target===this)closeItemModal()">
+  <div class="item-modal">
+    <div class="item-modal-img" id="item-modal-img">
+      <button class="item-modal-close" onclick="closeItemModal()">✕</button>
+      <img id="item-modal-photo" src="" alt="" style="display:none">
+      <span id="item-modal-emoji">🍽️</span>
+    </div>
+    <div class="item-modal-body">
+      <div class="item-modal-name" id="item-modal-name"></div>
+      <div class="item-modal-desc" id="item-modal-desc"></div>
+      <div class="item-modal-ingr" id="item-modal-ingr"></div>
+      <div class="item-modal-price-row">
+        <div>
+          <div id="item-modal-price-old" style="font-size:12px;color:var(--muted);text-decoration:line-through;display:none"></div>
+          <div class="item-modal-price" id="item-modal-price"></div>
+        </div>
+        <div id="item-modal-qty-wrap" style="display:flex;align-items:center;gap:10px">
+          <button class="qb" onclick="itemModalChangeQty(-1)">−</button>
+          <span id="item-modal-qty" style="font-weight:700;font-size:16px;min-width:24px;text-align:center">1</span>
+          <button class="qb" onclick="itemModalChangeQty(1)">+</button>
+        </div>
+      </div>
+      <button class="item-modal-add-btn" id="item-modal-add-btn" onclick="itemModalConfirm()">
+        🛒 Adicionar ao carrinho
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- PIZZA FLAVOR SELECTOR MODAL -->
 <div class="pizza-modal-bg" id="pizza-modal-bg" onclick="onPizzaBgClick(event)">
   <div class="pizza-modal" id="pizza-modal">
@@ -1155,15 +1221,10 @@ function renderMenu() {
 function itemCard(i) {
   const esgotado = i.status === 'esgotado';
   const isPizza  = i.item_type === 'pizza';
-  const ingrs    = Array.isArray(i.ingredients) && i.ingredients.length
-    ? `<div class="item-ingr">${i.ingredients.slice(0,5).map(g=>`<span class="ingr-chip">${g}</span>`).join('')}${i.ingredients.length>5?`<span class="ingr-chip">+${i.ingredients.length-5}</span>`:''}</div>`
-    : '';
-  const addBtn = isPizza
-    ? `<button class="add-btn" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#000" onclick="openPizzaModal(${i.id})" ${esgotado?'disabled':''} title="Montar pizza">🍕</button>`
-    : `<button class="add-btn" onclick="addToCart(${i.id})" ${esgotado?'disabled':''} title="Adicionar">+</button>`;
+  const clickFn  = esgotado ? '' : `onclick="openItemModal(${i.id})"`;
 
   return `
-  <div class="item-card" style="animation-delay:${Math.random()*.15}s">
+  <div class="item-card" ${clickFn} style="${esgotado?'opacity:.6;cursor:not-allowed':'cursor:pointer'};animation-delay:${Math.random()*.15}s">
     <div class="item-img">
       ${i.image_url
         ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy">`
@@ -1175,13 +1236,11 @@ function itemCard(i) {
     <div class="item-body">
       <div class="item-name">${i.name}</div>
       <div class="item-desc">${i.description || ''}</div>
-      ${ingrs}
       <div class="item-price-row">
         <div>
           ${i.price_old ? `<span class="item-price-old">R$ ${fmtN(i.price_old)}</span>` : ''}
           <span class="item-price">R$ ${fmtN(i.price)}</span>
         </div>
-        ${addBtn}
       </div>
     </div>
   </div>`;
@@ -1638,6 +1697,87 @@ function confirmPizza() {
   updateCartFloat();
   showToast('🍕', 'Pizza adicionada!');
   closePizzaModal();
+}
+
+// ═══════════════════════════════════════════════
+// ITEM DETAIL MODAL
+// ═══════════════════════════════════════════════
+let _itemModalId = null;
+let _itemModalQty = 1;
+
+function openItemModal(itemId) {
+  const i = allItems.find(x => x.id === itemId);
+  if (!i || i.status === 'esgotado') return;
+  _itemModalId = itemId;
+  _itemModalQty = 1;
+
+  // Photo
+  const photo = document.getElementById('item-modal-photo');
+  const emoji = document.getElementById('item-modal-emoji');
+  if (i.image_url) {
+    photo.src = i.image_url; photo.style.display = 'block';
+    emoji.style.display = 'none';
+  } else {
+    photo.style.display = 'none';
+    emoji.textContent = i.emoji || '🍽️';
+    emoji.style.display = 'block';
+  }
+
+  document.getElementById('item-modal-name').textContent  = i.name;
+  document.getElementById('item-modal-desc').textContent  = i.description || '';
+
+  // Ingredients
+  const ingrEl = document.getElementById('item-modal-ingr');
+  const ingrs  = Array.isArray(i.ingredients) ? i.ingredients : [];
+  ingrEl.innerHTML = ingrs.map(g => `<span class="item-modal-ingr-chip">${g}</span>`).join('');
+  ingrEl.style.display = ingrs.length ? '' : 'none';
+
+  // Price
+  const oldEl = document.getElementById('item-modal-price-old');
+  if (i.price_old) { oldEl.textContent = 'R$ ' + fmtN(i.price_old); oldEl.style.display = ''; }
+  else oldEl.style.display = 'none';
+  document.getElementById('item-modal-price').textContent = 'R$ ' + fmtN(i.price);
+  document.getElementById('item-modal-qty').textContent = '1';
+
+  // Add button
+  const btn = document.getElementById('item-modal-add-btn');
+  const isPizza = i.item_type === 'pizza';
+  btn.className = 'item-modal-add-btn' + (isPizza ? ' pizza' : '');
+  btn.textContent = isPizza ? '🍕 Montar Pizza' : '🛒 Adicionar ao carrinho';
+
+  // Hide qty selector for pizza
+  document.getElementById('item-modal-qty-wrap').style.display = isPizza ? 'none' : 'flex';
+
+  document.getElementById('item-modal-bg').classList.add('on');
+}
+
+function closeItemModal() {
+  document.getElementById('item-modal-bg').classList.remove('on');
+  _itemModalId = null;
+}
+
+function itemModalChangeQty(delta) {
+  _itemModalQty = Math.max(1, _itemModalQty + delta);
+  document.getElementById('item-modal-qty').textContent = _itemModalQty;
+}
+
+function itemModalConfirm() {
+  const i = allItems.find(x => x.id === _itemModalId);
+  if (!i) return;
+
+  if (i.item_type === 'pizza') {
+    closeItemModal();
+    openPizzaModal(i.id);
+    return;
+  }
+
+  const existing = cart.find(c => c.id === i.id);
+  if (existing) existing.qty += _itemModalQty;
+  else cart.push({ ...i, qty: _itemModalQty });
+
+  updateCartFloat();
+  showToast('🛒', `${i.name} adicionado!`);
+  closeItemModal();
 }
 
 // ═══════════════════════════════════════════════
