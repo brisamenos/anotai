@@ -1,6 +1,6 @@
 // ══ GESTOR SERVICE WORKER ══════════════════
-const SUPA_URL  = 'https://lhrzwccbvdintqgebisq.supabase.co';
-const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxocnp3Y2NidmRpbnRxZ2ViaXNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1ODY0NzEsImV4cCI6MjA4OTE2MjQ3MX0.gbljgt0rzOf9eBoTcXxxfl0e_0Y-6XYxve-HGY7meJo';
+const SUPA_URL = '' /* usa URL relativa ao servidor */;
+const SUPA_ANON = '' /* não usado mais */;
 const POLL_MS   = 15000; // polling a cada 15s em background
 
 let pollTimer      = null;
@@ -39,7 +39,7 @@ function stopPolling() {
 
 async function doPoll() {
   try {
-    const headers = { apikey: SUPA_ANON, Authorization: `Bearer ${SUPA_ANON}` };
+    const headers = { "Content-Type": "application/json" };
 
     // 1. Pedidos delivery/balcão novos em análise
     const ordRes = await fetch(

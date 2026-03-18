@@ -3,8 +3,8 @@
 // mesmo com a aba fechada ou minimizada.
 
 const SW_VERSION  = 'garcom-sw-v1';
-const SUPA_URL    = 'https://lhrzwccbvdintqgebisq.supabase.co';
-const SUPA_ANON   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxocnp3Y2NidmRpbnRxZ2ViaXNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1ODY0NzEsImV4cCI6MjA4OTE2MjQ3MX0.gbljgt0rzOf9eBoTcXxxfl0e_0Y-6XYxve-HGY7meJo';
+const SUPA_URL = '' /* usa URL relativa ao servidor */;
+const SUPA_ANON = '' /* não usado mais */;
 const POLL_MS     = 20000; // polling a cada 20s quando em background
 
 let pollTimer     = null;
@@ -62,7 +62,7 @@ async function doPoll() {
     // 1. Verifica mesas (mudança de status)
     const mesaRes = await fetch(
       `${SUPA_URL}/rest/v1/mesas?select=num,status&order=num`,
-      { headers: { apikey: SUPA_ANON, Authorization: `Bearer ${SUPA_ANON}` } }
+      { headers: { "Content-Type": "application/json" } }
     );
     if (mesaRes.ok) {
       const mesas = await mesaRes.json();
@@ -82,7 +82,7 @@ async function doPoll() {
     // 2. Verifica pedidos novos (status mudou para producao ou pronto)
     const ordRes = await fetch(
       `${SUPA_URL}/rest/v1/orders?garcom_id=eq.${garcomId}&status=in.(producao,pronto,analise)&select=id,status,items,mesa_num&order=id.desc&limit=20`,
-      { headers: { apikey: SUPA_ANON, Authorization: `Bearer ${SUPA_ANON}` } }
+      { headers: { "Content-Type": "application/json" } }
     );
     if (ordRes.ok) {
       const orders = await ordRes.json();
