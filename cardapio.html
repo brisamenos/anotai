@@ -281,7 +281,68 @@ body {
   text-decoration: line-through;
   margin-right: 4px;
 }
-/* ── ITEM DETAIL MODAL ────────────────── */
+/* ── FOOD BUILD ANIMATION ─────────────── */
+.food-anim-stage {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; background: var(--surface2);
+  z-index: 1;
+}
+.food-anim-base {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  animation: foodRise .5s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes foodRise {
+  from { transform: scale(.3) translateY(60px); opacity: 0; }
+  to   { transform: scale(1) translateY(0);    opacity: 1; }
+}
+.food-anim-main {
+  font-size: 80px;
+  filter: drop-shadow(0 12px 24px rgba(0,0,0,.6));
+  position: relative; z-index: 2;
+}
+.ingr-particle {
+  position: absolute;
+  font-size: 28px;
+  pointer-events: none;
+  animation: ingrFall var(--dur,.8s) cubic-bezier(.55,.055,.675,.19) var(--delay,0s) both;
+  z-index: 3;
+}
+@keyframes ingrFall {
+  0%   { transform: translate(var(--sx,0px), -140px) rotate(var(--r0,0deg)) scale(1.2); opacity: 1; }
+  60%  { opacity: 1; }
+  80%  { transform: translate(calc(var(--sx,0px)*.3), var(--ey,0px)) rotate(var(--r1,360deg)) scale(1); opacity: 1; }
+  90%  { transform: translate(calc(var(--sx,0px)*.3), calc(var(--ey,0px) - 10px)) rotate(var(--r1,360deg)) scale(.95); }
+  100% { transform: translate(calc(var(--sx,0px)*.3), var(--ey,0px)) rotate(var(--r1,360deg)) scale(1); opacity: .9; }
+}
+.shine-ring {
+  position: absolute; inset: -20px; border-radius: 50%;
+  background: conic-gradient(transparent 0%, rgba(255,215,0,.25) 30%, transparent 50%);
+  animation: spinRing 1.5s linear infinite;
+  z-index: 0;
+}
+@keyframes spinRing { to { transform: rotate(360deg); } }
+.steam-puff {
+  position: absolute;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.4);
+  animation: steamUp var(--dur,1.2s) ease-out var(--delay,0s) infinite;
+  z-index: 4;
+}
+@keyframes steamUp {
+  0%   { transform: translate(var(--sx,0px), 0) scale(1); opacity: .7; }
+  100% { transform: translate(calc(var(--sx,0px) + 10px), -50px) scale(3); opacity: 0; }
+}
+.food-anim-label {
+  position: absolute; bottom: 14px; left: 0; right: 0;
+  text-align: center; font-size: 12px; font-weight: 700;
+  color: rgba(255,255,255,.7); letter-spacing: .5px;
+  text-transform: uppercase; z-index: 5;
+  animation: fadeIn 1s .8s both;
+}
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
 .item-modal-bg {
   display: none; position: fixed; inset: 0;
   background: rgba(0,0,0,.85); z-index: 550;
@@ -1007,8 +1068,14 @@ body {
   <div class="item-modal">
     <div class="item-modal-img" id="item-modal-img">
       <button class="item-modal-close" onclick="closeItemModal()">✕</button>
-      <img id="item-modal-photo" src="" alt="" style="display:none">
-      <span id="item-modal-emoji">🍽️</span>
+      <img id="item-modal-photo" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;position:absolute;inset:0;z-index:1">
+      <div class="food-anim-stage" id="food-anim-stage">
+        <div class="shine-ring" id="food-shine"></div>
+        <div class="food-anim-base" id="food-anim-base">
+          <span class="food-anim-main" id="food-anim-main">🍽️</span>
+        </div>
+        <div class="food-anim-label" id="food-anim-label"></div>
+      </div>
     </div>
     <div class="item-modal-body">
       <div class="item-modal-name" id="item-modal-name"></div>
@@ -1704,6 +1771,90 @@ function confirmPizza() {
 }
 
 // ═══════════════════════════════════════════════
+// FOOD BUILD ANIMATION
+// ═══════════════════════════════════════════════
+const FOOD_PROFILES = {
+  pizza:     { main:'🍕', particles:['🍅','🧀','🫒','🌿','🥩','🫑'], label:'Montando sua pizza...', steam:true,  bg:'radial-gradient(ellipse at 50% 70%, #7c2d12 0%, #181b24 70%)' },
+  hamburger: { main:'🍔', particles:['🥩','🧀','🥬','🍅','🧅','🥚'], label:'Montando o hambúrguer...', steam:true,  bg:'radial-gradient(ellipse at 50% 70%, #92400e 0%, #181b24 70%)' },
+  hotdog:    { main:'🌭', particles:['🌭','🧅','🌿','🍅'],            label:'Preparando...',         steam:true,  bg:'radial-gradient(ellipse at 50% 70%, #78350f 0%, #181b24 70%)' },
+  fries:     { main:'🍟', particles:['🥔','🧂','🫙'],                 label:'Fritando...',           steam:true,  bg:'radial-gradient(ellipse at 50% 70%, #92400e 0%, #181b24 70%)' },
+  chicken:   { main:'🍗', particles:['🌿','🧄','🫙','🧅'],            label:'Grelhando...',          steam:true,  bg:'radial-gradient(ellipse at 50% 70%, #7c2d12 0%, #181b24 70%)' },
+  drink:     { main:'🥤', particles:['🧊','🍋','🌿','💧'],            label:'Preparando bebida...',  steam:false, bg:'radial-gradient(ellipse at 50% 70%, #1e3a5f 0%, #181b24 70%)' },
+  juice:     { main:'🧃', particles:['🍊','🍋','🍇','🍓','🍉'],       label:'Espremendo...',         steam:false, bg:'radial-gradient(ellipse at 50% 70%, #d97706 0%, #181b24 70%)' },
+  beer:      { main:'🍺', particles:['🌾','🌿','🧊'],                 label:'Gelando...',            steam:false, bg:'radial-gradient(ellipse at 50% 70%, #78350f 0%, #181b24 70%)' },
+  cake:      { main:'🍰', particles:['🍓','🍫','🍒','🫐'],            label:'Decorando...',          steam:false, bg:'radial-gradient(ellipse at 50% 70%, #831843 0%, #181b24 70%)' },
+  icecream:  { main:'🍦', particles:['🍫','🍓','🌰','🍬'],            label:'Servindo...',           steam:false, bg:'radial-gradient(ellipse at 50% 70%, #0f4c81 0%, #181b24 70%)' },
+  default:   { main:'🍽️', particles:['✨','⭐','💫'],                 label:'Preparando...',         steam:false, bg:'radial-gradient(ellipse at 50% 70%, #1e2130 0%, #181b24 70%)' },
+};
+
+function detectFoodType(item) {
+  const n = (item.name + ' ' + (item.description||'')).toLowerCase();
+  if (n.match(/pizza|calabres|mussarela|margherita/)) return 'pizza';
+  if (n.match(/burger|hamburguer|hambúrguer|x-/))     return 'hamburger';
+  if (n.match(/hot.?dog|cachorro/))                   return 'hotdog';
+  if (n.match(/batata|frita|fritas/))                 return 'fries';
+  if (n.match(/frango|chicken|assado|grelhado/))      return 'chicken';
+  if (n.match(/bolo|cake|torta/))                     return 'cake';
+  if (n.match(/sorvete|gelato|acai|açaí/))            return 'icecream';
+  if (n.match(/suco|juice|vitamina/))                 return 'juice';
+  if (n.match(/cerveja|beer|chopp/))                  return 'beer';
+  if (n.match(/coca|pepsi|guaraná|refrigerante|soda|agua|água|drinks|bebida|smoothie|leite/)) return 'drink';
+  if (item.item_type === 'pizza') return 'pizza';
+  return 'default';
+}
+
+function playFoodAnimation(item) {
+  const type    = detectFoodType(item);
+  const profile = FOOD_PROFILES[type] || FOOD_PROFILES.default;
+  const stage   = document.getElementById('food-anim-stage');
+  const base    = document.getElementById('food-anim-base');
+  const mainEl  = document.getElementById('food-anim-main');
+  const label   = document.getElementById('food-anim-label');
+  const shine   = document.getElementById('food-shine');
+
+  // Set background gradient
+  stage.style.background = profile.bg;
+
+  // Main food emoji
+  mainEl.textContent = item.emoji && item.emoji.length <= 2 ? item.emoji : profile.main;
+  label.textContent = profile.label;
+
+  // Remove old particles
+  stage.querySelectorAll('.ingr-particle,.steam-puff').forEach(e => e.remove());
+
+  // Restart animation on base
+  base.style.animation = 'none';
+  void base.offsetWidth;
+  base.style.animation = 'foodRise .55s cubic-bezier(.34,1.56,.64,1) both';
+
+  // Spawn ingredient particles
+  const count = Math.min(profile.particles.length, 6);
+  profile.particles.slice(0, count).forEach((p, i) => {
+    const el = document.createElement('span');
+    el.className = 'ingr-particle';
+    const sx   = (Math.random() - .5) * 120;
+    const ey   = (Math.random() * 30) - 15;
+    const r0   = (Math.random() - .5) * 180;
+    const r1   = r0 + (Math.random() - .5) * 360;
+    const dur  = (.55 + Math.random() * .3).toFixed(2) + 's';
+    const delay= (i * .08 + .3).toFixed(2) + 's';
+    el.style.cssText = `--sx:${sx}px;--ey:${ey}px;--r0:${r0}deg;--r1:${r1}deg;--dur:${dur};--delay:${delay}`;
+    el.textContent = p;
+    stage.appendChild(el);
+  });
+
+  // Steam puffs for hot items
+  if (profile.steam) {
+    [0,1,2].forEach(i => {
+      const el = document.createElement('div');
+      el.className = 'steam-puff';
+      el.style.cssText = `--sx:${(i-1)*14}px;--dur:${1.2+i*.2}s;--delay:${.8+i*.15}s;bottom:50%;left:${44+i*6}%`;
+      stage.appendChild(el);
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════
 // ITEM DETAIL MODAL
 // ═══════════════════════════════════════════════
 let _itemModalId = null;
@@ -1715,41 +1866,43 @@ function openItemModal(itemId) {
   _itemModalId = itemId;
   _itemModalQty = 1;
 
-  // Photo
+  // Show animation stage by default, show photo on top if exists
   const photo = document.getElementById('item-modal-photo');
-  const emoji = document.getElementById('item-modal-emoji');
+  const stage = document.getElementById('food-anim-stage');
+
+  playFoodAnimation(i);
+
   if (i.image_url) {
-    photo.src = i.image_url; photo.style.display = 'block';
-    emoji.style.display = 'none';
+    photo.src = i.image_url;
+    photo.style.display = 'block';
+    stage.style.opacity = '1';
+    // Fade photo in after animation plays
+    photo.style.opacity = '0';
+    photo.style.transition = 'opacity .6s ease 1s';
+    setTimeout(() => { photo.style.opacity = '1'; }, 100);
   } else {
     photo.style.display = 'none';
-    emoji.textContent = i.emoji || '🍽️';
-    emoji.style.display = 'block';
+    stage.style.opacity = '1';
   }
 
   document.getElementById('item-modal-name').textContent  = i.name;
   document.getElementById('item-modal-desc').textContent  = i.description || '';
 
-  // Ingredients
   const ingrEl = document.getElementById('item-modal-ingr');
   const ingrs  = Array.isArray(i.ingredients) ? i.ingredients : [];
   ingrEl.innerHTML = ingrs.map(g => `<span class="item-modal-ingr-chip">${g}</span>`).join('');
   ingrEl.style.display = ingrs.length ? '' : 'none';
 
-  // Price
   const oldEl = document.getElementById('item-modal-price-old');
   if (i.price_old) { oldEl.textContent = 'R$ ' + fmtN(i.price_old); oldEl.style.display = ''; }
   else oldEl.style.display = 'none';
   document.getElementById('item-modal-price').textContent = 'R$ ' + fmtN(i.price);
   document.getElementById('item-modal-qty').textContent = '1';
 
-  // Add button
   const btn = document.getElementById('item-modal-add-btn');
   const isPizza = i.item_type === 'pizza';
   btn.className = 'item-modal-add-btn' + (isPizza ? ' pizza' : '');
   btn.textContent = isPizza ? '🍕 Montar Pizza' : '🛒 Adicionar ao carrinho';
-
-  // Hide qty selector for pizza
   document.getElementById('item-modal-qty-wrap').style.display = isPizza ? 'none' : 'flex';
 
   document.getElementById('item-modal-bg').classList.add('on');
@@ -1758,6 +1911,9 @@ function openItemModal(itemId) {
 function closeItemModal() {
   document.getElementById('item-modal-bg').classList.remove('on');
   _itemModalId = null;
+  const photo = document.getElementById('item-modal-photo');
+  photo.style.transition = '';
+  photo.style.opacity = '1';
 }
 
 function itemModalChangeQty(delta) {
@@ -1768,18 +1924,15 @@ function itemModalChangeQty(delta) {
 function itemModalConfirm() {
   const i = allItems.find(x => x.id === _itemModalId);
   if (!i) return;
-
   if (i.item_type === 'pizza') {
     const pid = i.id;
     closeItemModal();
     setTimeout(() => openPizzaModal(pid), 50);
     return;
   }
-
   const existing = cart.find(c => c.id === i.id);
   if (existing) existing.qty += _itemModalQty;
   else cart.push({ ...i, qty: _itemModalQty });
-
   updateCartFloat();
   showToast('🛒', `${i.name} adicionado!`);
   closeItemModal();
