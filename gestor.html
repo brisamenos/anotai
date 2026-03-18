@@ -593,6 +593,10 @@ td:first-child{padding-left:16px}
       <span style="font-size:13px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="10" height="12" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 3V2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 8h6M5 11h4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       <div><div style="font-weight:600;font-size:11px">Cardápio Digital</div></div>
     </div>
+    <div class="tbadge" id="rt-badge" title="Status da conexão em tempo real">
+      <div class="sdot" id="rt-dot" style="background:var(--muted)"></div>
+      <span style="font-weight:600;font-size:11px" id="rt-txt">Conectando</span>
+    </div>
     <div class="ibtn" onclick="toggleNotif()">
       <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M8 2a5 5 0 0 1 5 5c0 2.5-.8 4-2 5H5c-1.2-1-2-2.5-2-5a5 5 0 0 1 5-5Z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13.5a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>
       <span class="nbadge" id="notif-count">3</span>
@@ -2004,13 +2008,31 @@ function sendBrowserNotif(title, body) {
   }
 }
 
+let _rtChannels = [];
+let _rtConnected = false;
+
+function setRtStatus(ok) {
+  _rtConnected = ok;
+  const dot = document.getElementById('rt-dot');
+  const txt = document.getElementById('rt-txt');
+  if (dot) dot.style.background = ok ? 'var(--success)' : 'var(--danger)';
+  if (txt) txt.textContent = ok ? 'Ao vivo' : 'Reconectando...';
+}
+
+function unsubscribeAll() {
+  _rtChannels.forEach(ch => { try { sb.removeChannel(ch); } catch(e){} });
+  _rtChannels = [];
+}
+
 function subscribeOrders() {
-  sb.channel('orders-rt')
+  unsubscribeAll();
+
+  const chOrders = sb.channel('orders-rt')
     .on('postgres_changes', {event:'INSERT', schema:'public', table:'orders'}, p => {
       if (!ordersKanban.find(x => x.id === p.new.id)) {
         ordersKanban.unshift(mapOrder(p.new));
         renderKanban();
-        _refreshMesaPageIfActive(); // sempre atualiza a aba de mesas
+        _refreshMesaPageIfActive();
         playOrderSound();
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
@@ -2022,7 +2044,6 @@ function subscribeOrders() {
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, p => {
       const idx = ordersKanban.findIndex(x => x.id === p.new.id);
       if (idx !== -1) {
-        // Se foi finalizado/cancelado, remove do kanban local
         if (['entregue', 'cancelado'].includes(p.new.status)) {
           ordersKanban.splice(idx, 1);
         } else {
@@ -2030,7 +2051,7 @@ function subscribeOrders() {
         }
         renderKanban();
       }
-      _refreshMesaPageIfActive(); // sempre atualiza a aba de mesas
+      _refreshMesaPageIfActive();
     })
     .on('postgres_changes', {event:'DELETE', schema:'public', table:'orders'}, p => {
       ordersKanban = ordersKanban.filter(o => o.id !== p.old.id);
@@ -2038,19 +2059,20 @@ function subscribeOrders() {
       _refreshMesaPageIfActive();
     })
     .subscribe(status => {
-      if (status === 'SUBSCRIBED') console.log('[RT] orders channel subscribed');
+      setRtStatus(status === 'SUBSCRIBED');
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        setTimeout(() => subscribeOrders(), 3000);
+      }
     });
 
-  // Subscribe to mesas changes — qualquer alteração na tabela mesas
-  sb.channel('mesas-rt')
+  const chMesas = sb.channel('mesas-rt')
     .on('postgres_changes', {event:'*', schema:'public', table:'mesas'}, () => {
       sb.from('mesas').select('*').order('num').then(({ data }) => {
         if (data) { tables = data; _refreshMesaPageIfActive(); renderQR(); }
       });
     }).subscribe();
 
-  // Subscribe to store_config changes
-  sb.channel('store-config-rt')
+  const chConfig = sb.channel('store-config-rt')
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'store_config'}, p => {
       const st = document.getElementById('status-txt');
       if (!st) return;
@@ -2059,7 +2081,17 @@ function subscribeOrders() {
       st.textContent = open ? 'Online' : 'Offline';
     })
     .subscribe();
+
+  _rtChannels = [chOrders, chMesas, chConfig];
 }
+
+// Sync ao voltar para a aba (tab do browser ficou em background)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    loadAllData();
+    if (!_rtConnected) subscribeOrders();
+  }
+});
 
 // ── Generic toast for Supabase ops ───────────────────
 const _ICON_OK  = `<svg width='13' height='13' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'><circle cx='8' cy='8' r='6' stroke='currentColor' stroke-width='1.4'/><path d='M5.5 8l2 2 3-3' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/></svg>`;
