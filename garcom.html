@@ -831,14 +831,21 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// Polling de 8s como fallback (complementa o WebSocket)
-setInterval(() => {
+// Polling de 12s — só re-renderiza se houver mudança real
+let _lastGarcomHash = '';
+setInterval(async () => {
   if (!currentGarcom || document.visibilityState !== 'visible') return;
-  sb.from('mesas').select('*').order('num').then(({ data }) => {
-    if (data) { tables = data; renderMesas(); }
-  });
-  loadPedidosDaMesa();
-}, 8000);
+  if (!_rtConnected) { subscribeRealtime(); return; } // reconecta se perdeu WS
+  // Compara estado das mesas (leve)
+  const { data: mesasData } = await sb.from('mesas').select('num,status,updated_at').order('num');
+  const hash = JSON.stringify((mesasData||[]).map(m => m.num + m.status + (m.updated_at||'')));
+  if (hash !== _lastGarcomHash) {
+    _lastGarcomHash = hash;
+    tables = mesasData || tables;
+    renderMesas();
+    loadPedidosDaMesa();
+  }
+}, 12000);
 
 // Registra SW ao carregar a página
 registerSW();
