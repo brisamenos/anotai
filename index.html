@@ -315,6 +315,9 @@ td:first-child{padding-left:16px}
 .pz-confirm-btn{flex:1;background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;border:none;border-radius:10px;padding:12px;font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:700;cursor:pointer;transition:all .18s;display:flex;align-items:center;justify-content:center;gap:6px}
 .pz-confirm-btn:hover{filter:brightness(1.08)}
 .pz-confirm-btn:disabled{opacity:.4;cursor:not-allowed}
+.pz-max-btn{padding:5px 12px;border-radius:99px;border:1.5px solid rgba(255,255,255,.12);background:none;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:11.5px;font-weight:600;cursor:pointer;transition:all .15s}
+.pz-max-btn:hover{border-color:rgba(245,158,11,.4);color:var(--accent3)}
+.pz-max-btn.on{border-color:var(--accent3);color:var(--accent3);background:rgba(245,158,11,.12)}
 .pz-slot{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.08);border-radius:12px;padding:12px 14px;cursor:pointer;transition:all .18s}
 .pz-slot:hover{border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.05)}
 .pz-slot.active{border-color:var(--accent3);background:rgba(245,158,11,.08)}
@@ -1233,10 +1236,32 @@ td:first-child{padding-left:16px}
         <div class="sw" style="width:100%"><select id="new-cat" class="form-input" style="width:100%"></select></div>
       </div>
       <div class="form-row"><label class="form-label">Tipo</label>
-        <div class="sw" style="width:100%"><select id="new-item-type" class="form-input" style="width:100%">
+        <div class="sw" style="width:100%"><select id="new-item-type" class="form-input" style="width:100%" onchange="togglePizzaOptions('new')">
           <option value="normal">🍽️ Normal</option>
-          <option value="pizza">🍕 Pizza (multi-sabores)</option>
+          <option value="pizza">🍕 Pizza (sabor)</option>
         </select></div>
+      </div>
+    </div>
+
+    <!-- Opções extras quando tipo = pizza -->
+    <div id="new-pizza-options" style="display:none;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:14px 16px;margin-bottom:4px">
+      <div style="font-size:11px;font-weight:700;color:var(--accent3);letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px">🍕 Opções da Pizza</div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:12px">
+        <div class="toggle" id="new-meio-meio" onclick="this.classList.toggle('on')"></div>
+        <div>
+          <div style="font-size:13px;font-weight:600">Permite Meio a Meio</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:1px">Cliente pode combinar 2 sabores nesta pizza</div>
+        </div>
+      </label>
+      <div>
+        <label class="form-label" style="margin-bottom:6px">Máximo de sabores que o cliente pode escolher</label>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="pz-max-btn on" data-val="1" onclick="setPizzaMax('new',1,this)">1 sabor</button>
+          <button type="button" class="pz-max-btn" data-val="2" onclick="setPizzaMax('new',2,this)">2 sabores</button>
+          <button type="button" class="pz-max-btn" data-val="3" onclick="setPizzaMax('new',3,this)">3 sabores</button>
+          <button type="button" class="pz-max-btn" data-val="4" onclick="setPizzaMax('new',4,this)">4 sabores</button>
+        </div>
+        <input type="hidden" id="new-max-flavors" value="1">
       </div>
     </div>
 
@@ -1289,10 +1314,32 @@ td:first-child{padding-left:16px}
         <div class="sw" style="width:100%"><select id="edit-cat" class="form-input" style="width:100%"></select></div>
       </div>
       <div class="form-row"><label class="form-label">Tipo</label>
-        <div class="sw" style="width:100%"><select id="edit-item-type" class="form-input" style="width:100%">
+        <div class="sw" style="width:100%"><select id="edit-item-type" class="form-input" style="width:100%" onchange="togglePizzaOptions('edit')">
           <option value="normal">🍽️ Normal</option>
-          <option value="pizza">🍕 Pizza</option>
+          <option value="pizza">🍕 Pizza (sabor)</option>
         </select></div>
+      </div>
+    </div>
+
+    <!-- Opções extras quando tipo = pizza -->
+    <div id="edit-pizza-options" style="display:none;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:14px 16px;margin-bottom:4px">
+      <div style="font-size:11px;font-weight:700;color:var(--accent3);letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px">🍕 Opções da Pizza</div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:12px">
+        <div class="toggle" id="edit-meio-meio" onclick="this.classList.toggle('on')"></div>
+        <div>
+          <div style="font-size:13px;font-weight:600">Permite Meio a Meio</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:1px">Cliente pode combinar 2 sabores nesta pizza</div>
+        </div>
+      </label>
+      <div>
+        <label class="form-label" style="margin-bottom:6px">Máximo de sabores que o cliente pode escolher</label>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="pz-max-btn on" data-val="1" onclick="setPizzaMax('edit',1,this)">1 sabor</button>
+          <button type="button" class="pz-max-btn" data-val="2" onclick="setPizzaMax('edit',2,this)">2 sabores</button>
+          <button type="button" class="pz-max-btn" data-val="3" onclick="setPizzaMax('edit',3,this)">3 sabores</button>
+          <button type="button" class="pz-max-btn" data-val="4" onclick="setPizzaMax('edit',4,this)">4 sabores</button>
+        </div>
+        <input type="hidden" id="edit-max-flavors" value="1">
       </div>
     </div>
 
@@ -1549,7 +1596,9 @@ function mapItem(i) {
     desc: i.description || '',
     imageUrl: i.image_url || null,
     ingredients: Array.isArray(i.ingredients) ? i.ingredients : [],
-    itemType: i.item_type || 'normal'
+    itemType: i.item_type || 'normal',
+    allowHalf: !!i.allow_half,
+    maxFlavors: i.max_flavors || 1
   };
 }
 
@@ -2212,7 +2261,19 @@ function cycleStatus(id,el){
   el.innerHTML=`<div class="stdot"></div>&nbsp;${next[1]}`;
 }
 
-// helper: populate category selects from loaded categories array
+function setPizzaMax(ctx, val, el) {
+  document.querySelectorAll(`#${ctx}-pizza-options .pz-max-btn`).forEach(b => b.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById(`${ctx}-max-flavors`).value = val;
+  // Auto-sync meio-a-meio: if max >= 2, suggest enabling it
+}
+
+function togglePizzaOptions(ctx) {
+  const typeEl = document.getElementById(ctx+'-item-type');
+  const box    = document.getElementById(ctx+'-pizza-options');
+  if (!typeEl || !box) return;
+  box.style.display = typeEl.value === 'pizza' ? '' : 'none';
+}
 function populateCatSelects() {
   const opts = categories.length
     ? categories.map(c => `<option value="${c.name}">${c.label}</option>`).join('')
@@ -2236,8 +2297,10 @@ async function addItem() {
   const desc     = document.getElementById('new-desc').value.trim();
   const ingrRaw  = document.getElementById('new-ingredients').value.trim();
   const ingredients = ingrRaw ? ingrRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
-  const itemType = document.getElementById('new-item-type').value;
-  const status   = document.getElementById('new-status').value;
+  const itemType  = document.getElementById('new-item-type').value;
+  const allowHalf = itemType === 'pizza' && document.getElementById('new-meio-meio').classList.contains('on');
+  const maxFlavors= itemType === 'pizza' ? (parseInt(document.getElementById('new-max-flavors').value) || 1) : 1;
+  const status    = document.getElementById('new-status').value;
 
   if (!catKey) { sbToast('err','Selecione uma categoria'); return; }
 
@@ -2247,6 +2310,7 @@ async function addItem() {
     cat: catLabel, cat_key: catKey,
     price, price_old: priceOld,
     description: desc, ingredients, item_type: itemType,
+    allow_half: allowHalf, max_flavors: maxFlavors,
     promo: false, status,
     days: [1,1,1,1,1,1,1]
   }).select().single();
@@ -2283,6 +2347,15 @@ function openEditItem(id) {
   document.getElementById('edit-cat').value         = it.catKey;
   document.getElementById('edit-status').value      = it.status;
   document.getElementById('edit-item-type').value   = it.itemType || 'normal';
+  togglePizzaOptions('edit');
+  const meioel = document.getElementById('edit-meio-meio');
+  if (meioel) meioel.classList.toggle('on', !!it.allowHalf);
+  // Set max flavors buttons
+  const mf = it.maxFlavors || 1;
+  document.getElementById('edit-max-flavors').value = mf;
+  document.querySelectorAll('#edit-pizza-options .pz-max-btn').forEach(b => {
+    b.classList.toggle('on', parseInt(b.dataset.val) === mf);
+  });
 
   // Emoji grid for edit modal
   const eg = document.getElementById('edit-emoji-grid');
@@ -2318,7 +2391,10 @@ async function saveEditItem() {
   it.status      = document.getElementById('edit-status').value;
   const ingrRaw  = document.getElementById('edit-ingredients').value;
   it.ingredients = ingrRaw ? ingrRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
-  it.itemType    = document.getElementById('edit-item-type').value;
+  it.itemType   = document.getElementById('edit-item-type').value;
+  const meioEl  = document.getElementById('edit-meio-meio');
+  it.allowHalf  = it.itemType === 'pizza' && meioEl && meioEl.classList.contains('on');
+  it.maxFlavors = it.itemType === 'pizza' ? (parseInt(document.getElementById('edit-max-flavors').value) || 1) : 1;
 
   const selEmo   = document.querySelector('#edit-emoji-grid .emo-btn.on');
   if (selEmo) it.emoji = selEmo.textContent.trim();
@@ -2330,7 +2406,7 @@ async function saveEditItem() {
     name: it.name, description: it.desc,
     price: it.price, price_old: it.priceOld || null,
     cat: it.cat, cat_key: it.catKey, status: it.status,
-    ingredients: it.ingredients, item_type: it.itemType,
+    ingredients: it.ingredients, item_type: it.itemType, allow_half: it.allowHalf, max_flavors: it.maxFlavors,
     emoji: it.emoji
   }).eq('id', editingId);
   sbLoading(false);
