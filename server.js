@@ -385,7 +385,8 @@ function sseBroadcast(channel, event, data) {
 
 // Emite apenas para os canais do tenant correto
 function emit(tenantId, table, record, type) {
-  const tid = tenantId || 'global'
+  const tid = tenantId || (record && record.tenant_id) || 'global'
+  if (tid === 'global') return // sem tenant = não emite para ninguém
   // Canais do gestor
   sseBroadcast(`orders-rt:${tid}`,      table+':'+type, record)
   sseBroadcast(`mesas-rt:${tid}`,       table+':'+type, record)
