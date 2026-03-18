@@ -2733,6 +2733,35 @@ const sb = createClient('', '', {
 
 // ── Autenticação ──────────────────────────────────────
 let _sessao = null;
+let _planoAtual = 'pro'; // padrão conservador; atualizado via servidor em _carregarPlano()
+
+// Busca o plano real do tenant no servidor (não depende da sessão salva)
+async function _carregarPlano() {
+  try {
+    const tid = _sessao?.tenant_id;
+    if (!tid) return;
+    const res = await fetch(`/rest/v1/tenants?id=eq.${tid}&select=plano`, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const plano = (Array.isArray(data) ? data[0]?.plano : data?.plano) || 'pro';
+    _planoAtual = plano.toLowerCase();
+
+    // Atualiza a sessão com o plano correto para futuras verificações
+    try {
+      const sess = JSON.parse(sessionStorage.getItem('sys_session') || '{}');
+      sess.plano = _planoAtual;
+      sessionStorage.setItem('sys_session', JSON.stringify(sess));
+    } catch(e) {}
+
+    // Atualiza badge do botão Robô na sidebar
+    const roboBadge = document.getElementById('sn-robo-badge');
+    if (roboBadge) {
+      roboBadge.style.display = _planoAtual !== 'premium' ? 'inline-block' : 'none';
+    }
+  } catch(e) {}
+}
 
 function _verificarSessao() {
   try {
@@ -2752,12 +2781,7 @@ function _verificarSessao() {
     if (el_av)   el_av.textContent   = nome.charAt(0).toUpperCase();
     if (el_nome) el_nome.textContent = nome.split(' ')[0];
     if (el_role) el_role.textContent = role === 'superadmin' ? 'Super Admin' : role === 'admin' ? 'Administrador' : 'Gestor';
-    // ── Badge de bloqueio no botão do Robô ──
-    try {
-      const plano = (_sessao.plano || 'pro').toLowerCase();
-      const roboBadge = document.getElementById('sn-robo-badge');
-      if (roboBadge && plano !== 'premium') roboBadge.style.display = 'inline-block';
-    } catch(e) {}
+    // ── Badge de bloqueio no botão do Robô — atualizado após fetch do plano ──
     return true;
   } catch(e) {
     window.location.href = 'login.html';
@@ -2773,6 +2797,7 @@ function confirmarLogout() {
 }
 
 if (!_verificarSessao()) { /* redireciona */ }
+else { _carregarPlano(); } // Busca plano real do servidor (ignora cache da sessão)
 
 // ── Tenant injetado automaticamente pelo supabase-shim.js ────
 // O shim lê tenant_id da sessionStorage e envia x-tenant-id em cada request.
@@ -3553,14 +3578,10 @@ let movimentos   = [];
 function nav(id){
   // ── Bloqueio do Robô para plano Pro ──────────────────
   if (id === 'robo') {
-    try {
-      const sess = JSON.parse(sessionStorage.getItem('sys_session') || '{}');
-      const plano = (sess.plano || 'pro').toLowerCase();
-      if (plano !== 'premium') {
-        _toastUpgradePlano();
-        return; // Não navega
-      }
-    } catch(e) {}
+    if (_planoAtual !== 'premium') {
+      _toastUpgradePlano();
+      return; // Não navega
+    }
   }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
   document.querySelectorAll('.si').forEach(s=>s.classList.remove('on'));
