@@ -694,15 +694,33 @@ function subscribeRealtime() {
   sb.channel('garcom-mesas')
     .on('postgres_changes', { event:'*', schema:'public', table:'mesas' }, () => {
       sb.from('mesas').select('*').order('num').then(({ data }) => {
-        if (data) { tables = data; renderMesas(); }
+        if (data) {
+          tables = data;
+          renderMesas();
+          // Quando uma mesa muda de status (ex: gestor liberou),
+          // refiltra os pedidos para excluir mesas que ficaram livres
+          const pedidosPage = document.getElementById('page-pedidos');
+          if (pedidosPage && pedidosPage.classList.contains('on')) {
+            loadPedidosDaMesa();
+          } else {
+            // Atualiza silenciosamente o array para quando o garçom abrir a aba
+            const activeMesaNums = tables.filter(t => t.status !== 'free').map(t => t.num);
+            myOrders = myOrders.filter(o => activeMesaNums.includes(o.mesa_num));
+          }
+        }
       });
     }).subscribe();
   sb.channel('garcom-orders')
-    .on('postgres_changes', { event:'INSERT', schema:'public', table:'orders' }, p => {
-      // if this order is from this garçom, add to myOrders
-      if (p.new.garcom_id === currentGarcom?.id) {
-        myOrders.unshift(p.new);
-        renderMyOrders();
+    .on('postgres_changes', { event:'*', schema:'public', table:'orders' }, p => {
+      if (p.eventType === 'INSERT' && p.new.garcom_id === currentGarcom?.id) {
+        if (!myOrders.find(o => o.id === p.new.id)) {
+          myOrders.unshift(p.new);
+          renderMyOrders();
+        }
+      } else if (p.eventType === 'UPDATE') {
+        // Atualiza status do pedido localmente (ex: cozinha marcou como pronto)
+        const idx = myOrders.findIndex(o => o.id === p.new.id);
+        if (idx !== -1) { myOrders[idx] = p.new; renderMyOrders(); }
       }
     }).subscribe();
 }
@@ -987,10 +1005,22 @@ async function loadPedidosDaMesa() {
   const el = document.getElementById('pedidos-list');
   el.innerHTML = '<div class="empty"><div class="spinner" style="margin:0 auto"></div></div>';
   try {
+    // Só mostra pedidos de mesas que estão ATUALMENTE ocupadas ou aguardando pagamento.
+    // Quando uma mesa é liberada (free), os pedidos anteriores ficam de histórico
+    // no gestor, mas somem da visão do garçom na próxima abertura do app.
+    const activeMesaNums = tables.filter(t => t.status !== 'free').map(t => t.num);
+
+    if (!activeMesaNums.length) {
+      myOrders = [];
+      renderMyOrders();
+      return;
+    }
+
     const { data } = await sb.from('orders')
       .select('*')
       .eq('garcom_id', currentGarcom.id)
       .in('status', ['producao','pronto','analise'])
+      .in('mesa_num', activeMesaNums)
       .order('id', { ascending: false });
     myOrders = data || [];
     renderMyOrders();
@@ -1139,7 +1169,8 @@ async function confirmarFinalizarMesa() {
     showToast('✅ Mesa ' + finalizarMesaNum + ' enviada para pagamento!');
     const { data: mesas } = await sb.from('mesas').select('*').order('num');
     if (mesas) { tables = mesas; renderMesas(); }
-    renderMyOrders();
+    // Recarrega pedidos filtrando pela lista de mesas ativas atualizada
+    await loadPedidosDaMesa();
   } catch(e) {
     showToast('❌ Erro ao finalizar mesa');
     console.error(e);
