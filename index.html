@@ -622,9 +622,16 @@ body {
   transition: all .15s;
 }
 .close-btn:hover { background: var(--surface3); color: var(--text); }
-.drawer-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+.drawer-body { flex: 1; overflow-y: auto; padding: 16px 20px; min-height: 0; }
 .drawer-body::-webkit-scrollbar { width: 4px; }
 .drawer-body::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 99px; }
+/* drawer footer — always visible, never scrolls away */
+.drawer-foot {
+  padding: 14px 20px 20px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--surface);
+}
 
 /* cart items */
 .cart-item {
@@ -850,11 +857,6 @@ body {
 .dtab.on { background: var(--accent); color: #fff; }
 
 /* drawer footer */
-.drawer-foot {
-  padding: 14px 20px 20px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-}
 .confirm-btn {
   width: 100%;
   padding: 15px;
@@ -1161,7 +1163,7 @@ body {
     </div>
 
     <!-- normal flow -->
-    <div id="cart-content">
+    <div id="cart-content" style="display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0">
       <div class="drawer-body" id="drawer-body">
         <!-- DELIVERY TYPE -->
         <div class="delivery-tabs">
@@ -1186,22 +1188,22 @@ body {
         <!-- FORM -->
         <div class="form-section">
           <label class="form-label">Seus dados</label>
-          <input class="form-input" id="f-name" placeholder="Seu nome *" required autocomplete="name">
-          <input class="form-input" id="f-phone" placeholder="WhatsApp *" required autocomplete="tel" inputmode="tel">
+          <input class="form-input" id="f-name" placeholder="Seu nome *" required autocomplete="name" oninput="saveCustomerData()">
+          <input class="form-input" id="f-phone" placeholder="WhatsApp *" required autocomplete="tel" inputmode="tel" oninput="saveCustomerData()">
 
           <!-- DELIVERY ADDRESS -->
           <div id="addr-block">
             <div class="addr-cep-row">
-              <input class="form-input" id="f-cep" placeholder="CEP *" maxlength="9" inputmode="numeric" oninput="maskCep(this)" onblur="fetchCep()">
+              <input class="form-input" id="f-cep" placeholder="CEP *" maxlength="9" inputmode="numeric" oninput="maskCep(this);saveCustomerData()" onblur="fetchCep()">
               <button class="addr-cep-btn" id="cep-btn" onclick="fetchCep()" type="button">Buscar</button>
             </div>
             <div class="addr-auto-filled" id="addr-filled-hint"></div>
             <div class="form-row2" style="margin-top:8px">
-              <input class="form-input" id="f-street" placeholder="Rua / Avenida *" autocomplete="street-address">
-              <input class="form-input" id="f-num" placeholder="Número *" inputmode="numeric">
+              <input class="form-input" id="f-street" placeholder="Rua / Avenida *" autocomplete="street-address" oninput="saveCustomerData()">
+              <input class="form-input" id="f-num" placeholder="Número *" inputmode="numeric" oninput="saveCustomerData()">
             </div>
-            <input class="form-input" id="f-comp" placeholder="Complemento (apto, bloco...)">
-            <input class="form-input" id="f-bairro" placeholder="Bairro">
+            <input class="form-input" id="f-comp" placeholder="Complemento (apto, bloco...)" oninput="saveCustomerData()">
+            <input class="form-input" id="f-bairro" placeholder="Bairro" oninput="saveCustomerData()">
             <div class="form-row2">
               <input class="form-input" id="f-city" placeholder="Cidade" readonly style="opacity:.7">
               <input class="form-input" id="f-state" placeholder="UF" readonly style="opacity:.7;width:70px">
@@ -1219,6 +1221,7 @@ body {
           </div>
         </div>
       </div>
+      </div><!-- end drawer-body -->
 
       <div class="drawer-foot">
         <button class="confirm-btn" id="confirm-btn" onclick="submitOrder()">
@@ -1226,7 +1229,7 @@ body {
           Confirmar Pedido
         </button>
       </div>
-    </div>
+    </div><!-- end cart-content -->
 
     <!-- SUCCESS -->
     <div class="success-screen" id="success-screen">
@@ -1397,8 +1400,49 @@ let appliedCupom  = null;
 const TAXA_DELIVERY = 5;
 
 // ═══════════════════════════════════════════════
-// INIT
+// CUSTOMER DATA — localStorage
 // ═══════════════════════════════════════════════
+const CUSTOMER_KEY = 'estimafood_customer';
+
+function saveCustomerData() {
+  const data = {
+    name:    document.getElementById('f-name')?.value   || '',
+    phone:   document.getElementById('f-phone')?.value  || '',
+    cep:     document.getElementById('f-cep')?.value    || '',
+    street:  document.getElementById('f-street')?.value || '',
+    num:     document.getElementById('f-num')?.value    || '',
+    comp:    document.getElementById('f-comp')?.value   || '',
+    bairro:  document.getElementById('f-bairro')?.value || '',
+    city:    document.getElementById('f-city')?.value   || '',
+    state:   document.getElementById('f-state')?.value  || '',
+  };
+  try { localStorage.setItem(CUSTOMER_KEY, JSON.stringify(data)); } catch(e) {}
+}
+
+function loadCustomerData() {
+  try {
+    const raw = localStorage.getItem(CUSTOMER_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+    set('f-name',   d.name);
+    set('f-phone',  d.phone);
+    set('f-cep',    d.cep);
+    set('f-street', d.street);
+    set('f-num',    d.num);
+    set('f-comp',   d.comp);
+    set('f-bairro', d.bairro);
+    set('f-city',   d.city);
+    set('f-state',  d.state);
+    // Show address hint if address is pre-filled
+    if (d.street && d.city) {
+      const hint = document.getElementById('addr-filled-hint');
+      if (hint) { hint.textContent = '📍 ' + [d.street, d.bairro, d.city, d.state].filter(Boolean).join(', '); hint.classList.add('show'); }
+    }
+  } catch(e) {}
+}
+
+
 async function init() {
   renderMenuWrap('<div class="loading-wrap"><div class="spinner"></div><span>Carregando cardápio…</span></div>');
   try {
@@ -1618,6 +1662,7 @@ function grandTotal() {
 function openCart() {
   document.getElementById('drawer-bg').classList.add('on');
   renderCartDrawer();
+  loadCustomerData();
 }
 function closeCart() {
   document.getElementById('drawer-bg').classList.remove('on');
@@ -2278,6 +2323,7 @@ async function fetchCep() {
     hint.textContent = '📍 '+d.logradouro+', '+d.bairro+' — '+d.localidade+'/'+d.uf;
     hint.classList.add('show');
     document.getElementById('f-num').focus();
+    saveCustomerData();
   } catch(e) { showToast('⚠️','Erro ao buscar CEP'); }
   finally { btn.disabled=false; btn.textContent='Buscar'; }
 }
@@ -2290,7 +2336,6 @@ function buildAddrFull() {
 // ═══════════════════════════════════════════════
 // REMOVER ITEM DO CARRINHO
 // ═══════════════════════════════════════════════
-function removeCartItem(id) {
   const item = cart.find(c => c.id === id);
   if (!item) return;
   const el = document.getElementById('cart-item-' + id);
