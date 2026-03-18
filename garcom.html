@@ -621,8 +621,8 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 const { createClient } = window.supabase;
 const sb = createClient('', '', { auth:{ persistSession:false } });
 
-let _garcomTenantId  = null;
-let _garcomNomeLoja  = null;
+let _garcomTenantId = null;
+let _garcomNomeLoja = null;
 
 (async function resolveGarcomTenant() {
   const p    = new URLSearchParams(window.location.search);
@@ -646,15 +646,17 @@ let _garcomNomeLoja  = null;
     if (cor) document.documentElement.style.setProperty('--accent', cor);
     const logoEl = document.getElementById('login-store-logo');
     if (logoEl && info.branding?.store_logo_url) {
-      logoEl.src = info.branding.store_logo_url.startsWith('http') ? info.branding.store_logo_url : window.location.origin + info.branding.store_logo_url;
+      logoEl.src = info.branding.store_logo_url.startsWith('http')
+        ? info.branding.store_logo_url
+        : window.location.origin + info.branding.store_logo_url;
       logoEl.style.display = 'block';
-      logoEl.onload = () => { const icon=document.getElementById('login-logo-icon'); if(icon) icon.style.display='none'; };
+      logoEl.onload = () => { const ic=document.getElementById('login-logo-icon'); if(ic) ic.style.display='none'; };
     }
     const topbar = document.getElementById('topbar-store-name');
     if (topbar && _garcomNomeLoja) topbar.textContent = _garcomNomeLoja;
   } else if (tid || slug) {
     const errEl = document.getElementById('login-store-name');
-    if (errEl) { errEl.textContent = 'Restaurante não encontrado'; errEl.style.color = '#ef4444'; }
+    if (errEl) { errEl.textContent = 'Restaurante não encontrado'; errEl.style.color='#ef4444'; }
   }
 })();
 
