@@ -39,7 +39,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);hei
 .app{display:flex;flex:1;overflow:hidden}
 
 /* SIDEBAR */
-.sidebar{width:var(--sw);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:10px 8px;gap:1px;overflow-y:auto;overflow-x:hidden;flex-shrink:0;-webkit-overflow-scrolling:touch}
+.sidebar{width:var(--sw);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:10px 8px 0;overflow:hidden;flex-shrink:0}
 .sidebar::-webkit-scrollbar{width:3px}
 .sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:99px}
 .shead{font-size:9.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);padding:8px 8px 3px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-radius:6px;transition:background .15s;user-select:none}
@@ -55,7 +55,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);hei
 .si.on::before{content:'';position:absolute;left:0;top:4px;bottom:4px;width:3px;border-radius:0 3px 3px 0;background:var(--accent)}
 .sbc{margin-left:auto;background:var(--accent);color:#fff;font-size:9.5px;font-weight:700;padding:1px 5px;border-radius:99px;min-width:16px;text-align:center}
 .ssub{padding-left:30px;font-size:12px}
-.sfoot{margin-top:auto;padding:8px 0 0;border-top:1px solid var(--border)}
+.sfoot{padding:8px 0;border-top:1px solid var(--border);flex-shrink:0;background:var(--surface)}
 .urow{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:7px;cursor:pointer;transition:background .15s}
 .urow:hover{background:var(--surface2)}
 .av{width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
@@ -598,6 +598,7 @@ td:first-child{padding-left:16px}
 <div class="app">
 <!-- SIDEBAR -->
 <aside class="sidebar">
+  <div style="flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:8px">
   <div style="padding:7px 8px 4px"><div style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><input placeholder="Procurando por algo?" style="background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text);width:100%"></div></div>
 
   <div class="shead" onclick="toggleSideGroup('sg-dia')" id="sh-dia">Seu dia a dia <span class="shead-arrow">▾</span></div>
@@ -694,7 +695,9 @@ td:first-child{padding-left:16px}
     <svg viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="10" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="8" r="1" fill="currentColor"/></svg>
     Impressão automática
   </button>
-  </div>
+  </div><!-- end sidebar-group gestao -->
+
+  </div><!-- end scroll wrapper -->
 
   <div class="sfoot">
     <div class="urow">
