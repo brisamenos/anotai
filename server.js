@@ -614,7 +614,7 @@ const server = http.createServer(async (req,res) => {
   // Criar tenant + store_config automaticamente ao cadastrar no admin
   if(req.method==='POST'&&upath==='/api/criar-tenant'){
     const body = await readBody(req)
-    const {nome,plano,slug,email,senha,role} = body
+    const {nome,plano,slug,email,senha,role,nomeGestor} = body
     if(!nome||!email||!senha){send(res,400,{error:'nome, email e senha obrigatórios'});return}
     try {
       const hash = crypto.createHash('sha256').update(senha).digest('hex')
@@ -638,11 +638,12 @@ const server = http.createServer(async (req,res) => {
         return
       }
 
+      const nomeUsuario = nomeGestor || nome  // usa nome do gestor se fornecido, senão usa nome do restaurante
       db.prepare("INSERT INTO tenants (nome,plano,slug) VALUES (?,?,?)").run(nome,plano||'basic',slugFinal)
       const t = db.prepare("SELECT id FROM tenants WHERE slug=?").get(slugFinal)
       db.prepare("INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)").run(t.id)
       db.prepare("INSERT INTO sys_users (nome,email,senha_hash,role,tenant_id) VALUES (?,?,?,?,?)")
-        .run(nome,email,hash,role||'gestor',t.id)
+        .run(nomeUsuario,email,hash,role||'gestor',t.id)
       send(res,201,{ok:true,tenant_id:t.id,slug:slugFinal})
     } catch(e){ send(res,400,{error:e.message}) }
     return
