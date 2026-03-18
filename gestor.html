@@ -791,6 +791,10 @@ td:first-child{padding-left:16px}
   <button class="si ssub" id="sn-imagens" onclick="nav('imagens')">Imagens do cardápio</button>
   <button class="si ssub" id="sn-edicao" onclick="nav('edicao')">Edição em massa</button>
   <button class="si ssub" id="sn-potencializador" onclick="nav('potencializador')">Potencializador</button>
+  <button class="si" id="sn-cardapio-publico" onclick="nav('cardapio-publico')">
+    <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 2c-1.5 2-2.5 3.8-2.5 6s1 4 2.5 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 2c1.5 2 2.5 3.8 2.5 6s-1 4-2.5 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M2 8h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    Cardápio público
+  </button>
   <button class="si" id="sn-robo" onclick="nav('robo')">
     <svg viewBox="0 0 16 16" fill="none"><rect x="3" y="5" width="10" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="9" r="1" fill="currentColor"/><circle cx="10" cy="9" r="1" fill="currentColor"/><path d="M6 5V3.5M10 5V3.5M6 3.5H10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Robô <span id="sn-robo-badge" style="display:none;font-size:9px;font-weight:700;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;padding:1px 5px;border-radius:99px;margin-left:4px;letter-spacing:.3px;">PRO</span>
@@ -3621,6 +3625,7 @@ function nav(id){
   if(id==='caixa') renderCaixa();
   if(id==='taxa') renderTaxaPage();
   if(id==='clientes') renderClientesPage();
+  if(id==='cardapio-publico') loadCardapioPublico();
 }
 
 function switchTab(btn,id){
@@ -7482,6 +7487,280 @@ function _evoShowQRPrompt() {
   if(cn) cn.style.display='none';
 }
 
+<!-- ══ PÁGINA: CARDÁPIO PÚBLICO ══════════════════════════ -->
+<div class="page" id="page-cardapio-publico">
+<div class="ph">
+  <div>
+    <div class="pt">🌐 Cardápio Público</div>
+    <div class="ps">Personalize como seus clientes veem o seu cardápio online</div>
+  </div>
+  <button class="btn bp" onclick="salvarCardapioPublico()">💾 Salvar alterações</button>
+</div>
+
+<!-- LINK DO CARDÁPIO -->
+<div id="cp-link-box" style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:12px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+  <div style="flex:1;min-width:200px">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:5px">Link do seu cardápio</div>
+    <div id="cp-link-url" style="font-size:14px;font-weight:600;color:var(--accent);word-break:break-all">Carregando...</div>
+  </div>
+  <div style="display:flex;gap:8px;flex-shrink:0">
+    <button class="btn bg" onclick="cpCopiarLink()">📋 Copiar</button>
+    <button class="btn bp" onclick="cpAbrirLink()">🔗 Abrir</button>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+<!-- COLUNA ESQUERDA -->
+<div style="display:flex;flex-direction:column;gap:14px">
+
+  <!-- Nome e descrição -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:7px">
+      <span style="font-size:16px">🏪</span> Identidade da loja
+    </div>
+    <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Nome da loja</label>
+    <input id="cp-nome" class="form-input" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;margin-bottom:12px;transition:border-color .18s" placeholder="Ex: Pizzaria do João">
+    <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Descrição / slogan</label>
+    <input id="cp-descricao" class="form-input" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;margin-bottom:12px;transition:border-color .18s" placeholder="Ex: As melhores pizzas da cidade">
+    <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">WhatsApp de contato</label>
+    <input id="cp-whatsapp" class="form-input" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;transition:border-color .18s" placeholder="5511999999999">
+  </div>
+
+  <!-- Infos de entrega -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:7px">
+      <span style="font-size:16px">🛵</span> Informações de entrega
+    </div>
+    <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Tempo estimado</label>
+    <input id="cp-tempo" class="form-input" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;margin-bottom:12px;transition:border-color .18s" placeholder="Ex: 30-45 min">
+    <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Avaliação exibida</label>
+    <input id="cp-avaliacao" class="form-input" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;transition:border-color .18s" placeholder="Ex: 4.8">
+  </div>
+
+  <!-- Cor principal -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:7px">
+      <span style="font-size:16px">🎨</span> Cor principal
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <input type="color" id="cp-cor" value="#3b82f6" style="width:48px;height:48px;border:none;border-radius:10px;cursor:pointer;background:none;padding:0" oninput="cpPreviewCor(this.value)">
+      <div style="flex:1">
+        <div style="font-size:12.5px;margin-bottom:4px">Cor usada no botão de pedido, destaques e links do cardápio</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="cp-cor-presets">
+          <div onclick="cpSetCor('#3b82f6')" style="width:28px;height:28px;border-radius:7px;background:#3b82f6;cursor:pointer;border:2px solid transparent" title="Azul"></div>
+          <div onclick="cpSetCor('#22c55e')" style="width:28px;height:28px;border-radius:7px;background:#22c55e;cursor:pointer;border:2px solid transparent" title="Verde"></div>
+          <div onclick="cpSetCor('#f97316')" style="width:28px;height:28px;border-radius:7px;background:#f97316;cursor:pointer;border:2px solid transparent" title="Laranja"></div>
+          <div onclick="cpSetCor('#ef4444')" style="width:28px;height:28px;border-radius:7px;background:#ef4444;cursor:pointer;border:2px solid transparent" title="Vermelho"></div>
+          <div onclick="cpSetCor('#8b5cf6')" style="width:28px;height:28px;border-radius:7px;background:#8b5cf6;cursor:pointer;border:2px solid transparent" title="Roxo"></div>
+          <div onclick="cpSetCor('#ec4899')" style="width:28px;height:28px;border-radius:7px;background:#ec4899;cursor:pointer;border:2px solid transparent" title="Rosa"></div>
+          <div onclick="cpSetCor('#14b8a6')" style="width:28px;height:28px;border-radius:7px;background:#14b8a6;cursor:pointer;border:2px solid transparent" title="Teal"></div>
+          <div onclick="cpSetCor('#f59e0b')" style="width:28px;height:28px;border-radius:7px;background:#f59e0b;cursor:pointer;border:2px solid transparent" title="Âmbar"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- COLUNA DIREITA -->
+<div style="display:flex;flex-direction:column;gap:14px">
+
+  <!-- Upload logo -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:7px">
+      <span style="font-size:16px">🖼️</span> Logo da loja
+    </div>
+    <div id="cp-logo-preview" style="width:80px;height:80px;border-radius:14px;background:var(--surface2);border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:12px;overflow:hidden;cursor:pointer" onclick="document.getElementById('cp-logo-file').click()">🏪</div>
+    <input type="file" id="cp-logo-file" accept="image/*" style="display:none" onchange="cpUploadImagem(this,'logo')">
+    <button class="btn bg" style="width:100%;justify-content:center;margin-bottom:8px" onclick="document.getElementById('cp-logo-file').click()">📁 Escolher logo</button>
+    <div style="font-size:11px;color:var(--muted)">JPG, PNG ou WebP. Recomendado: 200×200px</div>
+  </div>
+
+  <!-- Upload banner -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:7px">
+      <span style="font-size:16px">🎞️</span> Banner do cardápio
+    </div>
+    <div id="cp-banner-preview" style="width:100%;height:100px;border-radius:10px;background:var(--surface2);border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:12px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center" onclick="document.getElementById('cp-banner-file').click()">🎞️</div>
+    <input type="file" id="cp-banner-file" accept="image/*" style="display:none" onchange="cpUploadImagem(this,'banner')">
+    <button class="btn bg" style="width:100%;justify-content:center;margin-bottom:8px" onclick="document.getElementById('cp-banner-file').click()">📁 Escolher banner</button>
+    <div style="font-size:11px;color:var(--muted)">Imagem de fundo do cabeçalho. Recomendado: 1200×400px</div>
+  </div>
+
+  <!-- Preview resumo -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:7px">
+      <span style="font-size:16px">👁️</span> Preview do cabeçalho
+    </div>
+    <div id="cp-preview-hero" style="border-radius:10px;overflow:hidden;background:linear-gradient(160deg,#0f1117,#1a1f35);padding:20px 16px 16px;position:relative">
+      <div id="cp-prev-logo" style="width:44px;height:44px;border-radius:10px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:8px;overflow:hidden">🏪</div>
+      <div id="cp-prev-nome" style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#3b82f6;margin-bottom:3px">Nome da loja</div>
+      <div id="cp-prev-desc" style="font-size:12px;color:#64748b;margin-bottom:8px">Slogan ou descrição</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <div style="background:rgba(255,235,200,.08);border:1px solid rgba(255,235,200,.12);border-radius:99px;padding:3px 9px;font-size:11px;color:#64748b;display:flex;align-items:center;gap:4px">
+          <div id="cp-prev-dot" style="width:6px;height:6px;border-radius:50%;background:#22c55e"></div>Aberto agora
+        </div>
+        <div id="cp-prev-tempo" style="background:rgba(255,235,200,.08);border:1px solid rgba(255,235,200,.12);border-radius:99px;padding:3px 9px;font-size:11px;color:#64748b">🛵 30-45 min</div>
+        <div id="cp-prev-aval" style="background:rgba(255,235,200,.08);border:1px solid rgba(255,235,200,.12);border-radius:99px;padding:3px 9px;font-size:11px;color:#64748b">⭐ 5.0</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+</div>
+
+<script>
+// ══ CARDÁPIO PÚBLICO ════════════════════════════════
+let _cpLogoUrl   = '';
+let _cpBannerUrl = '';
+
+async function loadCardapioPublico() {
+  const { data } = await sb.from('store_config').select(
+    'store_name,store_descricao,store_logo_url,store_banner_url,store_cor,store_tempo_entrega,store_avaliacao,store_whatsapp'
+  ).single();
+  if (!data) return;
+
+  const v = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+  v('cp-nome',      data.store_name);
+  v('cp-descricao', data.store_descricao);
+  v('cp-whatsapp',  data.store_whatsapp);
+  v('cp-tempo',     data.store_tempo_entrega);
+  v('cp-avaliacao', data.store_avaliacao);
+
+  const cor = data.store_cor || '#3b82f6';
+  const corEl = document.getElementById('cp-cor');
+  if (corEl) corEl.value = cor;
+  cpPreviewCor(cor);
+
+  if (data.store_logo_url) {
+    _cpLogoUrl = data.store_logo_url;
+    const prev = document.getElementById('cp-logo-preview');
+    if (prev) { prev.innerHTML = ''; prev.style.backgroundImage = `url(${_cpLogoUrl})`; prev.style.backgroundSize = 'cover'; prev.style.backgroundPosition = 'center'; }
+    const pp = document.getElementById('cp-prev-logo');
+    if (pp) { pp.innerHTML = ''; pp.style.backgroundImage = `url(${_cpLogoUrl})`; pp.style.backgroundSize = 'cover'; pp.style.backgroundPosition = 'center'; }
+  }
+  if (data.store_banner_url) {
+    _cpBannerUrl = data.store_banner_url;
+    const prev = document.getElementById('cp-banner-preview');
+    if (prev) { prev.innerHTML = ''; prev.style.backgroundImage = `url(${_cpBannerUrl})`; }
+    const hero = document.getElementById('cp-preview-hero');
+    if (hero) hero.style.backgroundImage = `url(${_cpBannerUrl})`;
+  }
+
+  cpAtualizarPreview();
+  cpMontarLink();
+}
+
+function cpMontarLink() {
+  const slug = _sessao?.tenant_id || '';
+  const base = window.location.origin;
+  const url  = `${base}/index.html?slug=${encodeURIComponent(slug)}`;
+  const el = document.getElementById('cp-link-url');
+  if (el) el.textContent = url;
+}
+
+function cpCopiarLink() {
+  const el = document.getElementById('cp-link-url');
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent).then(() => sbToast('ok','Link copiado!'));
+}
+
+function cpAbrirLink() {
+  const el = document.getElementById('cp-link-url');
+  if (el) window.open(el.textContent, '_blank');
+}
+
+function cpSetCor(hex) {
+  const el = document.getElementById('cp-cor');
+  if (el) el.value = hex;
+  cpPreviewCor(hex);
+}
+
+function cpPreviewCor(hex) {
+  const nome = document.getElementById('cp-prev-nome');
+  if (nome) nome.style.color = hex;
+  cpAtualizarPreview();
+}
+
+function cpAtualizarPreview() {
+  const nome = (document.getElementById('cp-nome')?.value || 'Nome da loja');
+  const desc = (document.getElementById('cp-descricao')?.value || 'Slogan ou descrição');
+  const tempo = (document.getElementById('cp-tempo')?.value || '30-45 min');
+  const aval  = (document.getElementById('cp-avaliacao')?.value || '5.0');
+  const cor   = (document.getElementById('cp-cor')?.value || '#3b82f6');
+
+  const el = (id) => document.getElementById(id);
+  if (el('cp-prev-nome')) el('cp-prev-nome').textContent = nome;
+  if (el('cp-prev-desc')) el('cp-prev-desc').textContent = desc;
+  if (el('cp-prev-nome')) el('cp-prev-nome').style.color = cor;
+  if (el('cp-prev-tempo')) el('cp-prev-tempo').textContent = `🛵 ${tempo}`;
+  if (el('cp-prev-aval'))  el('cp-prev-aval').textContent  = `⭐ ${aval}`;
+}
+
+// Atualiza preview em tempo real
+['cp-nome','cp-descricao','cp-tempo','cp-avaliacao'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', cpAtualizarPreview);
+});
+
+async function cpUploadImagem(input, tipo) {
+  const file = input.files[0];
+  if (!file) return;
+  sbLoading(true);
+  try {
+    const ext  = file.name.split('.').pop();
+    const path = `branding/${_sessao?.tenant_id || 'default'}-${tipo}.${ext}`;
+    const { data } = await sb.storage.from('menu-images').upload(path, file, { upsert: true });
+    const { data: { publicUrl } } = sb.storage.from('menu-images').getPublicUrl(path);
+
+    if (tipo === 'logo') {
+      _cpLogoUrl = publicUrl;
+      const prev = document.getElementById('cp-logo-preview');
+      if (prev) { prev.innerHTML = ''; prev.style.backgroundImage = `url(${publicUrl})`; prev.style.backgroundSize = 'cover'; prev.style.backgroundPosition = 'center'; }
+      const pp = document.getElementById('cp-prev-logo');
+      if (pp) { pp.innerHTML = ''; pp.style.backgroundImage = `url(${publicUrl})`; pp.style.backgroundSize = 'cover'; pp.style.backgroundPosition = 'center'; }
+    } else {
+      _cpBannerUrl = publicUrl;
+      const prev = document.getElementById('cp-banner-preview');
+      if (prev) { prev.innerHTML = ''; prev.style.backgroundImage = `url(${publicUrl})`; }
+      const hero = document.getElementById('cp-preview-hero');
+      if (hero) hero.style.backgroundImage = `url(${publicUrl})`;
+    }
+    sbToast('ok', `${tipo === 'logo' ? 'Logo' : 'Banner'} atualizado!`);
+  } catch(e) {
+    sbToast('err', 'Erro ao enviar imagem');
+  } finally {
+    sbLoading(false);
+  }
+}
+
+async function salvarCardapioPublico() {
+  sbLoading(true);
+  try {
+    const payload = {
+      store_name:          document.getElementById('cp-nome')?.value.trim()      || null,
+      store_descricao:     document.getElementById('cp-descricao')?.value.trim() || null,
+      store_whatsapp:      document.getElementById('cp-whatsapp')?.value.trim()  || null,
+      store_tempo_entrega: document.getElementById('cp-tempo')?.value.trim()     || '30-45 min',
+      store_avaliacao:     document.getElementById('cp-avaliacao')?.value.trim() || '5.0',
+      store_cor:           document.getElementById('cp-cor')?.value              || '#3b82f6',
+    };
+    if (_cpLogoUrl)   payload.store_logo_url   = _cpLogoUrl;
+    if (_cpBannerUrl) payload.store_banner_url = _cpBannerUrl;
+
+    const { error } = await sb.from('store_config').upsert(payload);
+    if (error) throw error;
+    sbToast('ok', '✅ Cardápio público salvo!');
+  } catch(e) {
+    sbToast('err', 'Erro ao salvar: ' + e.message);
+  } finally {
+    sbLoading(false);
+  }
+}
+</script>
+
+<script>
 buildEmojiGrid();
 initSidebarState();
 requestNotifPermission();
