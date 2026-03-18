@@ -261,7 +261,29 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
   </div>
 </div>
 
-<!-- MODAL USUÁRIOS DO CLIENTE -->
+<!-- MODAL RENOVAR ACESSO -->
+<div class="modal-bg" id="m-renovar">
+  <div class="modal" style="width:420px">
+    <button class="modal-x" onclick="fecharModal('m-renovar')">✕</button>
+    <h2 id="m-ren-titulo">🔄 Renovar Acesso</h2>
+    <input type="hidden" id="ren-id">
+    <div style="color:var(--muted);font-size:12.5px;margin-bottom:16px" id="ren-info"></div>
+
+    <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Adicionar período</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+      <button class="btn bg2" style="justify-content:center;padding:10px" onclick="renovarDias(30)">+30 dias<br><span style="font-size:10px;color:var(--muted)">1 mês</span></button>
+      <button class="btn bg2" style="justify-content:center;padding:10px" onclick="renovarDias(90)">+90 dias<br><span style="font-size:10px;color:var(--muted)">3 meses</span></button>
+      <button class="btn bg2" style="justify-content:center;padding:10px" onclick="renovarDias(180)">+180 dias<br><span style="font-size:10px;color:var(--muted)">6 meses</span></button>
+      <button class="btn bp" style="justify-content:center;padding:10px" onclick="renovarDias(365)">+365 dias<br><span style="font-size:10px;opacity:.8">1 ano</span></button>
+    </div>
+
+    <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Ou definir data exata</div>
+    <div style="display:flex;gap:8px">
+      <input class="minput" id="ren-data" type="date" style="flex:1">
+      <button class="btn bp" onclick="renovarData()">Salvar</button>
+    </div>
+  </div>
+</div>
 <div class="modal-bg" id="m-usuarios-cli">
   <div class="modal" style="width:580px">
     <button class="modal-x" onclick="fecharModal('m-usuarios-cli')">✕</button>
@@ -424,6 +446,7 @@ function renderClientes() {
     <td><div style="display:flex;gap:4px">
       <button class="btn bg2 bsm" onclick="editarCliente('${c.id}')">✏️</button>
       <button class="btn bg2 bsm" title="${userCount} usuário(s)" onclick="abrirUsuariosCliente('${c.id}')">👥${userCount>1?` <span style='font-size:10px'>${userCount}</span>`:''}</button>
+      <button class="btn bg2 bsm" title="Renovar acesso" onclick="abrirRenovar('${c.id}')">🔄</button>
       <button class="btn bg2 bsm" onclick="toggleCliente('${c.id}',${c.ativo})">${c.ativo?'⏸':'▶'}</button>
       <button class="btn bd bsm" onclick="deletarCliente('${c.id}','${c.nome.replace(/'/g,"\\'")}')">🗑</button>
     </div></td>
@@ -483,8 +506,8 @@ async function salvarCliente() {
 
   let error;
   if (id) {
-    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo }).eq('id',id));
-    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo}; }
+    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo, expires_at: expira }).eq('id',id));
+    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo,expires_at:expira}; }
   } else {
     try {
       const res = await fetch('/api/criar-tenant', {
@@ -525,6 +548,52 @@ async function deletarCliente(id, nome) {
   document.getElementById('st-inativos').textContent=_clientes.filter(c=>!c.ativo).length;
   document.getElementById('st-users').textContent  = _usuarios.length;
   toast('ok','Cliente removido');
+}
+
+// ── RENOVAR ACESSO ───────────────────────
+function abrirRenovar(id) {
+  const c = _clientes.find(x=>x.id===id);
+  if (!c) return;
+  document.getElementById('ren-id').value = id;
+  document.getElementById('m-ren-titulo').textContent = `🔄 Renovar — ${c.nome}`;
+  const expAtual = c.expires_at ? new Date(c.expires_at).toLocaleDateString('pt-BR') : 'Sem data definida';
+  const hoje = new Date();
+  const base = c.expires_at && new Date(c.expires_at) > hoje ? new Date(c.expires_at) : hoje;
+  document.getElementById('ren-info').textContent = `Vencimento atual: ${expAtual}`;
+  // Pré-preenche a data com +30 dias como sugestão
+  const sugestao = new Date(base); sugestao.setDate(sugestao.getDate()+30);
+  document.getElementById('ren-data').value = sugestao.toISOString().slice(0,10);
+  abrirModal('m-renovar');
+}
+
+async function renovarDias(dias) {
+  const id = document.getElementById('ren-id').value;
+  const c  = _clientes.find(x=>x.id===id);
+  if (!c) return;
+  const hoje = new Date();
+  const base = c.expires_at && new Date(c.expires_at) > hoje ? new Date(c.expires_at) : hoje;
+  const nova  = new Date(base);
+  nova.setDate(nova.getDate() + dias);
+  await _aplicarRenovacao(id, nova.toISOString().slice(0,10));
+}
+
+async function renovarData() {
+  const id   = document.getElementById('ren-id').value;
+  const data = document.getElementById('ren-data').value;
+  if (!data) { toast('err','Selecione uma data'); return; }
+  await _aplicarRenovacao(id, data);
+}
+
+async function _aplicarRenovacao(id, dataISO) {
+  const { error } = await sb.from('tenants').update({ expires_at: dataISO, ativo: true }).eq('id', id);
+  if (error) { toast('err', 'Erro ao renovar: ' + error.message); return; }
+  const c = _clientes.find(x=>x.id===id);
+  if (c) { c.expires_at = dataISO; c.ativo = true; }
+  fecharModal('m-renovar');
+  renderClientes(); renderDash();
+  document.getElementById('st-ativos').textContent  = _clientes.filter(c=>c.ativo).length;
+  document.getElementById('st-inativos').textContent= _clientes.filter(c=>!c.ativo).length;
+  toast('ok', `Acesso renovado até ${new Date(dataISO).toLocaleDateString('pt-BR')}`);
 }
 
 // ── USUÁRIOS POR CLIENTE ─────────────────
@@ -591,24 +660,30 @@ function fecharFormUsuario() {
 }
 
 async function salvarUsuario() {
-  const id     = document.getElementById('usr-id').value;
+  const id     = document.getElementById('usr-id').value.trim();
   const nome   = document.getElementById('usr-nome').value.trim();
   const email  = document.getElementById('usr-email').value.trim().toLowerCase();
   const senha  = document.getElementById('usr-senha').value;
-  const tenant = document.getElementById('usr-tenant-fixed').value || _tenantAtivo;
+  const tenant = (document.getElementById('usr-tenant-fixed').value || _tenantAtivo || '').trim();
   const role   = document.getElementById('usr-role').value;
-  if (!nome||!email) { toast('err','Preencha nome e email'); return; }
-  if (!id&&!senha)   { toast('err','Defina uma senha para o novo usuário'); return; }
-  const payload = { nome, email, tenant_id:tenant, role, ativo:true };
-  if (senha) payload.senha_hash = await sha256(senha);
+  if (!nome||!email)  { toast('err','Preencha nome e email'); return; }
+  if (!id&&!senha)    { toast('err','Defina uma senha para o novo usuário'); return; }
+  if (!tenant)        { toast('err','Erro interno: tenant não identificado. Feche e abra o modal novamente.'); return; }
+
   let error;
   if (id) {
-    ({ error } = await sb.from('sys_users').update(payload).eq('id',id));
+    // Edição: só manda senha se foi preenchida
+    const payload = { nome, email, role, ativo: true };
+    if (senha) payload.senha_hash = await sha256(senha);
+    ({ error } = await sb.from('sys_users').update(payload).eq('id', id));
     if (!error) { const i=_usuarios.findIndex(u=>u.id===id); if(i>=0) _usuarios[i]={..._usuarios[i],...payload}; }
   } else {
+    // Criação: manda tudo
+    const hash = await sha256(senha);
+    const payload = { nome, email, tenant_id: tenant, role, ativo: true, senha_hash: hash };
     const { data, error:e2 } = await sb.from('sys_users').insert(payload).select('*,tenants(nome)').single();
     error = e2;
-    if (!error&&data) _usuarios.unshift(data);
+    if (!error && data) _usuarios.unshift(data);
   }
   if (error) { toast('err','Erro: '+(error.message||'Verifique os dados')); return; }
   fecharFormUsuario();
