@@ -41,7 +41,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS tenants (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
     nome TEXT NOT NULL, plano TEXT DEFAULT 'basic', ativo INTEGER DEFAULT 1,
-    slug TEXT UNIQUE,
+    slug TEXT UNIQUE, expires_at TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   );
   CREATE TABLE IF NOT EXISTS sys_users (
@@ -144,6 +144,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_fidelidade_tenant ON fidelidade(tenant_id);
 `)
 
+// Migrations automáticas (bancos já existentes)
+try { db.exec("ALTER TABLE tenants ADD COLUMN expires_at TEXT") } catch(e) {}
+
 // Superadmin padrão
 const adminExists = db.prepare("SELECT id FROM sys_users WHERE role='superadmin' LIMIT 1").get()
 if (!adminExists) {
@@ -202,7 +205,7 @@ function emit(tenantId, table, record, type) {
 // REST ENGINE — multi-tenant automático
 // ════════════════════════════════════════════════════════
 const TABLE_COLS = {
-  tenants:      ['id','nome','plano','ativo','slug','created_at'],
+  tenants:      ['id','nome','plano','ativo','slug','expires_at','created_at'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
   store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state'],
   categories:   ['id','tenant_id','name','emoji','sort_order','ativo'],
@@ -330,8 +333,8 @@ async function handleREST(req, res, table, params, body) {
 
     // JOIN: sys_users + tenants
     if (table==='sys_users' && sel?.includes('tenants')) {
-      const rows = db.prepare(`SELECT u.*,t.nome as t_nome,t.plano as t_plano,t.ativo as t_ativo FROM sys_users u LEFT JOIN tenants t ON u.tenant_id=t.id ${WHERE} ${ORDER} LIMIT ? OFFSET ?`).all(...vals,limit,offset)
-      const mapped = rows.map(r=>{const{t_nome,t_plano,t_ativo,...u}=r;u.tenants={nome:t_nome,plano:t_plano,ativo:t_ativo===1};return parseRow(table,u)})
+      const rows = db.prepare(`SELECT u.*,t.nome as t_nome,t.plano as t_plano,t.ativo as t_ativo,t.expires_at as t_expires_at FROM sys_users u LEFT JOIN tenants t ON u.tenant_id=t.id ${WHERE} ${ORDER} LIMIT ? OFFSET ?`).all(...vals,limit,offset)
+      const mapped = rows.map(r=>{const{t_nome,t_plano,t_ativo,t_expires_at,...u}=r;u.tenants={nome:t_nome,plano:t_plano,ativo:t_ativo===1,expires_at:t_expires_at};return parseRow(table,u)})
       return send(res,200,isSingle?(mapped[0]||null):mapped)
     }
 
