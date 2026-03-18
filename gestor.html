@@ -850,6 +850,10 @@ td:first-child{padding-left:16px}
     <svg viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="10" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="8" r="1" fill="currentColor"/></svg>
     Impressão automática
   </button>
+  <button class="si" id="sn-clientes" onclick="nav('clientes')">
+    <svg viewBox="0 0 16 16" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 13c0-2.76 2.24-5 5-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="12" cy="8" r="2" stroke="currentColor" stroke-width="1.4"/><path d="M9.5 13c0-1.93 1.12-3.5 2.5-3.5s2.5 1.57 2.5 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    Clientes <span style="font-size:9px;background:var(--accent);color:#fff;padding:1px 4px;border-radius:4px;margin-left:2px;font-weight:700">NOVO</span>
+  </button>
   </div><!-- end sidebar-group gestao -->
 
   </div><!-- end scroll wrapper -->
@@ -1780,7 +1784,85 @@ td:first-child{padding-left:16px}
 </div><!-- end main -->
 </div><!-- end app -->
 
-<!-- ════════ MODAIS ════════ -->
+<!-- CLIENTES -->
+<div class="page" id="page-clientes">
+  <div class="ph">
+    <div>
+      <div class="pt">Clientes</div>
+      <div class="ps">Gerencie sua base de clientes e veja aniversariantes</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn bg" id="btn-tab-todos" onclick="clientesTab('todos')" style="background:var(--accent);color:#fff;border-color:var(--accent)">👥 Todos</button>
+      <button class="btn bg" id="btn-tab-aniversario" onclick="clientesTab('aniversario')">🎂 Aniversariantes</button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="sg" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+    <div class="sc" style="--ca:var(--accent)"><div class="si2">👥</div><div class="sl">Total clientes</div><div class="sv" id="cli-total">0</div></div>
+    <div class="sc" style="--ca:var(--success)"><div class="si2">🎂</div><div class="sl">Aniversariantes hoje</div><div class="sv" id="cli-aniv-hoje" style="color:var(--success)">0</div></div>
+    <div class="sc" style="--ca:var(--accent3)"><div class="si2">📅</div><div class="sl">Aniversariantes mês</div><div class="sv" id="cli-aniv-mes" style="color:var(--accent3)">0</div></div>
+    <div class="sc" style="--ca:var(--purple)"><div class="si2">⭐</div><div class="sl">Com pontos fidelidade</div><div class="sv" id="cli-com-pts" style="color:var(--purple)">0</div></div>
+  </div>
+
+  <!-- Busca -->
+  <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center">
+    <div class="sbox" style="flex:1"><svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><input id="cli-search" placeholder="Buscar por nome ou telefone..." style="background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:12.5px;color:var(--text);width:100%" oninput="renderClientes()"></div>
+    <div class="sw"><select id="cli-order" onchange="renderClientes()" style="font-size:12.5px">
+      <option value="nome">Nome A-Z</option>
+      <option value="pts">Mais pontos</option>
+      <option value="pedidos">Mais pedidos</option>
+      <option value="aniversario">Aniversário próximo</option>
+    </select></div>
+  </div>
+
+  <!-- Painel aniversariantes hoje (oculto por padrão) -->
+  <div id="cli-aniv-banner" style="display:none;background:linear-gradient(135deg,rgba(139,92,246,.15),rgba(236,72,153,.12));border:1px solid rgba(139,92,246,.3);border-radius:12px;padding:14px 18px;margin-bottom:16px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px">🎉 Aniversariantes hoje <span id="cli-aniv-hoje-badge" style="background:var(--purple);color:#fff;font-size:10px;padding:1px 7px;border-radius:99px">0</span></div>
+    <div id="cli-aniv-hoje-list" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+  </div>
+
+  <!-- Lista -->
+  <div class="tw">
+    <div class="tmeta">
+      <span id="cli-count" style="font-size:12.5px;color:var(--muted)">0 clientes</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Cliente</th>
+          <th>Telefone</th>
+          <th>Aniversário</th>
+          <th>Pedidos</th>
+          <th>Pontos</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="cli-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- MODAL: Editar cliente -->
+<div class="modal-bg" id="modal-edit-cliente">
+  <div class="modal" style="width:460px">
+    <button class="modal-close" onclick="closeModal('modal-edit-cliente')">✕</button>
+    <h2>✏️ Editar Cliente</h2>
+    <input type="hidden" id="edit-cli-id">
+    <div class="form-row"><label class="form-label">Nome</label><input class="form-input" id="edit-cli-nome" placeholder="Nome completo"></div>
+    <div class="form-row"><label class="form-label">Telefone</label><input class="form-input" id="edit-cli-phone" placeholder="(XX) X XXXX-XXXX"></div>
+    <div class="form-row">
+      <label class="form-label">Data de aniversário</label>
+      <input class="form-input" id="edit-cli-aniversario" type="date">
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Deixe vazio se não souber</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-edit-cliente')">Cancelar</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="saveCliente()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 
 <!-- Novo Pedido -->
 <div class="modal-bg" id="modal-new-order">
@@ -2994,6 +3076,7 @@ function nav(id){
   if(id==='impressao') renderImpressao();
   if(id==='caixa') renderCaixa();
   if(id==='taxa') renderTaxaPage();
+  if(id==='clientes') renderClientesPage();
 }
 
 function switchTab(btn,id){
@@ -3861,6 +3944,16 @@ function renderQR(){
       <div class="qr-code"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="1" width="8" height="14" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="12" r=".8" fill="currentColor"/></svg></div>
       ${t.guests?`<div style="font-size:11px;color:var(--muted)">${t.guests} pessoas • ${t.total}</div>`:'<div style="font-size:11px;color:var(--muted)">Escanear para pedir</div>'}
       <button class="btn bg" style="width:100%;justify-content:center;font-size:10.5px;margin-top:7px;padding:4px" onclick="event.stopPropagation();toggleMesaStatus(${t.num})">${t.status==='free'?'<svg width="10" height="10" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" fill="var(--danger)" opacity=".9"/></svg> Ocupar':'<svg width="10" height="10" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" fill="var(--accent3)" opacity=".9"/></svg> Liberar'}</button>
+      <div style="display:flex;gap:5px;margin-top:5px">
+        <button class="btn bg" style="flex:1;justify-content:center;font-size:10.5px;padding:4px;gap:4px" onclick="event.stopPropagation();openEditMesa(${t.num})">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3-9 9H2v-3L11 2z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Editar
+        </button>
+        <button class="btn bd" style="flex:1;justify-content:center;font-size:10.5px;padding:4px;gap:4px" onclick="event.stopPropagation();qrDeleteMesa(${t.num})">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2.5A.5.5 0 0 1 6.5 2h3a.5.5 0 0 1 .5.5V4M5 4l.7 9.5a.5.5 0 0 0 .5.5h3.6a.5.5 0 0 0 .5-.5L11 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          Excluir
+        </button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -3961,6 +4054,18 @@ async function confirmDeleteMesa() {
   renderMesasPage();
   renderQR();
   sbToast('ok',`Mesa ${num} excluída!`);
+}
+
+async function qrDeleteMesa(num) {
+  if (!confirm(`Excluir Mesa ${num}? Esta ação não pode ser desfeita.`)) return;
+  sbLoading(true);
+  const { error } = await sb.from('mesas').delete().eq('num', num);
+  sbLoading(false);
+  if (error) { sbToast('err','Erro ao excluir'); return; }
+  tables = tables.filter(t => t.num !== num);
+  renderMesasPage();
+  renderQR();
+  sbToast('ok', `Mesa ${num} excluída!`);
 }
 
 // MESAS PAGE — pedidos agrupados por mesa
@@ -5827,7 +5932,177 @@ function _pdvbKeyHandler(e){
   }
 }
 
-function initSidebarState(){loadSidebarState();}
+// ═══════════════════════════════════════
+// CLIENTES & ANIVERSARIANTES
+// ═══════════════════════════════════════
+let _clientesTab = 'todos';
+
+function clientesTab(tab) {
+  _clientesTab = tab;
+  const btnTodos = document.getElementById('btn-tab-todos');
+  const btnAniv  = document.getElementById('btn-tab-aniversario');
+  if (btnTodos) { btnTodos.style.background = tab==='todos'?'var(--accent)':''; btnTodos.style.color = tab==='todos'?'#fff':''; btnTodos.style.borderColor = tab==='todos'?'var(--accent)':'var(--border)'; }
+  if (btnAniv)  { btnAniv.style.background = tab==='aniversario'?'var(--purple)':''; btnAniv.style.color = tab==='aniversario'?'#fff':''; btnAniv.style.borderColor = tab==='aniversario'?'var(--purple)':'var(--border)'; }
+  renderClientes();
+}
+
+function renderClientesPage() {
+  _clientesTab = 'todos';
+  clientesTab('todos');
+  renderClientes();
+}
+
+function renderClientes() {
+  const search  = (document.getElementById('cli-search')?.value || '').toLowerCase();
+  const order   = document.getElementById('cli-order')?.value || 'nome';
+  const today   = new Date();
+  const todayMD = `${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const mesMes  = today.getMonth() + 1;
+
+  // Enriquece fidClients com campo birthday (buscado do Supabase ou local)
+  let clientes = fidClients.map(c => ({
+    ...c,
+    birthday: c.birthday || null,
+    isAnivHoje: c.birthday ? c.birthday.slice(5) === todayMD : false,
+    isAnivMes:  c.birthday ? parseInt(c.birthday.slice(5,7)) === mesMes : false,
+    diasAteAniv: c.birthday ? _diasAteAniversario(c.birthday) : 999
+  }));
+
+  // Stats
+  document.getElementById('cli-total').textContent    = clientes.length;
+  document.getElementById('cli-aniv-hoje').textContent = clientes.filter(c=>c.isAnivHoje).length;
+  document.getElementById('cli-aniv-mes').textContent  = clientes.filter(c=>c.isAnivMes).length;
+  document.getElementById('cli-com-pts').textContent   = clientes.filter(c=>c.pts>0).length;
+
+  // Banner de hoje
+  const hoje = clientes.filter(c => c.isAnivHoje);
+  const banner = document.getElementById('cli-aniv-banner');
+  const hojeBadge = document.getElementById('cli-aniv-hoje-badge');
+  const hojeList  = document.getElementById('cli-aniv-hoje-list');
+  if (banner) banner.style.display = hoje.length ? 'block' : 'none';
+  if (hojeBadge) hojeBadge.textContent = hoje.length;
+  if (hojeList) hojeList.innerHTML = hoje.map(c=>`
+    <div style="display:flex;align-items:center;gap:7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.25);border-radius:8px;padding:6px 10px">
+      <span style="font-size:18px">🎂</span>
+      <div><div style="font-size:12.5px;font-weight:600">${c.name}</div><div style="font-size:11px;color:var(--muted)">${c.phone||'—'}</div></div>
+    </div>`).join('');
+
+  // Filtrar por tab
+  if (_clientesTab === 'aniversario') {
+    clientes = clientes.filter(c => c.birthday);
+    clientes.sort((a,b) => a.diasAteAniv - b.diasAteAniv);
+  } else {
+    // Ordenar
+    if (order === 'nome')       clientes.sort((a,b) => a.name.localeCompare(b.name));
+    else if (order === 'pts')   clientes.sort((a,b) => b.pts - a.pts);
+    else if (order === 'pedidos') clientes.sort((a,b) => (b.orders||0) - (a.orders||0));
+    else if (order === 'aniversario') clientes.sort((a,b) => a.diasAteAniv - b.diasAteAniv);
+  }
+
+  // Busca
+  if (search) clientes = clientes.filter(c =>
+    c.name.toLowerCase().includes(search) || (c.phone||'').includes(search)
+  );
+
+  document.getElementById('cli-count').textContent = `${clientes.length} cliente${clientes.length!==1?'s':''}`;
+
+  const tbody = document.getElementById('cli-tbody');
+  if (!tbody) return;
+  if (!clientes.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted);font-size:13px">${search?'Nenhum cliente encontrado':'Nenhum cliente cadastrado ainda.<br>Os clientes aparecem automaticamente ao fazer pedidos.'}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = clientes.map(c => {
+    const anivLabel = c.birthday ? _formatAniversario(c.birthday, c.isAnivHoje, c.isAnivMes) : '<span style="color:var(--muted)">—</span>';
+    const ptsBar = c.max ? Math.min(100, Math.round((c.pts/c.max)*100)) : 0;
+    return `<tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;color:#fff">${c.name.charAt(0).toUpperCase()}</div>
+          <div><div style="font-weight:600;font-size:13px">${c.name}</div>${c.isAnivHoje?'<div style="font-size:10px;color:var(--purple);font-weight:600">🎂 Aniversário hoje!</div>':''}</div>
+        </div>
+      </td>
+      <td style="color:var(--muted);font-size:12.5px">${c.phone||'—'}</td>
+      <td>${anivLabel}</td>
+      <td style="font-size:12.5px;font-weight:600">${c.orders||0}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:7px">
+          <div style="flex:1;height:5px;background:var(--surface2);border-radius:99px;overflow:hidden;min-width:50px"><div style="height:100%;width:${ptsBar}%;background:var(--accent);border-radius:99px"></div></div>
+          <span style="font-size:12px;font-weight:600;color:var(--accent);min-width:30px">${c.pts}</span>
+        </div>
+      </td>
+      <td>
+        <div style="display:flex;gap:5px">
+          <button class="btn bg" style="font-size:11px;padding:3px 9px" onclick="openEditCliente(${c.id})">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3-9 9H2v-3L11 2z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Editar
+          </button>
+          <button class="btn bd" style="font-size:11px;padding:3px 9px" onclick="deleteCliente(${c.id},'${c.name.replace(/'/g,'\\\')}')">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2.5A.5.5 0 0 1 6.5 2h3a.5.5 0 0 1 .5.5V4M5 4l.7 9.5a.5.5 0 0 0 .5.5h3.6a.5.5 0 0 0 .5-.5L11 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function _diasAteAniversario(birthday) {
+  if (!birthday) return 999;
+  const today = new Date();
+  const aniv = new Date(today.getFullYear(), parseInt(birthday.slice(5,7))-1, parseInt(birthday.slice(8,10)));
+  if (aniv < today) aniv.setFullYear(today.getFullYear() + 1);
+  return Math.round((aniv - today) / (1000*60*60*24));
+}
+
+function _formatAniversario(birthday, isHoje, isMes) {
+  if (!birthday) return '<span style="color:var(--muted)">—</span>';
+  const [,m,d] = birthday.split('-');
+  const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const label = `${d}/${meses[parseInt(m)-1]}`;
+  if (isHoje) return `<span style="color:var(--purple);font-weight:700">🎂 ${label} — Hoje!</span>`;
+  if (isMes)  return `<span style="color:var(--accent3);font-weight:600">📅 ${label} — Este mês</span>`;
+  return `<span style="color:var(--muted)">${label}</span>`;
+}
+
+function openEditCliente(id) {
+  const c = fidClients.find(x => x.id === id);
+  if (!c) return;
+  document.getElementById('edit-cli-id').value    = id;
+  document.getElementById('edit-cli-nome').value  = c.name || '';
+  document.getElementById('edit-cli-phone').value = c.phone || '';
+  document.getElementById('edit-cli-aniversario').value = c.birthday || '';
+  openModal('modal-edit-cliente');
+}
+
+async function saveCliente() {
+  const id      = parseInt(document.getElementById('edit-cli-id').value);
+  const name    = document.getElementById('edit-cli-nome').value.trim();
+  const phone   = document.getElementById('edit-cli-phone').value.trim();
+  const birthday = document.getElementById('edit-cli-aniversario').value || null;
+  if (!name) { sbToast('err','Informe o nome'); return; }
+  sbLoading(true);
+  const { error } = await sb.from('fidelidade').update({ name, phone, birthday }).eq('id', id);
+  sbLoading(false);
+  if (error) { sbToast('err','Erro ao salvar: ' + (error.message||'')); return; }
+  const c = fidClients.find(x => x.id === id);
+  if (c) { c.name = name; c.phone = phone; c.birthday = birthday; }
+  closeModal('modal-edit-cliente');
+  renderClientes();
+  sbToast('ok', `${name} atualizado!`);
+}
+
+async function deleteCliente(id, name) {
+  if (!confirm(`Remover cliente "${name}"? Os dados de fidelidade serão perdidos.`)) return;
+  sbLoading(true);
+  const { error } = await sb.from('fidelidade').delete().eq('id', id);
+  sbLoading(false);
+  if (error) { sbToast('err','Erro ao remover'); return; }
+  fidClients = fidClients.filter(x => x.id !== id);
+  renderClientes();
+  sbToast('ok', `${name} removido`);
+}
+
+
 
 function toggleAutoAccept(el) {
   el.classList.toggle('on');
