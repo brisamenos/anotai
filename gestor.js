@@ -1,4 +1,3 @@
-
 // ═══════════════════════════════════════════════════════
 // SUPABASE — CONFIGURAÇÃO E INTEGRAÇÃO
 // ═══════════════════════════════════════════════════════
@@ -417,6 +416,10 @@ function subscribeOrders() {
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
         showToast('🛎️', `Novo pedido #${p.new.id} — ${p.new.client}`);
         sendBrowserNotif(`🛎️ Novo pedido #${p.new.id}`, `${p.new.client} — ${items}`);
+        // Auto-aceitar se ativado e pedido em análise
+        if (_autoAcceptOn && p.new.status === 'analise') {
+          setTimeout(() => advanceOrderById(p.new.id), 800);
+        }
         // Auto-impressão se modo automático estiver ativo
         if (_printMode === 'auto') printOrder(mapOrder(p.new));
         // Atualiza KDS se estiver aberto
@@ -3947,11 +3950,26 @@ async function deleteCliente(id) {
 
 
 
+let _autoAcceptOn = false;
+
 function toggleAutoAccept(el) {
   el.classList.toggle('on');
-  const on = el.classList.contains('on');
-  showToast('🔄', 'Aceitar automaticamente: ' + (on ? 'Ativado' : 'Desativado'));
+  _autoAcceptOn = el.classList.contains('on');
+  // Persiste localmente
+  try { localStorage.setItem('gestor_auto_accept', _autoAcceptOn ? '1' : '0'); } catch(e) {}
+  showToast('🔄', 'Aceitar automaticamente: ' + (_autoAcceptOn ? 'Ativado' : 'Desativado'));
 }
+
+// Restaura estado do auto-accept ao carregar
+(function() {
+  try {
+    if (localStorage.getItem('gestor_auto_accept') === '1') {
+      _autoAcceptOn = true;
+      const el = document.getElementById('auto-accept');
+      if (el) el.classList.add('on');
+    }
+  } catch(e) {}
+})();
 
 async function toggleStatus(){
   const st  = document.getElementById('status-txt');
