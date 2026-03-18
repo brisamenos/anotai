@@ -62,8 +62,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);hei
 .av-green{background:linear-gradient(135deg,var(--success),#4ade80)}
 
 /* MAIN */
-.main{flex:1;overflow:auto}
-.page{display:none;padding:24px 28px;animation:fadeUp .25s ease}
+.main{flex:1;overflow-y:auto;overflow-x:hidden;min-height:0}
+.page{display:none;padding:24px 28px 60px;animation:fadeUp .25s ease}
 .page.on{display:block}
 @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:10px}
