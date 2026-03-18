@@ -1773,13 +1773,17 @@ function applyBranding(b, tenantNome) {
     hero.style.background = `linear-gradient(160deg,#0f1117 0%,rgba(${r},${g},${bv},.25) 60%,#181b24 100%)`;
   }
 
-  // Logo circular no hero
-  if (b.store_logo_url) {
+  // Logo no hero
+  if (b.store_logo_url && !document.getElementById('branding-logo')) {
     const info = document.querySelector('.hero-info');
     if (info) {
       const img = document.createElement('img');
-      img.src = b.store_logo_url;
+      img.id  = 'branding-logo';
+      // Garante URL absoluta caso venha relativa do servidor
+      img.src = b.store_logo_url.startsWith('http') ? b.store_logo_url : window.location.origin + b.store_logo_url;
+      img.alt = nome;
       img.style.cssText = 'width:56px;height:56px;border-radius:12px;object-fit:cover;margin-bottom:10px;border:2px solid rgba(255,255,255,.15);display:block';
+      img.onerror = () => { img.style.display = 'none'; }; // esconde se URL quebrada
       info.insertBefore(img, info.firstChild);
     }
   }
@@ -1826,7 +1830,7 @@ async function init() {
     }
 
     const [itemsRes, catsRes, cuponsRes, configRes] = await Promise.all([
-      sb.from('menu_items').select('*').neq('status','pausado').order('id'),
+      sb.from('menu_items').select('*').not('status','eq','pausado').order('id'),
       sb.from('categories').select('*').order('sort_order'),
       sb.from('cupons').select('*').eq('ativo', true),
       sb.from('store_config').select('*').single()
