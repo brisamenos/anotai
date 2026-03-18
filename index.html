@@ -560,153 +560,49 @@ body {
 
 
 
-
 /* ── ORDER TRACKER BUTTON ──────────────── */
 .track-btn {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  z-index: 500;
-  display: none;
-  align-items: center;
-  gap: 7px;
-  background: var(--surface);
-  border: 1.5px solid var(--accent);
-  border-radius: 99px;
-  padding: 8px 14px 8px 10px;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--accent);
-  cursor: pointer;
-  box-shadow: 0 4px 20px rgba(0,0,0,.4);
-  animation: slideDown .3s cubic-bezier(.34,1.56,.64,1);
-  transition: all .18s;
+  position: fixed; top: 16px; right: 16px; z-index: 500;
+  display: none; align-items: center; gap: 7px;
+  background: var(--surface); border: 1.5px solid var(--accent);
+  border-radius: 99px; padding: 8px 14px 8px 10px;
+  font-size: 12.5px; font-weight: 700; color: var(--accent);
+  cursor: pointer; box-shadow: 0 4px 20px rgba(0,0,0,.4);
+  animation: slideDown .3s cubic-bezier(.34,1.56,.64,1); transition: all .18s;
 }
 .track-btn:hover { background: rgba(59,130,246,.12); transform: translateY(-1px); }
 .track-btn.show { display: flex; }
-.track-btn-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--accent);
-  animation: pulse 1.8s infinite;
-  flex-shrink: 0;
-}
-.track-btn-dot.done { background: var(--green); animation: none; }
+.track-btn-dot { width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.8s infinite;flex-shrink:0; }
+.track-btn-dot.done { background:var(--green);animation:none; }
 @keyframes slideDown { from{opacity:0;transform:translateY(-12px)} to{opacity:1;transform:translateY(0)} }
-
-/* ── ORDER TRACKER DRAWER ──────────────── */
-.track-drawer {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: none;
-  align-items: flex-end;
-  justify-content: center;
-  background: rgba(0,0,0,.6);
-  backdrop-filter: blur(4px);
-  padding: 0 0 0 0;
-  animation: fadeIn .2s ease;
-}
-.track-drawer.open { display: flex; }
-.track-sheet {
-  width: 100%;
-  max-width: 480px;
-  background: var(--surface);
-  border-radius: 22px 22px 0 0;
-  padding: 0 0 env(safe-area-inset-bottom, 0) 0;
-  animation: sheetUp .3s cubic-bezier(.4,0,.2,1);
-  max-height: 92vh;
-  overflow-y: auto;
-}
+.track-drawer { position:fixed;inset:0;z-index:1000;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(4px); }
+.track-drawer.open { display:flex; }
+.track-sheet { width:100%;max-width:480px;background:var(--surface);border-radius:22px 22px 0 0;max-height:92vh;overflow-y:auto;animation:sheetUp .3s cubic-bezier(.4,0,.2,1); }
 @keyframes sheetUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
-.track-handle {
-  width: 36px; height: 4px; border-radius: 99px;
-  background: var(--border-2, rgba(255,255,255,.15));
-  margin: 14px auto 0;
-}
-.track-header {
-  padding: 16px 20px 12px;
-  display: flex; align-items: center; gap: 12px;
-  border-bottom: 1px solid var(--border);
-}
-.track-order-num {
-  font-family: 'Syne', sans-serif;
-  font-size: 20px; font-weight: 800;
-  color: var(--accent);
-}
-.track-order-lbl { font-size: 11px; color: var(--muted); margin-top: 1px; }
-.track-close {
-  margin-left: auto;
-  width: 30px; height: 30px; border-radius: 50%;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: 14px; color: var(--muted);
-  flex-shrink: 0;
-}
-.track-close:hover { color: var(--text); }
-
-/* Timeline */
-.track-timeline { padding: 24px 24px 28px; }
-.track-step {
-  display: flex; gap: 16px;
-  position: relative; padding-bottom: 28px;
-}
-.track-step:last-child { padding-bottom: 0; }
-.track-step-left { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
-.track-step-icon {
-  width: 44px; height: 44px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 20px;
-  background: var(--surface2); border: 2px solid var(--border);
-  transition: all .4s cubic-bezier(.34,1.56,.64,1);
-  position: relative; z-index: 1;
-}
-.track-step-icon.active {
-  background: rgba(59,130,246,.15);
-  border-color: var(--accent);
-  box-shadow: 0 0 0 5px rgba(59,130,246,.12);
-  animation: iconPulse 2s infinite;
-}
-.track-step-icon.done {
-  background: rgba(34,197,94,.12);
-  border-color: var(--green);
-  box-shadow: none; animation: none;
-}
-@keyframes iconPulse {
-  0%,100%{ box-shadow: 0 0 0 5px rgba(59,130,246,.12); }
-  50%{ box-shadow: 0 0 0 10px rgba(59,130,246,.04); }
-}
-.track-step-line {
-  width: 2px; flex: 1; min-height: 20px;
-  background: var(--border);
-  margin-top: 4px; border-radius: 99px;
-  transition: background .5s;
-}
-.track-step-line.done { background: var(--green); }
-.track-step-content { padding-top: 10px; flex: 1; }
-.track-step-title {
-  font-size: 15px; font-weight: 700;
-  color: var(--muted);
-  transition: color .3s;
-}
-.track-step-title.active { color: var(--accent); }
-.track-step-title.done { color: var(--text); }
-.track-step-desc {
-  font-size: 12.5px; color: var(--muted);
-  margin-top: 3px; line-height: 1.5;
-}
-.track-step-time {
-  font-size: 11px; color: var(--muted);
-  margin-top: 4px;
-}
-.track-items-box {
-  margin: 0 20px 20px;
-  background: var(--surface2); border-radius: 12px;
-  padding: 12px 16px;
-  border: 1px solid var(--border);
-}
-.track-items-title { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing:.5px; text-transform:uppercase; margin-bottom:8px; }
-.track-item-row { font-size: 13px; padding: 3px 0; display:flex; justify-content:space-between; }
+.track-handle { width:36px;height:4px;border-radius:99px;background:rgba(255,255,255,.15);margin:14px auto 0; }
+.track-header { padding:16px 20px 12px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border); }
+.track-order-num { font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--accent); }
+.track-order-lbl { font-size:11px;color:var(--muted);margin-top:1px; }
+.track-close { margin-left:auto;width:30px;height:30px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:var(--muted);flex-shrink:0; }
+.track-timeline { padding:24px 24px 28px; }
+.track-step { display:flex;gap:16px;position:relative;padding-bottom:28px; }
+.track-step:last-child { padding-bottom:0; }
+.track-step-left { display:flex;flex-direction:column;align-items:center;flex-shrink:0; }
+.track-step-icon { width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--surface2);border:2px solid var(--border);transition:all .4s cubic-bezier(.34,1.56,.64,1);position:relative;z-index:1; }
+.track-step-icon.active { background:rgba(59,130,246,.15);border-color:var(--accent);animation:iconPulse 2s infinite; }
+.track-step-icon.done { background:rgba(34,197,94,.12);border-color:var(--green);animation:none; }
+@keyframes iconPulse { 0%,100%{box-shadow:0 0 0 5px rgba(59,130,246,.12)} 50%{box-shadow:0 0 0 10px rgba(59,130,246,.04)} }
+.track-step-line { width:2px;flex:1;min-height:20px;background:var(--border);margin-top:4px;border-radius:99px;transition:background .5s; }
+.track-step-line.done { background:var(--green); }
+.track-step-content { padding-top:10px;flex:1; }
+.track-step-title { font-size:15px;font-weight:700;color:var(--muted);transition:color .3s; }
+.track-step-title.active { color:var(--accent); }
+.track-step-title.done { color:var(--text); }
+.track-step-desc { font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.5; }
+.track-step-time { font-size:11px;color:var(--muted);margin-top:4px; }
+.track-items-box { margin:0 20px 20px;background:var(--surface2);border-radius:12px;padding:12px 16px;border:1px solid var(--border); }
+.track-items-title { font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px; }
+.track-item-row { font-size:13px;padding:3px 0;display:flex;justify-content:space-between; }
 
 /* ── FLOATING CART ────────────────────── */
 .cart-float {
@@ -1348,35 +1244,23 @@ body {
 <!-- ORDER TRACKER BUTTON -->
 <button class="track-btn" id="track-btn" onclick="openTrackDrawer()">
   <div class="track-btn-dot" id="track-btn-dot"></div>
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-    <rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
-    <path d="M5 4V3a3 3 0 0 1 6 0v1" stroke="currentColor" stroke-width="1.4"/>
-    <circle cx="8" cy="8.5" r="1.5" fill="currentColor"/>
-  </svg>
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M5 4V3a3 3 0 0 1 6 0v1" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8.5" r="1.5" fill="currentColor"/></svg>
   <span id="track-btn-lbl">Meu pedido</span>
 </button>
-
-<!-- ORDER TRACKER DRAWER -->
 <div class="track-drawer" id="track-drawer" onclick="if(event.target===this)closeTrackDrawer()">
   <div class="track-sheet">
     <div class="track-handle"></div>
     <div class="track-header">
-      <div>
-        <div class="track-order-num" id="track-order-num">#000</div>
-        <div class="track-order-lbl">Acompanhe seu pedido em tempo real</div>
-      </div>
+      <div><div class="track-order-num" id="track-order-num">#000</div><div class="track-order-lbl">Acompanhe seu pedido em tempo real</div></div>
       <div class="track-close" onclick="closeTrackDrawer()">✕</div>
     </div>
-    <div class="track-timeline" id="track-timeline">
-      <!-- gerado via JS -->
-    </div>
+    <div class="track-timeline" id="track-timeline"></div>
     <div class="track-items-box" id="track-items-box" style="display:none">
       <div class="track-items-title">Itens do pedido</div>
       <div id="track-items-list"></div>
     </div>
   </div>
 </div>
-
 <!-- FLOATING CART BUTTON -->
 <div class="cart-float" id="cart-float">
   <button class="cart-btn" onclick="openCart()">
@@ -1647,7 +1531,7 @@ body {
 // SUPABASE
 // ═══════════════════════════════════════════════
 const { createClient } = window.supabase;
-const sb = createClient('', '', { auth: { persistSession: false } });
+const sb = createClient('', '', {
   auth: {
     persistSession: false,
     autoRefreshToken: false,
@@ -1899,7 +1783,6 @@ async function resolveTenant() {
   const p    = new URLSearchParams(window.location.search);
   const slug = p.get('slug') || p.get('t');
   const tid  = p.get('tenant');
-
   if (tid) {
     const res  = await fetch(`/api/tenant-info?id=${tid}`);
     const data = await res.json();
@@ -1925,18 +1808,12 @@ function applyBranding(b, tenantNome) {
   if (!b) return;
   const nome = b.store_name || tenantNome || 'Cardápio';
   const cor  = b.store_cor  || '#3b82f6';
-
-  // Nome e descrição
   const logoEl = document.querySelector('.hero-logo');
   if (logoEl) logoEl.textContent = nome;
   document.title = nome;
   const subEl = document.querySelector('.hero-sub');
   if (subEl && b.store_descricao) subEl.textContent = b.store_descricao;
-
-  // Cor principal
   document.documentElement.style.setProperty('--accent', cor);
-
-  // Banner de fundo do hero
   const hero = document.querySelector('.hero');
   if (hero && b.store_banner_url) {
     hero.style.background = `linear-gradient(160deg,rgba(0,0,0,.7) 0%,rgba(0,0,0,.45) 100%), url('${b.store_banner_url}') center/cover no-repeat`;
@@ -1945,8 +1822,6 @@ function applyBranding(b, tenantNome) {
     const r = parseInt(hex.slice(0,2),16), g = parseInt(hex.slice(2,4),16), bv = parseInt(hex.slice(4,6),16);
     hero.style.background = `linear-gradient(160deg,#0f1117 0%,rgba(${r},${g},${bv},.25) 60%,#181b24 100%)`;
   }
-
-  // Logo no hero
   if (b.store_logo_url && !document.getElementById('branding-logo')) {
     const info = document.querySelector('.hero-info');
     if (info) {
@@ -1959,8 +1834,6 @@ function applyBranding(b, tenantNome) {
       info.insertBefore(img, info.firstChild);
     }
   }
-
-  // Tempo de entrega e avaliação
   const badges = document.querySelectorAll('.hero-badge');
   if (badges[1] && b.store_tempo_entrega) badges[1].innerHTML = `🛵 ${b.store_tempo_entrega}`;
   if (badges[2] && b.store_avaliacao)     badges[2].innerHTML = `⭐ ${b.store_avaliacao}`;
@@ -2043,39 +1916,9 @@ function applyStoreStatus(open) {
 }
 
 function subscribeStoreStatus() {
-  // Canal original que estava funcionando
   sb.channel('store-config-cardapio')
-    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'store_config' }, p => {
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'store_config'}, p => {
       applyStoreStatus(p.new.store_open);
-    })
-    .subscribe();
-
-  // Realtime para menu_items — atualiza cardápio quando gestor edita
-  sb.channel('menu-rt')
-    .on('postgres_changes', { event:'INSERT', schema:'public', table:'menu_items' }, p => {
-      if (p.new && !allItems.find(i => i.id === p.new.id)) {
-        allItems.push(p.new);
-        renderMenu();
-        buildCatTabs();
-      }
-    })
-    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'menu_items' }, p => {
-      const idx = allItems.findIndex(i => i.id === p.new.id);
-      if (idx !== -1) allItems[idx] = p.new; else allItems.push(p.new);
-      renderMenu();
-    })
-    .on('postgres_changes', { event:'DELETE', schema:'public', table:'menu_items' }, p => {
-      allItems = allItems.filter(i => i.id !== p.old.id);
-      renderMenu();
-    })
-    .subscribe();
-
-  // Realtime para categories
-  sb.channel('cats-rt')
-    .on('postgres_changes', { event:'*', schema:'public', table:'categories' }, () => {
-      sb.from('categories').select('*').order('sort_order').then(({ data }) => {
-        if (data) { allCats = data; buildCatTabs(); renderMenu(); }
-      });
     })
     .subscribe();
 }
@@ -2502,7 +2345,6 @@ async function submitOrder() {
     }
 
     cart = []; appliedCupom = null; updateCartFloat();
-    // Inicia rastreio do pedido
     startOrderTracking(data.id, data.items || itemsArr, data.client || name);
 
   } catch(err) {
@@ -3057,242 +2899,130 @@ init();
 // ════════════════════════════════════════════════════════
 // ACOMPANHAMENTO DE PEDIDO EM TEMPO REAL
 // ════════════════════════════════════════════════════════
-
 const TRACK_STEPS = [
-  {
-    key:    'analise',
-    icon:   '📋',
-    title:  'Pedido recebido',
-    desc:   'Seu pedido foi enviado e está aguardando confirmação do restaurante.',
-  },
-  {
-    key:    'producao',
-    icon:   '👨‍🍳',
-    title:  'Em preparo',
-    desc:   'O restaurante confirmou! Seu pedido está sendo preparado com carinho.',
-  },
-  {
-    key:    'pronto',
-    icon:   '🛵',
-    title:  'Saiu para entrega',
-    desc:   'Pedido pronto! O motoboy está a caminho.',
-  },
-  {
-    key:    'entregue',
-    icon:   '✅',
-    title:  'Entregue!',
-    desc:   'Chegou! Bom apetite. Obrigado pela preferência!',
-  },
+  { key:'analise',  icon:'📋', title:'Pedido recebido',   desc:'Seu pedido foi enviado e aguarda confirmação.' },
+  { key:'producao', icon:'👨‍🍳', title:'Em preparo',        desc:'Confirmado! Seu pedido está sendo preparado.' },
+  { key:'pronto',   icon:'🛵', title:'Saiu para entrega', desc:'Pronto! O motoboy está a caminho.' },
+  { key:'entregue', icon:'✅', title:'Entregue!',          desc:'Chegou! Bom apetite. Obrigado pela preferência!' },
 ];
-
-let _trackOrderId   = null;
-let _trackOrderData = null;
-let _trackSSE       = null;
-let _trackChannel   = null;
+let _trackOrderId=null, _trackOrderData=null, _trackChannel=null;
 
 function startOrderTracking(orderId, items, clientName) {
   _trackOrderId = orderId;
-
-  // Persiste no localStorage para reabrir após fechar e voltar
-  try {
-    localStorage.setItem('last_order', JSON.stringify({ id: orderId, items, client: clientName, ts: Date.now() }));
-  } catch(e) {}
-
+  try { localStorage.setItem('last_order', JSON.stringify({ id:orderId, items, client:clientName, ts:Date.now() })); } catch(e){}
   showTrackBtn(orderId, 'analise');
   subscribeOrderTracking(orderId);
 }
 
 function showTrackBtn(orderId, status) {
-  const btn  = document.getElementById('track-btn');
-  const dot  = document.getElementById('track-btn-dot');
-  const lbl  = document.getElementById('track-btn-lbl');
+  const btn=document.getElementById('track-btn'), dot=document.getElementById('track-btn-dot'), lbl=document.getElementById('track-btn-lbl');
   if (!btn) return;
-
-  const labels = { analise:'Pedido recebido', producao:'Em preparo 👨‍🍳', pronto:'Saiu p/ entrega 🛵', entregue:'Entregue! ✅', cancelado:'Cancelado' };
+  const labels={analise:'Pedido recebido',producao:'Em preparo 👨‍🍳',pronto:'Saiu p/ entrega 🛵',entregue:'Entregue! ✅',cancelado:'Cancelado'};
+  const colors={analise:'var(--accent)',producao:'var(--accent3)',pronto:'var(--orange)',entregue:'var(--green)',cancelado:'var(--danger)'};
   btn.classList.add('show');
-  if (lbl) lbl.textContent = labels[status] || 'Meu pedido';
-  if (dot) {
-    dot.className = 'track-btn-dot' + (status === 'entregue' || status === 'cancelado' ? ' done' : '');
-  }
-  // Cor do botão muda conforme status
-  const colors = { analise:'var(--accent)', producao:'var(--accent3)', pronto:'var(--orange)', entregue:'var(--green)', cancelado:'var(--danger)' };
-  btn.style.borderColor = colors[status] || 'var(--accent)';
-  btn.style.color       = colors[status] || 'var(--accent)';
-  if (dot) dot.style.background = colors[status] || 'var(--accent)';
+  if (lbl) lbl.textContent = labels[status]||'Meu pedido';
+  if (dot) { dot.className='track-btn-dot'+(status==='entregue'||status==='cancelado'?' done':''); dot.style.background=colors[status]||'var(--accent)'; }
+  btn.style.borderColor=colors[status]||'var(--accent)';
+  btn.style.color=colors[status]||'var(--accent)';
 }
 
 function subscribeOrderTracking(orderId) {
-  // Fecha SSE anterior se houver
-  if (_trackSSE) { _trackSSE.close(); _trackSSE = null; }
-
-  // Busca status atual
-  sb.from('orders').select('id,status,items,client,total,created_at').eq('id', orderId).single()
-    .then(({ data }) => {
-      if (data) {
-        _trackOrderData = data;
-        showTrackBtn(orderId, data.status);
-      }
-    });
-
-  // Assina updates em tempo real via SSE
-  const tid = sessionStorage.getItem('sys_session') ? JSON.parse(sessionStorage.getItem('sys_session')).tenant_id : null;
   if (_trackChannel) { try { sb.removeChannel(_trackChannel); } catch(e){} }
+  sb.from('orders').select('id,status,items,client,total,created_at').eq('id', orderId).single()
+    .then(({data}) => { if(data){_trackOrderData=data; showTrackBtn(orderId,data.status);} });
   _trackChannel = sb.channel('orders-tracking')
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, p => {
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'orders'}, p => {
       if (p.new?.id !== orderId) return;
-      _trackOrderData = { ..._trackOrderData, ...p.new };
+      _trackOrderData={..._trackOrderData,...p.new};
       showTrackBtn(orderId, p.new.status);
       renderTrackTimeline(p.new.status);
-      // Notificação push se o drawer estiver fechado
       if (!document.getElementById('track-drawer')?.classList.contains('open')) {
-        const msgs = {
-          producao: '👨‍🍳 Seu pedido entrou em preparo!',
-          pronto:   '🛵 Seu pedido saiu para entrega!',
-          entregue: '✅ Pedido entregue! Bom apetite!',
-        };
+        const msgs={producao:'👨‍🍳 Seu pedido entrou em preparo!',pronto:'🛵 Seu pedido saiu para entrega!',entregue:'✅ Pedido entregue! Bom apetite!'};
         if (msgs[p.new.status]) showToast('📦', msgs[p.new.status]);
       }
-      // Se entregue, some o botão após 2 minutos
-      if (p.new.status === 'entregue' || p.new.status === 'cancelado') {
-        setTimeout(() => {
-          const btn = document.getElementById('track-btn');
-          if (btn) btn.classList.remove('show');
-        }, 120000);
+      if (p.new.status==='entregue'||p.new.status==='cancelado') {
+        setTimeout(()=>{ const b=document.getElementById('track-btn'); if(b) b.classList.remove('show'); }, 120000);
       }
-    })
-    .subscribe();
+    }).subscribe();
 }
 
 function openTrackDrawer() {
-  const drawer = document.getElementById('track-drawer');
+  const drawer=document.getElementById('track-drawer');
   if (!drawer) return;
   drawer.classList.add('open');
-  document.body.style.overflow = 'hidden';
-
-  // Atualiza número do pedido
-  const numEl = document.getElementById('track-order-num');
-  if (numEl && _trackOrderId) numEl.textContent = '#' + String(_trackOrderId).padStart(3, '0');
-
-  // Renderiza itens
+  document.body.style.overflow='hidden';
+  const numEl=document.getElementById('track-order-num');
+  if (numEl&&_trackOrderId) numEl.textContent='#'+String(_trackOrderId).padStart(3,'0');
   renderTrackItems();
-
-  // Busca status atualizado e renderiza
   if (_trackOrderId) {
-    sb.from('orders').select('id,status,items,client,total,created_at').eq('id', _trackOrderId).single()
-      .then(({ data }) => {
-        if (data) {
-          _trackOrderData = data;
-          renderTrackTimeline(data.status);
-        }
-      });
+    sb.from('orders').select('id,status,items,client,total,created_at').eq('id',_trackOrderId).single()
+      .then(({data})=>{ if(data){_trackOrderData=data; renderTrackTimeline(data.status);} });
   }
-
   if (_trackOrderData) renderTrackTimeline(_trackOrderData.status);
 }
 
 function closeTrackDrawer() {
-  const drawer = document.getElementById('track-drawer');
-  if (drawer) drawer.classList.remove('open');
-  document.body.style.overflow = '';
+  const drawer=document.getElementById('track-drawer');
+  if(drawer) drawer.classList.remove('open');
+  document.body.style.overflow='';
 }
 
 function renderTrackTimeline(currentStatus) {
-  const container = document.getElementById('track-timeline');
+  const container=document.getElementById('track-timeline');
   if (!container) return;
-
-  const stepIndex = TRACK_STEPS.findIndex(s => s.key === currentStatus);
-  const isCancelled = currentStatus === 'cancelado';
-
-  if (isCancelled) {
-    container.innerHTML = `
-      <div style="text-align:center;padding:24px 0">
-        <div style="font-size:48px;margin-bottom:12px">😔</div>
-        <div style="font-size:16px;font-weight:700;color:var(--danger);margin-bottom:6px">Pedido cancelado</div>
-        <div style="font-size:13px;color:var(--muted)">Entre em contato com o restaurante para mais informações.</div>
-      </div>`;
+  if (currentStatus==='cancelado') {
+    container.innerHTML=`<div style="text-align:center;padding:24px 0"><div style="font-size:48px;margin-bottom:12px">😔</div><div style="font-size:16px;font-weight:700;color:var(--danger);margin-bottom:6px">Pedido cancelado</div><div style="font-size:13px;color:var(--muted)">Entre em contato com o restaurante.</div></div>`;
     return;
   }
-
-  container.innerHTML = TRACK_STEPS.map((step, i) => {
-    const isDone   = i < stepIndex;
-    const isActive = i === stepIndex;
-    const isLast   = i === TRACK_STEPS.length - 1;
-
-    const iconClass  = isDone ? 'done' : isActive ? 'active' : '';
-    const titleClass = isDone ? 'done' : isActive ? 'active' : '';
-    const lineClass  = isDone ? 'done' : '';
-
-    // Horário estimado
-    let timeLabel = '';
-    if (isDone && _trackOrderData?.created_at) {
-      const base = new Date(_trackOrderData.created_at);
-      const mins = [0, 8, 20, 35][i] || 0;
-      base.setMinutes(base.getMinutes() + mins);
-      timeLabel = base.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    } else if (isActive) {
-      timeLabel = 'Agora';
-    }
-
-    return `
-    <div class="track-step">
+  const stepIndex=TRACK_STEPS.findIndex(s=>s.key===currentStatus);
+  container.innerHTML=TRACK_STEPS.map((step,i)=>{
+    const isDone=i<stepIndex, isActive=i===stepIndex, isLast=i===TRACK_STEPS.length-1;
+    let timeLabel='';
+    if (isDone&&_trackOrderData?.created_at) {
+      const base=new Date(_trackOrderData.created_at);
+      base.setMinutes(base.getMinutes()+([0,8,20,35][i]||0));
+      timeLabel=base.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    } else if(isActive) timeLabel='Agora';
+    return `<div class="track-step">
       <div class="track-step-left">
-        <div class="track-step-icon ${iconClass}">
-          ${isDone ? '✓' : step.icon}
-        </div>
-        ${!isLast ? `<div class="track-step-line ${lineClass}"></div>` : ''}
+        <div class="track-step-icon ${isDone?'done':isActive?'active':''}">${isDone?'✓':step.icon}</div>
+        ${!isLast?`<div class="track-step-line ${isDone?'done':''}"></div>`:''}
       </div>
       <div class="track-step-content">
-        <div class="track-step-title ${titleClass}">${step.title}</div>
-        <div class="track-step-desc">${isActive || isDone ? step.desc : ''}</div>
-        ${timeLabel ? `<div class="track-step-time">${timeLabel}</div>` : ''}
+        <div class="track-step-title ${isDone?'done':isActive?'active':''}">${step.title}</div>
+        <div class="track-step-desc">${isActive||isDone?step.desc:''}</div>
+        ${timeLabel?`<div class="track-step-time">${timeLabel}</div>`:''}
       </div>
     </div>`;
   }).join('');
 }
 
 function renderTrackItems() {
-  const box  = document.getElementById('track-items-box');
-  const list = document.getElementById('track-items-list');
-  if (!box || !list || !_trackOrderData) return;
-
-  const items = Array.isArray(_trackOrderData.items) ? _trackOrderData.items : [];
+  const box=document.getElementById('track-items-box'), list=document.getElementById('track-items-list');
+  if (!box||!list||!_trackOrderData) return;
+  const items=Array.isArray(_trackOrderData.items)?_trackOrderData.items:[];
   if (!items.length) return;
-
-  box.style.display = 'block';
-  list.innerHTML = items.map(i =>
-    `<div class="track-item-row">
-      <span>${i.qty || 1}x ${i.name}</span>
-      <span style="color:var(--muted)">R$ ${((i.price || 0) * (i.qty || 1)).toFixed(2).replace('.',',')}</span>
-    </div>`
-  ).join('') + ((_trackOrderData.total) ?
-    `<div class="track-item-row" style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;font-weight:700">
-      <span>Total</span>
-      <span style="color:var(--green)">R$ ${parseFloat(_trackOrderData.total).toFixed(2).replace('.',',')}</span>
-    </div>` : '');
+  box.style.display='block';
+  list.innerHTML=items.map(i=>`<div class="track-item-row"><span>${i.qty||1}x ${i.name}</span><span style="color:var(--muted)">R$ ${((i.price||0)*(i.qty||1)).toFixed(2).replace('.',',')}</span></div>`).join('')
+    +(_trackOrderData.total?`<div class="track-item-row" style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;font-weight:700"><span>Total</span><span style="color:var(--green)">R$ ${parseFloat(_trackOrderData.total).toFixed(2).replace('.',',')}</span></div>`:'');
 }
 
-// Recarrega pedido em andamento ao abrir a página
-(function restoreLastOrder() {
+// Restaura pedido em andamento ao reabrir
+(function() {
   try {
-    const saved = JSON.parse(localStorage.getItem('last_order') || 'null');
-    if (!saved || !saved.id) return;
-    // Só restaura se for recente (menos de 3 horas)
-    if (Date.now() - saved.ts > 3 * 60 * 60 * 1000) return;
-    _trackOrderId = saved.id;
-    // Busca status atual no servidor
-    setTimeout(async () => {
-      const { data } = await sb.from('orders').select('id,status,items,client,total,created_at').eq('id', saved.id).single();
+    const saved=JSON.parse(localStorage.getItem('last_order')||'null');
+    if (!saved||!saved.id||Date.now()-saved.ts>3*60*60*1000) return;
+    _trackOrderId=saved.id;
+    setTimeout(async()=>{
+      const {data}=await sb.from('orders').select('id,status,items,client,total,created_at').eq('id',saved.id).single();
       if (!data) return;
-      if (data.status === 'entregue' || data.status === 'cancelado') {
-        // Pedido finalizado — remove do storage
-        if (Date.now() - saved.ts > 60 * 60 * 1000) { localStorage.removeItem('last_order'); return; }
-      }
-      _trackOrderData = data;
-      showTrackBtn(saved.id, data.status);
-      subscribeOrderTracking(saved.id);
-    }, 1500);
-  } catch(e) {}
+      _trackOrderData=data;
+      showTrackBtn(saved.id,data.status);
+      if (data.status!=='entregue'&&data.status!=='cancelado') subscribeOrderTracking(saved.id);
+    },1500);
+  } catch(e){}
 })();
+
 </script>
 </body>
 </html>
