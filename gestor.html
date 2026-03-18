@@ -783,8 +783,69 @@ td:first-child{padding-left:16px}
 
 <!-- PEDIDOS MESA -->
 <div class="page" id="page-pedidos-mesa">
-  <div class="ph"><div><div class="pt">Pedidos Mesa</div><div class="ps">Pedidos feitos via QR Code ou garçom</div></div><button class="btn bp" onclick="nav('garcom')"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M5 10V8a3 3 0 0 1 6 0v2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 10h8a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="5.5" cy="6" r="2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10.5" cy="6" r="2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Modo Garçom</button></div>
+  <div class="ph">
+    <div><div class="pt">Pedidos Mesa</div><div class="ps">Pedidos feitos via QR Code ou garçom</div></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn bp" onclick="openModalNovaMesa()">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Nova Mesa
+      </button>
+      <button class="btn bg" onclick="nav('garcom')">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Modo Garçom
+      </button>
+    </div>
+  </div>
   <div class="garcom-wrap" id="mesa-grid"></div>
+</div>
+
+<!-- MODAL EDITAR MESA -->
+<div class="modal-bg" id="modal-edit-mesa">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-head">
+      <div class="modal-title" id="modal-edit-mesa-title">Editar Mesa</div>
+      <button class="modal-close" onclick="closeModal('modal-edit-mesa')">✕</button>
+    </div>
+    <div style="padding:16px 20px 20px;display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label class="form-label">Número da mesa</label>
+        <input class="form-input" id="edit-mesa-num" type="number" min="1" placeholder="Ex: 1">
+      </div>
+      <div>
+        <label class="form-label">Capacidade (pessoas)</label>
+        <input class="form-input" id="edit-mesa-guests" type="number" min="1" placeholder="Ex: 4">
+      </div>
+      <input type="hidden" id="edit-mesa-old-num">
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn bp" style="flex:1" onclick="saveMesaEdit()">Salvar</button>
+        <button class="btn bd" style="flex:1" onclick="confirmDeleteMesa()">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M3 4h10M6 4V2.5A.5.5 0 0 1 6.5 2h3a.5.5 0 0 1 .5.5V4M5 4l.7 9.5a.5.5 0 0 0 .5.5h3.6a.5.5 0 0 0 .5-.5L11 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          Excluir mesa
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NOVA MESA -->
+<div class="modal-bg" id="modal-nova-mesa">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-head">
+      <div class="modal-title">Nova Mesa</div>
+      <button class="modal-close" onclick="closeModal('modal-nova-mesa')">✕</button>
+    </div>
+    <div style="padding:16px 20px 20px;display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label class="form-label">Número da mesa</label>
+        <input class="form-input" id="nova-mesa-num" type="number" min="1" placeholder="Ex: 5">
+      </div>
+      <div>
+        <label class="form-label">Capacidade (pessoas)</label>
+        <input class="form-input" id="nova-mesa-guests" type="number" min="1" placeholder="Ex: 4">
+      </div>
+      <button class="btn bp" onclick="saveNovaMesa()">Criar mesa</button>
+    </div>
+  </div>
 </div>
 
 <!-- GESTOR DE CARDÁPIO -->
@@ -2971,18 +3032,90 @@ async function addTable() {
   sbToast('ok',`Mesa ${num} criada!`);
 }
 
+function openModalNovaMesa() {
+  const next = tables.length ? Math.max(...tables.map(t=>t.num)) + 1 : 1;
+  document.getElementById('nova-mesa-num').value = next;
+  document.getElementById('nova-mesa-guests').value = '';
+  openModal('modal-nova-mesa');
+}
+
+async function saveNovaMesa() {
+  const num    = parseInt(document.getElementById('nova-mesa-num').value);
+  const guests = parseInt(document.getElementById('nova-mesa-guests').value) || null;
+  if (!num || num < 1) { sbToast('err','Informe o número da mesa'); return; }
+  if (tables.find(t => t.num === num)) { sbToast('err',`Mesa ${num} já existe`); return; }
+  sbLoading(true);
+  const { data, error } = await sb.from('mesas').insert({ num, status:'free', guests }).select().single();
+  sbLoading(false);
+  if (error) { sbToast('err','Erro ao criar mesa'); return; }
+  tables.push({ num, status:'free', guests, total:null });
+  tables.sort((a,b)=>a.num-b.num);
+  closeModal('modal-nova-mesa');
+  renderMesasPage();
+  renderQR();
+  sbToast('ok',`Mesa ${num} criada!`);
+}
+
+function openEditMesa(num) {
+  const t = tables.find(x => x.num === num);
+  if (!t) return;
+  document.getElementById('edit-mesa-old-num').value  = num;
+  document.getElementById('edit-mesa-num').value      = num;
+  document.getElementById('edit-mesa-guests').value   = t.guests || '';
+  document.getElementById('modal-edit-mesa-title').textContent = `Editar Mesa ${num}`;
+  openModal('modal-edit-mesa');
+}
+
+async function saveMesaEdit() {
+  const oldNum  = parseInt(document.getElementById('edit-mesa-old-num').value);
+  const newNum  = parseInt(document.getElementById('edit-mesa-num').value);
+  const guests  = parseInt(document.getElementById('edit-mesa-guests').value) || null;
+  if (!newNum || newNum < 1) { sbToast('err','Informe o número da mesa'); return; }
+  if (newNum !== oldNum && tables.find(t => t.num === newNum)) { sbToast('err',`Mesa ${newNum} já existe`); return; }
+  sbLoading(true);
+  const { error } = await sb.from('mesas').update({ num: newNum, guests }).eq('num', oldNum);
+  sbLoading(false);
+  if (error) { sbToast('err','Erro ao salvar'); return; }
+  const t = tables.find(x => x.num === oldNum);
+  if (t) { t.num = newNum; t.guests = guests; }
+  tables.sort((a,b)=>a.num-b.num);
+  closeModal('modal-edit-mesa');
+  renderMesasPage();
+  renderQR();
+  sbToast('ok',`Mesa atualizada!`);
+}
+
+async function confirmDeleteMesa() {
+  const num = parseInt(document.getElementById('edit-mesa-old-num').value);
+  if (!confirm(`Excluir Mesa ${num}? Esta ação não pode ser desfeita.`)) return;
+  sbLoading(true);
+  const { error } = await sb.from('mesas').delete().eq('num', num);
+  sbLoading(false);
+  if (error) { sbToast('err','Erro ao excluir'); return; }
+  tables = tables.filter(t => t.num !== num);
+  closeModal('modal-edit-mesa');
+  renderMesasPage();
+  renderQR();
+  sbToast('ok',`Mesa ${num} excluída!`);
+}
+
 // MESAS PAGE
 function renderMesasPage(){
   const g=document.getElementById('mesa-grid');
   if(!g) return;
+  if (!tables.length) {
+    g.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px"><div style="font-size:36px;margin-bottom:10px">🍽️</div>Nenhuma mesa cadastrada.<br>Clique em <strong>Nova Mesa</strong> para adicionar.</div>';
+    return;
+  }
   g.innerHTML=tables.map(t=>{
     const sc=t.status==='free'?'qr-free':t.status==='busy'?'qr-busy':'qr-waiting';
     const sl=t.status==='free'?'Livre':'Ocupada';
     const bg=t.status==='free'?'rgba(34,197,94,.08)':t.status==='busy'?'rgba(239,68,68,.08)':'rgba(245,158,11,.08)';
-    return`<div class="garcom-mesa" style="background:${bg}" onclick="openGarcomMesa(${t.num})">
-      <div class="gm-num">Mesa ${t.num}</div>
-      <div class="gm-guests">${t.guests?t.guests+' pessoas':''}</div>
-      <div class="gm-status ${sc}">${sl}</div>
+    return`<div class="garcom-mesa" style="background:${bg};position:relative">
+      <button onclick="event.stopPropagation();openEditMesa(${t.num})" style="position:absolute;top:7px;right:7px;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px" title="Editar mesa">✎</button>
+      <div class="gm-num" onclick="openGarcomMesa(${t.num})" style="cursor:pointer">Mesa ${t.num}</div>
+      <div class="gm-guests" onclick="openGarcomMesa(${t.num})" style="cursor:pointer">${t.guests?t.guests+' pessoas':''}</div>
+      <div class="gm-status ${sc}" onclick="openGarcomMesa(${t.num})" style="cursor:pointer">${sl}</div>
       ${t.total&&t.status==='busy'?`<div style="font-size:12px;font-weight:700;color:var(--success);margin-top:5px">${t.total}</div>`:''}
     </div>`;
   }).join('');
