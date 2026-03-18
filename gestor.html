@@ -556,10 +556,37 @@ td:first-child{padding-left:16px}
 .pm-tabs{display:flex;gap:3px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:3px;margin-bottom:16px}
 .pm-tab{flex:1;padding:6px 12px;border-radius:7px;font-size:12.5px;font-weight:600;cursor:pointer;border:none;background:none;color:var(--muted);font-family:'DM Sans',sans-serif;transition:all .18s;text-align:center}
 .pm-tab.on{background:var(--surface2);color:var(--text)}
+
+/* ── IMPRESSÃO TÉRMICA ─────────────────── */
+@media print {
+  body > *:not(#print-frame) { display: none !important; }
+  #print-frame {
+    display: block !important;
+    position: fixed; inset: 0; z-index: 99999;
+    background: #fff;
+  }
+}
+.print-ticket {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: #000;
+  background: #fff;
+  width: 280px;
+  padding: 10px 8px;
+  line-height: 1.5;
+}
+.print-ticket .pt-center { text-align: center; }
+.print-ticket .pt-bold   { font-weight: bold; }
+.print-ticket .pt-large  { font-size: 14px; font-weight: bold; }
+.print-ticket .pt-hr     { border: none; border-top: 1px dashed #000; margin: 6px 0; }
+.print-ticket .pt-row    { display: flex; justify-content: space-between; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+
+<!-- Frame de impressão (invisível, só aparece no print) -->
+<div id="print-frame" style="display:none"></div>
 
 <!-- TOP NAV -->
 <nav class="topnav">
@@ -1348,16 +1375,79 @@ td:first-child{padding-left:16px}
 
 <!-- IMPRESSÃO -->
 <div class="page" id="page-impressao">
-  <div class="ph"><div><div class="pt">Impressão Automática</div><div class="ps">Pedidos são impressos automaticamente na cozinha</div></div><button class="btn bp" onclick="testPrint()"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="10" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="8" r=".6" fill="currentColor"/></svg> Teste de impressão</button></div>
+  <div class="ph">
+    <div><div class="pt">Impressão</div><div class="ps">Configure como os pedidos são impressos na térmica</div></div>
+    <button class="btn bp" onclick="testPrint()">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="10" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="8" r=".6" fill="currentColor"/></svg>
+      Testar impressão
+    </button>
+  </div>
+
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-    <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="10" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="8" r=".6" fill="currentColor"/></svg> Impressoras Configuradas</div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:12px;display:flex;align-items:center;gap:10px"><div style="font-size:24px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="10" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="8" r=".6" fill="currentColor"/></svg></div><div style="flex:1"><div style="font-weight:600;font-size:13px">Epson TM-T20X</div><div style="font-size:11.5px;color:var(--muted)">Cozinha • Bluetooth</div></div><span class="chip chip-green">● Online</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
-        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:12px;display:flex;align-items:center;gap:10px"><div style="font-size:24px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="10" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="8" r=".6" fill="currentColor"/></svg></div><div style="flex:1"><div style="font-weight:600;font-size:13px">Star TSP143</div><div style="font-size:11.5px;color:var(--muted)">Balcão • WiFi</div></div><span class="chip chip-green">● Online</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
-        <button class="btn bg" style="width:100%;justify-content:center" onclick="showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><path d=&quot;M8 3v10M3 8h10&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>','Assistente de configuração')"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Adicionar impressora</button>
+
+    <!-- Config -->
+    <div style="display:flex;flex-direction:column;gap:14px">
+
+      <!-- Modo -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px">
+        <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px">Modo de impressão</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label id="lbl-print-auto" onclick="setPrintMode('auto')" style="display:flex;align-items:center;gap:12px;background:rgba(59,130,246,.1);border:2px solid var(--accent);border-radius:10px;padding:12px 14px;cursor:pointer">
+            <div style="width:18px;height:18px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <div id="dot-auto" style="width:8px;height:8px;border-radius:50%;background:#fff"></div>
+            </div>
+            <div>
+              <div style="font-weight:700;font-size:13px">🖨️ Automático</div>
+              <div style="font-size:11.5px;color:var(--muted);margin-top:1px">Imprime sozinho quando chega um pedido novo</div>
+            </div>
+          </label>
+          <label id="lbl-print-manual" onclick="setPrintMode('manual')" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:2px solid var(--border);border-radius:10px;padding:12px 14px;cursor:pointer">
+            <div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <div id="dot-manual" style="width:8px;height:8px;border-radius:50%;background:transparent"></div>
+            </div>
+            <div>
+              <div style="font-weight:700;font-size:13px">👆 Manual</div>
+              <div style="font-size:11.5px;color:var(--muted);margin-top:1px">Botão 🖨️ aparece em cada pedido no kanban</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Configurações do comprovante -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px">
+        <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px">Dados do comprovante</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div>
+            <label class="form-label">Nome do estabelecimento</label>
+            <input class="form-input" id="print-nome" value="ESTIMA FOOD" oninput="renderImpressao()">
+          </div>
+          <div>
+            <label class="form-label">Linha extra (site, telefone...)</label>
+            <input class="form-input" id="print-sub" value="anota.ai/estima-food" oninput="renderImpressao()">
+          </div>
+          <div>
+            <label class="form-label">Mensagem de rodapé</label>
+            <input class="form-input" id="print-rodape" value="Obrigado pela preferência! 🙏" oninput="renderImpressao()">
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px">
+            <span style="font-size:12.5px">Imprimir mesa/endereço</span>
+            <div class="toggle on" id="toggle-print-addr" onclick="this.classList.toggle('on');renderImpressao()"></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px">
+            <span style="font-size:12.5px">Imprimir forma de pagamento</span>
+            <div class="toggle on" id="toggle-print-pag" onclick="this.classList.toggle('on');renderImpressao()"></div>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M9 2H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 2v4h4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 9h6M5 12h4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Prévia do Comprovante</div><div class="print-preview" id="print-preview"></div></div>
+
+    <!-- Prévia -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px">Prévia do comprovante</div>
+      <div style="background:#f8f8f8;border-radius:8px;padding:16px;display:flex;justify-content:center">
+        <div class="print-preview" id="print-preview"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -2146,6 +2236,8 @@ function subscribeOrders() {
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
         showToast('🛎️', `Novo pedido #${p.new.id} — ${p.new.client}`);
         sendBrowserNotif(`🛎️ Novo pedido #${p.new.id}`, `${p.new.client} — ${items}`);
+        // Auto-impressão se modo automático estiver ativo
+        if (_printMode === 'auto') printOrder(mapOrder(p.new));
       }
       // Atualiza cache de mesa e rerenderiza SEM nova query ao banco
       if (p.new.mesa_num) {
@@ -2527,9 +2619,10 @@ function renderKanban(){
         if(st==='analise'){
           actionBtn=
             '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById('+o.id+')">✔ Confirmar</button>'+
-            '<button class="oc-btn oc-btn-no" onclick="event.stopPropagation();cancelOrderById('+o.id+')">✕ Cancelar</button>';
+            '<button class="oc-btn oc-btn-no" onclick="event.stopPropagation();cancelOrderById('+o.id+')">✕ Cancelar</button>'+
+            (_printMode==='manual'?'<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById('+o.id+')">🖨️</button>':'');
         } else if(st==='producao'){
-          actionBtn='<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById('+o.id+')">🚀 Pronto!</button>';
+          actionBtn='<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById('+o.id+')">🚀 Pronto!</button>'+(_printMode==='manual'?'<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById('+o.id+')">🖨️</button>':'');
         } else {
           actionBtn='<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById('+o.id+')">✔ Finalizar</button>';
         }
@@ -3920,30 +4013,101 @@ function renderSatisfacao(){
 // ─────────────────────────────────────────
 // IMPRESSÃO
 // ─────────────────────────────────────────
-function renderImpressao(){
-  const p=document.getElementById('print-preview');
-  if(!p) return;
-  const now=new Date().toLocaleString('pt-BR');
-  p.innerHTML=`<div style="text-align:center;font-weight:bold;font-size:14px">ESTIMA FOOD</div>
-<div style="text-align:center;font-size:11px">anota.ai/estima-food</div>
-<hr>
-<div style="font-size:11px">Pedido: #62</div>
-<div style="font-size:11px">Data: ${now}</div>
-<div style="font-size:11px">Cliente: Airton</div>
-<hr>
-<div style="font-size:12px">1x X-SALADA ........... R$18,00</div>
-<div style="font-size:12px">1x BATATA FRITA ........ R$10,00</div>
-<div style="font-size:12px">1x PASTEL DE CARNE ..... R$12,00</div>
-<hr>
-<div style="font-size:11px">Subtotal: R$ 40,00</div>
-<div style="font-size:11px">Taxa entrega: R$ 5,00</div>
-<div style="font-weight:bold;font-size:13px">TOTAL: R$ 45,00</div>
-<div style="font-size:11px">Pagamento: Dinheiro</div>
-<hr>
-<div style="text-align:center;font-size:11px">Obrigado! </div>`;
+// ─────────────────────────────────────────
+// IMPRESSÃO TÉRMICA
+// ─────────────────────────────────────────
+let _printMode = localStorage.getItem('printMode') || 'auto';
+
+function setPrintMode(mode) {
+  _printMode = mode;
+  localStorage.setItem('printMode', mode);
+  const isAuto = mode === 'auto';
+  const la = document.getElementById('lbl-print-auto');
+  const lm = document.getElementById('lbl-print-manual');
+  const da = document.getElementById('dot-auto');
+  const dm = document.getElementById('dot-manual');
+  if (la) { la.style.background = isAuto ? 'rgba(59,130,246,.1)' : 'var(--surface2)'; la.style.borderColor = isAuto ? 'var(--accent)' : 'var(--border)'; }
+  if (lm) { lm.style.background = !isAuto ? 'rgba(59,130,246,.1)' : 'var(--surface2)'; lm.style.borderColor = !isAuto ? 'var(--accent)' : 'var(--border)'; }
+  if (da) da.style.background = isAuto ? '#fff' : 'transparent';
+  if (dm) dm.style.background = !isAuto ? '#fff' : 'transparent';
+  sbToast('ok', isAuto ? '🖨️ Impressão automática ativada' : '👆 Impressão manual ativada');
 }
 
-function testPrint(){renderImpressao();showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><rect x=&quot;3&quot; y=&quot;2&quot; width=&quot;10&quot; height=&quot;4&quot; rx=&quot;1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><rect x=&quot;3&quot; y=&quot;10&quot; width=&quot;10&quot; height=&quot;4&quot; rx=&quot;1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><circle cx=&quot;12&quot; cy=&quot;8&quot; r=&quot;.6&quot; fill=&quot;currentColor&quot;/></svg>','Teste enviado para a impressora!');}
+function _getPrintConfig() {
+  return {
+    nome:   ((document.getElementById('print-nome')?.value)   || 'ESTIMA FOOD').toUpperCase(),
+    sub:     (document.getElementById('print-sub')?.value)    || '',
+    rodape:  (document.getElementById('print-rodape')?.value) || 'Obrigado!',
+    addr:    document.getElementById('toggle-print-addr')?.classList.contains('on') ?? true,
+    pag:     document.getElementById('toggle-print-pag')?.classList.contains('on')  ?? true,
+  };
+}
+
+function _buildTicketHtml(order, cfg) {
+  const items = Array.isArray(order.items) ? order.items : [];
+  const now = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const money = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
+  const itemLines = items.map(i => {
+    const name = (i.qty + 'x ' + i.name).toUpperCase();
+    const price = money((i.price||0) * (i.qty||1));
+    return `<div style="display:flex;justify-content:space-between"><span>${name}</span><span style="white-space:nowrap;margin-left:8px">${price}</span></div>`;
+  }).join('');
+  const subtotal = items.reduce((s,i) => s + (parseFloat(i.price||0) * (i.qty||1)), 0);
+  const taxa = parseFloat(order.taxa || 0);
+  const total = subtotal + taxa;
+  return `<div class="print-ticket">
+    <div class="pt-center pt-large">${cfg.nome}</div>
+    ${cfg.sub ? `<div class="pt-center" style="font-size:11px">${cfg.sub}</div>` : ''}
+    <hr class="pt-hr">
+    <div>Pedido: <b>#${order.id}</b></div>
+    <div>Data: ${now}</div>
+    <div>Cliente: ${order.client || '—'}</div>
+    ${cfg.addr && order.addr ? `<div>Local: ${order.addr}</div>` : ''}
+    <hr class="pt-hr">
+    ${itemLines}
+    <hr class="pt-hr">
+    ${taxa > 0 ? `<div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${money(subtotal)}</span></div><div style="display:flex;justify-content:space-between"><span>Taxa entrega</span><span>${money(taxa)}</span></div>` : ''}
+    <div style="display:flex;justify-content:space-between;font-weight:bold"><span>TOTAL</span><span>${money(total)}</span></div>
+    ${cfg.pag && order.pag ? `<div>Pagamento: ${order.pag}</div>` : ''}
+    <hr class="pt-hr">
+    <div class="pt-center" style="font-size:11px">${cfg.rodape}</div>
+  </div>`;
+}
+
+function printOrder(order) {
+  const cfg = _getPrintConfig();
+  const html = _buildTicketHtml(order, cfg);
+  const frame = document.getElementById('print-frame');
+  if (!frame) return;
+  frame.innerHTML = html;
+  frame.style.display = 'block';
+  setTimeout(() => {
+    window.print();
+    setTimeout(() => { frame.style.display = 'none'; }, 1500);
+  }, 150);
+}
+
+function printOrderById(id) {
+  const o = ordersKanban.find(x => x.id === id);
+  if (o) printOrder(o); else sbToast('err', 'Pedido não encontrado');
+}
+
+function renderImpressao() {
+  const p = document.getElementById('print-preview');
+  if (!p) return;
+  setPrintMode(_printMode);
+  const cfg = _getPrintConfig();
+  const ex = { id:99, client:'João Silva', addr:'Mesa 3', mesa_num:3, pag:'PIX', taxa:0,
+    items:[{qty:1,name:'Pizza Calabreza',price:50},{qty:2,name:'Coca Cola 2L',price:14}] };
+  p.innerHTML = _buildTicketHtml(ex, cfg);
+}
+
+function testPrint() {
+  const ex = { id:99, client:'TESTE IMPRESSÃO', addr:'Balcão', mesa_num:null, pag:'PIX', taxa:5,
+    items:[{qty:1,name:'X-Salada',price:18},{qty:1,name:'Batata Frita',price:10}] };
+  printOrder(ex);
+  sbToast('ok', '🖨️ Enviando para impressora...');
+}
 
 // ─────────────────────────────────────────
 // CAIXA
