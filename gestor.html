@@ -3365,9 +3365,12 @@ function renderMesaKanban(mesaOrders) {
 
   const cardHtml = (o, col) => {
     const itemsArr = Array.isArray(o.items) ? o.items : [];
-    const itemStr  = itemsArr.map(i=>`${i.qty}× ${i.name}`).join(', ');
+    // Mostra 🥤 em bebidas e 🍴 em comidas
+    const itemStr = itemsArr.map(i=>`${i.drink?'🥤':'🍴'} ${i.qty}× ${i.name}`).join('  ');
     const total    = 'R$ '+(parseFloat(o.total)||0).toFixed(2).replace('.',',');
     const isAnalise = o.status === 'analise';
+    const hasDrinks = itemsArr.some(i=>i.drink);
+    const hasFood   = itemsArr.some(i=>!i.drink);
     let actionBtn = '';
     if (col === 'preparando') {
       if (isAnalise) {
@@ -3385,15 +3388,16 @@ function renderMesaKanban(mesaOrders) {
         <button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();fecharMesa(${o.mesa_num})">💰 Fechar Mesa ${o.mesa_num}</button>
       </div>`;
     }
-    const statusDot = isAnalise
-      ? `<span style="font-size:9px;background:rgba(249,115,22,.2);color:#fed7aa;padding:1px 5px;border-radius:99px;font-weight:700">NOVO</span>`
-      : '';
+    const tags = [];
+    if (isAnalise) tags.push(`<span style="font-size:9px;background:rgba(249,115,22,.2);color:#fed7aa;padding:1px 5px;border-radius:99px;font-weight:700">NOVO</span>`);
+    if (hasDrinks && hasFood) tags.push(`<span style="font-size:9px;background:rgba(6,182,212,.15);color:#67e8f9;padding:1px 5px;border-radius:99px;font-weight:700">COMIDA + BEBIDA</span>`);
+    else if (hasDrinks) tags.push(`<span style="font-size:9px;background:rgba(6,182,212,.15);color:#67e8f9;padding:1px 5px;border-radius:99px;font-weight:700">BEBIDA</span>`);
     return `<div class="order-card" onclick="openOrderDetail(${o.id})">
       <div class="oc-top">
         <span class="oc-id">Mesa ${o.mesa_num} · #${o.id}</span>
         <span class="oc-time">⏱ ${o.time||''}</span>
       </div>
-      ${statusDot ? `<div style="margin-bottom:3px">${statusDot}</div>` : ''}
+      ${tags.length ? `<div style="display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap">${tags.join('')}</div>` : ''}
       <div class="oc-items">${itemStr}</div>
       <div class="oc-bot">
         <span class="oc-total">${total}</span>
@@ -3445,7 +3449,7 @@ function renderMesasList(mesaOrders, activeTables) {
               <span style="font-size:11px;color:var(--muted)">${o.time||''}</span>
             </div>
             <div style="font-size:12.5px;line-height:1.6">
-              ${itemsArr.map(i=>`<span style="display:inline-block;background:rgba(255,255,255,.05);border-radius:5px;padding:1px 6px;margin:1px 2px 1px 0;font-size:11.5px">${i.qty}× ${i.name}</span>`).join('')}
+              ${itemsArr.map(i=>`<span style="display:inline-block;background:rgba(255,255,255,.05);border-radius:5px;padding:1px 6px;margin:1px 2px 1px 0;font-size:11.5px">${i.drink?'🥤':'🍴'} ${i.qty}× ${i.name}</span>`).join('')}
             </div>
             <div style="font-size:12px;font-weight:700;color:var(--accent3);text-align:right;margin-top:5px">R$ ${(parseFloat(o.total)||0).toFixed(2).replace('.',',')}</div>
           </div>`;
@@ -4271,10 +4275,21 @@ async function fecharMesa(num) {
   if (!t) return;
   sbLoading(true);
   try {
+    // 1. Finaliza todos os pedidos ativos da mesa (limpa o kanban e zera o acúmulo)
+    await sb.from('orders')
+      .update({ status: 'entregue' })
+      .eq('mesa_num', num)
+      .in('status', ['analise', 'producao', 'pronto']);
+
+    // 2. Marca a mesa como aguardando pagamento
     await sb.from('mesas').update({
       status: 'waiting', updated_at: new Date().toISOString()
     }).eq('num', num);
+
+    // Atualiza estado local
     t.status = 'waiting';
+    ordersKanban = ordersKanban.filter(o => o.mesa_num !== num);
+    renderKanban();
     renderMesasPage();
     sbToast('ok', `Mesa ${num} aguardando pagamento`);
   } catch(e) {
