@@ -7490,8 +7490,7 @@ function _evoSetStatus(type,txt) {
 
 async function topnavCopiarCardapio(btn) {
   try {
-    const slug = _sessao?.tenant_id || '';
-    const url  = `${window.location.origin}/index.html?slug=${encodeURIComponent(slug)}`;
+    const url  = `${window.location.origin}/index.html?tenant=${encodeURIComponent(_sessao?.tenant_id || '')}`;
     await navigator.clipboard.writeText(url);
     // Feedback visual temporário no botão
     const svg = btn.querySelector('svg');
@@ -7683,9 +7682,9 @@ async function loadCardapioPublico() {
 }
 
 function cpMontarLink() {
-  const slug = _sessao?.tenant_id || '';
+  const tid  = _sessao?.tenant_id || '';
   const base = window.location.origin;
-  const url  = `${base}/index.html?slug=${encodeURIComponent(slug)}`;
+  const url  = `${base}/index.html?tenant=${encodeURIComponent(tid)}`;
   const el = document.getElementById('cp-link-url');
   if (el) el.textContent = url;
 }
