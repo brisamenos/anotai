@@ -1,712 +1,651 @@
-// ═══════════════════════════════════════════════════════
-// ESTIMA FOOD — Servidor Multi-Tenant (SQLite + REST + SSE)
-// Cada restaurante tem seus próprios dados isolados
-// ═══════════════════════════════════════════════════════
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Admin — Painel SaaS</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#070b14;--s1:#0d1526;--s2:#111827;--s3:#1a2540;--border:rgba(255,255,255,.07);--accent:#3b82f6;--danger:#ef4444;--success:#22c55e;--orange:#f97316;--purple:#8b5cf6;--text:#f1f5f9;--muted:#64748b}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
 
-const http         = require('http')
-const fs           = require('fs')
-const path         = require('path')
-const crypto       = require('crypto')
-const Database = require('better-sqlite3')
+/* LOGIN */
+#login{width:100%;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.lg-card{background:rgba(10,15,25,.92);border:1px solid var(--border);border-radius:20px;padding:40px;width:400px;backdrop-filter:blur(20px);box-shadow:0 24px 80px rgba(0,0,0,.6);animation:fadeUp .4s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.lg-icon{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,var(--accent),#1d4ed8);display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 14px;box-shadow:0 4px 16px rgba(59,130,246,.4)}
+.lg-title{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;text-align:center;letter-spacing:-.5px;margin-bottom:4px}
+.lg-sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:28px}
+.f-label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.f-input{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13.5px;outline:none;transition:all .18s;margin-bottom:14px}
+.f-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.12)}
+.f-input::placeholder{color:var(--muted)}
+.btn-lg{width:100%;padding:13px;border-radius:10px;border:none;cursor:pointer;background:linear-gradient(135deg,var(--accent),#2563eb);color:#fff;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;transition:all .2s;box-shadow:0 4px 16px rgba(59,130,246,.35)}
+.btn-lg:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(59,130,246,.5)}
+.err{display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:10px 14px;font-size:12.5px;color:#fca5a5;margin-bottom:14px}
+.err.on{display:block}
 
-const PORT        = process.env.PORT           || 3001
-const EVO_URL     = process.env.EVOLUTION_URL  || 'https://projeto-evolution-api.xtknqq.easypanel.host'
-const EVO_KEY     = process.env.EVOLUTION_KEY  || '429683C4C977415CAAFCCE10F7D57E11'
-const EVO_INST    = process.env.EVOLUTION_INST || 'estima-food'
-const DB_PATH     = process.env.DB_PATH        || '/app/data/estima.db'
-const UPLOADS_DIR = process.env.UPLOADS_DIR    || '/app/data/uploads'
+/* LAYOUT */
+#painel{display:none;width:100%}
+.sidebar{width:220px;background:var(--s1);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;bottom:0;z-index:50}
+.sb-logo{display:flex;align-items:center;gap:10px;padding:18px;border-bottom:1px solid var(--border)}
+.sb-logo-icon{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#1d4ed8);display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 3px 10px rgba(59,130,246,.3)}
+.sb-logo-name{font-family:'Syne',sans-serif;font-size:15px;font-weight:800}
+.sb-logo-tag{font-size:9px;background:var(--orange);color:#fff;padding:1px 6px;border-radius:99px;font-weight:700;letter-spacing:.5px;display:block;margin-top:2px}
+.sb-nav{flex:1;padding:10px 8px}
+.sb-sec{font-size:9.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);padding:8px 8px 4px}
+.sb-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;font-size:12.5px;font-weight:500;color:var(--muted);cursor:pointer;transition:all .15s;margin-bottom:1px;border:none;background:none;width:100%;text-align:left;font-family:'DM Sans',sans-serif}
+.sb-item:hover{background:var(--s2);color:var(--text)}
+.sb-item.on{background:rgba(59,130,246,.15);color:var(--accent);font-weight:600}
+.sb-foot{padding:10px 8px;border-top:1px solid var(--border)}
+.sb-user{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:background .15s}
+.sb-user:hover{background:var(--s2)}
+.sb-av{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
 
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true })
-fs.mkdirSync(UPLOADS_DIR, { recursive: true })
+.main{margin-left:220px;flex:1;display:flex;flex-direction:column;min-height:100vh}
+.topbar{height:52px;background:rgba(10,15,25,.85);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 22px;gap:10px;position:sticky;top:0;z-index:40;backdrop-filter:blur(10px)}
+.topbar-title{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;flex:1;letter-spacing:-.3px}
+.content{padding:22px;flex:1}
 
-function log(emoji, msg, data) {
-  const t = new Date().toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' })
-  console.log(`[${t}] ${emoji}  ${msg}`, data ? JSON.stringify(data) : '')
+/* STATS */
+.sg{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.sc{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:16px 18px;position:relative;overflow:hidden}
+.sc::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--ca,var(--accent));border-radius:12px 12px 0 0}
+.sc-label{font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.3px;margin-bottom:6px}
+.sc-val{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;letter-spacing:-1px}
+.sc-icon{position:absolute;top:12px;right:12px;font-size:18px;opacity:.5}
+
+/* CARDS */
+.card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:16px}
+.card-title{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;letter-spacing:-.3px}
+
+/* TABELA */
+.tw{background:var(--s1);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px}
+.tmeta{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--border)}
+table{width:100%;border-collapse:collapse}
+thead th{padding:9px 14px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);background:var(--s2);border-bottom:1px solid var(--border)}
+tbody tr{border-bottom:1px solid var(--border);transition:background .12s}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:rgba(255,255,255,.02)}
+td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
+
+/* BADGE */
+.badge{display:inline-flex;align-items:center;gap:4px;border-radius:99px;padding:2px 9px;font-size:10.5px;font-weight:600}
+.bg-green{background:rgba(34,197,94,.12);color:var(--success)}
+.bg-red{background:rgba(239,68,68,.12);color:var(--danger)}
+.bg-blue{background:rgba(59,130,246,.12);color:var(--accent)}
+.bg-orange{background:rgba(249,115,22,.12);color:var(--orange)}
+.bg-purple{background:rgba(139,92,246,.12);color:var(--purple)}
+.bg-gray{background:rgba(255,255,255,.06);color:var(--muted)}
+
+/* BOTÕES */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .15s;white-space:nowrap}
+.bp{background:linear-gradient(135deg,var(--accent),#2563eb);color:#fff;box-shadow:0 2px 8px rgba(59,130,246,.25)}
+.bp:hover{box-shadow:0 4px 14px rgba(59,130,246,.4);transform:translateY(-1px)}
+.bg2{background:var(--s2);border:1px solid var(--border);color:var(--text)}
+.bg2:hover{border-color:var(--accent);color:var(--accent)}
+.bd{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:var(--danger)}
+.bd:hover{background:rgba(239,68,68,.2)}
+.bsm{padding:3px 9px;font-size:11px}
+
+/* SEARCH */
+.sbox{display:flex;align-items:center;gap:7px;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:6px 11px}
+.sbox:focus-within{border-color:var(--accent)}
+.sbox input{background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:12.5px;color:var(--text);width:180px}
+.sbox input::placeholder{color:var(--muted)}
+
+/* MODAL */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-bg.on{display:flex}
+.modal{background:var(--s1);border:1px solid var(--border);border-radius:16px;width:500px;max-width:95vw;max-height:88vh;overflow-y:auto;padding:26px;position:relative;box-shadow:0 24px 64px rgba(0,0,0,.6)}
+.modal h2{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:18px}
+.modal-x{position:absolute;top:14px;right:14px;width:26px;height:26px;border-radius:7px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .15s}
+.modal-x:hover{color:var(--danger);border-color:var(--danger)}
+.mrow{margin-bottom:13px}
+.mlabel{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.minput{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:9px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;transition:all .18s}
+.minput:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.12)}
+.mrow2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* TOAST */
+#toast{position:fixed;bottom:18px;right:18px;z-index:9999;display:flex;flex-direction:column;gap:7px}
+.ti{display:flex;align-items:center;gap:9px;background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:11px 15px;font-size:13px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.4);animation:tIn .22s ease;min-width:220px}
+@keyframes tIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+.ti-ok{border-left:3px solid var(--success)}
+.ti-err{border-left:3px solid var(--danger)}
+</style>
+  <script src="/supabase-shim.js"></script>
+</head>
+<body>
+<div id="toast"></div>
+
+<!-- ══ LOGIN ══ -->
+<div id="login">
+  <div class="lg-card">
+    <div class="lg-icon">🛡️</div>
+    <div class="lg-title">Painel Admin</div>
+    <div class="lg-sub">Acesso restrito ao proprietário do sistema</div>
+    <div class="err" id="lg-err"></div>
+    <label class="f-label">Email</label>
+    <input class="f-input" id="lg-email" type="email" placeholder="admin@sistema.com" autocomplete="email">
+    <label class="f-label">Senha</label>
+    <input class="f-input" id="lg-senha" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="btn-lg" onclick="doLogin()">Entrar no painel</button>
+    <div style="text-align:center;margin-top:16px;font-size:12px;color:var(--muted)">
+      <a href="login.html" style="color:var(--accent);text-decoration:none">← Login dos gestores</a>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PAINEL ══ -->
+<div id="painel">
+  <aside class="sidebar">
+    <div class="sb-logo">
+      <div class="sb-logo-icon">🛡️</div>
+      <div>
+        <div class="sb-logo-name">SaaS Admin</div>
+        <div class="sb-logo-tag">PROPRIETÁRIO</div>
+      </div>
+    </div>
+    <nav class="sb-nav">
+      <div class="sb-sec">Painel</div>
+      <button class="sb-item on" id="nav-dash" onclick="navTo('dash')">📊 Dashboard</button>
+      <div class="sb-sec" style="margin-top:6px">Gestão</div>
+      <button class="sb-item" id="nav-clientes" onclick="navTo('clientes')">🏢 Clientes</button>
+    </nav>
+    <div class="sb-foot">
+      <div class="sb-user" onclick="doLogout()">
+        <div class="sb-av" id="adm-av">A</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:600" id="adm-nome">Admin</div>
+          <div style="font-size:10px;color:var(--muted)">Super Admin</div>
+        </div>
+        <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted)"><path d="M6 3H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Dashboard</div>
+      <button class="btn bg2 bsm" onclick="loadAll()">🔄 Atualizar</button>
+    </div>
+    <div class="content">
+
+      <!-- DASHBOARD -->
+      <div id="sec-dash">
+        <div class="sg">
+          <div class="sc" style="--ca:var(--accent)"><div class="sc-icon">🏢</div><div class="sc-label">Total Clientes</div><div class="sc-val" id="st-total">—</div></div>
+          <div class="sc" style="--ca:var(--success)"><div class="sc-icon">✅</div><div class="sc-label">Ativos</div><div class="sc-val" id="st-ativos" style="color:var(--success)">—</div></div>
+          <div class="sc" style="--ca:var(--danger)"><div class="sc-icon">⏸</div><div class="sc-label">Inativos</div><div class="sc-val" id="st-inativos" style="color:var(--danger)">—</div></div>
+          <div class="sc" style="--ca:var(--purple)"><div class="sc-icon">👤</div><div class="sc-label">Usuários</div><div class="sc-val" id="st-users" style="color:var(--purple)">—</div></div>
+        </div>
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div class="card-title">🕐 Clientes Recentes</div>
+            <button class="btn bg2 bsm" onclick="navTo('clientes')">Ver todos →</button>
+          </div>
+          <div id="dash-list"></div>
+        </div>
+      </div>
+
+      <!-- CLIENTES -->
+      <div id="sec-clientes" style="display:none">
+        <div class="tw">
+          <div class="tmeta">
+            <div class="card-title">🏢 Clientes / Restaurantes</div>
+            <div style="display:flex;gap:8px">
+              <div class="sbox">
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style="color:var(--muted)"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                <input id="cli-q" placeholder="Buscar..." oninput="renderClientes()">
+              </div>
+              <button class="btn bp bsm" onclick="abrirModalCliente()">+ Novo cliente</button>
+            </div>
+          </div>
+          <table>
+            <thead><tr><th>Restaurante</th><th>Gestor principal</th><th>Plano</th><th>Expira</th><th>Status</th><th>Ações</th></tr></thead>
+            <tbody id="cli-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- MODAL CLIENTE -->
+<div class="modal-bg" id="m-cliente">
+  <div class="modal">
+    <button class="modal-x" onclick="fecharModal('m-cliente')">✕</button>
+    <h2 id="m-cli-titulo">➕ Novo Cliente</h2>
+    <input type="hidden" id="cli-id">
+
+    <!-- SEÇÃO: RESTAURANTE -->
+    <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">🏢 Dados do Restaurante</div>
+    <div class="mrow"><label class="mlabel">Nome do restaurante *</label><input class="minput" id="cli-nome" placeholder="Ex: Estima Food" oninput="autoSlug()"></div>
+    <div class="mrow2">
+      <div class="mrow" style="margin:0"><label class="mlabel">Slug (identificador) *</label><input class="minput" id="cli-slug" placeholder="estima-food" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'-')"></div>
+      <div class="mrow" style="margin:0"><label class="mlabel">Plano</label>
+        <select class="minput" id="cli-plano">
+          <option value="basico">Básico</option>
+          <option value="pro">Pro</option>
+          <option value="premium">Premium</option>
+        </select>
+      </div>
+    </div>
+    <div class="mrow2">
+      <div class="mrow" style="margin:0"><label class="mlabel">Expira em</label><input class="minput" id="cli-expira" type="date"></div>
+      <div class="mrow" style="margin:0"><label class="mlabel">Status</label>
+        <select class="minput" id="cli-ativo">
+          <option value="true">Ativo</option>
+          <option value="false">Inativo</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- SEÇÃO: ACESSO DO GESTOR (só na criação) -->
+    <div id="cli-gestor-section">
+      <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin:16px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">👤 Acesso do Gestor</div>
+      <div class="mrow"><label class="mlabel">Nome do responsável *</label><input class="minput" id="cli-gestor-nome" placeholder="Nome de quem vai operar o sistema"></div>
+      <div class="mrow2">
+        <div class="mrow" style="margin:0"><label class="mlabel">Email de acesso *</label><input class="minput" id="cli-email" type="email" placeholder="dono@restaurante.com"></div>
+        <div class="mrow" style="margin:0"><label class="mlabel">Senha inicial *</label><input class="minput" id="cli-senha" type="password" placeholder="Mínimo 6 caracteres"></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn bg2" style="flex:1;justify-content:center" onclick="fecharModal('m-cliente')">Cancelar</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="salvarCliente()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL USUÁRIOS DO CLIENTE -->
+<div class="modal-bg" id="m-usuarios-cli">
+  <div class="modal" style="width:580px">
+    <button class="modal-x" onclick="fecharModal('m-usuarios-cli')">✕</button>
+    <h2 id="m-ucli-titulo">👥 Usuários</h2>
+    <div id="ucli-lista" style="margin-bottom:16px"></div>
+    <button class="btn bp bsm" onclick="abrirFormUsuario()">+ Adicionar usuário</button>
+    <div id="ucli-form" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+      <input type="hidden" id="usr-id">
+      <input type="hidden" id="usr-tenant-fixed">
+      <div class="mrow"><label class="mlabel">Nome completo *</label><input class="minput" id="usr-nome" placeholder="Nome do responsável"></div>
+      <div class="mrow2">
+        <div class="mrow" style="margin:0"><label class="mlabel">Email *</label><input class="minput" id="usr-email" type="email" placeholder="gestor@rest.com"></div>
+        <div class="mrow" style="margin:0"><label class="mlabel">Perfil</label>
+          <select class="minput" id="usr-role">
+            <option value="gestor">Gestor</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+      </div>
+      <div class="mrow"><label class="mlabel">Senha <span style="font-weight:400;text-transform:none">(deixe em branco para não alterar)</span></label><input class="minput" id="usr-senha" type="password" placeholder="Mínimo 6 caracteres"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn bg2" style="flex:1;justify-content:center" onclick="fecharFormUsuario()">Cancelar</button>
+        <button class="btn bp" style="flex:1;justify-content:center" onclick="salvarUsuario()">💾 Salvar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPA_URL  = 'https://lhrzwccbvdintqgebisq.supabase.co';
+const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxocnp3Y2NidmRpbnRxZ2ViaXNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1ODY0NzEsImV4cCI6MjA4OTE2MjQ3MX0.gbljgt0rzOf9eBoTcXxxfl0e_0Y-6XYxve-HGY7meJo';
+const { createClient } = window.supabase;
+const sb = createClient(SUPA_URL, SUPA_ANON, { auth: { persistSession: false } });
+
+let _sessao = null;
+let _clientes = [];
+let _usuarios = [];
+
+async function sha256(t) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
-// ════════════════════════════════════════════════════════
-// BANCO SQLite
-// ════════════════════════════════════════════════════════
-const db = new Database(DB_PATH)
-db.pragma('journal_mode = WAL')
-db.pragma('foreign_keys = ON')
+// ── LOGIN ────────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('lg-email').value.trim().toLowerCase();
+  const senha = document.getElementById('lg-senha').value;
+  const err   = document.getElementById('lg-err');
+  if (!email||!senha) { err.textContent='Preencha email e senha'; err.classList.add('on'); return; }
+  err.classList.remove('on');
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS tenants (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
-    nome TEXT NOT NULL, plano TEXT DEFAULT 'basic', ativo INTEGER DEFAULT 1,
-    slug TEXT UNIQUE,
-    created_at TEXT DEFAULT (datetime('now'))
-  );
-  CREATE TABLE IF NOT EXISTS sys_users (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
-    tenant_id TEXT REFERENCES tenants(id) ON DELETE CASCADE,
-    nome TEXT NOT NULL, email TEXT UNIQUE NOT NULL,
-    senha_hash TEXT NOT NULL, role TEXT DEFAULT 'gestor',
-    ativo INTEGER DEFAULT 1, ultimo_acesso TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
-  );
+  const hash = await sha256(senha);
+  const { data: u } = await sb.from('sys_users').select('*,tenants(*)').eq('email',email).eq('senha_hash',hash).eq('ativo',true).in('role',['superadmin','admin']).single();
 
-  -- Tabelas multi-tenant: todas têm tenant_id
-  CREATE TABLE IF NOT EXISTS store_config (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT UNIQUE NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    store_open INTEGER DEFAULT 1, caixa_open INTEGER DEFAULT 0,
-    delivery_fee_config TEXT DEFAULT '{}', fid_config TEXT DEFAULT '{}',
-    evo_automacoes TEXT DEFAULT '{}', evo_aniv_last TEXT,
-    wa_server_url TEXT, sidebar_state TEXT DEFAULT '{}'
-  );
-  CREATE TABLE IF NOT EXISTS categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    name TEXT NOT NULL, emoji TEXT, sort_order INTEGER DEFAULT 0, ativo INTEGER DEFAULT 1
-  );
-  CREATE TABLE IF NOT EXISTS menu_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    name TEXT NOT NULL, description TEXT, price REAL NOT NULL,
-    category_id INTEGER REFERENCES categories(id),
-    image_url TEXT, status TEXT DEFAULT 'ativo',
-    created_at TEXT DEFAULT (datetime('now'))
-  );
-  CREATE TABLE IF NOT EXISTS cupons (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    code TEXT NOT NULL, type TEXT DEFAULT 'percent', value REAL NOT NULL,
-    min_order REAL DEFAULT 0, uses_left INTEGER DEFAULT -1,
-    ativo INTEGER DEFAULT 1, expires_at TEXT,
-    UNIQUE(tenant_id, code)
-  );
-  CREATE TABLE IF NOT EXISTS mesas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    num INTEGER NOT NULL, status TEXT DEFAULT 'free',
-    guests INTEGER DEFAULT 0, opened_at TEXT,
-    updated_at TEXT DEFAULT (datetime('now')),
-    UNIQUE(tenant_id, num)
-  );
-  CREATE TABLE IF NOT EXISTS garcons (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    nome TEXT NOT NULL, usuario TEXT NOT NULL, senha TEXT NOT NULL,
-    ativo INTEGER DEFAULT 1,
-    UNIQUE(tenant_id, usuario)
-  );
-  CREATE TABLE IF NOT EXISTS orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    client TEXT, phone TEXT, addr TEXT, items TEXT DEFAULT '[]',
-    total REAL DEFAULT 0, taxa REAL DEFAULT 0, pag TEXT DEFAULT 'dinheiro',
-    status TEXT DEFAULT 'analise', mesa_num INTEGER,
-    garcom_id INTEGER, garcom_nome TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
-  );
-  CREATE TABLE IF NOT EXISTS movimentos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    description TEXT, tipo TEXT DEFAULT 'entrada', val REAL DEFAULT 0,
-    pag TEXT, time TEXT DEFAULT (datetime('now')),
-    created_at TEXT DEFAULT (datetime('now'))
-  );
-  CREATE TABLE IF NOT EXISTS estoque (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    name TEXT NOT NULL, qty REAL DEFAULT 0, unit TEXT DEFAULT 'un',
-    min_qty REAL DEFAULT 0, cost REAL DEFAULT 0,
-    updated_at TEXT DEFAULT (datetime('now'))
-  );
-  CREATE TABLE IF NOT EXISTS fidelidade (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    name TEXT NOT NULL, phone TEXT, birthday TEXT, pts INTEGER DEFAULT 0,
-    max_pts INTEGER DEFAULT 500, orders_count INTEGER DEFAULT 0,
-    resgates INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now'))
-  );
-  CREATE TABLE IF NOT EXISTS customers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    name TEXT, phone TEXT, addr TEXT, orders_count INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    UNIQUE(tenant_id, phone)
-  );
+  if (!u) { err.textContent='Acesso negado. Verifique suas credenciais.'; err.classList.add('on'); return; }
 
-  -- Índices para performance
-  CREATE INDEX IF NOT EXISTS idx_orders_tenant     ON orders(tenant_id);
-  CREATE INDEX IF NOT EXISTS idx_orders_status     ON orders(tenant_id, status);
-  CREATE INDEX IF NOT EXISTS idx_menu_tenant       ON menu_items(tenant_id);
-  CREATE INDEX IF NOT EXISTS idx_mesas_tenant      ON mesas(tenant_id);
-  CREATE INDEX IF NOT EXISTS idx_fidelidade_tenant ON fidelidade(tenant_id);
-`)
+  _sessao = u;
+  sessionStorage.setItem('adm_session', JSON.stringify({ id:u.id, nome:u.nome, email:u.email, role:u.role, ts:Date.now() }));
+  await sb.from('sys_users').update({ ultimo_acesso: new Date().toISOString() }).eq('id', u.id);
 
-// Superadmin padrão
-const adminExists = db.prepare("SELECT id FROM sys_users WHERE role='superadmin' LIMIT 1").get()
-if (!adminExists) {
-  const hash = crypto.createHash('sha256').update('admin123').digest('hex')
-  db.prepare("INSERT OR IGNORE INTO tenants (id,nome,plano,slug) VALUES ('system','Sistema Admin','premium','admin')").run()
-  db.prepare("INSERT INTO sys_users (nome,email,senha_hash,role,tenant_id) VALUES (?,?,?,?,?)")
-    .run('Administrador','admin@estimafood.com',hash,'superadmin','system')
-  log('🔑','Superadmin criado: admin@estimafood.com / admin123')
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('painel').style.display = 'flex';
+  document.getElementById('adm-av').textContent   = u.nome.charAt(0).toUpperCase();
+  document.getElementById('adm-nome').textContent = u.nome.split(' ')[0];
+  await loadAll();
 }
 
-// Garante store_config para cada tenant existente
-const tenantsAtivos = db.prepare("SELECT id FROM tenants").all()
-for (const t of tenantsAtivos) {
-  db.prepare("INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)").run(t.id)
+function doLogout() {
+  if (!confirm('Sair do painel admin?')) return;
+  sessionStorage.removeItem('adm_session');
+  document.getElementById('painel').style.display = 'none';
+  document.getElementById('login').style.display  = 'flex';
+  _sessao = null;
 }
 
-// ════════════════════════════════════════════════════════
-// SSE — Server-Sent Events (Realtime por tenant)
-// ════════════════════════════════════════════════════════
-const sseClients = new Map()
-
-function sseSubscribe(channel, res) {
-  res.writeHead(200, {
-    'Content-Type':'text/event-stream','Cache-Control':'no-cache',
-    'Connection':'keep-alive','Access-Control-Allow-Origin':'*'
-  })
-  res.write(': connected\n\n')
-  if (!sseClients.has(channel)) sseClients.set(channel, new Set())
-  sseClients.get(channel).add(res)
-  const ka = setInterval(() => { try { res.write(': ping\n\n') } catch(e) { clearInterval(ka) } }, 25000)
-  res.on('close', () => { clearInterval(ka); sseClients.get(channel)?.delete(res) })
-}
-
-function sseBroadcast(channel, event, data) {
-  const clients = sseClients.get(channel)
-  if (!clients?.size) return
-  const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
-  for (const r of clients) { try { r.write(msg) } catch(e) { clients.delete(r) } }
-}
-
-// Emite apenas para os canais do tenant correto
-function emit(tenantId, table, record, type) {
-  const tid = tenantId || 'global'
-  // Canais do gestor (incluem tenant no nome)
-  sseBroadcast(`orders-rt:${tid}`,      table+':'+type, record)
-  sseBroadcast(`mesas-rt:${tid}`,       table+':'+type, record)
-  sseBroadcast(`store-config-rt:${tid}`,table+':'+type, record)
-  // Canais dinâmicos do garçom
-  for (const [ch] of sseClients) {
-    if (ch.startsWith(`garcom-mesas-`) && ch.endsWith(`:${tid}`)) sseBroadcast(ch, table+':'+type, record)
-    if (ch.startsWith(`garcom-orders-`) && ch.endsWith(`:${tid}`)) sseBroadcast(ch, table+':'+type, record)
-  }
-}
-
-// ════════════════════════════════════════════════════════
-// REST ENGINE — multi-tenant automático
-// ════════════════════════════════════════════════════════
-const TABLE_COLS = {
-  tenants:      ['id','nome','plano','ativo','slug','created_at'],
-  sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
-  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state'],
-  categories:   ['id','tenant_id','name','emoji','sort_order','ativo'],
-  menu_items:   ['id','tenant_id','name','description','price','category_id','image_url','status','created_at'],
-  cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
-  mesas:        ['id','tenant_id','num','status','guests','opened_at','updated_at'],
-  garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
-  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','status','mesa_num','garcom_id','garcom_nome','created_at'],
-  movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
-  estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','updated_at'],
-  fidelidade:   ['id','tenant_id','name','phone','birthday','pts','max_pts','orders_count','resgates','created_at'],
-  customers:    ['id','tenant_id','name','phone','addr','orders_count','created_at'],
-}
-
-// Tabelas que NÃO são filtradas por tenant (acesso global)
-const NO_TENANT_FILTER = ['tenants','sys_users']
-
-// Tabelas onde o tenant_id é identificado pela coluna 'tenant_id' e não 'id'
-const JSON_FIELDS = {
-  orders:       ['items'],
-  store_config: ['delivery_fee_config','fid_config','evo_automacoes','sidebar_state']
-}
-
-function jsonParse(v) { if(typeof v!=='string')return v; try{return JSON.parse(v)}catch(e){return v} }
-
-function parseRow(table, row) {
-  if (!row) return row
-  const out = {...row}
-  for (const f of (JSON_FIELDS[table]||[])) { if(f in out) out[f]=jsonParse(out[f]) }
-  for (const f of ['ativo','store_open','caixa_open']) { if(f in out) out[f]=out[f]===1||out[f]===true }
-  return out
-}
-
-function serialize(table, body) {
-  const out = {...body}
-  for (const f of (JSON_FIELDS[table]||[])) { if(f in out && typeof out[f]!=='string') out[f]=JSON.stringify(out[f]) }
-  return out
-}
-
-function buildWhere(params, cols, tenantId, table) {
-  const conds=[], vals=[]
-
-  // Injeta filtro de tenant automaticamente
-  if (tenantId && !NO_TENANT_FILTER.includes(table)) {
-    conds.push('"tenant_id" = ?')
-    vals.push(tenantId)
-  }
-
-  for (const [key,val] of params.entries()) {
-    if(['_single','select','order','limit','offset','_tenant'].includes(key)) continue
-    if(!cols.includes(key)&&key!=='or') continue
-    let m
-    if(key==='or'){
-      const parts=val.replace(/^\(|\)$/g,'').split(',')
-      const orC=[]
-      for(const p of parts){
-        const pm=p.match(/^(\w+)\.(eq|neq)\.(.+)$/)
-        if(pm&&cols.includes(pm[1])){orC.push(`"${pm[1]}" ${pm[2]==='eq'?'=':'!='} ?`);vals.push(pm[3])}
-      }
-      if(orC.length) conds.push(`(${orC.join(' OR ')})`)
-      continue
-    }
-    if((m=val.match(/^eq\.(.+)$/)))   { conds.push(`"${key}" = ?`);  vals.push(m[1]==='null'?null:m[1]); continue }
-    if((m=val.match(/^neq\.(.+)$/)))  { conds.push(`"${key}" != ?`); vals.push(m[1]); continue }
-    if((m=val.match(/^gte\.(.+)$/)))  { conds.push(`"${key}" >= ?`); vals.push(m[1]); continue }
-    if((m=val.match(/^lte\.(.+)$/)))  { conds.push(`"${key}" <= ?`); vals.push(m[1]); continue }
-    if((m=val.match(/^gt\.(.+)$/)))   { conds.push(`"${key}" > ?`);  vals.push(m[1]); continue }
-    if((m=val.match(/^lt\.(.+)$/)))   { conds.push(`"${key}" < ?`);  vals.push(m[1]); continue }
-    if(val==='not.is.null') { conds.push(`"${key}" IS NOT NULL`); continue }
-    if(val==='is.null')     { conds.push(`"${key}" IS NULL`);     continue }
-    if((m=val.match(/^in\.\((.+)\)$/))) {
-      const items=m[1].split(',').map(s=>s.trim())
-      conds.push(`"${key}" IN (${items.map(()=>'?').join(',')})`)
-      vals.push(...items); continue
-    }
-  }
-  return { WHERE: conds.length?`WHERE ${conds.join(' AND ')}`:'', vals }
-}
-
-function buildOrder(str, cols) {
-  if (!str) return ''
-  const parts = str.split(',').map(p=>{ const[c,d]=p.trim().split('.'); return cols.includes(c)?`"${c}" ${d==='desc'?'DESC':'ASC'}`:null }).filter(Boolean)
-  return parts.length ? `ORDER BY ${parts.join(', ')}` : ''
-}
-
-// Extrai tenant_id do header ou query param
-function getTenantId(req, params) {
-  return req.headers['x-tenant-id'] || params.get('_tenant') || null
-}
-
-async function handleREST(req, res, table, params, body) {
-  const cols = TABLE_COLS[table]
-  if (!cols) return send(res,404,{error:'Tabela não encontrada'})
-
-  const tenantId = getTenantId(req, params)
-  const { WHERE, vals } = buildWhere(params, cols, tenantId, table)
-
-  // GET
-  if (req.method==='GET') {
-    const isSingle = req.headers['prefer']?.includes('single') || params.get('_single')==='true'
-    const ORDER = buildOrder(params.get('order')||'', cols)
-    const limit = parseInt(params.get('limit')||'1000')
-    const offset= parseInt(params.get('offset')||'0')
-    const sel   = params.get('select')
-    let selectCols = '*'
-    if (sel) {
-      const valid = sel.split(',').map(s=>s.trim().split(':')[0]).filter(c=>cols.includes(c)||c==='*')
-      if (valid.length) selectCols = valid.map(c=>`"${c}"`).join(', ')
-    }
-
-    // store_config: busca por tenant_id em vez de id=1
-    if (table==='store_config' && tenantId) {
-      try {
-        const row = db.prepare(`SELECT * FROM store_config WHERE tenant_id=?`).get(tenantId)
-        if (!row && (params.get('_single')==='true' || req.headers['prefer']?.includes('single'))) {
-          // Cria config vazia para esse tenant
-          db.prepare("INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)").run(tenantId)
-          const created = db.prepare("SELECT * FROM store_config WHERE tenant_id=?").get(tenantId)
-          return send(res,200,parseRow(table,created))
-        }
-        if (isSingle) return send(res,200,row?parseRow(table,row):{error:'Not found'})
-        return send(res,200,row?[parseRow(table,row)]:[])
-      } catch(e) { return send(res,400,{error:e.message}) }
-    }
-
-    // JOIN: sys_users + tenants
-    if (table==='sys_users' && sel?.includes('tenants')) {
-      const rows = db.prepare(`SELECT u.*,t.nome as t_nome,t.plano as t_plano,t.ativo as t_ativo FROM sys_users u LEFT JOIN tenants t ON u.tenant_id=t.id ${WHERE} ${ORDER} LIMIT ? OFFSET ?`).all(...vals,limit,offset)
-      const mapped = rows.map(r=>{const{t_nome,t_plano,t_ativo,...u}=r;u.tenants={nome:t_nome,plano:t_plano,ativo:t_ativo===1};return parseRow(table,u)})
-      return send(res,200,isSingle?(mapped[0]||null):mapped)
-    }
-
-    // JOIN: tenants + contagem sys_users
-    if (table==='tenants' && sel?.includes('sys_users')) {
-      const rows = db.prepare(`SELECT * FROM tenants ${WHERE} ${ORDER} LIMIT ? OFFSET ?`).all(...vals,limit,offset)
-      const mapped = rows.map(r=>{const c=db.prepare("SELECT COUNT(*) as c FROM sys_users WHERE tenant_id=?").get(r.id);r.sys_users=Array(c?.c||0).fill({});return parseRow(table,r)})
-      return send(res,200,isSingle?(mapped[0]||null):mapped)
-    }
-
+// Verifica sessão ao carregar
+window.addEventListener('DOMContentLoaded', () => {
+  const raw = sessionStorage.getItem('adm_session');
+  if (raw) {
     try {
-      if (isSingle) {
-        const row = db.prepare(`SELECT ${selectCols} FROM "${table}" ${WHERE} ${ORDER} LIMIT 1`).get(...vals)
-        return send(res,row?200:406,row?parseRow(table,row):{error:'Not found'})
+      const s = JSON.parse(raw);
+      if (Date.now() - s.ts < 8*60*60*1000) {
+        _sessao = s;
+        document.getElementById('login').style.display  = 'none';
+        document.getElementById('painel').style.display = 'flex';
+        document.getElementById('adm-av').textContent   = s.nome.charAt(0).toUpperCase();
+        document.getElementById('adm-nome').textContent = s.nome.split(' ')[0];
+        loadAll();
       }
-      const rows = db.prepare(`SELECT ${selectCols} FROM "${table}" ${WHERE} ${ORDER} LIMIT ? OFFSET ?`).all(...vals,limit,offset)
-      return send(res,200,rows.map(r=>parseRow(table,r)))
-    } catch(e) { return send(res,400,{error:e.message}) }
+    } catch(e) {}
   }
+});
 
-  // POST
-  if (req.method==='POST') {
-    const isUpsert = req.headers['prefer']?.includes('resolution=merge-duplicates')
-    try {
-      const payload = serialize(table, body)
+// ── NAVEGAÇÃO ────────────────────────────
+function navTo(id) {
+  ['dash','clientes'].forEach(s => {
+    document.getElementById('sec-'+s).style.display = s===id ? 'block' : 'none';
+    document.getElementById('nav-'+s)?.classList.toggle('on', s===id);
+  });
+  const titles = { dash:'Dashboard', clientes:'Clientes' };
+  document.getElementById('topbar-title').textContent = titles[id] || id;
+}
 
-      // Injeta tenant_id no body automaticamente
-      if (tenantId && !NO_TENANT_FILTER.includes(table) && !payload.tenant_id) {
-        payload.tenant_id = tenantId
-      }
+// ── CARREGAR DADOS ───────────────────────
+async function loadAll() {
+  const [cr, ur] = await Promise.all([
+    sb.from('tenants').select('*').neq('slug','_admin').order('criado_em',{ascending:false}),
+    sb.from('sys_users').select('*,tenants(nome)').neq('role','superadmin').order('criado_em',{ascending:false})
+  ]);
+  _clientes = cr.data || [];
+  _usuarios = ur.data || [];
 
-      // store_config: upsert por tenant_id
-      if (table==='store_config' && tenantId) {
-        const keys = Object.keys(payload).filter(k=>cols.includes(k))
-        const setClause = keys.filter(k=>k!=='tenant_id').map(k=>`"${k}"=excluded."${k}"`).join(', ')
-        const colList = keys.map(k=>`"${k}"`).join(', ')
-        const phs = keys.map(()=>'?').join(', ')
-        db.prepare(`INSERT INTO store_config (${colList}) VALUES (${phs}) ON CONFLICT(tenant_id) DO UPDATE SET ${setClause}`)
-          .run(...keys.map(k=>payload[k]))
-        const row = db.prepare("SELECT * FROM store_config WHERE tenant_id=?").get(tenantId)
-        return send(res,200,parseRow(table,row))
-      }
+  document.getElementById('st-total').textContent   = _clientes.length;
+  document.getElementById('st-ativos').textContent  = _clientes.filter(c=>c.ativo).length;
+  document.getElementById('st-inativos').textContent= _clientes.filter(c=>!c.ativo).length;
+  document.getElementById('st-users').textContent   = _usuarios.length;
 
-      const keys = Object.keys(payload).filter(k=>cols.includes(k))
-      if (!keys.length) return send(res,400,{error:'Sem campos válidos'})
-      const colList = keys.map(k=>`"${k}"`).join(', ')
-      const phs = keys.map(()=>'?').join(', ')
+  renderDash(); renderClientes();
+}
 
-      // Mesas: conflict por (tenant_id, num)
-      const conflictKey = table==='mesas' ? '(tenant_id, num)' : 'id'
+// ── DASHBOARD ────────────────────────────
+function renderDash() {
+  const el = document.getElementById('dash-list');
+  if (!el) return;
+  const list = _clientes.slice(0,6);
+  if (!list.length) { el.innerHTML='<p style="color:var(--muted);font-size:13px;padding:8px 0">Nenhum cliente ainda. Crie o primeiro!</p>'; return; }
+  el.innerHTML = list.map(c=>`
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${c.nome.charAt(0).toUpperCase()}</div>
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:13px">${c.nome}</div>
+        <div style="font-size:11px;color:var(--muted)">${c.email}</div>
+      </div>
+      <span class="badge ${c.ativo?'bg-green':'bg-red'}">${c.ativo?'● Ativo':'● Inativo'}</span>
+      <span class="badge bg-blue">${c.plano}</span>
+    </div>`).join('');
+}
 
-      let stmt
-      if (isUpsert) {
-        const upd = keys.filter(k=>k!=='id'&&k!=='tenant_id').map(k=>`"${k}"=excluded."${k}"`).join(', ')
-        stmt = db.prepare(`INSERT INTO "${table}" (${colList}) VALUES (${phs}) ON CONFLICT${table==='mesas'?'(tenant_id,num)':'(id)'} DO UPDATE SET ${upd}`)
-      } else {
-        stmt = db.prepare(`INSERT INTO "${table}" (${colList}) VALUES (${phs})`)
-      }
-      const info = stmt.run(...keys.map(k=>payload[k]))
-      const newId = info.lastInsertRowid
-      const returnRep = req.headers['prefer']?.includes('return=representation')
-      let inserted = null
-      if (returnRep) {
-        inserted = db.prepare(`SELECT * FROM "${table}" WHERE id=?`).get(newId)
-        inserted = parseRow(table, inserted)
-      }
-      if (['orders','mesas','store_config'].includes(table)) emit(tenantId||payload.tenant_id, table, inserted||payload, 'INSERT')
-      return send(res,201,returnRep?inserted:{id:newId})
-    } catch(e) { return send(res,400,{error:e.message}) }
-  }
+// ── CLIENTES ─────────────────────────────
+function renderClientes() {
+  const q  = (document.getElementById('cli-q')?.value||'').toLowerCase();
+  const el = document.getElementById('cli-tbody');
+  if (!el) return;
+  const fil = _clientes.filter(c=>!q||c.nome.toLowerCase().includes(q)||c.email.toLowerCase().includes(q)||c.slug.includes(q));
+  if (!fil.length) { el.innerHTML='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--muted)">Nenhum cliente encontrado</td></tr>'; return; }
+  const planoBadge = { basico:'bg-gray', pro:'bg-blue', premium:'bg-purple' };
+  el.innerHTML = fil.map(c => {
+    const users = _usuarios.filter(u=>u.tenant_id===c.id);
+    const gestor = users.find(u=>u.role==='gestor')||users[0];
+    const userCount = users.length;
+    return `<tr>
+    <td><div style="display:flex;align-items:center;gap:9px">
+      <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">${c.nome.charAt(0)}</div>
+      <div><div style="font-weight:600">${c.nome}</div><div style="font-size:11px;color:var(--muted)">/${c.slug}</div></div>
+    </div></td>
+    <td><div style="font-size:12.5px">${gestor?.nome||'—'}</div><div style="font-size:11px;color:var(--muted)">${gestor?.email||c.email||'—'}</div></td>
+    <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${c.plano}</span></td>
+    <td style="color:var(--muted);font-size:12px">${c.expires_at ? new Date(c.expires_at).toLocaleDateString('pt-BR') : '—'}</td>
+    <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">${c.ativo?'● Ativo':'● Inativo'}</span></td>
+    <td><div style="display:flex;gap:4px">
+      <button class="btn bg2 bsm" onclick="editarCliente('${c.id}')">✏️</button>
+      <button class="btn bg2 bsm" title="${userCount} usuário(s)" onclick="abrirUsuariosCliente('${c.id}')">👥${userCount>1?` <span style='font-size:10px'>${userCount}</span>`:''}</button>
+      <button class="btn bg2 bsm" onclick="toggleCliente('${c.id}',${c.ativo})">${c.ativo?'⏸':'▶'}</button>
+      <button class="btn bd bsm" onclick="deletarCliente('${c.id}','${c.nome.replace(/'/g,"\\'")}')">🗑</button>
+    </div></td>
+  </tr>`}).join('');
+}
 
-  // PATCH
-  if (req.method==='PATCH') {
-    try {
-      const payload = serialize(table, body)
-      const keys = Object.keys(payload).filter(k=>cols.includes(k))
-      if (!keys.length) return send(res,400,{error:'Sem campos válidos'})
-
-      // store_config: update por tenant_id
-      if (table==='store_config' && tenantId) {
-        const setClause = keys.map(k=>`"${k}"=?`).join(', ')
-        db.prepare(`UPDATE store_config SET ${setClause} WHERE tenant_id=?`).run(...keys.map(k=>payload[k]),tenantId)
-        const row = db.prepare("SELECT * FROM store_config WHERE tenant_id=?").get(tenantId)
-        if (['orders','mesas','store_config'].includes(table)) emit(tenantId, table, payload, 'UPDATE')
-        return send(res,200,parseRow(table,row))
-      }
-
-      const setClause = keys.map(k=>`"${k}"=?`).join(', ')
-      const info = db.prepare(`UPDATE "${table}" SET ${setClause} ${WHERE}`).run(...keys.map(k=>payload[k]),...vals)
-      if (['orders','mesas','store_config'].includes(table)) emit(tenantId||payload.tenant_id, table, payload, 'UPDATE')
-      return send(res,200,{updated:info.changes})
-    } catch(e) { return send(res,400,{error:e.message}) }
-  }
-
-  // DELETE
-  if (req.method==='DELETE') {
-    if (!WHERE) return send(res,400,{error:'DELETE sem filtro não permitido'})
-    try {
-      const info = db.prepare(`DELETE FROM "${table}" ${WHERE}`).run(...vals)
-      if (['orders','mesas'].includes(table)) emit(tenantId, table, {}, 'DELETE')
-      return send(res,200,{deleted:info.changes})
-    } catch(e) { return send(res,400,{error:e.message}) }
+// ── CRUD CLIENTES ────────────────────────
+function autoSlug() {
+  const nome = document.getElementById('cli-nome').value;
+  if (!document.getElementById('cli-id').value) { // só auto-preenche na criação
+    document.getElementById('cli-slug').value = nome.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
   }
 }
 
-// ════════════════════════════════════════════════════════
-// API: /api/tenant-info?slug=xxx  (cardápio público)
-// ════════════════════════════════════════════════════════
-function handleTenantInfo(params) {
-  const slug = params.get('slug')
-  const id   = params.get('id')
-  if (!slug && !id) return { error: 'Informe slug ou id' }
-  const t = slug
-    ? db.prepare("SELECT id,nome,slug FROM tenants WHERE slug=? AND ativo=1").get(slug)
-    : db.prepare("SELECT id,nome,slug FROM tenants WHERE id=? AND ativo=1").get(id)
-  return t || { error: 'Restaurante não encontrado' }
-}
-
-// ════════════════════════════════════════════════════════
-// UPLOAD DE IMAGENS
-// ════════════════════════════════════════════════════════
-function handleUpload(req, res) {
-  return new Promise(resolve => {
-    const chunks = []
-    req.on('data', c => chunks.push(c))
-    req.on('end', () => {
-      try {
-        const buffer = Buffer.concat(chunks)
-        const ct = req.headers['content-type']||''
-        const boundary = ct.split('boundary=')[1]
-        let fname = `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
-        if (!boundary) {
-          const body = JSON.parse(buffer.toString())
-          const ext  = (body.mime||'image/jpeg').split('/')[1]||'jpg'
-          fname = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-          fs.writeFileSync(path.join(UPLOADS_DIR,fname),Buffer.from(body.data,'base64'))
-        } else {
-          const raw  = buffer.toString('binary')
-          const parts = raw.split('--'+boundary).filter(p=>p.includes('filename='))
-          if (parts.length) {
-            const [head,...bodyParts] = parts[0].split('\r\n\r\n')
-            const fnMatch = head.match(/filename="([^"]+)"/)
-            if (fnMatch) {
-              const ext = path.extname(fnMatch[1])||'.jpg'
-              fname = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
-              const fileContent = bodyParts.join('\r\n\r\n').replace(/\r\n$/,'')
-              fs.writeFileSync(path.join(UPLOADS_DIR,fname),Buffer.from(fileContent,'binary'))
-            }
-          }
-        }
-        const url = `/uploads/${fname}`
-        resolve(send(res,200,{url,publicUrl:url}))
-      } catch(e) { resolve(send(res,400,{error:e.message})) }
-    })
-  })
-}
-
-// ════════════════════════════════════════════════════════
-// WHATSAPP
-// ════════════════════════════════════════════════════════
-async function sendWA(phone, text) {
-  const num = phone.replace(/\D/g,'')
-  const number = num.startsWith('55')?num:`55${num}`
-  try {
-    const r = await fetch(`${EVO_URL}/message/sendText/${EVO_INST}`,{
-      method:'POST',headers:{'Content-Type':'application/json',apikey:EVO_KEY},
-      body:JSON.stringify({number,text})
-    })
-    const data = await r.json().catch(()=>({}))
-    if (r.ok){log('📤',`Enviado para ${number}`);return{ok:true,data}}
-    log('❌',`Falhou ${number}:`,data);return{ok:false,data}
-  } catch(e){log('❌','Erro WA:',{error:e.message});return{ok:false,error:e.message}}
-}
-
-function fillVars(tpl, vars) {
-  let t=tpl; Object.entries(vars).forEach(([k,v])=>{t=t.replaceAll(`{${k}}`,v??'')}) ; return t
-}
-
-// ── Scheduler aniversários (por tenant) ───────────────
-const _anivLast = new Map()
-
-async function checarAniv() {
-  const tenants = db.prepare("SELECT id FROM tenants WHERE ativo=1").all()
-  for (const t of tenants) {
-    try {
-      const cfg  = db.prepare("SELECT evo_automacoes,evo_aniv_last FROM store_config WHERE tenant_id=?").get(t.id)
-      if (!cfg) continue
-      const auto = jsonParse(cfg.evo_automacoes)||{}
-      const ca   = auto['aniversario']||{}
-      if (!ca.on) continue
-      const now    = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Fortaleza'}))
-      const today  = `${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
-      const hora   = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
-      if (_anivLast.get(t.id)===today||cfg.evo_aniv_last===today) continue
-      if (hora<(auto._aniv_hora||'09:00')) continue
-      _anivLast.set(t.id, today)
-      const clientes = db.prepare("SELECT * FROM fidelidade WHERE tenant_id=? AND birthday IS NOT NULL AND phone IS NOT NULL").all(t.id)
-      const anivs    = clientes.filter(c=>c.birthday&&c.phone&&c.birthday.slice(5)===today)
-      if (!anivs.length){db.prepare("UPDATE store_config SET evo_aniv_last=? WHERE tenant_id=?").run(today,t.id);continue}
-      for (const c of anivs){await sendWA(c.phone,fillVars(ca.msg,{nome:c.name}));await sleep(1500)}
-      db.prepare("UPDATE store_config SET evo_aniv_last=? WHERE tenant_id=?").run(today,t.id)
-      log('🎂',`Aniversários tenant ${t.id}: ${anivs.length} enviados`)
-    } catch(e){log('❌','Erro aniv tenant '+t.id,{error:e.message})}
-  }
-}
-
-// ── Checker pedidos (por tenant) ─────────────────────
-const processed = new Set()
-
-async function checarPedidos() {
-  try {
-    const tenants = db.prepare("SELECT id FROM tenants WHERE ativo=1").all()
-    const desde   = new Date(Date.now()-86400000).toISOString().slice(0,19).replace('T',' ')
-    for (const t of tenants) {
-      const cfg    = db.prepare("SELECT evo_automacoes FROM store_config WHERE tenant_id=?").get(t.id)
-      if (!cfg) continue
-      const auto   = jsonParse(cfg.evo_automacoes)||{}
-      const pedidos = db.prepare(`SELECT * FROM orders WHERE tenant_id=? AND phone IS NOT NULL AND created_at>=? AND status IN ('producao','pronto','cancelado','finalizado') ORDER BY id DESC LIMIT 50`).all(t.id,desde)
-      for (const o of pedidos) {
-        const chave=`${o.id}_${o.status}`
-        if (processed.has(chave)) continue
-        processed.add(chave)
-        const tipo={producao:'confirmado',pronto:'pronto',cancelado:'cancelado',finalizado:'avaliacao'}[o.status]
-        if (!tipo) continue
-        const ct=auto[tipo]||{}; if(!ct.on) continue
-        const items=(() => { try{return(JSON.parse(o.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}catch(e){return''} })()
-        const vars={ nome:o.client||'Cliente', id:String(o.id), itens:items,
-          total:(parseFloat(o.total)||0).toFixed(2).replace('.',','), endereco:o.addr||'', mesa:String(o.mesa_num||''),
-          tipo_entrega:(o.addr||'').includes('Mesa')?'🪑 Mesa':(o.addr||'').includes('alcão')?'🏪 Balcão':'🛵 Entrega' }
-        await sendWA(o.phone, fillVars(ct.msg, vars)); await sleep(800)
-        if (o.status==='finalizado') {
-          const cp=auto['pontos']||{}; if(cp.on&&o.phone){
-            await sleep(5000)
-            const fid=db.prepare("SELECT * FROM fidelidade WHERE tenant_id=? AND (phone=? OR name=?) LIMIT 1").get(t.id,o.phone,o.client)
-            if(fid){const pg=Math.floor((parseFloat(o.total)||0)*10);const pt=(fid.pts||0)+pg;const pf=Math.max(0,(fid.max_pts||500)-pt)
-              await sendWA(o.phone,fillVars(cp.msg,{nome:fid.name||o.client,pontos_ganhos:String(pg),pontos_total:String(pt),pontos_faltam:String(pf)}))}
-          }
-        }
-      }
-    }
-    if(processed.size>2000){const a=[...processed];a.slice(0,1000).forEach(k=>processed.delete(k))}
-  } catch(e){log('❌','Erro checker pedidos:',{error:e.message})}
-}
-
-// ════════════════════════════════════════════════════════
-// HTTP SERVER
-// ════════════════════════════════════════════════════════
-function send(res,status,data){res.setHeader('Content-Type','application/json');res.writeHead(status);res.end(JSON.stringify(data))}
-function readBody(req){return new Promise((ok,err)=>{let b='';req.on('data',c=>b+=c);req.on('end',()=>{try{ok(b?JSON.parse(b):{})}catch(e){ok({})}});req.on('error',err)})}
-function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
-
-const MIME={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.jpg':'image/jpeg','.ico':'image/x-icon','.svg':'image/svg+xml','.webp':'image/webp'}
-
-const server = http.createServer(async (req,res) => {
-  res.setHeader('Access-Control-Allow-Origin','*')
-  res.setHeader('Access-Control-Allow-Methods','GET,POST,PATCH,DELETE,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers','Content-Type,Prefer,apikey,Authorization,x-tenant-id')
-  if(req.method==='OPTIONS'){res.writeHead(200);res.end();return}
-
-  const url    = new URL(req.url,`http://localhost:${PORT}`)
-  const upath  = url.pathname.replace(/\/$/,'')||'/'
-  const params = url.searchParams
-
-  // SSE — canal inclui tenant: /sse/orders-rt:TENANT_ID
-  if(upath.startsWith('/sse/')){sseSubscribe(upath.slice(5),res);return}
-
-  // REST API
-  if(upath.startsWith('/rest/v1/')||upath.startsWith('/api/')){
-    const table = upath.split('/')[upath.startsWith('/api/')?2:3]
-    const body  = ['POST','PATCH'].includes(req.method)?await readBody(req):{}
-    await handleREST(req,res,table,params,body); return
-  }
-
-  // Info do tenant para cardápio público
-  if(req.method==='GET'&&upath==='/api/tenant-info'){
-    const info = handleTenantInfo(params)
-    send(res, info.error?404:200, info); return
-  }
-
-  // Criar tenant + store_config automaticamente ao cadastrar no admin
-  if(req.method==='POST'&&upath==='/api/criar-tenant'){
-    const body = await readBody(req)
-    const {nome,plano,slug,email,senha,role,nomeGestor} = body
-    if(!nome||!email||!senha){send(res,400,{error:'nome, email e senha obrigatórios'});return}
-    try {
-      const hash = crypto.createHash('sha256').update(senha).digest('hex')
-      const slugBase = slug || nome.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'')
-
-      // ── Garante slug único: se já existir, acrescenta sufixo numérico ──
-      let slugFinal = slugBase
-      let suffix = 2
-      while (db.prepare("SELECT id FROM tenants WHERE slug=?").get(slugFinal)) {
-        slugFinal = `${slugBase}-${suffix++}`
-      }
-      // Avisa se o slug foi alterado (slug informado pelo usuário já em uso)
-      if (slug && slugFinal !== slug) {
-        send(res,400,{error:`O identificador (slug) "${slug}" já está em uso. Sugerimos: "${slugFinal}"`})
-        return
-      }
-
-      // ── Valida e-mail duplicado ──
-      if (db.prepare("SELECT id FROM sys_users WHERE email=?").get(email)) {
-        send(res,400,{error:`O e-mail "${email}" já está cadastrado no sistema.`})
-        return
-      }
-
-      const nomeUsuario = nomeGestor || nome  // usa nome do gestor se fornecido, senão usa nome do restaurante
-      db.prepare("INSERT INTO tenants (nome,plano,slug) VALUES (?,?,?)").run(nome,plano||'basic',slugFinal)
-      const t = db.prepare("SELECT id FROM tenants WHERE slug=?").get(slugFinal)
-      db.prepare("INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)").run(t.id)
-      db.prepare("INSERT INTO sys_users (nome,email,senha_hash,role,tenant_id) VALUES (?,?,?,?,?)")
-        .run(nomeUsuario,email,hash,role||'gestor',t.id)
-      send(res,201,{ok:true,tenant_id:t.id,slug:slugFinal})
-    } catch(e){ send(res,400,{error:e.message}) }
-    return
-  }
-
-  // Upload
-  if(req.method==='POST'&&upath.startsWith('/storage/v1/object/')){await handleUpload(req,res);return}
-
-  // Servir imagens
-  if(req.method==='GET'&&(upath.startsWith('/uploads/')||upath.startsWith('/storage/v1/object/public/'))){
-    const fname=path.basename(upath)
-    const fpath=path.join(UPLOADS_DIR,fname)
-    if(fs.existsSync(fpath)){
-      const ext=path.extname(fpath)
-      res.setHeader('Content-Type',MIME[ext]||'application/octet-stream')
-      res.writeHead(200);fs.createReadStream(fpath).pipe(res)
-    } else {res.writeHead(404);res.end('Not found')}
-    return
-  }
-
-  // Status
-  if(upath==='/status'){send(res,200,{ok:true,uptime:Math.floor(process.uptime()),db:'sqlite-multitenant',version:'3.0.0'});return}
-
-  // WA avulso
-  if(req.method==='POST'&&upath==='/enviar'){
-    const{phone,text}=await readBody(req)
-    if(!phone||!text){send(res,400,{ok:false,error:'phone e text obrigatórios'});return}
-    const r=await sendWA(phone,text);send(res,r.ok?200:500,r);return
-  }
-
-  // Promoção em massa (por tenant)
-  if(req.method==='POST'&&upath==='/promocao'){
-    const body=await readBody(req)
-    const{destino='todos',msg,tenant_id}=body
-    if(!msg){send(res,400,{ok:false,error:'msg obrigatório'});return}
-    let cl=db.prepare("SELECT * FROM fidelidade WHERE phone IS NOT NULL"+(tenant_id?' AND tenant_id=?':'')).all(...(tenant_id?[tenant_id]:[]))
-    if(destino==='com_pedido') cl=cl.filter(c=>c.orders_count>0)
-    if(!cl.length){send(res,200,{ok:true,enviados:0});return}
-    send(res,200,{ok:true,total:cl.length,msg:'Envio iniciado'})
-    ;(async()=>{let ok=0,fail=0;for(const c of cl){const r=await sendWA(c.phone,fillVars(msg,{nome:c.name}));r.ok?ok++:fail++;await sleep(1500)};log('📢',`Promoção: ${ok} ok, ${fail} fail`)})()
-    return
-  }
-
-  // Aniversário manual
-  if(req.method==='POST'&&upath==='/aniversario'){_anivLast.clear();checarAniv();send(res,200,{ok:true});return}
-
-  // Arquivos estáticos
-  if(req.method==='GET'){
-    const fname = upath==='/'?'index.html':upath.slice(1)
-    const fpath = path.join(__dirname,fname)
-    if(fs.existsSync(fpath)&&!fname.includes('..')){
-      const ext=path.extname(fpath)
-      res.setHeader('Content-Type',MIME[ext]||'text/plain')
-      res.writeHead(200);fs.createReadStream(fpath).pipe(res);return
+function abrirModalCliente(id) {
+  document.getElementById('m-cli-titulo').textContent = id ? '✏️ Editar Cliente' : '➕ Novo Cliente';
+  document.getElementById('cli-id').value         = id||'';
+  document.getElementById('cli-nome').value       = '';
+  document.getElementById('cli-slug').value       = '';
+  document.getElementById('cli-email').value      = '';
+  document.getElementById('cli-senha').value      = '';
+  document.getElementById('cli-gestor-nome').value= '';
+  document.getElementById('cli-plano').value      = 'basico';
+  document.getElementById('cli-expira').value     = '';
+  document.getElementById('cli-ativo').value      = 'true';
+  // Seção gestor: só exibe na criação
+  document.getElementById('cli-gestor-section').style.display = id ? 'none' : '';
+  if (id) {
+    const c = _clientes.find(x=>x.id===id);
+    if (c) {
+      document.getElementById('cli-nome').value  = c.nome;
+      document.getElementById('cli-slug').value  = c.slug;
+      document.getElementById('cli-plano').value = c.plano;
+      document.getElementById('cli-expira').value= c.expires_at ? c.expires_at.slice(0,10) : '';
+      document.getElementById('cli-ativo').value = String(c.ativo);
     }
   }
+  abrirModal('m-cliente');
+}
+function editarCliente(id) { abrirModalCliente(id); }
 
-  send(res,404,{ok:false,error:`Rota não encontrada: ${req.method} ${upath}`})
-})
+async function salvarCliente() {
+  const id          = document.getElementById('cli-id').value;
+  const nome        = document.getElementById('cli-nome').value.trim();
+  const slug        = document.getElementById('cli-slug').value.trim();
+  const plano       = document.getElementById('cli-plano').value;
+  const expira      = document.getElementById('cli-expira').value || null;
+  const ativo       = document.getElementById('cli-ativo').value === 'true';
+  const gestorNome  = document.getElementById('cli-gestor-nome').value.trim();
+  const email       = document.getElementById('cli-email').value.trim().toLowerCase();
+  const senha       = document.getElementById('cli-senha').value;
 
-server.listen(PORT,()=>{
-  log('🚀',`Servidor rodando na porta ${PORT}`)
-  log('🏢',`Multi-tenant ativo — SQLite: ${DB_PATH}`)
-})
+  if (!nome||!slug) { toast('err','Preencha nome e slug do restaurante'); return; }
+  if (!id && (!gestorNome||!email||!senha)) { toast('err','Preencha todos os dados do gestor'); return; }
 
-setInterval(checarAniv,60000)
-setInterval(checarPedidos,15000)
-setTimeout(checarAniv,5000)
-setTimeout(checarPedidos,8000)
+  let error;
+  if (id) {
+    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo }).eq('id',id));
+    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo}; }
+  } else {
+    try {
+      const res = await fetch('/api/criar-tenant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome, slug, email, senha, nomeGestor: gestorNome, plano, role: 'gestor' })
+      });
+      const data = await res.json();
+      if (!res.ok) { error = { message: data.error || 'Erro ao criar restaurante' }; }
+      else { await loadAll(); }
+    } catch(e) { error = { message: e.message }; }
+  }
+  if (error) { toast('err','Erro: '+(error.message||'Verifique os dados')); return; }
+  fecharModal('m-cliente'); renderClientes(); renderDash();
+  document.getElementById('st-total').textContent   = _clientes.length;
+  document.getElementById('st-ativos').textContent  = _clientes.filter(c=>c.ativo).length;
+  document.getElementById('st-inativos').textContent= _clientes.filter(c=>!c.ativo).length;
+  toast('ok', id ? 'Cliente atualizado!' : `Restaurante criado! Login: ${email}`);
+}
 
-process.on('SIGTERM',()=>{db.close();server.close();process.exit(0)})
-process.on('SIGINT', ()=>{db.close();server.close();process.exit(0)})
+async function toggleCliente(id, ativo) {
+  await sb.from('tenants').update({ ativo:!ativo }).eq('id',id);
+  const c=_clientes.find(x=>x.id===id); if(c) c.ativo=!ativo;
+  renderClientes(); renderDash();
+  document.getElementById('st-ativos').textContent = _clientes.filter(c=>c.ativo).length;
+  document.getElementById('st-inativos').textContent=_clientes.filter(c=>!c.ativo).length;
+  toast('ok', !ativo?'Cliente ativado!':'Cliente pausado');
+}
+
+async function deletarCliente(id, nome) {
+  if (!confirm(`Excluir "${nome}"? Todos os dados e usuários serão removidos.`)) return;
+  await sb.from('tenants').delete().eq('id',id);
+  _clientes = _clientes.filter(c=>c.id!==id);
+  _usuarios = _usuarios.filter(u=>u.tenant_id!==id);
+  renderClientes(); renderDash();
+  document.getElementById('st-total').textContent  = _clientes.length;
+  document.getElementById('st-ativos').textContent = _clientes.filter(c=>c.ativo).length;
+  document.getElementById('st-inativos').textContent=_clientes.filter(c=>!c.ativo).length;
+  document.getElementById('st-users').textContent  = _usuarios.length;
+  toast('ok','Cliente removido');
+}
+
+// ── USUÁRIOS POR CLIENTE ─────────────────
+let _tenantAtivo = null;
+
+function abrirUsuariosCliente(tenantId) {
+  _tenantAtivo = tenantId;
+  const c = _clientes.find(x=>x.id===tenantId);
+  document.getElementById('m-ucli-titulo').textContent = `👥 Usuários — ${c?.nome||''}`;
+  fecharFormUsuario();
+  renderUsuariosCliente();
+  abrirModal('m-usuarios-cli');
+}
+
+function renderUsuariosCliente() {
+  const users = _usuarios.filter(u=>u.tenant_id===_tenantAtivo);
+  const rb = { superadmin:'bg-purple', admin:'bg-orange', gestor:'bg-blue' };
+  const el = document.getElementById('ucli-lista');
+  if (!users.length) {
+    el.innerHTML='<p style="color:var(--muted);font-size:13px;padding:4px 0">Nenhum usuário ainda.</p>';
+    return;
+  }
+  el.innerHTML = users.map(u=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">${u.nome.charAt(0)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px">${u.nome}</div>
+        <div style="font-size:11px;color:var(--muted)">${u.email}</div>
+      </div>
+      <span class="badge ${rb[u.role]||'bg-gray'}">${u.role}</span>
+      <span class="badge ${u.ativo?'bg-green':'bg-red'}">${u.ativo?'●':'⏸'}</span>
+      <div style="display:flex;gap:4px">
+        <button class="btn bg2 bsm" onclick="editarUsuarioCliente('${u.id}')">✏️</button>
+        <button class="btn bg2 bsm" onclick="toggleUsuario('${u.id}',${u.ativo})">${u.ativo?'⏸':'▶'}</button>
+        <button class="btn bd bsm" onclick="deletarUsuario('${u.id}','${u.nome.replace(/'/g,"\\'")}')">🗑</button>
+      </div>
+    </div>`).join('');
+}
+
+function abrirFormUsuario() {
+  document.getElementById('usr-id').value    = '';
+  document.getElementById('usr-nome').value  = '';
+  document.getElementById('usr-email').value = '';
+  document.getElementById('usr-senha').value = '';
+  document.getElementById('usr-role').value  = 'gestor';
+  document.getElementById('usr-tenant-fixed').value = _tenantAtivo;
+  document.getElementById('ucli-form').style.display = 'block';
+}
+
+function editarUsuarioCliente(id) {
+  const u = _usuarios.find(x=>x.id===id);
+  if (!u) return;
+  document.getElementById('usr-id').value    = u.id;
+  document.getElementById('usr-nome').value  = u.nome;
+  document.getElementById('usr-email').value = u.email;
+  document.getElementById('usr-senha').value = '';
+  document.getElementById('usr-role').value  = u.role;
+  document.getElementById('usr-tenant-fixed').value = _tenantAtivo;
+  document.getElementById('ucli-form').style.display = 'block';
+}
+
+function fecharFormUsuario() {
+  document.getElementById('ucli-form').style.display = 'none';
+}
+
+async function salvarUsuario() {
+  const id     = document.getElementById('usr-id').value;
+  const nome   = document.getElementById('usr-nome').value.trim();
+  const email  = document.getElementById('usr-email').value.trim().toLowerCase();
+  const senha  = document.getElementById('usr-senha').value;
+  const tenant = document.getElementById('usr-tenant-fixed').value || _tenantAtivo;
+  const role   = document.getElementById('usr-role').value;
+  if (!nome||!email) { toast('err','Preencha nome e email'); return; }
+  if (!id&&!senha)   { toast('err','Defina uma senha para o novo usuário'); return; }
+  const payload = { nome, email, tenant_id:tenant, role, ativo:true };
+  if (senha) payload.senha_hash = await sha256(senha);
+  let error;
+  if (id) {
+    ({ error } = await sb.from('sys_users').update(payload).eq('id',id));
+    if (!error) { const i=_usuarios.findIndex(u=>u.id===id); if(i>=0) _usuarios[i]={..._usuarios[i],...payload}; }
+  } else {
+    const { data, error:e2 } = await sb.from('sys_users').insert(payload).select('*,tenants(nome)').single();
+    error = e2;
+    if (!error&&data) _usuarios.unshift(data);
+  }
+  if (error) { toast('err','Erro: '+(error.message||'Verifique os dados')); return; }
+  fecharFormUsuario();
+  renderUsuariosCliente();
+  renderClientes();
+  document.getElementById('st-users').textContent = _usuarios.length;
+  toast('ok', id ? 'Usuário atualizado!' : 'Usuário criado!');
+}
+
+async function toggleUsuario(id, ativo) {
+  await sb.from('sys_users').update({ ativo:!ativo }).eq('id',id);
+  const u=_usuarios.find(x=>x.id===id); if(u) u.ativo=!ativo;
+  renderUsuariosCliente(); renderClientes();
+  toast('ok', !ativo?'Usuário ativado!':'Usuário pausado');
+}
+
+async function deletarUsuario(id, nome) {
+  if (!confirm(`Remover usuário "${nome}"?`)) return;
+  await sb.from('sys_users').delete().eq('id',id);
+  _usuarios = _usuarios.filter(u=>u.id!==id);
+  renderUsuariosCliente(); renderClientes();
+  document.getElementById('st-users').textContent = _usuarios.length;
+  toast('ok','Usuário removido');
+}
+
+// ── HELPERS ──────────────────────────────
+function abrirModal(id)  { document.getElementById(id).classList.add('on'); }
+function fecharModal(id) { document.getElementById(id).classList.remove('on'); }
+
+function toast(type, msg) {
+  const c = document.getElementById('toast');
+  const d = document.createElement('div');
+  d.className = 'ti ti-'+(type==='ok'?'ok':'err');
+  d.innerHTML = (type==='ok'?'✅':'❌') + ' ' + msg;
+  c.appendChild(d);
+  setTimeout(()=>d.remove(), 3500);
+}
+</script>
+</body>
+</html>
