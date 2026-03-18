@@ -1717,11 +1717,19 @@ async function submitCadastro() {
 let _tenantId = null;
 
 async function resolveTenant() {
-  // Aceita: ?slug=meu-restaurante  ou  ?tenant=ID
-  const p   = new URLSearchParams(window.location.search);
+  // Aceita: ?slug=meu-restaurante  ou  ?tenant=UUID
+  const p    = new URLSearchParams(window.location.search);
   const slug = p.get('slug') || p.get('t');
   const tid  = p.get('tenant');
-  if (tid) { _tenantId = tid; return true; }
+
+  if (tid) {
+    // Busca branding pelo id
+    const res  = await fetch(`/api/tenant-info?id=${tid}`);
+    const data = await res.json();
+    if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
+    return false;
+  }
+
   if (!slug) {
     // Tenta pegar da URL: /cardapio/meu-restaurante
     const match = window.location.pathname.match(/\/([a-z0-9-]+)\/?$/);
@@ -1732,6 +1740,7 @@ async function resolveTenant() {
     }
     return false;
   }
+
   const res  = await fetch(`/api/tenant-info?slug=${slug}`);
   const data = await res.json();
   if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
