@@ -137,8 +137,14 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     name TEXT NOT NULL, description TEXT, price REAL NOT NULL,
-    category_id INTEGER REFERENCES categories(id),
-    image_url TEXT, status TEXT DEFAULT 'ativo',
+    price_old REAL, category_id INTEGER REFERENCES categories(id),
+    cat TEXT, cat_key TEXT,
+    emoji TEXT, image_url TEXT,
+    promo INTEGER DEFAULT 0, status TEXT DEFAULT 'ativo',
+    item_type TEXT DEFAULT 'normal',
+    allow_half INTEGER DEFAULT 0, max_flavors INTEGER DEFAULT 1,
+    days TEXT DEFAULT '[1,1,1,1,1,1,1]',
+    ingredients TEXT DEFAULT '[]',
     created_at TEXT DEFAULT (datetime('now'))
   );
   CREATE TABLE IF NOT EXISTS cupons (
@@ -236,6 +242,22 @@ const MIGRATIONS = [
       `ALTER TABLE categories ADD COLUMN promo INTEGER DEFAULT 0`,
       // Preenche label com name para categorias já existentes
       `UPDATE categories SET label = name WHERE label IS NULL`
+    ]
+  },
+  {
+    version: 4,
+    description: 'Adiciona colunas faltantes em menu_items',
+    up: [
+      `ALTER TABLE menu_items ADD COLUMN price_old REAL`,
+      `ALTER TABLE menu_items ADD COLUMN cat TEXT`,
+      `ALTER TABLE menu_items ADD COLUMN cat_key TEXT`,
+      `ALTER TABLE menu_items ADD COLUMN emoji TEXT`,
+      `ALTER TABLE menu_items ADD COLUMN promo INTEGER DEFAULT 0`,
+      `ALTER TABLE menu_items ADD COLUMN item_type TEXT DEFAULT 'normal'`,
+      `ALTER TABLE menu_items ADD COLUMN allow_half INTEGER DEFAULT 0`,
+      `ALTER TABLE menu_items ADD COLUMN max_flavors INTEGER DEFAULT 1`,
+      `ALTER TABLE menu_items ADD COLUMN days TEXT DEFAULT '[1,1,1,1,1,1,1]'`,
+      `ALTER TABLE menu_items ADD COLUMN ingredients TEXT DEFAULT '[]'`
     ]
   },
 ]
@@ -357,7 +379,7 @@ const TABLE_COLS = {
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
   store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
-  menu_items:   ['id','tenant_id','name','description','price','category_id','image_url','status','created_at'],
+  menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
@@ -374,6 +396,7 @@ const NO_TENANT_FILTER = ['tenants','sys_users']
 // Tabelas onde o tenant_id é identificado pela coluna 'tenant_id' e não 'id'
 const JSON_FIELDS = {
   orders:       ['items'],
+  menu_items:   ['days','ingredients'],
   store_config: ['delivery_fee_config','fid_config','evo_automacoes','sidebar_state']
 }
 
