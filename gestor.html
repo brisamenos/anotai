@@ -827,6 +827,37 @@ td:first-child{padding-left:16px}
   </div>
 </div>
 
+<!-- MODAL REGISTRAR PAGAMENTO MESA -->
+<div class="modal-bg" id="modal-pag-mesa">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-head">
+      <div class="modal-title" id="modal-pag-mesa-title">💰 Registrar Pagamento — Mesa ?</div>
+      <button class="modal-close" onclick="closeModal('modal-pag-mesa')">✕</button>
+    </div>
+    <div style="padding:16px 20px 20px;display:flex;flex-direction:column;gap:12px">
+      <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:11.5px;color:var(--muted);margin-bottom:4px">Total a receber</div>
+        <div style="font-family:'Syne',sans-serif;font-size:30px;font-weight:900;color:var(--accent3)" id="modal-pag-total">R$ 0,00</div>
+      </div>
+      <div>
+        <label class="form-label">Forma de pagamento</label>
+        <div class="sw" style="width:100%">
+          <select class="form-input" id="modal-pag-forma">
+            <option value="PIX">📱 PIX</option>
+            <option value="Cartão">💳 Cartão</option>
+            <option value="Dinheiro">💵 Dinheiro</option>
+          </select>
+        </div>
+      </div>
+      <input type="hidden" id="modal-pag-mesa-num">
+      <button class="btn bp" style="justify-content:center;padding:13px;font-size:14px;font-weight:700" onclick="confirmarPagamentoMesa()">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Confirmar pagamento e liberar mesa
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL NOVA MESA -->
 <div class="modal-bg" id="modal-nova-mesa">
   <div class="modal" style="max-width:360px">
@@ -3158,15 +3189,23 @@ function renderMesasPage(){
     return;
   }
   g.innerHTML=tables.map(t=>{
-    const sc=t.status==='free'?'qr-free':t.status==='busy'?'qr-busy':'qr-waiting';
-    const sl=t.status==='free'?'Livre':'Ocupada';
-    const bg=t.status==='free'?'rgba(34,197,94,.08)':t.status==='busy'?'rgba(239,68,68,.08)':'rgba(245,158,11,.08)';
-    return`<div class="garcom-mesa" style="background:${bg};position:relative">
+    const isFree    = t.status==='free';
+    const isWaiting = t.status==='waiting';
+    const isBusy    = t.status==='busy';
+    const sc  = isFree?'qr-free':isWaiting?'qr-waiting':'qr-busy';
+    const sl  = isFree?'Livre':isWaiting?'Aguardando pagamento':'Ocupada';
+    const bg  = isFree?'rgba(34,197,94,.08)':isWaiting?'rgba(245,158,11,.1)':'rgba(239,68,68,.08)';
+    const border = isWaiting?'border:1.5px solid rgba(245,158,11,.3)':'';
+    const payBtn = isWaiting
+      ? `<button onclick="event.stopPropagation();openRegistrarPagamento(${t.num})" style="width:100%;margin-top:9px;padding:7px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-family:'DM Sans',sans-serif;font-size:11.5px;font-weight:700;cursor:pointer">💰 Registrar pagamento</button>`
+      : '';
+    return`<div class="garcom-mesa" style="background:${bg};${border};position:relative">
       <button onclick="event.stopPropagation();openEditMesa(${t.num})" style="position:absolute;top:7px;right:7px;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px" title="Editar mesa">✎</button>
-      <div class="gm-num" onclick="openGarcomMesa(${t.num})" style="cursor:pointer">Mesa ${t.num}</div>
-      <div class="gm-guests" onclick="openGarcomMesa(${t.num})" style="cursor:pointer">${t.guests?t.guests+' pessoas':''}</div>
-      <div class="gm-status ${sc}" onclick="openGarcomMesa(${t.num})" style="cursor:pointer">${sl}</div>
-      ${t.total&&t.status==='busy'?`<div style="font-size:12px;font-weight:700;color:var(--success);margin-top:5px">${t.total}</div>`:''}
+      <div class="gm-num" onclick="${!isWaiting?`openGarcomMesa(${t.num})`:''}" style="${!isWaiting?'cursor:pointer':''}">Mesa ${t.num}</div>
+      <div class="gm-guests">${t.guests?t.guests+' pessoas':''}</div>
+      <div class="gm-status ${sc}">${sl}</div>
+      ${(t.total&&!isFree)?`<div style="font-size:13px;font-weight:700;color:var(--accent3);margin-top:5px">${t.total}</div>`:''}
+      ${payBtn}
     </div>`;
   }).join('');
 }
@@ -3914,6 +3953,67 @@ async function saveTaxaConfig() {
     sbToast('ok', 'Taxa de entrega salva!');
   } catch(e) {
     sbToast('err', 'Erro ao salvar taxa');
+  }
+}
+
+function openRegistrarPagamento(num) {
+  const t = tables.find(x => x.num === num);
+  if (!t) return;
+  document.getElementById('modal-pag-mesa-title').textContent = `💰 Registrar Pagamento — Mesa ${num}`;
+  document.getElementById('modal-pag-total').textContent = t.total || 'R$ 0,00';
+  document.getElementById('modal-pag-mesa-num').value = num;
+  // Pre-select forma if garçom sent one
+  if (t.pag_forma) {
+    const sel = document.getElementById('modal-pag-forma');
+    for (let i=0;i<sel.options.length;i++) {
+      if (sel.options[i].value === t.pag_forma) { sel.selectedIndex=i; break; }
+    }
+  }
+  openModal('modal-pag-mesa');
+}
+
+async function confirmarPagamentoMesa() {
+  const num   = parseInt(document.getElementById('modal-pag-mesa-num').value);
+  const forma = document.getElementById('modal-pag-forma').value;
+  const t     = tables.find(x=>x.num===num);
+  if (!t) return;
+  const totalStr = t.total || 'R$ 0,00';
+  const totalVal = parseFloat(totalStr.replace('R$ ','').replace(',','.')) || 0;
+  const time     = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+
+  sbLoading(true);
+  try {
+    // 1. Liberar mesa
+    await sb.from('mesas').update({
+      status: 'free', total: null, pag_forma: null,
+      guests: null, updated_at: new Date().toISOString()
+    }).eq('num', num);
+
+    // 2. Registrar entrada no caixa
+    await sb.from('movimentos').insert({
+      description: `Mesa ${num} — Pagamento`,
+      tipo: 'entrada', val: totalVal, pag: forma, time,
+      created_at: new Date().toISOString()
+    });
+
+    // 3. Marcar pedidos da mesa como finalizados
+    await sb.from('orders')
+      .update({ status: 'entregue' })
+      .eq('addr', `Mesa ${num}`)
+      .in('status', ['producao','pronto','analise']);
+
+    // Update local state
+    t.status = 'free'; t.total = null; t.guests = null;
+    tables.sort((a,b)=>a.num-b.num);
+    closeModal('modal-pag-mesa');
+    renderMesasPage();
+    renderQR();
+    sbToast('ok', `Mesa ${num} liberada — R$ ${totalVal.toFixed(2).replace('.',',')} registrado no caixa!`);
+  } catch(e) {
+    sbToast('err', 'Erro ao registrar pagamento');
+    console.error(e);
+  } finally {
+    sbLoading(false);
   }
 }
 
