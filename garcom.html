@@ -893,7 +893,7 @@ async function openPedido(num) {
     ? { status: 'busy', opened_at: now, updated_at: now }
     : { status: 'busy', updated_at: now };
   await sb.from('mesas').update(updatePayload).eq('num', num);
-  if (mesa) { mesa.status = 'busy'; mesa.updated_at = now; if (mesa.status === 'free') mesa.opened_at = now; }
+  if (mesa) { const wasFree = mesa.status === 'free'; mesa.status = 'busy'; mesa.updated_at = now; if (wasFree) mesa.opened_at = now; }
   renderMesas();
   document.getElementById('sheet-pedido').classList.add('on');
 }
@@ -1061,10 +1061,11 @@ async function submitPedido() {
   const orderStatus = foodItems.length > 0 ? 'producao' : 'pronto';
 
   try {
-    // Garante que a mesa está busy (sem sobreescrever updated_at se já estava aberta)
     const mesaAtual = tables.find(t => t.num === activeMesa);
     if (mesaAtual && mesaAtual.status !== 'busy') {
-      await sb.from('mesas').update({ status:'busy', updated_at:new Date().toISOString() }).eq('num', activeMesa);
+      const _now = new Date().toISOString();
+      await sb.from('mesas').update({ status:'busy', opened_at: _now, updated_at: _now }).eq('num', activeMesa);
+      if (mesaAtual) { mesaAtual.status = 'busy'; mesaAtual.opened_at = _now; mesaAtual.updated_at = _now; }
     }
 
     const { data, error } = await sb.from('orders').insert({
