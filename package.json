@@ -1,0 +1,15 @@
+{
+  "name": "estima-food-whatsapp-server",
+  "version": "1.0.0",
+  "description": "Servidor de automações WhatsApp 24/7 — Estima Food",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

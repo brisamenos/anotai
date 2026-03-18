@@ -1515,7 +1515,7 @@ Válido hoje apenas para você! 💛</textarea>
             <div style="font-size:12px;color:var(--muted)">⏰ Horário de envio automático:</div>
             <input class="form-input" style="width:90px;font-size:12px;padding:4px 8px" value="09:00" id="auto-aniv-hora" onchange="_iniciarSchedulerAniversario()">
             <div id="aniv-scheduler-status" style="font-size:11px;color:var(--success);background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:6px;padding:2px 8px">⚡ Automático ativo</div>
-            <button class="btn bg" style="font-size:11.5px;padding:4px 12px" onclick="evoEnviarAniversariantesHoje(false)">🎂 Enviar agora</button>
+            <button class="btn bg" style="font-size:11.5px;padding:4px 12px" onclick="evoEnviarAniversariantesManual()">🎂 Enviar agora</button>
           </div>
           <div style="margin-top:8px;font-size:11.5px;color:var(--muted);background:var(--surface2);border-radius:6px;padding:7px 10px">
             💡 O sistema verifica automaticamente todos os dias no horário configurado e envia as felicitações sem precisar de interação.
@@ -2707,6 +2707,8 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
 // ═══════════════════════════════════════════════════════
 const SUPA_URL  = 'https://lhrzwccbvdintqgebisq.supabase.co';
 const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxocnp3Y2NidmRpbnRxZ2ViaXNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1ODY0NzEsImV4cCI6MjA4OTE2MjQ3MX0.gbljgt0rzOf9eBoTcXxxfl0e_0Y-6XYxve-HGY7meJo';
+// URL do servidor de automações (ajuste para a URL do seu Easypanel)
+const WA_SERVER = 'http://localhost:3001';
 const { createClient } = window.supabase;
 const sb = createClient(SUPA_URL, SUPA_ANON, {
   auth: {
@@ -6973,7 +6975,18 @@ async function evoEnviarMensagem(phone, tipo, vars={}) {
   return r.ok;
 }
 
-async function evoEnviarAniversariantesHoje(silencioso = false) {
+async function evoEnviarAniversariantesManual() {
+  try {
+    const r = await fetch(`${WA_SERVER}/aniversario`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    const d = await r.json().catch(() => ({}))
+    sbToast(r.ok ? 'ok' : 'err', r.ok ? '🎂 Verificação de aniversários iniciada no servidor!' : 'Erro: servidor offline?')
+  } catch(e) {
+    // Fallback: roda no browser se servidor offline
+    evoEnviarAniversariantesHoje(false)
+  }
+}
+
+
   const toggle = document.getElementById('auto-toggle-aniversario');
   if (toggle && !toggle.classList.contains('on')) {
     if (!silencioso) sbToast('err', 'Automação de aniversário está desativada');
@@ -7118,25 +7131,40 @@ async function evoEnviarRetornoManual() {
   sbToast(sent?'ok':'err', sent?`Mensagem enviada para ${c.name}!`:'Erro ao enviar');
 }
 
-// ── Promoção em massa ──────────────────
+// ── Promoção em massa via Edge Function ──────────────
 async function evoEnviarPromocao() {
   const destino = document.getElementById('promo-destino')?.value || 'todos';
-  const res = document.getElementById('promo-resultado');
-  let clientes = fidClients.filter(c => c.phone);
-  if (destino === 'com_pedido') clientes = clientes.filter(c => c.orders > 0);
-  if (!clientes.length) { sbToast('err','Nenhum cliente com telefone encontrado'); return; }
-  if (!confirm(`Enviar promoção para ${clientes.length} cliente(s)?`)) return;
-  if (res) res.innerHTML = `<span style="color:var(--muted)">⏳ Enviando para ${clientes.length} clientes...</span>`;
+  const msg     = document.getElementById('auto-msg-promocao')?.value;
+  const res     = document.getElementById('promo-resultado');
+  if (!msg) { sbToast('err','Escreva a mensagem antes de enviar'); return; }
+  // Conta clientes para confirmação
+  const total = fidClients.filter(c => c.phone && (destino === 'todos' || (destino === 'com_pedido' && c.orders > 0))).length;
+  if (!total) { sbToast('err','Nenhum cliente com telefone encontrado'); return; }
+  if (!confirm(`Enviar promoção para ${total} cliente(s)? Este processo roda no servidor e pode demorar alguns minutos.`)) return;
+  if (res) { res.style.display='block'; res.innerHTML='<span style="color:var(--muted)">⏳ Iniciando envio no servidor...</span>'; }
   sbLoading(true);
-  let ok=0, fail=0;
-  for (const c of clientes) {
-    const sent = await evoEnviarMensagem(c.phone, 'promocao', { nome: c.name });
-    sent ? ok++ : fail++;
-    await new Promise(r => setTimeout(r, 1500)); // delay para não ser bloqueado
+  try {
+    // Chama a Edge Function — roda no servidor Supabase, não no browser
+    const r = await fetch(`${WA_SERVER}/promocao`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ destino, msg })
+    });
+    const data = await r.json().catch(() => ({}));
+    sbLoading(false);
+    if (r.ok && data.ok) {
+      if (res) res.innerHTML = `<span style="color:var(--success)">✅ ${data.enviados} enviados${data.falhou ? ` | ❌ ${data.falhou} falhou` : ''}</span>`;
+      sbToast('ok', `Promoção enviada para ${data.enviados} clientes!`);
+    } else {
+      const err = data.error || `HTTP ${r.status}`;
+      if (res) res.innerHTML = `<span style="color:var(--danger)">❌ Erro: ${err}</span>`;
+      sbToast('err', 'Erro: ' + err);
+    }
+  } catch(e) {
+    sbLoading(false);
+    if (res) res.innerHTML = `<span style="color:var(--danger)">❌ ${e.message}</span>`;
+    sbToast('err', 'Erro de conexão');
   }
-  sbLoading(false);
-  if (res) res.innerHTML = `<span style="color:var(--success)">✅ Enviado para ${ok} clientes${fail?` | ❌ ${fail} falhou`:''}</span>`;
-  sbToast('ok', `Promoção enviada para ${ok} clientes!`);
 }
 
 
