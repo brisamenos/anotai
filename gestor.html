@@ -1992,6 +1992,58 @@ function unsubscribeAll() {
   _rtChannels = [];
 }
 
+// Cache local dos pedidos de mesa (separado do ordersKanban principal)
+let mesaOrdersCache = [];
+
+function _updateMesaOrdersCache(newOrder) {
+  const idx = mesaOrdersCache.findIndex(o => o.id === newOrder.id);
+  if (idx !== -1) {
+    if (['entregue', 'cancelado'].includes(newOrder.status)) {
+      mesaOrdersCache.splice(idx, 1);
+    } else {
+      mesaOrdersCache[idx] = newOrder;
+    }
+  } else if (!['entregue', 'cancelado'].includes(newOrder.status) && newOrder.mesa_num) {
+    mesaOrdersCache.unshift(newOrder);
+  }
+}
+
+function _renderMesaPageFromCache() {
+  const pg = document.getElementById('page-pedidos-mesa');
+  if (!pg || !pg.classList.contains('on')) return;
+
+  const grid = document.getElementById('pm-mesas-grid');
+  if (!grid) return;
+
+  const activeTables = tables.filter(t => t.status !== 'free');
+
+  // Stats
+  const elv = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  elv('pm-stat-livres',    tables.filter(t => t.status === 'free').length);
+  elv('pm-stat-ocupadas',  tables.filter(t => t.status === 'busy').length);
+  elv('pm-stat-aguardando',tables.filter(t => t.status === 'waiting').length);
+
+  if (!activeTables.length) {
+    grid.innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted);font-size:13px"><div style="font-size:40px;margin-bottom:12px">🍽️</div>Nenhuma mesa ocupada no momento</div>';
+    return;
+  }
+
+  // Filtra por sessão usando cache local
+  const sessionOrders = mesaOrdersCache.filter(o => {
+    const mesa = activeTables.find(t => t.num === parseInt(o.mesa_num));
+    if (!mesa || !mesa.updated_at) return true;
+    return new Date(o.created_at || 0).getTime() >= new Date(mesa.updated_at).getTime() - 5000;
+  });
+
+  // Popula o cache local com os dados frescos do banco
+  mesaOrdersCache = allOrders;
+
+  grid.innerHTML = activeTables
+    .sort((a, b) => a.num - b.num)
+    .map(t => renderMesaCard(t, sessionOrders.filter(o => parseInt(o.mesa_num) === t.num)))
+    .join('');
+}
+
 function subscribeOrders() {
   unsubscribeAll();
 
@@ -2000,13 +2052,17 @@ function subscribeOrders() {
       if (!ordersKanban.find(x => x.id === p.new.id)) {
         ordersKanban.unshift(mapOrder(p.new));
         renderKanban();
-        _refreshMesaPageIfActive();
         playOrderSound();
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
         showToast('🛎️', `Novo pedido #${p.new.id} — ${p.new.client}`);
         sendBrowserNotif(`🛎️ Novo pedido #${p.new.id}`, `${p.new.client} — ${items}`);
+      }
+      // Atualiza cache de mesa e rerenderiza SEM nova query ao banco
+      if (p.new.mesa_num) {
+        _updateMesaOrdersCache(p.new);
+        _renderMesaPageFromCache();
       }
     })
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, p => {
@@ -2019,12 +2075,17 @@ function subscribeOrders() {
         }
         renderKanban();
       }
-      _refreshMesaPageIfActive();
+      // Atualiza cache de mesa e rerenderiza SEM nova query ao banco
+      if (p.new.mesa_num) {
+        _updateMesaOrdersCache(p.new);
+        _renderMesaPageFromCache();
+      }
     })
     .on('postgres_changes', {event:'DELETE', schema:'public', table:'orders'}, p => {
       ordersKanban = ordersKanban.filter(o => o.id !== p.old.id);
+      mesaOrdersCache = mesaOrdersCache.filter(o => o.id !== p.old.id);
       renderKanban();
-      _refreshMesaPageIfActive();
+      _renderMesaPageFromCache();
     })
     .subscribe(status => {
       setRtStatus(status === 'SUBSCRIBED');
@@ -2036,7 +2097,7 @@ function subscribeOrders() {
   const chMesas = sb.channel('mesas-rt')
     .on('postgres_changes', {event:'*', schema:'public', table:'mesas'}, () => {
       sb.from('mesas').select('*').order('num').then(({ data }) => {
-        if (data) { tables = data; _refreshMesaPageIfActive(); renderQR(); }
+        if (data) { tables = data; _renderMesaPageFromCache(); renderQR(); }
       });
     }).subscribe();
 
@@ -3312,6 +3373,9 @@ async function renderMesasPage() {
     return new Date(o.created_at || 0).getTime() >= new Date(mesa.updated_at).getTime() - 5000;
   });
 
+  // Popula o cache local com os dados frescos do banco
+  mesaOrdersCache = allOrders;
+
   grid.innerHTML = activeTables
     .sort((a, b) => a.num - b.num)
     .map(t => renderMesaCard(t, sessionOrders.filter(o => parseInt(o.mesa_num) === t.num)))
@@ -3393,17 +3457,21 @@ async function mesaAdvanceOrder(id) {
   if (!error) {
     const o = ordersKanban.find(x => x.id === id);
     if (o) o.status = 'producao';
-    renderMesasPage();
+    // Atualiza cache local imediatamente
+    const co = mesaOrdersCache.find(x => x.id === id);
+    if (co) co.status = 'producao';
+    _renderMesaPageFromCache();
   } else sbToast('err', 'Erro ao atualizar pedido');
 }
 
 async function mesaServOrder(id) {
-  // Marca como entregue — some da mesa, não acumula
   const { error } = await sb.from('orders').update({ status: 'entregue' }).eq('id', id);
   if (!error) {
     ordersKanban = ordersKanban.filter(x => x.id !== id);
+    // Remove do cache local imediatamente
+    mesaOrdersCache = mesaOrdersCache.filter(x => x.id !== id);
     renderKanban();
-    renderMesasPage();
+    _renderMesaPageFromCache();
     sbToast('ok', 'Pedido entregue ✓');
   } else sbToast('err', 'Erro ao atualizar pedido');
 }
@@ -3413,7 +3481,8 @@ async function mesaCancelOrder(id) {
   const { error } = await sb.from('orders').update({ status: 'cancelado' }).eq('id', id);
   if (!error) {
     ordersKanban = ordersKanban.filter(x => x.id !== id);
-    renderMesasPage();
+    mesaOrdersCache = mesaOrdersCache.filter(x => x.id !== id);
+    _renderMesaPageFromCache();
     sbToast('ok', 'Pedido cancelado');
   } else sbToast('err', 'Erro ao cancelar');
 }
@@ -4195,11 +4264,12 @@ async function fecharMesa(num) {
       status: 'waiting', updated_at: new Date().toISOString()
     }).eq('num', num);
 
-    // Atualiza estado local
+    // Atualiza estado local e cache
     t.status = 'waiting';
     ordersKanban = ordersKanban.filter(o => o.mesa_num !== num);
+    mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== num);
     renderKanban();
-    renderMesasPage();
+    _renderMesaPageFromCache();
     sbToast('ok', `Mesa ${num} aguardando pagamento`);
   } catch(e) {
     sbToast('err', 'Erro ao fechar mesa');
@@ -4264,13 +4334,13 @@ async function confirmarPagamentoMesa() {
       created_at: new Date().toISOString()
     });
 
-    // Atualizar estado local
+    // Atualizar estado local e cache
     t.status = 'free'; t.total = null; t.guests = null;
-    // Remover pedidos da mesa do kanban local
     ordersKanban = ordersKanban.filter(o => o.addr !== `Mesa ${num}` && o.mesa_num !== num);
+    mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== num);
     tables.sort((a,b)=>a.num-b.num);
     closeModal('modal-pag-mesa');
-    renderMesasPage();
+    _renderMesaPageFromCache();
     renderKanban();
     renderQR();
     sbToast('ok', `Mesa ${num} liberada — R$ ${totalVal.toFixed(2).replace('.',',')} registrado no caixa!`);
