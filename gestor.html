@@ -39,14 +39,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);hei
 .app{display:flex;flex:1;overflow:hidden}
 
 /* SIDEBAR */
-.sidebar{width:var(--sw);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:10px 8px;gap:1px;overflow-y:auto;flex-shrink:0}
+.sidebar{width:var(--sw);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:10px 8px;gap:1px;overflow-y:auto;overflow-x:hidden;flex-shrink:0;-webkit-overflow-scrolling:touch}
 .sidebar::-webkit-scrollbar{width:3px}
 .sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:99px}
 .shead{font-size:9.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);padding:8px 8px 3px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-radius:6px;transition:background .15s;user-select:none}
 .shead:hover{background:var(--surface2)}
 .shead-arrow{font-size:10px;transition:transform .2s;opacity:.5}
 .shead.collapsed .shead-arrow{transform:rotate(-90deg)}
-.sidebar-group{overflow:hidden;transition:max-height .25s ease,opacity .25s ease;max-height:400px;opacity:1}
+.sidebar-group{overflow:hidden;transition:max-height .3s ease,opacity .25s ease;max-height:1000px;opacity:1}
 .sidebar-group.collapsed{max-height:0!important;opacity:0}
 .si{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:7px;font-size:12.5px;font-weight:400;color:var(--muted);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .15s;position:relative;font-family:'DM Sans',sans-serif}
 .si svg{width:14px;height:14px;flex-shrink:0}
