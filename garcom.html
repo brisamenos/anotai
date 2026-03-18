@@ -617,11 +617,10 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 <div class="toast" id="toast"><span id="toast-msg"></span></div>
 
 <script>
-// ══ SUPABASE (shim local) ══════════════════
+// ══ SUPABASE ══════════════════════════════
 const { createClient } = window.supabase;
 const sb = createClient('', '', { auth:{ persistSession:false } });
 
-// ── Tenant via URL: garcom.html?tenant=UUID ou ?slug=meu-restaurante ──
 let _garcomTenantId  = null;
 let _garcomNomeLoja  = null;
 
@@ -629,7 +628,6 @@ let _garcomNomeLoja  = null;
   const p    = new URLSearchParams(window.location.search);
   const slug = p.get('slug') || p.get('t');
   const tid  = p.get('tenant');
-
   let info = null;
   if (tid) {
     const r = await fetch(`/api/tenant-info?id=${tid}`).then(r=>r.json()).catch(()=>({}));
@@ -638,34 +636,23 @@ let _garcomNomeLoja  = null;
     const r = await fetch(`/api/tenant-info?slug=${slug}`).then(r=>r.json()).catch(()=>({}));
     if (r.id) info = r;
   }
-
   if (info?.id) {
     _garcomTenantId = info.id;
     _garcomNomeLoja = info.branding?.store_name || info.nome || null;
     sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _garcomTenantId, ts: Date.now() }));
-    // Aplica nome da loja na tela de login
     const nomeEl = document.getElementById('login-store-name');
     if (nomeEl && _garcomNomeLoja) nomeEl.textContent = _garcomNomeLoja;
-    // Aplica cor principal se tiver branding
     const cor = info.branding?.store_cor;
     if (cor) document.documentElement.style.setProperty('--accent', cor);
-    // Aplica logo se tiver
     const logoEl = document.getElementById('login-store-logo');
     if (logoEl && info.branding?.store_logo_url) {
-      logoEl.src = info.branding.store_logo_url.startsWith('http')
-        ? info.branding.store_logo_url
-        : window.location.origin + info.branding.store_logo_url;
+      logoEl.src = info.branding.store_logo_url.startsWith('http') ? info.branding.store_logo_url : window.location.origin + info.branding.store_logo_url;
       logoEl.style.display = 'block';
-      logoEl.onload = () => {
-        const icon = document.getElementById('login-logo-icon');
-        if (icon) icon.style.display = 'none';
-      };
+      logoEl.onload = () => { const icon=document.getElementById('login-logo-icon'); if(icon) icon.style.display='none'; };
     }
-    // Atualiza topbar com nome da loja
     const topbar = document.getElementById('topbar-store-name');
     if (topbar && _garcomNomeLoja) topbar.textContent = _garcomNomeLoja;
   } else if (tid || slug) {
-    // Tenant informado mas não encontrado
     const errEl = document.getElementById('login-store-name');
     if (errEl) { errEl.textContent = 'Restaurante não encontrado'; errEl.style.color = '#ef4444'; }
   }
@@ -694,7 +681,7 @@ async function doLogin() {
   btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px"></div>';
   try {
     const { data, error } = await sb.from('garcons')
-      .select('*').eq('usuario', user).eq('senha', pass).eq('ativo', true).single();
+      .select('*').eq('usuario', user).eq('senha', pass).eq('ativo', 1).single();
     if (error || !data) {
       err.textContent = 'Usuário ou senha incorretos';
       err.style.display = 'block';
