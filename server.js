@@ -140,6 +140,7 @@ db.exec(`
 
 // Migrations automáticas (bancos já existentes)
 try { db.exec("ALTER TABLE tenants ADD COLUMN expires_at TEXT") } catch(e) {}
+try { db.exec("ALTER TABLE store_config ADD COLUMN evo_instance TEXT") } catch(e) {}
 
 // Superadmin padrão
 const adminExists = db.prepare("SELECT id FROM sys_users WHERE role='superadmin' LIMIT 1").get()
@@ -201,7 +202,7 @@ function emit(tenantId, table, record, type) {
 const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','expires_at','created_at'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
-  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state'],
+  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance'],
   categories:   ['id','tenant_id','name','emoji','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','category_id','image_url','status','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
@@ -504,16 +505,17 @@ function handleUpload(req, res) {
 // ════════════════════════════════════════════════════════
 // WHATSAPP
 // ════════════════════════════════════════════════════════
-async function sendWA(phone, text) {
+async function sendWA(phone, text, inst) {
+  const instance = inst || EVO_INST
   const num = phone.replace(/\D/g,'')
   const number = num.startsWith('55')?num:`55${num}`
   try {
-    const r = await fetch(`${EVO_URL}/message/sendText/${EVO_INST}`,{
+    const r = await fetch(`${EVO_URL}/message/sendText/${instance}`,{
       method:'POST',headers:{'Content-Type':'application/json',apikey:EVO_KEY},
       body:JSON.stringify({number,text})
     })
     const data = await r.json().catch(()=>({}))
-    if (r.ok){log('📤',`Enviado para ${number}`);return{ok:true,data}}
+    if (r.ok){log('📤',`Enviado para ${number} [${instance}]`);return{ok:true,data}}
     log('❌',`Falhou ${number}:`,data);return{ok:false,data}
   } catch(e){log('❌','Erro WA:',{error:e.message});return{ok:false,error:e.message}}
 }
@@ -529,9 +531,10 @@ async function checarAniv() {
   const tenants = db.prepare("SELECT id FROM tenants WHERE ativo=1").all()
   for (const t of tenants) {
     try {
-      const cfg  = db.prepare("SELECT evo_automacoes,evo_aniv_last FROM store_config WHERE tenant_id=?").get(t.id)
+      const cfg  = db.prepare("SELECT evo_automacoes,evo_aniv_last,evo_instance FROM store_config WHERE tenant_id=?").get(t.id)
       if (!cfg) continue
       const auto = jsonParse(cfg.evo_automacoes)||{}
+      const inst = cfg.evo_instance || EVO_INST
       const ca   = auto['aniversario']||{}
       if (!ca.on) continue
       const now    = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Fortaleza'}))
@@ -543,7 +546,7 @@ async function checarAniv() {
       const clientes = db.prepare("SELECT * FROM fidelidade WHERE tenant_id=? AND birthday IS NOT NULL AND phone IS NOT NULL").all(t.id)
       const anivs    = clientes.filter(c=>c.birthday&&c.phone&&c.birthday.slice(5)===today)
       if (!anivs.length){db.prepare("UPDATE store_config SET evo_aniv_last=? WHERE tenant_id=?").run(today,t.id);continue}
-      for (const c of anivs){await sendWA(c.phone,fillVars(ca.msg,{nome:c.name}));await sleep(1500)}
+      for (const c of anivs){await sendWA(c.phone,fillVars(ca.msg,{nome:c.name}),inst);await sleep(1500)}
       db.prepare("UPDATE store_config SET evo_aniv_last=? WHERE tenant_id=?").run(today,t.id)
       log('🎂',`Aniversários tenant ${t.id}: ${anivs.length} enviados`)
     } catch(e){log('❌','Erro aniv tenant '+t.id,{error:e.message})}
@@ -558,9 +561,10 @@ async function checarPedidos() {
     const tenants = db.prepare("SELECT id FROM tenants WHERE ativo=1").all()
     const desde   = new Date(Date.now()-86400000).toISOString().slice(0,19).replace('T',' ')
     for (const t of tenants) {
-      const cfg    = db.prepare("SELECT evo_automacoes FROM store_config WHERE tenant_id=?").get(t.id)
+      const cfg    = db.prepare("SELECT evo_automacoes,evo_instance FROM store_config WHERE tenant_id=?").get(t.id)
       if (!cfg) continue
       const auto   = jsonParse(cfg.evo_automacoes)||{}
+      const inst   = cfg.evo_instance || EVO_INST
       const pedidos = db.prepare(`SELECT * FROM orders WHERE tenant_id=? AND phone IS NOT NULL AND created_at>=? AND status IN ('producao','pronto','cancelado','finalizado') ORDER BY id DESC LIMIT 50`).all(t.id,desde)
       for (const o of pedidos) {
         const chave=`${o.id}_${o.status}`
@@ -573,13 +577,13 @@ async function checarPedidos() {
         const vars={ nome:o.client||'Cliente', id:String(o.id), itens:items,
           total:(parseFloat(o.total)||0).toFixed(2).replace('.',','), endereco:o.addr||'', mesa:String(o.mesa_num||''),
           tipo_entrega:(o.addr||'').includes('Mesa')?'🪑 Mesa':(o.addr||'').includes('alcão')?'🏪 Balcão':'🛵 Entrega' }
-        await sendWA(o.phone, fillVars(ct.msg, vars)); await sleep(800)
+        await sendWA(o.phone, fillVars(ct.msg, vars), inst); await sleep(800)
         if (o.status==='finalizado') {
           const cp=auto['pontos']||{}; if(cp.on&&o.phone){
             await sleep(5000)
             const fid=db.prepare("SELECT * FROM fidelidade WHERE tenant_id=? AND (phone=? OR name=?) LIMIT 1").get(t.id,o.phone,o.client)
             if(fid){const pg=Math.floor((parseFloat(o.total)||0)*10);const pt=(fid.pts||0)+pg;const pf=Math.max(0,(fid.max_pts||500)-pt)
-              await sendWA(o.phone,fillVars(cp.msg,{nome:fid.name||o.client,pontos_ganhos:String(pg),pontos_total:String(pt),pontos_faltam:String(pf)}))}
+              await sendWA(o.phone,fillVars(cp.msg,{nome:fid.name||o.client,pontos_ganhos:String(pg),pontos_total:String(pt),pontos_faltam:String(pf)}),inst)}
           }
         }
       }
@@ -675,10 +679,55 @@ const server = http.createServer(async (req,res) => {
   if(upath==='/status'){send(res,200,{ok:true,uptime:Math.floor(process.uptime()),db:'sqlite-multitenant',version:'3.0.0'});return}
 
   // WA avulso
+  // ── Proxy Evolution API (por tenant) ──────────────────────
+  // Gestor chama /api/evo  →  servidor repassa com a apikey real
+  if (upath.startsWith('/api/evo')) {
+    const tenantId = req.headers['x-tenant-id']
+    if (!tenantId) { send(res,401,{error:'x-tenant-id obrigatório'}); return }
+
+    // Resolve instância do tenant
+    const cfg = db.prepare("SELECT evo_instance FROM store_config WHERE tenant_id=?").get(tenantId)
+    const instance = cfg?.evo_instance || null
+
+    const body = ['POST','DELETE'].includes(req.method) ? await readBody(req) : {}
+    const action = upath.replace('/api/evo','') // ex: /instance/create, /instance/connect/...
+
+    // Injeta instanceName quando não vem no body
+    if (req.method === 'POST' && body.instanceName === undefined && instance) {
+      body.instanceName = instance
+    }
+
+    // Substitui :instance na path pelo valor real do tenant
+    const evoPath = action.replace(':instance', instance || '')
+
+    try {
+      const r = await fetch(`${EVO_URL}${evoPath}`, {
+        method: req.method,
+        headers: { 'Content-Type': 'application/json', apikey: EVO_KEY },
+        body: req.method !== 'GET' ? JSON.stringify(body) : undefined
+      })
+      const data = await r.json().catch(() => ({}))
+
+      // Se criou instância com sucesso, salva o nome no store_config do tenant
+      if (evoPath.startsWith('/instance/create') && r.ok && body.instanceName) {
+        db.prepare("UPDATE store_config SET evo_instance=? WHERE tenant_id=?")
+          .run(body.instanceName, tenantId)
+        log('🤖', `Instância "${body.instanceName}" salva para tenant ${tenantId}`)
+      }
+
+      send(res, r.status, data)
+    } catch(e) {
+      send(res, 500, { error: e.message })
+    }
+    return
+  }
+
   if(req.method==='POST'&&upath==='/enviar'){
-    const{phone,text}=await readBody(req)
+    const{phone,text,tenant_id}=await readBody(req)
     if(!phone||!text){send(res,400,{ok:false,error:'phone e text obrigatórios'});return}
-    const r=await sendWA(phone,text);send(res,r.ok?200:500,r);return
+    const tid = tenant_id || req.headers['x-tenant-id']
+    const cfgEnv = tid ? db.prepare("SELECT evo_instance FROM store_config WHERE tenant_id=?").get(tid) : null
+    const r=await sendWA(phone,text,cfgEnv?.evo_instance);send(res,r.ok?200:500,r);return
   }
 
   // Promoção em massa (por tenant)
@@ -686,11 +735,14 @@ const server = http.createServer(async (req,res) => {
     const body=await readBody(req)
     const{destino='todos',msg,tenant_id}=body
     if(!msg){send(res,400,{ok:false,error:'msg obrigatório'});return}
-    let cl=db.prepare("SELECT * FROM fidelidade WHERE phone IS NOT NULL"+(tenant_id?' AND tenant_id=?':'')).all(...(tenant_id?[tenant_id]:[]))
+    const tid = tenant_id || req.headers['x-tenant-id']
+    const cfgPromo = tid ? db.prepare("SELECT evo_instance FROM store_config WHERE tenant_id=?").get(tid) : null
+    const instPromo = cfgPromo?.evo_instance || EVO_INST
+    let cl=db.prepare("SELECT * FROM fidelidade WHERE phone IS NOT NULL"+(tid?' AND tenant_id=?':'')).all(...(tid?[tid]:[]))
     if(destino==='com_pedido') cl=cl.filter(c=>c.orders_count>0)
     if(!cl.length){send(res,200,{ok:true,enviados:0});return}
     send(res,200,{ok:true,total:cl.length,msg:'Envio iniciado'})
-    ;(async()=>{let ok=0,fail=0;for(const c of cl){const r=await sendWA(c.phone,fillVars(msg,{nome:c.name}));r.ok?ok++:fail++;await sleep(1500)};log('📢',`Promoção: ${ok} ok, ${fail} fail`)})()
+    ;(async()=>{let ok=0,fail=0;for(const c of cl){const r=await sendWA(c.phone,fillVars(msg,{nome:c.name}),instPromo);r.ok?ok++:fail++;await sleep(1500)};log('📢',`Promoção: ${ok} ok, ${fail} fail`)})()
     return
   }
 
