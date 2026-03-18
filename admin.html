@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Admin — Painel SaaS</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#070b14;--s1:#0d1526;--s2:#111827;--s3:#1a2540;--border:rgba(255,255,255,.07);--accent:#3b82f6;--danger:#ef4444;--success:#22c55e;--orange:#f97316;--purple:#8b5cf6;--text:#f1f5f9;--muted:#64748b}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
+
+/* LOGIN */
+#login{width:100%;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.lg-card{background:rgba(10,15,25,.92);border:1px solid var(--border);border-radius:20px;padding:40px;width:400px;backdrop-filter:blur(20px);box-shadow:0 24px 80px rgba(0,0,0,.6);animation:fadeUp .4s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.lg-icon{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,var(--accent),#1d4ed8);display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 14px;box-shadow:0 4px 16px rgba(59,130,246,.4)}
+.lg-title{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;text-align:center;letter-spacing:-.5px;margin-bottom:4px}
+.lg-sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:28px}
+.f-label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.f-input{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13.5px;outline:none;transition:all .18s;margin-bottom:14px}
+.f-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.12)}
+.f-input::placeholder{color:var(--muted)}
+.btn-lg{width:100%;padding:13px;border-radius:10px;border:none;cursor:pointer;background:linear-gradient(135deg,var(--accent),#2563eb);color:#fff;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;transition:all .2s;box-shadow:0 4px 16px rgba(59,130,246,.35)}
+.btn-lg:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(59,130,246,.5)}
+.err{display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:10px 14px;font-size:12.5px;color:#fca5a5;margin-bottom:14px}
+.err.on{display:block}
+
+/* LAYOUT */
+#painel{display:none;width:100%}
+.sidebar{width:220px;background:var(--s1);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;bottom:0;z-index:50}
+.sb-logo{display:flex;align-items:center;gap:10px;padding:18px;border-bottom:1px solid var(--border)}
+.sb-logo-icon{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#1d4ed8);display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 3px 10px rgba(59,130,246,.3)}
+.sb-logo-name{font-family:'Syne',sans-serif;font-size:15px;font-weight:800}
+.sb-logo-tag{font-size:9px;background:var(--orange);color:#fff;padding:1px 6px;border-radius:99px;font-weight:700;letter-spacing:.5px;display:block;margin-top:2px}
+.sb-nav{flex:1;padding:10px 8px}
+.sb-sec{font-size:9.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);padding:8px 8px 4px}
+.sb-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;font-size:12.5px;font-weight:500;color:var(--muted);cursor:pointer;transition:all .15s;margin-bottom:1px;border:none;background:none;width:100%;text-align:left;font-family:'DM Sans',sans-serif}
+.sb-item:hover{background:var(--s2);color:var(--text)}
+.sb-item.on{background:rgba(59,130,246,.15);color:var(--accent);font-weight:600}
+.sb-foot{padding:10px 8px;border-top:1px solid var(--border)}
+.sb-user{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:background .15s}
+.sb-user:hover{background:var(--s2)}
+.sb-av{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+
+.main{margin-left:220px;flex:1;display:flex;flex-direction:column;min-height:100vh}
+.topbar{height:52px;background:rgba(10,15,25,.85);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 22px;gap:10px;position:sticky;top:0;z-index:40;backdrop-filter:blur(10px)}
+.topbar-title{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;flex:1;letter-spacing:-.3px}
+.content{padding:22px;flex:1}
+
+/* STATS */
+.sg{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.sc{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:16px 18px;position:relative;overflow:hidden}
+.sc::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--ca,var(--accent));border-radius:12px 12px 0 0}
+.sc-label{font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.3px;margin-bottom:6px}
+.sc-val{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;letter-spacing:-1px}
+.sc-icon{position:absolute;top:12px;right:12px;font-size:18px;opacity:.5}
+
+/* CARDS */
+.card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:16px}
+.card-title{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;letter-spacing:-.3px}
+
+/* TABELA */
+.tw{background:var(--s1);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px}
+.tmeta{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--border)}
+table{width:100%;border-collapse:collapse}
+thead th{padding:9px 14px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);background:var(--s2);border-bottom:1px solid var(--border)}
+tbody tr{border-bottom:1px solid var(--border);transition:background .12s}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:rgba(255,255,255,.02)}
+td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
+
+/* BADGE */
+.badge{display:inline-flex;align-items:center;gap:4px;border-radius:99px;padding:2px 9px;font-size:10.5px;font-weight:600}
+.bg-green{background:rgba(34,197,94,.12);color:var(--success)}
+.bg-red{background:rgba(239,68,68,.12);color:var(--danger)}
+.bg-blue{background:rgba(59,130,246,.12);color:var(--accent)}
+.bg-orange{background:rgba(249,115,22,.12);color:var(--orange)}
+.bg-purple{background:rgba(139,92,246,.12);color:var(--purple)}
+.bg-gray{background:rgba(255,255,255,.06);color:var(--muted)}
+
+/* BOTÕES */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .15s;white-space:nowrap}
+.bp{background:linear-gradient(135deg,var(--accent),#2563eb);color:#fff;box-shadow:0 2px 8px rgba(59,130,246,.25)}
+.bp:hover{box-shadow:0 4px 14px rgba(59,130,246,.4);transform:translateY(-1px)}
+.bg2{background:var(--s2);border:1px solid var(--border);color:var(--text)}
+.bg2:hover{border-color:var(--accent);color:var(--accent)}
+.bd{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:var(--danger)}
+.bd:hover{background:rgba(239,68,68,.2)}
+.bsm{padding:3px 9px;font-size:11px}
+
+/* SEARCH */
+.sbox{display:flex;align-items:center;gap:7px;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:6px 11px}
+.sbox:focus-within{border-color:var(--accent)}
+.sbox input{background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:12.5px;color:var(--text);width:180px}
+.sbox input::placeholder{color:var(--muted)}
+
+/* MODAL */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-bg.on{display:flex}
+.modal{background:var(--s1);border:1px solid var(--border);border-radius:16px;width:500px;max-width:95vw;max-height:88vh;overflow-y:auto;padding:26px;position:relative;box-shadow:0 24px 64px rgba(0,0,0,.6)}
+.modal h2{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:18px}
+.modal-x{position:absolute;top:14px;right:14px;width:26px;height:26px;border-radius:7px;background:var(--s2);border:1px solid var(--border);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .15s}
+.modal-x:hover{color:var(--danger);border-color:var(--danger)}
+.mrow{margin-bottom:13px}
+.mlabel{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.minput{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:9px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;transition:all .18s}
+.minput:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.12)}
+.mrow2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* TOAST */
+#toast{position:fixed;bottom:18px;right:18px;z-index:9999;display:flex;flex-direction:column;gap:7px}
+.ti{display:flex;align-items:center;gap:9px;background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:11px 15px;font-size:13px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.4);animation:tIn .22s ease;min-width:220px}
+@keyframes tIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+.ti-ok{border-left:3px solid var(--success)}
+.ti-err{border-left:3px solid var(--danger)}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+
+<!-- ══ LOGIN ══ -->
+<div id="login">
+  <div class="lg-card">
+    <div class="lg-icon">🛡️</div>
+    <div class="lg-title">Painel Admin</div>
+    <div class="lg-sub">Acesso restrito ao proprietário do sistema</div>
+    <div class="err" id="lg-err"></div>
+    <label class="f-label">Email</label>
+    <input class="f-input" id="lg-email" type="email" placeholder="admin@sistema.com" autocomplete="email">
+    <label class="f-label">Senha</label>
+    <input class="f-input" id="lg-senha" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="btn-lg" onclick="doLogin()">Entrar no painel</button>
+    <div style="text-align:center;margin-top:16px;font-size:12px;color:var(--muted)">
+      <a href="login.html" style="color:var(--accent);text-decoration:none">← Login dos gestores</a>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PAINEL ══ -->
+<div id="painel">
+  <aside class="sidebar">
+    <div class="sb-logo">
+      <div class="sb-logo-icon">🛡️</div>
+      <div>
+        <div class="sb-logo-name">SaaS Admin</div>
+        <div class="sb-logo-tag">PROPRIETÁRIO</div>
+      </div>
+    </div>
+    <nav class="sb-nav">
+      <div class="sb-sec">Painel</div>
+      <button class="sb-item on" id="nav-dash" onclick="navTo('dash')">📊 Dashboard</button>
+      <div class="sb-sec" style="margin-top:6px">Gestão</div>
+      <button class="sb-item" id="nav-clientes" onclick="navTo('clientes')">🏢 Clientes</button>
+      <button class="sb-item" id="nav-usuarios" onclick="navTo('usuarios')">👤 Usuários</button>
+    </nav>
+    <div class="sb-foot">
+      <div class="sb-user" onclick="doLogout()">
+        <div class="sb-av" id="adm-av">A</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:600" id="adm-nome">Admin</div>
+          <div style="font-size:10px;color:var(--muted)">Super Admin</div>
+        </div>
+        <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted)"><path d="M6 3H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Dashboard</div>
+      <button class="btn bg2 bsm" onclick="loadAll()">🔄 Atualizar</button>
+    </div>
+    <div class="content">
+
+      <!-- DASHBOARD -->
+      <div id="sec-dash">
+        <div class="sg">
+          <div class="sc" style="--ca:var(--accent)"><div class="sc-icon">🏢</div><div class="sc-label">Total Clientes</div><div class="sc-val" id="st-total">—</div></div>
+          <div class="sc" style="--ca:var(--success)"><div class="sc-icon">✅</div><div class="sc-label">Ativos</div><div class="sc-val" id="st-ativos" style="color:var(--success)">—</div></div>
+          <div class="sc" style="--ca:var(--danger)"><div class="sc-icon">⏸</div><div class="sc-label">Inativos</div><div class="sc-val" id="st-inativos" style="color:var(--danger)">—</div></div>
+          <div class="sc" style="--ca:var(--purple)"><div class="sc-icon">👤</div><div class="sc-label">Usuários</div><div class="sc-val" id="st-users" style="color:var(--purple)">—</div></div>
+        </div>
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div class="card-title">🕐 Clientes Recentes</div>
+            <button class="btn bg2 bsm" onclick="navTo('clientes')">Ver todos →</button>
+          </div>
+          <div id="dash-list"></div>
+        </div>
+      </div>
+
+      <!-- CLIENTES -->
+      <div id="sec-clientes" style="display:none">
+        <div class="tw">
+          <div class="tmeta">
+            <div class="card-title">🏢 Clientes / Restaurantes</div>
+            <div style="display:flex;gap:8px">
+              <div class="sbox">
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style="color:var(--muted)"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                <input id="cli-q" placeholder="Buscar..." oninput="renderClientes()">
+              </div>
+              <button class="btn bp bsm" onclick="abrirModalCliente()">+ Novo cliente</button>
+            </div>
+          </div>
+          <table>
+            <thead><tr><th>Restaurante</th><th>Email</th><th>Plano</th><th>Expira</th><th>Status</th><th>Ações</th></tr></thead>
+            <tbody id="cli-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- USUÁRIOS -->
+      <div id="sec-usuarios" style="display:none">
+        <div class="tw">
+          <div class="tmeta">
+            <div class="card-title">👤 Usuários / Acessos</div>
+            <div style="display:flex;gap:8px">
+              <div class="sbox">
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style="color:var(--muted)"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                <input id="usr-q" placeholder="Buscar..." oninput="renderUsuarios()">
+              </div>
+              <button class="btn bp bsm" onclick="abrirModalUsuario()">+ Novo usuário</button>
+            </div>
+          </div>
+          <table>
+            <thead><tr><th>Nome</th><th>Email</th><th>Restaurante</th><th>Perfil</th><th>Último acesso</th><th>Status</th><th>Ações</th></tr></thead>
+            <tbody id="usr-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- MODAL CLIENTE -->
+<div class="modal-bg" id="m-cliente">
+  <div class="modal">
+    <button class="modal-x" onclick="fecharModal('m-cliente')">✕</button>
+    <h2 id="m-cli-titulo">➕ Novo Cliente</h2>
+    <input type="hidden" id="cli-id">
+    <div class="mrow"><label class="mlabel">Nome do restaurante *</label><input class="minput" id="cli-nome" placeholder="Ex: Estima Food"></div>
+    <div class="mrow2">
+      <div class="mrow" style="margin:0"><label class="mlabel">Slug (identificador) *</label><input class="minput" id="cli-slug" placeholder="estima-food" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'-')"></div>
+      <div class="mrow" style="margin:0"><label class="mlabel">Plano</label>
+        <select class="minput" id="cli-plano">
+          <option value="basico">Básico</option>
+          <option value="pro">Pro</option>
+          <option value="premium">Premium</option>
+        </select>
+      </div>
+    </div>
+    <div class="mrow"><label class="mlabel">Email do responsável *</label><input class="minput" id="cli-email" type="email" placeholder="dono@restaurante.com"></div>
+    <div class="mrow2">
+      <div class="mrow" style="margin:0"><label class="mlabel">Expira em</label><input class="minput" id="cli-expira" type="date"></div>
+      <div class="mrow" style="margin:0"><label class="mlabel">Status</label>
+        <select class="minput" id="cli-ativo">
+          <option value="true">Ativo</option>
+          <option value="false">Inativo</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn bg2" style="flex:1;justify-content:center" onclick="fecharModal('m-cliente')">Cancelar</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="salvarCliente()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL USUÁRIO -->
+<div class="modal-bg" id="m-usuario">
+  <div class="modal">
+    <button class="modal-x" onclick="fecharModal('m-usuario')">✕</button>
+    <h2 id="m-usr-titulo">➕ Novo Usuário</h2>
+    <input type="hidden" id="usr-id">
+    <div class="mrow"><label class="mlabel">Nome completo *</label><input class="minput" id="usr-nome" placeholder="Nome do responsável"></div>
+    <div class="mrow"><label class="mlabel">Email de acesso *</label><input class="minput" id="usr-email" type="email" placeholder="gestor@restaurante.com"></div>
+    <div class="mrow"><label class="mlabel">Senha * <span style="font-weight:400;text-transform:none">(deixe em branco para não alterar)</span></label><input class="minput" id="usr-senha" type="password" placeholder="Mínimo 6 caracteres"></div>
+    <div class="mrow2">
+      <div class="mrow" style="margin:0"><label class="mlabel">Restaurante *</label>
+        <select class="minput" id="usr-tenant">
+          <option value="">— Selecione —</option>
+        </select>
+      </div>
+      <div class="mrow" style="margin:0"><label class="mlabel">Perfil</label>
+        <select class="minput" id="usr-role">
+          <option value="gestor">Gestor</option>
+          <option value="admin">Admin</option>
+          <option value="superadmin">Super Admin</option>
+        </select>
+      </div>
+    </div>
+    <div class="mrow"><label class="mlabel">Status</label>
+      <select class="minput" id="usr-ativo">
+        <option value="true">Ativo</option>
+        <option value="false">Inativo</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn bg2" style="flex:1;justify-content:center" onclick="fecharModal('m-usuario')">Cancelar</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="salvarUsuario()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPA_URL  = 'https://lhrzwccbvdintqgebisq.supabase.co';
+const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxocnp3Y2NidmRpbnRxZ2ViaXNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1ODY0NzEsImV4cCI6MjA4OTE2MjQ3MX0.gbljgt0rzOf9eBoTcXxxfl0e_0Y-6XYxve-HGY7meJo';
+const { createClient } = window.supabase;
+const sb = createClient(SUPA_URL, SUPA_ANON, { auth: { persistSession: false } });
+
+let _sessao = null;
+let _clientes = [];
+let _usuarios = [];
+
+async function sha256(t) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+// ── LOGIN ────────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('lg-email').value.trim().toLowerCase();
+  const senha = document.getElementById('lg-senha').value;
+  const err   = document.getElementById('lg-err');
+  if (!email||!senha) { err.textContent='Preencha email e senha'; err.classList.add('on'); return; }
+  err.classList.remove('on');
+
+  const hash = await sha256(senha);
+  const { data: u } = await sb.from('sys_users').select('*,tenants(*)').eq('email',email).eq('senha_hash',hash).eq('ativo',true).in('role',['superadmin','admin']).single();
+
+  if (!u) { err.textContent='Acesso negado. Verifique suas credenciais.'; err.classList.add('on'); return; }
+
+  _sessao = u;
+  sessionStorage.setItem('adm_session', JSON.stringify({ id:u.id, nome:u.nome, email:u.email, role:u.role, ts:Date.now() }));
+  await sb.from('sys_users').update({ ultimo_acesso: new Date().toISOString() }).eq('id', u.id);
+
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('painel').style.display = 'flex';
+  document.getElementById('adm-av').textContent   = u.nome.charAt(0).toUpperCase();
+  document.getElementById('adm-nome').textContent = u.nome.split(' ')[0];
+  await loadAll();
+}
+
+function doLogout() {
+  if (!confirm('Sair do painel admin?')) return;
+  sessionStorage.removeItem('adm_session');
+  document.getElementById('painel').style.display = 'none';
+  document.getElementById('login').style.display  = 'flex';
+  _sessao = null;
+}
+
+// Verifica sessão ao carregar
+window.addEventListener('DOMContentLoaded', () => {
+  const raw = sessionStorage.getItem('adm_session');
+  if (raw) {
+    try {
+      const s = JSON.parse(raw);
+      if (Date.now() - s.ts < 8*60*60*1000) {
+        _sessao = s;
+        document.getElementById('login').style.display  = 'none';
+        document.getElementById('painel').style.display = 'flex';
+        document.getElementById('adm-av').textContent   = s.nome.charAt(0).toUpperCase();
+        document.getElementById('adm-nome').textContent = s.nome.split(' ')[0];
+        loadAll();
+      }
+    } catch(e) {}
+  }
+});
+
+// ── NAVEGAÇÃO ────────────────────────────
+function navTo(id) {
+  ['dash','clientes','usuarios'].forEach(s => {
+    document.getElementById('sec-'+s).style.display = s===id ? 'block' : 'none';
+    document.getElementById('nav-'+s)?.classList.toggle('on', s===id);
+  });
+  const titles = { dash:'Dashboard', clientes:'Clientes', usuarios:'Usuários' };
+  document.getElementById('topbar-title').textContent = titles[id] || id;
+}
+
+// ── CARREGAR DADOS ───────────────────────
+async function loadAll() {
+  const [cr, ur] = await Promise.all([
+    sb.from('tenants').select('*').neq('slug','_admin').order('criado_em',{ascending:false}),
+    sb.from('sys_users').select('*,tenants(nome)').neq('role','superadmin').order('criado_em',{ascending:false})
+  ]);
+  _clientes = cr.data || [];
+  _usuarios = ur.data || [];
+
+  document.getElementById('st-total').textContent   = _clientes.length;
+  document.getElementById('st-ativos').textContent  = _clientes.filter(c=>c.ativo).length;
+  document.getElementById('st-inativos').textContent= _clientes.filter(c=>!c.ativo).length;
+  document.getElementById('st-users').textContent   = _usuarios.length;
+
+  renderDash(); renderClientes(); renderUsuarios(); preencherSelect();
+}
+
+// ── DASHBOARD ────────────────────────────
+function renderDash() {
+  const el = document.getElementById('dash-list');
+  if (!el) return;
+  const list = _clientes.slice(0,6);
+  if (!list.length) { el.innerHTML='<p style="color:var(--muted);font-size:13px;padding:8px 0">Nenhum cliente ainda. Crie o primeiro!</p>'; return; }
+  el.innerHTML = list.map(c=>`
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${c.nome.charAt(0).toUpperCase()}</div>
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:13px">${c.nome}</div>
+        <div style="font-size:11px;color:var(--muted)">${c.email}</div>
+      </div>
+      <span class="badge ${c.ativo?'bg-green':'bg-red'}">${c.ativo?'● Ativo':'● Inativo'}</span>
+      <span class="badge bg-blue">${c.plano}</span>
+    </div>`).join('');
+}
+
+// ── CLIENTES ─────────────────────────────
+function renderClientes() {
+  const q  = (document.getElementById('cli-q')?.value||'').toLowerCase();
+  const el = document.getElementById('cli-tbody');
+  if (!el) return;
+  const fil = _clientes.filter(c=>!q||c.nome.toLowerCase().includes(q)||c.email.toLowerCase().includes(q)||c.slug.includes(q));
+  if (!fil.length) { el.innerHTML='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--muted)">Nenhum cliente encontrado</td></tr>'; return; }
+  const planoBadge = { basico:'bg-gray', pro:'bg-blue', premium:'bg-purple' };
+  el.innerHTML = fil.map(c=>`<tr>
+    <td><div style="display:flex;align-items:center;gap:9px">
+      <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">${c.nome.charAt(0)}</div>
+      <div><div style="font-weight:600">${c.nome}</div><div style="font-size:11px;color:var(--muted)">/${c.slug}</div></div>
+    </div></td>
+    <td style="color:var(--muted)">${c.email}</td>
+    <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${c.plano}</span></td>
+    <td style="color:var(--muted);font-size:12px">${c.expira_em ? new Date(c.expira_em).toLocaleDateString('pt-BR') : '—'}</td>
+    <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">${c.ativo?'● Ativo':'● Inativo'}</span></td>
+    <td><div style="display:flex;gap:4px">
+      <button class="btn bg2 bsm" onclick="editarCliente('${c.id}')">✏️</button>
+      <button class="btn bg2 bsm" onclick="toggleCliente('${c.id}',${c.ativo})">${c.ativo?'⏸':'▶'}</button>
+      <button class="btn bd bsm" onclick="deletarCliente('${c.id}','${c.nome.replace(/'/g,"\\'")}')">🗑</button>
+    </div></td>
+  </tr>`).join('');
+}
+
+// ── CRUD CLIENTES ────────────────────────
+function abrirModalCliente(id) {
+  document.getElementById('m-cli-titulo').textContent = id ? '✏️ Editar Cliente' : '➕ Novo Cliente';
+  document.getElementById('cli-id').value    = id||'';
+  document.getElementById('cli-nome').value  = '';
+  document.getElementById('cli-slug').value  = '';
+  document.getElementById('cli-email').value = '';
+  document.getElementById('cli-plano').value = 'basico';
+  document.getElementById('cli-expira').value= '';
+  document.getElementById('cli-ativo').value = 'true';
+  if (id) {
+    const c = _clientes.find(x=>x.id===id);
+    if (c) {
+      document.getElementById('cli-nome').value  = c.nome;
+      document.getElementById('cli-slug').value  = c.slug;
+      document.getElementById('cli-email').value = c.email;
+      document.getElementById('cli-plano').value = c.plano;
+      document.getElementById('cli-expira').value= c.expira_em ? c.expira_em.slice(0,10) : '';
+      document.getElementById('cli-ativo').value = String(c.ativo);
+    }
+  }
+  abrirModal('m-cliente');
+}
+function editarCliente(id) { abrirModalCliente(id); }
+
+async function salvarCliente() {
+  const id    = document.getElementById('cli-id').value;
+  const nome  = document.getElementById('cli-nome').value.trim();
+  const slug  = document.getElementById('cli-slug').value.trim();
+  const email = document.getElementById('cli-email').value.trim().toLowerCase();
+  const plano = document.getElementById('cli-plano').value;
+  const expira= document.getElementById('cli-expira').value || null;
+  const ativo = document.getElementById('cli-ativo').value === 'true';
+  if (!nome||!slug||!email) { toast('err','Preencha os campos obrigatórios'); return; }
+  const payload = { nome, slug, email, plano, expira_em:expira, ativo };
+  let error;
+  if (id) {
+    ({ error } = await sb.from('tenants').update(payload).eq('id',id));
+    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],...payload}; }
+  } else {
+    const { data, error:e2 } = await sb.from('tenants').insert(payload).select().single();
+    error = e2;
+    if (!error&&data) _clientes.unshift(data);
+  }
+  if (error) { toast('err','Erro: '+(error.message||'Verifique os dados')); return; }
+  fecharModal('m-cliente'); renderClientes(); renderDash();
+  document.getElementById('st-total').textContent  = _clientes.length;
+  document.getElementById('st-ativos').textContent = _clientes.filter(c=>c.ativo).length;
+  document.getElementById('st-inativos').textContent=_clientes.filter(c=>!c.ativo).length;
+  toast('ok', id ? 'Cliente atualizado!' : 'Cliente criado com sucesso!');
+}
+
+async function toggleCliente(id, ativo) {
+  await sb.from('tenants').update({ ativo:!ativo }).eq('id',id);
+  const c=_clientes.find(x=>x.id===id); if(c) c.ativo=!ativo;
+  renderClientes(); renderDash();
+  document.getElementById('st-ativos').textContent = _clientes.filter(c=>c.ativo).length;
+  document.getElementById('st-inativos').textContent=_clientes.filter(c=>!c.ativo).length;
+  toast('ok', !ativo?'Cliente ativado!':'Cliente pausado');
+}
+
+async function deletarCliente(id, nome) {
+  if (!confirm(`Excluir "${nome}"? Todos os dados e usuários serão removidos.`)) return;
+  await sb.from('tenants').delete().eq('id',id);
+  _clientes = _clientes.filter(c=>c.id!==id);
+  _usuarios = _usuarios.filter(u=>u.tenant_id!==id);
+  renderClientes(); renderDash(); renderUsuarios();
+  document.getElementById('st-total').textContent  = _clientes.length;
+  document.getElementById('st-ativos').textContent = _clientes.filter(c=>c.ativo).length;
+  document.getElementById('st-inativos').textContent=_clientes.filter(c=>!c.ativo).length;
+  document.getElementById('st-users').textContent  = _usuarios.length;
+  toast('ok','Cliente removido');
+}
+
+// ── USUÁRIOS ─────────────────────────────
+function preencherSelect() {
+  const sel = document.getElementById('usr-tenant');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Selecione o restaurante —</option>' +
+    _clientes.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
+}
+
+function renderUsuarios() {
+  const q  = (document.getElementById('usr-q')?.value||'').toLowerCase();
+  const el = document.getElementById('usr-tbody');
+  if (!el) return;
+  const fil = _usuarios.filter(u=>!q||u.nome.toLowerCase().includes(q)||u.email.toLowerCase().includes(q));
+  if (!fil.length) { el.innerHTML='<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--muted)">Nenhum usuário encontrado</td></tr>'; return; }
+  const rb = { superadmin:'bg-purple', admin:'bg-orange', gestor:'bg-blue' };
+  el.innerHTML = fil.map(u=>`<tr>
+    <td style="font-weight:600">${u.nome}</td>
+    <td style="color:var(--muted)">${u.email}</td>
+    <td style="color:var(--muted);font-size:12px">${u.tenants?.nome||'—'}</td>
+    <td><span class="badge ${rb[u.role]||'bg-gray'}">${u.role}</span></td>
+    <td style="color:var(--muted);font-size:12px">${u.ultimo_acesso ? new Date(u.ultimo_acesso).toLocaleDateString('pt-BR') : 'Nunca'}</td>
+    <td><span class="badge ${u.ativo?'bg-green':'bg-red'}">${u.ativo?'● Ativo':'● Inativo'}</span></td>
+    <td><div style="display:flex;gap:4px">
+      <button class="btn bg2 bsm" onclick="editarUsuario('${u.id}')">✏️</button>
+      <button class="btn bg2 bsm" onclick="toggleUsuario('${u.id}',${u.ativo})">${u.ativo?'⏸':'▶'}</button>
+      <button class="btn bd bsm" onclick="deletarUsuario('${u.id}','${u.nome.replace(/'/g,"\\'")}')">🗑</button>
+    </div></td>
+  </tr>`).join('');
+}
+
+function abrirModalUsuario(id) {
+  document.getElementById('m-usr-titulo').textContent = id ? '✏️ Editar Usuário' : '➕ Novo Usuário';
+  document.getElementById('usr-id').value    = id||'';
+  document.getElementById('usr-nome').value  = '';
+  document.getElementById('usr-email').value = '';
+  document.getElementById('usr-senha').value = '';
+  document.getElementById('usr-role').value  = 'gestor';
+  document.getElementById('usr-ativo').value = 'true';
+  document.getElementById('usr-tenant').value= '';
+  preencherSelect();
+  if (id) {
+    const u = _usuarios.find(x=>x.id===id);
+    if (u) {
+      document.getElementById('usr-nome').value  = u.nome;
+      document.getElementById('usr-email').value = u.email;
+      document.getElementById('usr-tenant').value= u.tenant_id||'';
+      document.getElementById('usr-role').value  = u.role;
+      document.getElementById('usr-ativo').value = String(u.ativo);
+    }
+  }
+  abrirModal('m-usuario');
+}
+function editarUsuario(id) { abrirModalUsuario(id); }
+
+async function salvarUsuario() {
+  const id     = document.getElementById('usr-id').value;
+  const nome   = document.getElementById('usr-nome').value.trim();
+  const email  = document.getElementById('usr-email').value.trim().toLowerCase();
+  const senha  = document.getElementById('usr-senha').value;
+  const tenant = document.getElementById('usr-tenant').value || null;
+  const role   = document.getElementById('usr-role').value;
+  const ativo  = document.getElementById('usr-ativo').value === 'true';
+  if (!nome||!email) { toast('err','Preencha nome e email'); return; }
+  if (!id&&!senha)   { toast('err','Defina uma senha para o novo usuário'); return; }
+  if (!tenant)       { toast('err','Selecione o restaurante'); return; }
+  const payload = { nome, email, tenant_id:tenant, role, ativo };
+  if (senha) payload.senha_hash = await sha256(senha);
+  let error;
+  if (id) {
+    ({ error } = await sb.from('sys_users').update(payload).eq('id',id));
+    if (!error) { const i=_usuarios.findIndex(u=>u.id===id); if(i>=0) _usuarios[i]={..._usuarios[i],...payload}; }
+  } else {
+    const { data, error:e2 } = await sb.from('sys_users').insert(payload).select('*,tenants(nome)').single();
+    error = e2;
+    if (!error&&data) _usuarios.unshift(data);
+  }
+  if (error) { toast('err','Erro: '+(error.message||'Verifique os dados')); return; }
+  fecharModal('m-usuario'); renderUsuarios();
+  document.getElementById('st-users').textContent = _usuarios.length;
+  toast('ok', id ? 'Usuário atualizado!' : 'Usuário criado! Já pode fazer login em gestor.html');
+}
+
+async function toggleUsuario(id, ativo) {
+  await sb.from('sys_users').update({ ativo:!ativo }).eq('id',id);
+  const u=_usuarios.find(x=>x.id===id); if(u) u.ativo=!ativo;
+  renderUsuarios();
+  toast('ok', !ativo?'Usuário ativado!':'Usuário pausado');
+}
+
+async function deletarUsuario(id, nome) {
+  if (!confirm(`Remover usuário "${nome}"?`)) return;
+  await sb.from('sys_users').delete().eq('id',id);
+  _usuarios = _usuarios.filter(u=>u.id!==id);
+  renderUsuarios();
+  document.getElementById('st-users').textContent = _usuarios.length;
+  toast('ok','Usuário removido');
+}
+
+// ── HELPERS ──────────────────────────────
+function abrirModal(id)  { document.getElementById(id).classList.add('on'); }
+function fecharModal(id) { document.getElementById(id).classList.remove('on'); }
+
+function toast(type, msg) {
+  const c = document.getElementById('toast');
+  const d = document.createElement('div');
+  d.className = 'ti ti-'+(type==='ok'?'ok':'err');
+  d.innerHTML = (type==='ok'?'✅':'❌') + ' ' + msg;
+  c.appendChild(d);
+  setTimeout(()=>d.remove(), 3500);
+}
+</script>
+</body>
+</html>

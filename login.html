@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Login — Estima Food</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#070b14;--border:rgba(255,255,255,.08);--accent:#3b82f6;--text:#f1f5f9;--muted:#64748b;--danger:#ef4444;--success:#22c55e}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.bg-grid{position:fixed;inset:0;background-image:linear-gradient(rgba(59,130,246,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,.04) 1px,transparent 1px);background-size:40px 40px}
+.glow{position:fixed;top:-30%;left:50%;transform:translateX(-50%);width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,rgba(59,130,246,.1) 0%,transparent 70%);pointer-events:none}
+.card{position:relative;z-index:10;background:rgba(10,15,25,.9);border:1px solid var(--border);border-radius:20px;padding:42px 38px;width:420px;max-width:95vw;backdrop-filter:blur(20px);box-shadow:0 24px 80px rgba(0,0,0,.6);animation:up .4s ease}
+@keyframes up{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:28px}
+.logo-icon{width:46px;height:46px;border-radius:13px;background:linear-gradient(135deg,var(--accent),#1d4ed8);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 16px rgba(59,130,246,.4)}
+.logo-name{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;letter-spacing:-.5px}
+.title{font-family:'Syne',sans-serif;font-size:23px;font-weight:800;text-align:center;letter-spacing:-.5px;margin-bottom:4px}
+.sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:26px}
+.f-label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.f-input{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13.5px;outline:none;transition:all .18s;margin-bottom:14px}
+.f-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.12)}
+.f-input::placeholder{color:var(--muted)}
+.btn-in{width:100%;padding:13px;border-radius:10px;border:none;cursor:pointer;background:linear-gradient(135deg,var(--accent),#2563eb);color:#fff;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;transition:all .2s;box-shadow:0 4px 16px rgba(59,130,246,.35)}
+.btn-in:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(59,130,246,.5)}
+.btn-in:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.err{display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:10px 14px;font-size:12.5px;color:#fca5a5;margin-bottom:14px}
+.err.on{display:block}
+.adm-link{text-align:center;margin-top:18px;font-size:12px;color:var(--muted)}
+.adm-link a{color:var(--accent);text-decoration:none}
+.adm-link a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="glow"></div>
+<div class="card">
+  <div class="logo">
+    <div class="logo-icon">🍕</div>
+    <div class="logo-name">Estima Food</div>
+  </div>
+  <div class="title">Entrar no sistema</div>
+  <div class="sub">Use as credenciais fornecidas pelo administrador</div>
+  <div class="err" id="err"></div>
+  <label class="f-label">Email</label>
+  <input class="f-input" id="email" type="email" placeholder="seu@email.com" autocomplete="email">
+  <label class="f-label">Senha</label>
+  <input class="f-input" id="senha" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')login()">
+  <button class="btn-in" id="btn" onclick="login()">Entrar</button>
+  <div class="adm-link">
+    Proprietário do sistema? <a href="admin.html">Acessar painel admin →</a>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPA_URL  = 'https://lhrzwccbvdintqgebisq.supabase.co';
+const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxocnp3Y2NidmRpbnRxZ2ViaXNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1ODY0NzEsImV4cCI6MjA4OTE2MjQ3MX0.gbljgt0rzOf9eBoTcXxxfl0e_0Y-6XYxve-HGY7meJo';
+const { createClient } = window.supabase;
+const sb = createClient(SUPA_URL, SUPA_ANON, { auth:{ persistSession:false } });
+
+async function sha256(t) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function login() {
+  const email = document.getElementById('email').value.trim().toLowerCase();
+  const senha = document.getElementById('senha').value;
+  const err   = document.getElementById('err');
+  const btn   = document.getElementById('btn');
+  if (!email||!senha) { err.textContent='Preencha email e senha'; err.classList.add('on'); return; }
+  err.classList.remove('on');
+  btn.disabled = true; btn.textContent = 'Entrando...';
+
+  try {
+    const hash = await sha256(senha);
+    const { data: u } = await sb.from('sys_users')
+      .select('*,tenants(*)')
+      .eq('email', email)
+      .eq('senha_hash', hash)
+      .eq('ativo', true)
+      .single();
+
+    if (!u || !u.tenants?.ativo) {
+      err.textContent = u ? 'Conta do restaurante inativa. Contate o administrador.' : 'Email ou senha incorretos.';
+      err.classList.add('on');
+      return;
+    }
+
+    // Salva sessão com tenant_id
+    sessionStorage.setItem('sys_session', JSON.stringify({
+      user_id:   u.id,
+      tenant_id: u.tenant_id,
+      role:      u.role,
+      nome:      u.nome,
+      email:     u.email,
+      tenant:    u.tenants,
+      ts:        Date.now()
+    }));
+
+    await sb.from('sys_users').update({ ultimo_acesso: new Date().toISOString() }).eq('id', u.id);
+
+    // Redireciona
+    if (u.role === 'superadmin' || u.role === 'admin') {
+      window.location.href = 'admin.html';
+    } else {
+      window.location.href = 'gestor.html';
+    }
+  } catch(e) {
+    err.textContent = 'Erro de conexão. Tente novamente.';
+    err.classList.add('on');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+}
+</script>
+</body>
+</html>
