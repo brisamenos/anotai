@@ -310,7 +310,7 @@ async function handleREST(req, res, table, params, body) {
     let selectCols = '*'
     if (sel) {
       const valid = sel.split(',').map(s=>s.trim().split(':')[0]).filter(c=>cols.includes(c)||c==='*')
-      if (valid.length) selectCols = valid.map(c=>`"${c}"`).join(', ')
+      if (valid.length) selectCols = valid.map(c=>c==='*'?'*':`"${c}"`).join(', ')
     }
 
     // store_config: busca por tenant_id em vez de id=1
