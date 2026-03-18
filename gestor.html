@@ -1415,6 +1415,25 @@ td:first-child{padding-left:16px}
         </div>
       </div>
 
+      <!-- Servidor de automações -->
+      <div class="card" style="padding:20px;margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:14px">🖥️ Servidor de Automações 24/7</div>
+        <div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:flex-end">
+          <div class="form-row" style="margin:0">
+            <label class="form-label">URL do servidor (server.js no Easypanel)</label>
+            <input class="form-input" id="wa-server-url" placeholder="https://wa-server.seudominio.com" oninput="salvarWaServerUrl()">
+          </div>
+          <button class="btn bg" onclick="testarServidorWA()" style="white-space:nowrap">🔍 Testar</button>
+          <div id="wa-server-status" style="display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap">
+            <div style="width:7px;height:7px;border-radius:50%;background:var(--muted)" id="wa-sdot"></div>
+            <span id="wa-stxt">Não testado</span>
+          </div>
+        </div>
+        <div style="margin-top:8px;font-size:11.5px;color:var(--muted)">
+          💡 Sem servidor configurado, as automações rodam apenas enquanto o gestor estiver aberto.
+        </div>
+      </div>
+
       <!-- Teste de envio -->
       <div class="card" style="padding:20px">
         <div class="card-title" style="margin-bottom:14px">🧪 Testar Envio de Mensagem</div>
@@ -2707,8 +2726,8 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
 // ═══════════════════════════════════════════════════════
 const SUPA_URL  = 'https://lhrzwccbvdintqgebisq.supabase.co';
 const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxocnp3Y2NidmRpbnRxZ2ViaXNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1ODY0NzEsImV4cCI6MjA4OTE2MjQ3MX0.gbljgt0rzOf9eBoTcXxxfl0e_0Y-6XYxve-HGY7meJo';
-// URL do servidor de automações (ajuste para a URL do seu Easypanel)
-const WA_SERVER = 'http://localhost:3001';
+// URL do servidor de automações — carregada do Supabase
+let WA_SERVER = '';
 const { createClient } = window.supabase;
 const sb = createClient(SUPA_URL, SUPA_ANON, {
   auth: {
@@ -6822,7 +6841,78 @@ async function deleteGarcom(id) {
 // ─────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────
-function initSidebarState() { loadSidebarState(); evoCarregarAutomacoesSalvas(); }
+function initSidebarState() { loadSidebarState(); evoCarregarAutomacoesSalvas(); carregarWaServerUrl(); }
+
+// ═══════════════════════════════════════
+// SERVIDOR DE AUTOMAÇÕES 24/7
+// ═══════════════════════════════════════
+async function salvarWaServerUrl() {
+  const url = (document.getElementById('wa-server-url')?.value || '').replace(/\/$/,'');
+  WA_SERVER = url;
+  try { await sb.from('store_config').upsert({ id: 1, wa_server_url: url }); } catch(e){}
+}
+
+async function testarServidorWA() {
+  const url = (document.getElementById('wa-server-url')?.value || '').replace(/\/$/,'');
+  if (!url) { sbToast('err','Informe a URL do servidor'); return; }
+  WA_SERVER = url;
+  const dot = document.getElementById('wa-sdot');
+  const txt = document.getElementById('wa-stxt');
+  const box = document.getElementById('wa-server-status');
+  if (dot) dot.style.background = 'var(--accent3)';
+  if (txt) txt.textContent = 'Testando...';
+  try {
+    const r = await fetch(`${url}/status`, { signal: AbortSignal.timeout(5000) });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d.ok) {
+      if (dot) dot.style.background = 'var(--success)';
+      if (txt) txt.textContent = '🟢 Online';
+      if (box) { box.style.borderColor = 'rgba(34,197,94,.3)'; box.style.color = 'var(--success)'; }
+      sbToast('ok', '✅ Servidor online! Automações 24/7 ativas.');
+      await salvarWaServerUrl();
+    } else {
+      if (dot) dot.style.background = 'var(--danger)';
+      if (txt) txt.textContent = '❌ Erro';
+      sbToast('err', 'Servidor respondeu com erro');
+    }
+  } catch(e) {
+    if (dot) dot.style.background = 'var(--danger)';
+    if (txt) txt.textContent = '❌ Offline';
+    if (box) box.style.borderColor = 'rgba(239,68,68,.3)';
+    sbToast('err', 'Servidor não alcançado: ' + e.message);
+  }
+}
+
+async function carregarWaServerUrl() {
+  try {
+    const { data } = await sb.from('store_config').select('wa_server_url').eq('id',1).single();
+    if (data?.wa_server_url) {
+      WA_SERVER = data.wa_server_url;
+      const el = document.getElementById('wa-server-url');
+      if (el) el.value = data.wa_server_url;
+      try {
+        const r = await fetch(`${WA_SERVER}/status`, { signal: AbortSignal.timeout(3000) });
+        const d = await r.json().catch(() => ({}));
+        const dot = document.getElementById('wa-sdot');
+        const txt = document.getElementById('wa-stxt');
+        const box = document.getElementById('wa-server-status');
+        if (r.ok && d.ok) {
+          if (dot) dot.style.background = 'var(--success)';
+          if (txt) txt.textContent = '🟢 Online';
+          if (box) { box.style.borderColor = 'rgba(34,197,94,.3)'; box.style.color = 'var(--success)'; }
+        } else {
+          if (dot) dot.style.background = 'var(--danger)';
+          if (txt) txt.textContent = '❌ Offline';
+        }
+      } catch(e) {
+        const dot = document.getElementById('wa-sdot');
+        const txt = document.getElementById('wa-stxt');
+        if (dot) dot.style.background = 'var(--danger)';
+        if (txt) txt.textContent = '❌ Offline';
+      }
+    }
+  } catch(e){}
+}
 
 // ═══════════════════════════════════════
 // EVOLUTION API — WhatsApp Integration
