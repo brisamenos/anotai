@@ -722,171 +722,96 @@ body {
 
 /* ── PIZZA SELECTOR ───────────────────── */
 .pizza-modal-bg {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.88);
-  z-index: 600;
-  align-items: center;
-  justify-content: center;
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.88); z-index: 600;
+  align-items: center; justify-content: center;
   backdrop-filter: blur(8px);
 }
 .pizza-modal-bg.on { display: flex; }
 .pizza-modal {
-  background: #181b24;
+  background: var(--surface);
   border: 1px solid rgba(255,255,255,.1);
   border-radius: 20px;
-  width: 520px;
-  max-width: 96vw;
-  max-height: 92vh;
-  overflow-y: auto;
-  padding: 28px 24px 24px;
+  width: 500px; max-width: 96vw; max-height: 92vh;
+  overflow-y: auto; padding: 26px 22px 22px;
   position: relative;
-  animation: pzIn .3s cubic-bezier(.34,1.56,.64,1);
+  animation: pzIn .28s cubic-bezier(.34,1.56,.64,1);
 }
-@keyframes pzIn { from{opacity:0;transform:scale(.92)} to{opacity:1;transform:scale(1)} }
-.pz-header { text-align: center; margin-bottom: 20px; }
-.pz-title { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; margin-bottom: 4px; }
-.pz-sub { font-size: 12.5px; color: var(--muted); }
-.pz-close { position: absolute; top: 16px; right: 16px; width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,.07); border: none; color: var(--muted); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-.pz-close:hover { background: rgba(255,255,255,.12); color: #fff; }
-
-/* pizza visual */
-.pizza-visual-wrap { display: flex; justify-content: center; margin-bottom: 20px; }
-.pizza-slices-wrap {
-  width: 260px;
-  height: 260px;
-  position: relative;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 3px solid rgba(255,255,255,.1);
-  box-shadow: 0 0 0 6px rgba(245,158,11,.1), 0 8px 32px rgba(0,0,0,.5);
+@keyframes pzIn { from{opacity:0;transform:scale(.9)} to{opacity:1;transform:scale(1)} }
+.pz-header { text-align: center; margin-bottom: 18px; }
+.pz-title { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; margin-bottom: 3px; }
+.pz-sub { font-size: 12px; color: var(--muted); }
+.pz-close {
+  position: absolute; top: 14px; right: 14px;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: rgba(255,255,255,.07); border: none;
+  color: var(--muted); font-size: 15px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
 }
-.pizza-slice {
-  position: absolute;
-  width: 50%;
-  height: 50%;
-  transform-origin: 100% 100%;
-  cursor: pointer;
-  transition: filter .2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-.pizza-slice:hover { filter: brightness(1.2); }
-.pizza-slice.selected { filter: brightness(1.3); }
-.pizza-slice-inner {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: 700;
-  color: rgba(255,255,255,.9);
-  text-shadow: 0 1px 3px rgba(0,0,0,.8);
-  padding: 4px;
-  text-align: center;
-  line-height: 1.2;
-}
-/* slice positioning */
-.slice-1 { transform: rotate(0deg) skewY(-45deg); }
-.slice-2 { transform: rotate(90deg) skewY(-45deg); }
-.slice-3 { transform: rotate(180deg) skewY(-45deg); }
-.slice-4 { transform: rotate(270deg) skewY(-45deg); }
-/* 2-slice mode */
-.mode-2 .slice-1 { width: 100%; height: 50%; transform: none; top: 0; left: 0; border-radius: 130px 130px 0 0; }
-.mode-2 .slice-2 { width: 100%; height: 50%; transform: none; bottom: 0; left: 0; border-radius: 0 0 130px 130px; }
-.mode-2 .slice-3, .mode-2 .slice-4 { display: none; }
-/* 3-slice mode - use clip-path */
-.mode-3 .slice-1, .mode-3 .slice-2, .mode-3 .slice-3 { width: 100%; height: 100%; transform: none; top: 0; left: 0; }
-.mode-3 .slice-1 { clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 58%); }
-.mode-3 .slice-2 { clip-path: polygon(50% 50%, 0% 58%, 0% 0%, 50% 0%); }
-.mode-3 .slice-3 { clip-path: polygon(50% 50%, 0% 58%, 100% 100%, 100% 58%); }
-.mode-3 .slice-4 { display: none; }
-/* 4-slice mode */
-.mode-4 .slice-1, .mode-4 .slice-2, .mode-4 .slice-3, .mode-4 .slice-4 { width: 50%; height: 50%; transform: none; }
-.mode-4 .slice-1 { top: 0; left: 50%; border-radius: 0 130px 0 0; }
-.mode-4 .slice-2 { top: 50%; left: 50%; border-radius: 0 0 130px 0; }
-.mode-4 .slice-3 { top: 50%; left: 0; border-radius: 0 0 0 130px; }
-.mode-4 .slice-4 { top: 0; left: 0; border-radius: 130px 0 0 0; }
-
-.pz-size-tabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 20px; }
+.pz-close:hover { background: rgba(255,255,255,.14); color: var(--text); }
+.pz-size-tabs { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 4px; }
 .pz-size-tab {
-  padding: 6px 16px;
-  border-radius: 99px;
+  padding: 6px 14px; border-radius: 99px;
   border: 1.5px solid rgba(255,255,255,.1);
-  background: none;
-  color: var(--muted);
-  font-family: 'DM Sans', sans-serif;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all .18s;
+  background: none; color: var(--muted);
+  font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: all .18s;
 }
 .pz-size-tab.on { border-color: var(--amber); color: var(--amber); background: rgba(245,158,11,.1); }
-.pz-size-tab:hover { border-color: rgba(255,255,255,.25); color: var(--text); }
-
-.pz-flavors-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .5px; text-transform: uppercase; margin-bottom: 10px; }
-.pz-selected-summary { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 16px; min-height: 32px; }
-.pz-sel-chip {
-  display: flex; align-items: center; gap: 5px;
-  background: rgba(245,158,11,.14);
-  border: 1px solid rgba(245,158,11,.3);
-  border-radius: 99px;
-  padding: 4px 10px;
-  font-size: 11.5px;
-  color: var(--amber2);
-  font-weight: 600;
+.pz-size-tab:hover:not(.on) { border-color: rgba(255,255,255,.25); color: var(--text); }
+.pz-slot {
+  display: flex; align-items: center; gap: 12px;
+  background: rgba(255,255,255,.04);
+  border: 1.5px solid rgba(255,255,255,.08);
+  border-radius: 12px; padding: 12px 14px;
+  cursor: pointer; transition: all .18s;
 }
-.pz-sel-chip .rm { cursor: pointer; opacity: .6; font-size: 13px; }
-.pz-sel-chip .rm:hover { opacity: 1; }
-
-.pz-flavor-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; max-height: 200px; overflow-y: auto; }
+.pz-slot:hover { border-color: rgba(245,158,11,.35); background: rgba(245,158,11,.05); }
+.pz-slot.active { border-color: var(--amber); background: rgba(245,158,11,.08); }
+.pz-slot.filled { border-color: rgba(245,158,11,.25); }
+.pz-slot-num {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(245,158,11,.15); color: var(--amber);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; flex-shrink: 0;
+}
+.pz-slot.active .pz-slot-num { background: var(--amber); color: #000; }
+.pz-slot-img {
+  width: 42px; height: 42px; border-radius: 8px;
+  background: rgba(255,255,255,.06); flex-shrink: 0;
+  overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 22px;
+}
+.pz-slot-img img { width: 100%; height: 100%; object-fit: cover; }
+.pz-slot-info { flex: 1; min-width: 0; }
+.pz-slot-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pz-slot-hint { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.pz-slot-remove { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 4px; flex-shrink: 0; }
+.pz-slot-remove:hover { color: var(--red); }
+.pz-flavor-list { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; max-height: 220px; overflow-y: auto; }
 .pz-flavor-list::-webkit-scrollbar { width: 3px; }
 .pz-flavor-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 99px; }
 .pz-flavor-btn {
   display: flex; align-items: center; gap: 9px;
-  background: rgba(255,255,255,.04);
-  border: 1.5px solid rgba(255,255,255,.08);
-  border-radius: 10px;
-  padding: 9px 12px;
-  cursor: pointer;
-  transition: all .15s;
-  text-align: left;
+  background: rgba(255,255,255,.04); border: 1.5px solid rgba(255,255,255,.08);
+  border-radius: 10px; padding: 10px 12px; cursor: pointer; transition: all .15s; text-align: left;
 }
-.pz-flavor-btn:hover { border-color: rgba(245,158,11,.4); background: rgba(245,158,11,.07); }
+.pz-flavor-btn:hover { border-color: rgba(245,158,11,.4); background: rgba(245,158,11,.06); }
 .pz-flavor-btn.on { border-color: var(--amber); background: rgba(245,158,11,.12); }
-.pz-flavor-btn.disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
-.pz-flavor-icon { font-size: 22px; width: 32px; text-align: center; flex-shrink: 0; }
+.pz-flavor-icon { width: 36px; height: 36px; border-radius: 8px; background: rgba(255,255,255,.06); overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.pz-flavor-icon img { width: 100%; height: 100%; object-fit: cover; }
 .pz-flavor-name { font-size: 12.5px; font-weight: 600; }
 .pz-flavor-price { font-size: 11px; color: var(--muted); margin-top: 1px; }
-
-.pz-footer { margin-top: 18px; display: flex; gap: 10px; }
+.pz-flavors-label { font-size: 10.5px; font-weight: 700; color: var(--muted); letter-spacing: .6px; text-transform: uppercase; }
+.pz-footer { margin-top: 18px; }
 .pz-confirm-btn {
-  flex: 1;
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  color: #000;
-  border: none;
-  border-radius: 12px;
-  padding: 13px;
-  font-family: 'DM Sans', sans-serif;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all .18s;
-  display: flex; align-items: center; justify-content: center; gap: 7px;
+  width: 100%; background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #000; border: none; border-radius: 12px; padding: 14px;
+  font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 700;
+  cursor: pointer; transition: all .18s; display: flex; align-items: center; justify-content: center; gap: 8px;
 }
-.pz-confirm-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.pz-confirm-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
 .pz-confirm-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
-
-/* slice colors */
-.sc-1 { background: linear-gradient(135deg, #b45309, #92400e); }
-.sc-2 { background: linear-gradient(135deg, #92400e, #78350f); }
-.sc-3 { background: linear-gradient(135deg, #78350f, #92400e); }
-.sc-4 { background: linear-gradient(135deg, #7c2d12, #b45309); }
-.sc-empty { background: rgba(255,255,255,.04); border: 2px dashed rgba(255,255,255,.1); }
 
 
 /* ── CHIP ─────────────────────────────── */
@@ -1041,53 +966,35 @@ body {
 <div class="pizza-modal-bg" id="pizza-modal-bg" onclick="onPizzaBgClick(event)">
   <div class="pizza-modal" id="pizza-modal">
     <button class="pz-close" onclick="closePizzaModal()">✕</button>
+
     <div class="pz-header">
-      <div style="font-size:40px;margin-bottom:8px">🍕</div>
+      <div style="font-size:44px;margin-bottom:6px">🍕</div>
       <div class="pz-title" id="pz-pizza-name">Monte sua Pizza</div>
-      <div class="pz-sub">Escolha até <span id="pz-max-label">4</span> sabores</div>
+      <div class="pz-sub">Escolha quantos sabores você quer</div>
     </div>
 
-    <!-- Size selector -->
-    <div class="pz-size-tabs" id="pz-size-tabs">
-      <button class="pz-size-tab on" data-slices="1" onclick="setPizzaSlices(1,this)">Inteira</button>
-      <button class="pz-size-tab" data-slices="2" onclick="setPizzaSlices(2,this)">½ a ½</button>
-      <button class="pz-size-tab" data-slices="3" onclick="setPizzaSlices(3,this)">⅓ cada</button>
-      <button class="pz-size-tab" data-slices="4" onclick="setPizzaSlices(4,this)">¼ cada</button>
+    <!-- Quantos sabores -->
+    <div class="pz-flavors-label" style="margin-bottom:10px">QUANTOS SABORES?</div>
+    <div class="pz-size-tabs">
+      <button class="pz-size-tab on" onclick="pzSetSlices(1,this)">🍕 Inteira</button>
+      <button class="pz-size-tab" onclick="pzSetSlices(2,this)">½ + ½</button>
+      <button class="pz-size-tab" onclick="pzSetSlices(3,this)">3 sabores</button>
+      <button class="pz-size-tab" onclick="pzSetSlices(4,this)">4 sabores</button>
     </div>
 
-    <!-- Pizza visual -->
-    <div class="pizza-visual-wrap">
-      <div class="pizza-slices-wrap mode-1" id="pz-slices-wrap">
-        <div class="pizza-slice sc-empty" id="pz-slice-0" onclick="openSlicePicker(0)">
-          <div class="pizza-slice-inner" id="pz-slice-label-0">+ Sabor</div>
-        </div>
-        <div class="pizza-slice sc-empty" id="pz-slice-1" onclick="openSlicePicker(1)" style="display:none">
-          <div class="pizza-slice-inner" id="pz-slice-label-1">+ Sabor</div>
-        </div>
-        <div class="pizza-slice sc-empty" id="pz-slice-2" onclick="openSlicePicker(2)" style="display:none">
-          <div class="pizza-slice-inner" id="pz-slice-label-2">+ Sabor</div>
-        </div>
-        <div class="pizza-slice sc-empty" id="pz-slice-3" onclick="openSlicePicker(3)" style="display:none">
-          <div class="pizza-slice-inner" id="pz-slice-label-3">+ Sabor</div>
-        </div>
-      </div>
-    </div>
+    <!-- Slot cards -->
+    <div class="pz-flavors-label" style="margin:16px 0 10px">SEUS SABORES</div>
+    <div id="pz-slots" style="display:flex;flex-direction:column;gap:8px"></div>
 
-    <!-- Selected summary -->
-    <div class="pz-flavors-label">SABORES SELECIONADOS</div>
-    <div class="pz-selected-summary" id="pz-selected-summary">
-      <span style="font-size:12px;color:var(--muted);padding:4px 0">Clique em uma fatia para escolher o sabor</span>
-    </div>
-
-    <!-- Flavor list (shown when slice is active) -->
-    <div id="pz-flavor-picker" style="display:none">
-      <div class="pz-flavors-label" id="pz-picker-label">ESCOLHA O SABOR DA FATIA 1</div>
-      <div class="pz-flavor-list" id="pz-flavor-list"></div>
+    <!-- Lista de sabores (aparece ao clicar num slot) -->
+    <div id="pz-picker-wrap" style="display:none;margin-top:14px">
+      <div class="pz-flavors-label" id="pz-picker-title" style="margin-bottom:10px">ESCOLHA O SABOR</div>
+      <div id="pz-flavor-list" class="pz-flavor-list"></div>
     </div>
 
     <div class="pz-footer">
       <button class="pz-confirm-btn" id="pz-confirm-btn" onclick="confirmPizza()" disabled>
-        🍕 Adicionar ao Carrinho — <span id="pz-total-label">R$ 0,00</span>
+        🍕 Adicionar ao carrinho &nbsp;·&nbsp; <span id="pz-total-label">R$ 0,00</span>
       </button>
     </div>
   </div>
@@ -1575,29 +1482,20 @@ function showToast(icon, msg) {
 }
 
 // ═══════════════════════════════════════════════
-// PIZZA SELECTOR
+// PIZZA SELECTOR — limpo e sem bugs
 // ═══════════════════════════════════════════════
-let pizzaState = {
-  item: null,       // base pizza item
-  slices: 1,        // 1,2,3,4
-  selected: [],     // array of flavor items (length == slices)
-  activeSlice: 0    // which slice is being picked
-};
-
-const SLICE_COLORS = ['sc-1','sc-2','sc-3','sc-4'];
+let pz = { item: null, slices: 1, selected: [], activeSlot: -1 };
 
 function openPizzaModal(itemId) {
   const item = allItems.find(i => i.id === itemId);
   if (!item) return;
-  // Get all pizzas as flavors
-  const flavors = allItems.filter(i => i.item_type === 'pizza' && i.status !== 'esgotado');
-  pizzaState = { item, slices: 1, selected: [null], activeSlice: 0, flavors };
+  pz = { item, slices: 1, selected: [null], activeSlot: -1 };
   document.getElementById('pz-pizza-name').textContent = item.name;
-  document.getElementById('pz-max-label').textContent = '4';
-  setPizzaSlices(1, document.querySelector('.pz-size-tab[data-slices="1"]'));
+  document.querySelectorAll('.pz-size-tab').forEach((b,i) => b.classList.toggle('on', i===0));
+  document.getElementById('pz-picker-wrap').style.display = 'none';
   document.getElementById('pizza-modal-bg').classList.add('on');
-  renderPizzaSlicesWrap();
-  openSlicePicker(0);
+  pzRenderSlots();
+  pzUpdateConfirm();
 }
 
 function closePizzaModal() {
@@ -1608,139 +1506,126 @@ function onPizzaBgClick(e) {
   if (e.target === document.getElementById('pizza-modal-bg')) closePizzaModal();
 }
 
-function setPizzaSlices(n, el) {
-  // Update tab UI
+function pzSetSlices(n, el) {
   document.querySelectorAll('.pz-size-tab').forEach(b => b.classList.remove('on'));
-  if (el) el.classList.add('on');
-  pizzaState.slices = n;
-  // Resize selected array
-  while (pizzaState.selected.length < n) pizzaState.selected.push(null);
-  pizzaState.selected = pizzaState.selected.slice(0, n);
-  renderPizzaSlicesWrap();
-  openSlicePicker(pizzaState.activeSlice < n ? pizzaState.activeSlice : 0);
-  updatePizzaSummary();
+  el.classList.add('on');
+  pz.slices = n;
+  // keep existing selections, resize array
+  while (pz.selected.length < n) pz.selected.push(null);
+  pz.selected = pz.selected.slice(0, n);
+  pz.activeSlot = -1;
+  document.getElementById('pz-picker-wrap').style.display = 'none';
+  pzRenderSlots();
+  pzUpdateConfirm();
 }
 
-function renderPizzaSlicesWrap() {
-  const wrap = document.getElementById('pz-slices-wrap');
-  const n = pizzaState.slices;
-  wrap.className = 'pizza-slices-wrap mode-' + n;
+function pzRenderSlots() {
+  const labels = ['Inteira','½ do sabor','⅓ do sabor','¼ do sabor'];
+  const label  = labels[pz.slices - 1] || '¼ do sabor';
+  const container = document.getElementById('pz-slots');
+  container.innerHTML = pz.selected.map((fl, i) => {
+    const isActive = pz.activeSlot === i;
+    const isFilled = fl !== null;
+    const imgHtml = fl && fl.image_url
+      ? `<div class="pz-slot-img"><img src="${fl.image_url}" alt="${fl.name}"></div>`
+      : `<div class="pz-slot-img">${fl ? '🍕' : '＋'}</div>`;
+    return `<div class="pz-slot${isActive?' active':''}${isFilled?' filled':''}" onclick="pzOpenSlot(${i})">
+      <div class="pz-slot-num">${i+1}</div>
+      ${imgHtml}
+      <div class="pz-slot-info">
+        <div class="pz-slot-name">${fl ? fl.name : 'Toque para escolher o sabor'}</div>
+        <div class="pz-slot-hint">${isFilled ? (label + ' · R$ '+fmtN(fl.price)) : 'Slot '+(i+1)+' vazio'}</div>
+      </div>
+      ${isFilled ? `<button class="pz-slot-remove" onclick="event.stopPropagation();pzRemoveSlot(${i})">✕</button>` : ''}
+    </div>`;
+  }).join('');
+}
 
-  for (let i = 0; i < 4; i++) {
-    const slice = document.getElementById('pz-slice-' + i);
-    const label = document.getElementById('pz-slice-label-' + i);
-    if (i < n) {
-      slice.style.display = '';
-      const flavor = pizzaState.selected[i];
-      // Remove old color classes
-      SLICE_COLORS.forEach(c => slice.classList.remove(c));
-      slice.classList.remove('sc-empty');
-      if (flavor) {
-        slice.classList.add(SLICE_COLORS[i]);
-        label.textContent = flavor.name.length > 14 ? flavor.name.slice(0,12)+'…' : flavor.name;
-      } else {
-        slice.classList.add('sc-empty');
-        label.textContent = '+ Sabor';
-      }
-      slice.style.outline = pizzaState.activeSlice === i ? '3px solid #f59e0b' : '';
-    } else {
-      slice.style.display = 'none';
-    }
+function pzOpenSlot(idx) {
+  pz.activeSlot = idx;
+  pzRenderSlots();
+
+  const flavors = allItems.filter(i => i.item_type === 'pizza' && i.status !== 'esgotado');
+  const names = ['1º sabor','2º sabor','3º sabor','4º sabor'];
+  document.getElementById('pz-picker-title').textContent = 'ESCOLHA O ' + (names[idx]||'SABOR').toUpperCase();
+  document.getElementById('pz-picker-wrap').style.display = '';
+
+  if (!flavors.length) {
+    document.getElementById('pz-flavor-list').innerHTML =
+      '<div style="color:var(--muted);font-size:12.5px;padding:14px;grid-column:span 2;text-align:center">Nenhum sabor cadastrado.<br>Adicione itens do tipo Pizza no cardápio.</div>';
+    return;
   }
-}
 
-function openSlicePicker(idx) {
-  pizzaState.activeSlice = idx;
-  renderPizzaSlicesWrap();
-  const picker = document.getElementById('pz-flavor-picker');
-  const label  = document.getElementById('pz-picker-label');
-  const list   = document.getElementById('pz-flavor-list');
-  picker.style.display = '';
-  const names = ['1ª fatia','2ª fatia','3ª fatia','4ª fatia'];
-  label.textContent = 'ESCOLHA O SABOR — ' + (names[idx] || '').toUpperCase();
-
-  const flavors = pizzaState.flavors && pizzaState.flavors.length
-    ? pizzaState.flavors
-    : allItems.filter(i => i.item_type === 'pizza' && i.status !== 'esgotado');
-
-  list.innerHTML = flavors.map(f => {
-    const isOn = pizzaState.selected[idx]?.id === f.id;
-    return `<button class="pz-flavor-btn ${isOn?'on':''}" onclick="selectFlavor(${f.id})">
-      <div class="pz-flavor-icon">${f.image_url ? `<img src="${f.image_url}" style="width:32px;height:32px;border-radius:8px;object-fit:cover">` : (f.emoji || '🍕')}</div>
+  document.getElementById('pz-flavor-list').innerHTML = flavors.map(f => {
+    const isOn = pz.selected[idx]?.id === f.id;
+    const img = f.image_url
+      ? `<div class="pz-flavor-icon"><img src="${f.image_url}"></div>`
+      : `<div class="pz-flavor-icon">🍕</div>`;
+    return `<button class="pz-flavor-btn${isOn?' on':''}" onclick="pzSelectFlavor(${f.id})">
+      ${img}
       <div>
         <div class="pz-flavor-name">${f.name}</div>
         <div class="pz-flavor-price">R$ ${fmtN(f.price)}</div>
       </div>
     </button>`;
-  }).join('') || '<div style="color:var(--muted);font-size:12.5px;padding:10px">Nenhum sabor de pizza cadastrado ainda.<br>Adicione itens do tipo "Pizza" no cardápio.</div>';
+  }).join('');
+
+  // Scroll picker into view smoothly
+  setTimeout(() => document.getElementById('pz-picker-wrap').scrollIntoView({behavior:'smooth',block:'nearest'}), 80);
 }
 
-function selectFlavor(flavorId) {
-  const flavor = allItems.find(i => i.id === flavorId);
-  if (!flavor) return;
-  const idx = pizzaState.activeSlice;
-  pizzaState.selected[idx] = flavor;
-  renderPizzaSlicesWrap();
-  updatePizzaSummary();
+function pzSelectFlavor(fid) {
+  const fl = allItems.find(i => i.id === fid);
+  if (!fl || pz.activeSlot < 0) return;
+  pz.selected[pz.activeSlot] = fl;
 
-  // Auto-advance to next unfilled slice
-  const next = pizzaState.selected.findIndex((s, i) => i > idx && s === null);
-  if (next !== -1) {
-    setTimeout(() => openSlicePicker(next), 280);
+  // Auto-advance to next empty slot
+  const nextEmpty = pz.selected.findIndex((s, i) => i > pz.activeSlot && s === null);
+  pzRenderSlots();
+  pzUpdateConfirm();
+
+  if (nextEmpty !== -1) {
+    setTimeout(() => pzOpenSlot(nextEmpty), 220);
   } else {
-    // Re-render list to show current selection
-    openSlicePicker(idx);
+    // Re-render picker to reflect selection
+    pzOpenSlot(pz.activeSlot);
   }
 }
 
-function updatePizzaSummary() {
-  const summary = document.getElementById('pz-selected-summary');
-  const filled  = pizzaState.selected.filter(Boolean);
-  if (!filled.length) {
-    summary.innerHTML = '<span style="font-size:12px;color:var(--muted);padding:4px 0">Clique em uma fatia para escolher o sabor</span>';
-    document.getElementById('pz-confirm-btn').disabled = true;
+function pzRemoveSlot(idx) {
+  pz.selected[idx] = null;
+  pz.activeSlot = idx;
+  pzRenderSlots();
+  pzUpdateConfirm();
+  pzOpenSlot(idx);
+}
+
+function pzUpdateConfirm() {
+  const filled = pz.selected.filter(Boolean);
+  const allFilled = pz.selected.every(Boolean) && pz.selected.length > 0;
+  const btn = document.getElementById('pz-confirm-btn');
+  btn.disabled = !allFilled;
+  if (filled.length) {
+    const maxP = Math.max(...filled.map(f => f.price));
+    document.getElementById('pz-total-label').textContent = 'R$ ' + fmtN(maxP);
+  } else {
     document.getElementById('pz-total-label').textContent = 'R$ 0,00';
-    return;
   }
-  summary.innerHTML = filled.map((f, i) => `
-    <div class="pz-sel-chip">
-      ${pizzaState.slices > 1 ? `<span style="font-size:9px;opacity:.7">${['½','⅓','¼'][pizzaState.slices-2] || '¼'}</span>` : ''}
-      ${f.emoji || '🍕'} ${f.name}
-      <span class="rm" onclick="removeSlice(${i})">✕</span>
-    </div>`).join('');
-
-  const allFilled = pizzaState.selected.every(Boolean);
-  document.getElementById('pz-confirm-btn').disabled = !allFilled;
-
-  // Price = max of selected flavors
-  const maxPrice = Math.max(...filled.map(f => f.price));
-  document.getElementById('pz-total-label').textContent = 'R$ ' + fmtN(maxPrice);
-}
-
-function removeSlice(idx) {
-  pizzaState.selected[idx] = null;
-  renderPizzaSlicesWrap();
-  updatePizzaSummary();
-  openSlicePicker(idx);
 }
 
 function confirmPizza() {
-  const filled = pizzaState.selected.filter(Boolean);
-  if (!filled.length) return;
-  const maxPrice = Math.max(...filled.map(f => f.price));
+  const filled = pz.selected.filter(Boolean);
+  if (!filled.length || !pz.selected.every(Boolean)) return;
+  const maxP  = Math.max(...filled.map(f => f.price));
   const names = filled.map(f => f.name).join(' + ');
-  const cartItem = {
-    id: pizzaState.item.id + '_pizza_' + Date.now(),
-    name: `🍕 ${names}`,
-    price: maxPrice,
-    qty: 1,
-    emoji: '🍕',
-    image_url: null,
-    _isPizza: true
-  };
-  cart.push(cartItem);
+  cart.push({
+    id: 'pizza_' + Date.now(),
+    name: '🍕 ' + names,
+    price: maxP, qty: 1,
+    image_url: null, _isPizza: true
+  });
   updateCartFloat();
-  showToast('🍕', `Pizza adicionada: ${names}`);
+  showToast('🍕', 'Pizza adicionada!');
   closePizzaModal();
 }
 
