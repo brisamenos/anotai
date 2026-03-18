@@ -7,13 +7,7 @@ const http         = require('http')
 const fs           = require('fs')
 const path         = require('path')
 const crypto       = require('crypto')
-const { execSync } = require('child_process')
-
-try { require.resolve('better-sqlite3') } catch(e) {
-  console.log('Instalando better-sqlite3...')
-  execSync('npm install better-sqlite3', { stdio: 'inherit' })
-}
-const Database = require('better-sqlite3')
+const Database     = require('better-sqlite3')
 
 const PORT        = process.env.PORT           || 3001
 const EVO_URL     = process.env.EVOLUTION_URL  || 'https://projeto-evolution-api.xtknqq.easypanel.host'
@@ -240,7 +234,8 @@ function parseRow(table, row) {
 }
 
 function sanitize(v) {
-  if (v === undefined) return null
+  if (v === undefined || v === null) return null
+  if (v === '')    return null   // string vazia → null (evita FK constraint com '')
   if (v === true)  return 1
   if (v === false) return 0
   return v
@@ -401,12 +396,19 @@ async function handleREST(req, res, table, params, body) {
         stmt = db.prepare(`INSERT INTO "${table}" (${colList}) VALUES (${phs})`)
       }
       const info = stmt.run(...keys.map(k=>sanitize(payload[k])))
-      const newId = info.lastInsertRowid
+      const newRowid = info.lastInsertRowid
       const returnRep = req.headers['prefer']?.includes('return=representation')
       let inserted = null
       if (returnRep) {
-        inserted = db.prepare(`SELECT * FROM "${table}" WHERE id=?`).get(newId)
-        inserted = parseRow(table, inserted)
+        // Usa rowid para funcionar tanto com TEXT PK (sys_users, tenants) quanto INTEGER PK
+        const raw = db.prepare(`SELECT * FROM "${table}" WHERE rowid=?`).get(newRowid)
+        // Para sys_users com join de tenants, faz o join completo
+        if (table === 'sys_users' && raw) {
+          const t = db.prepare("SELECT nome,plano,ativo,expires_at FROM tenants WHERE id=?").get(raw.tenant_id)
+          inserted = parseRow(table, {...raw, tenants: t ? {nome:t.nome,plano:t.plano,ativo:t.ativo===1,expires_at:t.expires_at} : null})
+        } else {
+          inserted = raw ? parseRow(table, raw) : null
+        }
       }
       if (['orders','mesas','store_config'].includes(table)) emit(tenantId||payload.tenant_id, table, inserted||payload, 'INSERT')
       return send(res,201,returnRep?inserted:{id:newId})
