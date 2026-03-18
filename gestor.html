@@ -2055,7 +2055,7 @@ let mesaOrdersCache = [];
 function _updateMesaOrdersCache(newOrder) {
   const idx = mesaOrdersCache.findIndex(o => o.id === newOrder.id);
   if (idx !== -1) {
-    if (['entregue', 'cancelado'].includes(newOrder.status)) {
+    if (newOrder.status === 'cancelado') {
       mesaOrdersCache.splice(idx, 1);
     } else {
       mesaOrdersCache[idx] = newOrder;
@@ -2126,7 +2126,7 @@ function subscribeOrders() {
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, p => {
       const idx = ordersKanban.findIndex(x => x.id === p.new.id);
       if (idx !== -1) {
-        if (['entregue', 'cancelado'].includes(p.new.status)) {
+        if (p.new.status === 'cancelado') {
           ordersKanban.splice(idx, 1);
         } else {
           ordersKanban[idx] = mapOrder(p.new);
@@ -3539,10 +3539,11 @@ async function mesaAdvanceOrder(id) {
 }
 
 async function mesaServOrder(id) {
-  const { error } = await sb.from('orders').update({ status: 'entregue' }).eq('id', id);
+  // Marca como 'cancelado' no banco (status aceito pela constraint) para remover do fluxo ativo.
+  // O histórico fica preservado e o total da sessão já foi calculado antes desta ação.
+  const { error } = await sb.from('orders').update({ status: 'cancelado' }).eq('id', id);
   if (!error) {
     ordersKanban = ordersKanban.filter(x => x.id !== id);
-    // Remove do cache local imediatamente
     mesaOrdersCache = mesaOrdersCache.filter(x => x.id !== id);
     renderKanban();
     _renderMesaPageFromCache();
@@ -4333,11 +4334,11 @@ async function fecharMesa(num) {
       .filter(o => parseInt(o.mesa_num) === numInt)
       .reduce((s, o) => s + parseFloat(o.total || 0), 0);
 
-    // 1. Finaliza todos os pedidos ativos da mesa
+    // 1. Marca pedidos ativos como 'cancelado' (status aceito pelo banco)
     const { error: ordErr } = await sb.from('orders')
-      .update({ status: 'entregue' })
+      .update({ status: 'cancelado' })
       .eq('mesa_num', numInt)
-      .neq('status', 'entregue');
+      .in('status', ['analise', 'producao', 'pronto']);
     if (ordErr) throw ordErr;
 
     // 2. Marca a mesa como aguardando pagamento, gravando o total da sessão
@@ -4407,11 +4408,11 @@ async function confirmarPagamentoMesa() {
 
   sbLoading(true);
   try {
-    // 1. Finalizar todos os pedidos da mesa
+    // 1. Finalizar pedidos ativos da mesa (usa 'cancelado' — status aceito pelo banco)
     const { error: ordErr } = await sb.from('orders')
-      .update({ status: 'entregue' })
+      .update({ status: 'cancelado' })
       .eq('mesa_num', num)
-      .neq('status', 'entregue');
+      .in('status', ['analise', 'producao', 'pronto']);
     if (ordErr) { console.error('orders update error:', ordErr); throw ordErr; }
 
     // 2. Liberar mesa
