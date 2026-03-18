@@ -2043,9 +2043,39 @@ function applyStoreStatus(open) {
 }
 
 function subscribeStoreStatus() {
+  // Canal original que estava funcionando
   sb.channel('store-config-cardapio')
-    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'store_config'}, p => {
+    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'store_config' }, p => {
       applyStoreStatus(p.new.store_open);
+    })
+    .subscribe();
+
+  // Realtime para menu_items — atualiza cardápio quando gestor edita
+  sb.channel('menu-rt')
+    .on('postgres_changes', { event:'INSERT', schema:'public', table:'menu_items' }, p => {
+      if (p.new && !allItems.find(i => i.id === p.new.id)) {
+        allItems.push(p.new);
+        renderMenu();
+        buildCatTabs();
+      }
+    })
+    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'menu_items' }, p => {
+      const idx = allItems.findIndex(i => i.id === p.new.id);
+      if (idx !== -1) allItems[idx] = p.new; else allItems.push(p.new);
+      renderMenu();
+    })
+    .on('postgres_changes', { event:'DELETE', schema:'public', table:'menu_items' }, p => {
+      allItems = allItems.filter(i => i.id !== p.old.id);
+      renderMenu();
+    })
+    .subscribe();
+
+  // Realtime para categories
+  sb.channel('cats-rt')
+    .on('postgres_changes', { event:'*', schema:'public', table:'categories' }, () => {
+      sb.from('categories').select('*').order('sort_order').then(({ data }) => {
+        if (data) { allCats = data; buildCatTabs(); renderMenu(); }
+      });
     })
     .subscribe();
 }
