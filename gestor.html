@@ -718,6 +718,12 @@ td:first-child{padding-left:16px}
 
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// Stub temporário — evita ReferenceError enquanto o script principal carrega
+function nav(){}
+function openModal(){}
+function closeModal(){}
+</script>
 </head>
 <body>
 
@@ -2875,12 +2881,6 @@ function _refreshMesaPageIfActive() {
 }
 
 // ── Realtime orders ──────────────────────────────────
-function requestNotifPermission() {
-  if ('Notification' in window && Notification.permission === 'default') {
-    Notification.requestPermission();
-  }
-}
-
 function sendBrowserNotif(title, body) {
   if ('Notification' in window && Notification.permission === 'granted') {
     new Notification(title, { body, icon: '' });
