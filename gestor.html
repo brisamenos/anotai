@@ -2080,8 +2080,8 @@ function _renderMesaPageFromCache() {
 
   const activeTables = tables.filter(t => t.status !== 'free');
 
-  // Stats
-  const elv = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  // Atualiza stats sem piscar
+  const elv = (id, v) => { const e = document.getElementById(id); if (e && e.textContent !== String(v)) e.textContent = v; };
   elv('pm-stat-livres',    tables.filter(t => t.status === 'free').length);
   elv('pm-stat-ocupadas',  tables.filter(t => t.status === 'busy').length);
   elv('pm-stat-aguardando',tables.filter(t => t.status === 'waiting').length);
@@ -2091,17 +2091,45 @@ function _renderMesaPageFromCache() {
     return;
   }
 
-  // Filtra por sessão usando cache local
   const sessionOrders = mesaOrdersCache.filter(o => {
     const mesa = activeTables.find(t => t.num === parseInt(o.mesa_num));
     if (!mesa || !mesa.opened_at) return true;
     return new Date(o.created_at || 0).getTime() >= new Date(mesa.opened_at).getTime() - 5000;
   });
 
-  grid.innerHTML = activeTables
-    .sort((a, b) => a.num - b.num)
-    .map(t => renderMesaCard(t, sessionOrders.filter(o => parseInt(o.mesa_num) === t.num)))
-    .join('');
+  // Atualização inteligente: só substitui o card da mesa que mudou
+  const sorted = activeTables.sort((a, b) => a.num - b.num);
+  const existing = grid.querySelectorAll('[data-mesa-card]');
+  const existingNums = new Set([...existing].map(el => parseInt(el.dataset.mesaCard)));
+  const activeNums   = new Set(sorted.map(t => t.num));
+
+  // Remove cards de mesas que ficaram livres
+  existing.forEach(el => {
+    if (!activeNums.has(parseInt(el.dataset.mesaCard))) el.remove();
+  });
+
+  sorted.forEach((t, i) => {
+    const orders  = sessionOrders.filter(o => parseInt(o.mesa_num) === t.num);
+    const newHtml = renderMesaCard(t, orders);
+    const cardId  = 'mesa-card-' + t.num;
+    let el = document.getElementById(cardId);
+
+    if (!el) {
+      // Nova mesa — cria wrapper e insere na posição certa
+      el = document.createElement('div');
+      el.id = cardId;
+      el.dataset.mesaCard = t.num;
+      el.style.cssText = 'margin-bottom:0';
+      el.innerHTML = newHtml;
+      const ref = grid.children[i];
+      if (ref) grid.insertBefore(el, ref); else grid.appendChild(el);
+    } else {
+      // Mesa existente — só atualiza se conteúdo mudou (evita piscar)
+      if (el.innerHTML !== newHtml) {
+        el.innerHTML = newHtml;
+      }
+    }
+  });
 }
 
 function subscribeOrders() {
@@ -2189,14 +2217,25 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// Polling de 8s como fallback garantido (complementa o WebSocket)
-setInterval(() => {
+// Polling de 12s — só re-renderiza se houver mudança real no banco
+let _lastPollHash = '';
+setInterval(async () => {
   if (document.visibilityState !== 'visible') return;
+  if (!_rtConnected) { subscribeOrders(); return; } // reconecta se perdeu WS
   const pg = document.getElementById('page-pedidos-mesa');
-  if (pg && pg.classList.contains('on')) {
-    renderMesasPage();
+  if (!pg || !pg.classList.contains('on')) return;
+  // Busca apenas IDs + status para comparar (leve)
+  const { data } = await sb.from('orders')
+    .select('id,status,mesa_num')
+    .not('mesa_num', 'is', null)
+    .in('status', ['analise','producao','pronto'])
+    .order('id');
+  const hash = JSON.stringify((data||[]).map(o => o.id + o.status));
+  if (hash !== _lastPollHash) {
+    _lastPollHash = hash;
+    renderMesasPage(); // só renderiza se algo mudou
   }
-}, 8000);
+}, 12000);
 
 // Registra SW e pede permissão de notificação ao carregar
 requestNotifPermission();
@@ -3456,10 +3495,8 @@ async function renderMesasPage() {
   // Popula o cache local com os dados da sessão atual (já filtrados)
   mesaOrdersCache = sessionOrders;
 
-  grid.innerHTML = activeTables
-    .sort((a, b) => a.num - b.num)
-    .map(t => renderMesaCard(t, sessionOrders.filter(o => parseInt(o.mesa_num) === t.num)))
-    .join('');
+  // Usa renderização inteligente (sem piscar)
+  _renderMesaPageFromCache();
 }
 
 function renderMesaCard(t, orders) {
