@@ -24,6 +24,15 @@ function log(emoji, msg, data) {
   console.log(`[${t}] ${emoji}  ${msg}`, data ? JSON.stringify(data) : '')
 }
 
+// ── Diagnóstico de persistência ────────────────────────
+const _dbExistia = fs.existsSync(DB_PATH)
+log('💾', `Banco: ${DB_PATH}`)
+log(_dbExistia ? '✅' : '🆕', _dbExistia
+  ? `Banco existente encontrado — dados preservados`
+  : `Banco NOVO — se isso aparecer após um deploy, o volume /app/data NÃO está montado no Easypanel!`
+)
+log('📁', `Uploads: ${UPLOADS_DIR}`)
+
 // ════════════════════════════════════════════════════════
 // BANCO SQLite
 // ════════════════════════════════════════════════════════
