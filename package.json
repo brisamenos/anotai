@@ -1,7 +1,7 @@
 {
-  "name": "estima-food-server",
-  "version": "2.0.0",
-  "description": "Servidor Estima Food — SQLite + REST + SSE + WhatsApp",
+  "name": "estima-food",
+  "version": "1.0.0",
+  "description": "Estima Food — Sistema Multi-Tenant",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
