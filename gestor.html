@@ -7070,7 +7070,7 @@ async function evoEnviarAniversariantesManual() {
   }
 }
 
-
+async function evoEnviarAniversariantesHoje(silencioso = false) {
   const toggle = document.getElementById('auto-toggle-aniversario');
   if (toggle && !toggle.classList.contains('on')) {
     if (!silencioso) sbToast('err', 'Automação de aniversário está desativada');
@@ -7095,9 +7095,9 @@ async function evoEnviarAniversariantesManual() {
   try { await sb.from('store_config').upsert({ id: 1, evo_aniv_last: todayMD }); } catch(e){}
   // Atualiza label na tela
   const lastEl = document.getElementById('aniv-last-send');
-  if (lastEl) lastEl.textContent = `Último envio: ${todayMD} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;
-  if (!silencioso) sbToast('ok', `🎂 Enviado para ${ok} aniversariante(s)${fail ? ` | ${fail} falhou` : ''}`);
-  else if (ok > 0) sbToast('ok', `🎂 Felicitações automáticas enviadas para ${ok} aniversariante(s)!`);
+  if (lastEl) lastEl.textContent = 'Último envio: ' + todayMD + ' às ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  if (!silencioso) sbToast('ok', '🎂 Enviado para ' + ok + ' aniversariante(s)' + (fail ? ' | ' + fail + ' falhou' : '') + '!');
+  else if (ok > 0) sbToast('ok', '🎂 Felicitações automáticas enviadas para ' + ok + ' aniversariante(s)!');
 }
 
 // ── Scheduler automático de aniversário ──────────────────
