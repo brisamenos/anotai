@@ -691,36 +691,42 @@ async function loadData() {
 
 // ══ REALTIME MESAS ═══════════════════════
 function subscribeRealtime() {
-  sb.channel('garcom-mesas')
+  // Canal de mesas — qualquer mudança recarrega a lista inteira
+  sb.channel('garcom-mesas-' + (currentGarcom?.id || 'g'))
     .on('postgres_changes', { event:'*', schema:'public', table:'mesas' }, () => {
       sb.from('mesas').select('*').order('num').then(({ data }) => {
-        if (data) {
-          tables = data;
-          renderMesas();
-          // Quando uma mesa muda de status (ex: gestor liberou),
-          // refiltra os pedidos para excluir mesas que ficaram livres
-          const pedidosPage = document.getElementById('page-pedidos');
-          if (pedidosPage && pedidosPage.classList.contains('on')) {
-            loadPedidosDaMesa();
-          } else {
-            // Atualiza silenciosamente o array para quando o garçom abrir a aba
-            const activeMesaNums = tables.filter(t => t.status !== 'free').map(t => t.num);
-            myOrders = myOrders.filter(o => activeMesaNums.includes(o.mesa_num));
-          }
-        }
+        if (!data) return;
+        tables = data;
+        renderMesas();
+        // Sempre recarrega pedidos com a lista de mesas atualizada —
+        // se a mesa virou 'free', os pedidos antigos somem automaticamente
+        loadPedidosDaMesa();
       });
     }).subscribe();
-  sb.channel('garcom-orders')
+
+  // Canal de pedidos — INSERT novo / UPDATE de status / DELETE
+  sb.channel('garcom-orders-' + (currentGarcom?.id || 'g'))
     .on('postgres_changes', { event:'*', schema:'public', table:'orders' }, p => {
-      if (p.eventType === 'INSERT' && p.new.garcom_id === currentGarcom?.id) {
-        if (!myOrders.find(o => o.id === p.new.id)) {
+      if (p.eventType === 'INSERT') {
+        // Só adiciona se for pedido deste garçom e não estiver na lista
+        if (p.new.garcom_id === currentGarcom?.id && !myOrders.find(o => o.id === p.new.id)) {
           myOrders.unshift(p.new);
           renderMyOrders();
         }
       } else if (p.eventType === 'UPDATE') {
-        // Atualiza status do pedido localmente (ex: cozinha marcou como pronto)
         const idx = myOrders.findIndex(o => o.id === p.new.id);
-        if (idx !== -1) { myOrders[idx] = p.new; renderMyOrders(); }
+        if (idx !== -1) {
+          // Se pedido foi finalizado ou cancelado, remove da lista do garçom
+          if (['entregue', 'cancelado'].includes(p.new.status)) {
+            myOrders.splice(idx, 1);
+          } else {
+            myOrders[idx] = p.new;
+          }
+          renderMyOrders();
+        }
+      } else if (p.eventType === 'DELETE') {
+        myOrders = myOrders.filter(o => o.id !== p.old.id);
+        renderMyOrders();
       }
     }).subscribe();
 }
