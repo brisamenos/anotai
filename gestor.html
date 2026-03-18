@@ -3308,7 +3308,7 @@ async function renderMesasPage() {
           <button onclick="openGarcomMesa(${num})" class="btn bp" style="flex:1;justify-content:center;font-size:12px">
             ➕ Lançar pedido
           </button>
-          <button onclick="openRegistrarPagamento(${num})" class="btn" style="flex:1;justify-content:center;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;border:none;font-size:12px;font-weight:700">
+          <button onclick="fecharMesa(${num})" class="btn" style="flex:1;justify-content:center;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;border:none;font-size:12px;font-weight:700">
             💰 Fechar mesa
           </button>
         </div>`;
@@ -4078,6 +4078,24 @@ async function saveTaxaConfig() {
     sbToast('ok', 'Taxa de entrega salva!');
   } catch(e) {
     sbToast('err', 'Erro ao salvar taxa');
+  }
+}
+
+async function fecharMesa(num) {
+  const t = tables.find(x => x.num === num);
+  if (!t) return;
+  sbLoading(true);
+  try {
+    await sb.from('mesas').update({
+      status: 'waiting', updated_at: new Date().toISOString()
+    }).eq('num', num);
+    t.status = 'waiting';
+    renderMesasPage();
+    sbToast('ok', `Mesa ${num} aguardando pagamento`);
+  } catch(e) {
+    sbToast('err', 'Erro ao fechar mesa');
+  } finally {
+    sbLoading(false);
   }
 }
 
