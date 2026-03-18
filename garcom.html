@@ -940,11 +940,13 @@ async function submitPedido() {
 
   const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 
-  // Split: food → producao, drinks → pronto
   const foodItems  = cart.filter(i => !isDrink(i));
-  const drinkItems = cart.filter(i => isDrink(i));
-  const allItemsArr = cart.map(i=>({qty:i.qty, name:i.name, price:i.price, obs:''}));
+  // Tudo num pedido só — bebidas ficam marcadas com flag drink:true
+  const allItemsArr = cart.map(i=>({qty:i.qty, name:i.name, price:i.price, obs:'', drink: !!isDrink(i)}));
   const tot = cart.reduce((s,i)=>s+i.price*i.qty,0);
+
+  // Status: se tem comida → producao (vai pra cozinha); só bebidas → pronto (já na mesa)
+  const orderStatus = foodItems.length > 0 ? 'producao' : 'pronto';
 
   try {
     // Garante que a mesa está busy (sem sobreescrever updated_at se já estava aberta)
@@ -953,8 +955,6 @@ async function submitPedido() {
       await sb.from('mesas').update({ status:'busy', updated_at:new Date().toISOString() }).eq('num', activeMesa);
     }
 
-    // Insert single order — food goes to 'producao', all-drinks goes to 'pronto'
-    const orderStatus = foodItems.length > 0 ? 'producao' : 'pronto';
     const { data, error } = await sb.from('orders').insert({
       client: `Mesa ${activeMesa}`,
       phone: '',
@@ -970,20 +970,6 @@ async function submitPedido() {
       garcom_nome: currentGarcom?.nome
     }).select().single();
     if (error) throw error;
-
-    // If there are both food and drinks, also register drinks as separate 'pronto' entry
-    if (foodItems.length > 0 && drinkItems.length > 0) {
-      const drinkArr = drinkItems.map(i=>({qty:i.qty, name:i.name, price:i.price, obs:''}));
-      const drinkTot = drinkItems.reduce((s,i)=>s+i.price*i.qty,0);
-      await sb.from('orders').insert({
-        client: `Mesa ${activeMesa}`,
-        phone: '', addr: `Mesa ${activeMesa}`,
-        items: drinkArr, total: drinkTot, taxa: 0,
-        status: 'pronto', time, pag: 'Mesa',
-        mesa_num: activeMesa,
-        garcom_id: currentGarcom?.id, garcom_nome: currentGarcom?.nome
-      });
-    }
 
     myOrders.unshift({ ...data, _mesaNum: activeMesa });
     closeSheet();
@@ -1186,7 +1172,13 @@ async function confirmarFinalizarMesa() {
   const orders = myOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === finalizarMesaNum);
   const total  = orders.reduce((s,o)=>s+parseFloat(o.total||0),0);
   try {
-    // Set mesa to 'waiting' (aguardando pagamento no caixa)
+    // 1. Finaliza todos os pedidos ativos da mesa — limpa o kanban e zera o acúmulo
+    await sb.from('orders')
+      .update({ status: 'entregue' })
+      .eq('mesa_num', finalizarMesaNum)
+      .in('status', ['analise', 'producao', 'pronto']);
+
+    // 2. Marca mesa como aguardando pagamento
     await sb.from('mesas').update({
       status: 'waiting',
       total: 'R$ ' + total.toFixed(2).replace('.',','),
@@ -1198,7 +1190,6 @@ async function confirmarFinalizarMesa() {
     showToast('✅ Mesa ' + finalizarMesaNum + ' enviada para pagamento!');
     const { data: mesas } = await sb.from('mesas').select('*').order('num');
     if (mesas) { tables = mesas; renderMesas(); }
-    // Recarrega pedidos filtrando pela lista de mesas ativas atualizada
     await loadPedidosDaMesa();
   } catch(e) {
     showToast('❌ Erro ao finalizar mesa');
