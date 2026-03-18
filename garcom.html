@@ -765,7 +765,7 @@ function renderMesas() {
 }
 
 // ══ SHEET PEDIDO ═════════════════════════
-function openPedido(num) {
+async function openPedido(num) {
   activeMesa = num;
   cart = [];
   document.getElementById('sheet-title').textContent = `Lançar Pedido — Mesa ${num}`;
@@ -773,6 +773,16 @@ function openPedido(num) {
   renderItemGrid();
   updateCartUI();
   switchSheetTab('itens');
+  // Se a mesa está livre (primeira abertura), marca como busy e registra o timestamp
+  // da sessão. Isso é o marco zero pra filtrar pedidos antigos.
+  const mesa = tables.find(t => t.num === num);
+  if (mesa && mesa.status === 'free') {
+    const now = new Date().toISOString();
+    await sb.from('mesas').update({ status: 'busy', updated_at: now }).eq('num', num);
+    mesa.status = 'busy';
+    mesa.updated_at = now;
+    renderMesas();
+  }
   document.getElementById('sheet-pedido').classList.add('on');
 }
 
@@ -937,8 +947,11 @@ async function submitPedido() {
   const tot = cart.reduce((s,i)=>s+i.price*i.qty,0);
 
   try {
-    // Update mesa to busy
-    await sb.from('mesas').update({ status:'busy', updated_at:new Date().toISOString() }).eq('num', activeMesa);
+    // Garante que a mesa está busy (sem sobreescrever updated_at se já estava aberta)
+    const mesaAtual = tables.find(t => t.num === activeMesa);
+    if (mesaAtual && mesaAtual.status !== 'busy') {
+      await sb.from('mesas').update({ status:'busy', updated_at:new Date().toISOString() }).eq('num', activeMesa);
+    }
 
     // Insert single order — food goes to 'producao', all-drinks goes to 'pronto'
     const orderStatus = foodItems.length > 0 ? 'producao' : 'pronto';
@@ -1009,18 +1022,18 @@ function switchTab(tab) {
 
 async function loadPedidosDaMesa() {
   const el = document.getElementById('pedidos-list');
-  el.innerHTML = '<div class="empty"><div class="spinner" style="margin:0 auto"></div></div>';
+  if (el) el.innerHTML = '<div class="empty"><div class="spinner" style="margin:0 auto"></div></div>';
   try {
-    // Só mostra pedidos de mesas que estão ATUALMENTE ocupadas ou aguardando pagamento.
-    // Quando uma mesa é liberada (free), os pedidos anteriores ficam de histórico
-    // no gestor, mas somem da visão do garçom na próxima abertura do app.
-    const activeMesaNums = tables.filter(t => t.status !== 'free').map(t => t.num);
+    // Apenas mesas abertas agora (busy ou waiting)
+    const activeMesas = tables.filter(t => t.status !== 'free');
 
-    if (!activeMesaNums.length) {
+    if (!activeMesas.length) {
       myOrders = [];
       renderMyOrders();
       return;
     }
+
+    const activeMesaNums = activeMesas.map(t => t.num);
 
     const { data } = await sb.from('orders')
       .select('*')
@@ -1028,7 +1041,17 @@ async function loadPedidosDaMesa() {
       .in('status', ['producao','pronto','analise'])
       .in('mesa_num', activeMesaNums)
       .order('id', { ascending: false });
-    myOrders = data || [];
+
+    // Filtro de sessão: só pedidos criados APÓS a última abertura da mesa.
+    // Isso garante que ao reabrir uma mesa o histórico anterior não acumula.
+    myOrders = (data || []).filter(o => {
+      const mesa = activeMesas.find(t => t.num === o.mesa_num);
+      if (!mesa || !mesa.updated_at) return true;
+      const orderTime = new Date(o.created_at || 0).getTime();
+      const mesaOpenTime = new Date(mesa.updated_at).getTime();
+      return orderTime >= mesaOpenTime - 5000; // 5s de tolerância
+    });
+
     renderMyOrders();
   } catch(e) {
     myOrders = [];
