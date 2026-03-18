@@ -1,20 +1,17 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
-# Dependências para compilar better-sqlite3
+# Ferramentas necessárias para compilar better-sqlite3 (módulo nativo C++)
 RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
-# Copia e instala dependências
-COPY package.json .
+COPY package.json ./
 RUN npm install --production
 
-# Copia todos os arquivos estáticos e o servidor
 COPY . .
 
-# Diretório de dados persistentes (mapeado como volume no Easypanel)
-RUN mkdir -p /app/data/uploads
-VOLUME ["/app/data"]
+RUN mkdir -p /app/data /app/data/uploads
 
 EXPOSE 3001
+
 CMD ["node", "server.js"]
