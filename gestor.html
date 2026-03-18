@@ -7737,10 +7737,11 @@ async function cpUploadImagem(input, tipo) {
   if (!file) return;
   sbLoading(true);
   try {
-    const ext  = file.name.split('.').pop();
-    const path = `branding/${_sessao?.tenant_id || 'default'}-${tipo}.${ext}`;
-    const { data } = await sb.storage.from('menu-images').upload(path, file, { upsert: true });
-    const { data: { publicUrl } } = sb.storage.from('menu-images').getPublicUrl(path);
+    const ext      = file.name.split('.').pop().toLowerCase();
+    const filename = `${_sessao?.tenant_id || 'default'}-${tipo}.${ext}`;
+    const filepath = `branding/${filename}`;
+    await sb.storage.from('menu-images').upload(filepath, file, { upsert: true });
+    const { data: { publicUrl } } = sb.storage.from('menu-images').getPublicUrl(filepath);
 
     if (tipo === 'logo') {
       _cpLogoUrl = publicUrl;
@@ -7755,9 +7756,15 @@ async function cpUploadImagem(input, tipo) {
       const hero = document.getElementById('cp-preview-hero');
       if (hero) hero.style.backgroundImage = `url(${publicUrl})`;
     }
-    sbToast('ok', `${tipo === 'logo' ? 'Logo' : 'Banner'} atualizado!`);
+
+    // Salva URL no banco imediatamente, sem precisar clicar em "Salvar"
+    const field = tipo === 'logo' ? 'store_logo_url' : 'store_banner_url';
+    await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, [field]: publicUrl });
+
+    sbToast('ok', `${tipo === 'logo' ? 'Logo' : 'Banner'} enviado e salvo!`);
   } catch(e) {
-    sbToast('err', 'Erro ao enviar imagem');
+    console.error('cpUploadImagem:', e);
+    sbToast('err', 'Erro ao enviar imagem: ' + (e.message || ''));
   } finally {
     sbLoading(false);
   }
