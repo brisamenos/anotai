@@ -180,7 +180,10 @@ td:first-child{padding-left:16px}
 .cat-row{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;overflow:hidden;transition:border-color .18s}
 .cat-row:hover{border-color:rgba(59,130,246,.3)}
 .cat-head{display:flex;align-items:center;gap:10px;padding:13px 16px;cursor:pointer}
-.cat-drag{color:var(--muted);cursor:grab;font-size:14px}
+.cat-drag{color:var(--muted);cursor:grab;font-size:18px;padding:0 4px;user-select:none;flex-shrink:0}
+.cat-drag:active{cursor:grabbing}
+.cat-row.drag-over{border-color:var(--accent)!important;background:rgba(59,130,246,.06)}
+.cat-row.dragging{opacity:.4}
 .cat-name{font-weight:700;font-size:14px;flex:1}
 .cat-badge{font-size:10.5px;background:rgba(59,130,246,.12);color:var(--accent);padding:2px 7px;border-radius:99px;font-weight:600}
 .cat-promo-banner{background:var(--accent3);color:#000;text-align:center;font-size:11px;font-weight:700;padding:3px;letter-spacing:.8px;text-transform:uppercase}
@@ -2151,6 +2154,63 @@ function printOrderDetail(){
 }
 
 // ─────────────────────────────────────────
+// GESTOR — DRAG & DROP CATEGORIAS
+// ─────────────────────────────────────────
+let _dragCatId = null;
+
+function catDragStart(e, id) {
+  _dragCatId = id;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', id);
+  // Mark dragging element
+  setTimeout(() => e.target.closest('.cat-row')?.classList.add('dragging'), 0);
+}
+
+function catDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  // Highlight drop target
+  const row = e.target.closest('.cat-row');
+  document.querySelectorAll('.cat-row.drag-over').forEach(r => r.classList.remove('drag-over'));
+  if (row && parseInt(row.dataset.catId) !== _dragCatId) {
+    row.classList.add('drag-over');
+  }
+}
+
+function catDragEnd(e) {
+  document.querySelectorAll('.cat-row').forEach(r => {
+    r.classList.remove('dragging');
+    r.classList.remove('drag-over');
+  });
+  _dragCatId = null;
+}
+
+async function catDrop(e, targetId) {
+  e.preventDefault();
+  if (!_dragCatId || _dragCatId === targetId) return;
+
+  // Reorder categories array
+  const fromIdx = categories.findIndex(c => c.id === _dragCatId);
+  const toIdx   = categories.findIndex(c => c.id === targetId);
+  if (fromIdx === -1 || toIdx === -1) return;
+
+  const moved = categories.splice(fromIdx, 1)[0];
+  categories.splice(toIdx, 0, moved);
+
+  renderGestor();
+
+  // Persist new order to Supabase
+  try {
+    await Promise.all(categories.map((cat, i) =>
+      sb.from('categories').update({ sort_order: i + 1 }).eq('id', cat.id)
+    ));
+    sbToast('ok', 'Ordem das categorias salva!');
+  } catch(err) {
+    sbToast('err', 'Erro ao salvar ordem');
+  }
+}
+
+// ─────────────────────────────────────────
 // GESTOR DE CARDÁPIO
 // ─────────────────────────────────────────
 function renderGestor(){
@@ -2161,13 +2221,17 @@ function renderGestor(){
       cl.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:13px">Nenhuma categoria ainda.<br>Clique em <strong style="color:var(--accent)">Nova categoria</strong> para começar.</div>';
       return;
     }
-    cl.innerHTML=categories.map(cat=>{
+    cl.innerHTML=categories.map((cat,idx)=>{
       const catItems=items.filter(i=>i.catKey===cat.name||i.cat===cat.name);
       return `
       ${cat.promo?'<div class="cat-promo-banner">promo</div>':''}
-      <div class="cat-row">
+      <div class="cat-row" draggable="true" data-cat-id="${cat.id}"
+           ondragstart="catDragStart(event,${cat.id})"
+           ondragover="catDragOver(event)"
+           ondrop="catDrop(event,${cat.id})"
+           ondragend="catDragEnd(event)">
         <div class="cat-head" onclick="toggleCat(${cat.id})">
-          <span class="cat-drag">⠿</span>
+          <span class="cat-drag" onmousedown="event.stopPropagation()" title="Arrastar para reordenar">⠿</span>
           <div>
             <div class="cat-name">${cat.label}</div>
             <span class="cat-badge">${catItems.length} ite${catItems.length===1?'m':'ns'}</span>
