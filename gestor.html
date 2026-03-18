@@ -1122,10 +1122,60 @@ td:first-child{padding-left:16px}
 
 <!-- GARÇOM -->
 <div class="page" id="page-garcom">
-  <div class="ph"><div><div class="pt">Modo Garçom</div><div class="ps">Clique em uma mesa para lançar pedido</div></div>
-    <div style="display:flex;gap:8px"><div class="chip chip-green">● App garçom ativo</div><button class="btn bg" onclick="showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><rect x=&quot;4&quot; y=&quot;1&quot; width=&quot;8&quot; height=&quot;14&quot; rx=&quot;1.5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><circle cx=&quot;8&quot; cy=&quot;12&quot; r=&quot;.8&quot; fill=&quot;currentColor&quot;/></svg>','QR Code do app gerado!')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="1" width="8" height="14" rx="1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="12" r=".8" fill="currentColor"/></svg> Baixar app garçom</button></div>
+  <div class="ph">
+    <div><div class="pt">Modo Garçom</div><div class="ps">Gerencie garçons e visualize as mesas</div></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn bg" onclick="window.open('garcom.html','_blank')">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="4" y="1" width="8" height="14" rx="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="12" r=".8" fill="currentColor"/></svg>
+        Abrir app garçom
+      </button>
+      <button class="btn bp" onclick="openModal('modal-add-garcom')">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Novo garçom
+      </button>
+    </div>
   </div>
-  <div class="garcom-wrap" id="garcom-grid"></div>
+
+  <!-- Lista de garçons -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title" style="margin-bottom:12px">👤 Garçons cadastrados</div>
+    <div id="garcons-list">
+      <div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">
+        <div class="spinner" style="margin:0 auto 10px"></div>Carregando...
+      </div>
+    </div>
+  </div>
+
+  <!-- Mesas em tempo real -->
+  <div class="card">
+    <div class="card-title" style="margin-bottom:12px">🍽️ Mesas — visão em tempo real</div>
+    <div class="garcom-wrap" id="garcom-grid"></div>
+  </div>
+</div>
+
+<!-- MODAL NOVO GARÇOM -->
+<div class="modal-bg" id="modal-add-garcom">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-head">
+      <div class="modal-title">Novo Garçom</div>
+      <button class="modal-close" onclick="closeModal('modal-add-garcom')">✕</button>
+    </div>
+    <div style="padding:16px 20px 20px;display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label class="form-label">Nome completo</label>
+        <input class="form-input" id="add-garcom-nome" placeholder="Ex: João Silva">
+      </div>
+      <div>
+        <label class="form-label">Usuário (login)</label>
+        <input class="form-input" id="add-garcom-usuario" placeholder="Ex: joao" autocomplete="off">
+      </div>
+      <div>
+        <label class="form-label">Senha</label>
+        <input class="form-input" id="add-garcom-senha" type="password" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <button class="btn bp" style="justify-content:center" onclick="addGarcom()">Cadastrar garçom</button>
+    </div>
+  </div>
 </div>
 
 <!-- COZINHA KDS -->
@@ -2122,7 +2172,7 @@ function nav(id){
   if(id==='recuperador') renderRecup();
   if(id==='cupom') renderCupons();
   if(id==='fidelidade') renderFidelidade();
-  if(id==='garcom') renderGarcom();
+  if(id==='garcom') { renderGarcom(); loadGarcons(); }
   if(id==='kds') renderKDS();
   if(id==='estoque') renderEstoque();
   if(id==='desempenho') renderDesempenho();
@@ -3864,6 +3914,90 @@ async function saveTaxaConfig() {
     sbToast('ok', 'Taxa de entrega salva!');
   } catch(e) {
     sbToast('err', 'Erro ao salvar taxa');
+  }
+}
+
+// ─────────────────────────────────────────
+// GARÇONS
+// ─────────────────────────────────────────
+let garcons = [];
+
+async function loadGarcons() {
+  const el = document.getElementById('garcons-list');
+  if (!el) return;
+  try {
+    const { data } = await sb.from('garcons').select('*').order('id');
+    garcons = data || [];
+    renderGarconsList();
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px">Erro ao carregar garçons.</div>';
+  }
+}
+
+function renderGarconsList() {
+  const el = document.getElementById('garcons-list');
+  if (!el) return;
+  if (!garcons.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px;text-align:center">Nenhum garçom cadastrado. Clique em <strong>Novo garçom</strong> para adicionar.</div>';
+    return;
+  }
+  el.innerHTML = garcons.map(g => `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#1d4ed8);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">
+        ${g.nome.charAt(0).toUpperCase()}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13.5px">${g.nome}</div>
+        <div style="font-size:11.5px;color:var(--muted)">@${g.usuario}</div>
+      </div>
+      <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;${g.ativo?'background:rgba(34,197,94,.12);color:var(--success)':'background:rgba(100,116,139,.1);color:var(--muted)'}">
+        ${g.ativo ? '● Ativo' : '● Inativo'}
+      </span>
+      <button class="btn bg" style="font-size:11px;padding:3px 8px" onclick="toggleGarcom(${g.id},${g.ativo})">${g.ativo?'Pausar':'Ativar'}</button>
+      <button class="btn bd" style="font-size:11px;padding:3px 8px" onclick="deleteGarcom(${g.id})">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M3 4h10M6 4V2.5A.5.5 0 0 1 6.5 2h3a.5.5 0 0 1 .5.5V4M5 4l.7 9.5a.5.5 0 0 0 .5.5h3.6a.5.5 0 0 0 .5-.5L11 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
+    </div>`).join('');
+}
+
+async function addGarcom() {
+  const nome    = document.getElementById('add-garcom-nome').value.trim();
+  const usuario = document.getElementById('add-garcom-usuario').value.trim().toLowerCase();
+  const senha   = document.getElementById('add-garcom-senha').value.trim();
+  if (!nome)    { sbToast('err','Informe o nome'); return; }
+  if (!usuario) { sbToast('err','Informe o usuário'); return; }
+  if (!senha)   { sbToast('err','Informe a senha'); return; }
+  sbLoading(true);
+  const { data, error } = await sb.from('garcons').insert({ nome, usuario, senha, ativo:true }).select().single();
+  sbLoading(false);
+  if (error) { sbToast('err', error.code==='23505'?'Usuário já existe':'Erro ao cadastrar'); return; }
+  garcons.push(data);
+  renderGarconsList();
+  closeModal('modal-add-garcom');
+  document.getElementById('add-garcom-nome').value = '';
+  document.getElementById('add-garcom-usuario').value = '';
+  document.getElementById('add-garcom-senha').value = '';
+  sbToast('ok', `Garçom ${nome} cadastrado!`);
+}
+
+async function toggleGarcom(id, ativo) {
+  const { error } = await sb.from('garcons').update({ ativo: !ativo }).eq('id', id);
+  if (!error) {
+    const g = garcons.find(x=>x.id===id);
+    if (g) g.ativo = !ativo;
+    renderGarconsList();
+    sbToast('ok', !ativo ? 'Garçom ativado!' : 'Garçom pausado');
+  }
+}
+
+async function deleteGarcom(id) {
+  const g = garcons.find(x=>x.id===id);
+  if (!confirm(`Excluir garçom ${g?.nome}?`)) return;
+  const { error } = await sb.from('garcons').delete().eq('id', id);
+  if (!error) {
+    garcons = garcons.filter(x=>x.id!==id);
+    renderGarconsList();
+    sbToast('ok', 'Garçom removido');
   }
 }
 
