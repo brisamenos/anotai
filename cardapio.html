@@ -343,6 +343,66 @@ body {
   animation: fadeIn 1s .8s both;
 }
 @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+/* ── MOTOBOY DELIVERY ANIMATION ──────── */
+.motoboy-overlay {
+  display: none; position: fixed; inset: 0; z-index: 9999;
+  background: rgba(10,12,20,.97);
+  flex-direction: column; align-items: center; justify-content: center;
+}
+.motoboy-overlay.show { display: flex; }
+.motoboy-scene { position: relative; width: 320px; height: 200px; overflow: hidden; }
+.mb-road {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 38px;
+  background: #0f1117; border-top: 2px solid rgba(255,255,255,.07);
+}
+.mb-road-line {
+  position: absolute; bottom: 17px; height: 3px; width: 36px;
+  background: rgba(245,158,11,.35); border-radius: 2px;
+  animation: roadLine .38s linear infinite;
+}
+@keyframes roadLine { from{transform:translateX(360px)} to{transform:translateX(-60px)} }
+.mb-bag {
+  position: absolute; font-size: 62px; bottom: 36px; left: 50%;
+  transform: translateX(-50%);
+  animation: bagBounce .32s ease-in-out infinite alternate, bagSlideIn .55s cubic-bezier(.34,1.56,.64,1) both;
+  filter: drop-shadow(0 8px 18px rgba(0,0,0,.8)); z-index: 3;
+}
+@keyframes bagSlideIn { from{transform:translateX(200px) translateX(-50%);opacity:0} to{transform:translateX(-50%);opacity:1} }
+@keyframes bagBounce  { from{bottom:36px} to{bottom:42px} }
+.mb-moto {
+  position: absolute; font-size: 50px; bottom: 32px; left: 50%;
+  transform: translateX(-50%);
+  animation: motoBounce .17s ease-in-out infinite alternate; z-index: 2;
+}
+@keyframes motoBounce { from{bottom:32px} to{bottom:36px} }
+.mb-food-fly {
+  position: absolute; font-size: 24px; z-index: 4;
+  animation: foodFlyIn var(--dur,.6s) cubic-bezier(.34,1.56,.64,1) var(--delay,0s) both;
+}
+@keyframes foodFlyIn {
+  0%   { transform: translate(var(--fx,0px),var(--fy,-70px)) rotate(var(--r0,0deg)) scale(.5); opacity:0; }
+  70%  { opacity:1; }
+  100% { transform: translate(0,0) rotate(var(--r1,20deg)) scale(1); opacity:1; }
+}
+.mb-speed {
+  position: absolute; height: 2px; border-radius: 99px;
+  background: linear-gradient(to right,transparent,rgba(255,255,255,.12));
+  animation: speedLine .28s linear infinite;
+}
+@keyframes speedLine { from{transform:translateX(320px);opacity:0} 60%{opacity:1} to{transform:translateX(-60px);opacity:0} }
+.mb-star { position: absolute; font-size: 13px; animation: starPop .4s cubic-bezier(.34,1.56,.64,1) var(--delay,0s) both, starFade 1s ease var(--delay2,.8s) forwards; }
+@keyframes starPop  { from{transform:scale(0)} to{transform:scale(1)} }
+@keyframes starFade { to{opacity:0} }
+.motoboy-text { text-align: center; margin-top: 10px; animation: fadeIn .5s .8s both; }
+.motoboy-title { font-family:'Syne',sans-serif; font-size:22px; font-weight:900; color:var(--amber); margin-bottom:5px; }
+.motoboy-sub { font-size:13px; color:var(--muted); line-height:1.6; }
+.motoboy-ordernum { margin-top:14px; background:rgba(245,158,11,.1); border:1px solid rgba(245,158,11,.22); border-radius:12px; padding:10px 28px; font-family:'Syne',sans-serif; font-size:24px; font-weight:900; color:var(--amber); letter-spacing:2px; }
+.motoboy-btn { margin-top:20px; background:linear-gradient(135deg,#f59e0b,#d97706); color:#000; border:none; border-radius:12px; padding:13px 32px; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:700; cursor:pointer; transition:all .18s; animation:fadeIn .5s 1.2s both; }
+.motoboy-btn:hover { filter:brightness(1.1); transform:translateY(-2px); }
+/* ── CART REMOVE BTN ─────────────────── */
+.ci-remove { background:none; border:none; color:var(--muted); cursor:pointer; font-size:18px; padding:4px 6px; border-radius:6px; transition:all .15s; flex-shrink:0; line-height:1; }
+.ci-remove:hover { background:rgba(239,68,68,.15); color:var(--red); }
+
 .item-modal-bg {
   display: none; position: fixed; inset: 0;
   background: rgba(0,0,0,.85); z-index: 550;
@@ -1063,6 +1123,28 @@ body {
   <span id="toast-msg"></span>
 </div>
 
+<!-- MOTOBOY DELIVERY ANIMATION -->
+<div class="motoboy-overlay" id="motoboy-overlay">
+  <div class="motoboy-scene" id="motoboy-scene">
+    <div class="mb-road">
+      <div class="mb-road-line" style="animation-delay:0s"></div>
+      <div class="mb-road-line" style="animation-delay:.13s"></div>
+      <div class="mb-road-line" style="animation-delay:.26s"></div>
+    </div>
+    <div class="mb-speed" style="top:60px;width:80px;animation-delay:0s"></div>
+    <div class="mb-speed" style="top:80px;width:50px;animation-delay:.1s"></div>
+    <div class="mb-speed" style="top:50px;width:60px;animation-delay:.05s"></div>
+    <div class="mb-moto">🏍️</div>
+    <div class="mb-bag" id="mb-bag">🛍️</div>
+  </div>
+  <div class="motoboy-text">
+    <div class="motoboy-title">Pedido a Caminho! 🛵</div>
+    <div class="motoboy-sub">Seu pedido foi confirmado e está<br>sendo embalado com carinho.</div>
+    <div class="motoboy-ordernum" id="motoboy-num">#000</div>
+  </div>
+  <button class="motoboy-btn" onclick="closeMotoboy()">✓ Ótimo, obrigado!</button>
+</div>
+
 <!-- ITEM DETAIL MODAL -->
 <div class="item-modal-bg" id="item-modal-bg" onclick="if(event.target===this)closeItemModal()">
   <div class="item-modal">
@@ -1413,7 +1495,7 @@ function renderCartDrawer() {
     list.innerHTML = '<div class="empty" style="padding:30px 0 10px"><div class="empty-icon" style="font-size:36px">🛒</div>Carrinho vazio</div>';
   } else {
     list.innerHTML = cart.map(i => `
-      <div class="cart-item">
+      <div class="cart-item" id="cart-item-${i.id}">
         <div class="ci-thumb">
           ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}">` : i.emoji || '🍽️'}
         </div>
@@ -1422,10 +1504,11 @@ function renderCartDrawer() {
           <div class="ci-price">R$ ${fmtN(i.price * i.qty)}</div>
         </div>
         <div class="qty-row">
-          <button class="qb" onclick="changeQty(${i.id},-1)">−</button>
+          <button class="qb" onclick="changeQty(${JSON.stringify(i.id)},-1)">−</button>
           <span class="qn">${i.qty}</span>
-          <button class="qb" onclick="changeQty(${i.id},1)">+</button>
+          <button class="qb" onclick="changeQty(${JSON.stringify(i.id)},1)">+</button>
         </div>
+        <button class="ci-remove" onclick="removeCartItem(${JSON.stringify(i.id)})" title="Remover item">🗑</button>
       </div>`).join('');
   }
   renderTotals();
@@ -1548,10 +1631,10 @@ async function submitOrder() {
       return;
     }
 
-    // show success
+    // Show motoboy animation instead of success screen
+    showMotoboyAnimation(data.id);
     document.getElementById('cart-content').style.display = 'none';
-    const ss = document.getElementById('success-screen');
-    ss.classList.add('show');
+    document.getElementById('success-screen').classList.add('show');
     document.getElementById('success-id').textContent = '#' + String(data.id).padStart(3, '0');
     cart = [];
     appliedCupom = null;
@@ -1936,6 +2019,74 @@ function itemModalConfirm() {
   updateCartFloat();
   showToast('🛒', `${i.name} adicionado!`);
   closeItemModal();
+}
+
+// ═══════════════════════════════════════════════
+// REMOVER ITEM DO CARRINHO
+// ═══════════════════════════════════════════════
+function removeCartItem(id) {
+  const item = cart.find(c => c.id === id);
+  if (!item) return;
+  const el = document.getElementById('cart-item-' + id);
+  const doRemove = () => {
+    cart = cart.filter(c => c.id !== id);
+    appliedCupom = null;
+    document.getElementById('cupom-feedback').innerHTML = '';
+    document.getElementById('cupom-input').value = '';
+    updateCartFloat();
+    renderCartDrawer();
+  };
+  if (el) {
+    el.style.transition = 'all .22s ease';
+    el.style.transform  = 'translateX(90px)';
+    el.style.opacity    = '0';
+    setTimeout(doRemove, 230);
+  } else { doRemove(); }
+  showToast('🗑', `"${item.name}" removido`);
+}
+
+// ═══════════════════════════════════════════════
+// MOTOBOY ANIMATION
+// ═══════════════════════════════════════════════
+function showMotoboyAnimation(orderId) {
+  const overlay = document.getElementById('motoboy-overlay');
+  const scene   = document.getElementById('motoboy-scene');
+  document.getElementById('motoboy-num').textContent = '#' + String(orderId).padStart(3,'0');
+  overlay.classList.add('show');
+
+  // Clear old
+  scene.querySelectorAll('.mb-food-fly,.mb-star').forEach(e => e.remove());
+
+  // Food particles flying into bag
+  const foods = ['🍔','🍟','🥤','🍕','🍗','🌭','🍰','🧃'];
+  foods.sort(()=>Math.random()-.5).slice(0,5).forEach((f,i) => {
+    const el    = document.createElement('span');
+    el.className = 'mb-food-fly';
+    const fx    = (Math.random()-.5)*200;
+    const fy    = -(50+Math.random()*60);
+    const r0    = (Math.random()-.5)*180;
+    const r1    = (Math.random()-.5)*40;
+    const dur   = (.45+Math.random()*.25).toFixed(2)+'s';
+    const delay = (i*.1+.15).toFixed(2)+'s';
+    el.style.cssText = `--fx:${fx}px;--fy:${fy}px;--r0:${r0}deg;--r1:${r1}deg;--dur:${dur};--delay:${delay};bottom:58px;left:50%;transform:translateX(-50%)`;
+    el.textContent = f;
+    scene.appendChild(el);
+  });
+
+  // Stars burst
+  ['⭐','✨','💫','🌟','✨','⭐'].forEach((s,i) => {
+    const el    = document.createElement('span');
+    el.className = 'mb-star';
+    const x     = 20+Math.random()*280;
+    const y     = 10+Math.random()*110;
+    el.style.cssText = `--delay:${(.3+i*.12).toFixed(2)}s;--delay2:${(.8+i*.1).toFixed(2)}s;left:${x}px;top:${y}px`;
+    el.textContent = s;
+    scene.appendChild(el);
+  });
+}
+
+function closeMotoboy() {
+  document.getElementById('motoboy-overlay').classList.remove('show');
 }
 
 // ═══════════════════════════════════════════════
