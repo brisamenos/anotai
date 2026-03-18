@@ -65,6 +65,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);hei
 .main{flex:1;overflow:auto}
 .page{display:none;padding:24px 28px;animation:fadeUp .25s ease}
 .page.on{display:block}
+#page-pdv-balcao.on{display:flex}
 @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:10px}
 .pt{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:-.4px}
@@ -226,7 +227,74 @@ td:first-child{padding-left:16px}
 .cart-total-row{display:flex;justify-content:space-between;font-size:14px;font-weight:700;margin-bottom:10px}
 .cart-total-row span:last-child{color:var(--accent);font-family:'Syne',sans-serif}
 
-/* ── RESPONSIVE ─────────────────────── */
+/* ── PDV BALCÃO ─────────────────────── */
+.pdvb-wrap{display:grid;grid-template-columns:1fr 340px;gap:0;height:calc(100vh - 108px);overflow:hidden}
+.pdvb-left{display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
+.pdvb-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.pdvb-tab{padding:11px 20px;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;display:flex;align-items:center;gap:6px}
+.pdvb-tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.pdvb-tab .kbd{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:10px;font-family:monospace;color:var(--muted);font-weight:700}
+.pdvb-toolbar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.pdvb-filter-btn{display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:7px;background:var(--surface2);border:1px solid var(--border);font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s;white-space:nowrap}
+.pdvb-filter-btn:hover{border-color:var(--accent);color:var(--accent)}
+.pdvb-search-wrap{flex:1;display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:6px 11px;transition:border-color .18s}
+.pdvb-search-wrap:focus-within{border-color:var(--accent)}
+.pdvb-search-wrap input{background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:12.5px;color:var(--text);flex:1}
+.pdvb-search-wrap input::placeholder{color:var(--muted)}
+.pdvb-nav-hint{display:flex;align-items:center;gap:8px;margin-left:auto;font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0}
+.pdvb-nav-hint .kbd{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-size:10px;font-family:monospace;color:var(--text);font-weight:700}
+.pdvb-cats{display:flex;gap:0;border-bottom:1px solid var(--border);padding:0 12px;overflow-x:auto;flex-shrink:0;background:var(--surface)}
+.pdvb-cats::-webkit-scrollbar{height:3px}
+.pdvb-cats::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:99px}
+.pdvb-cat{padding:9px 14px;font-size:12.5px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;flex-shrink:0}
+.pdvb-cat.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:700}
+.pdvb-cat:hover{color:var(--text)}
+.pdvb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;padding:14px;overflow-y:auto;flex:1}
+.pdvb-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:0;cursor:pointer;transition:all .17s;overflow:hidden;display:flex;flex-direction:column}
+.pdvb-item:hover,.pdvb-item.focused{border-color:var(--accent);background:rgba(59,130,246,.05);transform:translateY(-1px)}
+.pdvb-item-img{height:72px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:28px}
+.pdvb-item-info{padding:8px 10px}
+.pdvb-item-name{font-size:11.5px;font-weight:600;margin-bottom:2px;line-height:1.35}
+.pdvb-item-price{font-size:12px;color:var(--accent);font-weight:700}
+.pdvb-bottom-bar{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.pdvb-bar-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 10px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--muted);transition:all .15s;font-family:'DM Sans',sans-serif;white-space:nowrap}
+.pdvb-bar-btn:hover{border-color:var(--accent);color:var(--accent)}
+.pdvb-bar-btn.danger:hover{border-color:var(--danger);color:var(--danger)}
+.pdvb-bar-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.pdvb-bar-btn.primary:hover{background:#2563eb}
+/* RIGHT PANEL */
+.pdvb-right{display:flex;flex-direction:column;overflow:hidden;background:var(--surface)}
+.pdvb-order-head{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+.pdvb-order-head span{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted)}
+.pdvb-order-items{flex:1;overflow-y:auto;padding:8px 12px}
+.pdvb-order-items::-webkit-scrollbar{width:3px}
+.pdvb-order-items::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:99px}
+.pdvb-empty-order{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;color:var(--muted);font-size:12px;text-align:center;opacity:.6}
+.pdvb-oi{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);margin-bottom:5px}
+.pdvb-oi-emoji{font-size:17px;width:26px;text-align:center;flex-shrink:0}
+.pdvb-oi-info{flex:1;min-width:0}
+.pdvb-oi-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pdvb-oi-price{font-size:11px;color:var(--muted)}
+.pdvb-oi-obs{font-size:10.5px;color:var(--accent3);font-style:italic;margin-top:1px}
+.pdvb-oi-ctrl{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.pdvb-qb{width:20px;height:20px;border-radius:5px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .14s}
+.pdvb-qb:hover{border-color:var(--accent);color:var(--accent)}
+.pdvb-qn{font-size:12px;font-weight:700;min-width:16px;text-align:center}
+.pdvb-totals{padding:10px 14px;border-top:1px solid var(--border);flex-shrink:0}
+.pdvb-tot-row{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;color:var(--muted)}
+.pdvb-tot-row.total{font-family:'Syne',sans-serif;font-weight:700;font-size:15px;color:var(--text);padding-top:8px;border-top:1px solid var(--border);margin-top:5px}
+.pdvb-tot-row.total span:last-child{color:var(--accent)}
+.pdvb-inputs{padding:8px 12px;border-top:1px solid var(--border);display:flex;gap:7px;flex-shrink:0}
+.pdvb-input{flex:1;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;outline:none;transition:border-color .18s}
+.pdvb-input:focus{border-color:var(--accent)}
+.pdvb-actions{padding:8px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px;flex-shrink:0}
+.pdvb-act-btn{display:flex;align-items:center;justify-content:center;gap:5px;padding:8px 6px;border-radius:8px;font-size:11.5px;font-weight:600;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--muted);transition:all .15s;font-family:'DM Sans',sans-serif;white-space:nowrap}
+.pdvb-act-btn:hover{border-color:rgba(255,255,255,.2);color:var(--text)}
+.pdvb-gerar-btn{margin:8px 12px 10px;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;background:linear-gradient(135deg,var(--accent),#2563eb);border:none;color:#fff;font-family:'Syne',sans-serif;transition:all .18s;letter-spacing:-.2px;flex-shrink:0}
+.pdvb-gerar-btn:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.pdvb-gerar-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+
+
 @media(max-width:900px){
   :root{--sw:0px}
   .sidebar{display:none}
@@ -670,6 +738,11 @@ td:first-child{padding-left:16px}
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="2" rx="1"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="8" y1="4" x2="8" y2="2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Pedidos mesa
   </button>
+
+  <button class="si" id="sn-pdv-balcao" onclick="nav('pdv-balcao')">
+    <svg viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M5 4V3a3 3 0 0 1 6 0v1" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="9" r="1.5" fill="currentColor"/></svg>
+    Pedidos balcão (PDV)
+  </button>
   </div>
 
   <div class="shead" style="margin-top:4px" onclick="toggleSideGroup('sg-cardapio')" id="sh-cardapio">Cardápio <span class="shead-arrow">▾</span></div>
@@ -1028,8 +1101,235 @@ td:first-child{padding-left:16px}
   </div>
 </div>
 
-<!-- TAXA DE ENTREGA -->
-<div class="page" id="page-taxa">
+<!-- PEDIDOS BALCÃO (PDV) COMPLETO -->
+<div class="page" id="page-pdv-balcao" style="padding:0;height:calc(100vh - 52px);display:none;flex-direction:column;overflow:hidden">
+
+  <!-- Header -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0">
+    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;letter-spacing:-.3px">Pedidos balcão (PDV)</div>
+    <div style="display:flex;gap:7px">
+      <button class="btn bg" style="font-size:11.5px;padding:5px 10px" onclick="pdvbClearCart()">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2.5A.5.5 0 0 1 6.5 2h3a.5.5 0 0 1 .5.5V4M5 4l.7 9.5a.5.5 0 0 0 .5.5h3.6a.5.5 0 0 0 .5-.5L11 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Limpar
+      </button>
+      <button class="btn bg" style="font-size:11.5px;padding:5px 10px" id="pdvb-config-btn" onclick="pdvbToggleConfig()">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Configurar
+      </button>
+    </div>
+  </div>
+
+  <div class="pdvb-wrap" style="flex:1">
+
+    <!-- ESQUERDA: ITENS -->
+    <div class="pdvb-left">
+      <!-- Tabs -->
+      <div class="pdvb-tabs">
+        <div class="pdvb-tab on" id="pdvb-tab-d" onclick="pdvbSwitchTab('d')">
+          <span class="kbd">D</span> Delivery e Balcão
+        </div>
+        <div class="pdvb-tab" id="pdvb-tab-m" onclick="pdvbSwitchTab('m')">
+          <span class="kbd">M</span> Mesas e Comandas
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="pdvb-toolbar">
+        <button class="pdvb-filter-btn" onclick="pdvbToggleFilter()" id="pdvb-filter-btn">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <span class="kbd" style="font-size:9px">F</span> Filtros
+        </button>
+        <div class="pdvb-search-wrap">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <input id="pdvb-search" placeholder="[P] Pesquisar" oninput="pdvbRenderGrid()" autocomplete="off">
+        </div>
+        <div class="pdvb-nav-hint">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style="opacity:.4"><path d="M8 3v10M5 10l3 3 3-3M5 6l3-3 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span>Navegação</span>
+          <span class="kbd">ENTER</span>
+          <span>Selecionar item</span>
+        </div>
+      </div>
+
+      <!-- Filter panel (hidden by default) -->
+      <div id="pdvb-filter-panel" style="display:none;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface2);flex-shrink:0">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <span style="font-size:11px;color:var(--muted);font-weight:600">Tipo:</span>
+          <button class="pdvb-filter-btn on" id="pdvb-f-todos" onclick="pdvbSetFilter('todos')" style="padding:4px 10px;font-size:11px">Todos</button>
+          <button class="pdvb-filter-btn" id="pdvb-f-promo" onclick="pdvbSetFilter('promo')" style="padding:4px 10px;font-size:11px">Promoção</button>
+          <button class="pdvb-filter-btn" id="pdvb-f-pizza" onclick="pdvbSetFilter('pizza')" style="padding:4px 10px;font-size:11px">Pizza</button>
+          <button class="pdvb-filter-btn bd" onclick="pdvbSetFilter('todos');document.getElementById('pdvb-filter-panel').style.display='none'" style="padding:4px 10px;font-size:11px;margin-left:auto">✕ Fechar</button>
+        </div>
+      </div>
+
+      <!-- Categorias -->
+      <div class="pdvb-cats" id="pdvb-cats"></div>
+
+      <!-- Grid de itens -->
+      <div class="pdvb-grid" id="pdvb-grid"></div>
+
+      <!-- Bottom bar -->
+      <div class="pdvb-bottom-bar">
+        <button class="pdvb-bar-btn" onclick="pdvbOpenObs()">
+          <span class="kbd" style="font-size:9px">O</span> Observação do item
+        </button>
+        <button class="pdvb-bar-btn" onclick="pdvbBackCat()" id="pdvb-voltar-btn" style="display:none">
+          <span class="kbd" style="font-size:9px">V</span> Voltar
+        </button>
+        <button class="pdvb-bar-btn primary" onclick="pdvbGerarPedido()">
+          <span class="kbd" style="font-size:9px;background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.3);color:#fff">A</span> Finalizar item
+        </button>
+      </div>
+    </div>
+
+    <!-- DIREITA: RESUMO DO PEDIDO -->
+    <div class="pdvb-right">
+      <div class="pdvb-order-head">
+        <span>Itens do pedido</span>
+        <span>Subtotal</span>
+      </div>
+
+      <div class="pdvb-order-items" id="pdvb-order-items">
+        <div class="pdvb-empty-order" id="pdvb-empty-msg">
+          <svg width="32" height="32" viewBox="0 0 16 16" fill="none" style="opacity:.3"><path d="M2 2h2l1.5 7.5A1 1 0 0 0 6.5 11h5a1 1 0 0 0 1-.8L14 6H4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="7" cy="13.5" r="1" fill="currentColor"/><circle cx="12" cy="13.5" r="1" fill="currentColor"/></svg>
+          Finalize o item ao lado,<br>ele vai aparecer aqui
+        </div>
+      </div>
+
+      <div class="pdvb-totals">
+        <div class="pdvb-tot-row"><span>Subtotal</span><span id="pdvb-subtotal">R$ 0,00</span></div>
+        <div class="pdvb-tot-row"><span>Entrega</span><span id="pdvb-entrega" style="color:var(--success)">Grátis</span></div>
+        <div class="pdvb-tot-row" id="pdvb-desconto-row" style="display:none"><span>Desconto</span><span id="pdvb-desconto" style="color:var(--success)">-R$ 0,00</span></div>
+        <div class="pdvb-tot-row total"><span>Total</span><span id="pdvb-total">R$ 0,00</span></div>
+      </div>
+
+      <!-- Inputs -->
+      <div class="pdvb-inputs">
+        <input class="pdvb-input" id="pdvb-phone" placeholder="(XX) X XXXX-XXXX" oninput="pdvbFormatPhone(this)">
+        <input class="pdvb-input" id="pdvb-client" placeholder="Nome do cliente...">
+      </div>
+
+      <!-- Ações -->
+      <div class="pdvb-actions">
+        <button class="pdvb-act-btn" onclick="pdvbEntrega()">
+          <span class="kbd" style="font-size:9px;background:var(--surface);border-color:var(--border);color:var(--text)">E</span> Entrega
+        </button>
+        <button class="pdvb-act-btn" onclick="pdvbPagamentos()">
+          <span class="kbd" style="font-size:9px;background:var(--surface);border-color:var(--border);color:var(--text)">R</span> Pagamentos
+        </button>
+        <button class="pdvb-act-btn" onclick="pdvbCPF()">
+          <span class="kbd" style="font-size:9px;background:var(--surface);border-color:var(--border);color:var(--text)">T</span> CPF/CNPJ
+        </button>
+        <button class="pdvb-act-btn" onclick="pdvbAjustar()">
+          <span class="kbd" style="font-size:9px;background:var(--surface);border-color:var(--border);color:var(--text)">Y</span> Ajustar valor
+        </button>
+      </div>
+
+      <button class="pdvb-gerar-btn" id="pdvb-gerar" onclick="pdvbGerarPedido()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        [ ENTER ] Gerar pedido
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL: Observação PDV -->
+<div class="modal-bg" id="modal-pdvb-obs">
+  <div class="modal" style="width:420px">
+    <button class="modal-close" onclick="closeModal('modal-pdvb-obs')">✕</button>
+    <h2>Observação do item</h2>
+    <div class="form-row" style="margin-bottom:4px">
+      <label class="form-label">Item selecionado</label>
+      <div id="pdvb-obs-item-name" style="font-size:13px;font-weight:600;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--muted)">—</div>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Observação</label>
+      <textarea class="form-input" id="pdvb-obs-text" rows="3" placeholder="Ex: sem cebola, bem passado, molho à parte..."></textarea>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-pdvb-obs')">Cancelar</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="pdvbSaveObs()">Salvar observação</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Pagamento PDV -->
+<div class="modal-bg" id="modal-pdvb-pag">
+  <div class="modal" style="width:480px">
+    <button class="modal-close" onclick="closeModal('modal-pdvb-pag')">✕</button>
+    <h2>💳 Forma de Pagamento</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px" id="pdvb-pag-grid">
+      <label style="display:flex;align-items:center;gap:9px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;transition:border-color .18s" onclick="pdvbSelectPag(this,'Dinheiro')">
+        <input type="radio" name="pdvb-pag" value="Dinheiro" checked style="accent-color:var(--accent)">
+        <span style="font-size:13px;font-weight:600">💵 Dinheiro</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:9px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;transition:border-color .18s" onclick="pdvbSelectPag(this,'Cartão')">
+        <input type="radio" name="pdvb-pag" value="Cartão" style="accent-color:var(--accent)">
+        <span style="font-size:13px;font-weight:600">💳 Cartão</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:9px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;transition:border-color .18s" onclick="pdvbSelectPag(this,'PIX')">
+        <input type="radio" name="pdvb-pag" value="PIX" style="accent-color:var(--accent)">
+        <span style="font-size:13px;font-weight:600">⚡ PIX</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:9px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;transition:border-color .18s" onclick="pdvbSelectPag(this,'Vale Refeição')">
+        <input type="radio" name="pdvb-pag" value="Vale Refeição" style="accent-color:var(--accent)">
+        <span style="font-size:13px;font-weight:600">🎫 Vale Refeição</span>
+      </label>
+    </div>
+    <!-- Troco -->
+    <div id="pdvb-troco-wrap" style="margin-bottom:14px">
+      <label class="form-label">Troco para (R$) — opcional</label>
+      <input class="form-input" id="pdvb-troco" type="number" step="0.01" placeholder="0,00">
+    </div>
+    <button class="btn bp" style="width:100%;justify-content:center;font-size:13.5px;padding:10px" onclick="pdvbConfirmPag()">
+      Confirmar pagamento
+    </button>
+  </div>
+</div>
+
+<!-- MODAL: Entrega PDV -->
+<div class="modal-bg" id="modal-pdvb-entrega">
+  <div class="modal" style="width:440px">
+    <button class="modal-close" onclick="closeModal('modal-pdvb-entrega')">✕</button>
+    <h2>🚚 Tipo de Entrega</h2>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+      <label style="display:flex;align-items:center;gap:9px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer" onclick="pdvbSelectEntrega(this,'balcao')">
+        <input type="radio" name="pdvb-entrega" value="balcao" checked style="accent-color:var(--accent)">
+        <div><div style="font-size:13px;font-weight:600">🏪 Balcão / Retirada</div><div style="font-size:11.5px;color:var(--muted);margin-top:2px">Cliente retira no local — taxa grátis</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:9px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer" onclick="pdvbSelectEntrega(this,'delivery')">
+        <input type="radio" name="pdvb-entrega" value="delivery" style="accent-color:var(--accent)">
+        <div><div style="font-size:13px;font-weight:600">🛵 Delivery</div><div style="font-size:11.5px;color:var(--muted);margin-top:2px">Entrega no endereço do cliente</div></div>
+      </label>
+    </div>
+    <div id="pdvb-addr-wrap" style="display:none">
+      <div class="form-row"><label class="form-label">Endereço de entrega</label><input class="form-input" id="pdvb-addr" placeholder="Rua, número, bairro..."></div>
+      <div class="form-row"><label class="form-label">Taxa de entrega (R$)</label><input class="form-input" id="pdvb-taxa-val" type="number" step="0.50" placeholder="0,00" oninput="pdvbUpdateTaxa()"></div>
+    </div>
+    <button class="btn bp" style="width:100%;justify-content:center" onclick="pdvbConfirmEntrega()">Confirmar</button>
+  </div>
+</div>
+
+<!-- MODAL: Ajustar valor PDV -->
+<div class="modal-bg" id="modal-pdvb-ajustar">
+  <div class="modal" style="width:400px">
+    <button class="modal-close" onclick="closeModal('modal-pdvb-ajustar')">✕</button>
+    <h2>✏️ Ajustar Valor</h2>
+    <div class="form-row">
+      <label class="form-label">Desconto (%)</label>
+      <input class="form-input" id="pdvb-desc-pct" type="number" min="0" max="100" placeholder="0" oninput="pdvbPreviewDesc()">
+    </div>
+    <div class="form-row">
+      <label class="form-label">Desconto (R$)</label>
+      <input class="form-input" id="pdvb-desc-val" type="number" min="0" step="0.01" placeholder="0,00" oninput="pdvbPreviewDesc()">
+    </div>
+    <div id="pdvb-desc-preview" style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:14px;display:none"></div>
+    <button class="btn bp" style="width:100%;justify-content:center" onclick="pdvbConfirmAjuste()">Aplicar desconto</button>
+  </div>
+</div>
+
+
   <div class="ph">
     <div>
       <div class="pt">Taxa de Entrega</div>
@@ -2726,6 +3026,7 @@ function nav(id){
   if(id==='imagens') renderImagens();
   if(id==='potencializador') renderPotencializador();
   if(id==='pdv') renderPDV();
+  if(id==='pdv-balcao') renderPDVBalcao();
   if(id==='robo') initChat();
   if(id==='qrcode') renderQR();
   if(id==='cupom') renderCupons();
@@ -5331,7 +5632,432 @@ function toggleSideGroup(id) {
   saveSidebarState();
 }
 
+// ═══════════════════════════════════════════
+// PDV BALCÃO — COMPLETO
+// ═══════════════════════════════════════════
+let pdvbCart        = [];    // [{...item, qty, obs}]
+let pdvbActiveCat   = '__todos__';
+let pdvbActiveTab   = 'd';   // 'd' = delivery/balcao, 'm' = mesa
+let pdvbFilter      = 'todos';
+let pdvbEntregaTipo = 'balcao';
+let pdvbEntregaTaxa = 0;
+let pdvbEntregaAddr = '';
+let pdvbPagamento   = 'Dinheiro';
+let pdvbDesconto    = 0;     // valor em R$
+let pdvbFocusIdx    = -1;    // item focado pelo teclado
+let pdvbObsIdx      = -1;    // índice do cart item em edição
+
+function renderPDVBalcao() {
+  pdvbRenderCats();
+  pdvbRenderGrid();
+  pdvbRenderOrder();
+  pdvbSetupKeyboard();
+}
+
+// ── Categorias ─────────────────────────
+function pdvbRenderCats() {
+  const el = document.getElementById('pdvb-cats');
+  if (!el) return;
+  const activeItems = items.filter(i => i.status === 'active');
+  const cats = ['Todos', ...new Set(activeItems.map(i => i.cat).filter(Boolean))];
+  el.innerHTML = cats.map(c => {
+    const key = c === 'Todos' ? '__todos__' : c;
+    return `<div class="pdvb-cat${pdvbActiveCat === key ? ' on' : ''}" onclick="pdvbSelectCat('${key}')">${c}</div>`;
+  }).join(' <span style="color:var(--border);font-size:14px;align-self:center">|</span> ');
+}
+
+function pdvbSelectCat(key) {
+  pdvbActiveCat = key;
+  pdvbFocusIdx = -1;
+  document.querySelectorAll('.pdvb-cat').forEach((el, i) => {
+    const cats = ['__todos__', ...new Set(items.filter(x=>x.status==='active').map(i=>i.cat).filter(Boolean))];
+    el.classList.toggle('on', cats[i] === key);
+  });
+  pdvbRenderGrid();
+}
+
+// ── Grid de itens ───────────────────────
+function pdvbGetFilteredItems() {
+  const q = (document.getElementById('pdvb-search') || {}).value || '';
+  return items.filter(i => {
+    if (i.status !== 'active') return false;
+    if (pdvbActiveCat !== '__todos__' && i.cat !== pdvbActiveCat) return false;
+    if (pdvbFilter === 'promo' && !i.promo) return false;
+    if (pdvbFilter === 'pizza' && i.itemType !== 'pizza') return false;
+    if (q && !i.name.toLowerCase().includes(q.toLowerCase())) return false;
+    return true;
+  });
+}
+
+function pdvbRenderGrid() {
+  const g = document.getElementById('pdvb-grid');
+  if (!g) return;
+  const fil = pdvbGetFilteredItems();
+  if (!fil.length) {
+    g.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:40px;font-size:13px;opacity:.7">Nenhum item encontrado</div>';
+    return;
+  }
+  g.innerHTML = fil.map((i, idx) => `
+    <div class="pdvb-item${pdvbFocusIdx === idx ? ' focused' : ''}" 
+         onclick="pdvbAddItem(${i.id})" 
+         id="pdvbi-${idx}"
+         title="${i.name} — R$ ${i.price.toFixed(2).replace('.',',')}">
+      <div class="pdvb-item-img">${i.imageUrl ? `<img src="${i.imageUrl}" style="width:100%;height:100%;object-fit:cover">` : (i.emoji || '🍽️')}</div>
+      <div class="pdvb-item-info">
+        <div class="pdvb-item-name">${i.name}${i.itemType==='pizza'?' <span style="font-size:8px;background:rgba(245,158,11,.15);color:var(--accent3);border-radius:3px;padding:1px 4px;font-weight:700">PIZZA</span>':''}</div>
+        <div class="pdvb-item-price">R$ ${i.price.toFixed(2).replace('.',',')}${i.promo?'<span style="font-size:9px;background:rgba(34,197,94,.12);color:var(--success);border-radius:3px;padding:1px 4px;margin-left:4px;font-weight:700">PROMO</span>':''}</div>
+      </div>
+    </div>`).join('');
+  pdvbRenderCats();
+}
+
+// ── Adicionar item ao carrinho ──────────
+function pdvbAddItem(id) {
+  const it = items.find(i => i.id === id);
+  if (!it) return;
+  if (it.itemType === 'pizza') {
+    openPDVPizza(id); // usa o seletor de pizza existente
+    return;
+  }
+  const ci = pdvbCart.find(c => c.id === id && !c.obs);
+  if (ci) ci.qty++;
+  else pdvbCart.push({ ...it, qty: 1, obs: '' });
+  pdvbRenderOrder();
+  sbToast('ok', `${it.name} adicionado!`);
+}
+
+// ── Render do painel direito ────────────
+function pdvbRenderOrder() {
+  const el = document.getElementById('pdvb-order-items');
+  const empty = document.getElementById('pdvb-empty-msg');
+  if (!el) return;
+
+  if (pdvbCart.length === 0) {
+    el.innerHTML = `<div class="pdvb-empty-order" id="pdvb-empty-msg">
+      <svg width="32" height="32" viewBox="0 0 16 16" fill="none" style="opacity:.3"><path d="M2 2h2l1.5 7.5A1 1 0 0 0 6.5 11h5a1 1 0 0 0 1-.8L14 6H4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="7" cy="13.5" r="1" fill="currentColor"/><circle cx="12" cy="13.5" r="1" fill="currentColor"/></svg>
+      Finalize o item ao lado,<br>ele vai aparecer aqui
+    </div>`;
+  } else {
+    el.innerHTML = pdvbCart.map((ci, idx) => `
+      <div class="pdvb-oi">
+        <div class="pdvb-oi-emoji">${ci.emoji || '🍽️'}</div>
+        <div class="pdvb-oi-info">
+          <div class="pdvb-oi-name">${ci.name}</div>
+          <div class="pdvb-oi-price">R$ ${(ci.price * ci.qty).toFixed(2).replace('.',',')}</div>
+          ${ci.obs ? `<div class="pdvb-oi-obs">💬 ${ci.obs}</div>` : ''}
+        </div>
+        <div class="pdvb-oi-ctrl">
+          <div class="pdvb-qb" onclick="pdvbChangeQty(${idx},-1)">−</div>
+          <div class="pdvb-qn">${ci.qty}</div>
+          <div class="pdvb-qb" onclick="pdvbChangeQty(${idx},1)">+</div>
+        </div>
+      </div>`).join('');
+  }
+
+  const sub = pdvbCart.reduce((s, ci) => s + ci.price * ci.qty, 0);
+  const total = Math.max(0, sub + pdvbEntregaTaxa - pdvbDesconto);
+  document.getElementById('pdvb-subtotal').textContent = 'R$ ' + sub.toFixed(2).replace('.',',');
+  document.getElementById('pdvb-total').textContent = 'R$ ' + total.toFixed(2).replace('.',',');
+  document.getElementById('pdvb-entrega').textContent = pdvbEntregaTaxa > 0
+    ? 'R$ ' + pdvbEntregaTaxa.toFixed(2).replace('.',',')
+    : 'Grátis';
+  document.getElementById('pdvb-entrega').style.color = pdvbEntregaTaxa > 0 ? 'var(--text)' : 'var(--success)';
+  const drow = document.getElementById('pdvb-desconto-row');
+  if (pdvbDesconto > 0) {
+    drow.style.display = 'flex';
+    document.getElementById('pdvb-desconto').textContent = '-R$ ' + pdvbDesconto.toFixed(2).replace('.',',');
+  } else {
+    drow.style.display = 'none';
+  }
+  const btn = document.getElementById('pdvb-gerar');
+  if (btn) btn.disabled = pdvbCart.length === 0;
+}
+
+function pdvbChangeQty(idx, delta) {
+  pdvbCart[idx].qty += delta;
+  if (pdvbCart[idx].qty <= 0) pdvbCart.splice(idx, 1);
+  pdvbRenderOrder();
+}
+
+function pdvbClearCart() {
+  pdvbCart = [];
+  pdvbDesconto = 0;
+  pdvbEntregaTaxa = 0;
+  pdvbEntregaTipo = 'balcao';
+  pdvbEntregaAddr = '';
+  pdvbPagamento = 'Dinheiro';
+  const ph = document.getElementById('pdvb-phone');
+  const cl = document.getElementById('pdvb-client');
+  if (ph) ph.value = '';
+  if (cl) cl.value = '';
+  pdvbRenderOrder();
+  sbToast('ok', 'Pedido limpo');
+}
+
+// ── Tabs ────────────────────────────────
+function pdvbSwitchTab(tab) {
+  pdvbActiveTab = tab;
+  ['d','m'].forEach(t => {
+    document.getElementById('pdvb-tab-'+t)?.classList.toggle('on', t === tab);
+  });
+  if (tab === 'm') {
+    // Vai para a página de pedidos de mesa
+    nav('pedidos-mesa');
+  }
+}
+
+// ── Filter ──────────────────────────────
+function pdvbToggleFilter() {
+  const p = document.getElementById('pdvb-filter-panel');
+  if (p) p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+
+function pdvbSetFilter(f) {
+  pdvbFilter = f;
+  ['todos','promo','pizza'].forEach(k => {
+    const b = document.getElementById('pdvb-f-' + k);
+    if (b) { b.classList.toggle('on', k === f); b.style.color = k === f ? 'var(--accent)' : ''; b.style.borderColor = k === f ? 'var(--accent)' : ''; }
+  });
+  pdvbRenderGrid();
+}
+
+// ── Voltar categoria ────────────────────
+function pdvbBackCat() { pdvbSelectCat('__todos__'); }
+
+// ── Observação ──────────────────────────
+function pdvbOpenObs() {
+  if (pdvbCart.length === 0) { sbToast('err','Adicione itens primeiro'); return; }
+  pdvbObsIdx = pdvbCart.length - 1; // último item adicionado
+  const it = pdvbCart[pdvbObsIdx];
+  const nameEl = document.getElementById('pdvb-obs-item-name');
+  const textEl = document.getElementById('pdvb-obs-text');
+  if (nameEl) nameEl.textContent = it.name;
+  if (textEl) textEl.value = it.obs || '';
+  openModal('modal-pdvb-obs');
+}
+
+function pdvbSaveObs() {
+  const text = (document.getElementById('pdvb-obs-text') || {}).value || '';
+  if (pdvbObsIdx >= 0 && pdvbObsIdx < pdvbCart.length) {
+    pdvbCart[pdvbObsIdx].obs = text;
+    pdvbRenderOrder();
+  }
+  closeModal('modal-pdvb-obs');
+  sbToast('ok', 'Observação salva!');
+}
+
+// ── Entrega ─────────────────────────────
+function pdvbEntrega() { openModal('modal-pdvb-entrega'); }
+
+function pdvbSelectEntrega(label, val) {
+  document.querySelectorAll('#modal-pdvb-entrega label').forEach(l => {
+    l.style.borderColor = l === label ? 'var(--accent)' : 'var(--border)';
+  });
+  const wrap = document.getElementById('pdvb-addr-wrap');
+  if (wrap) wrap.style.display = val === 'delivery' ? 'block' : 'none';
+}
+
+function pdvbUpdateTaxa() {
+  const v = parseFloat(document.getElementById('pdvb-taxa-val')?.value) || 0;
+  pdvbEntregaTaxa = v;
+  pdvbRenderOrder();
+}
+
+function pdvbConfirmEntrega() {
+  const tipo = document.querySelector('input[name="pdvb-entrega"]:checked')?.value || 'balcao';
+  pdvbEntregaTipo = tipo;
+  if (tipo === 'delivery') {
+    pdvbEntregaAddr = document.getElementById('pdvb-addr')?.value || '';
+    pdvbEntregaTaxa = parseFloat(document.getElementById('pdvb-taxa-val')?.value) || 0;
+  } else {
+    pdvbEntregaTaxa = 0;
+    pdvbEntregaAddr = '';
+  }
+  pdvbRenderOrder();
+  closeModal('modal-pdvb-entrega');
+  sbToast('ok', tipo === 'delivery' ? `Delivery — R$ ${pdvbEntregaTaxa.toFixed(2).replace('.',',')}` : 'Balcão / Retirada');
+}
+
+// ── Pagamentos ──────────────────────────
+function pdvbPagamentos() { openModal('modal-pdvb-pag'); }
+
+function pdvbSelectPag(label, val) {
+  pdvbPagamento = val;
+  document.querySelectorAll('#pdvb-pag-grid label').forEach(l => {
+    l.style.borderColor = l === label ? 'var(--accent)' : 'var(--border)';
+  });
+  const trocoWrap = document.getElementById('pdvb-troco-wrap');
+  if (trocoWrap) trocoWrap.style.display = val === 'Dinheiro' ? 'block' : 'none';
+}
+
+function pdvbConfirmPag() {
+  closeModal('modal-pdvb-pag');
+  sbToast('ok', `Pagamento: ${pdvbPagamento}`);
+}
+
+// ── CPF/CNPJ ────────────────────────────
+function pdvbCPF() {
+  const v = prompt('CPF/CNPJ do cliente (opcional):');
+  if (v !== null) sbToast('ok', v ? `CPF/CNPJ: ${v}` : 'CPF/CNPJ removido');
+}
+
+// ── Ajustar valor ────────────────────────
+function pdvbAjustar() {
+  document.getElementById('pdvb-desc-pct').value = '';
+  document.getElementById('pdvb-desc-val').value = '';
+  document.getElementById('pdvb-desc-preview').style.display = 'none';
+  openModal('modal-pdvb-ajustar');
+}
+
+function pdvbPreviewDesc() {
+  const sub = pdvbCart.reduce((s, ci) => s + ci.price * ci.qty, 0);
+  const pct = parseFloat(document.getElementById('pdvb-desc-pct')?.value) || 0;
+  const val = parseFloat(document.getElementById('pdvb-desc-val')?.value) || 0;
+  const desc = pct > 0 ? sub * (pct / 100) : val;
+  const preview = document.getElementById('pdvb-desc-preview');
+  if (preview && desc > 0) {
+    preview.style.display = 'block';
+    preview.innerHTML = `<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Desconto</span><span style="color:var(--success);font-weight:700">-R$ ${desc.toFixed(2).replace('.',',')}</span></div><div style="display:flex;justify-content:space-between;font-weight:700;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)"><span>Total</span><span style="color:var(--accent)">R$ ${Math.max(0, sub + pdvbEntregaTaxa - desc).toFixed(2).replace('.',',')}</span></div>`;
+  }
+}
+
+function pdvbConfirmAjuste() {
+  const sub = pdvbCart.reduce((s, ci) => s + ci.price * ci.qty, 0);
+  const pct = parseFloat(document.getElementById('pdvb-desc-pct')?.value) || 0;
+  const val = parseFloat(document.getElementById('pdvb-desc-val')?.value) || 0;
+  pdvbDesconto = pct > 0 ? sub * (pct / 100) : val;
+  pdvbRenderOrder();
+  closeModal('modal-pdvb-ajustar');
+  sbToast('ok', `Desconto de R$ ${pdvbDesconto.toFixed(2).replace('.',',')} aplicado!`);
+}
+
+// ── Gerar pedido ────────────────────────
+async function pdvbGerarPedido() {
+  if (pdvbCart.length === 0) { sbToast('err','Carrinho vazio!'); return; }
+  const client = document.getElementById('pdvb-client')?.value || 'Balcão';
+  const phone  = document.getElementById('pdvb-phone')?.value || '';
+  const sub    = pdvbCart.reduce((s, ci) => s + ci.price * ci.qty, 0);
+  const total  = Math.max(0, sub + pdvbEntregaTaxa - pdvbDesconto);
+  const addr   = pdvbEntregaTipo === 'delivery'
+    ? (pdvbEntregaAddr || 'Entrega')
+    : 'balcão';
+  const time   = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const itemsData = pdvbCart.map(ci => ({
+    id: ci.id, name: ci.name, qty: ci.qty,
+    price: ci.price, obs: ci.obs || '', emoji: ci.emoji || ''
+  }));
+
+  sbLoading(true);
+  try {
+    // 1. Criar pedido no banco
+    const { data: ord, error: ordErr } = await sb.from('orders').insert({
+      client: client || 'Balcão',
+      phone,
+      items: itemsData,
+      total,
+      taxa: pdvbEntregaTaxa,
+      status: 'analise',
+      addr,
+      pag: pdvbPagamento,
+      time
+    }).select().single();
+    if (ordErr) throw ordErr;
+
+    // 2. Registrar no caixa
+    await sb.from('movimentos').insert({
+      description: `PDV — ${client}`,
+      tipo: 'entrada',
+      val: total,
+      pag: pdvbPagamento,
+      time
+    });
+
+    // 3. Atualizar estado local
+    if (ord) {
+      ordersKanban.unshift({
+        id: ord.id, client: ord.client, phone: ord.phone,
+        items: itemsData, total, taxa: pdvbEntregaTaxa,
+        status: 'analise', time, addr, pag: pdvbPagamento
+      });
+    }
+
+    playOrderSound();
+    sbToast('ok', `✅ Pedido #${ord?.id || '?'} gerado — R$ ${total.toFixed(2).replace('.',',')}`);
+    pdvbClearCart();
+  } catch(e) {
+    console.error('pdvbGerarPedido error:', e);
+    sbToast('err', 'Erro ao gerar pedido: ' + (e?.message || JSON.stringify(e)));
+  } finally {
+    sbLoading(false);
+  }
+}
+
+// ── Formatação do telefone ───────────────
+function pdvbFormatPhone(input) {
+  let v = input.value.replace(/\D/g,'').slice(0,11);
+  if (v.length > 10) v = v.replace(/(\d{2})(\d{5})(\d{4})/,'($1) $2-$3');
+  else if (v.length > 6) v = v.replace(/(\d{2})(\d{4})(\d*)/,'($1) $2-$3');
+  else if (v.length > 2) v = v.replace(/(\d{2})(\d*)/,'($1) $2');
+  input.value = v;
+}
+
+// ── Keyboard shortcuts ──────────────────
+function pdvbSetupKeyboard() {
+  // Remove listener anterior para não duplicar
+  document.removeEventListener('keydown', _pdvbKeyHandler);
+  document.addEventListener('keydown', _pdvbKeyHandler);
+}
+
+function _pdvbKeyHandler(e) {
+  // Só age quando o PDV Balcão está ativo
+  const page = document.getElementById('page-pdv-balcao');
+  if (!page || !page.classList.contains('on')) return;
+  // Não intercepta quando usuário está digitando em input/textarea
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+  const fil = pdvbGetFilteredItems();
+  switch(e.key.toUpperCase()) {
+    case 'D': pdvbSwitchTab('d'); break;
+    case 'M': pdvbSwitchTab('m'); break;
+    case 'F': pdvbToggleFilter(); break;
+    case 'P': document.getElementById('pdvb-search')?.focus(); e.preventDefault(); break;
+    case 'O': pdvbOpenObs(); break;
+    case 'A': pdvbGerarPedido(); break;
+    case 'E': pdvbEntrega(); break;
+    case 'R': pdvbPagamentos(); break;
+    case 'T': pdvbCPF(); break;
+    case 'Y': pdvbAjustar(); break;
+    case 'V': pdvbBackCat(); break;
+    case 'ARROWRIGHT':
+    case 'ARROWDOWN':
+      pdvbFocusIdx = Math.min(pdvbFocusIdx + 1, fil.length - 1);
+      pdvbRenderGrid(); pdvbScrollToFocused(); e.preventDefault(); break;
+    case 'ARROWLEFT':
+    case 'ARROWUP':
+      pdvbFocusIdx = Math.max(pdvbFocusIdx - 1, 0);
+      pdvbRenderGrid(); pdvbScrollToFocused(); e.preventDefault(); break;
+    case 'ENTER':
+      if (pdvbFocusIdx >= 0 && pdvbFocusIdx < fil.length) {
+        pdvbAddItem(fil[pdvbFocusIdx].id); e.preventDefault();
+      }
+      break;
+  }
+}
+
+function pdvbScrollToFocused() {
+  const el = document.getElementById('pdvbi-' + pdvbFocusIdx);
+  if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+// ── Config toggle (placeholder) ─────────
+function pdvbToggleConfig() {
+  sbToast('ok', 'Configurações do PDV — em breve!');
+}
+
 function initSidebarState() { loadSidebarState(); }
+
+
 
 function toggleAutoAccept(el) {
   el.classList.toggle('on');
