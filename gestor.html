@@ -1997,7 +1997,6 @@ function subscribeOrders() {
         if (data) { tables = data; _refreshMesaPageIfActive(); renderQR(); }
       });
     }).subscribe();
-}
 
   // Subscribe to store_config changes
   sb.channel('store-config-rt')
