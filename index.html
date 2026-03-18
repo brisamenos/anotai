@@ -1202,49 +1202,97 @@ td:first-child{padding-left:16px}
 
 <!-- Add Item -->
 <div class="modal-bg" id="modal-add-item">
-  <div class="modal">
+  <div class="modal" style="max-width:560px">
     <button class="modal-close" onclick="closeModal('modal-add-item')">✕</button>
-    <h2><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Novo Item do Cardápio</h2>
-    <div class="form-row"><label class="form-label">Nome do item</label><input class="form-input" id="new-name" placeholder="Ex: X-Tudo"></div>
-    <div class="form-row-2">
-      <div class="form-row"><label class="form-label">Preço (R$)</label><input class="form-input" id="new-price" placeholder="0,00" type="number" step="0.01"></div>
-      <div class="form-row"><label class="form-label">Categoria</label><div class="sw" style="width:100%"><select id="new-cat" style="width:100%" class="form-input"><option value="lanches">Lanches</option><option value="bebidas">Bebidas</option><option value="sobremesas">Sobremesas</option></select></div></div>
-    </div>
-    <div class="form-row"><label class="form-label">Emoji / Ícone</label><div class="emoji-grid" id="emoji-grid"></div></div>
+    <h2 style="margin-bottom:18px">➕ Novo Item do Cardápio</h2>
+
+    <div class="form-row"><label class="form-label">Nome do item *</label><input class="form-input" id="new-name" placeholder="Ex: X-Tudo Especial"></div>
     <div class="form-row"><label class="form-label">Descrição</label><textarea class="form-input" id="new-desc" rows="2" placeholder="Descreva o item..."></textarea></div>
-    <div class="form-row"><label class="form-label">Ingredientes <span style="color:var(--muted);font-size:10.5px">(separados por vírgula)</span></label><input class="form-input" id="new-ingredients" placeholder="Ex: Pão, Carne, Queijo, Alface"></div>
-    <div class="form-row"><label class="form-label">Tipo do item</label>
-      <div class="sw" style="width:100%"><select id="new-item-type" class="form-input" style="width:100%">
-        <option value="normal">Normal</option>
-        <option value="pizza">🍕 Pizza (permite múltiplos sabores)</option>
+    <div class="form-row"><label class="form-label">Ingredientes <span style="color:var(--muted);font-size:10.5px">(separados por vírgula)</span></label><input class="form-input" id="new-ingredients" placeholder="Ex: Pão, Carne, Queijo, Alface, Tomate"></div>
+
+    <div class="form-row-2">
+      <div class="form-row"><label class="form-label">Preço (R$) *</label><input class="form-input" id="new-price" placeholder="0,00" type="number" step="0.01" min="0"></div>
+      <div class="form-row"><label class="form-label">Preço antigo (R$)</label><input class="form-input" id="new-price-old" placeholder="Opcional" type="number" step="0.01" min="0"></div>
+    </div>
+
+    <div class="form-row-2">
+      <div class="form-row"><label class="form-label">Categoria *</label>
+        <div class="sw" style="width:100%"><select id="new-cat" class="form-input" style="width:100%"></select></div>
+      </div>
+      <div class="form-row"><label class="form-label">Tipo</label>
+        <div class="sw" style="width:100%"><select id="new-item-type" class="form-input" style="width:100%">
+          <option value="normal">🍽️ Normal</option>
+          <option value="pizza">🍕 Pizza (multi-sabores)</option>
+        </select></div>
+      </div>
+    </div>
+
+    <div class="form-row"><label class="form-label">Status</label>
+      <div class="sw" style="width:100%"><select id="new-status" class="form-input" style="width:100%">
+        <option value="active">✅ Disponível</option>
+        <option value="esgotado">❌ Esgotado</option>
+        <option value="pausado">⏸️ Pausado</option>
       </select></div>
     </div>
-    <div style="display:flex;gap:8px;margin-top:4px">
+
+    <div class="form-row"><label class="form-label">Emoji / Ícone</label><div class="emoji-grid" id="emoji-grid"></div></div>
+
+    <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-add-item')">Cancelar</button>
-      <button class="btn bp" style="flex:1;justify-content:center" onclick="addItem()">Adicionar item</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="addItem()">✔ Adicionar item</button>
     </div>
   </div>
 </div>
 
 <!-- Edit Item -->
 <div class="modal-bg" id="modal-edit-item">
-  <div class="modal">
+  <div class="modal" style="max-width:560px">
     <button class="modal-close" onclick="closeModal('modal-edit-item')">✕</button>
-    <h2><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M10 3l3 3-7 7H3v-3l7-7z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Editar Item</h2>
-    <div class="form-row"><label class="form-label">Nome</label><input class="form-input" id="edit-name"></div>
-    <div class="form-row"><label class="form-label">Descrição</label><textarea class="form-input" id="edit-desc" rows="2"></textarea></div>
+    <h2 style="margin-bottom:18px">✏️ Editar Item</h2>
+
+    <div class="form-row"><label class="form-label">Nome *</label><input class="form-input" id="edit-name"></div>
+    <div class="form-row"><label class="form-label">Descrição</label><textarea class="form-input" id="edit-desc" rows="2" placeholder="Descreva o item..."></textarea></div>
     <div class="form-row"><label class="form-label">Ingredientes <span style="color:var(--muted);font-size:10.5px">(separados por vírgula)</span></label><input class="form-input" id="edit-ingredients" placeholder="Ex: Pão, Carne, Queijo"></div>
+
     <div class="form-row-2">
-      <div class="form-row"><label class="form-label">Preço (R$)</label><input class="form-input" id="edit-price" type="number" step="0.01"></div>
-      <div class="form-row"><label class="form-label">Categoria</label><div class="sw" style="width:100%"><select id="edit-cat" class="form-input" style="width:100%"><option value="lanches">Lanches</option><option value="bebidas">Bebidas</option><option value="sobremesas">Sobremesas</option></select></div></div>
+      <div class="form-row"><label class="form-label">Preço (R$) *</label><input class="form-input" id="edit-price" type="number" step="0.01" min="0"></div>
+      <div class="form-row"><label class="form-label">Preço antigo (R$)</label><input class="form-input" id="edit-price-old" type="number" step="0.01" min="0" placeholder="Opcional"></div>
     </div>
+
     <div class="form-row-2">
-      <div class="form-row"><label class="form-label">Status</label><div class="sw" style="width:100%"><select id="edit-status" class="form-input" style="width:100%"><option value="active">Disponível</option><option value="esgotado">Esgotado</option><option value="pausado">Pausado</option></select></div></div>
-      <div class="form-row"><label class="form-label">Tipo</label><div class="sw" style="width:100%"><select id="edit-item-type" class="form-input" style="width:100%"><option value="normal">Normal</option><option value="pizza">🍕 Pizza</option></select></div></div>
+      <div class="form-row"><label class="form-label">Categoria *</label>
+        <div class="sw" style="width:100%"><select id="edit-cat" class="form-input" style="width:100%"></select></div>
+      </div>
+      <div class="form-row"><label class="form-label">Tipo</label>
+        <div class="sw" style="width:100%"><select id="edit-item-type" class="form-input" style="width:100%">
+          <option value="normal">🍽️ Normal</option>
+          <option value="pizza">🍕 Pizza</option>
+        </select></div>
+      </div>
     </div>
-    <div style="display:flex;gap:8px;margin-top:4px">
-      <button class="btn bd" style="flex:1;justify-content:center" onclick="deleteItem()"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M3 4h10M6 4V2.5A.5.5 0 0 1 6.5 2h3a.5.5 0 0 1 .5.5V4M5 4l.7 9.5a.5.5 0 0 0 .5.5h3.6a.5.5 0 0 0 .5-.5L11 4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 7v4M9 7v4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Excluir</button>
-      <button class="btn bp" style="flex:1;justify-content:center" onclick="saveEditItem()"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 2v5h6V2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="5" y="9" width="6" height="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Salvar</button>
+
+    <div class="form-row"><label class="form-label">Status</label>
+      <div class="sw" style="width:100%"><select id="edit-status" class="form-input" style="width:100%">
+        <option value="active">✅ Disponível</option>
+        <option value="esgotado">❌ Esgotado</option>
+        <option value="pausado">⏸️ Pausado</option>
+      </select></div>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label">Emoji / Ícone</label>
+      <div class="emoji-grid" id="edit-emoji-grid"></div>
+    </div>
+
+    <!-- Preview atual do emoji -->
+    <div id="edit-emoji-preview" style="display:flex;align-items:center;gap:8px;margin-top:4px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--muted)">
+      <span id="edit-emoji-current" style="font-size:22px">🍽️</span>
+      <span>Emoji atual · Selecione outro acima para trocar</span>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn bd" style="flex:1;justify-content:center" onclick="deleteItem()">🗑 Excluir item</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="saveEditItem()">💾 Salvar alterações</button>
     </div>
   </div>
 </div>
@@ -1747,7 +1795,16 @@ async function finishOrderById(id) {
 const DAYS=['D','S','T','Q','Q','S','S'];
 const DAYS_FULL=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const STATUS_CYCLE=[['sta','Disponível'],['ste','Esgotado'],['stp','Pausado']];
-const EMOJIS=['<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5v6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>'];
+const EMOJIS_PLAIN = [
+  '🍔','🌭','🍟','🍕','🥪','🌮','🌯','🥙','🧆','🍿',
+  '🍗','🍖','🥩','🥚','🍳','🥓','🍝','🍜','🍲','🍛',
+  '🥗','🥘','🫕','🥫','🧇','🥞','🧈','🍞','🥐','🥖',
+  '🧀','🥨','🍰','🎂','🍮','🍯','🍩','🍪','🍫','🍬',
+  '🍭','🍦','🍧','🍨','🍱','🍣','🍤','🦐','🦑','🥤',
+  '🧃','🍵','☕','🧋','🥛','🍺','🍷','🧉','🍹','🍸',
+  '🍉','🍓','🍇','🍒','🍑','🥭','🍍','🥝','🍋','🍌'
+];
+const EMOJIS = EMOJIS_PLAIN;
 const BOT_ANSWERS={
   'cardapio':'Aqui está nosso cardápio! Cachorrão R$8, X-Burguer R$12, Batata Frita R$9, Coca lata R$5, Suco R$6. O que deseja pedir?',
   'taxa':'A taxa de entrega é R$5,00 para toda a área. ',
@@ -2006,7 +2063,7 @@ function renderGestor(){
               <button class="btn bg" style="font-size:10.5px;padding:3px 8px;flex-shrink:0" onclick="event.stopPropagation();openEditItem(${item.id})">✏️ Editar</button>
             </div>
           `).join('')}
-          <div class="cat-add" onclick="openModal('modal-add-item')">
+          <div class="cat-add" onclick="openAddItemModal('${cat.name}')">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
             Adicionar Item
           </div>
@@ -2140,78 +2197,145 @@ function cycleStatus(id,el){
   el.innerHTML=`<div class="stdot"></div>&nbsp;${next[1]}`;
 }
 
-function openEditItem(id){
-  editingId=id;
-  const it=items.find(i=>i.id===id);
-  document.getElementById('edit-name').value=it.name;
-  document.getElementById('edit-desc').value=it.desc||'';
-  document.getElementById('edit-ingredients').value=(it.ingredients||[]).join(', ');
-  document.getElementById('edit-price').value=it.price;
-  document.getElementById('edit-cat').value=it.catKey;
-  document.getElementById('edit-status').value=it.status;
-  const typeEl=document.getElementById('edit-item-type');
-  if(typeEl) typeEl.value=it.itemType||'normal';
+// helper: populate category selects from loaded categories array
+function populateCatSelects() {
+  const opts = categories.length
+    ? categories.map(c => `<option value="${c.name}">${c.label}</option>`).join('')
+    : '<option value="">Nenhuma categoria — crie uma primeiro</option>';
+  ['new-cat','edit-cat'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { const prev = el.value; el.innerHTML = opts; el.value = prev; }
+  });
+}
+
+async function addItem() {
+  const name = document.getElementById('new-name').value.trim();
+  if (!name) { sbToast('err','Informe o nome do item'); return; }
+  const price    = parseFloat(document.getElementById('new-price').value) || 0;
+  const priceOld = parseFloat(document.getElementById('new-price-old').value) || null;
+  const catEl    = document.getElementById('new-cat');
+  const catKey   = catEl ? catEl.value : '';
+  const catLabel = catEl ? (catEl.options[catEl.selectedIndex]?.text || catKey) : catKey;
+  const selEmo   = document.querySelector('#emoji-grid .emo-btn.on');
+  const emoji    = selEmo ? selEmo.textContent.trim() : '🍽️';
+  const desc     = document.getElementById('new-desc').value.trim();
+  const ingrRaw  = document.getElementById('new-ingredients').value.trim();
+  const ingredients = ingrRaw ? ingrRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
+  const itemType = document.getElementById('new-item-type').value;
+  const status   = document.getElementById('new-status').value;
+
+  if (!catKey) { sbToast('err','Selecione uma categoria'); return; }
+
+  sbLoading(true);
+  const { data, error } = await sb.from('menu_items').insert({
+    emoji, name,
+    cat: catLabel, cat_key: catKey,
+    price, price_old: priceOld,
+    description: desc, ingredients, item_type: itemType,
+    promo: false, status,
+    days: [1,1,1,1,1,1,1]
+  }).select().single();
+  sbLoading(false);
+
+  if (error) { sbToast('err','Erro ao salvar item'); console.error(error); return; }
+  items.push(mapItem(data));
+
+  // Reset form
+  ['new-name','new-desc','new-ingredients','new-price','new-price-old'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.querySelectorAll('#emoji-grid .emo-btn').forEach(b => b.classList.remove('on'));
+  document.getElementById('new-item-type').value = 'normal';
+  document.getElementById('new-status').value = 'active';
+
+  closeModal('modal-add-item');
+  renderTable(); renderGestor(); renderPDV();
+  sbToast('ok', `"${name}" adicionado ao cardápio!`);
+}
+
+function openEditItem(id) {
+  editingId = id;
+  const it = items.find(i => i.id === id);
+  if (!it) return;
+
+  populateCatSelects();
+
+  document.getElementById('edit-name').value        = it.name;
+  document.getElementById('edit-desc').value        = it.desc || '';
+  document.getElementById('edit-ingredients').value = (it.ingredients || []).join(', ');
+  document.getElementById('edit-price').value       = it.price;
+  document.getElementById('edit-price-old').value   = it.priceOld || '';
+  document.getElementById('edit-cat').value         = it.catKey;
+  document.getElementById('edit-status').value      = it.status;
+  document.getElementById('edit-item-type').value   = it.itemType || 'normal';
+
+  // Emoji grid for edit modal
+  const eg = document.getElementById('edit-emoji-grid');
+  if (eg) {
+    eg.innerHTML = EMOJIS_PLAIN.map(e =>
+      `<div class="emo-btn${it.emoji===e?' on':''}" onclick="selectEditEmoji(this,'${e}')">${e}</div>`
+    ).join('');
+  }
+  const prev = document.getElementById('edit-emoji-current');
+  if (prev) prev.textContent = it.emoji || '🍽️';
+
   openModal('modal-edit-item');
+}
+
+function selectEditEmoji(el, emoji) {
+  document.querySelectorAll('#edit-emoji-grid .emo-btn').forEach(b => b.classList.remove('on'));
+  el.classList.add('on');
+  const prev = document.getElementById('edit-emoji-current');
+  if (prev) prev.textContent = emoji;
 }
 
 async function saveEditItem() {
   const it = items.find(i => i.id === editingId);
   if (!it) return;
-  it.name       = document.getElementById('edit-name').value;
-  it.desc       = document.getElementById('edit-desc').value || '';
-  it.price      = parseFloat(document.getElementById('edit-price').value) || it.price;
-  it.catKey     = document.getElementById('edit-cat').value;
-  it.cat        = it.catKey;
-  it.status     = document.getElementById('edit-status').value;
-  const ingrRaw = document.getElementById('edit-ingredients').value;
-  it.ingredients= ingrRaw ? ingrRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
-  const typeEl  = document.getElementById('edit-item-type');
-  it.itemType   = typeEl ? typeEl.value : 'normal';
+
+  it.name        = document.getElementById('edit-name').value.trim();
+  it.desc        = document.getElementById('edit-desc').value.trim();
+  it.price       = parseFloat(document.getElementById('edit-price').value) || it.price;
+  it.priceOld    = parseFloat(document.getElementById('edit-price-old').value) || null;
+  it.catKey      = document.getElementById('edit-cat').value;
+  const catEl    = document.getElementById('edit-cat');
+  it.cat         = catEl ? (catEl.options[catEl.selectedIndex]?.text || it.catKey) : it.catKey;
+  it.status      = document.getElementById('edit-status').value;
+  const ingrRaw  = document.getElementById('edit-ingredients').value;
+  it.ingredients = ingrRaw ? ingrRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
+  it.itemType    = document.getElementById('edit-item-type').value;
+
+  const selEmo   = document.querySelector('#edit-emoji-grid .emo-btn.on');
+  if (selEmo) it.emoji = selEmo.textContent.trim();
+
+  if (!it.name) { sbToast('err','Informe o nome do item'); return; }
+
   sbLoading(true);
   const { error } = await sb.from('menu_items').update({
-    name: it.name, description: it.desc, price: it.price,
-    cat: it.catKey, cat_key: it.catKey, status: it.status,
-    ingredients: it.ingredients, item_type: it.itemType
+    name: it.name, description: it.desc,
+    price: it.price, price_old: it.priceOld || null,
+    cat: it.cat, cat_key: it.catKey, status: it.status,
+    ingredients: it.ingredients, item_type: it.itemType,
+    emoji: it.emoji
   }).eq('id', editingId);
   sbLoading(false);
+
   if (error) { sbToast('err','Erro ao atualizar item'); console.error(error); return; }
   closeModal('modal-edit-item');
   renderTable(); renderGestor(); renderPDV();
-  sbToast('ok','Item atualizado!');
+  sbToast('ok', `"${it.name}" atualizado!`);
 }
 
 async function deleteItem() {
+  if (!confirm(`Excluir este item do cardápio?\n\nEsta ação não pode ser desfeita.`)) return;
   sbLoading(true);
   const { error } = await sb.from('menu_items').delete().eq('id', editingId);
   sbLoading(false);
   if (error) { sbToast('err','Erro ao excluir item'); console.error(error); return; }
   items = items.filter(i => i.id !== editingId);
   closeModal('modal-edit-item');
-  renderTable(); renderGestor();
-  showToast(_ICON_TRS,'Item excluído');
-}
-
-async function addItem() {
-  const name = document.getElementById('new-name').value.trim();
-  if (!name) { sbToast('err','Informe o nome do item'); return; }
-  const price  = parseFloat(document.getElementById('new-price').value)||0;
-  const catKey = document.getElementById('new-cat').value;
-  const selEmo = document.querySelector('.emo-btn.on');
-  const emoji  = selEmo ? selEmo.innerHTML : '';
-  const desc   = document.getElementById('new-desc').value;
-  sbLoading(true);
-  const { data, error } = await sb.from('menu_items').insert({
-    emoji, name, cat: catKey, cat_key: catKey, price,
-    description: desc, promo: false, status: 'active', days: [1,1,1,1,1,0,0]
-  }).select().single();
-  sbLoading(false);
-  if (error) { sbToast('err','Erro ao salvar item'); console.error(error); return; }
-  items.push(mapItem(data));
-  closeModal('modal-add-item');
-  document.getElementById('new-name').value = '';
-  document.getElementById('new-price').value = '';
   renderTable(); renderGestor(); renderPDV();
-  sbToast('ok','Item adicionado!');
+  sbToast('ok','Item excluído do cardápio!');
 }
 
 function applyBulk(){
@@ -2974,12 +3098,31 @@ function filterPDV(){renderPDV();}
 function buildEmojiGrid(){
   const g=document.getElementById('emoji-grid');
   if(!g) return;
-  g.innerHTML=EMOJIS.map(e=>`<div class="emo-btn" onclick="selEmoji(this)">${e}</div>`).join('');
+  g.innerHTML=EMOJIS_PLAIN.map(e=>`<div class="emo-btn" onclick="selEmoji(this,'add')">${e}</div>`).join('');
 }
 
-function selEmoji(el){
-  document.querySelectorAll('.emo-btn').forEach(b=>b.classList.remove('on'));
+function selEmoji(el, ctx){
+  // Only deselect emojis in the same grid context
+  const grid = el.closest('.emoji-grid');
+  if (grid) grid.querySelectorAll('.emo-btn').forEach(b=>b.classList.remove('on'));
   el.classList.add('on');
+}
+
+// Open add-item modal and populate category select
+function openAddItemModal(catKeyDefault) {
+  populateCatSelects();
+  if (catKeyDefault) {
+    const sel = document.getElementById('new-cat');
+    if (sel) sel.value = catKeyDefault;
+  }
+  // Reset form
+  ['new-name','new-desc','new-ingredients','new-price','new-price-old'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+  const nt = document.getElementById('new-item-type'); if(nt) nt.value='normal';
+  const ns = document.getElementById('new-status'); if(ns) ns.value='active';
+  document.querySelectorAll('#emoji-grid .emo-btn').forEach(b=>b.classList.remove('on'));
+  openModal('modal-add-item');
 }
 
 // ─────────────────────────────────────────
