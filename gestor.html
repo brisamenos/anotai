@@ -6234,7 +6234,7 @@ function renderClientes() {
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3-9 9H2v-3L11 2z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Editar
           </button>
-          <button class="btn bd" style="font-size:11px;padding:3px 9px" onclick="deleteCliente(${c.id},'${c.name.replace(/'/g,'\\\')}')">
+          <button class="btn bd" style="font-size:11px;padding:3px 9px" onclick="deleteCliente(${c.id})">
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2.5A.5.5 0 0 1 6.5 2h3a.5.5 0 0 1 .5.5V4M5 4l.7 9.5a.5.5 0 0 0 .5.5h3.6a.5.5 0 0 0 .5-.5L11 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
           </button>
         </div>
@@ -6288,7 +6288,9 @@ async function saveCliente() {
   sbToast('ok', `${name} atualizado!`);
 }
 
-async function deleteCliente(id, name) {
+async function deleteCliente(id) {
+  const c = fidClients.find(x => x.id === id);
+  const name = c?.name || 'este cliente';
   if (!confirm(`Remover cliente "${name}"? Os dados de fidelidade serão perdidos.`)) return;
   sbLoading(true);
   const { error } = await sb.from('fidelidade').delete().eq('id', id);
