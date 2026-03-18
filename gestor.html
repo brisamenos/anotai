@@ -1511,17 +1511,125 @@ A equipe Estima Food deseja um dia incrível para você!
 
 🎁 Presente especial: use o cupom ANIVER10 e ganhe 10% OFF no seu próximo pedido!
 Válido hoje apenas para você! 💛</textarea>
-          <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
-            <div style="font-size:12px;color:var(--muted)">Horário de envio:</div>
-            <input class="form-input" style="width:90px;font-size:12px;padding:4px 8px" value="09:00" id="auto-aniv-hora">
-            <button class="btn bp" style="font-size:11.5px;padding:4px 12px" onclick="evoEnviarAniversariantesHoje()">🎂 Enviar para aniversariantes de hoje</button>
+          <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <div style="font-size:12px;color:var(--muted)">⏰ Horário de envio automático:</div>
+            <input class="form-input" style="width:90px;font-size:12px;padding:4px 8px" value="09:00" id="auto-aniv-hora" onchange="_iniciarSchedulerAniversario()">
+            <div id="aniv-scheduler-status" style="font-size:11px;color:var(--success);background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:6px;padding:2px 8px">⚡ Automático ativo</div>
+            <button class="btn bg" style="font-size:11.5px;padding:4px 12px" onclick="evoEnviarAniversariantesHoje(false)">🎂 Enviar agora</button>
           </div>
+          <div style="margin-top:8px;font-size:11.5px;color:var(--muted);background:var(--surface2);border-radius:6px;padding:7px 10px">
+            💡 O sistema verifica automaticamente todos os dias no horário configurado e envia as felicitações sem precisar de interação.
+            <span id="aniv-last-send" style="display:block;margin-top:3px;font-size:11px"></span>
+          </div>
+        </div>
+
+        <!-- Boas-vindas novo cliente -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(6,182,212,.15);display:flex;align-items:center;justify-content:center;font-size:18px">👋</div>
+              <div><div style="font-weight:600;font-size:13.5px">Boas-vindas — Primeiro Pedido</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando o cliente faz o 1º pedido no sistema</div></div>
+            </div>
+            <div class="toggle on" id="auto-toggle-boasvindas" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-boasvindas" rows="3" style="font-size:12.5px">👋 Olá {nome}, seja muito bem-vindo(a) à Estima Food! 🍕
+Ficamos felizes com seu primeiro pedido!
+Em caso de dúvidas, é só chamar aqui. 😊</textarea>
+        </div>
+
+        <!-- Avaliação pós-pedido -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(245,158,11,.15);display:flex;align-items:center;justify-content:center;font-size:18px">⭐</div>
+              <div><div style="font-weight:600;font-size:13.5px">Pedir Avaliação</div><div style="font-size:11.5px;color:var(--muted)">Enviado após o pedido ser finalizado — peça um feedback</div></div>
+            </div>
+            <div class="toggle" id="auto-toggle-avaliacao" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-avaliacao" rows="3" style="font-size:12.5px">⭐ {nome}, esperamos que tenha curtido seu pedido #${id}!
+Conta pra gente como foi sua experiência — sua opinião é muito importante para nós! 🙏
+Responda com uma nota de 1 a 5 ⭐</textarea>
+          <div style="margin-top:8px;font-size:11.5px;color:var(--muted)">💡 Enviada automaticamente quando o pedido é marcado como "Finalizado"</div>
+        </div>
+
+        <!-- Lembrete de carrinho abandonado -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(236,72,153,.15);display:flex;align-items:center;justify-content:center;font-size:18px">🛒</div>
+              <div><div style="font-weight:600;font-size:13.5px">Retorno de Cliente</div><div style="font-size:11.5px;color:var(--muted)">Enviado manualmente para clientes que não pedem há dias</div></div>
+            </div>
+            <div class="toggle" id="auto-toggle-retorno" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-retorno" rows="3" style="font-size:12.5px">😋 {nome}, sentimos sua falta aqui na Estima Food!
+Que tal pedir hoje? Temos novidades no cardápio te esperando! 🍕
+Acesse: anota.ai/estima</textarea>
+          <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <div class="sbox" style="flex:1;min-width:180px"><svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><input id="retorno-search" placeholder="Buscar cliente pelo nome..." style="background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text);width:100%" oninput="retornoBuscar()"></div>
+            <button class="btn bp" style="font-size:11.5px;padding:5px 12px" onclick="evoEnviarRetornoManual()">📤 Enviar para cliente</button>
+          </div>
+          <div id="retorno-resultado" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
+        </div>
+
+        <!-- Promoção do dia -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(34,197,94,.15);display:flex;align-items:center;justify-content:center;font-size:18px">📢</div>
+              <div><div style="font-weight:600;font-size:13.5px">Promoção / Divulgação</div><div style="font-size:11.5px;color:var(--muted)">Envie uma promoção ou novidade para todos os clientes cadastrados</div></div>
+            </div>
+            <div class="toggle" id="auto-toggle-promocao" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-promocao" rows="4" style="font-size:12.5px">🔥 {nome}, oferta especial hoje na Estima Food!
+
+🍕 [DESCREVA A PROMOÇÃO AQUI]
+
+⏰ Válido somente hoje!
+Faça seu pedido: anota.ai/estima</textarea>
+          <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <div style="font-size:12px;color:var(--muted)">Enviar para:</div>
+            <select class="form-input" id="promo-destino" style="font-size:12px;padding:5px 10px;width:auto">
+              <option value="todos">Todos os clientes</option>
+              <option value="com_pedido">Clientes com pelo menos 1 pedido</option>
+              <option value="fidelidade">Clientes do programa de fidelidade</option>
+            </select>
+            <button class="btn bp" style="font-size:11.5px;padding:5px 12px" onclick="evoEnviarPromocao()">📢 Enviar agora</button>
+          </div>
+          <div id="promo-resultado" style="margin-top:8px;font-size:12px"></div>
+        </div>
+
+        <!-- Pontos de fidelidade -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(245,158,11,.15);display:flex;align-items:center;justify-content:center;font-size:18px">🏆</div>
+              <div><div style="font-weight:600;font-size:13.5px">Saldo de Pontos de Fidelidade</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando o cliente acumula pontos após um pedido finalizado</div></div>
+            </div>
+            <div class="toggle on" id="auto-toggle-pontos" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-pontos" rows="3" style="font-size:12.5px">🏆 {nome}, você ganhou {pontos_ganhos} pontos com seu pedido!
+Seu saldo atual: {pontos_total} pontos 🎯
+Faltam {pontos_faltam} pontos para sua próxima recompensa!</textarea>
+        </div>
+
+        <!-- Lembrete pagamento mesa -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(59,130,246,.15);display:flex;align-items:center;justify-content:center;font-size:18px">💰</div>
+              <div><div style="font-weight:600;font-size:13.5px">Conta da Mesa Pronta</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando a mesa solicita a conta (status "Aguardando pagamento")</div></div>
+            </div>
+            <div class="toggle on" id="auto-toggle-conta" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-conta" rows="3" style="font-size:12.5px">💰 {nome}, sua conta da Mesa {mesa} está pronta!
+Total: R$ {total}
+Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
         </div>
 
       </div>
       <div style="display:flex;gap:8px;margin-top:14px;font-size:12px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
         <span>📌</span>
-        <span>Variáveis disponíveis: <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{nome}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{id}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{itens}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{total}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{endereco}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{tipo_entrega}</code></span>
+        <span>Variáveis: <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{nome}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{id}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{itens}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{total}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{endereco}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{tipo_entrega}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{pontos_ganhos}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{pontos_total}</code> <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">{mesa}</code></span>
       </div>
     </div>
 
@@ -3133,11 +3241,9 @@ async function advanceOrderById(id) {
   const { error } = await sb.from('orders').update({status: newStatus}).eq('id', id);
   if (!error) {
     o.status = newStatus;
-    // ── Disparo WhatsApp automático ──
     if (o.phone) {
       const vars = {
-        nome: o.client || 'Cliente',
-        id: o.id,
+        nome: o.client || 'Cliente', id: o.id,
         itens: Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '',
         total: (o.total||0).toFixed(2).replace('.',','),
         endereco: o.addr || '',
@@ -3185,10 +3291,33 @@ async function finishOrderById(id) {
     }) : Promise.resolve()
   ]);
   sbLoading(false);
-  if (o) movimentos.push({
-    desc:`Pedido #${o.id} – ${o.client}`, tipo:'entrada',
-    val:o.total+o.taxa, pag:o.pag||'PIX', time
-  });
+  if (o) {
+    movimentos.push({ desc:`Pedido #${o.id} – ${o.client}`, tipo:'entrada', val:o.total+o.taxa, pag:o.pag||'PIX', time });
+
+    // ── WhatsApp: avaliação pós-pedido ──
+    if (o.phone) {
+      setTimeout(() => {
+        evoEnviarMensagem(o.phone, 'avaliacao', {
+          nome: o.client||'Cliente', id: o.id,
+          itens: Array.isArray(o.items)?o.items.map(i=>`${i.qty}x ${i.name}`).join(', '):'',
+          total: (o.total||0).toFixed(2).replace('.',',')
+        });
+      }, 3000); // 3 segundos após finalizar
+    }
+
+    // ── WhatsApp: pontos de fidelidade ──
+    const cliente = fidClients.find(c => c.phone === o.phone || c.name === o.client);
+    if (cliente?.phone) {
+      const pontos_ganhos = Math.floor((o.total||0) * (_fidConfig?.pts_por_real||10));
+      const pontos_total  = (cliente.pts||0) + pontos_ganhos;
+      const pontos_faltam = Math.max(0, (cliente.max||_fidConfig?.meta_pts||500) - pontos_total);
+      setTimeout(() => {
+        evoEnviarMensagem(cliente.phone, 'pontos', {
+          nome: cliente.name, pontos_ganhos, pontos_total, pontos_faltam
+        });
+      }, 5000); // 5 segundos após finalizar
+    }
+  }
   ordersKanban = ordersKanban.filter(x => x.id !== id);
   renderKanban();
   sbToast('ok',`Pedido #${id} finalizado!`);
@@ -6844,38 +6973,172 @@ async function evoEnviarMensagem(phone, tipo, vars={}) {
   return r.ok;
 }
 
-async function evoEnviarAniversariantesHoje() {
-  if (!evoConnected) { sbToast('err','WhatsApp não conectado'); return; }
-  const today=new Date();
-  const todayMD=`${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-  const anivs=fidClients.filter(c=>c.birthday&&c.birthday.slice(5)===todayMD&&c.phone);
-  if (!anivs.length) { sbToast('ok','Nenhum aniversariante com telefone hoje'); return; }
-  sbLoading(true);
-  let ok=0,fail=0;
-  for (const c of anivs) { const sent=await evoEnviarMensagem(c.phone,'aniversario',{nome:c.name}); sent?ok++:fail++; }
-  sbLoading(false);
-  sbToast('ok',`🎂 Enviado para ${ok} aniversariante(s)${fail?` | ${fail} falhou`:''}`);
+async function evoEnviarAniversariantesHoje(silencioso = false) {
+  const toggle = document.getElementById('auto-toggle-aniversario');
+  if (toggle && !toggle.classList.contains('on')) {
+    if (!silencioso) sbToast('err', 'Automação de aniversário está desativada');
+    return;
+  }
+  const today  = new Date();
+  const todayMD = `${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const anivs  = fidClients.filter(c => c.birthday && c.birthday.slice(5) === todayMD && c.phone);
+  if (!anivs.length) {
+    if (!silencioso) sbToast('ok', 'Nenhum aniversariante com telefone hoje');
+    return;
+  }
+  if (!silencioso) sbLoading(true);
+  let ok=0, fail=0;
+  for (const c of anivs) {
+    const sent = await evoEnviarMensagem(c.phone, 'aniversario', { nome: c.name });
+    sent ? ok++ : fail++;
+    await new Promise(r => setTimeout(r, 1200));
+  }
+  if (!silencioso) sbLoading(false);
+  // Salva que já enviou hoje no Supabase
+  try { await sb.from('store_config').upsert({ id: 1, evo_aniv_last: todayMD }); } catch(e){}
+  // Atualiza label na tela
+  const lastEl = document.getElementById('aniv-last-send');
+  if (lastEl) lastEl.textContent = `Último envio: ${todayMD} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;
+  if (!silencioso) sbToast('ok', `🎂 Enviado para ${ok} aniversariante(s)${fail ? ` | ${fail} falhou` : ''}`);
+  else if (ok > 0) sbToast('ok', `🎂 Felicitações automáticas enviadas para ${ok} aniversariante(s)!`);
 }
 
-function evoSalvarAutomacoes() {
-  const data={};
-  ['confirmado','pronto','entrega','cancelado','aniversario'].forEach(tipo=>{
-    data[tipo]={ on:document.getElementById(`auto-toggle-${tipo}`)?.classList.contains('on'), msg:document.getElementById(`auto-msg-${tipo}`)?.value };
+// ── Scheduler automático de aniversário ──────────────────
+let _anivSchedulerTimer = null;
+let _anivLastSent = null; // cache em memória para não bater no banco a cada minuto
+
+async function _checarAniversario() {
+  const toggle = document.getElementById('auto-toggle-aniversario');
+  if (!toggle || !toggle.classList.contains('on')) return;
+
+  const horaEl  = document.getElementById('auto-aniv-hora');
+  const horaCfg = horaEl?.value || '09:00';
+  const [hCfg, mCfg] = horaCfg.split(':').map(Number);
+  const now     = new Date();
+  const todayMD = `${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
+  // Usa cache em memória primeiro
+  if (_anivLastSent === todayMD) return;
+
+  // Só consulta o banco uma vez por dia (quando cache está vazio ou é outro dia)
+  if (!_anivLastSent) {
+    try {
+      const { data } = await sb.from('store_config').select('evo_aniv_last').eq('id',1).single();
+      _anivLastSent = data?.evo_aniv_last || null;
+    } catch(e) {}
+  }
+
+  if (_anivLastSent === todayMD) return;
+
+  const minutosAgora = now.getHours() * 60 + now.getMinutes();
+  const minutosCfg   = hCfg * 60 + mCfg;
+
+  if (minutosAgora >= minutosCfg) {
+    console.log('[EVO SCHEDULER] ✅ Disparando aniversários automáticos:', todayMD, horaCfg);
+    _anivLastSent = todayMD; // marca na memória imediatamente para não duplicar
+    evoEnviarAniversariantesHoje(true);
+  }
+}
+
+function _iniciarSchedulerAniversario() {
+  if (_anivSchedulerTimer) clearInterval(_anivSchedulerTimer);
+  // Roda logo ao iniciar (caso já tenha passado da hora hoje)
+  setTimeout(_checarAniversario, 5000);
+  // Verifica a cada 60s
+  _anivSchedulerTimer = setInterval(_checarAniversario, 60000);
+  console.log('[EVO SCHEDULER] Scheduler de aniversário iniciado ✅');
+}
+
+async function evoSalvarAutomacoes() {
+  const tipos = ['confirmado','pronto','entrega','cancelado','aniversario','boasvindas','avaliacao','retorno','promocao','pontos','conta'];
+  const data = {};
+  tipos.forEach(tipo => {
+    data[tipo] = {
+      on:  document.getElementById(`auto-toggle-${tipo}`)?.classList.contains('on'),
+      msg: document.getElementById(`auto-msg-${tipo}`)?.value
+    };
   });
-  localStorage.setItem('evo_automacoes',JSON.stringify(data));
-  sbToast('ok','✅ Automações salvas!');
+  data._aniv_hora = document.getElementById('auto-aniv-hora')?.value || '09:00';
+  try {
+    const { error } = await sb.from('store_config').upsert({ id: 1, evo_automacoes: data });
+    if (error) throw error;
+    sbToast('ok', '✅ Automações salvas!');
+  } catch(e) {
+    sbToast('err', 'Erro ao salvar: ' + (e.message || JSON.stringify(e)));
+  }
 }
 
-function evoCarregarAutomacoesSalvas() {
+async function evoCarregarAutomacoesSalvas() {
   try {
-    const data=JSON.parse(localStorage.getItem('evo_automacoes')||'{}');
-    Object.entries(data).forEach(([tipo,cfg])=>{
-      const t=document.getElementById(`auto-toggle-${tipo}`), m=document.getElementById(`auto-msg-${tipo}`);
-      if (t) { cfg.on?t.classList.add('on'):t.classList.remove('on'); }
-      if (m&&cfg.msg) m.value=cfg.msg;
+    const { data } = await sb.from('store_config').select('evo_automacoes').eq('id', 1).single();
+    const cfg = data?.evo_automacoes || {};
+    Object.entries(cfg).forEach(([tipo, val]) => {
+      if (tipo.startsWith('_')) return;
+      const t = document.getElementById(`auto-toggle-${tipo}`);
+      const m = document.getElementById(`auto-msg-${tipo}`);
+      if (t) { val.on ? t.classList.add('on') : t.classList.remove('on'); }
+      if (m && val.msg) m.value = val.msg;
     });
-  } catch(e){}
+    if (cfg._aniv_hora) {
+      const h = document.getElementById('auto-aniv-hora');
+      if (h) h.value = cfg._aniv_hora;
+    }
+  } catch(e) {
+    console.warn('evoCarregarAutomacoesSalvas:', e);
+  }
 }
+
+// ── Busca cliente para retorno manual ──
+function retornoBuscar() {
+  const q = (document.getElementById('retorno-search')?.value||'').toLowerCase();
+  const res = document.getElementById('retorno-resultado');
+  if (!q || q.length < 2) { if(res) res.innerHTML=''; return; }
+  const found = fidClients.filter(c => c.name.toLowerCase().includes(q) && c.phone);
+  if (!found.length) { if(res) res.innerHTML='<span style="color:var(--muted)">Nenhum cliente encontrado com telefone</span>'; return; }
+  if (res) res.innerHTML = found.slice(0,3).map(c=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;margin-top:4px">
+      <span style="font-size:13px;font-weight:600">${c.name}</span>
+      <span style="font-size:11px;color:var(--muted)">${c.phone}</span>
+      <button class="btn bp" style="font-size:10.5px;padding:2px 8px;margin-left:auto" onclick="evoEnviarRetornoCliente(${c.id})">📤 Enviar</button>
+    </div>`).join('');
+}
+
+async function evoEnviarRetornoCliente(id) {
+  const c = fidClients.find(x => x.id === id);
+  if (!c?.phone) { sbToast('err','Cliente sem telefone'); return; }
+  const sent = await evoEnviarMensagem(c.phone, 'retorno', { nome: c.name });
+  sbToast(sent?'ok':'err', sent?`Mensagem enviada para ${c.name}!`:'Erro ao enviar');
+}
+
+async function evoEnviarRetornoManual() {
+  const q = (document.getElementById('retorno-search')?.value||'').toLowerCase();
+  const c = fidClients.find(x => x.name.toLowerCase().includes(q) && x.phone);
+  if (!c) { sbToast('err','Nenhum cliente encontrado com esse nome'); return; }
+  const sent = await evoEnviarMensagem(c.phone, 'retorno', { nome: c.name });
+  sbToast(sent?'ok':'err', sent?`Mensagem enviada para ${c.name}!`:'Erro ao enviar');
+}
+
+// ── Promoção em massa ──────────────────
+async function evoEnviarPromocao() {
+  const destino = document.getElementById('promo-destino')?.value || 'todos';
+  const res = document.getElementById('promo-resultado');
+  let clientes = fidClients.filter(c => c.phone);
+  if (destino === 'com_pedido') clientes = clientes.filter(c => c.orders > 0);
+  if (!clientes.length) { sbToast('err','Nenhum cliente com telefone encontrado'); return; }
+  if (!confirm(`Enviar promoção para ${clientes.length} cliente(s)?`)) return;
+  if (res) res.innerHTML = `<span style="color:var(--muted)">⏳ Enviando para ${clientes.length} clientes...</span>`;
+  sbLoading(true);
+  let ok=0, fail=0;
+  for (const c of clientes) {
+    const sent = await evoEnviarMensagem(c.phone, 'promocao', { nome: c.name });
+    sent ? ok++ : fail++;
+    await new Promise(r => setTimeout(r, 1500)); // delay para não ser bloqueado
+  }
+  sbLoading(false);
+  if (res) res.innerHTML = `<span style="color:var(--success)">✅ Enviado para ${ok} clientes${fail?` | ❌ ${fail} falhou`:''}</span>`;
+  sbToast('ok', `Promoção enviada para ${ok} clientes!`);
+}
+
 
 function evoCarregarHistorico() {
   const tbody=document.getElementById('msgs-tbody'), count=document.getElementById('msgs-count');
@@ -6912,6 +7175,8 @@ buildEmojiGrid();
 initSidebarState();
 requestNotifPermission();
 loadAllData();
+// Inicia scheduler automático de aniversário
+setTimeout(_iniciarSchedulerAniversario, 3000);
 </script>
 </body>
 </html>
