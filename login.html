@@ -179,6 +179,7 @@ async function doLogin() {
       email:     u.email,
       role:      u.role,
       tenant_id: u.tenant_id,
+      plano:     tenant?.plano || 'pro',
       ts:        Date.now()
     }));
 
