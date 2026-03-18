@@ -3254,20 +3254,8 @@ async function advanceOrderById(id) {
   if (!o) return;
   const newStatus = o.status === 'analise' ? 'producao' : 'pronto';
   const { error } = await sb.from('orders').update({status: newStatus}).eq('id', id);
-  if (!error) {
-    o.status = newStatus;
-    if (o.phone) {
-      const vars = {
-        nome: o.client || 'Cliente', id: o.id,
-        itens: Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '',
-        total: (o.total||0).toFixed(2).replace('.',','),
-        endereco: o.addr || '',
-        tipo_entrega: (o.addr||'').includes('Mesa') ? '🪑 Será servido na mesa' : (o.addr||'').includes('alcão') ? '🏪 Pronto para retirada no balcão' : '🛵 Saindo para entrega em breve'
-      };
-      if (newStatus === 'producao') evoEnviarMensagem(o.phone, 'confirmado', vars);
-      if (newStatus === 'pronto')   evoEnviarMensagem(o.phone, 'pronto', vars);
-    }
-  }
+  if (!error) o.status = newStatus;
+  // WhatsApp é enviado pelo server.js automaticamente ao detectar mudança de status
   playOrderSound();
   renderKanban();
   sbToast('ok',`Pedido #${id} avançado!`);
@@ -3277,18 +3265,8 @@ async function advanceOrderById(id) {
 async function cancelOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
   const { error } = await sb.from('orders').update({status:'cancelado'}).eq('id', id);
-  if (!error) {
-    // ── Disparo WhatsApp cancelamento ──
-    if (o?.phone) {
-      evoEnviarMensagem(o.phone, 'cancelado', {
-        nome: o.client || 'Cliente',
-        id: o.id,
-        itens: Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '',
-        total: (o.total||0).toFixed(2).replace('.',',')
-      });
-    }
-    ordersKanban = ordersKanban.filter(x => x.id !== id);
-  }
+  if (!error) ordersKanban = ordersKanban.filter(x => x.id !== id);
+  // WhatsApp é enviado pelo server.js automaticamente
   renderKanban();
   showToast(_ICON_TRS,`Pedido #${id} cancelado`);
 }
@@ -3306,33 +3284,8 @@ async function finishOrderById(id) {
     }) : Promise.resolve()
   ]);
   sbLoading(false);
-  if (o) {
-    movimentos.push({ desc:`Pedido #${o.id} – ${o.client}`, tipo:'entrada', val:o.total+o.taxa, pag:o.pag||'PIX', time });
-
-    // ── WhatsApp: avaliação pós-pedido ──
-    if (o.phone) {
-      setTimeout(() => {
-        evoEnviarMensagem(o.phone, 'avaliacao', {
-          nome: o.client||'Cliente', id: o.id,
-          itens: Array.isArray(o.items)?o.items.map(i=>`${i.qty}x ${i.name}`).join(', '):'',
-          total: (o.total||0).toFixed(2).replace('.',',')
-        });
-      }, 3000); // 3 segundos após finalizar
-    }
-
-    // ── WhatsApp: pontos de fidelidade ──
-    const cliente = fidClients.find(c => c.phone === o.phone || c.name === o.client);
-    if (cliente?.phone) {
-      const pontos_ganhos = Math.floor((o.total||0) * (_fidConfig?.pts_por_real||10));
-      const pontos_total  = (cliente.pts||0) + pontos_ganhos;
-      const pontos_faltam = Math.max(0, (cliente.max||_fidConfig?.meta_pts||500) - pontos_total);
-      setTimeout(() => {
-        evoEnviarMensagem(cliente.phone, 'pontos', {
-          nome: cliente.name, pontos_ganhos, pontos_total, pontos_faltam
-        });
-      }, 5000); // 5 segundos após finalizar
-    }
-  }
+  if (o) movimentos.push({ desc:`Pedido #${o.id} – ${o.client}`, tipo:'entrada', val:o.total+o.taxa, pag:o.pag||'PIX', time });
+  // WhatsApp (avaliação + pontos) é enviado pelo server.js automaticamente
   ordersKanban = ordersKanban.filter(x => x.id !== id);
   renderKanban();
   sbToast('ok',`Pedido #${id} finalizado!`);
