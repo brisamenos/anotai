@@ -634,6 +634,10 @@ td:first-child{padding-left:16px}
     <svg viewBox="0 0 16 16" fill="none"><rect x="3" y="5" width="10" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="9" r="1" fill="currentColor"/><circle cx="10" cy="9" r="1" fill="currentColor"/><path d="M6 5V3.5M10 5V3.5M6 3.5H10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Robô
   </button>
+  <button class="si" id="sn-taxa" onclick="nav('taxa')">
+    <svg viewBox="0 0 16 16" fill="none"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/></svg>
+    Taxa de Entrega
+  </button>
   </div>
 
   <div class="shead" style="margin-top:4px" onclick="toggleSideGroup('sg-venda')" id="sh-venda">Venda mais <span class="shead-arrow">▾</span></div>
@@ -870,6 +874,72 @@ td:first-child{padding-left:16px}
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- TAXA DE ENTREGA -->
+<div class="page" id="page-taxa">
+  <div class="ph">
+    <div>
+      <div class="pt">Taxa de Entrega</div>
+      <div class="ps">Configure como a taxa é cobrada no cardápio digital</div>
+    </div>
+    <button class="btn bp" onclick="saveTaxaConfig()">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M5 2v5h6V2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+      Salvar
+    </button>
+  </div>
+
+  <!-- Modo -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">Tipo de cobrança</div>
+    <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 16px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);flex:1;min-width:140px;transition:border-color .18s" id="taxa-label-fixo">
+        <input type="radio" name="taxa-tipo" value="fixo" id="taxa-tipo-fixo" checked onchange="onTaxaTipoChange()" style="accent-color:var(--accent)">
+        <div>
+          <div style="font-weight:600;font-size:13px">Taxa Fixa</div>
+          <div style="font-size:11.5px;color:var(--muted)">Mesmo valor para toda entrega</div>
+        </div>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 16px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);flex:1;min-width:140px;transition:border-color .18s" id="taxa-label-km">
+        <input type="radio" name="taxa-tipo" value="por_km" id="taxa-tipo-km" onchange="onTaxaTipoChange()" style="accent-color:var(--accent)">
+        <div>
+          <div style="font-weight:600;font-size:13px">Por Faixas de Km</div>
+          <div style="font-size:11.5px;color:var(--muted)">Taxa varia conforme a distância</div>
+        </div>
+      </label>
+    </div>
+  </div>
+
+  <!-- TAXA FIXA -->
+  <div class="card" id="taxa-fixo-block" style="margin-bottom:16px">
+    <div class="card-title">Valor da taxa fixa</div>
+    <div style="margin-top:12px;display:flex;align-items:center;gap:10px;max-width:260px">
+      <span style="font-size:13px;color:var(--muted);flex-shrink:0">R$</span>
+      <input class="form-input" id="taxa-fixo-val" type="number" min="0" step="0.50" placeholder="0,00" style="font-size:20px;font-weight:700;font-family:'Syne',sans-serif;max-width:160px">
+      <span style="font-size:12px;color:var(--muted)">por entrega</span>
+    </div>
+  </div>
+
+  <!-- FAIXAS DE KM -->
+  <div class="card" id="taxa-km-block" style="display:none;margin-bottom:16px">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+      Faixas de distância
+      <button class="btn bp" style="font-size:11px;padding:4px 10px" onclick="addTaxaFaixa()">+ Adicionar faixa</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin:8px 0 14px">Cada faixa define: até quantos km e qual o valor da taxa. O cliente vai ver a lista e escolher a faixa dele.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px">
+      <span style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Até (km)</span>
+      <span style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Taxa (R$)</span>
+      <span></span>
+    </div>
+    <div id="taxa-faixas-list" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
+
+  <!-- Preview -->
+  <div class="card" id="taxa-preview-block" style="background:rgba(59,130,246,.05);border-color:rgba(59,130,246,.15)">
+    <div class="card-title">📱 Prévia — como o cliente vai ver</div>
+    <div id="taxa-preview-content" style="margin-top:12px;font-size:13px;color:var(--muted)"></div>
   </div>
 </div>
 
@@ -1996,6 +2066,7 @@ function nav(id){
   if(id==='satisfacao') renderSatisfacao();
   if(id==='impressao') renderImpressao();
   if(id==='caixa') renderCaixa();
+  if(id==='taxa') renderTaxaPage();
 }
 
 function switchTab(btn,id){
@@ -3551,6 +3622,113 @@ function showToast(icon,msg){
   t.style.display='flex';
   clearTimeout(tTimer);
   tTimer=setTimeout(()=>t.style.display='none',2800);
+}
+
+// ─────────────────────────────────────────
+// TAXA DE ENTREGA
+// ─────────────────────────────────────────
+let _taxaConfig = { tipo: 'fixo', valor: 5, faixas: [] };
+
+async function renderTaxaPage() {
+  try {
+    const { data } = await sb.from('store_config').select('delivery_fee_config').eq('id', 1).single();
+    if (data?.delivery_fee_config) _taxaConfig = data.delivery_fee_config;
+  } catch(e) {}
+
+  const tipo = _taxaConfig.tipo || 'fixo';
+  document.getElementById('taxa-tipo-fixo').checked = tipo === 'fixo';
+  document.getElementById('taxa-tipo-km').checked   = tipo === 'por_km';
+  document.getElementById('taxa-fixo-val').value    = _taxaConfig.valor ?? 5;
+
+  // Faixas
+  const faixas = _taxaConfig.faixas || [];
+  const list = document.getElementById('taxa-faixas-list');
+  list.innerHTML = '';
+  if (!faixas.length && tipo === 'por_km') {
+    // Default example rows
+    [[1, 3], [3, 5], [7, 8]].forEach(([km, tx]) => _addFaixaRow(km, tx));
+  } else {
+    faixas.forEach(f => _addFaixaRow(f.ate_km, f.taxa));
+  }
+
+  onTaxaTipoChange();
+}
+
+function onTaxaTipoChange() {
+  const tipo = document.querySelector('input[name="taxa-tipo"]:checked').value;
+  document.getElementById('taxa-fixo-block').style.display = tipo === 'fixo'  ? '' : 'none';
+  document.getElementById('taxa-km-block').style.display   = tipo === 'por_km' ? '' : 'none';
+  // Update label borders
+  document.getElementById('taxa-label-fixo').style.borderColor = tipo === 'fixo'   ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('taxa-label-km').style.borderColor   = tipo === 'por_km' ? 'var(--accent)' : 'var(--border)';
+  updateTaxaPreview();
+}
+
+function _addFaixaRow(km, taxa) {
+  const list = document.getElementById('taxa-faixas-list');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center';
+  row.innerHTML = `
+    <input class="form-input" type="number" min="0" step="0.5" placeholder="Ex: 3" value="${km||''}" oninput="updateTaxaPreview()" style="margin-bottom:0">
+    <input class="form-input" type="number" min="0" step="0.50" placeholder="Ex: 5.00" value="${taxa||''}" oninput="updateTaxaPreview()" style="margin-bottom:0">
+    <button onclick="this.closest('div').remove();updateTaxaPreview()" style="width:28px;height:28px;border-radius:7px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.2);color:var(--danger);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">✕</button>
+  `;
+  list.appendChild(row);
+  updateTaxaPreview();
+}
+
+function addTaxaFaixa() { _addFaixaRow('', ''); }
+
+function getTaxaFaixasFromDOM() {
+  const rows = document.querySelectorAll('#taxa-faixas-list > div');
+  return Array.from(rows).map(r => {
+    const inputs = r.querySelectorAll('input');
+    return { ate_km: parseFloat(inputs[0].value)||0, taxa: parseFloat(inputs[1].value)||0 };
+  }).filter(f => f.ate_km > 0).sort((a,b) => a.ate_km - b.ate_km);
+}
+
+function updateTaxaPreview() {
+  const tipo = document.querySelector('input[name="taxa-tipo"]:checked')?.value || 'fixo';
+  const el = document.getElementById('taxa-preview-content');
+  if (tipo === 'fixo') {
+    const val = parseFloat(document.getElementById('taxa-fixo-val').value) || 0;
+    el.innerHTML = `<div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border-radius:10px;padding:12px 16px">
+      <span style="font-size:24px">🛵</span>
+      <div>
+        <div style="font-weight:600;font-size:13px">Taxa de entrega</div>
+        <div style="font-size:18px;font-weight:700;color:var(--accent3);font-family:'Syne',sans-serif">R$ ${val.toFixed(2).replace('.',',')}</div>
+      </div>
+    </div>`;
+  } else {
+    const faixas = getTaxaFaixasFromDOM();
+    if (!faixas.length) { el.innerHTML = '<span style="color:var(--muted)">Adicione pelo menos uma faixa acima.</span>'; return; }
+    el.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:8px">O cliente verá um seletor como este:</div>
+      <div style="background:var(--surface2);border-radius:10px;overflow:hidden">
+        ${faixas.map((f,i) => `<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center${i===0?';background:rgba(59,130,246,.08)':''}">
+          <span style="font-size:13px">Até ${f.ate_km} km${i===0?' <span style="font-size:10px;background:rgba(59,130,246,.15);color:var(--accent);padding:1px 6px;border-radius:99px;margin-left:6px">selecionado</span>':''}</span>
+          <span style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent3)">R$ ${f.taxa.toFixed(2).replace('.',',')}</span>
+        </div>`).join('')}
+      </div>`;
+  }
+}
+
+async function saveTaxaConfig() {
+  const tipo = document.querySelector('input[name="taxa-tipo"]:checked').value;
+  const config = { tipo };
+  if (tipo === 'fixo') {
+    config.valor = parseFloat(document.getElementById('taxa-fixo-val').value) || 0;
+    config.faixas = [];
+  } else {
+    config.faixas = getTaxaFaixasFromDOM();
+    config.valor = 0;
+  }
+  try {
+    await sb.from('store_config').upsert({ id: 1, delivery_fee_config: config });
+    _taxaConfig = config;
+    sbToast('ok', 'Taxa de entrega salva!');
+  } catch(e) {
+    sbToast('err', 'Erro ao salvar taxa');
+  }
 }
 
 // ─────────────────────────────────────────
