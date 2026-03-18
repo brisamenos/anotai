@@ -57,8 +57,9 @@
 <div class="app">
 <!-- SIDEBAR -->
 <aside class="sidebar">
+  <div class="sb-pin" title="Fixar sidebar" onclick="this.closest('.sidebar').classList.toggle('pinned')">📌</div>
   <div style="flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:8px">
-  <div style="padding:7px 8px 4px"><div style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><input placeholder="Procurando por algo?" style="background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text);width:100%"></div></div>
+  <div class="sidebar-search" style="padding:7px 8px 4px"><div style="display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><input placeholder="Procurando por algo?" style="background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text);width:100%"></div></div>
 
   <div class="shead" onclick="toggleSideGroup('sg-dia')" id="sh-dia">Seu dia a dia <span class="shead-arrow">▾</span></div>
   <div class="sidebar-group" id="sg-dia">
@@ -167,11 +168,11 @@
   <div class="sfoot">
     <div class="urow" onclick="confirmarLogout()" title="Sair do sistema">
       <div class="av av-green" id="sidebar-av">E</div>
-      <div style="flex:1;min-width:0">
+      <div class="sfoot-info" style="flex:1;min-width:0">
         <div style="font-size:12.5px;font-weight:600" id="sidebar-nome">estima</div>
         <div style="font-size:10px;color:var(--muted)" id="sidebar-role">Administrador</div>
       </div>
-      <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><path d="M6 3H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <svg class="sfoot-info" viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><path d="M6 3H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
   </div>
 </aside>
