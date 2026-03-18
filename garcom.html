@@ -624,6 +624,16 @@ const sb = createClient('', '', { auth:{ persistSession:false } });
 let _garcomTenantId = null;
 let _garcomNomeLoja = null;
 
+// Seta tenant imediatamente se vier na URL (sem esperar fetch)
+(function() {
+  const p = new URLSearchParams(window.location.search);
+  const tid = p.get('tenant');
+  if (tid) {
+    _garcomTenantId = tid;
+    sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: tid, ts: Date.now() }));
+  }
+})();
+
 (async function resolveGarcomTenant() {
   const p    = new URLSearchParams(window.location.search);
   const slug = p.get('slug') || p.get('t');
@@ -1116,6 +1126,7 @@ async function submitPedido() {
     }
 
     const { data, error } = await sb.from('orders').insert({
+      tenant_id: _garcomTenantId,
       client: `Mesa ${activeMesa}`,
       phone: '',
       addr: `Mesa ${activeMesa}`,
