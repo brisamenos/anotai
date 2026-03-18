@@ -403,6 +403,10 @@ async function loadAll() {
   renderDash(); renderClientes();
 }
 
+// ── Mapeamento de planos (global) ─────────────────────
+const planoBadge = { basico:'bg-gray', pro:'bg-blue', premium:'bg-purple' };
+const planoLabel = { basico:'Básico', pro:'Pro', premium:'⭐ Premium' };
+
 // ── DASHBOARD ────────────────────────────
 function renderDash() {
   const el = document.getElementById('dash-list');
@@ -428,8 +432,7 @@ function renderClientes() {
   if (!el) return;
   const fil = _clientes.filter(c=>!q||c.nome.toLowerCase().includes(q)||c.email.toLowerCase().includes(q)||c.slug.includes(q));
   if (!fil.length) { el.innerHTML='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--muted)">Nenhum cliente encontrado</td></tr>'; return; }
-  const planoBadge = { basico:'bg-gray', pro:'bg-blue', premium:'bg-purple' };
-  const planoLabel = { basico:'Básico', pro:'Pro', premium:'⭐ Premium' };
+
   el.innerHTML = fil.map(c => {
     const users = _usuarios.filter(u=>u.tenant_id===c.id);
     const gestor = users.find(u=>u.role==='gestor')||users[0];
