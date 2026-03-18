@@ -424,9 +424,7 @@ td:first-child{padding-left:16px}
 .qr-waiting{background:rgba(245,158,11,.12);color:var(--accent3)}
 .qr-code{width:56px;height:56px;margin:0 auto 8px;background:var(--surface2);border-radius:7px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:28px}
 
-/* RECUP */
-.recup-item{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:14px;display:flex;align-items:center;gap:12px;transition:border-color .18s}
-.recup-item:hover{border-color:var(--accent3)}
+
 .ri-av{width:38px;height:38px;border-radius:9px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0}
 
 /* TABS */
@@ -717,10 +715,7 @@ td:first-child{padding-left:16px}
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="3.5" y="3.5" width="2" height="2" fill="currentColor" rx=".3"/><rect x="10.5" y="3.5" width="2" height="2" fill="currentColor" rx=".3"/><rect x="3.5" y="10.5" width="2" height="2" fill="currentColor" rx=".3"/><path d="M9 9h1.5v1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M11.5 11.5H14v3H9v-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
     QR Code
   </button>
-  <button class="si" id="sn-recuperador" onclick="nav('recuperador')">
-    <svg viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 1 1 2 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M3 11V8H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    Recuperador de vendas
-  </button>
+
   <button class="si" id="sn-cupom" onclick="nav('cupom')">
     <svg viewBox="0 0 16 16" fill="none"><path d="M9 2L7 14M4 5h8M4 11h8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Cupom
@@ -1164,19 +1159,6 @@ td:first-child{padding-left:16px}
   <div class="qr-wrap" id="qr-grid"></div>
 </div>
 
-<!-- RECUPERADOR -->
-<div class="page" id="page-recuperador">
-  <div class="ph"><div><div class="pt">Recuperador de Vendas</div><div class="ps">Clientes que iniciaram pedido mas não finalizaram</div></div><button class="btn bp" onclick="sendAllRecup()"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M14 8L2 3l3 5-3 5 12-5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Enviar para todos</button></div>
-  <div class="sg">
-    <div class="sc" style="--ca:var(--danger)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="7" cy="5" r="3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 14c0-2.8 2.2-5 5-5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 11l3 3M14 11l-3 3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Abandonos hoje</div><div class="sv">7</div></div>
-    <div class="sc" style="--ca:var(--accent3)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 11V4M5 7l3-3 3 3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 14h10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Mensagens enviadas</div><div class="sv" id="recup-sent">0</div></div>
-    <div class="sc" style="--ca:var(--success)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 4v8M5.5 6.5A2 1.5 0 0 1 8 5a2 1.5 0 0 1 0 3 2 1.5 0 0 0 0 3 2 1.5 0 0 0 2.5-1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Recuperados</div><div class="sv" id="recup-conv">0</div></div>
-    <div class="sc" style="--ca:var(--accent)"><div class="si2">%</div><div class="sl">Taxa recuperação</div><div class="sv" id="recup-pct">0%</div></div>
-  </div>
-  <div id="recup-list" style="display:flex;flex-direction:column;gap:8px"></div>
-</div>
-
-<!-- CUPOM -->
 <div class="page" id="page-cupom">
   <div class="ph"><div><div class="pt">Cupons de Desconto</div><div class="ps">Crie e gerencie cupons para seus clientes</div></div><button class="btn bp" onclick="openModal('modal-add-cupom')">+ Criar cupom</button></div>
   <div class="sg">
@@ -1190,24 +1172,37 @@ td:first-child{padding-left:16px}
 
 <!-- FIDELIDADE -->
 <div class="page" id="page-fidelidade">
-  <div class="ph"><div><div class="pt">Programa de Fidelidade</div><div class="ps">Crie recorrência e recompense clientes fiéis</div></div><button class="btn bp" onclick="openModal('modal-fid-config')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M4 4l1 1M11 11l1 1M4 12l1-1M11 5l1-1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Configurar programa</button></div>
-  <div class="sg">
-    <div class="sc" style="--ca:var(--accent3)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5L8 2z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Clientes no programa</div><div class="sv">24</div></div>
-    <div class="sc" style="--ca:var(--accent)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Pontos distribuídos</div><div class="sv">1.840</div></div>
-    <div class="sc" style="--ca:var(--success)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="7" width="12" height="7" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 7h12v-2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v2z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5V14M8 5c0-1.7-2-3-2-3s0 1.3 2 3zM8 5c0-1.7 2-3 2-3s0 1.3-2 3z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Recompensas resgatadas</div><div class="sv">7</div></div>
-    <div class="sc" style="--ca:var(--purple)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 12l4-4 3 3 5-6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 5h3v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Retorno médio</div><div class="sv">3.2x</div></div>
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-    <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="6" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 14c0-2.5 2-4.5 5-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 14c0-2.5-2-4.5-5-4.5s-5 2-5 4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Clientes</div><div id="fid-clients"></div></div>
-    <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M5 2h6v6a3 3 0 0 1-6 0V2z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 2h3M11 2h3M2 5H5M11 5h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 8v4M5.5 14h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Regras do Programa</div>
-      <div class="form-row"><label class="form-label">Pontos por R$ gasto</label><div style="display:flex;align-items:center;gap:7px"><input class="form-input" value="10" style="width:70px"> <span style="font-size:12.5px;color:var(--muted)">pontos por R$1,00</span></div></div>
-      <div class="form-row"><label class="form-label">Recompensa ao atingir</label><div style="display:flex;align-items:center;gap:7px"><input class="form-input" value="500" style="width:70px"> <span style="font-size:12.5px;color:var(--muted)">pontos = R$10,00 desconto</span></div></div>
-      <div class="form-row"><label class="form-label">Dobro de pontos aos</label><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px" id="fid-days"></div></div>
-      <button class="btn bp" style="width:100%;justify-content:center;margin-top:8px" onclick="showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><path d=&quot;M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5L8 2z&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>','Programa atualizado!')">Salvar configurações</button>
+  <div class="ph">
+    <div><div class="pt">Programa de Fidelidade</div><div class="ps">Pontos reais por pedido — recompense clientes fiéis</div></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn bg" onclick="openModal('modal-fid-config')">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M4 4l1 1M11 11l1 1M4 12l1-1M11 5l1-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Configurar
+      </button>
+      <button class="btn bp" onclick="openModal('modal-add-fid-client')">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Novo cliente
+      </button>
     </div>
   </div>
-</div>
 
+  <!-- Stats -->
+  <div class="sg" style="margin-bottom:18px">
+    <div class="sc" style="--ca:var(--accent3)"><div class="sl">No programa</div><div class="sv" id="fid-stat-total">0</div></div>
+    <div class="sc" style="--ca:var(--accent)"><div class="sl">Pontos ativos</div><div class="sv" id="fid-stat-pts">0</div></div>
+    <div class="sc" style="--ca:var(--success)"><div class="sl">Recompensas usadas</div><div class="sv" id="fid-stat-resgatados">0</div></div>
+    <div class="sc" style="--ca:var(--purple)"><div class="sl">Perto da meta</div><div class="sv" id="fid-stat-perto">0</div></div>
+  </div>
+
+  <!-- Busca -->
+  <div class="sbox" style="margin-bottom:14px;max-width:340px">
+    <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    <input id="fid-search" placeholder="Buscar cliente..." oninput="renderFidelidade()" style="width:240px">
+  </div>
+
+  <!-- Lista de clientes -->
+  <div id="fid-clients"></div>
+</div>
 <!-- COMPRE+ GANHE+ -->
 <div class="page" id="page-compre-ganhe">
   <div class="ph"><div><div class="pt">Compre+ Ganhe+</div><div class="ps">Oferte combos e promoções progressivas</div></div><button class="btn bp" onclick="openModal('modal-add-promo')">+ Criar promoção</button></div>
@@ -1315,16 +1310,36 @@ td:first-child{padding-left:16px}
 
 <!-- CONTROLE DE ESTOQUE -->
 <div class="page" id="page-estoque">
-  <div class="ph"><div><div class="pt">Controle de Estoque e Custos</div><div class="ps">Gestão de ingredientes e custos</div></div><button class="btn bp" onclick="openModal('modal-estoque')">+ Registrar entrada</button></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-    <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 5l6-3 6 3v6l-6 3-6-3V5z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 2v12M2 5l6 3 6-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Estoque de Ingredientes</div><div id="estoque-bars"></div></div>
-    <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 4v8M5.5 6.5A2 1.5 0 0 1 8 5a2 1.5 0 0 1 0 3 2 1.5 0 0 0 0 3 2 1.5 0 0 0 2.5-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Custo por Item</div>
-      <div class="tw" style="border:none;border-radius:0;margin-top:-10px">
-        <table><thead><tr><th>Item</th><th>Custo</th><th>Venda</th><th>Margem</th></tr></thead>
-        <tbody id="custo-table"></tbody></table>
-      </div>
+  <div class="ph">
+    <div><div class="pt">Controle de Estoque</div><div class="ps">Ingredientes e movimentações em tempo real</div></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn bg" onclick="openModal('modal-add-ingrediente')">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Novo ingrediente
+      </button>
+      <button class="btn bp" onclick="openModal('modal-estoque')">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 13V3M3 8l5-5 5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Registrar entrada
+      </button>
     </div>
   </div>
+
+  <!-- Stats -->
+  <div class="sg" style="margin-bottom:18px">
+    <div class="sc" style="--ca:var(--accent)"><div class="sl">Ingredientes</div><div class="sv" id="est-stat-total">0</div></div>
+    <div class="sc" style="--ca:var(--danger)"><div class="sl">Estoque baixo</div><div class="sv" id="est-stat-baixo" style="color:var(--danger)">0</div></div>
+    <div class="sc" style="--ca:var(--success)"><div class="sl">Valor em estoque</div><div class="sv" id="est-stat-valor">R$0</div></div>
+    <div class="sc" style="--ca:var(--accent3)"><div class="sl">Entradas hoje</div><div class="sv" id="est-stat-entradas">0</div></div>
+  </div>
+
+  <!-- Busca -->
+  <div class="sbox" style="margin-bottom:14px;max-width:300px">
+    <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    <input id="est-search" placeholder="Buscar ingrediente..." oninput="renderEstoque()" style="width:220px">
+  </div>
+
+  <!-- Lista -->
+  <div id="estoque-list"></div>
 </div>
 
 <!-- MEU DESEMPENHO -->
@@ -1831,11 +1846,66 @@ td:first-child{padding-left:16px}
   <div class="modal">
     <button class="modal-close" onclick="closeModal('modal-fid-config')">✕</button>
     <h2><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5L8 2z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Configurar Fidelidade</h2>
-    <div class="form-row"><label class="form-label">Nome do programa</label><input class="form-input" value="Clube Estima Food"></div>
-    <div class="form-row"><label class="form-label">Pontos por R$1,00 gasto</label><input class="form-input" type="number" value="10"></div>
-    <div class="form-row"><label class="form-label">Pontos para resgatar R$10,00</label><input class="form-input" type="number" value="500"></div>
-    <div class="form-row"><label class="form-label">Mensagem de boas-vindas</label><textarea class="form-input" rows="2">Bem-vindo ao Clube Estima Food!</textarea></div>
-    <button class="btn bp" style="width:100%;justify-content:center;margin-top:4px" onclick="closeModal('modal-fid-config');showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><path d=&quot;M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5L8 2z&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>','Programa salvo!')">Salvar programa</button>
+    <div class="form-row"><label class="form-label">Pontos por R$1,00 gasto</label><div style="display:flex;align-items:center;gap:8px"><input class="form-input" id="fid-cfg-pts" type="number" value="10" style="width:80px"><span style="font-size:12.5px;color:var(--muted)">pontos por cada R$1,00</span></div></div>
+    <div class="form-row"><label class="form-label">Meta de pontos para recompensa</label><input class="form-input" id="fid-cfg-meta" type="number" value="500" placeholder="Ex: 500"></div>
+    <div class="form-row"><label class="form-label">Valor da recompensa (R$)</label><input class="form-input" id="fid-cfg-rec" type="number" step="0.01" value="10" placeholder="Ex: 10"></div>
+    <div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.15);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--muted);margin-bottom:8px">
+      Exemplo: com 10 pts/R$ e meta de 500, o cliente gasta <strong style="color:var(--text)">R$50</strong> para ganhar <strong style="color:var(--success)">R$10</strong> de desconto.
+    </div>
+    <button class="btn bp" style="width:100%;justify-content:center" onclick="saveFidConfig()">Salvar configurações</button>
+  </div>
+</div>
+
+
+<!-- Modal Novo Cliente Fidelidade -->
+<div class="modal-bg" id="modal-add-fid-client">
+  <div class="modal" style="max-width:400px">
+    <button class="modal-close" onclick="closeModal('modal-add-fid-client')">✕</button>
+    <h2>⭐ Novo Cliente Fidelidade</h2>
+    <div class="form-row"><label class="form-label">Nome do cliente</label><input class="form-input" id="fid-add-name" placeholder="Ex: João Silva"></div>
+    <div class="form-row"><label class="form-label">Telefone</label><input class="form-input" id="fid-add-phone" placeholder="(99) 99999-0000"></div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-add-fid-client')">Cancelar</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="addFidClient()">Cadastrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Adicionar Pontos -->
+<div class="modal-bg" id="modal-add-pts">
+  <div class="modal" style="max-width:360px">
+    <button class="modal-close" onclick="closeModal('modal-add-pts')">✕</button>
+    <h2>⭐ Adicionar Pontos</h2>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;text-align:center">
+      <div style="font-size:13px;font-weight:600" id="modal-pts-client-name">—</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px" id="modal-pts-current">0 pontos atuais</div>
+    </div>
+    <div class="form-row"><label class="form-label">Pontos a adicionar</label><input class="form-input" id="modal-pts-qty" type="number" min="1" placeholder="Ex: 100"></div>
+    <div class="form-row"><label class="form-label">Motivo (opcional)</label><input class="form-input" id="modal-pts-motivo" placeholder="Ex: Pedido #42"></div>
+    <input type="hidden" id="modal-pts-client-id">
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-add-pts')">Cancelar</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="confirmAddPts()">Adicionar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Resgatar Recompensa -->
+<div class="modal-bg" id="modal-resgatar">
+  <div class="modal" style="max-width:360px">
+    <button class="modal-close" onclick="closeModal('modal-resgatar')">✕</button>
+    <h2>🎁 Resgatar Recompensa</h2>
+    <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:14px;margin-bottom:14px;text-align:center">
+      <div style="font-size:13px;font-weight:600" id="modal-resg-name">—</div>
+      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--success);margin-top:4px" id="modal-resg-valor">—</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px" id="modal-resg-pts">—</div>
+    </div>
+    <p style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:14px">Confirmar resgate? Os pontos serão zerados.</p>
+    <input type="hidden" id="modal-resg-id">
+    <div style="display:flex;gap:8px">
+      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-resgatar')">Cancelar</button>
+      <button class="btn bs" style="flex:1;justify-content:center" onclick="confirmResgatar()">✓ Confirmar resgate</button>
+    </div>
   </div>
 </div>
 
@@ -1861,16 +1931,74 @@ td:first-child{padding-left:16px}
 </div>
 
 <!-- Estoque -->
-<div class="modal-bg" id="modal-estoque">
-  <div class="modal">
-    <button class="modal-close" onclick="closeModal('modal-estoque')">✕</button>
-    <h2><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 5l6-3 6 3v6l-6 3-6-3V5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 2v12M2 5l6 3 6-3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Registrar Entrada de Estoque</h2>
-    <div class="form-row"><label class="form-label">Ingrediente</label><div class="sw" style="width:100%"><select class="form-input" style="width:100%"><option>Pão de cachorro-quente</option><option>Salsicha</option><option>Coca-Cola 2L</option><option>Guaraná 2L</option><option>Pão de hambúrguer</option><option>Carne bovina</option></select></div></div>
+<!-- Modal Novo Ingrediente -->
+<div class="modal-bg" id="modal-add-ingrediente">
+  <div class="modal" style="max-width:420px">
+    <button class="modal-close" onclick="closeModal('modal-add-ingrediente')">✕</button>
+    <h2>📦 Novo Ingrediente</h2>
     <div class="form-row-2">
-      <div class="form-row"><label class="form-label">Quantidade</label><input class="form-input" type="number" value="100"></div>
-      <div class="form-row"><label class="form-label">Custo total (R$)</label><input class="form-input" type="number" value="50" step="0.01"></div>
+      <div class="form-row"><label class="form-label">Nome</label><input class="form-input" id="ing-nome" placeholder="Ex: Pão de hambúrguer"></div>
+      <div class="form-row"><label class="form-label">Unidade</label>
+        <div class="sw" style="width:100%"><select class="form-input" id="ing-unit" style="width:100%">
+          <option value="un">un (unidades)</option>
+          <option value="kg">kg (quilos)</option>
+          <option value="g">g (gramas)</option>
+          <option value="L">L (litros)</option>
+          <option value="ml">ml (mililitros)</option>
+          <option value="cx">cx (caixas)</option>
+          <option value="pct">pct (pacotes)</option>
+        </select></div>
+      </div>
     </div>
-    <button class="btn bp" style="width:100%;justify-content:center;margin-top:4px" onclick="closeModal('modal-estoque');showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><path d=&quot;M2 5l6-3 6 3v6l-6 3-6-3V5z&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M8 2v12M2 5l6 3 6-3&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>','Estoque atualizado!')">Registrar</button>
+    <div class="form-row-2">
+      <div class="form-row"><label class="form-label">Quantidade inicial</label><input class="form-input" id="ing-qty" type="number" min="0" placeholder="0"></div>
+      <div class="form-row"><label class="form-label">Estoque mínimo (alerta)</label><input class="form-input" id="ing-min" type="number" min="0" placeholder="Ex: 10"></div>
+    </div>
+    <div class="form-row"><label class="form-label">Custo unitário (R$)</label><input class="form-input" id="ing-custo" type="number" step="0.01" min="0" placeholder="0,00"></div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-add-ingrediente')">Cancelar</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="saveIngrediente()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Registrar Entrada -->
+<div class="modal-bg" id="modal-estoque">
+  <div class="modal" style="max-width:420px">
+    <button class="modal-close" onclick="closeModal('modal-estoque')">✕</button>
+    <h2>📥 Registrar Entrada</h2>
+    <div class="form-row"><label class="form-label">Ingrediente</label>
+      <div class="sw" style="width:100%"><select class="form-input" id="est-sel-ingrediente" style="width:100%"><option value="">Selecione...</option></select></div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-row"><label class="form-label">Quantidade</label><input class="form-input" id="est-qty-entrada" type="number" min="1" placeholder="Ex: 100"></div>
+      <div class="form-row"><label class="form-label">Custo total (R$)</label><input class="form-input" id="est-custo-entrada" type="number" step="0.01" min="0" placeholder="0,00"></div>
+    </div>
+    <div class="form-row"><label class="form-label">Observação (opcional)</label><input class="form-input" id="est-obs-entrada" placeholder="Ex: Nota fiscal 123"></div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-estoque')">Cancelar</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="registrarEntrada()">Registrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Editar Ingrediente -->
+<div class="modal-bg" id="modal-edit-ingrediente">
+  <div class="modal" style="max-width:420px">
+    <button class="modal-close" onclick="closeModal('modal-edit-ingrediente')">✕</button>
+    <h2>✏️ Editar Ingrediente</h2>
+    <input type="hidden" id="edit-ing-id">
+    <div class="form-row"><label class="form-label">Nome</label><input class="form-input" id="edit-ing-nome" placeholder="Nome do ingrediente"></div>
+    <div class="form-row-2">
+      <div class="form-row"><label class="form-label">Quantidade atual</label><input class="form-input" id="edit-ing-qty" type="number" min="0"></div>
+      <div class="form-row"><label class="form-label">Estoque mínimo</label><input class="form-input" id="edit-ing-min" type="number" min="0"></div>
+    </div>
+    <div class="form-row"><label class="form-label">Custo unitário (R$)</label><input class="form-input" id="edit-ing-custo" type="number" step="0.01" min="0"></div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn bd" style="padding:7px 12px" onclick="deleteIngrediente()">🗑️</button>
+      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-edit-ingrediente')">Cancelar</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="saveEditIngrediente()">Salvar</button>
+    </div>
   </div>
 </div>
 
@@ -2055,17 +2183,20 @@ async function loadAllData() {
       num:t.num, status:t.status, guests:t.guests, total:t.total
     }));
     if (estoqueRes.data?.length)  estoqueItems  = estoqueRes.data.map(e => ({
-      id:e.id, name:e.name, qty:parseFloat(e.qty)||0,
-      max:parseFloat(e.max_qty)||100, unit:e.unit||'unid'
+      id:e.id, name:e.name, unit:e.unit||'un', qty:parseFloat(e.qty)||0,
+      min_qty:parseFloat(e.min_qty)||0, custo:parseFloat(e.custo)||0,
+      updated_at:e.updated_at||null
     }));
     if (fidRes.data?.length)      fidClients    = fidRes.data.map(f => ({
-      id:f.id, name:f.name, pts:f.pts||0, max:f.max_pts||500,
-      orders:f.orders_count||0, emoji:f.emoji||f.name.charAt(0)
+      id:f.id, name:f.name, phone:f.phone||'', pts:f.pts||0,
+      max:f.max_pts||_fidConfig.meta_pts||500,
+      orders:f.orders_count||0, resgates:f.resgates||0
     }));
 
     // Set orderIdSeq above DB max
     if (ordersKanban.length) orderIdSeq = Math.max(...ordersKanban.map(o=>o.id)) + 1;
 
+    await loadFidConfig();
     subscribeOrders();
     renderKanban();
     renderCaixa();
@@ -2564,8 +2695,6 @@ let categories   = [];
 let ordersKanban = [];
 let orderIdSeq   = 1;
 let tables       = [];
-let recupClients = [];
-let recupSent    = 0, recupConv = 0;
 let fidClients   = [];
 let estoqueItems = [];
 let cartItems    = [];
@@ -2594,7 +2723,6 @@ function nav(id){
   if(id==='pdv') renderPDV();
   if(id==='robo') initChat();
   if(id==='qrcode') renderQR();
-  if(id==='recuperador') renderRecup();
   if(id==='cupom') renderCupons();
   if(id==='fidelidade') renderFidelidade();
   if(id==='garcom') { renderGarcom(); loadGarcons(); }
@@ -3738,35 +3866,9 @@ async function mesaCancelOrder(id) {
 }
 
 // ─────────────────────────────────────────
-// RECUPERADOR
 // ─────────────────────────────────────────
-function renderRecup(){
-  const l=document.getElementById('recup-list');
-  if(!l) return;
-  l.innerHTML=recupClients.map((c,i)=>`
-    <div class="recup-item">
-      <div class="ri-av">${c.emoji||'<svg width="20" height="20" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'}</div>
-      <div style="flex:1">
-        <div style="font-weight:600;font-size:13.5px">${c.name}</div>
-        <div style="font-size:12px;color:var(--muted)">${c.phone} • ${c.items}</div>
-        <div style="font-size:11.5px;color:var(--accent3);margin-top:2px">⏰ Abandonou há ${c.time}</div>
-      </div>
-      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px;color:var(--success);margin-right:8px">R$ ${c.val.toFixed(2).replace('.',',')}</div>
-      ${c.sent?`<button class="btn bs" style="font-size:11px;padding:4px 9px;cursor:default"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Enviado</button>`:`<button class="btn bp" style="font-size:11px;padding:4px 9px" onclick="sendRecup(${i})"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M14 8L2 3l3 5-3 5 12-5z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Recuperar</button>`}
-    </div>`).join('');
-}
 
-function sendRecup(i){
-  recupClients[i].sent=true;recupSent++;
-  document.getElementById('recup-sent').textContent=recupSent;
-  if(Math.random()<0.4){recupConv++;document.getElementById('recup-conv').textContent=recupConv;showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><circle cx=&quot;8&quot; cy=&quot;8&quot; r=&quot;6&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M5.5 8l2 2 3-3&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>',`${recupClients[i].name} voltou a pedir!`);}
-  else showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><path d=&quot;M14 8L2 3l3 5-3 5 12-5z&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>',`Mensagem enviada para ${recupClients[i].name}`);
-  const pct=recupSent>0?Math.round(recupConv/recupSent*100):0;
-  document.getElementById('recup-pct').textContent=pct+'%';
-  renderRecup();
-}
 
-function sendAllRecup(){recupClients.forEach((_,i)=>{if(!recupClients[i].sent)sendRecup(i);});}
 
 // ─────────────────────────────────────────
 // CUPONS
@@ -3819,31 +3921,177 @@ async function addCupom() {
 // ─────────────────────────────────────────
 // FIDELIDADE
 // ─────────────────────────────────────────
-function renderFidelidade(){
-  const c=document.getElementById('fid-clients');
-  if(c) c.innerHTML=fidClients.map(cl=>`
-    <div class="fid-client">
-      <div class="fid-av">${cl.emoji}</div>
-      <div style="flex:1">
-        <div style="font-weight:600;font-size:13px">${cl.name}</div>
-        <div style="font-size:11px;color:var(--muted)">${cl.orders} pedidos</div>
-        <div class="fid-stars">${[1,2,3,4,5].map(s=>`<span class="fstar${cl.pts/cl.max<s/5?' e':''}">★</span>`).join('')}</div>
-        <div class="pts-bar"><div class="pts-fill" style="width:${Math.min(100,cl.pts/cl.max*100)}%"></div></div>
-        <div style="font-size:10.5px;color:var(--muted);margin-top:2px">${cl.pts}/${cl.max} pontos</div>
-      </div>
-      <button class="btn bg" style="font-size:11px;padding:3px 8px" onclick="addPoints('${cl.name}')">+ Pontos</button>
-    </div>`).join('');
-  const fd=document.getElementById('fid-days');
-  if(fd) fd.innerHTML=DAYS_FULL.map((d,i)=>`<span class="chip chip-blue" style="cursor:pointer;${[0,2].includes(i)?'':'opacity:.4'}" onclick="this.style.opacity=this.style.opacity==='0.4'?'1':'0.4'">${d}</span>`).join('');
+// ─────────────────────────────────────────
+// FIDELIDADE — REAL
+// ─────────────────────────────────────────
+let _fidConfig = { pts_por_real: 10, meta_pts: 500, recompensa_reais: 10 };
+
+async function loadFidConfig() {
+  try {
+    const { data } = await sb.from('store_config').select('fid_config').eq('id',1).single();
+    if (data?.fid_config) _fidConfig = { ..._fidConfig, ...data.fid_config };
+  } catch(e) {}
 }
 
-function addPoints(name){
-  const cl=fidClients.find(c=>c.name===name);
-  cl.pts=Math.min(cl.max,cl.pts+50);
+async function saveFidConfig() {
+  const pts  = parseInt(document.getElementById('fid-cfg-pts')?.value) || 10;
+  const meta = parseInt(document.getElementById('fid-cfg-meta')?.value) || 500;
+  const rec  = parseFloat(document.getElementById('fid-cfg-rec')?.value) || 10;
+  _fidConfig = { pts_por_real: pts, meta_pts: meta, recompensa_reais: rec };
+  await sb.from('store_config').upsert({ id:1, fid_config: _fidConfig });
+  // Atualiza max_pts de todos os clientes
+  await sb.from('fidelidade').update({ max_pts: meta }).gte('id', 0);
+  fidClients.forEach(c => c.max = meta);
+  closeModal('modal-fid-config');
   renderFidelidade();
-  showToast('⭐',`+50 pontos para ${name}!`);
-  if(cl.pts>=cl.max) showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><rect x=&quot;2&quot; y=&quot;7&quot; width=&quot;12&quot; height=&quot;7&quot; rx=&quot;1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M2 7h12v-2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v2z&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M8 5V14M8 5c0-1.7-2-3-2-3s0 1.3 2 3zM8 5c0-1.7 2-3 2-3s0 1.3-2 3z&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>',`${name} atingiu a recompensa!`);
+  sbToast('ok', 'Configurações salvas!');
 }
+
+function renderFidelidade() {
+  const search = (document.getElementById('fid-search')?.value || '').toLowerCase();
+  const filtered = fidClients.filter(c => c.name.toLowerCase().includes(search) || (c.phone||'').includes(search));
+
+  // Stats
+  const elv = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
+  const totalPts = fidClients.reduce((s,c)=>s+c.pts,0);
+  const resgatados = fidClients.filter(c=>c.resgates>0).length;
+  const perto = fidClients.filter(c=>c.pts >= c.max * 0.8 && c.pts < c.max).length;
+  elv('fid-stat-total', fidClients.length);
+  elv('fid-stat-pts', totalPts.toLocaleString('pt-BR'));
+  elv('fid-stat-resgatados', resgatados);
+  elv('fid-stat-perto', perto);
+
+  const c = document.getElementById('fid-clients');
+  if (!c) return;
+
+  if (!filtered.length) {
+    c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">Nenhum cliente encontrado</div>';
+    return;
+  }
+
+  c.innerHTML = filtered
+    .sort((a,b) => b.pts - a.pts)
+    .map(cl => {
+      const pct = Math.min(100, (cl.pts / cl.max) * 100);
+      const canResgatar = cl.pts >= cl.max;
+      const barColor = canResgatar ? 'var(--success)' : pct >= 80 ? 'var(--accent3)' : 'var(--accent)';
+      const initials = cl.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+      return `<div style="background:var(--surface);border:1px solid ${canResgatar?'rgba(34,197,94,.3)':'var(--border)'};border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:14px">
+        <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0">${initials}</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+            <div style="font-weight:700;font-size:13.5px">${cl.name}</div>
+            ${canResgatar ? '<span style="font-size:10px;background:rgba(34,197,94,.15);color:var(--success);padding:1px 6px;border-radius:99px;font-weight:700">🎁 PODE RESGATAR</span>' : ''}
+          </div>
+          <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">${cl.phone||'Sem telefone'} · ${cl.orders} pedidos · ${cl.resgates||0} resgates</div>
+          <div style="background:var(--surface2);border-radius:99px;height:6px;overflow:hidden;margin-bottom:3px">
+            <div style="width:${pct}%;height:100%;background:${barColor};border-radius:99px;transition:width .4s"></div>
+          </div>
+          <div style="font-size:10.5px;color:var(--muted)">${cl.pts} / ${cl.max} pontos (${pct.toFixed(0)}%) • recompensa: R$ ${_fidConfig.recompensa_reais.toFixed(2).replace('.',',')}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+          <button class="btn bg" style="font-size:11px;padding:4px 10px" onclick="openAddPts(${cl.id},'${cl.name.replace(/'/g,"\'")}',${cl.pts})">+ Pontos</button>
+          ${canResgatar ? `<button class="btn bs" style="font-size:11px;padding:4px 10px" onclick="openResgatar(${cl.id},'${cl.name.replace(/'/g,"\'")}',${cl.pts},${cl.max})">🎁 Resgatar</button>` : ''}
+          <button class="btn bd" style="font-size:11px;padding:4px 10px" onclick="deleteFidClient(${cl.id},'${cl.name.replace(/'/g,"\'")}')">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+
+  // Preenche config modal com valores atuais
+  const cp = document.getElementById('fid-cfg-pts');
+  const cm = document.getElementById('fid-cfg-meta');
+  const cr = document.getElementById('fid-cfg-rec');
+  if (cp) cp.value = _fidConfig.pts_por_real;
+  if (cm) cm.value = _fidConfig.meta_pts;
+  if (cr) cr.value = _fidConfig.recompensa_reais;
+}
+
+function openAddPts(id, name, currentPts) {
+  document.getElementById('modal-pts-client-id').value = id;
+  document.getElementById('modal-pts-client-name').textContent = name;
+  document.getElementById('modal-pts-current').textContent = currentPts + ' pontos atuais';
+  document.getElementById('modal-pts-qty').value = '';
+  document.getElementById('modal-pts-motivo').value = '';
+  openModal('modal-add-pts');
+}
+
+async function confirmAddPts() {
+  const id    = parseInt(document.getElementById('modal-pts-client-id').value);
+  const qty   = parseInt(document.getElementById('modal-pts-qty').value) || 0;
+  const motivo= document.getElementById('modal-pts-motivo').value;
+  if (!qty || qty < 1) { sbToast('err','Informe os pontos'); return; }
+  const cl = fidClients.find(c => c.id === id);
+  if (!cl) return;
+  const newPts = cl.pts + qty;
+  const { error } = await sb.from('fidelidade').update({ pts: newPts }).eq('id', id);
+  if (error) { sbToast('err','Erro ao adicionar pontos'); return; }
+  cl.pts = newPts;
+  closeModal('modal-add-pts');
+  renderFidelidade();
+  sbToast('ok', `+${qty} pontos para ${cl.name}!`);
+  if (newPts >= cl.max) sbToast('ok', `🎁 ${cl.name} pode resgatar a recompensa!`);
+}
+
+function openResgatar(id, name, pts, max) {
+  document.getElementById('modal-resg-id').value = id;
+  document.getElementById('modal-resg-name').textContent = name;
+  document.getElementById('modal-resg-valor').textContent = 'R$ ' + _fidConfig.recompensa_reais.toFixed(2).replace('.',',') + ' de desconto';
+  document.getElementById('modal-resg-pts').textContent = pts + ' pontos serão zerados';
+  openModal('modal-resgatar');
+}
+
+async function confirmResgatar() {
+  const id = parseInt(document.getElementById('modal-resg-id').value);
+  const cl = fidClients.find(c => c.id === id);
+  if (!cl) return;
+  const { error } = await sb.from('fidelidade').update({ pts: 0, resgates: (cl.resgates||0)+1 }).eq('id', id);
+  if (error) { sbToast('err','Erro ao resgatar'); return; }
+  cl.pts = 0;
+  cl.resgates = (cl.resgates||0)+1;
+  closeModal('modal-resgatar');
+  renderFidelidade();
+  sbToast('ok', `🎁 Recompensa resgatada para ${cl.name}!`);
+}
+
+async function addFidClient() {
+  const name  = document.getElementById('fid-add-name').value.trim();
+  const phone = document.getElementById('fid-add-phone').value.trim();
+  if (!name) { sbToast('err','Informe o nome'); return; }
+  const { data, error } = await sb.from('fidelidade').insert({
+    name, phone, pts: 0, max_pts: _fidConfig.meta_pts, orders_count: 0, resgates: 0
+  }).select().single();
+  if (error) { sbToast('err','Erro ao cadastrar'); return; }
+  fidClients.unshift({ id:data.id, name:data.name, phone:data.phone, pts:0, max:_fidConfig.meta_pts, orders:0, resgates:0 });
+  closeModal('modal-add-fid-client');
+  document.getElementById('fid-add-name').value = '';
+  document.getElementById('fid-add-phone').value = '';
+  renderFidelidade();
+  sbToast('ok', `${name} cadastrado no programa!`);
+}
+
+async function deleteFidClient(id, name) {
+  if (!confirm(`Remover ${name} do programa de fidelidade?`)) return;
+  const { error } = await sb.from('fidelidade').delete().eq('id', id);
+  if (error) { sbToast('err','Erro ao remover'); return; }
+  fidClients = fidClients.filter(c => c.id !== id);
+  renderFidelidade();
+  sbToast('ok', `${name} removido do programa`);
+}
+
+// Chamado ao confirmar pagamento — adiciona pontos automaticamente se cliente estiver no programa
+async function _autoAddFidPoints(clientPhone, totalVal) {
+  if (!clientPhone || !totalVal) return;
+  const cl = fidClients.find(c => c.phone && c.phone.replace(/\D/g,'') === clientPhone.replace(/\D/g,''));
+  if (!cl) return;
+  const pts = Math.floor(totalVal * _fidConfig.pts_por_real);
+  if (pts < 1) return;
+  const newPts = cl.pts + pts;
+  await sb.from('fidelidade').update({ pts: newPts, orders_count: cl.orders+1 }).eq('id', cl.id);
+  cl.pts = newPts; cl.orders++;
+  sbToast('ok', `⭐ +${pts} pontos fidelidade para ${cl.name}`);
+  if (newPts >= cl.max) sbToast('ok', `🎁 ${cl.name} atingiu a recompensa!`);
+}
+
 
 // ─────────────────────────────────────────
 // GARÇOM
@@ -4140,19 +4388,184 @@ async function kdsCancelOrder(id) {
 // ─────────────────────────────────────────
 // ESTOQUE
 // ─────────────────────────────────────────
-function renderEstoque(){
-  const b=document.getElementById('estoque-bars');
-  if(b) b.innerHTML=estoqueItems.map(e=>{
-    const pct=e.qty/e.max*100;
-    const cls=pct>50?'fill-green':pct>20?'fill-yellow':'fill-red';
-    const warn=pct<=20?` <span class="chip chip-red" style="font-size:9.5px">Baixo!</span>`:'';
-    return`<div class="prog-item"><div class="prog-label"><span>${e.name}${warn}</span><span style="color:var(--muted)">${e.qty}/${e.max} ${e.unit}</span></div><div class="prog-bar"><div class="prog-fill ${cls}" style="width:${pct}%"></div></div></div>`;
-  }).join('');
-  const ct=document.getElementById('custo-table');
-  if(ct) ct.innerHTML=items.map(i=>{
-    const custo=i.price*0.35;const margem=((i.price-custo)/i.price*100).toFixed(0);
-    return`<tr><td><div style="display:flex;align-items:center;gap:5px"><span>${i.emoji}</span><span style="font-size:12px">${i.name}</span></div></td><td style="color:var(--danger);font-size:12px">R$ ${custo.toFixed(2).replace('.',',')}</td><td style="color:var(--success);font-weight:600;font-size:12px">R$ ${i.price.toFixed(2).replace('.',',')}</td><td><span class="chip ${margem>60?'chip-green':'chip-yellow'}" style="font-size:10.5px">${margem}%</span></td></tr>`;
-  }).join('');
+// ─────────────────────────────────────────
+// ESTOQUE — REAL
+// ─────────────────────────────────────────
+function renderEstoque() {
+  const search = (document.getElementById('est-search')?.value || '').toLowerCase();
+  const filtered = estoqueItems.filter(e => e.name.toLowerCase().includes(search));
+
+  // Stats
+  const baixo    = estoqueItems.filter(e => e.qty <= e.min_qty).length;
+  const valor    = estoqueItems.reduce((s,e) => s + (e.qty * (e.custo||0)), 0);
+  const hoje     = estoqueItems.filter(e => {
+    if (!e.updated_at) return false;
+    return new Date(e.updated_at).toDateString() === new Date().toDateString();
+  }).length;
+  const elv = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
+  elv('est-stat-total',    estoqueItems.length);
+  elv('est-stat-baixo',    baixo);
+  elv('est-stat-valor',    'R$ '+valor.toFixed(2).replace('.',','));
+  elv('est-stat-entradas', hoje);
+
+  // Popular select do modal de entrada
+  const sel = document.getElementById('est-sel-ingrediente');
+  if (sel) {
+    sel.innerHTML = '<option value="">Selecione...</option>' +
+      estoqueItems.map(e => `<option value="${e.id}">${e.name} (${e.qty} ${e.unit})</option>`).join('');
+  }
+
+  const list = document.getElementById('estoque-list');
+  if (!list) return;
+
+  if (!filtered.length) {
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">Nenhum ingrediente cadastrado.<br>Clique em <strong>Novo ingrediente</strong> para começar.</div>';
+    return;
+  }
+
+  list.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:var(--surface2)">
+            <th style="padding:10px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Ingrediente</th>
+            <th style="padding:10px 14px;text-align:center;font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Qty / Mín</th>
+            <th style="padding:10px 14px;text-align:center;font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Estoque</th>
+            <th style="padding:10px 14px;text-align:right;font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Custo unit.</th>
+            <th style="padding:10px 14px;text-align:right;font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Valor total</th>
+            <th style="padding:10px 6px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filtered.map(e => {
+            const pct = e.min_qty > 0 ? Math.min(100, (e.qty / (e.min_qty * 3)) * 100) : (e.qty > 0 ? 100 : 0);
+            const isBaixo = e.qty <= e.min_qty;
+            const isZero  = e.qty === 0;
+            const barColor = isZero ? 'var(--danger)' : isBaixo ? 'var(--accent3)' : 'var(--success)';
+            const valorTotal = (e.qty * (e.custo||0)).toFixed(2).replace('.',',');
+            return `<tr style="border-top:1px solid var(--border);transition:background .13s" onmouseenter="this.style.background='rgba(255,255,255,.02)'" onmouseleave="this.style.background=''">
+              <td style="padding:12px 14px">
+                <div style="font-weight:600;font-size:13px">${e.name}</div>
+                <div style="font-size:11px;color:var(--muted)">${e.unit}${e.updated_at ? ' · atualizado ' + new Date(e.updated_at).toLocaleDateString('pt-BR') : ''}</div>
+              </td>
+              <td style="padding:12px 14px;text-align:center">
+                <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:${isZero?'var(--danger)':isBaixo?'var(--accent3)':'var(--text)'}">${e.qty}</div>
+                <div style="font-size:11px;color:var(--muted)">mín: ${e.min_qty}</div>
+              </td>
+              <td style="padding:12px 14px;min-width:120px">
+                ${isBaixo ? `<span style="font-size:9.5px;background:${isZero?'rgba(239,68,68,.15)':'rgba(245,158,11,.15)'};color:${isZero?'var(--danger)':'var(--accent3)'};padding:1px 6px;border-radius:99px;font-weight:700;display:block;margin-bottom:4px">${isZero?'⚠️ ZERADO':'⚠️ BAIXO'}</span>` : ''}
+                <div style="background:var(--surface2);border-radius:99px;height:5px;overflow:hidden">
+                  <div style="width:${pct}%;height:100%;background:${barColor};border-radius:99px"></div>
+                </div>
+              </td>
+              <td style="padding:12px 14px;text-align:right;font-size:12.5px;color:var(--muted)">
+                ${e.custo ? 'R$ '+e.custo.toFixed(2).replace('.',',') : '—'}
+              </td>
+              <td style="padding:12px 14px;text-align:right;font-size:12.5px;font-weight:600;color:var(--success)">
+                ${e.custo ? 'R$ '+valorTotal : '—'}
+              </td>
+              <td style="padding:12px 6px;text-align:right">
+                <button class="btn bg" style="font-size:11px;padding:3px 8px" onclick="openEditIngrediente(${e.id})">✏️</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function saveIngrediente() {
+  const nome  = document.getElementById('ing-nome').value.trim();
+  const unit  = document.getElementById('ing-unit').value;
+  const qty   = parseFloat(document.getElementById('ing-qty').value) || 0;
+  const min   = parseFloat(document.getElementById('ing-min').value) || 0;
+  const custo = parseFloat(document.getElementById('ing-custo').value) || 0;
+  if (!nome) { sbToast('err','Informe o nome do ingrediente'); return; }
+  sbLoading(true);
+  const { data, error } = await sb.from('estoque').insert({
+    name: nome, unit, qty, min_qty: min, custo, updated_at: new Date().toISOString()
+  }).select().single();
+  sbLoading(false);
+  if (error) { sbToast('err','Erro ao cadastrar: '+error.message); return; }
+  estoqueItems.push({ id:data.id, name:data.name, unit:data.unit, qty:data.qty,
+    min_qty:data.min_qty, custo:data.custo||0, updated_at:data.updated_at });
+  closeModal('modal-add-ingrediente');
+  ['ing-nome','ing-qty','ing-min','ing-custo'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value='';
+  });
+  renderEstoque();
+  sbToast('ok', `${nome} cadastrado!`);
+}
+
+async function registrarEntrada() {
+  const id    = parseInt(document.getElementById('est-sel-ingrediente').value);
+  const qty   = parseFloat(document.getElementById('est-qty-entrada').value) || 0;
+  const custo = parseFloat(document.getElementById('est-custo-entrada').value) || 0;
+  const obs   = document.getElementById('est-obs-entrada').value;
+  if (!id)  { sbToast('err','Selecione o ingrediente'); return; }
+  if (!qty) { sbToast('err','Informe a quantidade'); return; }
+  const item = estoqueItems.find(e => e.id === id);
+  if (!item) return;
+  const newQty = item.qty + qty;
+  const custUnit = qty > 0 && custo > 0 ? custo/qty : item.custo;
+  sbLoading(true);
+  const { error } = await sb.from('estoque').update({
+    qty: newQty, custo: custUnit, updated_at: new Date().toISOString()
+  }).eq('id', id);
+  sbLoading(false);
+  if (error) { sbToast('err','Erro ao registrar'); return; }
+  item.qty = newQty; item.custo = custUnit; item.updated_at = new Date().toISOString();
+  closeModal('modal-estoque');
+  ['est-qty-entrada','est-custo-entrada','est-obs-entrada'].forEach(i => {
+    const el=document.getElementById(i); if(el) el.value='';
+  });
+  renderEstoque();
+  sbToast('ok', `+${qty} ${item.unit} de ${item.name} registrado!`);
+}
+
+function openEditIngrediente(id) {
+  const e = estoqueItems.find(x => x.id === id);
+  if (!e) return;
+  document.getElementById('edit-ing-id').value    = id;
+  document.getElementById('edit-ing-nome').value  = e.name;
+  document.getElementById('edit-ing-qty').value   = e.qty;
+  document.getElementById('edit-ing-min').value   = e.min_qty;
+  document.getElementById('edit-ing-custo').value = e.custo||0;
+  openModal('modal-edit-ingrediente');
+}
+
+async function saveEditIngrediente() {
+  const id    = parseInt(document.getElementById('edit-ing-id').value);
+  const nome  = document.getElementById('edit-ing-nome').value.trim();
+  const qty   = parseFloat(document.getElementById('edit-ing-qty').value) || 0;
+  const min   = parseFloat(document.getElementById('edit-ing-min').value) || 0;
+  const custo = parseFloat(document.getElementById('edit-ing-custo').value) || 0;
+  if (!nome) { sbToast('err','Informe o nome'); return; }
+  sbLoading(true);
+  const { error } = await sb.from('estoque').update({
+    name: nome, qty, min_qty: min, custo, updated_at: new Date().toISOString()
+  }).eq('id', id);
+  sbLoading(false);
+  if (error) { sbToast('err','Erro ao salvar'); return; }
+  const item = estoqueItems.find(e => e.id === id);
+  if (item) { item.name=nome; item.qty=qty; item.min_qty=min; item.custo=custo; item.updated_at=new Date().toISOString(); }
+  closeModal('modal-edit-ingrediente');
+  renderEstoque();
+  sbToast('ok', `${nome} atualizado!`);
+}
+
+async function deleteIngrediente() {
+  const id   = parseInt(document.getElementById('edit-ing-id').value);
+  const item = estoqueItems.find(e => e.id === id);
+  if (!confirm(`Excluir ${item?.name}?`)) return;
+  sbLoading(true);
+  const { error } = await sb.from('estoque').delete().eq('id', id);
+  sbLoading(false);
+  if (error) { sbToast('err','Erro ao excluir'); return; }
+  estoqueItems = estoqueItems.filter(e => e.id !== id);
+  closeModal('modal-edit-ingrediente');
+  renderEstoque();
+  sbToast('ok', `${item?.name} removido!`);
 }
 
 // ─────────────────────────────────────────
