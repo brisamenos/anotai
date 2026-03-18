@@ -7538,7 +7538,7 @@ function _evoShowQRPrompt() {
   </div>
 </div>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;padding-bottom:40px">
 
 <!-- COLUNA ESQUERDA -->
 <div style="display:flex;flex-direction:column;gap:14px">
@@ -7768,6 +7768,7 @@ async function salvarCardapioPublico() {
   sbLoading(true);
   try {
     const payload = {
+      tenant_id:           _sessao?.tenant_id,
       store_name:          document.getElementById('cp-nome')?.value.trim()      || null,
       store_descricao:     document.getElementById('cp-descricao')?.value.trim() || null,
       store_whatsapp:      document.getElementById('cp-whatsapp')?.value.trim()  || null,
@@ -7781,8 +7782,11 @@ async function salvarCardapioPublico() {
     const { error } = await sb.from('store_config').upsert(payload);
     if (error) throw error;
     sbToast('ok', '✅ Cardápio público salvo!');
+    // Recarrega para confirmar o que ficou no banco
+    await loadCardapioPublico();
   } catch(e) {
-    sbToast('err', 'Erro ao salvar: ' + e.message);
+    sbToast('err', 'Erro ao salvar: ' + (e.message || JSON.stringify(e)));
+    console.error('salvarCardapioPublico:', e);
   } finally {
     sbLoading(false);
   }
