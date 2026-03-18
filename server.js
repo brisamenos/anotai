@@ -241,14 +241,20 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`)
 
   // GET /status — verifica se servidor está rodando
-  if (req.method === 'GET' && url.pathname === '/status') {
+  // Log de todas as requisições para debug
+  log('🌐', `${req.method} ${url.pathname}`)
+
+  const path = url.pathname.replace(/\/$/, '') // remove barra final
+
+  // GET /status — verifica se servidor está rodando
+  if (req.method === 'GET' && (path === '/status' || path === '')) {
     res.writeHead(200)
-    res.end(JSON.stringify({ ok: true, uptime: process.uptime(), version: '1.0.0' }))
+    res.end(JSON.stringify({ ok: true, uptime: process.uptime(), version: '1.0.0', server: 'Estima Food WA Server' }))
     return
   }
 
   // POST /enviar — envia mensagem avulsa
-  if (req.method === 'POST' && url.pathname === '/enviar') {
+  if (req.method === 'POST' && path === '/enviar') {
     const body = await readBody(req)
     const { phone, text } = JSON.parse(body)
     if (!phone || !text) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'phone e text obrigatórios' })); return }
@@ -259,7 +265,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // POST /promocao — envio em massa
-  if (req.method === 'POST' && url.pathname === '/promocao') {
+  if (req.method === 'POST' && path === '/promocao') {
     const body = await readBody(req)
     const { destino = 'todos', msg } = JSON.parse(body)
     if (!msg) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'msg obrigatório' })); return }
@@ -270,11 +276,9 @@ const server = http.createServer(async (req, res) => {
 
     if (!clientes?.length) { res.writeHead(200); res.end(JSON.stringify({ ok: true, enviados: 0, msg: 'Nenhum cliente' })); return }
 
-    // Responde imediatamente e processa em background
     res.writeHead(200)
     res.end(JSON.stringify({ ok: true, total: clientes.length, msg: 'Envio iniciado em background' }))
 
-    // Envia em background
     ;(async () => {
       log('📢', `Enviando promoção para ${clientes.length} clientes...`)
       let ok = 0, fail = 0
@@ -291,16 +295,17 @@ const server = http.createServer(async (req, res) => {
   }
 
   // POST /aniversario — disparo manual de aniversários
-  if (req.method === 'POST' && url.pathname === '/aniversario') {
-    _anivLastChecked = null // force recheck
+  if (req.method === 'POST' && path === '/aniversario') {
+    _anivLastChecked = null
     checarAniversarios()
     res.writeHead(200)
     res.end(JSON.stringify({ ok: true, msg: 'Verificação de aniversários iniciada' }))
     return
   }
 
+  log('⚠️', `Rota não encontrada: ${req.method} ${url.pathname}`)
   res.writeHead(404)
-  res.end(JSON.stringify({ ok: false, error: 'Rota não encontrada' }))
+  res.end(JSON.stringify({ ok: false, error: `Rota não encontrada: ${req.method} ${url.pathname}` }))
 })
 
 // ── Helpers ──────────────────────────────────────────────
