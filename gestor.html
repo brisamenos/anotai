@@ -4317,30 +4317,34 @@ async function saveTaxaConfig() {
 }
 
 async function fecharMesa(num) {
-  const t = tables.find(x => x.num === num);
+  const numInt = parseInt(num);
+  const t = tables.find(x => parseInt(x.num) === numInt);
   if (!t) return;
   sbLoading(true);
   try {
-    // 1. Finaliza TODOS os pedidos da mesa sem filtro de status
-    await sb.from('orders')
+    // 1. Finaliza todos os pedidos ativos da mesa (.neq é a sintaxe correta no Supabase JS v2)
+    const { error: ordErr } = await sb.from('orders')
       .update({ status: 'entregue' })
-      .eq('mesa_num', num)
-      .not('status', 'eq', 'entregue');
+      .eq('mesa_num', numInt)
+      .neq('status', 'entregue');
+    if (ordErr) throw ordErr;
 
     // 2. Marca a mesa como aguardando pagamento
-    await sb.from('mesas').update({
+    const { error: mesaErr } = await sb.from('mesas').update({
       status: 'waiting', updated_at: new Date().toISOString()
-    }).eq('num', num);
+    }).eq('num', numInt);
+    if (mesaErr) throw mesaErr;
 
     // Atualiza estado local e cache
     t.status = 'waiting';
-    ordersKanban = ordersKanban.filter(o => o.mesa_num !== num);
-    mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== num);
+    ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== numInt);
+    mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== numInt);
     renderKanban();
     _renderMesaPageFromCache();
-    sbToast('ok', `Mesa ${num} aguardando pagamento`);
+    sbToast('ok', `Mesa ${numInt} aguardando pagamento`);
   } catch(e) {
-    sbToast('err', 'Erro ao fechar mesa');
+    console.error('fecharMesa error:', e);
+    sbToast('err', 'Erro ao fechar mesa: ' + (e?.message || e));
   } finally {
     sbLoading(false);
   }
@@ -4383,11 +4387,12 @@ async function confirmarPagamentoMesa() {
 
   sbLoading(true);
   try {
-    // 1. Finalizar TODOS os pedidos da mesa (sem filtro de status — elimina qualquer resíduo)
-    await sb.from('orders')
+    // 1. Finalizar todos os pedidos da mesa
+    const { error: ordErr2 } = await sb.from('orders')
       .update({ status: 'entregue' })
       .eq('mesa_num', num)
-      .not('status', 'eq', 'entregue');
+      .neq('status', 'entregue');
+    if (ordErr2) throw ordErr2;
 
     // 2. Liberar mesa — updated_at vai pra NOW() pra resetar o marco de sessão
     await sb.from('mesas').update({
