@@ -807,16 +807,14 @@ async function openPedido(num) {
   renderItemGrid();
   updateCartUI();
   switchSheetTab('itens');
-  // Se a mesa está livre (primeira abertura), marca como busy e registra o timestamp
-  // da sessão. Isso é o marco zero pra filtrar pedidos antigos.
   const mesa = tables.find(t => t.num === num);
-  if (mesa && mesa.status === 'free') {
-    const now = new Date().toISOString();
-    await sb.from('mesas').update({ status: 'busy', updated_at: now }).eq('num', num);
-    mesa.status = 'busy';
-    mesa.updated_at = now;
-    renderMesas();
-  }
+  // Sempre reseta o updated_at ao abrir a mesa — este é o marco zero da sessão.
+  // Garante que pedidos de sessões anteriores não apareçam mesmo se não foram
+  // finalizados corretamente.
+  const now = new Date().toISOString();
+  await sb.from('mesas').update({ status: 'busy', updated_at: now }).eq('num', num);
+  if (mesa) { mesa.status = 'busy'; mesa.updated_at = now; }
+  renderMesas();
   document.getElementById('sheet-pedido').classList.add('on');
 }
 
@@ -1203,14 +1201,15 @@ function selectFinalizarPay(el) {
 
 async function confirmarFinalizarMesa() {
   if (!finalizarMesaNum) return;
+  // myOrders já está filtrado por sessão (loadPedidosDaMesa aplica o filtro)
   const orders = myOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === finalizarMesaNum);
   const total  = orders.reduce((s,o)=>s+parseFloat(o.total||0),0);
   try {
-    // 1. Finaliza todos os pedidos ativos da mesa — limpa o kanban e zera o acúmulo
+    // 1. Finaliza TODOS os pedidos da mesa sem filtro de status
     await sb.from('orders')
       .update({ status: 'entregue' })
       .eq('mesa_num', finalizarMesaNum)
-      .in('status', ['analise', 'producao', 'pronto']);
+      .not('status', 'eq', 'entregue');
 
     // 2. Marca mesa como aguardando pagamento
     await sb.from('mesas').update({
