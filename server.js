@@ -386,10 +386,13 @@ function sseBroadcast(channel, event, data) {
 // Emite apenas para os canais do tenant correto
 function emit(tenantId, table, record, type) {
   const tid = tenantId || 'global'
-  // Canais do gestor (incluem tenant no nome)
+  // Canais do gestor
   sseBroadcast(`orders-rt:${tid}`,      table+':'+type, record)
   sseBroadcast(`mesas-rt:${tid}`,       table+':'+type, record)
   sseBroadcast(`store-config-rt:${tid}`,table+':'+type, record)
+  // Canais do cardápio público
+  sseBroadcast(`menu-rt:${tid}`,        table+':'+type, record)
+  sseBroadcast(`cats-rt:${tid}`,        table+':'+type, record)
   // Canais dinâmicos do garçom
   for (const [ch] of sseClients) {
     if (ch.startsWith(`garcom-mesas-`) && ch.endsWith(`:${tid}`)) sseBroadcast(ch, table+':'+type, record)
@@ -473,8 +476,15 @@ function buildWhere(params, cols, tenantId, table) {
       if(orC.length) conds.push(`(${orC.join(' OR ')})`)
       continue
     }
-    if((m=val.match(/^eq\.(.+)$/)))   { conds.push(`"${key}" = ?`);  vals.push(m[1]==='null'?null:m[1]); continue }
-    if((m=val.match(/^neq\.(.+)$/)))  { conds.push(`"${key}" != ?`); vals.push(m[1]); continue }
+    if((m=val.match(/^eq\.(.+)$/)))   {
+      let v = m[1]==='null' ? null : m[1]
+      if (v==='true') v=1; else if (v==='false') v=0  // SQLite usa 0/1 para boolean
+      conds.push(`"${key}" = ?`);  vals.push(v); continue
+    }
+    if((m=val.match(/^neq\.(.+)$/)))  {
+      let v = m[1]; if(v==='true') v=1; else if(v==='false') v=0
+      conds.push(`"${key}" != ?`); vals.push(v); continue
+    }
     if((m=val.match(/^gte\.(.+)$/)))  { conds.push(`"${key}" >= ?`); vals.push(m[1]); continue }
     if((m=val.match(/^lte\.(.+)$/)))  { conds.push(`"${key}" <= ?`); vals.push(m[1]); continue }
     if((m=val.match(/^gt\.(.+)$/)))   { conds.push(`"${key}" > ?`);  vals.push(m[1]); continue }
@@ -613,7 +623,7 @@ async function handleREST(req, res, table, params, body) {
           inserted = raw ? parseRow(table, raw) : null
         }
       }
-      if (['orders','mesas','store_config'].includes(table)) emit(tenantId||payload.tenant_id, table, inserted||payload, 'INSERT')
+      if (['orders','mesas','store_config','menu_items','categories'].includes(table)) emit(tenantId||payload.tenant_id, table, inserted||payload, 'INSERT')
       return send(res,201,returnRep?inserted:{id:newId})
     } catch(e) { return send(res,400,{error:e.message}) }
   }
@@ -630,13 +640,13 @@ async function handleREST(req, res, table, params, body) {
         const setClause = keys.map(k=>`"${k}"=?`).join(', ')
         db.prepare(`UPDATE store_config SET ${setClause} WHERE tenant_id=?`).run(...keys.map(k=>sanitize(payload[k])),tenantId)
         const row = db.prepare("SELECT * FROM store_config WHERE tenant_id=?").get(tenantId)
-        if (['orders','mesas','store_config'].includes(table)) emit(tenantId, table, payload, 'UPDATE')
+        if (['orders','mesas','store_config','menu_items','categories'].includes(table)) emit(tenantId, table, payload, 'UPDATE')
         return send(res,200,parseRow(table,row))
       }
 
       const setClause = keys.map(k=>`"${k}"=?`).join(', ')
       const info = db.prepare(`UPDATE "${table}" SET ${setClause} ${WHERE}`).run(...keys.map(k=>sanitize(payload[k])),...vals)
-      if (['orders','mesas','store_config'].includes(table)) emit(tenantId||payload.tenant_id, table, payload, 'UPDATE')
+      if (['orders','mesas','store_config','menu_items','categories'].includes(table)) emit(tenantId||payload.tenant_id, table, payload, 'UPDATE')
       return send(res,200,{updated:info.changes})
     } catch(e) { return send(res,400,{error:e.message}) }
   }
@@ -646,7 +656,7 @@ async function handleREST(req, res, table, params, body) {
     if (!WHERE) return send(res,400,{error:'DELETE sem filtro não permitido'})
     try {
       const info = db.prepare(`DELETE FROM "${table}" ${WHERE}`).run(...vals)
-      if (['orders','mesas'].includes(table)) emit(tenantId, table, {}, 'DELETE')
+      if (['orders','mesas','menu_items','categories'].includes(table)) emit(tenantId, table, {}, 'DELETE')
       return send(res,200,{deleted:info.changes})
     } catch(e) { return send(res,400,{error:e.message}) }
   }
