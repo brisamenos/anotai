@@ -1766,8 +1766,9 @@ function itemModalConfirm() {
   if (!i) return;
 
   if (i.item_type === 'pizza') {
+    const pid = i.id;
     closeItemModal();
-    openPizzaModal(i.id);
+    setTimeout(() => openPizzaModal(pid), 50);
     return;
   }
 
