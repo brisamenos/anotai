@@ -17,23 +17,22 @@
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
 
 /* TOP NAV */
-.topnav{display:flex;align-items:center;height:52px;background:var(--surface);border-bottom:1px solid var(--border);padding:0 14px;gap:6px;flex-shrink:0;z-index:200}
-.logo{display:flex;align-items:center;gap:7px;font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);min-width:calc(var(--sw) - 14px);text-decoration:none;flex-shrink:0}
+.topnav{display:flex;align-items:center;height:52px;background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;gap:10px;flex-shrink:0;z-index:200}
+.logo{display:flex;align-items:center;gap:8px;font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--text);min-width:calc(var(--sw) - 16px);text-decoration:none;flex-shrink:0;letter-spacing:-.3px}
 .logo svg{width:26px;height:26px;flex-shrink:0}
-.tnav-pill{display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;border:none;background:none;transition:all .18s;white-space:nowrap;font-family:'DM Sans',sans-serif}
-.tnav-pill:hover{background:var(--surface2);color:var(--text)}
-.tnav-pill.on{background:rgba(59,130,246,.14);color:var(--accent)}
-.tnr{display:flex;align-items:center;gap:6px;margin-left:auto}
+.tnav-pill{display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;border:1px solid var(--border);background:var(--surface2);transition:all .18s;white-space:nowrap;font-family:'DM Sans',sans-serif}
+.tnav-pill:hover{color:var(--text);border-color:rgba(255,255,255,.15)}
+.tnav-pill.on{background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.25);color:var(--success)}
+.tnr{display:flex;align-items:center;gap:8px;margin-left:auto}
 .caixa-btn{display:flex;align-items:center;gap:6px;background:var(--success);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
 .caixa-btn:hover{background:#16a34a}
-.tbadge{display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:11.5px;cursor:pointer;transition:border-color .18s}
-.tbadge:hover{border-color:var(--accent)}
+.tbadge{display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11.5px;cursor:default;transition:border-color .18s}
 .tbadge .sdot{width:7px;height:7px;border-radius:50%;background:var(--success);animation:pulse 2s infinite;flex-shrink:0}
 @keyframes sb-spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.4)}50%{box-shadow:0 0 0 4px rgba(34,197,94,0)}}
 .ibtn{width:32px;height:32px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);transition:all .18s;position:relative;flex-shrink:0}
 .ibtn:hover{color:var(--text);border-color:var(--accent)}
-.nbadge{position:absolute;top:-3px;right:-3px;width:14px;height:14px;background:var(--danger);border-radius:50%;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--surface)}
+.nbadge{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;background:var(--danger);border-radius:99px;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--surface);padding:0 3px}
 
 /* LAYOUT */
 .app{display:flex;flex:1;overflow:hidden}
@@ -567,6 +566,7 @@ td:first-child{padding-left:16px}
 .desemp-trend{font-size:12px;margin-top:4px}
 .trend-up{color:var(--success)}
 .trend-down{color:var(--danger)}
+.desemp-prd-btn.on{background:rgba(59,130,246,.15);border-color:var(--accent);color:var(--accent)}
 
 /* MAPA PLACEHOLDER */
 .map-placeholder{background:var(--surface2);border:1px solid var(--border);border-radius:10px;height:200px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--muted);flex-direction:column;gap:8px}
@@ -625,38 +625,20 @@ td:first-child{padding-left:16px}
   </div>
   <a class="logo" href="#" onclick="nav('pedidos');return false">
     <svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#3b82f6"/><path d="M10 28L20 12L30 28" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 22H26" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/></svg>
-    anota AI
+    Estima Food
   </a>
-  <div style="display:flex;align-items:center;gap:2px;flex:1">
-    <button class="tnav-pill" onclick="nav('cupom')"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="7" width="12" height="7" rx="1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 7h12v-2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v2z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 5V14M8 5c0-1.7-2-3-2-3s0 1.3 2 3zM8 5c0-1.7 2-3 2-3s0 1.3-2 3z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Indique &amp; Ganhe</button>
-    <button class="tnav-pill on" id="pill-status" onclick="toggleStatus()">⚡ Status: <span id="status-txt" style="color:var(--success)">Online</span></button>
-    <button class="tnav-pill" onclick="nav('cardapio')"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M7 9l-2 2a3 3 0 0 1-4.2-4.2l2-2A3 3 0 0 1 5.9 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 7l2-2a3 3 0 0 1 4.2 4.2l-2 2A3 3 0 0 1 10.1 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 10l4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Cardápio Digital</button>
-  </div>
   <div class="tnr">
-    <button class="caixa-btn" onclick="nav('caixa')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Caixa aberto ▾</button>
-    <div class="tbadge" onclick="showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><rect x=&quot;4&quot; y=&quot;1&quot; width=&quot;8&quot; height=&quot;14&quot; rx=&quot;1.5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><circle cx=&quot;8&quot; cy=&quot;12&quot; r=&quot;.8&quot; fill=&quot;currentColor&quot;/></svg>','Receber via PIX — Chave: estima@food.com.br')">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 2L13 7 8 12 3 7z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span style="font-weight:600;font-size:11.5px">Receber via Pix</span>
-    </div>
-    <div class="tbadge" onclick="nav('impressao')">
-      <span style="font-size:13px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="10" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="8" r=".6" fill="currentColor"/></svg></span>
-      <span style="font-weight:600;font-size:11.5px">Impressora</span>
-    </div>
-    <div class="tbadge" onclick="nav('cardapio')">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M7 9l-2 2a3 3 0 0 1-4.2-4.2l2-2A3 3 0 0 1 5.9 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 7l2-2a3 3 0 0 1 4.2 4.2l-2 2A3 3 0 0 1 10.1 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 10l4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <div><div style="font-weight:600;font-size:11px">Loja</div><div style="font-size:9.5px;color:var(--muted)">Estima Food</div></div>
-    </div>
-    <div class="tbadge" onclick="nav('cardapio')">
-      <span style="font-size:13px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="10" height="12" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 3V2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 8h6M5 11h4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-      <div><div style="font-weight:600;font-size:11px">Cardápio Digital</div></div>
-    </div>
-    <div class="tbadge" id="rt-badge" title="Status da conexão em tempo real">
+    <button class="tnav-pill on" id="pill-status" onclick="toggleStatus()" title="Alternar status da loja">
+      <div class="sdot" id="status-dot" style="background:var(--success)"></div>
+      <span id="status-txt">Online</span>
+    </button>
+    <div class="tbadge" id="rt-badge" title="Conexão em tempo real">
       <div class="sdot" id="rt-dot" style="background:var(--muted)"></div>
       <span style="font-weight:600;font-size:11px" id="rt-txt">Conectando</span>
     </div>
-    <div class="ibtn" onclick="toggleNotif()">
+    <div class="ibtn" onclick="toggleNotif()" title="Notificações">
       <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M8 2a5 5 0 0 1 5 5c0 2.5-.8 4-2 5H5c-1.2-1-2-2.5-2-5a5 5 0 0 1 5-5Z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13.5a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>
-      <span class="nbadge" id="notif-count">3</span>
+      <span class="nbadge" id="notif-count" style="display:none">0</span>
     </div>
   </div>
 </nav>
@@ -1345,7 +1327,12 @@ td:first-child{padding-left:16px}
 <!-- MEU DESEMPENHO -->
 <div class="page" id="page-desempenho">
   <div class="ph"><div><div class="pt">Meu Desempenho</div><div class="ps">Métricas e evolução do seu negócio</div></div>
-    <div class="sw"><select style="font-size:12px"><option>Últimos 30 dias</option><option>Últimos 7 dias</option><option>Este mês</option></select></div>
+    <div style="display:flex;gap:6px">
+      <button class="btn bg desemp-prd-btn on" data-prd="hoje" onclick="setDesempPrd(this,'hoje')">Hoje</button>
+      <button class="btn bg desemp-prd-btn" data-prd="semana" onclick="setDesempPrd(this,'semana')">7 dias</button>
+      <button class="btn bg desemp-prd-btn" data-prd="mes" onclick="setDesempPrd(this,'mes')">Este mês</button>
+      <button class="btn bg desemp-prd-btn" data-prd="30" onclick="setDesempPrd(this,'30')">30 dias</button>
+    </div>
   </div>
   <div class="desemp-grid" id="desemp-grid"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
@@ -1368,10 +1355,10 @@ td:first-child{padding-left:16px}
   </div>
   <div class="ts on" id="t-rel-geral">
     <div class="sg">
-      <div class="sc" style="--ca:var(--accent)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 4v8M5.5 6.5A2 1.5 0 0 1 8 5a2 1.5 0 0 1 0 3 2 1.5 0 0 0 0 3 2 1.5 0 0 0 2.5-1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Faturamento mês</div><div class="sv">R$4.120</div><div class="str trend-up">↑ 18% vs mês anterior</div></div>
-      <div class="sc" style="--ca:var(--success)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 5l6-3 6 3v6l-6 3-6-3V5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 2v12M2 5l6 3 6-3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Pedidos mês</div><div class="sv">318</div><div class="str trend-up">↑ 12%</div></div>
-      <div class="sc" style="--ca:var(--purple)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Ticket médio</div><div class="sv">R$13</div><div class="str" style="color:var(--muted)">por pedido</div></div>
-      <div class="sc" style="--ca:var(--accent3)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5L8 2z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Avaliação</div><div class="sv">4.8</div><div class="str" style="color:var(--accent3)">↑ Ótimo</div></div>
+      <div class="sc" style="--ca:var(--accent)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 4v8M5.5 6.5A2 1.5 0 0 1 8 5a2 1.5 0 0 1 0 3 2 1.5 0 0 0 0 3 2 1.5 0 0 0 2.5-1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Faturamento mês</div><div class="sv" id="rel-kpi-fat">—</div><div class="str" id="rel-kpi-fat-sub" style="color:var(--muted)">carregando...</div></div>
+      <div class="sc" style="--ca:var(--success)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 5l6-3 6 3v6l-6 3-6-3V5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 2v12M2 5l6 3 6-3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Pedidos mês</div><div class="sv" id="rel-kpi-ped">—</div><div class="str" id="rel-kpi-ped-sub" style="color:var(--muted)">carregando...</div></div>
+      <div class="sc" style="--ca:var(--purple)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Ticket médio</div><div class="sv" id="rel-kpi-ticket">—</div><div class="str" style="color:var(--muted)">por pedido</div></div>
+      <div class="sc" style="--ca:var(--accent3)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5L8 2z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Cancelamentos mês</div><div class="sv" id="rel-kpi-cancel">—</div><div class="str" id="rel-kpi-cancel-sub" style="color:var(--muted)">carregando...</div></div>
     </div>
     <div class="rel-grid">
       <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 12V7M6 12V3M10 12V8M14 12V5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Faturamento mensal</div><div class="bar-chart-wrap" id="rel-month-bar" style="height:140px"></div></div>
@@ -4571,78 +4558,346 @@ async function deleteIngrediente() {
 // ─────────────────────────────────────────
 // DESEMPENHO
 // ─────────────────────────────────────────
-function renderDesempenho(){
-  const metrics=[
-    {label:'Faturamento total',val:'R$4.120',trend:'+18%',up:true},
-    {label:'Total de pedidos',val:'318',trend:'+12%',up:true},
-    {label:'Ticket médio',val:'R$13,00',trend:'+5%',up:true},
-    {label:'Tempo médio entrega',val:'38 min',trend:'-4 min',up:true},
-    {label:'Taxa de cancelamento',val:'3.2%',trend:'-0.8%',up:true},
-    {label:'Avaliação média',val:'4.8 ⭐',trend:'+0.2',up:true},
-  ];
-  const dg=document.getElementById('desemp-grid');
-  if(dg) dg.innerHTML=metrics.map(m=>`<div class="desemp-card"><div class="desemp-label">${m.label}</div><div class="desemp-val">${m.val}</div><div class="desemp-trend ${m.up?'trend-up':'trend-down'}">${m.trend}</div></div>`).join('');
-  const dayData=[42,68,55,80,90,75,60];
-  const maxD=Math.max(...dayData);
-  const bar=document.getElementById('desemp-bar');
-  if(bar) bar.innerHTML=DAYS_FULL.map((d,i)=>`<div class="bar-col"><div class="bar-val">${dayData[i]}</div><div class="bar-fill" style="height:${Math.round(dayData[i]/maxD*100)}%;background:var(--accent)"></div><div class="bar-label">${d}</div></div>`).join('');
-  const top=document.getElementById('desemp-top');
-  if(top){const topI=items.slice(0,5);top.innerHTML=topI.map((i,idx)=>`<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--border)"><span style="font-size:12px;font-weight:700;color:var(--accent);width:18px">${idx+1}</span><span style="font-size:18px">${i.emoji}</span><span style="flex:1;font-size:12.5px">${i.name}</span><span style="font-size:12px;color:var(--muted)">${20-idx*3}x</span></div>`).join('');}
+let _desempPrd = 'hoje';
+
+function setDesempPrd(el, prd) {
+  _desempPrd = prd;
+  document.querySelectorAll('.desemp-prd-btn').forEach(b => b.classList.remove('on'));
+  el.classList.add('on');
+  renderDesempenho();
+}
+
+function _desempSince() {
+  const now = new Date();
+  if (_desempPrd === 'hoje') {
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  } else if (_desempPrd === 'semana') {
+    const d = new Date(now); d.setDate(d.getDate() - 6); d.setHours(0,0,0,0);
+    return d.toISOString();
+  } else if (_desempPrd === 'mes') {
+    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  } else { // 30
+    const d = new Date(now); d.setDate(d.getDate() - 29); d.setHours(0,0,0,0);
+    return d.toISOString();
+  }
+}
+
+async function renderDesempenho() {
+  const dg  = document.getElementById('desemp-grid');
+  const bar = document.getElementById('desemp-bar');
+  const top = document.getElementById('desemp-top');
+
+  // Loading state
+  if (dg)  dg.innerHTML  = Array(6).fill('<div class="desemp-card"><div class="desemp-label">Carregando...</div><div class="desemp-val" style="font-size:18px;color:var(--muted)">—</div></div>').join('');
+  if (bar) bar.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:20px;text-align:center">Carregando...</div>';
+  if (top) top.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px">Carregando...</div>';
+
+  try {
+    const since = _desempSince();
+
+    // Busca pedidos reais do período (todos os status exceto cancelado para faturamento)
+    const { data: allOrders } = await sb.from('orders')
+      .select('id,status,total,items,mesa_num,pag,created_at,garcom_nome')
+      .gte('created_at', since)
+      .order('created_at', { ascending: true });
+
+    const orders = allOrders || [];
+    const entregues = orders.filter(o => !['cancelado'].includes(o.status));
+
+    // ── KPIs ─────────────────────────────
+    const totalPedidos   = orders.length;
+    const faturamento    = entregues.reduce((s,o) => s + parseFloat(o.total||0), 0);
+    const ticketMedio    = totalPedidos > 0 ? faturamento / totalPedidos : 0;
+    const cancelados     = orders.filter(o => o.status === 'cancelado').length;
+    const taxaCancelamento = totalPedidos > 0 ? (cancelados / totalPedidos * 100) : 0;
+    const mesasSet       = new Set(orders.map(o => o.mesa_num).filter(Boolean));
+    const itensQtd       = entregues.reduce((s,o) => {
+      if (!Array.isArray(o.items)) return s;
+      return s + o.items.reduce((si,i) => si + (i.qty||1), 0);
+    }, 0);
+
+    const metrics = [
+      { label:'Faturamento', val: 'R$ ' + faturamento.toFixed(2).replace('.',','), icon:'💰', color:'var(--accent3)' },
+      { label:'Total de pedidos', val: totalPedidos, icon:'🛎️', color:'var(--accent)' },
+      { label:'Ticket médio', val: 'R$ ' + ticketMedio.toFixed(2).replace('.',','), icon:'🎯', color:'var(--purple)' },
+      { label:'Mesas atendidas', val: mesasSet.size, icon:'🍽️', color:'var(--success)' },
+      { label:'Itens vendidos', val: itensQtd, icon:'📦', color:'var(--accent2)' },
+      { label:'Cancelamentos', val: cancelados + (taxaCancelamento > 0 ? ` (${taxaCancelamento.toFixed(1)}%)` : ''), icon:'❌', color: cancelados > 0 ? 'var(--danger)' : 'var(--muted)' },
+    ];
+
+    if (dg) dg.innerHTML = metrics.map(m => `
+      <div class="desemp-card">
+        <div style="font-size:24px;margin-bottom:4px">${m.icon}</div>
+        <div class="desemp-label">${m.label}</div>
+        <div class="desemp-val" style="font-size:22px;color:${m.color}">${m.val}</div>
+      </div>`).join('');
+
+    // ── Pedidos por dia da semana ────────
+    const dayCounts = [0,0,0,0,0,0,0]; // Dom..Sab
+    orders.forEach(o => {
+      const d = new Date(o.created_at).getDay();
+      dayCounts[d]++;
+    });
+    const maxD = Math.max(...dayCounts, 1);
+    if (bar) bar.innerHTML = DAYS_FULL.map((d,i) => `
+      <div class="bar-col">
+        <div class="bar-val">${dayCounts[i]}</div>
+        <div class="bar-fill" style="height:${Math.max(Math.round(dayCounts[i]/maxD*100),2)}%;background:var(--accent)"></div>
+        <div class="bar-label">${d}</div>
+      </div>`).join('');
+
+    // ── Top itens mais vendidos ──────────
+    const itemMap = {};
+    entregues.forEach(o => {
+      if (!Array.isArray(o.items)) return;
+      o.items.forEach(i => {
+        const k = i.name;
+        if (!itemMap[k]) itemMap[k] = { qty: 0, rev: 0 };
+        itemMap[k].qty += (i.qty||1);
+        itemMap[k].rev += (parseFloat(i.price||0) * (i.qty||1));
+      });
+    });
+    const sorted = Object.entries(itemMap).sort((a,b) => b[1].qty - a[1].qty).slice(0,8);
+
+    if (top) {
+      if (!sorted.length) {
+        top.innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:12px;text-align:center">Nenhum item no período</div>';
+      } else {
+        // Find emoji from items list if available
+        top.innerHTML = sorted.map(([name, {qty, rev}], idx) => {
+          const menuItem = items.find(i => i.name === name);
+          const emoji = menuItem?.emoji || '🍽️';
+          return `<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:12px;font-weight:700;color:var(--accent);width:18px">${idx+1}</span>
+            <span style="font-size:18px">${emoji}</span>
+            <span style="flex:1;font-size:12.5px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</span>
+            <span style="font-size:11px;color:var(--muted);margin-right:6px">${qty}x</span>
+            <span style="font-size:12px;font-weight:700;color:var(--success);flex-shrink:0">R$ ${rev.toFixed(2).replace('.',',')}</span>
+          </div>`;
+        }).join('');
+      }
+    }
+
+  } catch(e) {
+    console.error('renderDesempenho error:', e);
+    if (dg) dg.innerHTML = '<div style="color:var(--danger);font-size:13px;padding:12px;grid-column:span 3">Erro ao carregar dados de desempenho</div>';
+  }
 }
 
 // ─────────────────────────────────────────
 // RELATÓRIOS
 // ─────────────────────────────────────────
-function renderRelatorios(){
-  // Monthly bar
-  const months=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  const mData=[120,180,150,220,80,280,320,290,340,390,null,null];
-  const maxM=Math.max(...mData.filter(Boolean));
-  const mb=document.getElementById('rel-month-bar');
-  if(mb) mb.innerHTML=months.map((m,i)=>mData[i]?`<div class="bar-col"><div class="bar-fill" style="height:${Math.round(mData[i]/maxM*100)}%"></div><div class="bar-label">${m}</div></div>`:`<div class="bar-col"><div class="bar-fill" style="height:2%;opacity:.3"></div><div class="bar-label">${m}</div></div>`).join('');
-  // Day bar
-  const dayD=[42,68,55,80,90,75,60];const maxDy=Math.max(...dayD);
-  const db=document.getElementById('rel-day-bar');
-  if(db) db.innerHTML=DAYS_FULL.map((d,i)=>`<div class="bar-col"><div class="bar-fill" style="height:${Math.round(dayD[i]/maxDy*100)}%;background:var(--accent3)"></div><div class="bar-label">${d}</div></div>`).join('');
-  // Gauges
-  const gaugeEl=document.getElementById('rel-gauges');
-  if(gaugeEl) gaugeEl.innerHTML=`
-    <div class="gauge"><div class="gauge-val" style="color:var(--accent)">1</div><div class="gauge-label" style="color:var(--accent)">Cartão</div></div>
-    <div class="gauge"><div class="gauge-val" style="color:var(--success)">19</div><div class="gauge-label" style="color:var(--success)">Dinheiro</div></div>
-    <div class="gauge"><div class="gauge-val" style="color:var(--purple)">12</div><div class="gauge-label" style="color:var(--purple)">PIX</div></div>`;
-  // Platforms
-  const platforms=[{name:'Garçom',val:20,color:'var(--purple)'},{name:'WhatsApp',val:25,color:'var(--success)'},{name:'Website',val:324,color:'var(--accent3)'},{name:'PDV',val:72,color:'var(--orange)'},{name:'QR Code',val:41,color:'var(--accent)'}];
-  const maxP=Math.max(...platforms.map(p=>p.val));
-  const pe=document.getElementById('rel-platforms');
-  if(pe) pe.innerHTML=platforms.map(p=>`<div class="platform-row"><div class="platform-name">${p.name}</div><div class="platform-bar"><div class="platform-fill" style="width:${Math.round(p.val/maxP*100)}%;background:${p.color}"></div></div><div class="platform-val">R$ ${p.val.toFixed(2).replace('.',',')}</div></div>`).join('');
-  // Areas
-  const areas=[{name:'Padre Reus',fat:'R$119,00',ped:3},{name:'Fragata',fat:'R$230,00',ped:11},{name:'Centro',fat:'R$180,00',ped:8}];
-  const ae=document.getElementById('rel-areas');
-  if(ae) ae.innerHTML=areas.map(a=>`<div style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-weight:600;font-size:13px">${a.name}</div><div style="font-size:12px;color:var(--accent)">${a.fat}</div><div style="font-size:11.5px;color:var(--muted)">${a.ped} Pedidos</div></div>`).join('');
-  // Clientes tab
-  const rtc=document.getElementById('rel-top-clients');
-  if(rtc) rtc.innerHTML=fidClients.map((c,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:14px;font-weight:700;color:var(--accent)">#${i+1}</span><div class="fid-av">${c.emoji}</div><div style="flex:1"><div style="font-weight:600;font-size:13px">${c.name}</div><div style="font-size:11.5px;color:var(--muted)">${c.orders} pedidos</div></div><div style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px;color:var(--success)">R$ ${(c.orders*13).toFixed(2).replace('.',',')}</div></div>`).join('');
-  // Produtos
-  const rpl=document.getElementById('rel-produtos-list');
-  if(rpl) rpl.innerHTML=items.slice(0,6).map((i,idx)=>`<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)"><span style="width:18px;font-size:12px;font-weight:700;color:var(--accent)">${idx+1}</span><span style="font-size:18px">${i.emoji}</span><span style="flex:1;font-size:13px">${i.name}</span><span style="font-size:12px;color:var(--muted)">${30-idx*4}x vendidos</span><span style="font-size:12.5px;font-weight:600;color:var(--success)">R$ ${(i.price*(30-idx*4)).toFixed(2).replace('.',',')}</span></div>`).join('');
+async function renderRelatorios() {
+  const money = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
+  const loading = id => { const el=document.getElementById(id); if(el) el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center">Carregando...</div>'; };
+
+  ['rel-month-bar','rel-day-bar','rel-gauges','rel-platforms','rel-areas',
+   'rel-top-clients','rel-entradas-list','rel-produtos-list','rel-sat-list'].forEach(loading);
+
+  const now   = new Date();
+  const mesIn = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const anoIn = new Date(now.getFullYear(), 0, 1).toISOString();
+
+  try {
+    // ── Busca pedidos do ANO todo (para barra mensal) ──
+    const [{ data: anoOrders }, { data: movimentos }] = await Promise.all([
+      sb.from('orders').select('id,status,total,items,mesa_num,addr,pag,garcom_nome,created_at')
+        .gte('created_at', anoIn).order('created_at', { ascending: true }),
+      sb.from('movimentos').select('*').gte('time', new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString('pt-BR')).order('id', { ascending: false })
+    ]);
+
+    const allYear = anoOrders || [];
+    const mesPedidos = allYear.filter(o => new Date(o.created_at) >= new Date(mesIn));
+    const mesValidos = mesPedidos.filter(o => o.status !== 'cancelado');
+
+    // ── KPIs do mês ──
+    const fatMes    = mesValidos.reduce((s,o) => s + parseFloat(o.total||0), 0);
+    const qtdMes    = mesPedidos.length;
+    const ticket    = qtdMes > 0 ? fatMes / qtdMes : 0;
+    const cancelMes = mesPedidos.filter(o => o.status === 'cancelado').length;
+    const pctCancel = qtdMes > 0 ? (cancelMes / qtdMes * 100).toFixed(1) : '0';
+
+    const elv = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+    elv('rel-kpi-fat',    money(fatMes));
+    elv('rel-kpi-fat-sub', qtdMes + ' pedidos no mês');
+    elv('rel-kpi-ped',    qtdMes);
+    elv('rel-kpi-ped-sub', mesValidos.length + ' confirmados');
+    elv('rel-kpi-ticket', money(ticket));
+    elv('rel-kpi-cancel', cancelMes);
+    elv('rel-kpi-cancel-sub', pctCancel + '% do total');
+
+    // ── Faturamento mensal (barras por mês) ──
+    const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const mData  = new Array(12).fill(0);
+    allYear.filter(o => o.status !== 'cancelado').forEach(o => {
+      mData[new Date(o.created_at).getMonth()] += parseFloat(o.total||0);
+    });
+    const maxM = Math.max(...mData, 1);
+    const mb = document.getElementById('rel-month-bar');
+    if (mb) mb.innerHTML = months.map((m,i) => `
+      <div class="bar-col">
+        <div class="bar-val" style="font-size:9px">${mData[i]>0 ? 'R$'+Math.round(mData[i]) : ''}</div>
+        <div class="bar-fill" style="height:${Math.max(Math.round(mData[i]/maxM*100),mData[i]>0?3:1)}%;${mData[i]===0?'opacity:.2':''}"></div>
+        <div class="bar-label">${m}</div>
+      </div>`).join('');
+
+    // ── Pedidos por dia da semana (mês atual) ──
+    const dayC = [0,0,0,0,0,0,0];
+    mesPedidos.forEach(o => { dayC[new Date(o.created_at).getDay()]++; });
+    const maxDy = Math.max(...dayC, 1);
+    const db = document.getElementById('rel-day-bar');
+    if (db) db.innerHTML = DAYS_FULL.map((d,i) => `
+      <div class="bar-col">
+        <div class="bar-val">${dayC[i]}</div>
+        <div class="bar-fill" style="height:${Math.max(Math.round(dayC[i]/maxDy*100),2)}%;background:var(--accent3)"></div>
+        <div class="bar-label">${d}</div>
+      </div>`).join('');
+
+    // ── Métodos de pagamento (mês) ──
+    const pagMap = {};
+    mesValidos.forEach(o => {
+      const k = (o.pag||'Outro').trim();
+      if (!pagMap[k]) pagMap[k] = 0;
+      pagMap[k]++;
+    });
+    const pagColors = { PIX:'var(--purple)', Cartão:'var(--accent)', Dinheiro:'var(--success)', Mesa:'var(--accent3)' };
+    const pagEl = document.getElementById('rel-gauges');
+    if (pagEl) {
+      const pagEntries = Object.entries(pagMap).sort((a,b)=>b[1]-a[1]);
+      pagEl.innerHTML = pagEntries.length
+        ? pagEntries.map(([k,v]) => `<div class="gauge"><div class="gauge-val" style="color:${pagColors[k]||'var(--muted)'}">${v}</div><div class="gauge-label" style="color:${pagColors[k]||'var(--muted)'}">${k}</div></div>`).join('')
+        : '<div style="color:var(--muted);font-size:12px;padding:12px">Sem dados no mês</div>';
+    }
+
+    // ── Faturamento por origem (mesa vs delivery) ──
+    const originMap = {};
+    mesValidos.forEach(o => {
+      let origem = 'Outros';
+      if (o.mesa_num)                            origem = 'Mesa (Garçom)';
+      else if ((o.addr||'').startsWith('Mesa'))  origem = 'Mesa (Garçom)';
+      else if (o.pag === 'Mesa')                 origem = 'Mesa (Garçom)';
+      else                                        origem = 'Delivery / Balcão';
+      if (!originMap[origem]) originMap[origem] = 0;
+      originMap[origem] += parseFloat(o.total||0);
+    });
+    const originColors = { 'Mesa (Garçom)':'var(--purple)', 'Delivery / Balcão':'var(--accent3)', 'Outros':'var(--muted)' };
+    const pe = document.getElementById('rel-platforms');
+    if (pe) {
+      const entries = Object.entries(originMap).sort((a,b)=>b[1]-a[1]);
+      const maxO = Math.max(...entries.map(e=>e[1]), 1);
+      pe.innerHTML = entries.length
+        ? entries.map(([k,v]) => `<div class="platform-row"><div class="platform-name">${k}</div><div class="platform-bar"><div class="platform-fill" style="width:${Math.round(v/maxO*100)}%;background:${originColors[k]||'var(--accent)'}"></div></div><div class="platform-val">${money(v)}</div></div>`).join('')
+        : '<div style="color:var(--muted);font-size:12px;padding:12px">Sem dados no mês</div>';
+    }
+
+    // ── Áreas de entrega (top endereços) ──
+    const areaMap = {};
+    mesValidos.filter(o => !o.mesa_num && o.addr && !o.addr.startsWith('Mesa')).forEach(o => {
+      const parts = (o.addr||'').split(',');
+      const bairro = (parts[1]||parts[0]||'').trim().split(' ').slice(0,3).join(' ') || 'Sem endereço';
+      if (!areaMap[bairro]) areaMap[bairro] = { fat:0, ped:0 };
+      areaMap[bairro].fat += parseFloat(o.total||0);
+      areaMap[bairro].ped++;
+    });
+    const ae = document.getElementById('rel-areas');
+    if (ae) {
+      const areaEntries = Object.entries(areaMap).sort((a,b)=>b[1].ped-a[1].ped).slice(0,6);
+      ae.innerHTML = areaEntries.length
+        ? areaEntries.map(([k,v]) => `<div style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-weight:600;font-size:13px">${k}</div><div style="font-size:12px;color:var(--accent)">${money(v.fat)}</div><div style="font-size:11.5px;color:var(--muted)">${v.ped} pedido${v.ped!==1?'s':''}</div></div>`).join('')
+        : '<div style="color:var(--muted);font-size:12px;padding:8px">Apenas pedidos de mesa no mês</div>';
+    }
+
+    // ── Clientes mais frequentes (via fidClients já carregado) ──
+    const rtc = document.getElementById('rel-top-clients');
+    if (rtc) {
+      const sorted = [...fidClients].sort((a,b)=>b.orders-a.orders).slice(0,10);
+      rtc.innerHTML = sorted.length
+        ? sorted.map((c,i) => `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:14px;font-weight:700;color:var(--accent);width:22px">#${i+1}</span>
+            <div class="fid-av">${c.name?.[0]||'?'}</div>
+            <div style="flex:1"><div style="font-weight:600;font-size:13px">${c.name}</div><div style="font-size:11.5px;color:var(--muted)">${c.orders} pedido${c.orders!==1?'s':''} · ${c.pts} pts</div></div>
+            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px;color:var(--success)">${money(c.orders * ticket)}</div>
+          </div>`).join('')
+        : '<div style="color:var(--muted);font-size:12.5px;padding:12px">Nenhum cliente cadastrado</div>';
+    }
+
+    // ── Entradas do mês (movimentos) ──
+    const el = document.getElementById('rel-entradas-list');
+    if (el) {
+      const movs = (movimentos||[]);
+      const entradas = movs.filter(m=>m.tipo==='entrada');
+      const saidas   = movs.filter(m=>m.tipo==='saida');
+      const totEnt   = entradas.reduce((s,m)=>s+parseFloat(m.val||0),0);
+      const totSai   = saidas.reduce((s,m)=>s+parseFloat(m.val||0),0);
+      el.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">
+          <div style="background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.15);border-radius:10px;padding:12px;text-align:center">
+            <div style="font-size:10.5px;color:var(--muted);margin-bottom:4px">Entradas</div>
+            <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--success)">${money(totEnt)}</div>
+          </div>
+          <div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.15);border-radius:10px;padding:12px;text-align:center">
+            <div style="font-size:10.5px;color:var(--muted);margin-bottom:4px">Saídas</div>
+            <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--danger)">${money(totSai)}</div>
+          </div>
+          <div style="background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.15);border-radius:10px;padding:12px;text-align:center">
+            <div style="font-size:10.5px;color:var(--muted);margin-bottom:4px">Saldo</div>
+            <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:${totEnt-totSai>=0?'var(--success)':'var(--danger)'}">${money(totEnt-totSai)}</div>
+          </div>
+        </div>
+        ${movs.length ? movs.map(m => `
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:16px">${m.tipo==='entrada'?'↑':'↓'}</span>
+            <div style="flex:1"><div style="font-size:13px;font-weight:500">${m.description||'—'}</div><div style="font-size:11.5px;color:var(--muted)">${m.time||''} · ${m.pag||''}</div></div>
+            <div style="font-weight:700;font-size:13.5px;color:${m.tipo==='entrada'?'var(--success)':'var(--danger)'}">${m.tipo==='entrada'?'+':'-'}${money(m.val)}</div>
+          </div>`).join('') : '<div style="color:var(--muted);font-size:12.5px;padding:12px;text-align:center">Nenhuma movimentação no mês</div>'}`;
+    }
+
+    // ── Produtos mais vendidos (mês) ──
+    const itemMapR = {};
+    mesValidos.forEach(o => {
+      if (!Array.isArray(o.items)) return;
+      o.items.forEach(i => {
+        const k = i.name;
+        if (!itemMapR[k]) itemMapR[k] = { qty:0, rev:0 };
+        itemMapR[k].qty += (i.qty||1);
+        itemMapR[k].rev += parseFloat(i.price||0) * (i.qty||1);
+      });
+    });
+    const sortedP = Object.entries(itemMapR).sort((a,b)=>b[1].qty-a[1].qty).slice(0,15);
+    const rpl = document.getElementById('rel-produtos-list');
+    if (rpl) rpl.innerHTML = sortedP.length
+      ? sortedP.map(([name,{qty,rev}],idx) => {
+          const mi = items.find(i=>i.name===name);
+          return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+            <span style="width:20px;font-size:12px;font-weight:700;color:var(--accent)">${idx+1}</span>
+            <span style="font-size:18px">${mi?.emoji||'🍽️'}</span>
+            <span style="flex:1;font-size:13px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</span>
+            <span style="font-size:12px;color:var(--muted);margin-right:8px">${qty}x</span>
+            <span style="font-size:12.5px;font-weight:700;color:var(--success);flex-shrink:0">${money(rev)}</span>
+          </div>`;
+        }).join('')
+      : '<div style="color:var(--muted);font-size:12.5px;padding:12px;text-align:center">Nenhum produto vendido no mês</div>';
+
+    // ── Satisfação (aba dentro de relatorios) ──
+    const relSat = document.getElementById('rel-sat-list');
+    if (relSat) relSat.innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:12px;text-align:center">Módulo de avaliações não configurado</div>';
+
+  } catch(e) {
+    console.error('renderRelatorios error:', e);
+    sbToast('err', 'Erro ao carregar relatórios');
+  }
 }
 
 // ─────────────────────────────────────────
 // SATISFAÇÃO
 // ─────────────────────────────────────────
-function renderSatisfacao(){
-  const ratings=[{stars:5,count:89},{stars:4,count:28},{stars:3,count:12},{stars:2,count:8},{stars:1,count:5}];
-  const total=ratings.reduce((s,r)=>s+r.count,0);
-  const sb=document.getElementById('sat-bars');
-  if(sb) sb.innerHTML=ratings.map(r=>`<div class="rating-bar"><div class="rating-stars">${'★'.repeat(r.stars)+'☆'.repeat(5-r.stars)}</div><div class="rating-track"><div class="rating-fill" style="width:${Math.round(r.count/total*100)}%"></div></div><div class="rating-cnt">${r.count}</div></div>`).join('');
-  const reviews=[
-    {name:'Maria S.',stars:5,text:'Ótimo atendimento, comida chegou quentinha!',time:'2h atrás'},
-    {name:'João C.',stars:5,text:'Perfeito! Entrega rápida e deliciosa.',time:'4h atrás'},
-    {name:'Ana L.',stars:4,text:'Muito bom, só achei o preço um pouco alto.',time:'5h atrás'},
-    {name:'Pedro R.',stars:3,text:'Atendimento ok, mas demorou um pouco.',time:'6h atrás'},
-  ];
-  const sr=document.getElementById('sat-reviews');
-  if(sr) sr.innerHTML=reviews.map(r=>`<div style="padding:12px 0;border-bottom:1px solid var(--border)"><div style="display:flex;align-items:center;gap:9px;margin-bottom:5px"><div class="fid-av">${r.name[0]}</div><div><div style="font-weight:600;font-size:13px">${r.name}</div><div style="color:var(--accent3);font-size:13px">${'★'.repeat(r.stars)+'☆'.repeat(5-r.stars)}</div></div><div style="margin-left:auto;font-size:11px;color:var(--muted)">${r.time}</div></div><div style="font-size:12.5px;color:var(--muted)">${r.text}</div></div>`).join('');
+async function renderSatisfacao(){
+  // Sem tabela de ratings no banco — exibe estado vazio informativo
+  const sb2 = document.getElementById('sat-bars');
+  const sr  = document.getElementById('sat-reviews');
+  const msg = '<div style="text-align:center;padding:32px;color:var(--muted);font-size:13px"><div style="font-size:40px;margin-bottom:12px">⭐</div>Módulo de avaliações ainda não implementado.<br><small style="font-size:11.5px">Quando clientes avaliarem pedidos, os dados aparecerão aqui.</small></div>';
+  if (sb2) sb2.innerHTML = msg;
+  if (sr)  sr.innerHTML  = '';
 }
 
 // ─────────────────────────────────────────
@@ -5026,13 +5281,15 @@ function toggleAutoAccept(el) {
 }
 
 async function toggleStatus(){
-  const st=document.getElementById('status-txt');
-  const on=st.style.color==='var(--success)';
-  const newOpen = on ? false : true;
-  st.style.color = newOpen ? 'var(--success)' : 'var(--danger)';
+  const st  = document.getElementById('status-txt');
+  const dot = document.getElementById('status-dot');
+  const pill = document.getElementById('pill-status');
+  const on  = st.textContent === 'Online';
+  const newOpen = !on;
   st.textContent = newOpen ? 'Online' : 'Offline';
+  if (dot)  dot.style.background  = newOpen ? 'var(--success)' : 'var(--danger)';
+  if (pill) { pill.style.background = newOpen ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'; pill.style.borderColor = newOpen ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'; pill.style.color = newOpen ? 'var(--success)' : 'var(--danger)'; }
   showToast(newOpen?'⚡':'⏸️', newOpen?'Loja aberta para pedidos!':'Loja pausada');
-  // sync to Supabase store_config table (upsert row id=1)
   try {
     await sb.from('store_config').upsert({ id: 1, store_open: newOpen });
   } catch(e) { console.warn('store_config sync:', e); }
