@@ -3304,10 +3304,17 @@ async function renderMesasPage() {
     .not('mesa_num', 'is', null)
     .in('status', ['analise','producao','pronto'])
     .order('id', { ascending: false });
-  const mesaOrders = orders || [];
 
-  // Active tables
+  // Filtro de sessão: só pedidos criados após a última abertura de cada mesa.
+  // Impede que fechamentos anteriores acumulem no total.
   const activeTables = tables.filter(t=>t.status!=='free');
+  const mesaOrders = (orders || []).filter(o => {
+    const mesa = activeTables.find(t => t.num === o.mesa_num);
+    if (!mesa || !mesa.updated_at) return true;
+    const orderTime   = new Date(o.created_at || 0).getTime();
+    const mesaOpenTime= new Date(mesa.updated_at).getTime();
+    return orderTime >= mesaOpenTime - 5000; // 5s de tolerância
+  });
 
   if (pmTab === 'pedidos') {
     // Filter pills (kanban tab)
@@ -4310,13 +4317,13 @@ async function confirmarPagamentoMesa() {
 
   sbLoading(true);
   try {
-    // 1. Finalizar todos os pedidos ativos da mesa pelo campo mesa_num
+    // 1. Finalizar todos os pedidos ativos da mesa
     await sb.from('orders')
       .update({ status: 'entregue' })
       .eq('mesa_num', num)
       .in('status', ['analise','producao','pronto']);
 
-    // 2. Liberar mesa
+    // 2. Liberar mesa — updated_at vai pra NOW() pra resetar o marco de sessão
     await sb.from('mesas').update({
       status: 'free', total: null, pag_forma: null,
       guests: null, updated_at: new Date().toISOString()
