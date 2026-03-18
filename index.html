@@ -315,6 +315,19 @@ td:first-child{padding-left:16px}
 .pz-confirm-btn{flex:1;background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;border:none;border-radius:10px;padding:12px;font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:700;cursor:pointer;transition:all .18s;display:flex;align-items:center;justify-content:center;gap:6px}
 .pz-confirm-btn:hover{filter:brightness(1.08)}
 .pz-confirm-btn:disabled{opacity:.4;cursor:not-allowed}
+.pz-slot{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.08);border-radius:12px;padding:12px 14px;cursor:pointer;transition:all .18s}
+.pz-slot:hover{border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.05)}
+.pz-slot.active{border-color:var(--accent3);background:rgba(245,158,11,.08)}
+.pz-slot.filled{border-color:rgba(245,158,11,.25)}
+.pz-slot-num{width:28px;height:28px;border-radius:50%;background:rgba(245,158,11,.15);color:var(--accent3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.pz-slot.active .pz-slot-num{background:var(--accent3);color:#000}
+.pz-slot-img{width:42px;height:42px;border-radius:8px;background:rgba(255,255,255,.06);flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.pz-slot-img img{width:100%;height:100%;object-fit:cover}
+.pz-slot-info{flex:1;min-width:0}
+.pz-slot-name{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pz-slot-hint{font-size:11.5px;color:var(--muted);margin-top:2px}
+.pz-slot-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:4px;flex-shrink:0}
+.pz-slot-remove:hover{color:var(--danger)}
 .pdv-item-pizza{border-color:rgba(245,158,11,.3)!important}
 .pdv-item-pizza .pdv-price{color:var(--accent3)}
 
@@ -1235,7 +1248,19 @@ td:first-child{padding-left:16px}
       </select></div>
     </div>
 
-    <div class="form-row"><label class="form-label">Emoji / Ícone</label><div class="emoji-grid" id="emoji-grid"></div></div>
+    <div class="form-row">
+      <label class="form-label">Foto do item</label>
+      <div id="new-img-preview" style="width:100%;height:140px;background:var(--surface2);border:2px dashed var(--border);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:border-color .18s;position:relative;overflow:hidden" onclick="triggerNewItemImage()">
+        <img id="new-img-thumb" src="" style="display:none;width:100%;height:100%;object-fit:cover;position:absolute;inset:0">
+        <div id="new-img-placeholder" style="display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--muted)">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="18" height="15" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          <span style="font-size:12px;font-weight:500">Clique para adicionar foto</span>
+          <span style="font-size:10.5px">JPG, PNG ou WEBP</span>
+        </div>
+        <div id="new-img-change" style="display:none;position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.6);color:#fff;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:600">✏️ Trocar</div>
+      </div>
+      <input type="file" id="new-img-input" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="previewNewItemImage(this)">
+    </div>
 
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-add-item')">Cancelar</button>
@@ -1447,40 +1472,30 @@ td:first-child{padding-left:16px}
   <div class="pizza-modal">
     <button class="pz-close" onclick="closePDVPizza()">✕</button>
     <div class="pz-header">
-      <div style="font-size:38px;margin-bottom:6px">🍕</div>
+      <div style="font-size:40px;margin-bottom:6px">🍕</div>
       <div class="pz-title" id="pdv-pz-name">Monte sua Pizza</div>
-      <div class="pz-sub">Escolha até <span id="pdv-pz-max">4</span> sabores</div>
+      <div class="pz-sub">Escolha quantos sabores você quer</div>
     </div>
 
+    <div class="pz-flavors-label" style="margin-bottom:10px">QUANTOS SABORES?</div>
     <div class="pz-size-tabs" id="pdv-pz-size-tabs">
-      <button class="pz-size-tab on" data-slices="1" onclick="pdvSetSlices(1,this)">Inteira</button>
-      <button class="pz-size-tab" data-slices="2" onclick="pdvSetSlices(2,this)">½ a ½</button>
-      <button class="pz-size-tab" data-slices="3" onclick="pdvSetSlices(3,this)">⅓ cada</button>
-      <button class="pz-size-tab" data-slices="4" onclick="pdvSetSlices(4,this)">¼ cada</button>
+      <button class="pz-size-tab on" onclick="pdvSetSlices(1,this)">🍕 Inteira</button>
+      <button class="pz-size-tab" onclick="pdvSetSlices(2,this)">½ + ½</button>
+      <button class="pz-size-tab" onclick="pdvSetSlices(3,this)">3 sabores</button>
+      <button class="pz-size-tab" onclick="pdvSetSlices(4,this)">4 sabores</button>
     </div>
 
-    <div class="pizza-visual-wrap">
-      <div class="pizza-slices-wrap mode-1" id="pdv-pz-wrap">
-        <div class="pizza-slice sc-empty slice-1" id="pdv-slice-0" onclick="pdvOpenPicker(0)"><div class="pizza-slice-inner" id="pdv-slice-lbl-0">+ Sabor</div></div>
-        <div class="pizza-slice sc-empty slice-2" id="pdv-slice-1" onclick="pdvOpenPicker(1)" style="display:none"><div class="pizza-slice-inner" id="pdv-slice-lbl-1">+ Sabor</div></div>
-        <div class="pizza-slice sc-empty slice-3" id="pdv-slice-2" onclick="pdvOpenPicker(2)" style="display:none"><div class="pizza-slice-inner" id="pdv-slice-lbl-2">+ Sabor</div></div>
-        <div class="pizza-slice sc-empty slice-4" id="pdv-slice-3" onclick="pdvOpenPicker(3)" style="display:none"><div class="pizza-slice-inner" id="pdv-slice-lbl-3">+ Sabor</div></div>
-      </div>
-    </div>
+    <div class="pz-flavors-label" style="margin:16px 0 10px">SEUS SABORES</div>
+    <div id="pdv-pz-slots" style="display:flex;flex-direction:column;gap:8px"></div>
 
-    <div class="pz-flavors-label">SABORES SELECIONADOS</div>
-    <div class="pz-selected-summary" id="pdv-pz-summary">
-      <span style="font-size:11.5px;color:var(--muted);padding:3px 0">Clique em uma fatia para escolher o sabor</span>
-    </div>
-
-    <div id="pdv-pz-picker" style="display:none">
-      <div class="pz-flavors-label" id="pdv-pz-picker-label">ESCOLHA O SABOR DA FATIA 1</div>
-      <div class="pz-flavor-list" id="pdv-pz-flavor-list"></div>
+    <div id="pdv-pz-picker-wrap" style="display:none;margin-top:14px">
+      <div class="pz-flavors-label" id="pdv-pz-picker-title" style="margin-bottom:10px">ESCOLHA O SABOR</div>
+      <div id="pdv-pz-flavor-list" class="pz-flavor-list"></div>
     </div>
 
     <div class="pz-footer">
       <button class="pz-confirm-btn" id="pdv-pz-confirm" onclick="pdvConfirmPizza()" disabled>
-        🍕 Adicionar — <span id="pdv-pz-total">R$ 0,00</span>
+        🍕 Adicionar &nbsp;·&nbsp; <span id="pdv-pz-total">R$ 0,00</span>
       </button>
     </div>
   </div>
@@ -2327,7 +2342,10 @@ async function saveEditItem() {
 }
 
 async function deleteItem() {
-  if (!confirm(`Excluir este item do cardápio?\n\nEsta ação não pode ser desfeita.`)) return;
+  // Use inline confirm since native confirm() may be blocked in iframes
+  const it = items.find(i => i.id === editingId);
+  const name = it ? it.name : 'este item';
+  if (!await showConfirmDialog(`Excluir "${name}"?`, 'Esta ação não pode ser desfeita.')) return;
   sbLoading(true);
   const { error } = await sb.from('menu_items').delete().eq('id', editingId);
   sbLoading(false);
@@ -2336,6 +2354,33 @@ async function deleteItem() {
   closeModal('modal-edit-item');
   renderTable(); renderGestor(); renderPDV();
   sbToast('ok','Item excluído do cardápio!');
+}
+
+function showConfirmDialog(title, msg) {
+  return new Promise(resolve => {
+    let el = document.getElementById('confirm-dialog');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'confirm-dialog';
+      el.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9998;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+      el.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px 24px;max-width:360px;width:90%;text-align:center">
+        <div id="cd-title" style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:8px"></div>
+        <div id="cd-msg" style="font-size:12.5px;color:var(--muted);margin-bottom:22px;line-height:1.5"></div>
+        <div style="display:flex;gap:10px">
+          <button id="cd-cancel" style="flex:1;padding:10px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Cancelar</button>
+          <button id="cd-ok" style="flex:1;padding:10px;border-radius:8px;background:var(--danger);border:none;color:#fff;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">🗑 Excluir</button>
+        </div>
+      </div>`;
+      document.body.appendChild(el);
+    }
+    document.getElementById('cd-title').textContent = title;
+    document.getElementById('cd-msg').textContent   = msg;
+    el.style.display = 'flex';
+    const close = (val) => { el.style.display = 'none'; resolve(val); };
+    document.getElementById('cd-ok').onclick     = () => close(true);
+    document.getElementById('cd-cancel').onclick  = () => close(false);
+    el.onclick = (e) => { if (e.target === el) close(false); };
+  });
 }
 
 function applyBulk(){
@@ -2973,22 +3018,20 @@ function updateCxLabel(){
 }
 
 // ─────────────────────────────────────────
-// PIZZA SELECTOR — PDV
+// PIZZA SELECTOR — PDV (slot-based, sem bugs)
 // ─────────────────────────────────────────
-const PZ_COLORS = ['sc-1','sc-2','sc-3','sc-4'];
-let pdvPz = { item: null, slices: 1, selected: [null], activeSlice: 0 };
+let pdvPz = { item: null, slices: 1, selected: [], activeSlot: -1 };
 
 function openPDVPizza(itemId) {
   const it = items.find(i => i.id === itemId);
   if (!it) return;
-  pdvPz = { item: it, slices: 1, selected: [null], activeSlice: 0 };
+  pdvPz = { item: it, slices: 1, selected: [null], activeSlot: -1 };
   document.getElementById('pdv-pz-name').textContent = it.name;
-  // reset tabs
-  document.querySelectorAll('#pdv-pz-size-tabs .pz-size-tab').forEach(b => b.classList.remove('on'));
-  document.querySelector('#pdv-pz-size-tabs .pz-size-tab[data-slices="1"]').classList.add('on');
+  document.querySelectorAll('#pdv-pz-size-tabs .pz-size-tab').forEach((b,i) => b.classList.toggle('on', i===0));
+  document.getElementById('pdv-pz-picker-wrap').style.display = 'none';
   document.getElementById('pdv-pizza-modal-bg').classList.add('on');
-  pdvRenderSlices();
-  pdvOpenPicker(0);
+  pdvRenderSlots();
+  pdvUpdateConfirm();
 }
 
 function closePDVPizza() {
@@ -2997,96 +3040,96 @@ function closePDVPizza() {
 
 function pdvSetSlices(n, el) {
   document.querySelectorAll('#pdv-pz-size-tabs .pz-size-tab').forEach(b => b.classList.remove('on'));
-  if (el) el.classList.add('on');
+  el.classList.add('on');
   pdvPz.slices = n;
   while (pdvPz.selected.length < n) pdvPz.selected.push(null);
   pdvPz.selected = pdvPz.selected.slice(0, n);
-  pdvRenderSlices();
-  pdvOpenPicker(pdvPz.activeSlice < n ? pdvPz.activeSlice : 0);
-  pdvUpdateSummary();
+  pdvPz.activeSlot = -1;
+  document.getElementById('pdv-pz-picker-wrap').style.display = 'none';
+  pdvRenderSlots();
+  pdvUpdateConfirm();
 }
 
-function pdvRenderSlices() {
-  const wrap = document.getElementById('pdv-pz-wrap');
-  wrap.className = 'pizza-slices-wrap mode-' + pdvPz.slices;
-  for (let i = 0; i < 4; i++) {
-    const sl = document.getElementById('pdv-slice-' + i);
-    const lb = document.getElementById('pdv-slice-lbl-' + i);
-    if (i < pdvPz.slices) {
-      sl.style.display = '';
-      const fl = pdvPz.selected[i];
-      PZ_COLORS.forEach(c => sl.classList.remove(c));
-      sl.classList.remove('sc-empty');
-      sl.style.outline = pdvPz.activeSlice === i ? '3px solid #f59e0b' : '';
-      if (fl) { sl.classList.add(PZ_COLORS[i]); lb.textContent = fl.name.length > 13 ? fl.name.slice(0,11)+'…' : fl.name; }
-      else { sl.classList.add('sc-empty'); lb.textContent = '+ Sabor'; }
-    } else {
-      sl.style.display = 'none';
-    }
-  }
+function pdvRenderSlots() {
+  const labels = ['Inteira','½ do sabor','⅓ do sabor','¼ do sabor'];
+  const label  = labels[pdvPz.slices - 1] || '¼ do sabor';
+  const container = document.getElementById('pdv-pz-slots');
+  container.innerHTML = pdvPz.selected.map((fl, i) => {
+    const isActive = pdvPz.activeSlot === i;
+    const isFilled = fl !== null;
+    const imgHtml = fl && fl.imageUrl
+      ? `<div class="pz-slot-img"><img src="${fl.imageUrl}" alt="${fl.name}"></div>`
+      : `<div class="pz-slot-img" style="font-size:22px">${isFilled ? '🍕' : '＋'}</div>`;
+    return `<div class="pz-slot${isActive?' active':''}${isFilled?' filled':''}" onclick="pdvOpenSlot(${i})">
+      <div class="pz-slot-num">${i+1}</div>
+      ${imgHtml}
+      <div class="pz-slot-info">
+        <div class="pz-slot-name">${fl ? fl.name : 'Toque para escolher o sabor'}</div>
+        <div class="pz-slot-hint">${isFilled ? (label+' · R$ '+fl.price.toFixed(2).replace('.',',')) : 'Slot '+(i+1)+' vazio'}</div>
+      </div>
+      ${isFilled ? `<button class="pz-slot-remove" onclick="event.stopPropagation();pdvRemoveSlot(${i})">✕</button>` : ''}
+    </div>`;
+  }).join('');
 }
 
-function pdvOpenPicker(idx) {
-  pdvPz.activeSlice = idx;
-  pdvRenderSlices();
-  document.getElementById('pdv-pz-picker').style.display = '';
-  const names = ['1ª fatia','2ª fatia','3ª fatia','4ª fatia'];
-  document.getElementById('pdv-pz-picker-label').textContent = 'SABOR DA ' + (names[idx]||'').toUpperCase();
+function pdvOpenSlot(idx) {
+  pdvPz.activeSlot = idx;
+  pdvRenderSlots();
   const pizzas = items.filter(i => i.itemType === 'pizza' && i.status !== 'esgotado');
+  const names = ['1º sabor','2º sabor','3º sabor','4º sabor'];
+  document.getElementById('pdv-pz-picker-title').textContent = 'ESCOLHA O ' + (names[idx]||'SABOR').toUpperCase();
+  document.getElementById('pdv-pz-picker-wrap').style.display = '';
   document.getElementById('pdv-pz-flavor-list').innerHTML = pizzas.length
-    ? pizzas.map(f => `<button class="pz-flavor-btn ${pdvPz.selected[idx]?.id===f.id?'on':''}" onclick="pdvSelectFlavor(${f.id})">
-        <div class="pz-flavor-icon">${f.imageUrl?`<img src="${f.imageUrl}" style="width:28px;height:28px;border-radius:6px;object-fit:cover">`:(f.emoji||'🍕')}</div>
-        <div><div class="pz-flavor-name">${f.name}</div><div class="pz-flavor-price">R$ ${f.price.toFixed(2).replace('.',',')}</div></div>
-      </button>`).join('')
-    : '<div style="color:var(--muted);font-size:12px;padding:10px;grid-column:span 2">Nenhum item marcado como Pizza.<br>Marque um item como tipo "Pizza" no Gestor de Cardápio.</div>';
+    ? pizzas.map(f => {
+        const isOn = pdvPz.selected[idx]?.id === f.id;
+        const img = f.imageUrl
+          ? `<div class="pz-flavor-icon"><img src="${f.imageUrl}"></div>`
+          : `<div class="pz-flavor-icon">🍕</div>`;
+        return `<button class="pz-flavor-btn${isOn?' on':''}" onclick="pdvSelectFlavor(${f.id})">
+          ${img}
+          <div>
+            <div class="pz-flavor-name">${f.name}</div>
+            <div class="pz-flavor-price">R$ ${f.price.toFixed(2).replace('.',',')}</div>
+          </div>
+        </button>`;
+      }).join('')
+    : '<div style="color:var(--muted);font-size:12px;padding:14px;grid-column:span 2;text-align:center">Nenhum item do tipo Pizza cadastrado.<br>Gestor de Cardápio → edite um item → Tipo = Pizza.</div>';
 }
 
 function pdvSelectFlavor(fid) {
   const fl = items.find(i => i.id === fid);
-  if (!fl) return;
-  pdvPz.selected[pdvPz.activeSlice] = fl;
-  pdvRenderSlices();
-  pdvUpdateSummary();
-  const next = pdvPz.selected.findIndex((s, i) => i > pdvPz.activeSlice && s === null);
-  setTimeout(() => pdvOpenPicker(next !== -1 ? next : pdvPz.activeSlice), 260);
+  if (!fl || pdvPz.activeSlot < 0) return;
+  pdvPz.selected[pdvPz.activeSlot] = fl;
+  const nextEmpty = pdvPz.selected.findIndex((s, i) => i > pdvPz.activeSlot && s === null);
+  pdvRenderSlots();
+  pdvUpdateConfirm();
+  if (nextEmpty !== -1) setTimeout(() => pdvOpenSlot(nextEmpty), 220);
+  else pdvOpenSlot(pdvPz.activeSlot);
 }
 
-function pdvRemoveSlice(idx) {
+function pdvRemoveSlot(idx) {
   pdvPz.selected[idx] = null;
-  pdvRenderSlices();
-  pdvUpdateSummary();
-  pdvOpenPicker(idx);
+  pdvPz.activeSlot = idx;
+  pdvRenderSlots();
+  pdvUpdateConfirm();
+  pdvOpenSlot(idx);
 }
 
-function pdvUpdateSummary() {
-  const filled = pdvPz.selected.filter(Boolean);
-  const sum = document.getElementById('pdv-pz-summary');
-  if (!filled.length) {
-    sum.innerHTML = '<span style="font-size:11.5px;color:var(--muted);padding:3px 0">Clique em uma fatia para escolher o sabor</span>';
-    document.getElementById('pdv-pz-confirm').disabled = true;
-    document.getElementById('pdv-pz-total').textContent = 'R$ 0,00';
-    return;
-  }
-  const labels = ['½','⅓','¼'];
-  sum.innerHTML = filled.map((f, i) => `<div class="pz-sel-chip">
-    ${pdvPz.slices > 1 ? `<span style="font-size:9px;opacity:.7">${labels[pdvPz.slices-2]||'¼'}</span>` : ''}
-    ${f.emoji||'🍕'} ${f.name}
-    <span class="rm" onclick="pdvRemoveSlice(${i})">✕</span>
-  </div>`).join('');
-  document.getElementById('pdv-pz-confirm').disabled = !pdvPz.selected.every(Boolean);
-  const maxP = Math.max(...filled.map(f => f.price));
+function pdvUpdateConfirm() {
+  const filled    = pdvPz.selected.filter(Boolean);
+  const allFilled = pdvPz.selected.every(Boolean) && pdvPz.selected.length > 0;
+  document.getElementById('pdv-pz-confirm').disabled = !allFilled;
+  const maxP = filled.length ? Math.max(...filled.map(f => f.price)) : 0;
   document.getElementById('pdv-pz-total').textContent = 'R$ ' + maxP.toFixed(2).replace('.',',');
 }
 
 function pdvConfirmPizza() {
-  const filled = pdvPz.selected.filter(Boolean);
-  if (!filled.length) return;
-  const maxP  = Math.max(...filled.map(f => f.price));
-  const names = filled.map(f => f.name).join(' + ');
-  const uid   = Date.now();
-  cartItems.push({ id: uid, name: `🍕 ${names}`, price: maxP, qty: 1, emoji: '🍕', _isPizza: true });
+  if (!pdvPz.selected.every(Boolean)) return;
+  const maxP  = Math.max(...pdvPz.selected.map(f => f.price));
+  const names = pdvPz.selected.map(f => f.name).join(' + ');
+  cartItems.push({ id: Date.now(), name: '🍕 '+names, price: maxP, qty: 1, emoji: '🍕', _isPizza: true });
   renderCart();
-  showToast('🍕', `Pizza adicionada: ${names}`);
+  showToast('🍕', 'Pizza adicionada!');
   closePDVPizza();
 }
 
