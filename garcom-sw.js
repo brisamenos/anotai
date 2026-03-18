@@ -2,13 +2,14 @@
 // Mantém polling em background e envia notificações
 // mesmo com a aba fechada ou minimizada.
 
-const SW_VERSION  = 'garcom-sw-v1';
+const SW_VERSION  = 'garcom-sw-v2';
 const SUPA_URL = '' /* usa URL relativa ao servidor */;
 const SUPA_ANON = '' /* não usado mais */;
 const POLL_MS     = 20000; // polling a cada 20s quando em background
 
 let pollTimer     = null;
 let garcomId      = null;
+let tenantId      = null; // ← novo: filtra por restaurante
 let lastOrderIds  = new Set();
 let lastMesaState = {}; // num → status
 
@@ -23,10 +24,11 @@ self.addEventListener('activate', e => {
 
 // ── Mensagens da página ──────────────────
 self.addEventListener('message', e => {
-  const { type, garcom_id, orderIds, mesaState } = e.data || {};
+  const { type, garcom_id, tenant_id, orderIds, mesaState } = e.data || {};
 
   if (type === 'INIT') {
     garcomId = garcom_id;
+    tenantId = tenant_id || null;
     // Inicializa o estado conhecido (não notifica no boot)
     if (orderIds)   lastOrderIds  = new Set(orderIds);
     if (mesaState)  lastMesaState = mesaState;
@@ -35,6 +37,7 @@ self.addEventListener('message', e => {
 
   if (type === 'LOGOUT') {
     garcomId = null;
+    tenantId = null;
     stopPolling();
   }
 
@@ -58,11 +61,14 @@ function stopPolling() {
 async function doPoll() {
   if (!garcomId) return;
 
+  const headers = { "Content-Type": "application/json" };
+  if (tenantId) headers['x-tenant-id'] = tenantId;
+
   try {
     // 1. Verifica mesas (mudança de status)
     const mesaRes = await fetch(
       `${SUPA_URL}/rest/v1/mesas?select=num,status&order=num`,
-      { headers: { "Content-Type": "application/json" } }
+      { headers }
     );
     if (mesaRes.ok) {
       const mesas = await mesaRes.json();
@@ -82,7 +88,7 @@ async function doPoll() {
     // 2. Verifica pedidos novos (status mudou para producao ou pronto)
     const ordRes = await fetch(
       `${SUPA_URL}/rest/v1/orders?garcom_id=eq.${garcomId}&status=in.(producao,pronto,analise)&select=id,status,items,mesa_num&order=id.desc&limit=20`,
-      { headers: { "Content-Type": "application/json" } }
+      { headers }
     );
     if (ordRes.ok) {
       const orders = await ordRes.json();

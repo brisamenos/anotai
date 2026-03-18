@@ -2775,31 +2775,9 @@ function confirmarLogout() {
 
 if (!_verificarSessao()) { /* redireciona */ }
 
-// ── Wrapper Supabase com tenant automático ────────────
-const _sbRaw = sb;
-// Sobrescreve sb com Proxy que injeta tenant_id automaticamente
-Object.defineProperty(window, 'sbT', { value: new Proxy(_sbRaw, {
-  get(target, prop) {
-    if (prop === 'from') {
-      return (table) => {
-        const q = target.from(table);
-        const semTenant = ['sys_users','tenants','garcons'];
-        if (_sessao?.tenant_id && !semTenant.includes(table)) {
-          const _select = q.select.bind(q);
-          q.select = (...args) => _select(...args).eq('tenant_id', _sessao.tenant_id);
-          const _insert = q.insert.bind(q);
-          q.insert = (data, opts) => {
-            if (Array.isArray(data)) data = data.map(d => ({...d, tenant_id:_sessao.tenant_id}));
-            else data = {...data, tenant_id:_sessao.tenant_id};
-            return _insert(data, opts);
-          };
-        }
-        return q;
-      };
-    }
-    return typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop];
-  }
-})});
+// ── Tenant injetado automaticamente pelo supabase-shim.js ────
+// O shim lê tenant_id da sessionStorage e envia x-tenant-id em cada request.
+// Não precisa mais do proxy manual — sb já funciona com multi-tenant.
 
 // ── Loading overlay ──────────────────────────────────
 function sbLoading(show) {
@@ -2982,6 +2960,7 @@ function _initSwState() {
   if (!_swReg?.active) return;
   _swReg.active.postMessage({
     type:         'INIT',
+    tenant_id:    _sessao?.tenant_id || null,
     orderIds:     ordersKanban.map(o => o.id),
     mesaOrderIds: mesaOrdersCache.map(o => o.id)
   });
@@ -2991,6 +2970,7 @@ function _syncSwState() {
   if (!_swReg?.active) return;
   _swReg.active.postMessage({
     type:         'SYNC',
+    tenant_id:    _sessao?.tenant_id || null,
     orderIds:     ordersKanban.map(o => o.id),
     mesaOrderIds: mesaOrdersCache.map(o => o.id)
   });

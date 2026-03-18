@@ -253,6 +253,7 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
       </div>
     </div>
     <div class="mrow"><label class="mlabel">Email do responsável *</label><input class="minput" id="cli-email" type="email" placeholder="dono@restaurante.com"></div>
+    <div class="mrow" id="cli-senha-row"><label class="mlabel">Senha inicial * <span style="font-weight:400;text-transform:none">(login do gestor)</span></label><input class="minput" id="cli-senha" type="password" placeholder="Mínimo 6 caracteres"></div>
     <div class="mrow2">
       <div class="mrow" style="margin:0"><label class="mlabel">Expira em</label><input class="minput" id="cli-expira" type="date"></div>
       <div class="mrow" style="margin:0"><label class="mlabel">Status</label>
@@ -447,15 +448,18 @@ function abrirModalCliente(id) {
   document.getElementById('cli-nome').value  = '';
   document.getElementById('cli-slug').value  = '';
   document.getElementById('cli-email').value = '';
+  document.getElementById('cli-senha').value = '';
   document.getElementById('cli-plano').value = 'basico';
   document.getElementById('cli-expira').value= '';
   document.getElementById('cli-ativo').value = 'true';
+  // Mostra senha só ao criar, oculta ao editar
+  document.getElementById('cli-senha-row').style.display = id ? 'none' : '';
   if (id) {
     const c = _clientes.find(x=>x.id===id);
     if (c) {
       document.getElementById('cli-nome').value  = c.nome;
       document.getElementById('cli-slug').value  = c.slug;
-      document.getElementById('cli-email').value = c.email;
+      document.getElementById('cli-email').value = c.email||'';
       document.getElementById('cli-plano').value = c.plano;
       document.getElementById('cli-expira').value= c.expires_at ? c.expires_at.slice(0,10) : '';
       document.getElementById('cli-ativo').value = String(c.ativo);
@@ -470,26 +474,39 @@ async function salvarCliente() {
   const nome  = document.getElementById('cli-nome').value.trim();
   const slug  = document.getElementById('cli-slug').value.trim();
   const email = document.getElementById('cli-email').value.trim().toLowerCase();
+  const senha = document.getElementById('cli-senha').value;
   const plano = document.getElementById('cli-plano').value;
   const expira= document.getElementById('cli-expira').value || null;
   const ativo = document.getElementById('cli-ativo').value === 'true';
   if (!nome||!slug||!email) { toast('err','Preencha os campos obrigatórios'); return; }
-  const payload = { nome, slug, email, plano, expires_at:expira, ativo };
+  if (!id && !senha) { toast('err','Defina uma senha inicial para o gestor'); return; }
   let error;
   if (id) {
-    ({ error } = await sb.from('tenants').update(payload).eq('id',id));
-    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],...payload}; }
+    // Edição: atualiza apenas tenant
+    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo }).eq('id',id));
+    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo}; }
   } else {
-    const { data, error:e2 } = await sb.from('tenants').insert(payload).select().single();
-    error = e2;
-    if (!error&&data) _clientes.unshift(data);
+    // Criação: usa endpoint que cria tenant + store_config + usuário gestor de uma vez
+    try {
+      const res = await fetch('/api/criar-tenant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome, slug, email, senha, plano, role: 'gestor' })
+      });
+      const data = await res.json();
+      if (!res.ok) { error = { message: data.error || 'Erro ao criar restaurante' }; }
+      else {
+        // Recarrega lista completa
+        await loadAll();
+      }
+    } catch(e) { error = { message: e.message }; }
   }
   if (error) { toast('err','Erro: '+(error.message||'Verifique os dados')); return; }
   fecharModal('m-cliente'); renderClientes(); renderDash();
   document.getElementById('st-total').textContent  = _clientes.length;
   document.getElementById('st-ativos').textContent = _clientes.filter(c=>c.ativo).length;
   document.getElementById('st-inativos').textContent=_clientes.filter(c=>!c.ativo).length;
-  toast('ok', id ? 'Cliente atualizado!' : 'Cliente criado com sucesso!');
+  toast('ok', id ? 'Cliente atualizado!' : `Restaurante criado! Login: ${email}`);
 }
 
 async function toggleCliente(id, ativo) {

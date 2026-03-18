@@ -1713,15 +1713,71 @@ async function submitCadastro() {
   }
 }
 
+// ── Resolução de tenant para cardápio público ─────────
+let _tenantId = null;
+
+async function resolveTenant() {
+  // Aceita: ?slug=meu-restaurante  ou  ?tenant=ID
+  const p   = new URLSearchParams(window.location.search);
+  const slug = p.get('slug') || p.get('t');
+  const tid  = p.get('tenant');
+  if (tid) { _tenantId = tid; return true; }
+  if (!slug) {
+    // Tenta pegar da URL: /cardapio/meu-restaurante
+    const match = window.location.pathname.match(/\/([a-z0-9-]+)\/?$/);
+    if (match && match[1] !== 'index.html') {
+      const res = await fetch(`/api/tenant-info?slug=${match[1]}`);
+      const data = await res.json();
+      if (data.id) { _tenantId = data.id; return true; }
+    }
+    return false;
+  }
+  const res  = await fetch(`/api/tenant-info?slug=${slug}`);
+  const data = await res.json();
+  if (data.id) { _tenantId = data.id; return true; }
+  return false;
+}
+
+function sbTenant() {
+  // Proxy que injeta x-tenant-id nas queries do cardápio
+  if (!_tenantId) return sb;
+  return new Proxy(sb, {
+    get(target, prop) {
+      if (prop === 'from') {
+        return (table) => {
+          const q = target.from(table);
+          const orig = q._withTenant || (() => q);
+          // Injeta tenant_id via header
+          q._headers = q._headers || {};
+          q._headers['x-tenant-id'] = _tenantId;
+          return q;
+        };
+      }
+      return typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop];
+    }
+  });
+}
 
 async function init() {
   renderMenuWrap('<div class="loading-wrap"><div class="spinner"></div><span>Carregando cardápio…</span></div>');
   try {
+    // Resolve tenant pelo slug na URL
+    const tenantOk = await resolveTenant();
+    if (!tenantOk && !_tenantId) {
+      renderMenuWrap('<div class="loading-wrap"><div style="font-size:32px">🍽️</div><span>Restaurante não encontrado.<br>Verifique o link.</span></div>');
+      return;
+    }
+
+    // Injeta tenant_id no header de todas as requisições desta sessão
+    if (_tenantId) {
+      sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
+    }
+
     const [itemsRes, catsRes, cuponsRes, configRes] = await Promise.all([
       sb.from('menu_items').select('*').neq('status','pausado').order('id'),
       sb.from('categories').select('*').order('sort_order'),
       sb.from('cupons').select('*').eq('ativo', true),
-      sb.from('store_config').select('*').eq('id', 1).single()
+      sb.from('store_config').select('*').single()
     ]);
     allItems  = (itemsRes.data  || []);
     allCats   = (catsRes.data   || []);
@@ -1739,7 +1795,7 @@ async function init() {
     renderMenu();
     checkPromos();
     subscribeStoreStatus();
-    loadProfile(); // carrega perfil cadastrado
+    loadProfile();
   } catch(e) {
     console.error(e);
     renderMenuWrap('<div class="loading-wrap"><div style="font-size:32px">⚠️</div><span>Erro ao carregar cardápio. Tente novamente.</span></div>');

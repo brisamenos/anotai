@@ -4,17 +4,19 @@ const SUPA_ANON = '' /* não usado mais */;
 const POLL_MS   = 15000; // polling a cada 15s em background
 
 let pollTimer      = null;
+let tenantId       = null; // ← filtra por restaurante
 let lastOrderIds   = new Set();
-let lastMesaOrders = new Set(); // IDs de pedidos de mesa conhecidos
+let lastMesaOrders = new Set();
 
 self.addEventListener('install',  () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 
 // ── Mensagens da página ──────────────────
 self.addEventListener('message', e => {
-  const { type, orderIds, mesaOrderIds } = e.data || {};
+  const { type, tenant_id, orderIds, mesaOrderIds } = e.data || {};
 
   if (type === 'INIT') {
+    tenantId = tenant_id || null;
     if (orderIds)     lastOrderIds   = new Set(orderIds);
     if (mesaOrderIds) lastMesaOrders = new Set(mesaOrderIds);
     startPolling();
@@ -40,6 +42,7 @@ function stopPolling() {
 async function doPoll() {
   try {
     const headers = { "Content-Type": "application/json" };
+    if (tenantId) headers['x-tenant-id'] = tenantId;
 
     // 1. Pedidos delivery/balcão novos em análise
     const ordRes = await fetch(

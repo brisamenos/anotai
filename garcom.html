@@ -622,6 +622,23 @@ const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIs
 const { createClient } = window.supabase;
 const sb = createClient(SUPA_URL, SUPA_ANON, { auth:{ persistSession:false } });
 
+// ── Tenant via URL: garcom.html?slug=meu-restaurante ──
+let _garcomTenantId = null;
+(async function resolveGarcomTenant() {
+  const p    = new URLSearchParams(window.location.search);
+  const slug = p.get('slug') || p.get('t');
+  const tid  = p.get('tenant');
+  if (tid) {
+    _garcomTenantId = tid;
+  } else if (slug) {
+    const r = await fetch(`/api/tenant-info?slug=${slug}`).then(r=>r.json()).catch(()=>({}));
+    if (r.id) _garcomTenantId = r.id;
+  }
+  if (_garcomTenantId) {
+    sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _garcomTenantId, ts: Date.now() }));
+  }
+})();
+
 // ══ STATE ═════════════════════════════════
 let currentGarcom = null;  // { id, nome, usuario }
 let tables        = [];
@@ -744,6 +761,7 @@ function sendSwState() {
   _swReg.active.postMessage({
     type:       'SYNC',
     garcom_id:  currentGarcom.id,
+    tenant_id:  _garcomTenantId,
     orderIds:   myOrders.map(o => o.id),
     mesaState:  Object.fromEntries(tables.map(t => [t.num, t.status]))
   });
@@ -754,6 +772,7 @@ function initSW() {
   _swReg.active.postMessage({
     type:       'INIT',
     garcom_id:  currentGarcom.id,
+    tenant_id:  _garcomTenantId,
     orderIds:   myOrders.map(o => o.id),
     mesaState:  Object.fromEntries(tables.map(t => [t.num, t.status]))
   });
