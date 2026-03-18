@@ -239,6 +239,13 @@ function parseRow(table, row) {
   return out
 }
 
+function sanitize(v) {
+  if (v === undefined) return null
+  if (v === true)  return 1
+  if (v === false) return 0
+  return v
+}
+
 function serialize(table, body) {
   const out = {...body}
   for (const f of (JSON_FIELDS[table]||[])) { if(f in out && typeof out[f]!=='string') out[f]=JSON.stringify(out[f]) }
@@ -373,7 +380,7 @@ async function handleREST(req, res, table, params, body) {
         const colList = keys.map(k=>`"${k}"`).join(', ')
         const phs = keys.map(()=>'?').join(', ')
         db.prepare(`INSERT INTO store_config (${colList}) VALUES (${phs}) ON CONFLICT(tenant_id) DO UPDATE SET ${setClause}`)
-          .run(...keys.map(k=>payload[k]))
+          .run(...keys.map(k=>sanitize(payload[k])))
         const row = db.prepare("SELECT * FROM store_config WHERE tenant_id=?").get(tenantId)
         return send(res,200,parseRow(table,row))
       }
@@ -393,7 +400,7 @@ async function handleREST(req, res, table, params, body) {
       } else {
         stmt = db.prepare(`INSERT INTO "${table}" (${colList}) VALUES (${phs})`)
       }
-      const info = stmt.run(...keys.map(k=>payload[k]))
+      const info = stmt.run(...keys.map(k=>sanitize(payload[k])))
       const newId = info.lastInsertRowid
       const returnRep = req.headers['prefer']?.includes('return=representation')
       let inserted = null
@@ -416,14 +423,14 @@ async function handleREST(req, res, table, params, body) {
       // store_config: update por tenant_id
       if (table==='store_config' && tenantId) {
         const setClause = keys.map(k=>`"${k}"=?`).join(', ')
-        db.prepare(`UPDATE store_config SET ${setClause} WHERE tenant_id=?`).run(...keys.map(k=>payload[k]),tenantId)
+        db.prepare(`UPDATE store_config SET ${setClause} WHERE tenant_id=?`).run(...keys.map(k=>sanitize(payload[k])),tenantId)
         const row = db.prepare("SELECT * FROM store_config WHERE tenant_id=?").get(tenantId)
         if (['orders','mesas','store_config'].includes(table)) emit(tenantId, table, payload, 'UPDATE')
         return send(res,200,parseRow(table,row))
       }
 
       const setClause = keys.map(k=>`"${k}"=?`).join(', ')
-      const info = db.prepare(`UPDATE "${table}" SET ${setClause} ${WHERE}`).run(...keys.map(k=>payload[k]),...vals)
+      const info = db.prepare(`UPDATE "${table}" SET ${setClause} ${WHERE}`).run(...keys.map(k=>sanitize(payload[k])),...vals)
       if (['orders','mesas','store_config'].includes(table)) emit(tenantId||payload.tenant_id, table, payload, 'UPDATE')
       return send(res,200,{updated:info.changes})
     } catch(e) { return send(res,400,{error:e.message}) }
