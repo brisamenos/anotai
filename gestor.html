@@ -458,16 +458,48 @@ td:first-child{padding-left:16px}
 .platform-val{font-size:11.5px;font-weight:600;min-width:55px;text-align:right}
 
 /* KDS */
-.kds-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.kds-card{border:2px solid var(--border);border-radius:12px;padding:14px;background:var(--surface)}
-.kds-card.urgente{border-color:var(--danger)}
-.kds-card.normal{border-color:var(--accent3)}
-.kds-card.ok{border-color:var(--success)}
-.kds-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
-.kds-id{font-family:'Syne',sans-serif;font-weight:800;font-size:15px}
-.kds-time{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}
-.kds-item{font-size:12.5px;padding:5px 0;border-bottom:1px solid var(--border);display:flex;gap:8px}
-.kds-qty{font-weight:700;color:var(--accent);flex-shrink:0}
+/* ── KDS COMPLETO ──────────────────────── */
+.kds-page { display:flex; flex-direction:column; height:calc(100vh - 120px); overflow:hidden; }
+.kds-topbar { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; flex-shrink:0; }
+.kds-filter-btn { padding:5px 14px; border-radius:8px; font-family:'DM Sans',sans-serif; font-size:12px; font-weight:600; cursor:pointer; border:1.5px solid var(--border); background:var(--surface2); color:var(--muted); transition:all .15s; }
+.kds-filter-btn.on { border-color:var(--accent); background:rgba(59,130,246,.12); color:var(--accent); }
+.kds-cols { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:12px; overflow-y:auto; flex:1; padding-bottom:8px; }
+.kds-col-label { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; padding:4px 8px 8px; color:var(--muted); }
+.kds-card2 { border:2px solid var(--border); border-radius:14px; background:var(--surface); overflow:hidden; transition:border-color .3s, box-shadow .3s; position:relative; }
+.kds-card2.st-new     { border-color:rgba(249,115,22,.7);  box-shadow:0 0 0 0 rgba(249,115,22,.3); animation:kds-pulse-new 1.5s ease 3; }
+.kds-card2.st-ok      { border-color:rgba(245,158,11,.6);  }
+.kds-card2.st-late    { border-color:rgba(239,68,68,.8);   box-shadow:0 0 12px rgba(239,68,68,.25); }
+.kds-card2.st-done    { border-color:rgba(34,197,94,.5);   opacity:.75; }
+@keyframes kds-pulse-new { 0%,100%{box-shadow:0 0 0 0 rgba(249,115,22,.5)} 50%{box-shadow:0 0 0 8px rgba(249,115,22,0)} }
+.kds-card2-head { display:flex; align-items:center; justify-content:space-between; padding:10px 14px 8px; border-bottom:1px solid var(--border); }
+.kds-card2-id { font-family:'Syne',sans-serif; font-weight:800; font-size:16px; }
+.kds-card2-type { font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; }
+.kds-type-mesa     { background:rgba(59,130,246,.15);  color:#93c5fd; }
+.kds-type-delivery { background:rgba(139,92,246,.15); color:#c4b5fd; }
+.kds-type-balcao   { background:rgba(34,197,94,.12);  color:#86efac; }
+.kds-timer { font-family:'Syne',sans-serif; font-weight:700; font-size:13px; padding:3px 9px; border-radius:8px; }
+.kds-timer.t-ok   { background:rgba(34,197,94,.12);  color:var(--success); }
+.kds-timer.t-warn { background:rgba(245,158,11,.15); color:var(--accent3); }
+.kds-timer.t-late { background:rgba(239,68,68,.15);  color:var(--danger); animation:blink .8s step-end infinite; }
+@keyframes blink { 50%{opacity:.4} }
+.kds-card2-body { padding:10px 14px; }
+.kds-card2-client { font-size:11.5px; color:var(--muted); margin-bottom:8px; }
+.kds-item2 { display:flex; align-items:flex-start; gap:8px; padding:7px 0; border-bottom:1px solid rgba(255,255,255,.05); }
+.kds-item2:last-child { border-bottom:none; }
+.kds-item2-qty { font-family:'Syne',sans-serif; font-size:15px; font-weight:800; color:var(--accent); min-width:28px; }
+.kds-item2-name { font-size:13px; font-weight:600; flex:1; }
+.kds-item2-obs { font-size:11px; color:var(--accent3); margin-top:2px; }
+.kds-item2-drink { color:var(--accent2); }
+.kds-card2-foot { display:flex; gap:6px; padding:8px 14px 12px; }
+.kds-btn-pronto { flex:1; background:var(--success); color:#fff; border:none; border-radius:9px; padding:9px; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:700; cursor:pointer; transition:filter .15s; }
+.kds-btn-pronto:hover { filter:brightness(1.1); }
+.kds-btn-mais { background:var(--surface2); border:1px solid var(--border); color:var(--muted); border-radius:9px; padding:9px 12px; font-family:'DM Sans',sans-serif; font-size:12px; cursor:pointer; transition:all .15s; }
+.kds-btn-mais:hover { border-color:var(--accent3); color:var(--accent3); }
+.kds-stats { display:flex; gap:10px; margin-bottom:12px; flex-shrink:0; }
+.kds-stat { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:8px 14px; text-align:center; flex:1; }
+.kds-stat-val { font-family:'Syne',sans-serif; font-size:20px; font-weight:800; }
+.kds-stat-lbl { font-size:10.5px; color:var(--muted); margin-top:1px; }
+.kds-fullscreen { position:fixed; inset:0; z-index:9000; background:var(--bg); display:flex; flex-direction:column; padding:14px; }
 
 /* FIDELIDADE */
 .fid-client{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;background:var(--surface2);border:1px solid var(--border);margin-bottom:7px;transition:all .17s;cursor:pointer}
@@ -865,11 +897,9 @@ td:first-child{padding-left:16px}
 <!-- MODAL EDITAR MESA -->
 <div class="modal-bg" id="modal-edit-mesa">
   <div class="modal" style="max-width:360px">
-    <div class="modal-head">
-      <div class="modal-title" id="modal-edit-mesa-title">Editar Mesa</div>
-      <button class="modal-close" onclick="closeModal('modal-edit-mesa')">✕</button>
-    </div>
-    <div style="padding:16px 20px 20px;display:flex;flex-direction:column;gap:12px">
+    <button class="modal-close" onclick="closeModal('modal-edit-mesa')">✕</button>
+    <h2 id="modal-edit-mesa-title">Editar Mesa</h2>
+    <div style="display:flex;flex-direction:column;gap:12px">
       <div>
         <label class="form-label">Número da mesa</label>
         <input class="form-input" id="edit-mesa-num" type="number" min="1" placeholder="Ex: 1">
@@ -1274,14 +1304,32 @@ td:first-child{padding-left:16px}
 
 <!-- COZINHA KDS -->
 <div class="page" id="page-kds">
-  <div class="ph"><div><div class="pt">Cozinha (KDS)</div><div class="ps">Display de pedidos para a cozinha em tempo real</div></div>
-    <div style="display:flex;gap:8px">
-      <span class="chip chip-red"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" fill="var(--danger)" opacity=".9"/></svg> 2 urgentes</span>
-      <span class="chip chip-yellow"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" fill="var(--accent3)" opacity=".9"/></svg> 3 em preparo</span>
-      <button class="btn bg" onclick="showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M3 8a5 5 0 1 1 2 4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 11V8h3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>','Tela atualizada!')"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M3 8a5 5 0 1 1 2 4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 11V8h3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Atualizar</button>
+  <div id="kds-inner" class="kds-page">
+    <!-- Topbar -->
+    <div class="kds-topbar">
+      <div><div class="pt" style="font-size:18px">🍳 Cozinha</div></div>
+      <!-- Filtros -->
+      <div style="display:flex;gap:6px;flex:1;flex-wrap:wrap">
+        <button class="kds-filter-btn on" id="kds-f-todos"    onclick="kdsSetFilter('todos')">Todos</button>
+        <button class="kds-filter-btn"    id="kds-f-mesa"     onclick="kdsSetFilter('mesa')">🍽️ Mesa</button>
+        <button class="kds-filter-btn"    id="kds-f-delivery" onclick="kdsSetFilter('delivery')">🛵 Delivery</button>
+        <button class="kds-filter-btn"    id="kds-f-balcao"   onclick="kdsSetFilter('balcao')">🏠 Balcão</button>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn bg" style="font-size:12px" onclick="renderKDS()">↺ Atualizar</button>
+        <button class="btn bg" style="font-size:12px" onclick="kdsToggleFullscreen()">⛶ Tela cheia</button>
+      </div>
     </div>
+    <!-- Stats -->
+    <div class="kds-stats">
+      <div class="kds-stat"><div class="kds-stat-val" id="kds-cnt-total" style="color:var(--accent)">0</div><div class="kds-stat-lbl">Em preparo</div></div>
+      <div class="kds-stat"><div class="kds-stat-val" id="kds-cnt-new"   style="color:var(--orange)">0</div><div class="kds-stat-lbl">Novos</div></div>
+      <div class="kds-stat"><div class="kds-stat-val" id="kds-cnt-late"  style="color:var(--danger)">0</div><div class="kds-stat-lbl">Atrasados</div></div>
+      <div class="kds-stat"><div class="kds-stat-val" id="kds-avg-time"  style="color:var(--success)">—</div><div class="kds-stat-lbl">Tempo médio</div></div>
+    </div>
+    <!-- Grid de cards -->
+    <div class="kds-cols" id="kds-grid"></div>
   </div>
-  <div class="kds-grid" id="kds-grid"></div>
 </div>
 
 <!-- CONTROLE DE ESTOQUE -->
@@ -2238,6 +2286,9 @@ function subscribeOrders() {
         sendBrowserNotif(`🛎️ Novo pedido #${p.new.id}`, `${p.new.client} — ${items}`);
         // Auto-impressão se modo automático estiver ativo
         if (_printMode === 'auto') printOrder(mapOrder(p.new));
+        // Atualiza KDS se estiver aberto
+        const kpg = document.getElementById('page-kds');
+        if (kpg && kpg.classList.contains('on')) renderKDS();
       }
       // Atualiza cache de mesa e rerenderiza SEM nova query ao banco
       if (p.new.mesa_num) {
@@ -2261,6 +2312,8 @@ function subscribeOrders() {
         _renderMesaPageFromCache();
       }
       _syncSwState();
+      // Atualiza KDS se aberto
+      { const kpg = document.getElementById('page-kds'); if (kpg && kpg.classList.contains('on')) renderKDS(); }
     })
     .on('postgres_changes', {event:'DELETE', schema:'public', table:'orders'}, p => {
       ordersKanban = ordersKanban.filter(o => o.id !== p.old.id);
@@ -3504,7 +3557,7 @@ function openEditMesa(num) {
   document.getElementById('edit-mesa-old-num').value  = num;
   document.getElementById('edit-mesa-num').value      = num;
   document.getElementById('edit-mesa-guests').value   = t.guests || '';
-  document.getElementById('modal-edit-mesa-title').textContent = `Editar Mesa ${num}`;
+  document.getElementById('modal-edit-mesa-title').textContent = `✏️ Editar Mesa ${num}`;
   openModal('modal-edit-mesa');
 }
 
@@ -3660,6 +3713,7 @@ function renderMesaCard(t, orders) {
         <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:900">Mesa ${t.num}</div>
         ${t.guests ? `<span style="font-size:11.5px;color:var(--muted)">${t.guests} pessoas</span>` : ''}
         ${statusLabel}
+        <button onclick="event.stopPropagation();openEditMesa(${t.num})" style="margin-left:4px;background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--muted);cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif" title="Editar mesa">✏️</button>
       </div>
       <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:900;color:var(--accent3)">R$ ${total.toFixed(2).replace('.', ',')}</div>
     </div>
@@ -3891,28 +3945,215 @@ async function submitGarcomOrder(){
 // ─────────────────────────────────────────
 // KDS
 // ─────────────────────────────────────────
-function renderKDS(){
-  const g=document.getElementById('kds-grid');
-  if(!g) return;
-  const kdsOrders=ordersKanban.filter(o=>o.status==='producao');
-  if(kdsOrders.length===0){g.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--muted)">Nenhum pedido em produção no momento</div>';return;}
-  g.innerHTML=kdsOrders.map((o,idx)=>{
-    const urgente=idx===0;
-    const cls=urgente?'urgente':idx===1?'normal':'ok';
-    const mins=[12,6,3][idx%3];
-    return`<div class="kds-card ${cls}">
-      <div class="kds-head">
-        <div class="kds-id">#${o.id}</div>
-        <div class="kds-time">${urgente?'<svg width="10" height="10" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" fill="var(--danger)" opacity=".9"/></svg>':'<svg width="10" height="10" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5" fill="var(--accent3)" opacity=".9"/></svg>'} ${mins} min atrás</div>
+// ─────────────────────────────────────────
+// KDS COMPLETO
+// ─────────────────────────────────────────
+let kdsFilter  = 'todos';
+let kdsTimers  = {}; // id → { startTs, extra }
+let _kdsInterval = null;
+let _kdsFullscreen = false;
+
+function kdsSetFilter(f) {
+  kdsFilter = f;
+  ['todos','mesa','delivery','balcao'].forEach(k => {
+    const el = document.getElementById('kds-f-'+k);
+    if (el) el.classList.toggle('on', k === f);
+  });
+  renderKDS();
+}
+
+function kdsToggleFullscreen() {
+  const inner = document.getElementById('kds-inner');
+  if (!inner) return;
+  _kdsFullscreen = !_kdsFullscreen;
+  if (_kdsFullscreen) {
+    inner.classList.add('kds-fullscreen');
+    document.body.style.overflow = 'hidden';
+  } else {
+    inner.classList.remove('kds-fullscreen');
+    document.body.style.overflow = '';
+  }
+}
+
+function _kdsOrderType(o) {
+  const addr = (o.addr || '').toLowerCase();
+  if (o.mesa_num || addr.includes('mesa')) return 'mesa';
+  if (addr.includes('balcão') || addr.includes('balcao') || addr.includes('pdv')) return 'balcao';
+  return 'delivery';
+}
+
+function _kdsElapsed(o) {
+  const t = kdsTimers[o.id];
+  const extra = t?.extra || 0;
+  const startMs = t?.startTs || Date.now();
+  return Math.floor((Date.now() - startMs) / 1000) + extra;
+}
+
+function _kdsFormatTime(secs) {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+function kdsAddTime(id, extra = 300) {
+  if (!kdsTimers[id]) kdsTimers[id] = { startTs: Date.now(), extra: 0 };
+  kdsTimers[id].extra -= extra; // subtrai para "ganhar" mais tempo
+  renderKDS();
+}
+
+function renderKDS() {
+  const g = document.getElementById('kds-grid');
+  if (!g) return;
+
+  // Para/reinicia timer de atualização
+  if (_kdsInterval) clearInterval(_kdsInterval);
+  _kdsInterval = setInterval(() => _kdsUpdateTimers(), 1000);
+
+  // Filtra pedidos
+  let orders = ordersKanban.filter(o => o.status === 'producao' || o.status === 'analise');
+  if (kdsFilter === 'mesa')     orders = orders.filter(o => _kdsOrderType(o) === 'mesa');
+  if (kdsFilter === 'delivery') orders = orders.filter(o => _kdsOrderType(o) === 'delivery');
+  if (kdsFilter === 'balcao')   orders = orders.filter(o => _kdsOrderType(o) === 'balcao');
+
+  // Ordena: analise primeiro, depois por tempo (mais antigos primeiro)
+  orders.sort((a, b) => {
+    if (a.status === 'analise' && b.status !== 'analise') return -1;
+    if (b.status === 'analise' && a.status !== 'analise') return  1;
+    return _kdsElapsed(b) - _kdsElapsed(a);
+  });
+
+  // Inicializa timers para novos pedidos
+  orders.forEach(o => {
+    if (!kdsTimers[o.id]) kdsTimers[o.id] = { startTs: Date.now(), extra: 0 };
+  });
+
+  // Atualiza stats
+  const late = orders.filter(o => _kdsElapsed(o) > 900).length; // >15min
+  const newOrders = orders.filter(o => o.status === 'analise').length;
+  const sEl = id => { const e = document.getElementById(id); return e; };
+  const se = (id, v) => { const e = sEl(id); if (e && e.textContent !== String(v)) e.textContent = v; };
+  se('kds-cnt-total', orders.length);
+  se('kds-cnt-new',   newOrders);
+  se('kds-cnt-late',  late);
+
+  if (!orders.length) {
+    g.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:80px 20px;color:var(--muted)"><div style="font-size:52px;margin-bottom:16px">✅</div><div style="font-size:16px;font-weight:600">Cozinha vazia</div><div style="font-size:13px;margin-top:6px">Nenhum pedido em preparo no momento</div></div>';
+    return;
+  }
+
+  g.innerHTML = orders.map(o => {
+    const type    = _kdsOrderType(o);
+    const elapsed = _kdsElapsed(o);
+    const isNew   = o.status === 'analise';
+    const isLate  = elapsed > 900;
+    const isWarn  = elapsed > 480 && !isLate;
+    const cardCls = isNew ? 'st-new' : isLate ? 'st-late' : isWarn ? 'st-ok' : '';
+    const timerCls= isLate ? 't-late' : isWarn ? 't-warn' : 't-ok';
+    const typeLabel = type === 'mesa' ? `🍽️ ${o.addr||('Mesa '+(o.mesa_num||''))}` : type === 'balcao' ? '🏠 Balcão' : '🛵 Delivery';
+    const typeCls   = 'kds-type-'+type;
+    const items = Array.isArray(o.items) ? o.items : [];
+
+    const itemsHtml = items.map(i => {
+      const isDrink = !!i.drink;
+      return `<div class="kds-item2">
+        <span class="kds-item2-qty">${i.qty}×</span>
+        <div>
+          <div class="kds-item2-name ${isDrink ? 'kds-item2-drink' : ''}">${isDrink ? '🥤 ' : ''}${i.name.toUpperCase()}</div>
+          ${i.obs ? `<div class="kds-item2-obs">⚠️ ${i.obs}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+
+    const actionBtns = isNew
+      ? `<button class="kds-btn-pronto" style="background:var(--orange)" onclick="kdsConfirm(${o.id})">✔ Confirmar</button>
+         <button class="kds-btn-mais" onclick="kdsCancelOrder(${o.id})" style="color:var(--danger)">✕</button>`
+      : `<button class="kds-btn-pronto" onclick="kdsMarkPronto(${o.id})">✅ Pronto</button>
+         <button class="kds-btn-mais" onclick="kdsAddTime(${o.id})" title="+5 min">+5min</button>`;
+
+    return `<div class="kds-card2 ${cardCls}" id="kds-card-${o.id}">
+      <div class="kds-card2-head">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="kds-card2-id">#${o.id}</div>
+          <span class="kds-card2-type ${typeCls}">${typeLabel}</span>
+          ${isNew ? '<span style="font-size:9px;background:rgba(249,115,22,.2);color:#fed7aa;padding:1px 5px;border-radius:99px;font-weight:700;animation:blink .6s step-end infinite">NOVO</span>' : ''}
+        </div>
+        <div class="kds-timer ${timerCls}" id="kds-timer-${o.id}">${_kdsFormatTime(elapsed)}</div>
       </div>
-      <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">${o.client} • ${o.addr}</div>
-      ${o.items.map(item=>`<div class="kds-item"><span class="kds-qty">${item.qty}x</span><span>${item.name}${item.obs?` <span style="color:var(--accent3);font-size:10.5px">(${item.obs})</span>`:''}</span></div>`).join('')}
-      <div style="display:flex;gap:7px;margin-top:10px">
-        <button class="btn bs" style="flex:1;justify-content:center;font-size:11.5px;padding:5px" onclick="advanceOrderById(${o.id});renderKDS()">✅ Pronto</button>
-        <button class="btn bg" style="font-size:11.5px;padding:5px" onclick="showToast('⏱️','Tempo extra registrado')">+5min</button>
+      <div class="kds-card2-body">
+        <div class="kds-card2-client">${o.client || ''}${o.phone ? ' · ' + o.phone : ''}</div>
+        ${itemsHtml}
       </div>
+      <div class="kds-card2-foot">${actionBtns}</div>
     </div>`;
   }).join('');
+
+  // Tempo médio
+  if (orders.length > 0) {
+    const avg = Math.round(orders.reduce((s,o) => s + _kdsElapsed(o), 0) / orders.length);
+    se('kds-avg-time', _kdsFormatTime(avg));
+  }
+}
+
+function _kdsUpdateTimers() {
+  // Atualiza só os timers sem re-renderizar tudo (evita piscar)
+  ordersKanban
+    .filter(o => o.status === 'producao' || o.status === 'analise')
+    .forEach(o => {
+      const el = document.getElementById('kds-timer-' + o.id);
+      if (!el) return;
+      const elapsed = _kdsElapsed(o);
+      const isLate = elapsed > 900;
+      const isWarn = elapsed > 480 && !isLate;
+      el.textContent = _kdsFormatTime(elapsed);
+      el.className = 'kds-timer ' + (isLate ? 't-late' : isWarn ? 't-warn' : 't-ok');
+    });
+}
+
+async function kdsConfirm(id) {
+  const { error } = await sb.from('orders').update({ status: 'producao' }).eq('id', id);
+  if (!error) {
+    const o = ordersKanban.find(x => x.id === id);
+    if (o) o.status = 'producao';
+    const card = document.getElementById('kds-card-' + id);
+    if (card) card.classList.remove('st-new');
+    renderKDS();
+    sbToast('ok', `Pedido #${id} em preparo`);
+  }
+}
+
+async function kdsMarkPronto(id) {
+  const { error } = await sb.from('orders').update({ status: 'pronto' }).eq('id', id);
+  if (!error) {
+    const o = ordersKanban.find(x => x.id === id);
+    if (o) o.status = 'pronto';
+    delete kdsTimers[id];
+    // Som de conclusão
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [[660,0],[880,.1],[1100,.2]].forEach(([f,t]) => {
+        const osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = f; gain.gain.setValueAtTime(.3, ctx.currentTime+t);
+        gain.gain.exponentialRampToValueAtTime(.001, ctx.currentTime+t+.15);
+        osc.start(ctx.currentTime+t); osc.stop(ctx.currentTime+t+.2);
+      });
+    } catch(e){}
+    renderKDS();
+    renderKanban();
+    sbToast('ok', `Pedido #${id} pronto! ✅`);
+  }
+}
+
+async function kdsCancelOrder(id) {
+  if (!confirm('Cancelar pedido #' + id + '?')) return;
+  const { error } = await sb.from('orders').update({ status: 'cancelado' }).eq('id', id);
+  if (!error) {
+    ordersKanban = ordersKanban.filter(x => x.id !== id);
+    delete kdsTimers[id];
+    renderKDS();
+    renderKanban();
+    sbToast('ok', `Pedido #${id} cancelado`);
+  }
 }
 
 // ─────────────────────────────────────────
