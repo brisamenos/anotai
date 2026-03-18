@@ -2292,6 +2292,7 @@ function buildAddrFull() {
 // ═══════════════════════════════════════════════
 // REMOVER ITEM DO CARRINHO
 // ═══════════════════════════════════════════════
+function removeCartItem(id) {
   const item = cart.find(c => c.id === id);
   if (!item) return;
   const el = document.getElementById('cart-item-' + id);
