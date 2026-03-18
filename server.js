@@ -40,6 +40,68 @@ const db = new Database(DB_PATH)
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
 
+// ── Backup/Restore automático ─────────────────────────
+// Salva um snapshot JSON a cada 5 minutos e também a cada criação de tenant.
+// Se o banco sumir (volume não montado), restaura automaticamente do JSON.
+const BACKUP_PATH = path.join(path.dirname(DB_PATH), 'backup.json')
+
+function fazerBackup() {
+  try {
+    const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_items',
+      'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers']
+    const snapshot = { ts: new Date().toISOString(), tabelas: {} }
+    for (const t of TABELAS_BACKUP) {
+      try { snapshot.tabelas[t] = db.prepare(`SELECT * FROM "${t}"`).all() } catch(e) { snapshot.tabelas[t] = [] }
+    }
+    fs.writeFileSync(BACKUP_PATH, JSON.stringify(snapshot), 'utf8')
+    log('💾', `Backup salvo em ${BACKUP_PATH} (${Object.values(snapshot.tabelas).reduce((a,b)=>a+b.length,0)} registros)`)
+  } catch(e) {
+    log('❌', 'Erro ao salvar backup:', { error: e.message })
+  }
+}
+
+function restaurarBackup() {
+  if (!fs.existsSync(BACKUP_PATH)) {
+    log('⚠️', 'Nenhum backup encontrado para restaurar.')
+    return false
+  }
+  try {
+    const snapshot = JSON.parse(fs.readFileSync(BACKUP_PATH, 'utf8'))
+    const tabelas = snapshot.tabelas || {}
+    log('♻️', `Restaurando backup de ${snapshot.ts}...`)
+
+    const ordem = ['tenants','sys_users','store_config','categories','menu_items',
+      'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers']
+
+    for (const t of ordem) {
+      const rows = tabelas[t]
+      if (!rows || !rows.length) continue
+      try {
+        const cols = Object.keys(rows[0])
+        const placeholders = cols.map(() => '?').join(',')
+        const colList = cols.map(c => `"${c}"`).join(',')
+        const stmt = db.prepare(`INSERT OR IGNORE INTO "${t}" (${colList}) VALUES (${placeholders})`)
+        const insertMany = db.transaction((items) => {
+          let ok = 0
+          for (const row of items) {
+            try { stmt.run(Object.values(row)); ok++ } catch(e) {}
+          }
+          return ok
+        })
+        const ok = insertMany(rows)
+        log('♻️', `  ${t}: ${ok}/${rows.length} registros restaurados`)
+      } catch(e) {
+        log('❌', `  Erro ao restaurar ${t}:`, { error: e.message })
+      }
+    }
+    log('✅', 'Restauração concluída!')
+    return true
+  } catch(e) {
+    log('❌', 'Erro ao ler backup:', { error: e.message })
+    return false
+  }
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS tenants (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
@@ -151,6 +213,12 @@ db.exec(`
 try { db.exec("ALTER TABLE tenants ADD COLUMN expires_at TEXT") } catch(e) {}
 try { db.exec("ALTER TABLE store_config ADD COLUMN evo_instance TEXT") } catch(e) {}
 
+// ── Restaurar backup se o banco for novo ──────────────
+if (!_dbExistia) {
+  log('♻️', 'Banco novo detectado — tentando restaurar backup...')
+  restaurarBackup()
+}
+
 // Superadmin padrão
 const adminExists = db.prepare("SELECT id FROM sys_users WHERE role='superadmin' LIMIT 1").get()
 if (!adminExists) {
@@ -166,6 +234,11 @@ const tenantsAtivos = db.prepare("SELECT id FROM tenants").all()
 for (const t of tenantsAtivos) {
   db.prepare("INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)").run(t.id)
 }
+
+// ── Agenda backup automático a cada 5 minutos ─────────
+setTimeout(fazerBackup, 10000) // primeiro backup 10s após start
+setInterval(fazerBackup, 5 * 60 * 1000) // a cada 5 min
+
 
 // ════════════════════════════════════════════════════════
 // SSE — Server-Sent Events (Realtime por tenant)
@@ -658,6 +731,7 @@ const server = http.createServer(async (req,res) => {
       db.prepare("INSERT INTO sys_users (nome,email,senha_hash,role,tenant_id) VALUES (?,?,?,?,?)")
         .run(nomeUsuario,email,hash,role||'gestor',t.id)
       send(res,201,{ok:true,tenant_id:t.id,slug:slugFinal})
+      setTimeout(fazerBackup, 2000) // backup 2s após criar tenant
     } catch(e){ send(res,400,{error:e.message}) }
     return
   }
@@ -685,7 +759,22 @@ const server = http.createServer(async (req,res) => {
   }
 
   // Status
-  if(upath==='/status'){send(res,200,{ok:true,uptime:Math.floor(process.uptime()),db:'sqlite-multitenant',version:'3.0.0'});return}
+  if(upath==='/status'){send(res,200,{ok:true,uptime:Math.floor(process.uptime()),db:'sqlite-multitenant',version:'3.0.0',backup:fs.existsSync(BACKUP_PATH)?fs.statSync(BACKUP_PATH).mtime:null});return}
+
+  // Backup manual sob demanda
+  if(req.method==='POST'&&upath==='/api/backup'){
+    fazerBackup()
+    const size = fs.existsSync(BACKUP_PATH) ? fs.statSync(BACKUP_PATH).size : 0
+    send(res,200,{ok:true,path:BACKUP_PATH,size})
+    return
+  }
+
+  // Restaurar backup manualmente (emergência)
+  if(req.method==='POST'&&upath==='/api/restore'){
+    const ok = restaurarBackup()
+    send(res,200,{ok,msg:ok?'Restauração concluída':'Nenhum backup encontrado'})
+    return
+  }
 
   // WA avulso
   // ── Proxy Evolution API (por tenant) ──────────────────────
