@@ -1387,11 +1387,10 @@ td:first-child{padding-left:16px}
           <div class="card-title" style="margin-bottom:14px">⚙️ Configuração da Instância</div>
           <div class="form-row">
             <label class="form-label">Nome da instância</label>
-            <input class="form-input" id="evo-instance" placeholder="ex: estima-food" value="estima-food">
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">Identificador único da sua conexão WhatsApp</div>
+            <input class="form-input" id="evo-instance" placeholder="ex: meu-restaurante" value="">
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">Identificador único da sua conexão WhatsApp (sem espaços)</div>
           </div>
-          <input type="hidden" id="evo-url" value="https://projeto-evolution-api.xtknqq.easypanel.host">
-          <input type="hidden" id="evo-apikey" value="429683C4C977415CAAFCCE10F7D57E11">
+          <!-- URL e apikey são gerenciados pelo servidor — não ficam no browser -->
           <div style="display:flex;gap:8px;margin-top:4px">
             <button class="btn bp" style="flex:1;justify-content:center" onclick="evoCriarInstancia()">➕ Criar instância</button>
             <button class="btn bg" style="flex:1;justify-content:center" onclick="evoCheckStatus()">🔍 Verificar</button>
@@ -3598,7 +3597,7 @@ function nav(id){
   if(id==='potencializador') renderPotencializador();
   if(id==='pdv') renderPDV();
   if(id==='pdv-balcao') renderPDVBalcao();
-  if(id==='robo') initChat();
+  if(id==='robo') { evoCarregarInstancia().then(()=>{ evoCheckStatus(); }); initChat(); }
   if(id==='qrcode') renderQR();
   if(id==='cupom') renderCupons();
   if(id==='fidelidade') renderFidelidade();
@@ -7084,39 +7083,34 @@ async function carregarWaServerUrl() {
 }
 
 // ═══════════════════════════════════════
-// EVOLUTION API — WhatsApp Integration
+// EVOLUTION API — proxy via servidor
+// (API key nunca fica exposta no browser)
 // ═══════════════════════════════════════
 const EVO = {
-  get url()     { return (document.getElementById('evo-url')?.value||'').replace(/\/$/,''); },
-  get key()     { return document.getElementById('evo-apikey')?.value||''; },
-  get instance(){ return document.getElementById('evo-instance')?.value||'estima-food'; },
-  headers()     { return { 'Content-Type':'application/json', 'apikey': this.key }; },
+  get instance(){ return (document.getElementById('evo-instance')?.value||'').trim(); },
 
+  // Chama o proxy do servidor em /api/evo/*
   async req(method, path, body) {
     try {
-      const r = await fetch(`${this.url}${path}`, {
+      const tid = _sessao?.tenant_id || '';
+      const r = await fetch(`/api/evo${path}`, {
         method,
-        headers: this.headers(),
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
         body: body ? JSON.stringify(body) : undefined
       });
-      const data = await r.json().catch(()=>({}));
-      console.log(`[EVO] ${method} ${path}`, r.status, data);
+      const data = await r.json().catch(() => ({}));
+      console.log(`[EVO proxy] ${method} ${path}`, r.status, data);
       return { ok: r.ok, status: r.status, data };
     } catch(e) {
-      console.error('[EVO] fetch error:', e);
+      console.error('[EVO proxy] fetch error:', e);
       return { ok: false, error: e.message };
     }
   },
 
-  // Evolution API 2.7 — formato correto
   async sendText(number, text) {
     const phone = number.replace(/\D/g,'');
     const num   = phone.startsWith('55') ? phone : `55${phone}`;
-    // Tenta o formato v2 primeiro
-    const r = await this.req('POST', `/message/sendText/${this.instance}`, {
-      number: num,
-      text: text
-    });
+    const r = await this.req('POST', '/message/sendText/' + this.instance, { number: num, text });
     return r;
   }
 };
@@ -7135,12 +7129,32 @@ function roboTab(tab) {
   if (tab==='wp')   evoCheckStatus();
 }
 
+// Carrega instância salva do store_config ao abrir o Robô
+async function evoCarregarInstancia() {
+  try {
+    const { data } = await sb.from('store_config').select('evo_instance').single();
+    if (data?.evo_instance) {
+      const el = document.getElementById('evo-instance');
+      if (el) el.value = data.evo_instance;
+    }
+  } catch(e) {}
+}
+
 async function evoCriarInstancia() {
+  const instName = EVO.instance;
+  if (!instName) { sbToast('err', 'Informe o nome da instância antes de criar.'); return; }
   sbLoading(true);
-  const r = await EVO.req('POST', '/instance/create', { instanceName: EVO.instance, qrcode: true, integration: 'WHATSAPP-BAILEYS' });
+  const r = await EVO.req('POST', '/instance/create', { instanceName: instName, qrcode: true, integration: 'WHATSAPP-BAILEYS' });
   sbLoading(false);
-  if (r.ok) { sbToast('ok', `Instância "${EVO.instance}" criada!`); evoCheckStatus(); }
-  else { const m = r.data?.message||r.data?.error||`Erro ${r.status}`; sbToast('err','Erro: '+(typeof m==='string'?m:JSON.stringify(m))); }
+  if (r.ok) {
+    // Salva evo_instance no store_config do tenant
+    await sb.from('store_config').upsert({ evo_instance: instName });
+    sbToast('ok', `Instância "${instName}" criada!`);
+    evoCheckStatus();
+  } else {
+    const m = r.data?.message||r.data?.error||`Erro ${r.status}`;
+    sbToast('err','Erro: '+(typeof m==='string'?m:JSON.stringify(m)));
+  }
 }
 
 async function evoCheckStatus() {
