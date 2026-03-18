@@ -225,33 +225,51 @@ async function checarPedidos() {
 }
 
 // ═══════════════════════════════════════════════════════
-// 3. HTTP SERVER (recebe chamadas do gestor)
+// 3. HTTP SERVER (serve gestor.html + recebe chamadas de automação)
 // ═══════════════════════════════════════════════════════
 const http = require('http')
+const fs   = require('fs')
+const path_module = require('path')
 
 const server = http.createServer(async (req, res) => {
-  // CORS para o gestor
+  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
-  res.setHeader('Content-Type', 'application/json')
 
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return }
 
-  const url = new URL(req.url, `http://localhost:${PORT}`)
+  const url  = new URL(req.url, `http://localhost:${PORT}`)
+  const path = url.pathname.replace(/\/$/, '') || '/'
 
-  // GET /status — verifica se servidor está rodando
-  // Log de todas as requisições para debug
-  log('🌐', `${req.method} ${url.pathname}`)
+  log('🌐', `${req.method} ${path}`)
 
-  const path = url.pathname.replace(/\/$/, '') // remove barra final
+  // ── Serve arquivos estáticos (gestor.html, garcom.html, etc.) ──
+  if (req.method === 'GET') {
+    // Raiz → gestor.html
+    const fileName = path === '/' ? 'gestor.html' : path.slice(1)
+    const filePath = path_module.join(__dirname, fileName)
 
-  // GET /status — verifica se servidor está rodando
-  if (req.method === 'GET' && (path === '/status' || path === '')) {
-    res.writeHead(200)
-    res.end(JSON.stringify({ ok: true, uptime: process.uptime(), version: '1.0.0', server: 'Estima Food WA Server' }))
-    return
+    if (fs.existsSync(filePath) && !fileName.includes('..')) {
+      const ext  = path_module.extname(filePath)
+      const mime = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css', '.png':'image/png', '.jpg':'image/jpeg', '.ico':'image/x-icon' }[ext] || 'text/plain'
+      res.setHeader('Content-Type', mime)
+      res.writeHead(200)
+      fs.createReadStream(filePath).pipe(res)
+      return
+    }
+
+    // /status — verifica se servidor está rodando
+    if (path === '/status') {
+      res.setHeader('Content-Type', 'application/json')
+      res.writeHead(200)
+      res.end(JSON.stringify({ ok: true, uptime: Math.floor(process.uptime()), version: '1.0.0', server: 'Estima Food WA Server' }))
+      return
+    }
   }
+
+  // Daqui pra baixo: todas as rotas de API retornam JSON
+  res.setHeader('Content-Type', 'application/json')
 
   // POST /enviar — envia mensagem avulsa
   if (req.method === 'POST' && path === '/enviar') {
