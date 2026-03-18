@@ -1,4 +1,3 @@
-
 // ═══════════════════════════════════════════════════════
 // SUPABASE — CONFIGURAÇÃO E INTEGRAÇÃO
 // ═══════════════════════════════════════════════════════
@@ -166,7 +165,7 @@ async function loadAllData(silent = false) {
       safe(sb.from('mesas').select('*').order('num')),
       safe(sb.from('estoque').select('*').order('id')),
       safe(sb.from('fidelidade').select('*').order('pts',{ascending:false})),
-      safe(sb.from('store_config').select('caixa_open,store_open').single())
+      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema').single())
     ]);
 
     if (itemsRes.data?.length)    items         = itemsRes.data.map(mapItem);
@@ -203,7 +202,7 @@ async function loadAllData(silent = false) {
 
     // Aplica estado do caixa e loja
     if (cfgRes.data) {
-      setCaixaState(cfgRes.data.caixa_open !== false); // default aberto se null
+      setCaixaState(cfgRes.data.caixa_open !== false);
       const stOpen = cfgRes.data.store_open !== false;
       const st   = document.getElementById('status-txt');
       const dot  = document.getElementById('status-dot');
@@ -211,6 +210,14 @@ async function loadAllData(silent = false) {
       if (st)   st.textContent = stOpen ? 'Online' : 'Offline';
       if (dot)  dot.style.background  = stOpen ? 'var(--success)' : 'var(--danger)';
       if (pill) { pill.style.background = stOpen ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'; pill.style.borderColor = stOpen ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'; pill.style.color = stOpen ? 'var(--success)' : 'var(--danger)'; }
+      // Carrega tema salvo no banco (sobrepõe localStorage se existir)
+      if (cfgRes.data.gestor_tema) {
+        try {
+          const vars = JSON.parse(cfgRes.data.gestor_tema);
+          temaApply(vars);
+          localStorage.setItem('gestor_tema', cfgRes.data.gestor_tema);
+        } catch(e) {}
+      }
     }
 
     await loadFidConfig();
@@ -5187,10 +5194,9 @@ function temaSalvarStorage() {
 
 async function temaSalvar() {
   temaSalvarStorage();
-  // Persiste também no banco para sincronizar entre dispositivos
   try {
     const json = JSON.stringify(_temaAtual);
-    await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, sidebar_state: json });
+    await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, gestor_tema: json });
     sbToast('ok', '🎨 Tema salvo com sucesso!');
   } catch(e) {
     sbToast('ok', '🎨 Tema salvo localmente!');
