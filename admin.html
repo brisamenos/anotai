@@ -228,9 +228,8 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
       <div class="mrow" style="margin:0"><label class="mlabel">Slug (identificador) *</label><input class="minput" id="cli-slug" placeholder="estima-food" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'-')"></div>
       <div class="mrow" style="margin:0"><label class="mlabel">Plano</label>
         <select class="minput" id="cli-plano">
-          <option value="basico">Básico</option>
-          <option value="pro">Pro</option>
-          <option value="premium">Premium</option>
+          <option value="pro">Pro — Sem Robô</option>
+          <option value="premium">Premium — Com Robô IA</option>
         </select>
       </div>
     </div>
@@ -418,7 +417,7 @@ function renderDash() {
         <div style="font-size:11px;color:var(--muted)">${c.email}</div>
       </div>
       <span class="badge ${c.ativo?'bg-green':'bg-red'}">${c.ativo?'● Ativo':'● Inativo'}</span>
-      <span class="badge bg-blue">${c.plano}</span>
+      <span class="badge ${planoBadge[c.plano]||'bg-blue'}">${planoLabel[c.plano]||c.plano}</span>
     </div>`).join('');
 }
 
@@ -430,6 +429,7 @@ function renderClientes() {
   const fil = _clientes.filter(c=>!q||c.nome.toLowerCase().includes(q)||c.email.toLowerCase().includes(q)||c.slug.includes(q));
   if (!fil.length) { el.innerHTML='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--muted)">Nenhum cliente encontrado</td></tr>'; return; }
   const planoBadge = { basico:'bg-gray', pro:'bg-blue', premium:'bg-purple' };
+  const planoLabel = { basico:'Básico', pro:'Pro', premium:'⭐ Premium' };
   el.innerHTML = fil.map(c => {
     const users = _usuarios.filter(u=>u.tenant_id===c.id);
     const gestor = users.find(u=>u.role==='gestor')||users[0];
@@ -440,7 +440,7 @@ function renderClientes() {
       <div><div style="font-weight:600">${c.nome}</div><div style="font-size:11px;color:var(--muted)">/${c.slug}</div></div>
     </div></td>
     <td><div style="font-size:12.5px">${gestor?.nome||'—'}</div><div style="font-size:11px;color:var(--muted)">${gestor?.email||c.email||'—'}</div></td>
-    <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${c.plano}</span></td>
+    <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${planoLabel[c.plano]||c.plano}</span></td>
     <td style="color:var(--muted);font-size:12px">${c.expires_at ? new Date(c.expires_at).toLocaleDateString('pt-BR') : '—'}</td>
     <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">${c.ativo?'● Ativo':'● Inativo'}</span></td>
     <td><div style="display:flex;gap:4px">
@@ -471,7 +471,7 @@ function abrirModalCliente(id) {
   document.getElementById('cli-email').value      = '';
   document.getElementById('cli-senha').value      = '';
   document.getElementById('cli-gestor-nome').value= '';
-  document.getElementById('cli-plano').value      = 'basico';
+  document.getElementById('cli-plano').value      = 'pro';
   document.getElementById('cli-expira').value     = '';
   document.getElementById('cli-ativo').value      = 'true';
   // Seção gestor: só exibe na criação
