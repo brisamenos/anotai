@@ -2928,22 +2928,46 @@ function showTrackBtn(orderId, status) {
 
 function subscribeOrderTracking(orderId) {
   if (_trackChannel) { try { sb.removeChannel(_trackChannel); } catch(e){} }
+
+  // Busca status atual imediatamente
   sb.from('orders').select('id,status,items,client,total,created_at').eq('id', orderId).single()
-    .then(({data}) => { if(data){_trackOrderData=data; showTrackBtn(orderId,data.status);} });
-  _trackChannel = sb.channel('orders-tracking')
-    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'orders'}, p => {
-      if (p.new?.id !== orderId) return;
-      _trackOrderData={..._trackOrderData,...p.new};
+    .then(({data}) => { if(data){ _trackOrderData=data; showTrackBtn(orderId,data.status); } });
+
+  // Assina o canal orders-rt que o servidor já emite em todo PATCH/UPDATE
+  _trackChannel = sb.channel('orders-rt')
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, p => {
+      if (String(p.new?.id) !== String(orderId)) return; // filtra só o pedido do cliente
+      _trackOrderData = {..._trackOrderData, ...p.new};
       showTrackBtn(orderId, p.new.status);
-      renderTrackTimeline(p.new.status);
-      if (!document.getElementById('track-drawer')?.classList.contains('open')) {
-        const msgs={producao:'👨‍🍳 Seu pedido entrou em preparo!',pronto:'🛵 Seu pedido saiu para entrega!',entregue:'✅ Pedido entregue! Bom apetite!'};
+      // Atualiza timeline se drawer estiver aberto
+      const drawer = document.getElementById('track-drawer');
+      if (drawer?.classList.contains('open')) renderTrackTimeline(p.new.status);
+      // Toast se drawer fechado
+      else {
+        const msgs = {producao:'👨‍🍳 Seu pedido entrou em preparo!', pronto:'🛵 Seu pedido saiu para entrega!', entregue:'✅ Pedido entregue! Bom apetite!'};
         if (msgs[p.new.status]) showToast('📦', msgs[p.new.status]);
       }
       if (p.new.status==='entregue'||p.new.status==='cancelado') {
         setTimeout(()=>{ const b=document.getElementById('track-btn'); if(b) b.classList.remove('show'); }, 120000);
       }
-    }).subscribe();
+    })
+    .subscribe();
+
+  // Polling a cada 8s como fallback (SSE pode cair em algumas redes)
+  if (window._trackPoll) clearInterval(window._trackPoll);
+  window._trackPoll = setInterval(async () => {
+    if (!_trackOrderId) { clearInterval(window._trackPoll); return; }
+    const {data} = await sb.from('orders').select('id,status,items,client,total,created_at').eq('id', _trackOrderId).single();
+    if (!data) return;
+    const changed = !_trackOrderData || _trackOrderData.status !== data.status;
+    _trackOrderData = data;
+    if (changed) {
+      showTrackBtn(_trackOrderId, data.status);
+      const drawer = document.getElementById('track-drawer');
+      if (drawer?.classList.contains('open')) renderTrackTimeline(data.status);
+    }
+    if (data.status==='entregue'||data.status==='cancelado') clearInterval(window._trackPoll);
+  }, 8000);
 }
 
 function openTrackDrawer() {
@@ -2953,12 +2977,14 @@ function openTrackDrawer() {
   document.body.style.overflow='hidden';
   const numEl=document.getElementById('track-order-num');
   if (numEl&&_trackOrderId) numEl.textContent='#'+String(_trackOrderId).padStart(3,'0');
+  // Renderiza com dados atuais imediatamente
+  if (_trackOrderData) renderTrackTimeline(_trackOrderData.status);
   renderTrackItems();
+  // Busca status mais recente do servidor
   if (_trackOrderId) {
     sb.from('orders').select('id,status,items,client,total,created_at').eq('id',_trackOrderId).single()
-      .then(({data})=>{ if(data){_trackOrderData=data; renderTrackTimeline(data.status);} });
+      .then(({data})=>{ if(data){ _trackOrderData=data; renderTrackTimeline(data.status); renderTrackItems(); } });
   }
-  if (_trackOrderData) renderTrackTimeline(_trackOrderData.status);
 }
 
 function closeTrackDrawer() {
