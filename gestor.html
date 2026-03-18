@@ -2724,18 +2724,11 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
 // ═══════════════════════════════════════════════════════
 // SUPABASE — CONFIGURAÇÃO E INTEGRAÇÃO
 // ═══════════════════════════════════════════════════════
-const SUPA_URL  = 'https://lhrzwccbvdintqgebisq.supabase.co';
-const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxocnp3Y2NidmRpbnRxZ2ViaXNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1ODY0NzEsImV4cCI6MjA4OTE2MjQ3MX0.gbljgt0rzOf9eBoTcXxxfl0e_0Y-6XYxve-HGY7meJo';
-// URL do servidor de automações — carregada do Supabase
+// URL do servidor de automações — carregada do banco
 let WA_SERVER = '';
 const { createClient } = window.supabase;
-const sb = createClient(SUPA_URL, SUPA_ANON, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-    detectSessionInUrl: false
-  },
-  realtime: { params: { eventsPerSecond: 10 } }
+const sb = createClient('', '', {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
 });
 
 // ── Autenticação ──────────────────────────────────────
@@ -2825,9 +2818,13 @@ function mapOrder(o) {
     total: parseFloat(o.total) || 0,
     taxa: parseFloat(o.taxa) || 0,
     status: o.status || 'analise',
-    time: o.time || '',
+    time: o.created_at || o.time || '',
+    created_at: o.created_at || '',
     addr: o.addr || '',
-    pag: o.pag || ''
+    pag: o.pag || '',
+    mesa_num: o.mesa_num || null,
+    garcom_id: o.garcom_id || null,
+    garcom_nome: o.garcom_nome || ''
   };
 }
 
@@ -2850,7 +2847,7 @@ async function loadAllData() {
       safe(sb.from('mesas').select('*').order('num')),
       safe(sb.from('estoque').select('*').order('id')),
       safe(sb.from('fidelidade').select('*').order('pts',{ascending:false})),
-      safe(sb.from('store_config').select('caixa_open,store_open').eq('id',1).single())
+      safe(sb.from('store_config').select('caixa_open,store_open').single())
     ]);
 
     if (itemsRes.data?.length)    items         = itemsRes.data.map(mapItem);
@@ -2864,15 +2861,16 @@ async function loadAllData() {
       val: parseFloat(m.val)||0, pag: m.pag||'', time: m.time||''
     }));
     if (cuponsRes.data?.length)   cupons        = cuponsRes.data.map(c => ({
-      id:c.id, code:c.code, tipo:c.tipo, val:parseFloat(c.val)||0,
-      minimo:parseFloat(c.minimo)||0, usos:c.usos||0, ativo:!!c.ativo
+      id:c.id, code:c.code, tipo:c.type||'percent', val:parseFloat(c.value)||0,
+      minimo:parseFloat(c.min_order)||0, usos:c.uses_left||-1, ativo:!!c.ativo
     }));
     if (mesasRes.data?.length)    tables        = mesasRes.data.map(t => ({
-      num:t.num, status:t.status, guests:t.guests, total:t.total
+      id: t.id, num: t.num, status: t.status, guests: t.guests||0,
+      total: t.total||0, opened_at: t.opened_at||null, updated_at: t.updated_at||null
     }));
     if (estoqueRes.data?.length)  estoqueItems  = estoqueRes.data.map(e => ({
       id:e.id, name:e.name, unit:e.unit||'un', qty:parseFloat(e.qty)||0,
-      min_qty:parseFloat(e.min_qty)||0, custo:parseFloat(e.custo)||0,
+      min_qty:parseFloat(e.min_qty)||0, custo:parseFloat(e.cost)||0,
       updated_at:e.updated_at||null
     }));
     if (fidRes.data?.length)      fidClients    = fidRes.data.map(f => ({
@@ -3139,7 +3137,13 @@ function subscribeOrders() {
   const chMesas = sb.channel('mesas-rt')
     .on('postgres_changes', {event:'*', schema:'public', table:'mesas'}, () => {
       sb.from('mesas').select('*').order('num').then(({ data }) => {
-        if (data) { tables = data; _renderMesaPageFromCache(); renderQR(); }
+        if (data) {
+          tables = data.map(t => ({
+            id: t.id, num: t.num, status: t.status, guests: t.guests||0,
+            total: t.total||0, opened_at: t.opened_at||null, updated_at: t.updated_at||null
+          }));
+          _renderMesaPageFromCache(); renderQR();
+        }
       });
     }).subscribe();
 
@@ -4628,7 +4632,7 @@ async function addCupom() {
   if (!code) { sbToast('err','Informe o código'); return; }
   sbLoading(true);
   const { data, error } = await sb.from('cupons').insert({
-    code, tipo, val, minimo: 0, usos: 0, ativo: true
+    code, type: tipo === '%' ? 'percent' : 'fixed', value: val, min_order: 0, uses_left: -1, ativo: true
   }).select().single();
   sbLoading(false);
   if (error) { sbToast('err', error.code==='23505'?'Código já existe':'Erro ao criar cupom'); return; }
@@ -4649,7 +4653,7 @@ let _fidConfig = { pts_por_real: 10, meta_pts: 500, recompensa_reais: 10 };
 
 async function loadFidConfig() {
   try {
-    const { data } = await sb.from('store_config').select('fid_config').eq('id',1).single();
+    const { data } = await sb.from('store_config').select('fid_config').single();
     if (data?.fid_config) _fidConfig = { ..._fidConfig, ...data.fid_config };
   } catch(e) {}
 }
@@ -4659,7 +4663,7 @@ async function saveFidConfig() {
   const meta = parseInt(document.getElementById('fid-cfg-meta')?.value) || 500;
   const rec  = parseFloat(document.getElementById('fid-cfg-rec')?.value) || 10;
   _fidConfig = { pts_por_real: pts, meta_pts: meta, recompensa_reais: rec };
-  await sb.from('store_config').upsert({ id:1, fid_config: _fidConfig });
+  await sb.from('store_config').upsert({ fid_config: _fidConfig });
   // Atualiza max_pts de todos os clientes
   await sb.from('fidelidade').update({ max_pts: meta }).gte('id', 0);
   fidClients.forEach(c => c.max = meta);
@@ -5204,12 +5208,12 @@ async function saveIngrediente() {
   if (!nome) { sbToast('err','Informe o nome do ingrediente'); return; }
   sbLoading(true);
   const { data, error } = await sb.from('estoque').insert({
-    name: nome, unit, qty, min_qty: min, custo, updated_at: new Date().toISOString()
+    name: nome, unit, qty, min_qty: min, cost: custo, updated_at: new Date().toISOString()
   }).select().single();
   sbLoading(false);
   if (error) { sbToast('err','Erro ao cadastrar: '+error.message); return; }
   estoqueItems.push({ id:data.id, name:data.name, unit:data.unit, qty:data.qty,
-    min_qty:data.min_qty, custo:data.custo||0, updated_at:data.updated_at });
+    min_qty:data.min_qty, custo:parseFloat(data.cost)||0, updated_at:data.updated_at });
   closeModal('modal-add-ingrediente');
   ['ing-nome','ing-qty','ing-min','ing-custo'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value='';
@@ -5231,7 +5235,7 @@ async function registrarEntrada() {
   const custUnit = qty > 0 && custo > 0 ? custo/qty : item.custo;
   sbLoading(true);
   const { error } = await sb.from('estoque').update({
-    qty: newQty, custo: custUnit, updated_at: new Date().toISOString()
+    qty: newQty, cost: custUnit, updated_at: new Date().toISOString()
   }).eq('id', id);
   sbLoading(false);
   if (error) { sbToast('err','Erro ao registrar'); return; }
@@ -5264,7 +5268,7 @@ async function saveEditIngrediente() {
   if (!nome) { sbToast('err','Informe o nome'); return; }
   sbLoading(true);
   const { error } = await sb.from('estoque').update({
-    name: nome, qty, min_qty: min, custo, updated_at: new Date().toISOString()
+    name: nome, qty, min_qty: min, cost: custo, updated_at: new Date().toISOString()
   }).eq('id', id);
   sbLoading(false);
   if (error) { sbToast('err','Erro ao salvar'); return; }
@@ -5761,7 +5765,7 @@ async function toggleCaixa() {
     // Abrir caixa
     setCaixaState(true);
     sbToast('ok', '🟢 Caixa aberto!');
-    try { await sb.from('store_config').upsert({ id: 1, caixa_open: true }); }
+    try { await sb.from('store_config').upsert({ caixa_open: true }); }
     catch(e) { console.warn('caixa sync:', e); }
     nav('caixa');
   } else {
@@ -5771,7 +5775,7 @@ async function toggleCaixa() {
     const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     sbToast('ok', '🔒 Caixa fechado às ' + time);
     try {
-      await sb.from('store_config').upsert({ id: 1, caixa_open: false });
+      await sb.from('store_config').upsert({ caixa_open: false });
     } catch(e) { console.warn('caixa sync:', e); }
   }
 }
@@ -6016,7 +6020,7 @@ let _sidebarState = {};
 
 async function loadSidebarState() {
   try {
-    const { data } = await sb.from('store_config').select('sidebar_state').eq('id',1).single();
+    const { data } = await sb.from('store_config').select('sidebar_state').single();
     _sidebarState = (data && data.sidebar_state) ? data.sidebar_state : {};
   } catch(e) { _sidebarState = {}; }
   ['sg-dia','sg-cardapio','sg-venda','sg-gestao'].forEach(id => {
@@ -6032,7 +6036,7 @@ async function loadSidebarState() {
 
 async function saveSidebarState() {
   try {
-    await sb.from('store_config').upsert({ id: 1, sidebar_state: _sidebarState });
+    await sb.from('store_config').upsert({ sidebar_state: _sidebarState });
   } catch(e) { console.warn('sidebar state save:', e); }
 }
 
@@ -6479,7 +6483,7 @@ async function toggleStatus(){
   if (pill) { pill.style.background = newOpen ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'; pill.style.borderColor = newOpen ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'; pill.style.color = newOpen ? 'var(--success)' : 'var(--danger)'; }
   showToast(newOpen?'⚡':'⏸️', newOpen?'Loja aberta para pedidos!':'Loja pausada');
   try {
-    await sb.from('store_config').upsert({ id: 1, store_open: newOpen });
+    await sb.from('store_config').upsert({ store_open: newOpen });
   } catch(e) { console.warn('store_config sync:', e); }
 }
 
@@ -6517,7 +6521,7 @@ let _taxaConfig = { tipo: 'fixo', valor: 5, faixas: [] };
 
 async function renderTaxaPage() {
   try {
-    const { data } = await sb.from('store_config').select('delivery_fee_config').eq('id', 1).single();
+    const { data } = await sb.from('store_config').select('delivery_fee_config').single();
     if (data?.delivery_fee_config) _taxaConfig = data.delivery_fee_config;
   } catch(e) {}
 
@@ -6609,7 +6613,7 @@ async function saveTaxaConfig() {
     config.valor = 0;
   }
   try {
-    await sb.from('store_config').upsert({ id: 1, delivery_fee_config: config });
+    await sb.from('store_config').upsert({ delivery_fee_config: config });
     _taxaConfig = config;
     sbToast('ok', 'Taxa de entrega salva!');
   } catch(e) {
@@ -6839,7 +6843,7 @@ function initSidebarState() { loadSidebarState(); evoCarregarAutomacoesSalvas();
 async function salvarWaServerUrl() {
   const url = (document.getElementById('wa-server-url')?.value || '').replace(/\/$/,'');
   WA_SERVER = url;
-  try { await sb.from('store_config').upsert({ id: 1, wa_server_url: url }); } catch(e){}
+  try { await sb.from('store_config').upsert({ wa_server_url: url }); } catch(e){}
 }
 
 async function testarServidorWA() {
@@ -6875,7 +6879,7 @@ async function testarServidorWA() {
 
 async function carregarWaServerUrl() {
   try {
-    const { data } = await sb.from('store_config').select('wa_server_url').eq('id',1).single();
+    const { data } = await sb.from('store_config').select('wa_server_url').single();
     if (data?.wa_server_url) {
       WA_SERVER = data.wa_server_url;
       const el = document.getElementById('wa-server-url');
@@ -7088,7 +7092,7 @@ async function evoEnviarAniversariantesHoje(silencioso = false) {
   }
   if (!silencioso) sbLoading(false);
   // Salva que já enviou hoje no Supabase
-  try { await sb.from('store_config').upsert({ id: 1, evo_aniv_last: todayMD }); } catch(e){}
+  try { await sb.from('store_config').upsert({ evo_aniv_last: todayMD }); } catch(e){}
   // Atualiza label na tela
   const lastEl = document.getElementById('aniv-last-send');
   if (lastEl) lastEl.textContent = 'Último envio: ' + todayMD + ' às ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -7116,7 +7120,7 @@ async function _checarAniversario() {
   // Só consulta o banco uma vez por dia (quando cache está vazio ou é outro dia)
   if (!_anivLastSent) {
     try {
-      const { data } = await sb.from('store_config').select('evo_aniv_last').eq('id',1).single();
+      const { data } = await sb.from('store_config').select('evo_aniv_last').single();
       _anivLastSent = data?.evo_aniv_last || null;
     } catch(e) {}
   }
@@ -7153,7 +7157,7 @@ async function evoSalvarAutomacoes() {
   });
   data._aniv_hora = document.getElementById('auto-aniv-hora')?.value || '09:00';
   try {
-    const { error } = await sb.from('store_config').upsert({ id: 1, evo_automacoes: data });
+    const { error } = await sb.from('store_config').upsert({ evo_automacoes: data });
     if (error) throw error;
     sbToast('ok', '✅ Automações salvas!');
   } catch(e) {
@@ -7163,7 +7167,7 @@ async function evoSalvarAutomacoes() {
 
 async function evoCarregarAutomacoesSalvas() {
   try {
-    const { data } = await sb.from('store_config').select('evo_automacoes').eq('id', 1).single();
+    const { data } = await sb.from('store_config').select('evo_automacoes').single();
     const cfg = data?.evo_automacoes || {};
     Object.entries(cfg).forEach(([tipo, val]) => {
       if (tipo.startsWith('_')) return;
