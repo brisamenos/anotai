@@ -521,6 +521,45 @@ body {
 /* ── ITEM CARD — remove + button ──────── */
 .add-btn { display: none; }
 
+/* ── CADASTRO MODAL ───────────────────── */
+.cad-bg {
+  display: none; position: fixed; inset: 0; z-index: 800;
+  background: rgba(0,0,0,.85); backdrop-filter: blur(8px);
+  align-items: flex-end; justify-content: center;
+}
+.cad-bg.on { display: flex; }
+.cad-modal {
+  background: var(--surface);
+  border-radius: 24px 24px 0 0;
+  width: 100%; max-width: 520px;
+  max-height: 94vh; overflow-y: auto;
+  animation: slideUp .3s cubic-bezier(.34,1.56,.64,1);
+}
+.cad-handle { width: 40px; height: 4px; background: var(--surface3); border-radius: 99px; margin: 12px auto 0; }
+.cad-head { padding: 20px 20px 16px; border-bottom: 1px solid var(--border); text-align: center; }
+.cad-head-icon { font-size: 44px; margin-bottom: 10px; }
+.cad-head-title { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 900; margin-bottom: 4px; }
+.cad-head-sub { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.cad-body { padding: 20px; }
+.cad-field { margin-bottom: 14px; }
+.cad-field label { display: block; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; }
+.cad-field input { width: 100%; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 12px; padding: 13px 16px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none; transition: border-color .18s; }
+.cad-field input:focus { border-color: rgba(59,130,246,.5); }
+.cad-field input::placeholder { color: var(--muted); }
+.cad-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cad-btn { width: 100%; padding: 15px; background: linear-gradient(135deg, var(--accent), #2563eb); color: #fff; border: none; border-radius: 14px; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 4px; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all .18s; box-shadow: 0 6px 20px rgba(59,130,246,.3); }
+.cad-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.cad-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+.cad-skip { width: 100%; padding: 12px; background: none; border: none; color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer; margin-top: 6px; }
+.cad-skip:hover { color: var(--text); }
+.cad-err { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.2); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; color: var(--red); margin-bottom: 12px; display: none; text-align: center; }
+.hero-profile-btn { position: absolute; top: 16px; right: 16px; z-index: 5; display: flex; align-items: center; gap: 7px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: 99px; padding: 7px 14px; font-size: 12.5px; font-weight: 600; color: var(--text); cursor: pointer; transition: all .18s; backdrop-filter: blur(6px); }
+.hero-profile-btn:hover { background: rgba(255,255,255,.14); }
+.hero-profile-btn .pav { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #06b6d4); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: #fff; flex-shrink: 0; }
+.aniv-banner { margin: 12px 20px 0; background: linear-gradient(135deg, rgba(245,158,11,.12), rgba(251,191,36,.08)); border: 1px solid rgba(245,158,11,.25); border-radius: 14px; padding: 12px 16px; display: none; align-items: center; gap: 12px; }
+.aniv-banner.show { display: flex; }
+
+
 /* ── FLOATING CART ────────────────────── */
 .cart-float {
   position: fixed;
@@ -1107,6 +1146,10 @@ body {
 <!-- HERO -->
 <div class="hero">
   <div class="hero-pattern"></div>
+  <button class="hero-profile-btn" id="hero-profile-btn" onclick="openCadastro()">
+    <div class="pav" id="hero-pav">?</div>
+    <span id="hero-profile-txt">Entrar / Cadastrar</span>
+  </button>
   <div class="hero-info">
     <div class="hero-logo">🍔 Estima Food</div>
     <div class="hero-sub">Peça online e receba em casa</div>
@@ -1115,6 +1158,15 @@ body {
       <div class="hero-badge">🛵 Entrega ~30 min</div>
       <div class="hero-badge">⭐ 4.8</div>
     </div>
+  </div>
+</div>
+
+<!-- ANIVERSÁRIO BANNER -->
+<div class="aniv-banner" id="aniv-banner">
+  <span style="font-size:26px">🎂</span>
+  <div>
+    <div class="aniv-banner-text" id="aniv-banner-text">Feliz aniversário!</div>
+    <div style="font-size:11.5px;color:var(--muted)">Use o cupom <strong>ANIVER10</strong> e ganhe 10% de desconto hoje!</div>
   </div>
 </div>
 
@@ -1249,6 +1301,45 @@ body {
         <span id="success-id">#000</span>
       </div>
       <button class="coupon-btn" style="margin-top:24px;border-radius:12px;padding:12px 24px;font-size:14px" onclick="resetOrder()">Fazer novo pedido</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- CADASTRO MODAL -->
+<div class="cad-bg" id="cad-bg" onclick="if(event.target===this)closeCadastro()">
+  <div class="cad-modal">
+    <div class="cad-handle"></div>
+    <div class="cad-head">
+      <div class="cad-head-icon" id="cad-icon">👤</div>
+      <div class="cad-head-title" id="cad-title">Crie sua conta</div>
+      <div class="cad-head-sub" id="cad-sub">Cadastre-se para acompanhar seus pedidos,<br>acumular pontos e receber ofertas exclusivas!</div>
+    </div>
+    <div class="cad-body">
+      <div class="cad-err" id="cad-err">Preencha todos os campos obrigatórios</div>
+
+      <div class="cad-field">
+        <label>Nome completo *</label>
+        <input id="cad-nome" type="text" placeholder="Seu nome" autocomplete="name">
+      </div>
+      <div class="cad-field">
+        <label>WhatsApp *</label>
+        <input id="cad-phone" type="tel" placeholder="(99) 99999-9999" autocomplete="tel" inputmode="tel" oninput="onCadPhoneInput()">
+      </div>
+      <div class="cad-field">
+        <label>E-mail</label>
+        <input id="cad-email" type="email" placeholder="seu@email.com" autocomplete="email">
+      </div>
+      <div class="cad-field">
+        <label>Data de aniversário</label>
+        <input id="cad-aniv" type="date" style="color-scheme:dark">
+      </div>
+
+      <button class="cad-btn" id="cad-btn" onclick="submitCadastro()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span id="cad-btn-txt">Salvar cadastro</span>
+      </button>
+      <button class="cad-skip" onclick="closeCadastro()">Continuar sem cadastro</button>
     </div>
   </div>
 </div>
@@ -1401,26 +1492,42 @@ let deliveryFeeConfig = { tipo: 'fixo', valor: 5, faixas: [] };
 let selectedDistFaixa = 0; // index into faixas when tipo=por_km
 
 // ═══════════════════════════════════════════════
-// CUSTOMER DATA — localStorage
+// CUSTOMER DATA — localStorage + Supabase
 // ═══════════════════════════════════════════════
-const CUSTOMER_KEY = 'estimafood_customer';
+const CUSTOMER_KEY  = 'estimafood_customer';
+const PROFILE_KEY   = 'estimafood_profile'; // perfil completo com aniversário
+let _profile = null; // { id, name, phone, email, birthday, addr }
 
 function saveCustomerData() {
   const data = {
-    name:    document.getElementById('f-name')?.value   || '',
-    phone:   document.getElementById('f-phone')?.value  || '',
-    cep:     document.getElementById('f-cep')?.value    || '',
-    street:  document.getElementById('f-street')?.value || '',
-    num:     document.getElementById('f-num')?.value    || '',
-    comp:    document.getElementById('f-comp')?.value   || '',
-    bairro:  document.getElementById('f-bairro')?.value || '',
-    city:    document.getElementById('f-city')?.value   || '',
-    state:   document.getElementById('f-state')?.value  || '',
+    name:   document.getElementById('f-name')?.value   || '',
+    phone:  document.getElementById('f-phone')?.value  || '',
+    street: document.getElementById('f-street')?.value || '',
+    num:    document.getElementById('f-num')?.value    || '',
+    comp:   document.getElementById('f-comp')?.value   || '',
+    bairro: document.getElementById('f-bairro')?.value || '',
+    city:   document.getElementById('f-city')?.value   || '',
+    state:  document.getElementById('f-state')?.value  || '',
   };
   try { localStorage.setItem(CUSTOMER_KEY, JSON.stringify(data)); } catch(e) {}
 }
 
 function loadCustomerData() {
+  // Prioridade: perfil cadastrado > localStorage
+  if (_profile) {
+    const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+    set('f-name',  _profile.name);
+    set('f-phone', _profile.phone);
+    if (_profile.addr) {
+      const parts = _profile.addr.split(',');
+      set('f-street', parts[0]?.trim() || '');
+      set('f-num',    parts[1]?.trim() || '');
+      set('f-bairro', parts[3]?.trim() || '');
+      set('f-city',   parts[4]?.trim() || '');
+      set('f-state',  parts[5]?.trim() || '');
+    }
+    return;
+  }
   try {
     const raw = localStorage.getItem(CUSTOMER_KEY);
     if (!raw) return;
@@ -1435,6 +1542,175 @@ function loadCustomerData() {
     set('f-city',   d.city);
     set('f-state',  d.state);
   } catch(e) {}
+}
+
+// ── Carrega perfil salvo do Supabase via phone ──
+async function loadProfile() {
+  try {
+    const raw = localStorage.getItem(PROFILE_KEY);
+    if (!raw) return;
+    const local = JSON.parse(raw);
+    if (!local.phone) return;
+    // Verifica no banco
+    const { data } = await sb.from('customers')
+      .select('id,name,phone,email,birthday,addr')
+      .eq('phone', local.phone).maybeSingle();
+    if (data) {
+      _profile = data;
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(data));
+      updateHeroProfile(data);
+      checkAniversario(data.birthday);
+    }
+  } catch(e) {}
+}
+
+function updateHeroProfile(p) {
+  const btn = document.getElementById('hero-profile-btn');
+  const txt = document.getElementById('hero-profile-txt');
+  const pav = document.getElementById('hero-pav');
+  if (!btn || !txt || !pav) return;
+  if (p && p.name) {
+    pav.textContent = p.name.charAt(0).toUpperCase();
+    txt.textContent = 'Olá, ' + p.name.split(' ')[0] + ' 👋';
+  } else {
+    pav.textContent = '?';
+    txt.textContent = 'Entrar / Cadastrar';
+  }
+}
+
+function checkAniversario(birthday) {
+  if (!birthday) return;
+  const today = new Date();
+  const bday  = new Date(birthday + 'T12:00:00');
+  if (bday.getDate() === today.getDate() && bday.getMonth() === today.getMonth()) {
+    const banner = document.getElementById('aniv-banner');
+    const btxt   = document.getElementById('aniv-banner-text');
+    const name   = _profile?.name?.split(' ')[0] || '';
+    if (btxt) btxt.textContent = '🎉 Feliz aniversário' + (name ? ', ' + name : '') + '!';
+    if (banner) banner.classList.add('show');
+  }
+}
+
+// ── Modal de Cadastro ──
+function openCadastro() {
+  const err = document.getElementById('cad-err');
+  if (err) err.style.display = 'none';
+  // Se já tem perfil, preenche para edição
+  if (_profile) {
+    document.getElementById('cad-title').textContent = 'Meu Perfil';
+    document.getElementById('cad-sub').textContent   = 'Atualize seus dados quando quiser.';
+    document.getElementById('cad-icon').textContent  = '✏️';
+    document.getElementById('cad-btn-txt').textContent = 'Atualizar dados';
+  } else {
+    document.getElementById('cad-title').textContent = 'Crie sua conta';
+    document.getElementById('cad-sub').textContent   = 'Cadastre-se para acompanhar pedidos, acumular pontos e receber ofertas!';
+    document.getElementById('cad-icon').textContent  = '👤';
+    document.getElementById('cad-btn-txt').textContent = 'Salvar cadastro';
+  }
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+  set('cad-nome',  _profile?.name    || '');
+  set('cad-phone', _profile?.phone   || '');
+  set('cad-email', _profile?.email   || '');
+  set('cad-aniv',  _profile?.birthday|| '');
+  document.getElementById('cad-bg').classList.add('on');
+}
+
+function closeCadastro() {
+  document.getElementById('cad-bg').classList.remove('on');
+}
+
+function closeCadastroFromSuccess() {
+  // fecha o success screen para abrir o cadastro por cima
+  document.getElementById('success-screen').classList.remove('show');
+  document.getElementById('cart-content').style.display = '';
+}
+
+function onCadPhoneInput() {
+  // Formata telefone enquanto digita
+  let v = document.getElementById('cad-phone').value.replace(/\D/g,'');
+  if (v.length > 11) v = v.slice(0,11);
+  if (v.length >= 7) {
+    v = v.length === 11
+      ? '(' + v.slice(0,2) + ') ' + v.slice(2,7) + '-' + v.slice(7)
+      : '(' + v.slice(0,2) + ') ' + v.slice(2,6) + '-' + v.slice(6);
+  } else if (v.length >= 3) {
+    v = '(' + v.slice(0,2) + ') ' + v.slice(2);
+  }
+  document.getElementById('cad-phone').value = v;
+}
+
+async function submitCadastro() {
+  const nome  = document.getElementById('cad-nome').value.trim();
+  const phone = document.getElementById('cad-phone').value.trim();
+  const email = document.getElementById('cad-email').value.trim();
+  const aniv  = document.getElementById('cad-aniv').value;
+  const err   = document.getElementById('cad-err');
+  const btn   = document.getElementById('cad-btn');
+
+  err.style.display = 'none';
+  if (!nome)  { err.textContent = 'Informe seu nome'; err.style.display = 'block'; return; }
+  if (!phone) { err.textContent = 'Informe seu WhatsApp'; err.style.display = 'block'; return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px;border-color:rgba(255,255,255,.3);border-top-color:#fff"></div> Salvando...';
+
+  try {
+    const payload = {
+      name: nome, phone, email: email||null,
+      birthday: aniv||null,
+      last_order_at: new Date().toISOString()
+    };
+
+    // Upsert pelo telefone
+    const { data: existing } = await sb.from('customers')
+      .select('id,orders_count,total_spent,addr').eq('phone', phone).maybeSingle();
+
+    let saved;
+    if (existing) {
+      const { data } = await sb.from('customers')
+        .update({ ...payload, addr: existing.addr })
+        .eq('id', existing.id).select().single();
+      saved = data;
+    } else {
+      const { data } = await sb.from('customers')
+        .insert({ ...payload, orders_count: 0, total_spent: 0 })
+        .select().single();
+      saved = data;
+    }
+
+    // Também cria/atualiza fidelidade
+    try {
+      const { data: fidEx } = await sb.from('fidelidade')
+        .select('id').eq('phone', phone).maybeSingle();
+      if (!fidEx) {
+        await sb.from('fidelidade').insert({ name: nome, phone, pts: 0, orders_count: 0 });
+      } else {
+        await sb.from('fidelidade').update({ name: nome }).eq('id', fidEx.id);
+      }
+    } catch(e) {}
+
+    _profile = saved || { ...payload };
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(_profile));
+
+    updateHeroProfile(_profile);
+    checkAniversario(_profile.birthday);
+
+    // Preenche form de checkout automaticamente
+    const set2 = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+    set2('f-name',  nome);
+    set2('f-phone', phone);
+
+    closeCadastro();
+    showToast('🎉', saved ? 'Cadastro atualizado!' : 'Bem-vindo, ' + nome.split(' ')[0] + '!');
+
+  } catch(e) {
+    console.error('submitCadastro:', e);
+    err.textContent = 'Erro ao salvar. Verifique sua conexão.';
+    err.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="cad-btn-txt">' + (_profile ? 'Atualizar dados' : 'Salvar cadastro') + '</span>';
+  }
 }
 
 
@@ -1463,6 +1739,7 @@ async function init() {
     renderMenu();
     checkPromos();
     subscribeStoreStatus();
+    loadProfile(); // carrega perfil cadastrado
   } catch(e) {
     console.error(e);
     renderMenuWrap('<div class="loading-wrap"><div style="font-size:32px">⚠️</div><span>Erro ao carregar cardápio. Tente novamente.</span></div>');
@@ -1827,22 +2104,47 @@ async function submitOrder() {
     // Save/update customer
     try {
       const { data: existing } = await sb.from('customers')
-        .select('id,orders_count,total_spent').eq('phone', phone).maybeSingle();
+        .select('id,orders_count,total_spent,email,birthday').eq('phone', phone).maybeSingle();
       if (existing) {
         await sb.from('customers').update({
           name, addr: addrFull || existing.addr,
+          email: _profile?.email || existing.email || null,
+          birthday: _profile?.birthday || existing.birthday || null,
           orders_count: (existing.orders_count||0)+1,
           total_spent: (parseFloat(existing.total_spent)||0)+grandTotal(),
           last_order_at: new Date().toISOString()
         }).eq('id', existing.id);
+        // Atualiza perfil local com dados do banco
+        if (!_profile) {
+          _profile = { ...existing, name, phone };
+          localStorage.setItem(PROFILE_KEY, JSON.stringify(_profile));
+          updateHeroProfile(_profile);
+        }
       } else {
-        await sb.from('customers').insert({
+        const { data: inserted } = await sb.from('customers').insert({
           name, phone, addr: addrFull||null,
+          email: _profile?.email || null,
+          birthday: _profile?.birthday || null,
           orders_count: 1, total_spent: grandTotal(),
           last_order_at: new Date().toISOString()
-        });
+        }).select().single();
         isNewCustomer = true;
+        // Se não tinha perfil, sugere cadastro completo
+        if (!_profile) {
+          _profile = inserted;
+          localStorage.setItem(PROFILE_KEY, JSON.stringify(_profile || { name, phone }));
+          updateHeroProfile({ name, phone });
+        }
       }
+      // Atualiza fidelidade
+      try {
+        const { data: fidEx } = await sb.from('fidelidade').select('id,pts,orders_count').eq('phone', phone).maybeSingle();
+        if (fidEx) {
+          await sb.from('fidelidade').update({ name, orders_count: (fidEx.orders_count||0)+1 }).eq('id', fidEx.id);
+        } else {
+          await sb.from('fidelidade').insert({ name, phone, pts: 0, orders_count: 1 });
+        }
+      } catch(e) {}
     } catch(e) { console.warn('Customer save skipped:', e); }
 
     // Insert order
@@ -1858,20 +2160,26 @@ async function submitOrder() {
     if (error) { showToast('❌','Erro ao enviar pedido.'); return; }
 
     // Show success
-    if (isNewCustomer) {
-      // Show register success briefly, then motoboy
+    if (isNewCustomer && !(_profile?.birthday || _profile?.email)) {
+      // Novo cliente sem cadastro completo — mostra tela de boas-vindas + convite para completar
       document.getElementById('cart-content').style.display = 'none';
       const ss = document.getElementById('success-screen');
       ss.classList.add('show');
       const regBox = document.getElementById('register-success-box');
       regBox.style.display = 'flex';
-      document.getElementById('register-name-confirm').textContent = '👤 ' + name + ' · ' + phone;
+      regBox.innerHTML = `
+        <div style="font-size:54px;margin-bottom:10px;animation:popIn .5s cubic-bezier(.34,1.56,.64,1) both">🎉</div>
+        <div style="font-family:'Syne',sans-serif;font-size:19px;font-weight:900;color:var(--green);margin-bottom:6px">Bem-vindo, ${name.split(' ')[0]}!</div>
+        <div style="font-size:12.5px;color:var(--muted);line-height:1.6;margin-bottom:14px">Pedido #${String(data.id).padStart(3,'0')} confirmado!<br>Quer salvar seu aniversário e receber ofertas?</div>
+        <button onclick="closeMotoboy();closeCadastroFromSuccess();openCadastro()" style="background:var(--accent);color:#fff;border:none;border-radius:12px;padding:11px 24px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">🎂 Completar meu cadastro</button>
+        <button onclick="regBox.style.display='none';showMotoboyAnimation(${data.id})" style="background:none;border:none;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:12.5px;cursor:pointer">Agora não</button>`;
       document.getElementById('success-id').textContent = '#' + String(data.id).padStart(3,'0');
-      // After 2.5s show motoboy
       setTimeout(() => {
-        regBox.style.display = 'none';
-        showMotoboyAnimation(data.id);
-      }, 2500);
+        if (regBox.style.display !== 'none') {
+          regBox.style.display = 'none';
+          showMotoboyAnimation(data.id);
+        }
+      }, 6000);
     } else {
       showMotoboyAnimation(data.id);
       document.getElementById('cart-content').style.display = 'none';
