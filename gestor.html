@@ -2010,8 +2010,7 @@ function subscribeOrders() {
       if (!ordersKanban.find(x => x.id === p.new.id)) {
         ordersKanban.unshift(mapOrder(p.new));
         renderKanban();
-        // If order has mesa_num, also refresh mesa page if active
-        if (p.new.mesa_num) _refreshMesaPageIfActive();
+        _refreshMesaPageIfActive(); // sempre atualiza a aba de mesas
         playOrderSound();
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
@@ -2022,18 +2021,27 @@ function subscribeOrders() {
     })
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, p => {
       const idx = ordersKanban.findIndex(x => x.id === p.new.id);
-      if (idx !== -1) { ordersKanban[idx] = mapOrder(p.new); renderKanban(); }
-      if (p.new.mesa_num) _refreshMesaPageIfActive();
+      if (idx !== -1) {
+        // Se foi finalizado/cancelado, remove do kanban local
+        if (['entregue', 'cancelado'].includes(p.new.status)) {
+          ordersKanban.splice(idx, 1);
+        } else {
+          ordersKanban[idx] = mapOrder(p.new);
+        }
+        renderKanban();
+      }
+      _refreshMesaPageIfActive(); // sempre atualiza a aba de mesas
     })
     .on('postgres_changes', {event:'DELETE', schema:'public', table:'orders'}, p => {
       ordersKanban = ordersKanban.filter(o => o.id !== p.old.id);
       renderKanban();
+      _refreshMesaPageIfActive();
     })
     .subscribe(status => {
       if (status === 'SUBSCRIBED') console.log('[RT] orders channel subscribed');
     });
 
-  // Subscribe to mesas changes
+  // Subscribe to mesas changes — qualquer alteração na tabela mesas
   sb.channel('mesas-rt')
     .on('postgres_changes', {event:'*', schema:'public', table:'mesas'}, () => {
       sb.from('mesas').select('*').order('num').then(({ data }) => {
