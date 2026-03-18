@@ -24,8 +24,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);hei
 .tnav-pill:hover{color:var(--text);border-color:rgba(255,255,255,.15)}
 .tnav-pill.on{background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.25);color:var(--success)}
 .tnr{display:flex;align-items:center;gap:8px;margin-left:auto}
-.caixa-btn{display:flex;align-items:center;gap:6px;background:var(--success);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
-.caixa-btn:hover{background:#16a34a}
+.caixa-btn{display:flex;align-items:center;gap:6px;background:var(--success);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .18s}
+.caixa-btn:hover{filter:brightness(1.1)}
+.caixa-btn.fechado{background:var(--surface2);border:1px solid var(--border);color:var(--muted)}
 .tbadge{display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11.5px;cursor:default;transition:border-color .18s}
 .tbadge .sdot{width:7px;height:7px;border-radius:50%;background:var(--success);animation:pulse 2s infinite;flex-shrink:0}
 @keyframes sb-spin{to{transform:rotate(360deg)}}
@@ -631,6 +632,10 @@ td:first-child{padding-left:16px}
     <button class="tnav-pill on" id="pill-status" onclick="toggleStatus()" title="Alternar status da loja">
       <div class="sdot" id="status-dot" style="background:var(--success)"></div>
       <span id="status-txt">Online</span>
+    </button>
+    <button class="caixa-btn" id="caixa-btn" onclick="toggleCaixa()" title="Abrir/Fechar Caixa">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8.5" r="2" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M4 6.5h.5M11.5 6.5H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <span id="caixa-btn-txt">Caixa aberto</span>
     </button>
     <div class="tbadge" id="rt-badge" title="Conexão em tempo real">
       <div class="sdot" id="rt-dot" style="background:var(--muted)"></div>
@@ -1487,7 +1492,7 @@ td:first-child{padding-left:16px}
   <div class="ph"><div><div class="pt">Controle de Caixa</div><div class="ps">Entradas, saídas e saldo do dia</div></div>
     <div style="display:flex;gap:7px">
       <button class="btn bg" onclick="openModal('modal-mov')">+ Registrar movimento</button>
-      <button class="btn bd" onclick="if(confirm('Fechar o caixa?')){showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><rect x=&quot;3&quot; y=&quot;8&quot; width=&quot;10&quot; height=&quot;7&quot; rx=&quot;1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M5 8V5.5a3 3 0 0 1 6 0V8&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>','Caixa fechado!')}"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="8" width="10" height="7" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 8V5.5a3 3 0 0 1 6 0V8" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Fechar Caixa</button>
+      <button class="btn bd" onclick="toggleCaixa()"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="8" width="10" height="7" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 8V5.5a3 3 0 0 1 6 0V8" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Fechar Caixa</button>
     </div>
   </div>
   <div class="sg">
@@ -2140,7 +2145,7 @@ async function loadAllData() {
 
     const [
       itemsRes, catsRes, ordersRes, movsRes,
-      cuponsRes, mesasRes, estoqueRes, fidRes
+      cuponsRes, mesasRes, estoqueRes, fidRes, cfgRes
     ] = await Promise.all([
       safe(sb.from('menu_items').select('*').order('id')),
       safe(sb.from('categories').select('*').order('sort_order')),
@@ -2149,7 +2154,8 @@ async function loadAllData() {
       safe(sb.from('cupons').select('*').order('id')),
       safe(sb.from('mesas').select('*').order('num')),
       safe(sb.from('estoque').select('*').order('id')),
-      safe(sb.from('fidelidade').select('*').order('pts',{ascending:false}))
+      safe(sb.from('fidelidade').select('*').order('pts',{ascending:false})),
+      safe(sb.from('store_config').select('caixa_open,store_open').eq('id',1).single())
     ]);
 
     if (itemsRes.data?.length)    items         = itemsRes.data.map(mapItem);
@@ -2182,6 +2188,18 @@ async function loadAllData() {
 
     // Set orderIdSeq above DB max
     if (ordersKanban.length) orderIdSeq = Math.max(...ordersKanban.map(o=>o.id)) + 1;
+
+    // Aplica estado do caixa e loja
+    if (cfgRes.data) {
+      setCaixaState(cfgRes.data.caixa_open !== false); // default aberto se null
+      const stOpen = cfgRes.data.store_open !== false;
+      const st   = document.getElementById('status-txt');
+      const dot  = document.getElementById('status-dot');
+      const pill = document.getElementById('pill-status');
+      if (st)   st.textContent = stOpen ? 'Online' : 'Offline';
+      if (dot)  dot.style.background  = stOpen ? 'var(--success)' : 'var(--danger)';
+      if (pill) { pill.style.background = stOpen ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'; pill.style.borderColor = stOpen ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'; pill.style.color = stOpen ? 'var(--success)' : 'var(--danger)'; }
+    }
 
     await loadFidConfig();
     subscribeOrders();
@@ -5002,7 +5020,47 @@ function testPrint() {
 // ─────────────────────────────────────────
 // CAIXA
 // ─────────────────────────────────────────
-function renderCaixa(){
+// ─────────────────────────────────────────
+// CAIXA — abrir / fechar
+// ─────────────────────────────────────────
+let _caixaAberto = true;
+
+function setCaixaState(aberto) {
+  _caixaAberto = aberto;
+  const btn = document.getElementById('caixa-btn');
+  const txt = document.getElementById('caixa-btn-txt');
+  if (!btn || !txt) return;
+  if (aberto) {
+    btn.classList.remove('fechado');
+    txt.textContent = 'Caixa aberto';
+  } else {
+    btn.classList.add('fechado');
+    txt.textContent = 'Caixa fechado';
+  }
+}
+
+async function toggleCaixa() {
+  const novoEstado = !_caixaAberto;
+  if (novoEstado) {
+    // Abrir caixa
+    setCaixaState(true);
+    sbToast('ok', '🟢 Caixa aberto!');
+    try { await sb.from('store_config').upsert({ id: 1, caixa_open: true }); }
+    catch(e) { console.warn('caixa sync:', e); }
+    nav('caixa');
+  } else {
+    // Pedir confirmação para fechar
+    if (!confirm('Fechar o caixa agora?\n\nIsso registrará o fechamento mas não apaga os movimentos do dia.')) return;
+    setCaixaState(false);
+    const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    sbToast('ok', '🔒 Caixa fechado às ' + time);
+    try {
+      await sb.from('store_config').upsert({ id: 1, caixa_open: false });
+    } catch(e) { console.warn('caixa sync:', e); }
+  }
+}
+
+
   const entradas=movimentos.filter(m=>m.tipo==='entrada').reduce((s,m)=>s+m.val,0);
   const saidas=movimentos.filter(m=>m.tipo==='saida').reduce((s,m)=>s+m.val,0);
   const saldo=entradas-saidas;
