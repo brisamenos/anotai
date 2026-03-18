@@ -727,8 +727,55 @@ body {
 .total-row .val { color: var(--text); }
 .total-row.disc .val { color: var(--green); }
 
-/* checkout form */
-.form-section { margin-top: 18px; }
+/* ── MOBILE FIX ───────────────────────── */
+@media(max-width:480px) {
+  .drawer { border-radius: 16px 16px 0 0; max-height: 95vh; }
+  .form-row2 { grid-template-columns: 1fr; gap: 0; }
+  .delivery-tabs { gap: 2px; }
+  .dtab { font-size: 12px; padding: 7px 4px; }
+  .pay-opts { gap: 6px; }
+  .pay-opt { min-width: 70px; font-size: 11px; padding: 8px 6px; }
+  .drawer-body { padding: 14px 16px; }
+  .drawer-foot { padding: 12px 16px 16px; }
+  .confirm-btn { font-size: 14px; padding: 13px; }
+  .cart-item { gap: 8px; }
+  .ci-thumb { width: 42px; height: 42px; font-size: 18px; }
+  .qty-row { gap: 6px; }
+  .qb { width: 24px; height: 24px; }
+  .form-input { font-size: 16px; /* prevents zoom on iOS */ }
+}
+
+/* ── ADDRESS SECTION ─────────────────── */
+.addr-section { margin-top: 14px; }
+.addr-cep-row { display: flex; gap: 8px; margin-bottom: 0; }
+.addr-cep-row .form-input { margin-bottom: 0; flex: 1; }
+.addr-cep-btn {
+  background: var(--accent); color: #fff; border: none;
+  border-radius: 10px; padding: 0 16px; font-family: 'DM Sans', sans-serif;
+  font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  transition: background .15s; flex-shrink: 0;
+}
+.addr-cep-btn:hover { background: #2563eb; }
+.addr-cep-btn:disabled { opacity: .5; cursor: not-allowed; }
+.addr-auto-filled {
+  background: rgba(34,197,94,.07); border: 1px solid rgba(34,197,94,.2);
+  border-radius: 10px; padding: 10px 14px; margin: 8px 0;
+  font-size: 12px; color: var(--green); display: none;
+}
+.addr-auto-filled.show { display: block; }
+
+/* ── REGISTER SUCCESS ─────────────────── */
+.register-success {
+  display: none; flex-direction: column; align-items: center;
+  padding: 32px 20px; text-align: center;
+  animation: fadeIn .4s ease;
+}
+.register-success.show { display: flex; }
+.register-success-icon { font-size: 56px; margin-bottom: 14px; animation: popIn .5s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes popIn { from{transform:scale(0)} to{transform:scale(1)} }
+.register-success-title { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 900; color: var(--green); margin-bottom: 8px; }
+.register-success-sub { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.register-success-btn { margin-top: 20px; background: var(--accent); color: #fff; border: none; border-radius: 12px; padding: 12px 28px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; }
 .form-label {
   font-size: 11px;
   font-weight: 600;
@@ -1139,14 +1186,29 @@ body {
         <!-- FORM -->
         <div class="form-section">
           <label class="form-label">Seus dados</label>
-          <input class="form-input" id="f-name" placeholder="Seu nome *" required>
-          <input class="form-input" id="f-phone" placeholder="WhatsApp (opcional)">
+          <input class="form-input" id="f-name" placeholder="Seu nome *" required autocomplete="name">
+          <input class="form-input" id="f-phone" placeholder="WhatsApp *" required autocomplete="tel" inputmode="tel">
 
+          <!-- DELIVERY ADDRESS -->
           <div id="addr-block">
-            <input class="form-input" id="f-addr" placeholder="Endereço completo *">
+            <div class="addr-cep-row">
+              <input class="form-input" id="f-cep" placeholder="CEP *" maxlength="9" inputmode="numeric" oninput="maskCep(this)" onblur="fetchCep()">
+              <button class="addr-cep-btn" id="cep-btn" onclick="fetchCep()" type="button">Buscar</button>
+            </div>
+            <div class="addr-auto-filled" id="addr-filled-hint"></div>
+            <div class="form-row2" style="margin-top:8px">
+              <input class="form-input" id="f-street" placeholder="Rua / Avenida *" autocomplete="street-address">
+              <input class="form-input" id="f-num" placeholder="Número *" inputmode="numeric">
+            </div>
+            <input class="form-input" id="f-comp" placeholder="Complemento (apto, bloco...)">
+            <input class="form-input" id="f-bairro" placeholder="Bairro">
+            <div class="form-row2">
+              <input class="form-input" id="f-city" placeholder="Cidade" readonly style="opacity:.7">
+              <input class="form-input" id="f-state" placeholder="UF" readonly style="opacity:.7;width:70px">
+            </div>
           </div>
           <div id="mesa-block" style="display:none">
-            <input class="form-input" id="f-mesa" type="number" placeholder="Número da mesa *" min="1">
+            <input class="form-input" id="f-mesa" type="number" placeholder="Número da mesa *" min="1" inputmode="numeric">
           </div>
 
           <label class="form-label">Pagamento</label>
@@ -1168,9 +1230,17 @@ body {
 
     <!-- SUCCESS -->
     <div class="success-screen" id="success-screen">
-      <div class="success-icon">🎉</div>
+      <!-- Register success -->
+      <div class="register-success" id="register-success-box" style="display:none;flex-direction:column;align-items:center;padding:24px 20px;text-align:center">
+        <div style="font-size:54px;margin-bottom:10px;animation:popIn .5s cubic-bezier(.34,1.56,.64,1) both">🎉</div>
+        <div style="font-family:'Syne',sans-serif;font-size:19px;font-weight:900;color:var(--green);margin-bottom:6px">Cadastro concluído!</div>
+        <div style="font-size:12.5px;color:var(--muted);line-height:1.6;margin-bottom:16px">Seus dados foram salvos.<br>Na próxima compra tudo já estará preenchido!</div>
+        <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:10px 20px;font-size:13px;color:var(--green);font-weight:600" id="register-name-confirm"></div>
+      </div>
+      <!-- Order number -->
+      <div class="success-icon" id="success-icon-el">🎉</div>
       <div class="success-title">Pedido Enviado!</div>
-      <div class="success-sub">Seu pedido foi recebido e está sendo preparado com carinho.</div>
+      <div class="success-sub">Seu pedido foi recebido e está<br>sendo preparado com carinho.</div>
       <div class="success-num">
         <span>Número do pedido</span>
         <span id="success-id">#000</span>
@@ -1640,105 +1710,110 @@ function applyCupom() {
 async function submitOrder() {
   const name  = document.getElementById('f-name').value.trim();
   const phone = document.getElementById('f-phone').value.trim();
-  const addr  = deliveryType === 'delivery'  ? document.getElementById('f-addr').value.trim() : '';
-  const mesa  = deliveryType === 'mesa'      ? document.getElementById('f-mesa').value.trim()  : '';
+  const mesa  = deliveryType === 'mesa' ? document.getElementById('f-mesa').value.trim() : '';
 
-  if (!name) { showToast('⚠️', 'Informe seu nome'); return; }
-  if (deliveryType === 'delivery' && !addr) { showToast('⚠️', 'Informe o endereço de entrega'); return; }
-  if (deliveryType === 'mesa' && !mesa) { showToast('⚠️', 'Informe o número da mesa'); return; }
-  if (cart.length === 0) { showToast('⚠️', 'Carrinho vazio'); return; }
+  if (!name)  { showToast('⚠️','Informe seu nome'); return; }
+  if (!phone) { showToast('⚠️','Informe seu WhatsApp'); return; }
+  if (deliveryType === 'mesa' && !mesa) { showToast('⚠️','Informe o número da mesa'); return; }
+  if (cart.length === 0) { showToast('⚠️','Carrinho vazio'); return; }
+
+  let addrFull = '';
+  if (deliveryType === 'delivery') {
+    const street = document.getElementById('f-street').value.trim();
+    const num    = document.getElementById('f-num').value.trim();
+    if (!street) { showToast('⚠️','Informe o nome da rua'); return; }
+    if (!num)    { showToast('⚠️','Informe o número'); return; }
+    addrFull = buildAddrFull();
+  } else if (deliveryType === 'mesa') {
+    addrFull = 'Mesa ' + mesa;
+  } else {
+    addrFull = 'Retirada no balcão';
+  }
 
   const btn = document.getElementById('confirm-btn');
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner" style="width:20px;height:20px;border-width:2px"></div> Enviando…';
 
-  const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  const addrFull = deliveryType === 'mesa' ? `Mesa ${mesa}` : (deliveryType === 'retirada' ? 'Retirada no balcão' : addr);
-
-  const itemsArr = cart.map(i => ({
-    qty: i.qty, name: i.name, price: i.price, obs: ''
-  }));
+  const time     = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const itemsArr = cart.map(i => ({qty:i.qty, name:i.name, price:i.price, obs:''}));
+  let isNewCustomer = false;
 
   try {
-    // 1. Save/update customer in DB (non-blocking - don't let it fail the order)
-    if (name) {
-      try {
-        const { data: existingCustomer } = await sb.from('customers')
-          .select('id, orders_count, total_spent')
-          .eq('phone', phone || name)
-          .maybeSingle();
-
-        if (existingCustomer) {
-          await sb.from('customers').update({
-            name,
-            addr: addrFull || existingCustomer.addr,
-            orders_count: (existingCustomer.orders_count || 0) + 1,
-            total_spent: (parseFloat(existingCustomer.total_spent) || 0) + grandTotal(),
-            last_order_at: new Date().toISOString()
-          }).eq('id', existingCustomer.id);
-        } else {
-          await sb.from('customers').insert({
-            name,
-            phone: phone || null,
-            addr: addrFull || null,
-            orders_count: 1,
-            total_spent: grandTotal(),
-            last_order_at: new Date().toISOString()
-          });
-        }
-      } catch(custErr) {
-        console.warn('Customer save skipped:', custErr);
-        // Don't block - customer table may not exist yet
+    // Save/update customer
+    try {
+      const { data: existing } = await sb.from('customers')
+        .select('id,orders_count,total_spent').eq('phone', phone).maybeSingle();
+      if (existing) {
+        await sb.from('customers').update({
+          name, addr: addrFull || existing.addr,
+          orders_count: (existing.orders_count||0)+1,
+          total_spent: (parseFloat(existing.total_spent)||0)+grandTotal(),
+          last_order_at: new Date().toISOString()
+        }).eq('id', existing.id);
+      } else {
+        await sb.from('customers').insert({
+          name, phone, addr: addrFull||null,
+          orders_count: 1, total_spent: grandTotal(),
+          last_order_at: new Date().toISOString()
+        });
+        isNewCustomer = true;
       }
-    }
+    } catch(e) { console.warn('Customer save skipped:', e); }
 
-    // 2. Insert the order
+    // Insert order
     const { data, error } = await sb.from('orders').insert({
-      client: name,
-      phone:  phone || null,
-      addr:   addrFull,
-      items:  itemsArr,
-      total:  grandTotal(),
-      taxa:   getTaxa(),
-      status: 'analise',
-      time,
-      pag:    selectedPay
+      client: name, phone, addr: addrFull,
+      items: itemsArr, total: grandTotal(), taxa: getTaxa(),
+      status: 'analise', time, pag: selectedPay
     }).select().single();
 
     btn.disabled = false;
-    btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar Pedido`;
+    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar Pedido';
 
-    if (error) {
-      console.error(error);
-      showToast('❌', 'Erro ao enviar pedido. Tente novamente.');
-      return;
+    if (error) { showToast('❌','Erro ao enviar pedido.'); return; }
+
+    // Show success
+    if (isNewCustomer) {
+      // Show register success briefly, then motoboy
+      document.getElementById('cart-content').style.display = 'none';
+      const ss = document.getElementById('success-screen');
+      ss.classList.add('show');
+      const regBox = document.getElementById('register-success-box');
+      regBox.style.display = 'flex';
+      document.getElementById('register-name-confirm').textContent = '👤 ' + name + ' · ' + phone;
+      document.getElementById('success-id').textContent = '#' + String(data.id).padStart(3,'0');
+      // After 2.5s show motoboy
+      setTimeout(() => {
+        regBox.style.display = 'none';
+        showMotoboyAnimation(data.id);
+      }, 2500);
+    } else {
+      showMotoboyAnimation(data.id);
+      document.getElementById('cart-content').style.display = 'none';
+      document.getElementById('success-screen').classList.add('show');
+      document.getElementById('success-id').textContent = '#' + String(data.id).padStart(3,'0');
     }
 
-    // Show motoboy animation instead of success screen
-    showMotoboyAnimation(data.id);
-    document.getElementById('cart-content').style.display = 'none';
-    document.getElementById('success-screen').classList.add('show');
-    document.getElementById('success-id').textContent = '#' + String(data.id).padStart(3, '0');
-    cart = [];
-    appliedCupom = null;
-    updateCartFloat();
+    cart = []; appliedCupom = null; updateCartFloat();
 
   } catch(err) {
     console.error(err);
     btn.disabled = false;
-    btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar Pedido`;
-    showToast('❌', 'Erro inesperado. Tente novamente.');
+    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar Pedido';
+    showToast('❌','Erro inesperado. Tente novamente.');
   }
 }
 
 function resetOrder() {
   document.getElementById('cart-content').style.display = '';
   document.getElementById('success-screen').classList.remove('show');
-  document.getElementById('f-name').value  = '';
-  document.getElementById('f-phone').value = '';
-  document.getElementById('f-addr').value  = '';
-  document.getElementById('f-mesa').value  = '';
-  document.getElementById('cupom-input').value  = '';
+  document.getElementById('register-success-box').style.display = 'none';
+  ['f-name','f-phone','f-cep','f-street','f-num','f-comp','f-bairro','f-mesa'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value='';
+  });
+  ['f-city','f-state'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('addr-filled-hint').classList.remove('show');
+  document.getElementById('cupom-input').value = '';
   document.getElementById('cupom-feedback').innerHTML = '';
   renderCartDrawer();
   closeCart();
@@ -2177,7 +2252,44 @@ function addUpsellItem(id) {
 function closeUpsell() {
   document.getElementById('upsell-overlay').classList.remove('show');
 }
-function removeCartItem(id) {
+// ═══════════════════════════════════════════════
+// CEP AUTO-FILL (ViaCEP)
+// ═══════════════════════════════════════════════
+function maskCep(el) {
+  let v = el.value.replace(/\D/g,'').slice(0,8);
+  if (v.length > 5) v = v.slice(0,5)+'-'+v.slice(5);
+  el.value = v;
+}
+
+async function fetchCep() {
+  const cep = document.getElementById('f-cep').value.replace(/\D/g,'');
+  if (cep.length !== 8) return;
+  const btn = document.getElementById('cep-btn');
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const r = await fetch('https://viacep.com.br/ws/'+cep+'/json/');
+    const d = await r.json();
+    if (d.erro) { showToast('⚠️','CEP não encontrado'); return; }
+    document.getElementById('f-street').value = d.logradouro||'';
+    document.getElementById('f-bairro').value  = d.bairro||'';
+    document.getElementById('f-city').value    = d.localidade||'';
+    document.getElementById('f-state').value   = d.uf||'';
+    const hint = document.getElementById('addr-filled-hint');
+    hint.textContent = '📍 '+d.logradouro+', '+d.bairro+' — '+d.localidade+'/'+d.uf;
+    hint.classList.add('show');
+    document.getElementById('f-num').focus();
+  } catch(e) { showToast('⚠️','Erro ao buscar CEP'); }
+  finally { btn.disabled=false; btn.textContent='Buscar'; }
+}
+
+function buildAddrFull() {
+  const s = (id) => document.getElementById(id)?.value.trim()||'';
+  return [s('f-street'),s('f-num'),s('f-comp'),s('f-bairro'),s('f-city'),s('f-state'),s('f-cep')].filter(Boolean).join(', ');
+}
+
+// ═══════════════════════════════════════════════
+// REMOVER ITEM DO CARRINHO
+// ═══════════════════════════════════════════════
   const item = cart.find(c => c.id === id);
   if (!item) return;
   const el = document.getElementById('cart-item-' + id);
