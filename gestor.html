@@ -1387,19 +1387,11 @@ td:first-child{padding-left:16px}
           <div class="card-title" style="margin-bottom:14px">⚙️ Configuração da Instância</div>
           <div class="form-row">
             <label class="form-label">Nome da instância</label>
-            <input class="form-input" id="evo-instance" placeholder="estima-food" value="estima-food">
+            <input class="form-input" id="evo-instance" placeholder="ex: estima-food" value="estima-food">
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">Identificador único da sua conexão WhatsApp</div>
           </div>
-          <div class="form-row">
-            <label class="form-label">URL da Evolution API</label>
-            <input class="form-input" id="evo-url" value="https://projeto-evolution-api.xtknqq.easypanel.host" placeholder="https://...">
-          </div>
-          <div class="form-row">
-            <label class="form-label">API Key</label>
-            <input class="form-input" id="evo-apikey" value="429683C4C977415CAAFCCE10F7D57E11" type="password" placeholder="Sua API Key">
-            <div style="margin-top:4px;display:flex;gap:5px">
-              <button class="btn bg" style="font-size:11px;padding:3px 9px" onclick="document.getElementById('evo-apikey').type=document.getElementById('evo-apikey').type==='password'?'text':'password'">👁 Ver</button>
-            </div>
-          </div>
+          <input type="hidden" id="evo-url" value="https://projeto-evolution-api.xtknqq.easypanel.host">
+          <input type="hidden" id="evo-apikey" value="429683C4C977415CAAFCCE10F7D57E11">
           <div style="display:flex;gap:8px;margin-top:4px">
             <button class="btn bp" style="flex:1;justify-content:center" onclick="evoCriarInstancia()">➕ Criar instância</button>
             <button class="btn bg" style="flex:1;justify-content:center" onclick="evoCheckStatus()">🔍 Verificar</button>
