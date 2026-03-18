@@ -2803,6 +2803,7 @@ else { _carregarPlano(); } // Busca plano real do servidor (ignora cache da sess
 // Não precisa mais do proxy manual — sb já funciona com multi-tenant.
 
 // ── Loading overlay ──────────────────────────────────
+let _sbLoadingTimer = null;
 function sbLoading(show) {
   let el = document.getElementById('sb-loading');
   if (!el && show) {
@@ -2815,6 +2816,15 @@ function sbLoading(show) {
     document.body.appendChild(el);
   }
   if (el) el.style.display = show ? 'flex' : 'none';
+  // Timeout de segurança — força fechar após 8s para nunca ficar preso
+  if (_sbLoadingTimer) { clearTimeout(_sbLoadingTimer); _sbLoadingTimer = null; }
+  if (show) {
+    _sbLoadingTimer = setTimeout(() => {
+      const e = document.getElementById('sb-loading');
+      if (e) e.style.display = 'none';
+      _sbLoadingTimer = null;
+    }, 8000);
+  }
 }
 
 // ── Mapper helpers ───────────────────────────────────
