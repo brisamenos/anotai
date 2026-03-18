@@ -710,3 +710,93 @@ td:first-child{padding-left:16px}
 
 
 #page-tema.on,#page-cardapio-publico.on{display:flex!important}
+
+/* ══ SIDEBAR HOVER-EXPAND ═══════════════════════════════════ */
+:root{ --sw-collapsed:52px; }
+
+.sidebar{
+  width:var(--sw-collapsed);
+  transition:width .22s cubic-bezier(.4,0,.2,1),box-shadow .22s;
+  position:relative;
+}
+.sidebar:hover,.sidebar.pinned{
+  width:var(--sw);
+  box-shadow:4px 0 28px rgba(0,0,0,.5);
+  z-index:100;
+}
+
+/* Tudo que some quando colapsado */
+.sidebar-search,
+.shead,.shead-arrow,.sbc,
+.ssub,
+.si-lbl,
+.sfoot-info
+{ opacity:0; width:0; overflow:hidden; transition:opacity .12s,width 0s .22s; pointer-events:none; }
+
+.sidebar:hover .sidebar-search,
+.sidebar.pinned .sidebar-search,
+.sidebar:hover .shead,
+.sidebar.pinned .shead,
+.sidebar:hover .shead-arrow,
+.sidebar.pinned .shead-arrow,
+.sidebar:hover .sbc,
+.sidebar.pinned .sbc,
+.sidebar:hover .ssub,
+.sidebar.pinned .ssub,
+.sidebar:hover .si-lbl,
+.sidebar.pinned .si-lbl,
+.sidebar:hover .sfoot-info,
+.sidebar.pinned .sfoot-info
+{ opacity:1; width:auto; transition:opacity .18s .1s,width 0s; pointer-events:auto; }
+
+/* Ícone pin */
+.sb-pin{
+  position:absolute;top:8px;right:6px;
+  width:22px;height:22px;border-radius:6px;
+  background:var(--surface2);border:1px solid var(--border);
+  display:none;align-items:center;justify-content:center;
+  cursor:pointer;font-size:12px;color:var(--muted);
+  transition:all .15s;z-index:10;
+}
+.sidebar:hover .sb-pin,.sidebar.pinned .sb-pin{ display:flex; }
+.sb-pin:hover{ color:var(--accent);border-color:var(--accent); }
+.sidebar.pinned .sb-pin{ color:var(--accent);border-color:var(--accent);background:rgba(59,130,246,.12); }
+
+/* Manter grupos visíveis no estado colapsado (só ícones) */
+.sidebar:not(:hover):not(.pinned) .sidebar-group{ max-height:1000px!important;opacity:1!important; }
+
+/* Esconde texto dos botões .si quando colapsado — sem alterar HTML */
+/* O SVG fica, o texto (nó de texto) some via font-size 0 + width */
+.sidebar:not(:hover):not(.pinned) .si{
+  font-size:0;
+  justify-content:center;
+  padding:8px;
+  gap:0;
+}
+.sidebar:not(:hover):not(.pinned) .si svg{
+  width:16px; height:16px; flex-shrink:0;
+}
+.sidebar:not(:hover):not(.pinned) .si .sbc{
+  position:absolute; top:2px; right:2px;
+  font-size:7px; min-width:12px; height:12px; padding:0 2px;
+}
+.sidebar:not(:hover):not(.pinned) .si .sbc{ opacity:1!important; width:auto!important; }
+.sidebar:not(:hover):not(.pinned) .ssub{ display:none; }
+.sidebar:not(:hover):not(.pinned) .shead{ 
+  font-size:0; padding:4px 8px;
+  border-bottom:1px solid var(--border);
+  margin-bottom:2px;
+}
+.sidebar:hover .si,
+.sidebar.pinned .si{ font-size:12.5px; justify-content:flex-start; padding:7px 8px; gap:8px; }
+.sidebar:hover .shead,
+.sidebar.pinned .shead{ font-size:9.5px; padding:8px 8px 3px; }
+
+/* Footer collapse */
+.sidebar:not(:hover):not(.pinned) .urow{ justify-content:center; padding:7px 8px; }
+.sidebar:not(:hover):not(.pinned) .sfoot-info{ display:none; }
+.sidebar:hover .urow,.sidebar.pinned .urow{ justify-content:flex-start; padding:7px 8px; }
+.sidebar:hover .sfoot-info,.sidebar.pinned .sfoot-info{ display:flex; }
+
+/* Topnav logo — não muda com sidebar */
+.logo{ min-width:160px; }
