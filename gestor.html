@@ -4397,9 +4397,10 @@ function openRegistrarPagamento(num, totalJaCalculado) {
 async function confirmarPagamentoMesa() {
   const num   = parseInt(document.getElementById('modal-pag-mesa-num').value);
   const forma = document.getElementById('modal-pag-forma').value;
-  const t     = tables.find(x=>x.num===num);
-  if (!t) return;
-  // Usar o total mostrado no modal (já calculado a partir dos pedidos reais)
+  // parseInt nos dois lados para evitar falha de comparação string vs number
+  const t = tables.find(x => parseInt(x.num) === num);
+  if (!t) { sbToast('err', 'Mesa não encontrada'); return; }
+
   const totalStr = document.getElementById('modal-pag-total').textContent || 'R$ 0,00';
   const totalVal = parseFloat(totalStr.replace('R$ ','').replace(',','.')) || 0;
   const time     = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -4407,38 +4408,41 @@ async function confirmarPagamentoMesa() {
   sbLoading(true);
   try {
     // 1. Finalizar todos os pedidos da mesa
-    const { error: ordErr2 } = await sb.from('orders')
+    const { error: ordErr } = await sb.from('orders')
       .update({ status: 'entregue' })
       .eq('mesa_num', num)
       .neq('status', 'entregue');
-    if (ordErr2) throw ordErr2;
+    if (ordErr) { console.error('orders update error:', ordErr); throw ordErr; }
 
-    // 2. Liberar mesa — updated_at vai pra NOW() pra resetar o marco de sessão
-    await sb.from('mesas').update({
+    // 2. Liberar mesa
+    const { error: mesaErr } = await sb.from('mesas').update({
       status: 'free', total: null, pag_forma: null,
       guests: null, updated_at: new Date().toISOString()
     }).eq('num', num);
+    if (mesaErr) { console.error('mesas update error:', mesaErr); throw mesaErr; }
 
-    // 3. Registrar entrada no caixa
-    await sb.from('movimentos').insert({
+    // 3. Registrar entrada no caixa (não-fatal — mesa libera mesmo se falhar)
+    const { error: movErr } = await sb.from('movimentos').insert({
       description: `Mesa ${num} — Pagamento`,
-      tipo: 'entrada', val: totalVal, pag: forma, time,
-      created_at: new Date().toISOString()
+      tipo: 'entrada', val: totalVal, pag: forma, time
     });
+    if (movErr) console.warn('movimentos insert warning (não-fatal):', movErr);
 
     // Atualizar estado local e cache
     t.status = 'free'; t.total = null; t.guests = null;
-    ordersKanban = ordersKanban.filter(o => o.addr !== `Mesa ${num}` && o.mesa_num !== num);
+    ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== num);
     mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== num);
-    tables.sort((a,b)=>a.num-b.num);
+    tables.sort((a,b) => parseInt(a.num) - parseInt(b.num));
     closeModal('modal-pag-mesa');
     _renderMesaPageFromCache();
     renderKanban();
     renderQR();
-    sbToast('ok', `Mesa ${num} liberada — R$ ${totalVal.toFixed(2).replace('.',',')} registrado no caixa!`);
+    const caixaMsg = movErr ? ' (caixa não registrado — verifique)' : ' registrado no caixa!';
+    sbToast('ok', `Mesa ${num} liberada — R$ ${totalVal.toFixed(2).replace('.',',')}${caixaMsg}`);
   } catch(e) {
-    sbToast('err', 'Erro ao registrar pagamento');
-    console.error(e);
+    console.error('confirmarPagamentoMesa error:', e);
+    const msg = e?.message || e?.details || e?.hint || JSON.stringify(e);
+    sbToast('err', 'Erro: ' + msg);
   } finally {
     sbLoading(false);
   }
