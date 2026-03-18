@@ -796,7 +796,7 @@ function subscribeRealtime() {
       } else if (p.eventType === 'UPDATE') {
         const idx = myOrders.findIndex(o => o.id === p.new.id);
         if (idx !== -1) {
-          if (p.new.status === 'cancelado') {
+          if (['entregue','cancelado'].includes(p.new.status)) {
             myOrders.splice(idx, 1);
           } else {
             myOrders[idx] = p.new;
@@ -830,6 +830,15 @@ document.addEventListener('visibilitychange', () => {
     if (!_rtConnected) subscribeRealtime();
   }
 });
+
+// Polling de 8s como fallback (complementa o WebSocket)
+setInterval(() => {
+  if (!currentGarcom || document.visibilityState !== 'visible') return;
+  sb.from('mesas').select('*').order('num').then(({ data }) => {
+    if (data) { tables = data; renderMesas(); }
+  });
+  loadPedidosDaMesa();
+}, 8000);
 
 // Registra SW ao carregar a página
 registerSW();
@@ -877,12 +886,14 @@ async function openPedido(num) {
   updateCartUI();
   switchSheetTab('itens');
   const mesa = tables.find(t => t.num === num);
-  // Sempre reseta o updated_at ao abrir a mesa — este é o marco zero da sessão.
-  // Garante que pedidos de sessões anteriores não apareçam mesmo se não foram
-  // finalizados corretamente.
   const now = new Date().toISOString();
-  await sb.from('mesas').update({ status: 'busy', updated_at: now }).eq('num', num);
-  if (mesa) { mesa.status = 'busy'; mesa.updated_at = now; }
+  // opened_at = marco zero da sessão, só grava ao abrir mesa livre
+  // updated_at sempre atualiza para manter sincronismo
+  const updatePayload = mesa?.status === 'free'
+    ? { status: 'busy', opened_at: now, updated_at: now }
+    : { status: 'busy', updated_at: now };
+  await sb.from('mesas').update(updatePayload).eq('num', num);
+  if (mesa) { mesa.status = 'busy'; mesa.updated_at = now; if (mesa.status === 'free') mesa.opened_at = now; }
   renderMesas();
   document.getElementById('sheet-pedido').classList.add('on');
 }
@@ -1133,9 +1144,9 @@ async function loadPedidosDaMesa() {
     // Isso garante que ao reabrir uma mesa o histórico anterior não acumula.
     myOrders = (data || []).filter(o => {
       const mesa = activeMesas.find(t => t.num === o.mesa_num);
-      if (!mesa || !mesa.updated_at) return true;
-      const orderTime = new Date(o.created_at || 0).getTime();
-      const mesaOpenTime = new Date(mesa.updated_at).getTime();
+      if (!mesa || !mesa.opened_at) return true;
+      const orderTime    = new Date(o.created_at || 0).getTime();
+      const mesaOpenTime = new Date(mesa.opened_at).getTime();
       return orderTime >= mesaOpenTime - 5000; // 5s de tolerância
     });
 
@@ -1274,11 +1285,11 @@ async function confirmarFinalizarMesa() {
   const orders = myOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === finalizarMesaNum);
   const total  = orders.reduce((s,o)=>s+parseFloat(o.total||0),0);
   try {
-    // 1. Finaliza TODOS os pedidos da mesa sem filtro de status
+    // 1. Finaliza os pedidos ativos da mesa
     await sb.from('orders')
-      .update({ status: 'cancelado' })
+      .update({ status: 'entregue' })
       .eq('mesa_num', finalizarMesaNum)
-      .neq('status', 'entregue');
+      .in('status', ['analise', 'producao', 'pronto']);
 
     // 2. Marca mesa como aguardando pagamento
     await sb.from('mesas').update({
@@ -1286,6 +1297,7 @@ async function confirmarFinalizarMesa() {
       total: 'R$ ' + total.toFixed(2).replace('.',','),
       pag_forma: finalizarPay,
       updated_at: new Date().toISOString()
+      // opened_at mantém — sessão ainda ativa até gestor confirmar pagamento
     }).eq('num', finalizarMesaNum);
 
     closeFinalizarMesa();
