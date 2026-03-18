@@ -141,7 +141,11 @@ body {
   gap: 8px;
   overflow-x: auto;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+  cursor: grab;
 }
+.cats-scroll:active { cursor: grabbing; }
 .cats-scroll::-webkit-scrollbar { display: none; }
 .cat-tab {
   flex-shrink: 0;
@@ -1036,7 +1040,7 @@ body {
     <div class="pz-header">
       <div style="font-size:44px;margin-bottom:6px">🍕</div>
       <div class="pz-title" id="pz-pizza-name">Monte sua Pizza</div>
-      <div class="pz-sub">Escolha quantos sabores você quer</div>
+      <div class="pz-sub" id="pz-sub">Escolha quantos sabores você quer</div>
     </div>
 
     <!-- Quantos sabores -->
@@ -1785,6 +1789,23 @@ function itemModalConfirm() {
 // START
 // ═══════════════════════════════════════════════
 init();
+(function() {
+  const el = document.getElementById('cats-scroll');
+  if (!el) return;
+  let isDown = false, startX, scrollLeft;
+  el.addEventListener('mousedown', e => {
+    isDown = true; startX = e.pageX - el.offsetLeft; scrollLeft = el.scrollLeft;
+    el.style.cursor = 'grabbing';
+  });
+  el.addEventListener('mouseleave', () => { isDown = false; el.style.cursor = 'grab'; });
+  el.addEventListener('mouseup', () => { isDown = false; el.style.cursor = 'grab'; });
+  el.addEventListener('mousemove', e => {
+    if (!isDown) return;
+    e.preventDefault();
+    const x = e.pageX - el.offsetLeft;
+    el.scrollLeft = scrollLeft - (x - startX);
+  });
+})();
 </script>
 </body>
 </html>
