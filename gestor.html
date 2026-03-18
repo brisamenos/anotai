@@ -62,9 +62,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);hei
 .av-green{background:linear-gradient(135deg,var(--success),#4ade80)}
 
 /* MAIN */
-.main{flex:1;overflow:auto;position:relative}
-.page{display:none;padding:24px 28px 60px;animation:fadeUp .25s ease}
-.page.on{display:block}
+.main{flex:1;overflow:auto}
+.page{display:none;padding:24px 28px;animation:fadeUp .25s ease}
+.page.on{display:block}.page.on#page-cardapio-publico{display:flex}
 @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:10px}
 .pt{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:-.4px}
@@ -3633,9 +3633,8 @@ function nav(id){
   if(id==='taxa') renderTaxaPage();
   if(id==='clientes') renderClientesPage();
   if(id==='cardapio-publico') {
-    // Esta página usa position:absolute+overflow-y:auto próprio
     const cpPg = document.getElementById('page-cardapio-publico');
-    if(cpPg) { cpPg.style.display = 'block'; cpPg.scrollTop = 0; }
+    if(cpPg) cpPg.style.display = 'flex';
     loadCardapioPublico();
   }
 }
@@ -7521,7 +7520,8 @@ function _evoShowQRPrompt() {
 </script>
 
 <!-- ══ PÁGINA: CARDÁPIO PÚBLICO ══════════════════════════ -->
-<div class="page" id="page-cardapio-publico" style="position:absolute;inset:0;overflow-y:auto;padding:24px 28px 60px;display:none">
+<div class="page" id="page-cardapio-publico" style="display:none;padding:0;height:100%;flex-direction:column">
+<div style="padding:24px 28px 0;flex-shrink:0">
 <div class="ph">
   <div>
     <div class="pt">🌐 Cardápio Público</div>
@@ -7529,6 +7529,9 @@ function _evoShowQRPrompt() {
   </div>
   <button class="btn bp" onclick="salvarCardapioPublico()">💾 Salvar alterações</button>
 </div>
+</div>
+
+<div style="flex:1;overflow-y:auto;padding:0 28px 40px">
 
 <!-- LINK DO CARDÁPIO -->
 <div id="cp-link-box" style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:12px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
@@ -7640,9 +7643,10 @@ function _evoShowQRPrompt() {
     </div>
   </div>
 
-</div>
-</div>
-</div>
+</div><!-- fim grid -->
+</div><!-- fim scroll wrapper -->
+</div><!-- fim padding header -->
+</div><!-- fim page-cardapio-publico -->
 
 <script>
 // ══ CARDÁPIO PÚBLICO ════════════════════════════════
