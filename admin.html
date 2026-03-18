@@ -153,7 +153,6 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
       <button class="sb-item on" id="nav-dash" onclick="navTo('dash')">📊 Dashboard</button>
       <div class="sb-sec" style="margin-top:6px">Gestão</div>
       <button class="sb-item" id="nav-clientes" onclick="navTo('clientes')">🏢 Clientes</button>
-      <button class="sb-item" id="nav-usuarios" onclick="navTo('usuarios')">👤 Usuários</button>
     </nav>
     <div class="sb-foot">
       <div class="sb-user" onclick="doLogout()">
@@ -205,28 +204,8 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
             </div>
           </div>
           <table>
-            <thead><tr><th>Restaurante</th><th>Email</th><th>Plano</th><th>Expira</th><th>Status</th><th>Ações</th></tr></thead>
+            <thead><tr><th>Restaurante</th><th>Gestor principal</th><th>Plano</th><th>Expira</th><th>Status</th><th>Ações</th></tr></thead>
             <tbody id="cli-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- USUÁRIOS -->
-      <div id="sec-usuarios" style="display:none">
-        <div class="tw">
-          <div class="tmeta">
-            <div class="card-title">👤 Usuários / Acessos</div>
-            <div style="display:flex;gap:8px">
-              <div class="sbox">
-                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style="color:var(--muted)"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-                <input id="usr-q" placeholder="Buscar..." oninput="renderUsuarios()">
-              </div>
-              <button class="btn bp bsm" onclick="abrirModalUsuario()">+ Novo usuário</button>
-            </div>
-          </div>
-          <table>
-            <thead><tr><th>Nome</th><th>Email</th><th>Restaurante</th><th>Perfil</th><th>Último acesso</th><th>Status</th><th>Ações</th></tr></thead>
-            <tbody id="usr-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -270,38 +249,31 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
   </div>
 </div>
 
-<!-- MODAL USUÁRIO -->
-<div class="modal-bg" id="m-usuario">
-  <div class="modal">
-    <button class="modal-x" onclick="fecharModal('m-usuario')">✕</button>
-    <h2 id="m-usr-titulo">➕ Novo Usuário</h2>
-    <input type="hidden" id="usr-id">
-    <div class="mrow"><label class="mlabel">Nome completo *</label><input class="minput" id="usr-nome" placeholder="Nome do responsável"></div>
-    <div class="mrow"><label class="mlabel">Email de acesso *</label><input class="minput" id="usr-email" type="email" placeholder="gestor@restaurante.com"></div>
-    <div class="mrow"><label class="mlabel">Senha * <span style="font-weight:400;text-transform:none">(deixe em branco para não alterar)</span></label><input class="minput" id="usr-senha" type="password" placeholder="Mínimo 6 caracteres"></div>
-    <div class="mrow2">
-      <div class="mrow" style="margin:0"><label class="mlabel">Restaurante *</label>
-        <select class="minput" id="usr-tenant">
-          <option value="">— Selecione —</option>
-        </select>
+<!-- MODAL USUÁRIOS DO CLIENTE -->
+<div class="modal-bg" id="m-usuarios-cli">
+  <div class="modal" style="width:580px">
+    <button class="modal-x" onclick="fecharModal('m-usuarios-cli')">✕</button>
+    <h2 id="m-ucli-titulo">👥 Usuários</h2>
+    <div id="ucli-lista" style="margin-bottom:16px"></div>
+    <button class="btn bp bsm" onclick="abrirFormUsuario()">+ Adicionar usuário</button>
+    <div id="ucli-form" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+      <input type="hidden" id="usr-id">
+      <input type="hidden" id="usr-tenant-fixed">
+      <div class="mrow"><label class="mlabel">Nome completo *</label><input class="minput" id="usr-nome" placeholder="Nome do responsável"></div>
+      <div class="mrow2">
+        <div class="mrow" style="margin:0"><label class="mlabel">Email *</label><input class="minput" id="usr-email" type="email" placeholder="gestor@rest.com"></div>
+        <div class="mrow" style="margin:0"><label class="mlabel">Perfil</label>
+          <select class="minput" id="usr-role">
+            <option value="gestor">Gestor</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
       </div>
-      <div class="mrow" style="margin:0"><label class="mlabel">Perfil</label>
-        <select class="minput" id="usr-role">
-          <option value="gestor">Gestor</option>
-          <option value="admin">Admin</option>
-          <option value="superadmin">Super Admin</option>
-        </select>
+      <div class="mrow"><label class="mlabel">Senha <span style="font-weight:400;text-transform:none">(deixe em branco para não alterar)</span></label><input class="minput" id="usr-senha" type="password" placeholder="Mínimo 6 caracteres"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn bg2" style="flex:1;justify-content:center" onclick="fecharFormUsuario()">Cancelar</button>
+        <button class="btn bp" style="flex:1;justify-content:center" onclick="salvarUsuario()">💾 Salvar</button>
       </div>
-    </div>
-    <div class="mrow"><label class="mlabel">Status</label>
-      <select class="minput" id="usr-ativo">
-        <option value="true">Ativo</option>
-        <option value="false">Inativo</option>
-      </select>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <button class="btn bg2" style="flex:1;justify-content:center" onclick="fecharModal('m-usuario')">Cancelar</button>
-      <button class="btn bp" style="flex:1;justify-content:center" onclick="salvarUsuario()">💾 Salvar</button>
     </div>
   </div>
 </div>
@@ -373,11 +345,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // ── NAVEGAÇÃO ────────────────────────────
 function navTo(id) {
-  ['dash','clientes','usuarios'].forEach(s => {
+  ['dash','clientes'].forEach(s => {
     document.getElementById('sec-'+s).style.display = s===id ? 'block' : 'none';
     document.getElementById('nav-'+s)?.classList.toggle('on', s===id);
   });
-  const titles = { dash:'Dashboard', clientes:'Clientes', usuarios:'Usuários' };
+  const titles = { dash:'Dashboard', clientes:'Clientes' };
   document.getElementById('topbar-title').textContent = titles[id] || id;
 }
 
@@ -395,7 +367,7 @@ async function loadAll() {
   document.getElementById('st-inativos').textContent= _clientes.filter(c=>!c.ativo).length;
   document.getElementById('st-users').textContent   = _usuarios.length;
 
-  renderDash(); renderClientes(); renderUsuarios(); preencherSelect();
+  renderDash(); renderClientes();
 }
 
 // ── DASHBOARD ────────────────────────────
@@ -424,21 +396,26 @@ function renderClientes() {
   const fil = _clientes.filter(c=>!q||c.nome.toLowerCase().includes(q)||c.email.toLowerCase().includes(q)||c.slug.includes(q));
   if (!fil.length) { el.innerHTML='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--muted)">Nenhum cliente encontrado</td></tr>'; return; }
   const planoBadge = { basico:'bg-gray', pro:'bg-blue', premium:'bg-purple' };
-  el.innerHTML = fil.map(c=>`<tr>
+  el.innerHTML = fil.map(c => {
+    const users = _usuarios.filter(u=>u.tenant_id===c.id);
+    const gestor = users.find(u=>u.role==='gestor')||users[0];
+    const userCount = users.length;
+    return `<tr>
     <td><div style="display:flex;align-items:center;gap:9px">
       <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">${c.nome.charAt(0)}</div>
       <div><div style="font-weight:600">${c.nome}</div><div style="font-size:11px;color:var(--muted)">/${c.slug}</div></div>
     </div></td>
-    <td style="color:var(--muted)">${c.email}</td>
+    <td><div style="font-size:12.5px">${gestor?.nome||'—'}</div><div style="font-size:11px;color:var(--muted)">${gestor?.email||c.email||'—'}</div></td>
     <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${c.plano}</span></td>
     <td style="color:var(--muted);font-size:12px">${c.expires_at ? new Date(c.expires_at).toLocaleDateString('pt-BR') : '—'}</td>
     <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">${c.ativo?'● Ativo':'● Inativo'}</span></td>
     <td><div style="display:flex;gap:4px">
       <button class="btn bg2 bsm" onclick="editarCliente('${c.id}')">✏️</button>
+      <button class="btn bg2 bsm" title="${userCount} usuário(s)" onclick="abrirUsuariosCliente('${c.id}')">👥${userCount>1?` <span style='font-size:10px'>${userCount}</span>`:''}</button>
       <button class="btn bg2 bsm" onclick="toggleCliente('${c.id}',${c.ativo})">${c.ativo?'⏸':'▶'}</button>
       <button class="btn bd bsm" onclick="deletarCliente('${c.id}','${c.nome.replace(/'/g,"\\'")}')">🗑</button>
     </div></td>
-  </tr>`).join('');
+  </tr>`}).join('');
 }
 
 // ── CRUD CLIENTES ────────────────────────
@@ -523,7 +500,7 @@ async function deletarCliente(id, nome) {
   await sb.from('tenants').delete().eq('id',id);
   _clientes = _clientes.filter(c=>c.id!==id);
   _usuarios = _usuarios.filter(u=>u.tenant_id!==id);
-  renderClientes(); renderDash(); renderUsuarios();
+  renderClientes(); renderDash();
   document.getElementById('st-total').textContent  = _clientes.length;
   document.getElementById('st-ativos').textContent = _clientes.filter(c=>c.ativo).length;
   document.getElementById('st-inativos').textContent=_clientes.filter(c=>!c.ativo).length;
@@ -531,72 +508,79 @@ async function deletarCliente(id, nome) {
   toast('ok','Cliente removido');
 }
 
-// ── USUÁRIOS ─────────────────────────────
-function preencherSelect() {
-  const sel = document.getElementById('usr-tenant');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">— Selecione o restaurante —</option>' +
-    _clientes.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
+// ── USUÁRIOS POR CLIENTE ─────────────────
+let _tenantAtivo = null;
+
+function abrirUsuariosCliente(tenantId) {
+  _tenantAtivo = tenantId;
+  const c = _clientes.find(x=>x.id===tenantId);
+  document.getElementById('m-ucli-titulo').textContent = `👥 Usuários — ${c?.nome||''}`;
+  fecharFormUsuario();
+  renderUsuariosCliente();
+  abrirModal('m-usuarios-cli');
 }
 
-function renderUsuarios() {
-  const q  = (document.getElementById('usr-q')?.value||'').toLowerCase();
-  const el = document.getElementById('usr-tbody');
-  if (!el) return;
-  const fil = _usuarios.filter(u=>!q||u.nome.toLowerCase().includes(q)||u.email.toLowerCase().includes(q));
-  if (!fil.length) { el.innerHTML='<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--muted)">Nenhum usuário encontrado</td></tr>'; return; }
+function renderUsuariosCliente() {
+  const users = _usuarios.filter(u=>u.tenant_id===_tenantAtivo);
   const rb = { superadmin:'bg-purple', admin:'bg-orange', gestor:'bg-blue' };
-  el.innerHTML = fil.map(u=>`<tr>
-    <td style="font-weight:600">${u.nome}</td>
-    <td style="color:var(--muted)">${u.email}</td>
-    <td style="color:var(--muted);font-size:12px">${u.tenants?.nome||'—'}</td>
-    <td><span class="badge ${rb[u.role]||'bg-gray'}">${u.role}</span></td>
-    <td style="color:var(--muted);font-size:12px">${u.ultimo_acesso ? new Date(u.ultimo_acesso).toLocaleDateString('pt-BR') : 'Nunca'}</td>
-    <td><span class="badge ${u.ativo?'bg-green':'bg-red'}">${u.ativo?'● Ativo':'● Inativo'}</span></td>
-    <td><div style="display:flex;gap:4px">
-      <button class="btn bg2 bsm" onclick="editarUsuario('${u.id}')">✏️</button>
-      <button class="btn bg2 bsm" onclick="toggleUsuario('${u.id}',${u.ativo})">${u.ativo?'⏸':'▶'}</button>
-      <button class="btn bd bsm" onclick="deletarUsuario('${u.id}','${u.nome.replace(/'/g,"\\'")}')">🗑</button>
-    </div></td>
-  </tr>`).join('');
+  const el = document.getElementById('ucli-lista');
+  if (!users.length) {
+    el.innerHTML='<p style="color:var(--muted);font-size:13px;padding:4px 0">Nenhum usuário ainda.</p>';
+    return;
+  }
+  el.innerHTML = users.map(u=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">${u.nome.charAt(0)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px">${u.nome}</div>
+        <div style="font-size:11px;color:var(--muted)">${u.email}</div>
+      </div>
+      <span class="badge ${rb[u.role]||'bg-gray'}">${u.role}</span>
+      <span class="badge ${u.ativo?'bg-green':'bg-red'}">${u.ativo?'●':'⏸'}</span>
+      <div style="display:flex;gap:4px">
+        <button class="btn bg2 bsm" onclick="editarUsuarioCliente('${u.id}')">✏️</button>
+        <button class="btn bg2 bsm" onclick="toggleUsuario('${u.id}',${u.ativo})">${u.ativo?'⏸':'▶'}</button>
+        <button class="btn bd bsm" onclick="deletarUsuario('${u.id}','${u.nome.replace(/'/g,"\\'")}')">🗑</button>
+      </div>
+    </div>`).join('');
 }
 
-function abrirModalUsuario(id) {
-  document.getElementById('m-usr-titulo').textContent = id ? '✏️ Editar Usuário' : '➕ Novo Usuário';
-  document.getElementById('usr-id').value    = id||'';
+function abrirFormUsuario() {
+  document.getElementById('usr-id').value    = '';
   document.getElementById('usr-nome').value  = '';
   document.getElementById('usr-email').value = '';
   document.getElementById('usr-senha').value = '';
   document.getElementById('usr-role').value  = 'gestor';
-  document.getElementById('usr-ativo').value = 'true';
-  document.getElementById('usr-tenant').value= '';
-  preencherSelect();
-  if (id) {
-    const u = _usuarios.find(x=>x.id===id);
-    if (u) {
-      document.getElementById('usr-nome').value  = u.nome;
-      document.getElementById('usr-email').value = u.email;
-      document.getElementById('usr-tenant').value= u.tenant_id||'';
-      document.getElementById('usr-role').value  = u.role;
-      document.getElementById('usr-ativo').value = String(u.ativo);
-    }
-  }
-  abrirModal('m-usuario');
+  document.getElementById('usr-tenant-fixed').value = _tenantAtivo;
+  document.getElementById('ucli-form').style.display = 'block';
 }
-function editarUsuario(id) { abrirModalUsuario(id); }
+
+function editarUsuarioCliente(id) {
+  const u = _usuarios.find(x=>x.id===id);
+  if (!u) return;
+  document.getElementById('usr-id').value    = u.id;
+  document.getElementById('usr-nome').value  = u.nome;
+  document.getElementById('usr-email').value = u.email;
+  document.getElementById('usr-senha').value = '';
+  document.getElementById('usr-role').value  = u.role;
+  document.getElementById('usr-tenant-fixed').value = _tenantAtivo;
+  document.getElementById('ucli-form').style.display = 'block';
+}
+
+function fecharFormUsuario() {
+  document.getElementById('ucli-form').style.display = 'none';
+}
 
 async function salvarUsuario() {
   const id     = document.getElementById('usr-id').value;
   const nome   = document.getElementById('usr-nome').value.trim();
   const email  = document.getElementById('usr-email').value.trim().toLowerCase();
   const senha  = document.getElementById('usr-senha').value;
-  const tenant = document.getElementById('usr-tenant').value || null;
+  const tenant = document.getElementById('usr-tenant-fixed').value || _tenantAtivo;
   const role   = document.getElementById('usr-role').value;
-  const ativo  = document.getElementById('usr-ativo').value === 'true';
   if (!nome||!email) { toast('err','Preencha nome e email'); return; }
   if (!id&&!senha)   { toast('err','Defina uma senha para o novo usuário'); return; }
-  if (!tenant)       { toast('err','Selecione o restaurante'); return; }
-  const payload = { nome, email, tenant_id:tenant, role, ativo };
+  const payload = { nome, email, tenant_id:tenant, role, ativo:true };
   if (senha) payload.senha_hash = await sha256(senha);
   let error;
   if (id) {
@@ -608,15 +592,17 @@ async function salvarUsuario() {
     if (!error&&data) _usuarios.unshift(data);
   }
   if (error) { toast('err','Erro: '+(error.message||'Verifique os dados')); return; }
-  fecharModal('m-usuario'); renderUsuarios();
+  fecharFormUsuario();
+  renderUsuariosCliente();
+  renderClientes();
   document.getElementById('st-users').textContent = _usuarios.length;
-  toast('ok', id ? 'Usuário atualizado!' : 'Usuário criado! Já pode fazer login em gestor.html');
+  toast('ok', id ? 'Usuário atualizado!' : 'Usuário criado!');
 }
 
 async function toggleUsuario(id, ativo) {
   await sb.from('sys_users').update({ ativo:!ativo }).eq('id',id);
   const u=_usuarios.find(x=>x.id===id); if(u) u.ativo=!ativo;
-  renderUsuarios();
+  renderUsuariosCliente(); renderClientes();
   toast('ok', !ativo?'Usuário ativado!':'Usuário pausado');
 }
 
@@ -624,7 +610,7 @@ async function deletarUsuario(id, nome) {
   if (!confirm(`Remover usuário "${nome}"?`)) return;
   await sb.from('sys_users').delete().eq('id',id);
   _usuarios = _usuarios.filter(u=>u.id!==id);
-  renderUsuarios();
+  renderUsuariosCliente(); renderClientes();
   document.getElementById('st-users').textContent = _usuarios.length;
   toast('ok','Usuário removido');
 }
