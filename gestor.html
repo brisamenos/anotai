@@ -1090,7 +1090,7 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
   <div class="ph">
     <div><div class="pt">Modo Garçom</div><div class="ps">Gerencie garçons e visualize as mesas</div></div>
     <div style="display:flex;gap:8px">
-      <button class="btn bg" onclick="window.open('garcom.html','_blank')">
+      <button class="btn bg" onclick="window.open('garcom.html?tenant='+encodeURIComponent(_sessao?.tenant_id||''),'_blank')">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="4" y="1" width="8" height="14" rx="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="12" r=".8" fill="currentColor"/></svg>
         Abrir app garçom
       </button>
