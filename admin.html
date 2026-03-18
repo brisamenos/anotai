@@ -430,7 +430,7 @@ function renderClientes() {
     </div></td>
     <td style="color:var(--muted)">${c.email}</td>
     <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${c.plano}</span></td>
-    <td style="color:var(--muted);font-size:12px">${c.expira_em ? new Date(c.expira_em).toLocaleDateString('pt-BR') : '—'}</td>
+    <td style="color:var(--muted);font-size:12px">${c.expires_at ? new Date(c.expires_at).toLocaleDateString('pt-BR') : '—'}</td>
     <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">${c.ativo?'● Ativo':'● Inativo'}</span></td>
     <td><div style="display:flex;gap:4px">
       <button class="btn bg2 bsm" onclick="editarCliente('${c.id}')">✏️</button>
@@ -457,7 +457,7 @@ function abrirModalCliente(id) {
       document.getElementById('cli-slug').value  = c.slug;
       document.getElementById('cli-email').value = c.email;
       document.getElementById('cli-plano').value = c.plano;
-      document.getElementById('cli-expira').value= c.expira_em ? c.expira_em.slice(0,10) : '';
+      document.getElementById('cli-expira').value= c.expires_at ? c.expires_at.slice(0,10) : '';
       document.getElementById('cli-ativo').value = String(c.ativo);
     }
   }
@@ -474,7 +474,7 @@ async function salvarCliente() {
   const expira= document.getElementById('cli-expira').value || null;
   const ativo = document.getElementById('cli-ativo').value === 'true';
   if (!nome||!slug||!email) { toast('err','Preencha os campos obrigatórios'); return; }
-  const payload = { nome, slug, email, plano, expira_em:expira, ativo };
+  const payload = { nome, slug, email, plano, expires_at:expira, ativo };
   let error;
   if (id) {
     ({ error } = await sb.from('tenants').update(payload).eq('id',id));
