@@ -220,7 +220,10 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
     <button class="modal-x" onclick="fecharModal('m-cliente')">✕</button>
     <h2 id="m-cli-titulo">➕ Novo Cliente</h2>
     <input type="hidden" id="cli-id">
-    <div class="mrow"><label class="mlabel">Nome do restaurante *</label><input class="minput" id="cli-nome" placeholder="Ex: Estima Food"></div>
+
+    <!-- SEÇÃO: RESTAURANTE -->
+    <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">🏢 Dados do Restaurante</div>
+    <div class="mrow"><label class="mlabel">Nome do restaurante *</label><input class="minput" id="cli-nome" placeholder="Ex: Estima Food" oninput="autoSlug()"></div>
     <div class="mrow2">
       <div class="mrow" style="margin:0"><label class="mlabel">Slug (identificador) *</label><input class="minput" id="cli-slug" placeholder="estima-food" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'-')"></div>
       <div class="mrow" style="margin:0"><label class="mlabel">Plano</label>
@@ -231,8 +234,6 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
         </select>
       </div>
     </div>
-    <div class="mrow"><label class="mlabel">Email do responsável *</label><input class="minput" id="cli-email" type="email" placeholder="dono@restaurante.com"></div>
-    <div class="mrow" id="cli-senha-row"><label class="mlabel">Senha inicial * <span style="font-weight:400;text-transform:none">(login do gestor)</span></label><input class="minput" id="cli-senha" type="password" placeholder="Mínimo 6 caracteres"></div>
     <div class="mrow2">
       <div class="mrow" style="margin:0"><label class="mlabel">Expira em</label><input class="minput" id="cli-expira" type="date"></div>
       <div class="mrow" style="margin:0"><label class="mlabel">Status</label>
@@ -242,7 +243,18 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
         </select>
       </div>
     </div>
-    <div style="display:flex;gap:8px;margin-top:8px">
+
+    <!-- SEÇÃO: ACESSO DO GESTOR (só na criação) -->
+    <div id="cli-gestor-section">
+      <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin:16px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">👤 Acesso do Gestor</div>
+      <div class="mrow"><label class="mlabel">Nome do responsável *</label><input class="minput" id="cli-gestor-nome" placeholder="Nome de quem vai operar o sistema"></div>
+      <div class="mrow2">
+        <div class="mrow" style="margin:0"><label class="mlabel">Email de acesso *</label><input class="minput" id="cli-email" type="email" placeholder="dono@restaurante.com"></div>
+        <div class="mrow" style="margin:0"><label class="mlabel">Senha inicial *</label><input class="minput" id="cli-senha" type="password" placeholder="Mínimo 6 caracteres"></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn bg2" style="flex:1;justify-content:center" onclick="fecharModal('m-cliente')">Cancelar</button>
       <button class="btn bp" style="flex:1;justify-content:center" onclick="salvarCliente()">💾 Salvar</button>
     </div>
@@ -419,24 +431,33 @@ function renderClientes() {
 }
 
 // ── CRUD CLIENTES ────────────────────────
+function autoSlug() {
+  const nome = document.getElementById('cli-nome').value;
+  if (!document.getElementById('cli-id').value) { // só auto-preenche na criação
+    document.getElementById('cli-slug').value = nome.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  }
+}
+
 function abrirModalCliente(id) {
   document.getElementById('m-cli-titulo').textContent = id ? '✏️ Editar Cliente' : '➕ Novo Cliente';
-  document.getElementById('cli-id').value    = id||'';
-  document.getElementById('cli-nome').value  = '';
-  document.getElementById('cli-slug').value  = '';
-  document.getElementById('cli-email').value = '';
-  document.getElementById('cli-senha').value = '';
-  document.getElementById('cli-plano').value = 'basico';
-  document.getElementById('cli-expira').value= '';
-  document.getElementById('cli-ativo').value = 'true';
-  // Mostra senha só ao criar, oculta ao editar
-  document.getElementById('cli-senha-row').style.display = id ? 'none' : '';
+  document.getElementById('cli-id').value         = id||'';
+  document.getElementById('cli-nome').value       = '';
+  document.getElementById('cli-slug').value       = '';
+  document.getElementById('cli-email').value      = '';
+  document.getElementById('cli-senha').value      = '';
+  document.getElementById('cli-gestor-nome').value= '';
+  document.getElementById('cli-plano').value      = 'basico';
+  document.getElementById('cli-expira').value     = '';
+  document.getElementById('cli-ativo').value      = 'true';
+  // Seção gestor: só exibe na criação
+  document.getElementById('cli-gestor-section').style.display = id ? 'none' : '';
   if (id) {
     const c = _clientes.find(x=>x.id===id);
     if (c) {
       document.getElementById('cli-nome').value  = c.nome;
       document.getElementById('cli-slug').value  = c.slug;
-      document.getElementById('cli-email').value = c.email||'';
       document.getElementById('cli-plano').value = c.plano;
       document.getElementById('cli-expira').value= c.expires_at ? c.expires_at.slice(0,10) : '';
       document.getElementById('cli-ativo').value = String(c.ativo);
@@ -447,42 +468,40 @@ function abrirModalCliente(id) {
 function editarCliente(id) { abrirModalCliente(id); }
 
 async function salvarCliente() {
-  const id    = document.getElementById('cli-id').value;
-  const nome  = document.getElementById('cli-nome').value.trim();
-  const slug  = document.getElementById('cli-slug').value.trim();
-  const email = document.getElementById('cli-email').value.trim().toLowerCase();
-  const senha = document.getElementById('cli-senha').value;
-  const plano = document.getElementById('cli-plano').value;
-  const expira= document.getElementById('cli-expira').value || null;
-  const ativo = document.getElementById('cli-ativo').value === 'true';
-  if (!nome||!slug||!email) { toast('err','Preencha os campos obrigatórios'); return; }
-  if (!id && !senha) { toast('err','Defina uma senha inicial para o gestor'); return; }
+  const id          = document.getElementById('cli-id').value;
+  const nome        = document.getElementById('cli-nome').value.trim();
+  const slug        = document.getElementById('cli-slug').value.trim();
+  const plano       = document.getElementById('cli-plano').value;
+  const expira      = document.getElementById('cli-expira').value || null;
+  const ativo       = document.getElementById('cli-ativo').value === 'true';
+  const gestorNome  = document.getElementById('cli-gestor-nome').value.trim();
+  const email       = document.getElementById('cli-email').value.trim().toLowerCase();
+  const senha       = document.getElementById('cli-senha').value;
+
+  if (!nome||!slug) { toast('err','Preencha nome e slug do restaurante'); return; }
+  if (!id && (!gestorNome||!email||!senha)) { toast('err','Preencha todos os dados do gestor'); return; }
+
   let error;
   if (id) {
-    // Edição: atualiza apenas tenant
     ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo }).eq('id',id));
     if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo}; }
   } else {
-    // Criação: usa endpoint que cria tenant + store_config + usuário gestor de uma vez
     try {
       const res = await fetch('/api/criar-tenant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, slug, email, senha, plano, role: 'gestor' })
+        body: JSON.stringify({ nome, slug, email, senha, nomeGestor: gestorNome, plano, role: 'gestor' })
       });
       const data = await res.json();
       if (!res.ok) { error = { message: data.error || 'Erro ao criar restaurante' }; }
-      else {
-        // Recarrega lista completa
-        await loadAll();
-      }
+      else { await loadAll(); }
     } catch(e) { error = { message: e.message }; }
   }
   if (error) { toast('err','Erro: '+(error.message||'Verifique os dados')); return; }
   fecharModal('m-cliente'); renderClientes(); renderDash();
-  document.getElementById('st-total').textContent  = _clientes.length;
-  document.getElementById('st-ativos').textContent = _clientes.filter(c=>c.ativo).length;
-  document.getElementById('st-inativos').textContent=_clientes.filter(c=>!c.ativo).length;
+  document.getElementById('st-total').textContent   = _clientes.length;
+  document.getElementById('st-ativos').textContent  = _clientes.filter(c=>c.ativo).length;
+  document.getElementById('st-inativos').textContent= _clientes.filter(c=>!c.ativo).length;
   toast('ok', id ? 'Cliente atualizado!' : `Restaurante criado! Login: ${email}`);
 }
 
