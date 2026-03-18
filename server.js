@@ -612,19 +612,21 @@ async function handleREST(req, res, table, params, body) {
       const newRowid = info.lastInsertRowid
       const returnRep = req.headers['prefer']?.includes('return=representation')
       let inserted = null
+      // Sempre busca o registro completo do banco para o emit (garante JSON fields parseados)
+      const rawForEmit = db.prepare(`SELECT * FROM "${table}" WHERE rowid=?`).get(newRowid)
+      const insertedForEmit = rawForEmit ? parseRow(table, rawForEmit) : null
       if (returnRep) {
-        // Usa rowid para funcionar tanto com TEXT PK (sys_users, tenants) quanto INTEGER PK
-        const raw = db.prepare(`SELECT * FROM "${table}" WHERE rowid=?`).get(newRowid)
-        // Para sys_users com join de tenants, faz o join completo
-        if (table === 'sys_users' && raw) {
-          const t = db.prepare("SELECT nome,plano,ativo,expires_at FROM tenants WHERE id=?").get(raw.tenant_id)
-          inserted = parseRow(table, {...raw, tenants: t ? {nome:t.nome,plano:t.plano,ativo:t.ativo===1,expires_at:t.expires_at} : null})
+        if (table === 'sys_users' && rawForEmit) {
+          const t = db.prepare("SELECT nome,plano,ativo,expires_at FROM tenants WHERE id=?").get(rawForEmit.tenant_id)
+          inserted = parseRow(table, {...rawForEmit, tenants: t ? {nome:t.nome,plano:t.plano,ativo:t.ativo===1,expires_at:t.expires_at} : null})
         } else {
-          inserted = raw ? parseRow(table, raw) : null
+          inserted = insertedForEmit
         }
       }
-      if (['orders','mesas','store_config','menu_items','categories'].includes(table)) emit(tenantId||payload.tenant_id, table, inserted||payload, 'INSERT')
-      return send(res,201,returnRep?inserted:{id:newId})
+      if (['orders','mesas','store_config','menu_items','categories'].includes(table)) {
+        emit(tenantId||payload.tenant_id, table, insertedForEmit||payload, 'INSERT')
+      }
+      return send(res,201,returnRep?inserted:{id:newRowid})
     } catch(e) { return send(res,400,{error:e.message}) }
   }
 
@@ -640,13 +642,19 @@ async function handleREST(req, res, table, params, body) {
         const setClause = keys.map(k=>`"${k}"=?`).join(', ')
         db.prepare(`UPDATE store_config SET ${setClause} WHERE tenant_id=?`).run(...keys.map(k=>sanitize(payload[k])),tenantId)
         const row = db.prepare("SELECT * FROM store_config WHERE tenant_id=?").get(tenantId)
-        if (['orders','mesas','store_config','menu_items','categories'].includes(table)) emit(tenantId, table, payload, 'UPDATE')
-        return send(res,200,parseRow(table,row))
+        const parsed = parseRow(table, row)
+        if (['orders','mesas','store_config','menu_items','categories'].includes(table)) emit(tenantId, table, parsed, 'UPDATE')
+        return send(res,200,parsed)
       }
 
       const setClause = keys.map(k=>`"${k}"=?`).join(', ')
       const info = db.prepare(`UPDATE "${table}" SET ${setClause} ${WHERE}`).run(...keys.map(k=>sanitize(payload[k])),...vals)
-      if (['orders','mesas','store_config','menu_items','categories'].includes(table)) emit(tenantId||payload.tenant_id, table, payload, 'UPDATE')
+      // Busca registro atualizado do banco para o emit (garante JSON fields parseados)
+      if (['orders','mesas','store_config','menu_items','categories'].includes(table)) {
+        const idVal = vals[vals.length - 1] // último val geralmente é o id do filtro
+        const updatedRow = db.prepare(`SELECT * FROM "${table}" ${WHERE}`).get(...vals)
+        emit(tenantId||payload.tenant_id, table, updatedRow ? parseRow(table, updatedRow) : payload, 'UPDATE')
+      }
       return send(res,200,{updated:info.changes})
     } catch(e) { return send(res,400,{error:e.message}) }
   }
