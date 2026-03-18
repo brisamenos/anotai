@@ -2092,9 +2092,6 @@ function _renderMesaPageFromCache() {
     return new Date(o.created_at || 0).getTime() >= new Date(mesa.opened_at).getTime() - 5000;
   });
 
-  // Popula o cache local com os dados frescos do banco
-  mesaOrdersCache = allOrders;
-
   grid.innerHTML = activeTables
     .sort((a, b) => a.num - b.num)
     .map(t => renderMesaCard(t, sessionOrders.filter(o => parseInt(o.mesa_num) === t.num)))
