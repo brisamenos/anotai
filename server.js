@@ -255,7 +255,19 @@ function runMigrations() {
     try {
       db.transaction(() => {
         const sqls = Array.isArray(migration.up) ? migration.up : [migration.up]
-        for (const sql of sqls) db.exec(sql)
+        for (const sql of sqls) {
+          try {
+            db.exec(sql)
+          } catch(e) {
+            // "duplicate column name" significa que a coluna já existe (migration aplicada
+            // manualmente antes do sistema de versões) — trata como sucesso e continua
+            if (e.message && e.message.includes('duplicate column name')) {
+              log('⚠️', `  [v${migration.version}] Coluna já existia (OK): ${e.message}`)
+            } else {
+              throw e // erro real — propaga e aborta esta migration
+            }
+          }
+        }
         db.pragma(`user_version = ${migration.version}`)
       })()
       log('✅', `  [v${migration.version}] ${migration.description}`)
