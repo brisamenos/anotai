@@ -1204,6 +1204,11 @@ body {
               <input class="form-input" id="f-city" placeholder="Cidade" oninput="saveCustomerData()">
               <input class="form-input" id="f-state" placeholder="UF" maxlength="2" style="text-transform:uppercase" oninput="saveCustomerData()">
             </div>
+            <!-- Faixas de distância (aparece só quando config=por_km) -->
+            <div id="faixa-selector" style="display:none;margin-top:4px">
+              <label class="form-label">Distância da entrega</label>
+              <div id="faixa-opts" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
+            </div>
           </div>
           <div id="mesa-block" style="display:none">
             <input class="form-input" id="f-mesa" type="number" placeholder="Número da mesa *" min="1" inputmode="numeric">
@@ -1392,7 +1397,8 @@ let searchQ       = '';
 let deliveryType  = 'delivery';  // delivery | retirada | mesa
 let selectedPay   = 'PIX';
 let appliedCupom  = null;
-const TAXA_DELIVERY = 5;
+let deliveryFeeConfig = { tipo: 'fixo', valor: 5, faixas: [] };
+let selectedDistFaixa = 0; // index into faixas when tipo=por_km
 
 // ═══════════════════════════════════════════════
 // CUSTOMER DATA — localStorage
@@ -1445,8 +1451,13 @@ async function init() {
     allCats   = (catsRes.data   || []);
     allCupons = (cuponsRes.data || []);
 
-    // Apply store open/close status
-    if (configRes.data) applyStoreStatus(configRes.data.store_open);
+    // Apply store config
+    if (configRes.data) {
+      applyStoreStatus(configRes.data.store_open);
+      if (configRes.data.delivery_fee_config) {
+        deliveryFeeConfig = configRes.data.delivery_fee_config;
+      }
+    }
 
     buildCatTabs();
     renderMenu();
@@ -1631,14 +1642,23 @@ function getDiscount() {
   const c = appliedCupom;
   const sub = cartSubtotal();
   if (c.tipo === '%') return sub * c.val / 100;
-  if (c.tipo === 'frete') return deliveryType === 'delivery' ? TAXA_DELIVERY : 0;
+  if (c.tipo === 'frete') return deliveryType === 'delivery' ? getTaxaBase() : 0;
   return Math.min(c.val, sub);
+}
+
+function getTaxaBase() {
+  if (deliveryFeeConfig.tipo === 'fixo') return parseFloat(deliveryFeeConfig.valor) || 0;
+  // por_km — usa a faixa selecionada
+  const faixas = deliveryFeeConfig.faixas || [];
+  if (!faixas.length) return 0;
+  const idx = Math.min(selectedDistFaixa, faixas.length - 1);
+  return parseFloat(faixas[idx]?.taxa) || 0;
 }
 
 function getTaxa() {
   if (deliveryType !== 'delivery') return 0;
   if (appliedCupom?.tipo === 'frete') return 0;
-  return TAXA_DELIVERY;
+  return getTaxaBase();
 }
 
 function grandTotal() {
@@ -1652,6 +1672,7 @@ function openCart() {
   document.getElementById('drawer-bg').classList.add('on');
   renderCartDrawer();
   loadCustomerData();
+  if (deliveryType === 'delivery') renderFaixaSelector();
 }
 function closeCart() {
   document.getElementById('drawer-bg').classList.remove('on');
@@ -1667,6 +1688,29 @@ function setDelivery(type) {
   });
   document.getElementById('addr-block').style.display  = type === 'delivery'  ? '' : 'none';
   document.getElementById('mesa-block').style.display  = type === 'mesa'      ? '' : 'none';
+  if (type === 'delivery') renderFaixaSelector();
+  renderTotals();
+}
+
+function renderFaixaSelector() {
+  const sel   = document.getElementById('faixa-selector');
+  const opts  = document.getElementById('faixa-opts');
+  if (!sel || !opts) return;
+  const faixas = deliveryFeeConfig?.faixas || [];
+  if (deliveryFeeConfig?.tipo !== 'por_km' || !faixas.length) {
+    sel.style.display = 'none'; return;
+  }
+  sel.style.display = '';
+  opts.innerHTML = faixas.map((f, i) => `
+    <label style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:10px;border:1.5px solid ${i===selectedDistFaixa?'var(--accent)':'var(--border)'};background:${i===selectedDistFaixa?'rgba(59,130,246,.08)':'var(--surface2)'};cursor:pointer;transition:all .15s" onclick="selectFaixa(${i})">
+      <span style="font-size:13px;font-weight:600">🛵 Até ${f.ate_km} km</span>
+      <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px;color:var(--amber)">R$ ${fmtN(f.taxa)}</span>
+    </label>`).join('');
+}
+
+function selectFaixa(idx) {
+  selectedDistFaixa = idx;
+  renderFaixaSelector();
   renderTotals();
 }
 
@@ -1708,10 +1752,17 @@ function renderTotals() {
   const tot  = grandTotal();
   const wrap = document.getElementById('totals-wrap');
 
+  let taxaLabel = 'Taxa de entrega';
+  if (deliveryType === 'delivery' && deliveryFeeConfig?.tipo === 'por_km') {
+    const faixas = deliveryFeeConfig.faixas || [];
+    const f = faixas[selectedDistFaixa];
+    if (f) taxaLabel = `Entrega até ${f.ate_km} km`;
+  }
+
   wrap.innerHTML = `
     <div class="totals">
       <div class="total-row"><span>Subtotal</span><span class="val">R$ ${fmtN(sub)}</span></div>
-      ${taxa > 0 ? `<div class="total-row"><span>Taxa de entrega</span><span class="val">R$ ${fmtN(taxa)}</span></div>` : ''}
+      ${deliveryType === 'delivery' ? `<div class="total-row"><span>${taxaLabel}</span><span class="val">${taxa > 0 ? 'R$ ' + fmtN(taxa) : 'Grátis'}</span></div>` : ''}
       ${disc > 0 ? `<div class="total-row disc"><span>Desconto (${appliedCupom.code})</span><span class="val">− R$ ${fmtN(disc)}</span></div>` : ''}
       <div class="total-row big"><span>Total</span><span>R$ ${fmtN(tot)}</span></div>
     </div>`;
