@@ -5061,6 +5061,7 @@ async function toggleCaixa() {
 }
 
 
+function renderCaixa() {
   const entradas=movimentos.filter(m=>m.tipo==='entrada').reduce((s,m)=>s+m.val,0);
   const saidas=movimentos.filter(m=>m.tipo==='saida').reduce((s,m)=>s+m.val,0);
   const saldo=entradas-saidas;
