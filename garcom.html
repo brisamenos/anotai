@@ -656,6 +656,8 @@ async function doLogin() {
       document.getElementById('screen-app').classList.add('show');
       await loadData();
       subscribeRealtime();
+      await requestNotifPermission();
+      initSW();
     }
   } catch(e) {
     err.textContent = 'Erro de conexão. Tente novamente.';
@@ -667,6 +669,8 @@ async function doLogin() {
 }
 
 function doLogout() {
+  stopSW();
+  unsubscribeAll();
   currentGarcom = null;
   cart = []; myOrders = [];
   document.getElementById('screen-app').classList.remove('show');
@@ -692,6 +696,8 @@ async function loadData() {
 // ══ REALTIME ═════════════════════════════
 let _rtChannels = [];
 let _rtConnected = false;
+let _swReg       = null;  // Service Worker registration
+let _heartbeat   = null;  // Keeps WS alive
 
 function setRtStatus(ok) {
   _rtConnected = ok;
@@ -704,8 +710,60 @@ function setRtStatus(ok) {
 function unsubscribeAll() {
   _rtChannels.forEach(ch => { try { sb.removeChannel(ch); } catch(e){} });
   _rtChannels = [];
+  if (_heartbeat) { clearInterval(_heartbeat); _heartbeat = null; }
 }
 
+// ── Service Worker ────────────────────────
+async function registerSW() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    _swReg = await navigator.serviceWorker.register('./garcom-sw.js', { scope: './' });
+    console.log('[SW] registered');
+
+    // Escuta mensagens do SW (poll done → sincroniza dados)
+    navigator.serviceWorker.addEventListener('message', e => {
+      if (e.data?.type === 'SW_POLL_DONE' && currentGarcom) {
+        sb.from('mesas').select('*').order('num').then(({ data }) => {
+          if (data) { tables = data; renderMesas(); }
+        });
+        loadPedidosDaMesa();
+      }
+    });
+  } catch(e) { console.warn('[SW] register failed', e); }
+}
+
+async function requestNotifPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    await Notification.requestPermission();
+  }
+}
+
+function sendSwState() {
+  if (!_swReg?.active || !currentGarcom) return;
+  _swReg.active.postMessage({
+    type:       'SYNC',
+    garcom_id:  currentGarcom.id,
+    orderIds:   myOrders.map(o => o.id),
+    mesaState:  Object.fromEntries(tables.map(t => [t.num, t.status]))
+  });
+}
+
+function initSW() {
+  if (!_swReg?.active || !currentGarcom) return;
+  _swReg.active.postMessage({
+    type:       'INIT',
+    garcom_id:  currentGarcom.id,
+    orderIds:   myOrders.map(o => o.id),
+    mesaState:  Object.fromEntries(tables.map(t => [t.num, t.status]))
+  });
+}
+
+function stopSW() {
+  _swReg?.active?.postMessage({ type: 'LOGOUT' });
+}
+
+// ── Realtime WebSocket ────────────────────
 function subscribeRealtime() {
   unsubscribeAll();
 
@@ -718,6 +776,7 @@ function subscribeRealtime() {
         tables = data;
         renderMesas();
         loadPedidosDaMesa();
+        sendSwState(); // sincroniza SW com o novo estado
       });
     })
     .subscribe(status => {
@@ -748,13 +807,20 @@ function subscribeRealtime() {
         myOrders = myOrders.filter(o => o.id !== p.old.id);
         renderMyOrders();
       }
+      sendSwState(); // sincroniza SW após qualquer mudança
     })
     .subscribe();
+
+  // Heartbeat: envia ping a cada 25s para manter o WS vivo mesmo em background
+  _heartbeat = setInterval(() => {
+    try { sb.channel('garcom-mesas-' + gid).send({ type:'broadcast', event:'ping', payload:{} }); }
+    catch(e){}
+  }, 25000);
 
   _rtChannels = [chMesas, chOrders];
 }
 
-// Sync ao voltar para a aba (ex: celular minimizou o browser)
+// Sync ao voltar para a aba
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && currentGarcom) {
     sb.from('mesas').select('*').order('num').then(({ data }) => {
@@ -764,6 +830,9 @@ document.addEventListener('visibilitychange', () => {
     if (!_rtConnected) subscribeRealtime();
   }
 });
+
+// Registra SW ao carregar a página
+registerSW();
 
 // ══ TABS ═════════════════════════════════
 // switchTab defined in MEUS PEDIDOS section
