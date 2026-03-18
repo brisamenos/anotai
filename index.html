@@ -1352,14 +1352,17 @@ td:first-child{padding-left:16px}
     </div>
 
     <div class="form-row">
-      <label class="form-label">Emoji / Ícone</label>
-      <div class="emoji-grid" id="edit-emoji-grid"></div>
-    </div>
-
-    <!-- Preview atual do emoji -->
-    <div id="edit-emoji-preview" style="display:flex;align-items:center;gap:8px;margin-top:4px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--muted)">
-      <span id="edit-emoji-current" style="font-size:22px">🍽️</span>
-      <span>Emoji atual · Selecione outro acima para trocar</span>
+      <label class="form-label">Foto do item</label>
+      <div id="edit-img-preview" style="width:100%;height:140px;background:var(--surface2);border:2px dashed var(--border);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:border-color .18s;position:relative;overflow:hidden" onclick="triggerEditItemImage()">
+        <img id="edit-img-thumb" src="" style="display:none;width:100%;height:100%;object-fit:cover;position:absolute;inset:0">
+        <div id="edit-img-placeholder" style="display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--muted)">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="18" height="15" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          <span style="font-size:12px;font-weight:500">Clique para adicionar foto</span>
+          <span style="font-size:10.5px">JPG, PNG ou WEBP</span>
+        </div>
+        <div id="edit-img-change" style="display:none;position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.6);color:#fff;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:600">✏️ Trocar foto</div>
+      </div>
+      <input type="file" id="edit-img-input" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="previewEditItemImage(this)">
     </div>
 
     <div style="display:flex;gap:8px;margin-top:18px">
@@ -1373,12 +1376,35 @@ td:first-child{padding-left:16px}
 <div class="modal-bg" id="modal-add-cat">
   <div class="modal" style="width:420px">
     <button class="modal-close" onclick="closeModal('modal-add-cat')">✕</button>
-    <h2><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 5v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5A1 1 0 0 0 5.8 3H3a1 1 0 0 0-1 2z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Nova Categoria</h2>
-    <div class="form-row"><label class="form-label">Nome da categoria</label><input class="form-input" id="cat-name-input" placeholder="Ex: Combos, Pizzas, Sobremesas"></div>
-    <div class="form-row"><label class="form-label">Tipo</label><div class="sw" style="width:100%"><select class="form-input" style="width:100%"><option>Itens principais</option><option>Bebidas</option><option>Adicionais</option></select></div></div>
-    <div style="display:flex;gap:8px;margin-top:4px">
+    <h2>📁 Nova Categoria</h2>
+    <div class="form-row"><label class="form-label">Nome da categoria</label><input class="form-input" id="cat-name-input" placeholder="Ex: Pizzas, Combos, Sobremesas"></div>
+    <div class="form-row"><label class="form-label">Tipo</label>
+      <div class="sw" style="width:100%"><select id="cat-type-input" class="form-input" style="width:100%">
+        <option>Itens principais</option><option>Bebidas</option><option>Adicionais</option>
+      </select></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-add-cat')">Cancelar</button>
-      <button class="btn bp" style="flex:1;justify-content:center" onclick="addCategory()">Criar categoria</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="addCategory()">✔ Criar categoria</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Category -->
+<div class="modal-bg" id="modal-edit-cat">
+  <div class="modal" style="width:420px">
+    <button class="modal-close" onclick="closeModal('modal-edit-cat')">✕</button>
+    <h2>✏️ Editar Categoria</h2>
+    <input type="hidden" id="edit-cat-id">
+    <div class="form-row"><label class="form-label">Nome da categoria</label><input class="form-input" id="edit-cat-name" placeholder="Nome da categoria"></div>
+    <div class="form-row"><label class="form-label">Tipo</label>
+      <div class="sw" style="width:100%"><select id="edit-cat-type" class="form-input" style="width:100%">
+        <option>Itens principais</option><option>Bebidas</option><option>Adicionais</option>
+      </select></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn bd" style="flex:1;justify-content:center" onclick="deleteCatById()">🗑 Excluir</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="saveEditCategory()">💾 Salvar</button>
     </div>
   </div>
 </div>
@@ -1741,6 +1767,50 @@ function sbToast(type, msg) {
 }
 
 // ── Image upload (Supabase Storage) ──────────────────
+// ── New item image preview ────────────────────
+let _newItemImageFile = null;
+function triggerNewItemImage() {
+  document.getElementById('new-img-input').click();
+}
+function previewNewItemImage(inp) {
+  const file = inp.files[0];
+  if (!file) return;
+  _newItemImageFile = file;
+  const url = URL.createObjectURL(file);
+  const thumb = document.getElementById('new-img-thumb');
+  thumb.src = url; thumb.style.display = 'block';
+  document.getElementById('new-img-placeholder').style.display = 'none';
+  document.getElementById('new-img-change').style.display = 'block';
+  document.getElementById('new-img-preview').style.border = '2px solid var(--accent)';
+}
+
+// ── Edit item image preview ────────────────────
+let _editItemImageFile = null;
+function triggerEditItemImage() {
+  document.getElementById('edit-img-input').click();
+}
+function previewEditItemImage(inp) {
+  const file = inp.files[0];
+  if (!file) return;
+  _editItemImageFile = file;
+  const url = URL.createObjectURL(file);
+  const thumb = document.getElementById('edit-img-thumb');
+  thumb.src = url; thumb.style.display = 'block';
+  document.getElementById('edit-img-placeholder').style.display = 'none';
+  document.getElementById('edit-img-change').style.display = 'block';
+  document.getElementById('edit-img-preview').style.border = '2px solid var(--accent)';
+}
+
+// ── Upload image to Supabase Storage ─────────
+async function uploadItemImage(file, itemId) {
+  const ext  = file.name.split('.').pop();
+  const path = `item-${itemId || Date.now()}-${Date.now()}.${ext}`;
+  const { error } = await sb.storage.from('menu-images').upload(path, file, { upsert: true });
+  if (error) throw error;
+  const { data: { publicUrl } } = sb.storage.from('menu-images').getPublicUrl(path);
+  return publicUrl;
+}
+
 function triggerImageUpload(itemId, itemName) {
   const inp = document.createElement('input');
   inp.type = 'file';
@@ -1754,26 +1824,17 @@ function triggerImageUpload(itemId, itemName) {
     document.body.removeChild(inp);
     sbLoading(true);
     try {
-      const ext = file.name.split('.').pop();
-      const path = `item-${itemId || Date.now()}.${ext}`;
-      const { error: upErr } = await sb.storage.from('menu-images').upload(path, file, {upsert:true});
-      if (upErr) throw upErr;
-      const { data:{ publicUrl } } = sb.storage.from('menu-images').getPublicUrl(path);
-      // Update DB
+      const publicUrl = await uploadItemImage(file, itemId);
       if (itemId) {
         await sb.from('menu_items').update({image_url: publicUrl}).eq('id', itemId);
         const it = items.find(i => i.id === itemId);
         if (it) it.imageUrl = publicUrl;
-        renderImagens();
-        renderGestor();
+        renderImagens(); renderGestor();
       }
-      sbToast('ok', `Foto de ${itemName} enviada!`);
+      sbToast('ok', `Foto de ${itemName} atualizada!`);
     } catch(e) {
-      console.error('Upload error:', e);
       sbToast('err', 'Erro ao enviar imagem');
-    } finally {
-      sbLoading(false);
-    }
+    } finally { sbLoading(false); }
   };
 }
 
@@ -2143,11 +2204,52 @@ function toggleCat(id){
   renderGestor();
 }
 
-function handleCatAction(id,action){
-  if(!action) return;
-  if(action==='delete'){categories=categories.filter(c=>c.id!==id);renderGestor();}
-  else if(action==='pause') showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><circle cx=&quot;8&quot; cy=&quot;9&quot; r=&quot;5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M8 6.5V9l1.5 1.5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M6 2h4M8 2v2&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>','Categoria pausada!');
-  else showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><path d=&quot;M10 3l3 3-7 7H3v-3l7-7z&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>','Editando categoria...');
+function handleCatAction(id, action) {
+  if (!action) return;
+  if (action === 'edit') {
+    const cat = categories.find(c => c.id === id);
+    if (!cat) return;
+    document.getElementById('edit-cat-id').value   = id;
+    document.getElementById('edit-cat-name').value = cat.label;
+    openModal('modal-edit-cat');
+  } else if (action === 'delete') {
+    deleteCatById(id);
+  } else if (action === 'pause') {
+    sbToast('ok', 'Categoria pausada!');
+  }
+}
+
+async function saveEditCategory() {
+  const id   = parseInt(document.getElementById('edit-cat-id').value);
+  const name = document.getElementById('edit-cat-name').value.trim();
+  const type = document.getElementById('edit-cat-type').value;
+  if (!name) { sbToast('err','Informe o nome'); return; }
+  sbLoading(true);
+  const { error } = await sb.from('categories').update({
+    label: name, name: name.toLowerCase(), type
+  }).eq('id', id);
+  sbLoading(false);
+  if (error) { sbToast('err','Erro ao salvar'); return; }
+  const cat = categories.find(c => c.id === id);
+  if (cat) { cat.label = name; cat.name = name.toLowerCase(); cat.type = type; }
+  closeModal('modal-edit-cat');
+  renderGestor();
+  populateCatSelects();
+  sbToast('ok', 'Categoria atualizada!');
+}
+
+async function deleteCatById(id) {
+  const catId = id || parseInt(document.getElementById('edit-cat-id').value);
+  if (!await showConfirmDialog('Excluir categoria?', 'Os itens desta categoria não serão apagados.')) return;
+  sbLoading(true);
+  const { error } = await sb.from('categories').delete().eq('id', catId);
+  sbLoading(false);
+  if (error) { sbToast('err','Erro ao excluir'); return; }
+  categories = categories.filter(c => c.id !== catId);
+  closeModal('modal-edit-cat');
+  renderGestor();
+  populateCatSelects();
+  sbToast('ok', 'Categoria excluída!');
 }
 
 async function addCategory() {
@@ -2317,15 +2419,31 @@ async function addItem() {
   sbLoading(false);
 
   if (error) { sbToast('err','Erro ao salvar item'); console.error(error); return; }
+
+  // Upload image if selected
+  if (_newItemImageFile) {
+    try {
+      const url = await uploadItemImage(_newItemImageFile, data.id);
+      await sb.from('menu_items').update({ image_url: url }).eq('id', data.id);
+      data.image_url = url;
+    } catch(e) { sbToast('err','Item criado mas erro ao enviar foto'); }
+    _newItemImageFile = null;
+  }
+
   items.push(mapItem(data));
 
   // Reset form
   ['new-name','new-desc','new-ingredients','new-price','new-price-old'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
-  document.querySelectorAll('#emoji-grid .emo-btn').forEach(b => b.classList.remove('on'));
+  // Reset image preview
+  const t = document.getElementById('new-img-thumb'); if(t){ t.src=''; t.style.display='none'; }
+  const p = document.getElementById('new-img-placeholder'); if(p) p.style.display='flex';
+  const c = document.getElementById('new-img-change'); if(c) c.style.display='none';
+  const pr = document.getElementById('new-img-preview'); if(pr) pr.style.border='2px dashed var(--border)';
   document.getElementById('new-item-type').value = 'normal';
   document.getElementById('new-status').value = 'active';
+  togglePizzaOptions('new');
 
   closeModal('modal-add-item');
   renderTable(); renderGestor(); renderPDV();
@@ -2357,15 +2475,23 @@ function openEditItem(id) {
     b.classList.toggle('on', parseInt(b.dataset.val) === mf);
   });
 
-  // Emoji grid for edit modal
-  const eg = document.getElementById('edit-emoji-grid');
-  if (eg) {
-    eg.innerHTML = EMOJIS_PLAIN.map(e =>
-      `<div class="emo-btn${it.emoji===e?' on':''}" onclick="selectEditEmoji(this,'${e}')">${e}</div>`
-    ).join('');
+  // Reset image file state and show existing image
+  _editItemImageFile = null;
+  const thumb = document.getElementById('edit-img-thumb');
+  const placeholder = document.getElementById('edit-img-placeholder');
+  const change = document.getElementById('edit-img-change');
+  const preview = document.getElementById('edit-img-preview');
+  if (it.imageUrl) {
+    thumb.src = it.imageUrl; thumb.style.display = 'block';
+    placeholder.style.display = 'none';
+    change.style.display = 'block';
+    preview.style.border = '2px solid var(--accent)';
+  } else {
+    thumb.src = ''; thumb.style.display = 'none';
+    placeholder.style.display = 'flex';
+    change.style.display = 'none';
+    preview.style.border = '2px dashed var(--border)';
   }
-  const prev = document.getElementById('edit-emoji-current');
-  if (prev) prev.textContent = it.emoji || '🍽️';
 
   openModal('modal-edit-item');
 }
@@ -2412,6 +2538,17 @@ async function saveEditItem() {
   sbLoading(false);
 
   if (error) { sbToast('err','Erro ao atualizar item'); console.error(error); return; }
+
+  // Upload new image if selected
+  if (_editItemImageFile) {
+    try {
+      const url = await uploadItemImage(_editItemImageFile, editingId);
+      await sb.from('menu_items').update({ image_url: url }).eq('id', editingId);
+      it.imageUrl = url;
+    } catch(e) { sbToast('err','Item salvo mas erro ao enviar foto'); }
+    _editItemImageFile = null;
+  }
+
   closeModal('modal-edit-item');
   renderTable(); renderGestor(); renderPDV();
   sbToast('ok', `"${it.name}" atualizado!`);
