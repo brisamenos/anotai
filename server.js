@@ -676,29 +676,46 @@ function handleUpload(req, res) {
         const buffer = Buffer.concat(chunks)
         const ct = req.headers['content-type']||''
         const boundary = ct.split('boundary=')[1]
-        let fname = `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
+
+        // Tenta extrair nome do arquivo a partir da URL do request
+        // Ex: /storage/v1/object/menu-images/branding/21541f9b7a91d8a2-logo.jpg
+        const urlPath = req.url || ''
+        const urlBasename = path.basename(urlPath.split('?')[0])
+        const hasValidExt = /\.(jpg|jpeg|png|webp|gif)$/i.test(urlBasename)
+        const fnameFromUrl = hasValidExt ? urlBasename : null
+
+        let fname = fnameFromUrl || `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
+
         if (!boundary) {
           const body = JSON.parse(buffer.toString())
           const ext  = (body.mime||'image/jpeg').split('/')[1]||'jpg'
-          fname = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-          fs.writeFileSync(path.join(UPLOADS_DIR,fname),Buffer.from(body.data,'base64'))
+          if (!fnameFromUrl) fname = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+          fs.writeFileSync(path.join(UPLOADS_DIR, fname), Buffer.from(body.data,'base64'))
         } else {
-          const raw  = buffer.toString('binary')
+          const raw   = buffer.toString('binary')
           const parts = raw.split('--'+boundary).filter(p=>p.includes('filename='))
           if (parts.length) {
             const [head,...bodyParts] = parts[0].split('\r\n\r\n')
             const fnMatch = head.match(/filename="([^"]+)"/)
-            if (fnMatch) {
+            // Usa nome da URL se disponível, senão usa nome do multipart, senão aleatório
+            if (!fnameFromUrl && fnMatch) {
               const ext = path.extname(fnMatch[1])||'.jpg'
               fname = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
-              const fileContent = bodyParts.join('\r\n\r\n').replace(/\r\n$/,'')
-              fs.writeFileSync(path.join(UPLOADS_DIR,fname),Buffer.from(fileContent,'binary'))
             }
+            const fileContent = bodyParts.join('\r\n\r\n').replace(/\r\n$/,'')
+            fs.writeFileSync(path.join(UPLOADS_DIR, fname), Buffer.from(fileContent,'binary'))
+          } else {
+            // Sem partes multipart válidas — salva o buffer inteiro
+            fs.writeFileSync(path.join(UPLOADS_DIR, fname), buffer)
           }
         }
         const url = `/uploads/${fname}`
-        resolve(send(res,200,{url,publicUrl:url}))
-      } catch(e) { resolve(send(res,400,{error:e.message})) }
+        log('📸', `Upload: ${fname}`)
+        resolve(send(res, 200, {url, publicUrl: url}))
+      } catch(e) {
+        log('❌', 'Upload error:', {error: e.message})
+        resolve(send(res, 400, {error: e.message}))
+      }
     })
   })
 }
