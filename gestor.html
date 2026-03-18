@@ -6674,20 +6674,33 @@ const EVO = {
   get key()     { return document.getElementById('evo-apikey')?.value||''; },
   get instance(){ return document.getElementById('evo-instance')?.value||'estima-food'; },
   headers()     { return { 'Content-Type':'application/json', 'apikey': this.key }; },
+
   async req(method, path, body) {
     try {
-      const r = await fetch(`${this.url}${path}`, { method, headers: this.headers(), body: body ? JSON.stringify(body) : undefined });
-      return { ok: r.ok, status: r.status, data: await r.json().catch(()=>({})) };
-    } catch(e) { return { ok: false, error: e.message }; }
+      const r = await fetch(`${this.url}${path}`, {
+        method,
+        headers: this.headers(),
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const data = await r.json().catch(()=>({}));
+      console.log(`[EVO] ${method} ${path}`, r.status, data);
+      return { ok: r.ok, status: r.status, data };
+    } catch(e) {
+      console.error('[EVO] fetch error:', e);
+      return { ok: false, error: e.message };
+    }
   },
+
+  // Evolution API 2.7 — formato correto
   async sendText(number, text) {
     const phone = number.replace(/\D/g,'');
-    const jid   = phone.startsWith('55') ? `${phone}@s.whatsapp.net` : `55${phone}@s.whatsapp.net`;
-    return this.req('POST', `/message/sendText/${this.instance}`, {
-      number: jid,
-      options: { delay: 1200, presence: 'composing' },
-      textMessage: { text }
+    const num   = phone.startsWith('55') ? phone : `55${phone}`;
+    // Tenta o formato v2 primeiro
+    const r = await this.req('POST', `/message/sendText/${this.instance}`, {
+      number: num,
+      text: text
     });
+    return r;
   }
 };
 
@@ -6758,18 +6771,29 @@ async function evoTestarEnvio() {
   const phone = document.getElementById('evo-test-phone')?.value?.replace(/\D/g,'');
   const msg   = document.getElementById('evo-test-msg')?.value;
   const res   = document.getElementById('evo-test-result');
-  if (!phone) { sbToast('err','Informe o número'); return; }
-  if (!evoConnected) { sbToast('err','WhatsApp não conectado'); return; }
-  if (res) { res.style.display='block'; res.innerHTML='<span style="color:var(--muted)">Enviando...</span>'; }
+  if (!phone || phone.length < 10) { sbToast('err','Número inválido. Ex: 85912345678'); return; }
+  if (!msg)  { sbToast('err','Informe a mensagem'); return; }
+  if (res) { res.style.display='block'; res.innerHTML='<span style="color:var(--muted)">⏳ Enviando...</span>'; }
+
   const r = await EVO.sendText(phone, msg);
+  console.log('[EVO TEST]', r);
+
   if (r.ok) {
-    if (res) res.innerHTML='<span style="color:var(--success)">✅ Mensagem enviada!</span>';
-    sbToast('ok','Teste enviado!');
+    if (res) res.innerHTML='<span style="color:var(--success)">✅ Mensagem enviada com sucesso!</span>';
+    sbToast('ok','✅ Mensagem enviada!');
     evoMsgHistory.unshift({ to:phone, tipo:'Teste', msg:(msg||'').slice(0,60), status:'enviado', time: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) });
   } else {
-    const err=r.data?.message||r.error||'Erro';
-    if (res) res.innerHTML=`<span style="color:var(--danger)">❌ ${err}</span>`;
-    sbToast('err','Erro ao enviar: '+err);
+    // Extrai erro real da resposta da API
+    const d = r.data || {};
+    const errMsg = d.message || d.error || d.response?.message || d.response || r.error || `HTTP ${r.status}`;
+    const errStr = typeof errMsg === 'object' ? JSON.stringify(errMsg) : String(errMsg);
+    if (res) res.innerHTML=`
+      <span style="color:var(--danger)">❌ Erro: ${errStr}</span>
+      <details style="margin-top:6px;font-size:11px;color:var(--muted)">
+        <summary style="cursor:pointer">Ver resposta completa da API</summary>
+        <pre style="margin-top:4px;background:var(--surface2);padding:8px;border-radius:6px;overflow:auto;font-size:10px">${JSON.stringify(d,null,2)}</pre>
+      </details>`;
+    sbToast('err', 'Erro: ' + errStr.slice(0,80));
   }
 }
 
