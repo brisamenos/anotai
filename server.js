@@ -244,10 +244,10 @@ const server = http.createServer(async (req, res) => {
 
   log('🌐', `${req.method} ${path}`)
 
-  // ── Serve arquivos estáticos (gestor.html, garcom.html, etc.) ──
+  // ── Serve arquivos estáticos (index.html, gestor.html, garcom.html, etc.) ──
   if (req.method === 'GET') {
-    // Raiz → gestor.html
-    const fileName = path === '/' ? 'gestor.html' : path.slice(1)
+    // Raiz → index.html (cardápio)
+    const fileName = path === '/' ? 'index.html' : path.slice(1)
     const filePath = path_module.join(__dirname, fileName)
 
     if (fs.existsSync(filePath) && !fileName.includes('..')) {
