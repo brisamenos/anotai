@@ -2869,8 +2869,8 @@ function mapOrder(o) {
 }
 
 // ── Load all data ────────────────────────────────────
-async function loadAllData() {
-  sbLoading(true);
+async function loadAllData(silent = false) {
+  if (!silent) sbLoading(true);
   try {
     // Run all queries independently so one failure doesn't block others
     const safe = q => q.then(r => r).catch(e => ({ data: null, error: e }));
@@ -2935,16 +2935,16 @@ async function loadAllData() {
     }
 
     await loadFidConfig();
-    subscribeOrders();
+    if (!_rtConnected) subscribeOrders();
     renderKanban();
     renderCaixa();
     // Sincroniza SW com os dados carregados
     setTimeout(() => _initSwState(), 500);
   } catch(e) {
     console.error('Supabase load error:', e);
-    sbToast('err', 'Erro ao conectar ao banco de dados');
+    if (!silent) sbToast('err', 'Erro ao conectar ao banco de dados');
   } finally {
-    sbLoading(false);
+    if (!silent) sbLoading(false);
   }
 }
 
@@ -2975,7 +2975,7 @@ async function registerSW() {
     navigator.serviceWorker.addEventListener('message', e => {
       if (e.data?.type === 'SW_POLL_DONE') {
         // Recarga silenciosa quando SW detectou algo em background
-        loadAllData();
+        loadAllData(true);
         if (!_rtConnected) subscribeOrders();
       }
     });
@@ -3209,7 +3209,7 @@ function subscribeOrders() {
 // Sync ao voltar para a aba
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
-    loadAllData();
+    loadAllData(true);
     if (!_rtConnected) subscribeOrders();
   }
 });
