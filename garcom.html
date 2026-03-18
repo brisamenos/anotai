@@ -414,8 +414,9 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 <div id="screen-login">
   <div class="login-card">
     <div class="login-logo">
-      <div class="login-logo-icon">🍽️</div>
-      <div class="login-logo-name">Estima Food</div>
+      <img id="login-store-logo" src="" alt="" style="display:none;width:60px;height:60px;border-radius:14px;object-fit:cover;margin-bottom:8px;border:2px solid rgba(255,255,255,.15)" onerror="this.style.display='none'">
+      <div class="login-logo-icon" id="login-logo-icon">🍽️</div>
+      <div class="login-logo-name" id="login-store-name">Carregando...</div>
       <div class="login-logo-sub">Acesso Garçom</div>
     </div>
     <div class="login-err" id="login-err">Usuário ou senha incorretos</div>
@@ -438,7 +439,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 <div id="screen-app">
 
   <div class="topbar">
-    <div class="topbar-logo">🍔 Estima</div>
+    <div class="topbar-logo" id="topbar-store-name">🍔 Estima</div>
     <div class="topbar-sep"></div>
     <div class="topbar-garcom" id="topbar-garcom-name">—</div>
     <div class="topbar-right">
@@ -616,26 +617,57 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 <div class="toast" id="toast"><span id="toast-msg"></span></div>
 
 <script>
-// ══ SUPABASE ══════════════════════════════
-const SUPA_URL  = 'https://lhrzwccbvdintqgebisq.supabase.co';
-const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxocnp3Y2NidmRpbnRxZ2ViaXNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1ODY0NzEsImV4cCI6MjA4OTE2MjQ3MX0.gbljgt0rzOf9eBoTcXxxfl0e_0Y-6XYxve-HGY7meJo';
+// ══ SUPABASE (shim local) ══════════════════
 const { createClient } = window.supabase;
-const sb = createClient(SUPA_URL, SUPA_ANON, { auth:{ persistSession:false } });
+const sb = createClient('', '', { auth:{ persistSession:false } });
 
-// ── Tenant via URL: garcom.html?slug=meu-restaurante ──
-let _garcomTenantId = null;
+// ── Tenant via URL: garcom.html?tenant=UUID ou ?slug=meu-restaurante ──
+let _garcomTenantId  = null;
+let _garcomNomeLoja  = null;
+
 (async function resolveGarcomTenant() {
   const p    = new URLSearchParams(window.location.search);
   const slug = p.get('slug') || p.get('t');
   const tid  = p.get('tenant');
+
+  let info = null;
   if (tid) {
-    _garcomTenantId = tid;
+    const r = await fetch(`/api/tenant-info?id=${tid}`).then(r=>r.json()).catch(()=>({}));
+    if (r.id) info = r;
   } else if (slug) {
     const r = await fetch(`/api/tenant-info?slug=${slug}`).then(r=>r.json()).catch(()=>({}));
-    if (r.id) _garcomTenantId = r.id;
+    if (r.id) info = r;
   }
-  if (_garcomTenantId) {
+
+  if (info?.id) {
+    _garcomTenantId = info.id;
+    _garcomNomeLoja = info.branding?.store_name || info.nome || null;
     sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _garcomTenantId, ts: Date.now() }));
+    // Aplica nome da loja na tela de login
+    const nomeEl = document.getElementById('login-store-name');
+    if (nomeEl && _garcomNomeLoja) nomeEl.textContent = _garcomNomeLoja;
+    // Aplica cor principal se tiver branding
+    const cor = info.branding?.store_cor;
+    if (cor) document.documentElement.style.setProperty('--accent', cor);
+    // Aplica logo se tiver
+    const logoEl = document.getElementById('login-store-logo');
+    if (logoEl && info.branding?.store_logo_url) {
+      logoEl.src = info.branding.store_logo_url.startsWith('http')
+        ? info.branding.store_logo_url
+        : window.location.origin + info.branding.store_logo_url;
+      logoEl.style.display = 'block';
+      logoEl.onload = () => {
+        const icon = document.getElementById('login-logo-icon');
+        if (icon) icon.style.display = 'none';
+      };
+    }
+    // Atualiza topbar com nome da loja
+    const topbar = document.getElementById('topbar-store-name');
+    if (topbar && _garcomNomeLoja) topbar.textContent = _garcomNomeLoja;
+  } else if (tid || slug) {
+    // Tenant informado mas não encontrado
+    const errEl = document.getElementById('login-store-name');
+    if (errEl) { errEl.textContent = 'Restaurante não encontrado'; errEl.style.color = '#ef4444'; }
   }
 })();
 

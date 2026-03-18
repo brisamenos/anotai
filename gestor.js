@@ -4842,9 +4842,14 @@ async function loadCardapioPublico() {
 function cpMontarLink() {
   const tid  = _sessao?.tenant_id || '';
   const base = window.location.origin;
-  const url  = `${base}/index.html?tenant=${encodeURIComponent(tid)}`;
+  const urlCardapio = `${base}/index.html?tenant=${encodeURIComponent(tid)}`;
+  const urlGarcom   = `${base}/garcom.html?tenant=${encodeURIComponent(tid)}`;
+
   const el = document.getElementById('cp-link-url');
-  if (el) el.textContent = url;
+  if (el) el.textContent = urlCardapio;
+
+  const elG = document.getElementById('cp-link-garcom');
+  if (elG) elG.textContent = urlGarcom;
 }
 
 function cpCopiarLink() {
