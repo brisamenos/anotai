@@ -1102,7 +1102,7 @@ function renderKanban(){
           '<div class="oc-bot"><span class="oc-total">'+total+'</span>'+
             (o.addr?'<span class="oc-addr">📍 '+o.addr+'</span>':'')+
           '</div>'+
-          (o.pag==='dinheiro'?'<div style="font-size:11px;color:var(--amber);margin:4px 0 0;padding:0 2px">💵 Dinheiro'+(o.troco?' · Troco p/ R$'+parseFloat(o.troco).toFixed(2).replace('.',','):'· Sem troco')+'</div>':'')+
+          (o.pag==='dinheiro'?'<div style="font-size:11px;color:var(--amber);margin:4px 0 0;padding:0 2px">💵 Dinheiro · '+(o.troco>0?'Troco p/ R$'+parseFloat(o.troco).toFixed(2).replace('.',','):o.troco===-1?'Precisa de troco':'Sem troco')+'</div>':'')+
           '<div class="oc-actions">'+actionBtn+'</div>'+
         '</div>';
       }).join('');
@@ -1144,8 +1144,10 @@ function openOrderDetail(id){
   if (trocoRow) {
     if (o.pag === 'dinheiro') {
       trocoRow.style.display = '';
-      trocoRow.innerHTML = o.troco
+      trocoRow.innerHTML = o.troco > 0
         ? `<span>💵 Troco para</span><span style="color:var(--amber);font-weight:700">R$ ${parseFloat(o.troco).toFixed(2).replace('.',',')}</span>`
+        : o.troco === -1
+        ? `<span>💵 Precisa de troco</span><span style="color:var(--amber)">Valor não informado</span>`
         : `<span>💵 Sem troco</span><span style="color:var(--muted)">Valor exato</span>`;
     } else {
       trocoRow.style.display = 'none';
