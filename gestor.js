@@ -411,7 +411,12 @@ function _renderMesaPageFromCache() {
   });
 }
 
+let _subscribing = false; // guard contra chamadas simultâneas de subscribeOrders
+
 function subscribeOrders() {
+  if (_subscribing) return; // já está tentando conectar, ignora
+  _subscribing = true;
+  _rtConnected = false;     // marca offline imediatamente para o polling não disparar mais
   unsubscribeAll();
 
   const chOrders = sb.channel('orders-rt')
@@ -468,6 +473,7 @@ function subscribeOrders() {
       _renderMesaPageFromCache();
     })
     .subscribe(status => {
+      _subscribing = false; // libera guard independente do resultado
       setRtStatus(status === 'SUBSCRIBED');
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         setTimeout(() => subscribeOrders(), 3000);
