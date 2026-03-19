@@ -855,7 +855,11 @@ const server = http.createServer(async (req,res) => {
   const params = url.searchParams
 
   // SSE — canal inclui tenant: /sse/orders-rt:TENANT_ID
-  if(upath.startsWith('/sse/')){sseSubscribe(upath.slice(5),res);return}
+  if(upath.startsWith('/sse/')){
+    const channel = decodeURIComponent(upath.slice(5))
+    sseSubscribe(channel, res)
+    return
+  }
 
   // Info do tenant para cardápio público ── ANTES do bloco genérico /api/
   if(req.method==='GET'&&upath==='/api/tenant-info'){
