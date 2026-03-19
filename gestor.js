@@ -5887,56 +5887,56 @@ const TEMAS_PRONTOS = [
   // ════ TEMAS CLAROS ════
   {
     nome:'☀️ Light Classic', desc:'Claro elegante',
-    vars:{'--bg':'#f8fafc','--surface':'#ffffff','--surface2':'#f1f5f9','--surface3':'#e2e8f0',
+    vars:{'--bg':'#f8fafc','--surface':'#ffffff','--surface2':'#f1f5f9','--surface3':'#e2e8f0','--border':'#cbd5e1',
           '--accent':'#3b82f6','--accent2':'#06b6d4','--accent3':'#f59e0b',
           '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
           '--pink':'#db2777','--orange':'#ea580c','--text':'#0f172a','--muted':'#64748b'}
   },
   {
     nome:'🌸 Light Rose', desc:'Rosa pastel claro',
-    vars:{'--bg':'#fff1f5','--surface':'#ffffff','--surface2':'#fce7f0','--surface3':'#fbcfe8',
+    vars:{'--bg':'#fff1f5','--surface':'#ffffff','--surface2':'#fce7f0','--surface3':'#fbcfe8','--border':'#fda4af',
           '--accent':'#e11d48','--accent2':'#f43f5e','--accent3':'#f59e0b',
           '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
           '--pink':'#be185d','--orange':'#ea580c','--text':'#1e0a14','--muted':'#9d4f7a'}
   },
   {
     nome:'🌿 Light Green', desc:'Verde suave e fresco',
-    vars:{'--bg':'#f0fdf4','--surface':'#ffffff','--surface2':'#dcfce7','--surface3':'#bbf7d0',
+    vars:{'--bg':'#f0fdf4','--surface':'#ffffff','--surface2':'#dcfce7','--surface3':'#bbf7d0','--border':'#86efac',
           '--accent':'#16a34a','--accent2':'#22c55e','--accent3':'#ca8a04',
           '--success':'#15803d','--danger':'#dc2626','--purple':'#7c3aed',
           '--pink':'#db2777','--orange':'#ea580c','--text':'#052e16','--muted':'#4b7a5a'}
   },
   {
     nome:'🍊 Light Orange', desc:'Quente e vibrante',
-    vars:{'--bg':'#fff7ed','--surface':'#ffffff','--surface2':'#ffedd5','--surface3':'#fed7aa',
+    vars:{'--bg':'#fff7ed','--surface':'#ffffff','--surface2':'#ffedd5','--surface3':'#fed7aa','--border':'#fdba74',
           '--accent':'#ea580c','--accent2':'#f97316','--accent3':'#ca8a04',
           '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
           '--pink':'#db2777','--orange':'#c2410c','--text':'#431407','--muted':'#92400e'}
   },
   {
     nome:'💜 Light Lavender', desc:'Roxo pastel suave',
-    vars:{'--bg':'#faf5ff','--surface':'#ffffff','--surface2':'#f3e8ff','--surface3':'#e9d5ff',
+    vars:{'--bg':'#faf5ff','--surface':'#ffffff','--surface2':'#f3e8ff','--surface3':'#e9d5ff','--border':'#d8b4fe',
           '--accent':'#7c3aed','--accent2':'#8b5cf6','--accent3':'#d97706',
           '--success':'#16a34a','--danger':'#dc2626','--purple':'#6d28d9',
           '--pink':'#db2777','--orange':'#ea580c','--text':'#2e1065','--muted':'#7c5c9e'}
   },
   {
     nome:'🩵 Light Sky', desc:'Azul céu limpo',
-    vars:{'--bg':'#f0f9ff','--surface':'#ffffff','--surface2':'#e0f2fe','--surface3':'#bae6fd',
+    vars:{'--bg':'#f0f9ff','--surface':'#ffffff','--surface2':'#e0f2fe','--surface3':'#bae6fd','--border':'#7dd3fc',
           '--accent':'#0284c7','--accent2':'#0ea5e9','--accent3':'#d97706',
           '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
           '--pink':'#db2777','--orange':'#ea580c','--text':'#082f49','--muted':'#0369a1'}
   },
   {
     nome:'🤍 Light Minimal', desc:'Cinza neutro limpo',
-    vars:{'--bg':'#f9fafb','--surface':'#ffffff','--surface2':'#f3f4f6','--surface3':'#e5e7eb',
+    vars:{'--bg':'#f9fafb','--surface':'#ffffff','--surface2':'#f3f4f6','--surface3':'#e5e7eb','--border':'#d1d5db',
           '--accent':'#111827','--accent2':'#374151','--accent3':'#d97706',
           '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
           '--pink':'#db2777','--orange':'#ea580c','--text':'#111827','--muted':'#6b7280'}
   },
   {
     nome:'🍫 Light Caramelo', desc:'Marrom quente aconchegante',
-    vars:{'--bg':'#fdf8f0','--surface':'#ffffff','--surface2':'#fdf3e3','--surface3':'#fde8c8',
+    vars:{'--bg':'#fdf8f0','--surface':'#ffffff','--surface2':'#fdf3e3','--surface3':'#fde8c8','--border':'#f6d599',
           '--accent':'#92400e','--accent2':'#b45309','--accent3':'#059669',
           '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
           '--pink':'#db2777','--orange':'#c2410c','--text':'#451a03','--muted':'#92400e'}
@@ -5959,6 +5959,74 @@ function temaApply(vars, save = false) {
   const root = document.documentElement;
   Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
   _temaAtual = { ..._temaAtual, ...vars };
+
+  // Detecta se o tema é claro pelo fundo principal
+  const bg = vars['--bg'] || _temaAtual['--bg'] || '';
+  const isLight = bg && parseInt(bg.replace('#','').slice(0,2), 16) >= 50;
+
+  // Remove override anterior
+  let overrideEl = document.getElementById('tema-light-override');
+  if (overrideEl) overrideEl.remove();
+
+  if (isLight) {
+    // Injeta CSS fixes para temas claros
+    const text  = vars['--text']  || _temaAtual['--text']  || '#111827';
+    const muted = vars['--muted'] || _temaAtual['--muted'] || '#6b7280';
+    const sur   = vars['--surface']  || _temaAtual['--surface']  || '#ffffff';
+    const sur2  = vars['--surface2'] || _temaAtual['--surface2'] || '#f3f4f6';
+    const sur3  = vars['--surface3'] || _temaAtual['--surface3'] || '#e5e7eb';
+    const bord  = vars['--border']   || _temaAtual['--border']   || '#d1d5db';
+    const acc   = vars['--accent']   || _temaAtual['--accent']   || '#3b82f6';
+    const css = `
+      /* Tema Claro — overrides críticos */
+      :root { --border: ${bord} !important; }
+      body, .app, .main, .page { background: var(--bg) !important; color: ${text} !important; }
+      .sidebar { background: ${sur} !important; border-right: 1px solid ${bord} !important; }
+      .si { color: ${text} !important; }
+      .si:hover, .si.on { background: rgba(0,0,0,.06) !important; color: ${acc} !important; }
+      .shead { color: ${muted} !important; }
+      .topnav { background: ${sur} !important; border-bottom: 1px solid ${bord} !important; }
+      .modal { background: ${sur} !important; color: ${text} !important; border: 1px solid ${bord} !important; }
+      .modal-bg { background: rgba(0,0,0,.3) !important; }
+      .card, .sc, .tw, .kol { background: ${sur} !important; border-color: ${bord} !important; color: ${text} !important; }
+      .kol { background: ${sur2} !important; }
+      .kol-title { color: ${text} !important; }
+      .ph .pt { color: ${text} !important; }
+      .ph .ps { color: ${muted} !important; }
+      .form-input, .form-label, textarea { background: ${sur} !important; color: ${text} !important; border-color: ${bord} !important; }
+      .form-label { color: ${muted} !important; }
+      .btn.bg { background: ${sur2} !important; color: ${text} !important; border-color: ${bord} !important; }
+      .btn.bd { border-color: var(--danger) !important; color: var(--danger) !important; background: transparent !important; }
+      .sw select { background: ${sur} !important; color: ${text} !important; border-color: ${bord} !important; }
+      .tab { color: ${muted} !important; }
+      .tab.on { color: ${acc} !important; }
+      .tw table th { background: ${sur2} !important; color: ${muted} !important; border-color: ${bord} !important; }
+      .tw table td { border-color: ${bord} !important; color: ${text} !important; }
+      .tw table tr:hover td { background: ${sur2} !important; }
+      .sbox { background: ${sur2} !important; border-color: ${bord} !important; color: ${text} !important; }
+      input::placeholder, textarea::placeholder { color: ${muted} !important; opacity: .7 !important; }
+      .toggle { background: ${sur3} !important; }
+      .toggle.on { background: var(--success) !important; }
+      .badge-analise { background: rgba(251,146,60,.15) !important; color: #c2410c !important; }
+      .badge-producao { background: rgba(234,179,8,.15) !important; color: #a16207 !important; }
+      .badge-pronto { background: rgba(34,197,94,.15) !important; color: #15803d !important; }
+      .kol-head { border-bottom: 2px solid ${bord} !important; }
+      .order-card { background: ${sur} !important; border-color: ${bord} !important; color: ${text} !important; box-shadow: 0 1px 4px rgba(0,0,0,.08) !important; }
+      .order-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.12) !important; }
+      .urow { border-top-color: ${bord} !important; }
+      .chip { background: ${sur2} !important; color: ${text} !important; border-color: ${bord} !important; }
+      .pdvb-wrap, .pdvb-left, .pdvb-right { background: var(--bg) !important; }
+      .pdvb-grid-item { background: ${sur} !important; color: ${text} !important; border-color: ${bord} !important; }
+      .pdvb-order-items { background: ${sur2} !important; }
+      .pdvb-cat-btn { color: ${text} !important; }
+      .pdvb-cat-btn.on { color: ${acc} !important; border-bottom-color: ${acc} !important; }
+    `;
+    overrideEl = document.createElement('style');
+    overrideEl.id = 'tema-light-override';
+    overrideEl.textContent = css;
+    document.head.appendChild(overrideEl);
+  }
+
   temaUpdatePreview();
   temaUpdateInputs();
   if (save) temaSalvarStorage();
