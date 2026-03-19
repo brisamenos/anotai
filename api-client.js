@@ -66,6 +66,9 @@
       this._name = name;
       this._handlers = {};
       this._sse = null;
+      this._statusCb = null;
+      this._destroyed = false;       // impede reconexão após unsubscribe()
+      this._reconnectTimer = null;   // controla timer de reconexão para evitar duplicatas
     }
 
     on(event, filter, callback) {
@@ -77,19 +80,36 @@
     }
 
     subscribe(statusCb) {
+      // Guarda o callback mais recente (permite re-subscribe com mesmo canal)
+      if (statusCb) this._statusCb = statusCb;
+      // Se já existe SSE ativo, não abre outro
       if (this._sse) return this;
+      this._destroyed = false;
+
       const tid = getTenantId();
       const channel = tid ? `${this._name}:${tid}` : this._name;
       const url = `${BASE}/sse/${encodeURIComponent(channel)}`;
       this._sse = new EventSource(url);
       const self = this;
 
-      this._sse.onopen = () => statusCb?.('SUBSCRIBED');
+      this._sse.onopen = () => {
+        // Cancela qualquer timer de reconexão pendente ao conectar com sucesso
+        if (self._reconnectTimer) { clearTimeout(self._reconnectTimer); self._reconnectTimer = null; }
+        self._statusCb?.('SUBSCRIBED');
+      };
 
       this._sse.onerror = () => {
-        statusCb?.('CHANNEL_ERROR');
-        setTimeout(() => {
-          if (self._sse) { self._sse.close(); self._sse = null; self.subscribe(statusCb); }
+        // Só reconecta se não foi destruído manualmente (unsubscribe/removeChannel)
+        if (self._destroyed) return;
+        // Fecha conexão defeituosa antes de reagendar
+        try { self._sse.close(); } catch(e) {}
+        self._sse = null;
+        self._statusCb?.('CHANNEL_ERROR');
+        // Evita timers duplicados
+        if (self._reconnectTimer) clearTimeout(self._reconnectTimer);
+        self._reconnectTimer = setTimeout(() => {
+          self._reconnectTimer = null;
+          if (!self._destroyed) self.subscribe();
         }, 3000);
       };
 
@@ -123,6 +143,8 @@
     }
 
     unsubscribe() {
+      this._destroyed = true;
+      if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
       if (this._sse) { this._sse.close(); this._sse = null; }
       return Promise.resolve();
     }
@@ -136,7 +158,15 @@
       if (!this._channels.has(name)) this._channels.set(name, new Channel(name));
       return this._channels.get(name);
     }
-    removeChannel(ch) { ch?.unsubscribe(); return Promise.resolve(); }
+    removeChannel(ch) {
+      if (!ch) return Promise.resolve();
+      ch.unsubscribe();
+      // Remove do mapa para que a próxima chamada a channel() crie instância limpa
+      for (const [key, val] of this._channels) {
+        if (val === ch) { this._channels.delete(key); break; }
+      }
+      return Promise.resolve();
+    }
     removeAllChannels() {
       this._channels.forEach(ch => ch.unsubscribe());
       this._channels.clear();
