@@ -2284,6 +2284,20 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
 </div><!-- fim page-tema -->
 
 
+<!-- MODAL COMPROVANTE MESA -->
+<div class="modal-bg" id="modal-comprovante-mesa">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-title">🧾 Comprovante da Mesa</div>
+    <div id="comp-mesa-content" style="margin:16px 0;max-height:60vh;overflow-y:auto"></div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-comprovante-mesa')">Fechar</button>
+      <button class="btn bp" style="flex:1;justify-content:center" onclick="imprimirComprovanteMesa()">
+        🖨️ Imprimir comprovante
+      </button>
+    </div>
+  </div>
+</div>
+
 <script src="/gestor.js"></script>
 </body>
 </html>
