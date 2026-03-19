@@ -2011,7 +2011,7 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
 </div>
 
 <!-- Modelos Prontos -->
-<div class="modal-bg" id="modal-modelos">
+<div class="modal-bg" id="modal-modelos" onclick="if(event.target===this)closeModal('modal-modelos')" style="align-items:center;justify-content:center">
   <div class="modal" style="width:640px;max-height:88vh;overflow-y:auto">
     <button class="modal-close" onclick="closeModal('modal-modelos')">✕</button>
     <div class="modal-title" style="margin-bottom:4px">Modelos prontos de cardápio</div>
@@ -2025,47 +2025,41 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
     <!-- Grid de modelos -->
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px" id="modelos-grid">
 
-      <!-- Açaiteria -->
-      <div class="modelo-card" id="modelo-acaiteria" onclick="selecionarModelo('acaiteria')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s">
-        <div style="font-size:36px;margin-bottom:8px">🍇</div>
-        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px">Açaiteria</div>
-        <div style="font-size:11px;color:var(--muted);line-height:1.4">Tamanhos, complementos, coberturas e adicionais</div>
-      </div>
+      <button class="modelo-card" id="modelo-acaiteria" onclick="selecionarModelo('acaiteria')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s;font-family:inherit;color:var(--text)">
+        <div style="font-size:36px;margin-bottom:8px;pointer-events:none">🍇</div>
+        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px;pointer-events:none">Açaiteria</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.4;pointer-events:none">Tamanhos, complementos, coberturas e adicionais</div>
+      </button>
 
-      <!-- Restaurante -->
-      <div class="modelo-card" id="modelo-restaurante" onclick="selecionarModelo('restaurante')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s">
-        <div style="font-size:36px;margin-bottom:8px">🍽️</div>
-        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px">Restaurante</div>
-        <div style="font-size:11px;color:var(--muted);line-height:1.4">Entradas, pratos principais, sobremesas e bebidas</div>
-      </div>
+      <button class="modelo-card" id="modelo-restaurante" onclick="selecionarModelo('restaurante')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s;font-family:inherit;color:var(--text)">
+        <div style="font-size:36px;margin-bottom:8px;pointer-events:none">🍽️</div>
+        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px;pointer-events:none">Restaurante</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.4;pointer-events:none">Entradas, pratos principais, sobremesas e bebidas</div>
+      </button>
 
-      <!-- Pizzaria -->
-      <div class="modelo-card" id="modelo-pizzaria" onclick="selecionarModelo('pizzaria')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s">
-        <div style="font-size:36px;margin-bottom:8px">🍕</div>
-        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px">Pizzaria</div>
-        <div style="font-size:11px;color:var(--muted);line-height:1.4">Pizzas salgadas, doces, bordas e bebidas</div>
-      </div>
+      <button class="modelo-card" id="modelo-pizzaria" onclick="selecionarModelo('pizzaria')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s;font-family:inherit;color:var(--text)">
+        <div style="font-size:36px;margin-bottom:8px;pointer-events:none">🍕</div>
+        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px;pointer-events:none">Pizzaria</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.4;pointer-events:none">Pizzas salgadas, doces, bordas e bebidas</div>
+      </button>
 
-      <!-- Hamburgueria -->
-      <div class="modelo-card" id="modelo-hamburgueria" onclick="selecionarModelo('hamburgueria')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s">
-        <div style="font-size:36px;margin-bottom:8px">🍔</div>
-        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px">Hamburgueria</div>
-        <div style="font-size:11px;color:var(--muted);line-height:1.4">Hambúrgueres, combos, acompanhamentos e bebidas</div>
-      </div>
+      <button class="modelo-card" id="modelo-hamburgueria" onclick="selecionarModelo('hamburgueria')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s;font-family:inherit;color:var(--text)">
+        <div style="font-size:36px;margin-bottom:8px;pointer-events:none">🍔</div>
+        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px;pointer-events:none">Hamburgueria</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.4;pointer-events:none">Hambúrgueres, combos, acompanhamentos e bebidas</div>
+      </button>
 
-      <!-- Cafeteria -->
-      <div class="modelo-card" id="modelo-cafeteria" onclick="selecionarModelo('cafeteria')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s">
-        <div style="font-size:36px;margin-bottom:8px">☕</div>
-        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px">Cafeteria</div>
-        <div style="font-size:11px;color:var(--muted);line-height:1.4">Cafés, sucos, salgados e doces</div>
-      </div>
+      <button class="modelo-card" id="modelo-cafeteria" onclick="selecionarModelo('cafeteria')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s;font-family:inherit;color:var(--text)">
+        <div style="font-size:36px;margin-bottom:8px;pointer-events:none">☕</div>
+        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px;pointer-events:none">Cafeteria</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.4;pointer-events:none">Cafés, sucos, salgados e doces</div>
+      </button>
 
-      <!-- Padaria -->
-      <div class="modelo-card" id="modelo-padaria" onclick="selecionarModelo('padaria')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s">
-        <div style="font-size:36px;margin-bottom:8px">🥐</div>
-        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px">Padaria</div>
-        <div style="font-size:11px;color:var(--muted);line-height:1.4">Pães, salgados, doces, bolos e bebidas</div>
-      </div>
+      <button class="modelo-card" id="modelo-padaria" onclick="selecionarModelo('padaria')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s;font-family:inherit;color:var(--text)">
+        <div style="font-size:36px;margin-bottom:8px;pointer-events:none">🥐</div>
+        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px;pointer-events:none">Padaria</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.4;pointer-events:none">Pães, salgados, doces, bolos e bebidas</div>
+      </button>
 
     </div>
 
