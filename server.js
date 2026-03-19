@@ -313,6 +313,16 @@ const MIGRATIONS = [
     description: 'Adiciona horarios_config em store_config',
     up: `ALTER TABLE store_config ADD COLUMN horarios_config TEXT`
   },
+  {
+    version: 11,
+    description: 'Adiciona total_spent, last_order_at, email e birthday em customers',
+    up: [
+      `ALTER TABLE customers ADD COLUMN total_spent REAL DEFAULT 0`,
+      `ALTER TABLE customers ADD COLUMN last_order_at TEXT`,
+      `ALTER TABLE customers ADD COLUMN email TEXT`,
+      `ALTER TABLE customers ADD COLUMN birthday TEXT`
+    ]
+  },
 ]
 
 function runMigrations() {
@@ -448,7 +458,7 @@ const TABLE_COLS = {
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','updated_at'],
   fidelidade:   ['id','tenant_id','name','phone','birthday','pts','max_pts','orders_count','resgates','created_at'],
-  customers:    ['id','tenant_id','name','phone','addr','orders_count','created_at'],
+  customers:    ['id','tenant_id','name','phone','addr','orders_count','total_spent','last_order_at','email','birthday','created_at'],
 }
 
 // Tabelas que NÃO são filtradas por tenant (acesso global)
