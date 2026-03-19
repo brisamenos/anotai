@@ -47,6 +47,7 @@ body {
   content: '';
   position: absolute;
   inset: 0;
+  pointer-events: none;
   background:
     radial-gradient(ellipse 60% 80% at 80% 20%, rgba(59,130,246,.18) 0%, transparent 70%),
     radial-gradient(ellipse 40% 60% at 20% 80%, rgba(6,182,212,.08) 0%, transparent 60%);
@@ -55,6 +56,7 @@ body {
   position: absolute;
   inset: 0;
   opacity: .04;
+  pointer-events: none;
   background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
 }
 .hero-info { position: relative; z-index: 1; }
@@ -141,7 +143,7 @@ body {
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-x;
+  touch-action: pan-x pan-y;
   cursor: grab;
 }
 .cats-scroll:active { cursor: grabbing; }
@@ -221,6 +223,8 @@ body {
   transition: all .2s;
   position: relative;
   animation: fadeUp .3s ease both;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(59,130,246,.15);
 }
 .item-card:hover {
   border-color: rgba(59,130,246,.35);
@@ -552,7 +556,7 @@ body {
 .cad-skip { width: 100%; padding: 12px; background: none; border: none; color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer; margin-top: 6px; }
 .cad-skip:hover { color: var(--text); }
 .cad-err { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.2); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; color: var(--red); margin-bottom: 12px; display: none; text-align: center; }
-.hero-profile-btn { position: absolute; top: 16px; right: 16px; z-index: 5; display: flex; align-items: center; gap: 7px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: 99px; padding: 7px 14px; font-size: 12.5px; font-weight: 600; color: var(--text); cursor: pointer; transition: all .18s; backdrop-filter: blur(6px); }
+.hero-profile-btn { position: absolute; top: 16px; right: 16px; z-index: 10; display: flex; align-items: center; gap: 7px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: 99px; padding: 7px 14px; font-size: 12.5px; font-weight: 600; color: var(--text); cursor: pointer; transition: all .18s; backdrop-filter: blur(6px); }
 .hero-profile-btn:hover { background: rgba(255,255,255,.14); }
 .hero-profile-btn .pav { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #06b6d4); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: #fff; flex-shrink: 0; }
 .aniv-banner { margin: 12px 20px 0; background: linear-gradient(135deg, rgba(245,158,11,.12), rgba(251,191,36,.08)); border: 1px solid rgba(245,158,11,.25); border-radius: 14px; padding: 12px 16px; display: none; align-items: center; gap: 12px; }
@@ -1535,13 +1539,20 @@ body {
 // ═══════════════════════════════════════════════
 // SUPABASE
 // ═══════════════════════════════════════════════
+// Garante que o shim foi carregado — se não, cria um stub para não travar
+if (!window.supabase) {
+  console.error('[index] supabase-shim.js não carregou. Verifique o servidor.');
+  window.supabase = { createClient: () => ({
+    from: () => ({ select:()=>({eq:()=>({maybeSingle:async()=>({data:null,error:{message:'shim missing'}}),single:async()=>({data:null,error:{message:'shim missing'}})}),not:()=>({order:async()=>({data:[],error:null})}),order:async()=>({data:[],error:null})}),insert:()=>({select:()=>({single:async()=>({data:null,error:{message:'shim missing'}})})}),update:()=>({eq:()=>({select:()=>({single:async()=>({data:null,error:null})})})}),upsert:async()=>({data:null,error:null}),delete:()=>({eq:async()=>({data:null,error:null})})  }),
+    channel: () => ({ on:()=>({subscribe:()=>{}}), subscribe:()=>{} }),
+    removeChannel: ()=>{},
+    storage: { from: ()=>({ upload:async()=>({data:null,error:null}), getPublicUrl:()=>({data:{publicUrl:''}}) }) },
+    auth: { getSession:async()=>({data:{session:null},error:null}), onAuthStateChange:()=>({data:{subscription:{unsubscribe:()=>{}}}}) }
+  }) }
+}
 const { createClient } = window.supabase;
 const sb = createClient('', '', {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-    detectSessionInUrl: false
-  }
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
 });
 
 // ═══════════════════════════════════════════════
@@ -1620,7 +1631,7 @@ async function loadProfile() {
     const local = JSON.parse(raw);
     if (!local.phone) return;
     // Verifica no banco
-    const { data } = await sb.from('customers')
+    const { data } = await sbTenant().from('customers')
       .select('id,name,phone,email,birthday,addr')
       .eq('phone', local.phone).maybeSingle();
     if (data) {
@@ -1680,11 +1691,13 @@ function openCadastro() {
   set('cad-phone', _profile?.phone   || '');
   set('cad-email', _profile?.email   || '');
   set('cad-aniv',  _profile?.birthday|| '');
-  document.getElementById('cad-bg').classList.add('on');
+  const cadBg = document.getElementById('cad-bg');
+  if (cadBg) { cadBg.classList.add('on'); cadBg.style.display = 'flex'; }
 }
 
 function closeCadastro() {
-  document.getElementById('cad-bg').classList.remove('on');
+  const cadBg = document.getElementById('cad-bg');
+  if (cadBg) { cadBg.classList.remove('on'); cadBg.style.display = ''; }
 }
 
 function closeCadastroFromSuccess() {
@@ -1730,17 +1743,18 @@ async function submitCadastro() {
     };
 
     // Upsert pelo telefone
-    const { data: existing } = await sb.from('customers')
+    const sbt2 = sbTenant();
+    const { data: existing } = await sbt2.from('customers')
       .select('id,orders_count,total_spent,addr').eq('phone', phone).maybeSingle();
 
     let saved;
     if (existing) {
-      const { data } = await sb.from('customers')
+      const { data } = await sbt2.from('customers')
         .update({ ...payload, addr: existing.addr })
         .eq('id', existing.id).select().single();
       saved = data;
     } else {
-      const { data } = await sb.from('customers')
+      const { data } = await sbt2.from('customers')
         .insert({ ...payload, orders_count: 0, total_spent: 0 })
         .select().single();
       saved = data;
@@ -1748,12 +1762,12 @@ async function submitCadastro() {
 
     // Também cria/atualiza fidelidade
     try {
-      const { data: fidEx } = await sb.from('fidelidade')
+      const { data: fidEx } = await sbt2.from('fidelidade')
         .select('id').eq('phone', phone).maybeSingle();
       if (!fidEx) {
-        await sb.from('fidelidade').insert({ name: nome, phone, pts: 0, orders_count: 0 });
+        await sbt2.from('fidelidade').insert({ name: nome, phone, pts: 0, orders_count: 0 });
       } else {
-        await sb.from('fidelidade').update({ name: nome }).eq('id', fidEx.id);
+        await sbt2.from('fidelidade').update({ name: nome }).eq('id', fidEx.id);
       }
     } catch(e) {}
 
@@ -1845,23 +1859,9 @@ function applyBranding(b, tenantNome) {
 }
 
 function sbTenant() {
-  // Proxy que injeta x-tenant-id nas queries do cardápio
-  if (!_tenantId) return sb;
-  return new Proxy(sb, {
-    get(target, prop) {
-      if (prop === 'from') {
-        return (table) => {
-          const q = target.from(table);
-          const orig = q._withTenant || (() => q);
-          // Injeta tenant_id via header
-          q._headers = q._headers || {};
-          q._headers['x-tenant-id'] = _tenantId;
-          return q;
-        };
-      }
-      return typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop];
-    }
-  });
+  // O shim já injeta x-tenant-id automaticamente via sessionStorage.
+  // sessionStorage é preenchida em init() antes de qualquer query.
+  return sb;
 }
 
 async function init() {
@@ -1879,21 +1879,29 @@ async function init() {
       sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
     }
 
+    const st = sbTenant();
     const [itemsRes, catsRes, cuponsRes, configRes] = await Promise.all([
-      sb.from('menu_items').select('*').not('status','eq','pausado').order('id'),
-      sb.from('categories').select('*').order('sort_order'),
-      sb.from('cupons').select('*').eq('ativo', true),
-      sb.from('store_config').select('*').single()
+      st.from('menu_items').select('*').not('status','eq','pausado').order('id'),
+      st.from('categories').select('*').order('sort_order'),
+      st.from('cupons').select('*').eq('ativo', true),
+      st.from('store_config').select('*').single()
     ]);
-    allItems  = (itemsRes.data  || []);
-    allCats   = (catsRes.data   || []);
+    allItems  = (itemsRes.data  || []).map(x => ({...x, id: Number(x.id)}));
+    allCats   = (catsRes.data   || []).map(x => ({...x, id: Number(x.id)}));
     allCupons = (cuponsRes.data || []);
 
     // Apply store config
     if (configRes.data) {
       applyStoreStatus(configRes.data.store_open);
       if (configRes.data.delivery_fee_config) {
-        deliveryFeeConfig = configRes.data.delivery_fee_config;
+        const rawFee = configRes.data.delivery_fee_config;
+        // Normaliza campos: o banco pode ter 'tipo'/'tipo' e 'valor'/'value'
+        deliveryFeeConfig = {
+          tipo:   rawFee.tipo  || rawFee.type  || 'fixo',
+          valor:  rawFee.valor || rawFee.value || rawFee.fixed || 0,
+          faixas: rawFee.faixas || rawFee.zones || [],
+          ...rawFee
+        };
       }
     }
 
@@ -2080,9 +2088,11 @@ function getDiscount() {
   if (!appliedCupom) return 0;
   const c = appliedCupom;
   const sub = cartSubtotal();
-  if (c.tipo === '%') return sub * c.val / 100;
-  if (c.tipo === 'frete') return deliveryType === 'delivery' ? getTaxaBase() : 0;
-  return Math.min(c.val, sub);
+  const tipo = c.type || c.tipo || '';
+  const val  = parseFloat(c.value ?? c.val ?? 0);
+  if (tipo === 'percent' || tipo === '%') return sub * val / 100;
+  if (tipo === 'frete') return deliveryType === 'delivery' ? getTaxaBase() : 0;
+  return Math.min(val, sub);
 }
 
 function getTaxaBase() {
@@ -2218,8 +2228,9 @@ function applyCupom() {
   if (!found) {
     fb.innerHTML = '<div class="coupon-err">❌ Cupom inválido ou expirado</div>';
     appliedCupom = null;
-  } else if (found.minimo > 0 && cartSubtotal() < found.minimo) {
-    fb.innerHTML = `<div class="coupon-err">❌ Pedido mínimo de R$ ${fmtN(found.minimo)} para este cupom</div>`;
+  } else if ((found.min_order || found.minimo || 0) > 0 && cartSubtotal() < (found.min_order || found.minimo || 0)) {
+    const minVal = found.min_order || found.minimo || 0;
+    fb.innerHTML = `<div class="coupon-err">❌ Pedido mínimo de R$ ${fmtN(minVal)} para este cupom</div>`;
     appliedCupom = null;
   } else {
     appliedCupom = found;
@@ -2265,10 +2276,11 @@ async function submitOrder() {
   try {
     // Save/update customer
     try {
-      const { data: existing } = await sb.from('customers')
+      const sbt = sbTenant();
+      const { data: existing } = await sbt.from('customers')
         .select('id,orders_count,total_spent,email,birthday').eq('phone', phone).maybeSingle();
       if (existing) {
-        await sb.from('customers').update({
+        await sbt.from('customers').update({
           name, addr: addrFull || existing.addr,
           email: _profile?.email || existing.email || null,
           birthday: _profile?.birthday || existing.birthday || null,
@@ -2283,7 +2295,7 @@ async function submitOrder() {
           updateHeroProfile(_profile);
         }
       } else {
-        const { data: inserted } = await sb.from('customers').insert({
+        const { data: inserted } = await sbt.from('customers').insert({
           name, phone, addr: addrFull||null,
           email: _profile?.email || null,
           birthday: _profile?.birthday || null,
@@ -2300,17 +2312,17 @@ async function submitOrder() {
       }
       // Atualiza fidelidade
       try {
-        const { data: fidEx } = await sb.from('fidelidade').select('id,pts,orders_count').eq('phone', phone).maybeSingle();
+        const { data: fidEx } = await sbt.from('fidelidade').select('id,pts,orders_count').eq('phone', phone).maybeSingle();
         if (fidEx) {
-          await sb.from('fidelidade').update({ name, orders_count: (fidEx.orders_count||0)+1 }).eq('id', fidEx.id);
+          await sbt.from('fidelidade').update({ name, orders_count: (fidEx.orders_count||0)+1 }).eq('id', fidEx.id);
         } else {
-          await sb.from('fidelidade').insert({ name, phone, pts: 0, orders_count: 1 });
+          await sbt.from('fidelidade').insert({ name, phone, pts: 0, orders_count: 1 });
         }
       } catch(e) {}
     } catch(e) { console.warn('Customer save skipped:', e); }
 
     // Insert order
-    const { data, error } = await sb.from('orders').insert({
+    const { data, error } = await sbt.from('orders').insert({
       client: name, phone, addr: addrFull,
       items: itemsArr, total: grandTotal(), taxa: getTaxa(),
       status: 'analise', time, pag: selectedPay
@@ -2565,8 +2577,11 @@ function confirmPizza() {
   cart.push(pizzaItem);
   updateCartFloat();
   closePizzaModal();
-  // Always suggest drink after pizza
-  setTimeout(() => openUpsell(pizzaItem), 350);
+  // Só mostra upsell se existirem bebidas cadastradas
+  setTimeout(() => {
+    if (getUpsellSuggestions().length > 0) openUpsell(pizzaItem);
+    else showToast('🛒', pizzaItem.name + ' adicionada!');
+  }, 350);
 }
 
 // ═══════════════════════════════════════════════
@@ -2660,7 +2675,8 @@ let _itemModalId = null;
 let _itemModalQty = 1;
 
 function openItemModal(itemId) {
-  const i = allItems.find(x => x.id === itemId);
+  const id = Number(itemId);
+  const i = allItems.find(x => x.id === id);
   if (!i || i.status === 'esgotado') return;
   _itemModalId = itemId;
   _itemModalQty = 1;
@@ -2704,11 +2720,13 @@ function openItemModal(itemId) {
   btn.textContent = isPizza ? '🍕 Montar Pizza' : '🛒 Adicionar ao carrinho';
   document.getElementById('item-modal-qty-wrap').style.display = isPizza ? 'none' : 'flex';
 
-  document.getElementById('item-modal-bg').classList.add('on');
+  const modalBg = document.getElementById('item-modal-bg');
+  if (modalBg) { modalBg.classList.add('on'); modalBg.style.display = 'flex'; }
 }
 
 function closeItemModal() {
-  document.getElementById('item-modal-bg').classList.remove('on');
+  const modalBg = document.getElementById('item-modal-bg');
+  if (modalBg) { modalBg.classList.remove('on'); modalBg.style.display = ''; }
   _itemModalId = null;
   const photo = document.getElementById('item-modal-photo');
   photo.style.transition = '';
@@ -2721,7 +2739,7 @@ function itemModalChangeQty(delta) {
 }
 
 function itemModalConfirm() {
-  const i = allItems.find(x => x.id === _itemModalId);
+  const i = allItems.find(x => x.id === Number(_itemModalId));
   if (!i) return;
   if (i.item_type === 'pizza') {
     const pid = i.id;
@@ -2753,13 +2771,13 @@ function getUpsellSuggestions() {
   // Get drinks/accompaniments not already in cart
   const cartIds = new Set(cart.map(c => c.id));
   const drinks  = allItems.filter(i =>
-    i.status === 'active' &&
+    ['active','ativo'].includes(i.status) &&
     !cartIds.has(i.id) &&
     UPSELL_DRINKS.includes(detectFoodType(i))
   );
   // Also include any item with category name matching bebidas/drinks
   const beverages = allItems.filter(i =>
-    i.status === 'active' &&
+    ['active','ativo'].includes(i.status) &&
     !cartIds.has(i.id) &&
     (i.cat_key === 'bebidas' || i.cat === 'bebidas' || i.cat_key === 'drinks')
   );
@@ -2770,7 +2788,8 @@ function getUpsellSuggestions() {
 
 function shouldShowUpsell(item) {
   const type = detectFoodType(item);
-  return UPSELL_TRIGGERS.includes(type);
+  if (!UPSELL_TRIGGERS.includes(type)) return false;
+  return getUpsellSuggestions().length > 0;
 }
 
 function openUpsell(addedItem) {
