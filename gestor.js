@@ -5060,13 +5060,86 @@ function _evoShowQRPrompt() {
   if(qr){ qr.style.display='block'; qr.innerHTML='<div style="font-size:48px;margin-bottom:12px">📱</div><div style="font-size:14px;font-weight:600;margin-bottom:6px">WhatsApp desconectado</div><div style="font-size:12px;color:var(--muted);margin-bottom:16px">Clique para gerar o QR Code</div><button class="btn bp" onclick="evoConectar()">📲 Conectar WhatsApp</button>'; }
   if(cn) cn.style.display='none';
 }
-// ══ CARDÁPIO PÚBLICO ════════════════════════════════
+// ══ HORÁRIOS DE FUNCIONAMENTO ════════════════════════
+const _CP_DIAS = [
+  { key:'dom', label:'Domingo' },
+  { key:'seg', label:'Segunda' },
+  { key:'ter', label:'Terça'   },
+  { key:'qua', label:'Quarta'  },
+  { key:'qui', label:'Quinta'  },
+  { key:'sex', label:'Sexta'   },
+  { key:'sab', label:'Sábado'  },
+];
+
+function cpRenderHorarios(horarios) {
+  const container = document.getElementById('cp-horarios-list');
+  if (!container) return;
+  container.innerHTML = '';
+  for (const d of _CP_DIAS) {
+    const h = horarios[d.key] || { ativo: d.key !== 'dom', abertura: '11:00', fechamento: '22:00' };
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;transition:opacity .15s';
+    row.id = `cp-hr-row-${d.key}`;
+    row.innerHTML = `
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;min-width:80px">
+        <div class="toggle-wrap" onclick="cpToggleDia('${d.key}',this)" style="width:34px;height:18px;border-radius:9px;background:${h.ativo?'var(--success)':'var(--surface)'};border:1px solid ${h.ativo?'var(--success)':'var(--border)'};position:relative;cursor:pointer;transition:all .2s;flex-shrink:0">
+          <div style="position:absolute;top:2px;left:${h.ativo?'16px':'2px'};width:12px;height:12px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>
+        </div>
+        <span style="font-size:12px;font-weight:600;color:${h.ativo?'var(--text)':'var(--muted)'}" id="cp-hr-label-${d.key}">${d.label}</span>
+      </label>
+      <div id="cp-hr-times-${d.key}" style="display:${h.ativo?'flex':'none'};align-items:center;gap:6px;flex:1">
+        <input type="time" value="${h.abertura||'11:00'}" id="cp-hr-ab-${d.key}"
+          style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 8px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;outline:none;width:90px"
+          oninput="cpHorarioChanged()">
+        <span style="font-size:11px;color:var(--muted)">até</span>
+        <input type="time" value="${h.fechamento||'22:00'}" id="cp-hr-fch-${d.key}"
+          style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 8px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;outline:none;width:90px"
+          oninput="cpHorarioChanged()">
+      </div>
+      <span id="cp-hr-fechado-${d.key}" style="display:${h.ativo?'none':'flex'};font-size:11px;color:var(--muted);font-weight:600;flex:1">Fechado</span>
+    `;
+    container.appendChild(row);
+  }
+}
+
+function cpToggleDia(key, toggleEl) {
+  const timesEl  = document.getElementById(`cp-hr-times-${key}`);
+  const fechEl   = document.getElementById(`cp-hr-fechado-${key}`);
+  const labelEl  = document.getElementById(`cp-hr-label-${key}`);
+  const knob     = toggleEl.querySelector('div');
+  const isOn     = toggleEl.dataset.on !== 'false' && toggleEl.style.background.includes('success') || toggleEl.style.background === 'var(--success)';
+  const nowOn    = !isOn;
+  toggleEl.style.background = nowOn ? 'var(--success)' : 'var(--surface)';
+  toggleEl.style.borderColor = nowOn ? 'var(--success)' : 'var(--border)';
+  if (knob) knob.style.left = nowOn ? '16px' : '2px';
+  if (timesEl)  timesEl.style.display  = nowOn ? 'flex' : 'none';
+  if (fechEl)   fechEl.style.display   = nowOn ? 'none' : 'flex';
+  if (labelEl)  labelEl.style.color    = nowOn ? 'var(--text)' : 'var(--muted)';
+}
+
+function cpGetHorarios() {
+  const out = {};
+  for (const d of _CP_DIAS) {
+    const toggleEl = document.querySelector(`#cp-hr-row-${d.key} .toggle-wrap`);
+    const ativo    = toggleEl ? toggleEl.style.background === 'var(--success)' || toggleEl.style.background.includes('success') : false;
+    out[d.key] = {
+      ativo,
+      abertura:    document.getElementById(`cp-hr-ab-${d.key}`)?.value  || '11:00',
+      fechamento:  document.getElementById(`cp-hr-fch-${d.key}`)?.value || '22:00',
+    };
+  }
+  return out;
+}
+
+function cpHorarioChanged() { /* placeholder para futuros listeners */ }
+
+
 let _cpLogoUrl   = '';
 let _cpBannerUrl = '';
 
 async function loadCardapioPublico() {
   const { data } = await sb.from('store_config').select(
-    'store_name,store_descricao,store_logo_url,store_banner_url,store_cor,store_tempo_entrega,store_avaliacao,store_whatsapp'
+    'store_name,store_descricao,store_logo_url,store_banner_url,store_cor,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config'
   ).single();
   if (!data) return;
 
@@ -5076,6 +5149,11 @@ async function loadCardapioPublico() {
   v('cp-whatsapp',  data.store_whatsapp);
   v('cp-tempo',     data.store_tempo_entrega);
   v('cp-avaliacao', data.store_avaliacao);
+
+  // Horários de funcionamento
+  let horarios = {};
+  try { horarios = data.horarios_config ? JSON.parse(data.horarios_config) : {}; } catch(e) {}
+  cpRenderHorarios(horarios);
 
   const cor = data.store_cor || '#3b82f6';
   const corEl = document.getElementById('cp-cor');
@@ -5206,6 +5284,7 @@ async function salvarCardapioPublico() {
       store_tempo_entrega: document.getElementById('cp-tempo')?.value.trim()     || '30-45 min',
       store_avaliacao:     document.getElementById('cp-avaliacao')?.value.trim() || '5.0',
       store_cor:           document.getElementById('cp-cor')?.value              || '#3b82f6',
+      horarios_config:     JSON.stringify(cpGetHorarios()),
     };
     if (_cpLogoUrl)   payload.store_logo_url   = _cpLogoUrl;
     if (_cpBannerUrl) payload.store_banner_url = _cpBannerUrl;
