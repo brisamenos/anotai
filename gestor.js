@@ -1650,15 +1650,37 @@ function selecionarModelo(tipo) {
 
 // ── Limpa todo o cardápio do tenant ──────────────────
 async function limparCardapioAtual() {
-  // Deleta todos os itens
-  if (items.length > 0) {
-    await sb.from('menu_items').delete().neq('id', 0);
-    items.length = 0;
+  if (items.length > 0)      await sb.from('menu_items').delete().neq('id', 0);
+  if (categories.length > 0) await sb.from('categories').delete().neq('id', 0);
+  items.length = 0;
+  categories.length = 0;
+}
+
+// ── Excluir tudo com confirmação dupla ───────────────
+async function excluirTodoCardapio() {
+  if (!categories.length && !items.length) {
+    sbToast('err', 'O cardápio já está vazio.');
+    return;
   }
-  // Deleta todas as categorias
-  if (categories.length > 0) {
-    await sb.from('categories').delete().neq('id', 0);
-    categories.length = 0;
+
+  const primeira = confirm(`Tem certeza que deseja EXCLUIR TODO O CARDÁPIO?\n\n${categories.length} categoria(s) · ${items.length} item(s) serão deletados permanentemente.`);
+  if (!primeira) return;
+
+  const segunda = confirm('⚠️ Esta ação não pode ser desfeita.\n\nConfirme novamente para excluir tudo.');
+  if (!segunda) return;
+
+  closeModal('modal-modelos');
+  sbLoading(true);
+  try {
+    await limparCardapioAtual();
+    renderGestor();
+    renderTable();
+    sbToast('ok', '🗑️ Cardápio excluído com sucesso.');
+  } catch(e) {
+    sbToast('err', 'Erro ao excluir: ' + e.message);
+    console.error(e);
+  } finally {
+    sbLoading(false);
   }
 }
 
