@@ -713,9 +713,52 @@ async function handleREST(req, res, table, params, body) {
       const info = db.prepare(`UPDATE "${table}" SET ${setClause} ${WHERE}`).run(...keys.map(k=>sanitize(payload[k])),...vals)
       // Busca registro atualizado do banco para o emit (garante JSON fields parseados)
       if (['orders','mesas','store_config','menu_items','categories'].includes(table)) {
-        const idVal = vals[vals.length - 1] // último val geralmente é o id do filtro
         const updatedRow = db.prepare(`SELECT * FROM "${table}" ${WHERE}`).get(...vals)
-        emit(tenantId||payload.tenant_id, table, updatedRow ? parseRow(table, updatedRow) : payload, 'UPDATE')
+        const parsedRow  = updatedRow ? parseRow(table, updatedRow) : null
+        emit(tenantId||payload.tenant_id, table, parsedRow || payload, 'UPDATE')
+
+        // ── Notificação WhatsApp ao mudar status do pedido (kanban) ──────────
+        // Dispara imediatamente — não depende do checarPedidos (polling 15s)
+        if (table === 'orders' && payload.status && parsedRow && parsedRow.phone) {
+          ;(async () => {
+            try {
+              const tid = tenantId || parsedRow.tenant_id
+              const cfg = db.prepare("SELECT evo_automacoes,evo_instance FROM store_config WHERE tenant_id=?").get(tid)
+              const auto = jsonParse(cfg?.evo_automacoes) || {}
+              const inst = cfg?.evo_instance || EVO_INST
+              // Mapa completo: todos os status do kanban → chave de automação
+              const statusToTipo = {
+                producao:  'confirmado',
+                pronto:    'pronto',
+                saiu:      'saiu',
+                entregue:  'entregue',
+                cancelado: 'cancelado',
+                finalizado:'avaliacao'
+              }
+              const tipo = statusToTipo[payload.status]
+              if (!tipo) return
+              const ct = auto[tipo] || {}
+              if (!ct.on || !ct.msg) return
+              const items = (() => {
+                try { return (parsedRow.items || []).map(i => `${i.qty}x ${i.name}`).join(', ') } catch(e) { return '' }
+              })()
+              const vars = {
+                nome:          parsedRow.client || 'Cliente',
+                id:            String(parsedRow.id),
+                itens:         items,
+                total:         (parseFloat(parsedRow.total) || 0).toFixed(2).replace('.', ','),
+                endereco:      parsedRow.addr || '',
+                mesa:          String(parsedRow.mesa_num || ''),
+                tipo_entrega:  (parsedRow.addr || '').includes('Mesa') ? '🪑 Mesa'
+                             : (parsedRow.addr || '').includes('alcão') ? '🏪 Balcão' : '🛵 Entrega'
+              }
+              await sendWA(parsedRow.phone, fillVars(ct.msg, vars), inst)
+              // Marca como processado — evita que checarPedidos duplique a mensagem
+              processed.add(`${parsedRow.id}_${payload.status}`)
+              log('📲', `WA kanban → ${parsedRow.phone} [${payload.status}]`)
+            } catch(e) { log('❌', 'Erro WA kanban:', { error: e.message }) }
+          })()
+        }
       }
       return send(res,200,{updated:info.changes})
     } catch(e) { return send(res,400,{error:e.message}) }
@@ -814,17 +857,20 @@ function handleUpload(req, res) {
 // ════════════════════════════════════════════════════════
 async function sendWA(phone, text, inst) {
   const instance = inst || EVO_INST
-  const num = phone.replace(/\D/g,'')
-  const number = num.startsWith('55')?num:`55${num}`
+  // Evolution API v2: número só dígitos com DDI 55
+  const num    = phone.replace(/\D/g,'')
+  const number = num.startsWith('55') ? num : `55${num}`
   try {
-    const r = await fetch(`${EVO_URL}/message/sendText/${instance}`,{
-      method:'POST',headers:{'Content-Type':'application/json',apikey:EVO_KEY},
-      body:JSON.stringify({ number, text })
+    // v2.x — endpoint idêntico ao v1; body aceita options.delay
+    const r = await fetch(`${EVO_URL}/message/sendText/${instance}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: EVO_KEY },
+      body: JSON.stringify({ number, text, options: { delay: 1200 } })
     })
     const data = await r.json().catch(()=>({}))
-    if (r.ok){log('📤',`Enviado para ${number} [${instance}]`);return{ok:true,data}}
-    log('❌',`Falhou ${number}:`,data);return{ok:false,data}
-  } catch(e){log('❌','Erro WA:',{error:e.message});return{ok:false,error:e.message}}
+    if (r.ok) { log('📤', `Enviado para ${number} [${instance}]`); return { ok: true, data } }
+    log('❌', `Falhou ${number}:`, data); return { ok: false, data }
+  } catch(e) { log('❌', 'Erro WA:', { error: e.message }); return { ok: false, error: e.message } }
 }
 
 function fillVars(tpl, vars) {
@@ -876,12 +922,12 @@ async function checarPedidos() {
       if (!cfg) continue
       const auto   = jsonParse(cfg.evo_automacoes)||{}
       const inst   = cfg.evo_instance || EVO_INST
-      const pedidos = db.prepare(`SELECT * FROM orders WHERE tenant_id=? AND phone IS NOT NULL AND created_at>=? AND status IN ('producao','pronto','cancelado','finalizado') ORDER BY id DESC LIMIT 50`).all(t.id,desde)
+      const pedidos = db.prepare(`SELECT * FROM orders WHERE tenant_id=? AND phone IS NOT NULL AND created_at>=? AND status IN ('producao','pronto','saiu','entregue','cancelado','finalizado') ORDER BY id DESC LIMIT 50`).all(t.id,desde)
       for (const o of pedidos) {
         const chave=`${o.id}_${o.status}`
         if (processed.has(chave)) continue
         processed.add(chave)
-        const tipo={producao:'confirmado',pronto:'pronto',cancelado:'cancelado',finalizado:'avaliacao'}[o.status]
+        const tipo={producao:'confirmado',pronto:'pronto',saiu:'saiu',entregue:'entregue',cancelado:'cancelado',finalizado:'avaliacao'}[o.status]
         if (!tipo) continue
         const ct=auto[tipo]||{}; if(!ct.on) continue
         const items=(() => { try{return(JSON.parse(o.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}catch(e){return''} })()
@@ -1185,7 +1231,7 @@ const server = http.createServer(async (req,res) => {
         }
 
         // Verifica se existe automação customizada para este status
-        const tipoAuto = { producao:'confirmado', pronto:'pronto', cancelado:'cancelado', finalizado:'avaliacao' }[new_status]
+        const tipoAuto = { producao:'confirmado', pronto:'pronto', saiu:'saiu', entregue:'entregue', cancelado:'cancelado', finalizado:'avaliacao' }[new_status]
         const ct = tipoAuto ? (auto[tipoAuto]||{}) : {}
         const vars = { nome, id:idStr, itens:items, total, endereco:order.addr||'', mesa:String(order.mesa_num||''), tipo_entrega:isDelivery }
 
