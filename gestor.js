@@ -14,13 +14,13 @@ async function _carregarPlano() {
   try {
     const tid = _sessao?.tenant_id;
     if (!tid) return;
-    const res = await fetch(`/rest/v1/tenants?id=eq.${tid}&select=plano`, {
-      headers: { 'Content-Type': 'application/json' }
+    const res = await fetch('/api/tenant-info-gestor', {
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid }
     });
     if (!res.ok) return;
     const data = await res.json();
-    const plano = (Array.isArray(data) ? data[0]?.plano : data?.plano) || 'pro';
-    _planoAtual = plano.toLowerCase();
+    const plano = (data?.plano || 'pro').toLowerCase();
+    _planoAtual = plano;
 
     // Atualiza a sessão com o plano correto para futuras verificações
     try {
@@ -4168,13 +4168,11 @@ async function renderMeuPlano() {
     const tid = _sessao?.tenant_id;
     if (!tid) throw new Error('Sessão inválida');
 
-    // Usa fetch direto — mesmo padrão de _carregarPlano() que já funciona
-    const res = await fetch(`/rest/v1/tenants?id=eq.${encodeURIComponent(tid)}&select=nome,plano,expires_at,ativo`, {
+    const res = await fetch('/api/tenant-info-gestor', {
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid }
     });
     if (!res.ok) throw new Error('Erro HTTP ' + res.status);
-    const arr  = await res.json();
-    const data = Array.isArray(arr) ? arr[0] : arr;
+    const data = await res.json();
     if (!data) throw new Error('Tenant não encontrado');
 
     const plano     = (data.plano || 'pro').toLowerCase();
@@ -6096,9 +6094,8 @@ async function iaCarregarConfig() {
   // URL do webhook — usa o slug do tenant (mesma URL já configurada nas automações)
   const urlEl = document.getElementById('ia-webhook-url');
   try {
-    const _tRes = await fetch(`/rest/v1/tenants?id=eq.${encodeURIComponent(_sessao?.tenant_id||'')}&select=slug`, { headers: { 'Content-Type': 'application/json' } }).catch(()=>null);
-    const _tArr = _tRes?.ok ? await _tRes.json().catch(()=>[]) : [];
-    const slug = (Array.isArray(_tArr) ? _tArr[0]?.slug : _tArr?.slug) || _sessao?.tenant_id || '';
+    const _slugRes1 = await fetch('/api/tenant-slug', { headers: { 'Content-Type': 'application/json', 'x-tenant-id': _sessao?.tenant_id || '' } }).catch(()=>null);
+    const slug = (_slugRes1?.ok ? (await _slugRes1.json().catch(()=>({}))).slug : '') || _sessao?.tenant_id || '';
     const webhookUrl = `${window.location.origin}/webhook/${slug}`;
     if (urlEl) urlEl.textContent = webhookUrl;
     // Registra webhook automaticamente na Evolution API ao carregar
@@ -6258,9 +6255,8 @@ async function topnavCopiarCardapio(btn) {
     const tid = _sessao?.tenant_id || '';
     let slug = '';
     try {
-      const _tRes2 = await fetch(`/rest/v1/tenants?id=eq.${encodeURIComponent(tid)}&select=slug`, { headers: { 'Content-Type': 'application/json' } }).catch(()=>null);
-      const _tArr2 = _tRes2?.ok ? await _tRes2.json().catch(()=>[]) : [];
-      slug = (Array.isArray(_tArr2) ? _tArr2[0]?.slug : _tArr2?.slug) || '';
+      const _slugRes2 = await fetch('/api/tenant-slug', { headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid } }).catch(()=>null);
+      slug = (_slugRes2?.ok ? (await _slugRes2.json().catch(()=>({}))).slug : '') || '';
     } catch(e) {}
     const url = slug
       ? `${window.location.origin}/index.html?slug=${encodeURIComponent(slug)}`
@@ -6416,13 +6412,8 @@ async function cpMontarLink() {
 
   let slug = '';
   try {
-    const res = await fetch(`/rest/v1/tenants?id=eq.${encodeURIComponent(tid)}&select=slug`, {
-      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid }
-    });
-    if (res.ok) {
-      const arr = await res.json();
-      slug = (Array.isArray(arr) ? arr[0]?.slug : arr?.slug) || '';
-    }
+    const _slugRes3 = await fetch('/api/tenant-slug', { headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid } }).catch(()=>null);
+    if (_slugRes3?.ok) { slug = (await _slugRes3.json().catch(()=>({}))).slug || ''; }
   } catch(e) {}
 
   const urlCardapio = slug
@@ -7075,9 +7066,8 @@ async function iaRegistrarWebhook(webhookUrl) {
     const inst = cfg?.evo_instance;
     if (!inst) return; // instância ainda não criada, nada a fazer
     if (!webhookUrl) {
-      const _tFetch = await fetch(`/rest/v1/tenants?id=eq.${encodeURIComponent(_sessao?.tenant_id||'')}&select=slug`, { headers: { 'Content-Type': 'application/json' } }).catch(()=>null);
-      const _tData  = _tFetch?.ok ? await _tFetch.json().catch(()=>[]) : [];
-      const slug = (Array.isArray(_tData) ? _tData[0]?.slug : _tData?.slug) || _sessao?.tenant_id || '';
+      const _slugRes4 = await fetch('/api/tenant-slug', { headers: { 'Content-Type': 'application/json', 'x-tenant-id': _sessao?.tenant_id || '' } }).catch(()=>null);
+      const slug = (_slugRes4?.ok ? (await _slugRes4.json().catch(()=>({}))).slug : '') || _sessao?.tenant_id || '';
       webhookUrl = `${window.location.origin}/webhook/${slug}`;
     }
     // Chama o proxy /api/evo para setar o webhook na instância
