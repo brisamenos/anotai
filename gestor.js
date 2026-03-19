@@ -4884,9 +4884,18 @@ async function evoCarregarAutomacoesSalvas() {
 // ════════════════════════════════════════════════════════
 
 async function iaCarregarConfig() {
-  // URL do webhook
+  // URL do webhook — usa o slug do tenant (mesma URL já configurada nas automações)
   const urlEl = document.getElementById('ia-webhook-url');
-  if (urlEl) urlEl.textContent = `${window.location.origin}/webhook/whatsapp/${_sessao?.tenant_id||''}`;
+  try {
+    const { data: tData } = await sb.from('tenants').select('slug').eq('id', _sessao?.tenant_id).single();
+    const slug = tData?.slug || _sessao?.tenant_id || '';
+    const webhookUrl = `${window.location.origin}/webhook/${slug}`;
+    if (urlEl) urlEl.textContent = webhookUrl;
+    // Registra webhook automaticamente na Evolution API ao carregar
+    iaRegistrarWebhook(webhookUrl);
+  } catch(e) {
+    if (urlEl) urlEl.textContent = `${window.location.origin}/webhook/${_sessao?.tenant_id||''}`;
+  }
 
   try {
     const { data } = await sb.from('store_config').select('ia_config').single();
@@ -5585,3 +5594,29 @@ function initTemaPage() {
     if (saved) temaApply(JSON.parse(saved));
   } catch(e) {}
 })();
+
+// ── Registra webhook na Evolution API automaticamente ──
+async function iaRegistrarWebhook(webhookUrl) {
+  try {
+    const { data: cfg } = await sb.from('store_config').select('evo_instance').single();
+    const inst = cfg?.evo_instance;
+    if (!inst) return; // instância ainda não criada, nada a fazer
+    if (!webhookUrl) {
+      const { data: tData } = await sb.from('tenants').select('slug').eq('id', _sessao?.tenant_id).single();
+      const slug = tData?.slug || _sessao?.tenant_id || '';
+      webhookUrl = `${window.location.origin}/webhook/${slug}`;
+    }
+    // Chama o proxy /api/evo para setar o webhook na instância
+    await EVO.req('POST', `/webhook/set/${inst}`, {
+      webhook: {
+        enabled: true,
+        url: webhookUrl,
+        webhookByEvents: false,
+        webhookBase64: false,
+        events: ['MESSAGES_UPSERT']
+      }
+    });
+  } catch(e) {
+    console.warn('iaRegistrarWebhook:', e);
+  }
+}
