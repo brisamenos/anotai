@@ -814,17 +814,37 @@ function handleUpload(req, res) {
 // ════════════════════════════════════════════════════════
 async function sendWA(phone, text, inst) {
   const instance = inst || EVO_INST
-  const num = phone.replace(/\D/g,'')
-  const number = num.startsWith('55')?num:`55${num}`
+  const num    = phone.replace(/\D/g,'')
+  const number = num.startsWith('55') ? num : `55${num}`
+
+  // Evolution API v2.x usa textMessage wrapper
+  // Ref: https://doc.evolution-api.com/v2/api-reference/messages/send-text
+  const payload = {
+    number,
+    text,                          // v1 compat
+    textMessage: { text }          // v2.x formato correto
+  }
+
   try {
-    const r = await fetch(`${EVO_URL}/message/sendText/${instance}`,{
-      method:'POST',headers:{'Content-Type':'application/json',apikey:EVO_KEY},
-      body:JSON.stringify({ number, text })
+    const headers = {
+      'Content-Type': 'application/json',
+      'apikey': EVO_KEY
+    }
+    const r    = await fetch(`${EVO_URL}/message/sendText/${instance}`, {
+      method: 'POST', headers,
+      body: JSON.stringify(payload)
     })
-    const data = await r.json().catch(()=>({}))
-    if (r.ok){log('📤',`Enviado para ${number} [${instance}]`);return{ok:true,data}}
-    log('❌',`Falhou ${number}:`,data);return{ok:false,data}
-  } catch(e){log('❌','Erro WA:',{error:e.message});return{ok:false,error:e.message}}
+    const data = await r.json().catch(() => ({}))
+    if (r.ok) {
+      log('📤', `Enviado para ${number} [${instance}]`)
+      return { ok: true, data }
+    }
+    log('❌', `Falhou ${number}:`, data)
+    return { ok: false, data }
+  } catch(e) {
+    log('❌', 'Erro WA:', { error: e.message })
+    return { ok: false, error: e.message }
+  }
 }
 
 function fillVars(tpl, vars) {
