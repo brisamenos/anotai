@@ -1400,6 +1400,325 @@ async function catDrop(e, targetId) {
 // ─────────────────────────────────────────
 // GESTOR DE CARDÁPIO
 // ─────────────────────────────────────────
+// ─────────────────────────────────────────
+// MODELOS PRONTOS DE CARDÁPIO
+// ─────────────────────────────────────────
+const MODELOS_CARDAPIO = {
+  acaiteria: {
+    label: 'Açaiteria',
+    categorias: [
+      {
+        label: 'Tamanhos',
+        name: 'tamanhos',
+        itens: [
+          { name: 'Açaí 300ml',  emoji: '🥤', price: 12.00, description: 'Açaí 300ml — base pura, monte do seu jeito' },
+          { name: 'Açaí 400ml',  emoji: '🥤', price: 15.00, description: 'Açaí 400ml — tamanho ideal para um lanche' },
+          { name: 'Açaí 500ml',  emoji: '🥤', price: 18.00, description: 'Açaí 500ml — generoso e bem servido' },
+          { name: 'Açaí 700ml',  emoji: '🥤', price: 23.00, description: 'Açaí 700ml — o favorito da galera' },
+          { name: 'Açaí 1L',     emoji: '🥤', price: 30.00, description: 'Açaí 1 litro — para compartilhar' },
+          { name: 'Tigela P',    emoji: '🍨', price: 14.00, description: 'Tigela pequena de açaí' },
+          { name: 'Tigela M',    emoji: '🍨', price: 20.00, description: 'Tigela média de açaí' },
+          { name: 'Tigela G',    emoji: '🍨', price: 27.00, description: 'Tigela grande de açaí' },
+        ]
+      },
+      {
+        label: 'Complementos',
+        name: 'complementos',
+        itens: [
+          { name: 'Granola',         emoji: '🌾', price: 0.00, description: 'Granola crocante' },
+          { name: 'Leite em Pó',     emoji: '🥛', price: 0.00, description: 'Leite em pó' },
+          { name: 'Paçoca',          emoji: '🥜', price: 0.00, description: 'Paçoca triturada' },
+          { name: 'Amendoim',        emoji: '🥜', price: 0.00, description: 'Amendoim torrado' },
+          { name: 'Aveia',           emoji: '🌾', price: 0.00, description: 'Aveia em flocos' },
+          { name: 'Sucrilhos',       emoji: '🌽', price: 0.00, description: 'Sucrilhos crocantes' },
+          { name: 'Coco Ralado',     emoji: '🥥', price: 0.00, description: 'Coco ralado' },
+          { name: 'Confeito M&M',    emoji: '🍬', price: 0.00, description: 'Confeito colorido' },
+          { name: 'Granulado',       emoji: '🍫', price: 0.00, description: 'Granulado de chocolate' },
+        ]
+      },
+      {
+        label: 'Coberturas',
+        name: 'coberturas',
+        itens: [
+          { name: 'Mel',             emoji: '🍯', price: 0.00, description: 'Mel puro' },
+          { name: 'Leite Condensado',emoji: '🥛', price: 0.00, description: 'Leite condensado' },
+          { name: 'Nutella',         emoji: '🍫', price: 3.00, description: 'Nutella — adicional' },
+          { name: 'Calda de Morango',emoji: '🍓', price: 0.00, description: 'Calda de morango' },
+          { name: 'Calda de Chocolate', emoji: '🍫', price: 0.00, description: 'Calda de chocolate' },
+        ]
+      },
+      {
+        label: 'Frutas',
+        name: 'frutas',
+        itens: [
+          { name: 'Morango',    emoji: '🍓', price: 0.00, description: 'Morango fresco' },
+          { name: 'Banana',     emoji: '🍌', price: 0.00, description: 'Banana fatiada' },
+          { name: 'Kiwi',       emoji: '🥝', price: 0.00, description: 'Kiwi fatiado' },
+          { name: 'Uva',        emoji: '🍇', price: 0.00, description: 'Uva sem semente' },
+        ]
+      },
+      {
+        label: 'Adicionais',
+        name: 'adicionais',
+        itens: [
+          { name: 'Sorvete extra',    emoji: '🍦', price: 4.00, description: 'Bola de sorvete extra' },
+          { name: 'Chantilly',        emoji: '🍦', price: 2.00, description: 'Chantilly' },
+          { name: 'Proteína em pó',   emoji: '💪', price: 5.00, description: 'Scoop de proteína' },
+        ]
+      },
+    ]
+  },
+  restaurante: {
+    label: 'Restaurante',
+    categorias: [
+      { label: 'Entradas', name: 'entradas', itens: [
+        { name: 'Caldo de Feijão',   emoji: '🫘', price: 12.00, description: 'Caldo de feijão temperado' },
+        { name: 'Isca de Frango',    emoji: '🍗', price: 22.00, description: 'Isca de frango empanada' },
+        { name: 'Camarão ao Alho',   emoji: '🦐', price: 35.00, description: 'Camarão ao alho e óleo' },
+      ]},
+      { label: 'Pratos Principais', name: 'pratos_principais', itens: [
+        { name: 'Frango Grelhado',   emoji: '🍗', price: 35.00, description: 'Frango grelhado com acompanhamentos' },
+        { name: 'Picanha na Brasa',  emoji: '🥩', price: 65.00, description: 'Picanha na brasa 300g' },
+        { name: 'Filé de Peixe',     emoji: '🐟', price: 42.00, description: 'Filé de peixe grelhado' },
+        { name: 'Marmita P',         emoji: '🍱', price: 18.00, description: 'Marmita pequena completa' },
+        { name: 'Marmita G',         emoji: '🍱', price: 25.00, description: 'Marmita grande completa' },
+      ]},
+      { label: 'Sobremesas', name: 'sobremesas', itens: [
+        { name: 'Pudim',             emoji: '🍮', price: 10.00, description: 'Pudim de leite condensado' },
+        { name: 'Mousse de Maracujá',emoji: '🍮', price: 10.00, description: 'Mousse de maracujá' },
+        { name: 'Sorvete',           emoji: '🍨', price: 8.00, description: '2 bolas de sorvete' },
+      ]},
+      { label: 'Bebidas', name: 'bebidas', itens: [
+        { name: 'Suco Natural',   emoji: '🧃', price: 8.00, description: 'Suco da fruta natural 400ml' },
+        { name: 'Refrigerante',   emoji: '🥤', price: 6.00, description: 'Lata 350ml' },
+        { name: 'Água',           emoji: '💧', price: 3.00, description: 'Água mineral 500ml' },
+        { name: 'Cerveja',        emoji: '🍺', price: 9.00, description: 'Garrafa 600ml' },
+      ]},
+    ]
+  },
+  pizzaria: {
+    label: 'Pizzaria',
+    categorias: [
+      { label: 'Pizzas Salgadas', name: 'pizzas_salgadas', itens: [
+        { name: 'Margherita',         emoji: '🍕', price: 48.00, description: 'Molho de tomate, mussarela e manjericão' },
+        { name: 'Calabresa',          emoji: '🍕', price: 52.00, description: 'Molho, mussarela e calabresa' },
+        { name: 'Frango com Catupiry',emoji: '🍕', price: 58.00, description: 'Molho, mussarela, frango e catupiry' },
+        { name: 'Portuguesa',         emoji: '🍕', price: 60.00, description: 'Molho, mussarela, presunto, ovo e pimentão' },
+        { name: 'Quatro Queijos',     emoji: '🍕', price: 65.00, description: 'Molho, mussarela, provolone, parmesão e gorgonzola' },
+      ]},
+      { label: 'Pizzas Doces', name: 'pizzas_doces', itens: [
+        { name: 'Chocolate com Morango', emoji: '🍕', price: 55.00, description: 'Chocolate ao leite e morangos frescos' },
+        { name: 'Romeu e Julieta',    emoji: '🍕', price: 50.00, description: 'Mussarela e goiabada' },
+        { name: 'Banana com Canela',  emoji: '🍕', price: 48.00, description: 'Banana, canela e leite condensado' },
+      ]},
+      { label: 'Bordas', name: 'bordas', itens: [
+        { name: 'Borda Recheada Catupiry', emoji: '🧀', price: 8.00, description: 'Borda recheada com catupiry' },
+        { name: 'Borda Recheada Cheddar',  emoji: '🧀', price: 8.00, description: 'Borda recheada com cheddar' },
+        { name: 'Borda Simples',           emoji: '🍞', price: 0.00, description: 'Borda tradicional' },
+      ]},
+      { label: 'Bebidas', name: 'bebidas_pizza', itens: [
+        { name: 'Refrigerante 2L',    emoji: '🥤', price: 12.00, description: 'Refrigerante 2 litros' },
+        { name: 'Cerveja Long Neck',  emoji: '🍺', price: 10.00, description: 'Cerveja long neck 355ml' },
+        { name: 'Suco de Uva',        emoji: '🧃', price: 12.00, description: 'Suco de uva integral' },
+      ]},
+    ]
+  },
+  hamburgueria: {
+    label: 'Hamburgueria',
+    categorias: [
+      { label: 'Hambúrgueres', name: 'hamburgueres', itens: [
+        { name: 'Classic Burger',    emoji: '🍔', price: 28.00, description: 'Pão, carne 150g, queijo, alface e tomate' },
+        { name: 'Double Smash',      emoji: '🍔', price: 38.00, description: 'Pão brioche, 2 smash patties, queijo american' },
+        { name: 'Chicken Crispy',    emoji: '🍗', price: 32.00, description: 'Pão, frango crocante, cheddar e bacon' },
+        { name: 'Veggie Burger',     emoji: '🥗', price: 30.00, description: 'Pão, hambúrguer de grão-de-bico, rúcula' },
+      ]},
+      { label: 'Combos', name: 'combos', itens: [
+        { name: 'Combo Clássico',    emoji: '🍟', price: 42.00, description: 'Hambúrguer + Batata M + Refrigerante' },
+        { name: 'Combo Duplo',       emoji: '🍟', price: 55.00, description: 'Hambúrguer Duplo + Batata G + Refrigerante' },
+      ]},
+      { label: 'Acompanhamentos', name: 'acompanhamentos', itens: [
+        { name: 'Batata Frita P',    emoji: '🍟', price: 12.00, description: 'Porção pequena de batata frita' },
+        { name: 'Batata Frita G',    emoji: '🍟', price: 18.00, description: 'Porção grande de batata frita' },
+        { name: 'Onion Rings',       emoji: '🧅', price: 16.00, description: 'Anéis de cebola empanados' },
+        { name: 'Fritas com Cheddar',emoji: '🧀', price: 22.00, description: 'Batata frita com cheddar e bacon' },
+      ]},
+      { label: 'Bebidas', name: 'bebidas_burger', itens: [
+        { name: 'Milkshake',         emoji: '🥤', price: 20.00, description: 'Milkshake 400ml — vários sabores' },
+        { name: 'Refrigerante Lata', emoji: '🥤', price: 6.00, description: 'Lata 350ml' },
+        { name: 'Água',              emoji: '💧', price: 4.00, description: 'Água mineral 500ml' },
+      ]},
+    ]
+  },
+  cafeteria: {
+    label: 'Cafeteria',
+    categorias: [
+      { label: 'Cafés', name: 'cafes', itens: [
+        { name: 'Espresso',      emoji: '☕', price: 6.00, description: 'Espresso tradicional' },
+        { name: 'Cappuccino',    emoji: '☕', price: 10.00, description: 'Cappuccino 300ml' },
+        { name: 'Latte',         emoji: '☕', price: 12.00, description: 'Café latte com leite vaporizado' },
+        { name: 'Café Gelado',   emoji: '🧊', price: 14.00, description: 'Cold brew 400ml' },
+      ]},
+      { label: 'Sucos e Vitaminas', name: 'sucos', itens: [
+        { name: 'Suco Verde',    emoji: '🥤', price: 12.00, description: 'Couve, maçã e gengibre' },
+        { name: 'Vitamina',      emoji: '🍹', price: 14.00, description: 'Vitamina de banana com aveia' },
+        { name: 'Água de Coco',  emoji: '🥥', price: 8.00, description: 'Água de coco natural' },
+      ]},
+      { label: 'Salgados', name: 'salgados', itens: [
+        { name: 'Croissant',     emoji: '🥐', price: 12.00, description: 'Croissant de presunto e queijo' },
+        { name: 'Coxinha',       emoji: '🍗', price: 7.00, description: 'Coxinha de frango' },
+        { name: 'Wrap',          emoji: '🌯', price: 18.00, description: 'Wrap de frango grelhado' },
+      ]},
+      { label: 'Doces', name: 'doces_cafe', itens: [
+        { name: 'Brownie',       emoji: '🍫', price: 10.00, description: 'Brownie de chocolate' },
+        { name: 'Muffin',        emoji: '🧁', price: 9.00, description: 'Muffin de blueberry' },
+        { name: 'Cheesecake',    emoji: '🍰', price: 15.00, description: 'Fatia de cheesecake com calda de frutas' },
+      ]},
+    ]
+  },
+  padaria: {
+    label: 'Padaria',
+    categorias: [
+      { label: 'Pães', name: 'paes', itens: [
+        { name: 'Pão Francês',   emoji: '🥖', price: 0.70, description: 'Pão francês fresquinho — unidade' },
+        { name: 'Pão de Queijo', emoji: '🧀', price: 3.50, description: 'Pão de queijo mineiro — unidade' },
+        { name: 'Pão de Forma',  emoji: '🍞', price: 9.00, description: 'Pão de forma fatiado — pacote' },
+        { name: 'Baguete',       emoji: '🥖', price: 8.00, description: 'Baguete tradicional' },
+      ]},
+      { label: 'Salgados', name: 'salgados_padaria', itens: [
+        { name: 'Esfiha',        emoji: '🫓', price: 5.00, description: 'Esfiha de carne' },
+        { name: 'Enroladinho',   emoji: '🌀', price: 4.50, description: 'Enroladinho de presunto e queijo' },
+        { name: 'Pastel',        emoji: '🥟', price: 6.00, description: 'Pastel de carne' },
+        { name: 'Pizza Pão',     emoji: '🍕', price: 7.00, description: 'Pizza pão individual' },
+      ]},
+      { label: 'Doces', name: 'doces_padaria', itens: [
+        { name: 'Sonho',         emoji: '🍩', price: 5.00, description: 'Sonho com recheio de creme' },
+        { name: 'Brigadeirão',   emoji: '🍫', price: 4.50, description: 'Fatia de brigadeirão' },
+        { name: 'Bolo de Cenoura', emoji: '🎂', price: 6.00, description: 'Fatia de bolo de cenoura com cobertura' },
+      ]},
+      { label: 'Bolos', name: 'bolos', itens: [
+        { name: 'Bolo Festa 1kg',  emoji: '🎂', price: 65.00, description: 'Bolo de festa confeitado 1kg' },
+        { name: 'Bolo de Pote',    emoji: '🍮', price: 15.00, description: 'Bolo de pote individual' },
+      ]},
+      { label: 'Bebidas', name: 'bebidas_padaria', itens: [
+        { name: 'Café Coado',    emoji: '☕', price: 4.00, description: 'Café coado — copo' },
+        { name: 'Achocolatado',  emoji: '🥛', price: 6.00, description: 'Achocolatado quente ou frio 300ml' },
+        { name: 'Suco de Laranja', emoji: '🍊', price: 7.00, description: 'Suco de laranja natural' },
+      ]},
+    ]
+  },
+};
+
+let _modeloSelecionado = null;
+
+function selecionarModelo(tipo) {
+  _modeloSelecionado = tipo;
+  const modelo = MODELOS_CARDAPIO[tipo];
+  if (!modelo) return;
+
+  // Atualiza visual dos cards
+  document.querySelectorAll('.modelo-card').forEach(c => {
+    c.style.borderColor = 'var(--border)';
+    c.style.background  = 'var(--surface2)';
+  });
+  const card = document.getElementById('modelo-' + tipo);
+  if (card) {
+    card.style.borderColor = 'var(--accent)';
+    card.style.background  = 'rgba(59,130,246,.08)';
+  }
+
+  // Mostra aviso e preview
+  document.getElementById('modelos-aviso').style.display = 'block';
+  document.getElementById('modelo-preview').style.display = 'block';
+  document.getElementById('btn-aplicar-modelo').style.display = 'flex';
+
+  const prev = document.getElementById('modelo-preview-content');
+  prev.innerHTML = modelo.categorias.map(cat => `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+      <div style="font-weight:700;font-size:12.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 8h6M5 5h3M5 11h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        ${cat.label}
+        <span style="font-size:10px;color:var(--muted);font-weight:400">(${cat.itens.length} itens)</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">
+        ${cat.itens.map(it => `
+          <span style="font-size:11px;padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--muted2)">
+            ${it.emoji} ${it.name} ${it.price > 0 ? '· R$' + it.price.toFixed(2).replace('.',',') : ''}
+          </span>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+async function aplicarModelo() {
+  if (!_modeloSelecionado) return;
+  const modelo = MODELOS_CARDAPIO[_modeloSelecionado];
+  if (!modelo) return;
+
+  const btn = document.getElementById('btn-aplicar-modelo');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin"></div> Aplicando...';
+  sbLoading(true);
+
+  try {
+    let catSortOrder = categories.length;
+
+    for (const catDef of modelo.categorias) {
+      // Cria categoria
+      const { data: catData, error: catErr } = await sb.from('categories').insert({
+        name: catDef.name,
+        label: catDef.label,
+        type: 'Itens principais',
+        promo: false,
+        sort_order: ++catSortOrder
+      }).select().single();
+
+      if (catErr) { console.error('Erro ao criar cat:', catErr); continue; }
+
+      categories.push({
+        id: catData.id, name: catData.name, label: catData.label,
+        type: catData.type, promo: false, open: false
+      });
+
+      // Cria itens da categoria
+      for (const itemDef of catDef.itens) {
+        const { data: itemData, error: itemErr } = await sb.from('menu_items').insert({
+          emoji:       itemDef.emoji,
+          name:        itemDef.name,
+          description: itemDef.description,
+          price:       itemDef.price,
+          price_old:   null,
+          cat:         catData.label,
+          cat_key:     catData.name,
+          item_type:   'normal',
+          allow_half:  false,
+          max_flavors: 1,
+          promo:       false,
+          status:      'active',
+          days:        [1,1,1,1,1,1,1],
+          ingredients: []
+        }).select().single();
+
+        if (itemErr) { console.error('Erro ao criar item:', itemErr); continue; }
+        items.push(mapItem(itemData));
+      }
+    }
+
+    closeModal('modal-modelos');
+    renderGestor();
+    renderTable();
+    sbToast('ok', `✅ Modelo "${modelo.label}" aplicado com ${modelo.categorias.length} categorias!`);
+
+  } catch(e) {
+    sbToast('err', 'Erro ao aplicar modelo: ' + e.message);
+    console.error(e);
+  } finally {
+    sbLoading(false);
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.4"/><path d="M9 2v4h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg> Aplicar modelo`;
+    _modeloSelecionado = null;
+  }
+}
+
+// ─────────────────────────────────────────
 function renderGestor(){
   try {
     const cl=document.getElementById('cat-list');
