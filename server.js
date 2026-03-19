@@ -1029,7 +1029,7 @@ const server = http.createServer(async (req,res) => {
     upath.startsWith('/api/restore') || upath.startsWith('/api/ia-') || upath.startsWith('/api/rastreio') ||
     upath === '/api/order-status' || upath === '/api/customer-register' ||
     upath === '/api/customer-login' || upath === '/api/customer-orders' ||
-    upath === '/api/criar-tenant' || upath === '/api/tenant-info'
+    upath === '/api/criar-tenant'  || upath === '/api/tenant-info'
   if(upath.startsWith('/rest/v1/')||(upath.startsWith('/api/')&&!_isSpecialApi)){
     const table = upath.split('/')[upath.startsWith('/api/')?2:3]
     const body  = ['POST','PATCH'].includes(req.method)?await readBody(req):{}
@@ -1167,37 +1167,65 @@ const server = http.createServer(async (req,res) => {
 
       // 4. Envia WA imediatamente (assíncrono, não bloqueia resposta)
       if (order.phone && oldStatus !== new_status) {
-        const cfg   = db.prepare("SELECT evo_instance, evo_automacoes, store_name, store_whatsapp FROM store_config WHERE tenant_id=?").get(tid)
-        const inst  = cfg?.evo_instance || EVO_INST
-        const auto  = jsonParse(cfg?.evo_automacoes) || {}
-        const nome  = order.client || 'Cliente'
-        const idStr = String(order.id).padStart(3,'0')
-        const items = (() => { try { return (JSON.parse(order.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') } catch(e){ return '' } })()
-        const isDelivery = (order.addr||'').includes('Mesa') ? '🪑 Mesa' : (order.addr||'').toLowerCase().includes('balc') ? '🏪 Balcão' : '🛵 Entrega'
-        const total = (parseFloat(order.total||0) + parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
+        setImmediate(async () => {
+          try {
+            const cfg   = db.prepare("SELECT evo_instance, evo_automacoes, store_name, store_whatsapp FROM store_config WHERE tenant_id=?").get(tid)
+            const inst  = cfg?.evo_instance || EVO_INST
+            const auto  = jsonParse(cfg?.evo_automacoes) || {}
+            const nome  = order.client || 'Cliente'
+            const idStr = String(order.id).padStart(3,'0')
+            const items = (() => { try { return (JSON.parse(order.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') } catch(e){ return '' } })()
+            const isDelivery = (order.addr||'').includes('Mesa') ? '🪑 Mesa' : (order.addr||'').toLowerCase().includes('balc') ? '🏪 Balcão' : '🛵 Entrega'
+            const total = (parseFloat(order.total||0) + parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
+            const vars  = { nome, id:idStr, itens:items, total, endereco:order.addr||'', mesa:String(order.mesa_num||''), tipo_entrega:isDelivery }
 
-        // Mensagens padrão por status (usadas quando automação não está configurada)
-        const msgPadrao = {
-          analise:   `✅ Olá, *${nome}*! Recebemos seu pedido *#${idStr}* com sucesso!\n\n🛒 ${items}\n💰 Total: R$${total}\n\nEm breve confirmaremos. 🍽️`,
-          producao:  `👨‍🍳 *#${idStr}* confirmado!\n\nOlá *${nome}*, seu pedido está sendo preparado agora. Aguarde! 😊`,
-          pronto:    `✅ *#${idStr}* pronto!\n\n*${nome}*, seu pedido está pronto! ${isDelivery === '🛵 Entrega' ? 'Em instantes sairá para entrega.' : 'Pode retirar no balcão.'}`,
-          saiu:      `🛵 *#${idStr}* a caminho!\n\n*${nome}*, seu pedido saiu para entrega! Chegará em breve. 🎉`,
-          entregue:  `🎉 Entregue!\n\n*${nome}*, seu pedido *#${idStr}* foi entregue. Bom apetite! ⭐\nAvalie nossa loja no cardápio.`,
-          cancelado: `😔 *#${idStr}* cancelado.\n\n*${nome}*, infelizmente seu pedido foi cancelado. Entre em contato conosco para mais informações.`,
-          finalizado:`🎉 *${nome}*, obrigado pelo pedido *#${idStr}*! Bom apetite! ⭐`,
-        }
+            // Mapeamento status → chave da automação
+            const tipoAuto = {
+              analise:   'recebido',
+              producao:  'confirmado',
+              pronto:    'pronto',
+              saiu:      'entrega',
+              entregue:  'entrega',
+              cancelado: 'cancelado',
+              finalizado:'avaliacao'
+            }[new_status]
 
-        // Verifica se existe automação customizada para este status
-        const tipoAuto = { producao:'confirmado', pronto:'pronto', cancelado:'cancelado', finalizado:'avaliacao' }[new_status]
-        const ct = tipoAuto ? (auto[tipoAuto]||{}) : {}
-        const vars = { nome, id:idStr, itens:items, total, endereco:order.addr||'', mesa:String(order.mesa_num||''), tipo_entrega:isDelivery }
+            const ct = tipoAuto ? (auto[tipoAuto] || {}) : {}
 
-        const msgFinal = (ct.on && ct.msg) ? fillVars(ct.msg, vars) : msgPadrao[new_status]
-        if (msgFinal) {
-          sendWA(order.phone, msgFinal, inst)
-            .then(r => log(r.ok?'📲':'❌', `Status ${new_status} → WA #${idStr}: ${r.ok?'ok':JSON.stringify(r)}`))
-        }
+            // Mensagens padrão (usadas quando automação não está configurada)
+            const msgPadrao = {
+              analise:   `📥 Olá, *${nome}*! Recebemos seu pedido *#${idStr}* com sucesso! 🎉\n\n🛒 ${items}\n💰 Total: R$${total}\n\nEm breve confirmaremos. Aguarde! ⏱️`,
+              producao:  `👨‍🍳 *#${idStr}* confirmado!\n\nOlá *${nome}*, seu pedido está sendo preparado agora. Aguarde! 😊`,
+              pronto:    `✅ *#${idStr}* pronto!\n\n*${nome}*, seu pedido está pronto! ${isDelivery === '🛵 Entrega' ? 'Em instantes sairá para entrega.' : isDelivery === '🪑 Mesa' ? 'Já pode chamar o garçom.' : 'Pode retirar no balcão.'}`,
+              saiu:      `🛵 *#${idStr}* a caminho!\n\n*${nome}*, seu pedido saiu para entrega! Chegará em breve. 🎉`,
+              entregue:  `🎉 Entregue!\n\n*${nome}*, seu pedido *#${idStr}* foi entregue. Bom apetite! ⭐`,
+              cancelado: `😔 *#${idStr}* cancelado.\n\n*${nome}*, seu pedido foi cancelado. Entre em contato para mais informações.`,
+              finalizado:`🎉 *${nome}*, obrigado pelo pedido *#${idStr}*! Bom apetite! ⭐`,
+            }
+
+            // Regra de envio:
+            // • ct.on === false → toggle desligado → NÃO envia
+            // • ct.on === true e ct.msg preenchido → envia msg customizada
+            // • ct não configurado (toggle nunca salvo) → envia msg padrão
+            let msgFinal = null
+            if (ct.on === false) {
+              log('⏭️', `Automação "${tipoAuto}" desligada para #${idStr} — WA não enviado`)
+            } else if (ct.on && ct.msg) {
+              msgFinal = fillVars(ct.msg, vars)
+            } else {
+              msgFinal = msgPadrao[new_status] || null
+            }
+
+            if (msgFinal) {
+              const r = await sendWA(order.phone, msgFinal, inst)
+              log(r.ok ? '📲' : '❌', `Automação "${tipoAuto || new_status}" → WA #${idStr} (${order.phone}): ${r.ok ? 'enviado' : JSON.stringify(r)}`)
+            }
+          } catch(e) {
+            log('❌', `Erro WA order-status #${order.id}:`, { error: e.message })
+          }
+        })
       }
+
     } catch(e) {
       log('❌','Erro order-status:',{error:e.message})
       send(res,500,{ok:false,error:e.message})
