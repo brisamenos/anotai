@@ -402,13 +402,25 @@ async function doLogin() {
   err.classList.remove('on');
 
   const hash = await sha256(senha);
-  const { data: u } = await sb.from('sys_users').select('*,tenants(*)').eq('email',email).eq('senha_hash',hash).eq('ativo',true).in('role',['superadmin','admin']).single();
 
-  if (!u) { err.textContent='Acesso negado. Verifique suas credenciais.'; err.classList.add('on'); return; }
+  // Credencial hardcoded do superadmin (senha: admin123)
+  const ADMIN_EMAIL = 'admin@estimafood.com';
+  const ADMIN_HASH  = '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9';
+
+  let u;
+  if (email === ADMIN_EMAIL && hash === ADMIN_HASH) {
+    u = { id: 'admin-local', nome: 'Administrador', email: ADMIN_EMAIL, role: 'superadmin' };
+  } else {
+    // Tenta no banco local
+    const { data: u2 } = await sb.from('sys_users').select('*').eq('email',email).eq('senha_hash',hash).eq('ativo',true).single();
+    if (!u2 || !['superadmin','admin'].includes(u2.role)) {
+      err.textContent='Acesso negado. Verifique suas credenciais.'; err.classList.add('on'); return;
+    }
+    u = u2;
+  }
 
   _sessao = u;
   sessionStorage.setItem('adm_session', JSON.stringify({ id:u.id, nome:u.nome, email:u.email, role:u.role, ts:Date.now() }));
-  await sb.from('sys_users').update({ ultimo_acesso: new Date().toISOString() }).eq('id', u.id);
 
   document.getElementById('login').style.display = 'none';
   document.getElementById('painel').style.display = 'flex';
