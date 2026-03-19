@@ -5978,48 +5978,142 @@ function temaApply(vars, save = false) {
     const bord  = vars['--border']   || _temaAtual['--border']   || '#d1d5db';
     const acc   = vars['--accent']   || _temaAtual['--accent']   || '#3b82f6';
     const css = `
-      /* Tema Claro — overrides críticos */
+      /* ══ Tema Claro — override global ══ */
       :root { --border: ${bord} !important; }
-      body, .app, .main, .page { background: var(--bg) !important; color: ${text} !important; }
-      .sidebar { background: ${sur} !important; border-right: 1px solid ${bord} !important; }
-      .si { color: ${text} !important; }
-      .si:hover, .si.on { background: rgba(0,0,0,.06) !important; color: ${acc} !important; }
-      .shead { color: ${muted} !important; }
-      .topnav { background: ${sur} !important; border-bottom: 1px solid ${bord} !important; }
-      .modal { background: ${sur} !important; color: ${text} !important; border: 1px solid ${bord} !important; }
-      .modal-bg { background: rgba(0,0,0,.3) !important; }
-      .card, .sc, .tw, .kol { background: ${sur} !important; border-color: ${bord} !important; color: ${text} !important; }
-      .kol { background: ${sur2} !important; }
-      .kol-title { color: ${text} !important; }
-      .ph .pt { color: ${text} !important; }
-      .ph .ps { color: ${muted} !important; }
-      .form-input, .form-label, textarea { background: ${sur} !important; color: ${text} !important; border-color: ${bord} !important; }
-      .form-label { color: ${muted} !important; }
-      .btn.bg { background: ${sur2} !important; color: ${text} !important; border-color: ${bord} !important; }
-      .btn.bd { border-color: var(--danger) !important; color: var(--danger) !important; background: transparent !important; }
-      .sw select { background: ${sur} !important; color: ${text} !important; border-color: ${bord} !important; }
-      .tab { color: ${muted} !important; }
-      .tab.on { color: ${acc} !important; }
-      .tw table th { background: ${sur2} !important; color: ${muted} !important; border-color: ${bord} !important; }
-      .tw table td { border-color: ${bord} !important; color: ${text} !important; }
+
+      /* Base */
+      *, *::before, *::after { border-color: ${bord}; }
+      body, .app { background: var(--bg) !important; color: ${text} !important; }
+
+      /* Layout principal */
+      .main       { background: var(--bg) !important; }
+      .page       { background: var(--bg) !important; color: ${text} !important; }
+      .topnav     { background: ${sur} !important; border-bottom: 1px solid ${bord} !important; box-shadow: 0 1px 4px rgba(0,0,0,.08) !important; }
+      .topnav *   { color: ${text} !important; }
+      .sidebar    { background: ${sur} !important; border-right: 1px solid ${bord} !important; box-shadow: 2px 0 8px rgba(0,0,0,.06) !important; }
+
+      /* Sidebar items */
+      .si         { color: ${muted} !important; }
+      .si:hover   { background: rgba(0,0,0,.05) !important; color: ${text} !important; }
+      .si.on      { background: rgba(0,0,0,.07) !important; color: ${acc} !important; }
+      .shead      { color: ${muted} !important; border-top-color: ${bord} !important; }
+      .urow       { border-top-color: ${bord} !important; color: ${text} !important; }
+      .urow *     { color: ${text} !important; }
+
+      /* Títulos de página */
+      .ph .pt, .ph h1, .ph h2 { color: ${text} !important; }
+      .ph .ps                  { color: ${muted} !important; }
+      .card-title              { color: ${text} !important; }
+
+      /* Cards e superfícies */
+      .card, .sc, .sbox     { background: ${sur} !important; border-color: ${bord} !important; color: ${text} !important; box-shadow: 0 1px 4px rgba(0,0,0,.06) !important; }
+      .sg .sc .sl           { color: ${muted} !important; }
+      .sg .sc .sv           { color: ${text} !important; }
+      .surface2, .s2        { background: ${sur2} !important; }
+
+      /* Kanban */
+      .kol           { background: ${sur2} !important; border: 1px solid ${bord} !important; }
+      .kol-head      { border-bottom: 2px solid ${bord} !important; background: ${sur} !important; }
+      .kol-title     { color: ${text} !important; }
+      .kol-title span { color: ${muted} !important; }
+      .order-card    { background: ${sur} !important; border: 1px solid ${bord} !important; color: ${text} !important; box-shadow: 0 1px 6px rgba(0,0,0,.08) !important; }
+      .order-card:hover { box-shadow: 0 3px 14px rgba(0,0,0,.14) !important; transform: translateY(-1px); }
+      .order-card *  { color: ${text} !important; }
+      .oc-id         { color: ${acc} !important; font-weight: 700 !important; }
+      .oc-client     { color: ${text} !important; }
+      .oc-info       { color: ${muted} !important; }
+      .oc-total      { color: ${text} !important; font-weight: 700 !important; }
+      .oc-time       { color: ${muted} !important; }
+      .kol-empty     { color: ${muted} !important; }
+      .kol-empty *   { color: ${muted} !important; }
+
+      /* Botões */
+      .btn           { color: ${text} !important; border-color: ${bord} !important; }
+      .btn.bg        { background: ${sur2} !important; color: ${text} !important; }
+      .btn.bp        { background: ${acc} !important; color: #fff !important; border-color: ${acc} !important; }
+      .btn.bd        { background: transparent !important; border-color: var(--danger) !important; color: var(--danger) !important; }
+      .btn:hover     { filter: brightness(.94) !important; }
+
+      /* Kanban avançar botões */
+      .oc-advance-btn  { background: rgba(0,0,0,.06) !important; color: ${text} !important; border-color: ${bord} !important; }
+
+      /* Filtros kanban */
+      .kf-btn        { background: ${sur2} !important; color: ${muted} !important; border-color: ${bord} !important; }
+      .kf-btn.on     { background: ${acc} !important; color: #fff !important; border-color: ${acc} !important; }
+
+      /* Tabs */
+      .tabs          { border-bottom-color: ${bord} !important; }
+      .tab           { color: ${muted} !important; }
+      .tab.on        { color: ${acc} !important; border-bottom-color: ${acc} !important; }
+      .ts            { background: var(--bg) !important; }
+
+      /* Tabelas */
+      .tw            { background: ${sur} !important; border-color: ${bord} !important; }
+      .tw table th   { background: ${sur2} !important; color: ${muted} !important; border-color: ${bord} !important; }
+      .tw table td   { border-color: ${bord} !important; color: ${text} !important; }
       .tw table tr:hover td { background: ${sur2} !important; }
-      .sbox { background: ${sur2} !important; border-color: ${bord} !important; color: ${text} !important; }
-      input::placeholder, textarea::placeholder { color: ${muted} !important; opacity: .7 !important; }
-      .toggle { background: ${sur3} !important; }
-      .toggle.on { background: var(--success) !important; }
-      .badge-analise { background: rgba(251,146,60,.15) !important; color: #c2410c !important; }
-      .badge-producao { background: rgba(234,179,8,.15) !important; color: #a16207 !important; }
-      .badge-pronto { background: rgba(34,197,94,.15) !important; color: #15803d !important; }
-      .kol-head { border-bottom: 2px solid ${bord} !important; }
-      .order-card { background: ${sur} !important; border-color: ${bord} !important; color: ${text} !important; box-shadow: 0 1px 4px rgba(0,0,0,.08) !important; }
-      .order-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.12) !important; }
-      .urow { border-top-color: ${bord} !important; }
-      .chip { background: ${sur2} !important; color: ${text} !important; border-color: ${bord} !important; }
+      .tmeta         { color: ${muted} !important; }
+
+      /* Inputs e forms */
+      input, textarea, select { background: ${sur} !important; color: ${text} !important; border-color: ${bord} !important; }
+      input::placeholder, textarea::placeholder { color: ${muted} !important; opacity: .6 !important; }
+      .form-label    { color: ${muted} !important; }
+      .sw select     { background: ${sur} !important; color: ${text} !important; }
+      .form-input    { background: ${sur} !important; color: ${text} !important; border-color: ${bord} !important; }
+
+      /* Modais */
+      .modal         { background: ${sur} !important; color: ${text} !important; border: 1px solid ${bord} !important; box-shadow: 0 8px 40px rgba(0,0,0,.18) !important; }
+      .modal *       { color: ${text} !important; }
+      .modal h2      { color: ${text} !important; }
+      .modal-bg      { background: rgba(0,0,0,.3) !important; }
+      .modal-close   { color: ${muted} !important; background: ${sur2} !important; }
+
+      /* Toggle */
+      .toggle        { background: ${sur3} !important; }
+      .toggle.on     { background: var(--success) !important; }
+
+      /* Badges de status */
+      .badge-analise  { background: rgba(234,88,12,.12) !important; color: #9a3412 !important; }
+      .badge-producao { background: rgba(202,138,4,.12)  !important; color: #713f12 !important; }
+      .badge-pronto   { background: rgba(22,163,74,.12)  !important; color: #14532d !important; }
+      .badge-cancelado{ background: rgba(220,38,38,.12)  !important; color: #7f1d1d !important; }
+
+      /* PDV balcão */
       .pdvb-wrap, .pdvb-left, .pdvb-right { background: var(--bg) !important; }
-      .pdvb-grid-item { background: ${sur} !important; color: ${text} !important; border-color: ${bord} !important; }
-      .pdvb-order-items { background: ${sur2} !important; }
-      .pdvb-cat-btn { color: ${text} !important; }
+      .pdvb-right    { border-left-color: ${bord} !important; background: ${sur} !important; }
+      .pdvb-toolbar, .pdvb-cats { border-bottom-color: ${bord} !important; background: ${sur} !important; }
+      .pdvb-grid-item { background: ${sur} !important; color: ${text} !important; border: 1px solid ${bord} !important; }
+      .pdvb-grid-item .pdvb-item-name { color: ${text} !important; }
+      .pdvb-grid-item .pdvb-item-price { color: ${acc} !important; }
+      .pdvb-cat-btn  { color: ${muted} !important; border-bottom: 2px solid transparent !important; }
       .pdvb-cat-btn.on { color: ${acc} !important; border-bottom-color: ${acc} !important; }
+      .pdvb-order-head { color: ${muted} !important; border-bottom-color: ${bord} !important; background: ${sur2} !important; }
+      .pdvb-order-item { border-bottom-color: ${bord} !important; color: ${text} !important; }
+      .pdvb-order-item * { color: ${text} !important; }
+      .pdvb-tot-row  { color: ${text} !important; }
+      .pdvb-gerar-btn { background: ${acc} !important; color: #fff !important; }
+      .pdvb-bar-btn  { background: ${sur2} !important; color: ${text} !important; border-color: ${bord} !important; }
+      .pdvb-bar-btn.primary { background: ${acc} !important; color: #fff !important; }
+      .pdvb-search-wrap input { background: ${sur2} !important; color: ${text} !important; }
+      .pdvb-topbar   { background: ${sur} !important; border-bottom-color: ${bord} !important; color: ${text} !important; }
+      .pdvb-tab      { color: ${muted} !important; border-bottom-color: transparent !important; }
+      .pdvb-tab.on   { color: ${acc} !important; border-bottom-color: ${acc} !important; }
+      .pdvb-bottom-bar { background: ${sur} !important; border-top-color: ${bord} !important; }
+      .pdvb-empty-order, .pdvb-empty-order * { color: ${muted} !important; }
+
+      /* Chips e badges misc */
+      .chip          { background: ${sur2} !important; color: ${text} !important; border-color: ${bord} !important; }
+      .chip-blue     { background: rgba(59,130,246,.12) !important; color: #1d4ed8 !important; }
+      .chip-green    { background: rgba(22,163,74,.12)  !important; color: #15803d !important; }
+      .chip-orange   { background: rgba(234,88,12,.12)  !important; color: #9a3412 !important; }
+
+      /* Misc */
+      .caixa-btn     { color: ${text} !important; border-color: ${bord} !important; }
+      .tw .tmeta span { color: ${muted} !important; }
+      .order-detail .od-info-card { background: ${sur2} !important; border-color: ${bord} !important; }
+      .od-info-card * { color: ${text} !important; }
+      .od-info-card-title { color: ${muted} !important; }
+      [id^="page-"] { color: ${text} !important; }
     `;
     overrideEl = document.createElement('style');
     overrideEl.id = 'tema-light-override';
