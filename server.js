@@ -817,12 +817,11 @@ async function sendWA(phone, text, inst) {
   const num    = phone.replace(/\D/g,'')
   const number = num.startsWith('55') ? num : `55${num}`
 
-  // Evolution API v2.7 — formato correto
-  // O número deve conter @s.whatsapp.net para evitar ambiguidade
+  // Evolution API v2.7 — exige campo "text" na raiz
   const payload = {
-    number: `${number}@s.whatsapp.net`,
-    options: { delay: 1000, presence: 'composing' },
-    textMessage: { text }
+    number,
+    text,
+    options: { delay: 1000, presence: 'composing' }
   }
 
   try {
