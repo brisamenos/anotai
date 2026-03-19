@@ -1184,7 +1184,7 @@ body {
 .chip-green { background: rgba(34,197,94,.12); color: var(--green); }
 .chip-amber { background: rgba(59,130,246,.12); color: var(--accent); }
 </style>
-  <script src="/supabase-shim.js"></script>
+  <script src="/api-client.js"></script>
 </head>
 <body>
 
@@ -1533,16 +1533,9 @@ body {
 
 <script>
 // ═══════════════════════════════════════════════
-// SUPABASE
+// API CLIENT
 // ═══════════════════════════════════════════════
-const { createClient } = window.supabase;
-const sb = createClient('', '', {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-    detectSessionInUrl: false
-  }
-});
+const sb = window.AppAPI;
 
 // ═══════════════════════════════════════════════
 // STATE
