@@ -1620,7 +1620,7 @@ async function loadProfile() {
     const local = JSON.parse(raw);
     if (!local.phone) return;
     // Verifica no banco
-    const { data } = await sb.from('customers')
+    const { data } = await sbTenant().from('customers')
       .select('id,name,phone,email,birthday,addr')
       .eq('phone', local.phone).maybeSingle();
     if (data) {
@@ -1730,17 +1730,18 @@ async function submitCadastro() {
     };
 
     // Upsert pelo telefone
-    const { data: existing } = await sb.from('customers')
+    const sbt2 = sbTenant();
+    const { data: existing } = await sbt2.from('customers')
       .select('id,orders_count,total_spent,addr').eq('phone', phone).maybeSingle();
 
     let saved;
     if (existing) {
-      const { data } = await sb.from('customers')
+      const { data } = await sbt2.from('customers')
         .update({ ...payload, addr: existing.addr })
         .eq('id', existing.id).select().single();
       saved = data;
     } else {
-      const { data } = await sb.from('customers')
+      const { data } = await sbt2.from('customers')
         .insert({ ...payload, orders_count: 0, total_spent: 0 })
         .select().single();
       saved = data;
@@ -1748,12 +1749,12 @@ async function submitCadastro() {
 
     // Também cria/atualiza fidelidade
     try {
-      const { data: fidEx } = await sb.from('fidelidade')
+      const { data: fidEx } = await sbt2.from('fidelidade')
         .select('id').eq('phone', phone).maybeSingle();
       if (!fidEx) {
-        await sb.from('fidelidade').insert({ name: nome, phone, pts: 0, orders_count: 0 });
+        await sbt2.from('fidelidade').insert({ name: nome, phone, pts: 0, orders_count: 0 });
       } else {
-        await sb.from('fidelidade').update({ name: nome }).eq('id', fidEx.id);
+        await sbt2.from('fidelidade').update({ name: nome }).eq('id', fidEx.id);
       }
     } catch(e) {}
 
@@ -1894,7 +1895,14 @@ async function init() {
     if (configRes.data) {
       applyStoreStatus(configRes.data.store_open);
       if (configRes.data.delivery_fee_config) {
-        deliveryFeeConfig = configRes.data.delivery_fee_config;
+        const rawFee = configRes.data.delivery_fee_config;
+        // Normaliza campos: o banco pode ter 'tipo'/'tipo' e 'valor'/'value'
+        deliveryFeeConfig = {
+          tipo:   rawFee.tipo  || rawFee.type  || 'fixo',
+          valor:  rawFee.valor || rawFee.value || rawFee.fixed || 0,
+          faixas: rawFee.faixas || rawFee.zones || [],
+          ...rawFee
+        };
       }
     }
 
@@ -2081,9 +2089,11 @@ function getDiscount() {
   if (!appliedCupom) return 0;
   const c = appliedCupom;
   const sub = cartSubtotal();
-  if (c.tipo === '%') return sub * c.val / 100;
-  if (c.tipo === 'frete') return deliveryType === 'delivery' ? getTaxaBase() : 0;
-  return Math.min(c.val, sub);
+  const tipo = c.type || c.tipo || '';
+  const val  = parseFloat(c.value ?? c.val ?? 0);
+  if (tipo === 'percent' || tipo === '%') return sub * val / 100;
+  if (tipo === 'frete') return deliveryType === 'delivery' ? getTaxaBase() : 0;
+  return Math.min(val, sub);
 }
 
 function getTaxaBase() {
@@ -2219,8 +2229,9 @@ function applyCupom() {
   if (!found) {
     fb.innerHTML = '<div class="coupon-err">❌ Cupom inválido ou expirado</div>';
     appliedCupom = null;
-  } else if (found.minimo > 0 && cartSubtotal() < found.minimo) {
-    fb.innerHTML = `<div class="coupon-err">❌ Pedido mínimo de R$ ${fmtN(found.minimo)} para este cupom</div>`;
+  } else if ((found.min_order || found.minimo || 0) > 0 && cartSubtotal() < (found.min_order || found.minimo || 0)) {
+    const minVal = found.min_order || found.minimo || 0;
+    fb.innerHTML = `<div class="coupon-err">❌ Pedido mínimo de R$ ${fmtN(minVal)} para este cupom</div>`;
     appliedCupom = null;
   } else {
     appliedCupom = found;
@@ -2266,10 +2277,11 @@ async function submitOrder() {
   try {
     // Save/update customer
     try {
-      const { data: existing } = await sb.from('customers')
+      const sbt = sbTenant();
+      const { data: existing } = await sbt.from('customers')
         .select('id,orders_count,total_spent,email,birthday').eq('phone', phone).maybeSingle();
       if (existing) {
-        await sb.from('customers').update({
+        await sbt.from('customers').update({
           name, addr: addrFull || existing.addr,
           email: _profile?.email || existing.email || null,
           birthday: _profile?.birthday || existing.birthday || null,
@@ -2284,7 +2296,7 @@ async function submitOrder() {
           updateHeroProfile(_profile);
         }
       } else {
-        const { data: inserted } = await sb.from('customers').insert({
+        const { data: inserted } = await sbt.from('customers').insert({
           name, phone, addr: addrFull||null,
           email: _profile?.email || null,
           birthday: _profile?.birthday || null,
@@ -2301,17 +2313,17 @@ async function submitOrder() {
       }
       // Atualiza fidelidade
       try {
-        const { data: fidEx } = await sb.from('fidelidade').select('id,pts,orders_count').eq('phone', phone).maybeSingle();
+        const { data: fidEx } = await sbt.from('fidelidade').select('id,pts,orders_count').eq('phone', phone).maybeSingle();
         if (fidEx) {
-          await sb.from('fidelidade').update({ name, orders_count: (fidEx.orders_count||0)+1 }).eq('id', fidEx.id);
+          await sbt.from('fidelidade').update({ name, orders_count: (fidEx.orders_count||0)+1 }).eq('id', fidEx.id);
         } else {
-          await sb.from('fidelidade').insert({ name, phone, pts: 0, orders_count: 1 });
+          await sbt.from('fidelidade').insert({ name, phone, pts: 0, orders_count: 1 });
         }
       } catch(e) {}
     } catch(e) { console.warn('Customer save skipped:', e); }
 
     // Insert order
-    const { data, error } = await sb.from('orders').insert({
+    const { data, error } = await sbt.from('orders').insert({
       client: name, phone, addr: addrFull,
       items: itemsArr, total: grandTotal(), taxa: getTaxa(),
       status: 'analise', time, pag: selectedPay
@@ -2566,8 +2578,11 @@ function confirmPizza() {
   cart.push(pizzaItem);
   updateCartFloat();
   closePizzaModal();
-  // Always suggest drink after pizza
-  setTimeout(() => openUpsell(pizzaItem), 350);
+  // Só mostra upsell se existirem bebidas cadastradas
+  setTimeout(() => {
+    if (getUpsellSuggestions().length > 0) openUpsell(pizzaItem);
+    else showToast('🛒', pizzaItem.name + ' adicionada!');
+  }, 350);
 }
 
 // ═══════════════════════════════════════════════
@@ -2723,7 +2738,7 @@ function itemModalChangeQty(delta) {
 }
 
 function itemModalConfirm() {
-  const i = allItems.find(x => x.id === _itemModalId);
+  const i = allItems.find(x => x.id === Number(_itemModalId));
   if (!i) return;
   if (i.item_type === 'pizza') {
     const pid = i.id;
@@ -2771,7 +2786,6 @@ function getUpsellSuggestions() {
 }
 
 function shouldShowUpsell(item) {
-  // Only show upsell if there are actual suggestions available
   const type = detectFoodType(item);
   if (!UPSELL_TRIGGERS.includes(type)) return false;
   return getUpsellSuggestions().length > 0;
