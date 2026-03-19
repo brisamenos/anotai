@@ -4614,7 +4614,7 @@ const EVO = {
   async sendText(number, text) {
     const phone = number.replace(/\D/g,'');
     const num   = phone.startsWith('55') ? phone : `55${phone}`;
-    const r = await this.req('POST', '/message/sendText/' + this.instance, { number: num, text });
+    const r = await this.req('POST', '/message/sendText/' + this.instance, { number: num, textMessage: { text } });
     return r;
   }
 };
@@ -4649,7 +4649,11 @@ async function evoCriarInstancia() {
   const instName = EVO.instance;
   if (!instName) { sbToast('err', 'Informe o nome da instância antes de criar.'); return; }
   sbLoading(true);
-  const r = await EVO.req('POST', '/instance/create', { instanceName: instName, qrcode: true, integration: 'WHATSAPP-BAILEYS' });
+  const r = await EVO.req('POST', '/instance/create', {
+    instanceName: instName,
+    qrcode: true,
+    integration: 'WHATSAPP-BAILEYS'
+  });
   sbLoading(false);
   if (r.ok) {
     // Salva evo_instance no store_config do tenant
