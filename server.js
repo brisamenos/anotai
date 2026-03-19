@@ -349,9 +349,7 @@ const MIGRATIONS = [
     up: `CREATE TABLE IF NOT EXISTS ratings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-      order_id INTEGER,
-      client TEXT,
-      phone TEXT,
+      order_id INTEGER, client TEXT, phone TEXT,
       nota INTEGER NOT NULL DEFAULT 5,
       comentario TEXT,
       created_at TEXT DEFAULT (datetime('now'))
@@ -910,20 +908,42 @@ async function checarAniv() {
       const auto = jsonParse(cfg.evo_automacoes)||{}
       const inst = cfg.evo_instance || EVO_INST
       const ca   = auto['aniversario']||{}
-      if (!ca.on) continue
+      if (ca.on === false) continue
       const now    = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Fortaleza'}))
       const today  = `${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
       const hora   = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
       if (_anivLast.get(t.id)===today||cfg.evo_aniv_last===today) continue
       if (hora<(auto._aniv_hora||'09:00')) continue
       _anivLast.set(t.id, today)
-      const clientes = db.prepare("SELECT * FROM fidelidade WHERE tenant_id=? AND birthday IS NOT NULL AND phone IS NOT NULL").all(t.id)
-      const anivs    = clientes.filter(c=>c.birthday&&c.phone&&c.birthday.slice(5)===today)
-      if (!anivs.length){db.prepare("UPDATE store_config SET evo_aniv_last=? WHERE tenant_id=?").run(today,t.id);continue}
-      for (const c of anivs){await sendWA(c.phone,fillVars(ca.msg,{nome:c.name}),inst);await sleep(1500)}
-      db.prepare("UPDATE store_config SET evo_aniv_last=? WHERE tenant_id=?").run(today,t.id)
-      log('🎂',`Aniversários tenant ${t.id}: ${anivs.length} enviados`)
-    } catch(e){log('❌','Erro aniv tenant '+t.id,{error:e.message})}
+
+      // Busca aniversariantes na tabela fidelidade
+      const deFidelidade = db.prepare(
+        "SELECT name, phone FROM fidelidade WHERE tenant_id=? AND birthday IS NOT NULL AND phone IS NOT NULL"
+      ).all(t.id).filter(c => c.birthday && c.phone && c.birthday.slice(5) === today)
+
+      // Busca aniversariantes na tabela customers (evita duplicar por phone)
+      const deCustomers = db.prepare(
+        "SELECT name, phone FROM customers WHERE tenant_id=? AND birthday IS NOT NULL AND phone IS NOT NULL"
+      ).all(t.id).filter(c => c.birthday && c.phone && c.birthday.slice(5) === today)
+
+      // Mescla sem duplicar por telefone (fidelidade tem prioridade)
+      const phonesVistos = new Set(deFidelidade.map(c => c.phone))
+      const anivs = [
+        ...deFidelidade,
+        ...deCustomers.filter(c => !phonesVistos.has(c.phone))
+      ]
+
+      if (!anivs.length) {
+        db.prepare("UPDATE store_config SET evo_aniv_last=? WHERE tenant_id=?").run(today, t.id)
+        continue
+      }
+      for (const c of anivs) {
+        await sendWA(c.phone, fillVars(ca.msg, { nome: c.name }), inst)
+        await sleep(1500)
+      }
+      db.prepare("UPDATE store_config SET evo_aniv_last=? WHERE tenant_id=?").run(today, t.id)
+      log('🎂', `Aniversários tenant ${t.id}: ${anivs.length} enviados`)
+    } catch(e) { log('❌','Erro aniv tenant '+t.id,{error:e.message}) }
   }
 }
 
@@ -1264,10 +1284,29 @@ const server = http.createServer(async (req,res) => {
             }
 
             if (msgFinal) {
-              const r = await sendWA(order.phone, msgFinal, inst)
-              log(r.ok ? '📲' : '❌', `Automação "${tipoAuto || new_status}" → WA #${idStr} (${order.phone}): ${r.ok ? 'enviado' : JSON.stringify(r)}`)
-              // Marca como processado para o scheduler não reenviar
-              if (r.ok) processed.add(`${order.id}_${new_status}`)
+              // finalizado → delay configurável (padrão 1 min) antes de enviar avaliação
+              // todos os outros status → envio imediato
+              if (new_status === 'finalizado') {
+                const minutos = Math.max(1, parseInt(auto._aval_minutos || 1, 10) || 1)
+                const delayMs = minutos * 60 * 1000
+                log('⏳', `Avaliação agendada em ${minutos} min para #${idStr}`)
+                setTimeout(async () => {
+                  // Revalida toggle no momento do disparo
+                  const cfgNow  = db.prepare("SELECT evo_automacoes FROM store_config WHERE tenant_id=?").get(tid)
+                  const autoNow = jsonParse(cfgNow?.evo_automacoes) || {}
+                  if (autoNow['avaliacao']?.on === false) {
+                    log('⏭️', `Avaliação desligada durante espera — #${idStr} não enviado`)
+                    return
+                  }
+                  const r = await sendWA(order.phone, msgFinal, inst)
+                  log(r.ok ? '📲' : '❌', `Automação "avaliacao" (+${minutos}min) → WA #${idStr} (${order.phone}): ${r.ok ? 'enviado' : JSON.stringify(r)}`)
+                  if (r.ok) processed.add(`${order.id}_${new_status}`)
+                }, delayMs)
+              } else {
+                const r = await sendWA(order.phone, msgFinal, inst)
+                log(r.ok ? '📲' : '❌', `Automação "${tipoAuto || new_status}" → WA #${idStr} (${order.phone}): ${r.ok ? 'enviado' : JSON.stringify(r)}`)
+                if (r.ok) processed.add(`${order.id}_${new_status}`)
+              }
             }
           } catch(e) {
             log('❌', `Erro WA order-status #${order.id}:`, { error: e.message })
