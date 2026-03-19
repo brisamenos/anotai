@@ -1879,14 +1879,15 @@ async function init() {
       sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
     }
 
+    const st = sbTenant();
     const [itemsRes, catsRes, cuponsRes, configRes] = await Promise.all([
-      sb.from('menu_items').select('*').not('status','eq','pausado').order('id'),
-      sb.from('categories').select('*').order('sort_order'),
-      sb.from('cupons').select('*').eq('ativo', true),
-      sb.from('store_config').select('*').single()
+      st.from('menu_items').select('*').not('status','eq','pausado').order('id'),
+      st.from('categories').select('*').order('sort_order'),
+      st.from('cupons').select('*').eq('ativo', true),
+      st.from('store_config').select('*').single()
     ]);
-    allItems  = (itemsRes.data  || []);
-    allCats   = (catsRes.data   || []);
+    allItems  = (itemsRes.data  || []).map(x => ({...x, id: Number(x.id)}));
+    allCats   = (catsRes.data   || []).map(x => ({...x, id: Number(x.id)}));
     allCupons = (cuponsRes.data || []);
 
     // Apply store config
@@ -2660,7 +2661,8 @@ let _itemModalId = null;
 let _itemModalQty = 1;
 
 function openItemModal(itemId) {
-  const i = allItems.find(x => x.id === itemId);
+  const id = Number(itemId);
+  const i = allItems.find(x => x.id === id);
   if (!i || i.status === 'esgotado') return;
   _itemModalId = itemId;
   _itemModalQty = 1;
