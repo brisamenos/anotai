@@ -1938,7 +1938,7 @@ function getTaxa() {
     const faixas = feeConfig.faixas || [];
     return parseFloat(faixas[Math.min(selectedFaixa, faixas.length-1)]?.taxa) || 0;
   }
-  return parseFloat(feeConfig.valor || feeConfig.value || 0);
+  return parseFloat(feeConfig.valor ?? feeConfig.value ?? 0);
 }
 
 function grandTotal() { return Math.max(0, cartSubtotal() - getDiscount() + getTaxa()); }
