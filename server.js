@@ -303,7 +303,10 @@ const MIGRATIONS = [
   {
     version: 9,
     description: 'Insere linha global para configurações de IA do admin',
-    up: `INSERT OR IGNORE INTO store_config (tenant_id) SELECT '_global' WHERE NOT EXISTS (SELECT 1 FROM store_config WHERE tenant_id='_global')`
+    up: [
+      `INSERT OR IGNORE INTO tenants (id, nome, plano, slug) VALUES ('_global', 'Global Config', 'premium', '_global')`,
+      `INSERT OR IGNORE INTO store_config (tenant_id) VALUES ('_global')`
+    ]
   },
 ]
 
@@ -366,6 +369,10 @@ if (!adminExists) {
     .run('Administrador','admin@estimafood.com',hash,'superadmin','system')
   log('🔑','Superadmin criado: admin@estimafood.com / admin123')
 }
+
+// Garante que o tenant '_global' existe (necessário para store_config de IA do admin)
+db.prepare("INSERT OR IGNORE INTO tenants (id, nome, plano, slug) VALUES ('_global', 'Global Config', 'premium', '_global')").run()
+db.prepare("INSERT OR IGNORE INTO store_config (tenant_id) VALUES ('_global')").run()
 
 // Garante store_config para cada tenant existente
 const tenantsAtivos = db.prepare("SELECT id FROM tenants").all()
