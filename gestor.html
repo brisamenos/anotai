@@ -883,19 +883,17 @@ Em caso de dúvidas, é só chamar aqui. 😊</textarea>
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(245,158,11,.15);display:flex;align-items:center;justify-content:center;font-size:18px">⭐</div>
               <div>
                 <div style="font-weight:600;font-size:13.5px">Pedir Avaliação — Satisfação</div>
-                <div style="font-size:11.5px;color:var(--muted)">Enviado <strong>60 segundos</strong> após o pedido ser <strong>Finalizado</strong> no kanban</div>
+                <div style="font-size:11.5px;color:var(--muted)">Enviado pelo servidor <strong>60 segundos</strong> após o pedido ser <strong>Finalizado</strong> no kanban</div>
               </div>
             </div>
             <div class="toggle" id="auto-toggle-avaliacao" onclick="this.classList.toggle('on')" title="Ativar/Desativar automação de avaliação"></div>
           </div>
           <textarea class="form-input" id="auto-msg-avaliacao" rows="4" style="font-size:12.5px">⭐ {nome}, esperamos que tenha curtido seu pedido #{id}!
-Conta pra gente como foi sua experiência — sua opinião é muito importante! 🙏
-Avalie em segundos clicando aqui: {link_avaliacao}</textarea>
+Conta pra gente como foi — sua opinião é muito importante para nós! 🙏
+Avalie agora: {link_avaliacao}</textarea>
           <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
-            <div style="font-size:11.5px;color:var(--muted)">💡 A mensagem é disparada automaticamente <strong>60 segundos</strong> após clicar em "Finalizar" no kanban. O cliente acessa o link, escolhe as estrelas e o registro fica salvo em <strong>Satisfação</strong>.</div>
-            <div style="font-size:11px;color:var(--muted);background:var(--surface2);border-radius:6px;padding:6px 10px">
-              Variáveis: <code>{nome}</code> <code>{id}</code> <code>{itens}</code> <code>{total}</code> <code>{link_avaliacao}</code>
-            </div>
+            <div style="font-size:11.5px;color:var(--muted)">💡 O servidor aguarda <strong>60 segundos</strong> após a finalização e envia automaticamente. O cliente clica no link, escolhe as estrelas e a avaliação é salva em <strong>Satisfação</strong>.</div>
+            <div style="font-size:11px;color:var(--muted);background:var(--surface2);border-radius:6px;padding:6px 10px">Variáveis: <code>{nome}</code> <code>{id}</code> <code>{itens}</code> <code>{total}</code> <code>{link_avaliacao}</code></div>
           </div>
         </div>
 
