@@ -411,12 +411,7 @@ function _renderMesaPageFromCache() {
   });
 }
 
-let _subscribing = false; // guard contra chamadas simultâneas de subscribeOrders
-
 function subscribeOrders() {
-  if (_subscribing) return; // já está tentando conectar, ignora
-  _subscribing = true;
-  _rtConnected = false;     // marca offline imediatamente para o polling não disparar mais
   unsubscribeAll();
 
   const chOrders = sb.channel('orders-rt')
@@ -473,7 +468,6 @@ function subscribeOrders() {
       _renderMesaPageFromCache();
     })
     .subscribe(status => {
-      _subscribing = false; // libera guard independente do resultado
       setRtStatus(status === 'SUBSCRIBED');
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         setTimeout(() => subscribeOrders(), 3000);
@@ -856,22 +850,39 @@ async function advanceOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
   if (!o) return;
   const newStatus = o.status === 'analise' ? 'producao' : 'pronto';
-  const { error } = await sb.from('orders').update({status: newStatus}).eq('id', id);
-  if (!error) o.status = newStatus;
-  // WhatsApp é enviado pelo server.js automaticamente ao detectar mudança de status
+  try {
+    const res = await fetch('/api/order-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: id, new_status: newStatus, tenant_id: _sessao?.tenant_id })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro');
+    o.status = newStatus;
+  } catch(e) {
+    sbToast('err', 'Erro ao avançar pedido: ' + e.message); return;
+  }
   playOrderSound();
   renderKanban();
-  sbToast('ok',`Pedido #${id} avançado!`);
+  sbToast('ok', `Pedido #${id} avançado!`);
 }
 
 // ── cancelOrderById ──────────────────────────────────
 async function cancelOrderById(id) {
-  const o = ordersKanban.find(x => x.id === id);
-  const { error } = await sb.from('orders').update({status:'cancelado'}).eq('id', id);
-  if (!error) ordersKanban = ordersKanban.filter(x => x.id !== id);
-  // WhatsApp é enviado pelo server.js automaticamente
+  try {
+    const res = await fetch('/api/order-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: id, new_status: 'cancelado', tenant_id: _sessao?.tenant_id })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro');
+    ordersKanban = ordersKanban.filter(x => x.id !== id);
+  } catch(e) {
+    sbToast('err', 'Erro ao cancelar pedido: ' + e.message); return;
+  }
   renderKanban();
-  showToast(_ICON_TRS,`Pedido #${id} cancelado`);
+  showToast(_ICON_TRS, `Pedido #${id} cancelado`);
 }
 
 // ── finishOrderById ──────────────────────────────────
@@ -879,19 +890,30 @@ async function finishOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
   const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   sbLoading(true);
-  await Promise.all([
-    sb.from('orders').update({status:'finalizado'}).eq('id', id),
-    o ? sb.from('movimentos').insert({
-      description: `Pedido #${o.id} – ${o.client}`,
-      tipo: 'entrada', val: o.total + o.taxa, pag: o.pag || 'PIX', time
-    }) : Promise.resolve()
-  ]);
+  try {
+    const res = await fetch('/api/order-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: id, new_status: 'finalizado', tenant_id: _sessao?.tenant_id })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro');
+    // Registra movimento financeiro
+    if (o) {
+      await sb.from('movimentos').insert({
+        description: `Pedido #${o.id} – ${o.client}`,
+        tipo: 'entrada', val: o.total + o.taxa, pag: o.pag || 'PIX', time
+      });
+      movimentos.push({ desc:`Pedido #${o.id} – ${o.client}`, tipo:'entrada', val:o.total+o.taxa, pag:o.pag||'PIX', time });
+    }
+    ordersKanban = ordersKanban.filter(x => x.id !== id);
+  } catch(e) {
+    sbLoading(false);
+    sbToast('err', 'Erro ao finalizar pedido: ' + e.message); return;
+  }
   sbLoading(false);
-  if (o) movimentos.push({ desc:`Pedido #${o.id} – ${o.client}`, tipo:'entrada', val:o.total+o.taxa, pag:o.pag||'PIX', time });
-  // WhatsApp (avaliação + pontos) é enviado pelo server.js automaticamente
-  ordersKanban = ordersKanban.filter(x => x.id !== id);
   renderKanban();
-  sbToast('ok',`Pedido #${id} finalizado!`);
+  sbToast('ok', `Pedido #${id} finalizado!`);
 }
 
 // ── addMovimento (quick register) ────────────────────
@@ -2169,37 +2191,51 @@ function renderMesaCard(t, orders) {
 }
 
 async function mesaAdvanceOrder(id) {
-  const { error } = await sb.from('orders').update({ status: 'producao' }).eq('id', id);
-  if (!error) {
-    const o = ordersKanban.find(x => x.id === id);
-    if (o) o.status = 'producao';
-    // Atualiza cache local imediatamente
+  try {
+    const res = await fetch('/api/order-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: id, new_status: 'producao', tenant_id: _sessao?.tenant_id })
+    });
+    if (!res.ok) throw new Error((await res.json()).error || 'Erro');
+    const o  = ordersKanban.find(x => x.id === id);
     const co = mesaOrdersCache.find(x => x.id === id);
+    if (o)  o.status  = 'producao';
     if (co) co.status = 'producao';
     _renderMesaPageFromCache();
-  } else sbToast('err', 'Erro ao atualizar pedido');
+  } catch(e) { sbToast('err', 'Erro ao atualizar pedido: ' + e.message); }
 }
 
 async function mesaServOrder(id) {
-  const { error } = await sb.from('orders').update({ status: 'entregue' }).eq('id', id);
-  if (!error) {
-    ordersKanban = ordersKanban.filter(x => x.id !== id);
-    mesaOrdersCache = mesaOrdersCache.filter(x => x.id !== id);
+  try {
+    const res = await fetch('/api/order-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: id, new_status: 'entregue', tenant_id: _sessao?.tenant_id })
+    });
+    if (!res.ok) throw new Error((await res.json()).error || 'Erro');
+    ordersKanban      = ordersKanban.filter(x => x.id !== id);
+    mesaOrdersCache   = mesaOrdersCache.filter(x => x.id !== id);
     renderKanban();
     _renderMesaPageFromCache();
     sbToast('ok', 'Pedido entregue ✓');
-  } else sbToast('err', 'Erro ao atualizar pedido');
+  } catch(e) { sbToast('err', 'Erro ao atualizar pedido: ' + e.message); }
 }
 
 async function mesaCancelOrder(id) {
   if (!confirm('Cancelar este pedido?')) return;
-  const { error } = await sb.from('orders').update({ status: 'cancelado' }).eq('id', id);
-  if (!error) {
-    ordersKanban = ordersKanban.filter(x => x.id !== id);
+  try {
+    const res = await fetch('/api/order-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: id, new_status: 'cancelado', tenant_id: _sessao?.tenant_id })
+    });
+    if (!res.ok) throw new Error((await res.json()).error || 'Erro');
+    ordersKanban    = ordersKanban.filter(x => x.id !== id);
     mesaOrdersCache = mesaOrdersCache.filter(x => x.id !== id);
     _renderMesaPageFromCache();
     sbToast('ok', 'Pedido cancelado');
-  } else sbToast('err', 'Erro ao cancelar');
+  } catch(e) { sbToast('err', 'Erro ao cancelar: ' + e.message); }
 }
 
 // ─────────────────────────────────────────
@@ -2676,24 +2712,33 @@ function _kdsUpdateTimers() {
 }
 
 async function kdsConfirm(id) {
-  const { error } = await sb.from('orders').update({ status: 'producao' }).eq('id', id);
-  if (!error) {
+  try {
+    const res = await fetch('/api/order-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: id, new_status: 'producao', tenant_id: _sessao?.tenant_id })
+    });
+    if (!res.ok) throw new Error((await res.json()).error || 'Erro');
     const o = ordersKanban.find(x => x.id === id);
     if (o) o.status = 'producao';
     const card = document.getElementById('kds-card-' + id);
     if (card) card.classList.remove('st-new');
     renderKDS();
     sbToast('ok', `Pedido #${id} em preparo`);
-  }
+  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
 }
 
 async function kdsMarkPronto(id) {
-  const { error } = await sb.from('orders').update({ status: 'pronto' }).eq('id', id);
-  if (!error) {
+  try {
+    const res = await fetch('/api/order-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: id, new_status: 'pronto', tenant_id: _sessao?.tenant_id })
+    });
+    if (!res.ok) throw new Error((await res.json()).error || 'Erro');
     const o = ordersKanban.find(x => x.id === id);
     if (o) o.status = 'pronto';
     delete kdsTimers[id];
-    // Som de conclusão
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       [[660,0],[880,.1],[1100,.2]].forEach(([f,t]) => {
@@ -2704,22 +2749,25 @@ async function kdsMarkPronto(id) {
         osc.start(ctx.currentTime+t); osc.stop(ctx.currentTime+t+.2);
       });
     } catch(e){}
-    renderKDS();
-    renderKanban();
+    renderKDS(); renderKanban();
     sbToast('ok', `Pedido #${id} pronto! ✅`);
-  }
+  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
 }
 
 async function kdsCancelOrder(id) {
   if (!confirm('Cancelar pedido #' + id + '?')) return;
-  const { error } = await sb.from('orders').update({ status: 'cancelado' }).eq('id', id);
-  if (!error) {
+  try {
+    const res = await fetch('/api/order-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: id, new_status: 'cancelado', tenant_id: _sessao?.tenant_id })
+    });
+    if (!res.ok) throw new Error((await res.json()).error || 'Erro');
     ordersKanban = ordersKanban.filter(x => x.id !== id);
     delete kdsTimers[id];
-    renderKDS();
-    renderKanban();
+    renderKDS(); renderKanban();
     sbToast('ok', `Pedido #${id} cancelado`);
-  }
+  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
 }
 
 // ─────────────────────────────────────────
@@ -4887,7 +4935,7 @@ function _iniciarSchedulerAniversario() {
 }
 
 async function evoSalvarAutomacoes() {
-  const tipos = ['confirmado','pronto','entrega','cancelado','aniversario','boasvindas','avaliacao','retorno','promocao','pontos','conta'];
+  const tipos = ['recebido','confirmado','pronto','entrega','cancelado','aniversario','boasvindas','avaliacao','retorno','promocao','pontos','conta'];
   const data = {};
   tipos.forEach(tipo => {
     data[tipo] = {
