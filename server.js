@@ -633,15 +633,17 @@ async function handleREST(req, res, table, params, body) {
         payload.tenant_id = tenantId
       }
 
-      // store_config: upsert por tenant_id
-      if (table==='store_config' && tenantId) {
+      // store_config: sempre faz upsert por tenant_id (seja do header ou do body)
+      const scTenantId = tenantId || payload.tenant_id
+      if (table==='store_config' && scTenantId) {
+        if (!payload.tenant_id) payload.tenant_id = scTenantId
         const keys = Object.keys(payload).filter(k=>cols.includes(k))
         const setClause = keys.filter(k=>k!=='tenant_id').map(k=>`"${k}"=excluded."${k}"`).join(', ')
         const colList = keys.map(k=>`"${k}"`).join(', ')
         const phs = keys.map(()=>'?').join(', ')
         db.prepare(`INSERT INTO store_config (${colList}) VALUES (${phs}) ON CONFLICT(tenant_id) DO UPDATE SET ${setClause}`)
           .run(...keys.map(k=>sanitize(payload[k])))
-        const row = db.prepare("SELECT * FROM store_config WHERE tenant_id=?").get(tenantId)
+        const row = db.prepare("SELECT * FROM store_config WHERE tenant_id=?").get(scTenantId)
         return send(res,200,parseRow(table,row))
       }
 
@@ -731,10 +733,10 @@ function handleTenantInfo(params) {
   const useDefault = params.get('default')
   if (!slug && !id && !useDefault) return { error: 'Informe slug ou id' }
   const t = slug
-    ? db.prepare("SELECT id,nome,slug,plano FROM tenants WHERE slug=? AND ativo=1").get(slug)
+    ? db.prepare("SELECT id,nome,slug FROM tenants WHERE slug=? AND ativo=1").get(slug)
     : id
-      ? db.prepare("SELECT id,nome,slug,plano FROM tenants WHERE id=? AND ativo=1").get(id)
-      : db.prepare("SELECT id,nome,slug,plano FROM tenants WHERE ativo=1 ORDER BY id ASC LIMIT 1").get()
+      ? db.prepare("SELECT id,nome,slug FROM tenants WHERE id=? AND ativo=1").get(id)
+      : db.prepare("SELECT id,nome,slug FROM tenants WHERE ativo=1 ORDER BY id ASC LIMIT 1").get()
   if (!t) return { error: 'Restaurante não encontrado' }
   // Inclui branding do cardápio público
   const cfg = db.prepare(`SELECT store_name,store_descricao,store_logo_url,store_banner_url,
