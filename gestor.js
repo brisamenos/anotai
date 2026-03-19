@@ -5200,7 +5200,7 @@ async function cpMontarLink() {
   const tid  = _sessao?.tenant_id || '';
   const base = window.location.origin;
 
-  // Busca o slug do tenant para gerar link legível (?slug=nome)
+  // Busca slug do tenant para gerar link legível
   let slug = '';
   try {
     const { data } = await sb.from('tenants').select('slug').eq('id', tid).single();
