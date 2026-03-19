@@ -1662,7 +1662,6 @@ async function aplicarModelo() {
     let catSortOrder = categories.length;
 
     for (const catDef of modelo.categorias) {
-      // Cria categoria
       const { data: catData, error: catErr } = await sb.from('categories').insert({
         name: catDef.name,
         label: catDef.label,
@@ -1678,7 +1677,6 @@ async function aplicarModelo() {
         type: catData.type, promo: false, open: false
       });
 
-      // Cria itens da categoria
       for (const itemDef of catDef.itens) {
         const { data: itemData, error: itemErr } = await sb.from('menu_items').insert({
           emoji:       itemDef.emoji,
@@ -1715,6 +1713,147 @@ async function aplicarModelo() {
     btn.disabled = false;
     btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.4"/><path d="M9 2v4h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg> Aplicar modelo`;
     _modeloSelecionado = null;
+  }
+}
+
+// ── Exportar cardápio atual ───────────────────────────
+function exportarCardapio() {
+  try {
+    // Monta estrutura exportável
+    const exportData = {
+      _versao:    1,
+      _exportado: new Date().toISOString(),
+      _nome:      document.getElementById('sidebar-nome')?.textContent || 'cardapio',
+      categorias: categories.map(cat => ({
+        name:  cat.name,
+        label: cat.label,
+        type:  cat.type  || 'Itens principais',
+        promo: cat.promo || false,
+        itens: items
+          .filter(i => i.catKey === cat.name)
+          .map(i => ({
+            name:        i.name,
+            emoji:       i.emoji       || '🍽️',
+            description: i.description || '',
+            price:       i.price       || 0,
+            price_old:   i.priceOld    || null,
+            status:      i.status      || 'active',
+            item_type:   i.itemType    || 'normal',
+            allow_half:  i.allowHalf   || false,
+            max_flavors: i.maxFlavors  || 1,
+            ingredients: i.ingredients || [],
+            days:        i.days        || [1,1,1,1,1,1,1],
+          }))
+      }))
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    const data = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+    a.href     = url;
+    a.download = `cardapio-${exportData._nome.toLowerCase().replace(/\s+/g,'-')}-${data}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    sbToast('ok', `📥 Cardápio exportado com ${categories.length} categoria(s)!`);
+  } catch(e) {
+    sbToast('err', 'Erro ao exportar: ' + e.message);
+    console.error(e);
+  }
+}
+
+// ── Importar cardápio de arquivo .json ───────────────
+async function importarCardapio(inputEl) {
+  const file = inputEl?.files?.[0];
+  if (!file) return;
+  inputEl.value = ''; // reset para permitir re-importar mesmo arquivo
+
+  let parsed;
+  try {
+    const text = await file.text();
+    parsed = JSON.parse(text);
+  } catch(e) {
+    sbToast('err', 'Arquivo inválido — não é um JSON válido');
+    return;
+  }
+
+  // Valida estrutura mínima
+  if (!parsed?.categorias || !Array.isArray(parsed.categorias)) {
+    sbToast('err', 'Arquivo não reconhecido — estrutura inválida');
+    return;
+  }
+
+  const total = parsed.categorias.reduce((s, c) => s + (c.itens?.length || 0), 0);
+  const confirmMsg = `Importar "${file.name}"?\n\n${parsed.categorias.length} categoria(s) · ${total} item(s)\n\nOs itens existentes não serão removidos.`;
+  if (!confirm(confirmMsg)) return;
+
+  closeModal('modal-modelos');
+  sbLoading(true);
+
+  let catsCriadas = 0, itensCriados = 0, erros = 0;
+
+  try {
+    let catSortOrder = categories.length;
+
+    for (const catDef of parsed.categorias) {
+      if (!catDef.name || !catDef.label) continue;
+
+      const { data: catData, error: catErr } = await sb.from('categories').insert({
+        name:       catDef.name,
+        label:      catDef.label,
+        type:       catDef.type  || 'Itens principais',
+        promo:      catDef.promo || false,
+        sort_order: ++catSortOrder
+      }).select().single();
+
+      if (catErr) { console.error('Erro ao criar cat:', catErr); erros++; continue; }
+      catsCriadas++;
+
+      categories.push({
+        id: catData.id, name: catData.name, label: catData.label,
+        type: catData.type, promo: catData.promo || false, open: false
+      });
+
+      const itens = catDef.itens || [];
+      for (const itemDef of itens) {
+        if (!itemDef.name) continue;
+
+        const { data: itemData, error: itemErr } = await sb.from('menu_items').insert({
+          emoji:       itemDef.emoji       || '🍽️',
+          name:        itemDef.name,
+          description: itemDef.description || '',
+          price:       parseFloat(itemDef.price) || 0,
+          price_old:   itemDef.price_old   || null,
+          cat:         catData.label,
+          cat_key:     catData.name,
+          item_type:   itemDef.item_type   || 'normal',
+          allow_half:  itemDef.allow_half  || false,
+          max_flavors: itemDef.max_flavors || 1,
+          promo:       false,
+          status:      itemDef.status      || 'active',
+          days:        itemDef.days        || [1,1,1,1,1,1,1],
+          ingredients: itemDef.ingredients || []
+        }).select().single();
+
+        if (itemErr) { console.error('Erro ao criar item:', itemErr); erros++; continue; }
+        itensCriados++;
+        items.push(mapItem(itemData));
+      }
+    }
+
+    renderGestor();
+    renderTable();
+    const msg = `✅ Importado: ${catsCriadas} categoria(s) · ${itensCriados} item(s)` + (erros ? ` · ${erros} erro(s)` : '');
+    sbToast('ok', msg);
+
+  } catch(e) {
+    sbToast('err', 'Erro ao importar: ' + e.message);
+    console.error(e);
+  } finally {
+    sbLoading(false);
   }
 }
 
