@@ -1184,7 +1184,7 @@ body {
 .chip-green { background: rgba(34,197,94,.12); color: var(--green); }
 .chip-amber { background: rgba(59,130,246,.12); color: var(--accent); }
 </style>
-  <script src="/api-client.js"></script>
+  <script src="/supabase-shim.js"></script>
 </head>
 <body>
 
@@ -1533,9 +1533,16 @@ body {
 
 <script>
 // ═══════════════════════════════════════════════
-// API CLIENT
+// SUPABASE
 // ═══════════════════════════════════════════════
-const sb = window.AppAPI;
+const { createClient } = window.supabase;
+const sb = createClient('', '', {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false
+  }
+});
 
 // ═══════════════════════════════════════════════
 // STATE
@@ -1550,8 +1557,6 @@ let deliveryType  = 'delivery';  // delivery | retirada | mesa
 let selectedPay   = 'PIX';
 let appliedCupom  = null;
 let deliveryFeeConfig = { tipo: 'fixo', valor: 5, faixas: [] };
-let _horariosFuncionamento = null; // horarios_config do gestor
-let _storeOpenManual = true;         // valor do toggle store_open do banco
 let selectedDistFaixa = 0; // index into faixas when tipo=por_km
 
 // ═══════════════════════════════════════════════
@@ -1615,7 +1620,7 @@ async function loadProfile() {
     const local = JSON.parse(raw);
     if (!local.phone) return;
     // Verifica no banco
-    const { data } = await sbTenant().from('customers')
+    const { data } = await sb.from('customers')
       .select('id,name,phone,email,birthday,addr')
       .eq('phone', local.phone).maybeSingle();
     if (data) {
@@ -1725,18 +1730,17 @@ async function submitCadastro() {
     };
 
     // Upsert pelo telefone
-    const sbt2 = sbTenant();
-    const { data: existing } = await sbt2.from('customers')
+    const { data: existing } = await sb.from('customers')
       .select('id,orders_count,total_spent,addr').eq('phone', phone).maybeSingle();
 
     let saved;
     if (existing) {
-      const { data } = await sbt2.from('customers')
+      const { data } = await sb.from('customers')
         .update({ ...payload, addr: existing.addr })
         .eq('id', existing.id).select().single();
       saved = data;
     } else {
-      const { data } = await sbt2.from('customers')
+      const { data } = await sb.from('customers')
         .insert({ ...payload, orders_count: 0, total_spent: 0 })
         .select().single();
       saved = data;
@@ -1744,12 +1748,12 @@ async function submitCadastro() {
 
     // Também cria/atualiza fidelidade
     try {
-      const { data: fidEx } = await sbt2.from('fidelidade')
+      const { data: fidEx } = await sb.from('fidelidade')
         .select('id').eq('phone', phone).maybeSingle();
       if (!fidEx) {
-        await sbt2.from('fidelidade').insert({ name: nome, phone, pts: 0, orders_count: 0 });
+        await sb.from('fidelidade').insert({ name: nome, phone, pts: 0, orders_count: 0 });
       } else {
-        await sbt2.from('fidelidade').update({ name: nome }).eq('id', fidEx.id);
+        await sb.from('fidelidade').update({ name: nome }).eq('id', fidEx.id);
       }
     } catch(e) {}
 
@@ -1875,31 +1879,21 @@ async function init() {
       sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
     }
 
-    const st = sbTenant();
     const [itemsRes, catsRes, cuponsRes, configRes] = await Promise.all([
-      st.from('menu_items').select('*').not('status','eq','pausado').order('id'),
-      st.from('categories').select('*').order('sort_order'),
-      st.from('cupons').select('*').eq('ativo', true),
-      st.from('store_config').select('*').single()
+      sb.from('menu_items').select('*').not('status','eq','pausado').order('id'),
+      sb.from('categories').select('*').order('sort_order'),
+      sb.from('cupons').select('*').eq('ativo', true),
+      sb.from('store_config').select('*').single()
     ]);
-    allItems  = (itemsRes.data  || []).map(x => ({...x, id: Number(x.id)}));
-    allCats   = (catsRes.data   || []).map(x => ({...x, id: Number(x.id)}));
+    allItems  = (itemsRes.data  || []);
+    allCats   = (catsRes.data   || []);
     allCupons = (cuponsRes.data || []);
 
     // Apply store config
     if (configRes.data) {
-      _horariosFuncionamento = configRes.data.horarios_config || null;
-      _storeOpenManual = configRes.data.store_open;
-      applyStoreStatus(_storeOpenManual, _horariosFuncionamento);
+      applyStoreStatus(configRes.data.store_open);
       if (configRes.data.delivery_fee_config) {
-        const rawFee = configRes.data.delivery_fee_config;
-        // Normaliza campos: o banco pode ter 'tipo'/'tipo' e 'valor'/'value'
-        deliveryFeeConfig = {
-          tipo:   rawFee.tipo  || rawFee.type  || 'fixo',
-          valor:  rawFee.valor || rawFee.value || rawFee.fixed || 0,
-          faixas: rawFee.faixas || rawFee.zones || [],
-          ...rawFee
-        };
+        deliveryFeeConfig = configRes.data.delivery_fee_config;
       }
     }
 
@@ -1914,73 +1908,24 @@ async function init() {
   }
 }
 
-// Verifica se agora está dentro do horário de funcionamento configurado
-function isWithinHorario(horarios) {
-  if (!horarios || !Object.keys(horarios).length) return null; // sem config = não interfere
-  const dias = ['dom','seg','ter','qua','qui','sex','sab'];
-  const agora = new Date();
-  const diaKey = dias[agora.getDay()];
-  const h = horarios[diaKey];
-  if (!h || !h.ativo) return false; // dia desativado = fechado
-  const [abH, abM]  = (h.abertura  || '00:00').split(':').map(Number);
-  const [fchH, fchM] = (h.fechamento || '23:59').split(':').map(Number);
-  const minAtual = agora.getHours() * 60 + agora.getMinutes();
-  const minAb    = abH * 60 + abM;
-  const minFch   = fchH * 60 + fchM;
-  return minAtual >= minAb && minAtual <= minFch;
-}
-
-function applyStoreStatus(storeOpen, horarios) {
-  const dentroDoHorario = isWithinHorario(horarios);
-  // Se há horários configurados, eles têm prioridade sobre o toggle manual
-  // Se não há horários configurados, usa só o toggle manual
-  const open = dentroDoHorario !== null ? (storeOpen && dentroDoHorario) : storeOpen;
-
+function applyStoreStatus(open) {
   const dot = document.querySelector('.hero-badge .dot');
   const txt = document.getElementById('store-status-text');
   if (dot) dot.style.background = open ? 'var(--green)' : '#ef4444';
-
-  let statusTxt = open ? 'Aberto agora' : 'Fechado no momento';
-  // Se fechado por horário, mostra quando abre
-  if (!open && dentroDoHorario === false) {
-    const dias = ['dom','seg','ter','qua','qui','sex','sab'];
-    const diaKey = dias[new Date().getDay()];
-    const h = horarios?.[diaKey];
-    if (h && h.ativo && h.abertura) statusTxt = `Abre às ${h.abertura}`;
-    else {
-      // Busca próximo dia ativo
-      for (let i = 1; i <= 7; i++) {
-        const nextKey = dias[(new Date().getDay() + i) % 7];
-        const nh = horarios?.[nextKey];
-        if (nh && nh.ativo) {
-          const nomeDia = {dom:'domingo',seg:'segunda',ter:'terça',qua:'quarta',qui:'quinta',sex:'sexta',sab:'sábado'}[nextKey];
-          statusTxt = `Abre ${nomeDia} às ${nh.abertura}`;
-          break;
-        }
-      }
-    }
-  }
-  if (txt) txt.textContent = statusTxt;
-
+  if (txt) txt.textContent = open ? 'Aberto agora' : 'Fechado no momento';
   const confirmBtn = document.getElementById('confirm-btn');
   if (confirmBtn) {
     confirmBtn.disabled = !open;
-    if (!open) confirmBtn.innerHTML = `🔴 ${statusTxt}`;
+    if (!open) confirmBtn.innerHTML = '🔴 Loja fechada no momento';
   }
 }
 
 function subscribeStoreStatus() {
   sb.channel('store-config-cardapio')
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'store_config'}, p => {
-      if (p.new.horarios_config !== undefined) _horariosFuncionamento = p.new.horarios_config;
-      if (p.new.store_open !== undefined) _storeOpenManual = p.new.store_open;
-      applyStoreStatus(_storeOpenManual, _horariosFuncionamento);
+      applyStoreStatus(p.new.store_open);
     })
     .subscribe();
-  // Re-verifica horário a cada minuto (para abrir/fechar automaticamente no horário certo)
-  setInterval(() => {
-    applyStoreStatus(_storeOpenManual, _horariosFuncionamento);
-  }, 60000);
 }
 
 // ═══════════════════════════════════════════════
@@ -2135,11 +2080,9 @@ function getDiscount() {
   if (!appliedCupom) return 0;
   const c = appliedCupom;
   const sub = cartSubtotal();
-  const tipo = c.type || c.tipo || '';
-  const val  = parseFloat(c.value ?? c.val ?? 0);
-  if (tipo === 'percent' || tipo === '%') return sub * val / 100;
-  if (tipo === 'frete') return deliveryType === 'delivery' ? getTaxaBase() : 0;
-  return Math.min(val, sub);
+  if (c.tipo === '%') return sub * c.val / 100;
+  if (c.tipo === 'frete') return deliveryType === 'delivery' ? getTaxaBase() : 0;
+  return Math.min(c.val, sub);
 }
 
 function getTaxaBase() {
@@ -2275,9 +2218,8 @@ function applyCupom() {
   if (!found) {
     fb.innerHTML = '<div class="coupon-err">❌ Cupom inválido ou expirado</div>';
     appliedCupom = null;
-  } else if ((found.min_order || found.minimo || 0) > 0 && cartSubtotal() < (found.min_order || found.minimo || 0)) {
-    const minVal = found.min_order || found.minimo || 0;
-    fb.innerHTML = `<div class="coupon-err">❌ Pedido mínimo de R$ ${fmtN(minVal)} para este cupom</div>`;
+  } else if (found.minimo > 0 && cartSubtotal() < found.minimo) {
+    fb.innerHTML = `<div class="coupon-err">❌ Pedido mínimo de R$ ${fmtN(found.minimo)} para este cupom</div>`;
     appliedCupom = null;
   } else {
     appliedCupom = found;
@@ -2323,11 +2265,10 @@ async function submitOrder() {
   try {
     // Save/update customer
     try {
-      const sbt = sbTenant();
-      const { data: existing } = await sbt.from('customers')
+      const { data: existing } = await sb.from('customers')
         .select('id,orders_count,total_spent,email,birthday').eq('phone', phone).maybeSingle();
       if (existing) {
-        await sbt.from('customers').update({
+        await sb.from('customers').update({
           name, addr: addrFull || existing.addr,
           email: _profile?.email || existing.email || null,
           birthday: _profile?.birthday || existing.birthday || null,
@@ -2342,7 +2283,7 @@ async function submitOrder() {
           updateHeroProfile(_profile);
         }
       } else {
-        const { data: inserted } = await sbt.from('customers').insert({
+        const { data: inserted } = await sb.from('customers').insert({
           name, phone, addr: addrFull||null,
           email: _profile?.email || null,
           birthday: _profile?.birthday || null,
@@ -2359,17 +2300,17 @@ async function submitOrder() {
       }
       // Atualiza fidelidade
       try {
-        const { data: fidEx } = await sbt.from('fidelidade').select('id,pts,orders_count').eq('phone', phone).maybeSingle();
+        const { data: fidEx } = await sb.from('fidelidade').select('id,pts,orders_count').eq('phone', phone).maybeSingle();
         if (fidEx) {
-          await sbt.from('fidelidade').update({ name, orders_count: (fidEx.orders_count||0)+1 }).eq('id', fidEx.id);
+          await sb.from('fidelidade').update({ name, orders_count: (fidEx.orders_count||0)+1 }).eq('id', fidEx.id);
         } else {
-          await sbt.from('fidelidade').insert({ name, phone, pts: 0, orders_count: 1 });
+          await sb.from('fidelidade').insert({ name, phone, pts: 0, orders_count: 1 });
         }
       } catch(e) {}
     } catch(e) { console.warn('Customer save skipped:', e); }
 
     // Insert order
-    const { data, error } = await sbt.from('orders').insert({
+    const { data, error } = await sb.from('orders').insert({
       client: name, phone, addr: addrFull,
       items: itemsArr, total: grandTotal(), taxa: getTaxa(),
       status: 'analise', time, pag: selectedPay
@@ -2624,11 +2565,8 @@ function confirmPizza() {
   cart.push(pizzaItem);
   updateCartFloat();
   closePizzaModal();
-  // Só mostra upsell se existirem bebidas cadastradas
-  setTimeout(() => {
-    if (getUpsellSuggestions().length > 0) openUpsell(pizzaItem);
-    else showToast('🛒', pizzaItem.name + ' adicionada!');
-  }, 350);
+  // Always suggest drink after pizza
+  setTimeout(() => openUpsell(pizzaItem), 350);
 }
 
 // ═══════════════════════════════════════════════
@@ -2722,8 +2660,7 @@ let _itemModalId = null;
 let _itemModalQty = 1;
 
 function openItemModal(itemId) {
-  const id = Number(itemId);
-  const i = allItems.find(x => x.id === id);
+  const i = allItems.find(x => x.id === itemId);
   if (!i || i.status === 'esgotado') return;
   _itemModalId = itemId;
   _itemModalQty = 1;
@@ -2784,7 +2721,7 @@ function itemModalChangeQty(delta) {
 }
 
 function itemModalConfirm() {
-  const i = allItems.find(x => x.id === Number(_itemModalId));
+  const i = allItems.find(x => x.id === _itemModalId);
   if (!i) return;
   if (i.item_type === 'pizza') {
     const pid = i.id;
@@ -2816,13 +2753,13 @@ function getUpsellSuggestions() {
   // Get drinks/accompaniments not already in cart
   const cartIds = new Set(cart.map(c => c.id));
   const drinks  = allItems.filter(i =>
-    ['active','ativo'].includes(i.status) &&
+    i.status === 'active' &&
     !cartIds.has(i.id) &&
     UPSELL_DRINKS.includes(detectFoodType(i))
   );
   // Also include any item with category name matching bebidas/drinks
   const beverages = allItems.filter(i =>
-    ['active','ativo'].includes(i.status) &&
+    i.status === 'active' &&
     !cartIds.has(i.id) &&
     (i.cat_key === 'bebidas' || i.cat === 'bebidas' || i.cat_key === 'drinks')
   );
@@ -2833,8 +2770,7 @@ function getUpsellSuggestions() {
 
 function shouldShowUpsell(item) {
   const type = detectFoodType(item);
-  if (!UPSELL_TRIGGERS.includes(type)) return false;
-  return getUpsellSuggestions().length > 0;
+  return UPSELL_TRIGGERS.includes(type);
 }
 
 function openUpsell(addedItem) {
