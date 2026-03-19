@@ -1138,6 +1138,71 @@ const server = http.createServer(async (req,res) => {
   if(req.method==='POST'&&upath==='/aniversario'){_anivLast.clear();checarAniv();send(res,200,{ok:true});return}
 
   // ════════════════════════════════════════════════════════
+  // ATUALIZAR STATUS DO PEDIDO + NOTIFICAÇÃO WA IMEDIATA
+  // ════════════════════════════════════════════════════════
+  if(req.method==='POST'&&upath==='/api/order-status'){
+    const body = await readBody(req)
+    const { order_id, new_status } = body
+    const tid = body.tenant_id || req.headers['x-tenant-id']
+    if (!order_id || !new_status || !tid) { send(res,400,{ok:false,error:'order_id, new_status e tenant_id obrigatórios'}); return }
+
+    try {
+      // 1. Busca pedido atual
+      const order = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(order_id, tid)
+      if (!order) { send(res,404,{ok:false,error:'Pedido não encontrado'}); return }
+
+      const oldStatus = order.status
+
+      // 2. Atualiza no banco
+      db.prepare("UPDATE orders SET status=? WHERE id=?").run(new_status, order_id)
+      const updatedOrder = db.prepare("SELECT * FROM orders WHERE id=?").get(order_id)
+
+      // 3. Emite SSE para todos os clientes conectados
+      emit(tid, 'orders', parseRow('orders', updatedOrder), 'UPDATE')
+
+      send(res, 200, { ok: true, order: parseRow('orders', updatedOrder) })
+
+      // 4. Envia WA imediatamente (assíncrono, não bloqueia resposta)
+      if (order.phone && oldStatus !== new_status) {
+        const cfg   = db.prepare("SELECT evo_instance, evo_automacoes, store_name, store_whatsapp FROM store_config WHERE tenant_id=?").get(tid)
+        const inst  = cfg?.evo_instance || EVO_INST
+        const auto  = jsonParse(cfg?.evo_automacoes) || {}
+        const nome  = order.client || 'Cliente'
+        const idStr = String(order.id).padStart(3,'0')
+        const items = (() => { try { return (JSON.parse(order.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') } catch(e){ return '' } })()
+        const isDelivery = (order.addr||'').includes('Mesa') ? '🪑 Mesa' : (order.addr||'').toLowerCase().includes('balc') ? '🏪 Balcão' : '🛵 Entrega'
+        const total = (parseFloat(order.total||0) + parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
+
+        // Mensagens padrão por status (usadas quando automação não está configurada)
+        const msgPadrao = {
+          analise:   `✅ Olá, *${nome}*! Recebemos seu pedido *#${idStr}* com sucesso!\n\n🛒 ${items}\n💰 Total: R$${total}\n\nEm breve confirmaremos. 🍽️`,
+          producao:  `👨‍🍳 *#${idStr}* confirmado!\n\nOlá *${nome}*, seu pedido está sendo preparado agora. Aguarde! 😊`,
+          pronto:    `✅ *#${idStr}* pronto!\n\n*${nome}*, seu pedido está pronto! ${isDelivery === '🛵 Entrega' ? 'Em instantes sairá para entrega.' : 'Pode retirar no balcão.'}`,
+          saiu:      `🛵 *#${idStr}* a caminho!\n\n*${nome}*, seu pedido saiu para entrega! Chegará em breve. 🎉`,
+          entregue:  `🎉 Entregue!\n\n*${nome}*, seu pedido *#${idStr}* foi entregue. Bom apetite! ⭐\nAvalie nossa loja no cardápio.`,
+          cancelado: `😔 *#${idStr}* cancelado.\n\n*${nome}*, infelizmente seu pedido foi cancelado. Entre em contato conosco para mais informações.`,
+          finalizado:`🎉 *${nome}*, obrigado pelo pedido *#${idStr}*! Bom apetite! ⭐`,
+        }
+
+        // Verifica se existe automação customizada para este status
+        const tipoAuto = { producao:'confirmado', pronto:'pronto', cancelado:'cancelado', finalizado:'avaliacao' }[new_status]
+        const ct = tipoAuto ? (auto[tipoAuto]||{}) : {}
+        const vars = { nome, id:idStr, itens:items, total, endereco:order.addr||'', mesa:String(order.mesa_num||''), tipo_entrega:isDelivery }
+
+        const msgFinal = (ct.on && ct.msg) ? fillVars(ct.msg, vars) : msgPadrao[new_status]
+        if (msgFinal) {
+          sendWA(order.phone, msgFinal, inst)
+            .then(r => log(r.ok?'📲':'❌', `Status ${new_status} → WA #${idStr}: ${r.ok?'ok':JSON.stringify(r)}`))
+        }
+      }
+    } catch(e) {
+      log('❌','Erro order-status:',{error:e.message})
+      send(res,500,{ok:false,error:e.message})
+    }
+    return
+  }
+
+  // ════════════════════════════════════════════════════════
   // WEBHOOK EVOLUTION API → AGENTE IA
   // ════════════════════════════════════════════════════════
   if(req.method==='POST'&&(upath.startsWith('/webhook/whatsapp')||upath.startsWith('/webhook/'))){

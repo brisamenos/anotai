@@ -2305,13 +2305,30 @@ function resetCart() {
 //  TRACKER
 // ══════════════════════════════════════════
 const STEPS = [
-  { key:'analise',  icon:'🕐', title:'Pedido recebido',  desc:'Aguardando confirmação da cozinha' },
-  { key:'producao', icon:'👨‍🍳', title:'Em preparo',       desc:'Sua comida está sendo preparada' },
-  { key:'pronto',   icon:'✅', title:'Pronto!',           desc:'Pedido pronto para retirada/entrega' },
-  { key:'saiu',     icon:'🛵', title:'Saiu para entrega', desc:'A caminho do seu endereço' },
-  { key:'entregue', icon:'🎉', title:'Entregue',          desc:'Bom apetite!' },
+  {
+    key:   ['analise'],
+    icon:  '🎉',
+    title: 'Pedido recebido!',
+    desc:  'Seu pedido foi recebido e está aguardando confirmação'
+  },
+  {
+    key:   ['producao','pronto'],
+    icon:  '👨‍🍳',
+    title: 'Preparando!',
+    desc:  'A cozinha está preparando seu pedido com carinho'
+  },
+  {
+    key:   ['saiu','entregue','finalizado'],
+    icon:  '🛵',
+    title: 'Saindo para entrega!',
+    desc:  'Seu pedido está a caminho. Logo chegará!'
+  },
 ];
-const STATUS_ORDER = ['analise','producao','pronto','saiu','entregue'];
+const STATUS_ORDER = ['analise','producao','pronto','saiu','entregue','finalizado'];
+
+function stepIndexFor(status) {
+  return STEPS.findIndex(s => s.key.includes(status));
+}
 
 function startTracking(orderId, items, client) {
   _trackOrderId = orderId;
@@ -2324,7 +2341,7 @@ function startTracking(orderId, items, client) {
       if (Number(p.new.id) === orderId) {
         updateTracker(p.new.status);
         const dot = document.getElementById('track-dot');
-        if (dot) dot.classList.toggle('done', p.new.status === 'entregue');
+        if (dot) dot.classList.toggle('done', ['entregue','finalizado'].includes(p.new.status));
       }
     })
     .subscribe();
@@ -2334,21 +2351,21 @@ function startTracking(orderId, items, client) {
 }
 
 function updateTracker(status) {
-  const curIdx = STATUS_ORDER.indexOf(status);
+  const curIdx = stepIndexFor(status);
   const tl     = document.getElementById('track-timeline');
   if (!tl) return;
-  tl.innerHTML = STEPS.map((s,i) => {
+  tl.innerHTML = STEPS.map((s, i) => {
     const isDone   = i < curIdx;
-    const isActive = STATUS_ORDER[i] === status;
+    const isActive = i === curIdx;
     const isLast   = i === STEPS.length - 1;
     return `
     <div class="tstep">
       <div class="tstep-left">
-        <div class="tstep-icon ${isDone?'done':isActive?'active':''}">${s.icon}</div>
-        ${!isLast ? `<div class="tstep-line ${isDone?'done':''}"></div>` : ''}
+        <div class="tstep-icon ${isDone ? 'done' : isActive ? 'active' : ''}">${isDone ? '✓' : s.icon}</div>
+        ${!isLast ? `<div class="tstep-line ${isDone ? 'done' : ''}"></div>` : ''}
       </div>
       <div class="tstep-content">
-        <div class="tstep-title ${isDone?'done':isActive?'active':''}">${s.title}</div>
+        <div class="tstep-title ${isDone ? 'done' : isActive ? 'active' : ''}">${s.title}</div>
         <div class="tstep-desc">${s.desc}</div>
       </div>
     </div>`;

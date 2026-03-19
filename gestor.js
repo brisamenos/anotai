@@ -834,27 +834,51 @@ function triggerImageUpload(itemId, itemName) {
 
 // ── createOrder ──────────────────────────────────────
 
+// ══════════════════════════════════════════════════════
+//  MUDANÇA DE STATUS — central com notificação WA imediata
+// ══════════════════════════════════════════════════════
+async function atualizarStatusPedido(id, newStatus) {
+  const tid = _sessao?.tenant_id;
+  if (!tid) return false;
+  try {
+    const res = await fetch('/api/order-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: id, new_status: newStatus, tenant_id: tid })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    // Atualiza estado local
+    const o = ordersKanban.find(x => x.id === id);
+    if (o) o.status = newStatus;
+    return true;
+  } catch(e) {
+    sbToast('err', 'Erro ao atualizar pedido: ' + e.message);
+    return false;
+  }
+}
+
 // ── advanceOrderById ─────────────────────────────────
 async function advanceOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
   if (!o) return;
   const newStatus = o.status === 'analise' ? 'producao' : 'pronto';
-  const { error } = await sb.from('orders').update({status: newStatus}).eq('id', id);
-  if (!error) o.status = newStatus;
-  // WhatsApp é enviado pelo server.js automaticamente ao detectar mudança de status
-  playOrderSound();
-  renderKanban();
-  sbToast('ok',`Pedido #${id} avançado!`);
+  const ok = await atualizarStatusPedido(id, newStatus);
+  if (ok) {
+    playOrderSound();
+    renderKanban();
+    sbToast('ok', `Pedido #${id} avançado! 📲 Cliente notificado.`);
+  }
 }
 
 // ── cancelOrderById ──────────────────────────────────
 async function cancelOrderById(id) {
-  const o = ordersKanban.find(x => x.id === id);
-  const { error } = await sb.from('orders').update({status:'cancelado'}).eq('id', id);
-  if (!error) ordersKanban = ordersKanban.filter(x => x.id !== id);
-  // WhatsApp é enviado pelo server.js automaticamente
-  renderKanban();
-  showToast(_ICON_TRS,`Pedido #${id} cancelado`);
+  const ok = await atualizarStatusPedido(id, 'cancelado');
+  if (ok) {
+    ordersKanban = ordersKanban.filter(x => x.id !== id);
+    renderKanban();
+    showToast(_ICON_TRS, `Pedido #${id} cancelado. 📲 Cliente notificado.`);
+  }
 }
 
 // ── finishOrderById ──────────────────────────────────
@@ -862,19 +886,18 @@ async function finishOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
   const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   sbLoading(true);
-  await Promise.all([
-    sb.from('orders').update({status:'finalizado'}).eq('id', id),
-    o ? sb.from('movimentos').insert({
+  const ok = await atualizarStatusPedido(id, 'finalizado');
+  if (ok && o) {
+    await sb.from('movimentos').insert({
       description: `Pedido #${o.id} – ${o.client}`,
       tipo: 'entrada', val: o.total + o.taxa, pag: o.pag || 'PIX', time
-    }) : Promise.resolve()
-  ]);
+    });
+    if (o) movimentos.push({ desc:`Pedido #${o.id} – ${o.client}`, tipo:'entrada', val:o.total+o.taxa, pag:o.pag||'PIX', time });
+    ordersKanban = ordersKanban.filter(x => x.id !== id);
+    renderKanban();
+    sbToast('ok', `Pedido #${id} finalizado! 📲 Cliente notificado.`);
+  }
   sbLoading(false);
-  if (o) movimentos.push({ desc:`Pedido #${o.id} – ${o.client}`, tipo:'entrada', val:o.total+o.taxa, pag:o.pag||'PIX', time });
-  // WhatsApp (avaliação + pontos) é enviado pelo server.js automaticamente
-  ordersKanban = ordersKanban.filter(x => x.id !== id);
-  renderKanban();
-  sbToast('ok',`Pedido #${id} finalizado!`);
 }
 
 // ── addMovimento (quick register) ────────────────────
@@ -1063,8 +1086,11 @@ function renderKanban(){
       e.preventDefault();
       const id=parseInt(e.dataTransfer.getData('orderId'));
       const o=ordersKanban.find(x=>x.id===id);
-      if(o) o.status=st;
-      renderKanban();
+      if(!o || o.status===st) return;
+      // Salva no banco e envia WA
+      atualizarStatusPedido(id, st).then(ok => {
+        if(ok){ renderKanban(); sbToast('ok',`Pedido #${id} → ${st}. 📲 Cliente notificado.`); }
+      });
     });
   });
   document.getElementById('pedidos-badge').textContent=ordersKanban.filter(o=>o.status==='analise').length||'';
@@ -2147,20 +2173,18 @@ function renderMesaCard(t, orders) {
 }
 
 async function mesaAdvanceOrder(id) {
-  const { error } = await sb.from('orders').update({ status: 'producao' }).eq('id', id);
-  if (!error) {
-    const o = ordersKanban.find(x => x.id === id);
-    if (o) o.status = 'producao';
-    // Atualiza cache local imediatamente
+  const ok = await atualizarStatusPedido(id, 'producao');
+  if (ok) {
     const co = mesaOrdersCache.find(x => x.id === id);
     if (co) co.status = 'producao';
     _renderMesaPageFromCache();
+    sbToast('ok', `Pedido #${id} em preparo. 📲 Cliente notificado.`);
   } else sbToast('err', 'Erro ao atualizar pedido');
 }
 
 async function mesaServOrder(id) {
-  const { error } = await sb.from('orders').update({ status: 'entregue' }).eq('id', id);
-  if (!error) {
+  const ok = await atualizarStatusPedido(id, 'entregue');
+  if (ok) {
     ordersKanban = ordersKanban.filter(x => x.id !== id);
     mesaOrdersCache = mesaOrdersCache.filter(x => x.id !== id);
     renderKanban();
@@ -2171,12 +2195,12 @@ async function mesaServOrder(id) {
 
 async function mesaCancelOrder(id) {
   if (!confirm('Cancelar este pedido?')) return;
-  const { error } = await sb.from('orders').update({ status: 'cancelado' }).eq('id', id);
-  if (!error) {
+  const ok = await atualizarStatusPedido(id, 'cancelado');
+  if (ok) {
     ordersKanban = ordersKanban.filter(x => x.id !== id);
     mesaOrdersCache = mesaOrdersCache.filter(x => x.id !== id);
     _renderMesaPageFromCache();
-    sbToast('ok', 'Pedido cancelado');
+    sbToast('ok', `Pedido #${id} cancelado. 📲 Cliente notificado.`);
   } else sbToast('err', 'Erro ao cancelar');
 }
 
@@ -2654,24 +2678,23 @@ function _kdsUpdateTimers() {
 }
 
 async function kdsConfirm(id) {
-  const { error } = await sb.from('orders').update({ status: 'producao' }).eq('id', id);
-  if (!error) {
+  const ok = await atualizarStatusPedido(id, 'producao');
+  if (ok) {
     const o = ordersKanban.find(x => x.id === id);
     if (o) o.status = 'producao';
     const card = document.getElementById('kds-card-' + id);
     if (card) card.classList.remove('st-new');
     renderKDS();
-    sbToast('ok', `Pedido #${id} em preparo`);
+    sbToast('ok', `Pedido #${id} em preparo. 📲 Cliente notificado.`);
   }
 }
 
 async function kdsMarkPronto(id) {
-  const { error } = await sb.from('orders').update({ status: 'pronto' }).eq('id', id);
-  if (!error) {
+  const ok = await atualizarStatusPedido(id, 'pronto');
+  if (ok) {
     const o = ordersKanban.find(x => x.id === id);
     if (o) o.status = 'pronto';
     delete kdsTimers[id];
-    // Som de conclusão
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       [[660,0],[880,.1],[1100,.2]].forEach(([f,t]) => {
@@ -2684,19 +2707,19 @@ async function kdsMarkPronto(id) {
     } catch(e){}
     renderKDS();
     renderKanban();
-    sbToast('ok', `Pedido #${id} pronto! ✅`);
+    sbToast('ok', `Pedido #${id} pronto! ✅ 📲 Cliente notificado.`);
   }
 }
 
 async function kdsCancelOrder(id) {
   if (!confirm('Cancelar pedido #' + id + '?')) return;
-  const { error } = await sb.from('orders').update({ status: 'cancelado' }).eq('id', id);
-  if (!error) {
+  const ok = await atualizarStatusPedido(id, 'cancelado');
+  if (ok) {
     ordersKanban = ordersKanban.filter(x => x.id !== id);
     delete kdsTimers[id];
     renderKDS();
     renderKanban();
-    sbToast('ok', `Pedido #${id} cancelado`);
+    sbToast('ok', `Pedido #${id} cancelado. 📲 Cliente notificado.`);
   }
 }
 
@@ -5179,9 +5202,7 @@ async function loadCardapioPublico() {
   const cor = data.store_cor || '#3b82f6';
   const corEl = document.getElementById('cp-cor');
   if (corEl) corEl.value = cor;
-  // Aplica cor no preview ao vivo (iframe) se existir elemento visual
-  const corSwatchEl = document.getElementById('cp-cor-swatch');
-  if (corSwatchEl) corSwatchEl.style.background = cor;
+  cpPreviewCor(cor);
 
   if (data.store_logo_url) {
     _cpLogoUrl = data.store_logo_url;
@@ -5198,7 +5219,8 @@ async function loadCardapioPublico() {
     if (hero) hero.style.backgroundImage = `url(${_cpBannerUrl})`;
   }
 
-  cpMontarLink(); // monta link e carrega iframe do cardápio real
+  cpAtualizarPreview();
+  cpMontarLink();
 }
 
 async function cpMontarLink() {
