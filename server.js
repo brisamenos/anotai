@@ -845,10 +845,10 @@ async function sendWA(phone, text, inst) {
   const num    = phone.replace(/\D/g,'')
   const number = num.startsWith('55') ? num : `55${num}`
 
-  // Evolution API v2.7 — exige campo "text" na raiz
+  // Evolution API v2 — payload correto: textMessage.text
   const payload = {
     number,
-    text,
+    textMessage: { text },
     options: { delay: 1000, presence: 'composing' }
   }
 
