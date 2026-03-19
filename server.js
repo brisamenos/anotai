@@ -817,12 +817,12 @@ async function sendWA(phone, text, inst) {
   const num    = phone.replace(/\D/g,'')
   const number = num.startsWith('55') ? num : `55${num}`
 
-  // Evolution API v2.x usa textMessage wrapper
-  // Ref: https://doc.evolution-api.com/v2/api-reference/messages/send-text
+  // Evolution API v2.7 — formato correto
+  // O número deve conter @s.whatsapp.net para evitar ambiguidade
   const payload = {
-    number,
-    text,                          // v1 compat
-    textMessage: { text }          // v2.x formato correto
+    number: `${number}@s.whatsapp.net`,
+    options: { delay: 1000, presence: 'composing' },
+    textMessage: { text }
   }
 
   try {
@@ -835,12 +835,31 @@ async function sendWA(phone, text, inst) {
       body: JSON.stringify(payload)
     })
     const data = await r.json().catch(() => ({}))
+
+    // Log detalhado para debug
+    log('📬', `sendWA response [${r.status}]:`, JSON.stringify(data).slice(0, 200))
+
     if (r.ok) {
       log('📤', `Enviado para ${number} [${instance}]`)
       return { ok: true, data }
     }
-    log('❌', `Falhou ${number}:`, data)
-    return { ok: false, data }
+
+    // Se falhou com @s.whatsapp.net, tenta sem
+    log('🔄', `Tentando sem sufixo para ${number}`)
+    const r2   = await fetch(`${EVO_URL}/message/sendText/${instance}`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ number, textMessage: { text } })
+    })
+    const data2 = await r2.json().catch(() => ({}))
+    log('📬', `sendWA retry [${r2.status}]:`, JSON.stringify(data2).slice(0, 200))
+
+    if (r2.ok) {
+      log('📤', `Enviado para ${number} [${instance}]`)
+      return { ok: true, data: data2 }
+    }
+
+    log('❌', `Falhou ${number}:`, data2)
+    return { ok: false, data: data2 }
   } catch(e) {
     log('❌', 'Erro WA:', { error: e.message })
     return { ok: false, error: e.message }
