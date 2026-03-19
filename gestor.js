@@ -1,4 +1,3 @@
-
 // ═══════════════════════════════════════════════════════
 // SUPABASE — CONFIGURAÇÃO E INTEGRAÇÃO
 // ═══════════════════════════════════════════════════════
@@ -2257,7 +2256,7 @@ async function saveFidConfig() {
   const meta = parseInt(document.getElementById('fid-cfg-meta')?.value) || 500;
   const rec  = parseFloat(document.getElementById('fid-cfg-rec')?.value) || 10;
   _fidConfig = { pts_por_real: pts, meta_pts: meta, recompensa_reais: rec };
-  await sb.from('store_config').upsert({ fid_config: _fidConfig });
+  await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, fid_config: _fidConfig });
   // Atualiza max_pts de todos os clientes
   await sb.from('fidelidade').update({ max_pts: meta }).gte('id', 0);
   fidClients.forEach(c => c.max = meta);
@@ -3359,7 +3358,7 @@ async function toggleCaixa() {
     // Abrir caixa
     setCaixaState(true);
     sbToast('ok', '🟢 Caixa aberto!');
-    try { await sb.from('store_config').upsert({ caixa_open: true }); }
+    try { await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, caixa_open: true }); }
     catch(e) { console.warn('caixa sync:', e); }
     nav('caixa');
   } else {
@@ -3369,7 +3368,7 @@ async function toggleCaixa() {
     const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     sbToast('ok', '🔒 Caixa fechado às ' + time);
     try {
-      await sb.from('store_config').upsert({ caixa_open: false });
+      await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, caixa_open: false });
     } catch(e) { console.warn('caixa sync:', e); }
   }
 }
@@ -3630,7 +3629,7 @@ async function loadSidebarState() {
 
 async function saveSidebarState() {
   try {
-    await sb.from('store_config').upsert({ sidebar_state: _sidebarState });
+    await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, sidebar_state: _sidebarState });
   } catch(e) { console.warn('sidebar state save:', e); }
 }
 
@@ -4092,7 +4091,7 @@ async function toggleStatus(){
   if (pill) { pill.style.background = newOpen ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'; pill.style.borderColor = newOpen ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'; pill.style.color = newOpen ? 'var(--success)' : 'var(--danger)'; }
   showToast(newOpen?'⚡':'⏸️', newOpen?'Loja aberta para pedidos!':'Loja pausada');
   try {
-    await sb.from('store_config').upsert({ store_open: newOpen });
+    await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, store_open: newOpen });
   } catch(e) { console.warn('store_config sync:', e); }
 }
 
@@ -4222,7 +4221,7 @@ async function saveTaxaConfig() {
     config.valor = 0;
   }
   try {
-    await sb.from('store_config').upsert({ delivery_fee_config: config });
+    await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, delivery_fee_config: config });
     _taxaConfig = config;
     sbToast('ok', 'Taxa de entrega salva!');
   } catch(e) {
@@ -4522,7 +4521,7 @@ function initSidebarState() { loadSidebarState(); evoCarregarAutomacoesSalvas();
 async function salvarWaServerUrl() {
   const url = (document.getElementById('wa-server-url')?.value || '').replace(/\/$/,'');
   WA_SERVER = url;
-  try { await sb.from('store_config').upsert({ wa_server_url: url }); } catch(e){}
+  try { await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, wa_server_url: url }); } catch(e){}
 }
 
 async function testarServidorWA() {
@@ -4654,7 +4653,7 @@ async function evoCriarInstancia() {
   sbLoading(false);
   if (r.ok) {
     // Salva evo_instance no store_config do tenant
-    await sb.from('store_config').upsert({ evo_instance: instName });
+    await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: instName });
     sbToast('ok', `Instância "${instName}" criada!`);
     evoCheckStatus();
   } else {
@@ -4787,7 +4786,7 @@ async function evoEnviarAniversariantesHoje(silencioso = false) {
   }
   if (!silencioso) sbLoading(false);
   // Salva que já enviou hoje no Supabase
-  try { await sb.from('store_config').upsert({ evo_aniv_last: todayMD }); } catch(e){}
+  try { await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_aniv_last: todayMD }); } catch(e){}
   // Atualiza label na tela
   const lastEl = document.getElementById('aniv-last-send');
   if (lastEl) lastEl.textContent = 'Último envio: ' + todayMD + ' às ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -4852,7 +4851,7 @@ async function evoSalvarAutomacoes() {
   });
   data._aniv_hora = document.getElementById('auto-aniv-hora')?.value || '09:00';
   try {
-    const { error } = await sb.from('store_config').upsert({ evo_automacoes: data });
+    const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_automacoes: data });
     if (error) throw error;
     sbToast('ok', '✅ Automações salvas!');
   } catch(e) {
@@ -4934,7 +4933,7 @@ async function iaSalvarConfig() {
   };
 
   try {
-    const { error } = await sb.from('store_config').upsert({ ia_config: JSON.stringify(ia) });
+    const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, ia_config: JSON.stringify(ia) });
     if (error) throw error;
     sbToast('ok', '✅ Configurações da IA salvas!');
     iaAtualizarStatus();
