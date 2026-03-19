@@ -344,7 +344,7 @@ body {
 @keyframes fadeIn { from{opacity:0} to{opacity:1} }
 /* ── MOTOBOY DELIVERY ANIMATION ──────── */
 .motoboy-overlay {
-  display: none; position: fixed; inset: 0; z-index: 9999;
+  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; z-index: 9999;
   background: rgba(10,12,20,.97);
   flex-direction: column; align-items: center; justify-content: center;
 }
@@ -404,7 +404,7 @@ body {
 
 /* ── UPSELL MODAL ────────────────────── */
 .upsell-overlay {
-  display: none; position: fixed; inset: 0; z-index: 700;
+  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; z-index: 700;
   background: rgba(0,0,0,.82); backdrop-filter: blur(6px);
   align-items: flex-end; justify-content: center;
 }
@@ -466,7 +466,9 @@ body {
 .upsell-skip:hover { border-color: rgba(255,255,255,.2); color: var(--text); }
 
 .item-modal-bg {
-  display: none; position: fixed; inset: 0;
+  display: none; position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100%; height: 100%;
   background: rgba(0,0,0,.85); z-index: 550;
   align-items: flex-end; justify-content: center;
   backdrop-filter: blur(6px);
@@ -522,7 +524,7 @@ body {
 
 /* ── CADASTRO MODAL ───────────────────── */
 .cad-bg {
-  display: none; position: fixed; inset: 0; z-index: 800;
+  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; z-index: 800;
   background: rgba(0,0,0,.85); backdrop-filter: blur(8px);
   align-items: flex-end; justify-content: center;
 }
@@ -552,7 +554,7 @@ body {
 .cad-skip { width: 100%; padding: 12px; background: none; border: none; color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer; margin-top: 6px; }
 .cad-skip:hover { color: var(--text); }
 .cad-err { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.2); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; color: var(--red); margin-bottom: 12px; display: none; text-align: center; }
-.hero-profile-btn { position: fixed; top: 14px; right: 16px; z-index: 150; display: flex; align-items: center; gap: 7px; background: rgba(15,17,23,.75); border: 1px solid rgba(255,255,255,.12); border-radius: 99px; padding: 7px 14px; font-size: 12.5px; font-weight: 600; color: var(--text); cursor: pointer; transition: all .25s; backdrop-filter: blur(12px); }
+.hero-profile-btn { position: absolute; top: 16px; right: 16px; z-index: 5; display: flex; align-items: center; gap: 7px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: 99px; padding: 7px 14px; font-size: 12.5px; font-weight: 600; color: var(--text); cursor: pointer; transition: all .18s; backdrop-filter: blur(6px); }
 .hero-profile-btn:hover { background: rgba(255,255,255,.14); }
 .hero-profile-btn .pav { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #06b6d4); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: #fff; flex-shrink: 0; }
 .aniv-banner { margin: 12px 20px 0; background: linear-gradient(135deg, rgba(245,158,11,.12), rgba(251,191,36,.08)); border: 1px solid rgba(245,158,11,.25); border-radius: 14px; padding: 12px 16px; display: none; align-items: center; gap: 12px; }
@@ -575,7 +577,7 @@ body {
 .track-btn-dot { width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.8s infinite;flex-shrink:0; }
 .track-btn-dot.done { background:var(--green);animation:none; }
 @keyframes slideDown { from{opacity:0;transform:translateY(-12px)} to{opacity:1;transform:translateY(0)} }
-.track-drawer { position:fixed;inset:0;z-index:1000;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(4px); }
+.track-drawer { position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;z-index:1000;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(4px); }
 .track-drawer.open { display:flex; }
 .track-sheet { width:100%;max-width:480px;background:var(--surface);border-radius:22px 22px 0 0;max-height:92vh;overflow-y:auto;animation:sheetUp .3s cubic-bezier(.4,0,.2,1); }
 @keyframes sheetUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
@@ -647,7 +649,8 @@ body {
 /* ── DRAWER CART ──────────────────────── */
 .drawer-bg {
   position: fixed;
-  inset: 0;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100%; height: 100%;
   background: rgba(0,0,0,.7);
   backdrop-filter: blur(4px);
   z-index: 400;
@@ -1079,7 +1082,7 @@ body {
 
 /* ── PIZZA SELECTOR ───────────────────── */
 .pizza-modal-bg {
-  display: none; position: fixed; inset: 0;
+  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%;
   background: rgba(0,0,0,.88); z-index: 600;
   align-items: center; justify-content: center;
   backdrop-filter: blur(8px);
@@ -1188,15 +1191,13 @@ body {
 </head>
 <body>
 
-<!-- BOTÃO DE PERFIL (fixed, fora do hero para evitar conflito de z-index) -->
-<button class="hero-profile-btn" id="hero-profile-btn" onclick="openCadastro()">
-  <div class="pav" id="hero-pav">?</div>
-  <span id="hero-profile-txt">Entrar / Cadastrar</span>
-</button>
-
 <!-- HERO -->
 <div class="hero">
   <div class="hero-pattern"></div>
+  <button class="hero-profile-btn" id="hero-profile-btn" onclick="openCadastro()">
+    <div class="pav" id="hero-pav">?</div>
+    <span id="hero-profile-txt">Entrar / Cadastrar</span>
+  </button>
   <div class="hero-info">
     <div class="hero-logo">🍔 Estima Food</div>
     <div class="hero-sub">Peça online e receba em casa</div>
@@ -1784,61 +1785,24 @@ async function resolveTenant() {
   const p    = new URLSearchParams(window.location.search);
   const slug = p.get('slug') || p.get('t');
   const tid  = p.get('tenant');
-
-  console.log('%c[Cardápio] resolveTenant iniciado', 'color:#3b82f6;font-weight:bold');
-  console.log('[Cardápio] URL:', window.location.href);
-  console.log('[Cardápio] Parâmetros → slug:', slug, '| tenant ID:', tid);
-
-  // 1. Por ID numérico (?tenant=123)
   if (tid) {
-    console.log('[Cardápio] Tentando por ID:', tid);
-    try {
-      const res  = await fetch(`/api/tenant-info?id=${tid}`);
-      const data = await res.json();
-      console.log('[Cardápio] Resposta tenant-info por ID:', data);
-      if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
-      console.warn('[Cardápio] tenant-info por ID não encontrou restaurante. Resposta:', data);
-    } catch(e) { console.error('[Cardápio] Erro ao buscar por ID:', e); }
-    return false;
-  }
-
-  // 2. Por slug na query string (?slug=xxx ou ?t=xxx)
-  if (slug) {
-    console.log('[Cardápio] Tentando por slug (query string):', slug);
-    try {
-      const res  = await fetch(`/api/tenant-info?slug=${encodeURIComponent(slug)}`);
-      const data = await res.json();
-      console.log('[Cardápio] Resposta tenant-info por slug:', data);
-      if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
-      console.warn('[Cardápio] Slug não encontrado:', slug, '| Resposta:', data);
-    } catch(e) { console.error('[Cardápio] Erro ao buscar por slug:', e); }
-    return false;
-  }
-
-  // 3. Slug no path da URL (ex: /pizzaria-do-joao/)
-  const match = window.location.pathname.match(/\/([a-z0-9][a-z0-9-]{1,})\/?$/);
-  console.log('[Cardápio] Path:', window.location.pathname, '| Match:', match ? match[1] : 'nenhum');
-  if (match && match[1] !== 'index.html' && match[1] !== 'cardapio') {
-    console.log('[Cardápio] Tentando por slug no path:', match[1]);
-    try {
-      const res  = await fetch(`/api/tenant-info?slug=${encodeURIComponent(match[1])}`);
-      const data = await res.json();
-      console.log('[Cardápio] Resposta tenant-info por path:', data);
-      if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
-    } catch(e) { console.error('[Cardápio] Erro ao buscar por path:', e); }
-  }
-
-  // 4. Fallback: primeiro tenant ativo (single-tenant)
-  console.log('[Cardápio] Tentando fallback: primeiro tenant ativo...');
-  try {
-    const res  = await fetch('/api/tenant-info?default=1');
+    const res  = await fetch(`/api/tenant-info?id=${tid}`);
     const data = await res.json();
-    console.log('[Cardápio] Resposta fallback tenant:', data);
     if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
-    console.warn('[Cardápio] Nenhum tenant ativo encontrado no fallback. Resposta:', data);
-  } catch(e) { console.error('[Cardápio] Erro no fallback:', e); }
-
-  console.error('[Cardápio] FALHOU: não foi possível identificar nenhum tenant.');
+    return false;
+  }
+  if (!slug) {
+    const match = window.location.pathname.match(/\/([a-z0-9-]+)\/?$/);
+    if (match && match[1] !== 'index.html') {
+      const res = await fetch(`/api/tenant-info?slug=${match[1]}`);
+      const data = await res.json();
+      if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
+    }
+    return false;
+  }
+  const res  = await fetch(`/api/tenant-info?slug=${slug}`);
+  const data = await res.json();
+  if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
   return false;
 }
 
@@ -1898,12 +1862,10 @@ function sbTenant() {
 }
 
 async function init() {
-  console.log('%c[Cardápio] ══ init() iniciado ══', 'color:#22c55e;font-weight:bold;font-size:14px');
   renderMenuWrap('<div class="loading-wrap"><div class="spinner"></div><span>Carregando cardápio…</span></div>');
   try {
     // Resolve tenant pelo slug na URL
     const tenantOk = await resolveTenant();
-    console.log('[Cardápio] resolveTenant resultado → tenantOk:', tenantOk, '| _tenantId:', _tenantId);
     if (!tenantOk && !_tenantId) {
       renderMenuWrap('<div class="loading-wrap"><div style="font-size:32px">🍽️</div><span>Restaurante não encontrado.<br>Verifique o link.</span></div>');
       return;
@@ -1924,16 +1886,6 @@ async function init() {
     allItems  = (itemsRes.data  || []).map(x => ({...x, id: Number(x.id)}));
     allCats   = (catsRes.data   || []).map(x => ({...x, id: Number(x.id)}));
     allCupons = (cuponsRes.data || []);
-
-    console.log('[Cardápio] Dados carregados →',
-      'itens:', allItems.length,
-      '| categorias:', allCats.length,
-      '| cupons:', allCupons.length
-    );
-    console.log('[Cardápio] itemsRes erro:', itemsRes.error);
-    console.log('[Cardápio] catsRes erro:', catsRes.error);
-    console.log('[Cardápio] configRes erro:', configRes.error, '| data:', configRes.data);
-    if (allItems.length === 0) console.warn('[Cardápio] ⚠️ Nenhum item retornado! Verifique o tenant_id e a tabela menu_items.');
 
     // Apply store config
     if (configRes.data) {
@@ -1956,8 +1908,7 @@ async function init() {
     subscribeStoreStatus();
     loadProfile();
   } catch(e) {
-    console.error('[Cardápio] ❌ ERRO no init():', e);
-    console.error('[Cardápio] Stack:', e.stack);
+    console.error(e);
     renderMenuWrap('<div class="loading-wrap"><div style="font-size:32px">⚠️</div><span>Erro ao carregar cardápio. Tente novamente.</span></div>');
   }
 }
@@ -3034,17 +2985,6 @@ function showTrackBtn(orderId, status) {
   if (dot) { dot.className='track-btn-dot'+(status==='entregue'||status==='cancelado'?' done':''); dot.style.background=colors[status]||'var(--accent)'; }
   btn.style.borderColor=colors[status]||'var(--accent)';
   btn.style.color=colors[status]||'var(--accent)';
-  // Desloca botão de perfil para a esquerda para não sobrepor o track-btn
-  const profBtn = document.getElementById('hero-profile-btn');
-  if (profBtn) {
-    if (status === 'entregue' || status === 'cancelado') {
-      profBtn.style.right = '16px'; // volta ao lugar após finalizar
-    } else {
-      // Calcula largura do track-btn para deslocar o perfil
-      const trackW = btn.offsetWidth || 160;
-      profBtn.style.right = (trackW + 24) + 'px';
-    }
-  }
 }
 
 function subscribeOrderTracking(orderId) {
