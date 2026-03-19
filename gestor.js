@@ -5172,9 +5172,7 @@ async function loadCardapioPublico() {
   let horarios = {};
   try {
     const hc = data.horarios_config;
-    horarios = hc
-      ? (typeof hc === 'string' ? JSON.parse(hc) : hc)
-      : {};
+    horarios = hc ? (typeof hc === 'string' ? JSON.parse(hc) : hc) : {};
   } catch(e) { horarios = {}; }
   cpRenderHorarios(horarios);
 
@@ -5206,7 +5204,6 @@ async function cpMontarLink() {
   const tid  = _sessao?.tenant_id || '';
   const base = window.location.origin;
 
-  // Busca slug do tenant para gerar link legível
   let slug = '';
   try {
     const { data } = await sb.from('tenants').select('slug').eq('id', tid).single();
@@ -5226,6 +5223,25 @@ async function cpMontarLink() {
 
   const elG = document.getElementById('cp-link-garcom');
   if (elG) elG.textContent = urlGarcom;
+
+  // Carrega iframe do cardápio real pela primeira vez
+  cpCarregarIframe(urlCardapio);
+}
+
+// ── Iframe do cardápio ────────────────────────────────
+function cpCarregarIframe(url) {
+  const iframe = document.getElementById('cp-iframe');
+  if (!iframe || iframe.src === url) return;
+  iframe.src = url || 'about:blank';
+}
+
+function cpRecarregarIframe() {
+  const iframe = document.getElementById('cp-iframe');
+  if (!iframe) return;
+  const src = iframe.src;
+  iframe.src = 'about:blank';
+  setTimeout(() => { iframe.src = src; }, 80);
+  sbToast('ok', 'Preview atualizado!');
 }
 
 function cpCopiarLink() {
@@ -5242,34 +5258,9 @@ function cpAbrirLink() {
 function cpSetCor(hex) {
   const el = document.getElementById('cp-cor');
   if (el) el.value = hex;
-  cpPreviewCor(hex);
 }
 
-function cpPreviewCor(hex) {
-  const nome = document.getElementById('cp-prev-nome');
-  if (nome) nome.style.color = hex;
-  cpAtualizarPreview();
-}
-
-function cpAtualizarPreview() {
-  const nome = (document.getElementById('cp-nome')?.value || 'Nome da loja');
-  const desc = (document.getElementById('cp-descricao')?.value || 'Slogan ou descrição');
-  const tempo = (document.getElementById('cp-tempo')?.value || '30-45 min');
-  const aval  = (document.getElementById('cp-avaliacao')?.value || '5.0');
-  const cor   = (document.getElementById('cp-cor')?.value || '#3b82f6');
-
-  const el = (id) => document.getElementById(id);
-  if (el('cp-prev-nome')) el('cp-prev-nome').textContent = nome;
-  if (el('cp-prev-desc')) el('cp-prev-desc').textContent = desc;
-  if (el('cp-prev-nome')) el('cp-prev-nome').style.color = cor;
-  if (el('cp-prev-tempo')) el('cp-prev-tempo').textContent = `🛵 ${tempo}`;
-  if (el('cp-prev-aval'))  el('cp-prev-aval').textContent  = `⭐ ${aval}`;
-}
-
-// Atualiza preview em tempo real
-['cp-nome','cp-descricao','cp-tempo','cp-avaliacao'].forEach(id => {
-  document.getElementById(id)?.addEventListener('input', cpAtualizarPreview);
-});
+// Preview agora é o iframe real — cpPreviewCor e cpAtualizarPreview não são mais necessários
 
 async function cpUploadImagem(input, tipo) {
   const file = input.files[0];
@@ -5301,6 +5292,8 @@ async function cpUploadImagem(input, tipo) {
     await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, [field]: publicUrl });
 
     sbToast('ok', `${tipo === 'logo' ? 'Logo' : 'Banner'} enviado e salvo!`);
+    // Recarrega iframe para refletir a nova imagem no cardápio
+    setTimeout(() => cpRecarregarIframe(), 600);
   } catch(e) {
     console.error('cpUploadImagem:', e);
     sbToast('err', 'Erro ao enviar imagem: ' + (e.message || ''));
@@ -5328,8 +5321,10 @@ async function salvarCardapioPublico() {
     const { error } = await sb.from('store_config').upsert(payload);
     if (error) throw error;
     sbToast('ok', '✅ Cardápio público salvo!');
-    // Recarrega para confirmar o que ficou no banco
+    // Recarrega dados e atualiza iframe (sincroniza com o cardápio real)
     await loadCardapioPublico();
+    // Pequeno delay para o banco propagar via SSE antes de recarregar o iframe
+    setTimeout(() => cpRecarregarIframe(), 600);
   } catch(e) {
     sbToast('err', 'Erro ao salvar: ' + (e.message || JSON.stringify(e)));
     console.error('salvarCardapioPublico:', e);
