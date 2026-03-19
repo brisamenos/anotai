@@ -786,8 +786,7 @@ async function sendWA(phone, text, inst) {
   try {
     const r = await fetch(`${EVO_URL}/message/sendText/${instance}`,{
       method:'POST',headers:{'Content-Type':'application/json',apikey:EVO_KEY},
-      // Evolution v2: campo textMessage ao invés de text direto
-      body:JSON.stringify({ number, textMessage: { text } })
+      body:JSON.stringify({ number, text })
     })
     const data = await r.json().catch(()=>({}))
     if (r.ok){log('📤',`Enviado para ${number} [${instance}]`);return{ok:true,data}}
