@@ -1031,6 +1031,7 @@ function nav(id){
   if(id==='caixa') _renderCaixaTela();
   if(id==='taxa') renderTaxaPage();
   if(id==='clientes') renderClientesPage();
+  if(id==='meu-plano') renderMeuPlano();
   if(id==='cardapio-publico') {
     const cpPg = document.getElementById('page-cardapio-publico');
     if(cpPg) cpPg.style.display = 'flex';
@@ -3552,8 +3553,177 @@ async function renderSatisfacao(){
 }
 
 // ─────────────────────────────────────────
-// IMPRESSÃO
+// MEU PLANO
 // ─────────────────────────────────────────
+async function renderMeuPlano() {
+  const elNome   = document.getElementById('plano-nome-display');
+  const elExpira = document.getElementById('plano-expira-display');
+  const elDias   = document.getElementById('plano-dias-display');
+  const elTenant = document.getElementById('plano-tenant-display');
+  const elBadge  = document.getElementById('plano-badge-wrap');
+  const elStatus = document.getElementById('plano-status-wrap');
+  const elRecursos = document.getElementById('plano-recursos-grid');
+  const elBgDeco = document.getElementById('plano-bg-deco');
+
+  if (elNome) elNome.textContent = 'Carregando...';
+
+  try {
+    const tid = _sessao?.tenant_id;
+    if (!tid) throw new Error('Sessão inválida');
+
+    const { data, error } = await sb.from('tenants')
+      .select('nome,plano,expires_at,ativo')
+      .eq('id', tid)
+      .single();
+
+    if (error) throw error;
+
+    const plano     = (data.plano || 'pro').toLowerCase();
+    const isPremium = plano === 'premium';
+    const expira    = data.expires_at ? new Date(data.expires_at) : null;
+    const hoje      = new Date();
+    hoje.setHours(0,0,0,0);
+    const diasRestantes = expira
+      ? Math.ceil((expira - hoje) / (1000 * 60 * 60 * 24))
+      : null;
+
+    // ── Nome e badge ──
+    const planoLabel = isPremium ? 'Premium' : 'Pro';
+    const planoColor = isPremium ? '#7c3aed' : 'var(--accent)';
+    if (elNome)   { elNome.textContent = planoLabel; elNome.style.color = planoColor; }
+    if (elBgDeco) elBgDeco.style.background = planoColor;
+    if (elBadge)  elBadge.innerHTML = `
+      <div style="padding:4px 12px;border-radius:99px;font-size:11px;font-weight:800;letter-spacing:.4px;
+        background:${isPremium ? 'rgba(124,58,237,.15)' : 'rgba(59,130,246,.12)'};
+        color:${planoColor};border:1px solid ${isPremium ? 'rgba(124,58,237,.35)' : 'rgba(59,130,246,.3)'}">
+        ${planoLabel.toUpperCase()}
+      </div>`;
+
+    // ── Vencimento ──
+    const expiraStr = expira
+      ? expira.toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric' })
+      : 'Sem data definida';
+    if (elExpira) elExpira.textContent = expiraStr;
+
+    // ── Dias restantes ──
+    let diasStr = 'Sem data definida';
+    let diasColor = 'var(--text)';
+    if (diasRestantes !== null) {
+      if (diasRestantes > 30)       { diasStr = `${diasRestantes} dias`; diasColor = 'var(--success)'; }
+      else if (diasRestantes > 7)   { diasStr = `${diasRestantes} dias`; diasColor = 'var(--warning,#f59e0b)'; }
+      else if (diasRestantes > 0)   { diasStr = `${diasRestantes} dias — vence em breve`; diasColor = 'var(--danger)'; }
+      else if (diasRestantes === 0) { diasStr = 'Vence hoje'; diasColor = 'var(--danger)'; }
+      else                          { diasStr = 'Vencido'; diasColor = 'var(--danger)'; }
+    }
+    if (elDias) { elDias.textContent = diasStr; elDias.style.color = diasColor; }
+
+    // ── Nome do tenant ──
+    if (elTenant) elTenant.textContent = data.nome || _sessao?.nome || '—';
+
+    // ── Status ──
+    if (elStatus) {
+      const ativo = data.ativo !== 0;
+      const vencido = diasRestantes !== null && diasRestantes < 0;
+      const alertaBarra = diasRestantes !== null && diasRestantes <= 30 && diasRestantes >= 0;
+      const pct = alertaBarra
+        ? Math.max(0, Math.min(100, Math.round((diasRestantes / 30) * 100)))
+        : null;
+
+      let statusHtml = '';
+
+      // Indicador principal
+      if (!ativo || vencido) {
+        statusHtml += `
+          <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;
+            background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:10px">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="color:var(--danger);flex-shrink:0">
+              <path d="M8 2L14 13H2L8 2z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M8 6v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              <circle cx="8" cy="11" r=".6" fill="currentColor"/>
+            </svg>
+            <div>
+              <div style="font-weight:700;font-size:13px;color:var(--danger)">${vencido ? 'Plano vencido' : 'Conta inativa'}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:1px">Entre em contato com o suporte para reativar.</div>
+            </div>
+          </div>`;
+      } else {
+        statusHtml += `
+          <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;
+            background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="color:var(--success);flex-shrink:0">
+              <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/>
+              <path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+            <div>
+              <div style="font-weight:700;font-size:13px;color:var(--success)">Assinatura ativa</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:1px">Todos os recursos disponíveis.</div>
+            </div>
+          </div>`;
+      }
+
+      // Barra de progresso se próximo do vencimento
+      if (alertaBarra && pct !== null) {
+        const barColor = diasRestantes <= 7 ? 'var(--danger)' : '#f59e0b';
+        statusHtml += `
+          <div style="margin-top:4px">
+            <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-bottom:5px">
+              <span>Tempo restante do plano</span>
+              <span style="font-weight:700;color:${barColor}">${diasRestantes}d de 30d</span>
+            </div>
+            <div style="height:7px;background:var(--surface2);border-radius:99px;overflow:hidden">
+              <div style="width:${pct}%;height:100%;background:${barColor};border-radius:99px;transition:width .5s"></div>
+            </div>
+          </div>`;
+      }
+
+      elStatus.innerHTML = statusHtml;
+    }
+
+    // ── Recursos ──
+    const recursosPro = [
+      { icon: `<svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`, label: 'Gestão de pedidos (Kanban)' },
+      { icon: `<svg viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><circle cx="8" cy="8.5" r="2" stroke="currentColor" stroke-width="1.4"/></svg>`, label: 'PDV / Pedidos no balcão' },
+      { icon: `<svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 8h6M8 5v6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`, label: 'Gestor de cardápio' },
+      { icon: `<svg viewBox="0 0 16 16" fill="none"><path d="M3 12V5l5-3 5 3v7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><rect x="6" y="8" width="4" height="4" rx=".5" stroke="currentColor" stroke-width="1.4"/></svg>`, label: 'Mesas e garçons' },
+      { icon: `<svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 2c-1.5 2-2.5 3.8-2.5 6s1 4 2.5 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M2 8h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`, label: 'Cardápio público online' },
+      { icon: `<svg viewBox="0 0 16 16" fill="none"><path d="M2 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H5l-3 2V4z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>`, label: 'Automações de WhatsApp' },
+      { icon: `<svg viewBox="0 0 16 16" fill="none"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>`, label: 'Satisfação e avaliações' },
+      { icon: `<svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/></svg>`, label: 'QR Code da mesa' },
+      { icon: `<svg viewBox="0 0 16 16" fill="none"><path d="M2 12L6 4l3 5 2-2.5L14 12H2z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`, label: 'Relatórios e desempenho' },
+      { icon: `<svg viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="9" r="1.5" stroke="currentColor" stroke-width="1.4"/></svg>`, label: 'Caixa e movimentos' },
+      { icon: `<svg viewBox="0 0 16 16" fill="none"><path d="M8 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM2 13c0-2.76 2.24-5 5-5h2c2.76 0 5 2.24 5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`, label: 'Programa de fidelidade' },
+      { icon: `<svg viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="10" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4"/></svg>`, label: 'Impressão térmica' },
+    ];
+    const recursosPremium = [
+      ...recursosPro,
+      { icon: `<svg viewBox="0 0 16 16" fill="none"><rect x="3" y="5" width="10" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="9" r="1" fill="currentColor"/><circle cx="10" cy="9" r="1" fill="currentColor"/><path d="M6 5V3.5M10 5V3.5M6 3.5H10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`, label: 'Agente IA no WhatsApp', destaque: true },
+      { icon: `<svg viewBox="0 0 16 16" fill="none"><path d="M2 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H5l-3 2V4z" stroke="currentColor" stroke-width="1.4"/><path d="M5 7h6M5 9.5h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`, label: 'Simulador do robô', destaque: true },
+    ];
+
+    const recursos = isPremium ? recursosPremium : recursosPro;
+    if (elRecursos) {
+      elRecursos.innerHTML = recursos.map(r => `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;
+          background:var(--surface2);border:1px solid var(--border);border-radius:10px;
+          ${r.destaque ? 'border-color:rgba(124,58,237,.3);background:rgba(124,58,237,.07);' : ''}">
+          <div style="width:28px;height:28px;border-radius:7px;
+            background:${r.destaque ? 'rgba(124,58,237,.15)' : 'var(--surface)'};
+            border:1px solid ${r.destaque ? 'rgba(124,58,237,.25)' : 'var(--border)'};
+            display:flex;align-items:center;justify-content:center;flex-shrink:0;
+            color:${r.destaque ? '#a78bfa' : 'var(--muted)'}">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">${r.icon.match(/<svg[^>]*>(.*)<\/svg>/s)?.[1]||''}</svg>
+          </div>
+          <span style="font-size:12.5px;font-weight:500;${r.destaque ? 'color:var(--text)' : 'color:var(--muted2)'}">${r.label}</span>
+          ${r.destaque ? '<svg viewBox="0 0 16 16" fill="none" width="13" height="13" style="margin-left:auto;color:#a78bfa;flex-shrink:0"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>' : '<svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="margin-left:auto;color:var(--success);flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>'}
+        </div>`).join('');
+    }
+
+  } catch(e) {
+    console.error('renderMeuPlano:', e);
+    if (elNome) elNome.textContent = 'Erro ao carregar';
+    if (elStatus) elStatus.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px;text-align:center">Não foi possível carregar as informações do plano.</div>`;
+  }
+}
 // ─────────────────────────────────────────
 // IMPRESSÃO TÉRMICA
 // ─────────────────────────────────────────
