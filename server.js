@@ -845,10 +845,10 @@ async function sendWA(phone, text, inst) {
   const num    = phone.replace(/\D/g,'')
   const number = num.startsWith('55') ? num : `55${num}`
 
-  // Evolution API v2 — payload correto: textMessage.text
+  // Evolution API — payload: { number, text }
   const payload = {
     number,
-    textMessage: { text },
+    text,
     options: { delay: 1000, presence: 'composing' }
   }
 
@@ -871,11 +871,11 @@ async function sendWA(phone, text, inst) {
       return { ok: true, data }
     }
 
-    // Se falhou com @s.whatsapp.net, tenta sem
+    // Se falhou, tenta sem options
     log('🔄', `Tentando sem sufixo para ${number}`)
     const r2   = await fetch(`${EVO_URL}/message/sendText/${instance}`, {
       method: 'POST', headers,
-      body: JSON.stringify({ number, textMessage: { text } })
+      body: JSON.stringify({ number, text })
     })
     const data2 = await r2.json().catch(() => ({}))
     log('📬', `sendWA retry [${r2.status}]:`, JSON.stringify(data2).slice(0, 200))
