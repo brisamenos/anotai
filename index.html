@@ -1782,24 +1782,31 @@ async function resolveTenant() {
   const p    = new URLSearchParams(window.location.search);
   const slug = p.get('slug') || p.get('t');
   const tid  = p.get('tenant');
+
+  // 1. Tenant por ID na query string (?tenant=123)
   if (tid) {
     const res  = await fetch(`/api/tenant-info?id=${tid}`);
     const data = await res.json();
     if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
-    return false;
   }
-  if (!slug) {
-    const match = window.location.pathname.match(/\/([a-z0-9-]+)\/?$/);
-    if (match && match[1] !== 'index.html') {
-      const res = await fetch(`/api/tenant-info?slug=${match[1]}`);
+
+  // 2. Tenant por slug na query string (?slug=xxx ou ?t=xxx)
+  if (slug) {
+    const res  = await fetch(`/api/tenant-info?slug=${encodeURIComponent(slug)}`);
+    const data = await res.json();
+    if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
+  }
+
+  // 3. Tenant pelo path da URL (ex: /meu-restaurante/)
+  if (!slug && !tid) {
+    const match = window.location.pathname.match(/\/([a-z0-9][a-z0-9-]{1,})\/?$/);
+    if (match && match[1] !== 'index.html' && match[1] !== 'cardapio') {
+      const res  = await fetch(`/api/tenant-info?slug=${encodeURIComponent(match[1])}`);
       const data = await res.json();
       if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
     }
-    return false;
   }
-  const res  = await fetch(`/api/tenant-info?slug=${slug}`);
-  const data = await res.json();
-  if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
+
   return false;
 }
 
@@ -1839,19 +1846,21 @@ function applyBranding(b, tenantNome) {
 }
 
 function sbTenant() {
-  // Proxy que injeta x-tenant-id nas queries do cardápio
+  // Proxy que injeta x-tenant-id nas queries do cardápio (compatível com api-client.js)
   if (!_tenantId) return sb;
   return new Proxy(sb, {
     get(target, prop) {
       if (prop === 'from') {
         return (table) => {
           const q = target.from(table);
-          const orig = q._withTenant || (() => q);
-          // Injeta tenant_id via header
+          // api-client.js usa _headers diretamente (sem _withTenant)
           q._headers = q._headers || {};
           q._headers['x-tenant-id'] = _tenantId;
           return q;
         };
+      }
+      if (prop === 'channel') {
+        return (name) => target.channel(name);
       }
       return typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop];
     }
@@ -1864,7 +1873,13 @@ async function init() {
     // Resolve tenant pelo slug na URL
     const tenantOk = await resolveTenant();
     if (!tenantOk && !_tenantId) {
-      renderMenuWrap('<div class="loading-wrap"><div style="font-size:32px">🍽️</div><span>Restaurante não encontrado.<br>Verifique o link.</span></div>');
+      const hasSlug = new URLSearchParams(window.location.search).get('slug') ||
+                      new URLSearchParams(window.location.search).get('t')    ||
+                      new URLSearchParams(window.location.search).get('tenant');
+      const msg = hasSlug
+        ? 'Restaurante não encontrado.<br>Verifique se o link está correto.'
+        : 'Link inválido.<br>Acesse o cardápio pelo link fornecido pelo restaurante.<br><small style="font-size:11px;color:var(--muted)">Ex: ?slug=nome-do-restaurante</small>';
+      renderMenuWrap(`<div class="loading-wrap"><div style="font-size:48px">🍽️</div><span style="text-align:center;line-height:1.7">${msg}</span></div>`);
       return;
     }
 
