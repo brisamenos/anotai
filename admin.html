@@ -153,6 +153,7 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
       <button class="sb-item on" id="nav-dash" onclick="navTo('dash')">📊 Dashboard</button>
       <div class="sb-sec" style="margin-top:6px">Gestão</div>
       <button class="sb-item" id="nav-clientes" onclick="navTo('clientes')">🏢 Clientes</button>
+      <button class="sb-item" id="nav-ia" onclick="navTo('ia')">🧠 Agente IA</button>
     </nav>
     <div class="sb-foot">
       <div class="sb-user" onclick="doLogout()">
@@ -190,8 +191,76 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
         </div>
       </div>
 
-      <!-- CLIENTES -->
-      <div id="sec-clientes" style="display:none">
+      <!-- IA CONFIG -->
+      <div id="sec-ia" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <div>
+            <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800">🧠 Agente IA</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">Configurações globais do agente IA para todos os restaurantes</div>
+          </div>
+          <button class="btn bp" onclick="iaSalvarConfigAdmin()">💾 Salvar configurações</button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+          <!-- API e Modelo -->
+          <div class="card">
+            <div class="card-title" style="margin-bottom:14px">🔑 Configuração da API OpenAI</div>
+            <div class="form-row" style="margin-bottom:12px">
+              <label class="form-label">API Key</label>
+              <input class="minput" id="adm-ia-key" type="password" placeholder="sk-..." autocomplete="off">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">Salva de forma segura. Obtida em platform.openai.com</div>
+            </div>
+            <div class="form-row" style="margin-bottom:12px">
+              <label class="form-label">Modelo</label>
+              <select class="minput" id="adm-ia-modelo">
+                <option value="gpt-4o-mini">⚡ GPT-4o Mini (rápido e econômico)</option>
+                <option value="gpt-4o">🧠 GPT-4o (mais inteligente)</option>
+                <option value="gpt-3.5-turbo">💨 GPT-3.5 Turbo</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label class="form-label">Instrução base do sistema</label>
+              <textarea class="minput" id="adm-ia-prompt" rows="4" placeholder="Ex: Você é um assistente simpático de restaurante. Responda de forma breve e objetiva em português. Não invente informações."></textarea>
+            </div>
+          </div>
+
+          <!-- Comportamento da mensagem -->
+          <div class="card">
+            <div class="card-title" style="margin-bottom:14px">⚙️ Comportamento das mensagens</div>
+
+            <div class="form-row" style="margin-bottom:12px">
+              <label class="form-label">Quebra de linha (caracteres)</label>
+              <input class="minput" id="adm-ia-quebra" type="number" min="0" max="500" value="80" placeholder="80">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">Insere quebra de linha a cada N caracteres. 0 = desativado.</div>
+            </div>
+
+            <div class="form-row" style="margin-bottom:12px">
+              <label class="form-label">Buffer de mensagens (segundos)</label>
+              <input class="minput" id="adm-ia-buffer" type="number" min="0" max="30" value="3" placeholder="3">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">Aguarda N segundos por mais mensagens antes de responder. Evita responder mensagens incompletas.</div>
+            </div>
+
+            <div class="form-row" style="margin-bottom:12px">
+              <label class="form-label">Pausa quando humano assume (minutos)</label>
+              <input class="minput" id="adm-ia-pausa" type="number" min="0" max="1440" value="30" placeholder="30">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">IA fica pausada por N minutos após um atendente responder manualmente. 0 = nunca pausa.</div>
+            </div>
+
+            <div class="form-row">
+              <label class="form-label">Máximo de tokens por resposta</label>
+              <input class="minput" id="adm-ia-tokens" type="number" min="100" max="2000" value="500" placeholder="500">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">Limita o tamanho das respostas da IA.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Status atual -->
+        <div class="card" id="adm-ia-status-card">
+          <div class="card-title" style="margin-bottom:12px">📊 Status</div>
+          <div id="adm-ia-status-msg" style="font-size:13px;color:var(--muted)">Carregando...</div>
+        </div>
+      </div>
         <div class="tw">
           <div class="tmeta">
             <div class="card-title">🏢 Clientes / Restaurantes</div>
@@ -378,12 +447,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // ── NAVEGAÇÃO ────────────────────────────
 function navTo(id) {
-  ['dash','clientes'].forEach(s => {
-    document.getElementById('sec-'+s).style.display = s===id ? 'block' : 'none';
+  ['dash','clientes','ia'].forEach(s => {
+    const sec = document.getElementById('sec-'+s);
+    if (sec) sec.style.display = s===id ? 'block' : 'none';
     document.getElementById('nav-'+s)?.classList.toggle('on', s===id);
   });
-  const titles = { dash:'Dashboard', clientes:'Clientes' };
+  const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA' };
   document.getElementById('topbar-title').textContent = titles[id] || id;
+  if (id==='ia') iaAdminCarregar();
 }
 
 // ── CARREGAR DADOS ───────────────────────
@@ -723,6 +794,83 @@ function toast(type, msg) {
   d.innerHTML = (type==='ok'?'✅':'❌') + ' ' + msg;
   c.appendChild(d);
   setTimeout(()=>d.remove(), 3500);
+}
+
+// ════════════════════════════════════════════════════════
+// AGENTE IA — ADMIN
+// Configurações globais salvas na tabela ia_global_config (server.js)
+// ════════════════════════════════════════════════════════
+async function iaAdminCarregar() {
+  const statusEl = document.getElementById('adm-ia-status-msg');
+  if (statusEl) statusEl.textContent = 'Carregando...';
+  try {
+    const { data } = await sb.from('store_config')
+      .select('ia_config')
+      .eq('tenant_id', '_global')
+      .single();
+    const ia = data?.ia_config ? JSON.parse(data.ia_config) : {};
+
+    // API key mascarada
+    const keyEl = document.getElementById('adm-ia-key');
+    if (keyEl) {
+      keyEl.value = ia.openai_key ? '••••••••' + ia.openai_key.slice(-4) : '';
+      keyEl.addEventListener('focus', () => { if (keyEl.value.startsWith('•')) keyEl.value = ''; }, {once:true});
+    }
+    // Modelo
+    const sel = document.getElementById('adm-ia-modelo');
+    if (sel && ia.modelo) for(let i=0;i<sel.options.length;i++) if(sel.options[i].value===ia.modelo){sel.selectedIndex=i;break;}
+    // Prompt
+    if (ia.prompt_base) { const el = document.getElementById('adm-ia-prompt'); if(el) el.value = ia.prompt_base; }
+    // Comportamento
+    if (ia.quebra_linha !== undefined) { const el = document.getElementById('adm-ia-quebra'); if(el) el.value = ia.quebra_linha; }
+    if (ia.buffer_seg  !== undefined) { const el = document.getElementById('adm-ia-buffer'); if(el) el.value = ia.buffer_seg; }
+    if (ia.pausa_min   !== undefined) { const el = document.getElementById('adm-ia-pausa');  if(el) el.value = ia.pausa_min; }
+    if (ia.max_tokens  !== undefined) { const el = document.getElementById('adm-ia-tokens'); if(el) el.value = ia.max_tokens; }
+
+    if (statusEl) statusEl.innerHTML = ia.openai_key
+      ? `<span style="color:var(--success)">✅ API Key configurada (modelo: ${ia.modelo||'gpt-4o-mini'}) · Buffer: ${ia.buffer_seg||3}s · Pausa humano: ${ia.pausa_min||30}min</span>`
+      : `<span style="color:var(--danger)">⚠️ API Key não configurada — o Agente IA não funcionará.</span>`;
+  } catch(e) {
+    if (statusEl) statusEl.textContent = 'Erro ao carregar: ' + e.message;
+  }
+}
+
+async function iaSalvarConfigAdmin() {
+  const keyVal = document.getElementById('adm-ia-key')?.value || '';
+
+  // Carrega config atual para preservar key se não foi alterada
+  let iaAtual = {};
+  try {
+    const { data } = await sb.from('store_config').select('ia_config').eq('tenant_id','_global').single();
+    iaAtual = data?.ia_config ? JSON.parse(data.ia_config) : {};
+  } catch(e) {}
+
+  const ia = {
+    ...iaAtual,
+    modelo:      document.getElementById('adm-ia-modelo')?.value || 'gpt-4o-mini',
+    prompt_base: document.getElementById('adm-ia-prompt')?.value || '',
+    quebra_linha: parseInt(document.getElementById('adm-ia-quebra')?.value) || 0,
+    buffer_seg:   parseInt(document.getElementById('adm-ia-buffer')?.value) || 3,
+    pausa_min:    parseInt(document.getElementById('adm-ia-pausa')?.value)  || 30,
+    max_tokens:   parseInt(document.getElementById('adm-ia-tokens')?.value) || 500,
+  };
+  if (keyVal && !keyVal.startsWith('•')) ia.openai_key = keyVal;
+
+  try {
+    // Upsert na linha _global do store_config
+    const { error } = await sb.from('store_config').upsert({
+      tenant_id: '_global',
+      ia_config: JSON.stringify(ia)
+    });
+    if (error) throw error;
+    toast('ok', '✅ Configurações da IA salvas!');
+    // Mascara key
+    const keyEl = document.getElementById('adm-ia-key');
+    if (keyEl && ia.openai_key) keyEl.value = '••••••••' + ia.openai_key.slice(-4);
+    iaAdminCarregar();
+  } catch(e) {
+    toast('err', 'Erro: ' + (e.message||JSON.stringify(e)));
+  }
 }
 </script>
 </body>

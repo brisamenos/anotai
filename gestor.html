@@ -979,28 +979,18 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
       <div class="ph" style="margin-bottom:20px">
         <div>
           <div class="pt">🧠 Agente IA</div>
-          <div class="ps">Responde automaticamente mensagens do WhatsApp com inteligência artificial 24/7</div>
+          <div class="ps">Selecione o que o agente pode responder para seus clientes via WhatsApp</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
             <div class="toggle" id="ia-toggle-ativo" onclick="this.classList.toggle('on');iaAtualizarStatus()"></div>
             <span id="ia-status-lbl" style="font-size:12px;font-weight:600;color:var(--muted)">Inativo</span>
           </label>
-          <button class="btn bp" onclick="iaSalvarConfig()">💾 Salvar configurações</button>
+          <button class="btn bp" onclick="iaSalvarConfig()">💾 Salvar</button>
         </div>
       </div>
 
-      <!-- Webhook URL -->
-      <div class="card" style="padding:18px;margin-bottom:16px;border:1px solid rgba(139,92,246,.25);background:rgba(139,92,246,.05)">
-        <div style="font-size:12px;font-weight:700;color:var(--purple);margin-bottom:8px">📌 Configure este webhook na Evolution API:</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <div id="ia-webhook-url" style="flex:1;font-size:12px;font-family:monospace;background:var(--surface2);padding:8px 12px;border-radius:8px;color:var(--text);word-break:break-all"></div>
-          <button class="btn bg" style="flex-shrink:0" onclick="navigator.clipboard.writeText(document.getElementById('ia-webhook-url').textContent).then(()=>sbToast('ok','URL copiada!'))">📋</button>
-        </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px">Na Evolution API → sua instância → Webhook → URL → cole este endereço. Evento: <strong>MESSAGES_UPSERT</strong></div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
 
         <!-- O que a IA responde -->
         <div class="card" style="padding:18px">
@@ -1009,8 +999,8 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
           <label style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer">
             <div class="toggle" id="ia-resp-cardapio" onclick="this.classList.toggle('on')"></div>
             <div>
-              <div style="font-size:13px;font-weight:600">🍕 Cardápio completo</div>
-              <div style="font-size:11px;color:var(--muted)">Informa preços, itens e categorias</div>
+              <div style="font-size:13px;font-weight:600">🍕 Cardápio e preços</div>
+              <div style="font-size:11px;color:var(--muted)">Responde sobre itens, categorias e preços</div>
             </div>
           </label>
 
@@ -1018,7 +1008,7 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
             <div class="toggle" id="ia-resp-pedido" onclick="this.classList.toggle('on')"></div>
             <div>
               <div style="font-size:13px;font-weight:600">📦 Status do pedido</div>
-              <div style="font-size:11px;color:var(--muted)">Busca o último pedido do cliente pelo telefone</div>
+              <div style="font-size:11px;color:var(--muted)">Informa o status do último pedido do cliente</div>
             </div>
           </label>
 
@@ -1026,19 +1016,23 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
             <div class="toggle" id="ia-resp-horario" onclick="this.classList.toggle('on')"></div>
             <div>
               <div style="font-size:13px;font-weight:600">🕐 Horário de funcionamento</div>
-              <div style="font-size:11px;color:var(--muted)">Informa quando está aberto</div>
+              <div style="font-size:11px;color:var(--muted)">Informa quando a loja está aberta</div>
             </div>
           </label>
-          <textarea class="form-input" id="ia-horario-txt" rows="2" placeholder="Ex: Seg a Sex 11h-23h, Sáb-Dom 11h-00h" style="font-size:12px;margin-top:4px;margin-bottom:8px"></textarea>
+          <textarea class="form-input" id="ia-horario-txt" rows="2"
+            placeholder="Ex: Seg a Sex 11h-23h, Sáb-Dom 11h-00h"
+            style="font-size:12px;margin:4px 0 8px"></textarea>
 
           <label style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer">
             <div class="toggle" id="ia-resp-entrega" onclick="this.classList.toggle('on')"></div>
             <div>
-              <div style="font-size:13px;font-weight:600">🛵 Informações de entrega</div>
+              <div style="font-size:13px;font-weight:600">🛵 Entrega e taxa</div>
               <div style="font-size:11px;color:var(--muted)">Taxa, tempo estimado, bairros atendidos</div>
             </div>
           </label>
-          <textarea class="form-input" id="ia-entrega-txt" rows="2" placeholder="Ex: Taxa R$5, entrega em até 45min, bairros X e Y" style="font-size:12px;margin-top:4px;margin-bottom:8px"></textarea>
+          <textarea class="form-input" id="ia-entrega-txt" rows="2"
+            placeholder="Ex: Taxa R$5, entrega em até 45min, bairros X e Y"
+            style="font-size:12px;margin:4px 0 8px"></textarea>
 
           <label style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer">
             <div class="toggle" id="ia-resp-promo" onclick="this.classList.toggle('on')"></div>
@@ -1049,40 +1043,29 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
           </label>
         </div>
 
-        <!-- Personalização -->
-        <div class="card" style="padding:18px">
-          <div class="card-title" style="margin-bottom:14px">✏️ Personalização da IA</div>
-
-          <div class="form-row" style="margin-bottom:12px">
-            <label class="form-label">Instrução adicional (opcional)</label>
-            <textarea class="form-input" id="ia-prompt-extra" rows="4" placeholder="Ex: Sempre ofereça bebidas ao final. Não aceite reclamações, direcione para o número X. Seja sempre animado e use emojis."></textarea>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">Instruções extras para personalizar o comportamento da IA</div>
+        <!-- Info + webhook -->
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="card" style="padding:18px;border:1px solid rgba(34,197,94,.2);background:rgba(34,197,94,.04)">
+            <div style="font-size:12px;font-weight:700;color:var(--success);margin-bottom:8px">ℹ️ Como funciona</div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.7">
+              A IA responde automaticamente os clientes via WhatsApp <strong>apenas sobre os tópicos selecionados</strong>.<br><br>
+              Ela <strong>não</strong> entra em conversas livres — só responde dúvidas relacionadas ao seu restaurante.<br><br>
+              Quando um atendente responde manualmente, a IA pausa automaticamente para aquele cliente.
+            </div>
           </div>
 
-          <div class="form-row">
-            <label class="form-label">Modelo de IA</label>
-            <select class="form-input" id="ia-modelo" style="font-size:13px">
-              <option value="claude-haiku-4-5-20251001">⚡ Claude Haiku (rápido e econômico)</option>
-              <option value="claude-sonnet-4-6">🧠 Claude Sonnet (mais inteligente)</option>
-            </select>
-          </div>
-
-          <div style="margin-top:16px;padding:12px;background:rgba(139,92,246,.08);border-radius:10px;border:1px solid rgba(139,92,246,.2)">
-            <div style="font-size:12px;font-weight:700;color:var(--purple);margin-bottom:6px">⚠️ Requisito</div>
-            <div style="font-size:11.5px;color:var(--muted);line-height:1.6">Configure a variável de ambiente <code style="background:var(--surface2);padding:1px 5px;border-radius:4px">ANTHROPIC_API_KEY</code> no Easypanel com sua chave da API do Claude.</div>
-          </div>
-
-          <div style="margin-top:12px;padding:12px;background:rgba(34,197,94,.06);border-radius:10px;border:1px solid rgba(34,197,94,.15)">
-            <div style="font-size:12px;font-weight:700;color:var(--success);margin-bottom:6px">📲 Rastreio pelo WhatsApp</div>
-            <div style="font-size:11.5px;color:var(--muted);line-height:1.6">Quando o cliente clicar em <strong>"Acompanhar pelo WhatsApp"</strong> no cardápio, receberá automaticamente o status do pedido via WhatsApp, mesmo com a IA desativada.</div>
+          <div class="card" style="padding:18px;border:1px solid rgba(139,92,246,.2);background:rgba(139,92,246,.04)">
+            <div style="font-size:12px;font-weight:700;color:var(--purple);margin-bottom:8px">📌 URL do Webhook</div>
+            <div id="ia-webhook-url" style="font-size:11.5px;font-family:monospace;background:var(--surface2);padding:8px 10px;border-radius:8px;word-break:break-all;margin-bottom:8px"></div>
+            <button class="btn bg" style="font-size:11.5px;width:100%;justify-content:center"
+              onclick="navigator.clipboard.writeText(document.getElementById('ia-webhook-url').textContent).then(()=>sbToast('ok','URL copiada!'))">
+              📋 Copiar URL do webhook
+            </button>
+            <div style="font-size:11px;color:var(--muted);margin-top:6px">Cole na Evolution API → Webhook → MESSAGES_UPSERT</div>
           </div>
         </div>
-      </div>
 
-      <div style="display:flex;justify-content:flex-end">
-        <button class="btn bp" style="padding:11px 28px;font-size:14px" onclick="iaSalvarConfig()">💾 Salvar configurações da IA</button>
       </div>
-
     </div><!-- fim robo-section-ia -->
 
     <div id="robo-section-chat" style="display:none">

@@ -300,6 +300,11 @@ const MIGRATIONS = [
     description: 'Adiciona ia_config em store_config para agente IA',
     up: `ALTER TABLE store_config ADD COLUMN ia_config TEXT`
   },
+  {
+    version: 9,
+    description: 'Insere linha global para configurações de IA do admin',
+    up: `INSERT OR IGNORE INTO store_config (tenant_id) SELECT '_global' WHERE NOT EXISTS (SELECT 1 FROM store_config WHERE tenant_id='_global')`
+  },
 ]
 
 function runMigrations() {
@@ -781,6 +786,10 @@ function fillVars(tpl, vars) {
   let t=tpl; Object.entries(vars).forEach(([k,v])=>{t=t.replaceAll(`{${k}}`,v??'')}) ; return t
 }
 
+// ── Buffer de mensagens e pausa humano (IA) ───────────
+const _msgBuffer   = new Map() // bufKey → { msgs, timer }
+const _pausaHumano = new Map() // pausaKey → timestamp
+
 // ── Scheduler aniversários (por tenant) ───────────────
 const _anivLast = new Map()
 
@@ -1028,97 +1037,119 @@ const server = http.createServer(async (req,res) => {
 
   // ════════════════════════════════════════════════════════
   // WEBHOOK EVOLUTION API → AGENTE IA
-  // Configurar no Evolution: POST https://seusite/webhook/whatsapp
   // ════════════════════════════════════════════════════════
   if(req.method==='POST'&&upath.startsWith('/webhook/whatsapp')){
     const body = await readBody(req)
-    // Extrai tenant do path: /webhook/whatsapp/TENANT_ID
     const tenantId = upath.split('/')[3] || req.headers['x-tenant-id'] || null
     try {
-      // Evolution API envia no formato: { data: { key: { remoteJid }, message: { conversation } } }
-      const msg  = body?.data?.message?.conversation || body?.data?.message?.extendedTextMessage?.text || ''
-      const from = body?.data?.key?.remoteJid || ''
+      const msg    = body?.data?.message?.conversation || body?.data?.message?.extendedTextMessage?.text || ''
+      const from   = body?.data?.key?.remoteJid || ''
       const fromMe = body?.data?.key?.fromMe || false
       if (!msg || !from || fromMe) { send(res,200,{ok:true}); return }
-
       const phone = from.replace('@s.whatsapp.net','').replace('@c.us','')
+      if (!tenantId) { send(res,200,{ok:true}); return }
 
-      if (!tenantId) { log('⚠️','Webhook sem tenant_id'); send(res,200,{ok:true}); return }
-
-      // Busca config do tenant
-      const cfg = db.prepare("SELECT ia_config,evo_instance,store_name,evo_automacoes FROM store_config WHERE tenant_id=?").get(tenantId)
+      // Config do tenant (tópicos habilitados, ativo)
+      const cfg = db.prepare("SELECT ia_config,evo_instance,store_name FROM store_config WHERE tenant_id=?").get(tenantId)
       if (!cfg) { send(res,200,{ok:true}); return }
-
       const ia = jsonParse(cfg.ia_config) || {}
-      if (!ia.ativo) { send(res,200,{ok:true}); return } // IA desativada
+      if (!ia.ativo) { send(res,200,{ok:true}); return }
 
-      const inst = cfg.evo_instance || EVO_INST
-      const nomeLoja = cfg.store_name || 'Restaurante'
+      // Config global do admin (key, modelo, buffer, quebra, pausa)
+      const cfgGlobal = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const iaG = jsonParse(cfgGlobal?.ia_config) || {}
+      const openaiKey  = iaG.openai_key || ''
+      if (!openaiKey) { log('⚠️','OpenAI key não configurada no admin'); send(res,200,{ok:true}); return }
+      const modelo    = iaG.modelo    || 'gpt-4o-mini'
+      const maxTokens = iaG.max_tokens|| 500
+      const bufferSeg = iaG.buffer_seg|| 3
+      const quebraLen = iaG.quebra_linha || 0
+      const pausaMin  = iaG.pausa_min || 30
 
-      // Monta contexto para o Claude
-      const contexto = []
-
-      if (ia.resp_cardapio) {
-        const cats  = db.prepare("SELECT name FROM categories WHERE tenant_id=? AND ativo=1 ORDER BY sort_order").all(tenantId)
-        const items = db.prepare("SELECT name,price,description,cat FROM menu_items WHERE tenant_id=? AND status='active' ORDER BY cat,id").all(tenantId)
-        const cardapioTxt = cats.map(c => {
-          const it = items.filter(i=>i.cat===c.name).map(i=>`  - ${i.name}: R$${parseFloat(i.price).toFixed(2).replace('.',',')}${i.description?' ('+i.description+')':''}`).join('\n')
-          return `${c.name}:\n${it}`
-        }).join('\n\n')
-        contexto.push(`CARDÁPIO:\n${cardapioTxt}`)
+      // Pausa humano: checa se está em pausa para este cliente
+      const pausaKey = `pausa:${tenantId}:${phone}`
+      const pausaAt  = _pausaHumano.get(pausaKey)
+      if (pausaAt && (Date.now() - pausaAt) < pausaMin * 60 * 1000) {
+        log('⏸️', `IA pausada para ${phone} (humano assumiu)`); send(res,200,{ok:true}); return
       }
 
-      if (ia.resp_horario && ia.horario_txt) {
-        contexto.push(`HORÁRIO DE FUNCIONAMENTO:\n${ia.horario_txt}`)
-      }
+      // Buffer: acumula mensagens por N segundos antes de responder
+      const bufKey = `buf:${tenantId}:${phone}`
+      if (_msgBuffer.has(bufKey)) clearTimeout(_msgBuffer.get(bufKey).timer)
+      const msgs = _msgBuffer.has(bufKey) ? _msgBuffer.get(bufKey).msgs : []
+      msgs.push(msg)
 
-      if (ia.resp_pedido) {
-        // Busca último pedido do cliente pelo telefone
-        const pedido = db.prepare("SELECT id,status,total,created_at FROM orders WHERE tenant_id=? AND phone LIKE ? ORDER BY id DESC LIMIT 1").get(tenantId, `%${phone.slice(-8)}%`)
-        if (pedido) {
-          const statusLabel = {analise:'aguardando confirmação',producao:'em preparo',pronto:'pronto/saindo para entrega',entregue:'entregue',cancelado:'cancelado'}[pedido.status]||pedido.status
-          contexto.push(`ÚLTIMO PEDIDO DO CLIENTE:\nPedido #${pedido.id} — Status: ${statusLabel} — Total: R$${parseFloat(pedido.total).toFixed(2).replace('.',',')}`)
+      const timer = setTimeout(async () => {
+        _msgBuffer.delete(bufKey)
+        const msgFull = msgs.join('\n')
+        const inst = cfg.evo_instance || EVO_INST
+        const nomeLoja = cfg.store_name || 'Restaurante'
+
+        // Monta contexto
+        const contexto = []
+        if (ia.resp_cardapio) {
+          const cats  = db.prepare("SELECT name FROM categories WHERE tenant_id=? AND ativo=1 ORDER BY sort_order").all(tenantId)
+          const items = db.prepare("SELECT name,price,description,cat FROM menu_items WHERE tenant_id=? AND status='active' ORDER BY cat,id").all(tenantId)
+          const txt = cats.map(c=>{
+            const it=items.filter(i=>i.cat===c.name).map(i=>`  - ${i.name}: R$${parseFloat(i.price).toFixed(2).replace('.',',')}${i.description?' ('+i.description+')':''}`).join('\n')
+            return `${c.name}:\n${it}`
+          }).join('\n\n')
+          if (txt) contexto.push(`CARDÁPIO:\n${txt}`)
         }
-      }
-
-      if (ia.resp_entrega && ia.entrega_txt) {
-        contexto.push(`INFORMAÇÕES DE ENTREGA:\n${ia.entrega_txt}`)
-      }
-
-      if (ia.resp_promo) {
-        const promos = db.prepare("SELECT name,price FROM menu_items WHERE tenant_id=? AND promo=1 AND status='active' LIMIT 5").all(tenantId)
-        if (promos.length) {
-          contexto.push(`PROMOÇÕES ATIVAS:\n${promos.map(p=>`- ${p.name}: R$${parseFloat(p.price).toFixed(2).replace('.',',')}`).join('\n')}`)
+        if (ia.resp_horario && ia.horario_txt) contexto.push(`HORÁRIO:\n${ia.horario_txt}`)
+        if (ia.resp_entrega && ia.entrega_txt) contexto.push(`ENTREGA:\n${ia.entrega_txt}`)
+        if (ia.resp_pedido) {
+          const ped = db.prepare("SELECT id,status,total FROM orders WHERE tenant_id=? AND phone LIKE ? ORDER BY id DESC LIMIT 1").get(tenantId,`%${phone.slice(-8)}%`)
+          if (ped) {
+            const sl = {analise:'aguardando confirmação',producao:'em preparo',pronto:'saindo para entrega',entregue:'entregue',cancelado:'cancelado'}
+            contexto.push(`ÚLTIMO PEDIDO DO CLIENTE: #${ped.id} — ${sl[ped.status]||ped.status} — R$${parseFloat(ped.total).toFixed(2).replace('.',',')}`)
+          }
         }
-      }
+        if (ia.resp_promo) {
+          const promos = db.prepare("SELECT name,price FROM menu_items WHERE tenant_id=? AND promo=1 AND status='active' LIMIT 5").all(tenantId)
+          if (promos.length) contexto.push(`PROMOÇÕES:\n${promos.map(p=>`- ${p.name}: R$${parseFloat(p.price).toFixed(2).replace('.',',')}`).join('\n')}`)
+        }
 
-      const systemPrompt = `Você é o assistente virtual do ${nomeLoja}, um restaurante. Responda de forma simpática, breve e útil em português. Não invente informações. Se não souber algo, oriente o cliente a entrar em contato diretamente.\n\n${contexto.join('\n\n')}\n\n${ia.prompt_extra||''}`
+        const systemPrompt = `${iaG.prompt_base||`Você é o assistente do ${nomeLoja}. Responda APENAS sobre assuntos do restaurante de forma breve e simpática em português. Se a pergunta não for sobre o restaurante, diga que só pode ajudar com informações do estabelecimento.`}\n\n${contexto.join('\n\n')}`
 
-      // Chama Claude API
-      const CLAUDE_KEY = process.env.ANTHROPIC_API_KEY || ''
-      if (!CLAUDE_KEY) { log('⚠️','ANTHROPIC_API_KEY não configurada'); send(res,200,{ok:true}); return }
+        try {
+          const r = await fetch('https://api.openai.com/v1/chat/completions',{
+            method:'POST',
+            headers:{'Content-Type':'application/json','Authorization':`Bearer ${openaiKey}`},
+            body:JSON.stringify({model:modelo,max_tokens:maxTokens,messages:[{role:'system',content:systemPrompt},{role:'user',content:msgFull}]})
+          })
+          const d = await r.json().catch(()=>({}))
+          let resposta = d?.choices?.[0]?.message?.content || ''
 
-      const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json', 'x-api-key': CLAUDE_KEY, 'anthropic-version':'2023-06-01' },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 500,
-          system: systemPrompt,
-          messages: [{ role:'user', content: msg }]
-        })
-      })
-      const claudeData = await claudeRes.json().catch(()=>({}))
-      const resposta = claudeData?.content?.[0]?.text || ''
+          // Quebra de linha
+          if (quebraLen > 0 && resposta.length > quebraLen) {
+            const words = resposta.split(' ')
+            let linha = '', result = []
+            for (const w of words) {
+              if ((linha+' '+w).trim().length > quebraLen) { result.push(linha.trim()); linha = w }
+              else linha = (linha+' '+w).trim()
+            }
+            if (linha) result.push(linha)
+            resposta = result.join('\n')
+          }
 
-      if (resposta) {
-        await sendWA(phone, resposta, inst)
-        log('🤖', `IA respondeu para ${phone}: ${resposta.slice(0,60)}...`)
-      }
+          if (resposta) { await sendWA(phone, resposta, inst); log('🤖',`IA → ${phone}: ${resposta.slice(0,60)}`) }
+        } catch(e) { log('❌','IA OpenAI error:',e.message) }
+      }, bufferSeg * 1000)
 
-    } catch(e) { log('❌','Webhook IA error:', e.message) }
-    send(res,200,{ok:true})
-    return
+      _msgBuffer.set(bufKey, { msgs, timer })
+    } catch(e) { log('❌','Webhook error:',e.message) }
+    send(res,200,{ok:true}); return
+  }
+
+  // Notifica que humano assumiu — pausa IA para aquele cliente
+  if(req.method==='POST'&&upath==='/api/ia-humano-assumiu'){
+    const { phone, tenant_id } = await readBody(req)
+    if (phone && tenant_id) {
+      _pausaHumano.set(`pausa:${tenant_id}:${phone}`, Date.now())
+      log('👤',`Humano assumiu conversa com ${phone} — IA pausada`)
+    }
+    send(res,200,{ok:true}); return
   }
 
   // Endpoint: envia mensagem de rastreio via WhatsApp (chamado pelo index.html)
