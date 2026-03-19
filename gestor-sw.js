@@ -1,6 +1,5 @@
 // ══ GESTOR SERVICE WORKER ══════════════════
-const SUPA_URL = '' /* usa URL relativa ao servidor */;
-const SUPA_ANON = '' /* não usado mais */;
+const SW_VERSION = 'gestor-sw-v3';
 const POLL_MS   = 15000; // polling a cada 15s em background
 
 let pollTimer      = null;
@@ -46,7 +45,7 @@ async function doPoll() {
 
     // 1. Pedidos delivery/balcão novos em análise
     const ordRes = await fetch(
-      `${SUPA_URL}/rest/v1/orders?status=in.(analise)&select=id,client,items,addr&order=id.desc&limit=20`,
+      `/api/orders?status=in.(analise)&select=id,client,items,addr&order=id.desc&limit=20`,
       { headers }
     );
     if (ordRes.ok) {
@@ -62,7 +61,7 @@ async function doPoll() {
 
     // 2. Pedidos de mesa novos (analise ou producao)
     const mesaRes = await fetch(
-      `${SUPA_URL}/rest/v1/orders?mesa_num=not.is.null&status=in.(analise,producao)&select=id,client,mesa_num,items&order=id.desc&limit=20`,
+      `/api/orders?mesa_num=not.is.null&status=in.(analise,producao)&select=id,client,mesa_num,items&order=id.desc&limit=20`,
       { headers }
     );
     if (mesaRes.ok) {

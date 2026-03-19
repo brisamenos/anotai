@@ -2,9 +2,7 @@
 // Mantém polling em background e envia notificações
 // mesmo com a aba fechada ou minimizada.
 
-const SW_VERSION  = 'garcom-sw-v2';
-const SUPA_URL = '' /* usa URL relativa ao servidor */;
-const SUPA_ANON = '' /* não usado mais */;
+const SW_VERSION  = 'garcom-sw-v3';
 const POLL_MS     = 20000; // polling a cada 20s quando em background
 
 let pollTimer     = null;
@@ -67,7 +65,7 @@ async function doPoll() {
   try {
     // 1. Verifica mesas (mudança de status)
     const mesaRes = await fetch(
-      `${SUPA_URL}/rest/v1/mesas?select=num,status&order=num`,
+      `/api/mesas?select=num,status&order=num`,
       { headers }
     );
     if (mesaRes.ok) {
@@ -87,7 +85,7 @@ async function doPoll() {
 
     // 2. Verifica pedidos novos (status mudou para producao ou pronto)
     const ordRes = await fetch(
-      `${SUPA_URL}/rest/v1/orders?garcom_id=eq.${garcomId}&status=in.(producao,pronto,analise)&select=id,status,items,mesa_num&order=id.desc&limit=20`,
+      `/api/orders?garcom_id=eq.${garcomId}&status=in.(producao,pronto,analise)&select=id,status,items,mesa_num&order=id.desc&limit=20`,
       { headers }
     );
     if (ordRes.ok) {

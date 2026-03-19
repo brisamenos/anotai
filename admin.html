@@ -115,7 +115,7 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
 .ti-ok{border-left:3px solid var(--success)}
 .ti-err{border-left:3px solid var(--danger)}
 </style>
-  <script src="/supabase-shim.js"></script>
+  <script src="/api-client.js"></script>
 </head>
 <body>
 <div id="toast"></div>
@@ -381,8 +381,7 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
 </div>
 
 <script>
-const { createClient } = window.supabase;
-const sb = createClient('', '', { auth: { persistSession: false } });
+const sb = window.AppAPI;
 
 let _sessao = null;
 let _clientes = [];

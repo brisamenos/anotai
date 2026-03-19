@@ -47,7 +47,7 @@ input::placeholder{color:var(--muted)}
 .alert-expiry{display:none;background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.25);border-radius:8px;padding:10px 14px;font-size:12.5px;color:#fdba74;margin-bottom:14px}
 .alert-expiry.on{display:block}
 </style>
-<script src="/supabase-shim.js"></script>
+<script src="/api-client.js"></script>
 </head>
 <body>
 <div class="card">
@@ -79,8 +79,7 @@ input::placeholder{color:var(--muted)}
 </div>
 
 <script>
-const { createClient } = window.supabase;
-const sb = createClient('', '', { auth: { persistSession: false } });
+const sb = window.AppAPI;
 
 // Se já tem sessão válida, redireciona direto
 (function(){
@@ -172,7 +171,7 @@ async function doLogin() {
       }
     }
 
-    // Salva sessão no formato esperado pelo gestor.html e supabase-shim.js
+    // Salva sessão no formato esperado pelo gestor.html e api-client.js
     sessionStorage.setItem('sys_session', JSON.stringify({
       id:        u.id,
       nome:      u.nome,

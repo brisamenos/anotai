@@ -1,12 +1,9 @@
 // ═══════════════════════════════════════════════════════
-// SUPABASE — CONFIGURAÇÃO E INTEGRAÇÃO
+// CLIENTE REST — ESTIMA FOOD
 // ═══════════════════════════════════════════════════════
 // URL do servidor de automações — carregada do banco
 let WA_SERVER = '';
-const { createClient } = window.supabase;
-const sb = createClient('', '', {
-  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-});
+const sb = window.AppAPI;
 
 // ── Autenticação ──────────────────────────────────────
 let _sessao = null;
@@ -76,7 +73,7 @@ function confirmarLogout() {
 if (!_verificarSessao()) { /* redireciona */ }
 else { _carregarPlano(); } // Busca plano real do servidor (ignora cache da sessão)
 
-// ── Tenant injetado automaticamente pelo supabase-shim.js ────
+// ── Tenant injetado automaticamente pelo api-client.js ────
 // O shim lê tenant_id da sessionStorage e envia x-tenant-id em cada request.
 // Não precisa mais do proxy manual — sb já funciona com multi-tenant.
 

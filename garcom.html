@@ -406,7 +406,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .pz-confirm:disabled { opacity:.4;cursor:not-allowed; }
 
 </style>
-  <script src="/supabase-shim.js"></script>
+  <script src="/api-client.js"></script>
 </head>
 <body>
 
@@ -618,8 +618,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 
 <script>
 // ══ SUPABASE ══════════════════════════════
-const { createClient } = window.supabase;
-const sb = createClient('', '', { auth:{ persistSession:false } });
+const sb = window.AppAPI;
 
 let _garcomTenantId = null;
 let _garcomNomeLoja = null;
