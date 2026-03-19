@@ -1024,11 +1024,11 @@ function nav(id){
   if(id==='garcom') { renderGarcom(); loadGarcons(); }
   if(id==='kds') renderKDS();
   if(id==='estoque') renderEstoque();
-  if(id==='desempenho') renderDesempenho();
-  if(id==='relatorios') renderRelatorios();
+  if(id==='desempenho') { setDesempPrd(_desempPrd); }
+  if(id==='relatorios') { setRelPeriodo(_relPeriodo); }
   if(id==='satisfacao') renderSatisfacao();
   if(id==='impressao') renderImpressao();
-  if(id==='caixa') renderCaixa();
+  if(id==='caixa') _renderCaixaTela();
   if(id==='taxa') renderTaxaPage();
   if(id==='clientes') renderClientesPage();
   if(id==='cardapio-publico') {
@@ -1151,45 +1151,170 @@ function advanceOrder(){
 // ─────────────────────────────────────────
 // ORDERS
 // ─────────────────────────────────────────
-async function createOrder() {
-  const client   = document.getElementById('order-client').value || 'Cliente';
-  const phone    = document.getElementById('order-phone').value  || '';
-  const addr     = document.getElementById('order-addr').value   || '';
-  const itemsStr = document.getElementById('order-items').value  || 'Pedido manual';
-  const tot      = parseFloat(document.getElementById('order-total').value) || 0;
-  const time     = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+// ── Novo Pedido Manual — estado do modal ──────────────
+let _noCart        = [];   // [{id, name, qty, price, emoji}]
+let _noDelivery    = 'delivery';
 
-  const itemsArr = itemsStr.split(',').map(s => {
-    const m = s.trim().match(/^(\d+)x?\s*(.*)/i);
-    return m ? {qty:parseInt(m[1]), name:m[2].trim(), price: tot/itemsStr.split(',').length, obs:''}
-             : {qty:1, name:s.trim(), price:tot, obs:''};
+function noSetDelivery(tipo) {
+  _noDelivery = tipo;
+  ['delivery','retirada','mesa'].forEach(t => {
+    const btn = document.getElementById('no-dtab-' + t);
+    if (!btn) return;
+    btn.className = t === tipo ? 'btn bp' : 'btn bg';
+    btn.style.flex = '1';
+    btn.style.justifyContent = 'center';
+    btn.style.fontSize = '12px';
   });
+  document.getElementById('no-addr-block').style.display = tipo === 'delivery' ? '' : 'none';
+  document.getElementById('no-mesa-block').style.display = tipo === 'mesa'     ? '' : 'none';
+}
+
+function noFilterItems(q) {
+  const list = document.getElementById('no-items-list');
+  if (!list) return;
+  const search = (q || '').toLowerCase();
+  const filtered = items.filter(i =>
+    i.status !== 'pausado' &&
+    (!search || i.name.toLowerCase().includes(search) || (i.desc||'').toLowerCase().includes(search))
+  ).slice(0, 50);
+  if (!filtered.length) {
+    list.innerHTML = '<div style="padding:12px;text-align:center;color:var(--muted);font-size:12.5px">Nenhum produto encontrado</div>';
+    return;
+  }
+  list.innerHTML = filtered.map(item => {
+    const priceStr = 'R$ ' + parseFloat(item.price||0).toFixed(2).replace('.',',');
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''" onclick="noAddItem(${item.id})">
+      <span style="font-size:20px;flex-shrink:0">${item.emoji||'🍽️'}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.name}</div>
+        ${item.desc ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.desc}</div>` : ''}
+      </div>
+      <span style="font-size:12.5px;font-weight:700;color:var(--success);flex-shrink:0">${priceStr}</span>
+      <button style="background:var(--accent);color:#fff;border:none;border-radius:7px;width:26px;height:26px;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center">+</button>
+    </div>`;
+  }).join('');
+}
+
+function noAddItem(itemId) {
+  const item = items.find(i => i.id === itemId);
+  if (!item) return;
+  const existing = _noCart.find(c => c.id === itemId);
+  if (existing) {
+    existing.qty++;
+  } else {
+    _noCart.push({ id: item.id, name: item.name, qty: 1, price: parseFloat(item.price||0), emoji: item.emoji||'🍽️' });
+  }
+  noRenderCart();
+}
+
+function noChangeQty(itemId, delta) {
+  const idx = _noCart.findIndex(c => c.id === itemId);
+  if (idx === -1) return;
+  _noCart[idx].qty += delta;
+  if (_noCart[idx].qty <= 0) _noCart.splice(idx, 1);
+  noRenderCart();
+}
+
+function noRenderCart() {
+  const el = document.getElementById('no-cart');
+  const empty = document.getElementById('no-cart-empty');
+  const totalEl = document.getElementById('no-total-display');
+  if (!el) return;
+  if (!_noCart.length) {
+    if (empty) empty.style.display = '';
+    el.querySelectorAll('.no-cart-row').forEach(r => r.remove());
+    if (totalEl) totalEl.textContent = 'R$ 0,00';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  el.querySelectorAll('.no-cart-row').forEach(r => r.remove());
+  const frag = document.createDocumentFragment();
+  _noCart.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'no-cart-row';
+    div.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--border)';
+    div.innerHTML = `
+      <span style="font-size:18px">${c.emoji}</span>
+      <span style="flex:1;font-size:13px;font-weight:500">${c.name}</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button onclick="noChangeQty(${c.id},-1)" style="width:24px;height:24px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">−</button>
+        <span style="font-size:13px;font-weight:700;min-width:20px;text-align:center">${c.qty}</span>
+        <button onclick="noChangeQty(${c.id},1)"  style="width:24px;height:24px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">+</button>
+      </div>
+      <span style="font-size:12.5px;font-weight:700;color:var(--success);min-width:60px;text-align:right">R$ ${(c.price * c.qty).toFixed(2).replace('.',',')}</span>`;
+    frag.appendChild(div);
+  });
+  el.appendChild(frag);
+  const total = _noCart.reduce((s,c) => s + c.price * c.qty, 0);
+  if (totalEl) totalEl.textContent = 'R$ ' + total.toFixed(2).replace('.',',');
+}
+
+function noOpenModal() {
+  _noCart = [];
+  _noDelivery = 'delivery';
+  ['order-client','order-phone','order-addr','order-obs','order-mesa'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('no-search').value = '';
+  noSetDelivery('delivery');
+  noFilterItems('');
+  noRenderCart();
+  openModal('modal-new-order');
+}
+
+async function createOrder() {
+  const client = document.getElementById('order-client').value.trim() || 'Cliente';
+  const phone  = document.getElementById('order-phone').value.trim()  || '';
+  const obs    = document.getElementById('order-obs').value.trim()    || '';
+  const pag    = document.getElementById('order-pag').value           || 'PIX';
+  const time   = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+
+  let addr = '';
+  let mesaNum = null;
+  if (_noDelivery === 'delivery') {
+    addr = document.getElementById('order-addr').value.trim();
+  } else if (_noDelivery === 'mesa') {
+    mesaNum = parseInt(document.getElementById('order-mesa').value) || null;
+    addr = mesaNum ? 'Mesa ' + mesaNum : 'Mesa';
+  } else {
+    addr = 'Retirada no balcão';
+  }
+
+  if (!_noCart.length) { sbToast('err','Adicione pelo menos um produto'); return; }
+
+  const itemsArr = _noCart.map(c => ({ qty: c.qty, name: c.name, price: c.price, obs: '' }));
+  if (obs) itemsArr[itemsArr.length - 1].obs = obs;
+  const tot = _noCart.reduce((s,c) => s + c.price * c.qty, 0);
 
   sbLoading(true);
   const { data: orderData, error: oErr } = await sb.from('orders').insert({
-    client, phone, addr, items: itemsArr, total: tot, taxa: 5,
-    status: 'analise', time, pag: 'PIX'
+    client, phone, addr,
+    items: itemsArr,
+    total: tot,
+    taxa: _noDelivery === 'delivery' ? 5 : 0,
+    mesa_num: mesaNum,
+    status: 'analise',
+    time, pag
   }).select().single();
 
   if (oErr) { sbLoading(false); sbToast('err','Erro ao criar pedido'); console.error(oErr); return; }
 
-  const { error: mErr } = await sb.from('movimentos').insert({
+  await sb.from('movimentos').insert({
     description: `Pedido #${orderData.id} – ${client}`,
-    tipo: 'entrada', val: tot + 5, pag: 'PIX', time
-  });
-  sbLoading(false);
+    tipo: 'entrada', val: tot, pag, time
+  }).catch(() => {});
 
+  sbLoading(false);
   ordersKanban.unshift(mapOrder(orderData));
-  const mov = { id: Date.now(), desc: `Pedido #${orderData.id} – ${client}`,
-    tipo:'entrada', val: tot+5, pag:'PIX', time };
-  movimentos.push(mov);
+  movimentos.push({ id: Date.now(), desc: `Pedido #${orderData.id} – ${client}`, tipo:'entrada', val:tot, pag, time });
 
   playOrderSound();
   const nc = document.getElementById('notif-count');
   if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
   closeModal('modal-new-order');
   nav('pedidos');
-  sbToast('ok',`Pedido #${orderData.id} criado!`);
+  sbToast('ok', `Pedido #${orderData.id} criado! ✅`);
 }
 
 function printOrderDetail(){
@@ -2960,28 +3085,28 @@ async function deleteIngrediente() {
 // ─────────────────────────────────────────
 // DESEMPENHO
 // ─────────────────────────────────────────
-let _desempPrd = 'hoje';
+let _desempPrd = 'mensal';
 
-function setDesempPrd(el, prd) {
+function setDesempPrd(prd) {
   _desempPrd = prd;
-  document.querySelectorAll('.desemp-prd-btn').forEach(b => b.classList.remove('on'));
-  el.classList.add('on');
+  ['diario','semanal','mensal','anual'].forEach(id => {
+    const btn = document.getElementById('dpb-' + id);
+    if (!btn) return;
+    const active = id === prd;
+    btn.style.background  = active ? 'var(--accent)' : '';
+    btn.style.color       = active ? '#fff' : '';
+    btn.style.borderColor = active ? 'var(--accent)' : '';
+  });
   renderDesempenho();
 }
 
-function _desempSince() {
-  const now = new Date();
-  if (_desempPrd === 'hoje') {
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  } else if (_desempPrd === 'semana') {
-    const d = new Date(now); d.setDate(d.getDate() - 6); d.setHours(0,0,0,0);
-    return d.toISOString();
-  } else if (_desempPrd === 'mes') {
-    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  } else { // 30
-    const d = new Date(now); d.setDate(d.getDate() - 29); d.setHours(0,0,0,0);
-    return d.toISOString();
-  }
+function _desempGetRange() {
+  // Reutiliza a mesma logica de _relGetRange mas com _desempPrd
+  const saved = _relPeriodo;
+  _relPeriodo = _desempPrd;
+  const range = _relGetRange();
+  _relPeriodo = saved;
+  return range;
 }
 
 async function renderDesempenho() {
@@ -2995,12 +3120,19 @@ async function renderDesempenho() {
   if (top) top.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px">Carregando...</div>';
 
   try {
-    const since = _desempSince();
+    const range = _desempGetRange();
+    const since = range.inicio.toISOString();
+    const ate   = range.fim.toISOString();
 
-    // Busca pedidos reais do período (todos os status exceto cancelado para faturamento)
+    // Atualiza label do periodo
+    const lblEl = document.getElementById('desemp-periodo-label');
+    if (lblEl) lblEl.textContent = range.label;
+
+    // Busca pedidos reais do período
     const { data: allOrders } = await sb.from('orders')
       .select('id,status,total,items,mesa_num,pag,created_at,garcom_nome')
       .gte('created_at', since)
+      .lt('created_at', ate)
       .order('created_at', { ascending: true });
 
     const orders = allOrders || [];
@@ -3034,19 +3166,41 @@ async function renderDesempenho() {
         <div class="desemp-val" style="font-size:22px;color:${m.color}">${m.val}</div>
       </div>`).join('');
 
-    // ── Pedidos por dia da semana ────────
-    const dayCounts = [0,0,0,0,0,0,0]; // Dom..Sab
-    orders.forEach(o => {
-      const d = new Date(o.created_at).getDay();
-      dayCounts[d]++;
-    });
-    const maxD = Math.max(...dayCounts, 1);
-    if (bar) bar.innerHTML = DAYS_FULL.map((d,i) => `
-      <div class="bar-col">
-        <div class="bar-val">${dayCounts[i]}</div>
-        <div class="bar-fill" style="height:${Math.max(Math.round(dayCounts[i]/maxD*100),2)}%;background:var(--accent)"></div>
-        <div class="bar-label">${d}</div>
-      </div>`).join('');
+    // ── Grafico dinamico por periodo ────────
+    const barCard = bar?.closest('.card')?.querySelector('.card-title');
+    if (bar) {
+      let barData = [], barLabels = [];
+      if (_desempPrd === 'anual') {
+        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por mês');
+        const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+        barData = new Array(12).fill(0); barLabels = months;
+        orders.forEach(o => { barData[new Date(o.created_at).getMonth()]++; });
+      } else if (_desempPrd === 'mensal') {
+        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por semana');
+        barData = [0,0,0,0,0]; barLabels = ['Sem 1','Sem 2','Sem 3','Sem 4','Sem 5'];
+        orders.forEach(o => {
+          const w = Math.min(Math.floor((new Date(o.created_at).getDate()-1)/7), 4);
+          barData[w]++;
+        });
+      } else if (_desempPrd === 'semanal') {
+        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por dia da semana');
+        barData = [0,0,0,0,0,0,0]; barLabels = DAYS_FULL;
+        orders.forEach(o => { barData[new Date(o.created_at).getDay()]++; });
+      } else { // diario
+        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por hora');
+        barData = new Array(24).fill(0);
+        barLabels = Array.from({length:24}, (_,i) => i % 4 === 0 ? i + 'h' : '');
+        orders.forEach(o => { barData[new Date(o.created_at).getHours()]++; });
+      }
+      const maxD = Math.max(...barData, 1);
+      bar.innerHTML = barLabels.map((lbl, i) => [
+        '<div class="bar-col">',
+        '<div class="bar-val">' + (barData[i] || '') + '</div>',
+        '<div class="bar-fill" style="height:' + Math.max(Math.round(barData[i]/maxD*100), barData[i]>0?3:2) + '%;background:var(--accent)' + (barData[i]===0?';opacity:.2':'') + '"></div>',
+        '<div class="bar-label">' + lbl + '</div>',
+        '</div>'
+      ].join('')).join('');
+    }
 
     // ── Top itens mais vendidos ──────────
     const itemMap = {};
@@ -3089,6 +3243,46 @@ async function renderDesempenho() {
 // ─────────────────────────────────────────
 // RELATÓRIOS
 // ─────────────────────────────────────────
+let _relPeriodo = 'mensal';
+
+function setRelPeriodo(p) {
+  _relPeriodo = p;
+  ['diario','semanal','mensal','anual'].forEach(id => {
+    const btn = document.getElementById('rpb-' + id);
+    if (!btn) return;
+    const active = id === p;
+    btn.style.background  = active ? 'var(--accent)' : '';
+    btn.style.color       = active ? '#fff' : '';
+    btn.style.borderColor = active ? 'var(--accent)' : '';
+  });
+  renderRelatorios();
+}
+
+function _relGetRange() {
+  const now = new Date();
+  let inicio, fim, label;
+  if (_relPeriodo === 'diario') {
+    inicio = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    fim    = new Date(inicio.getTime() + 86400000);
+    label  = 'Hoje, ' + inicio.toLocaleDateString('pt-BR', { day:'2-digit', month:'short' });
+  } else if (_relPeriodo === 'semanal') {
+    const day = now.getDay();
+    inicio = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day);
+    fim    = new Date(inicio.getTime() + 7 * 86400000);
+    label  = inicio.toLocaleDateString('pt-BR', { day:'2-digit', month:'short' })
+             + ' – ' + new Date(fim - 1).toLocaleDateString('pt-BR', { day:'2-digit', month:'short' });
+  } else if (_relPeriodo === 'mensal') {
+    inicio = new Date(now.getFullYear(), now.getMonth(), 1);
+    fim    = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    label  = inicio.toLocaleDateString('pt-BR', { month:'long', year:'numeric' });
+  } else {
+    inicio = new Date(now.getFullYear(), 0, 1);
+    fim    = new Date(now.getFullYear() + 1, 0, 1);
+    label  = String(now.getFullYear());
+  }
+  return { inicio, fim, label };
+}
+
 async function renderRelatorios() {
   const money = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
   const loading = id => { const el=document.getElementById(id); if(el) el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center">Carregando...</div>'; };
@@ -3096,20 +3290,28 @@ async function renderRelatorios() {
   ['rel-month-bar','rel-day-bar','rel-gauges','rel-platforms','rel-areas',
    'rel-top-clients','rel-entradas-list','rel-produtos-list','rel-sat-list'].forEach(loading);
 
-  const now   = new Date();
-  const mesIn = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const anoIn = new Date(now.getFullYear(), 0, 1).toISOString();
+  const now    = new Date();
+  const range  = _relGetRange();
+  const inicioISO = range.inicio.toISOString();
+  const fimISO    = range.fim.toISOString();
+  // Para o grafico de barras: ano inteiro em modo anual, senao so o periodo
+  const anoIn  = new Date(now.getFullYear(), 0, 1).toISOString();
+
+  // Atualiza label do periodo na tela
+  const lblEl = document.getElementById('rel-periodo-label');
+  if (lblEl) lblEl.textContent = range.label;
 
   try {
-    // ── Busca pedidos do ANO todo (para barra mensal) ──
-    const [{ data: anoOrders }, { data: movimentos }] = await Promise.all([
+    const [{ data: periodOrders }, { data: anoOrdersRaw }, { data: movimentos }] = await Promise.all([
       sb.from('orders').select('id,status,total,items,mesa_num,addr,pag,garcom_nome,created_at')
+        .gte('created_at', inicioISO).lt('created_at', fimISO).order('created_at', { ascending: true }),
+      sb.from('orders').select('id,status,total,created_at')
         .gte('created_at', anoIn).order('created_at', { ascending: true }),
-      sb.from('movimentos').select('*').gte('time', new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString('pt-BR')).order('id', { ascending: false })
+      sb.from('movimentos').select('*').gte('time', range.inicio.toLocaleDateString('pt-BR')).order('id', { ascending: false })
     ]);
 
-    const allYear = anoOrders || [];
-    const mesPedidos = allYear.filter(o => new Date(o.created_at) >= new Date(mesIn));
+    const allYear    = anoOrdersRaw || [];
+    const mesPedidos = periodOrders || [];
     const mesValidos = mesPedidos.filter(o => o.status !== 'cancelado');
 
     // ── KPIs do mês ──
@@ -3120,28 +3322,60 @@ async function renderRelatorios() {
     const pctCancel = qtdMes > 0 ? (cancelMes / qtdMes * 100).toFixed(1) : '0';
 
     const elv = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+    const periodoLabel = { diario:'hoje', semanal:'na semana', mensal:'no mês', anual:'no ano' }[_relPeriodo] || 'no período';
     elv('rel-kpi-fat',    money(fatMes));
-    elv('rel-kpi-fat-sub', qtdMes + ' pedidos no mês');
+    elv('rel-kpi-fat-sub', qtdMes + ' pedidos ' + periodoLabel);
     elv('rel-kpi-ped',    qtdMes);
     elv('rel-kpi-ped-sub', mesValidos.length + ' confirmados');
     elv('rel-kpi-ticket', money(ticket));
     elv('rel-kpi-cancel', cancelMes);
     elv('rel-kpi-cancel-sub', pctCancel + '% do total');
 
-    // ── Faturamento mensal (barras por mês) ──
-    const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-    const mData  = new Array(12).fill(0);
-    allYear.filter(o => o.status !== 'cancelado').forEach(o => {
-      mData[new Date(o.created_at).getMonth()] += parseFloat(o.total||0);
-    });
-    const maxM = Math.max(...mData, 1);
+    // ── Grafico de barras (dinamico por periodo) ──
     const mb = document.getElementById('rel-month-bar');
-    if (mb) mb.innerHTML = months.map((m,i) => `
-      <div class="bar-col">
-        <div class="bar-val" style="font-size:9px">${mData[i]>0 ? 'R$'+Math.round(mData[i]) : ''}</div>
-        <div class="bar-fill" style="height:${Math.max(Math.round(mData[i]/maxM*100),mData[i]>0?3:1)}%;${mData[i]===0?'opacity:.2':''}"></div>
-        <div class="bar-label">${m}</div>
-      </div>`).join('');
+    const chartTitle = mb?.closest('.card')?.querySelector('.card-title');
+    if (mb) {
+      const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+      let barData = [], barLabels = [];
+      if (_relPeriodo === 'anual') {
+        if (chartTitle) chartTitle.innerHTML = chartTitle.innerHTML.replace(/Faturamento.*/, 'Faturamento mensal (' + range.label + ')');
+        barData   = new Array(12).fill(0);
+        barLabels = months;
+        allYear.filter(o => o.status !== 'cancelado').forEach(o => {
+          barData[new Date(o.created_at).getMonth()] += parseFloat(o.total||0);
+        });
+      } else if (_relPeriodo === 'mensal') {
+        if (chartTitle) chartTitle.innerHTML = chartTitle.innerHTML.replace(/Faturamento.*/, 'Faturamento por semana');
+        barData = [0,0,0,0,0]; barLabels = ['Sem 1','Sem 2','Sem 3','Sem 4','Sem 5'];
+        mesValidos.forEach(o => {
+          const d = new Date(o.created_at).getDate();
+          const w = Math.min(Math.floor((d-1)/7), 4);
+          barData[w] += parseFloat(o.total||0);
+        });
+      } else if (_relPeriodo === 'semanal') {
+        if (chartTitle) chartTitle.innerHTML = chartTitle.innerHTML.replace(/Faturamento.*/, 'Faturamento por dia');
+        const dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+        barData = [0,0,0,0,0,0,0]; barLabels = dias;
+        mesValidos.forEach(o => {
+          barData[new Date(o.created_at).getDay()] += parseFloat(o.total||0);
+        });
+      } else { // diario — por hora
+        if (chartTitle) chartTitle.innerHTML = chartTitle.innerHTML.replace(/Faturamento.*/, 'Faturamento por hora');
+        barData = new Array(24).fill(0);
+        barLabels = Array.from({length:24}, (_,i) => i % 4 === 0 ? i + 'h' : '');
+        mesValidos.forEach(o => {
+          barData[new Date(o.created_at).getHours()] += parseFloat(o.total||0);
+        });
+      }
+      const maxM = Math.max(...barData, 1);
+      mb.innerHTML = barLabels.map((lbl, i) => [
+        '<div class="bar-col">',
+        '<div class="bar-val" style="font-size:9px">' + (barData[i]>0 ? 'R$'+Math.round(barData[i]) : '') + '</div>',
+        '<div class="bar-fill" style="height:' + Math.max(Math.round(barData[i]/maxM*100), barData[i]>0?3:1) + '%;' + (barData[i]===0?'opacity:.2':'') + '"></div>',
+        '<div class="bar-label">' + lbl + '</div>',
+        '</div>'
+      ].join('')).join('');
+    }
 
     // ── Pedidos por dia da semana (mês atual) ──
     const dayC = [0,0,0,0,0,0,0];
@@ -3424,25 +3658,37 @@ function setCaixaState(aberto) {
 }
 
 async function toggleCaixa() {
-  const novoEstado = !_caixaAberto;
-  if (novoEstado) {
-    // Abrir caixa
-    setCaixaState(true);
-    sbToast('ok', '🟢 Caixa aberto!');
-    try { await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, caixa_open: true }); }
-    catch(e) { console.warn('caixa sync:', e); }
-    nav('caixa');
-  } else {
-    // Pedir confirmação para fechar
-    if (!confirm('Fechar o caixa agora?\n\nIsso registrará o fechamento mas não apaga os movimentos do dia.')) return;
-    setCaixaState(false);
-    const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-    sbToast('ok', '🔒 Caixa fechado às ' + time);
-    try {
-      await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, caixa_open: false });
-    } catch(e) { console.warn('caixa sync:', e); }
-  }
+  if (_caixaAberto) await fecharCaixa();
+  else await abrirCaixa();
 }
+
+async function abrirCaixa() {
+  setCaixaState(true);
+  sbToast('ok', '🟢 Caixa aberto!');
+  try { await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, caixa_open: true }); }
+  catch(e) { console.warn('caixa sync:', e); }
+  _renderCaixaTela();
+}
+
+async function fecharCaixa() {
+  if (!confirm('Fechar o caixa agora?\n\nIsso registrará o fechamento mas não apaga os movimentos do dia.')) return;
+  setCaixaState(false);
+  const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  sbToast('ok', '🔒 Caixa fechado às ' + time);
+  try { await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, caixa_open: false }); }
+  catch(e) { console.warn('caixa sync:', e); }
+  _renderCaixaTela();
+}
+
+function _renderCaixaTela() {
+  const tFechado = document.getElementById('cx-tela-fechado');
+  const tAberto  = document.getElementById('cx-tela-aberto');
+  if (!tFechado || !tAberto) return;
+  tFechado.style.display = _caixaAberto ? 'none' : 'flex';
+  tAberto.style.display  = _caixaAberto ? ''     : 'none';
+  if (_caixaAberto) renderCaixa();
+}
+
 
 
 function renderCaixa() {
