@@ -2755,13 +2755,13 @@ function getUpsellSuggestions() {
   // Get drinks/accompaniments not already in cart
   const cartIds = new Set(cart.map(c => c.id));
   const drinks  = allItems.filter(i =>
-    i.status === 'active' &&
+    ['active','ativo'].includes(i.status) &&
     !cartIds.has(i.id) &&
     UPSELL_DRINKS.includes(detectFoodType(i))
   );
   // Also include any item with category name matching bebidas/drinks
   const beverages = allItems.filter(i =>
-    i.status === 'active' &&
+    ['active','ativo'].includes(i.status) &&
     !cartIds.has(i.id) &&
     (i.cat_key === 'bebidas' || i.cat === 'bebidas' || i.cat_key === 'drinks')
   );
@@ -2771,8 +2771,10 @@ function getUpsellSuggestions() {
 }
 
 function shouldShowUpsell(item) {
+  // Only show upsell if there are actual suggestions available
   const type = detectFoodType(item);
-  return UPSELL_TRIGGERS.includes(type);
+  if (!UPSELL_TRIGGERS.includes(type)) return false;
+  return getUpsellSuggestions().length > 0;
 }
 
 function openUpsell(addedItem) {
