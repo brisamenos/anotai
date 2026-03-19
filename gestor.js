@@ -910,31 +910,7 @@ async function finishOrderById(id) {
       movimentos.push({ desc:`Pedido #${o.id} – ${o.client}`, tipo:'entrada', val:o.total+o.taxa, pag:o.pag||'PIX', time });
     }
     ordersKanban = ordersKanban.filter(x => x.id !== id);
-
-    // ── Avaliação automática: 60s após finalizar ──
-    if (o && o.phone) {
-      const _tgAval = document.getElementById('auto-toggle-avaliacao');
-      if (_tgAval && _tgAval.classList.contains('on')) {
-        const _snap = { ...o, id }; // snapshot antes do kanban limpar
-        setTimeout(async () => {
-          const tg = document.getElementById('auto-toggle-avaliacao');
-          if (!tg || !tg.classList.contains('on')) return; // verificação no momento do disparo
-          const linkAvaliacao = `${window.location.origin}/?rate=${_snap.id}`;
-          const itensTxt = Array.isArray(_snap.items)
-            ? _snap.items.map(i => `${i.qty}x ${i.name}`).join(', ')
-            : '';
-          await evoEnviarMensagem(_snap.phone, 'avaliacao', {
-            nome:           _snap.client || 'Cliente',
-            id:             _snap.id,
-            itens:          itensTxt,
-            total:          Number(_snap.total || 0).toFixed(2).replace('.', ','),
-            link_avaliacao: linkAvaliacao,
-          });
-        }, 60000);
-      }
-    }
   } catch(e) {
-    sbLoading(false);
     sbToast('err', 'Erro ao finalizar pedido: ' + e.message); return;
   }
   sbLoading(false);
@@ -3563,16 +3539,14 @@ async function renderSatisfacao(){
 
     const list  = ratings || [];
     const total = list.length;
-
-    // ── Helpers para atualizar os cards de stats ──
-    const statEls = document.querySelectorAll('#page-satisfacao .sg .sv');
+    const statEls   = document.querySelectorAll('#page-satisfacao .sg .sv');
     const statTrend = document.querySelector('#page-satisfacao .sg .str');
 
     if (total === 0) {
       const vazio = `<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:13px">
         <div style="font-size:44px;margin-bottom:12px">⭐</div>
         Nenhuma avaliação ainda.<br>
-        <small style="font-size:11.5px">As avaliações aparecerão aqui quando os clientes responderem.</small>
+        <small style="font-size:11.5px">Quando clientes responderem ao link de avaliação, os dados aparecerão aqui.</small>
       </div>`;
       if (elBars)    elBars.innerHTML    = vazio;
       if (elReviews) elReviews.innerHTML = '';
@@ -3587,33 +3561,30 @@ async function renderSatisfacao(){
     const media         = soma / total;
     const satisfeitos   = list.filter(r => r.nota >= 4).length;
     const insatisfeitos = list.filter(r => r.nota <= 2).length;
-    const pctSat        = Math.round((satisfeitos / total) * 100);
-    const pctInsat      = Math.round((insatisfeitos / total) * 100);
 
-    // Atualiza cards de stats
     if (statEls[0]) statEls[0].textContent = media.toFixed(1);
     if (statEls[1]) statEls[1].textContent = total;
-    if (statEls[2]) statEls[2].textContent = pctSat   + '%';
-    if (statEls[3]) statEls[3].textContent = pctInsat + '%';
+    if (statEls[2]) statEls[2].textContent = Math.round((satisfeitos / total) * 100) + '%';
+    if (statEls[3]) statEls[3].textContent = Math.round((insatisfeitos / total) * 100) + '%';
     if (statTrend)  statTrend.textContent  = media >= 4.5 ? '↑ Excelente' : media >= 3.5 ? '→ Bom' : '↓ Atenção';
 
-    // ── Distribuição de notas ──
+    // Distribuição de notas
     const dist = [5,4,3,2,1].map(nota => {
       const count = list.filter(r => r.nota === nota).length;
       const pct   = Math.round((count / total) * 100);
-      const clr   = nota >= 4 ? 'var(--success)' : nota === 3 ? 'var(--warning,#f59e0b)' : 'var(--danger)';
+      const clr   = nota >= 4 ? 'var(--success)' : nota === 3 ? '#f59e0b' : 'var(--danger)';
       return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <span style="font-size:12px;font-weight:700;min-width:14px;text-align:right">${nota}</span>
         <span style="font-size:12px">⭐</span>
         <div style="flex:1;height:9px;background:var(--surface2);border-radius:99px;overflow:hidden">
-          <div style="width:${pct}%;height:100%;background:${clr};border-radius:99px;transition:width .5s"></div>
+          <div style="width:${pct}%;height:100%;background:${clr};border-radius:99px"></div>
         </div>
         <span style="font-size:11.5px;color:var(--muted);min-width:32px;text-align:right">${count}x</span>
       </div>`;
     }).join('');
     if (elBars) elBars.innerHTML = dist;
 
-    // ── Últimas avaliações ──
+    // Últimas avaliações
     const EMOJI = { 5:'😍', 4:'😊', 3:'😐', 2:'😕', 1:'😠' };
     const revs = list.slice(0, 30).map(r => {
       const stars = '⭐'.repeat(r.nota || 0);
@@ -3625,7 +3596,7 @@ async function renderSatisfacao(){
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px">
             <span style="font-weight:700;font-size:13px">${r.client || 'Cliente'}</span>
-            <span style="font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0">${dt}</span>
+            <span style="font-size:11px;color:var(--muted);white-space:nowrap">${dt}</span>
           </div>
           <div style="font-size:13px;margin-bottom:${r.comentario ? '5px' : '0'}">${stars}</div>
           ${r.comentario ? `<div style="font-size:12.5px;color:var(--muted2);line-height:1.5">${r.comentario}</div>` : ''}
@@ -3637,8 +3608,8 @@ async function renderSatisfacao(){
 
   } catch(e) {
     console.error('renderSatisfacao:', e);
-    const msg = '<div style="color:var(--muted);font-size:12.5px;padding:20px;text-align:center">Erro ao carregar avaliações.</div>';
-    if (elBars)    elBars.innerHTML    = msg;
+    const err = '<div style="color:var(--muted);font-size:12.5px;padding:20px;text-align:center">Erro ao carregar avaliações.</div>';
+    if (elBars)    elBars.innerHTML    = err;
     if (elReviews) elReviews.innerHTML = '';
   }
 }
@@ -5310,7 +5281,22 @@ async function evoEnviarAniversariantesHoje(silencioso = false) {
   }
   const today  = new Date();
   const todayMD = `${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-  const anivs  = fidClients.filter(c => c.birthday && c.birthday.slice(5) === todayMD && c.phone);
+
+  // Busca em fidelidade
+  const anivsFid = fidClients.filter(c => c.birthday && c.birthday.slice(5) === todayMD && c.phone);
+
+  // Busca em customers (sem duplicar por phone)
+  let anivsCust = [];
+  try {
+    const { data: custAll } = await sb.from('customers').select('name,phone,birthday');
+    if (custAll) {
+      const phonesFid = new Set(anivsFid.map(c => c.phone));
+      anivsCust = custAll.filter(c => c.birthday && c.birthday.slice(5) === todayMD && c.phone && !phonesFid.has(c.phone));
+    }
+  } catch(e) {}
+
+  const anivs = [...anivsFid, ...anivsCust];
+
   if (!anivs.length) {
     if (!silencioso) sbToast('ok', 'Nenhum aniversariante com telefone hoje');
     return;
@@ -5323,9 +5309,8 @@ async function evoEnviarAniversariantesHoje(silencioso = false) {
     await new Promise(r => setTimeout(r, 1200));
   }
   if (!silencioso) sbLoading(false);
-  // Salva que já enviou hoje no Supabase
+  // Salva que já enviou hoje
   try { await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_aniv_last: todayMD }); } catch(e){}
-  // Atualiza label na tela
   const lastEl = document.getElementById('aniv-last-send');
   if (lastEl) lastEl.textContent = 'Último envio: ' + todayMD + ' às ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   if (!silencioso) sbToast('ok', '🎂 Enviado para ' + ok + ' aniversariante(s)' + (fail ? ' | ' + fail + ' falhou' : '') + '!');
@@ -5387,7 +5372,8 @@ async function evoSalvarAutomacoes() {
       msg: document.getElementById(`auto-msg-${tipo}`)?.value
     };
   });
-  data._aniv_hora = document.getElementById('auto-aniv-hora')?.value || '09:00';
+  data._aniv_hora    = document.getElementById('auto-aniv-hora')?.value || '09:00';
+  data._aval_minutos = parseInt(document.getElementById('auto-aval-minutos')?.value || '1', 10) || 1;
   try {
     const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_automacoes: data });
     if (error) throw error;
@@ -5411,6 +5397,10 @@ async function evoCarregarAutomacoesSalvas() {
     if (cfg._aniv_hora) {
       const h = document.getElementById('auto-aniv-hora');
       if (h) h.value = cfg._aniv_hora;
+    }
+    if (cfg._aval_minutos) {
+      const m = document.getElementById('auto-aval-minutos');
+      if (m) m.value = cfg._aval_minutos;
     }
   } catch(e) {
     console.warn('evoCarregarAutomacoesSalvas:', e);
