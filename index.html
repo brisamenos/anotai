@@ -1784,24 +1784,61 @@ async function resolveTenant() {
   const p    = new URLSearchParams(window.location.search);
   const slug = p.get('slug') || p.get('t');
   const tid  = p.get('tenant');
+
+  console.log('%c[Cardápio] resolveTenant iniciado', 'color:#3b82f6;font-weight:bold');
+  console.log('[Cardápio] URL:', window.location.href);
+  console.log('[Cardápio] Parâmetros → slug:', slug, '| tenant ID:', tid);
+
+  // 1. Por ID numérico (?tenant=123)
   if (tid) {
-    const res  = await fetch(`/api/tenant-info?id=${tid}`);
-    const data = await res.json();
-    if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
-    return false;
-  }
-  if (!slug) {
-    const match = window.location.pathname.match(/\/([a-z0-9-]+)\/?$/);
-    if (match && match[1] !== 'index.html') {
-      const res = await fetch(`/api/tenant-info?slug=${match[1]}`);
+    console.log('[Cardápio] Tentando por ID:', tid);
+    try {
+      const res  = await fetch(`/api/tenant-info?id=${tid}`);
       const data = await res.json();
+      console.log('[Cardápio] Resposta tenant-info por ID:', data);
       if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
-    }
+      console.warn('[Cardápio] tenant-info por ID não encontrou restaurante. Resposta:', data);
+    } catch(e) { console.error('[Cardápio] Erro ao buscar por ID:', e); }
     return false;
   }
-  const res  = await fetch(`/api/tenant-info?slug=${slug}`);
-  const data = await res.json();
-  if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
+
+  // 2. Por slug na query string (?slug=xxx ou ?t=xxx)
+  if (slug) {
+    console.log('[Cardápio] Tentando por slug (query string):', slug);
+    try {
+      const res  = await fetch(`/api/tenant-info?slug=${encodeURIComponent(slug)}`);
+      const data = await res.json();
+      console.log('[Cardápio] Resposta tenant-info por slug:', data);
+      if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
+      console.warn('[Cardápio] Slug não encontrado:', slug, '| Resposta:', data);
+    } catch(e) { console.error('[Cardápio] Erro ao buscar por slug:', e); }
+    return false;
+  }
+
+  // 3. Slug no path da URL (ex: /pizzaria-do-joao/)
+  const match = window.location.pathname.match(/\/([a-z0-9][a-z0-9-]{1,})\/?$/);
+  console.log('[Cardápio] Path:', window.location.pathname, '| Match:', match ? match[1] : 'nenhum');
+  if (match && match[1] !== 'index.html' && match[1] !== 'cardapio') {
+    console.log('[Cardápio] Tentando por slug no path:', match[1]);
+    try {
+      const res  = await fetch(`/api/tenant-info?slug=${encodeURIComponent(match[1])}`);
+      const data = await res.json();
+      console.log('[Cardápio] Resposta tenant-info por path:', data);
+      if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
+    } catch(e) { console.error('[Cardápio] Erro ao buscar por path:', e); }
+  }
+
+  // 4. Fallback: primeiro tenant ativo (single-tenant)
+  console.log('[Cardápio] Tentando fallback: primeiro tenant ativo...');
+  try {
+    const res  = await fetch('/api/tenant-info?default=1');
+    const data = await res.json();
+    console.log('[Cardápio] Resposta fallback tenant:', data);
+    if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
+    console.warn('[Cardápio] Nenhum tenant ativo encontrado no fallback. Resposta:', data);
+  } catch(e) { console.error('[Cardápio] Erro no fallback:', e); }
+
+  console.error('[Cardápio] FALHOU: não foi possível identificar nenhum tenant.');
   return false;
 }
 
@@ -1861,10 +1898,12 @@ function sbTenant() {
 }
 
 async function init() {
+  console.log('%c[Cardápio] ══ init() iniciado ══', 'color:#22c55e;font-weight:bold;font-size:14px');
   renderMenuWrap('<div class="loading-wrap"><div class="spinner"></div><span>Carregando cardápio…</span></div>');
   try {
     // Resolve tenant pelo slug na URL
     const tenantOk = await resolveTenant();
+    console.log('[Cardápio] resolveTenant resultado → tenantOk:', tenantOk, '| _tenantId:', _tenantId);
     if (!tenantOk && !_tenantId) {
       renderMenuWrap('<div class="loading-wrap"><div style="font-size:32px">🍽️</div><span>Restaurante não encontrado.<br>Verifique o link.</span></div>');
       return;
@@ -1885,6 +1924,16 @@ async function init() {
     allItems  = (itemsRes.data  || []).map(x => ({...x, id: Number(x.id)}));
     allCats   = (catsRes.data   || []).map(x => ({...x, id: Number(x.id)}));
     allCupons = (cuponsRes.data || []);
+
+    console.log('[Cardápio] Dados carregados →',
+      'itens:', allItems.length,
+      '| categorias:', allCats.length,
+      '| cupons:', allCupons.length
+    );
+    console.log('[Cardápio] itemsRes erro:', itemsRes.error);
+    console.log('[Cardápio] catsRes erro:', catsRes.error);
+    console.log('[Cardápio] configRes erro:', configRes.error, '| data:', configRes.data);
+    if (allItems.length === 0) console.warn('[Cardápio] ⚠️ Nenhum item retornado! Verifique o tenant_id e a tabela menu_items.');
 
     // Apply store config
     if (configRes.data) {
@@ -1907,7 +1956,8 @@ async function init() {
     subscribeStoreStatus();
     loadProfile();
   } catch(e) {
-    console.error(e);
+    console.error('[Cardápio] ❌ ERRO no init():', e);
+    console.error('[Cardápio] Stack:', e.stack);
     renderMenuWrap('<div class="loading-wrap"><div style="font-size:32px">⚠️</div><span>Erro ao carregar cardápio. Tente novamente.</span></div>');
   }
 }
