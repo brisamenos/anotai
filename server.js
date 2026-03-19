@@ -866,7 +866,6 @@ async function checarAniv() {
 
 // ── Checker pedidos (por tenant) ─────────────────────
 const processed = new Set()
-const SERVER_START = Date.now() // Marca o momento de início do servidor
 
 async function checarPedidos() {
   try {
@@ -877,29 +876,11 @@ async function checarPedidos() {
       if (!cfg) continue
       const auto   = jsonParse(cfg.evo_automacoes)||{}
       const inst   = cfg.evo_instance || EVO_INST
-      const pedidos = db.prepare(`SELECT * FROM orders WHERE tenant_id=? AND phone IS NOT NULL AND created_at>=? AND status IN ('producao','pronto','cancelado','finalizado') ORDER BY id DESC LIMIT 50`).all(t.id,desde)
-      // Filtra pedidos mais antigos que o início do servidor para evitar reenvio após restart
-      .filter(o => new Date(o.created_at).getTime() >= (SERVER_START - 60000))
+      // Scheduler apenas registra pedidos no processed para evitar reenvio.
+      // O envio real de WA é feito pelo endpoint /api/order-status em tempo real.
+      const pedidos = db.prepare(`SELECT id, status FROM orders WHERE tenant_id=? AND phone IS NOT NULL AND created_at>=? AND status IN ('producao','pronto','cancelado','finalizado') ORDER BY id DESC LIMIT 100`).all(t.id,desde)
       for (const o of pedidos) {
-        const chave=`${o.id}_${o.status}`
-        if (processed.has(chave)) continue
-        processed.add(chave)
-        const tipo={producao:'confirmado',pronto:'pronto',cancelado:'cancelado',finalizado:'avaliacao'}[o.status]
-        if (!tipo) continue
-        const ct=auto[tipo]||{}; if(!ct.on) continue
-        const items=(() => { try{return(JSON.parse(o.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}catch(e){return''} })()
-        const vars={ nome:o.client||'Cliente', id:String(o.id), itens:items,
-          total:(parseFloat(o.total)||0).toFixed(2).replace('.',','), endereco:o.addr||'', mesa:String(o.mesa_num||''),
-          tipo_entrega:(o.addr||'').includes('Mesa')?'🪑 Mesa':(o.addr||'').includes('alcão')?'🏪 Balcão':'🛵 Entrega' }
-        await sendWA(o.phone, fillVars(ct.msg, vars), inst); await sleep(800)
-        if (o.status==='finalizado') {
-          const cp=auto['pontos']||{}; if(cp.on&&o.phone){
-            await sleep(5000)
-            const fid=db.prepare("SELECT * FROM fidelidade WHERE tenant_id=? AND (phone=? OR name=?) LIMIT 1").get(t.id,o.phone,o.client)
-            if(fid){const pg=Math.floor((parseFloat(o.total)||0)*10);const pt=(fid.pts||0)+pg;const pf=Math.max(0,(fid.max_pts||500)-pt)
-              await sendWA(o.phone,fillVars(cp.msg,{nome:fid.name||o.client,pontos_ganhos:String(pg),pontos_total:String(pt),pontos_faltam:String(pf)}),inst)}
-          }
-        }
+        processed.add(`${o.id}_${o.status}`)
       }
     }
     if(processed.size>2000){const a=[...processed];a.slice(0,1000).forEach(k=>processed.delete(k))}
