@@ -251,6 +251,11 @@ input,textarea{font-family:inherit}
 .wa-toggle-row.on .wa-toggle-switch{background:#22c55e;border-color:#22c55e}
 .wa-toggle-row.on .wa-toggle-switch::after{left:20px;background:#fff}
 
+/* Botão WhatsApp tela de sucesso */
+.success-wa-btn-hidden { display: none !important; }
+#success-wa-btn        { display: none; }
+#success-wa-btn.show   { display: flex !important; }
+
 /* ═══════════════════════════════════════
    ITEM MODAL
 ═══════════════════════════════════════ */
@@ -860,8 +865,8 @@ input,textarea{font-family:inherit}
         </button>
 
         <!-- WhatsApp — sempre visível se houver número configurado -->
-        <a id="success-wa-btn" target="_blank" href="#" style="
-          display:none;width:100%;text-decoration:none;
+        <a id="success-wa-btn" target="_blank" href="#" class="success-wa-btn-hidden" style="
+          width:100%;text-decoration:none;
           background:linear-gradient(135deg,#25d366,#128c7e);color:#fff;
           border-radius:14px;padding:15px 20px;margin-bottom:10px;
           font-size:14px;font-weight:700;
@@ -2263,12 +2268,13 @@ async function submitOrder() {
     const waBtnEl  = document.getElementById('success-wa-btn');
     const waLblEl  = document.getElementById('success-wa-label');
     if (waBtnEl) {
+      waBtnEl.classList.remove('success-wa-btn-hidden');
       if (waLink) {
-        waBtnEl.style.display = 'flex';
+        waBtnEl.classList.add('show');
         waBtnEl.href = waLink;
         if (waLblEl) waLblEl.textContent = `Acompanhar pedido ${numFormatado} pelo WhatsApp`;
       } else {
-        waBtnEl.style.display = 'none';
+        waBtnEl.classList.remove('show');
       }
     }
 
@@ -2297,6 +2303,9 @@ function resetCart() {
   document.getElementById('cart-items').innerHTML = '';
   const inv = document.getElementById('invite-signup');
   if (inv) inv.style.display = 'none';
+  // Reseta botão WA para próximo pedido
+  const waBtn = document.getElementById('success-wa-btn');
+  if (waBtn) { waBtn.classList.remove('show'); waBtn.href = '#'; }
   renderTotals();
   closeCart();
 }
