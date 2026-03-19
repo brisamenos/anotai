@@ -1411,59 +1411,46 @@ const MODELOS_CARDAPIO = {
         label: 'Tamanhos',
         name: 'tamanhos',
         itens: [
-          { name: 'Açaí 300ml',  emoji: '', price: 12.00, description: 'Açaí 300ml — base pura, monte do seu jeito' },
-          { name: 'Açaí 400ml',  emoji: '', price: 15.00, description: 'Açaí 400ml — tamanho ideal para um lanche' },
-          { name: 'Açaí 500ml',  emoji: '', price: 18.00, description: 'Açaí 500ml — generoso e bem servido' },
-          { name: 'Açaí 700ml',  emoji: '', price: 23.00, description: 'Açaí 700ml — o favorito da galera' },
-          { name: 'Açaí 1L',     emoji: '', price: 30.00, description: 'Açaí 1 litro — para compartilhar' },
-          { name: 'Tigela P',    emoji: '', price: 14.00, description: 'Tigela pequena de açaí' },
-          { name: 'Tigela M',    emoji: '', price: 20.00, description: 'Tigela média de açaí' },
-          { name: 'Tigela G',    emoji: '', price: 27.00, description: 'Tigela grande de açaí' },
-        ]
-      },
-      {
-        label: 'Complementos',
-        name: 'complementos',
-        itens: [
-          { name: 'Granola',         emoji: '', price: 0.00, description: 'Granola crocante' },
-          { name: 'Leite em Pó',     emoji: '', price: 0.00, description: 'Leite em pó' },
-          { name: 'Paçoca',          emoji: '', price: 0.00, description: 'Paçoca triturada' },
-          { name: 'Amendoim',        emoji: '', price: 0.00, description: 'Amendoim torrado' },
-          { name: 'Aveia',           emoji: '', price: 0.00, description: 'Aveia em flocos' },
-          { name: 'Sucrilhos',       emoji: '', price: 0.00, description: 'Sucrilhos crocantes' },
-          { name: 'Coco Ralado',     emoji: '', price: 0.00, description: 'Coco ralado' },
-          { name: 'Confeito M&M',    emoji: '', price: 0.00, description: 'Confeito colorido' },
-          { name: 'Granulado',       emoji: '', price: 0.00, description: 'Granulado de chocolate' },
-        ]
-      },
-      {
-        label: 'Coberturas',
-        name: 'coberturas',
-        itens: [
-          { name: 'Mel',             emoji: '', price: 0.00, description: 'Mel puro' },
-          { name: 'Leite Condensado',emoji: '', price: 0.00, description: 'Leite condensado' },
-          { name: 'Nutella',         emoji: '', price: 3.00, description: 'Nutella — adicional' },
-          { name: 'Calda de Morango',emoji: '', price: 0.00, description: 'Calda de morango' },
-          { name: 'Calda de Chocolate', emoji: '', price: 0.00, description: 'Calda de chocolate' },
-        ]
-      },
-      {
-        label: 'Frutas',
-        name: 'frutas',
-        itens: [
-          { name: 'Morango',    emoji: '', price: 0.00, description: 'Morango fresco' },
-          { name: 'Banana',     emoji: '', price: 0.00, description: 'Banana fatiada' },
-          { name: 'Kiwi',       emoji: '', price: 0.00, description: 'Kiwi fatiado' },
-          { name: 'Uva',        emoji: '', price: 0.00, description: 'Uva sem semente' },
-        ]
-      },
-      {
-        label: 'Adicionais',
-        name: 'adicionais',
-        itens: [
-          { name: 'Sorvete extra',    emoji: '', price: 4.00, description: 'Bola de sorvete extra' },
-          { name: 'Chantilly',        emoji: '', price: 2.00, description: 'Chantilly' },
-          { name: 'Proteína em pó',   emoji: '', price: 5.00, description: 'Scoop de proteína' },
+          {
+            name: 'Açaí 300ml', emoji: '', price: 12.00,
+            description: 'Monte seu açaí do seu jeito — escolha os complementos abaixo',
+            ingredients: ['Granola','Leite em Pó','Paçoca','Amendoim','Aveia','Sucrilhos','Coco Ralado','Confeito','Granulado','Mel','Leite Condensado','Nutella','Calda de Morango','Calda de Chocolate','Morango','Banana','Kiwi','Uva','Chantilly']
+          },
+          {
+            name: 'Açaí 400ml', emoji: '', price: 15.00,
+            description: 'Monte seu açaí do seu jeito — escolha os complementos abaixo',
+            ingredients: ['Granola','Leite em Pó','Paçoca','Amendoim','Aveia','Sucrilhos','Coco Ralado','Confeito','Granulado','Mel','Leite Condensado','Nutella','Calda de Morango','Calda de Chocolate','Morango','Banana','Kiwi','Uva','Chantilly']
+          },
+          {
+            name: 'Açaí 500ml', emoji: '', price: 18.00,
+            description: 'Monte seu açaí do seu jeito — escolha os complementos abaixo',
+            ingredients: ['Granola','Leite em Pó','Paçoca','Amendoim','Aveia','Sucrilhos','Coco Ralado','Confeito','Granulado','Mel','Leite Condensado','Nutella','Calda de Morango','Calda de Chocolate','Morango','Banana','Kiwi','Uva','Chantilly']
+          },
+          {
+            name: 'Açaí 700ml', emoji: '', price: 23.00,
+            description: 'Monte seu açaí do seu jeito — escolha os complementos abaixo',
+            ingredients: ['Granola','Leite em Pó','Paçoca','Amendoim','Aveia','Sucrilhos','Coco Ralado','Confeito','Granulado','Mel','Leite Condensado','Nutella','Calda de Morango','Calda de Chocolate','Morango','Banana','Kiwi','Uva','Chantilly']
+          },
+          {
+            name: 'Açaí 1 Litro', emoji: '', price: 30.00,
+            description: 'Monte seu açaí do seu jeito — escolha os complementos abaixo',
+            ingredients: ['Granola','Leite em Pó','Paçoca','Amendoim','Aveia','Sucrilhos','Coco Ralado','Confeito','Granulado','Mel','Leite Condensado','Nutella','Calda de Morango','Calda de Chocolate','Morango','Banana','Kiwi','Uva','Chantilly']
+          },
+          {
+            name: 'Tigela P', emoji: '', price: 14.00,
+            description: 'Monte seu açaí do seu jeito — escolha os complementos abaixo',
+            ingredients: ['Granola','Leite em Pó','Paçoca','Amendoim','Aveia','Sucrilhos','Coco Ralado','Confeito','Granulado','Mel','Leite Condensado','Nutella','Calda de Morango','Calda de Chocolate','Morango','Banana','Kiwi','Uva','Chantilly']
+          },
+          {
+            name: 'Tigela M', emoji: '', price: 20.00,
+            description: 'Monte seu açaí do seu jeito — escolha os complementos abaixo',
+            ingredients: ['Granola','Leite em Pó','Paçoca','Amendoim','Aveia','Sucrilhos','Coco Ralado','Confeito','Granulado','Mel','Leite Condensado','Nutella','Calda de Morango','Calda de Chocolate','Morango','Banana','Kiwi','Uva','Chantilly']
+          },
+          {
+            name: 'Tigela G', emoji: '', price: 27.00,
+            description: 'Monte seu açaí do seu jeito — escolha os complementos abaixo',
+            ingredients: ['Granola','Leite em Pó','Paçoca','Amendoim','Aveia','Sucrilhos','Coco Ralado','Confeito','Granulado','Mel','Leite Condensado','Nutella','Calda de Morango','Calda de Chocolate','Morango','Banana','Kiwi','Uva','Chantilly']
+          },
         ]
       },
     ]
