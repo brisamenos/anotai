@@ -5170,7 +5170,12 @@ async function loadCardapioPublico() {
 
   // Horários de funcionamento
   let horarios = {};
-  try { horarios = data.horarios_config ? JSON.parse(data.horarios_config) : {}; } catch(e) {}
+  try {
+    const hc = data.horarios_config;
+    horarios = hc
+      ? (typeof hc === 'string' ? JSON.parse(hc) : hc)
+      : {};
+  } catch(e) { horarios = {}; }
   cpRenderHorarios(horarios);
 
   const cor = data.store_cor || '#3b82f6';
