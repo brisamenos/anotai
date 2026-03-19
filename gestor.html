@@ -2018,9 +2018,22 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
     <div style="font-size:13px;color:var(--muted);margin-bottom:20px">Escolha o modelo do seu negócio e o cardápio será criado automaticamente. Você pode editar tudo depois.</div>
 
     <!-- Aviso -->
-    <div id="modelos-aviso" style="display:none;padding:10px 14px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);border-radius:10px;font-size:12.5px;color:var(--muted);margin-bottom:16px">
-      ⚠️ Isso vai <strong>adicionar</strong> as categorias e itens do modelo ao seu cardápio atual. Itens existentes não serão removidos.
+    <div id="modelos-aviso" style="display:none;padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;font-size:12.5px;margin-bottom:16px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <div id="toggle-limpar-cardapio" onclick="this.classList.toggle('on')" style="width:36px;height:20px;border-radius:99px;background:var(--surface);border:1.5px solid var(--border);flex-shrink:0;position:relative;transition:all .2s;cursor:pointer">
+          <div style="position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--muted);transition:all .2s"></div>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:12.5px;color:var(--text)">Substituir cardápio atual</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:1px">Remove todas as categorias e itens existentes antes de aplicar</div>
+        </div>
+      </label>
     </div>
+
+    <style>
+      #toggle-limpar-cardapio.on { background: var(--danger) !important; border-color: var(--danger) !important; }
+      #toggle-limpar-cardapio.on > div { left: 20px !important; background: #fff !important; }
+    </style>
 
     <!-- Grid de modelos -->
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px" id="modelos-grid">
