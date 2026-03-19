@@ -834,51 +834,27 @@ function triggerImageUpload(itemId, itemName) {
 
 // ── createOrder ──────────────────────────────────────
 
-// ══════════════════════════════════════════════════════
-//  MUDANÇA DE STATUS — central com notificação WA imediata
-// ══════════════════════════════════════════════════════
-async function atualizarStatusPedido(id, newStatus) {
-  const tid = _sessao?.tenant_id;
-  if (!tid) return false;
-  try {
-    const res = await fetch('/api/order-status', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order_id: id, new_status: newStatus, tenant_id: tid })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || res.statusText);
-    // Atualiza estado local
-    const o = ordersKanban.find(x => x.id === id);
-    if (o) o.status = newStatus;
-    return true;
-  } catch(e) {
-    sbToast('err', 'Erro ao atualizar pedido: ' + e.message);
-    return false;
-  }
-}
-
 // ── advanceOrderById ─────────────────────────────────
 async function advanceOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
   if (!o) return;
   const newStatus = o.status === 'analise' ? 'producao' : 'pronto';
-  const ok = await atualizarStatusPedido(id, newStatus);
-  if (ok) {
-    playOrderSound();
-    renderKanban();
-    sbToast('ok', `Pedido #${id} avançado! 📲 Cliente notificado.`);
-  }
+  const { error } = await sb.from('orders').update({status: newStatus}).eq('id', id);
+  if (!error) o.status = newStatus;
+  // WhatsApp é enviado pelo server.js automaticamente ao detectar mudança de status
+  playOrderSound();
+  renderKanban();
+  sbToast('ok',`Pedido #${id} avançado!`);
 }
 
 // ── cancelOrderById ──────────────────────────────────
 async function cancelOrderById(id) {
-  const ok = await atualizarStatusPedido(id, 'cancelado');
-  if (ok) {
-    ordersKanban = ordersKanban.filter(x => x.id !== id);
-    renderKanban();
-    showToast(_ICON_TRS, `Pedido #${id} cancelado. 📲 Cliente notificado.`);
-  }
+  const o = ordersKanban.find(x => x.id === id);
+  const { error } = await sb.from('orders').update({status:'cancelado'}).eq('id', id);
+  if (!error) ordersKanban = ordersKanban.filter(x => x.id !== id);
+  // WhatsApp é enviado pelo server.js automaticamente
+  renderKanban();
+  showToast(_ICON_TRS,`Pedido #${id} cancelado`);
 }
 
 // ── finishOrderById ──────────────────────────────────
@@ -886,18 +862,19 @@ async function finishOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
   const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   sbLoading(true);
-  const ok = await atualizarStatusPedido(id, 'finalizado');
-  if (ok && o) {
-    await sb.from('movimentos').insert({
+  await Promise.all([
+    sb.from('orders').update({status:'finalizado'}).eq('id', id),
+    o ? sb.from('movimentos').insert({
       description: `Pedido #${o.id} – ${o.client}`,
       tipo: 'entrada', val: o.total + o.taxa, pag: o.pag || 'PIX', time
-    });
-    if (o) movimentos.push({ desc:`Pedido #${o.id} – ${o.client}`, tipo:'entrada', val:o.total+o.taxa, pag:o.pag||'PIX', time });
-    ordersKanban = ordersKanban.filter(x => x.id !== id);
-    renderKanban();
-    sbToast('ok', `Pedido #${id} finalizado! 📲 Cliente notificado.`);
-  }
+    }) : Promise.resolve()
+  ]);
   sbLoading(false);
+  if (o) movimentos.push({ desc:`Pedido #${o.id} – ${o.client}`, tipo:'entrada', val:o.total+o.taxa, pag:o.pag||'PIX', time });
+  // WhatsApp (avaliação + pontos) é enviado pelo server.js automaticamente
+  ordersKanban = ordersKanban.filter(x => x.id !== id);
+  renderKanban();
+  sbToast('ok',`Pedido #${id} finalizado!`);
 }
 
 // ── addMovimento (quick register) ────────────────────
@@ -992,7 +969,12 @@ function nav(id){
   if(id==='potencializador') renderPotencializador();
   if(id==='pdv') renderPDV();
   if(id==='pdv-balcao') renderPDVBalcao();
-  if(id==='robo') { evoCarregarInstancia().then(()=>{ evoCheckStatus(); }); initChat(); }
+  if(id==='robo') {
+    evoCarregarInstancia().then(() => {
+      evoCheckStatus();   // vai atualizar QR/conectado porque naAbaRobo=true agora
+    });
+    initChat();
+  }
   if(id==='qrcode') renderQR();
   if(id==='cupom') renderCupons();
   if(id==='fidelidade') renderFidelidade();
@@ -1086,11 +1068,8 @@ function renderKanban(){
       e.preventDefault();
       const id=parseInt(e.dataTransfer.getData('orderId'));
       const o=ordersKanban.find(x=>x.id===id);
-      if(!o || o.status===st) return;
-      // Salva no banco e envia WA
-      atualizarStatusPedido(id, st).then(ok => {
-        if(ok){ renderKanban(); sbToast('ok',`Pedido #${id} → ${st}. 📲 Cliente notificado.`); }
-      });
+      if(o) o.status=st;
+      renderKanban();
     });
   });
   document.getElementById('pedidos-badge').textContent=ordersKanban.filter(o=>o.status==='analise').length||'';
@@ -2173,18 +2152,20 @@ function renderMesaCard(t, orders) {
 }
 
 async function mesaAdvanceOrder(id) {
-  const ok = await atualizarStatusPedido(id, 'producao');
-  if (ok) {
+  const { error } = await sb.from('orders').update({ status: 'producao' }).eq('id', id);
+  if (!error) {
+    const o = ordersKanban.find(x => x.id === id);
+    if (o) o.status = 'producao';
+    // Atualiza cache local imediatamente
     const co = mesaOrdersCache.find(x => x.id === id);
     if (co) co.status = 'producao';
     _renderMesaPageFromCache();
-    sbToast('ok', `Pedido #${id} em preparo. 📲 Cliente notificado.`);
   } else sbToast('err', 'Erro ao atualizar pedido');
 }
 
 async function mesaServOrder(id) {
-  const ok = await atualizarStatusPedido(id, 'entregue');
-  if (ok) {
+  const { error } = await sb.from('orders').update({ status: 'entregue' }).eq('id', id);
+  if (!error) {
     ordersKanban = ordersKanban.filter(x => x.id !== id);
     mesaOrdersCache = mesaOrdersCache.filter(x => x.id !== id);
     renderKanban();
@@ -2195,12 +2176,12 @@ async function mesaServOrder(id) {
 
 async function mesaCancelOrder(id) {
   if (!confirm('Cancelar este pedido?')) return;
-  const ok = await atualizarStatusPedido(id, 'cancelado');
-  if (ok) {
+  const { error } = await sb.from('orders').update({ status: 'cancelado' }).eq('id', id);
+  if (!error) {
     ordersKanban = ordersKanban.filter(x => x.id !== id);
     mesaOrdersCache = mesaOrdersCache.filter(x => x.id !== id);
     _renderMesaPageFromCache();
-    sbToast('ok', `Pedido #${id} cancelado. 📲 Cliente notificado.`);
+    sbToast('ok', 'Pedido cancelado');
   } else sbToast('err', 'Erro ao cancelar');
 }
 
@@ -2678,23 +2659,24 @@ function _kdsUpdateTimers() {
 }
 
 async function kdsConfirm(id) {
-  const ok = await atualizarStatusPedido(id, 'producao');
-  if (ok) {
+  const { error } = await sb.from('orders').update({ status: 'producao' }).eq('id', id);
+  if (!error) {
     const o = ordersKanban.find(x => x.id === id);
     if (o) o.status = 'producao';
     const card = document.getElementById('kds-card-' + id);
     if (card) card.classList.remove('st-new');
     renderKDS();
-    sbToast('ok', `Pedido #${id} em preparo. 📲 Cliente notificado.`);
+    sbToast('ok', `Pedido #${id} em preparo`);
   }
 }
 
 async function kdsMarkPronto(id) {
-  const ok = await atualizarStatusPedido(id, 'pronto');
-  if (ok) {
+  const { error } = await sb.from('orders').update({ status: 'pronto' }).eq('id', id);
+  if (!error) {
     const o = ordersKanban.find(x => x.id === id);
     if (o) o.status = 'pronto';
     delete kdsTimers[id];
+    // Som de conclusão
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       [[660,0],[880,.1],[1100,.2]].forEach(([f,t]) => {
@@ -2707,19 +2689,19 @@ async function kdsMarkPronto(id) {
     } catch(e){}
     renderKDS();
     renderKanban();
-    sbToast('ok', `Pedido #${id} pronto! ✅ 📲 Cliente notificado.`);
+    sbToast('ok', `Pedido #${id} pronto! ✅`);
   }
 }
 
 async function kdsCancelOrder(id) {
   if (!confirm('Cancelar pedido #' + id + '?')) return;
-  const ok = await atualizarStatusPedido(id, 'cancelado');
-  if (ok) {
+  const { error } = await sb.from('orders').update({ status: 'cancelado' }).eq('id', id);
+  if (!error) {
     ordersKanban = ordersKanban.filter(x => x.id !== id);
     delete kdsTimers[id];
     renderKDS();
     renderKanban();
-    sbToast('ok', `Pedido #${id} cancelado. 📲 Cliente notificado.`);
+    sbToast('ok', `Pedido #${id} cancelado`);
   }
 }
 
@@ -4533,7 +4515,21 @@ async function deleteGarcom(id) {
 // ─────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────
-function initSidebarState() { loadSidebarState(); evoCarregarAutomacoesSalvas(); carregarWaServerUrl(); }
+function initSidebarState() {
+  loadSidebarState();
+  evoCarregarAutomacoesSalvas();
+  carregarWaServerUrl();
+  // Carrega instância salva e verifica conexão já no boot da página
+  // (não espera o usuário clicar na aba Robô)
+  evoCarregarInstancia().then(() => {
+    if (EVO.instance) evoCheckStatus();
+  });
+}
+
+// Polling de reconexão — mantém o badge do topnav atualizado a cada 30s
+setInterval(() => {
+  if (EVO.instance) evoCheckStatus();
+}, 30000);
 
 // ═══════════════════════════════════════
 // SERVIDOR DE AUTOMAÇÕES 24/7
@@ -4687,12 +4683,21 @@ async function evoCriarInstancia() {
 }
 
 async function evoCheckStatus() {
+  if (!EVO.instance) return;
   _evoSetStatus('loading','Verificando...');
   const r = await EVO.req('GET', `/instance/connectionState/${EVO.instance}`);
   if (!r.ok) { _evoSetStatus('disconnected','Desconectado'); return; }
   const state = r.data?.instance?.state || r.data?.state || 'close';
-  if (state==='open') { evoConnected=true; _evoSetStatus('connected','Conectado'); _evoShowConnected(r.data?.instance?.profileName||r.data?.me?.pushName||'WhatsApp'); }
-  else { evoConnected=false; _evoSetStatus('disconnected','Desconectado'); _evoShowQRPrompt(); }
+  const naAbaRobo = document.getElementById('page-robo')?.classList.contains('on');
+  if (state==='open') {
+    evoConnected=true;
+    _evoSetStatus('connected','Conectado');
+    if (naAbaRobo) _evoShowConnected(r.data?.instance?.profileName||r.data?.me?.pushName||'WhatsApp');
+  } else {
+    evoConnected=false;
+    _evoSetStatus('disconnected','Desconectado');
+    if (naAbaRobo) _evoShowQRPrompt();
+  }
 }
 
 async function evoConectar() {
