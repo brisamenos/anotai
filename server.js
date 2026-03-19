@@ -731,10 +731,10 @@ function handleTenantInfo(params) {
   const useDefault = params.get('default')
   if (!slug && !id && !useDefault) return { error: 'Informe slug ou id' }
   const t = slug
-    ? db.prepare("SELECT id,nome,slug FROM tenants WHERE slug=? AND ativo=1").get(slug)
+    ? db.prepare("SELECT id,nome,slug,plano FROM tenants WHERE slug=? AND ativo=1").get(slug)
     : id
-      ? db.prepare("SELECT id,nome,slug FROM tenants WHERE id=? AND ativo=1").get(id)
-      : db.prepare("SELECT id,nome,slug FROM tenants WHERE ativo=1 ORDER BY id ASC LIMIT 1").get()
+      ? db.prepare("SELECT id,nome,slug,plano FROM tenants WHERE id=? AND ativo=1").get(id)
+      : db.prepare("SELECT id,nome,slug,plano FROM tenants WHERE ativo=1 ORDER BY id ASC LIMIT 1").get()
   if (!t) return { error: 'Restaurante não encontrado' }
   // Inclui branding do cardápio público
   const cfg = db.prepare(`SELECT store_name,store_descricao,store_logo_url,store_banner_url,
