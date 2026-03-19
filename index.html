@@ -742,8 +742,19 @@ input,textarea{font-family:inherit}
 .troco-opt-txt{flex:1}
 .troco-opt-lbl{font-weight:700;font-size:14px;margin-bottom:2px}
 .troco-opt-sub{font-size:12px;color:var(--muted)}
-.troco-opt-check{width:20px;height:20px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;transition:all .18s}
-.troco-opt.on .troco-opt-check{background:var(--accent);border-color:var(--accent);color:#fff}
+.troco-opt-radio{
+  width:20px;height:20px;border-radius:50%;
+  border:2px solid var(--border);flex-shrink:0;
+  transition:all .18s;position:relative;
+}
+.troco-opt-radio.on{
+  background:var(--accent);border-color:var(--accent);
+}
+.troco-opt-radio.on::after{
+  content:'';position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  width:8px;height:8px;border-radius:50%;background:#fff;
+}
 .troco-valor-wrap{display:none;margin-bottom:16px}
 .troco-valor-wrap.show{display:block}
 .troco-valor-lbl{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px}
@@ -1148,33 +1159,33 @@ input,textarea{font-family:inherit}
   <div class="troco-sheet">
     <div class="troco-handle"></div>
     <div class="troco-title">💵 Precisa de troco?</div>
-    <div class="troco-sub">Pagamento em dinheiro — informe se precisar de troco para agilizar a entrega</div>
+    <div class="troco-sub">Pagamento em dinheiro — informe se precisar de troco</div>
 
     <div class="troco-opts">
-      <div class="troco-opt on" id="troco-opt-nao" onclick="trocoEscolha('nao')">
+      <div class="troco-opt on" id="troco-opt-nao" onclick="trocoEscolha(this,'nao')">
         <div class="troco-opt-icon">✅</div>
         <div class="troco-opt-txt">
           <div class="troco-opt-lbl">Não preciso de troco</div>
-          <div class="troco-opt-sub">Tenho o valor exato ou pagarei por aproximação</div>
+          <div class="troco-opt-sub">Tenho o valor exato</div>
         </div>
-        <div class="troco-opt-check">✓</div>
+        <div class="troco-opt-radio on" id="troco-radio-nao"></div>
       </div>
-      <div class="troco-opt" id="troco-opt-sim" onclick="trocoEscolha('sim')">
+      <div class="troco-opt" id="troco-opt-sim" onclick="trocoEscolha(this,'sim')">
         <div class="troco-opt-icon">💸</div>
         <div class="troco-opt-txt">
           <div class="troco-opt-lbl">Preciso de troco</div>
-          <div class="troco-opt-sub">Informe o valor que vai pagar</div>
+          <div class="troco-opt-sub">Informe o valor que vai pagar (opcional)</div>
         </div>
-        <div class="troco-opt-check"></div>
+        <div class="troco-opt-radio" id="troco-radio-sim"></div>
       </div>
     </div>
 
     <div class="troco-valor-wrap" id="troco-valor-wrap">
-      <div class="troco-valor-lbl">Troco para quanto? (R$)</div>
-      <input class="troco-valor-input" id="troco-valor-input" type="number" step="0.01" min="0" placeholder="Ex: 50,00" oninput="trocoValidar()">
+      <div class="troco-valor-lbl">Troco para quanto? <span style="font-weight:400;color:var(--muted)">(deixe em branco se não souber)</span></div>
+      <input class="troco-valor-input" id="troco-valor-input" type="number" step="0.50" min="0" placeholder="Ex: 50,00">
     </div>
 
-    <button class="troco-confirm" id="troco-confirm-btn" onclick="trocoConfirmar()">
+    <button class="troco-confirm" onclick="trocoConfirmar()">
       ✅ Confirmar Pedido
     </button>
   </div>
@@ -2310,20 +2321,18 @@ async function submitOrder() {
   await _doSubmitOrder(addr, null);
 }
 
-// ─── Estado do troco ─────────────────────────────────
+// ─── Troco ───────────────────────────────────────────
 let _pendingOrderAddr = '';
 let _trocoEscolha    = 'nao'; // 'nao' | 'sim'
 
 function openTrocoModal() {
   _trocoEscolha = 'nao';
-  // Reset visual
   document.getElementById('troco-opt-nao').classList.add('on');
-  document.getElementById('troco-opt-nao').querySelector('.troco-opt-check').textContent = '✓';
   document.getElementById('troco-opt-sim').classList.remove('on');
-  document.getElementById('troco-opt-sim').querySelector('.troco-opt-check').textContent = '';
+  document.getElementById('troco-radio-nao').classList.add('on');
+  document.getElementById('troco-radio-sim').classList.remove('on');
   document.getElementById('troco-valor-wrap').classList.remove('show');
-  const inp = document.getElementById('troco-valor-input');
-  if (inp) inp.value = '';
+  document.getElementById('troco-valor-input').value = '';
   document.getElementById('troco-overlay').classList.add('on');
 }
 
@@ -2331,29 +2340,22 @@ function closeTrocoModal() {
   document.getElementById('troco-overlay').classList.remove('on');
 }
 
-function trocoEscolha(tipo) {
+function trocoEscolha(el, tipo) {
   _trocoEscolha = tipo;
-  const nao = document.getElementById('troco-opt-nao');
-  const sim = document.getElementById('troco-opt-sim');
-  nao.classList.toggle('on', tipo === 'nao');
-  sim.classList.toggle('on', tipo === 'sim');
-  nao.querySelector('.troco-opt-check').textContent = tipo === 'nao' ? '✓' : '';
-  sim.querySelector('.troco-opt-check').textContent = tipo === 'sim' ? '✓' : '';
+  document.getElementById('troco-opt-nao').classList.toggle('on', tipo === 'nao');
+  document.getElementById('troco-opt-sim').classList.toggle('on', tipo === 'sim');
+  document.getElementById('troco-radio-nao').classList.toggle('on', tipo === 'nao');
+  document.getElementById('troco-radio-sim').classList.toggle('on', tipo === 'sim');
   document.getElementById('troco-valor-wrap').classList.toggle('show', tipo === 'sim');
-  if (tipo === 'sim') document.getElementById('troco-valor-input')?.focus();
-}
-
-function trocoValidar() {
-  // Nada bloqueante — só UX
+  if (tipo === 'sim') setTimeout(() => document.getElementById('troco-valor-input').focus(), 100);
 }
 
 async function trocoConfirmar() {
   let troco = null;
   if (_trocoEscolha === 'sim') {
-    const v = parseFloat(document.getElementById('troco-valor-input')?.value || '0');
-    if (!v || v <= 0) { toast('⚠️', 'Informe o valor para o troco'); return; }
-    if (v < grandTotal() + getTaxa()) { toast('⚠️', 'Valor menor que o total do pedido'); return; }
-    troco = v;
+    const v = parseFloat(document.getElementById('troco-valor-input').value || '0');
+    // Salva o valor se informado, ou -1 para indicar "precisa de troco, valor não informado"
+    troco = (v > 0) ? v : -1;
   }
   closeTrocoModal();
   await _doSubmitOrder(_pendingOrderAddr, troco);
