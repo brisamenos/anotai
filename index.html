@@ -288,6 +288,37 @@ input,textarea{font-family:inherit}
 .im-obs{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:11px 14px;color:var(--text);font-size:13px;outline:none;resize:none;margin-top:16px;transition:border-color .18s}
 .im-obs:focus{border-color:rgba(249,115,22,.4)}
 .im-obs::placeholder{color:var(--muted)}
+
+/* ── Ingredientes selecionáveis ── */
+.im-ingr-label{
+  font-size:11px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.5px;
+  margin:16px 0 8px;
+}
+.im-ingr-grid{
+  display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;
+}
+.im-ingr-chip{
+  display:flex;align-items:center;gap:6px;
+  padding:7px 12px;border-radius:99px;
+  background:var(--s2);border:1.5px solid var(--border);
+  font-size:12.5px;color:var(--muted2);cursor:pointer;
+  transition:all .15s;user-select:none;font-family:'DM Sans',sans-serif;
+}
+.im-ingr-chip:hover{border-color:rgba(249,115,22,.4);color:var(--text)}
+.im-ingr-chip.on{
+  background:rgba(249,115,22,.1);border-color:var(--accent);
+  color:var(--accent);font-weight:600;
+}
+.im-ingr-chip .chip-check{
+  width:14px;height:14px;border-radius:50%;
+  border:1.5px solid var(--border);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;
+}
+.im-ingr-chip.on .chip-check{
+  background:var(--accent);border-color:var(--accent);color:#fff;font-size:9px;
+}
 .im-add-btn{
   width:100%;padding:16px;border-radius:14px;border:none;margin-top:18px;
   background:var(--accent-g);color:#fff;font-size:15px;font-weight:700;
@@ -864,6 +895,12 @@ input,textarea{font-family:inherit}
         </div>
       </div>
       <textarea class="im-obs" id="im-obs" rows="2" placeholder="Observações (opcional): sem cebola, bem passado…"></textarea>
+
+      <!-- ── Ingredientes selecionáveis ── -->
+      <div id="im-ingr-section" style="display:none">
+        <div class="im-ingr-label">Escolha os complementos</div>
+        <div class="im-ingr-grid" id="im-ingr-grid"></div>
+      </div>
 
       <!-- ── PIZZA: metade a metade ── -->
       <div class="half-section" id="half-section" style="display:none">
@@ -1833,6 +1870,26 @@ function openItemModal(id) {
   document.getElementById('im-qty').textContent = _imQty;
   document.getElementById('im-obs').value = '';
   document.getElementById('im-add-btn').disabled = !_lojaAberta;
+
+  // ── Ingredientes selecionáveis ──
+  const ingrSection = document.getElementById('im-ingr-section');
+  const ingrGrid    = document.getElementById('im-ingr-grid');
+  const ingrs = Array.isArray(i.ingredients) ? i.ingredients.filter(Boolean) : [];
+  if (ingrs.length > 0) {
+    ingrGrid.innerHTML = ingrs.map(ingr => `
+      <div class="im-ingr-chip" onclick="toggleIngr(this)">
+        <div class="chip-check"></div>
+        <span>${ingr}</span>
+      </div>`).join('');
+    ingrSection.style.display = '';
+    // Quando há ingredientes, reduz o textarea a placeholder menor
+    document.getElementById('im-obs').placeholder = 'Observação adicional (opcional)';
+  } else {
+    ingrSection.style.display = 'none';
+    ingrGrid.innerHTML = '';
+    document.getElementById('im-obs').placeholder = 'Observações (opcional): sem cebola, bem passado…';
+  }
+
   document.getElementById('item-modal-bg').classList.add('on');
 
   // ── Pizza meio a meio ──
@@ -1958,11 +2015,31 @@ function imQty(d) {
   updateImAddBtn();
 }
 
+function toggleIngr(chip) {
+  chip.classList.toggle('on');
+  const check = chip.querySelector('.chip-check');
+  if (check) check.textContent = chip.classList.contains('on') ? '✓' : '';
+}
+
 function imConfirm() {
   const i   = allItems.find(x => x.id === _imItemId);
   if (!i) return;
   const obs = document.getElementById('im-obs').value.trim();
   const isPizza = isPizzaItem(i);
+
+  // Coleta ingredientes selecionados
+  const selectedIngrs = [...document.querySelectorAll('#im-ingr-grid .im-ingr-chip.on')]
+    .map(c => c.querySelector('span')?.textContent?.trim())
+    .filter(Boolean);
+
+  // Monta obs final: ingredientes + obs livre
+  let obsComIngr = '';
+  if (selectedIngrs.length > 0) {
+    obsComIngr = selectedIngrs.join(', ');
+    if (obs) obsComIngr += ' · ' + obs;
+  } else {
+    obsComIngr = obs;
+  }
 
   // Pizza meio a meio — precisa de 2ª metade
   if (isPizza && !_halfItem) {
@@ -1973,7 +2050,7 @@ function imConfirm() {
 
   let cartName  = i.name;
   let cartPrice = parseFloat(i.price);
-  let cartObs   = obs;
+  let cartObs   = obsComIngr;
   let cartEmoji = i.emoji;
   let cartImg   = i.image_url;
 
@@ -1981,7 +2058,7 @@ function imConfirm() {
     const avgPrice = (parseFloat(i.price) + parseFloat(_halfItem.price)) / 2;
     cartName  = `${i.name} / ${_halfItem.name}`;
     cartPrice = avgPrice;
-    cartObs   = obs ? `Meio a meio · ${obs}` : 'Meio a meio';
+    cartObs   = obsComIngr ? `Meio a meio · ${obsComIngr}` : 'Meio a meio';
     cartImg   = i.image_url || null;
   }
 
