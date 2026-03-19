@@ -5179,7 +5179,9 @@ async function loadCardapioPublico() {
   const cor = data.store_cor || '#3b82f6';
   const corEl = document.getElementById('cp-cor');
   if (corEl) corEl.value = cor;
-  cpPreviewCor(cor);
+  // Aplica cor no preview ao vivo (iframe) se existir elemento visual
+  const corSwatchEl = document.getElementById('cp-cor-swatch');
+  if (corSwatchEl) corSwatchEl.style.background = cor;
 
   if (data.store_logo_url) {
     _cpLogoUrl = data.store_logo_url;
@@ -5196,8 +5198,7 @@ async function loadCardapioPublico() {
     if (hero) hero.style.backgroundImage = `url(${_cpBannerUrl})`;
   }
 
-  cpAtualizarPreview();
-  cpMontarLink();
+  cpMontarLink(); // monta link e carrega iframe do cardápio real
 }
 
 async function cpMontarLink() {
