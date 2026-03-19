@@ -5099,7 +5099,7 @@ function cpRenderHorarios(horarios) {
     row.id = `cp-hr-row-${d.key}`;
     row.innerHTML = `
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;min-width:80px">
-        <div class="toggle-wrap" onclick="cpToggleDia('${d.key}',this)" style="width:34px;height:18px;border-radius:9px;background:${h.ativo?'var(--success)':'var(--surface)'};border:1px solid ${h.ativo?'var(--success)':'var(--border)'};position:relative;cursor:pointer;transition:all .2s;flex-shrink:0">
+        <div class="toggle-wrap" onclick="cpToggleDia('${d.key}',this)" data-ativo="${h.ativo}" style="width:34px;height:18px;border-radius:9px;background:${h.ativo?'var(--success)':'var(--surface)'};border:1px solid ${h.ativo?'var(--success)':'var(--border)'};position:relative;cursor:pointer;transition:all .2s;flex-shrink:0">
           <div style="position:absolute;top:2px;left:${h.ativo?'16px':'2px'};width:12px;height:12px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>
         </div>
         <span style="font-size:12px;font-weight:600;color:${h.ativo?'var(--text)':'var(--muted)'}" id="cp-hr-label-${d.key}">${d.label}</span>
@@ -5124,8 +5124,9 @@ function cpToggleDia(key, toggleEl) {
   const fechEl   = document.getElementById(`cp-hr-fechado-${key}`);
   const labelEl  = document.getElementById(`cp-hr-label-${key}`);
   const knob     = toggleEl.querySelector('div');
-  const isOn     = toggleEl.dataset.on !== 'false' && toggleEl.style.background.includes('success') || toggleEl.style.background === 'var(--success)';
+  const isOn     = toggleEl.dataset.ativo === 'true';
   const nowOn    = !isOn;
+  toggleEl.dataset.ativo = String(nowOn);
   toggleEl.style.background = nowOn ? 'var(--success)' : 'var(--surface)';
   toggleEl.style.borderColor = nowOn ? 'var(--success)' : 'var(--border)';
   if (knob) knob.style.left = nowOn ? '16px' : '2px';
@@ -5138,7 +5139,7 @@ function cpGetHorarios() {
   const out = {};
   for (const d of _CP_DIAS) {
     const toggleEl = document.querySelector(`#cp-hr-row-${d.key} .toggle-wrap`);
-    const ativo    = toggleEl ? toggleEl.style.background === 'var(--success)' || toggleEl.style.background.includes('success') : false;
+    const ativo    = toggleEl ? toggleEl.dataset.ativo === 'true' : false;
     out[d.key] = {
       ativo,
       abertura:    document.getElementById(`cp-hr-ab-${d.key}`)?.value  || '11:00',
