@@ -1096,6 +1096,25 @@ const server = http.createServer(async (req,res) => {
   }
 
   // REST API genérico ── /rest/v1/:table  e  /api/:table
+  // ── /api/tenant-slug — retorna slug do tenant logado ─────
+  if (req.method === 'GET' && upath === '/api/tenant-slug') {
+    const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return }
+    const row = db.prepare('SELECT slug FROM tenants WHERE id=?').get(tid)
+    send(res, 200, { slug: row?.slug || '' })
+    return
+  }
+
+  // ── /api/tenant-info-gestor — retorna dados do plano ──────
+  if (req.method === 'GET' && upath === '/api/tenant-info-gestor') {
+    const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return }
+    const row = db.prepare('SELECT id, nome, slug, plano, ativo, expires_at FROM tenants WHERE id=?').get(tid)
+    if (!row) { send(res, 404, { error: 'Tenant não encontrado' }); return }
+    send(res, 200, row)
+    return
+  }
+
   // Exclui rotas especiais /api/evo, /api/backup, /api/restore, /api/ia-*, /api/rastreio-*
   const _isSpecialApi = upath.startsWith('/api/evo') || upath.startsWith('/api/backup') ||
     upath.startsWith('/api/restore') || upath.startsWith('/api/ia-') || upath.startsWith('/api/rastreio') ||
