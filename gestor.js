@@ -1,3 +1,4 @@
+
 // ═══════════════════════════════════════════════════════
 // SUPABASE — CONFIGURAÇÃO E INTEGRAÇÃO
 // ═══════════════════════════════════════════════════════
@@ -184,7 +185,8 @@ async function loadAllData(silent = false) {
     }));
     if (mesasRes.data?.length)    tables        = mesasRes.data.map(t => ({
       id: t.id, num: t.num, status: t.status, guests: t.guests||0,
-      total: t.total||0, opened_at: t.opened_at||null, updated_at: t.updated_at||null
+      total: parseFloat(t.total)||0, pag_forma: t.pag_forma||null,
+      opened_at: t.opened_at||null, updated_at: t.updated_at||null
     }));
     if (estoqueRes.data?.length)  estoqueItems  = estoqueRes.data.map(e => ({
       id:e.id, name:e.name, unit:e.unit||'un', qty:parseFloat(e.qty)||0,
@@ -475,7 +477,8 @@ function subscribeOrders() {
         if (data) {
           tables = data.map(t => ({
             id: t.id, num: t.num, status: t.status, guests: t.guests||0,
-            total: t.total||0, opened_at: t.opened_at||null, updated_at: t.updated_at||null
+            total: parseFloat(t.total)||0, pag_forma: t.pag_forma||null,
+            opened_at: t.opened_at||null, updated_at: t.updated_at||null
           }));
           _renderMesaPageFromCache(); renderQR();
         }
@@ -2083,11 +2086,16 @@ function renderMesaCard(t, orders) {
       }).join('')
     : `<div style="color:var(--muted);font-size:12.5px;text-align:center;padding:14px 0">Nenhum pedido ativo</div>`;
 
-  // Se mesa está waiting, usa t.total (gravado no fecharMesa com o valor da sessão)
+  // Se mesa está waiting, usa t.total gravado pelo garçom/fecharMesa
   // Se mesa está busy, usa total do cache atual
-  const displayTotal = isWaiting && t.total
-    ? parseFloat(t.total.replace('R$ ','').replace(',','.')) || total
-    : total;
+  let displayTotal = total; // padrão: soma do cache
+  if (isWaiting && t.total) {
+    // total pode vir como número (novo) ou string 'R$ 99,90' (legado)
+    const raw = typeof t.total === 'string'
+      ? parseFloat(t.total.replace('R$','').replace(',','.').trim())
+      : parseFloat(t.total);
+    if (!isNaN(raw) && raw > 0) displayTotal = raw;
+  }
 
   const actionBtn = isWaiting
     ? `<button onclick="openRegistrarPagamento(${t.num}, ${displayTotal.toFixed(2)})" style="width:100%;margin-top:4px;padding:11px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">
@@ -4214,15 +4222,14 @@ async function fecharMesa(num) {
     // 2. Marca a mesa como aguardando pagamento, gravando o total da sessão
     const { error: mesaErr } = await sb.from('mesas').update({
       status: 'waiting',
-      total: 'R$ ' + sessionTotal.toFixed(2).replace('.', ','),
+      total: sessionTotal,
       updated_at: new Date().toISOString()
-      // opened_at não muda — sessão continua sendo a mesma até liberar
     }).eq('num', numInt);
     if (mesaErr) throw mesaErr;
 
     // Atualiza estado local
     t.status = 'waiting';
-    t.total = 'R$ ' + sessionTotal.toFixed(2).replace('.', ',');
+    t.total = sessionTotal;
     ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== numInt);
     mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== numInt);
     renderKanban();
@@ -4257,10 +4264,12 @@ function openRegistrarPagamento(num, totalJaCalculado) {
   document.getElementById('modal-pag-mesa-title').textContent = `💰 Registrar Pagamento — Mesa ${num}`;
   document.getElementById('modal-pag-total').textContent = 'R$ ' + totalVal.toFixed(2).replace('.',',');
   document.getElementById('modal-pag-mesa-num').value = num;
-  if (t.pag_forma) {
+  // Pré-seleciona forma de pagamento se garçom já informou
+  const pagForma = t.pag_forma || t.pag_forma;
+  if (pagForma) {
     const sel = document.getElementById('modal-pag-forma');
-    for (let i=0;i<sel.options.length;i++) {
-      if (sel.options[i].value === t.pag_forma) { sel.selectedIndex=i; break; }
+    if (sel) for (let i=0;i<sel.options.length;i++) {
+      if (sel.options[i].value === pagForma) { sel.selectedIndex=i; break; }
     }
   }
   openModal('modal-pag-mesa');

@@ -1353,10 +1353,9 @@ async function confirmarFinalizarMesa() {
     // 2. Marca mesa como aguardando pagamento
     await sb.from('mesas').update({
       status: 'waiting',
-      total: 'R$ ' + total.toFixed(2).replace('.',','),
+      total: total,
       pag_forma: finalizarPay,
       updated_at: new Date().toISOString()
-      // opened_at mantém — sessão ainda ativa até gestor confirmar pagamento
     }).eq('num', finalizarMesaNum);
 
     closeFinalizarMesa();

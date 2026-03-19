@@ -167,6 +167,7 @@ db.exec(`
     tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     num INTEGER NOT NULL, status TEXT DEFAULT 'free',
     guests INTEGER DEFAULT 0, opened_at TEXT,
+    total REAL DEFAULT 0, pag_forma TEXT,
     updated_at TEXT DEFAULT (datetime('now')),
     UNIQUE(tenant_id, num)
   );
@@ -285,6 +286,14 @@ const MIGRATIONS = [
     version: 6,
     description: 'Adiciona gestor_tema em store_config',
     up: `ALTER TABLE store_config ADD COLUMN gestor_tema TEXT`
+  },
+  {
+    version: 7,
+    description: 'Adiciona total e pag_forma em mesas',
+    up: [
+      `ALTER TABLE mesas ADD COLUMN total REAL DEFAULT 0`,
+      `ALTER TABLE mesas ADD COLUMN pag_forma TEXT`
+    ]
   },
 ]
 
@@ -411,7 +420,7 @@ const TABLE_COLS = {
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
-  mesas:        ['id','tenant_id','num','status','guests','opened_at','updated_at'],
+  mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
   orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','status','mesa_num','garcom_id','garcom_nome','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
