@@ -1784,14 +1784,16 @@ async function resolveTenant() {
   const slug = p.get('slug') || p.get('t');
   const tid  = p.get('tenant');
 
-  // Tenta por ID ou slug na URL primeiro
+  // 1. Por ID (?tenant=123)
   if (tid) {
     try {
-      const res  = await fetch(`/api/tenant-info?id=${tid}`);
+      const res  = await fetch(`/api/tenant-info?id=${encodeURIComponent(tid)}`);
       const data = await res.json();
       if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
     } catch(e) {}
   }
+
+  // 2. Por slug na query string (?slug=xxx ou ?t=xxx)
   if (slug) {
     try {
       const res  = await fetch(`/api/tenant-info?slug=${encodeURIComponent(slug)}`);
@@ -1800,16 +1802,26 @@ async function resolveTenant() {
     } catch(e) {}
   }
 
-  // Fallback automático: pega o primeiro tenant ativo do banco
+  // 3. Slug no path (/nome-do-restaurante/)
+  if (!slug && !tid) {
+    const match = window.location.pathname.match(/\/([a-z0-9][a-z0-9-]{1,})\/?$/);
+    if (match && match[1] !== 'index.html' && match[1] !== 'cardapio') {
+      try {
+        const res  = await fetch(`/api/tenant-info?slug=${encodeURIComponent(match[1])}`);
+        const data = await res.json();
+        if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
+      } catch(e) {}
+    }
+  }
+
+  // 4. Fallback: primeiro tenant ativo (single-tenant / acesso direto)
   try {
     const res  = await fetch('/api/tenant-info?default=1');
     const data = await res.json();
     if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
   } catch(e) {}
 
-  // Último recurso: carrega sem tenant (sem filtro)
-  _tenantId = null;
-  return true;
+  return false;
 }
 
 function applyBranding(b, tenantNome) {
@@ -1872,7 +1884,15 @@ async function init() {
   try {
     // Resolve tenant pelo slug na URL
     const tenantOk = await resolveTenant();
-    // Continua mesmo sem tenant — carrega sem filtro
+    if (!tenantOk && !_tenantId) {
+      // Verifica se havia slug/tenant na URL — se sim, mostra erro; senão tenta carregar mesmo assim
+      const _p = new URLSearchParams(window.location.search);
+      if (_p.get('slug') || _p.get('t') || _p.get('tenant')) {
+        renderMenuWrap('<div class="loading-wrap"><div style="font-size:48px">🍽️</div><span style="text-align:center;line-height:1.8">Restaurante não encontrado.<br><small style="font-size:12px;color:var(--muted)">Verifique se o link está correto.</small></span></div>');
+        return;
+      }
+      // Sem parâmetro nenhum: continua sem filtro de tenant
+    }
 
     // Injeta tenant_id no header de todas as requisições desta sessão
     if (_tenantId) {
