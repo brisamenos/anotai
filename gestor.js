@@ -152,7 +152,7 @@ async function loadAllData(silent = false) {
 
     const [
       itemsRes, catsRes, ordersRes, movsRes,
-      cuponsRes, mesasRes, estoqueRes, fidRes, cfgRes
+      cuponsRes, mesasRes, estoqueRes, fidRes, cfgRes, customersRes
     ] = await Promise.all([
       safe(sb.from('menu_items').select('*').order('id')),
       safe(sb.from('categories').select('*').order('sort_order')),
@@ -162,7 +162,8 @@ async function loadAllData(silent = false) {
       safe(sb.from('mesas').select('*').order('num')),
       safe(sb.from('estoque').select('*').order('id')),
       safe(sb.from('fidelidade').select('*').order('pts',{ascending:false})),
-      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema').single())
+      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema').single()),
+      safe(sb.from('customers').select('*').order('id',{ascending:false}))
     ]);
 
     if (itemsRes.data?.length)    items         = itemsRes.data.map(mapItem);
@@ -194,6 +195,8 @@ async function loadAllData(silent = false) {
       max:f.max_pts||_fidConfig.meta_pts||500,
       orders:f.orders_count||0, resgates:f.resgates||0
     }));
+    if (customersRes.data?.length) customersData = customersRes.data;
+
 
     // Set orderIdSeq above DB max and init polling tracker
     if (ordersKanban.length) {
@@ -975,6 +978,7 @@ let ordersKanban = [];
 let orderIdSeq   = 1;
 let tables       = [];
 let fidClients   = [];
+let customersData = [];
 let estoqueItems = [];
 let cartItems    = [];
 let filters      = {search:'', cat:'', status:''};
@@ -3961,8 +3965,10 @@ function clientesTab(tab) {
   _clientesTab = tab;
   const btnTodos = document.getElementById('btn-tab-todos');
   const btnAniv  = document.getElementById('btn-tab-aniversario');
+  const btnCad   = document.getElementById('btn-tab-cadastrados');
   if (btnTodos) { btnTodos.style.background = tab==='todos'?'var(--accent)':''; btnTodos.style.color = tab==='todos'?'#fff':''; btnTodos.style.borderColor = tab==='todos'?'var(--accent)':'var(--border)'; }
-  if (btnAniv)  { btnAniv.style.background = tab==='aniversario'?'var(--purple)':''; btnAniv.style.color = tab==='aniversario'?'#fff':''; btnAniv.style.borderColor = tab==='aniversario'?'var(--purple)':'var(--border)'; }
+  if (btnAniv)  { btnAniv.style.background  = tab==='aniversario'?'var(--purple)':''; btnAniv.style.color = tab==='aniversario'?'#fff':''; btnAniv.style.borderColor = tab==='aniversario'?'var(--purple)':'var(--border)'; }
+  if (btnCad)   { btnCad.style.background   = tab==='cadastrados'?'var(--accent3)':''; btnCad.style.color = tab==='cadastrados'?'#fff':''; btnCad.style.borderColor = tab==='cadastrados'?'var(--accent3)':'var(--border)'; }
   renderClientes();
 }
 
@@ -3972,33 +3978,77 @@ function renderClientesPage() {
   renderClientes();
 }
 
-function renderClientes() {
-  const search  = (document.getElementById('cli-search')?.value || '').toLowerCase();
-  const order   = document.getElementById('cli-order')?.value || 'nome';
+// Mescla fidelidade + customers numa lista unificada
+function _mergeClientes() {
   const today   = new Date();
-  const todayMD = `${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const todayMD = String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
   const mesMes  = today.getMonth() + 1;
 
-  // Enriquece fidClients com campo birthday (buscado do Supabase ou local)
-  let clientes = fidClients.map(c => ({
+  // Base: fidelidade
+  const byPhone = {};
+  fidClients.forEach(c => {
+    const key = (c.phone||'').replace(/\D/g,'');
+    byPhone[key] = {
+      _fidId: c.id, _custId: null,
+      name: c.name, phone: c.phone||'', birthday: c.birthday||null,
+      pts: c.pts||0, max: c.max||500,
+      orders: c.orders||0, resgates: c.resgates||0,
+      email: null, addr: null, total_spent: 0, created_at: null,
+      fromCardapio: false
+    };
+  });
+
+  // Mescla customers (cadastros do cardápio)
+  customersData.forEach(c => {
+    const key = (c.phone||'').replace(/\D/g,'');
+    if (byPhone[key]) {
+      // Enriquece registro existente
+      byPhone[key]._custId     = c.id;
+      byPhone[key].email       = c.email || byPhone[key].email;
+      byPhone[key].birthday    = byPhone[key].birthday || c.birthday;
+      byPhone[key].addr        = c.addr || null;
+      byPhone[key].total_spent = parseFloat(c.total_spent)||0;
+      byPhone[key].orders      = Math.max(byPhone[key].orders, c.orders_count||0);
+      byPhone[key].created_at  = c.created_at;
+      byPhone[key].fromCardapio = true;
+    } else {
+      byPhone[key] = {
+        _fidId: null, _custId: c.id,
+        name: c.name, phone: c.phone||'', birthday: c.birthday||null,
+        pts: 0, max: 500,
+        orders: c.orders_count||0, resgates: 0,
+        email: c.email||null, addr: c.addr||null,
+        total_spent: parseFloat(c.total_spent)||0,
+        created_at: c.created_at, fromCardapio: true
+      };
+    }
+  });
+
+  return Object.values(byPhone).map(c => ({
     ...c,
-    birthday: c.birthday || null,
     isAnivHoje: c.birthday ? c.birthday.slice(5) === todayMD : false,
     isAnivMes:  c.birthday ? parseInt(c.birthday.slice(5,7)) === mesMes : false,
     diasAteAniv: c.birthday ? _diasAteAniversario(c.birthday) : 999
   }));
+}
+
+function renderClientes() {
+  const search  = (document.getElementById('cli-search')?.value || '').toLowerCase();
+  const order   = document.getElementById('cli-order')?.value || 'nome';
+
+  let clientes = _mergeClientes();
 
   // Stats
-  document.getElementById('cli-total').textContent    = clientes.length;
-  document.getElementById('cli-aniv-hoje').textContent = clientes.filter(c=>c.isAnivHoje).length;
-  document.getElementById('cli-aniv-mes').textContent  = clientes.filter(c=>c.isAnivMes).length;
-  document.getElementById('cli-com-pts').textContent   = clientes.filter(c=>c.pts>0).length;
+  document.getElementById('cli-total').textContent      = clientes.length;
+  document.getElementById('cli-aniv-hoje').textContent  = clientes.filter(c=>c.isAnivHoje).length;
+  document.getElementById('cli-aniv-mes').textContent   = clientes.filter(c=>c.isAnivMes).length;
+  document.getElementById('cli-com-pts').textContent    = clientes.filter(c=>c.pts>0).length;
 
-  // Banner de hoje
+  // Banner aniversariantes hoje
   const hoje = clientes.filter(c => c.isAnivHoje);
-  const banner = document.getElementById('cli-aniv-banner');
-  const hojeBadge = document.getElementById('cli-aniv-hoje-badge');
-  const hojeList  = document.getElementById('cli-aniv-hoje-list');
+  const banner     = document.getElementById('cli-aniv-banner');
+  const hojeBadge  = document.getElementById('cli-aniv-hoje-badge');
+  const hojeList   = document.getElementById('cli-aniv-hoje-list');
   if (banner) banner.style.display = hoje.length ? 'block' : 'none';
   if (hojeBadge) hojeBadge.textContent = hoje.length;
   if (hojeList) hojeList.innerHTML = hoje.map(c=>`
@@ -4011,17 +4061,21 @@ function renderClientes() {
   if (_clientesTab === 'aniversario') {
     clientes = clientes.filter(c => c.birthday);
     clientes.sort((a,b) => a.diasAteAniv - b.diasAteAniv);
-  } else {
-    // Ordenar
-    if (order === 'nome')       clientes.sort((a,b) => a.name.localeCompare(b.name));
-    else if (order === 'pts')   clientes.sort((a,b) => b.pts - a.pts);
+  } else if (_clientesTab === 'cadastrados') {
+    clientes = clientes.filter(c => c.fromCardapio);
+    if (order === 'nome')    clientes.sort((a,b) => a.name.localeCompare(b.name));
     else if (order === 'pedidos') clientes.sort((a,b) => (b.orders||0) - (a.orders||0));
+    else if (order === 'gasto')   clientes.sort((a,b) => (b.total_spent||0) - (a.total_spent||0));
+  } else {
+    if (order === 'nome')         clientes.sort((a,b) => a.name.localeCompare(b.name));
+    else if (order === 'pts')     clientes.sort((a,b) => b.pts - a.pts);
+    else if (order === 'pedidos') clientes.sort((a,b) => (b.orders||0) - (a.orders||0));
+    else if (order === 'gasto')   clientes.sort((a,b) => (b.total_spent||0) - (a.total_spent||0));
     else if (order === 'aniversario') clientes.sort((a,b) => a.diasAteAniv - b.diasAteAniv);
   }
 
-  // Busca
   if (search) clientes = clientes.filter(c =>
-    c.name.toLowerCase().includes(search) || (c.phone||'').includes(search)
+    c.name.toLowerCase().includes(search) || (c.phone||'').includes(search) || (c.email||'').toLowerCase().includes(search)
   );
 
   document.getElementById('cli-count').textContent = `${clientes.length} cliente${clientes.length!==1?'s':''}`;
@@ -4029,22 +4083,30 @@ function renderClientes() {
   const tbody = document.getElementById('cli-tbody');
   if (!tbody) return;
   if (!clientes.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted);font-size:13px">${search?'Nenhum cliente encontrado':'Nenhum cliente cadastrado ainda.<br>Os clientes aparecem automaticamente ao fazer pedidos.'}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted);font-size:13px">${search?'Nenhum cliente encontrado':'Nenhum cliente cadastrado ainda.'}</td></tr>`;
     return;
   }
   tbody.innerHTML = clientes.map(c => {
-    const anivLabel = c.birthday ? _formatAniversario(c.birthday, c.isAnivHoje, c.isAnivMes) : '<span style="color:var(--muted)">—</span>';
-    const ptsBar = c.max ? Math.min(100, Math.round((c.pts/c.max)*100)) : 0;
+    const anivLabel   = c.birthday ? _formatAniversario(c.birthday, c.isAnivHoje, c.isAnivMes) : '<span style="color:var(--muted)">—</span>';
+    const ptsBar      = c.max ? Math.min(100, Math.round((c.pts/c.max)*100)) : 0;
+    const gastoLabel  = c.total_spent > 0 ? `<span style="font-size:12px;font-weight:600;color:var(--success)">R$ ${c.total_spent.toFixed(2).replace('.',',')}</span>` : '<span style="color:var(--muted)">—</span>';
+    const badge       = c.fromCardapio ? '<span style="font-size:9px;background:rgba(59,130,246,.15);color:var(--accent);padding:1px 6px;border-radius:99px;margin-left:5px;font-weight:600">APP</span>' : '';
+    const emailLabel  = c.email ? `<div style="font-size:10.5px;color:var(--muted)">${c.email}</div>` : '';
     return `<tr>
       <td>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;color:#fff">${c.name.charAt(0).toUpperCase()}</div>
-          <div><div style="font-weight:600;font-size:13px">${c.name}</div>${c.isAnivHoje?'<div style="font-size:10px;color:var(--purple);font-weight:600">🎂 Aniversário hoje!</div>':''}</div>
+          <div>
+            <div style="font-weight:600;font-size:13px">${c.name}${badge}</div>
+            ${emailLabel}
+            ${c.isAnivHoje?'<div style="font-size:10px;color:var(--purple);font-weight:600">🎂 Aniversário hoje!</div>':''}
+          </div>
         </div>
       </td>
       <td style="color:var(--muted);font-size:12.5px">${c.phone||'—'}</td>
       <td>${anivLabel}</td>
       <td style="font-size:12.5px;font-weight:600">${c.orders||0}</td>
+      <td>${gastoLabel}</td>
       <td>
         <div style="display:flex;align-items:center;gap:7px">
           <div style="flex:1;height:5px;background:var(--surface2);border-radius:99px;overflow:hidden;min-width:50px"><div style="height:100%;width:${ptsBar}%;background:var(--accent);border-radius:99px"></div></div>
@@ -4053,13 +4115,13 @@ function renderClientes() {
       </td>
       <td>
         <div style="display:flex;gap:5px">
-          <button class="btn bg" style="font-size:11px;padding:3px 9px" onclick="openEditCliente(${c.id})">
+          <button class="btn bg" style="font-size:11px;padding:3px 9px" onclick="openEditCliente('${(c.phone||'').replace(/\D/g,'')}')">
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3-9 9H2v-3L11 2z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Editar
           </button>
-          <button class="btn bd" style="font-size:11px;padding:3px 9px" onclick="deleteCliente(${c.id})">
+          ${c._fidId ? `<button class="btn bd" style="font-size:11px;padding:3px 9px" onclick="deleteCliente(${c._fidId})">
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2.5A.5.5 0 0 1 6.5 2h3a.5.5 0 0 1 .5.5V4M5 4l.7 9.5a.5.5 0 0 0 .5.5h3.6a.5.5 0 0 0 .5-.5L11 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-          </button>
+          </button>` : ''}
         </div>
       </td>
     </tr>`;
@@ -4084,47 +4146,60 @@ function _formatAniversario(birthday, isHoje, isMes) {
   return `<span style="color:var(--muted)">${label}</span>`;
 }
 
-function openEditCliente(id) {
-  const c = fidClients.find(x => x.id === id);
-  if (!c) return;
-  document.getElementById('edit-cli-id').value    = id;
-  document.getElementById('edit-cli-nome').value  = c.name || '';
-  document.getElementById('edit-cli-phone').value = c.phone || '';
-  document.getElementById('edit-cli-aniversario').value = c.birthday || '';
+function openEditCliente(phone) {
+  // Busca pelo telefone nos dois arrays
+  const phoneSan = (phone||'').replace(/\D/g,'');
+  const fid  = fidClients.find(c => (c.phone||'').replace(/\D/g,'') === phoneSan);
+  const cust = customersData.find(c => (c.phone||'').replace(/\D/g,'') === phoneSan);
+  if (!fid && !cust) return;
+  document.getElementById('edit-cli-id').value          = fid ? fid.id : '';
+  document.getElementById('edit-cli-cust-id').value     = cust ? cust.id : '';
+  document.getElementById('edit-cli-nome').value        = (fid||cust).name || '';
+  document.getElementById('edit-cli-phone').value       = (fid||cust).phone || '';
+  document.getElementById('edit-cli-aniversario').value = (fid?.birthday || cust?.birthday) || '';
+  document.getElementById('edit-cli-email').value       = cust?.email || '';
   openModal('modal-edit-cliente');
 }
 
 async function saveCliente() {
-  const id      = parseInt(document.getElementById('edit-cli-id').value);
+  const fidId   = parseInt(document.getElementById('edit-cli-id').value) || null;
+  const custId  = parseInt(document.getElementById('edit-cli-cust-id').value) || null;
   const name    = document.getElementById('edit-cli-nome').value.trim();
   const phone   = document.getElementById('edit-cli-phone').value.trim();
   const birthday = document.getElementById('edit-cli-aniversario').value || null;
+  const email    = document.getElementById('edit-cli-email').value.trim() || null;
   if (!name) { sbToast('err','Informe o nome'); return; }
   sbLoading(true);
-  const { error } = await sb.from('fidelidade').update({ name, phone, birthday }).eq('id', id);
+  let ok = true;
+  if (fidId) {
+    const { error } = await sb.from('fidelidade').update({ name, phone, birthday }).eq('id', fidId);
+    if (error) ok = false;
+    else { const c = fidClients.find(x => x.id === fidId); if (c) { c.name=name; c.phone=phone; c.birthday=birthday; } }
+  }
+  if (custId) {
+    const { error } = await sb.from('customers').update({ name, phone, birthday, email }).eq('id', custId);
+    if (error) ok = false;
+    else { const c = customersData.find(x => x.id === custId); if (c) { c.name=name; c.phone=phone; c.birthday=birthday; c.email=email; } }
+  }
   sbLoading(false);
-  if (error) { sbToast('err','Erro ao salvar: ' + (error.message||'')); return; }
-  const c = fidClients.find(x => x.id === id);
-  if (c) { c.name = name; c.phone = phone; c.birthday = birthday; }
+  if (!ok) { sbToast('err','Erro ao salvar'); return; }
   closeModal('modal-edit-cliente');
   renderClientes();
   sbToast('ok', `${name} atualizado!`);
 }
 
-async function deleteCliente(id) {
-  const c = fidClients.find(x => x.id === id);
+async function deleteCliente(fidId) {
+  const c = fidClients.find(x => x.id === fidId);
   const name = c?.name || 'este cliente';
-  if (!confirm(`Remover cliente "${name}"? Os dados de fidelidade serão perdidos.`)) return;
+  if (!confirm(`Remover "${name}" do programa de fidelidade?`)) return;
   sbLoading(true);
-  const { error } = await sb.from('fidelidade').delete().eq('id', id);
+  const { error } = await sb.from('fidelidade').delete().eq('id', fidId);
   sbLoading(false);
   if (error) { sbToast('err','Erro ao remover'); return; }
-  fidClients = fidClients.filter(x => x.id !== id);
+  fidClients = fidClients.filter(x => x.id !== fidId);
   renderClientes();
-  sbToast('ok', `${name} removido`);
+  sbToast('ok', `${name} removido da fidelidade`);
 }
-
-
 
 let _autoAcceptOn = false;
 
@@ -4757,14 +4832,10 @@ async function evoCheckStatus() {
   if (state==='open') {
     evoConnected=true;
     _evoSetStatus('connected','Conectado');
-    // Salva evo_instance no banco sempre que verificar com sucesso
-    try { await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: EVO.instance }); } catch(e) {}
     if (naAbaRobo) _evoShowConnected(r.data?.instance?.profileName||r.data?.me?.pushName||'WhatsApp');
   } else {
     evoConnected=false;
     _evoSetStatus('disconnected','Desconectado');
-    // Salva evo_instance mesmo desconectado para não perder o nome digitado
-    try { await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: EVO.instance }); } catch(e) {}
     if (naAbaRobo) _evoShowQRPrompt();
   }
 }
