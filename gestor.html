@@ -363,6 +363,10 @@
         <input placeholder="Pesquisar" style="width:100px">
       </div>
       <div class="sw"><select id="gestor-actions" style="font-size:12px" onchange="handleGestorAction(this.value)"><option value="">Ações ▾</option><option value="pdv">Integração PDV</option><option value="edicao">Edição em massa</option><option value="imagens">Imagens do cardápio</option></select></div>
+      <button class="btn bg" onclick="openModal('modal-modelos')" style="display:flex;align-items:center;gap:6px">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="1" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.4"/><rect x="1" y="9" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="9" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.4"/></svg>
+        Modelos prontos
+      </button>
       <button class="btn bp" onclick="openModal('modal-add-cat')"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Nova categoria</button>
     </div>
   </div>
@@ -2002,6 +2006,81 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
     <div style="display:flex;gap:8px;margin-top:18px">
       <button class="btn bd" style="flex:1;justify-content:center" onclick="deleteItem()">🗑 Excluir item</button>
       <button class="btn bp" style="flex:1;justify-content:center" onclick="saveEditItem()">💾 Salvar alterações</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modelos Prontos -->
+<div class="modal-bg" id="modal-modelos">
+  <div class="modal" style="width:640px;max-height:88vh;overflow-y:auto">
+    <button class="modal-close" onclick="closeModal('modal-modelos')">✕</button>
+    <div class="modal-title" style="margin-bottom:4px">Modelos prontos de cardápio</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:20px">Escolha o modelo do seu negócio e o cardápio será criado automaticamente. Você pode editar tudo depois.</div>
+
+    <!-- Aviso -->
+    <div id="modelos-aviso" style="display:none;padding:10px 14px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);border-radius:10px;font-size:12.5px;color:var(--muted);margin-bottom:16px">
+      ⚠️ Isso vai <strong>adicionar</strong> as categorias e itens do modelo ao seu cardápio atual. Itens existentes não serão removidos.
+    </div>
+
+    <!-- Grid de modelos -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px" id="modelos-grid">
+
+      <!-- Açaiteria -->
+      <div class="modelo-card" id="modelo-acaiteria" onclick="selecionarModelo('acaiteria')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s">
+        <div style="font-size:36px;margin-bottom:8px">🍇</div>
+        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px">Açaiteria</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.4">Tamanhos, complementos, coberturas e adicionais</div>
+      </div>
+
+      <!-- Restaurante -->
+      <div class="modelo-card" id="modelo-restaurante" onclick="selecionarModelo('restaurante')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s">
+        <div style="font-size:36px;margin-bottom:8px">🍽️</div>
+        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px">Restaurante</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.4">Entradas, pratos principais, sobremesas e bebidas</div>
+      </div>
+
+      <!-- Pizzaria -->
+      <div class="modelo-card" id="modelo-pizzaria" onclick="selecionarModelo('pizzaria')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s">
+        <div style="font-size:36px;margin-bottom:8px">🍕</div>
+        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px">Pizzaria</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.4">Pizzas salgadas, doces, bordas e bebidas</div>
+      </div>
+
+      <!-- Hamburgueria -->
+      <div class="modelo-card" id="modelo-hamburgueria" onclick="selecionarModelo('hamburgueria')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s">
+        <div style="font-size:36px;margin-bottom:8px">🍔</div>
+        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px">Hamburgueria</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.4">Hambúrgueres, combos, acompanhamentos e bebidas</div>
+      </div>
+
+      <!-- Cafeteria -->
+      <div class="modelo-card" id="modelo-cafeteria" onclick="selecionarModelo('cafeteria')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s">
+        <div style="font-size:36px;margin-bottom:8px">☕</div>
+        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px">Cafeteria</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.4">Cafés, sucos, salgados e doces</div>
+      </div>
+
+      <!-- Padaria -->
+      <div class="modelo-card" id="modelo-padaria" onclick="selecionarModelo('padaria')" style="cursor:pointer;padding:16px;background:var(--surface2);border:2px solid var(--border);border-radius:14px;text-align:center;transition:all .18s">
+        <div style="font-size:36px;margin-bottom:8px">🥐</div>
+        <div style="font-weight:700;font-size:13.5px;margin-bottom:3px">Padaria</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.4">Pães, salgados, doces, bolos e bebidas</div>
+      </div>
+
+    </div>
+
+    <!-- Preview do modelo selecionado -->
+    <div id="modelo-preview" style="display:none;margin-bottom:20px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Preview do modelo</div>
+      <div id="modelo-preview-content" style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto"></div>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-modelos')">Cancelar</button>
+      <button class="btn bp" id="btn-aplicar-modelo" style="flex:1;justify-content:center;display:none" onclick="aplicarModelo()">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.4"/><path d="M9 2v4h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Aplicar modelo
+      </button>
     </div>
   </div>
 </div>
