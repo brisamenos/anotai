@@ -1076,7 +1076,7 @@ const server = http.createServer(async (req,res) => {
       if (!tenantId) { send(res,200,{ok:true}); return }
 
       // Config do tenant (tópicos habilitados, ativo)
-      const cfg = db.prepare("SELECT ia_config,evo_instance,store_name FROM store_config WHERE tenant_id=?").get(tenantId)
+      const cfg = db.prepare("SELECT ia_config,evo_instance,store_name,store_whatsapp,store_tempo_entrega,delivery_fee_config,horarios_config FROM store_config WHERE tenant_id=?").get(tenantId)
       if (!cfg) { send(res,200,{ok:true}); return }
       const ia = jsonParse(cfg.ia_config) || {}
       if (!ia.ativo) { send(res,200,{ok:true}); return }
@@ -1087,7 +1087,7 @@ const server = http.createServer(async (req,res) => {
       const openaiKey  = iaG.openai_key || ''
       if (!openaiKey) { log('⚠️','OpenAI key não configurada no admin'); send(res,200,{ok:true}); return }
       const modelo    = iaG.modelo    || 'gpt-4o-mini'
-      const maxTokens = iaG.max_tokens|| 500
+      const maxTokens = iaG.max_tokens|| 800
       const bufferSeg = iaG.buffer_seg|| 3
       const quebraLen = iaG.quebra_linha || 0
       const pausaMin  = iaG.pausa_min || 30
@@ -1098,6 +1098,11 @@ const server = http.createServer(async (req,res) => {
       if (pausaAt && (Date.now() - pausaAt) < pausaMin * 60 * 1000) {
         log('⏸️', `IA pausada para ${phone} (humano assumiu)`); send(res,200,{ok:true}); return
       }
+
+      // Histórico de conversa por cliente (últimas 10 trocas)
+      const convKey = `conv:${tenantId}:${phone}`
+      if (!_msgBuffer.has(convKey + '_hist')) _msgBuffer.set(convKey + '_hist', [])
+      const convHist = _msgBuffer.get(convKey + '_hist')
 
       // Buffer: acumula mensagens por N segundos antes de responder
       const bufKey = `buf:${tenantId}:${phone}`
@@ -1111,38 +1116,105 @@ const server = http.createServer(async (req,res) => {
         const inst = cfg.evo_instance || EVO_INST
         const nomeLoja = cfg.store_name || 'Restaurante'
 
-        // Monta contexto
+        // ── Monta contexto completo do restaurante ────────────
         const contexto = []
-        if (ia.resp_cardapio) {
-          const cats  = db.prepare("SELECT name FROM categories WHERE tenant_id=? AND ativo=1 ORDER BY sort_order").all(tenantId)
-          const items = db.prepare("SELECT name,price,description,cat FROM menu_items WHERE tenant_id=? AND status='active' ORDER BY cat,id").all(tenantId)
-          const txt = cats.map(c=>{
-            const it=items.filter(i=>i.cat===c.name).map(i=>`  - ${i.name}: R$${parseFloat(i.price).toFixed(2).replace('.',',')}${i.description?' ('+i.description+')':''}`).join('\n')
-            return `${c.name}:\n${it}`
-          }).join('\n\n')
-          if (txt) contexto.push(`CARDÁPIO:\n${txt}`)
+
+        // Informações básicas da loja (sempre incluídas)
+        const infoLoja = []
+        infoLoja.push(`Nome: ${nomeLoja}`)
+        if (cfg.store_whatsapp) infoLoja.push(`WhatsApp: ${cfg.store_whatsapp}`)
+        if (cfg.store_tempo_entrega) infoLoja.push(`Tempo de entrega: ${cfg.store_tempo_entrega}`)
+        // Taxa de entrega
+        const taxaCfg = jsonParse(cfg.delivery_fee_config) || {}
+        if (taxaCfg.zones && taxaCfg.zones.length) {
+          const taxasTxt = taxaCfg.zones.map(z => `${z.name}: R$${parseFloat(z.fee||0).toFixed(2).replace('.',',')}`).join(', ')
+          infoLoja.push(`Taxas de entrega: ${taxasTxt}`)
+        } else if (taxaCfg.fixed) {
+          infoLoja.push(`Taxa de entrega: R$${parseFloat(taxaCfg.fixed).toFixed(2).replace('.',',')}`)
         }
-        if (ia.resp_horario && ia.horario_txt) contexto.push(`HORÁRIO:\n${ia.horario_txt}`)
-        if (ia.resp_entrega && ia.entrega_txt) contexto.push(`ENTREGA:\n${ia.entrega_txt}`)
-        if (ia.resp_pedido) {
-          const ped = db.prepare("SELECT id,status,total FROM orders WHERE tenant_id=? AND phone LIKE ? ORDER BY id DESC LIMIT 1").get(tenantId,`%${phone.slice(-8)}%`)
-          if (ped) {
-            const sl = {analise:'aguardando confirmação',producao:'em preparo',pronto:'saindo para entrega',entregue:'entregue',cancelado:'cancelado'}
-            contexto.push(`ÚLTIMO PEDIDO DO CLIENTE: #${ped.id} — ${sl[ped.status]||ped.status} — R$${parseFloat(ped.total).toFixed(2).replace('.',',')}`)
-          }
-        }
-        if (ia.resp_promo) {
-          const promos = db.prepare("SELECT name,price FROM menu_items WHERE tenant_id=? AND promo=1 AND status='active' LIMIT 5").all(tenantId)
-          if (promos.length) contexto.push(`PROMOÇÕES:\n${promos.map(p=>`- ${p.name}: R$${parseFloat(p.price).toFixed(2).replace('.',',')}`).join('\n')}`)
+        contexto.push(`INFORMAÇÕES DA LOJA:\n${infoLoja.join('\n')}`)
+
+        // Horários de funcionamento
+        const horariosCfg = jsonParse(cfg.horarios_config) || {}
+        if (Object.keys(horariosCfg).length) {
+          const diasNome = {dom:'Domingo',seg:'Segunda',ter:'Terça',qua:'Quarta',qui:'Quinta',sex:'Sexta',sab:'Sábado'}
+          const horTxt = Object.entries(horariosCfg).map(([d,h]) =>
+            h.ativo ? `${diasNome[d]}: ${h.abertura} às ${h.fechamento}` : `${diasNome[d]}: Fechado`
+          ).join('\n')
+          contexto.push(`HORÁRIO DE FUNCIONAMENTO:\n${horTxt}`)
+        } else if (ia.resp_horario && ia.horario_txt) {
+          contexto.push(`HORÁRIO:\n${ia.horario_txt}`)
         }
 
-        const systemPrompt = `${iaG.prompt_base||`Você é o assistente do ${nomeLoja}. Responda APENAS sobre assuntos do restaurante de forma breve e simpática em português. Se a pergunta não for sobre o restaurante, diga que só pode ajudar com informações do estabelecimento.`}\n\n${contexto.join('\n\n')}`
+        // Cardápio completo (sempre incluído — é a info mais importante)
+        const cats  = db.prepare("SELECT name,emoji FROM categories WHERE tenant_id=? AND ativo=1 ORDER BY sort_order").all(tenantId)
+        const items = db.prepare("SELECT name,price,price_old,description,cat,emoji,promo,ingredients FROM menu_items WHERE tenant_id=? AND status IN ('ativo','active') ORDER BY cat,promo DESC,id").all(tenantId)
+        if (items.length) {
+          // Itens com categoria
+          const catTxt = cats.map(c => {
+            const its = items.filter(i => i.cat === c.name)
+            if (!its.length) return null
+            const linhas = its.map(i => {
+              let linha = `  • ${i.emoji ? i.emoji+' ' : ''}${i.name}: R$${parseFloat(i.price).toFixed(2).replace('.',',')}`
+              if (i.price_old && parseFloat(i.price_old) > parseFloat(i.price)) {
+                linha += ` ~~R$${parseFloat(i.price_old).toFixed(2).replace('.',',')}~~`
+              }
+              if (i.promo) linha += ' 🔥PROMOÇÃO'
+              if (i.description) linha += `\n    ${i.description}`
+              return linha
+            }).join('\n')
+            return `${c.emoji ? c.emoji+' ' : ''}${c.name}:\n${linhas}`
+          }).filter(Boolean).join('\n\n')
+          // Itens sem categoria
+          const semCat = items.filter(i => !i.cat || !cats.find(c => c.name === i.cat))
+          const semCatTxt = semCat.length ? semCat.map(i => `  • ${i.name}: R$${parseFloat(i.price).toFixed(2).replace('.',',')}`).join('\n') : ''
+          const cardapioFull = [catTxt, semCatTxt].filter(Boolean).join('\n\n')
+          if (cardapioFull) contexto.push(`CARDÁPIO COMPLETO:\n${cardapioFull}`)
+        }
+
+        // Informações de entrega extras
+        if (ia.resp_entrega && ia.entrega_txt) contexto.push(`ÁREA DE ENTREGA:\n${ia.entrega_txt}`)
+
+        // Último pedido do cliente
+        if (ia.resp_pedido) {
+          const ped = db.prepare("SELECT id,status,total,items FROM orders WHERE tenant_id=? AND phone LIKE ? ORDER BY id DESC LIMIT 1").get(tenantId,`%${phone.slice(-8)}%`)
+          if (ped) {
+            const sl = {analise:'aguardando confirmação',producao:'em preparo',pronto:'saindo para entrega',entregue:'entregue',cancelado:'cancelado'}
+            const itsPed = (() => { try { return (JSON.parse(ped.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') } catch(e) { return '' } })()
+            contexto.push(`ÚLTIMO PEDIDO DESTE CLIENTE: #${ped.id} — ${sl[ped.status]||ped.status} — R$${parseFloat(ped.total).toFixed(2).replace('.',',')}${itsPed?' ('+itsPed+')':''} `)
+          }
+        }
+
+        // Cupons ativos
+        const cupons = db.prepare("SELECT code,type,value,min_order FROM cupons WHERE tenant_id=? AND ativo=1 AND (expires_at IS NULL OR expires_at > datetime('now')) LIMIT 3").all(tenantId)
+        if (cupons.length) {
+          const cupTxt = cupons.map(cp => {
+            const desc = cp.type === 'percent' ? `${cp.value}% de desconto` : `R$${parseFloat(cp.value).toFixed(2).replace('.',',')} de desconto`
+            const min = parseFloat(cp.min_order||0) > 0 ? ` (pedido mínimo R$${parseFloat(cp.min_order).toFixed(2).replace('.',',')})` : ''
+            return `  • Código *${cp.code}*: ${desc}${min}`
+          }).join('\n')
+          contexto.push(`CUPONS DISPONÍVEIS:\n${cupTxt}`)
+        }
+
+        const systemPrompt = `${iaG.prompt_base || `Você é o assistente virtual do ${nomeLoja}. Seja simpático, objetivo e use emojis com moderação. Responda em português. Ajude o cliente com informações sobre cardápio, preços, horários, entrega e pedidos. Se perguntado sobre algo fora do restaurante, diga gentilmente que só pode ajudar com informações do estabelecimento.`}
+
+${contexto.join('\n\n')}
+
+INSTRUÇÕES:
+- Para preços, sempre use o formato R$ X,XX
+- Quando listar itens, seja organizado por categoria
+- Se o cliente perguntar o que tem disponível, liste o cardápio de forma organizada
+- Para fazer pedido, oriente o cliente a acessar o cardápio digital ou ligar/mandar mensagem diretamente`
 
         try {
           const r = await fetch('https://api.openai.com/v1/chat/completions',{
             method:'POST',
             headers:{'Content-Type':'application/json','Authorization':`Bearer ${openaiKey}`},
-            body:JSON.stringify({model:modelo,max_tokens:maxTokens,messages:[{role:'system',content:systemPrompt},{role:'user',content:msgFull}]})
+            body:JSON.stringify({model:modelo,max_tokens:maxTokens,messages:[
+              {role:'system',content:systemPrompt},
+              ...convHist.slice(-10), // últimas 10 mensagens do histórico
+              {role:'user',content:msgFull}
+            ]})
           })
           const d = await r.json().catch(()=>({}))
           let resposta = d?.choices?.[0]?.message?.content || ''
@@ -1159,7 +1231,16 @@ const server = http.createServer(async (req,res) => {
             resposta = result.join('\n')
           }
 
-          if (resposta) { await sendWA(phone, resposta, inst); log('🤖',`IA → ${phone}: ${resposta.slice(0,60)}`) }
+          if (resposta) {
+            await sendWA(phone, resposta, inst)
+            log('🤖',`IA → ${phone}: ${resposta.slice(0,60)}`)
+            // Salva no histórico de conversa
+            convHist.push({role:'user',content:msgFull})
+            convHist.push({role:'assistant',content:resposta})
+            // Mantém no máximo 20 mensagens (10 trocas)
+            if (convHist.length > 20) convHist.splice(0, convHist.length - 20)
+            _msgBuffer.set(convKey + '_hist', convHist)
+          }
         } catch(e) { log('❌','IA OpenAI error:',e.message) }
       }, bufferSeg * 1000)
 
