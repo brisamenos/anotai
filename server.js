@@ -786,7 +786,8 @@ async function sendWA(phone, text, inst) {
   try {
     const r = await fetch(`${EVO_URL}/message/sendText/${instance}`,{
       method:'POST',headers:{'Content-Type':'application/json',apikey:EVO_KEY},
-      body:JSON.stringify({number,text})
+      // Evolution v2: campo textMessage ao invés de text direto
+      body:JSON.stringify({ number, textMessage: { text } })
     })
     const data = await r.json().catch(()=>({}))
     if (r.ok){log('📤',`Enviado para ${number} [${instance}]`);return{ok:true,data}}
@@ -937,7 +938,10 @@ const server = http.createServer(async (req,res) => {
   }
 
   // REST API genérico ── /rest/v1/:table  e  /api/:table
-  if(upath.startsWith('/rest/v1/')||upath.startsWith('/api/')){
+  // Exclui rotas especiais /api/evo, /api/backup, /api/restore, /api/ia-*, /api/rastreio-*
+  const _isSpecialApi = upath.startsWith('/api/evo') || upath.startsWith('/api/backup') ||
+    upath.startsWith('/api/restore') || upath.startsWith('/api/ia-') || upath.startsWith('/api/rastreio')
+  if(upath.startsWith('/rest/v1/')||(upath.startsWith('/api/')&&!_isSpecialApi)){
     const table = upath.split('/')[upath.startsWith('/api/')?2:3]
     const body  = ['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body); return
