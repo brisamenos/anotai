@@ -866,6 +866,7 @@ async function checarAniv() {
 
 // ── Checker pedidos (por tenant) ─────────────────────
 const processed = new Set()
+const SERVER_START = Date.now() // Marca o momento de início do servidor
 
 async function checarPedidos() {
   try {
@@ -877,6 +878,8 @@ async function checarPedidos() {
       const auto   = jsonParse(cfg.evo_automacoes)||{}
       const inst   = cfg.evo_instance || EVO_INST
       const pedidos = db.prepare(`SELECT * FROM orders WHERE tenant_id=? AND phone IS NOT NULL AND created_at>=? AND status IN ('producao','pronto','cancelado','finalizado') ORDER BY id DESC LIMIT 50`).all(t.id,desde)
+      // Filtra pedidos mais antigos que o início do servidor para evitar reenvio após restart
+      .filter(o => new Date(o.created_at).getTime() >= (SERVER_START - 60000))
       for (const o of pedidos) {
         const chave=`${o.id}_${o.status}`
         if (processed.has(chave)) continue
@@ -1219,6 +1222,8 @@ const server = http.createServer(async (req,res) => {
             if (msgFinal) {
               const r = await sendWA(order.phone, msgFinal, inst)
               log(r.ok ? '📲' : '❌', `Automação "${tipoAuto || new_status}" → WA #${idStr} (${order.phone}): ${r.ok ? 'enviado' : JSON.stringify(r)}`)
+              // Marca como processado para o scheduler não reenviar
+              if (r.ok) processed.add(`${order.id}_${new_status}`)
             }
           } catch(e) {
             log('❌', `Erro WA order-status #${order.id}:`, { error: e.message })
