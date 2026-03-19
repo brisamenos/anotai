@@ -1784,7 +1784,6 @@ async function resolveTenant() {
   const slug = p.get('slug') || p.get('t');
   const tid  = p.get('tenant');
 
-  // 1. Por ID (?tenant=123)
   if (tid) {
     try {
       const res  = await fetch(`/api/tenant-info?id=${encodeURIComponent(tid)}`);
@@ -1792,35 +1791,20 @@ async function resolveTenant() {
       if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
     } catch(e) {}
   }
-
-  // 2. Por slug na query string (?slug=xxx ou ?t=xxx)
   if (slug) {
     try {
       const res  = await fetch(`/api/tenant-info?slug=${encodeURIComponent(slug)}`);
       const data = await res.json();
       if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
     } catch(e) {}
+    return false; // slug foi informado mas nao encontrado — para aqui
   }
-
-  // 3. Slug no path (/nome-do-restaurante/)
-  if (!slug && !tid) {
-    const match = window.location.pathname.match(/\/([a-z0-9][a-z0-9-]{1,})\/?$/);
-    if (match && match[1] !== 'index.html' && match[1] !== 'cardapio') {
-      try {
-        const res  = await fetch(`/api/tenant-info?slug=${encodeURIComponent(match[1])}`);
-        const data = await res.json();
-        if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
-      } catch(e) {}
-    }
-  }
-
-  // 4. Fallback: primeiro tenant ativo (single-tenant / acesso direto)
+  // Sem slug/tenant: fallback para primeiro tenant ativo
   try {
     const res  = await fetch('/api/tenant-info?default=1');
     const data = await res.json();
     if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
   } catch(e) {}
-
   return false;
 }
 
@@ -1885,13 +1869,8 @@ async function init() {
     // Resolve tenant pelo slug na URL
     const tenantOk = await resolveTenant();
     if (!tenantOk && !_tenantId) {
-      // Verifica se havia slug/tenant na URL — se sim, mostra erro; senão tenta carregar mesmo assim
-      const _p = new URLSearchParams(window.location.search);
-      if (_p.get('slug') || _p.get('t') || _p.get('tenant')) {
-        renderMenuWrap('<div class="loading-wrap"><div style="font-size:48px">🍽️</div><span style="text-align:center;line-height:1.8">Restaurante não encontrado.<br><small style="font-size:12px;color:var(--muted)">Verifique se o link está correto.</small></span></div>');
-        return;
-      }
-      // Sem parâmetro nenhum: continua sem filtro de tenant
+      renderMenuWrap('<div class="loading-wrap"><div style="font-size:32px">🍽️</div><span>Restaurante não encontrado.<br>Verifique o link.</span></div>');
+      return;
     }
 
     // Injeta tenant_id no header de todas as requisições desta sessão
@@ -1912,7 +1891,7 @@ async function init() {
 
     // Apply store config
     if (configRes.data) {
-      applyStoreStatus(configRes.data.store_open);
+      applyStoreStatus(configRes.data.store_open, configRes.data.horarios_config);
       if (configRes.data.delivery_fee_config) {
         const rawFee = configRes.data.delivery_fee_config;
         // Normaliza campos: o banco pode ter 'tipo'/'tipo' e 'valor'/'value'
@@ -1936,22 +1915,53 @@ async function init() {
   }
 }
 
-function applyStoreStatus(open) {
+
+// ═══════════════════════════════════════════════
+// HORÁRIOS DE FUNCIONAMENTO
+// ═══════════════════════════════════════════════
+function isLojaAberta(horarios_config, store_open) {
+  // Se store_open é explicitamente false, respeita o fechamento manual
+  if (store_open === false) return false;
+  // Se não tem horários configurados, usa só store_open
+  if (!horarios_config) return store_open !== false;
+  try {
+    const horarios = typeof horarios_config === 'string'
+      ? JSON.parse(horarios_config) : horarios_config;
+    const dias = ['dom','seg','ter','qua','qui','sex','sab'];
+    const agora = new Date();
+    const diaSemana = dias[agora.getDay()];
+    const h = horarios[diaSemana];
+    if (!h || !h.ativo) return false;
+    const [habH, habM] = (h.abertura || '00:00').split(':').map(Number);
+    const [fchH, fchM] = (h.fechamento || '23:59').split(':').map(Number);
+    const minAgora = agora.getHours() * 60 + agora.getMinutes();
+    const minAb    = habH * 60 + habM;
+    const minFch   = fchH * 60 + fchM;
+    return minAgora >= minAb && minAgora <= minFch;
+  } catch(e) { return store_open !== false; }
+}
+
+let _horarios_config = null; // cache dos horários
+
+function applyStoreStatus(open, horarios) {
+  if (horarios !== undefined) _horarios_config = horarios;
+  const aberto = isLojaAberta(_horarios_config, open);
   const dot = document.querySelector('.hero-badge .dot');
   const txt = document.getElementById('store-status-text');
-  if (dot) dot.style.background = open ? 'var(--green)' : '#ef4444';
-  if (txt) txt.textContent = open ? 'Aberto agora' : 'Fechado no momento';
+  if (dot) dot.style.background = aberto ? 'var(--green)' : '#ef4444';
+  if (txt) txt.textContent = aberto ? 'Aberto agora' : 'Fechado no momento';
   const confirmBtn = document.getElementById('confirm-btn');
   if (confirmBtn) {
-    confirmBtn.disabled = !open;
-    if (!open) confirmBtn.innerHTML = '🔴 Loja fechada no momento';
+    confirmBtn.disabled = !aberto;
+    if (!aberto) confirmBtn.innerHTML = '🔴 Loja fechada no momento';
+    else if (confirmBtn.innerHTML.includes('🔴')) confirmBtn.innerHTML = '✅ Confirmar pedido';
   }
 }
 
 function subscribeStoreStatus() {
   sb.channel('store-config-cardapio')
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'store_config'}, p => {
-      applyStoreStatus(p.new.store_open);
+      applyStoreStatus(p.new.store_open, p.new.horarios_config || _horarios_config);
     })
     .subscribe();
 }
@@ -2927,6 +2937,10 @@ function closeMotoboy() {
 // START
 // ═══════════════════════════════════════════════
 init();
+
+// Revalida status aberto/fechado a cada minuto (para fechar no horário automaticamente)
+setInterval(() => { applyStoreStatus(undefined); }, 60000);
+
 (function() {
   const el = document.getElementById('cats-scroll');
   if (!el) return;
