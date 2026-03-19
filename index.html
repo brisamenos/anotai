@@ -189,6 +189,69 @@ input,textarea{font-family:inherit}
 .empty-state-text{font-size:14px;color:var(--muted)}
 
 /* ═══════════════════════════════════════
+   PIZZA MEIO A MEIO
+═══════════════════════════════════════ */
+.half-section{margin-top:16px}
+.half-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.half-title .half-badge{background:var(--accent);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.3px}
+.half-selected{
+  display:flex;align-items:center;gap:10px;
+  background:rgba(249,115,22,.08);border:1.5px solid rgba(249,115,22,.3);
+  border-radius:12px;padding:10px 13px;cursor:pointer;transition:all .18s;margin-bottom:8px;
+}
+.half-selected:hover{border-color:var(--accent);background:rgba(249,115,22,.12)}
+.half-selected-emoji{width:32px;height:32px;border-radius:8px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;overflow:hidden}
+.half-selected-emoji img{width:100%;height:100%;object-fit:cover}
+.half-selected-info{flex:1;min-width:0}
+.half-selected-name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.half-selected-hint{font-size:11px;color:var(--muted);margin-top:1px}
+.half-pick-btn{font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0}
+.half-picker{
+  background:var(--s2);border:1px solid var(--border);border-radius:12px;
+  max-height:200px;overflow-y:auto;margin-bottom:8px;
+}
+.half-opt{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 13px;cursor:pointer;transition:background .15s;border-bottom:1px solid var(--border);
+}
+.half-opt:last-child{border-bottom:none}
+.half-opt:hover{background:rgba(255,255,255,.04)}
+.half-opt.on{background:rgba(249,115,22,.1)}
+.half-opt-emoji{width:28px;height:28px;border-radius:7px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;overflow:hidden}
+.half-opt-emoji img{width:100%;height:100%;object-fit:cover}
+.half-opt-name{flex:1;font-size:13px;font-weight:600;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.half-opt-price{font-size:12px;color:var(--amber);flex-shrink:0}
+.half-opt-check{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px}
+.half-opt.on .half-opt-check{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* ═══════════════════════════════════════
+   WHATSAPP TOGGLE (premium)
+═══════════════════════════════════════ */
+.wa-toggle-row{
+  display:flex;align-items:center;gap:12px;
+  background:rgba(37,211,102,.07);border:1px solid rgba(37,211,102,.2);
+  border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer;
+  transition:all .18s;
+}
+.wa-toggle-row:hover{background:rgba(37,211,102,.1)}
+.wa-toggle-icon{font-size:20px;flex-shrink:0}
+.wa-toggle-info{flex:1;min-width:0}
+.wa-toggle-lbl{font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px}
+.wa-toggle-sub{font-size:11.5px;color:var(--muted);line-height:1.4}
+.wa-toggle-switch{
+  width:42px;height:24px;border-radius:99px;background:var(--s3);
+  border:1.5px solid var(--border);flex-shrink:0;position:relative;
+  transition:all .2s;
+}
+.wa-toggle-switch::after{
+  content:'';position:absolute;top:2px;left:2px;
+  width:16px;height:16px;border-radius:50%;background:var(--muted);
+  transition:all .2s;
+}
+.wa-toggle-row.on .wa-toggle-switch{background:#22c55e;border-color:#22c55e}
+.wa-toggle-row.on .wa-toggle-switch::after{left:20px;background:#fff}
+
+/* ═══════════════════════════════════════
    ITEM MODAL
 ═══════════════════════════════════════ */
 .modal-overlay{
@@ -687,7 +750,7 @@ input,textarea{font-family:inherit}
 <div class="sticky-bar">
   <div class="search-wrap">
     <span class="search-icon">🔍</span>
-    <input class="search-input" type="search" placeholder="Buscar no cardápio…" id="search-input" oninput="onSearch(this.value)">
+    <input class="search-input" type="search" placeholder="Buscar no cardápio…" id="search-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="onSearch(this.value)">
   </div>
   <div class="cats-scroll" id="cats-scroll">
     <button class="cat-btn on" data-key="" onclick="filterCat(this,'')">Tudo</button>
@@ -737,6 +800,35 @@ input,textarea{font-family:inherit}
         </div>
       </div>
       <textarea class="im-obs" id="im-obs" rows="2" placeholder="Observações (opcional): sem cebola, bem passado…"></textarea>
+
+      <!-- ── PIZZA: metade a metade ── -->
+      <div class="half-section" id="half-section" style="display:none">
+        <div class="half-title">
+          2ª metade <span class="half-badge">PIZZA</span>
+        </div>
+        <!-- Metade selecionada (mostra após escolher) -->
+        <div class="half-selected" id="half-selected-row" style="display:none" onclick="toggleHalfPicker()">
+          <div class="half-selected-emoji" id="half-sel-emoji">🍕</div>
+          <div class="half-selected-info">
+            <div class="half-selected-name" id="half-sel-name">Escolha a 2ª metade</div>
+            <div class="half-selected-hint" id="half-sel-hint">Toque para trocar</div>
+          </div>
+          <span class="half-pick-btn">✏️</span>
+        </div>
+        <!-- Botão "Escolher" quando nenhuma selecionada -->
+        <div class="half-selected" id="half-pick-prompt" onclick="toggleHalfPicker()" style="border-style:dashed;opacity:.8">
+          <div class="half-selected-emoji">🍕</div>
+          <div class="half-selected-info">
+            <div class="half-selected-name">Escolher 2ª metade</div>
+            <div class="half-selected-hint">Toque para selecionar</div>
+          </div>
+          <span class="half-pick-btn">→</span>
+        </div>
+        <!-- Lista de opções -->
+        <div class="half-picker" id="half-picker-list" style="display:none"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center" id="half-price-note"></div>
+      </div>
+
       <button class="im-add-btn" id="im-add-btn" onclick="imConfirm()">
         🛒 Adicionar ao carrinho
       </button>
@@ -759,10 +851,10 @@ input,textarea{font-family:inherit}
       <div class="success-screen" id="success-screen">
         <div class="success-anim">✅</div>
         <div class="success-title">Pedido enviado!</div>
-        <div class="success-subtitle">Seu pedido foi recebido com sucesso.<br>Envie o número pelo WhatsApp e nossa IA responde na hora.</div>
+        <div class="success-subtitle" id="success-subtitle">Seu pedido foi recebido com sucesso.</div>
         <div class="success-order-num" id="success-num">#000</div>
 
-        <!-- Botão WhatsApp — principal CTA -->
+        <!-- Botão WhatsApp — visível apenas premium ou quando opt-in ativo -->
         <a id="success-wa-btn" target="_blank" href="#" style="
           display:none;width:100%;text-decoration:none;
           background:linear-gradient(135deg,#25d366,#128c7e);color:#fff;
@@ -776,7 +868,8 @@ input,textarea{font-family:inherit}
           Acompanhar pelo WhatsApp
         </a>
 
-        <button class="confirm-btn" style="margin-bottom:10px;background:var(--s2);color:var(--text);box-shadow:none;border:1.5px solid var(--border)" onclick="closeCart();openTracker()">
+        <!-- Tracker em tempo real — visível para plano pro -->
+        <button id="success-tracker-btn" class="confirm-btn" style="margin-bottom:10px;background:var(--s2);color:var(--text);box-shadow:none;border:1.5px solid var(--border)" onclick="closeCart();openTracker()">
           📡 Rastrear em tempo real
         </button>
 
@@ -851,6 +944,18 @@ input,textarea{font-family:inherit}
         <div class="form-section-label">Seus dados</div>
         <input class="form-input" id="f-name"  placeholder="Seu nome completo">
         <input class="form-input" id="f-phone" placeholder="WhatsApp (DDD + número)" type="tel">
+
+        <!-- whatsapp tracking toggle — apenas premium -->
+        <div id="wa-toggle-wrap" style="display:none">
+          <div class="wa-toggle-row" id="wa-toggle" onclick="toggleWaTracking()">
+            <div class="wa-toggle-icon">💬</div>
+            <div class="wa-toggle-info">
+              <div class="wa-toggle-lbl">Acompanhar pelo WhatsApp</div>
+              <div class="wa-toggle-sub">Receba atualizações do pedido pelo WhatsApp</div>
+            </div>
+            <div class="wa-toggle-switch"></div>
+          </div>
+        </div>
 
         <!-- pagamento -->
         <div class="form-section-label">Forma de pagamento</div>
@@ -986,6 +1091,7 @@ input,textarea{font-family:inherit}
 // ══════════════════════════════════════════
 const sb = window.AppAPI;
 let _tenantId    = null;
+let _tenantPlano = 'pro';  // 'pro' | 'premium'
 let _waNumero    = null;   // WhatsApp do restaurante
 let allItems     = [];
 let allCats      = [];
@@ -1001,11 +1107,16 @@ let selectedFaixa= 0;
 let _lojaAberta  = true;
 let _trackOrderId= null;
 let _trackChannel= null;
+let _waOptIn     = false;  // cliente optou por tracking via WA
 
 // ── Auth state ──
 let _customer    = null;
 const AUTH_KEY   = 'estima_customer';
 const PROFILE_KEY= 'estima_profile';
+
+// ── Pizza meio a meio ──
+let _halfItem    = null;   // item da 2ª metade selecionado
+let _halfPickerOpen = false;
 
 
 // ══════════════════════════════════════════
@@ -1121,6 +1232,7 @@ async function init() {
       hideSplash(); return;
     }
     _tenantId = info.id;
+    _tenantPlano = (info.plano || 'pro').toLowerCase();
     sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
     applyBranding(info.branding, info.nome);
 
@@ -1150,6 +1262,7 @@ async function init() {
     renderMenu();
     subscribeRealtime();
     loadCustomerSession();
+    setupPlanFeatures();
     setInterval(() => applyStatus(undefined, undefined), 60000);
   } catch(e) {
     console.error(e);
@@ -1161,6 +1274,26 @@ async function init() {
 
 function hideSplash() {
   setTimeout(() => document.getElementById('splash').classList.add('out'), 300);
+}
+
+// ══════════════════════════════════════════
+//  PLAN FEATURES
+// ══════════════════════════════════════════
+function setupPlanFeatures() {
+  const isPremium = _tenantPlano === 'premium';
+  // WhatsApp toggle — só premium
+  const wrap = document.getElementById('wa-toggle-wrap');
+  if (wrap) wrap.style.display = isPremium ? '' : 'none';
+  // Botão rastrear em tempo real — visível para pro (não-premium) e também premium
+  // (premium já tem o WA; pro usa o tracker SSE)
+  const tBtn = document.getElementById('success-tracker-btn');
+  if (tBtn) tBtn.style.display = '';
+}
+
+function toggleWaTracking() {
+  _waOptIn = !_waOptIn;
+  const row = document.getElementById('wa-toggle');
+  if (row) row.classList.toggle('on', _waOptIn);
 }
 
 // ══════════════════════════════════════════
@@ -1572,6 +1705,9 @@ function openItemModal(id) {
   if (!i) return;
   _imItemId = id;
   _imQty    = 1;
+  _halfItem = null;
+  _halfPickerOpen = false;
+
   const imgEl = document.getElementById('im-img');
   if (i.image_url) {
     imgEl.innerHTML = `<button class="im-close" onclick="closeItemModal()">✕</button><img src="${i.image_url}" alt="${i.name}" style="width:100%;height:100%;object-fit:cover">`;
@@ -1586,32 +1722,175 @@ function openItemModal(id) {
   else old.style.display = 'none';
   document.getElementById('im-qty').textContent = _imQty;
   document.getElementById('im-obs').value = '';
-  document.getElementById('im-add-btn').innerHTML = `🛒 Adicionar · R$ ${fmt(i.price * _imQty)}`;
   document.getElementById('im-add-btn').disabled = !_lojaAberta;
   document.getElementById('item-modal-bg').classList.add('on');
+
+  // ── Pizza meio a meio ──
+  const isPizza = isPizzaItem(i);
+  const halfSec = document.getElementById('half-section');
+  halfSec.style.display = isPizza ? '' : 'none';
+  if (isPizza) {
+    updateHalfUI();
+    renderHalfPicker(i);
+  }
+  updateImAddBtn();
+}
+
+function isPizzaItem(i) {
+  // Detecta pizza por: tipo, meio_a_meio flag, ou categoria
+  if (i.meio_a_meio || i.tipo === 'pizza' || i.is_pizza) return true;
+  const cat = allCats.find(c => c.name === (i.cat_key || i.cat));
+  if (cat && (cat.meio_a_meio || (cat.name||'').toLowerCase().includes('pizza') || (cat.label||'').toLowerCase().includes('pizza'))) return true;
+  return false;
+}
+
+function getPizzaSiblings(item) {
+  // Retorna todas as pizzas da mesma categoria, exceto o item atual
+  const catKey = item.cat_key || item.cat;
+  return allItems.filter(x =>
+    x.id !== item.id &&
+    (x.cat_key === catKey || x.cat === catKey) &&
+    x.status !== 'esgotado'
+  );
+}
+
+function renderHalfPicker(baseItem) {
+  const siblings = getPizzaSiblings(baseItem);
+  const list = document.getElementById('half-picker-list');
+  if (!siblings.length) {
+    list.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--muted);text-align:center">Nenhuma opção disponível</div>';
+    return;
+  }
+  list.innerHTML = siblings.map(s => {
+    const on = _halfItem && _halfItem.id === s.id ? ' on' : '';
+    const thumbInner = s.image_url
+      ? `<img src="${s.image_url}" alt="${s.name}" style="width:100%;height:100%;object-fit:cover;border-radius:7px">`
+      : `<span>${s.emoji || '🍕'}</span>`;
+    const check = (_halfItem && _halfItem.id === s.id) ? '✓' : '';
+    return `
+    <div class="half-opt${on}" onclick="selectHalf(${s.id})">
+      <div class="half-opt-emoji">${thumbInner}</div>
+      <span class="half-opt-name">${s.name}</span>
+      <span class="half-opt-price">R$ ${fmt(s.price)}</span>
+      <div class="half-opt-check">${check}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectHalf(id) {
+  _halfItem = allItems.find(x => x.id === id) || null;
+  _halfPickerOpen = false;
+  document.getElementById('half-picker-list').style.display = 'none';
+  const baseItem = allItems.find(x => x.id === _imItemId);
+  if (baseItem) renderHalfPicker(baseItem);
+  updateHalfUI();
+  updateImAddBtn();
+}
+
+function updateHalfUI() {
+  const prompt   = document.getElementById('half-pick-prompt');
+  const selected = document.getElementById('half-selected-row');
+  if (!_halfItem) {
+    prompt.style.display   = '';
+    selected.style.display = 'none';
+    document.getElementById('half-price-note').textContent = '';
+    return;
+  }
+  prompt.style.display   = 'none';
+  selected.style.display = '';
+  const base = allItems.find(x => x.id === _imItemId);
+  const avgPrice = base ? (parseFloat(base.price) + parseFloat(_halfItem.price)) / 2 : parseFloat(_halfItem.price);
+  // Emoji/img da 2ª metade
+  const emoEl = document.getElementById('half-sel-emoji');
+  if (_halfItem.image_url) {
+    emoEl.innerHTML = `<img src="${_halfItem.image_url}" alt="${_halfItem.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`;
+  } else {
+    emoEl.textContent = _halfItem.emoji || '🍕';
+  }
+  document.getElementById('half-sel-name').textContent = _halfItem.name;
+  document.getElementById('half-sel-hint').textContent = 'Toque para trocar';
+  document.getElementById('half-price-note').textContent = `Preço médio das metades: R$ ${fmt(avgPrice)}`;
+}
+
+function toggleHalfPicker() {
+  _halfPickerOpen = !_halfPickerOpen;
+  document.getElementById('half-picker-list').style.display = _halfPickerOpen ? '' : 'none';
+}
+
+function updateImAddBtn() {
+  const i = allItems.find(x => x.id === _imItemId);
+  if (!i) return;
+  const isPizza = isPizzaItem(i);
+  const base = parseFloat(i.price);
+  let price = base;
+  if (isPizza && _halfItem) {
+    price = (base + parseFloat(_halfItem.price)) / 2;
+  }
+  const disabled = !_lojaAberta || (isPizza && !_halfItem);
+  document.getElementById('im-add-btn').disabled = disabled;
+  const label = isPizza && !_halfItem
+    ? '🍕 Escolha a 2ª metade acima'
+    : `🛒 Adicionar · R$ ${fmt(price * _imQty)}`;
+  document.getElementById('im-add-btn').innerHTML = label;
 }
 
 function closeItemModal() {
   document.getElementById('item-modal-bg').classList.remove('on');
+  _halfItem = null;
+  _halfPickerOpen = false;
+  const pl = document.getElementById('half-picker-list');
+  if (pl) pl.style.display = 'none';
 }
 
 function imQty(d) {
   _imQty = Math.max(1, _imQty + d);
-  const i = allItems.find(x => x.id === _imItemId);
   document.getElementById('im-qty').textContent = _imQty;
-  if (i) document.getElementById('im-add-btn').innerHTML = `🛒 Adicionar · R$ ${fmt(i.price * _imQty)}`;
+  updateImAddBtn();
 }
 
 function imConfirm() {
   const i   = allItems.find(x => x.id === _imItemId);
   if (!i) return;
   const obs = document.getElementById('im-obs').value.trim();
-  const existing = cart.find(c => c.id === i.id && (c.obs||'') === obs);
+  const isPizza = isPizzaItem(i);
+
+  // Pizza meio a meio — precisa de 2ª metade
+  if (isPizza && !_halfItem) {
+    toast('🍕', 'Escolha a 2ª metade da pizza!');
+    document.getElementById('half-section').scrollIntoView({behavior:'smooth',block:'center'});
+    return;
+  }
+
+  let cartName  = i.name;
+  let cartPrice = parseFloat(i.price);
+  let cartObs   = obs;
+  let cartEmoji = i.emoji;
+  let cartImg   = i.image_url;
+
+  if (isPizza && _halfItem) {
+    const avgPrice = (parseFloat(i.price) + parseFloat(_halfItem.price)) / 2;
+    cartName  = `${i.name} / ${_halfItem.name}`;
+    cartPrice = avgPrice;
+    cartObs   = obs ? `Meio a meio · ${obs}` : 'Meio a meio';
+    cartImg   = i.image_url || null;
+  }
+
+  const cartItem = {
+    ...i,
+    name:      cartName,
+    price:     cartPrice,
+    obs:       cartObs,
+    emoji:     cartEmoji,
+    image_url: cartImg,
+  };
+
+  const existing = cart.find(c => c.name === cartName && (c.obs||'') === (cartObs||''));
   if (existing) existing.qty += _imQty;
-  else cart.push({ ...i, qty: _imQty, obs });
+  else cart.push({ ...cartItem, qty: _imQty });
+
   closeItemModal();
   updateCartFloat();
-  toast('🛒', `${i.name} adicionado!`);
+  toast('🛒', `${isPizza && _halfItem ? 'Pizza meio a meio' : i.name} adicionado!`);
 }
 
 // ══════════════════════════════════════════
@@ -1935,15 +2214,28 @@ async function submitOrder() {
     document.getElementById('success-screen').classList.add('on');
     document.getElementById('success-num').textContent = '#' + String(order.id).padStart(3,'0');
 
-    // Botão WhatsApp na tela de sucesso
-    const waLink = buildWaLink(order.id);
-    const waBtnEl = document.getElementById('success-wa-btn');
+    // Plan-aware success screen
+    const isPremium  = _tenantPlano === 'premium';
+    const waOptIn    = isPremium && (_waOptIn || true); // premium sempre mostra WA
+    const waLink     = buildWaLink(order.id);
+    const waBtnEl    = document.getElementById('success-wa-btn');
+    const trackerBtn = document.getElementById('success-tracker-btn');
+
     if (waBtnEl) {
-      if (waLink) {
+      if (waLink && isPremium) {
         waBtnEl.style.display = 'flex';
         waBtnEl.href = waLink;
       } else {
         waBtnEl.style.display = 'none';
+      }
+    }
+    // Subtítulo baseado no plano
+    const subtitleEl = document.getElementById('success-subtitle');
+    if (subtitleEl) {
+      if (isPremium && waLink) {
+        subtitleEl.innerHTML = 'Pedido recebido! Acompanhe pelo WhatsApp ou rastreie em tempo real.';
+      } else {
+        subtitleEl.innerHTML = 'Pedido recebido! Acompanhe pelo rastreador em tempo real.';
       }
     }
 
@@ -1953,8 +2245,10 @@ async function submitOrder() {
 
     startTracking(order.id, items, name);
 
-    // Toast WhatsApp (aparece 2s depois para não conflitar com animação)
-    setTimeout(() => showWaToast(order.id), 2000);
+    // Toast WhatsApp (apenas premium)
+    if (_tenantPlano === 'premium') {
+      setTimeout(() => showWaToast(order.id), 2000);
+    }
 
   } catch(e) {
     console.error(e);
