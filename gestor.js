@@ -3815,18 +3815,22 @@ function pdvOpenSlot(idx) {
   document.getElementById('pdv-pz-flavor-list').innerHTML = pizzas.length
     ? pizzas.map(f => {
         const isOn = pdvPz.selected[idx]?.id === f.id;
-        const img = f.imageUrl
-          ? `<div class="pz-flavor-icon"><img src="${f.imageUrl}"></div>`
-          : `<div class="pz-flavor-icon">🍕</div>`;
-        return `<button class="pz-flavor-btn${isOn?' on':''}" onclick="pdvSelectFlavor(${f.id})">
-          ${img}
-          <div>
-            <div class="pz-flavor-name">${f.name}</div>
-            <div class="pz-flavor-price">R$ ${f.price.toFixed(2).replace('.',',')}</div>
+        const thumb = f.imageUrl
+          ? `<img src="${f.imageUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:7px">`
+          : `<span style="font-size:18px">${f.emoji||'🍕'}</span>`;
+        const check = isOn
+          ? `<div style="width:20px;height:20px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;flex-shrink:0">✓</div>`
+          : `<div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--border);flex-shrink:0"></div>`;
+        return `<button onclick="pdvSelectFlavor(${f.id})" style="display:flex;align-items:center;gap:11px;padding:10px 13px;background:${isOn?'rgba(249,115,22,.12)':'none'};border:none;border-bottom:1px solid var(--border);cursor:pointer;width:100%;text-align:left;transition:background .15s;" onmouseover="if(!${isOn})this.style.background='rgba(255,255,255,.04)'" onmouseout="if(!${isOn})this.style.background='none'">
+          <div style="width:42px;height:42px;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">${thumb}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)">${f.name}</div>
+            <div style="font-size:12px;color:var(--amber);margin-top:1px">R$ ${f.price.toFixed(2).replace('.',',')}</div>
           </div>
+          ${check}
         </button>`;
       }).join('')
-    : '<div style="color:var(--muted);font-size:12px;padding:14px;grid-column:span 2;text-align:center">Nenhum item do tipo Pizza cadastrado.<br>Gestor de Cardápio → edite um item → Tipo = Pizza.</div>';
+    : '<div style="color:var(--muted);font-size:12px;padding:14px;text-align:center">Nenhum item do tipo Pizza cadastrado.<br>Gestor de Cardápio → edite um item → Tipo = Pizza.</div>';
 }
 
 function pdvSelectFlavor(fid) {
@@ -4080,10 +4084,22 @@ function pdvbUpdateTaxa(){pdvbEntregaTaxa=parseFloat(document.getElementById('pd
 function pdvbConfirmEntrega(){
   const tipo=document.querySelector('input[name="pdvb-entrega"]:checked')?.value||'balcao';
   pdvbEntregaTipo=tipo;
-  if(tipo==='delivery'){pdvbEntregaAddr=document.getElementById('pdvb-addr')?.value||'';pdvbEntregaTaxa=parseFloat(document.getElementById('pdvb-taxa-val')?.value)||0;}
-  else{pdvbEntregaTaxa=0;pdvbEntregaAddr='';}
+  if(tipo==='delivery'){
+    const rua   =(document.getElementById('pdvb-rua')?.value||'').trim();
+    const num   =(document.getElementById('pdvb-num')?.value||'').trim();
+    const bairro=(document.getElementById('pdvb-bairro')?.value||'').trim();
+    const compl =(document.getElementById('pdvb-compl')?.value||'').trim();
+    const ref   =(document.getElementById('pdvb-ref')?.value||'').trim();
+    const partes=[rua,num,bairro,compl,ref].filter(Boolean);
+    if(!rua){sbToast('err','Informe a rua/avenida');return;}
+    pdvbEntregaAddr=partes.join(', ');
+    pdvbEntregaTaxa=parseFloat(document.getElementById('pdvb-taxa-val')?.value)||0;
+  } else {
+    pdvbEntregaTaxa=0;
+    pdvbEntregaAddr='';
+  }
   pdvbRenderOrder();closeModal('modal-pdvb-entrega');
-  sbToast('ok',tipo==='delivery'?`Delivery — R$ ${pdvbEntregaTaxa.toFixed(2).replace('.',',')}`:'Balcão / Retirada');
+  sbToast('ok',tipo==='delivery'?`🛵 Delivery — R$ ${pdvbEntregaTaxa.toFixed(2).replace('.',',')}`:'🏪 Balcão / Retirada');
 }
 function pdvbPagamentos(){openModal('modal-pdvb-pag');}
 function pdvbSelectPag(label,val){
@@ -5867,6 +5883,64 @@ const TEMAS_PRONTOS = [
           '--success':'#22c55e','--danger':'#ef4444','--purple':'#7c3aed',
           '--pink':'#ec4899','--orange':'#f97316','--text':'#eef2ff','--muted':'#6366f1'}
   },
+
+  // ════ TEMAS CLAROS ════
+  {
+    nome:'☀️ Light Classic', desc:'Claro elegante',
+    vars:{'--bg':'#f8fafc','--surface':'#ffffff','--surface2':'#f1f5f9','--surface3':'#e2e8f0',
+          '--accent':'#3b82f6','--accent2':'#06b6d4','--accent3':'#f59e0b',
+          '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
+          '--pink':'#db2777','--orange':'#ea580c','--text':'#0f172a','--muted':'#64748b'}
+  },
+  {
+    nome:'🌸 Light Rose', desc:'Rosa pastel claro',
+    vars:{'--bg':'#fff1f5','--surface':'#ffffff','--surface2':'#fce7f0','--surface3':'#fbcfe8',
+          '--accent':'#e11d48','--accent2':'#f43f5e','--accent3':'#f59e0b',
+          '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
+          '--pink':'#be185d','--orange':'#ea580c','--text':'#1e0a14','--muted':'#9d4f7a'}
+  },
+  {
+    nome:'🌿 Light Green', desc:'Verde suave e fresco',
+    vars:{'--bg':'#f0fdf4','--surface':'#ffffff','--surface2':'#dcfce7','--surface3':'#bbf7d0',
+          '--accent':'#16a34a','--accent2':'#22c55e','--accent3':'#ca8a04',
+          '--success':'#15803d','--danger':'#dc2626','--purple':'#7c3aed',
+          '--pink':'#db2777','--orange':'#ea580c','--text':'#052e16','--muted':'#4b7a5a'}
+  },
+  {
+    nome:'🍊 Light Orange', desc:'Quente e vibrante',
+    vars:{'--bg':'#fff7ed','--surface':'#ffffff','--surface2':'#ffedd5','--surface3':'#fed7aa',
+          '--accent':'#ea580c','--accent2':'#f97316','--accent3':'#ca8a04',
+          '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
+          '--pink':'#db2777','--orange':'#c2410c','--text':'#431407','--muted':'#92400e'}
+  },
+  {
+    nome:'💜 Light Lavender', desc:'Roxo pastel suave',
+    vars:{'--bg':'#faf5ff','--surface':'#ffffff','--surface2':'#f3e8ff','--surface3':'#e9d5ff',
+          '--accent':'#7c3aed','--accent2':'#8b5cf6','--accent3':'#d97706',
+          '--success':'#16a34a','--danger':'#dc2626','--purple':'#6d28d9',
+          '--pink':'#db2777','--orange':'#ea580c','--text':'#2e1065','--muted':'#7c5c9e'}
+  },
+  {
+    nome:'🩵 Light Sky', desc:'Azul céu limpo',
+    vars:{'--bg':'#f0f9ff','--surface':'#ffffff','--surface2':'#e0f2fe','--surface3':'#bae6fd',
+          '--accent':'#0284c7','--accent2':'#0ea5e9','--accent3':'#d97706',
+          '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
+          '--pink':'#db2777','--orange':'#ea580c','--text':'#082f49','--muted':'#0369a1'}
+  },
+  {
+    nome:'🤍 Light Minimal', desc:'Cinza neutro limpo',
+    vars:{'--bg':'#f9fafb','--surface':'#ffffff','--surface2':'#f3f4f6','--surface3':'#e5e7eb',
+          '--accent':'#111827','--accent2':'#374151','--accent3':'#d97706',
+          '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
+          '--pink':'#db2777','--orange':'#ea580c','--text':'#111827','--muted':'#6b7280'}
+  },
+  {
+    nome:'🍫 Light Caramelo', desc:'Marrom quente aconchegante',
+    vars:{'--bg':'#fdf8f0','--surface':'#ffffff','--surface2':'#fdf3e3','--surface3':'#fde8c8',
+          '--accent':'#92400e','--accent2':'#b45309','--accent3':'#059669',
+          '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
+          '--pink':'#db2777','--orange':'#c2410c','--text':'#451a03','--muted':'#92400e'}
+  },
 ];
 
 // ── Estado atual do tema ──────────────────────────────
@@ -5961,22 +6035,37 @@ function temaUpdatePreview() {
 function temaBuildPresets() {
   const el = document.getElementById('tema-presets');
   if (!el) return;
-  el.innerHTML = TEMAS_PRONTOS.map((t, i) => {
+  const escuros = TEMAS_PRONTOS.filter(t => parseFloat(t.vars['--bg'].replace('#','').slice(0,2), 16) < 50);
+  const claros  = TEMAS_PRONTOS.filter(t => parseFloat(t.vars['--bg'].replace('#','').slice(0,2), 16) >= 50);
+  const buildCard = (t, i) => {
     const swatches = [t.vars['--accent'], t.vars['--accent2'], t.vars['--success'], t.vars['--bg']];
-    return `
-    <div onclick="temaApply(TEMAS_PRONTOS[${i}].vars)"
-      style="background:${t.vars['--surface']};border:1px solid ${t.vars['--surface3']};border-radius:10px;
-             padding:12px;cursor:pointer;transition:all .18s;position:relative;overflow:hidden"
-      onmouseover="this.style.transform='translateY(-2px)';this.style.borderColor='${t.vars['--accent']}'"
-      onmouseout="this.style.transform='';this.style.borderColor='${t.vars['--surface3']}'">
-      <div style="display:flex;gap:5px;margin-bottom:8px">
-        ${swatches.map(c=>`<div style="width:18px;height:18px;border-radius:50%;background:${c}"></div>`).join('')}
+    const idx = TEMAS_PRONTOS.indexOf(t);
+    return `<div onclick="temaApply(TEMAS_PRONTOS[${idx}].vars)"
+      style="background:${t.vars['--surface']};border:2px solid ${t.vars['--surface3']};border-radius:12px;
+             padding:13px;cursor:pointer;transition:all .18s;position:relative;overflow:hidden"
+      onmouseover="this.style.transform='translateY(-2px)';this.style.borderColor='${t.vars['--accent']}';this.style.boxShadow='0 4px 16px ${t.vars['--accent']}33'"
+      onmouseout="this.style.transform='';this.style.borderColor='${t.vars['--surface3']}';this.style.boxShadow=''">
+      <div style="display:flex;gap:5px;margin-bottom:9px">
+        ${swatches.map(c=>`<div style="width:20px;height:20px;border-radius:50%;background:${c};border:1.5px solid rgba(0,0,0,.1)"></div>`).join('')}
       </div>
-      <div style="font-size:12px;font-weight:700;color:${t.vars['--text']}">${t.nome}</div>
+      <div style="font-size:12.5px;font-weight:700;color:${t.vars['--text']}">${t.nome}</div>
       <div style="font-size:10.5px;color:${t.vars['--muted']};margin-top:2px">${t.desc}</div>
       <div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:${t.vars['--accent']}"></div>
     </div>`;
-  }).join('');
+  };
+  el.innerHTML =
+    `<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;margin-bottom:4px">
+       <div style="flex:1;height:1px;background:var(--border)"></div>
+       <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">🌑 Temas Escuros</span>
+       <div style="flex:1;height:1px;background:var(--border)"></div>
+     </div>` +
+    escuros.map(buildCard).join('') +
+    `<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;margin:8px 0 4px">
+       <div style="flex:1;height:1px;background:var(--border)"></div>
+       <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">☀️ Temas Claros</span>
+       <div style="flex:1;height:1px;background:var(--border)"></div>
+     </div>` +
+    claros.map(buildCard).join('');
 }
 
 // ── Salvar / Carregar / Reset ─────────────────────────
