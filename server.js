@@ -633,17 +633,15 @@ async function handleREST(req, res, table, params, body) {
         payload.tenant_id = tenantId
       }
 
-      // store_config: sempre faz upsert por tenant_id (seja do header ou do body)
-      const scTenantId = tenantId || payload.tenant_id
-      if (table==='store_config' && scTenantId) {
-        if (!payload.tenant_id) payload.tenant_id = scTenantId
+      // store_config: upsert por tenant_id
+      if (table==='store_config' && tenantId) {
         const keys = Object.keys(payload).filter(k=>cols.includes(k))
         const setClause = keys.filter(k=>k!=='tenant_id').map(k=>`"${k}"=excluded."${k}"`).join(', ')
         const colList = keys.map(k=>`"${k}"`).join(', ')
         const phs = keys.map(()=>'?').join(', ')
         db.prepare(`INSERT INTO store_config (${colList}) VALUES (${phs}) ON CONFLICT(tenant_id) DO UPDATE SET ${setClause}`)
           .run(...keys.map(k=>sanitize(payload[k])))
-        const row = db.prepare("SELECT * FROM store_config WHERE tenant_id=?").get(scTenantId)
+        const row = db.prepare("SELECT * FROM store_config WHERE tenant_id=?").get(tenantId)
         return send(res,200,parseRow(table,row))
       }
 
@@ -1246,14 +1244,34 @@ const server = http.createServer(async (req,res) => {
 
         // Busca pedido: prioridade 1 — número do pedido mencionado na mensagem
         const sl = {analise:'⏳ aguardando confirmação',producao:'👨‍🍳 em preparo',pronto:'🛵 saindo para entrega',entregue:'✅ entregue',cancelado:'❌ cancelado'}
-        const numPedidoMatch = msgFull.match(/\b(\d{1,6})\b/)
+
+        // Regex melhorada: tenta #NNN primeiro, depois "pedido NNN", depois qualquer número isolado
+        const numPedidoMatch =
+          msgFull.match(/#\*?(\d{1,6})\*?/) ||          // #023  ou  *#023*
+          msgFull.match(/pedido\s*[*#]?\s*(\d{1,6})/i) || // "pedido 023"
+          msgFull.match(/n[uú]mero\s*[*#]?\s*(\d{1,6})/i) || // "número 023"
+          msgFull.match(/\b0*([1-9]\d{0,5})\b/)           // número isolado (sem zeros à esquerda)
+
         const numPedido = numPedidoMatch ? parseInt(numPedidoMatch[1]) : null
         let pedidoContexto = ''
+        if (numPedido) log('🔍', `Buscando pedido #${numPedido} (tenant: ${tenantId}, phone: ...${phone.slice(-4)})`)
 
         if (numPedido) {
-          // Busca diretamente pelo número do pedido
-          const ped = db.prepare("SELECT id,status,total,items,client,created_at FROM orders WHERE tenant_id=? AND id=?").get(tenantId, numPedido)
+          // Busca 1: pelo tenant + id (caso normal)
+          let ped = db.prepare("SELECT id,status,total,items,client,phone,created_at FROM orders WHERE tenant_id=? AND id=?").get(tenantId, numPedido)
+
+          // Busca 2: fallback por id + telefone (cobre caso de tenant_id divergente no cadastro)
+          if (!ped) {
+            ped = db.prepare("SELECT id,status,total,items,client,phone,created_at FROM orders WHERE id=? AND phone LIKE ?").get(numPedido, `%${phone.slice(-8)}%`)
+          }
+
+          // Busca 3: só pelo id (último recurso, para quando o cliente não informou telefone no pedido)
+          if (!ped) {
+            ped = db.prepare("SELECT id,status,total,items,client,phone,created_at FROM orders WHERE id=?").get(numPedido)
+          }
+
           if (ped) {
+            log('✅', `Pedido #${numPedido} encontrado (id real: ${ped.id})`)
             const itsPed = (() => { try { return (JSON.parse(ped.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') } catch(e) { return '' } })()
             pedidoContexto = `PEDIDO ENCONTRADO (#${ped.id}):\n  Cliente: ${ped.client||'—'}\n  Status: ${sl[ped.status]||ped.status}\n  Total: R$${parseFloat(ped.total).toFixed(2).replace('.',',')}\n  Itens: ${itsPed||'—'}`
           } else {
