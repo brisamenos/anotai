@@ -200,6 +200,13 @@ async function loadAllData(silent = false) {
       const maxId = Math.max(...ordersKanban.map(o=>o.id));
       orderIdSeq = maxId + 1;
       _maxKnownOrderId = maxId;
+    } else {
+      // Kanban vazio — inicializa _maxKnownOrderId com o último ID do banco
+      // para o polling detectar novos pedidos do cardápio corretamente
+      try {
+        const { data: lastOrder } = await sb.from('orders').select('id').order('id', {ascending:false}).limit(1);
+        if (lastOrder?.[0]?.id) _maxKnownOrderId = Number(lastOrder[0].id);
+      } catch(e) {}
     }
 
     // Aplica estado do caixa e loja
@@ -520,12 +527,16 @@ setInterval(async () => {
 
   try {
     // 1. Busca pedidos novos (ID maior que o último conhecido)
-    if (_maxKnownOrderId > 0) {
-      const { data: novos } = await sb.from('orders')
+    // Roda sempre — incluindo quando _maxKnownOrderId = 0 (ex: gestor abre com kanban vazio
+    // e um pedido do cardápio chega antes do SSE estabilizar ou antes do próximo loadAllData)
+    {
+      const q = sb.from('orders')
         .select('*')
         .in('status', ['analise','producao','pronto'])
-        .gt('id', _maxKnownOrderId)
         .order('id', {ascending:false});
+      // Quando _maxKnownOrderId > 0 usa filtro eficiente; quando 0 varre todos os ativos
+      if (_maxKnownOrderId > 0) q.gt('id', _maxKnownOrderId);
+      const { data: novos } = await q;
 
       if (novos?.length) {
         let houveMudanca = false;
