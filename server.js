@@ -633,15 +633,17 @@ async function handleREST(req, res, table, params, body) {
         payload.tenant_id = tenantId
       }
 
-      // store_config: upsert por tenant_id
-      if (table==='store_config' && tenantId) {
+      // store_config: sempre faz upsert — aceita tenant_id do header OU do body
+      const scTenantId = tenantId || payload.tenant_id
+      if (table==='store_config' && scTenantId) {
+        if (!payload.tenant_id) payload.tenant_id = scTenantId
         const keys = Object.keys(payload).filter(k=>cols.includes(k))
         const setClause = keys.filter(k=>k!=='tenant_id').map(k=>`"${k}"=excluded."${k}"`).join(', ')
         const colList = keys.map(k=>`"${k}"`).join(', ')
         const phs = keys.map(()=>'?').join(', ')
         db.prepare(`INSERT INTO store_config (${colList}) VALUES (${phs}) ON CONFLICT(tenant_id) DO UPDATE SET ${setClause}`)
           .run(...keys.map(k=>sanitize(payload[k])))
-        const row = db.prepare("SELECT * FROM store_config WHERE tenant_id=?").get(tenantId)
+        const row = db.prepare("SELECT * FROM store_config WHERE tenant_id=?").get(scTenantId)
         return send(res,200,parseRow(table,row))
       }
 
@@ -689,13 +691,21 @@ async function handleREST(req, res, table, params, body) {
       const keys = Object.keys(payload).filter(k=>cols.includes(k))
       if (!keys.length) return send(res,400,{error:'Sem campos válidos'})
 
-      // store_config: update por tenant_id
-      if (table==='store_config' && tenantId) {
-        const setClause = keys.map(k=>`"${k}"=?`).join(', ')
-        db.prepare(`UPDATE store_config SET ${setClause} WHERE tenant_id=?`).run(...keys.map(k=>sanitize(payload[k])),tenantId)
-        const row = db.prepare("SELECT * FROM store_config WHERE tenant_id=?").get(tenantId)
+      // store_config: usa UPSERT para garantir que nunca falhe com UNIQUE constraint
+      // Aceita tenant_id do header (gestor) ou do body (admin sem header)
+      const patchTenantId = tenantId || payload.tenant_id || vals[0] || null
+      if (table==='store_config' && patchTenantId) {
+        const upsertKeys = [...new Set([...keys, 'tenant_id'])]
+          .filter(k => cols.includes(k))
+        if (!payload.tenant_id) payload.tenant_id = patchTenantId
+        const setClause = upsertKeys.filter(k=>k!=='tenant_id').map(k=>`"${k}"=excluded."${k}"`).join(', ')
+        const colList   = upsertKeys.map(k=>`"${k}"`).join(', ')
+        const phs       = upsertKeys.map(()=>'?').join(', ')
+        db.prepare(`INSERT INTO store_config (${colList}) VALUES (${phs}) ON CONFLICT(tenant_id) DO UPDATE SET ${setClause}`)
+          .run(...upsertKeys.map(k=>sanitize(payload[k] ?? (k==='tenant_id' ? patchTenantId : null))))
+        const row = db.prepare("SELECT * FROM store_config WHERE tenant_id=?").get(patchTenantId)
         const parsed = parseRow(table, row)
-        if (['orders','mesas','store_config','menu_items','categories'].includes(table)) emit(tenantId, table, parsed, 'UPDATE')
+        emit(patchTenantId, table, parsed, 'UPDATE')
         return send(res,200,parsed)
       }
 
