@@ -750,7 +750,7 @@ input,textarea{font-family:inherit}
 <div class="sticky-bar">
   <div class="search-wrap">
     <span class="search-icon">🔍</span>
-    <input class="search-input" type="search" placeholder="Buscar no cardápio…" id="search-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="onSearch(this.value)">
+    <input class="search-input" type="text" placeholder="Buscar no cardápio…" id="search-input" readonly onfocus="this.removeAttribute('readonly')" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="onSearch(this.value)">
   </div>
   <div class="cats-scroll" id="cats-scroll">
     <button class="cat-btn on" data-key="" onclick="filterCat(this,'')">Tudo</button>
@@ -1221,6 +1221,7 @@ function applyStatus(store_open, horarios) {
 //  INIT
 // ══════════════════════════════════════════
 async function init() {
+  clearSearchInput(); // Limpa antes de qualquer coisa
   document.getElementById('menu-wrap').innerHTML =
     '<div style="padding:60px 0;text-align:center"><div style="font-size:32px">⏳</div></div>';
   try {
@@ -1274,6 +1275,19 @@ async function init() {
 
 function hideSplash() {
   setTimeout(() => document.getElementById('splash').classList.add('out'), 300);
+}
+
+// Limpa campo de busca — o Chrome ignora autocomplete="off" e preenche com dados salvos
+// Esta função garante que o campo sempre inicie vazio
+function clearSearchInput() {
+  const el = document.getElementById('search-input');
+  if (!el) return;
+  el.value = '';
+  el.setAttribute('readonly', '');
+  // Remove readonly após um tick para permitir digitação normal
+  requestAnimationFrame(() => {
+    setTimeout(() => el.removeAttribute('readonly'), 200);
+  });
 }
 
 // ══════════════════════════════════════════
@@ -2355,6 +2369,13 @@ function fmt(n) {
 }
 
 init();
+
+// Garante limpeza do campo de busca mesmo quando Chrome autofill ocorre após load
+document.addEventListener('DOMContentLoaded', clearSearchInput);
+window.addEventListener('load', clearSearchInput);
+// Chrome às vezes preenche depois de 100-300ms
+setTimeout(clearSearchInput, 100);
+setTimeout(clearSearchInput, 400);
 </script>
 </body>
 </html>
