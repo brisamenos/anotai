@@ -323,6 +323,16 @@ const MIGRATIONS = [
       `ALTER TABLE customers ADD COLUMN birthday TEXT`
     ]
   },
+  {
+    version: 12,
+    description: 'Adiciona senha_hash em customers para autenticação própria',
+    up: `ALTER TABLE customers ADD COLUMN senha_hash TEXT`
+  },
+  {
+    version: 13,
+    description: 'Adiciona customer_id em orders para vincular pedido ao cliente logado',
+    up: `ALTER TABLE orders ADD COLUMN customer_id INTEGER`
+  },
 ]
 
 function runMigrations() {
@@ -454,11 +464,11 @@ const TABLE_COLS = {
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
-  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','status','mesa_num','garcom_id','garcom_nome','created_at'],
+  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','status','mesa_num','garcom_id','garcom_nome','customer_id','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','updated_at'],
   fidelidade:   ['id','tenant_id','name','phone','birthday','pts','max_pts','orders_count','resgates','created_at'],
-  customers:    ['id','tenant_id','name','phone','addr','orders_count','total_spent','last_order_at','email','birthday','created_at'],
+  customers:    ['id','tenant_id','name','phone','addr','orders_count','total_spent','last_order_at','email','birthday','senha_hash','customer_id','created_at'],
 }
 
 // Tabelas que NÃO são filtradas por tenant (acesso global)
@@ -913,6 +923,60 @@ const server = http.createServer(async (req,res) => {
   if(req.method==='GET'&&upath==='/api/tenant-info'){
     const info = handleTenantInfo(params)
     send(res, info.error?404:200, info); return
+  }
+
+  // ── Autenticação de clientes (cardápio público) ──────────────────
+  // POST /api/customer-register
+  if(req.method==='POST'&&upath==='/api/customer-register'){
+    const body   = await readBody(req)
+    const tid    = getTenantId(req, params)
+    const {name, phone, email, senha, birthday} = body
+    if(!name||!phone||!senha) { send(res,400,{error:'Nome, telefone e senha são obrigatórios'}); return }
+    if(!tid) { send(res,400,{error:'Tenant não identificado'}); return }
+    try {
+      const hash = crypto.createHash('sha256').update(senha).digest('hex')
+      const existing = db.prepare('SELECT id FROM customers WHERE tenant_id=? AND phone=?').get(tid, phone)
+      if(existing) {
+        // já existe: atualiza senha e dados se ainda não tinha senha
+        db.prepare('UPDATE customers SET name=?,email=?,birthday=?,senha_hash=? WHERE tenant_id=? AND phone=?')
+          .run(name, email||null, birthday||null, hash, tid, phone)
+        const c = db.prepare('SELECT id,name,phone,email,birthday,orders_count,total_spent,created_at FROM customers WHERE tenant_id=? AND phone=?').get(tid, phone)
+        send(res,200,{...c, token: Buffer.from(`${c.id}:${tid}:${hash.slice(0,16)}`).toString('base64')}); return
+      }
+      const info = db.prepare('INSERT INTO customers (tenant_id,name,phone,email,birthday,senha_hash,orders_count,total_spent) VALUES (?,?,?,?,?,?,0,0)')
+        .run(tid, name, phone, email||null, birthday||null, hash)
+      const c = db.prepare('SELECT id,name,phone,email,birthday,orders_count,total_spent,created_at FROM customers WHERE id=?').get(info.lastInsertRowid)
+      send(res,201,{...c, token: Buffer.from(`${c.id}:${tid}:${hash.slice(0,16)}`).toString('base64')}); return
+    } catch(e) { send(res,400,{error:e.message}); return }
+  }
+
+  // POST /api/customer-login
+  if(req.method==='POST'&&upath==='/api/customer-login'){
+    const body  = await readBody(req)
+    const tid   = getTenantId(req, params)
+    const {phone, senha} = body
+    if(!phone||!senha) { send(res,400,{error:'Telefone e senha obrigatórios'}); return }
+    if(!tid) { send(res,400,{error:'Tenant não identificado'}); return }
+    try {
+      const hash = crypto.createHash('sha256').update(senha).digest('hex')
+      const c = db.prepare('SELECT id,name,phone,email,birthday,orders_count,total_spent,created_at,senha_hash FROM customers WHERE tenant_id=? AND phone=?').get(tid, phone)
+      if(!c||!c.senha_hash) { send(res,401,{error:'Telefone não cadastrado'}); return }
+      if(c.senha_hash !== hash) { send(res,401,{error:'Senha incorreta'}); return }
+      const {senha_hash:_, ...safe} = c
+      send(res,200,{...safe, token: Buffer.from(`${c.id}:${tid}:${hash.slice(0,16)}`).toString('base64')}); return
+    } catch(e) { send(res,400,{error:e.message}); return }
+  }
+
+  // GET /api/customer-orders?customer_id=X
+  if(req.method==='GET'&&upath==='/api/customer-orders'){
+    const tid = getTenantId(req, params)
+    const cid = params.get('customer_id')
+    if(!tid||!cid) { send(res,400,{error:'Parâmetros faltando'}); return }
+    try {
+      const rows = db.prepare('SELECT id,client,phone,addr,items,total,taxa,pag,status,created_at FROM orders WHERE tenant_id=? AND customer_id=? ORDER BY id DESC LIMIT 30').all(tid, cid)
+      const parsed = rows.map(r=>({...r, items: (()=>{try{return JSON.parse(r.items)}catch(e){return[]}})()}))
+      send(res,200,parsed); return
+    } catch(e) { send(res,400,{error:e.message}); return }
   }
 
   // Criar tenant + store_config + usuário gestor ── ANTES do bloco genérico /api/
