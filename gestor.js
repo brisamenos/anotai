@@ -5046,7 +5046,15 @@ function _evoSetStatus(type,txt) {
 
 async function topnavCopiarCardapio(btn) {
   try {
-    const url  = `${window.location.origin}/index.html?tenant=${encodeURIComponent(_sessao?.tenant_id || '')}`;
+    const tid = _sessao?.tenant_id || '';
+    let slug = '';
+    try {
+      const { data } = await sb.from('tenants').select('slug').eq('id', tid).single();
+      slug = data?.slug || '';
+    } catch(e) {}
+    const url = slug
+      ? `${window.location.origin}/index.html?slug=${encodeURIComponent(slug)}`
+      : `${window.location.origin}/index.html?tenant=${encodeURIComponent(tid)}`;
     await navigator.clipboard.writeText(url);
     // Feedback visual temporário no botão
     const svg = btn.querySelector('svg');
@@ -5188,11 +5196,24 @@ async function loadCardapioPublico() {
   cpMontarLink();
 }
 
-function cpMontarLink() {
+async function cpMontarLink() {
   const tid  = _sessao?.tenant_id || '';
   const base = window.location.origin;
-  const urlCardapio = `${base}/index.html?tenant=${encodeURIComponent(tid)}`;
-  const urlGarcom   = `${base}/garcom.html?tenant=${encodeURIComponent(tid)}`;
+
+  // Busca o slug do tenant para gerar link legível (?slug=nome)
+  let slug = '';
+  try {
+    const { data } = await sb.from('tenants').select('slug').eq('id', tid).single();
+    slug = data?.slug || '';
+  } catch(e) {}
+
+  const urlCardapio = slug
+    ? `${base}/index.html?slug=${encodeURIComponent(slug)}`
+    : `${base}/index.html?tenant=${encodeURIComponent(tid)}`;
+
+  const urlGarcom = slug
+    ? `${base}/garcom.html?slug=${encodeURIComponent(slug)}`
+    : `${base}/garcom.html?tenant=${encodeURIComponent(tid)}`;
 
   const el = document.getElementById('cp-link-url');
   if (el) el.textContent = urlCardapio;
