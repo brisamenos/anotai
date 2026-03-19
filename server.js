@@ -1050,9 +1050,20 @@ const server = http.createServer(async (req,res) => {
   // ════════════════════════════════════════════════════════
   // WEBHOOK EVOLUTION API → AGENTE IA
   // ════════════════════════════════════════════════════════
-  if(req.method==='POST'&&upath.startsWith('/webhook/whatsapp')){
+  if(req.method==='POST'&&(upath.startsWith('/webhook/whatsapp')||upath.startsWith('/webhook/'))){
     const body = await readBody(req)
-    const tenantId = upath.split('/')[3] || req.headers['x-tenant-id'] || null
+    // Aceita /webhook/whatsapp/{tenant_id}  OU  /webhook/{slug}
+    let tenantId = upath.startsWith('/webhook/whatsapp')
+      ? (upath.split('/')[3] || null)
+      : null
+    if (!tenantId) {
+      const slug = upath.split('/')[2] || null
+      if (slug) {
+        const row = db.prepare("SELECT id FROM tenants WHERE slug=? OR id=?").get(slug, slug)
+        tenantId = row?.id || null
+      }
+    }
+    tenantId = tenantId || req.headers['x-tenant-id'] || null
     try {
       const msg    = body?.data?.message?.conversation || body?.data?.message?.extendedTextMessage?.text || ''
       const from   = body?.data?.key?.remoteJid || ''
