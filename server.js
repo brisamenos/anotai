@@ -333,11 +333,6 @@ const MIGRATIONS = [
     description: 'Adiciona customer_id em orders para vincular pedido ao cliente logado',
     up: `ALTER TABLE orders ADD COLUMN customer_id INTEGER`
   },
-  {
-    version: 14,
-    description: 'Adiciona coluna time em orders para armazenar horário do pedido do cardápio',
-    up: `ALTER TABLE orders ADD COLUMN time TEXT`
-  },
 ]
 
 function runMigrations() {
@@ -469,7 +464,7 @@ const TABLE_COLS = {
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
-  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','status','time','mesa_num','garcom_id','garcom_nome','customer_id','created_at'],
+  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','status','mesa_num','garcom_id','garcom_nome','customer_id','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','updated_at'],
   fidelidade:   ['id','tenant_id','name','phone','birthday','pts','max_pts','orders_count','resgates','created_at'],
@@ -685,6 +680,31 @@ async function handleREST(req, res, table, params, body) {
       if (['orders','mesas','store_config','menu_items','categories'].includes(table)) {
         emit(tenantId||payload.tenant_id, table, insertedForEmit||payload, 'INSERT')
       }
+      // Envia WA "recebido" quando novo pedido chega (analise)
+      if (table === 'orders' && insertedForEmit?.status === 'analise' && insertedForEmit?.phone) {
+        const _tid = tenantId || payload.tenant_id
+        setImmediate(async () => {
+          try {
+            const cfg  = db.prepare("SELECT evo_instance, evo_automacoes, store_name FROM store_config WHERE tenant_id=?").get(_tid)
+            const inst = cfg?.evo_instance || EVO_INST
+            const auto = jsonParse(cfg?.evo_automacoes) || {}
+            const cr   = auto['recebido'] || {}
+            const nome  = insertedForEmit.client || 'Cliente'
+            const idStr = String(insertedForEmit.id).padStart(3,'0')
+            const items = Array.isArray(insertedForEmit.items)
+              ? insertedForEmit.items.map(i=>`${i.qty}x ${i.name}`).join(', ')
+              : (() => { try { return (JSON.parse(insertedForEmit.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') } catch(e){ return '' } })()
+            const total = (parseFloat(insertedForEmit.total||0) + parseFloat(insertedForEmit.taxa||0)).toFixed(2).replace('.',',')
+            const vars  = { nome, id:idStr, itens:items, total, endereco:insertedForEmit.addr||'', mesa:String(insertedForEmit.mesa_num||'') }
+            const msgPadrao = `📥 Olá ${nome}! Recebemos seu pedido #${idStr} com sucesso! 🎉\n🛒 ${items}\n💰 Total: R$ ${total}\n⏱️ Em breve confirmaremos. Aguarde!`
+            const msgFinal  = (cr.on && cr.msg) ? fillVars(cr.msg, vars) : (cr.on === false ? null : msgPadrao)
+            if (msgFinal) {
+              const r = await sendWA(insertedForEmit.phone, msgFinal, inst)
+              log(r.ok?'📲':'❌', `WA recebido → #${idStr}: ${r.ok?'ok':JSON.stringify(r)}`)
+            }
+          } catch(e) { log('❌','Erro WA recebido:',{error:e.message}) }
+        })
+      }
       return send(res,201,returnRep?inserted:{id:newRowid})
     } catch(e) { return send(res,400,{error:e.message}) }
   }
@@ -881,12 +901,12 @@ async function checarPedidos() {
       if (!cfg) continue
       const auto   = jsonParse(cfg.evo_automacoes)||{}
       const inst   = cfg.evo_instance || EVO_INST
-      const pedidos = db.prepare(`SELECT * FROM orders WHERE tenant_id=? AND phone IS NOT NULL AND created_at>=? AND status IN ('producao','pronto','cancelado','finalizado') ORDER BY id DESC LIMIT 50`).all(t.id,desde)
+      const pedidos = db.prepare(`SELECT * FROM orders WHERE tenant_id=? AND phone IS NOT NULL AND created_at>=? AND status IN ('analise','producao','pronto','cancelado','finalizado','entregue') ORDER BY id DESC LIMIT 50`).all(t.id,desde)
       for (const o of pedidos) {
         const chave=`${o.id}_${o.status}`
         if (processed.has(chave)) continue
         processed.add(chave)
-        const tipo={producao:'confirmado',pronto:'pronto',cancelado:'cancelado',finalizado:'avaliacao'}[o.status]
+        const tipo={analise:'recebido',producao:'confirmado',pronto:'pronto',entregue:'entrega',cancelado:'cancelado',finalizado:'avaliacao'}[o.status]
         if (!tipo) continue
         const ct=auto[tipo]||{}; if(!ct.on) continue
         const items=(() => { try{return(JSON.parse(o.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}catch(e){return''} })()
@@ -1180,7 +1200,7 @@ const server = http.createServer(async (req,res) => {
 
         // Mensagens padrão por status (usadas quando automação não está configurada)
         const msgPadrao = {
-          analise:   `✅ Olá, *${nome}*! Recebemos seu pedido *#${idStr}* com sucesso!\n\n🛒 ${items}\n💰 Total: R$${total}\n\nEm breve confirmaremos. 🍽️`,
+          analise:   `📥 Olá, *${nome}*! Recebemos seu pedido *#${idStr}* com sucesso! 🎉\n\n🛒 ${items}\n💰 Total: R$${total}\n\nEm breve confirmaremos. Aguarde! ⏱️`,
           producao:  `👨‍🍳 *#${idStr}* confirmado!\n\nOlá *${nome}*, seu pedido está sendo preparado agora. Aguarde! 😊`,
           pronto:    `✅ *#${idStr}* pronto!\n\n*${nome}*, seu pedido está pronto! ${isDelivery === '🛵 Entrega' ? 'Em instantes sairá para entrega.' : 'Pode retirar no balcão.'}`,
           saiu:      `🛵 *#${idStr}* a caminho!\n\n*${nome}*, seu pedido saiu para entrega! Chegará em breve. 🎉`,
@@ -1190,7 +1210,15 @@ const server = http.createServer(async (req,res) => {
         }
 
         // Verifica se existe automação customizada para este status
-        const tipoAuto = { producao:'confirmado', pronto:'pronto', cancelado:'cancelado', finalizado:'avaliacao' }[new_status]
+        const tipoAuto = {
+          analise:   'recebido',
+          producao:  'confirmado',
+          pronto:    'pronto',
+          saiu:      'entrega',
+          entregue:  'entrega',
+          cancelado: 'cancelado',
+          finalizado:'avaliacao'
+        }[new_status]
         const ct = tipoAuto ? (auto[tipoAuto]||{}) : {}
         const vars = { nome, id:idStr, itens:items, total, endereco:order.addr||'', mesa:String(order.mesa_num||''), tipo_entrega:isDelivery }
 
