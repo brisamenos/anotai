@@ -6035,8 +6035,8 @@ function temaUpdatePreview() {
 function temaBuildPresets() {
   const el = document.getElementById('tema-presets');
   if (!el) return;
-  const escuros = TEMAS_PRONTOS.filter(t => parseFloat(t.vars['--bg'].replace('#','').slice(0,2), 16) < 50);
-  const claros  = TEMAS_PRONTOS.filter(t => parseFloat(t.vars['--bg'].replace('#','').slice(0,2), 16) >= 50);
+  const escuros = TEMAS_PRONTOS.filter(t => parseInt(t.vars['--bg'].replace('#','').slice(0,2), 16) < 50);
+  const claros  = TEMAS_PRONTOS.filter(t => parseInt(t.vars['--bg'].replace('#','').slice(0,2), 16) >= 50);
   const buildCard = (t, i) => {
     const swatches = [t.vars['--accent'], t.vars['--accent2'], t.vars['--success'], t.vars['--bg']];
     const idx = TEMAS_PRONTOS.indexOf(t);
