@@ -1,4 +1,3 @@
-
 // ═══════════════════════════════════════════════════════
 // SUPABASE — CONFIGURAÇÃO E INTEGRAÇÃO
 // ═══════════════════════════════════════════════════════
@@ -2064,11 +2063,7 @@ function renderMesaCard(t, orders) {
             <button class="oc-btn oc-btn-ok" onclick="mesaAdvanceOrder(${o.id})">✔ Confirmar</button>
             <button class="oc-btn oc-btn-no" onclick="mesaCancelOrder(${o.id})">✕ Cancelar</button>
           </div>`;
-        } else if (isProd) {
-          btns = `<div style="margin-top:7px">
-            <button class="oc-btn oc-btn-ok" style="width:100%" onclick="mesaServOrder(${o.id})">✓ Entregue</button>
-          </div>`;
-        } else if (isRdy) {
+        } else if (isProd || isRdy) {
           btns = `<div style="margin-top:7px">
             <button class="oc-btn oc-btn-ok" style="width:100%" onclick="mesaServOrder(${o.id})">✓ Entregue</button>
           </div>`;
@@ -2084,7 +2079,40 @@ function renderMesaCard(t, orders) {
           ${btns}
         </div>`;
       }).join('')
-    : `<div style="color:var(--muted);font-size:12.5px;text-align:center;padding:14px 0">Nenhum pedido ativo</div>`;
+    : isWaiting
+      // Mesa aguardando pagamento: busca resumo do consumo do cache ou banco
+      ? (function() {
+          // Tenta montar resumo dos pedidos entregues desta sessão
+          const sessionStart = t.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
+          const allSessionOrders = mesaOrdersCache.filter(o =>
+            parseInt(o.mesa_num) === parseInt(t.num) &&
+            new Date(o.created_at || 0).getTime() >= sessionStart
+          );
+          if (!allSessionOrders.length) {
+            return `<div style="color:var(--muted);font-size:12.5px;text-align:center;padding:10px 0">Consumo registrado — clique em registrar para detalhes</div>`;
+          }
+          // Monta lista consolidada de todos os itens
+          const itemMap = {};
+          allSessionOrders.forEach(o => {
+            (Array.isArray(o.items) ? o.items : []).forEach(i => {
+              const key = i.name;
+              if (!itemMap[key]) itemMap[key] = { name:i.name, qty:0, total:0, drink:!!i.drink };
+              itemMap[key].qty += (i.qty||1);
+              itemMap[key].total += (i.price||0) * (i.qty||1);
+            });
+          });
+          const rows = Object.values(itemMap).map(i =>
+            `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+              <span>${i.drink?'🥤':'🍴'} ${i.qty}× ${i.name}</span>
+              <span style="color:var(--accent3);font-weight:600">R$ ${i.total.toFixed(2).replace('.',',')}</span>
+            </div>`
+          ).join('');
+          return `<div style="background:var(--surface2);border:1px solid rgba(245,158,11,.2);border-radius:9px;padding:10px 12px;margin-bottom:4px">
+            <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">📋 Resumo do consumo</div>
+            ${rows}
+          </div>`;
+        })()
+      : `<div style="color:var(--muted);font-size:12.5px;text-align:center;padding:14px 0">Nenhum pedido ativo</div>`;
 
   // Se mesa está waiting, usa t.total gravado pelo garçom/fecharMesa
   // Se mesa está busy, usa total do cache atual
@@ -2114,7 +2142,7 @@ function renderMesaCard(t, orders) {
         ${statusLabel}
         <button onclick="event.stopPropagation();openEditMesa(${t.num})" style="margin-left:4px;background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--muted);cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif" title="Editar mesa">✏️</button>
       </div>
-      <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:900;color:var(--accent3)">R$ ${total.toFixed(2).replace('.', ',')}</div>
+      <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:900;color:var(--accent3)">R$ ${displayTotal.toFixed(2).replace('.', ',')}</div>
     </div>
     ${ordersHtml}
     ${actionBtn}
@@ -4318,8 +4346,12 @@ async function confirmarPagamentoMesa() {
     _renderMesaPageFromCache();
     renderKanban();
     renderQR();
-    const caixaMsg = movErr ? ' (caixa não registrado — verifique)' : ' registrado no caixa!';
-    sbToast('ok', `Mesa ${num} liberada — R$ ${totalVal.toFixed(2).replace('.',',')}${caixaMsg}`);
+    closeModal('modal-pag-mesa');
+
+    // Monta e exibe comprovante
+    const caixaMsg = movErr ? ' (caixa não registrado)' : '';
+    abrirComprovantesMesa(num, totalVal, forma, time);
+    sbToast('ok', `✅ Mesa ${num} liberada — R$ ${totalVal.toFixed(2).replace('.',',')}${caixaMsg}`);
   } catch(e) {
     console.error('confirmarPagamentoMesa error:', e);
     const msg = e?.message || e?.details || e?.hint || JSON.stringify(e);
@@ -4327,6 +4359,71 @@ async function confirmarPagamentoMesa() {
   } finally {
     sbLoading(false);
   }
+}
+
+function abrirComprovantesMesa(num, totalVal, forma, time) {
+  const modal = document.getElementById('modal-comprovante-mesa');
+  if (!modal) return;
+
+  // Busca itens do consumo do cache
+  const t = tables.find(x => parseInt(x.num) === parseInt(num));
+  const sessionStart = t?.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
+  const sessionOrders = mesaOrdersCache.filter(o =>
+    parseInt(o.mesa_num) === parseInt(num)
+  );
+
+  // Consolida itens
+  const itemMap = {};
+  sessionOrders.forEach(o => {
+    (Array.isArray(o.items) ? o.items : []).forEach(i => {
+      const key = i.name;
+      if (!itemMap[key]) itemMap[key] = { name:i.name, qty:0, total:0, drink:!!i.drink };
+      itemMap[key].qty += (i.qty||1);
+      itemMap[key].total += (i.price||0) * (i.qty||1);
+    });
+  });
+  const itens = Object.values(itemMap);
+
+  const nome  = _sessao?.nome || 'Estima Food';
+  const dataHora = new Date().toLocaleString('pt-BR', {timeZone:'America/Fortaleza'});
+  const formaLabel = {dinheiro:'💵 Dinheiro', pix:'💠 PIX', credito:'💳 Crédito', debito:'💳 Débito', voucher:'🎫 Voucher'}[forma] || forma;
+
+  const itensHtml = itens.map(i =>
+    `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px dashed #ddd">
+      <span>${i.qty}× ${i.name}</span>
+      <span>R$ ${i.total.toFixed(2).replace('.',',')}</span>
+    </div>`
+  ).join('') || '<div style="font-size:13px;color:#999;text-align:center;padding:8px">Sem itens registrados</div>';
+
+  document.getElementById('comp-mesa-content').innerHTML = `
+    <div style="font-family:monospace;background:#fff;color:#111;padding:20px;border-radius:10px;max-width:300px;margin:0 auto">
+      <div style="text-align:center;margin-bottom:12px">
+        <div style="font-size:18px;font-weight:900">${nome}</div>
+        <div style="font-size:11px;color:#666">${dataHora}</div>
+        <div style="font-size:13px;font-weight:700;margin-top:4px">Mesa ${num}</div>
+        <hr style="border:none;border-top:1px dashed #ccc;margin:8px 0">
+      </div>
+      <div style="margin-bottom:10px">${itensHtml}</div>
+      <hr style="border:none;border-top:1px dashed #ccc;margin:8px 0">
+      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;margin-bottom:4px">
+        <span>TOTAL</span><span>R$ ${totalVal.toFixed(2).replace('.',',')}</span>
+      </div>
+      <div style="font-size:12px;color:#555;margin-bottom:10px">${formaLabel}</div>
+      <hr style="border:none;border-top:1px dashed #ccc;margin:8px 0">
+      <div style="text-align:center;font-size:11px;color:#999">Obrigado pela preferência!</div>
+    </div>`;
+
+  openModal('modal-comprovante-mesa');
+}
+
+function imprimirComprovanteMesa() {
+  const conteudo = document.getElementById('comp-mesa-content')?.innerHTML;
+  if (!conteudo) return;
+  const w = window.open('', '_blank', 'width=400,height=600');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comprovante</title>
+    <style>body{margin:0;padding:16px;font-family:monospace} @media print{body{margin:0}}</style>
+    </head><body>${conteudo}<script>window.onload=()=>{window.print();window.close()}<\/script></body></html>`);
+  w.document.close();
 }
 
 // ─────────────────────────────────────────
