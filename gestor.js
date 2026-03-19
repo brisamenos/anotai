@@ -1648,10 +1648,31 @@ function selecionarModelo(tipo) {
     </div>`).join('');
 }
 
+// ── Limpa todo o cardápio do tenant ──────────────────
+async function limparCardapioAtual() {
+  // Deleta todos os itens
+  if (items.length > 0) {
+    await sb.from('menu_items').delete().neq('id', 0);
+    items.length = 0;
+  }
+  // Deleta todas as categorias
+  if (categories.length > 0) {
+    await sb.from('categories').delete().neq('id', 0);
+    categories.length = 0;
+  }
+}
+
 async function aplicarModelo() {
   if (!_modeloSelecionado) return;
   const modelo = MODELOS_CARDAPIO[_modeloSelecionado];
   if (!modelo) return;
+
+  const substituir = document.getElementById('toggle-limpar-cardapio')?.classList.contains('on');
+
+  if (substituir) {
+    const ok = confirm(`Tem certeza? Isso vai APAGAR todo o cardápio atual (${categories.length} categoria(s) · ${items.length} item(s)) e substituir pelo modelo "${modelo.label}".`);
+    if (!ok) return;
+  }
 
   const btn = document.getElementById('btn-aplicar-modelo');
   btn.disabled = true;
@@ -1659,6 +1680,10 @@ async function aplicarModelo() {
   sbLoading(true);
 
   try {
+    if (substituir) {
+      await limparCardapioAtual();
+    }
+
     let catSortOrder = categories.length;
 
     for (const catDef of modelo.categorias) {
@@ -1701,6 +1726,8 @@ async function aplicarModelo() {
     }
 
     closeModal('modal-modelos');
+    // Reset toggle
+    document.getElementById('toggle-limpar-cardapio')?.classList.remove('on');
     renderGestor();
     renderTable();
     sbToast('ok', `✅ Modelo "${modelo.label}" aplicado com ${modelo.categorias.length} categorias!`);
@@ -1787,8 +1814,10 @@ async function importarCardapio(inputEl) {
   }
 
   const total = parsed.categorias.reduce((s, c) => s + (c.itens?.length || 0), 0);
-  const confirmMsg = `Importar "${file.name}"?\n\n${parsed.categorias.length} categoria(s) · ${total} item(s)\n\nOs itens existentes não serão removidos.`;
-  if (!confirm(confirmMsg)) return;
+
+  const substituir = categories.length > 0 && confirm(
+    `Deseja SUBSTITUIR o cardápio atual?\n\nAtual: ${categories.length} categoria(s) · ${items.length} item(s)\nImportando: ${parsed.categorias.length} categoria(s) · ${total} item(s)\n\nClique OK para substituir ou Cancelar para adicionar ao existente.`
+  );
 
   closeModal('modal-modelos');
   sbLoading(true);
@@ -1796,6 +1825,10 @@ async function importarCardapio(inputEl) {
   let catsCriadas = 0, itensCriados = 0, erros = 0;
 
   try {
+    if (substituir) {
+      await limparCardapioAtual();
+    }
+
     let catSortOrder = categories.length;
 
     for (const catDef of parsed.categorias) {
