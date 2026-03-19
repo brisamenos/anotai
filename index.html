@@ -759,21 +759,38 @@ input,textarea{font-family:inherit}
       <div class="success-screen" id="success-screen">
         <div class="success-anim">✅</div>
         <div class="success-title">Pedido enviado!</div>
-        <div class="success-subtitle">Seu pedido foi recebido com sucesso.<br>Acompanhe o status abaixo.</div>
+        <div class="success-subtitle">Seu pedido foi recebido com sucesso.<br>Envie o número pelo WhatsApp e nossa IA responde na hora.</div>
         <div class="success-order-num" id="success-num">#000</div>
-        <button class="confirm-btn" style="margin-bottom:10px" onclick="closeCart();openTracker()">
-          📡 Acompanhar pedido
+
+        <!-- Botão WhatsApp — principal CTA -->
+        <a id="success-wa-btn" target="_blank" href="#" style="
+          display:none;width:100%;text-decoration:none;
+          background:linear-gradient(135deg,#25d366,#128c7e);color:#fff;
+          border-radius:14px;padding:16px;margin-bottom:10px;
+          font-size:15px;font-weight:700;
+          align-items:center;justify-content:center;gap:10px;
+          box-shadow:0 6px 20px rgba(37,211,102,.35);
+          transition:all .18s;
+        ">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          Acompanhar pelo WhatsApp
+        </a>
+
+        <button class="confirm-btn" style="margin-bottom:10px;background:var(--s2);color:var(--text);box-shadow:none;border:1.5px solid var(--border)" onclick="closeCart();openTracker()">
+          📡 Rastrear em tempo real
         </button>
+
         <!-- Convite de cadastro para não-logados -->
-        <div id="invite-signup" style="display:none;flex-direction:column;align-items:center;gap:8px;background:rgba(249,115,22,.06);border:1px solid rgba(249,115,22,.18);border-radius:14px;padding:16px;margin-bottom:10px;text-align:center">
+        <div id="invite-signup" style="display:none;flex-direction:column;align-items:center;gap:8px;background:rgba(249,115,22,.06);border:1px solid rgba(249,115,22,.18);border-radius:14px;padding:16px;margin-bottom:10px;text-align:center;width:100%">
           <div style="font-size:22px">🎯</div>
-          <div style="font-size:14px;font-weight:700">Acompanhe seus pedidos sempre</div>
-          <div style="font-size:12.5px;color:var(--muted);line-height:1.5">Crie uma conta gratuita para ver o histórico e rastrear em tempo real</div>
+          <div style="font-size:14px;font-weight:700">Acompanhe sempre seus pedidos</div>
+          <div style="font-size:12.5px;color:var(--muted);line-height:1.5">Crie uma conta gratuita para ver histórico e rastrear</div>
           <button onclick="closeCart();openAuth('register')" style="margin-top:4px;padding:10px 24px;background:var(--accent-g);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">Criar conta grátis</button>
           <button onclick="document.getElementById('invite-signup').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer">Agora não</button>
         </div>
+
         <button style="width:100%;padding:12px;background:none;border:none;color:var(--muted);font-size:13px" onclick="resetCart()">
-          + Novo pedido
+          + Fazer novo pedido
         </button>
       </div>
 
@@ -962,12 +979,14 @@ input,textarea{font-family:inherit}
   </div>
 </div>
 
+
 <script>
 // ══════════════════════════════════════════
 //  ESTADO GLOBAL
 // ══════════════════════════════════════════
 const sb = window.AppAPI;
 let _tenantId    = null;
+let _waNumero    = null;   // WhatsApp do restaurante
 let allItems     = [];
 let allCats      = [];
 let allCupons    = [];
@@ -984,9 +1003,10 @@ let _trackOrderId= null;
 let _trackChannel= null;
 
 // ── Auth state ──
-let _customer    = null; // { id, name, phone, email, birthday, orders_count, total_spent, token }
+let _customer    = null;
 const AUTH_KEY   = 'estima_customer';
 const PROFILE_KEY= 'estima_profile';
+
 
 // ══════════════════════════════════════════
 //  TENANT
@@ -995,15 +1015,13 @@ async function resolveTenant() {
   const p    = new URLSearchParams(location.search);
   const slug = p.get('slug') || p.get('t');
   const tid  = p.get('tenant');
-
   const fetchInfo = async (qs) => {
     const r = await fetch('/api/tenant-info' + qs);
     const d = await r.json();
     return d.id ? d : null;
   };
-
   let info = null;
-  if (tid)   info = await fetchInfo(`?id=${encodeURIComponent(tid)}`).catch(()=>null);
+  if (tid)         info = await fetchInfo(`?id=${encodeURIComponent(tid)}`).catch(()=>null);
   if (!info && slug) {
     info = await fetchInfo(`?slug=${encodeURIComponent(slug)}`).catch(()=>null);
     if (!info) return null;
@@ -1017,26 +1035,24 @@ function applyBranding(b, nome) {
   document.title = n;
   document.getElementById('hero-name').textContent = n;
   if (b?.store_descricao) document.getElementById('hero-desc').textContent = b.store_descricao;
-
   const cor = b?.store_cor || '#f97316';
   document.documentElement.style.setProperty('--accent', cor);
-
   if (b?.store_logo_url) {
     const emoEl = document.getElementById('hero-emoji');
-    const img = document.createElement('img');
-    img.src = b.store_logo_url;
-    img.alt = n;
-    img.className = 'hero-logo-img';
-    img.onerror = ()=>img.remove();
-    emoEl.replaceWith(img);
+    if (emoEl) {
+      const img = document.createElement('img');
+      img.src = b.store_logo_url;
+      img.alt = n;
+      img.className = 'hero-logo-img';
+      img.onerror = ()=>img.remove();
+      emoEl.replaceWith(img);
+    }
   }
-
   if (b?.store_banner_url) {
     const hero = document.getElementById('hero');
     const url  = b.store_banner_url.startsWith('http') ? b.store_banner_url : location.origin + b.store_banner_url;
     hero.style.background = `linear-gradient(180deg,rgba(0,0,0,.3) 0%,rgba(0,0,0,.85) 100%),url('${url}') center/cover no-repeat`;
   }
-
   if (b?.store_tempo_entrega) {
     document.getElementById('hero-tempo').textContent = b.store_tempo_entrega;
     document.getElementById('badge-tempo').style.display = '';
@@ -1045,10 +1061,15 @@ function applyBranding(b, nome) {
     document.getElementById('hero-aval').textContent = b.store_avaliacao;
     document.getElementById('badge-aval').style.display = '';
   }
+  // Salva número WA para usar no toast pós-pedido
+  if (b?.store_whatsapp) {
+    _waNumero = b.store_whatsapp.replace(/\D/g, '');
+    if (_waNumero.length <= 11) _waNumero = '55' + _waNumero;
+  }
 }
 
 // ══════════════════════════════════════════
-//  STATUS DA LOJA
+//  STATUS
 // ══════════════════════════════════════════
 function isLojaAberta(horarios, store_open) {
   if (store_open === false) return false;
@@ -1074,10 +1095,10 @@ function applyStatus(store_open, horarios) {
   const badge= document.getElementById('status-badge');
   const ban  = document.getElementById('closed-banner');
   const btn  = document.getElementById('confirm-btn');
-  dot.style.background  = _lojaAberta ? 'var(--green)' : 'var(--red)';
-  badge.classList.toggle('closed', !_lojaAberta);
-  txt.textContent = _lojaAberta ? 'Aberto agora' : 'Fechado';
-  ban.classList.toggle('on', !_lojaAberta);
+  if (dot)  dot.style.background = _lojaAberta ? 'var(--green)' : 'var(--red)';
+  if (badge) badge.classList.toggle('closed', !_lojaAberta);
+  if (txt)  txt.textContent = _lojaAberta ? 'Aberto agora' : 'Fechado';
+  if (ban)  ban.classList.toggle('on', !_lojaAberta);
   if (btn) {
     btn.disabled = !_lojaAberta || cart.length === 0;
     if (!_lojaAberta) btn.innerHTML = '🔴 Loja fechada';
@@ -1091,7 +1112,6 @@ function applyStatus(store_open, horarios) {
 async function init() {
   document.getElementById('menu-wrap').innerHTML =
     '<div style="padding:60px 0;text-align:center"><div style="font-size:32px">⏳</div></div>';
-
   try {
     const info = await resolveTenant();
     if (!info) {
@@ -1100,7 +1120,6 @@ async function init() {
         '<div class="empty-state"><div class="empty-state-icon">🍽️</div><div class="empty-state-text">Verifique o link e tente novamente.</div></div>';
       hideSplash(); return;
     }
-
     _tenantId = info.id;
     sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
     applyBranding(info.branding, info.nome);
@@ -1109,7 +1128,7 @@ async function init() {
       sb.from('menu_items').select('*').not('status','eq','pausado').order('id'),
       sb.from('categories').select('*').eq('ativo', true).order('sort_order'),
       sb.from('cupons').select('*').eq('ativo', true),
-      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config').single()
+      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp').single()
     ]);
 
     allItems  = (itemsR.data  || []).map(x => ({...x, id: Number(x.id)}));
@@ -1120,6 +1139,11 @@ async function init() {
       const c = cfgR.data;
       applyStatus(c.store_open, c.horarios_config);
       feeConfig = c.delivery_fee_config || {};
+      // Fallback: se não veio pelo branding, pega do store_config direto
+      if (!_waNumero && c.store_whatsapp) {
+        _waNumero = c.store_whatsapp.replace(/\D/g, '');
+        if (_waNumero.length <= 11) _waNumero = '55' + _waNumero;
+      }
     }
 
     buildCats();
@@ -1127,13 +1151,11 @@ async function init() {
     subscribeRealtime();
     loadCustomerSession();
     setInterval(() => applyStatus(undefined, undefined), 60000);
-
   } catch(e) {
     console.error(e);
     document.getElementById('menu-wrap').innerHTML =
       '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div class="empty-state-text">Erro ao carregar o cardápio.</div></div>';
   }
-
   hideSplash();
 }
 
@@ -1173,19 +1195,16 @@ async function reloadMenu() {
 function loadCustomerSession() {
   try {
     const saved = JSON.parse(localStorage.getItem(AUTH_KEY)||'null');
-    if (saved && saved.id && saved.token) {
-      _customer = saved;
-      updateProfileFab();
-    } else {
-      updateProfileFab();
-    }
-  } catch(e) { updateProfileFab(); }
+    if (saved && saved.id && saved.token) _customer = saved;
+  } catch(e) {}
+  updateProfileFab();
 }
 
 function updateProfileFab() {
   const fab  = document.getElementById('profile-fab');
   const av   = document.getElementById('profile-fab-av');
   const name = document.getElementById('profile-fab-name');
+  if (!fab) return;
   fab.style.display = 'flex';
   if (_customer) {
     av.textContent   = (_customer.name||'?').charAt(0).toUpperCase();
@@ -1201,7 +1220,6 @@ function onProfileFabClick() {
   else openAuth();
 }
 
-// ── ABRIR / FECHAR AUTH ──
 function openAuth(tab) {
   document.getElementById('auth-overlay').classList.add('on');
   if (tab) switchAuthTab(tab);
@@ -1218,14 +1236,11 @@ function switchAuthTab(tab) {
   document.getElementById('auth-err').classList.remove('on');
 }
 
-// ── LOGIN ──
 async function doLogin() {
   const phone = document.getElementById('login-phone').value.trim();
   const senha = document.getElementById('login-senha').value;
-  const err   = document.getElementById('auth-err');
-  const btn   = document.getElementById('login-btn');
-  err.classList.remove('on');
   if (!phone||!senha) { showAuthErr('Preencha telefone e senha'); return; }
+  const btn = document.getElementById('login-btn');
   btn.disabled = true;
   btn.innerHTML = '<div class="spin"></div> Entrando…';
   try {
@@ -1241,7 +1256,6 @@ async function doLogin() {
     updateProfileFab();
     closeAuth();
     toast('👋', `Olá, ${data.name.split(' ')[0]}!`);
-    // preenche dados no carrinho
     fillCartForm();
   } catch(e) {
     showAuthErr('Erro de conexão. Tente novamente.');
@@ -1251,23 +1265,20 @@ async function doLogin() {
   }
 }
 
-// ── CADASTRO ──
 async function doRegister() {
-  const name    = document.getElementById('reg-name').value.trim();
-  const phone   = document.getElementById('reg-phone').value.trim();
-  const email   = document.getElementById('reg-email').value.trim();
-  const senha   = document.getElementById('reg-senha').value;
-  const senha2  = document.getElementById('reg-senha2').value;
-  const birthday= document.getElementById('reg-birthday').value;
-  const btn     = document.getElementById('register-btn');
-
+  const name     = document.getElementById('reg-name').value.trim();
+  const phone    = document.getElementById('reg-phone').value.trim();
+  const email    = document.getElementById('reg-email').value.trim();
+  const senha    = document.getElementById('reg-senha').value;
+  const senha2   = document.getElementById('reg-senha2').value;
+  const birthday = document.getElementById('reg-birthday').value;
+  const btn      = document.getElementById('register-btn');
   document.getElementById('auth-err').classList.remove('on');
-  if (!name)           { showAuthErr('Informe seu nome');      return; }
-  if (!phone)          { showAuthErr('Informe seu WhatsApp');  return; }
-  if (!senha)          { showAuthErr('Crie uma senha');        return; }
+  if (!name)           { showAuthErr('Informe seu nome'); return; }
+  if (!phone)          { showAuthErr('Informe seu WhatsApp'); return; }
+  if (!senha)          { showAuthErr('Crie uma senha'); return; }
   if (senha.length < 6){ showAuthErr('Senha mínimo 6 caracteres'); return; }
-  if (senha !== senha2){ showAuthErr('As senhas não coincidem');     return; }
-
+  if (senha !== senha2){ showAuthErr('As senhas não coincidem'); return; }
   btn.disabled = true;
   btn.innerHTML = '<div class="spin"></div> Criando conta…';
   try {
@@ -1292,7 +1303,6 @@ async function doRegister() {
   }
 }
 
-// ── LOGOUT ──
 function doLogout() {
   _customer = null;
   localStorage.removeItem(AUTH_KEY);
@@ -1315,7 +1325,7 @@ function fillCartForm() {
 }
 
 // ══════════════════════════════════════════
-//  MINHA CONTA DRAWER
+//  MINHA CONTA
 // ══════════════════════════════════════════
 async function openAccount() {
   if (!_customer) { openAuth(); return; }
@@ -1336,7 +1346,7 @@ async function loadMyOrders() {
   const list = document.getElementById('acc-orders-list');
   list.innerHTML = '<div style="padding:20px;text-align:center"><div style="font-size:28px">⏳</div></div>';
   try {
-    const res  = await fetch(`/api/customer-orders?customer_id=${_customer.id}`, {
+    const res    = await fetch(`/api/customer-orders?customer_id=${_customer.id}`, {
       headers:{'x-tenant-id':_tenantId}
     });
     const orders = await res.json();
@@ -1344,13 +1354,9 @@ async function loadMyOrders() {
       list.innerHTML = '<div class="empty-state" style="padding:28px 20px"><div class="empty-state-icon">🛒</div><div class="empty-state-text">Nenhum pedido ainda</div></div>';
       return;
     }
-    const STATUS_LABELS = {
-      analise:'Aguardando',producao:'Preparando',pronto:'Pronto',
-      saiu:'A caminho',entregue:'Entregue',cancelado:'Cancelado'
-    };
+    const SL = {analise:'Aguardando',producao:'Preparando',pronto:'Pronto',saiu:'A caminho',entregue:'Entregue',cancelado:'Cancelado'};
     list.innerHTML = orders.map(o => {
       const itemsTxt = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}× ${i.name}`).join(', ') : '';
-      const statusLabel = STATUS_LABELS[o.status] || o.status;
       const d = new Date(o.created_at);
       const dateStr = isNaN(d) ? '' : d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
       const isActive = ['analise','producao','pronto','saiu'].includes(o.status);
@@ -1358,7 +1364,7 @@ async function loadMyOrders() {
       <div class="order-card" onclick="${isActive?`openOrderTracker(${o.id})`:'void(0)'}">
         <div class="order-card-head">
           <span class="order-card-num">#${String(o.id).padStart(3,'0')}</span>
-          <span class="order-card-status ${o.status}">${statusLabel}</span>
+          <span class="order-card-status ${o.status}">${SL[o.status]||o.status}</span>
         </div>
         <div class="order-card-items">${itemsTxt}</div>
         <div class="order-card-foot">
@@ -1377,15 +1383,12 @@ function openOrderTracker(orderId) {
   closeAccount();
   _trackOrderId = orderId;
   document.getElementById('track-order-num').textContent = 'Pedido #' + String(orderId).padStart(3,'0');
-  // recarrega status atual do pedido
   sb.from('orders').select('id,status,items,client').eq('id', orderId).single().then(({data})=>{
     if (data) {
       updateTracker(data.status);
-      const items = Array.isArray(data.items) ? data.items : [];
-      renderTrackItems(items, data.client);
+      renderTrackItems(Array.isArray(data.items)?data.items:[], data.client);
     }
   });
-  // inscreve no SSE
   if (_trackChannel) try{ sb.removeChannel(_trackChannel); }catch(e){}
   _trackChannel = sb.channel('orders-rt')
     .on('postgres_changes',{event:'UPDATE',table:'orders'}, p => {
@@ -1442,20 +1445,17 @@ function renderMenu() {
       '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">Nenhum item encontrado.</div></div>';
     return;
   }
-
   if (searchQ || activeCat) {
     document.getElementById('menu-wrap').innerHTML =
       `<div style="padding:20px 16px 120px"><div class="item-grid">${items.map(itemCard).join('')}</div></div>`;
     return;
   }
-
   const groups = new Map();
   items.forEach(i => {
     const key = i.cat_key || i.cat || '__outros';
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(i);
   });
-
   let html = '<div style="padding:20px 16px 120px">';
   groups.forEach((its, key) => {
     const cat   = allCats.find(c => c.name === key);
@@ -1501,14 +1501,12 @@ function openItemModal(id) {
   if (!i) return;
   _imItemId = id;
   _imQty    = 1;
-
   const imgEl = document.getElementById('im-img');
   if (i.image_url) {
     imgEl.innerHTML = `<button class="im-close" onclick="closeItemModal()">✕</button><img src="${i.image_url}" alt="${i.name}" style="width:100%;height:100%;object-fit:cover">`;
   } else {
     imgEl.innerHTML = `<button class="im-close" onclick="closeItemModal()">✕</button><span style="font-size:72px">${i.emoji||'🍽️'}</span>`;
   }
-
   document.getElementById('im-name').textContent = i.name;
   document.getElementById('im-desc').textContent = i.description || '';
   document.getElementById('im-price').textContent = 'R$ ' + fmt(i.price);
@@ -1579,7 +1577,7 @@ function cartSubtotal() { return cart.reduce((s,i) => s + i.price * i.qty, 0); }
 
 function getDiscount() {
   if (!appliedCupom) return 0;
-  const sub = cartSubtotal();
+  const sub  = cartSubtotal();
   const tipo = appliedCupom.type || appliedCupom.tipo || '';
   const val  = parseFloat(appliedCupom.value ?? appliedCupom.val ?? 0);
   if (tipo === 'percent' || tipo === '%') return sub * val / 100;
@@ -1587,27 +1585,23 @@ function getDiscount() {
   return Math.min(val, sub);
 }
 
-function getFaixaTaxa() {
-  const faixas = feeConfig.faixas || [];
-  if (!faixas.length) return 0;
-  return parseFloat(faixas[Math.min(selectedFaixa, faixas.length-1)]?.taxa) || 0;
-}
-
 function getTaxa() {
   if (deliveryType !== 'delivery') return 0;
   if (appliedCupom?.tipo === 'frete') return 0;
-  if (feeConfig.tipo === 'por_km') return getFaixaTaxa();
+  if (feeConfig.tipo === 'por_km') {
+    const faixas = feeConfig.faixas || [];
+    return parseFloat(faixas[Math.min(selectedFaixa, faixas.length-1)]?.taxa) || 0;
+  }
   return parseFloat(feeConfig.valor || feeConfig.value || 0);
 }
 
 function grandTotal() { return Math.max(0, cartSubtotal() - getDiscount() + getTaxa()); }
 
 function updateCartFloat() {
-  const qty   = cart.reduce((s,i) => s+i.qty, 0);
-  const total = cartSubtotal();
+  const qty = cart.reduce((s,i) => s+i.qty, 0);
   document.getElementById('cart-float').classList.toggle('show', cart.length > 0);
   document.getElementById('cart-badge').textContent = qty;
-  document.getElementById('cart-total-float').textContent = fmt(total);
+  document.getElementById('cart-total-float').textContent = fmt(cartSubtotal());
   const btn = document.getElementById('confirm-btn');
   if (btn) btn.disabled = cart.length === 0 || !_lojaAberta;
 }
@@ -1620,7 +1614,6 @@ function openCart() {
   fillCartForm();
   renderFaixas();
 }
-
 function closeCart() {
   document.getElementById('drawer-bg').classList.remove('on');
 }
@@ -1694,13 +1687,11 @@ function renderTotals() {
   const disc = getDiscount();
   const taxa = getTaxa();
   const tot  = grandTotal();
-
   let taxaLabel = 'Taxa de entrega';
   if (deliveryType === 'delivery' && feeConfig?.tipo === 'por_km') {
     const f = (feeConfig.faixas||[])[selectedFaixa];
     if (f) taxaLabel = `Entrega até ${f.ate_km} km`;
   }
-
   document.getElementById('totals-wrap').innerHTML = `
     <div class="total-row"><span>Subtotal</span><span>R$ ${fmt(sub)}</span></div>
     ${deliveryType === 'delivery' ? `<div class="total-row"><span>${taxaLabel}</span><span>${taxa>0?'R$ '+fmt(taxa):'Grátis'}</span></div>` : ''}
@@ -1708,9 +1699,6 @@ function renderTotals() {
     <div class="total-row big"><span>Total</span><span>R$ ${fmt(tot)}</span></div>`;
 }
 
-// ══════════════════════════════════════════
-//  CUPOM
-// ══════════════════════════════════════════
 function applyCupom() {
   const code = document.getElementById('cupom-input').value.trim().toUpperCase();
   const msg  = document.getElementById('cupom-msg');
@@ -1733,12 +1721,61 @@ function applyCupom() {
 }
 
 // ══════════════════════════════════════════
+//  WHATSAPP — gera link com mensagem pré-pronta
+// ══════════════════════════════════════════
+function buildWaLink(orderId) {
+  const num = String(orderId).padStart(3, '0');
+  const msg = `Olá! Quero acompanhar meu pedido *#${num}* 🍽️`;
+  const numero = _waNumero || '';
+  if (!numero) return null;
+  return `https://wa.me/${numero}?text=${encodeURIComponent(msg)}`;
+}
+
+function showWaToast(orderId) {
+  if (!_waNumero) return; // sem número configurado, não exibe
+  const link = buildWaLink(orderId);
+  const num  = String(orderId).padStart(3,'0');
+  const area = document.getElementById('toast-area');
+  const el   = document.createElement('div');
+  el.className = 'toast wa-toast';
+  el.style.cssText = `
+    background: #128c7e;
+    border-color: rgba(255,255,255,.15);
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; border-radius: 14px;
+    max-width: 320px; cursor: pointer;
+    box-shadow: 0 8px 28px rgba(18,140,126,.45);
+    animation: toastIn .35s cubic-bezier(.34,1.56,.64,1);
+  `;
+  el.innerHTML = `
+    <div style="font-size:26px;flex-shrink:0">💬</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:2px">
+        Acompanhe pelo WhatsApp
+      </div>
+      <div style="font-size:11.5px;color:rgba(255,255,255,.8);line-height:1.4">
+        Envie o nº <strong>#${num}</strong> e nossa IA responde na hora
+      </div>
+    </div>
+    <div style="font-size:18px;flex-shrink:0">→</div>
+  `;
+  el.onclick = () => { window.open(link, '_blank'); el.remove(); };
+  area.appendChild(el);
+  // Remove após 12s se não clicar
+  setTimeout(() => {
+    if (el.parentNode) {
+      el.classList.add('out');
+      setTimeout(() => el.remove(), 300);
+    }
+  }, 12000);
+}
+
+// ══════════════════════════════════════════
 //  SUBMIT
 // ══════════════════════════════════════════
 async function submitOrder() {
   const name  = document.getElementById('f-name').value.trim();
   const phone = document.getElementById('f-phone').value.trim();
-
   if (!name)  { toast('⚠️','Informe seu nome');      return; }
   if (!phone) { toast('⚠️','Informe seu WhatsApp');  return; }
   if (!cart.length) { toast('⚠️','Carrinho vazio');  return; }
@@ -1761,7 +1798,6 @@ async function submitOrder() {
     addr = 'Retirada no balcão';
   }
 
-  // se não está logado, salva perfil simples
   if (!_customer) {
     try { localStorage.setItem(PROFILE_KEY, JSON.stringify({ name, phone })); } catch(e) {}
   }
@@ -1774,17 +1810,15 @@ async function submitOrder() {
   const time  = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 
   try {
-    // salva/atualiza customer
     let customerId = _customer?.id || null;
     try {
       if (_customer) {
         await sb.from('customers').update({
           name, addr,
           orders_count: (_customer.orders_count||0)+1,
-          total_spent: (parseFloat(_customer.total_spent)||0)+grandTotal(),
+          total_spent:  (parseFloat(_customer.total_spent)||0)+grandTotal(),
           last_order_at: new Date().toISOString()
         }).eq('id', _customer.id);
-        // atualiza sessão local
         _customer.orders_count = (_customer.orders_count||0)+1;
         _customer.total_spent  = (parseFloat(_customer.total_spent)||0)+grandTotal();
         localStorage.setItem(AUTH_KEY, JSON.stringify(_customer));
@@ -1796,21 +1830,20 @@ async function submitOrder() {
           await sb.from('customers').update({
             name, addr,
             orders_count: (cl.orders_count||0)+1,
-            total_spent: (parseFloat(cl.total_spent)||0)+grandTotal(),
+            total_spent:  (parseFloat(cl.total_spent)||0)+grandTotal(),
             last_order_at: new Date().toISOString()
           }).eq('id', cl.id);
         } else {
-          const { data: inserted } = await sb.from('customers').insert({
+          const { data: ins } = await sb.from('customers').insert({
             name, phone, addr,
             orders_count: 1, total_spent: grandTotal(),
             last_order_at: new Date().toISOString()
           }).select().single();
-          customerId = inserted?.id || null;
+          customerId = ins?.id || null;
         }
       }
     } catch(e) {}
 
-    // insere o pedido
     const { data: order, error } = await sb.from('orders').insert({
       client: name, phone, addr,
       items, total: grandTotal(), taxa: getTaxa(),
@@ -1826,17 +1859,31 @@ async function submitOrder() {
     document.getElementById('cupom-input').value = '';
     document.getElementById('cupom-msg').innerHTML = '';
 
+    // ── Tela de sucesso ──
     document.getElementById('cart-content').style.display = 'none';
     document.getElementById('success-screen').classList.add('on');
     document.getElementById('success-num').textContent = '#' + String(order.id).padStart(3,'0');
 
+    // Botão WhatsApp na tela de sucesso
+    const waLink = buildWaLink(order.id);
+    const waBtnEl = document.getElementById('success-wa-btn');
+    if (waBtnEl) {
+      if (waLink) {
+        waBtnEl.style.display = 'flex';
+        waBtnEl.href = waLink;
+      } else {
+        waBtnEl.style.display = 'none';
+      }
+    }
+
+    // Convite de cadastro para não-logados
+    const inv = document.getElementById('invite-signup');
+    if (inv && !_customer) inv.style.display = 'flex';
+
     startTracking(order.id, items, name);
 
-    // convida para cadastro se não está logado
-    if (!_customer) {
-      const inviteEl = document.getElementById('invite-signup');
-      if (inviteEl) inviteEl.style.display = 'flex';
-    }
+    // Toast WhatsApp (aparece 2s depois para não conflitar com animação)
+    setTimeout(() => showWaToast(order.id), 2000);
 
   } catch(e) {
     console.error(e);
@@ -1873,7 +1920,6 @@ function startTracking(orderId, items, client) {
   const fab = document.getElementById('track-fab');
   fab.classList.add('show');
   document.getElementById('track-num').textContent = '#' + String(orderId).padStart(3,'0');
-
   if (_trackChannel) { try { sb.removeChannel(_trackChannel); } catch(e){} }
   _trackChannel = sb.channel('orders-rt')
     .on('postgres_changes',{event:'UPDATE',table:'orders'}, p => {
@@ -1881,12 +1927,9 @@ function startTracking(orderId, items, client) {
         updateTracker(p.new.status);
         const dot = document.getElementById('track-dot');
         if (dot) dot.classList.toggle('done', p.new.status === 'entregue');
-        // atualiza card na listagem da conta
-        loadMyOrders();
       }
     })
     .subscribe();
-
   updateTracker('analise');
   renderTrackItems(items, client);
   document.getElementById('track-order-num').textContent = 'Pedido #' + String(orderId).padStart(3,'0');
@@ -1946,758 +1989,6 @@ function fmt(n) {
   return Number(n||0).toFixed(2).replace('.',',');
 }
 
-init();
-</script>
-</body>
-</html>
-let _tenantId    = null;
-let allItems     = [];
-let allCats      = [];
-let allCupons    = [];
-let cart         = [];
-let activeCat    = '';
-let searchQ      = '';
-let deliveryType = 'delivery';
-let selectedPay  = 'dinheiro';
-let appliedCupom = null;
-let feeConfig    = {};
-let selectedFaixa= 0;
-let _lojaAberta  = true;
-let _trackOrderId= null;
-let _trackChannel= null;
-
-// chave do localStorage para salvar dados do cliente
-const PROFILE_KEY = 'estima_profile';
-
-// ══════════════════════════════════════════
-//  TENANT
-// ══════════════════════════════════════════
-async function resolveTenant() {
-  const p    = new URLSearchParams(location.search);
-  const slug = p.get('slug') || p.get('t');
-  const tid  = p.get('tenant');
-
-  const fetchInfo = async (qs) => {
-    const r = await fetch('/api/tenant-info' + qs);
-    const d = await r.json();
-    return d.id ? d : null;
-  };
-
-  let info = null;
-  if (tid)   info = await fetchInfo(`?id=${encodeURIComponent(tid)}`).catch(()=>null);
-  if (!info && slug) {
-    info = await fetchInfo(`?slug=${encodeURIComponent(slug)}`).catch(()=>null);
-    if (!info) return null; // slug informado mas não encontrado
-  }
-  if (!info) info = await fetchInfo('?default=1').catch(()=>null);
-  return info;
-}
-
-function applyBranding(b, nome) {
-  const n = b?.store_name || nome || 'Cardápio';
-  document.title = n;
-  document.getElementById('hero-name').textContent = n;
-  if (b?.store_descricao) document.getElementById('hero-desc').textContent = b.store_descricao;
-
-  const cor = b?.store_cor || '#f97316';
-  document.documentElement.style.setProperty('--accent', cor);
-  // gera accent-d (um pouco mais escuro)
-  document.documentElement.style.setProperty('--accent-d', cor);
-
-  if (b?.store_logo_url) {
-    const hero = document.getElementById('hero');
-    const emoEl = document.getElementById('hero-emoji');
-    const img = document.createElement('img');
-    img.src = b.store_logo_url;
-    img.alt = n;
-    img.className = 'hero-logo-img';
-    img.onerror = ()=>img.remove();
-    emoEl.replaceWith(img);
-  }
-
-  if (b?.store_banner_url) {
-    const hero = document.getElementById('hero');
-    const url  = b.store_banner_url.startsWith('http') ? b.store_banner_url : location.origin + b.store_banner_url;
-    hero.style.background = `linear-gradient(180deg,rgba(0,0,0,.3) 0%,rgba(0,0,0,.85) 100%),url('${url}') center/cover no-repeat`;
-  }
-
-  if (b?.store_tempo_entrega) {
-    document.getElementById('hero-tempo').textContent = b.store_tempo_entrega;
-    document.getElementById('badge-tempo').style.display = '';
-  }
-  if (b?.store_avaliacao) {
-    document.getElementById('hero-aval').textContent = b.store_avaliacao;
-    document.getElementById('badge-aval').style.display = '';
-  }
-}
-
-// ══════════════════════════════════════════
-//  STATUS DA LOJA
-// ══════════════════════════════════════════
-function isLojaAberta(horarios, store_open) {
-  if (store_open === false) return false;
-  if (!horarios) return store_open !== false;
-  try {
-    const h = typeof horarios === 'string' ? JSON.parse(horarios) : horarios;
-    const dias = ['dom','seg','ter','qua','qui','sex','sab'];
-    const hoje = h[dias[new Date().getDay()]];
-    if (!hoje || !hoje.ativo) return false;
-    const now = new Date().getHours()*60 + new Date().getMinutes();
-    const [ah,am] = (hoje.abertura||'00:00').split(':').map(Number);
-    const [fh,fm] = (hoje.fechamento||'23:59').split(':').map(Number);
-    return now >= ah*60+am && now <= fh*60+fm;
-  } catch(e) { return store_open !== false; }
-}
-
-let _cachedHorarios = null;
-function applyStatus(store_open, horarios) {
-  if (horarios !== undefined) _cachedHorarios = horarios;
-  _lojaAberta = isLojaAberta(_cachedHorarios, store_open);
-  const dot  = document.getElementById('status-dot');
-  const txt  = document.getElementById('status-txt');
-  const badge= document.getElementById('status-badge');
-  const ban  = document.getElementById('closed-banner');
-  const btn  = document.getElementById('confirm-btn');
-  dot.style.background  = _lojaAberta ? 'var(--green)' : 'var(--red)';
-  badge.classList.toggle('closed', !_lojaAberta);
-  txt.textContent = _lojaAberta ? 'Aberto agora' : 'Fechado';
-  ban.classList.toggle('on', !_lojaAberta);
-  if (btn) {
-    btn.disabled = !_lojaAberta || cart.length === 0;
-    if (!_lojaAberta) btn.innerHTML = '🔴 Loja fechada';
-    else if (cart.length > 0) btn.innerHTML = '✅ Confirmar Pedido';
-  }
-}
-
-// ══════════════════════════════════════════
-//  INIT
-// ══════════════════════════════════════════
-async function init() {
-  document.getElementById('menu-wrap').innerHTML =
-    '<div style="padding:60px 0;text-align:center"><div style="font-size:32px">⏳</div></div>';
-
-  try {
-    const info = await resolveTenant();
-    if (!info) {
-      document.getElementById('hero-name').textContent = 'Restaurante não encontrado';
-      document.getElementById('menu-wrap').innerHTML =
-        '<div class="empty-state"><div class="empty-state-icon">🍽️</div><div class="empty-state-text">Verifique o link e tente novamente.</div></div>';
-      hideSplash(); return;
-    }
-
-    _tenantId = info.id;
-    sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
-    applyBranding(info.branding, info.nome);
-
-    const [itemsR, catsR, cuponsR, cfgR] = await Promise.all([
-      sb.from('menu_items').select('*').not('status','eq','pausado').order('id'),
-      sb.from('categories').select('*').eq('ativo', true).order('sort_order'),
-      sb.from('cupons').select('*').eq('ativo', true),
-      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config').single()
-    ]);
-
-    allItems  = (itemsR.data  || []).map(x => ({...x, id: Number(x.id)}));
-    allCats   = (catsR.data   || []);
-    allCupons = (cuponsR.data || []);
-
-    if (cfgR.data) {
-      const c = cfgR.data;
-      applyStatus(c.store_open, c.horarios_config);
-      feeConfig = c.delivery_fee_config || {};
-    }
-
-    buildCats();
-    renderMenu();
-    subscribeRealtime();
-    restoreProfile();
-
-    // revalida horário a cada minuto
-    setInterval(() => applyStatus(undefined, undefined), 60000);
-  } catch(e) {
-    console.error(e);
-    document.getElementById('menu-wrap').innerHTML =
-      '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div class="empty-state-text">Erro ao carregar o cardápio.</div></div>';
-  }
-
-  hideSplash();
-}
-
-function hideSplash() {
-  setTimeout(() => document.getElementById('splash').classList.add('out'), 300);
-}
-
-// ══════════════════════════════════════════
-//  REALTIME
-// ══════════════════════════════════════════
-function subscribeRealtime() {
-  sb.channel('menu-rt')
-    .on('postgres_changes',{event:'*',table:'menu_items'},()=>reloadMenu())
-    .on('postgres_changes',{event:'*',table:'categories'},()=>reloadMenu())
-    .subscribe();
-  sb.channel('store-config-rt')
-    .on('postgres_changes',{event:'UPDATE',table:'store_config'}, p => {
-      applyStatus(p.new.store_open, p.new.horarios_config || _cachedHorarios);
-    })
-    .subscribe();
-}
-
-async function reloadMenu() {
-  const [itemsR, catsR] = await Promise.all([
-    sb.from('menu_items').select('*').not('status','eq','pausado').order('id'),
-    sb.from('categories').select('*').eq('ativo',true).order('sort_order')
-  ]);
-  allItems = (itemsR.data || []).map(x => ({...x, id: Number(x.id)}));
-  allCats  = (catsR.data  || []);
-  buildCats();
-  renderMenu();
-}
-
-// ══════════════════════════════════════════
-//  CATEGORIAS
-// ══════════════════════════════════════════
-function buildCats() {
-  const scroll = document.getElementById('cats-scroll');
-  scroll.innerHTML = `<button class="cat-btn on" data-key="" onclick="filterCat(this,'')">Tudo</button>`;
-  allCats.forEach(c => {
-    const b = document.createElement('button');
-    b.className = 'cat-btn';
-    b.dataset.key = c.name;
-    b.onclick = () => filterCat(b, c.name);
-    b.textContent = (c.emoji ? c.emoji + ' ' : '') + (c.label || c.name);
-    scroll.appendChild(b);
-  });
-}
-
-function filterCat(el, key) {
-  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('on'));
-  el.classList.add('on');
-  activeCat = key;
-  renderMenu();
-}
-
-function onSearch(val) {
-  searchQ = val.trim().toLowerCase();
-  renderMenu();
-}
-
-// ══════════════════════════════════════════
-//  RENDER MENU
-// ══════════════════════════════════════════
-function getFiltered() {
-  return allItems.filter(i => {
-    if (activeCat && i.cat_key !== activeCat && i.cat !== activeCat) return false;
-    if (searchQ && !i.name.toLowerCase().includes(searchQ) && !(i.description||'').toLowerCase().includes(searchQ)) return false;
-    return true;
-  });
-}
-
-function renderMenu() {
-  const items = getFiltered();
-  if (!items.length) {
-    document.getElementById('menu-wrap').innerHTML =
-      '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">Nenhum item encontrado.</div></div>';
-    return;
-  }
-
-  if (searchQ || activeCat) {
-    document.getElementById('menu-wrap').innerHTML =
-      `<div style="padding:20px 16px 120px"><div class="item-grid">${items.map(itemCard).join('')}</div></div>`;
-    return;
-  }
-
-  // Agrupado por categoria
-  const groups = new Map();
-  items.forEach(i => {
-    const key = i.cat_key || i.cat || '__outros';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(i);
-  });
-
-  let html = '<div style="padding:20px 16px 120px">';
-  groups.forEach((its, key) => {
-    const cat   = allCats.find(c => c.name === key);
-    const label = cat ? (cat.label || cat.name) : (key === '__outros' ? 'Outros' : key.charAt(0).toUpperCase() + key.slice(1));
-    html += `<div class="section"><div class="section-label">${label}</div><div class="item-grid">${its.map(itemCard).join('')}</div></div>`;
-  });
-  html += '</div>';
-  document.getElementById('menu-wrap').innerHTML = html;
-}
-
-function itemCard(i) {
-  const esg  = i.status === 'esgotado';
-  const click= esg ? '' : `onclick="openItemModal(${i.id})"`;
-  return `
-  <div class="item-card" ${click} style="${esg?'opacity:.55;cursor:not-allowed':''}">
-    <div class="item-img">
-      ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy">` : `<span>${i.emoji||'🍽️'}</span>`}
-      ${i.promo ? '<span class="item-promo-badge">PROMO</span>' : ''}
-      ${esg ? '<div class="item-esgotado-overlay">Esgotado</div>' : ''}
-    </div>
-    <div class="item-body">
-      <div class="item-name">${i.name}</div>
-      <div class="item-desc">${i.description||''}</div>
-      <div class="item-foot">
-        <div>
-          ${i.price_old ? `<span class="item-price-old">R$ ${fmt(i.price_old)}</span>` : ''}
-          <span class="item-price">R$ ${fmt(i.price)}</span>
-        </div>
-        <button class="item-add-btn" ${esg?'disabled':''} onclick="event.stopPropagation();addToCart(${i.id})">+</button>
-      </div>
-    </div>
-  </div>`;
-}
-
-// ══════════════════════════════════════════
-//  MODAL DO ITEM
-// ══════════════════════════════════════════
-let _imItemId = null;
-let _imQty    = 1;
-
-function openItemModal(id) {
-  const i = allItems.find(x => x.id === id);
-  if (!i) return;
-  _imItemId = id;
-  _imQty    = 1;
-
-  const imgEl = document.getElementById('im-img');
-  if (i.image_url) {
-    imgEl.innerHTML = `<button class="im-close" onclick="closeItemModal()">✕</button><img src="${i.image_url}" alt="${i.name}" style="width:100%;height:100%;object-fit:cover">`;
-  } else {
-    imgEl.innerHTML = `<button class="im-close" onclick="closeItemModal()">✕</button><span style="font-size:72px">${i.emoji||'🍽️'}</span>`;
-  }
-
-  document.getElementById('im-name').textContent = i.name;
-  document.getElementById('im-desc').textContent = i.description || '';
-  document.getElementById('im-price').textContent = 'R$ ' + fmt(i.price);
-  const old = document.getElementById('im-price-old');
-  if (i.price_old) { old.textContent = 'R$ ' + fmt(i.price_old); old.style.display = ''; }
-  else old.style.display = 'none';
-  document.getElementById('im-qty').textContent = _imQty;
-  document.getElementById('im-obs').value = '';
-  document.getElementById('im-add-btn').innerHTML = `🛒 Adicionar · R$ ${fmt(i.price * _imQty)}`;
-  document.getElementById('im-add-btn').disabled = !_lojaAberta;
-
-  document.getElementById('item-modal-bg').classList.add('on');
-}
-
-function closeItemModal() {
-  document.getElementById('item-modal-bg').classList.remove('on');
-}
-
-function imQty(d) {
-  _imQty = Math.max(1, _imQty + d);
-  const i = allItems.find(x => x.id === _imItemId);
-  document.getElementById('im-qty').textContent = _imQty;
-  if (i) document.getElementById('im-add-btn').innerHTML = `🛒 Adicionar · R$ ${fmt(i.price * _imQty)}`;
-}
-
-function imConfirm() {
-  const i   = allItems.find(x => x.id === _imItemId);
-  if (!i) return;
-  const obs = document.getElementById('im-obs').value.trim();
-  const existing = cart.find(c => c.id === i.id && (c.obs||'') === obs);
-  if (existing) existing.qty += _imQty;
-  else cart.push({ ...i, qty: _imQty, obs });
-  closeItemModal();
-  updateCartFloat();
-  toast('🛒', `${i.name} adicionado!`);
-}
-
-// ══════════════════════════════════════════
-//  CARRINHO
-// ══════════════════════════════════════════
-function addToCart(id) {
-  const i = allItems.find(x => x.id === id);
-  if (!i) return;
-  const ex = cart.find(c => c.id === id && !c.obs);
-  if (ex) ex.qty++;
-  else cart.push({...i, qty:1, obs:''});
-  updateCartFloat();
-  toast('🛒', `${i.name} adicionado!`);
-}
-
-function removeFromCart(id, obs) {
-  cart = cart.filter(c => !(c.id===id && (c.obs||'')===(obs||'')));
-  appliedCupom = null;
-  document.getElementById('cupom-input').value = '';
-  document.getElementById('cupom-msg').innerHTML = '';
-  updateCartFloat();
-  renderCartDrawer();
-}
-
-function changeQty(id, obs, d) {
-  const it = cart.find(c => c.id===id && (c.obs||'')===(obs||''));
-  if (!it) return;
-  it.qty += d;
-  if (it.qty <= 0) removeFromCart(id, obs);
-  else { updateCartFloat(); renderCartDrawer(); }
-}
-
-function cartSubtotal() { return cart.reduce((s,i) => s + i.price * i.qty, 0); }
-
-function getDiscount() {
-  if (!appliedCupom) return 0;
-  const sub = cartSubtotal();
-  const tipo = appliedCupom.type || appliedCupom.tipo || '';
-  const val  = parseFloat(appliedCupom.value ?? appliedCupom.val ?? 0);
-  if (tipo === 'percent' || tipo === '%') return sub * val / 100;
-  if (tipo === 'frete') return deliveryType === 'delivery' ? getTaxa() : 0;
-  return Math.min(val, sub);
-}
-
-function getFaixaTaxa() {
-  const faixas = feeConfig.faixas || [];
-  if (!faixas.length) return 0;
-  return parseFloat(faixas[Math.min(selectedFaixa, faixas.length-1)]?.taxa) || 0;
-}
-
-function getTaxa() {
-  if (deliveryType !== 'delivery') return 0;
-  if (appliedCupom?.tipo === 'frete') return 0;
-  if (feeConfig.tipo === 'por_km') return getFaixaTaxa();
-  return parseFloat(feeConfig.valor || feeConfig.value || 0);
-}
-
-function grandTotal() { return Math.max(0, cartSubtotal() - getDiscount() + getTaxa()); }
-
-function updateCartFloat() {
-  const qty   = cart.reduce((s,i) => s+i.qty, 0);
-  const total = cartSubtotal();
-  document.getElementById('cart-float').classList.toggle('show', cart.length > 0);
-  document.getElementById('cart-badge').textContent = qty;
-  document.getElementById('cart-total-float').textContent = fmt(total);
-  const btn = document.getElementById('confirm-btn');
-  if (btn) btn.disabled = cart.length === 0 || !_lojaAberta;
-}
-
-function openCart() {
-  document.getElementById('drawer-bg').classList.add('on');
-  document.getElementById('success-screen').classList.remove('on');
-  document.getElementById('cart-content').style.display = '';
-  renderCartDrawer();
-  restoreProfile();
-  renderFaixas();
-}
-
-function closeCart() {
-  document.getElementById('drawer-bg').classList.remove('on');
-}
-
-function setDelivery(type) {
-  deliveryType = type;
-  ['delivery','retirada','mesa'].forEach(t => {
-    document.getElementById('dtab-'+t).classList.toggle('on', t===type);
-  });
-  document.getElementById('addr-block').style.display  = type==='delivery' ? '' : 'none';
-  document.getElementById('mesa-block').style.display  = type==='mesa'     ? '' : 'none';
-  renderFaixas();
-  renderTotals();
-}
-
-function setPay(el) {
-  document.querySelectorAll('.pay-opt').forEach(b => b.classList.remove('on'));
-  el.classList.add('on');
-  selectedPay = el.dataset.pay;
-}
-
-function renderFaixas() {
-  const wrap   = document.getElementById('faixas-wrap');
-  const list   = document.getElementById('faixas-list');
-  const faixas = feeConfig?.faixas || [];
-  if (deliveryType !== 'delivery' || feeConfig?.tipo !== 'por_km' || !faixas.length) {
-    wrap.style.display = 'none'; return;
-  }
-  wrap.style.display = '';
-  list.innerHTML = faixas.map((f,i) => `
-    <div class="faixa-item ${i===selectedFaixa?'on':''}" onclick="selectFaixa(${i})">
-      <span class="faixa-label">🛵 Até ${f.ate_km} km</span>
-      <span class="faixa-val">R$ ${fmt(f.taxa)}</span>
-    </div>`).join('');
-}
-
-function selectFaixa(i) {
-  selectedFaixa = i;
-  renderFaixas();
-  renderTotals();
-}
-
-function renderCartDrawer() {
-  const list = document.getElementById('cart-items');
-  if (!cart.length) {
-    list.innerHTML = '<div class="empty-state" style="padding:20px 0 8px"><div class="empty-state-icon" style="font-size:36px">🛒</div><div class="empty-state-text">Nada aqui ainda</div></div>';
-  } else {
-    list.innerHTML = cart.map(i => `
-      <div class="ci">
-        <div class="ci-thumb">
-          ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}">` : i.emoji||'🍽️'}
-        </div>
-        <div class="ci-info">
-          <div class="ci-name">${i.name}</div>
-          <div class="ci-price">R$ ${fmt(i.price * i.qty)}</div>
-          ${i.obs ? `<div class="ci-obs">📝 ${i.obs}</div>` : ''}
-        </div>
-        <div class="ci-qty-row">
-          <button class="cqb" onclick="changeQty(${i.id},'${(i.obs||'').replace(/'/g,"\\'")}', -1)">−</button>
-          <span class="cqn">${i.qty}</span>
-          <button class="cqb" onclick="changeQty(${i.id},'${(i.obs||'').replace(/'/g,"\\'")}', 1)">+</button>
-        </div>
-        <button class="ci-del" onclick="removeFromCart(${i.id},'${(i.obs||'').replace(/'/g,"\\'")}')">🗑</button>
-      </div>`).join('');
-  }
-  renderTotals();
-}
-
-function renderTotals() {
-  const sub  = cartSubtotal();
-  const disc = getDiscount();
-  const taxa = getTaxa();
-  const tot  = grandTotal();
-
-  let taxaLabel = 'Taxa de entrega';
-  if (deliveryType === 'delivery' && feeConfig?.tipo === 'por_km') {
-    const f = (feeConfig.faixas||[])[selectedFaixa];
-    if (f) taxaLabel = `Entrega até ${f.ate_km} km`;
-  }
-
-  document.getElementById('totals-wrap').innerHTML = `
-    <div class="total-row"><span>Subtotal</span><span>R$ ${fmt(sub)}</span></div>
-    ${deliveryType === 'delivery' ? `<div class="total-row"><span>${taxaLabel}</span><span>${taxa>0?'R$ '+fmt(taxa):'Grátis'}</span></div>` : ''}
-    ${disc > 0 ? `<div class="total-row total-disc"><span>🏷 Desconto (${appliedCupom.code})</span><span>− R$ ${fmt(disc)}</span></div>` : ''}
-    <div class="total-row big"><span>Total</span><span>R$ ${fmt(tot)}</span></div>`;
-}
-
-// ══════════════════════════════════════════
-//  CUPOM
-// ══════════════════════════════════════════
-function applyCupom() {
-  const code = document.getElementById('cupom-input').value.trim().toUpperCase();
-  const msg  = document.getElementById('cupom-msg');
-  if (!code) return;
-  const found = allCupons.find(c => (c.code||'').toUpperCase() === code && c.ativo);
-  if (!found) {
-    msg.innerHTML = '<div class="cupom-err">❌ Cupom inválido ou expirado</div>';
-    appliedCupom = null;
-  } else {
-    const minOrder = parseFloat(found.min_order || found.minimo || 0);
-    if (minOrder > 0 && cartSubtotal() < minOrder) {
-      msg.innerHTML = `<div class="cupom-err">❌ Pedido mínimo de R$ ${fmt(minOrder)}</div>`;
-      appliedCupom = null;
-    } else {
-      appliedCupom = found;
-      msg.innerHTML = `<div class="cupom-ok">✅ Cupom "${found.code}" aplicado!</div>`;
-    }
-  }
-  renderTotals();
-}
-
-// ══════════════════════════════════════════
-//  PERFIL (salvo no localStorage)
-// ══════════════════════════════════════════
-function restoreProfile() {
-  try {
-    const p = JSON.parse(localStorage.getItem(PROFILE_KEY)||'null');
-    if (!p) return;
-    const v = (id,val) => { const el=document.getElementById(id); if(el&&val) el.value=val; };
-    v('f-name',  p.name  || p.nome);
-    v('f-phone', p.phone || p.telefone);
-  } catch(e) {}
-}
-
-function saveProfile(name, phone) {
-  try { localStorage.setItem(PROFILE_KEY, JSON.stringify({ name, phone })); } catch(e) {}
-}
-
-// ══════════════════════════════════════════
-//  SUBMIT
-// ══════════════════════════════════════════
-async function submitOrder() {
-  const name  = document.getElementById('f-name').value.trim();
-  const phone = document.getElementById('f-phone').value.trim();
-
-  if (!name)  { toast('⚠️','Informe seu nome');      return; }
-  if (!phone) { toast('⚠️','Informe seu WhatsApp');  return; }
-  if (!cart.length) { toast('⚠️','Carrinho vazio');  return; }
-  if (!_lojaAberta) { toast('🔴','Loja fechada');     return; }
-
-  let addr = '';
-  if (deliveryType === 'delivery') {
-    const rua = document.getElementById('f-rua').value.trim();
-    const num = document.getElementById('f-num').value.trim();
-    if (!rua) { toast('⚠️','Informe a rua');   return; }
-    if (!num) { toast('⚠️','Informe o número'); return; }
-    const bairro = document.getElementById('f-bairro').value.trim();
-    const compl  = document.getElementById('f-compl').value.trim();
-    addr = [rua, num, bairro, compl].filter(Boolean).join(', ');
-  } else if (deliveryType === 'mesa') {
-    const m = document.getElementById('f-mesa').value.trim();
-    if (!m) { toast('⚠️','Informe o número da mesa'); return; }
-    addr = 'Mesa ' + m;
-  } else {
-    addr = 'Retirada no balcão';
-  }
-
-  saveProfile(name, phone);
-
-  const btn = document.getElementById('confirm-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<div class="spin"></div> Enviando…';
-
-  const items = cart.map(i => ({ qty: i.qty, name: i.name, price: i.price, obs: i.obs||'' }));
-  const time  = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-
-  try {
-    // salva/atualiza cliente
-    try {
-      const { data: cl } = await sb.from('customers').select('id,orders_count,total_spent').eq('phone', phone).maybeSingle();
-      if (cl) {
-        await sb.from('customers').update({
-          name, addr,
-          orders_count: (cl.orders_count||0)+1,
-          total_spent:  (parseFloat(cl.total_spent)||0)+grandTotal(),
-          last_order_at: new Date().toISOString()
-        }).eq('id', cl.id);
-      } else {
-        await sb.from('customers').insert({
-          name, phone, addr,
-          orders_count: 1,
-          total_spent: grandTotal(),
-          last_order_at: new Date().toISOString()
-        });
-      }
-    } catch(e) {}
-
-    // insere o pedido
-    const { data: order, error } = await sb.from('orders').insert({
-      client: name, phone, addr,
-      items, total: grandTotal(), taxa: getTaxa(),
-      status: 'analise', time,
-      pag: selectedPay
-    }).select().single();
-
-    if (error) throw error;
-
-    // sucesso
-    cart = [];
-    appliedCupom = null;
-    updateCartFloat();
-    document.getElementById('cupom-input').value = '';
-    document.getElementById('cupom-msg').innerHTML = '';
-
-    document.getElementById('cart-content').style.display = 'none';
-    document.getElementById('success-screen').classList.add('on');
-    document.getElementById('success-num').textContent = '#' + String(order.id).padStart(3,'0');
-
-    startTracking(order.id, items, name);
-
-  } catch(e) {
-    console.error(e);
-    toast('❌','Erro ao enviar pedido. Tente novamente.');
-    btn.disabled = false;
-    btn.innerHTML = '✅ Confirmar Pedido';
-  }
-}
-
-function resetCart() {
-  document.getElementById('success-screen').classList.remove('on');
-  document.getElementById('cart-content').style.display = '';
-  document.getElementById('cart-items').innerHTML = '';
-  renderTotals();
-  closeCart();
-}
-
-// ══════════════════════════════════════════
-//  TRACKER
-// ══════════════════════════════════════════
-const STEPS = [
-  { key:'analise',  icon:'🕐', title:'Pedido recebido',  desc:'Aguardando confirmação da cozinha' },
-  { key:'producao', icon:'👨‍🍳', title:'Em preparo',       desc:'Sua comida está sendo preparada' },
-  { key:'pronto',   icon:'✅', title:'Pronto!',           desc:'Pedido pronto para retirada/entrega' },
-  { key:'saiu',     icon:'🛵', title:'Saiu para entrega', desc:'A caminho do seu endereço' },
-  { key:'entregue', icon:'🎉', title:'Entregue',          desc:'Bom apetite!' },
-];
-const STATUS_ORDER = ['analise','producao','pronto','saiu','entregue'];
-
-function startTracking(orderId, items, client) {
-  _trackOrderId = orderId;
-  const fab = document.getElementById('track-fab');
-  fab.classList.add('show');
-  document.getElementById('track-num').textContent = '#' + String(orderId).padStart(3,'0');
-
-  // inscreve no canal SSE
-  if (_trackChannel) { try { sb.removeChannel(_trackChannel); } catch(e){} }
-  _trackChannel = sb.channel('orders-rt')
-    .on('postgres_changes',{event:'UPDATE',table:'orders'}, p => {
-      if (Number(p.new.id) === orderId) updateTracker(p.new.status);
-    })
-    .subscribe();
-
-  updateTracker('analise');
-  renderTrackItems(items, client);
-  document.getElementById('track-order-num').textContent = 'Pedido #' + String(orderId).padStart(3,'0');
-}
-
-function updateTracker(status) {
-  const dot   = document.getElementById('track-dot');
-  const done  = status === 'entregue' || status === 'cancelado';
-  if (dot) { dot.classList.toggle('done', done); }
-
-  const curIdx = STATUS_ORDER.indexOf(status);
-  const tl     = document.getElementById('track-timeline');
-  if (!tl) return;
-  tl.innerHTML = STEPS.map((s,i) => {
-    const isDone   = i < curIdx;
-    const isActive = STATUS_ORDER[i] === status;
-    const isLast   = i === STEPS.length - 1;
-    return `
-    <div class="tstep">
-      <div class="tstep-left">
-        <div class="tstep-icon ${isDone?'done':isActive?'active':''}">${s.icon}</div>
-        ${!isLast ? `<div class="tstep-line ${isDone?'done':''}"></div>` : ''}
-      </div>
-      <div class="tstep-content">
-        <div class="tstep-title ${isDone?'done':isActive?'active':''}">${s.title}</div>
-        <div class="tstep-desc">${s.desc}</div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function renderTrackItems(items, client) {
-  const el = document.getElementById('track-items-list');
-  if (!el) return;
-  el.innerHTML = items.map(i => `
-    <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--muted2)">
-      <span>${i.qty}× ${i.name}${i.obs?` <span style="color:var(--muted);font-size:11px">(${i.obs})</span>`:''}</span>
-      <span>R$ ${fmt(i.price*i.qty)}</span>
-    </div>`).join('');
-}
-
-function openTracker()  { document.getElementById('track-drawer-bg').classList.add('on'); }
-function closeTracker() { document.getElementById('track-drawer-bg').classList.remove('on'); }
-
-// ══════════════════════════════════════════
-//  TOAST
-// ══════════════════════════════════════════
-function toast(icon, msg) {
-  const area = document.getElementById('toast-area');
-  const el   = document.createElement('div');
-  el.className = 'toast';
-  el.textContent = icon + ' ' + msg;
-  area.appendChild(el);
-  setTimeout(() => {
-    el.classList.add('out');
-    setTimeout(() => el.remove(), 300);
-  }, 2200);
-}
-
-// ══════════════════════════════════════════
-//  UTILS
-// ══════════════════════════════════════════
-function fmt(n) {
-  return Number(n||0).toFixed(2).replace('.',',');
-}
-
-// ── Start ──
 init();
 </script>
 </body>
