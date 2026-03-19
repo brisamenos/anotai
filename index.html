@@ -290,35 +290,43 @@ input,textarea{font-family:inherit}
 .im-obs::placeholder{color:var(--muted)}
 
 /* ── Ingredientes selecionáveis ── */
+.im-ingr-wrap{
+  margin:16px 0 8px;
+  background:var(--s2);border:1px solid var(--border);
+  border-radius:14px;padding:14px;
+}
 .im-ingr-label{
   font-size:11px;font-weight:700;color:var(--muted);
   text-transform:uppercase;letter-spacing:.5px;
-  margin:16px 0 8px;
+  margin-bottom:10px;display:flex;align-items:center;gap:6px;
 }
+.im-ingr-count{
+  background:var(--accent);color:#fff;
+  font-size:10px;font-weight:800;
+  padding:1px 7px;border-radius:99px;
+  display:none;
+}
+.im-ingr-count.show{display:inline-block}
 .im-ingr-grid{
-  display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;
+  display:flex;flex-wrap:wrap;gap:6px;
 }
 .im-ingr-chip{
-  display:flex;align-items:center;gap:6px;
-  padding:7px 12px;border-radius:99px;
-  background:var(--s2);border:1.5px solid var(--border);
+  display:flex;align-items:center;gap:5px;
+  padding:6px 11px;border-radius:99px;
+  background:var(--s1);border:1.5px solid var(--border2);
   font-size:12.5px;color:var(--muted2);cursor:pointer;
   transition:all .15s;user-select:none;font-family:'DM Sans',sans-serif;
 }
-.im-ingr-chip:hover{border-color:rgba(249,115,22,.4);color:var(--text)}
+.im-ingr-chip:active{transform:scale(.95)}
 .im-ingr-chip.on{
-  background:rgba(249,115,22,.1);border-color:var(--accent);
-  color:var(--accent);font-weight:600;
+  background:rgba(249,115,22,.12);border-color:var(--accent);
+  color:var(--accent);font-weight:700;
 }
-.im-ingr-chip .chip-check{
-  width:14px;height:14px;border-radius:50%;
-  border:1.5px solid var(--border);flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;
-  transition:all .15s;
+.im-ingr-chip .chip-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--border2);flex-shrink:0;transition:background .15s;
 }
-.im-ingr-chip.on .chip-check{
-  background:var(--accent);border-color:var(--accent);color:#fff;font-size:9px;
-}
+.im-ingr-chip.on .chip-dot{background:var(--accent)}
 .im-add-btn{
   width:100%;padding:16px;border-radius:14px;border:none;margin-top:18px;
   background:var(--accent-g);color:#fff;font-size:15px;font-weight:700;
@@ -898,8 +906,14 @@ input,textarea{font-family:inherit}
 
       <!-- ── Ingredientes selecionáveis ── -->
       <div id="im-ingr-section" style="display:none">
-        <div class="im-ingr-label">Escolha os complementos</div>
-        <div class="im-ingr-grid" id="im-ingr-grid"></div>
+        <div class="im-ingr-wrap">
+          <div class="im-ingr-label">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+            Escolha os complementos
+            <span class="im-ingr-count" id="im-ingr-count">0</span>
+          </div>
+          <div class="im-ingr-grid" id="im-ingr-grid"></div>
+        </div>
       </div>
 
       <!-- ── PIZZA: metade a metade ── -->
@@ -1388,7 +1402,11 @@ async function init() {
       sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp').single()
     ]);
 
-    allItems  = (itemsR.data  || []).map(x => ({...x, id: Number(x.id)}));
+    allItems  = (itemsR.data  || []).map(x => ({
+      ...x,
+      id: Number(x.id),
+      ingredients: (() => { try { return Array.isArray(x.ingredients) ? x.ingredients : JSON.parse(x.ingredients||'[]'); } catch(e){ return []; } })()
+    }));
     allCats   = (catsR.data   || []);
     allCupons = (cuponsR.data || []);
 
@@ -1534,7 +1552,11 @@ async function reloadMenu() {
     sb.from('menu_items').select('*').not('status','eq','pausado').order('id'),
     sb.from('categories').select('*').eq('ativo',true).order('sort_order')
   ]);
-  allItems = (itemsR.data || []).map(x => ({...x, id: Number(x.id)}));
+  allItems = (itemsR.data || []).map(x => ({
+    ...x,
+    id: Number(x.id),
+    ingredients: (() => { try { return Array.isArray(x.ingredients) ? x.ingredients : JSON.parse(x.ingredients||'[]'); } catch(e){ return []; } })()
+  }));
   allCats  = (catsR.data  || []);
   buildCats();
   renderMenu();
@@ -1878,11 +1900,12 @@ function openItemModal(id) {
   if (ingrs.length > 0) {
     ingrGrid.innerHTML = ingrs.map(ingr => `
       <div class="im-ingr-chip" onclick="toggleIngr(this)">
-        <div class="chip-check"></div>
+        <div class="chip-dot"></div>
         <span>${ingr}</span>
       </div>`).join('');
+    document.getElementById('im-ingr-count').textContent = '0';
+    document.getElementById('im-ingr-count').classList.remove('show');
     ingrSection.style.display = '';
-    // Quando há ingredientes, reduz o textarea a placeholder menor
     document.getElementById('im-obs').placeholder = 'Observação adicional (opcional)';
   } else {
     ingrSection.style.display = 'none';
@@ -2017,8 +2040,13 @@ function imQty(d) {
 
 function toggleIngr(chip) {
   chip.classList.toggle('on');
-  const check = chip.querySelector('.chip-check');
-  if (check) check.textContent = chip.classList.contains('on') ? '✓' : '';
+  // Atualiza contador
+  const total = document.querySelectorAll('#im-ingr-grid .im-ingr-chip.on').length;
+  const cnt = document.getElementById('im-ingr-count');
+  if (cnt) {
+    cnt.textContent = total;
+    total > 0 ? cnt.classList.add('show') : cnt.classList.remove('show');
+  }
 }
 
 function imConfirm() {
@@ -2027,7 +2055,6 @@ function imConfirm() {
   const obs = document.getElementById('im-obs').value.trim();
   const isPizza = isPizzaItem(i);
 
-  // Coleta ingredientes selecionados
   const selectedIngrs = [...document.querySelectorAll('#im-ingr-grid .im-ingr-chip.on')]
     .map(c => c.querySelector('span')?.textContent?.trim())
     .filter(Boolean);
