@@ -466,9 +466,7 @@ body {
 .upsell-skip:hover { border-color: rgba(255,255,255,.2); color: var(--text); }
 
 .item-modal-bg {
-  display: none; position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  width: 100%; height: 100%;
+  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%;
   background: rgba(0,0,0,.85); z-index: 550;
   align-items: flex-end; justify-content: center;
   backdrop-filter: blur(6px);
@@ -1785,25 +1783,33 @@ async function resolveTenant() {
   const p    = new URLSearchParams(window.location.search);
   const slug = p.get('slug') || p.get('t');
   const tid  = p.get('tenant');
+
+  // Tenta por ID ou slug na URL primeiro
   if (tid) {
-    const res  = await fetch(`/api/tenant-info?id=${tid}`);
-    const data = await res.json();
-    if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
-    return false;
-  }
-  if (!slug) {
-    const match = window.location.pathname.match(/\/([a-z0-9-]+)\/?$/);
-    if (match && match[1] !== 'index.html') {
-      const res = await fetch(`/api/tenant-info?slug=${match[1]}`);
+    try {
+      const res  = await fetch(`/api/tenant-info?id=${tid}`);
       const data = await res.json();
       if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
-    }
-    return false;
+    } catch(e) {}
   }
-  const res  = await fetch(`/api/tenant-info?slug=${slug}`);
-  const data = await res.json();
-  if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
-  return false;
+  if (slug) {
+    try {
+      const res  = await fetch(`/api/tenant-info?slug=${encodeURIComponent(slug)}`);
+      const data = await res.json();
+      if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
+    } catch(e) {}
+  }
+
+  // Fallback automático: pega o primeiro tenant ativo do banco
+  try {
+    const res  = await fetch('/api/tenant-info?default=1');
+    const data = await res.json();
+    if (data.id) { _tenantId = data.id; applyBranding(data.branding, data.nome); return true; }
+  } catch(e) {}
+
+  // Último recurso: carrega sem tenant (sem filtro)
+  _tenantId = null;
+  return true;
 }
 
 function applyBranding(b, tenantNome) {
@@ -1866,10 +1872,7 @@ async function init() {
   try {
     // Resolve tenant pelo slug na URL
     const tenantOk = await resolveTenant();
-    if (!tenantOk && !_tenantId) {
-      renderMenuWrap('<div class="loading-wrap"><div style="font-size:32px">🍽️</div><span>Restaurante não encontrado.<br>Verifique o link.</span></div>');
-      return;
-    }
+    // Continua mesmo sem tenant — carrega sem filtro
 
     // Injeta tenant_id no header de todas as requisições desta sessão
     if (_tenantId) {
