@@ -4757,10 +4757,14 @@ async function evoCheckStatus() {
   if (state==='open') {
     evoConnected=true;
     _evoSetStatus('connected','Conectado');
+    // Salva evo_instance no banco sempre que verificar com sucesso
+    try { await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: EVO.instance }); } catch(e) {}
     if (naAbaRobo) _evoShowConnected(r.data?.instance?.profileName||r.data?.me?.pushName||'WhatsApp');
   } else {
     evoConnected=false;
     _evoSetStatus('disconnected','Desconectado');
+    // Salva evo_instance mesmo desconectado para não perder o nome digitado
+    try { await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: EVO.instance }); } catch(e) {}
     if (naAbaRobo) _evoShowQRPrompt();
   }
 }
