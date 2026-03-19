@@ -1173,9 +1173,80 @@ function subscribeRealtime() {
     .subscribe();
   sb.channel('store-config-rt')
     .on('postgres_changes',{event:'UPDATE',table:'store_config'}, p => {
-      applyStatus(p.new.store_open, p.new.horarios_config || _cachedHorarios);
+      const cfg = p.new;
+      // Status aberto/fechado
+      applyStatus(cfg.store_open, cfg.horarios_config || _cachedHorarios);
+      // Branding completo — atualiza logo, banner, cor, nome, etc. em tempo real
+      applyBrandingLive(cfg);
     })
     .subscribe();
+}
+
+// Aplica mudanças de branding vindas do SSE (store_config row completo)
+// Diferente de applyBranding(): não recria elementos, atualiza os existentes
+function applyBrandingLive(cfg) {
+  if (!cfg) return;
+
+  // Nome e descrição
+  if (cfg.store_name) {
+    document.title = cfg.store_name;
+    const el = document.getElementById('hero-name');
+    if (el) el.textContent = cfg.store_name;
+  }
+  if (cfg.store_descricao) {
+    const el = document.getElementById('hero-desc');
+    if (el) el.textContent = cfg.store_descricao;
+  }
+
+  // Cor principal — atualiza CSS variable instantaneamente
+  if (cfg.store_cor) {
+    document.documentElement.style.setProperty('--accent', cfg.store_cor);
+  }
+
+  // Logo
+  if (cfg.store_logo_url) {
+    // Tenta atualizar img existente ou substituir o emoji
+    const existingImg = document.querySelector('.hero-logo-img');
+    if (existingImg) {
+      existingImg.src = cfg.store_logo_url;
+    } else {
+      const emoEl = document.getElementById('hero-emoji');
+      if (emoEl) {
+        const img = document.createElement('img');
+        img.src = cfg.store_logo_url;
+        img.className = 'hero-logo-img';
+        img.onerror = () => img.remove();
+        emoEl.replaceWith(img);
+      }
+    }
+  }
+
+  // Banner
+  if (cfg.store_banner_url) {
+    const hero = document.getElementById('hero');
+    if (hero) {
+      const url = cfg.store_banner_url.startsWith('http')
+        ? cfg.store_banner_url
+        : location.origin + cfg.store_banner_url;
+      hero.style.background = `linear-gradient(180deg,rgba(0,0,0,.3) 0%,rgba(0,0,0,.85) 100%),url('${url}') center/cover no-repeat`;
+    }
+  }
+
+  // Tempo e avaliação
+  if (cfg.store_tempo_entrega) {
+    const el = document.getElementById('hero-tempo');
+    if (el) { el.textContent = cfg.store_tempo_entrega; el.closest('.hero-badge').style.display = ''; }
+  }
+  if (cfg.store_avaliacao) {
+    const el = document.getElementById('hero-aval');
+    if (el) { el.textContent = cfg.store_avaliacao; el.closest('.hero-badge').style.display = ''; }
+  }
+
+  // WhatsApp
+  if (cfg.store_whatsapp) {
+    _waNumero = cfg.store_whatsapp.replace(/\D/g, '');
+    if (_waNumero.length <= 11) _waNumero = '55' + _waNumero;
+  }
 }
 
 async function reloadMenu() {
