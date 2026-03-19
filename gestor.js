@@ -197,8 +197,12 @@ async function loadAllData(silent = false) {
       orders:f.orders_count||0, resgates:f.resgates||0
     }));
 
-    // Set orderIdSeq above DB max
-    if (ordersKanban.length) orderIdSeq = Math.max(...ordersKanban.map(o=>o.id)) + 1;
+    // Set orderIdSeq above DB max and init polling tracker
+    if (ordersKanban.length) {
+      const maxId = Math.max(...ordersKanban.map(o=>o.id));
+      orderIdSeq = maxId + 1;
+      _maxKnownOrderId = maxId;
+    }
 
     // Aplica estado do caixa e loja
     if (cfgRes.data) {
@@ -409,6 +413,7 @@ function subscribeOrders() {
     .on('postgres_changes', {event:'INSERT', schema:'public', table:'orders'}, p => {
       if (!ordersKanban.find(x => x.id === p.new.id)) {
         ordersKanban.unshift(mapOrder(p.new));
+        if (p.new.id > _maxKnownOrderId) _maxKnownOrderId = p.new.id;
         renderKanban();
         playOrderSound();
         const nc = document.getElementById('notif-count');
@@ -506,23 +511,91 @@ document.addEventListener('visibilitychange', () => {
 
 // Polling de 12s — só re-renderiza se houver mudança real no banco
 let _lastPollHash = '';
+let _maxKnownOrderId = 0; // rastreia o maior ID visto — para detectar novos pedidos
+
+// ── Polling principal do kanban — roda a cada 5s ───────
+// Garante que pedidos do garçom e do cardápio cheguem
+// mesmo que o SSE falhe ou tenha problemas de canal
 setInterval(async () => {
   if (document.visibilityState !== 'visible') return;
-  if (!_rtConnected) { subscribeOrders(); return; } // reconecta se perdeu WS
-  const pg = document.getElementById('page-pedidos-mesa');
-  if (!pg || !pg.classList.contains('on')) return;
-  // Busca apenas IDs + status para comparar (leve)
-  const { data } = await sb.from('orders')
-    .select('id,status,mesa_num')
-    .not('mesa_num', 'is', null)
-    .in('status', ['analise','producao','pronto'])
-    .order('id');
-  const hash = JSON.stringify((data||[]).map(o => o.id + o.status));
-  if (hash !== _lastPollHash) {
-    _lastPollHash = hash;
-    renderMesasPage(); // só renderiza se algo mudou
-  }
-}, 12000);
+
+  try {
+    // 1. Busca pedidos novos (ID maior que o último conhecido)
+    if (_maxKnownOrderId > 0) {
+      const { data: novos } = await sb.from('orders')
+        .select('*')
+        .in('status', ['analise','producao','pronto'])
+        .gt('id', _maxKnownOrderId)
+        .order('id', {ascending:false});
+
+      if (novos?.length) {
+        let houveMudanca = false;
+        for (const o of novos) {
+          if (!ordersKanban.find(x => x.id === o.id)) {
+            ordersKanban.unshift(mapOrder(o));
+            houveMudanca = true;
+            // Notifica como novo pedido
+            playOrderSound();
+            const nc = document.getElementById('notif-count');
+            if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
+            const items = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
+            showToast('🛎️', `Novo pedido #${o.id} — ${o.client}`);
+            sendBrowserNotif(`🛎️ Novo pedido #${o.id}`, `${o.client} — ${items}`);
+            if (_autoAcceptOn && o.status === 'analise') setTimeout(() => advanceOrderById(o.id), 800);
+            if (_printMode === 'auto') printOrder(mapOrder(o));
+            // Atualiza cache mesa se for pedido de mesa
+            if (o.mesa_num) { _updateMesaOrdersCache(o); _renderMesaPageFromCache(); }
+          }
+          if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id;
+        }
+        if (houveMudanca) renderKanban();
+      }
+    }
+
+    // 2. Verifica mudanças de status nos pedidos já no kanban
+    if (ordersKanban.length) {
+      const ids = ordersKanban.map(o => o.id);
+      const { data: atuais } = await sb.from('orders')
+        .select('id,status')
+        .in('id', ids.slice(0, 50)); // limita para não sobrecarregar
+
+      if (atuais?.length) {
+        let houveMudanca = false;
+        for (const a of atuais) {
+          const idx = ordersKanban.findIndex(x => x.id === a.id);
+          if (idx !== -1 && ordersKanban[idx].status !== a.status) {
+            if (['entregue','cancelado'].includes(a.status)) {
+              ordersKanban.splice(idx, 1);
+            } else {
+              ordersKanban[idx].status = a.status;
+            }
+            houveMudanca = true;
+          }
+        }
+        if (houveMudanca) renderKanban();
+      }
+    }
+
+    // 3. Polling de mesas (página de mesas aberta)
+    const pg = document.getElementById('page-pedidos-mesa');
+    if (pg?.classList.contains('on')) {
+      const { data } = await sb.from('orders')
+        .select('id,status,mesa_num')
+        .not('mesa_num', 'is', null)
+        .in('status', ['analise','producao','pronto'])
+        .order('id');
+      const hash = JSON.stringify((data||[]).map(o => o.id + o.status));
+      if (hash !== _lastPollHash) {
+        _lastPollHash = hash;
+        renderMesasPage();
+      }
+    }
+
+    // 4. Reconecta SSE se perdeu conexão
+    if (!_rtConnected) subscribeOrders();
+
+  } catch(e) { /* polling silencioso */ }
+}, 5000);
 
 // Registra SW e pede permissão de notificação ao carregar
 requestNotifPermission();
