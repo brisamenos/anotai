@@ -1947,7 +1947,7 @@ function updateCartFloat() {
   const qty = cart.reduce((s,i) => s+i.qty, 0);
   document.getElementById('cart-float').classList.toggle('show', cart.length > 0);
   document.getElementById('cart-badge').textContent = qty;
-  document.getElementById('cart-total-float').textContent = fmt(cartSubtotal());
+  document.getElementById('cart-total-float').textContent = fmt(grandTotal());
   const btn = document.getElementById('confirm-btn');
   if (btn) btn.disabled = cart.length === 0 || !_lojaAberta;
 }
@@ -1973,6 +1973,7 @@ function setDelivery(type) {
   document.getElementById('mesa-block').style.display  = type==='mesa'     ? '' : 'none';
   renderFaixas();
   renderTotals();
+  updateCartFloat();
 }
 
 function setPay(el) {
