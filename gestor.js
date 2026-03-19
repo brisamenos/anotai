@@ -1,3 +1,4 @@
+
 // ═══════════════════════════════════════════════════════
 // SUPABASE — CONFIGURAÇÃO E INTEGRAÇÃO
 // ═══════════════════════════════════════════════════════
@@ -4624,13 +4625,14 @@ let evoConnected  = false;
 let evoQrInterval = null;
 
 function roboTab(tab) {
-  ['wp','auto','msgs','chat'].forEach(t => {
+  ['wp','auto','msgs','ia','chat'].forEach(t => {
     document.getElementById('robo-tab-'+t)?.classList.toggle('on', t===tab);
     const s = document.getElementById('robo-section-'+t);
     if (s) s.style.display = t===tab ? '' : 'none';
   });
   if (tab==='msgs') evoCarregarHistorico();
   if (tab==='wp')   evoCheckStatus();
+  if (tab==='ia')   iaCarregarConfig();
 }
 
 // Carrega instância salva do store_config ao abrir o Robô
@@ -4875,6 +4877,73 @@ async function evoCarregarAutomacoesSalvas() {
     }
   } catch(e) {
     console.warn('evoCarregarAutomacoesSalvas:', e);
+  }
+}
+
+// ════════════════════════════════════════════════════════
+// AGENTE IA
+// ════════════════════════════════════════════════════════
+
+async function iaCarregarConfig() {
+  // Mostra URL do webhook
+  const urlEl = document.getElementById('ia-webhook-url');
+  if (urlEl) {
+    const tid = _sessao?.tenant_id || '';
+    urlEl.textContent = `${window.location.origin}/webhook/whatsapp/${tid}`;
+  }
+  try {
+    const { data } = await sb.from('store_config').select('ia_config').single();
+    const ia = data?.ia_config ? JSON.parse(data.ia_config) : {};
+    // Toggle ativo
+    const tog = document.getElementById('ia-toggle-ativo');
+    if (tog) { ia.ativo ? tog.classList.add('on') : tog.classList.remove('on'); }
+    iaAtualizarStatus();
+    // Toggles de resposta
+    const campos = ['cardapio','pedido','horario','entrega','promo'];
+    campos.forEach(c => {
+      const el = document.getElementById(`ia-resp-${c}`);
+      if (el) { ia[`resp_${c}`] ? el.classList.add('on') : el.classList.remove('on'); }
+    });
+    // Textos
+    if (ia.horario_txt) { const el = document.getElementById('ia-horario-txt'); if(el) el.value = ia.horario_txt; }
+    if (ia.entrega_txt) { const el = document.getElementById('ia-entrega-txt'); if(el) el.value = ia.entrega_txt; }
+    if (ia.prompt_extra){ const el = document.getElementById('ia-prompt-extra'); if(el) el.value = ia.prompt_extra; }
+    if (ia.modelo) {
+      const sel = document.getElementById('ia-modelo');
+      if (sel) for(let i=0;i<sel.options.length;i++) if(sel.options[i].value===ia.modelo){sel.selectedIndex=i;break;}
+    }
+  } catch(e) { console.warn('iaCarregarConfig:', e); }
+}
+
+function iaAtualizarStatus() {
+  const on  = document.getElementById('ia-toggle-ativo')?.classList.contains('on');
+  const lbl = document.getElementById('ia-status-lbl');
+  if (lbl) {
+    lbl.textContent = on ? '🟢 Ativo — respondendo 24/7' : 'Inativo';
+    lbl.style.color = on ? 'var(--success)' : 'var(--muted)';
+  }
+}
+
+async function iaSalvarConfig() {
+  const ia = {
+    ativo:        document.getElementById('ia-toggle-ativo')?.classList.contains('on'),
+    resp_cardapio:document.getElementById('ia-resp-cardapio')?.classList.contains('on'),
+    resp_pedido:  document.getElementById('ia-resp-pedido')?.classList.contains('on'),
+    resp_horario: document.getElementById('ia-resp-horario')?.classList.contains('on'),
+    resp_entrega: document.getElementById('ia-resp-entrega')?.classList.contains('on'),
+    resp_promo:   document.getElementById('ia-resp-promo')?.classList.contains('on'),
+    horario_txt:  document.getElementById('ia-horario-txt')?.value || '',
+    entrega_txt:  document.getElementById('ia-entrega-txt')?.value || '',
+    prompt_extra: document.getElementById('ia-prompt-extra')?.value || '',
+    modelo:       document.getElementById('ia-modelo')?.value || 'claude-haiku-4-5-20251001',
+  };
+  try {
+    const { error } = await sb.from('store_config').upsert({ ia_config: JSON.stringify(ia) });
+    if (error) throw error;
+    sbToast('ok', '✅ Configurações da IA salvas!');
+    iaAtualizarStatus();
+  } catch(e) {
+    sbToast('err', 'Erro ao salvar: ' + (e.message||JSON.stringify(e)));
   }
 }
 

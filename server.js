@@ -295,6 +295,11 @@ const MIGRATIONS = [
       `ALTER TABLE mesas ADD COLUMN pag_forma TEXT`
     ]
   },
+  {
+    version: 8,
+    description: 'Adiciona ia_config em store_config para agente IA',
+    up: `ALTER TABLE store_config ADD COLUMN ia_config TEXT`
+  },
 ]
 
 function runMigrations() {
@@ -416,7 +421,7 @@ function emit(tenantId, table, record, type) {
 const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','expires_at','created_at'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
-  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_tempo_entrega','store_avaliacao','store_whatsapp','gestor_tema'],
+  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_tempo_entrega','store_avaliacao','store_whatsapp','gestor_tema','ia_config'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
@@ -1020,6 +1025,119 @@ const server = http.createServer(async (req,res) => {
 
   // Aniversário manual
   if(req.method==='POST'&&upath==='/aniversario'){_anivLast.clear();checarAniv();send(res,200,{ok:true});return}
+
+  // ════════════════════════════════════════════════════════
+  // WEBHOOK EVOLUTION API → AGENTE IA
+  // Configurar no Evolution: POST https://seusite/webhook/whatsapp
+  // ════════════════════════════════════════════════════════
+  if(req.method==='POST'&&upath.startsWith('/webhook/whatsapp')){
+    const body = await readBody(req)
+    // Extrai tenant do path: /webhook/whatsapp/TENANT_ID
+    const tenantId = upath.split('/')[3] || req.headers['x-tenant-id'] || null
+    try {
+      // Evolution API envia no formato: { data: { key: { remoteJid }, message: { conversation } } }
+      const msg  = body?.data?.message?.conversation || body?.data?.message?.extendedTextMessage?.text || ''
+      const from = body?.data?.key?.remoteJid || ''
+      const fromMe = body?.data?.key?.fromMe || false
+      if (!msg || !from || fromMe) { send(res,200,{ok:true}); return }
+
+      const phone = from.replace('@s.whatsapp.net','').replace('@c.us','')
+
+      if (!tenantId) { log('⚠️','Webhook sem tenant_id'); send(res,200,{ok:true}); return }
+
+      // Busca config do tenant
+      const cfg = db.prepare("SELECT ia_config,evo_instance,store_name,evo_automacoes FROM store_config WHERE tenant_id=?").get(tenantId)
+      if (!cfg) { send(res,200,{ok:true}); return }
+
+      const ia = jsonParse(cfg.ia_config) || {}
+      if (!ia.ativo) { send(res,200,{ok:true}); return } // IA desativada
+
+      const inst = cfg.evo_instance || EVO_INST
+      const nomeLoja = cfg.store_name || 'Restaurante'
+
+      // Monta contexto para o Claude
+      const contexto = []
+
+      if (ia.resp_cardapio) {
+        const cats  = db.prepare("SELECT name FROM categories WHERE tenant_id=? AND ativo=1 ORDER BY sort_order").all(tenantId)
+        const items = db.prepare("SELECT name,price,description,cat FROM menu_items WHERE tenant_id=? AND status='active' ORDER BY cat,id").all(tenantId)
+        const cardapioTxt = cats.map(c => {
+          const it = items.filter(i=>i.cat===c.name).map(i=>`  - ${i.name}: R$${parseFloat(i.price).toFixed(2).replace('.',',')}${i.description?' ('+i.description+')':''}`).join('\n')
+          return `${c.name}:\n${it}`
+        }).join('\n\n')
+        contexto.push(`CARDÁPIO:\n${cardapioTxt}`)
+      }
+
+      if (ia.resp_horario && ia.horario_txt) {
+        contexto.push(`HORÁRIO DE FUNCIONAMENTO:\n${ia.horario_txt}`)
+      }
+
+      if (ia.resp_pedido) {
+        // Busca último pedido do cliente pelo telefone
+        const pedido = db.prepare("SELECT id,status,total,created_at FROM orders WHERE tenant_id=? AND phone LIKE ? ORDER BY id DESC LIMIT 1").get(tenantId, `%${phone.slice(-8)}%`)
+        if (pedido) {
+          const statusLabel = {analise:'aguardando confirmação',producao:'em preparo',pronto:'pronto/saindo para entrega',entregue:'entregue',cancelado:'cancelado'}[pedido.status]||pedido.status
+          contexto.push(`ÚLTIMO PEDIDO DO CLIENTE:\nPedido #${pedido.id} — Status: ${statusLabel} — Total: R$${parseFloat(pedido.total).toFixed(2).replace('.',',')}`)
+        }
+      }
+
+      if (ia.resp_entrega && ia.entrega_txt) {
+        contexto.push(`INFORMAÇÕES DE ENTREGA:\n${ia.entrega_txt}`)
+      }
+
+      if (ia.resp_promo) {
+        const promos = db.prepare("SELECT name,price FROM menu_items WHERE tenant_id=? AND promo=1 AND status='active' LIMIT 5").all(tenantId)
+        if (promos.length) {
+          contexto.push(`PROMOÇÕES ATIVAS:\n${promos.map(p=>`- ${p.name}: R$${parseFloat(p.price).toFixed(2).replace('.',',')}`).join('\n')}`)
+        }
+      }
+
+      const systemPrompt = `Você é o assistente virtual do ${nomeLoja}, um restaurante. Responda de forma simpática, breve e útil em português. Não invente informações. Se não souber algo, oriente o cliente a entrar em contato diretamente.\n\n${contexto.join('\n\n')}\n\n${ia.prompt_extra||''}`
+
+      // Chama Claude API
+      const CLAUDE_KEY = process.env.ANTHROPIC_API_KEY || ''
+      if (!CLAUDE_KEY) { log('⚠️','ANTHROPIC_API_KEY não configurada'); send(res,200,{ok:true}); return }
+
+      const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'x-api-key': CLAUDE_KEY, 'anthropic-version':'2023-06-01' },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 500,
+          system: systemPrompt,
+          messages: [{ role:'user', content: msg }]
+        })
+      })
+      const claudeData = await claudeRes.json().catch(()=>({}))
+      const resposta = claudeData?.content?.[0]?.text || ''
+
+      if (resposta) {
+        await sendWA(phone, resposta, inst)
+        log('🤖', `IA respondeu para ${phone}: ${resposta.slice(0,60)}...`)
+      }
+
+    } catch(e) { log('❌','Webhook IA error:', e.message) }
+    send(res,200,{ok:true})
+    return
+  }
+
+  // Endpoint: envia mensagem de rastreio via WhatsApp (chamado pelo index.html)
+  if(req.method==='POST'&&upath==='/api/rastreio-wa'){
+    const { phone, order_id, tenant_id } = await readBody(req)
+    if (!phone||!order_id||!tenant_id) { send(res,400,{ok:false}); return }
+    const cfg = db.prepare("SELECT evo_instance,store_name,ia_config FROM store_config WHERE tenant_id=?").get(tenant_id)
+    const inst = cfg?.evo_instance || EVO_INST
+    const ia   = jsonParse(cfg?.ia_config)||{}
+    if (!ia.ativo && !ia.resp_rastreio_manual) { send(res,200,{ok:false,msg:'IA inativa'}); return }
+    const pedido = db.prepare("SELECT id,status,items,total FROM orders WHERE id=? AND tenant_id=?").get(order_id, tenant_id)
+    if (!pedido) { send(res,400,{ok:false}); return }
+    const statusLabel = {analise:'⏳ aguardando confirmação',producao:'👨‍🍳 em preparo',pronto:'🛵 saindo para entrega',entregue:'✅ entregue',cancelado:'❌ cancelado'}[pedido.status]||pedido.status
+    const nomeLoja = cfg?.store_name || 'Restaurante'
+    const msg = `🍽️ *${nomeLoja}*\n\nOlá! Seu pedido *#${String(pedido.id).padStart(3,'0')}* está com o status:\n\n${statusLabel}\n\nTotal: R$ ${parseFloat(pedido.total).toFixed(2).replace('.',',')}\n\nQualquer dúvida é só responder aqui! 😊`
+    const r = await sendWA(phone, msg, inst)
+    send(res, r.ok?200:500, r)
+    return
+  }
 
   // Arquivos estáticos
   if(req.method==='GET'){
