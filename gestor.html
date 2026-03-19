@@ -841,15 +841,19 @@ Nosso entregador está a caminho! 🏍️💨</textarea>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
             <div style="display:flex;align-items:center;gap:10px">
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(139,92,246,.15);display:flex;align-items:center;justify-content:center;font-size:18px">🎂</div>
-              <div><div style="font-weight:600;font-size:13.5px">Felicitação de Aniversário</div><div style="font-size:11.5px;color:var(--muted)">Enviado automaticamente no dia do aniversário do cliente (requer data cadastrada)</div></div>
+              <div>
+                <div style="font-weight:600;font-size:13.5px">Felicitação de Aniversário</div>
+                <div style="font-size:11.5px;color:var(--muted)">Verificado todo dia e enviado automaticamente para quem faz aniversário</div>
+              </div>
             </div>
             <div class="toggle on" id="auto-toggle-aniversario" onclick="this.classList.toggle('on')"></div>
           </div>
-          <textarea class="form-input" id="auto-msg-aniversario" rows="4" style="font-size:12.5px">🎉🎂 Feliz Aniversário, {nome}!
-A equipe Estima Food deseja um dia incrível para você!
-
-🎁 Presente especial: use o cupom ANIVER10 e ganhe 10% OFF no seu próximo pedido!
-Válido hoje apenas para você! 💛</textarea>
+          <textarea class="form-input" id="auto-msg-aniversario" rows="5" style="font-size:12.5px">🎉 Feliz aniversário, {nome}! 🥳
+Que seu dia seja incrível e cheio de coisas boas!
+Desejamos tudo de melhor pra você! 🎂❤️</textarea>
+          <div style="margin-top:10px;padding:10px 12px;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.2);border-radius:8px;font-size:11.5px;color:var(--muted);line-height:1.6">
+            ✍️ <strong>Dica:</strong> Escreva como uma mensagem de amigo, não de empresa. Sem mencionar cupons nem promoções — apenas a felicitação sincera. Isso gera muito mais resposta e carinho do cliente.
+          </div>
           <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <div style="font-size:12px;color:var(--muted)">⏰ Horário de envio automático:</div>
             <input class="form-input" style="width:90px;font-size:12px;padding:4px 8px" value="09:00" id="auto-aniv-hora" onchange="_iniciarSchedulerAniversario()">
@@ -857,7 +861,7 @@ Válido hoje apenas para você! 💛</textarea>
             <button class="btn bg" style="font-size:11.5px;padding:4px 12px" onclick="evoEnviarAniversariantesManual()">🎂 Enviar agora</button>
           </div>
           <div style="margin-top:8px;font-size:11.5px;color:var(--muted);background:var(--surface2);border-radius:6px;padding:7px 10px">
-            💡 O sistema verifica automaticamente todos os dias no horário configurado e envia as felicitações sem precisar de interação.
+            💡 O sistema verifica todos os dias no horário configurado — busca aniversariantes em <strong>Fidelidade</strong> e <strong>Clientes</strong> (sem duplicar). Variável disponível: <code>{nome}</code>
             <span id="aniv-last-send" style="display:block;margin-top:3px;font-size:11px"></span>
           </div>
         </div>
@@ -883,7 +887,7 @@ Em caso de dúvidas, é só chamar aqui. 😊</textarea>
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(245,158,11,.15);display:flex;align-items:center;justify-content:center;font-size:18px">⭐</div>
               <div>
                 <div style="font-weight:600;font-size:13.5px">Pedir Avaliação — Satisfação</div>
-                <div style="font-size:11.5px;color:var(--muted)">Enviado pelo servidor <strong>60 segundos</strong> após o pedido ser <strong>Finalizado</strong> no kanban</div>
+                <div style="font-size:11.5px;color:var(--muted)">Enviado pelo servidor após o pedido ser <strong>Finalizado</strong> no kanban</div>
               </div>
             </div>
             <div class="toggle" id="auto-toggle-avaliacao" onclick="this.classList.toggle('on')" title="Ativar/Desativar automação de avaliação"></div>
@@ -891,8 +895,17 @@ Em caso de dúvidas, é só chamar aqui. 😊</textarea>
           <textarea class="form-input" id="auto-msg-avaliacao" rows="4" style="font-size:12.5px">⭐ {nome}, esperamos que tenha curtido seu pedido #{id}!
 Conta pra gente como foi — sua opinião é muito importante para nós! 🙏
 Avalie agora: {link_avaliacao}</textarea>
-          <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
-            <div style="font-size:11.5px;color:var(--muted)">💡 O servidor aguarda <strong>60 segundos</strong> após a finalização e envia automaticamente. O cliente clica no link, escolhe as estrelas e a avaliação é salva em <strong>Satisfação</strong>.</div>
+          <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div style="font-size:12px;color:var(--muted);font-weight:600">⏱️ Aguardar antes de enviar:</div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="number" id="auto-aval-minutos" min="1" max="60" value="1"
+                style="width:64px;font-size:13px;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Sans',sans-serif;text-align:center"
+                onchange="this.value=Math.max(1,Math.min(60,parseInt(this.value)||1))">
+              <span style="font-size:12px;color:var(--muted)">minuto(s) após finalizar</span>
+            </div>
+          </div>
+          <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+            <div style="font-size:11.5px;color:var(--muted)">💡 O servidor aguarda o tempo configurado após a finalização e envia automaticamente. O cliente clica no link, escolhe as estrelas e a avaliação é salva em <strong>Satisfação</strong>.</div>
             <div style="font-size:11px;color:var(--muted);background:var(--surface2);border-radius:6px;padding:6px 10px">Variáveis: <code>{nome}</code> <code>{id}</code> <code>{itens}</code> <code>{total}</code> <code>{link_avaliacao}</code></div>
           </div>
         </div>
