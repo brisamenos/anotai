@@ -183,7 +183,7 @@ db.exec(`
     tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     client TEXT, phone TEXT, addr TEXT, items TEXT DEFAULT '[]',
     total REAL DEFAULT 0, taxa REAL DEFAULT 0, pag TEXT DEFAULT 'dinheiro',
-    status TEXT DEFAULT 'analise', mesa_num INTEGER,
+    troco REAL, status TEXT DEFAULT 'analise', mesa_num INTEGER,
     garcom_id INTEGER, garcom_nome TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   );
@@ -355,6 +355,11 @@ const MIGRATIONS = [
       created_at TEXT DEFAULT (datetime('now'))
     )`
   },
+  {
+    version: 15,
+    description: 'Adiciona coluna troco em orders para pedidos em dinheiro',
+    up: `ALTER TABLE orders ADD COLUMN troco REAL`
+  },
 ]
 
 function runMigrations() {
@@ -486,7 +491,7 @@ const TABLE_COLS = {
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
-  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','status','mesa_num','garcom_id','garcom_nome','customer_id','created_at'],
+  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','troco','status','mesa_num','garcom_id','garcom_nome','customer_id','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','updated_at'],
   fidelidade:   ['id','tenant_id','name','phone','birthday','pts','max_pts','orders_count','resgates','created_at'],

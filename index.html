@@ -714,57 +714,52 @@ input,textarea{font-family:inherit}
 .account-logout:hover{background:rgba(239,68,68,.15)}
 
 /* ═══════════════════════════════════════
-   MODAL AVALIAÇÃO / SATISFAÇÃO
+   MODAL TROCO
 ═══════════════════════════════════════ */
-.rating-overlay{
-  display:none;position:fixed;inset:0;z-index:900;
-  background:rgba(0,0,0,.85);backdrop-filter:blur(8px);
+.troco-overlay{
+  display:none;position:fixed;inset:0;z-index:850;
+  background:rgba(0,0,0,.8);backdrop-filter:blur(6px);
   align-items:flex-end;justify-content:center;
 }
-.rating-overlay.on{display:flex}
-.rating-sheet{
-  background:var(--s1);border-radius:24px 24px 0 0;
-  width:100%;max-width:520px;padding:32px 24px 44px;
-  animation:sheetUp .32s cubic-bezier(.34,1.56,.64,1);
-  text-align:center;
+.troco-overlay.on{display:flex}
+.troco-sheet{
+  background:var(--s1);border-radius:22px 22px 0 0;
+  width:100%;max-width:520px;padding:28px 24px 40px;
+  animation:sheetUp .28s cubic-bezier(.34,1.56,.64,1);
 }
-.rating-handle{width:36px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);margin:0 auto 24px}
-.rating-emoji{font-size:52px;margin-bottom:10px}
-.rating-title{font-family:'Fraunces',serif;font-size:22px;font-weight:900;margin-bottom:6px}
-.rating-sub{font-size:13.5px;color:var(--muted2);margin-bottom:26px;line-height:1.5}
-.rating-stars{display:flex;justify-content:center;gap:8px;margin-bottom:8px}
-.rating-star{
-  font-size:40px;cursor:pointer;
-  transition:transform .15s,filter .15s,opacity .15s;
-  filter:grayscale(1);opacity:.3;
+.troco-handle{width:36px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);margin:0 auto 20px}
+.troco-title{font-family:'Fraunces',serif;font-size:20px;font-weight:900;margin-bottom:6px;text-align:center}
+.troco-sub{font-size:13px;color:var(--muted2);text-align:center;margin-bottom:22px;line-height:1.5}
+.troco-opts{display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
+.troco-opt{
+  display:flex;align-items:center;gap:14px;
+  background:var(--s2);border:1.5px solid var(--border);border-radius:14px;
+  padding:14px 16px;cursor:pointer;transition:all .18s;
 }
-.rating-star.on{filter:none;opacity:1;transform:scale(1.18)}
-.rating-star:hover{filter:none;opacity:.8;transform:scale(1.1)}
-.rating-label{font-size:13px;color:var(--amber);font-weight:700;min-height:20px;margin-bottom:16px;transition:all .15s}
-.rating-obs{
-  width:100%;background:var(--s2);border:1px solid var(--border);
-  border-radius:12px;padding:11px 14px;color:var(--text);
-  font-size:13px;outline:none;resize:none;margin-bottom:18px;
-  font-family:'DM Sans',sans-serif;transition:border-color .18s;
+.troco-opt:hover{border-color:rgba(249,115,22,.4);background:rgba(249,115,22,.05)}
+.troco-opt.on{border-color:var(--accent);background:rgba(249,115,22,.08)}
+.troco-opt-icon{font-size:22px;flex-shrink:0}
+.troco-opt-txt{flex:1}
+.troco-opt-lbl{font-weight:700;font-size:14px;margin-bottom:2px}
+.troco-opt-sub{font-size:12px;color:var(--muted)}
+.troco-opt-check{width:20px;height:20px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;transition:all .18s}
+.troco-opt.on .troco-opt-check{background:var(--accent);border-color:var(--accent);color:#fff}
+.troco-valor-wrap{display:none;margin-bottom:16px}
+.troco-valor-wrap.show{display:block}
+.troco-valor-lbl{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px}
+.troco-valor-input{
+  width:100%;background:var(--s2);border:1.5px solid var(--border);border-radius:12px;
+  padding:13px 16px;color:var(--text);font-size:18px;font-weight:700;
+  font-family:'Fraunces',serif;outline:none;transition:border-color .18s;
 }
-.rating-obs:focus{border-color:rgba(249,115,22,.4)}
-.rating-obs::placeholder{color:var(--muted)}
-.rating-send{
+.troco-valor-input:focus{border-color:var(--accent)}
+.troco-confirm{
   width:100%;padding:15px;border-radius:14px;border:none;
   background:var(--accent-g);color:#fff;font-size:15px;font-weight:700;
   cursor:pointer;box-shadow:0 6px 20px rgba(249,115,22,.3);
-  transition:all .18s;
+  transition:all .18s;font-family:'DM Sans',sans-serif;
 }
-.rating-send:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(249,115,22,.4)}
-.rating-send:disabled{background:var(--s3);color:var(--muted);transform:none;box-shadow:none;cursor:not-allowed}
-.rating-skip{
-  margin-top:12px;background:none;border:none;
-  color:var(--muted);font-size:13px;cursor:pointer;font-family:inherit;
-}
-.rating-success{display:none;flex-direction:column;align-items:center;gap:10px;padding:12px 0}
-.rating-success-icon{font-size:56px}
-.rating-success-title{font-family:'Fraunces',serif;font-size:22px;font-weight:900}
-.rating-success-sub{font-size:13.5px;color:var(--muted2);line-height:1.5}
+.troco-confirm:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(249,115,22,.4)}
 </style>
 <script src="/api-client.js"></script>
 </head>
@@ -1073,14 +1068,32 @@ input,textarea{font-family:inherit}
 
     <!-- FORM CADASTRO -->
     <div class="auth-body" id="auth-form-register" style="display:none">
-      <input class="auth-input" id="reg-name"     type="text"     placeholder="Seu nome completo"       autocomplete="name">
-      <input class="auth-input" id="reg-phone"    type="tel"      placeholder="WhatsApp (DDD + número)" autocomplete="tel">
-      <input class="auth-input" id="reg-email"    type="email"    placeholder="E-mail (opcional)"       autocomplete="email">
-      <div class="auth-row2">
-        <input class="auth-input" id="reg-senha"  type="password" placeholder="Criar senha"    autocomplete="new-password">
-        <input class="auth-input" id="reg-senha2" type="password" placeholder="Confirmar"      autocomplete="new-password">
+      <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Nome completo</label>
+        <input class="auth-input" id="reg-name" type="text" placeholder="Ex: Maria Silva" autocomplete="name" style="margin-bottom:0">
       </div>
-      <input class="auth-input" id="reg-birthday" type="date"     placeholder="Aniversário (opcional)">
+      <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">WhatsApp</label>
+        <input class="auth-input" id="reg-phone" type="tel" placeholder="(85) 99999-9999" autocomplete="tel" style="margin-bottom:0">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">E-mail <span style="font-weight:400;text-transform:none;letter-spacing:0">(opcional)</span></label>
+        <input class="auth-input" id="reg-email" type="email" placeholder="seu@email.com" autocomplete="email" style="margin-bottom:0">
+      </div>
+      <div class="auth-row2">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Criar senha</label>
+          <input class="auth-input" id="reg-senha" type="password" placeholder="••••••" autocomplete="new-password" style="margin-bottom:0">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Confirmar</label>
+          <input class="auth-input" id="reg-senha2" type="password" placeholder="••••••" autocomplete="new-password" style="margin-bottom:0">
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">🎂 Data de aniversário <span style="font-weight:400;text-transform:none;letter-spacing:0">(opcional — para receber parabéns!)</span></label>
+        <input class="auth-input" id="reg-birthday" type="date" style="margin-bottom:0">
+      </div>
       <button class="auth-btn" id="register-btn" onclick="doRegister()">
         Criar minha conta
       </button>
@@ -1130,36 +1143,40 @@ input,textarea{font-family:inherit}
   </div>
 </div>
 
-<!-- ══════════════ MODAL AVALIAÇÃO ══════════════ -->
-<div class="rating-overlay" id="rating-overlay">
-  <div class="rating-sheet">
-    <div class="rating-handle"></div>
+<!-- ══════════════ MODAL TROCO ══════════════ -->
+<div class="troco-overlay" id="troco-overlay">
+  <div class="troco-sheet">
+    <div class="troco-handle"></div>
+    <div class="troco-title">💵 Precisa de troco?</div>
+    <div class="troco-sub">Pagamento em dinheiro — informe se precisar de troco para agilizar a entrega</div>
 
-    <!-- Formulário -->
-    <div id="rating-form-wrap">
-      <div class="rating-emoji">⭐</div>
-      <div class="rating-title">Como foi seu pedido?</div>
-      <div class="rating-sub" id="rating-sub">Sua opinião ajuda a melhorarmos cada vez mais!</div>
-      <div class="rating-stars" id="rating-stars">
-        <span class="rating-star" data-v="1" onclick="ratingPickStar(1)">⭐</span>
-        <span class="rating-star" data-v="2" onclick="ratingPickStar(2)">⭐</span>
-        <span class="rating-star" data-v="3" onclick="ratingPickStar(3)">⭐</span>
-        <span class="rating-star" data-v="4" onclick="ratingPickStar(4)">⭐</span>
-        <span class="rating-star" data-v="5" onclick="ratingPickStar(5)">⭐</span>
+    <div class="troco-opts">
+      <div class="troco-opt on" id="troco-opt-nao" onclick="trocoEscolha('nao')">
+        <div class="troco-opt-icon">✅</div>
+        <div class="troco-opt-txt">
+          <div class="troco-opt-lbl">Não preciso de troco</div>
+          <div class="troco-opt-sub">Tenho o valor exato ou pagarei por aproximação</div>
+        </div>
+        <div class="troco-opt-check">✓</div>
       </div>
-      <div class="rating-label" id="rating-label">Toque em uma estrela para avaliar</div>
-      <textarea class="rating-obs" id="rating-obs" rows="3" placeholder="Deixe um comentário (opcional)…"></textarea>
-      <button class="rating-send" id="rating-send-btn" onclick="submitRating()" disabled>Enviar avaliação</button>
-      <button class="rating-skip" onclick="closeRatingModal()">Agora não</button>
+      <div class="troco-opt" id="troco-opt-sim" onclick="trocoEscolha('sim')">
+        <div class="troco-opt-icon">💸</div>
+        <div class="troco-opt-txt">
+          <div class="troco-opt-lbl">Preciso de troco</div>
+          <div class="troco-opt-sub">Informe o valor que vai pagar</div>
+        </div>
+        <div class="troco-opt-check"></div>
+      </div>
     </div>
 
-    <!-- Sucesso -->
-    <div class="rating-success" id="rating-success-wrap">
-      <div class="rating-success-icon">🙏</div>
-      <div class="rating-success-title">Obrigado pelo feedback!</div>
-      <div class="rating-success-sub">Sua avaliação foi registrada com sucesso.<br>Ela nos ajuda a melhorar sempre!</div>
-      <button class="rating-send" style="margin-top:20px" onclick="closeRatingModal()">Fechar</button>
+    <div class="troco-valor-wrap" id="troco-valor-wrap">
+      <div class="troco-valor-lbl">Troco para quanto? (R$)</div>
+      <input class="troco-valor-input" id="troco-valor-input" type="number" step="0.01" min="0" placeholder="Ex: 50,00" oninput="trocoValidar()">
     </div>
+
+    <button class="troco-confirm" id="troco-confirm-btn" onclick="trocoConfirmar()">
+      ✅ Confirmar Pedido
+    </button>
   </div>
 </div>
 
@@ -2283,6 +2300,69 @@ async function submitOrder() {
     addr = 'Retirada no balcão';
   }
 
+  // Se pagamento é dinheiro → abre modal de troco antes de enviar
+  if (selectedPay === 'dinheiro') {
+    _pendingOrderAddr = addr;
+    openTrocoModal();
+    return;
+  }
+
+  await _doSubmitOrder(addr, null);
+}
+
+// ─── Estado do troco ─────────────────────────────────
+let _pendingOrderAddr = '';
+let _trocoEscolha    = 'nao'; // 'nao' | 'sim'
+
+function openTrocoModal() {
+  _trocoEscolha = 'nao';
+  // Reset visual
+  document.getElementById('troco-opt-nao').classList.add('on');
+  document.getElementById('troco-opt-nao').querySelector('.troco-opt-check').textContent = '✓';
+  document.getElementById('troco-opt-sim').classList.remove('on');
+  document.getElementById('troco-opt-sim').querySelector('.troco-opt-check').textContent = '';
+  document.getElementById('troco-valor-wrap').classList.remove('show');
+  const inp = document.getElementById('troco-valor-input');
+  if (inp) inp.value = '';
+  document.getElementById('troco-overlay').classList.add('on');
+}
+
+function closeTrocoModal() {
+  document.getElementById('troco-overlay').classList.remove('on');
+}
+
+function trocoEscolha(tipo) {
+  _trocoEscolha = tipo;
+  const nao = document.getElementById('troco-opt-nao');
+  const sim = document.getElementById('troco-opt-sim');
+  nao.classList.toggle('on', tipo === 'nao');
+  sim.classList.toggle('on', tipo === 'sim');
+  nao.querySelector('.troco-opt-check').textContent = tipo === 'nao' ? '✓' : '';
+  sim.querySelector('.troco-opt-check').textContent = tipo === 'sim' ? '✓' : '';
+  document.getElementById('troco-valor-wrap').classList.toggle('show', tipo === 'sim');
+  if (tipo === 'sim') document.getElementById('troco-valor-input')?.focus();
+}
+
+function trocoValidar() {
+  // Nada bloqueante — só UX
+}
+
+async function trocoConfirmar() {
+  let troco = null;
+  if (_trocoEscolha === 'sim') {
+    const v = parseFloat(document.getElementById('troco-valor-input')?.value || '0');
+    if (!v || v <= 0) { toast('⚠️', 'Informe o valor para o troco'); return; }
+    if (v < grandTotal() + getTaxa()) { toast('⚠️', 'Valor menor que o total do pedido'); return; }
+    troco = v;
+  }
+  closeTrocoModal();
+  await _doSubmitOrder(_pendingOrderAddr, troco);
+}
+
+async function _doSubmitOrder(addr, troco) {
+  const name  = document.getElementById('f-name').value.trim();
+  const phone = document.getElementById('f-phone').value.trim();
+
   if (!_customer) {
     try { localStorage.setItem(PROFILE_KEY, JSON.stringify({ name, phone })); } catch(e) {}
   }
@@ -2333,6 +2413,7 @@ async function submitOrder() {
       client: name, phone, addr,
       items, total: grandTotal(), taxa: getTaxa(),
       status: 'analise', time, pag: selectedPay,
+      troco: troco || null,
       customer_id: customerId
     }).select().single();
 
@@ -2499,98 +2580,6 @@ function toast(icon, msg) {
 function fmt(n) {
   return Number(n||0).toFixed(2).replace('.',',');
 }
-
-// ══════════════════════════════════════════
-//  MODAL DE AVALIAÇÃO (link ?rate=ID)
-// ══════════════════════════════════════════
-let _ratingOrderId  = null;
-let _ratingNota     = 0;
-const RATING_LABELS = { 1:'Muito ruim 😠', 2:'Ruim 😕', 3:'Regular 😐', 4:'Bom 😊', 5:'Excelente 😍' };
-
-function ratingPickStar(n) {
-  _ratingNota = n;
-  document.querySelectorAll('.rating-star').forEach(s => {
-    s.classList.toggle('on', Number(s.dataset.v) <= n);
-  });
-  const lbl = document.getElementById('rating-label');
-  if (lbl) lbl.textContent = RATING_LABELS[n] || '';
-  const btn = document.getElementById('rating-send-btn');
-  if (btn) btn.disabled = false;
-}
-
-function openRatingModal(orderId) {
-  _ratingOrderId = orderId;
-  _ratingNota    = 0;
-  // reset UI
-  document.querySelectorAll('.rating-star').forEach(s => s.classList.remove('on'));
-  const lbl = document.getElementById('rating-label');
-  if (lbl) lbl.textContent = 'Toque em uma estrela para avaliar';
-  const obs = document.getElementById('rating-obs');
-  if (obs) obs.value = '';
-  const btn = document.getElementById('rating-send-btn');
-  if (btn) btn.disabled = true;
-  const fw  = document.getElementById('rating-form-wrap');
-  const sw  = document.getElementById('rating-success-wrap');
-  if (fw) fw.style.display = '';
-  if (sw) sw.style.display = 'none';
-  // sub com número do pedido
-  const sub = document.getElementById('rating-sub');
-  if (sub && orderId) sub.textContent = `Pedido #${String(orderId).padStart(3,'0')} — sua opinião é muito importante!`;
-  document.getElementById('rating-overlay')?.classList.add('on');
-}
-
-function closeRatingModal() {
-  document.getElementById('rating-overlay')?.classList.remove('on');
-  // Limpa ?rate da URL sem recarregar
-  const url = new URL(window.location.href);
-  url.searchParams.delete('rate');
-  window.history.replaceState({}, '', url.toString());
-}
-
-async function submitRating() {
-  if (!_ratingNota) return;
-  const btn = document.getElementById('rating-send-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
-  const comentario = document.getElementById('rating-obs')?.value.trim() || '';
-  // Tenta pegar nome/phone do cliente logado (sessão) ou de localStorage
-  let client = '', phone = '';
-  try {
-    const sess = JSON.parse(localStorage.getItem('_customer') || sessionStorage.getItem('_customer') || '{}');
-    client = sess.name  || sess.nome  || '';
-    phone  = sess.phone || sess.fone  || '';
-  } catch(e) {}
-  try {
-    const { error } = await sb.from('ratings').insert({
-      order_id:   _ratingOrderId || null,
-      client:     client || null,
-      phone:      phone  || null,
-      nota:       _ratingNota,
-      comentario: comentario || null,
-    });
-    if (error) throw error;
-    // Mostra sucesso
-    const fw = document.getElementById('rating-form-wrap');
-    const sw = document.getElementById('rating-success-wrap');
-    if (fw) fw.style.display = 'none';
-    if (sw) sw.style.display = 'flex';
-  } catch(e) {
-    console.error('submitRating:', e);
-    if (btn) { btn.disabled = false; btn.textContent = 'Enviar avaliação'; }
-    toast('❌', 'Erro ao enviar avaliação. Tente novamente.');
-  }
-}
-
-// Detecta ?rate=ID na URL e abre o modal automaticamente
-(function checkRateParam() {
-  const params = new URLSearchParams(window.location.search);
-  const rateId = params.get('rate');
-  if (rateId) {
-    // Aguarda o DOM e o init() estarem prontos
-    window.addEventListener('load', () => {
-      setTimeout(() => openRatingModal(parseInt(rateId, 10) || rateId), 800);
-    });
-  }
-})();
 
 init();
 
