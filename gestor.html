@@ -1531,6 +1531,7 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn bg" id="btn-tab-todos" onclick="clientesTab('todos')" style="background:var(--accent);color:#fff;border-color:var(--accent)">👥 Todos</button>
+      <button class="btn bg" id="btn-tab-cadastrados" onclick="clientesTab('cadastrados')">📱 Cadastrados App</button>
       <button class="btn bg" id="btn-tab-aniversario" onclick="clientesTab('aniversario')">🎂 Aniversariantes</button>
     </div>
   </div>
@@ -1550,6 +1551,7 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
       <option value="nome">Nome A-Z</option>
       <option value="pts">Mais pontos</option>
       <option value="pedidos">Mais pedidos</option>
+      <option value="gasto">Maior gasto</option>
       <option value="aniversario">Aniversário próximo</option>
     </select></div>
   </div>
@@ -1572,6 +1574,7 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
           <th>Telefone</th>
           <th>Aniversário</th>
           <th>Pedidos</th>
+          <th>Gasto total</th>
           <th>Pontos</th>
           <th>Ações</th>
         </tr>
@@ -1587,8 +1590,10 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
     <button class="modal-close" onclick="closeModal('modal-edit-cliente')">✕</button>
     <h2>✏️ Editar Cliente</h2>
     <input type="hidden" id="edit-cli-id">
+    <input type="hidden" id="edit-cli-cust-id">
     <div class="form-row"><label class="form-label">Nome</label><input class="form-input" id="edit-cli-nome" placeholder="Nome completo"></div>
     <div class="form-row"><label class="form-label">Telefone</label><input class="form-input" id="edit-cli-phone" placeholder="(XX) X XXXX-XXXX"></div>
+    <div class="form-row"><label class="form-label">E-mail</label><input class="form-input" id="edit-cli-email" type="email" placeholder="email@exemplo.com"></div>
     <div class="form-row">
       <label class="form-label">Data de aniversário</label>
       <input class="form-input" id="edit-cli-aniversario" type="date">
