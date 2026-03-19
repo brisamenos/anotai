@@ -1550,6 +1550,8 @@ let deliveryType  = 'delivery';  // delivery | retirada | mesa
 let selectedPay   = 'PIX';
 let appliedCupom  = null;
 let deliveryFeeConfig = { tipo: 'fixo', valor: 5, faixas: [] };
+let _horariosFuncionamento = null; // horarios_config do gestor
+let _storeOpenManual = true;         // valor do toggle store_open do banco
 let selectedDistFaixa = 0; // index into faixas when tipo=por_km
 
 // ═══════════════════════════════════════════════
@@ -1886,7 +1888,9 @@ async function init() {
 
     // Apply store config
     if (configRes.data) {
-      applyStoreStatus(configRes.data.store_open);
+      _horariosFuncionamento = configRes.data.horarios_config || null;
+      _storeOpenManual = configRes.data.store_open;
+      applyStoreStatus(_storeOpenManual, _horariosFuncionamento);
       if (configRes.data.delivery_fee_config) {
         const rawFee = configRes.data.delivery_fee_config;
         // Normaliza campos: o banco pode ter 'tipo'/'tipo' e 'valor'/'value'
@@ -1910,24 +1914,73 @@ async function init() {
   }
 }
 
-function applyStoreStatus(open) {
+// Verifica se agora está dentro do horário de funcionamento configurado
+function isWithinHorario(horarios) {
+  if (!horarios || !Object.keys(horarios).length) return null; // sem config = não interfere
+  const dias = ['dom','seg','ter','qua','qui','sex','sab'];
+  const agora = new Date();
+  const diaKey = dias[agora.getDay()];
+  const h = horarios[diaKey];
+  if (!h || !h.ativo) return false; // dia desativado = fechado
+  const [abH, abM]  = (h.abertura  || '00:00').split(':').map(Number);
+  const [fchH, fchM] = (h.fechamento || '23:59').split(':').map(Number);
+  const minAtual = agora.getHours() * 60 + agora.getMinutes();
+  const minAb    = abH * 60 + abM;
+  const minFch   = fchH * 60 + fchM;
+  return minAtual >= minAb && minAtual <= minFch;
+}
+
+function applyStoreStatus(storeOpen, horarios) {
+  const dentroDoHorario = isWithinHorario(horarios);
+  // Se há horários configurados, eles têm prioridade sobre o toggle manual
+  // Se não há horários configurados, usa só o toggle manual
+  const open = dentroDoHorario !== null ? (storeOpen && dentroDoHorario) : storeOpen;
+
   const dot = document.querySelector('.hero-badge .dot');
   const txt = document.getElementById('store-status-text');
   if (dot) dot.style.background = open ? 'var(--green)' : '#ef4444';
-  if (txt) txt.textContent = open ? 'Aberto agora' : 'Fechado no momento';
+
+  let statusTxt = open ? 'Aberto agora' : 'Fechado no momento';
+  // Se fechado por horário, mostra quando abre
+  if (!open && dentroDoHorario === false) {
+    const dias = ['dom','seg','ter','qua','qui','sex','sab'];
+    const diaKey = dias[new Date().getDay()];
+    const h = horarios?.[diaKey];
+    if (h && h.ativo && h.abertura) statusTxt = `Abre às ${h.abertura}`;
+    else {
+      // Busca próximo dia ativo
+      for (let i = 1; i <= 7; i++) {
+        const nextKey = dias[(new Date().getDay() + i) % 7];
+        const nh = horarios?.[nextKey];
+        if (nh && nh.ativo) {
+          const nomeDia = {dom:'domingo',seg:'segunda',ter:'terça',qua:'quarta',qui:'quinta',sex:'sexta',sab:'sábado'}[nextKey];
+          statusTxt = `Abre ${nomeDia} às ${nh.abertura}`;
+          break;
+        }
+      }
+    }
+  }
+  if (txt) txt.textContent = statusTxt;
+
   const confirmBtn = document.getElementById('confirm-btn');
   if (confirmBtn) {
     confirmBtn.disabled = !open;
-    if (!open) confirmBtn.innerHTML = '🔴 Loja fechada no momento';
+    if (!open) confirmBtn.innerHTML = `🔴 ${statusTxt}`;
   }
 }
 
 function subscribeStoreStatus() {
   sb.channel('store-config-cardapio')
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'store_config'}, p => {
-      applyStoreStatus(p.new.store_open);
+      if (p.new.horarios_config !== undefined) _horariosFuncionamento = p.new.horarios_config;
+      if (p.new.store_open !== undefined) _storeOpenManual = p.new.store_open;
+      applyStoreStatus(_storeOpenManual, _horariosFuncionamento);
     })
     .subscribe();
+  // Re-verifica horário a cada minuto (para abrir/fechar automaticamente no horário certo)
+  setInterval(() => {
+    applyStoreStatus(_storeOpenManual, _horariosFuncionamento);
+  }, 60000);
 }
 
 // ═══════════════════════════════════════════════
