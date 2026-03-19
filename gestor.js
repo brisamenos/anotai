@@ -910,6 +910,29 @@ async function finishOrderById(id) {
       movimentos.push({ desc:`Pedido #${o.id} – ${o.client}`, tipo:'entrada', val:o.total+o.taxa, pag:o.pag||'PIX', time });
     }
     ordersKanban = ordersKanban.filter(x => x.id !== id);
+
+    // ── Avaliação automática: 60s após finalizar ──
+    if (o && o.phone) {
+      const _tgAval = document.getElementById('auto-toggle-avaliacao');
+      if (_tgAval && _tgAval.classList.contains('on')) {
+        const _snap = { ...o, id }; // snapshot antes do kanban limpar
+        setTimeout(async () => {
+          const tg = document.getElementById('auto-toggle-avaliacao');
+          if (!tg || !tg.classList.contains('on')) return; // verificação no momento do disparo
+          const linkAvaliacao = `${window.location.origin}/?rate=${_snap.id}`;
+          const itensTxt = Array.isArray(_snap.items)
+            ? _snap.items.map(i => `${i.qty}x ${i.name}`).join(', ')
+            : '';
+          await evoEnviarMensagem(_snap.phone, 'avaliacao', {
+            nome:           _snap.client || 'Cliente',
+            id:             _snap.id,
+            itens:          itensTxt,
+            total:          Number(_snap.total || 0).toFixed(2).replace('.', ','),
+            link_avaliacao: linkAvaliacao,
+          });
+        }, 60000);
+      }
+    }
   } catch(e) {
     sbLoading(false);
     sbToast('err', 'Erro ao finalizar pedido: ' + e.message); return;
@@ -3528,12 +3551,96 @@ async function renderRelatorios() {
 // SATISFAÇÃO
 // ─────────────────────────────────────────
 async function renderSatisfacao(){
-  // Sem tabela de ratings no banco — exibe estado vazio informativo
-  const sb2 = document.getElementById('sat-bars');
-  const sr  = document.getElementById('sat-reviews');
-  const msg = '<div style="text-align:center;padding:32px;color:var(--muted);font-size:13px"><div style="font-size:40px;margin-bottom:12px">⭐</div>Módulo de avaliações ainda não implementado.<br><small style="font-size:11.5px">Quando clientes avaliarem pedidos, os dados aparecerão aqui.</small></div>';
-  if (sb2) sb2.innerHTML = msg;
-  if (sr)  sr.innerHTML  = '';
+  const elBars    = document.getElementById('sat-bars');
+  const elReviews = document.getElementById('sat-reviews');
+
+  if (elBars)    elBars.innerHTML    = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Carregando…</div>';
+  if (elReviews) elReviews.innerHTML = '';
+
+  try {
+    const { data: ratings, error } = await sb.from('ratings').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+
+    const list  = ratings || [];
+    const total = list.length;
+
+    // ── Helpers para atualizar os cards de stats ──
+    const statEls = document.querySelectorAll('#page-satisfacao .sg .sv');
+    const statTrend = document.querySelector('#page-satisfacao .sg .str');
+
+    if (total === 0) {
+      const vazio = `<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:13px">
+        <div style="font-size:44px;margin-bottom:12px">⭐</div>
+        Nenhuma avaliação ainda.<br>
+        <small style="font-size:11.5px">As avaliações aparecerão aqui quando os clientes responderem.</small>
+      </div>`;
+      if (elBars)    elBars.innerHTML    = vazio;
+      if (elReviews) elReviews.innerHTML = '';
+      if (statEls[0]) statEls[0].textContent = '—';
+      if (statEls[1]) statEls[1].textContent = '0';
+      if (statEls[2]) statEls[2].textContent = '—';
+      if (statEls[3]) statEls[3].textContent = '—';
+      return;
+    }
+
+    const soma          = list.reduce((s, r) => s + (r.nota || 0), 0);
+    const media         = soma / total;
+    const satisfeitos   = list.filter(r => r.nota >= 4).length;
+    const insatisfeitos = list.filter(r => r.nota <= 2).length;
+    const pctSat        = Math.round((satisfeitos / total) * 100);
+    const pctInsat      = Math.round((insatisfeitos / total) * 100);
+
+    // Atualiza cards de stats
+    if (statEls[0]) statEls[0].textContent = media.toFixed(1);
+    if (statEls[1]) statEls[1].textContent = total;
+    if (statEls[2]) statEls[2].textContent = pctSat   + '%';
+    if (statEls[3]) statEls[3].textContent = pctInsat + '%';
+    if (statTrend)  statTrend.textContent  = media >= 4.5 ? '↑ Excelente' : media >= 3.5 ? '→ Bom' : '↓ Atenção';
+
+    // ── Distribuição de notas ──
+    const dist = [5,4,3,2,1].map(nota => {
+      const count = list.filter(r => r.nota === nota).length;
+      const pct   = Math.round((count / total) * 100);
+      const clr   = nota >= 4 ? 'var(--success)' : nota === 3 ? 'var(--warning,#f59e0b)' : 'var(--danger)';
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="font-size:12px;font-weight:700;min-width:14px;text-align:right">${nota}</span>
+        <span style="font-size:12px">⭐</span>
+        <div style="flex:1;height:9px;background:var(--surface2);border-radius:99px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${clr};border-radius:99px;transition:width .5s"></div>
+        </div>
+        <span style="font-size:11.5px;color:var(--muted);min-width:32px;text-align:right">${count}x</span>
+      </div>`;
+    }).join('');
+    if (elBars) elBars.innerHTML = dist;
+
+    // ── Últimas avaliações ──
+    const EMOJI = { 5:'😍', 4:'😊', 3:'😐', 2:'😕', 1:'😠' };
+    const revs = list.slice(0, 30).map(r => {
+      const stars = '⭐'.repeat(r.nota || 0);
+      const dt    = r.created_at
+        ? new Date(r.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })
+        : '';
+      return `<div style="padding:12px 0;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start">
+        <div style="font-size:26px;flex-shrink:0;line-height:1">${EMOJI[r.nota] || '⭐'}</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px">
+            <span style="font-weight:700;font-size:13px">${r.client || 'Cliente'}</span>
+            <span style="font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0">${dt}</span>
+          </div>
+          <div style="font-size:13px;margin-bottom:${r.comentario ? '5px' : '0'}">${stars}</div>
+          ${r.comentario ? `<div style="font-size:12.5px;color:var(--muted2);line-height:1.5">${r.comentario}</div>` : ''}
+          ${r.order_id   ? `<div style="font-size:11px;color:var(--muted);margin-top:3px">Pedido #${String(r.order_id).padStart(3,'0')}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+    if (elReviews) elReviews.innerHTML = revs || '<div style="color:var(--muted);font-size:12px;padding:12px">Nenhuma avaliação.</div>';
+
+  } catch(e) {
+    console.error('renderSatisfacao:', e);
+    const msg = '<div style="color:var(--muted);font-size:12.5px;padding:20px;text-align:center">Erro ao carregar avaliações.</div>';
+    if (elBars)    elBars.innerHTML    = msg;
+    if (elReviews) elReviews.innerHTML = '';
+  }
 }
 
 // ─────────────────────────────────────────

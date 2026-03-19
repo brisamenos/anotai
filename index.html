@@ -712,6 +712,59 @@ input,textarea{font-family:inherit}
   transition:all .15s;
 }
 .account-logout:hover{background:rgba(239,68,68,.15)}
+
+/* ═══════════════════════════════════════
+   MODAL AVALIAÇÃO / SATISFAÇÃO
+═══════════════════════════════════════ */
+.rating-overlay{
+  display:none;position:fixed;inset:0;z-index:900;
+  background:rgba(0,0,0,.85);backdrop-filter:blur(8px);
+  align-items:flex-end;justify-content:center;
+}
+.rating-overlay.on{display:flex}
+.rating-sheet{
+  background:var(--s1);border-radius:24px 24px 0 0;
+  width:100%;max-width:520px;padding:32px 24px 44px;
+  animation:sheetUp .32s cubic-bezier(.34,1.56,.64,1);
+  text-align:center;
+}
+.rating-handle{width:36px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);margin:0 auto 24px}
+.rating-emoji{font-size:52px;margin-bottom:10px}
+.rating-title{font-family:'Fraunces',serif;font-size:22px;font-weight:900;margin-bottom:6px}
+.rating-sub{font-size:13.5px;color:var(--muted2);margin-bottom:26px;line-height:1.5}
+.rating-stars{display:flex;justify-content:center;gap:8px;margin-bottom:8px}
+.rating-star{
+  font-size:40px;cursor:pointer;
+  transition:transform .15s,filter .15s,opacity .15s;
+  filter:grayscale(1);opacity:.3;
+}
+.rating-star.on{filter:none;opacity:1;transform:scale(1.18)}
+.rating-star:hover{filter:none;opacity:.8;transform:scale(1.1)}
+.rating-label{font-size:13px;color:var(--amber);font-weight:700;min-height:20px;margin-bottom:16px;transition:all .15s}
+.rating-obs{
+  width:100%;background:var(--s2);border:1px solid var(--border);
+  border-radius:12px;padding:11px 14px;color:var(--text);
+  font-size:13px;outline:none;resize:none;margin-bottom:18px;
+  font-family:'DM Sans',sans-serif;transition:border-color .18s;
+}
+.rating-obs:focus{border-color:rgba(249,115,22,.4)}
+.rating-obs::placeholder{color:var(--muted)}
+.rating-send{
+  width:100%;padding:15px;border-radius:14px;border:none;
+  background:var(--accent-g);color:#fff;font-size:15px;font-weight:700;
+  cursor:pointer;box-shadow:0 6px 20px rgba(249,115,22,.3);
+  transition:all .18s;
+}
+.rating-send:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(249,115,22,.4)}
+.rating-send:disabled{background:var(--s3);color:var(--muted);transform:none;box-shadow:none;cursor:not-allowed}
+.rating-skip{
+  margin-top:12px;background:none;border:none;
+  color:var(--muted);font-size:13px;cursor:pointer;font-family:inherit;
+}
+.rating-success{display:none;flex-direction:column;align-items:center;gap:10px;padding:12px 0}
+.rating-success-icon{font-size:56px}
+.rating-success-title{font-family:'Fraunces',serif;font-size:22px;font-weight:900}
+.rating-success-sub{font-size:13.5px;color:var(--muted2);line-height:1.5}
 </style>
 <script src="/api-client.js"></script>
 </head>
@@ -1074,6 +1127,39 @@ input,textarea{font-family:inherit}
     </div>
 
     <button class="account-logout" onclick="doLogout()">🚪 Sair da conta</button>
+  </div>
+</div>
+
+<!-- ══════════════ MODAL AVALIAÇÃO ══════════════ -->
+<div class="rating-overlay" id="rating-overlay">
+  <div class="rating-sheet">
+    <div class="rating-handle"></div>
+
+    <!-- Formulário -->
+    <div id="rating-form-wrap">
+      <div class="rating-emoji">⭐</div>
+      <div class="rating-title">Como foi seu pedido?</div>
+      <div class="rating-sub" id="rating-sub">Sua opinião ajuda a melhorarmos cada vez mais!</div>
+      <div class="rating-stars" id="rating-stars">
+        <span class="rating-star" data-v="1" onclick="ratingPickStar(1)">⭐</span>
+        <span class="rating-star" data-v="2" onclick="ratingPickStar(2)">⭐</span>
+        <span class="rating-star" data-v="3" onclick="ratingPickStar(3)">⭐</span>
+        <span class="rating-star" data-v="4" onclick="ratingPickStar(4)">⭐</span>
+        <span class="rating-star" data-v="5" onclick="ratingPickStar(5)">⭐</span>
+      </div>
+      <div class="rating-label" id="rating-label">Toque em uma estrela para avaliar</div>
+      <textarea class="rating-obs" id="rating-obs" rows="3" placeholder="Deixe um comentário (opcional)…"></textarea>
+      <button class="rating-send" id="rating-send-btn" onclick="submitRating()" disabled>Enviar avaliação</button>
+      <button class="rating-skip" onclick="closeRatingModal()">Agora não</button>
+    </div>
+
+    <!-- Sucesso -->
+    <div class="rating-success" id="rating-success-wrap">
+      <div class="rating-success-icon">🙏</div>
+      <div class="rating-success-title">Obrigado pelo feedback!</div>
+      <div class="rating-success-sub">Sua avaliação foi registrada com sucesso.<br>Ela nos ajuda a melhorar sempre!</div>
+      <button class="rating-send" style="margin-top:20px" onclick="closeRatingModal()">Fechar</button>
+    </div>
   </div>
 </div>
 
@@ -2413,6 +2499,98 @@ function toast(icon, msg) {
 function fmt(n) {
   return Number(n||0).toFixed(2).replace('.',',');
 }
+
+// ══════════════════════════════════════════
+//  MODAL DE AVALIAÇÃO (link ?rate=ID)
+// ══════════════════════════════════════════
+let _ratingOrderId  = null;
+let _ratingNota     = 0;
+const RATING_LABELS = { 1:'Muito ruim 😠', 2:'Ruim 😕', 3:'Regular 😐', 4:'Bom 😊', 5:'Excelente 😍' };
+
+function ratingPickStar(n) {
+  _ratingNota = n;
+  document.querySelectorAll('.rating-star').forEach(s => {
+    s.classList.toggle('on', Number(s.dataset.v) <= n);
+  });
+  const lbl = document.getElementById('rating-label');
+  if (lbl) lbl.textContent = RATING_LABELS[n] || '';
+  const btn = document.getElementById('rating-send-btn');
+  if (btn) btn.disabled = false;
+}
+
+function openRatingModal(orderId) {
+  _ratingOrderId = orderId;
+  _ratingNota    = 0;
+  // reset UI
+  document.querySelectorAll('.rating-star').forEach(s => s.classList.remove('on'));
+  const lbl = document.getElementById('rating-label');
+  if (lbl) lbl.textContent = 'Toque em uma estrela para avaliar';
+  const obs = document.getElementById('rating-obs');
+  if (obs) obs.value = '';
+  const btn = document.getElementById('rating-send-btn');
+  if (btn) btn.disabled = true;
+  const fw  = document.getElementById('rating-form-wrap');
+  const sw  = document.getElementById('rating-success-wrap');
+  if (fw) fw.style.display = '';
+  if (sw) sw.style.display = 'none';
+  // sub com número do pedido
+  const sub = document.getElementById('rating-sub');
+  if (sub && orderId) sub.textContent = `Pedido #${String(orderId).padStart(3,'0')} — sua opinião é muito importante!`;
+  document.getElementById('rating-overlay')?.classList.add('on');
+}
+
+function closeRatingModal() {
+  document.getElementById('rating-overlay')?.classList.remove('on');
+  // Limpa ?rate da URL sem recarregar
+  const url = new URL(window.location.href);
+  url.searchParams.delete('rate');
+  window.history.replaceState({}, '', url.toString());
+}
+
+async function submitRating() {
+  if (!_ratingNota) return;
+  const btn = document.getElementById('rating-send-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
+  const comentario = document.getElementById('rating-obs')?.value.trim() || '';
+  // Tenta pegar nome/phone do cliente logado (sessão) ou de localStorage
+  let client = '', phone = '';
+  try {
+    const sess = JSON.parse(localStorage.getItem('_customer') || sessionStorage.getItem('_customer') || '{}');
+    client = sess.name  || sess.nome  || '';
+    phone  = sess.phone || sess.fone  || '';
+  } catch(e) {}
+  try {
+    const { error } = await sb.from('ratings').insert({
+      order_id:   _ratingOrderId || null,
+      client:     client || null,
+      phone:      phone  || null,
+      nota:       _ratingNota,
+      comentario: comentario || null,
+    });
+    if (error) throw error;
+    // Mostra sucesso
+    const fw = document.getElementById('rating-form-wrap');
+    const sw = document.getElementById('rating-success-wrap');
+    if (fw) fw.style.display = 'none';
+    if (sw) sw.style.display = 'flex';
+  } catch(e) {
+    console.error('submitRating:', e);
+    if (btn) { btn.disabled = false; btn.textContent = 'Enviar avaliação'; }
+    toast('❌', 'Erro ao enviar avaliação. Tente novamente.');
+  }
+}
+
+// Detecta ?rate=ID na URL e abre o modal automaticamente
+(function checkRateParam() {
+  const params = new URLSearchParams(window.location.search);
+  const rateId = params.get('rate');
+  if (rateId) {
+    // Aguarda o DOM e o init() estarem prontos
+    window.addEventListener('load', () => {
+      setTimeout(() => openRatingModal(parseInt(rateId, 10) || rateId), 800);
+    });
+  }
+})();
 
 init();
 

@@ -215,6 +215,16 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now')),
     UNIQUE(tenant_id, phone)
   );
+  CREATE TABLE IF NOT EXISTS ratings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    order_id INTEGER,
+    client TEXT,
+    phone TEXT,
+    nota INTEGER NOT NULL DEFAULT 5,
+    comentario TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
 
   -- Índices para performance
   CREATE INDEX IF NOT EXISTS idx_orders_tenant     ON orders(tenant_id);
@@ -332,6 +342,20 @@ const MIGRATIONS = [
     version: 13,
     description: 'Adiciona customer_id em orders para vincular pedido ao cliente logado',
     up: `ALTER TABLE orders ADD COLUMN customer_id INTEGER`
+  },
+  {
+    version: 14,
+    description: 'Cria tabela ratings para avaliações de satisfação dos clientes',
+    up: `CREATE TABLE IF NOT EXISTS ratings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      order_id INTEGER,
+      client TEXT,
+      phone TEXT,
+      nota INTEGER NOT NULL DEFAULT 5,
+      comentario TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`
   },
 ]
 
@@ -469,6 +493,7 @@ const TABLE_COLS = {
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','updated_at'],
   fidelidade:   ['id','tenant_id','name','phone','birthday','pts','max_pts','orders_count','resgates','created_at'],
   customers:    ['id','tenant_id','name','phone','addr','orders_count','total_spent','last_order_at','email','birthday','senha_hash','customer_id','created_at'],
+  ratings:      ['id','tenant_id','order_id','client','phone','nota','comentario','created_at'],
 }
 
 // Tabelas que NÃO são filtradas por tenant (acesso global)
