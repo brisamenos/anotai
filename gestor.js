@@ -6385,7 +6385,6 @@ async function loadCardapioPublico() {
   const cor = data.store_cor || '#3b82f6';
   const corEl = document.getElementById('cp-cor');
   if (corEl) corEl.value = cor;
-  cpPreviewCor(cor);
 
   if (data.store_logo_url) {
     _cpLogoUrl = data.store_logo_url;
@@ -6402,7 +6401,6 @@ async function loadCardapioPublico() {
     if (hero) hero.style.backgroundImage = `url(${_cpBannerUrl})`;
   }
 
-  cpAtualizarPreview();
   cpMontarLink();
 }
 
