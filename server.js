@@ -1153,7 +1153,7 @@ const server = http.createServer(async (req,res) => {
       if (!tenantId) { send(res,200,{ok:true}); return }
 
       // Config do tenant (tópicos habilitados, ativo)
-      const cfg = db.prepare("SELECT ia_config,evo_instance,store_name,store_whatsapp,store_tempo_entrega,delivery_fee_config,horarios_config FROM store_config WHERE tenant_id=?").get(tenantId)
+      const cfg = db.prepare("SELECT ia_config,evo_instance,store_name,store_descricao,store_whatsapp,store_tempo_entrega,delivery_fee_config,horarios_config,store_open FROM store_config WHERE tenant_id=?").get(tenantId)
       if (!cfg) { send(res,200,{ok:true}); return }
       const ia = jsonParse(cfg.ia_config) || {}
       if (!ia.ativo) { send(res,200,{ok:true}); return }
@@ -1193,114 +1193,207 @@ const server = http.createServer(async (req,res) => {
         const inst = cfg.evo_instance || EVO_INST
         const nomeLoja = cfg.store_name || 'Restaurante'
 
-        // ── Monta contexto do restaurante ────────────────────
+        // ══════════════════════════════════════════════════
+        // CONTEXTO COMPLETO DO RESTAURANTE PARA A IA
+        // ══════════════════════════════════════════════════
         const contexto = []
 
-        // Link do cardápio digital (gerado a partir do slug/tenant)
+        // ── Link do cardápio ──────────────────────────────
         const tenantRow = db.prepare("SELECT slug FROM tenants WHERE id=?").get(tenantId)
         const slugTenant = tenantRow?.slug || tenantId
-        const linkCardapio = `${req.headers['x-forwarded-proto']||'https'}://${req.headers['host']||''}/?tenant=${slugTenant}`
+        const proto = req.headers['x-forwarded-proto'] || 'https'
+        const host  = req.headers['host'] || ''
+        const linkCardapio = `${proto}://${host}/index.html?slug=${slugTenant}`
 
-        // Informações básicas da loja
+        // ── Status da loja (aberta/fechada agora) ─────────
+        const agora = new Date()
+        const diasSemana = ['dom','seg','ter','qua','qui','sex','sab']
+        const diaHoje = diasSemana[agora.getDay()]
+        const horaMin = agora.getHours() * 60 + agora.getMinutes()
+        let lojaAbertaAgora = cfg.store_open !== false
+        const horariosCfg = jsonParse(cfg.horarios_config) || {}
+        const diaConfig = horariosCfg[diaHoje]
+        if (diaConfig) {
+          if (!diaConfig.ativo) {
+            lojaAbertaAgora = false
+          } else {
+            const [ah, am] = (diaConfig.abertura || '00:00').split(':').map(Number)
+            const [fh, fm] = (diaConfig.fechamento || '23:59').split(':').map(Number)
+            lojaAbertaAgora = horaMin >= ah * 60 + am && horaMin <= fh * 60 + fm
+          }
+        }
+
+        // ── 1. INFORMAÇÕES DA LOJA ────────────────────────
+        const taxaCfg = jsonParse(cfg.delivery_fee_config) || {}
         const infoLoja = []
         infoLoja.push(`Nome: ${nomeLoja}`)
+        infoLoja.push(`Status agora: ${lojaAbertaAgora ? '🟢 ABERTO' : '🔴 FECHADO'}`)
         if (cfg.store_whatsapp) infoLoja.push(`WhatsApp: ${cfg.store_whatsapp}`)
+        if (cfg.store_descricao) infoLoja.push(`Descrição: ${cfg.store_descricao}`)
         if (cfg.store_tempo_entrega) infoLoja.push(`Tempo estimado de entrega: ${cfg.store_tempo_entrega}`)
-        const taxaCfg = jsonParse(cfg.delivery_fee_config) || {}
-        if (taxaCfg.zones && taxaCfg.zones.length) {
-          const taxasTxt = taxaCfg.zones.map(z => `${z.name}: R$${parseFloat(z.fee||0).toFixed(2).replace('.',',')}`).join(', ')
-          infoLoja.push(`Taxas de entrega: ${taxasTxt}`)
-        } else if (taxaCfg.fixed) {
-          infoLoja.push(`Taxa de entrega: R$${parseFloat(taxaCfg.fixed).toFixed(2).replace('.',',')}`)
+        // Taxa de entrega — formato real: { tipo:'fixo', valor:X } ou { tipo:'por_km', faixas:[{ate_km,taxa}] }
+        if (taxaCfg.tipo === 'fixo') {
+          const taxa = parseFloat(taxaCfg.valor || 0)
+          infoLoja.push(`Taxa de entrega: ${taxa > 0 ? 'R$ ' + taxa.toFixed(2).replace('.', ',') : 'Grátis'}`)
+        } else if (taxaCfg.tipo === 'por_km' && taxaCfg.faixas?.length) {
+          const faixasTxt = taxaCfg.faixas.map(f => `até ${f.ate_km}km: R$${parseFloat(f.taxa).toFixed(2).replace('.',',')}`)
+          infoLoja.push(`Taxa de entrega por distância: ${faixasTxt.join(' | ')}`)
         }
-        infoLoja.push(`Link do cardápio digital: ${linkCardapio}`)
+        infoLoja.push(`Cardápio digital: ${linkCardapio}`)
         contexto.push(`INFORMAÇÕES DA LOJA:\n${infoLoja.join('\n')}`)
 
-        // Horários de funcionamento
-        const horariosCfg = jsonParse(cfg.horarios_config) || {}
+        // ── 2. HORÁRIOS DE FUNCIONAMENTO ──────────────────
+        const diasNome = {dom:'Domingo',seg:'Segunda',ter:'Terça',qua:'Quarta',qui:'Quinta',sex:'Sexta',sab:'Sábado'}
         if (Object.keys(horariosCfg).length) {
-          const diasNome = {dom:'Domingo',seg:'Segunda',ter:'Terça',qua:'Quarta',qui:'Quinta',sex:'Sexta',sab:'Sábado'}
-          const horTxt = Object.entries(horariosCfg).map(([d,h]) =>
-            h.ativo ? `${diasNome[d]}: ${h.abertura} às ${h.fechamento}` : `${diasNome[d]}: Fechado`
+          const horTxt = Object.entries(horariosCfg).map(([d, h]) =>
+            h.ativo
+              ? `${diasNome[d]}: ${h.abertura} às ${h.fechamento}${d === diaHoje ? ' ← hoje' : ''}`
+              : `${diasNome[d]}: Fechado`
           ).join('\n')
           contexto.push(`HORÁRIO DE FUNCIONAMENTO:\n${horTxt}`)
-        } else if (ia.resp_horario && ia.horario_txt) {
-          contexto.push(`HORÁRIO:\n${ia.horario_txt}`)
         }
 
-        // Informações de entrega/área de cobertura
-        if (ia.resp_entrega && ia.entrega_txt) contexto.push(`ÁREA DE ENTREGA:\n${ia.entrega_txt}`)
+        // ── 3. CARDÁPIO POR CATEGORIA ─────────────────────
+        const categorias = db.prepare("SELECT name, label FROM categories WHERE tenant_id=? AND ativo=1 ORDER BY sort_order").all(tenantId)
+        const itensTodos = db.prepare("SELECT name, description, price, price_old, status, cat_key, cat, emoji, promo FROM menu_items WHERE tenant_id=? AND status != 'pausado' ORDER BY id").all(tenantId)
 
-        // Cupons ativos
-        const cupons = db.prepare("SELECT code,type,value,min_order FROM cupons WHERE tenant_id=? AND ativo=1 AND (expires_at IS NULL OR expires_at > datetime('now')) LIMIT 3").all(tenantId)
+        if (itensTodos.length) {
+          // Agrupa por categoria
+          const catMap = new Map()
+          for (const item of itensTodos) {
+            const catKey = item.cat_key || item.cat || 'outros'
+            if (!catMap.has(catKey)) catMap.set(catKey, [])
+            catMap.get(catKey).push(item)
+          }
+          let cardapioTxt = ''
+          for (const [catKey, items] of catMap) {
+            const catInfo = categorias.find(c => c.name === catKey)
+            const catLabel = catInfo?.label || catInfo?.name || catKey
+            const itensTxt = items.map(i => {
+              const preco = `R$${parseFloat(i.price).toFixed(2).replace('.', ',')}`
+              const precoAnt = i.price_old ? ` (era R$${parseFloat(i.price_old).toFixed(2).replace('.', ',')})` : ''
+              const esgotado = i.status === 'esgotado' ? ' [ESGOTADO]' : ''
+              const promo = i.promo ? ' 🔥PROMOÇÃO' : ''
+              const desc = i.description ? ` — ${i.description.slice(0, 60)}${i.description.length > 60 ? '…' : ''}` : ''
+              return `  • ${i.name}: ${preco}${precoAnt}${promo}${esgotado}${desc}`
+            }).join('\n')
+            cardapioTxt += `\n${catLabel.toUpperCase()}:\n${itensTxt}\n`
+          }
+          contexto.push(`CARDÁPIO COMPLETO:${cardapioTxt}\nPara ver fotos e fazer pedido: ${linkCardapio}`)
+        }
+
+        // ── 4. PROMOÇÕES ATIVAS (itens em oferta) ─────────
+        const itensPromo = itensTodos.filter(i => i.promo && i.status !== 'esgotado')
+        if (itensPromo.length) {
+          const promoTxt = itensPromo.map(i => {
+            const preco = `R$${parseFloat(i.price).toFixed(2).replace('.', ',')}`
+            const ant   = i.price_old ? ` (antes R$${parseFloat(i.price_old).toFixed(2).replace('.', ',')})` : ''
+            return `  🔥 ${i.name}: ${preco}${ant}`
+          }).join('\n')
+          contexto.push(`PROMOÇÕES DO DIA:\n${promoTxt}`)
+        }
+
+        // ── 5. CUPONS DE DESCONTO ATIVOS ──────────────────
+        const cupons = db.prepare(`
+          SELECT code, type, value, min_order FROM cupons
+          WHERE tenant_id=? AND ativo=1
+          AND (expires_at IS NULL OR expires_at > datetime('now'))
+          LIMIT 5
+        `).all(tenantId)
         if (cupons.length) {
           const cupTxt = cupons.map(cp => {
-            const desc = cp.type === 'percent' ? `${cp.value}% de desconto` : `R$${parseFloat(cp.value).toFixed(2).replace('.',',')} de desconto`
-            const min = parseFloat(cp.min_order||0) > 0 ? ` (pedido mínimo R$${parseFloat(cp.min_order).toFixed(2).replace('.',',')})` : ''
+            const desc = cp.type === 'percent'
+              ? `${cp.value}% de desconto`
+              : `R$${parseFloat(cp.value).toFixed(2).replace('.', ',')} de desconto`
+            const min = parseFloat(cp.min_order || 0) > 0
+              ? ` (pedido mínimo R$${parseFloat(cp.min_order).toFixed(2).replace('.', ',')})`
+              : ''
             return `  • Código *${cp.code}*: ${desc}${min}`
           }).join('\n')
-          contexto.push(`CUPONS DISPONÍVEIS:\n${cupTxt}`)
+          contexto.push(`CUPONS DE DESCONTO DISPONÍVEIS:\n${cupTxt}`)
         }
 
-        // Busca pedido: prioridade 1 — número do pedido mencionado na mensagem
-        const sl = {analise:'⏳ aguardando confirmação',producao:'👨‍🍳 em preparo',pronto:'🛵 saindo para entrega',entregue:'✅ entregue',cancelado:'❌ cancelado'}
+        // ── 6. PEDIDOS DO CLIENTE (pelo telefone) ─────────
+        const pedidosCliente = db.prepare(`
+          SELECT id, status, total, items, created_at FROM orders
+          WHERE tenant_id=? AND phone LIKE ?
+          ORDER BY id DESC LIMIT 3
+        `).all(tenantId, `%${phone.slice(-8)}%`)
 
-        // Regex melhorada: tenta #NNN primeiro, depois "pedido NNN", depois qualquer número isolado
+        if (pedidosCliente.length) {
+          const slStatus = {
+            analise:  '⏳ aguardando confirmação',
+            producao: '👨‍🍳 em preparo',
+            pronto:   '✅ pronto',
+            saiu:     '🛵 saiu para entrega',
+            entregue: '🎉 entregue',
+            cancelado:'❌ cancelado',
+            finalizado:'✅ finalizado'
+          }
+          const pedTxt = pedidosCliente.map(p => {
+            const itsPed = (() => { try { return (JSON.parse(p.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') } catch(e) { return '' } })()
+            return `  Pedido #${p.id}: ${slStatus[p.status]||p.status} — R$${parseFloat(p.total).toFixed(2).replace('.',',')}${itsPed ? ' — '+itsPed : ''}`
+          }).join('\n')
+          contexto.push(`PEDIDOS RECENTES DESTE CLIENTE:\n${pedTxt}`)
+        }
+
+        // ── 7. PEDIDO ESPECÍFICO MENCIONADO NA MENSAGEM ───
+        const slStatus = {
+          analise:  '⏳ aguardando confirmação',
+          producao: '👨‍🍳 em preparo',
+          pronto:   '✅ pronto para retirada/entrega',
+          saiu:     '🛵 saiu para entrega',
+          entregue: '🎉 entregue',
+          cancelado:'❌ cancelado',
+          finalizado:'✅ finalizado'
+        }
         const numPedidoMatch =
-          msgFull.match(/#\*?(\d{1,6})\*?/) ||          // #023  ou  *#023*
-          msgFull.match(/pedido\s*[*#]?\s*(\d{1,6})/i) || // "pedido 023"
-          msgFull.match(/n[uú]mero\s*[*#]?\s*(\d{1,6})/i) || // "número 023"
-          msgFull.match(/\b0*([1-9]\d{0,5})\b/)           // número isolado (sem zeros à esquerda)
+          msgFull.match(/#\*?(\d{1,6})\*?/) ||
+          msgFull.match(/pedido\s*[*#]?\s*(\d{1,6})/i) ||
+          msgFull.match(/n[uú]mero\s*[*#]?\s*(\d{1,6})/i) ||
+          msgFull.match(/\b0*([1-9]\d{0,5})\b/)
 
         const numPedido = numPedidoMatch ? parseInt(numPedidoMatch[1]) : null
-        let pedidoContexto = ''
         if (numPedido) log('🔍', `Buscando pedido #${numPedido} (tenant: ${tenantId}, phone: ...${phone.slice(-4)})`)
 
         if (numPedido) {
-          // Busca 1: pelo tenant + id (caso normal)
-          let ped = db.prepare("SELECT id,status,total,items,client,phone,created_at FROM orders WHERE tenant_id=? AND id=?").get(tenantId, numPedido)
-
-          // Busca 2: fallback por id + telefone (cobre caso de tenant_id divergente no cadastro)
-          if (!ped) {
-            ped = db.prepare("SELECT id,status,total,items,client,phone,created_at FROM orders WHERE id=? AND phone LIKE ?").get(numPedido, `%${phone.slice(-8)}%`)
-          }
-
-          // Busca 3: só pelo id (último recurso, para quando o cliente não informou telefone no pedido)
-          if (!ped) {
-            ped = db.prepare("SELECT id,status,total,items,client,phone,created_at FROM orders WHERE id=?").get(numPedido)
-          }
+          let ped = db.prepare("SELECT id,status,total,items,client,phone,addr,pag,created_at FROM orders WHERE tenant_id=? AND id=?").get(tenantId, numPedido)
+          if (!ped) ped = db.prepare("SELECT id,status,total,items,client,phone,addr,pag,created_at FROM orders WHERE id=? AND phone LIKE ?").get(numPedido, `%${phone.slice(-8)}%`)
+          if (!ped) ped = db.prepare("SELECT id,status,total,items,client,phone,addr,pag,created_at FROM orders WHERE id=?").get(numPedido)
 
           if (ped) {
-            log('✅', `Pedido #${numPedido} encontrado (id real: ${ped.id})`)
+            log('✅', `Pedido #${numPedido} encontrado`)
             const itsPed = (() => { try { return (JSON.parse(ped.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') } catch(e) { return '' } })()
-            pedidoContexto = `PEDIDO ENCONTRADO (#${ped.id}):\n  Cliente: ${ped.client||'—'}\n  Status: ${sl[ped.status]||ped.status}\n  Total: R$${parseFloat(ped.total).toFixed(2).replace('.',',')}\n  Itens: ${itsPed||'—'}`
+            contexto.push([
+              `PEDIDO CONSULTADO (#${ped.id}):`,
+              `  Cliente: ${ped.client || '—'}`,
+              `  Status: ${slStatus[ped.status] || ped.status}`,
+              `  Total: R$${parseFloat(ped.total).toFixed(2).replace('.', ',')}`,
+              `  Itens: ${itsPed || '—'}`,
+              ped.addr ? `  Endereço: ${ped.addr}` : '',
+              ped.pag  ? `  Pagamento: ${ped.pag}` : '',
+            ].filter(Boolean).join('\n'))
           } else {
-            pedidoContexto = `PEDIDO #${numPedido}: não encontrado neste restaurante.`
-          }
-        } else {
-          // Fallback — busca pelo telefone (menos confiável)
-          const pedidos = db.prepare("SELECT id,status,total,items FROM orders WHERE tenant_id=? AND phone LIKE ? ORDER BY id DESC LIMIT 2").all(tenantId,`%${phone.slice(-8)}%`)
-          if (pedidos.length) {
-            const pedTxt = pedidos.map(p => {
-              const itsPed = (() => { try { return (JSON.parse(p.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') } catch(e) { return '' } })()
-              return `  Pedido #${p.id}: ${sl[p.status]||p.status} — R$${parseFloat(p.total).toFixed(2).replace('.',',')}${itsPed?' — '+itsPed:''}`
-            }).join('\n')
-            pedidoContexto = `PEDIDOS ENCONTRADOS PELO TELEFONE:\n${pedTxt}`
+            contexto.push(`PEDIDO #${numPedido}: não encontrado. Oriente o cliente a verificar o número.`)
           }
         }
-        if (pedidoContexto) contexto.push(pedidoContexto)
 
-        const systemPrompt = `${iaG.prompt_base || `Você é o assistente virtual do ${nomeLoja}. Seja simpático, objetivo e use emojis com moderação. Responda em português.`}
+        // ══════════════════════════════════════════════════
+        // SYSTEM PROMPT COMPLETO
+        // ══════════════════════════════════════════════════
+        const systemPrompt = `${iaG.prompt_base || `Você é o assistente virtual do ${nomeLoja}. Seja simpático, objetivo e use emojis com moderação. Responda sempre em português.`}
 
 ${contexto.join('\n\n')}
 
-REGRAS IMPORTANTES:
-- Quando o cliente pedir o cardápio ou quiser ver os produtos, NÃO liste os itens. Envie apenas o link: ${linkCardapio}
-- Para acompanhar pedido: peça o NÚMERO DO PEDIDO (ex: "qual o número do seu pedido?"). Com o número, consulte o status acima e informe.
-- Se o cliente já enviou o número do pedido, informe o status diretamente sem pedir de novo.
-- Se o número do pedido não for encontrado, diga que não localizou e peça para conferir o número.
-- Para horários, entrega e demais dúvidas, use as informações fornecidas acima.
-- Se perguntado sobre algo fora do restaurante, diga gentilmente que só pode ajudar com informações do estabelecimento.`
+REGRAS DE ATENDIMENTO:
+- CARDÁPIO: Nunca liste todos os itens na mensagem. Sempre envie o link do cardápio: ${linkCardapio}
+- PEDIDO: Se o cliente perguntar sobre pedido sem informar o número, pergunte "Qual o número do seu pedido? (ex: #023)". Se já informou, responda com o status diretamente.
+- PROMOÇÕES: Se houver promoções ativas, mencione-as proativamente quando o cliente perguntar sobre o cardápio.
+- CUPONS: Se houver cupons ativos, informe o código ao cliente quando relevante.
+- HORÁRIO: Informe se a loja está aberta ou fechada agora, e os horários de funcionamento quando perguntado.
+- ENTREGA: Informe a taxa e tempo estimado de entrega quando perguntado.
+- FOCO: Responda apenas sobre este restaurante. Para assuntos não relacionados, diga educadamente que só pode ajudar com informações do estabelecimento.
+- NOVO PEDIDO: Para fazer um pedido, sempre direcione o cliente para o cardápio digital: ${linkCardapio}`
 
         try {
           const r = await fetch('https://api.openai.com/v1/chat/completions',{
