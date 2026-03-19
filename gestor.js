@@ -4614,7 +4614,7 @@ const EVO = {
   async sendText(number, text) {
     const phone = number.replace(/\D/g,'');
     const num   = phone.startsWith('55') ? phone : `55${phone}`;
-    const r = await this.req('POST', '/message/sendText/' + this.instance, { number: num, textMessage: { text } });
+    const r = await this.req('POST', '/message/sendText/' + this.instance, { number: num, text });
     return r;
   }
 };
