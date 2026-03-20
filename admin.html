@@ -289,20 +289,14 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
             <div style="font-size:12px;color:var(--muted);margin-top:2px">Gerencie backups de todos os gestores ou individualmente</div>
           </div>
         </div>
-
-        <!-- Backup completo -->
         <div class="card" style="margin-bottom:16px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-            <div>
-              <div class="card-title">🗄️ Backup Completo</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:3px">Exporta todos os dados de todos os gestores</div>
-            </div>
+            <div><div class="card-title">🗄️ Backup Completo</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:3px">Exporta todos os dados de todos os gestores</div></div>
             <button class="btn bp" onclick="baixarBackupCompleto()" id="btn-backup-full">⬇️ Baixar backup</button>
           </div>
-          <div id="backup-full-info" style="font-size:12px;color:var(--muted)">Clique em "Baixar backup" para gerar e baixar o arquivo JSON completo.</div>
+          <div id="backup-full-info" style="font-size:12px;color:var(--muted)">Clique para gerar e baixar o arquivo JSON completo.</div>
         </div>
-
-        <!-- Backup por gestor -->
         <div class="tw" style="margin-bottom:16px">
           <div class="tmeta">
             <div class="card-title">🏢 Backup por Gestor</div>
@@ -311,21 +305,15 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
               <input id="bkp-q" placeholder="Buscar gestor..." oninput="renderBackupList()">
             </div>
           </div>
-          <table>
-            <thead><tr><th>Restaurante</th><th>Slug</th><th>Plano</th><th>Status</th><th>Ação</th></tr></thead>
-            <tbody id="bkp-tbody"></tbody>
-          </table>
+          <table><thead><tr><th>Restaurante</th><th>Slug</th><th>Plano</th><th>Status</th><th>Ação</th></tr></thead>
+            <tbody id="bkp-tbody"></tbody></table>
         </div>
-
-        <!-- Importar backup -->
         <div class="card">
           <div class="card-title" style="margin-bottom:4px">📤 Importar Backup</div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Selecione um arquivo .json de backup (completo ou de gestor individual). Registros já existentes não serão sobrescritos.</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Selecione um .json de backup. Registros existentes não serão sobrescritos.</div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <label style="cursor:pointer">
-              <div class="btn bg2" id="import-label-btn">📂 Selecionar arquivo .json</div>
-              <input type="file" id="import-file" accept=".json" style="display:none" onchange="previewImport(this)">
-            </label>
+            <label style="cursor:pointer"><div class="btn bg2">📂 Selecionar arquivo .json</div>
+              <input type="file" id="import-file" accept=".json" style="display:none" onchange="previewImport(this)"></label>
             <div id="import-file-name" style="font-size:12px;color:var(--muted)">Nenhum arquivo selecionado</div>
             <button class="btn bp" id="btn-importar" onclick="importarBackup()" style="display:none">⬆️ Importar</button>
           </div>
@@ -441,6 +429,14 @@ let _sessao = null;
 let _clientes = [];
 let _usuarios = [];
 
+function getAdminToken() {
+  try { return JSON.parse(sessionStorage.getItem('adm_session') || '{}').token || null; } catch { return null; }
+}
+function adminAuthHeader() {
+  const t = getAdminToken();
+  return t ? { 'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+}
+
 async function sha256(t) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -456,26 +452,21 @@ async function doLogin() {
 
   const hash = await sha256(senha);
 
-  // Valida no servidor — sem credencial hardcoded no HTML
+  // Valida no servidor — sem credencial no HTML
   let u;
   try {
-    const loginRes = await fetch('/api/admin-login', {
+    const r = await fetch('/api/admin-login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, senha_hash: hash })
     });
-    const json = await loginRes.json();
-    if (!loginRes.ok || !json.ok) {
-      err.textContent = json.error || 'Acesso negado. Verifique suas credenciais.';
-      err.classList.add('on'); return;
-    }
+    const json = await r.json();
+    if (!r.ok || !json.ok) { err.textContent = json.error || 'Acesso negado.'; err.classList.add('on'); return; }
     u = json;
-  } catch(e) {
-    err.textContent = 'Erro de conexão com o servidor.'; err.classList.add('on'); return;
-  }
+  } catch(e) { err.textContent = 'Erro de conexão.'; err.classList.add('on'); return; }
 
   _sessao = u;
-  sessionStorage.setItem('adm_session', JSON.stringify({ id:u.id, nome:u.nome, email:u.email, role:u.role, ts:Date.now() }));
+  sessionStorage.setItem('adm_session', JSON.stringify({ id:u.id, nome:u.nome, email:u.email, role:u.role, token:u.token||null, ts:Date.now() }));
 
   document.getElementById('login').style.display = 'none';
   document.getElementById('painel').style.display = 'flex';
@@ -870,11 +861,10 @@ async function iaAdminCarregar() {
   const statusEl = document.getElementById('adm-ia-status-msg');
   if (statusEl) statusEl.textContent = 'Carregando...';
   try {
-    const { data } = await sb.from('store_config')
-      .select('ia_config')
-      .eq('tenant_id', '_global')
-      .single();
-    const ia = data?.ia_config ? JSON.parse(data.ia_config) : {};
+    // ia_config é protegida — usa endpoint admin autenticado
+    const r = await fetch('/api/admin-backup/ia-config?tenant_id=_global', { headers: adminAuthHeader() });
+    const raw = r.ok ? await r.json() : {};
+    const ia = raw?.ia_config ? JSON.parse(raw.ia_config) : {};
 
     // API key mascarada
     const keyEl = document.getElementById('adm-ia-key');
@@ -904,11 +894,11 @@ async function iaAdminCarregar() {
 async function iaSalvarConfigAdmin() {
   const keyVal = document.getElementById('adm-ia-key')?.value || '';
 
-  // Carrega config atual para preservar key se não foi alterada
+  // Carrega config atual para preservar key se não foi alterada (endpoint protegido)
   let iaAtual = {};
   try {
-    const { data } = await sb.from('store_config').select('ia_config').eq('tenant_id','_global').single();
-    iaAtual = data?.ia_config ? JSON.parse(data.ia_config) : {};
+    const r = await fetch('/api/admin-backup/ia-config?tenant_id=_global', { headers: adminAuthHeader() });
+    if (r.ok) { const raw = await r.json(); iaAtual = raw?.ia_config ? JSON.parse(raw.ia_config) : {}; }
   } catch(e) {}
 
   const ia = {
@@ -938,101 +928,6 @@ async function iaSalvarConfigAdmin() {
     toast('err', 'Erro: ' + (e.message||JSON.stringify(e)));
   }
 }
-// ════════════════════════════════════════════════════════
-// BACKUP
-// ════════════════════════════════════════════════════════
-function renderBackupList() {
-  const q = (document.getElementById('bkp-q')?.value || '').toLowerCase();
-  const lista = _clientes.filter(c => !q || c.nome.toLowerCase().includes(q) || (c.slug||'').toLowerCase().includes(q));
-  const tbody = document.getElementById('bkp-tbody');
-  if (!tbody) return;
-  if (!lista.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Nenhum gestor encontrado</td></tr>'; return; }
-  tbody.innerHTML = lista.map(c => `
-    <tr>
-      <td><span style="font-weight:600">${c.nome}</span></td>
-      <td><span style="font-size:11px;color:var(--muted)">${c.slug||'—'}</span></td>
-      <td><span class="badge bg-blue">${c.plano||'—'}</span></td>
-      <td>${c.ativo ? '<span class="badge bg-green">Ativo</span>' : '<span class="badge bg-red">Inativo</span>'}</td>
-      <td><button class="btn bg2 bsm" onclick="baixarBackupTenant('${c.id}','${c.nome.replace(/'/g,"\'")}')">⬇️ Baixar</button></td>
-    </tr>`).join('');
-}
-
-async function baixarBackupCompleto() {
-  const btn = document.getElementById('btn-backup-full');
-  const info = document.getElementById('backup-full-info');
-  btn.disabled = true; btn.textContent = '⏳ Gerando...';
-  try {
-    const res = await fetch('/api/admin-backup-download');
-    if (!res.ok) { const e = await res.json(); throw new Error(e.error||'Erro'); }
-    const blob = await res.blob();
-    const cd = res.headers.get('Content-Disposition') || '';
-    const fname = cd.match(/filename="([^"]+)"/)?.[1] || `backup-completo-${new Date().toISOString().slice(0,10)}.json`;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = fname; a.click();
-    URL.revokeObjectURL(url);
-    info.innerHTML = `<span style="color:var(--success)">✅ Backup baixado: <strong>${fname}</strong> (${(blob.size/1024).toFixed(1)} KB)</span>`;
-  } catch(e) { info.innerHTML = `<span style="color:var(--danger)">❌ Erro: ${e.message}</span>`; }
-  btn.disabled = false; btn.innerHTML = '⬇️ Baixar backup';
-}
-
-async function baixarBackupTenant(tenantId, nome) {
-  try {
-    const res = await fetch(`/api/admin-backup-tenant?tenant_id=${encodeURIComponent(tenantId)}`);
-    if (!res.ok) { const e = await res.json(); throw new Error(e.error||'Erro'); }
-    const blob = await res.blob();
-    const cd = res.headers.get('Content-Disposition') || '';
-    const fname = cd.match(/filename="([^"]+)"/)?.[1] || `backup-${tenantId}.json`;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = fname; a.click();
-    URL.revokeObjectURL(url);
-    toast('ok', `Backup de "${nome}" baixado!`);
-  } catch(e) { toast('err', 'Erro: ' + e.message); }
-}
-
-function previewImport(input) {
-  const file = input.files?.[0];
-  const nameEl = document.getElementById('import-file-name');
-  const btnEl  = document.getElementById('btn-importar');
-  if (file) {
-    nameEl.textContent = `${file.name} (${(file.size/1024).toFixed(1)} KB)`;
-    nameEl.style.color = 'var(--text)';
-    btnEl.style.display = 'inline-flex';
-  } else {
-    nameEl.textContent = 'Nenhum arquivo selecionado';
-    nameEl.style.color = 'var(--muted)';
-    btnEl.style.display = 'none';
-  }
-  document.getElementById('import-status').innerHTML = '';
-}
-
-async function importarBackup() {
-  const file = document.getElementById('import-file').files?.[0];
-  const statusEl = document.getElementById('import-status');
-  const btn = document.getElementById('btn-importar');
-  if (!file) return;
-  if (!confirm(`Importar backup "${file.name}"?\n\nRegistros já existentes NÃO serão sobrescritos.`)) return;
-  btn.disabled = true; btn.textContent = '⏳ Importando...';
-  statusEl.innerHTML = '<span style="color:var(--muted)">⏳ Processando...</span>';
-  try {
-    const text = await file.text();
-    const json = JSON.parse(text);
-    const res = await fetch('/api/admin-backup-import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(json)
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Erro no servidor');
-    statusEl.innerHTML = `<span style="color:var(--success)">✅ Importação concluída — ${data.inserted} registros inseridos, ${data.skipped} já existentes ignorados${data.ts ? ` (backup de ${new Date(data.ts).toLocaleString('pt-BR')})` : ''}.</span>`;
-    toast('ok', `Backup importado! ${data.inserted} registros.`);
-    await loadAll();
-  } catch(e) {
-    statusEl.innerHTML = `<span style="color:var(--danger)">❌ Erro: ${e.message}</span>`;
-    toast('err', 'Falha na importação: ' + e.message);
-  }
-  btn.disabled = false; btn.textContent = '⬆️ Importar';
-}
-
 </script>
 </body>
 </html>
