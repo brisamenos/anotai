@@ -316,34 +316,35 @@ body{
 .kol-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
 .kol-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;opacity:.4;font-size:12px;text-align:center;line-height:1.5;padding:20px}
 .order-card{
-  background:rgba(255,255,255,.04);
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:10px;padding:10px 12px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;padding:12px 14px;
   cursor:pointer;
-  transition:all .2s ease;
+  transition:all .22s ease;
+  box-shadow:0 1px 3px rgba(0,0,0,.2);
 }
 .order-card:hover{
-  background:rgba(255,255,255,.07);
-  border-color:rgba(231,111,81,.3);
-  transform:translateY(-1px);
-  box-shadow:0 4px 16px rgba(0,0,0,.3);
+  background:var(--surface2);
+  border-color:var(--accent);
+  transform:translateY(-2px);
+  box-shadow:0 8px 24px rgba(0,0,0,.35),0 0 0 1px var(--accent-dim);
 }
 .oc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px}
 .oc-id{font-weight:700;font-size:12.5px}
 .oc-badge{display:none}
-.oc-client{font-size:11px;color:rgba(255,255,255,.6);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.oc-items{font-size:10.5px;color:rgba(255,255,255,.38);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.oc-client{font-size:12px;color:var(--muted2);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.oc-items{font-size:11px;color:var(--muted);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .oc-bot{display:flex;align-items:center;justify-content:space-between;gap:6px}
 .oc-total{font-weight:700;font-size:12.5px;color:var(--accent);white-space:nowrap}
-.oc-time{font-size:10px;color:rgba(255,255,255,.35);white-space:nowrap}
-.oc-addr{font-size:10px;color:rgba(255,255,255,.3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
+.oc-time{font-size:10px;color:var(--muted);white-space:nowrap}
+.oc-addr{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
 .oc-actions{display:flex;gap:4px;margin-top:8px}
 .oc-btn{flex:1;border:none;border-radius:7px;padding:5px 6px;font-size:10.5px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .15s;white-space:nowrap}
 .oc-btn-ok{background:rgba(34,197,94,.15);color:#86efac;border:1px solid rgba(34,197,94,.25)}.oc-btn-ok:hover{background:rgba(34,197,94,.25)}
 .oc-btn-no{background:rgba(239,68,68,.12);color:#fca5a5;border:1px solid rgba(239,68,68,.2)}.oc-btn-no:hover{background:rgba(239,68,68,.22)}
 .oc-btn-fin{background:rgba(231,111,81,.15);color:#fdb499;border:1px solid rgba(231,111,81,.25)}.oc-btn-fin:hover{background:rgba(231,111,81,.25)}
-.kol-config{background:rgba(0,0,0,.25);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin:0 8px 8px;font-size:11.5px;color:rgba(255,255,255,.5)}
-.kol-config strong{display:block;margin-bottom:3px;color:rgba(255,255,255,.75);font-size:12px}
+.kol-config{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin:0 8px 8px;font-size:11.5px;color:var(--muted2)}
+.kol-config strong{display:block;margin-bottom:3px;color:var(--text);font-size:12px}
 
 /* ══ SEARCH / INPUTS ═══════════════════════════════════════ */
 .search-bar{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap}
