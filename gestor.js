@@ -6570,7 +6570,16 @@ const TEMA_VARS = {
 
 const TEMAS_PRONTOS = [
   {
-    nome:'☀️ Modo Claro', desc:'Claro corporativo — padrão',
+    nome:'🌑 Modo Escuro', desc:'Dark premium — padrão',
+    vars:{'--bg':'#0a0a0a','--surface':'rgba(255,255,255,.035)','--surface2':'rgba(255,255,255,.06)','--surface3':'rgba(255,255,255,.09)',
+          '--accent':'#e76f51','--accent2':'#f4a261','--accent3':'#f59e0b',
+          '--accent-dim':'rgba(231,111,81,.18)','--accent-glow':'rgba(231,111,81,.35)',
+          '--success':'#22c55e','--danger':'#ef4444','--purple':'#a78bfa',
+          '--pink':'#f472b6','--orange':'#e76f51','--text':'#f5f5f7','--muted':'rgba(245,245,247,.42)','--muted2':'rgba(245,245,247,.62)',
+          '--border':'rgba(255,255,255,.08)','--border2':'rgba(255,255,255,.13)'}
+  },
+  {
+    nome:'☀️ Modo Claro', desc:'Claro corporativo',
     vars:{'--bg':'#f4f8ff','--surface':'#ffffff','--surface2':'#e8f0fe','--surface3':'#d6e4ff',
           '--border':'rgba(30,100,220,.13)','--border2':'rgba(30,100,220,.22)',
           '--accent':'#1a6fd4','--accent2':'#2196f3','--accent3':'#f59e0b',
@@ -6578,15 +6587,6 @@ const TEMAS_PRONTOS = [
           '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
           '--pink':'#db2777','--orange':'#ea580c',
           '--text':'#0a1929','--muted':'rgba(10,25,41,.45)','--muted2':'rgba(10,25,41,.65)'}
-  },
-  {
-    nome:'🌑 Modo Escuro', desc:'Dark premium',
-    vars:{'--bg':'#0a0a0a','--surface':'rgba(255,255,255,.035)','--surface2':'rgba(255,255,255,.06)','--surface3':'rgba(255,255,255,.09)',
-          '--accent':'#e76f51','--accent2':'#f4a261','--accent3':'#f59e0b',
-          '--accent-dim':'rgba(231,111,81,.18)','--accent-glow':'rgba(231,111,81,.35)',
-          '--success':'#22c55e','--danger':'#ef4444','--purple':'#a78bfa',
-          '--pink':'#f472b6','--orange':'#e76f51','--text':'#f5f5f7','--muted':'rgba(245,245,247,.42)','--muted2':'rgba(245,245,247,.62)',
-          '--border':'rgba(255,255,255,.08)','--border2':'rgba(255,255,255,.13)'}
   },
 ];
 
@@ -6906,7 +6906,7 @@ function initTemaPage() {
 }
 
 function temaAplicarModo(modo) {
-  const vars = modo === 'escuro' ? TEMAS_PRONTOS[1].vars : TEMAS_PRONTOS[0].vars;
+  const vars = modo === 'escuro' ? TEMAS_PRONTOS[0].vars : TEMAS_PRONTOS[1].vars;
   temaApply(vars, true);
   temaUpdateCardSelection();
   sbToast('ok', modo === 'escuro' ? '🌑 Modo escuro ativado!' : '☀️ Modo claro ativado!');
