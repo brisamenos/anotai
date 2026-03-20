@@ -6886,7 +6886,7 @@ function temaBuildPresets() {
 
 // ── Salvar / Carregar / Reset ─────────────────────────
 function temaSalvarStorage() {
-  try { localStorage.setItem('ef_tema_v2', JSON.stringify(_temaAtual)); } catch(e) {}
+  // sem persistência — tema vem do CSS :root
 }
 
 async function temaSalvar() {
@@ -6894,10 +6894,7 @@ async function temaSalvar() {
 }
 
 function temaCarregarStorage() {
-  try {
-    const saved = localStorage.getItem('ef_tema_v2');
-    if (saved) { const vars = JSON.parse(saved); if (vars && typeof vars === 'object') temaApply(vars); }
-  } catch(e) {}
+  // sem persistência — tema vem do CSS :root
 }
 
 function temaReset() {
@@ -6928,13 +6925,11 @@ function temaUpdateCardSelection() {
   if (cardEscuro) { cardEscuro.style.borderColor = isEscuro ? 'var(--accent)' : 'var(--border)'; cardEscuro.style.boxShadow = isEscuro ? '0 0 0 3px var(--accent-glow)' : 'none'; }
 }
 
-// Aplica tema salvo ou padrão ao carregar
-// Versão v2 — limpa cache antigo e força novo esquema de cores
+// Aplica tema escuro padrão — limpa qualquer cache antigo
 (function() {
-  try { localStorage.removeItem('ef_tema_modo'); } catch(e) {}
   try {
-    const saved = localStorage.getItem('ef_tema_v2');
-    if (saved) { const vars = JSON.parse(saved); if (vars && typeof vars === 'object') { temaApply(vars); return; } }
+    // Remove todas as chaves antigas de tema
+    ['ef_tema_modo','ef_tema_v2','tema','theme','gestor_tema'].forEach(k => localStorage.removeItem(k));
   } catch(e) {}
   try { temaApply(TEMAS_PRONTOS[0].vars); } catch(e) {}
 })();
