@@ -936,6 +936,13 @@ input,textarea{font-family:inherit}
 .pix-ok-icon{font-size:64px;animation:popIn .5s cubic-bezier(.34,1.56,.64,1)}
 .pix-ok-title{font-family:'Fraunces',serif;font-size:24px;font-weight:900;color:var(--green)}
 .pix-ok-sub{font-size:13.5px;color:var(--muted2)}
+/* PIX manual */
+.pix-manual-box{background:rgba(34,197,94,.06);border:1.5px solid rgba(34,197,94,.25);border-radius:14px;padding:18px 20px;margin-bottom:16px;text-align:left}
+.pix-manual-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.pix-manual-key{font-size:17px;font-weight:800;color:var(--text);word-break:break-all;margin-bottom:8px}
+.pix-manual-meta{font-size:12px;color:var(--muted2)}
+.pix-manual-confirm{width:100%;padding:14px;border-radius:12px;border:none;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(34,197,94,.3);font-family:'DM Sans',sans-serif;transition:all .18s;margin-top:8px}
+.pix-manual-confirm:hover{transform:translateY(-1px)}
 </style>
 <script src="/api-client.js"></script>
 </head>
@@ -1372,6 +1379,8 @@ input,textarea{font-family:inherit}
 <div class="pix-overlay" id="pix-overlay">
   <div class="pix-sheet">
     <div class="pix-handle"></div>
+
+    <!-- Modo QR Code (MP) -->
     <div id="pix-body-waiting">
       <div style="font-size:44px;margin-bottom:8px">⚡</div>
       <div class="pix-title">Pagar com PIX</div>
@@ -1388,6 +1397,29 @@ input,textarea{font-family:inherit}
       </div>
       <button class="pix-cancel" onclick="pixCancelar()">Cancelar e usar outra forma de pagamento</button>
     </div>
+
+    <!-- Modo PIX Manual (chave do gestor) -->
+    <div id="pix-body-manual" style="display:none">
+      <div style="font-size:44px;margin-bottom:8px">⚡</div>
+      <div class="pix-title">Pagar com PIX</div>
+      <div class="pix-sub">Copie a chave PIX abaixo, realize o pagamento e confirme.</div>
+      <div class="pix-valor" id="pix-valor-manual">R$ 0,00</div>
+      <div class="pix-manual-box">
+        <div class="pix-manual-label">Chave PIX</div>
+        <div class="pix-manual-key" id="pix-manual-key-display">—</div>
+        <div class="pix-manual-meta" id="pix-manual-meta">—</div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="pix-copy-btn" style="flex:1;text-align:center" id="pix-manual-copy-btn" onclick="pixManualCopiar()">📋 Copiar chave</button>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px;background:rgba(249,115,22,.06);border:1px solid rgba(249,115,22,.2);border-radius:10px;padding:10px 12px;text-align:left">
+        ⚠️ Após realizar o pagamento, clique em <strong>"Já paguei"</strong> para enviar seu pedido. O restaurante irá confirmar o recebimento.
+      </div>
+      <button class="pix-manual-confirm" onclick="pixManualConfirmar()">✅ Já paguei — enviar pedido</button>
+      <button class="pix-cancel" style="margin-top:10px" onclick="pixCancelar()">Cancelar</button>
+    </div>
+
+    <!-- Aprovado (MP) -->
     <div class="pix-ok-wrap" id="pix-body-ok">
       <div class="pix-ok-icon">✅</div>
       <div class="pix-ok-title">Pagamento confirmado!</div>
@@ -2754,7 +2786,7 @@ function showWaToast(orderId) {
 const TRACK_KEY = 'ef_track_v1';
 let _pendingOrderName  = '';
 let _pendingOrderPhone = '';
-let _pixAtivo = true; // carregado do servidor
+let _pixConfig = { pix_ativo: false, mp_configurado: false, pix_key_manual: '', pix_key_manual_tipo: '', pix_key_manual_banco: '' };
 
 function salvarTrackerLocal(id, items, client) {
   try { localStorage.setItem(TRACK_KEY, JSON.stringify({orderId:id,items,client,tenantId:_tenantId,ts:Date.now()})); } catch(e) {}
@@ -2775,11 +2807,10 @@ async function carregarConfigPix() {
     if (!_tenantId) return;
     const r = await fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } });
     if (r.ok) {
-      const d = await r.json();
-      _pixAtivo = d.pix_ativo !== false;
-      // Esconde ou mostra opção PIX no grid de pagamento
+      _pixConfig = await r.json();
+      // Mostra/esconde opção PIX no grid
       const pixOpt = document.querySelector('.pay-opt[data-pay="pix"]');
-      if (pixOpt) pixOpt.style.display = _pixAtivo ? '' : 'none';
+      if (pixOpt) pixOpt.style.display = (_pixConfig.pix_ativo || _pixConfig.pix_key_manual) ? '' : 'none';
     }
   } catch(e) {}
 }
@@ -2810,9 +2841,15 @@ async function submitOrder() {
   }
 
   if (selectedPay === 'pix') {
-    if (!_pixAtivo) { toast('❌','Pagamento PIX indisponível no momento. Escolha outra forma.'); return; }
     _pendingOrderAddr = addr; _pendingOrderName = name; _pendingOrderPhone = phone;
-    await abrirPixModal(); return;
+    // Decide modo: QR Code (MP) ou chave manual
+    if (_pixConfig.pix_ativo && _pixConfig.mp_configurado) {
+      await abrirPixModal(); return;
+    } else if (_pixConfig.pix_key_manual) {
+      abrirPixManual(); return;
+    } else {
+      toast('❌','PIX indisponível. Escolha outra forma.'); return;
+    }
   }
 
   if (selectedPay === 'dinheiro') {
@@ -2822,12 +2859,42 @@ async function submitOrder() {
   await _doSubmitOrder(addr, null);
 }
 
-// ═══ PIX — QR Code + polling direto ═══
+// ═══ PIX MANUAL — chave do gestor ═══
+function abrirPixManual() {
+  const cfg = _pixConfig;
+  document.getElementById('pix-body-waiting').style.display = 'none';
+  document.getElementById('pix-body-manual').style.display  = '';
+  document.getElementById('pix-body-ok').style.display      = 'none';
+  document.getElementById('pix-valor-manual').textContent   = 'R$ ' + fmt(grandTotal());
+  document.getElementById('pix-manual-key-display').textContent = cfg.pix_key_manual || '—';
+  const tipoLabel = {cpf:'CPF',cnpj:'CNPJ',email:'E-mail',telefone:'Telefone',aleatoria:'Chave aleatória'}[cfg.pix_key_manual_tipo] || cfg.pix_key_manual_tipo || '';
+  document.getElementById('pix-manual-meta').textContent = [tipoLabel, cfg.pix_key_manual_banco].filter(Boolean).join(' · ') || '';
+  document.getElementById('pix-overlay').classList.add('on');
+}
+
+function pixManualCopiar() {
+  const key = _pixConfig.pix_key_manual;
+  if (!key) return;
+  navigator.clipboard.writeText(key).then(() => {
+    const btn = document.getElementById('pix-manual-copy-btn');
+    if (btn) { btn.textContent = '✅ Copiada!'; setTimeout(() => btn.textContent = '📋 Copiar chave', 2000); }
+    toast('✅', 'Chave PIX copiada!');
+  }).catch(() => toast('❌','Não foi possível copiar'));
+}
+
+async function pixManualConfirmar() {
+  document.getElementById('pix-overlay').classList.remove('on');
+  // Envia pedido com pag='pix' (manual, sem QR Code)
+  await _doSubmitOrder(_pendingOrderAddr, null, 'pix_manual');
+}
+
+// ═══ PIX QR Code (MP) ═══
 let _pixMpId='', _pixPollT=null, _pixExpT=null, _pixDone=false, _pixAddr='';
 
 async function abrirPixModal() {
   _pixDone=false; _pixAddr=_pendingOrderAddr;
   document.getElementById('pix-body-waiting').style.display='';
+  document.getElementById('pix-body-manual').style.display='none';
   document.getElementById('pix-body-ok').style.display='none';
   document.getElementById('pix-qr-wrap').innerHTML='<span class="pix-loading">⏳</span>';
   document.getElementById('pix-copy-wrap').style.display='none';
@@ -2843,11 +2910,15 @@ async function abrirPixModal() {
       body:JSON.stringify({valor:grandTotal(),client:_pendingOrderName,email:(phoneNum||'cliente')+'@pedido.com',order_id:'pend-'+Date.now()})
     });
     const d=await r.json();
-    if(!r.ok||!d.ok){toast('❌',d.error||'Erro ao gerar PIX. Tente outra forma.');pixCancelar();return;}
+    if(!r.ok||!d.ok){
+      // Fallback para PIX manual se houver chave cadastrada
+      if(_pixConfig.pix_key_manual){ toast('⚠️','QR Code indisponível. Usando chave PIX manual.'); pixCancelar(); abrirPixManual(); return; }
+      toast('❌',d.error||'Erro ao gerar PIX. Tente outra forma.'); pixCancelar(); return;
+    }
     _pixMpId=String(d.mp_payment_id);
     const qrEl=document.getElementById('pix-qr-wrap');
     if(d.qr_code_base64){qrEl.innerHTML='<img src="data:image/png;base64,'+d.qr_code_base64+'" alt="QR PIX">';}
-    else{qrEl.innerHTML='<div style="font-size:11px;color:var(--muted);padding:10px">Sem QR Code.<br>Use o código abaixo.</div>';}
+    else{qrEl.innerHTML='<div style="font-size:11px;color:var(--muted);padding:10px">Sem QR.<br>Use o código abaixo.</div>';}
     if(d.qr_code){document.getElementById('pix-code-input').value=d.qr_code;document.getElementById('pix-copy-wrap').style.display='';}
     document.getElementById('pix-status-txt').textContent='Aguardando pagamento…';
     _pixPollT=setInterval(pixPoll,4000);
@@ -2867,10 +2938,7 @@ async function pixPoll() {
       document.getElementById('pix-status-txt').textContent='✅ Pagamento confirmado!';
       document.getElementById('pix-body-waiting').style.display='none';
       document.getElementById('pix-body-ok').style.display='flex';
-      setTimeout(async()=>{
-        document.getElementById('pix-overlay').classList.remove('on');
-        await _doSubmitOrder(_pixAddr,null,'pix_mp',_pixMpId);
-      },1500);
+      setTimeout(async()=>{document.getElementById('pix-overlay').classList.remove('on');await _doSubmitOrder(_pixAddr,null,'pix_mp',_pixMpId);},1500);
     }
   }catch(e){}
 }

@@ -264,23 +264,27 @@ const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_
 let _dirty = false
 function marcarDirty() { _dirty = true }
 
-// ── Sessões Admin (token em memória, válido 8h) ───────
-const _adminSessions = new Map()
+// ── Sessões Admin (SQLite, sobrevivem a restarts) ─────
+db.exec(`CREATE TABLE IF NOT EXISTS admin_sessions (
+  token TEXT PRIMARY KEY,
+  user_id TEXT, nome TEXT, email TEXT, role TEXT,
+  ts INTEGER NOT NULL
+)`)
 const ADMIN_SESSION_TTL = 8 * 60 * 60 * 1000
-
 function criarSessaoAdmin(user) {
   const token = crypto.randomBytes(32).toString('hex')
-  _adminSessions.set(token, { ...user, ts: Date.now() })
+  const ts = Date.now()
+  db.prepare('DELETE FROM admin_sessions WHERE ts < ?').run(ts - ADMIN_SESSION_TTL)
+  db.prepare('INSERT OR REPLACE INTO admin_sessions (token,user_id,nome,email,role,ts) VALUES (?,?,?,?,?,?)').run(token,user.id,user.nome,user.email,user.role,ts)
   return token
 }
-
 function validarSessaoAdmin(req) {
   const auth = req.headers['authorization'] || ''
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
   if (!token) return null
-  const s = _adminSessions.get(token)
+  const s = db.prepare('SELECT * FROM admin_sessions WHERE token=?').get(token)
   if (!s) return null
-  if (Date.now() - s.ts > ADMIN_SESSION_TTL) { _adminSessions.delete(token); return null }
+  if (Date.now() - s.ts > ADMIN_SESSION_TTL) { db.prepare('DELETE FROM admin_sessions WHERE token=?').run(token); return null }
   return s
 }
 
@@ -369,6 +373,7 @@ const TABLE_CHANNELS = {
   menu_items:   (tid) => [`menu-rt:${tid}`],
   categories:   (tid) => [`cats-rt:${tid}`, `menu-rt:${tid}`],
   garcons:      (tid) => [`orders-rt:${tid}`],
+  saques:       (tid) => [`saques-rt:${tid}`, `saques-admin`],
 }
 const GARCOM_PREFIXES = ['garcom-mesas-', 'garcom-orders-']
 
@@ -714,7 +719,7 @@ async function handleOrderStatus(req, res) {
           const cfg   = db.prepare("SELECT evo_instance,evo_automacoes,store_name,order_num_offset FROM store_config WHERE tenant_id=?").get(tid)
           const inst  = cfg?.evo_instance||EVO_INST
           const auto  = jsonParse(cfg?.evo_automacoes)||{}
-          const offset = parseInt(cfg?.order_num_offset)||0
+          const offset= parseInt(cfg?.order_num_offset)||0
           const nome  = order.client||'Cliente', idStr=String(Math.max(1,order.id-offset)).padStart(3,'0')
           const items = (()=>{try{return(JSON.parse(order.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}catch{return''}})()
           const isDelivery = (order.addr||'').includes('Mesa')?'🪑 Mesa':(order.addr||'').toLowerCase().includes('balc')?'🏪 Balcão':'🛵 Entrega'
@@ -1180,14 +1185,81 @@ const server = http.createServer(async (req,res) => {
     return
   }
 
-  // ── Consulta status de um pagamento PIX ──────────────
+  // ── Consulta status PIX (sempre consulta MP direto) ──
   if(req.method==='GET'&&upath==='/api/pix/status'){
-    const tid=req.headers['x-tenant-id'];if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
-    const mpId=params.get('mp_payment_id')
+    const tid=req.headers['x-tenant-id']||''
+    const mpId=params.get('mp_payment_id')||''
     if(!mpId){send(res,400,{error:'mp_payment_id obrigatório'});return}
-    const row=db.prepare('SELECT * FROM pagamentos_pix WHERE mp_payment_id=? AND tenant_id=?').get(mpId,tid)
-    if(!row){send(res,404,{error:'Pagamento não encontrado'});return}
-    send(res,200,row);return
+    let mpToken=MP_TOKEN
+    try{const c=db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get();const g=c&&c.ia_config?JSON.parse(c.ia_config):{};if(g.mp_token)mpToken=g.mp_token}catch(e2){}
+    log('🔍','PIX poll mp_id='+mpId+' token='+(mpToken?'OK':'VAZIO'))
+    if(!mpToken){send(res,400,{error:'Token MP não configurado'});return}
+    try{
+      const r=await fetch('https://api.mercadopago.com/v1/payments/'+mpId,{headers:{'Authorization':'Bearer '+mpToken}})
+      const pd=await r.json()
+      log('📡','MP status='+pd.status+' mp_id='+mpId)
+      if(!r.ok){const fb=db.prepare('SELECT status FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId));send(res,200,{status:fb?fb.status:'pendente'});return}
+      const novoStatus=pd.status==='approved'?'aprovado':pd.status==='rejected'?'rejeitado':pd.status==='cancelled'?'cancelado':'pendente'
+      const rowAtual=db.prepare('SELECT status,valor,tenant_id FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
+      if(rowAtual&&rowAtual.status!==novoStatus){
+        db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=? WHERE mp_payment_id=?').run(novoStatus,pd.date_approved||null,String(mpId))
+        if(novoStatus==='aprovado'){log('✅','PIX APROVADO: R$'+rowAtual.valor+' tenant='+(rowAtual.tenant_id||tid));marcarDirty()}
+      }
+      send(res,200,{status:novoStatus,mp_status:pd.status});return
+    }catch(e){log('❌','PIX poll erro: '+e.message);send(res,500,{error:e.message});return}
+  }
+
+  // ── Vincula PIX ao pedido real ────────────────────────
+  if(req.method==='POST'&&upath==='/api/pix/vincular'){
+    const tid=req.headers['x-tenant-id']||''
+    const body=await readBody(req)
+    const mpId=String(body.mp_payment_id||''),ordId=parseInt(body.order_id)||0
+    if(!mpId||!ordId){send(res,400,{error:'obrigatórios'});return}
+    db.prepare('UPDATE pagamentos_pix SET order_id=? WHERE mp_payment_id=?').run(ordId,mpId)
+    db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=?").run(ordId)
+    marcarDirty()
+    log('🔗','PIX vinculado: mp='+mpId+' order='+ordId)
+    send(res,200,{ok:true});return
+  }
+
+  // ── Config PIX do tenant (lê pix_ativo + pix_key_manual) ──
+  if(req.method==='GET'&&upath==='/api/pix/config'){
+    const tid=req.headers['x-tenant-id']||params.get('tenant_id')||''
+    if(!tid){send(res,400,{error:'tenant_id obrigatório'});return}
+    const cfg=db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+    const ia=cfg&&cfg.ia_config?JSON.parse(cfg.ia_config):{}
+    const gCfg=db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+    const gIa=gCfg&&gCfg.ia_config?JSON.parse(gCfg.ia_config):{}
+    const mpConfigurado=!!(gIa.mp_token||MP_TOKEN)
+    const pixAtivo=ia.pix_ativo!==false
+    send(res,200,{
+      pix_ativo: pixAtivo && mpConfigurado,
+      pix_ativo_gestor: pixAtivo,
+      mp_configurado: mpConfigurado,
+      pix_key_manual: ia.pix_key_manual||'',
+      pix_key_manual_tipo: ia.pix_key_manual_tipo||'',
+      pix_key_manual_banco: ia.pix_key_manual_banco||''
+    });return
+  }
+
+  // ── Gestor salva config PIX (ativar/desativar + chave manual) ──
+  if(req.method==='POST'&&upath==='/api/pix/gestor-config'){
+    const tid=req.headers['x-tenant-id']||''
+    if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
+    const body=await readBody(req)
+    try{
+      const cfg=db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+      const ia=cfg&&cfg.ia_config?JSON.parse(cfg.ia_config):{}
+      if(body.pix_ativo!==undefined) ia.pix_ativo=body.pix_ativo!==false
+      if(body.pix_key_manual!==undefined) ia.pix_key_manual=body.pix_key_manual||''
+      if(body.pix_key_manual_tipo!==undefined) ia.pix_key_manual_tipo=body.pix_key_manual_tipo||''
+      if(body.pix_key_manual_banco!==undefined) ia.pix_key_manual_banco=body.pix_key_manual_banco||''
+      db.prepare('INSERT INTO store_config (tenant_id,ia_config) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config').run(tid,JSON.stringify(ia))
+      marcarDirty()
+      log('⚙️','PIX config salva tenant='+tid+' ativo='+ia.pix_ativo)
+      send(res,200,{ok:true,pix_ativo:ia.pix_ativo,pix_key_manual:ia.pix_key_manual||''})
+    }catch(e){send(res,500,{error:e.message})}
+    return
   }
 
   // ── Webhook do Mercado Pago ───────────────────────────
@@ -1261,10 +1333,12 @@ const server = http.createServer(async (req,res) => {
     const numPag=db.prepare("SELECT COUNT(*) as c,COALESCE(SUM(taxa),0) as t FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)
     const tenant=db.prepare('SELECT nome FROM tenants WHERE id=?').get(tid)
 
-    db.prepare(`INSERT INTO saques (tenant_id,tenant_nome,valor_solicitado,num_pagamentos,taxa_total,valor_liquido,pix_key,pix_key_tipo)
+    const saqInfo=db.prepare(`INSERT INTO saques (tenant_id,tenant_nome,valor_solicitado,num_pagamentos,taxa_total,valor_liquido,pix_key,pix_key_tipo)
       VALUES (?,?,?,?,?,?,?,?)`)
       .run(tid,tenant?.nome||tid,saldo,numPag?.c||0,numPag?.t||0,saldo,pix_key,pix_key_tipo)
-
+    const saqNovo=db.prepare('SELECT * FROM saques WHERE id=?').get(saqInfo.lastInsertRowid)
+    sseBroadcast('saques-admin','saques:INSERT',saqNovo)
+    sseBroadcast(`saques-rt:${tid}`,'saques:INSERT',saqNovo)
     marcarDirty()
     log('💰',`Saque solicitado: R$${saldo.toFixed(2)} tenant=${tid}`)
     send(res,200,{ok:true,valor:saldo,pix_key});return
@@ -1293,6 +1367,8 @@ const server = http.createServer(async (req,res) => {
     if(!id||!status){send(res,400,{error:'id e status obrigatórios'});return}
     const paid_at=status==='pago'?new Date().toISOString():null
     db.prepare('UPDATE saques SET status=?,obs_admin=?,paid_at=COALESCE(?,paid_at) WHERE id=?').run(status,obs_admin||null,paid_at,id)
+    const saqAtual=db.prepare('SELECT * FROM saques WHERE id=?').get(id)
+    if(saqAtual){sseBroadcast(`saques-rt:${saqAtual.tenant_id}`,'saques:UPDATE',saqAtual);sseBroadcast('saques-admin','saques:UPDATE',saqAtual)}
     marcarDirty()
     log('💰',`Saque #${id} → ${status}`)
     send(res,200,{ok:true});return
@@ -1311,6 +1387,24 @@ const server = http.createServer(async (req,res) => {
       db.prepare("INSERT INTO store_config (tenant_id,ia_config) VALUES ('_global',?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config").run(JSON.stringify(cur))
       marcarDirty()
       send(res,200,{ok:true})
+    }catch(e){send(res,500,{error:e.message})}
+    return
+  }
+
+  // ── Admin: toggle PIX por tenant ─────────────────────
+  if(req.method==='POST'&&upath==='/api/admin/pix-toggle'){
+    if(!validarSessaoAdmin(req)){send(res,401,{error:'Não autorizado'});return}
+    const body=await readBody(req)
+    const{tenant_id,pix_ativo}=body
+    if(!tenant_id){send(res,400,{error:'tenant_id obrigatório'});return}
+    try{
+      const cfg=db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tenant_id)
+      const cur=cfg&&cfg.ia_config?JSON.parse(cfg.ia_config):{}
+      cur.pix_ativo=pix_ativo!==false
+      db.prepare('INSERT INTO store_config (tenant_id,ia_config) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config').run(tenant_id,JSON.stringify(cur))
+      marcarDirty()
+      log('⚙️','Admin PIX '+(pix_ativo?'ativado':'desativado')+' tenant='+tenant_id)
+      send(res,200,{ok:true,pix_ativo:cur.pix_ativo})
     }catch(e){send(res,500,{error:e.message})}
     return
   }
@@ -1383,7 +1477,7 @@ const server = http.createServer(async (req,res) => {
     return
   }
 
-  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/mp-config'])
+  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return

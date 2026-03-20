@@ -1039,7 +1039,7 @@ function nav(id){
   if(id==='impressao') renderImpressao();
   if(id==='caixa') _renderCaixaTela();
   if(id==='configuracoes') _renderConfiguracoes();
-  if(id==='saques') { carregarCarteira(); conectarSaquesSSE(); }
+  if(id==='saques') { carregarCarteira(); conectarSaquesSSE(); carregarConfigPixGestor(); }
   if(id==='taxa') renderTaxaPage();
   if(id==='clientes') renderClientesPage();
   if(id==='meu-plano') renderMeuPlano();
@@ -6924,6 +6924,7 @@ async function baixarBackupCompleto() {
 const _fmtR = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
 
 let _saquesSSE = null;
+let _pixAtivoGestor = true;
 
 function conectarSaquesSSE() {
   if (_saquesSSE) return;
@@ -6935,15 +6936,85 @@ function conectarSaquesSSE() {
     try {
       const d = JSON.parse(e.data);
       carregarCarteira();
-      if (d.status === 'pago') sbToast('ok', '✅ Seu saque foi pago! Verifique seu PIX.');
-      else if (d.status === 'aprovado') sbToast('ok', '✅ Saque aprovado! O pagamento está em processamento.');
+      if (d.status === 'pago')      sbToast('ok', '✅ Seu saque foi pago! Verifique seu PIX.');
+      else if (d.status === 'aprovado')  sbToast('ok', '✅ Saque aprovado! Pagamento em processamento.');
       else if (d.status === 'cancelado') sbToast('err', '❌ Saque cancelado. Entre em contato com o suporte.');
     } catch(ex) { carregarCarteira(); }
   });
-  _saquesSSE.onerror = () => {
-    _saquesSSE.close(); _saquesSSE = null;
-    setTimeout(conectarSaquesSSE, 5000);
-  };
+  _saquesSSE.onerror = () => { _saquesSSE.close(); _saquesSSE = null; setTimeout(conectarSaquesSSE, 5000); };
+}
+
+async function carregarConfigPixGestor() {
+  const tid = _sessao?.tenant_id;
+  if (!tid) return;
+  try {
+    const r = await fetch('/api/pix/config', { headers: { 'x-tenant-id': tid } });
+    if (!r.ok) return;
+    const d = await r.json();
+    _pixAtivoGestor = d.pix_ativo_gestor !== false;
+    const btn = document.getElementById('btn-pix-toggle');
+    const statusEl = document.getElementById('pix-config-status');
+    const manualWrap = document.getElementById('pix-manual-wrap');
+    if (btn) {
+      btn.textContent = _pixAtivoGestor ? '✅ Ativado' : '❌ Desativado';
+      btn.className = 'btn ' + (_pixAtivoGestor ? 'bp' : 'bd');
+    }
+    if (statusEl) {
+      if (!d.mp_configurado) statusEl.innerHTML = '<span style="color:var(--danger)">⚠️ Token MP não configurado pelo administrador</span>';
+      else statusEl.innerHTML = _pixAtivoGestor
+        ? '<span style="color:var(--success)">✅ QR Code via Mercado Pago ativo</span>'
+        : '<span style="color:var(--orange)">⚡ QR Code desativado — usando chave PIX manual</span>';
+    }
+    if (manualWrap) manualWrap.style.display = _pixAtivoGestor ? 'none' : '';
+    // Preenche campos da chave manual
+    if (!_pixAtivoGestor) {
+      const keyEl = document.getElementById('pix-manual-key');
+      const tipoEl = document.getElementById('pix-manual-tipo');
+      const bancoEl = document.getElementById('pix-manual-banco');
+      if (keyEl)  keyEl.value  = d.pix_key_manual || '';
+      if (tipoEl && d.pix_key_manual_tipo) tipoEl.value = d.pix_key_manual_tipo;
+      if (bancoEl) bancoEl.value = d.pix_key_manual_banco || '';
+    }
+  } catch(e) {}
+}
+
+async function togglePixGestor() {
+  const tid = _sessao?.tenant_id;
+  if (!tid) return;
+  const btn = document.getElementById('btn-pix-toggle');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/pix/gestor-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify({ pix_ativo: !_pixAtivoGestor })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    _pixAtivoGestor = d.pix_ativo;
+    sbToast('ok', _pixAtivoGestor ? '⚡ PIX QR Code ativado!' : '⚡ PIX QR Code desativado!');
+    await carregarConfigPixGestor();
+  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
+  finally { if (btn) btn.disabled = false; }
+}
+
+async function salvarPixManual() {
+  const tid = _sessao?.tenant_id;
+  if (!tid) return;
+  const key   = document.getElementById('pix-manual-key')?.value.trim() || '';
+  const tipo  = document.getElementById('pix-manual-tipo')?.value || 'telefone';
+  const banco = document.getElementById('pix-manual-banco')?.value.trim() || '';
+  if (!key) { sbToast('err', 'Informe a chave PIX'); return; }
+  try {
+    const r = await fetch('/api/pix/gestor-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify({ pix_key_manual: key, pix_key_manual_tipo: tipo, pix_key_manual_banco: banco })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    sbToast('ok', '✅ Chave PIX manual salva!');
+  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
 }
 
 async function carregarCarteira() {
@@ -7033,7 +7104,7 @@ async function solicitarSaque() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erro');
-    sbToast('ok', `✅ Saque de ${_fmtR(data.valor)} solicitado! O pagamento é realizado em até 24 horas úteis.`);
+    sbToast('ok', `✅ Saque de ${_fmtR(data.valor)} solicitado! Pagamento em até 24 horas úteis.`);
     await carregarCarteira();
   } catch(e) {
     sbToast('err', 'Erro: ' + e.message);
