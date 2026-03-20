@@ -6569,7 +6569,7 @@ const MODO_CLARO = {
   '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
   '--pink':'#db2777','--orange':'#ea580c',
   '--text':'#0a1929','--muted':'rgba(10,25,41,.45)','--muted2':'rgba(10,25,41,.65)',
-  '--sidebar-bg':'#ffffff','--topnav-bg':'#ffffff','--sfoot-bg':'rgba(240,246,255,.8)'
+  '--sidebar-bg':'#1a2744','--topnav-bg':'rgba(10,10,10,.92)','--sfoot-bg':'rgba(16,22,40,.8)'
 };
 
 // Compatibilidade com código legado que referencia TEMAS_PRONTOS
@@ -6604,15 +6604,20 @@ function _aplicarOverrideClaro(vars) {
   style.textContent = `
     body,.app{background:var(--bg)!important;color:${text}!important}
     .main,.page{background:var(--bg)!important;color:${text}!important}
-    .topnav{background:${tn}!important;border-bottom:1px solid ${bord}!important;box-shadow:0 1px 4px rgba(0,0,0,.08)!important}
-    .topnav *{color:${text}!important}
-    .sidebar{background:${sb}!important;border-right:1px solid ${bord}!important;box-shadow:2px 0 8px rgba(0,0,0,.06)!important}
+    .topnav{background:var(--topnav-bg)!important;border-bottom:1px solid rgba(255,255,255,.06)!important;box-shadow:0 1px 8px rgba(0,0,0,.3)!important}
+    .topnav *{color:#f1f5f9!important}
+    .topnav .tnav-pill{color:#f1f5f9!important;border-color:rgba(255,255,255,.15)!important;background:rgba(255,255,255,.07)!important}
+    .sidebar{background:var(--sidebar-bg)!important;border-right:1px solid rgba(255,255,255,.06)!important;box-shadow:2px 0 20px rgba(0,0,0,.4)!important}
     .sfoot{background:var(--sfoot-bg)!important}
-    .si{color:${muted}!important}
-    .si:hover{background:rgba(0,0,0,.05)!important;color:${text}!important}
-    .si.on{background:rgba(26,111,212,.1)!important;color:${acc}!important}
-    .shead{color:${muted}!important}
-    .urow *{color:${text}!important}
+    .si{color:rgba(255,255,255,.55)!important}
+    .si:hover{background:rgba(255,255,255,.07)!important;color:rgba(255,255,255,.9)!important}
+    .si.on{background:rgba(26,111,212,.25)!important;color:#60a5fa!important}
+    .si.on::before{background:#60a5fa!important}
+    .shead{color:rgba(255,255,255,.3)!important;border-color:rgba(255,255,255,.06)!important}
+    .urow *{color:rgba(255,255,255,.7)!important}
+    .sidebar-search > div{background:rgba(255,255,255,.07)!important;border-color:rgba(255,255,255,.1)!important}
+    .sidebar-search input{color:#f1f5f9!important}
+    .sidebar-search input::placeholder{color:rgba(255,255,255,.35)!important}
     .ph .pt,.ph h1,.ph h2{color:${text}!important}
     .ph .ps{color:${muted}!important}
     .card,.sc,.sbox,.tw{background:${sur}!important;border-color:${bord}!important;color:${text}!important}
