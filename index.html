@@ -914,52 +914,24 @@ input,textarea{font-family:inherit}
 /* ═══════════════════════════════════════
    MODAL PIX — QR Code
 ═══════════════════════════════════════ */
-.pix-overlay{
-  display:none;position:fixed;inset:0;z-index:950;
-  background:rgba(0,0,0,.88);backdrop-filter:blur(8px);
-  align-items:flex-end;justify-content:center;
-}
+.pix-overlay{display:none;position:fixed;inset:0;z-index:950;background:rgba(0,0,0,.88);backdrop-filter:blur(8px);align-items:flex-end;justify-content:center}
 .pix-overlay.on{display:flex}
-.pix-sheet{
-  background:var(--s1);border-radius:24px 24px 0 0;
-  width:100%;max-width:520px;padding:0 24px 44px;
-  animation:sheetUp .32s cubic-bezier(.34,1.56,.64,1);
-  text-align:center;
-}
+.pix-sheet{background:var(--s1);border-radius:24px 24px 0 0;width:100%;max-width:520px;padding:0 24px 44px;animation:sheetUp .32s cubic-bezier(.34,1.56,.64,1);text-align:center}
 .pix-handle{width:36px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);margin:14px auto 20px}
 .pix-icon{font-size:48px;margin-bottom:10px}
 .pix-title{font-family:'Fraunces',serif;font-size:22px;font-weight:900;margin-bottom:6px}
 .pix-sub{font-size:13px;color:var(--muted2);margin-bottom:20px;line-height:1.5}
 .pix-valor{font-family:'Fraunces',serif;font-size:32px;font-weight:900;color:var(--green);margin-bottom:18px}
-.pix-qr-wrap{
-  width:200px;height:200px;margin:0 auto 16px;
-  background:#fff;border-radius:16px;padding:8px;
-  display:flex;align-items:center;justify-content:center;
-  box-shadow:0 8px 32px rgba(0,0,0,.4);
-}
+.pix-qr-wrap{width:200px;height:200px;margin:0 auto 16px;background:#fff;border-radius:16px;padding:8px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 32px rgba(0,0,0,.4)}
 .pix-qr-wrap img{width:100%;height:100%;border-radius:8px;object-fit:contain}
 .pix-qr-loading{font-size:36px;display:inline-block;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .pix-copy-wrap{display:flex;gap:8px;margin-bottom:18px}
-.pix-code-input{
-  flex:1;background:var(--s2);border:1px solid var(--border);border-radius:10px;
-  padding:10px 12px;color:var(--muted2);font-size:11px;outline:none;
-  font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:default;
-}
-.pix-copy-btn{
-  padding:10px 16px;background:var(--s2);border:1.5px solid var(--border);
-  border-radius:10px;color:var(--accent);font-weight:700;font-size:12px;
-  white-space:nowrap;cursor:pointer;transition:all .15s;flex-shrink:0;font-family:'DM Sans',sans-serif;
-}
+.pix-code-input{flex:1;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--muted2);font-size:11px;outline:none;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:default}
+.pix-copy-btn{padding:10px 16px;background:var(--s2);border:1.5px solid var(--border);border-radius:10px;color:var(--accent);font-weight:700;font-size:12px;white-space:nowrap;cursor:pointer;transition:all .15s;flex-shrink:0;font-family:'DM Sans',sans-serif}
 .pix-copy-btn:hover{border-color:var(--accent);background:rgba(249,115,22,.08)}
-.pix-status-bar{
-  display:flex;align-items:center;justify-content:center;gap:8px;
-  font-size:13px;color:var(--muted2);margin-bottom:16px;
-}
-.pix-status-dot{
-  width:8px;height:8px;border-radius:50%;background:var(--amber);
-  animation:pulse 1.2s ease-in-out infinite;flex-shrink:0;
-}
+.pix-status-bar{display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;color:var(--muted2);margin-bottom:16px}
+.pix-status-dot{width:8px;height:8px;border-radius:50%;background:var(--amber);animation:pulse 1.2s ease-in-out infinite;flex-shrink:0}
 .pix-status-dot.aprovado{background:var(--green);animation:none}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
 .pix-cancel-btn{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:4px}
@@ -1404,35 +1376,22 @@ input,textarea{font-family:inherit}
 <div class="pix-overlay" id="pix-overlay">
   <div class="pix-sheet">
     <div class="pix-handle"></div>
-
-    <!-- Estado: gerando / aguardando -->
     <div id="pix-waiting">
       <div class="pix-icon">⚡</div>
       <div class="pix-title">Pagar com PIX</div>
-      <div class="pix-sub">Escaneie o QR Code abaixo ou copie o código PIX.<br>O pedido é enviado automaticamente após o pagamento.</div>
+      <div class="pix-sub">Escaneie o QR Code ou copie o código PIX.<br>O pedido é enviado automaticamente após o pagamento.</div>
       <div class="pix-valor" id="pix-valor">R$ 0,00</div>
-
-      <!-- QR Code -->
-      <div class="pix-qr-wrap" id="pix-qr-wrap">
-        <span class="pix-qr-loading">⏳</span>
-      </div>
-
-      <!-- Copia e cola -->
+      <div class="pix-qr-wrap" id="pix-qr-wrap"><span class="pix-qr-loading">⏳</span></div>
       <div class="pix-copy-wrap" id="pix-copy-wrap" style="display:none">
         <input class="pix-code-input" id="pix-code-input" readonly>
         <button class="pix-copy-btn" onclick="pixCopiarCodigo()">📋 Copiar</button>
       </div>
-
-      <!-- Status polling -->
       <div class="pix-status-bar">
         <div class="pix-status-dot" id="pix-status-dot"></div>
         <span id="pix-status-txt">Aguardando pagamento…</span>
       </div>
-
       <button class="pix-cancel-btn" onclick="pixCancelar()">Cancelar e escolher outra forma de pagamento</button>
     </div>
-
-    <!-- Estado: aprovado -->
     <div class="pix-approved-wrap" id="pix-approved">
       <div class="pix-approved-icon">✅</div>
       <div class="pix-approved-title">Pagamento aprovado!</div>
@@ -2823,6 +2782,7 @@ async function submitOrder() {
   // PIX → abre modal QR Code antes de enviar pedido
   if (selectedPay === 'pix') {
     _pendingOrderAddr = addr;
+    _pendingOrderName = name;
     await abrirPixModal(name);
     return;
   }
@@ -2838,19 +2798,44 @@ async function submitOrder() {
 }
 
 // ══════════════════════════════════════════
-//  PIX — QR CODE + POLLING
+//  PIX — QR CODE + POLLING DIRETO NA MP
 // ══════════════════════════════════════════
-let _pixMpId       = null;
-let _pixPollTimer  = null;
-let _pixTimeout    = null;
-let _pixAddr       = '';
-let _pixAprovado   = false;
+let _pixMpId      = null;
+let _pixPollTimer = null;
+let _pixTimeout   = null;
+let _pixAddr      = '';
+let _pixAprovado  = false;
+let _pendingOrderName = '';
+
+const TRACK_KEY = 'estima_track'; // localStorage — persiste tracker sem login
+
+function salvarTrackerLocal(orderId, items, client) {
+  try {
+    localStorage.setItem(TRACK_KEY, JSON.stringify({
+      orderId, items, client,
+      tenantId: _tenantId,
+      ts: Date.now()
+    }));
+  } catch(e) {}
+}
+
+function restaurarTrackerLocal() {
+  try {
+    const raw = localStorage.getItem(TRACK_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    // Só restaura se for do mesmo tenant e tiver menos de 4 horas
+    if (!d.orderId || d.tenantId !== _tenantId) return;
+    if (Date.now() - d.ts > 4 * 60 * 60 * 1000) { localStorage.removeItem(TRACK_KEY); return; }
+    startTracking(d.orderId, d.items || [], d.client || '');
+  } catch(e) {}
+}
 
 async function abrirPixModal(clientName) {
   _pixAprovado = false;
   _pixAddr     = _pendingOrderAddr;
 
-  // Reseta o modal
+  // Reseta visual
   document.getElementById('pix-waiting').style.display   = '';
   document.getElementById('pix-approved').style.display  = 'none';
   document.getElementById('pix-qr-wrap').innerHTML       = '<span class="pix-qr-loading">⏳</span>';
@@ -2861,14 +2846,14 @@ async function abrirPixModal(clientName) {
   document.getElementById('pix-overlay').classList.add('on');
 
   try {
-    const email = (document.getElementById('f-phone')?.value || '') + '@pedido.com';
+    const phone = document.getElementById('f-phone')?.value || '';
     const res = await fetch('/api/pix/criar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
       body: JSON.stringify({
         valor:    grandTotal(),
         client:   clientName,
-        email:    email,
+        email:    phone.replace(/\D/g,'') + '@pedido.com',
         order_id: 'pendente-' + Date.now()
       })
     });
@@ -2885,12 +2870,12 @@ async function abrirPixModal(clientName) {
     // Mostra QR Code
     const qrWrap = document.getElementById('pix-qr-wrap');
     if (d.qr_code_base64) {
-      qrWrap.innerHTML = `<img src="data:image/png;base64,${d.qr_code_base64}" alt="QR Code PIX">`;
+      qrWrap.innerHTML = '<img src="data:image/png;base64,' + d.qr_code_base64 + '" alt="QR Code PIX">';
     } else {
-      qrWrap.innerHTML = '<span style="font-size:13px;color:var(--muted);padding:10px">QR Code indisponível.<br>Use o código abaixo.</span>';
+      qrWrap.innerHTML = '<span style="font-size:12px;color:var(--muted);padding:10px">Use o código abaixo para pagar.</span>';
     }
 
-    // Mostra código copia-e-cola
+    // Código copia-e-cola
     if (d.qr_code) {
       document.getElementById('pix-code-input').value    = d.qr_code;
       document.getElementById('pix-copy-wrap').style.display = '';
@@ -2898,10 +2883,10 @@ async function abrirPixModal(clientName) {
 
     document.getElementById('pix-status-txt').textContent = 'Aguardando pagamento…';
 
-    // Inicia polling
+    // Polling a cada 4s — consulta diretamente o MP via servidor
     _pixPollTimer = setInterval(pixVerificarStatus, 4000);
 
-    // Timeout de 10 minutos
+    // Timeout 10 minutos
     _pixTimeout = setTimeout(() => {
       pixPararPolling();
       document.getElementById('pix-status-txt').textContent = 'PIX expirado. Tente novamente.';
@@ -2918,7 +2903,7 @@ async function abrirPixModal(clientName) {
 async function pixVerificarStatus() {
   if (!_pixMpId || _pixAprovado) return;
   try {
-    const res = await fetch(`/api/pix/status?mp_payment_id=${_pixMpId}`, {
+    const res = await fetch('/api/pix/status?mp_payment_id=' + _pixMpId, {
       headers: { 'x-tenant-id': _tenantId }
     });
     if (!res.ok) return;
@@ -2928,13 +2913,13 @@ async function pixVerificarStatus() {
       _pixAprovado = true;
       pixPararPolling();
 
-      // Animação de aprovado
+      // Feedback visual
       document.getElementById('pix-status-dot').className   = 'pix-status-dot aprovado';
-      document.getElementById('pix-status-txt').textContent = 'Pagamento aprovado! ✅';
+      document.getElementById('pix-status-txt').textContent = '✅ Pagamento aprovado!';
       document.getElementById('pix-waiting').style.display  = 'none';
       document.getElementById('pix-approved').style.display = 'flex';
 
-      // Aguarda 1.5s e envia o pedido
+      // 1.5s e envia pedido com pag = pix_mp
       setTimeout(async () => {
         document.getElementById('pix-overlay').classList.remove('on');
         await _doSubmitOrder(_pixAddr, null, 'pix_mp');
@@ -2944,8 +2929,8 @@ async function pixVerificarStatus() {
 }
 
 function pixPararPolling() {
-  if (_pixPollTimer) { clearInterval(_pixPollTimer);  _pixPollTimer = null; }
-  if (_pixTimeout)   { clearTimeout(_pixTimeout);     _pixTimeout   = null; }
+  if (_pixPollTimer) { clearInterval(_pixPollTimer); _pixPollTimer = null; }
+  if (_pixTimeout)   { clearTimeout(_pixTimeout);    _pixTimeout   = null; }
 }
 
 function pixCancelar() {
@@ -3097,6 +3082,7 @@ async function _doSubmitOrder(addr, troco, pagOverride) {
     if (inv && !_customer) inv.style.display = 'flex';
 
     startTracking(order.id, items, name);
+    salvarTrackerLocal(order.id, items, name);
 
     // Toast WhatsApp (apenas premium) — aparece 1.5s após confirmação
     if (_tenantPlano === 'premium') {
@@ -3112,6 +3098,7 @@ async function _doSubmitOrder(addr, troco, pagOverride) {
 }
 
 function resetCart() {
+  try { localStorage.removeItem(TRACK_KEY); } catch(e) {}
   document.getElementById('success-screen').classList.remove('on');
   document.getElementById('cart-content').style.display = '';
   document.getElementById('cart-items').innerHTML = '';
@@ -3313,6 +3300,8 @@ async function submitRating() {
 })();
 
 init();
+// Restaura tracker de pedido anterior (funciona sem login)
+window.addEventListener('load', () => { setTimeout(restaurarTrackerLocal, 1200); });
 
 // Garante limpeza do campo de busca mesmo quando Chrome autofill ocorre após load
 document.addEventListener('DOMContentLoaded', clearSearchInput);
