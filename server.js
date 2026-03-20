@@ -1178,53 +1178,55 @@ const server = http.createServer(async (req,res) => {
     return
   }
 
-  // ── Consulta status de um pagamento PIX (polling direto MP) ─
+  // ── Consulta status PIX — consulta MP diretamente se pendente ──
   if(req.method==='GET'&&upath==='/api/pix/status'){
-    const tid=req.headers['x-tenant-id'];if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
-    const mpId=params.get('mp_payment_id')
-    if(!mpId){send(res,400,{error:'mp_payment_id obrigatório'});return}
+    const tid=req.headers['x-tenant-id']||''
+    const mpId=params.get('mp_payment_id')||''
+    if(!tid||!mpId){send(res,400,{error:'x-tenant-id e mp_payment_id obrigatórios'});return}
+    log('🔍','PIX status poll: mp_id='+mpId+' tenant='+tid.slice(0,8))
     const row=db.prepare('SELECT * FROM pagamentos_pix WHERE mp_payment_id=? AND tenant_id=?').get(mpId,tid)
-    if(!row){send(res,404,{error:'Pagamento não encontrado'});return}
-
-    // Se pendente → consulta MP direto (não depende de webhook)
+    if(!row){
+      // Tenta sem filtro de tenant (segurança: retorna só status)
+      const row2=db.prepare('SELECT status,valor FROM pagamentos_pix WHERE mp_payment_id=?').get(mpId)
+      if(!row2){send(res,404,{error:'Pagamento não encontrado'});return}
+      log('⚠️','PIX tenant mismatch: mp_id='+mpId)
+      send(res,200,row2);return
+    }
+    // Se pendente → consulta MP direto
     if(row.status==='pendente'){
       try{
         let mpToken=MP_TOKEN
-        try{
-          const cfgMp=db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
-          const g=cfgMp&&cfgMp.ia_config?JSON.parse(cfgMp.ia_config):{}
-          if(g.mp_token)mpToken=g.mp_token
-        }catch(e2){}
-        if(mpToken){
-          const r=await fetch('https://api.mercadopago.com/v1/payments/'+mpId,{headers:{'Authorization':'Bearer '+mpToken}})
-          if(r.ok){
-            const pd=await r.json()
-            const novoStatus=pd.status==='approved'?'aprovado':pd.status==='rejected'?'rejeitado':pd.status==='cancelled'?'cancelado':'pendente'
-            if(novoStatus!=='pendente'){
-              db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=? WHERE mp_payment_id=?')
-                .run(novoStatus,pd.date_approved||null,String(mpId))
-              if(novoStatus==='aprovado'){
-                log('✅','PIX aprovado (polling direto): R$'+row.valor+' tenant='+tid)
-                marcarDirty()
-              }
-              send(res,200,Object.assign({},row,{status:novoStatus}));return
+        try{const c=db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get();const g=c&&c.ia_config?JSON.parse(c.ia_config):{};if(g.mp_token)mpToken=g.mp_token}catch(e2){}
+        if(!mpToken){log('⚠️','PIX poll: token MP não configurado');send(res,200,row);return}
+        log('📡','Consultando MP para payment '+mpId)
+        const r=await fetch('https://api.mercadopago.com/v1/payments/'+mpId,{headers:{'Authorization':'Bearer '+mpToken}})
+        const pd=await r.json()
+        log('📡','MP respondeu status='+pd.status+' para '+mpId)
+        if(r.ok){
+          const novoStatus=pd.status==='approved'?'aprovado':pd.status==='rejected'?'rejeitado':pd.status==='cancelled'?'cancelado':'pendente'
+          if(novoStatus!=='pendente'){
+            db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=? WHERE mp_payment_id=?').run(novoStatus,pd.date_approved||null,String(mpId))
+            if(novoStatus==='aprovado'){
+              log('✅','PIX APROVADO via polling: R$'+row.valor+' tenant='+tid.slice(0,8))
+              marcarDirty()
             }
+            send(res,200,Object.assign({},row,{status:novoStatus}));return
           }
         }
-      }catch(e){log('PIX status poll erro:',e.message)}
+      }catch(e){log('❌','PIX status poll erro: '+e.message)}
     }
     send(res,200,row);return
   }
 
-  // ── Vincula mp_payment_id ao pedido real após aprovação ──
+  // ── Vincula PIX ao pedido real após criação ──────────
   if(req.method==='POST'&&upath==='/api/pix/vincular'){
-    const tid=req.headers['x-tenant-id'];if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
+    const tid=req.headers['x-tenant-id']||''
     const body=await readBody(req)
-    const{mp_payment_id,order_id}=body
+    const mp_payment_id=String(body.mp_payment_id||'')
+    const order_id=parseInt(body.order_id)||0
     if(!mp_payment_id||!order_id){send(res,400,{error:'mp_payment_id e order_id obrigatórios'});return}
-    db.prepare('UPDATE pagamentos_pix SET order_id=? WHERE mp_payment_id=? AND tenant_id=?').run(order_id,mp_payment_id,tid)
-    // Garante que o pedido fica marcado como pago via PIX
-    db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=? AND tenant_id=?").run(order_id,tid)
+    db.prepare('UPDATE pagamentos_pix SET order_id=? WHERE mp_payment_id=?').run(order_id,mp_payment_id)
+    db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=?").run(order_id)
     marcarDirty()
     log('🔗','PIX vinculado: mp='+mp_payment_id+' order='+order_id)
     send(res,200,{ok:true});return
