@@ -910,39 +910,6 @@ input,textarea{font-family:inherit}
 .rating-success-icon{font-size:56px}
 .rating-success-title{font-family:'Fraunces',serif;font-size:22px;font-weight:900}
 .rating-success-sub{font-size:13.5px;color:var(--muted2);line-height:1.5}
-/* ═══ MODAL PIX ═══ */
-.pix-overlay{display:none;position:fixed;inset:0;z-index:950;background:rgba(0,0,0,.9);backdrop-filter:blur(8px);align-items:flex-end;justify-content:center}
-.pix-overlay.on{display:flex}
-.pix-sheet{background:var(--s1);border-radius:24px 24px 0 0;width:100%;max-width:520px;padding:0 24px 44px;animation:sheetUp .32s cubic-bezier(.34,1.56,.64,1);text-align:center}
-.pix-handle{width:36px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);margin:14px auto 20px}
-.pix-title{font-family:'Fraunces',serif;font-size:22px;font-weight:900;margin-bottom:6px}
-.pix-sub{font-size:13px;color:var(--muted2);margin-bottom:16px;line-height:1.5}
-.pix-valor{font-family:'Fraunces',serif;font-size:34px;font-weight:900;color:var(--green);margin-bottom:16px}
-.pix-qr-wrap{width:196px;height:196px;margin:0 auto 14px;background:#fff;border-radius:16px;padding:8px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 32px rgba(0,0,0,.5)}
-.pix-qr-wrap img{width:100%;height:100%;border-radius:8px;object-fit:contain}
-.pix-loading{font-size:34px;display:inline-block;animation:spin 1s linear infinite}
-.pix-copy-wrap{display:flex;gap:8px;margin-bottom:16px}
-.pix-code-input{flex:1;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--muted2);font-size:11px;outline:none;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:default}
-.pix-copy-btn{padding:10px 14px;background:var(--s2);border:1.5px solid var(--border);border-radius:10px;color:var(--accent);font-weight:700;font-size:12px;white-space:nowrap;cursor:pointer;transition:all .15s;flex-shrink:0;font-family:'DM Sans',sans-serif}
-.pix-copy-btn:hover{border-color:var(--accent)}
-.pix-status-bar{display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;color:var(--muted2);margin-bottom:14px}
-.pix-dot{width:8px;height:8px;border-radius:50%;background:var(--amber);animation:pulse 1.2s ease-in-out infinite;flex-shrink:0}
-.pix-dot.ok{background:var(--green);animation:none}
-.pix-dot.err{background:var(--red);animation:none}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.75)}}
-.pix-cancel{background:none;border:none;color:var(--muted);font-size:12.5px;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:2px}
-.pix-cancel:hover{color:var(--red)}
-.pix-ok-wrap{display:none;flex-direction:column;align-items:center;gap:10px;padding:16px 0}
-.pix-ok-icon{font-size:64px;animation:popIn .5s cubic-bezier(.34,1.56,.64,1)}
-.pix-ok-title{font-family:'Fraunces',serif;font-size:24px;font-weight:900;color:var(--green)}
-.pix-ok-sub{font-size:13.5px;color:var(--muted2)}
-/* PIX manual */
-.pix-manual-box{background:rgba(34,197,94,.06);border:1.5px solid rgba(34,197,94,.25);border-radius:14px;padding:18px 20px;margin-bottom:16px;text-align:left}
-.pix-manual-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
-.pix-manual-key{font-size:17px;font-weight:800;color:var(--text);word-break:break-all;margin-bottom:8px}
-.pix-manual-meta{font-size:12px;color:var(--muted2)}
-.pix-manual-confirm{width:100%;padding:14px;border-radius:12px;border:none;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(34,197,94,.3);font-family:'DM Sans',sans-serif;transition:all .18s;margin-top:8px}
-.pix-manual-confirm:hover{transform:translateY(-1px)}
 </style>
 <script src="/api-client.js"></script>
 </head>
@@ -1372,59 +1339,6 @@ input,textarea{font-family:inherit}
     <button class="troco-confirm" onclick="trocoConfirmar()">
       ✅ Confirmar Pedido
     </button>
-  </div>
-</div>
-
-<!-- ══════════════ MODAL PIX ══════════════ -->
-<div class="pix-overlay" id="pix-overlay">
-  <div class="pix-sheet">
-    <div class="pix-handle"></div>
-
-    <!-- Modo QR Code (MP) -->
-    <div id="pix-body-waiting">
-      <div style="font-size:44px;margin-bottom:8px">⚡</div>
-      <div class="pix-title">Pagar com PIX</div>
-      <div class="pix-sub">Escaneie o QR Code ou copie o código.<br>O pedido é enviado após a confirmação do pagamento.</div>
-      <div class="pix-valor" id="pix-valor">R$ 0,00</div>
-      <div class="pix-qr-wrap" id="pix-qr-wrap"><span class="pix-loading">⏳</span></div>
-      <div class="pix-copy-wrap" id="pix-copy-wrap" style="display:none">
-        <input class="pix-code-input" id="pix-code-input" readonly>
-        <button class="pix-copy-btn" id="pix-copy-btn" onclick="pixCopiar()">📋 Copiar código</button>
-      </div>
-      <div class="pix-status-bar">
-        <div class="pix-dot" id="pix-dot"></div>
-        <span id="pix-status-txt">Gerando QR Code…</span>
-      </div>
-      <button class="pix-cancel" onclick="pixCancelar()">Cancelar e usar outra forma de pagamento</button>
-    </div>
-
-    <!-- Modo PIX Manual (chave do gestor) -->
-    <div id="pix-body-manual" style="display:none">
-      <div style="font-size:44px;margin-bottom:8px">⚡</div>
-      <div class="pix-title">Pagar com PIX</div>
-      <div class="pix-sub">Copie a chave PIX abaixo, realize o pagamento e confirme.</div>
-      <div class="pix-valor" id="pix-valor-manual">R$ 0,00</div>
-      <div class="pix-manual-box">
-        <div class="pix-manual-label">Chave PIX</div>
-        <div class="pix-manual-key" id="pix-manual-key-display">—</div>
-        <div class="pix-manual-meta" id="pix-manual-meta">—</div>
-        <div style="display:flex;gap:8px;margin-top:10px">
-          <button class="pix-copy-btn" style="flex:1;text-align:center" id="pix-manual-copy-btn" onclick="pixManualCopiar()">📋 Copiar chave</button>
-        </div>
-      </div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:14px;background:rgba(249,115,22,.06);border:1px solid rgba(249,115,22,.2);border-radius:10px;padding:10px 12px;text-align:left">
-        ⚠️ Após realizar o pagamento, clique em <strong>"Já paguei"</strong> para enviar seu pedido. O restaurante irá confirmar o recebimento.
-      </div>
-      <button class="pix-manual-confirm" onclick="pixManualConfirmar()">✅ Já paguei — enviar pedido</button>
-      <button class="pix-cancel" style="margin-top:10px" onclick="pixCancelar()">Cancelar</button>
-    </div>
-
-    <!-- Aprovado (MP) -->
-    <div class="pix-ok-wrap" id="pix-body-ok">
-      <div class="pix-ok-icon">✅</div>
-      <div class="pix-ok-title">Pagamento confirmado!</div>
-      <div class="pix-ok-sub">Enviando seu pedido ao restaurante…</div>
-    </div>
   </div>
 </div>
 
@@ -2782,39 +2696,6 @@ function showWaToast(orderId) {
 // ══════════════════════════════════════════
 //  SUBMIT
 // ══════════════════════════════════════════
-// ═══ TRACKER LOCAL ═══
-const TRACK_KEY = 'ef_track_v1';
-let _pendingOrderName  = '';
-let _pendingOrderPhone = '';
-let _pixConfig = { pix_ativo: false, mp_configurado: false, pix_key_manual: '', pix_key_manual_tipo: '', pix_key_manual_banco: '' };
-
-function salvarTrackerLocal(id, items, client) {
-  try { localStorage.setItem(TRACK_KEY, JSON.stringify({orderId:id,items,client,tenantId:_tenantId,ts:Date.now()})); } catch(e) {}
-}
-function limparTrackerLocal() { try { localStorage.removeItem(TRACK_KEY); } catch(e) {} }
-function restaurarTrackerLocal() {
-  try {
-    const d = JSON.parse(localStorage.getItem(TRACK_KEY)||'null');
-    if (!d||!d.orderId) return;
-    if (d.tenantId&&d.tenantId!==_tenantId) return;
-    if (Date.now()-d.ts > 4*60*60*1000) { limparTrackerLocal(); return; }
-    startTracking(d.orderId, d.items||[], d.client||'');
-  } catch(e) {}
-}
-
-async function carregarConfigPix() {
-  try {
-    if (!_tenantId) return;
-    const r = await fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } });
-    if (r.ok) {
-      _pixConfig = await r.json();
-      // Mostra/esconde opção PIX no grid
-      const pixOpt = document.querySelector('.pay-opt[data-pay="pix"]');
-      if (pixOpt) pixOpt.style.display = (_pixConfig.pix_ativo || _pixConfig.pix_key_manual) ? '' : 'none';
-    }
-  } catch(e) {}
-}
-
 async function submitOrder() {
   const name  = document.getElementById('f-name').value.trim();
   const phone = document.getElementById('f-phone').value.trim();
@@ -2840,118 +2721,14 @@ async function submitOrder() {
     addr = 'Retirada no balcão';
   }
 
-  if (selectedPay === 'pix') {
-    _pendingOrderAddr = addr; _pendingOrderName = name; _pendingOrderPhone = phone;
-    // Decide modo: QR Code (MP) ou chave manual
-    if (_pixConfig.pix_ativo && _pixConfig.mp_configurado) {
-      await abrirPixModal(); return;
-    } else if (_pixConfig.pix_key_manual) {
-      abrirPixManual(); return;
-    } else {
-      toast('❌','PIX indisponível. Escolha outra forma.'); return;
-    }
-  }
-
+  // Se pagamento é dinheiro → abre modal de troco antes de enviar
   if (selectedPay === 'dinheiro') {
-    _pendingOrderAddr = addr; openTrocoModal(); return;
+    _pendingOrderAddr = addr;
+    openTrocoModal();
+    return;
   }
 
   await _doSubmitOrder(addr, null);
-}
-
-// ═══ PIX MANUAL — chave do gestor ═══
-function abrirPixManual() {
-  const cfg = _pixConfig;
-  document.getElementById('pix-body-waiting').style.display = 'none';
-  document.getElementById('pix-body-manual').style.display  = '';
-  document.getElementById('pix-body-ok').style.display      = 'none';
-  document.getElementById('pix-valor-manual').textContent   = 'R$ ' + fmt(grandTotal());
-  document.getElementById('pix-manual-key-display').textContent = cfg.pix_key_manual || '—';
-  const tipoLabel = {cpf:'CPF',cnpj:'CNPJ',email:'E-mail',telefone:'Telefone',aleatoria:'Chave aleatória'}[cfg.pix_key_manual_tipo] || cfg.pix_key_manual_tipo || '';
-  document.getElementById('pix-manual-meta').textContent = [tipoLabel, cfg.pix_key_manual_banco].filter(Boolean).join(' · ') || '';
-  document.getElementById('pix-overlay').classList.add('on');
-}
-
-function pixManualCopiar() {
-  const key = _pixConfig.pix_key_manual;
-  if (!key) return;
-  navigator.clipboard.writeText(key).then(() => {
-    const btn = document.getElementById('pix-manual-copy-btn');
-    if (btn) { btn.textContent = '✅ Copiada!'; setTimeout(() => btn.textContent = '📋 Copiar chave', 2000); }
-    toast('✅', 'Chave PIX copiada!');
-  }).catch(() => toast('❌','Não foi possível copiar'));
-}
-
-async function pixManualConfirmar() {
-  document.getElementById('pix-overlay').classList.remove('on');
-  // Envia pedido com pag='pix' (manual, sem QR Code)
-  await _doSubmitOrder(_pendingOrderAddr, null, 'pix_manual');
-}
-
-// ═══ PIX QR Code (MP) ═══
-let _pixMpId='', _pixPollT=null, _pixExpT=null, _pixDone=false, _pixAddr='';
-
-async function abrirPixModal() {
-  _pixDone=false; _pixAddr=_pendingOrderAddr;
-  document.getElementById('pix-body-waiting').style.display='';
-  document.getElementById('pix-body-manual').style.display='none';
-  document.getElementById('pix-body-ok').style.display='none';
-  document.getElementById('pix-qr-wrap').innerHTML='<span class="pix-loading">⏳</span>';
-  document.getElementById('pix-copy-wrap').style.display='none';
-  document.getElementById('pix-dot').className='pix-dot';
-  document.getElementById('pix-status-txt').textContent='Gerando QR Code…';
-  document.getElementById('pix-valor').textContent='R$ '+fmt(grandTotal());
-  document.getElementById('pix-overlay').classList.add('on');
-  try {
-    const phoneNum=(_pendingOrderPhone||'').replace(/[^0-9]/g,'');
-    const r=await fetch('/api/pix/criar',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-tenant-id':_tenantId},
-      body:JSON.stringify({valor:grandTotal(),client:_pendingOrderName,email:(phoneNum||'cliente')+'@pedido.com',order_id:'pend-'+Date.now()})
-    });
-    const d=await r.json();
-    if(!r.ok||!d.ok){
-      // Fallback para PIX manual se houver chave cadastrada
-      if(_pixConfig.pix_key_manual){ toast('⚠️','QR Code indisponível. Usando chave PIX manual.'); pixCancelar(); abrirPixManual(); return; }
-      toast('❌',d.error||'Erro ao gerar PIX. Tente outra forma.'); pixCancelar(); return;
-    }
-    _pixMpId=String(d.mp_payment_id);
-    const qrEl=document.getElementById('pix-qr-wrap');
-    if(d.qr_code_base64){qrEl.innerHTML='<img src="data:image/png;base64,'+d.qr_code_base64+'" alt="QR PIX">';}
-    else{qrEl.innerHTML='<div style="font-size:11px;color:var(--muted);padding:10px">Sem QR.<br>Use o código abaixo.</div>';}
-    if(d.qr_code){document.getElementById('pix-code-input').value=d.qr_code;document.getElementById('pix-copy-wrap').style.display='';}
-    document.getElementById('pix-status-txt').textContent='Aguardando pagamento…';
-    _pixPollT=setInterval(pixPoll,4000);
-    _pixExpT=setTimeout(()=>{pixPararPolling();document.getElementById('pix-dot').className='pix-dot err';document.getElementById('pix-status-txt').textContent='Tempo esgotado. Gere um novo PIX.';},10*60*1000);
-  } catch(e){toast('❌','Erro ao gerar PIX. Tente outra forma.');pixCancelar();}
-}
-
-async function pixPoll() {
-  if(!_pixMpId||_pixDone)return;
-  try{
-    const r=await fetch('/api/pix/status?mp_payment_id='+encodeURIComponent(_pixMpId),{headers:{'x-tenant-id':_tenantId}});
-    if(!r.ok)return;
-    const d=await r.json();
-    if(d.status==='aprovado'){
-      _pixDone=true; pixPararPolling();
-      document.getElementById('pix-dot').className='pix-dot ok';
-      document.getElementById('pix-status-txt').textContent='✅ Pagamento confirmado!';
-      document.getElementById('pix-body-waiting').style.display='none';
-      document.getElementById('pix-body-ok').style.display='flex';
-      setTimeout(async()=>{document.getElementById('pix-overlay').classList.remove('on');await _doSubmitOrder(_pixAddr,null,'pix_mp',_pixMpId);},1500);
-    }
-  }catch(e){}
-}
-
-function pixPararPolling(){if(_pixPollT){clearInterval(_pixPollT);_pixPollT=null;}if(_pixExpT){clearTimeout(_pixExpT);_pixExpT=null;}}
-function pixCancelar(){pixPararPolling();_pixMpId='';_pixDone=false;document.getElementById('pix-overlay').classList.remove('on');}
-function pixCopiar(){
-  const code=document.getElementById('pix-code-input').value;if(!code)return;
-  navigator.clipboard.writeText(code).then(()=>{
-    const btn=document.getElementById('pix-copy-btn');
-    if(btn){btn.textContent='✅ Copiado!';setTimeout(()=>{btn.textContent='📋 Copiar código';},2000);}
-    toast('✅','Código PIX copiado!');
-  }).catch(()=>{try{document.getElementById('pix-code-input').select();document.execCommand('copy');toast('✅','Copiado!');}catch(e2){}});
 }
 
 // ─── Troco ───────────────────────────────────────────
@@ -2994,7 +2771,7 @@ async function trocoConfirmar() {
   await _doSubmitOrder(_pendingOrderAddr, troco);
 }
 
-async function _doSubmitOrder(addr, troco, pagOverride, mpPaymentId) {
+async function _doSubmitOrder(addr, troco) {
   const name  = document.getElementById('f-name').value.trim();
   const phone = document.getElementById('f-phone').value.trim();
 
@@ -3047,15 +2824,12 @@ async function _doSubmitOrder(addr, troco, pagOverride, mpPaymentId) {
     const { data: order, error } = await sb.from('orders').insert({
       client: name, phone, addr,
       items, total: grandTotal(), taxa: getTaxa(),
-      status: 'analise', time, pag: pagOverride || selectedPay,
+      status: 'analise', time, pag: selectedPay,
       troco: troco || null,
       customer_id: customerId
     }).select().single();
 
     if (error) throw error;
-    if (mpPaymentId && order && order.id) {
-      fetch('/api/pix/vincular',{method:'POST',headers:{'Content-Type':'application/json','x-tenant-id':_tenantId},body:JSON.stringify({mp_payment_id:mpPaymentId,order_id:order.id})}).catch(()=>{});
-    }
 
     cart = [];
     appliedCupom = null;
@@ -3089,7 +2863,19 @@ async function _doSubmitOrder(addr, troco, pagOverride, mpPaymentId) {
     if (inv && !_customer) inv.style.display = 'flex';
 
     startTracking(order.id, items, name);
-    salvarTrackerLocal(order.id, items, name);
+
+    // 1. Salva no localStorage (celular próprio)
+    try {
+      localStorage.setItem('ef_order_' + (_tenantId||''), JSON.stringify({
+        orderId: order.id, items, client: name, ts: Date.now()
+      }));
+    } catch(e) {}
+    // 2. Coloca ?acompanhar=ID na URL (compartilhável)
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.set('acompanhar', order.id);
+      window.history.replaceState({}, '', u.toString());
+    } catch(e) {}
 
     // Toast WhatsApp (apenas premium) — aparece 1.5s após confirmação
     if (_tenantPlano === 'premium') {
@@ -3105,7 +2891,12 @@ async function _doSubmitOrder(addr, troco, pagOverride, mpPaymentId) {
 }
 
 function resetCart() {
-  limparTrackerLocal();
+  try { localStorage.removeItem('ef_order_' + (_tenantId||'')); } catch(e) {}
+  try {
+    const u = new URL(window.location.href);
+    u.searchParams.delete('acompanhar');
+    window.history.replaceState({}, '', u.toString());
+  } catch(e) {}
   document.getElementById('success-screen').classList.remove('on');
   document.getElementById('cart-content').style.display = '';
   document.getElementById('cart-items').innerHTML = '';
@@ -3307,9 +3098,64 @@ async function submitRating() {
 })();
 
 init();
+
+// ── Restaura tracker ao recarregar ──
+// Prioridade: URL ?acompanhar → localStorage
 window.addEventListener('load', () => {
-  setTimeout(restaurarTrackerLocal, 1200);
-  setTimeout(carregarConfigPix, 800);
+  setTimeout(async () => {
+    try {
+      const tid = _tenantId;
+      if (!tid) return;
+
+      // Tenta URL primeiro
+      let orderId = parseInt(new URLSearchParams(window.location.search).get('acompanhar')) || null;
+
+      // Fallback: localStorage
+      if (!orderId) {
+        const raw = localStorage.getItem('ef_order_' + tid);
+        if (raw) {
+          const saved = JSON.parse(raw);
+          if (saved.orderId && Date.now() - saved.ts < 4 * 60 * 60 * 1000) {
+            orderId = saved.orderId;
+          } else {
+            localStorage.removeItem('ef_order_' + tid);
+          }
+        }
+      }
+
+      if (!orderId) return;
+
+      // Busca pedido no servidor
+      const r = await fetch('/api/orders?id=eq.' + orderId + '&select=id,client,items,status', {
+        headers: { 'x-tenant-id': tid }
+      });
+      if (!r.ok) return;
+      const rows = await r.json();
+      const o = Array.isArray(rows) ? rows[0] : rows;
+      if (!o) return;
+
+      // Só mostra se pedido ainda está em andamento
+      if (['entregue','finalizado','cancelado'].includes(o.status)) {
+        localStorage.removeItem('ef_order_' + tid);
+        return;
+      }
+
+      const items = Array.isArray(o.items) ? o.items
+        : (typeof o.items === 'string' ? JSON.parse(o.items||'[]') : []);
+
+      startTracking(o.id, items, o.client || '');
+
+      // Sincroniza URL com o que foi restaurado pelo localStorage
+      try {
+        const u = new URL(window.location.href);
+        if (!u.searchParams.get('acompanhar')) {
+          u.searchParams.set('acompanhar', o.id);
+          window.history.replaceState({}, '', u.toString());
+        }
+      } catch(e) {}
+
+    } catch(e) {}
+  }, 1500);
 });
 
 // Garante limpeza do campo de busca mesmo quando Chrome autofill ocorre após load
