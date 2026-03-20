@@ -910,36 +910,32 @@ input,textarea{font-family:inherit}
 .rating-success-icon{font-size:56px}
 .rating-success-title{font-family:'Fraunces',serif;font-size:22px;font-weight:900}
 .rating-success-sub{font-size:13.5px;color:var(--muted2);line-height:1.5}
-
-/* ═══════════════════════════════════════
-   MODAL PIX — QR Code
-═══════════════════════════════════════ */
-.pix-overlay{display:none;position:fixed;inset:0;z-index:950;background:rgba(0,0,0,.88);backdrop-filter:blur(8px);align-items:flex-end;justify-content:center}
+/* ═══ MODAL PIX ═══ */
+.pix-overlay{display:none;position:fixed;inset:0;z-index:950;background:rgba(0,0,0,.9);backdrop-filter:blur(8px);align-items:flex-end;justify-content:center}
 .pix-overlay.on{display:flex}
 .pix-sheet{background:var(--s1);border-radius:24px 24px 0 0;width:100%;max-width:520px;padding:0 24px 44px;animation:sheetUp .32s cubic-bezier(.34,1.56,.64,1);text-align:center}
 .pix-handle{width:36px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);margin:14px auto 20px}
-.pix-icon{font-size:48px;margin-bottom:10px}
 .pix-title{font-family:'Fraunces',serif;font-size:22px;font-weight:900;margin-bottom:6px}
-.pix-sub{font-size:13px;color:var(--muted2);margin-bottom:20px;line-height:1.5}
-.pix-valor{font-family:'Fraunces',serif;font-size:32px;font-weight:900;color:var(--green);margin-bottom:18px}
-.pix-qr-wrap{width:200px;height:200px;margin:0 auto 16px;background:#fff;border-radius:16px;padding:8px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.pix-sub{font-size:13px;color:var(--muted2);margin-bottom:16px;line-height:1.5}
+.pix-valor{font-family:'Fraunces',serif;font-size:34px;font-weight:900;color:var(--green);margin-bottom:16px}
+.pix-qr-wrap{width:196px;height:196px;margin:0 auto 14px;background:#fff;border-radius:16px;padding:8px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 32px rgba(0,0,0,.5)}
 .pix-qr-wrap img{width:100%;height:100%;border-radius:8px;object-fit:contain}
-.pix-qr-loading{font-size:36px;display:inline-block;animation:spin 1s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.pix-copy-wrap{display:flex;gap:8px;margin-bottom:18px}
+.pix-loading{font-size:34px;display:inline-block;animation:spin 1s linear infinite}
+.pix-copy-wrap{display:flex;gap:8px;margin-bottom:16px}
 .pix-code-input{flex:1;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--muted2);font-size:11px;outline:none;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:default}
-.pix-copy-btn{padding:10px 16px;background:var(--s2);border:1.5px solid var(--border);border-radius:10px;color:var(--accent);font-weight:700;font-size:12px;white-space:nowrap;cursor:pointer;transition:all .15s;flex-shrink:0;font-family:'DM Sans',sans-serif}
-.pix-copy-btn:hover{border-color:var(--accent);background:rgba(249,115,22,.08)}
-.pix-status-bar{display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;color:var(--muted2);margin-bottom:16px}
-.pix-status-dot{width:8px;height:8px;border-radius:50%;background:var(--amber);animation:pulse 1.2s ease-in-out infinite;flex-shrink:0}
-.pix-status-dot.aprovado{background:var(--green);animation:none}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
-.pix-cancel-btn{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:4px}
-.pix-cancel-btn:hover{color:var(--red)}
-.pix-approved-wrap{display:none;flex-direction:column;align-items:center;gap:12px;padding:20px 0}
-.pix-approved-icon{font-size:64px;animation:popIn .5s cubic-bezier(.34,1.56,.64,1)}
-.pix-approved-title{font-family:'Fraunces',serif;font-size:24px;font-weight:900;color:var(--green)}
-.pix-approved-sub{font-size:14px;color:var(--muted2);line-height:1.5}
+.pix-copy-btn{padding:10px 14px;background:var(--s2);border:1.5px solid var(--border);border-radius:10px;color:var(--accent);font-weight:700;font-size:12px;white-space:nowrap;cursor:pointer;transition:all .15s;flex-shrink:0;font-family:'DM Sans',sans-serif}
+.pix-copy-btn:hover{border-color:var(--accent)}
+.pix-status-bar{display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;color:var(--muted2);margin-bottom:14px}
+.pix-dot{width:8px;height:8px;border-radius:50%;background:var(--amber);animation:pulse 1.2s ease-in-out infinite;flex-shrink:0}
+.pix-dot.ok{background:var(--green);animation:none}
+.pix-dot.err{background:var(--red);animation:none}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.75)}}
+.pix-cancel{background:none;border:none;color:var(--muted);font-size:12.5px;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:2px}
+.pix-cancel:hover{color:var(--red)}
+.pix-ok-wrap{display:none;flex-direction:column;align-items:center;gap:10px;padding:16px 0}
+.pix-ok-icon{font-size:64px;animation:popIn .5s cubic-bezier(.34,1.56,.64,1)}
+.pix-ok-title{font-family:'Fraunces',serif;font-size:24px;font-weight:900;color:var(--green)}
+.pix-ok-sub{font-size:13.5px;color:var(--muted2)}
 </style>
 <script src="/api-client.js"></script>
 </head>
@@ -1372,30 +1368,30 @@ input,textarea{font-family:inherit}
   </div>
 </div>
 
-<!-- ══════════════ MODAL PIX — QR CODE ══════════════ -->
+<!-- ══════════════ MODAL PIX ══════════════ -->
 <div class="pix-overlay" id="pix-overlay">
   <div class="pix-sheet">
     <div class="pix-handle"></div>
-    <div id="pix-waiting">
-      <div class="pix-icon">⚡</div>
+    <div id="pix-body-waiting">
+      <div style="font-size:46px;margin-bottom:8px">⚡</div>
       <div class="pix-title">Pagar com PIX</div>
-      <div class="pix-sub">Escaneie o QR Code ou copie o código PIX.<br>O pedido é enviado automaticamente após o pagamento.</div>
+      <div class="pix-sub">Escaneie o QR Code ou copie o código.<br>O pedido é enviado automaticamente após o pagamento.</div>
       <div class="pix-valor" id="pix-valor">R$ 0,00</div>
-      <div class="pix-qr-wrap" id="pix-qr-wrap"><span class="pix-qr-loading">⏳</span></div>
+      <div class="pix-qr-wrap" id="pix-qr-wrap"><span class="pix-loading">⏳</span></div>
       <div class="pix-copy-wrap" id="pix-copy-wrap" style="display:none">
         <input class="pix-code-input" id="pix-code-input" readonly>
-        <button class="pix-copy-btn" onclick="pixCopiarCodigo()">📋 Copiar</button>
+        <button class="pix-copy-btn" id="pix-copy-btn" onclick="pixCopiar()">📋 Copiar</button>
       </div>
       <div class="pix-status-bar">
-        <div class="pix-status-dot" id="pix-status-dot"></div>
-        <span id="pix-status-txt">Aguardando pagamento…</span>
+        <div class="pix-dot" id="pix-dot"></div>
+        <span id="pix-status-txt">Gerando QR Code…</span>
       </div>
-      <button class="pix-cancel-btn" onclick="pixCancelar()">Cancelar e escolher outra forma de pagamento</button>
+      <button class="pix-cancel" onclick="pixCancelar()">Cancelar e usar outra forma de pagamento</button>
     </div>
-    <div class="pix-approved-wrap" id="pix-approved">
-      <div class="pix-approved-icon">✅</div>
-      <div class="pix-approved-title">Pagamento aprovado!</div>
-      <div class="pix-approved-sub">Enviando seu pedido ao restaurante…</div>
+    <div class="pix-ok-wrap" id="pix-body-ok">
+      <div class="pix-ok-icon">✅</div>
+      <div class="pix-ok-title">Pagamento aprovado!</div>
+      <div class="pix-ok-sub">Enviando pedido ao restaurante…</div>
     </div>
   </div>
 </div>
@@ -2779,15 +2775,13 @@ async function submitOrder() {
     addr = 'Retirada no balcão';
   }
 
-  // PIX → abre modal QR Code antes de enviar pedido
   if (selectedPay === 'pix') {
     _pendingOrderAddr = addr;
     _pendingOrderName = name;
-    await abrirPixModal(name);
+    await abrirPixModal(name, phone);
     return;
   }
 
-  // Dinheiro → modal de troco
   if (selectedPay === 'dinheiro') {
     _pendingOrderAddr = addr;
     openTrocoModal();
@@ -2797,157 +2791,136 @@ async function submitOrder() {
   await _doSubmitOrder(addr, null);
 }
 
-// ══════════════════════════════════════════
-//  PIX — QR CODE + POLLING DIRETO NA MP
-// ══════════════════════════════════════════
-let _pixMpId      = null;
-let _pixPollTimer = null;
-let _pixTimeout   = null;
-let _pixAddr      = '';
-let _pixAprovado  = false;
+// ══ TRACKER LOCAL (sem login) ══
+const TRACK_KEY = 'ef_track_v1';
 let _pendingOrderName = '';
 
-const TRACK_KEY = 'estima_track'; // localStorage — persiste tracker sem login
-
 function salvarTrackerLocal(orderId, items, client) {
-  try {
-    localStorage.setItem(TRACK_KEY, JSON.stringify({
-      orderId, items, client,
-      tenantId: _tenantId,
-      ts: Date.now()
-    }));
-  } catch(e) {}
+  try { localStorage.setItem(TRACK_KEY, JSON.stringify({ orderId, items, client, tenantId: _tenantId, ts: Date.now() })); } catch(e) {}
 }
-
+function limparTrackerLocal() {
+  try { localStorage.removeItem(TRACK_KEY); } catch(e) {}
+}
 function restaurarTrackerLocal() {
   try {
-    const raw = localStorage.getItem(TRACK_KEY);
-    if (!raw) return;
-    const d = JSON.parse(raw);
-    // Só restaura se for do mesmo tenant e tiver menos de 4 horas
-    if (!d.orderId || d.tenantId !== _tenantId) return;
-    if (Date.now() - d.ts > 4 * 60 * 60 * 1000) { localStorage.removeItem(TRACK_KEY); return; }
+    const d = JSON.parse(localStorage.getItem(TRACK_KEY) || 'null');
+    if (!d || !d.orderId || d.tenantId !== _tenantId) return;
+    if (Date.now() - d.ts > 4 * 60 * 60 * 1000) { limparTrackerLocal(); return; }
     startTracking(d.orderId, d.items || [], d.client || '');
   } catch(e) {}
 }
 
-async function abrirPixModal(clientName) {
-  _pixAprovado = false;
-  _pixAddr     = _pendingOrderAddr;
+// ══ PIX — QR Code + polling direto MP ══
+let _pixMpId     = null;
+let _pixPollT    = null;
+let _pixExpT     = null;
+let _pixAddr     = '';
+let _pixDone     = false;
 
-  // Reseta visual
-  document.getElementById('pix-waiting').style.display   = '';
-  document.getElementById('pix-approved').style.display  = 'none';
-  document.getElementById('pix-qr-wrap').innerHTML       = '<span class="pix-qr-loading">⏳</span>';
-  document.getElementById('pix-copy-wrap').style.display = 'none';
-  document.getElementById('pix-status-dot').className    = 'pix-status-dot';
-  document.getElementById('pix-status-txt').textContent  = 'Gerando QR Code…';
-  document.getElementById('pix-valor').textContent       = 'R$ ' + fmt(grandTotal());
+async function abrirPixModal(clientName, phone) {
+  _pixDone = false;
+  _pixAddr = _pendingOrderAddr;
+
+  // Reset visual
+  document.getElementById('pix-body-waiting').style.display = '';
+  document.getElementById('pix-body-ok').style.display      = 'none';
+  document.getElementById('pix-qr-wrap').innerHTML          = '<span class="pix-loading">⏳</span>';
+  document.getElementById('pix-copy-wrap').style.display    = 'none';
+  document.getElementById('pix-dot').className              = 'pix-dot';
+  document.getElementById('pix-status-txt').textContent     = 'Gerando QR Code…';
+  document.getElementById('pix-valor').textContent          = 'R$ ' + fmt(grandTotal());
   document.getElementById('pix-overlay').classList.add('on');
 
   try {
-    const phone = document.getElementById('f-phone')?.value || '';
-    const res = await fetch('/api/pix/criar', {
+    const r = await fetch('/api/pix/criar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
       body: JSON.stringify({
         valor:    grandTotal(),
         client:   clientName,
-        email:    phone.replace(/\D/g,'') + '@pedido.com',
+        email:    (phone || '').replace(/\D/g, '') + '@pedido.com',
         order_id: 'pendente-' + Date.now()
       })
     });
-    const d = await res.json();
+    const d = await r.json();
 
-    if (!res.ok || !d.ok) {
-      toast('❌', d.error || 'Erro ao gerar PIX. Tente outra forma de pagamento.');
-      pixCancelar();
-      return;
+    if (!r.ok || !d.ok) {
+      toast('❌', d.error || 'Erro ao gerar PIX. Use outra forma de pagamento.');
+      pixCancelar(); return;
     }
 
-    _pixMpId = d.mp_payment_id;
+    _pixMpId = String(d.mp_payment_id);
 
-    // Mostra QR Code
-    const qrWrap = document.getElementById('pix-qr-wrap');
+    // QR Code
+    const qrEl = document.getElementById('pix-qr-wrap');
     if (d.qr_code_base64) {
-      qrWrap.innerHTML = '<img src="data:image/png;base64,' + d.qr_code_base64 + '" alt="QR Code PIX">';
+      qrEl.innerHTML = '<img src="data:image/png;base64,' + d.qr_code_base64 + '" alt="QR PIX">';
     } else {
-      qrWrap.innerHTML = '<span style="font-size:12px;color:var(--muted);padding:10px">Use o código abaixo para pagar.</span>';
+      qrEl.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:12px">Sem QR Code.<br>Use o código abaixo.</div>';
     }
-
-    // Código copia-e-cola
     if (d.qr_code) {
       document.getElementById('pix-code-input').value    = d.qr_code;
       document.getElementById('pix-copy-wrap').style.display = '';
     }
-
     document.getElementById('pix-status-txt').textContent = 'Aguardando pagamento…';
 
-    // Polling a cada 4s — consulta diretamente o MP via servidor
-    _pixPollTimer = setInterval(pixVerificarStatus, 4000);
-
-    // Timeout 10 minutos
-    _pixTimeout = setTimeout(() => {
+    // Polling a cada 4s
+    _pixPollT = setInterval(pixVerificar, 4000);
+    // Expira em 10min
+    _pixExpT = setTimeout(() => {
       pixPararPolling();
+      document.getElementById('pix-dot').className        = 'pix-dot err';
       document.getElementById('pix-status-txt').textContent = 'PIX expirado. Tente novamente.';
-      document.getElementById('pix-status-dot').style.background = 'var(--red)';
-      document.getElementById('pix-status-dot').style.animation  = 'none';
     }, 10 * 60 * 1000);
 
   } catch(e) {
-    toast('❌', 'Erro de conexão ao gerar PIX.');
+    toast('❌', 'Erro de conexão. Tente outra forma de pagamento.');
     pixCancelar();
   }
 }
 
-async function pixVerificarStatus() {
-  if (!_pixMpId || _pixAprovado) return;
+async function pixVerificar() {
+  if (!_pixMpId || _pixDone) return;
   try {
-    const res = await fetch('/api/pix/status?mp_payment_id=' + _pixMpId, {
+    const r = await fetch('/api/pix/status?mp_payment_id=' + _pixMpId, {
       headers: { 'x-tenant-id': _tenantId }
     });
-    if (!res.ok) return;
-    const d = await res.json();
-
+    if (!r.ok) return;
+    const d = await r.json();
     if (d.status === 'aprovado') {
-      _pixAprovado = true;
+      _pixDone = true;
       pixPararPolling();
-
-      // Feedback visual
-      document.getElementById('pix-status-dot').className   = 'pix-status-dot aprovado';
-      document.getElementById('pix-status-txt').textContent = '✅ Pagamento aprovado!';
-      document.getElementById('pix-waiting').style.display  = 'none';
-      document.getElementById('pix-approved').style.display = 'flex';
-
-      // 1.5s e envia pedido com pag = pix_mp
+      // Feedback aprovado
+      document.getElementById('pix-dot').className        = 'pix-dot ok';
+      document.getElementById('pix-status-txt').textContent = '✅ Pagamento confirmado!';
+      document.getElementById('pix-body-waiting').style.display = 'none';
+      document.getElementById('pix-body-ok').style.display      = 'flex';
+      // 1.5s → envia pedido
       setTimeout(async () => {
         document.getElementById('pix-overlay').classList.remove('on');
-        await _doSubmitOrder(_pixAddr, null, 'pix_mp');
+        await _doSubmitOrder(_pixAddr, null, 'pix_mp', _pixMpId);
       }, 1500);
     }
   } catch(e) {}
 }
 
 function pixPararPolling() {
-  if (_pixPollTimer) { clearInterval(_pixPollTimer); _pixPollTimer = null; }
-  if (_pixTimeout)   { clearTimeout(_pixTimeout);    _pixTimeout   = null; }
+  if (_pixPollT) { clearInterval(_pixPollT); _pixPollT = null; }
+  if (_pixExpT)  { clearTimeout(_pixExpT);   _pixExpT  = null; }
 }
-
 function pixCancelar() {
   pixPararPolling();
-  _pixMpId     = null;
-  _pixAprovado = false;
+  _pixMpId = null; _pixDone = false;
   document.getElementById('pix-overlay').classList.remove('on');
 }
-
-function pixCopiarCodigo() {
+function pixCopiar() {
   const code = document.getElementById('pix-code-input').value;
   if (!code) return;
   navigator.clipboard.writeText(code).then(() => {
-    const btn = document.querySelector('.pix-copy-btn');
-    if (btn) { btn.textContent = '✅ Copiado!'; setTimeout(() => btn.textContent = '📋 Copiar', 2000); }
+    const btn = document.getElementById('pix-copy-btn');
+    if (btn) { btn.textContent = '✅ Copiado!'; setTimeout(() => { btn.textContent = '📋 Copiar'; }, 2000); }
     toast('✅', 'Código PIX copiado!');
-  }).catch(() => toast('❌','Não foi possível copiar'));
+  }).catch(() => toast('❌', 'Não foi possível copiar'));
 }
 
 // ─── Troco ───────────────────────────────────────────
@@ -2990,7 +2963,7 @@ async function trocoConfirmar() {
   await _doSubmitOrder(_pendingOrderAddr, troco);
 }
 
-async function _doSubmitOrder(addr, troco, pagOverride) {
+async function _doSubmitOrder(addr, troco, pagOverride, mpPaymentId) {
   const name  = document.getElementById('f-name').value.trim();
   const phone = document.getElementById('f-phone').value.trim();
 
@@ -3050,6 +3023,17 @@ async function _doSubmitOrder(addr, troco, pagOverride) {
 
     if (error) throw error;
 
+    // Vincula pagamento PIX ao pedido real (se veio de PIX aprovado)
+    if (mpPaymentId && order && order.id) {
+      try {
+        await fetch('/api/pix/vincular', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
+          body: JSON.stringify({ mp_payment_id: mpPaymentId, order_id: order.id })
+        });
+      } catch(e) {}
+    }
+
     cart = [];
     appliedCupom = null;
     updateCartFloat();
@@ -3098,7 +3082,7 @@ async function _doSubmitOrder(addr, troco, pagOverride) {
 }
 
 function resetCart() {
-  try { localStorage.removeItem(TRACK_KEY); } catch(e) {}
+  limparTrackerLocal();
   document.getElementById('success-screen').classList.remove('on');
   document.getElementById('cart-content').style.display = '';
   document.getElementById('cart-items').innerHTML = '';
@@ -3300,7 +3284,6 @@ async function submitRating() {
 })();
 
 init();
-// Restaura tracker de pedido anterior (funciona sem login)
 window.addEventListener('load', () => { setTimeout(restaurarTrackerLocal, 1200); });
 
 // Garante limpeza do campo de busca mesmo quando Chrome autofill ocorre após load
