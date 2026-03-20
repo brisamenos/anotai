@@ -264,23 +264,35 @@ const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_
 let _dirty = false
 function marcarDirty() { _dirty = true }
 
-// ── Sessões Admin (token em memória, válido 8h) ───────
-const _adminSessions = new Map()
+// ── Sessões Admin (persistidas no SQLite, válidas 8h) ─
+db.exec(`CREATE TABLE IF NOT EXISTS admin_sessions (
+  token TEXT PRIMARY KEY,
+  user_id TEXT, nome TEXT, email TEXT, role TEXT,
+  ts INTEGER NOT NULL
+)`)
+
 const ADMIN_SESSION_TTL = 8 * 60 * 60 * 1000
 
 function criarSessaoAdmin(user) {
   const token = crypto.randomBytes(32).toString('hex')
-  _adminSessions.set(token, { ...user, ts: Date.now() })
+  const ts    = Date.now()
+  // Limpa sessões expiradas
+  db.prepare('DELETE FROM admin_sessions WHERE ts < ?').run(ts - ADMIN_SESSION_TTL)
+  db.prepare('INSERT OR REPLACE INTO admin_sessions (token,user_id,nome,email,role,ts) VALUES (?,?,?,?,?,?)')
+    .run(token, user.id, user.nome, user.email, user.role, ts)
   return token
 }
 
 function validarSessaoAdmin(req) {
-  const auth = req.headers['authorization'] || ''
+  const auth  = req.headers['authorization'] || ''
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
   if (!token) return null
-  const s = _adminSessions.get(token)
+  const s = db.prepare('SELECT * FROM admin_sessions WHERE token=?').get(token)
   if (!s) return null
-  if (Date.now() - s.ts > ADMIN_SESSION_TTL) { _adminSessions.delete(token); return null }
+  if (Date.now() - s.ts > ADMIN_SESSION_TTL) {
+    db.prepare('DELETE FROM admin_sessions WHERE token=?').run(token)
+    return null
+  }
   return s
 }
 
@@ -1178,58 +1190,14 @@ const server = http.createServer(async (req,res) => {
     return
   }
 
-  // ── Consulta status PIX — consulta MP diretamente se pendente ──
+  // ── Consulta status de um pagamento PIX ──────────────
   if(req.method==='GET'&&upath==='/api/pix/status'){
-    const tid=req.headers['x-tenant-id']||''
-    const mpId=params.get('mp_payment_id')||''
-    if(!tid||!mpId){send(res,400,{error:'x-tenant-id e mp_payment_id obrigatórios'});return}
-    log('🔍','PIX status poll: mp_id='+mpId+' tenant='+tid.slice(0,8))
+    const tid=req.headers['x-tenant-id'];if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
+    const mpId=params.get('mp_payment_id')
+    if(!mpId){send(res,400,{error:'mp_payment_id obrigatório'});return}
     const row=db.prepare('SELECT * FROM pagamentos_pix WHERE mp_payment_id=? AND tenant_id=?').get(mpId,tid)
-    if(!row){
-      // Tenta sem filtro de tenant (segurança: retorna só status)
-      const row2=db.prepare('SELECT status,valor FROM pagamentos_pix WHERE mp_payment_id=?').get(mpId)
-      if(!row2){send(res,404,{error:'Pagamento não encontrado'});return}
-      log('⚠️','PIX tenant mismatch: mp_id='+mpId)
-      send(res,200,row2);return
-    }
-    // Se pendente → consulta MP direto
-    if(row.status==='pendente'){
-      try{
-        let mpToken=MP_TOKEN
-        try{const c=db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get();const g=c&&c.ia_config?JSON.parse(c.ia_config):{};if(g.mp_token)mpToken=g.mp_token}catch(e2){}
-        if(!mpToken){log('⚠️','PIX poll: token MP não configurado');send(res,200,row);return}
-        log('📡','Consultando MP para payment '+mpId)
-        const r=await fetch('https://api.mercadopago.com/v1/payments/'+mpId,{headers:{'Authorization':'Bearer '+mpToken}})
-        const pd=await r.json()
-        log('📡','MP respondeu status='+pd.status+' para '+mpId)
-        if(r.ok){
-          const novoStatus=pd.status==='approved'?'aprovado':pd.status==='rejected'?'rejeitado':pd.status==='cancelled'?'cancelado':'pendente'
-          if(novoStatus!=='pendente'){
-            db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=? WHERE mp_payment_id=?').run(novoStatus,pd.date_approved||null,String(mpId))
-            if(novoStatus==='aprovado'){
-              log('✅','PIX APROVADO via polling: R$'+row.valor+' tenant='+tid.slice(0,8))
-              marcarDirty()
-            }
-            send(res,200,Object.assign({},row,{status:novoStatus}));return
-          }
-        }
-      }catch(e){log('❌','PIX status poll erro: '+e.message)}
-    }
+    if(!row){send(res,404,{error:'Pagamento não encontrado'});return}
     send(res,200,row);return
-  }
-
-  // ── Vincula PIX ao pedido real após criação ──────────
-  if(req.method==='POST'&&upath==='/api/pix/vincular'){
-    const tid=req.headers['x-tenant-id']||''
-    const body=await readBody(req)
-    const mp_payment_id=String(body.mp_payment_id||'')
-    const order_id=parseInt(body.order_id)||0
-    if(!mp_payment_id||!order_id){send(res,400,{error:'mp_payment_id e order_id obrigatórios'});return}
-    db.prepare('UPDATE pagamentos_pix SET order_id=? WHERE mp_payment_id=?').run(order_id,mp_payment_id)
-    db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=?").run(order_id)
-    marcarDirty()
-    log('🔗','PIX vinculado: mp='+mp_payment_id+' order='+order_id)
-    send(res,200,{ok:true});return
   }
 
   // ── Webhook do Mercado Pago ───────────────────────────
@@ -1425,7 +1393,7 @@ const server = http.createServer(async (req,res) => {
     return
   }
 
-  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/mp-config'])
+  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/mp-config'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return
