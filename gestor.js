@@ -6886,7 +6886,7 @@ function temaBuildPresets() {
 
 // ── Salvar / Carregar / Reset ─────────────────────────
 function temaSalvarStorage() {
-  try { localStorage.setItem('ef_tema_modo', JSON.stringify(_temaAtual)); } catch(e) {}
+  try { localStorage.setItem('ef_tema_v2', JSON.stringify(_temaAtual)); } catch(e) {}
 }
 
 async function temaSalvar() {
@@ -6895,7 +6895,7 @@ async function temaSalvar() {
 
 function temaCarregarStorage() {
   try {
-    const saved = localStorage.getItem('ef_tema_modo');
+    const saved = localStorage.getItem('ef_tema_v2');
     if (saved) { const vars = JSON.parse(saved); if (vars && typeof vars === 'object') temaApply(vars); }
   } catch(e) {}
 }
@@ -6929,9 +6929,11 @@ function temaUpdateCardSelection() {
 }
 
 // Aplica tema salvo ou padrão ao carregar
+// Versão v2 — limpa cache antigo e força novo esquema de cores
 (function() {
+  try { localStorage.removeItem('ef_tema_modo'); } catch(e) {}
   try {
-    const saved = localStorage.getItem('ef_tema_modo');
+    const saved = localStorage.getItem('ef_tema_v2');
     if (saved) { const vars = JSON.parse(saved); if (vars && typeof vars === 'object') { temaApply(vars); return; } }
   } catch(e) {}
   try { temaApply(TEMAS_PRONTOS[0].vars); } catch(e) {}
