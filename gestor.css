@@ -218,9 +218,9 @@ body{
 .sidebar-search input::placeholder{color:var(--muted)}
 
 /* ══ MAIN & PAGES ══════════════════════════════════════════ */
-.main{flex:1;overflow:auto}
-.page{display:none;padding:28px 32px;animation:fadeUp .28s ease}
-.page.on{display:block}
+.main{flex:1;overflow-y:auto;overflow-x:hidden;min-height:0}
+.page{display:none;padding:28px 32px;animation:fadeUp .28s ease;min-height:0}
+.page.on{display:block;min-height:0}
 .page.on#page-cardapio-publico{display:flex}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:26px;flex-wrap:wrap;gap:10px}
