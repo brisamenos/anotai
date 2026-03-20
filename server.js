@@ -849,6 +849,70 @@ const server = http.createServer(async (req,res) => {
   if(req.method==='POST'&&upath==='/api/backup'){fazerBackup(true);const size=fs.existsSync(BACKUP_PATH)?fs.statSync(BACKUP_PATH).size:0;send(res,200,{ok:true,path:BACKUP_PATH,size});return}
   if(req.method==='POST'&&upath==='/api/restore'){const ok=restaurarBackup();send(res,200,{ok,msg:ok?'Restauração concluída':'Nenhum backup encontrado'});return}
 
+  // ── Admin login (sem credencial no HTML) ─────────────
+  if(req.method==='POST'&&upath==='/api/admin-login'){
+    const body=await readBody(req),{email,senha_hash}=body
+    if(!email||!senha_hash){send(res,400,{error:'email e senha_hash obrigatórios'});return}
+    const u=db.prepare("SELECT id,nome,email,role FROM sys_users WHERE email=? AND senha_hash=? AND ativo=1 AND role IN ('superadmin','admin')").get(email.toLowerCase().trim(),senha_hash)
+    if(!u){send(res,401,{error:'Acesso negado. Credenciais inválidas.'});return}
+    send(res,200,{ok:true,id:u.id,nome:u.nome,email:u.email,role:u.role})
+    return
+  }
+
+  // ── Download de backup completo (todos os gestores) ──
+  if(req.method==='GET'&&upath==='/api/admin-backup-download'){
+    fazerBackup(true)
+    if(!fs.existsSync(BACKUP_PATH)){send(res,404,{error:'Nenhum backup disponível'});return}
+    const data=fs.readFileSync(BACKUP_PATH,'utf8')
+    const fname=`backup-completo-${new Date().toISOString().slice(0,10)}.json`
+    res.writeHead(200,{'Content-Type':'application/json','Content-Disposition':`attachment; filename="${fname}"`,'Content-Length':Buffer.byteLength(data)})
+    res.end(data)
+    return
+  }
+
+  // ── Download de backup de um tenant específico ───────
+  if(req.method==='GET'&&upath==='/api/admin-backup-tenant'){
+    const tid=params.get('tenant_id')
+    if(!tid){send(res,400,{error:'tenant_id obrigatório'});return}
+    const tenant=db.prepare('SELECT id,nome,slug FROM tenants WHERE id=?').get(tid)
+    if(!tenant){send(res,404,{error:'Tenant não encontrado'});return}
+    const TABELAS_TENANT=['sys_users','store_config','categories','menu_items','cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','ratings']
+    const snapshot={ts:new Date().toISOString(),tenant_id:tid,tenant_nome:tenant.nome,tabelas:{tenants:[tenant]}}
+    for(const t of TABELAS_TENANT){
+      try{snapshot.tabelas[t]=db.prepare(`SELECT * FROM "${t}" WHERE tenant_id=?`).all(tid)}catch{snapshot.tabelas[t]=[]}
+    }
+    const data=JSON.stringify(snapshot)
+    const fname=`backup-${tenant.slug||tid}-${new Date().toISOString().slice(0,10)}.json`
+    res.writeHead(200,{'Content-Type':'application/json','Content-Disposition':`attachment; filename="${fname}"`,'Content-Length':Buffer.byteLength(data)})
+    res.end(data)
+    return
+  }
+
+  // ── Importar backup (upload de arquivo JSON) ─────────
+  if(req.method==='POST'&&upath==='/api/admin-backup-import'){
+    const body=await readBody(req)
+    let snapshot=body
+    // aceita tanto { tabelas:{...} } quanto { ts, tabelas:{...} }
+    if(!snapshot?.tabelas){send(res,400,{error:'JSON de backup inválido (falta "tabelas")'});return}
+    try{
+      let totalOk=0,totalFail=0
+      for(const t of TABELAS_BACKUP){
+        const rows=snapshot.tabelas?.[t]
+        if(!rows?.length) continue
+        try{
+          const cols=Object.keys(rows[0])
+          const stmt=db.prepare(`INSERT OR IGNORE INTO "${t}" (${cols.map(c=>`"${c}"`).join(',')}) VALUES (${cols.map(()=>'?').join(',')})`)
+          const ins=db.transaction(items=>{let ok=0;for(const r of items){try{stmt.run(Object.values(r));ok++}catch{totalFail++}};return ok})
+          totalOk+=ins(rows)
+        }catch(e){log('⚠️',`Import ${t}: ${e.message}`)}
+      }
+      marcarDirty()
+      setTimeout(()=>fazerBackup(true),2000)
+      send(res,200,{ok:true,inserted:totalOk,skipped:totalFail,ts:snapshot.ts||null})
+    }catch(e){send(res,400,{error:'Erro ao importar: '+e.message})}
+    return
+  }
+
   if(upath.startsWith('/api/evo')){
     const tenantId=req.headers['x-tenant-id'];if(!tenantId){send(res,401,{error:'x-tenant-id obrigatório'});return}
     const cfg=db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tenantId),instance=cfg?.evo_instance||null
@@ -889,7 +953,7 @@ const server = http.createServer(async (req,res) => {
 
   if(req.method==='POST'&&(upath.startsWith('/webhook/whatsapp')||upath.startsWith('/webhook/'))){await handleIAWebhook(req,res);return}
 
-  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/ia-humano-assumiu','/api/rastreio-wa'])
+  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-backup-download','/api/admin-backup-tenant','/api/admin-backup-import','/api/ia-humano-assumiu','/api/rastreio-wa'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return
