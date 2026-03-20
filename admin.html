@@ -558,29 +558,22 @@ function doLogout() {
 // Verifica sessão ao carregar
 window.addEventListener('DOMContentLoaded', async () => {
   const raw = sessionStorage.getItem('adm_session');
-  if (raw) {
-    try {
-      const s = JSON.parse(raw);
-      if (!s.token || Date.now() - s.ts >= 8*60*60*1000) {
-        sessionStorage.removeItem('adm_session'); return;
-      }
-      // Valida token no servidor antes de mostrar o painel
-      const check = await fetch('/api/admin/mp-config', {
-        headers: { 'Authorization': 'Bearer ' + s.token, 'Content-Type': 'application/json' }
-      }).catch(() => null);
-      if (!check || check.status === 401) {
-        // Token expirou no servidor (restart) → limpa e pede login
-        sessionStorage.removeItem('adm_session');
-        return;
-      }
-      _sessao = s;
-      document.getElementById('login').style.display  = 'none';
-      document.getElementById('painel').style.display = 'flex';
-      document.getElementById('adm-av').textContent   = s.nome.charAt(0).toUpperCase();
-      document.getElementById('adm-nome').textContent = s.nome.split(' ')[0];
-      loadAll();
-    } catch(e) { sessionStorage.removeItem('adm_session'); }
-  }
+  if (!raw) return;
+  try {
+    const s = JSON.parse(raw);
+    if (!s.token || Date.now() - s.ts >= 8*60*60*1000) { sessionStorage.removeItem('adm_session'); return; }
+    // Valida token no servidor (sobrevive a restarts porque agora está no SQLite)
+    const check = await fetch('/api/admin/mp-config', {
+      headers: { 'Authorization': 'Bearer ' + s.token, 'Content-Type': 'application/json' }
+    }).catch(() => null);
+    if (!check || check.status === 401) { sessionStorage.removeItem('adm_session'); return; }
+    _sessao = s;
+    document.getElementById('login').style.display  = 'none';
+    document.getElementById('painel').style.display = 'flex';
+    document.getElementById('adm-av').textContent   = s.nome.charAt(0).toUpperCase();
+    document.getElementById('adm-nome').textContent = s.nome.split(' ')[0];
+    loadAll();
+  } catch(e) { sessionStorage.removeItem('adm_session'); }
 });
 
 // ── NAVEGAÇÃO ────────────────────────────
@@ -1186,18 +1179,7 @@ async function importarBackup() {
 async function carregarMpConfig() {
   try {
     const r = await fetch('/api/admin/mp-config', { headers: adminAuthHeader() });
-
-    // Sessão expirou no servidor → força novo login
-    if (r.status === 401) {
-      toast('err', 'Sessão expirada. Faça login novamente.');
-      setTimeout(() => {
-        sessionStorage.removeItem('adm_session');
-        document.getElementById('painel').style.display = 'none';
-        document.getElementById('login').style.display  = 'flex';
-      }, 1500);
-      return;
-    }
-
+    if (r.status === 401) { toast('err','Sessão expirada. Faça login novamente.'); setTimeout(doLogout,1500); return; }
     const d = r.ok ? await r.json() : {};
     const txtEl = document.getElementById('mp-status-txt');
     if (txtEl) txtEl.innerHTML = d.mp_configurado
@@ -1224,15 +1206,7 @@ async function salvarMpConfig() {
       headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    if (r.status === 401) {
-      toast('err', 'Sessão expirada. Faça login novamente.');
-      setTimeout(() => {
-        sessionStorage.removeItem('adm_session');
-        document.getElementById('painel').style.display = 'none';
-        document.getElementById('login').style.display  = 'flex';
-      }, 1500);
-      return;
-    }
+    if (r.status === 401) { toast('err','Sessão expirada. Faça login novamente.'); setTimeout(doLogout,1500); return; }
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
     toast('ok', '✅ Configuração MP salva!');

@@ -2792,136 +2792,88 @@ async function submitOrder() {
   await _doSubmitOrder(addr, null);
 }
 
-// ═══ TRACKER LOCAL — persiste sem login ═══
+// ═══ TRACKER LOCAL ═══
 const TRACK_KEY = 'ef_track_v1';
 let _pendingOrderName  = '';
 let _pendingOrderPhone = '';
 
-function salvarTrackerLocal(orderId, items, client) {
-  try { localStorage.setItem(TRACK_KEY, JSON.stringify({ orderId, items, client, tenantId: _tenantId, ts: Date.now() })); } catch(e) {}
+function salvarTrackerLocal(id, items, client) {
+  try { localStorage.setItem(TRACK_KEY, JSON.stringify({orderId:id,items,client,tenantId:_tenantId,ts:Date.now()})); } catch(e) {}
 }
-function limparTrackerLocal() {
-  try { localStorage.removeItem(TRACK_KEY); } catch(e) {}
-}
+function limparTrackerLocal() { try { localStorage.removeItem(TRACK_KEY); } catch(e) {} }
 function restaurarTrackerLocal() {
   try {
-    const d = JSON.parse(localStorage.getItem(TRACK_KEY) || 'null');
-    if (!d || !d.orderId) return;
-    if (d.tenantId && d.tenantId !== _tenantId) return;
-    if (Date.now() - d.ts > 4 * 60 * 60 * 1000) { limparTrackerLocal(); return; }
-    startTracking(d.orderId, d.items || [], d.client || '');
+    const d = JSON.parse(localStorage.getItem(TRACK_KEY)||'null');
+    if (!d||!d.orderId) return;
+    if (d.tenantId&&d.tenantId!==_tenantId) return;
+    if (Date.now()-d.ts > 4*60*60*1000) { limparTrackerLocal(); return; }
+    startTracking(d.orderId, d.items||[], d.client||'');
   } catch(e) {}
 }
 
-// ═══ PIX — QR Code + polling direto MP ═══
-let _pixMpId  = null;
-let _pixPollT = null;
-let _pixExpT  = null;
-let _pixDone  = false;
-let _pixAddr  = '';
+// ═══ PIX — QR Code + polling direto ═══
+let _pixMpId='', _pixPollT=null, _pixExpT=null, _pixDone=false, _pixAddr='';
 
 async function abrirPixModal() {
-  _pixDone = false;
-  _pixAddr = _pendingOrderAddr;
-
-  document.getElementById('pix-body-waiting').style.display = '';
-  document.getElementById('pix-body-ok').style.display      = 'none';
-  document.getElementById('pix-qr-wrap').innerHTML          = '<span class="pix-loading">⏳</span>';
-  document.getElementById('pix-copy-wrap').style.display    = 'none';
-  document.getElementById('pix-dot').className              = 'pix-dot';
-  document.getElementById('pix-status-txt').textContent     = 'Gerando QR Code…';
-  document.getElementById('pix-valor').textContent          = 'R$ ' + fmt(grandTotal());
+  _pixDone=false; _pixAddr=_pendingOrderAddr;
+  document.getElementById('pix-body-waiting').style.display='';
+  document.getElementById('pix-body-ok').style.display='none';
+  document.getElementById('pix-qr-wrap').innerHTML='<span class="pix-loading">⏳</span>';
+  document.getElementById('pix-copy-wrap').style.display='none';
+  document.getElementById('pix-dot').className='pix-dot';
+  document.getElementById('pix-status-txt').textContent='Gerando QR Code…';
+  document.getElementById('pix-valor').textContent='R$ '+fmt(grandTotal());
   document.getElementById('pix-overlay').classList.add('on');
-
   try {
-    const phoneNum = (_pendingOrderPhone || '').replace(/[^0-9]/g, '');
-    const r = await fetch('/api/pix/criar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
-      body: JSON.stringify({
-        valor:    grandTotal(),
-        client:   _pendingOrderName,
-        email:    (phoneNum || 'cliente') + '@pedido.com',
-        order_id: 'pend-' + Date.now()
-      })
+    const phoneNum=(_pendingOrderPhone||'').replace(/[^0-9]/g,'');
+    const r=await fetch('/api/pix/criar',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-tenant-id':_tenantId},
+      body:JSON.stringify({valor:grandTotal(),client:_pendingOrderName,email:(phoneNum||'cliente')+'@pedido.com',order_id:'pend-'+Date.now()})
     });
-    const d = await r.json();
-    if (!r.ok || !d.ok) {
-      toast('❌', d.error || 'Erro ao gerar PIX. Tente outra forma.');
-      pixCancelar(); return;
-    }
-
-    _pixMpId = String(d.mp_payment_id);
-
-    const qrEl = document.getElementById('pix-qr-wrap');
-    if (d.qr_code_base64) {
-      qrEl.innerHTML = '<img src="data:image/png;base64,' + d.qr_code_base64 + '" alt="QR PIX">';
-    } else {
-      qrEl.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:10px">Sem QR Code.<br>Use o código abaixo.</div>';
-    }
-    if (d.qr_code) {
-      document.getElementById('pix-code-input').value    = d.qr_code;
-      document.getElementById('pix-copy-wrap').style.display = '';
-    }
-    document.getElementById('pix-status-txt').textContent = 'Aguardando pagamento…';
-
-    // Polling a cada 4s
-    _pixPollT = setInterval(pixPoll, 4000);
-    // Expira em 10min
-    _pixExpT = setTimeout(() => {
-      pixPararPolling();
-      document.getElementById('pix-dot').className         = 'pix-dot err';
-      document.getElementById('pix-status-txt').textContent = 'Tempo esgotado. Gere um novo PIX.';
-    }, 10 * 60 * 1000);
-
-  } catch(e) {
-    toast('❌', 'Erro ao gerar PIX. Tente outra forma de pagamento.');
-    pixCancelar();
-  }
+    const d=await r.json();
+    if(!r.ok||!d.ok){toast('❌',d.error||'Erro ao gerar PIX. Tente outra forma.');pixCancelar();return;}
+    _pixMpId=String(d.mp_payment_id);
+    const qrEl=document.getElementById('pix-qr-wrap');
+    if(d.qr_code_base64){qrEl.innerHTML='<img src="data:image/png;base64,'+d.qr_code_base64+'" alt="QR PIX">';}
+    else{qrEl.innerHTML='<div style="font-size:11px;color:var(--muted);padding:10px">Sem QR Code.<br>Use o código abaixo.</div>';}
+    if(d.qr_code){document.getElementById('pix-code-input').value=d.qr_code;document.getElementById('pix-copy-wrap').style.display='';}
+    document.getElementById('pix-status-txt').textContent='Aguardando pagamento…';
+    _pixPollT=setInterval(pixPoll,4000);
+    _pixExpT=setTimeout(()=>{pixPararPolling();document.getElementById('pix-dot').className='pix-dot err';document.getElementById('pix-status-txt').textContent='Tempo esgotado. Gere um novo PIX.';},10*60*1000);
+  } catch(e){toast('❌','Erro ao gerar PIX. Tente outra forma.');pixCancelar();}
 }
 
 async function pixPoll() {
-  if (!_pixMpId || _pixDone) return;
-  try {
-    const r = await fetch('/api/pix/status?mp_payment_id=' + encodeURIComponent(_pixMpId), {
-      headers: { 'x-tenant-id': _tenantId }
-    });
-    if (!r.ok) return;
-    const d = await r.json();
-    if (d.status === 'aprovado') {
-      _pixDone = true;
-      pixPararPolling();
-      document.getElementById('pix-dot').className              = 'pix-dot ok';
-      document.getElementById('pix-status-txt').textContent     = '✅ Pagamento confirmado!';
-      document.getElementById('pix-body-waiting').style.display = 'none';
-      document.getElementById('pix-body-ok').style.display      = 'flex';
-      setTimeout(async () => {
+  if(!_pixMpId||_pixDone)return;
+  try{
+    const r=await fetch('/api/pix/status?mp_payment_id='+encodeURIComponent(_pixMpId),{headers:{'x-tenant-id':_tenantId}});
+    if(!r.ok)return;
+    const d=await r.json();
+    if(d.status==='aprovado'){
+      _pixDone=true; pixPararPolling();
+      document.getElementById('pix-dot').className='pix-dot ok';
+      document.getElementById('pix-status-txt').textContent='✅ Pagamento confirmado!';
+      document.getElementById('pix-body-waiting').style.display='none';
+      document.getElementById('pix-body-ok').style.display='flex';
+      setTimeout(async()=>{
         document.getElementById('pix-overlay').classList.remove('on');
-        await _doSubmitOrder(_pixAddr, null, 'pix_mp', _pixMpId);
-      }, 1500);
+        await _doSubmitOrder(_pixAddr,null,'pix_mp',_pixMpId);
+      },1500);
     }
-  } catch(e) {}
+  }catch(e){}
 }
 
-function pixPararPolling() {
-  if (_pixPollT) { clearInterval(_pixPollT); _pixPollT = null; }
-  if (_pixExpT)  { clearTimeout(_pixExpT);   _pixExpT  = null; }
-}
-function pixCancelar() {
-  pixPararPolling();
-  _pixMpId = null; _pixDone = false;
-  document.getElementById('pix-overlay').classList.remove('on');
-}
-function pixCopiar() {
-  const code = document.getElementById('pix-code-input').value;
-  if (!code) return;
-  navigator.clipboard.writeText(code).then(() => {
-    const btn = document.getElementById('pix-copy-btn');
-    if (btn) { btn.textContent = '✅ Copiado!'; setTimeout(() => { btn.textContent = '📋 Copiar código'; }, 2000); }
-    toast('✅', 'Código PIX copiado!');
-  }).catch(() => {
-    try { document.getElementById('pix-code-input').select(); document.execCommand('copy'); toast('✅','Copiado!'); } catch(e2) {}
-  });
+function pixPararPolling(){if(_pixPollT){clearInterval(_pixPollT);_pixPollT=null;}if(_pixExpT){clearTimeout(_pixExpT);_pixExpT=null;}}
+function pixCancelar(){pixPararPolling();_pixMpId='';_pixDone=false;document.getElementById('pix-overlay').classList.remove('on');}
+function pixCopiar(){
+  const code=document.getElementById('pix-code-input').value;
+  if(!code)return;
+  navigator.clipboard.writeText(code).then(()=>{
+    const btn=document.getElementById('pix-copy-btn');
+    if(btn){btn.textContent='✅ Copiado!';setTimeout(()=>{btn.textContent='📋 Copiar código';},2000);}
+    toast('✅','Código PIX copiado!');
+  }).catch(()=>{try{document.getElementById('pix-code-input').select();document.execCommand('copy');toast('✅','Copiado!');}catch(e2){}});
 }
 
 // ─── Troco ───────────────────────────────────────────
@@ -3023,14 +2975,8 @@ async function _doSubmitOrder(addr, troco, pagOverride, mpPaymentId) {
     }).select().single();
 
     if (error) throw error;
-
-    // Vincula mp_payment_id ao pedido real (se veio de PIX)
     if (mpPaymentId && order && order.id) {
-      fetch('/api/pix/vincular', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
-        body: JSON.stringify({ mp_payment_id: mpPaymentId, order_id: order.id })
-      }).catch(() => {});
+      fetch('/api/pix/vincular',{method:'POST',headers:{'Content-Type':'application/json','x-tenant-id':_tenantId},body:JSON.stringify({mp_payment_id:mpPaymentId,order_id:order.id})}).catch(()=>{});
     }
 
     cart = [];
@@ -3283,7 +3229,7 @@ async function submitRating() {
 })();
 
 init();
-window.addEventListener('load', () => { setTimeout(restaurarTrackerLocal, 1200); });
+window.addEventListener('load',()=>{setTimeout(restaurarTrackerLocal,1200);});
 
 // Garante limpeza do campo de busca mesmo quando Chrome autofill ocorre após load
 document.addEventListener('DOMContentLoaded', clearSearchInput);
