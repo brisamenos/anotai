@@ -289,33 +289,45 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
             <div style="font-size:12px;color:var(--muted);margin-top:2px">Gerencie backups de todos os gestores ou individualmente</div>
           </div>
         </div>
+        <!-- Backup Global com Imagens -->
         <div class="card" style="margin-bottom:16px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-            <div><div class="card-title">🗄️ Backup Completo</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:3px">Exporta todos os dados de todos os gestores</div></div>
-            <button class="btn bp" onclick="baixarBackupCompleto()" id="btn-backup-full">⬇️ Baixar backup</button>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div>
+              <div class="card-title">🗄️ Backup Global Completo</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:3px">Todos os restaurantes + todas as imagens em um único arquivo</div>
+            </div>
+            <button class="btn bp" onclick="baixarBackupCompleto()" id="btn-backup-full">⬇️ Baixar backup global</button>
           </div>
-          <div id="backup-full-info" style="font-size:12px;color:var(--muted)">Clique para gerar e baixar o arquivo JSON completo.</div>
+          <div id="backup-full-info" style="font-size:12px;color:var(--muted)">Inclui dados de todos os tenants e imagens do cardápio (comprimido em .gz).</div>
         </div>
+
+        <!-- Backup por Gestor -->
         <div class="tw" style="margin-bottom:16px">
           <div class="tmeta">
-            <div class="card-title">🏢 Backup por Gestor</div>
+            <div class="card-title">🏢 Backup Individual por Gestor</div>
             <div class="sbox">
               <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style="color:var(--muted)"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
               <input id="bkp-q" placeholder="Buscar gestor..." oninput="renderBackupList()">
             </div>
           </div>
-          <table><thead><tr><th>Restaurante</th><th>Slug</th><th>Plano</th><th>Status</th><th>Ação</th></tr></thead>
+          <table><thead><tr><th>Restaurante</th><th>Slug</th><th>Plano</th><th>Status</th><th>Backup</th></tr></thead>
             <tbody id="bkp-tbody"></tbody></table>
         </div>
+
+        <!-- Importar Backup -->
         <div class="card">
-          <div class="card-title" style="margin-bottom:4px">📤 Importar Backup</div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Selecione um .json de backup. Registros existentes não serão sobrescritos.</div>
+          <div class="card-title" style="margin-bottom:4px">📤 Importar / Restaurar Backup</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:14px">
+            Selecione um arquivo <strong>.json</strong> ou <strong>.json.gz</strong> de backup.<br>
+            Restaura dados <strong>e imagens</strong>. Registros já existentes não são sobrescritos.
+          </div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <label style="cursor:pointer"><div class="btn bg2">📂 Selecionar arquivo .json</div>
-              <input type="file" id="import-file" accept=".json" style="display:none" onchange="previewImport(this)"></label>
+            <label style="cursor:pointer">
+              <div class="btn bg2">📂 Selecionar arquivo de backup</div>
+              <input type="file" id="import-file" accept=".json,.gz" style="display:none" onchange="previewImport(this)">
+            </label>
             <div id="import-file-name" style="font-size:12px;color:var(--muted)">Nenhum arquivo selecionado</div>
-            <button class="btn bp" id="btn-importar" onclick="importarBackup()" style="display:none">⬆️ Importar</button>
+            <button class="btn bp" id="btn-importar" onclick="importarBackup()" style="display:none">⬆️ Restaurar</button>
           </div>
           <div id="import-status" style="margin-top:12px;font-size:12.5px"></div>
         </div>
@@ -926,6 +938,173 @@ async function iaSalvarConfigAdmin() {
     iaAdminCarregar();
   } catch(e) {
     toast('err', 'Erro: ' + (e.message||JSON.stringify(e)));
+  }
+}
+
+// ════════════════════════════════════════════════════════
+// BACKUP & RESTORE
+// ════════════════════════════════════════════════════════
+
+// ── Baixar backup global (todos os tenants + imagens) ──
+async function baixarBackupCompleto() {
+  const btn  = document.getElementById('btn-backup-full');
+  const info = document.getElementById('backup-full-info');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Gerando...'; }
+  if (info) info.textContent = 'Coletando todos os dados e imagens...';
+  try {
+    const res = await fetch('/api/admin-backup-global-imagens', { headers: adminAuthHeader() });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ${res.status}`);
+    }
+    const cd       = res.headers.get('Content-Disposition') || '';
+    const match    = cd.match(/filename="([^"]+)"/);
+    const filename = match ? match[1] : `backup-global-${new Date().toISOString().slice(0,10)}.json.gz`;
+    const blob     = await res.blob();
+    const url      = URL.createObjectURL(blob);
+    const a        = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+    const kb = Math.round(blob.size / 1024);
+    if (info) info.innerHTML = `✅ Backup gerado: <strong>${filename}</strong> (${kb} KB)`;
+    toast('ok', `💾 Backup global baixado! (${kb} KB)`);
+  } catch(e) {
+    if (info) info.textContent = '❌ Erro: ' + e.message;
+    toast('err', 'Erro ao gerar backup: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⬇️ Baixar backup global'; }
+  }
+}
+
+// ── Backup individual por gestor ───────────────────────
+function renderBackupList() {
+  const q   = (document.getElementById('bkp-q')?.value || '').toLowerCase();
+  const el  = document.getElementById('bkp-tbody');
+  if (!el) return;
+  const fil = _clientes.filter(c => !q || c.nome.toLowerCase().includes(q) || (c.slug||'').includes(q));
+  if (!fil.length) { el.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">Nenhum gestor encontrado</td></tr>'; return; }
+  el.innerHTML = fil.map(c => `
+    <tr>
+      <td><div style="font-weight:600;font-size:13px">${c.nome}</div></td>
+      <td><span style="font-size:12px;color:var(--muted)">/${c.slug||'—'}</span></td>
+      <td><span class="badge ${({basico:'bg-gray',pro:'bg-blue',premium:'bg-purple'})[c.plano]||'bg-blue'}">${({basico:'Básico',pro:'Pro',premium:'⭐ Premium'})[c.plano]||c.plano}</span></td>
+      <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">${c.ativo?'● Ativo':'● Inativo'}</span></td>
+      <td>
+        <button class="btn bg2 bsm" onclick="baixarBackupGestor('${c.id}','${c.slug||c.id}')">⬇️ Backup</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function baixarBackupGestor(tenantId, slug) {
+  try {
+    const res = await fetch(`/api/admin-backup-tenant?tenant_id=${tenantId}`, { headers: adminAuthHeader() });
+    if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error||'Erro'); }
+    const fname = `backup-${slug}-${new Date().toISOString().slice(0,10)}.json`;
+    const blob  = await res.blob();
+    const url   = URL.createObjectURL(blob);
+    const a     = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+    toast('ok', `💾 Backup de "${slug}" baixado!`);
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+// ── Preview do arquivo de backup selecionado ───────────
+let _importData = null;
+
+async function previewImport(input) {
+  const file = input.files[0];
+  const nameEl = document.getElementById('import-file-name');
+  const btnEl  = document.getElementById('btn-importar');
+  const status = document.getElementById('import-status');
+  _importData  = null;
+  if (btnEl) btnEl.style.display = 'none';
+  if (!file) { if (nameEl) nameEl.textContent = 'Nenhum arquivo selecionado'; return; }
+  if (nameEl) nameEl.textContent = file.name;
+  if (status) status.textContent = 'Lendo arquivo...';
+
+  try {
+    let jsonText;
+    if (file.name.endsWith('.gz')) {
+      // Descomprime no browser via DecompressionStream (Chrome/Edge/Firefox modernos)
+      const ds     = new DecompressionStream('gzip');
+      const reader = file.stream().pipeThrough(ds).getReader();
+      const chunks = [];
+      while (true) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); }
+      const blob2  = new Blob(chunks);
+      jsonText     = await blob2.text();
+    } else {
+      jsonText = await file.text();
+    }
+    _importData = JSON.parse(jsonText);
+    if (!_importData?.tabelas) throw new Error('Formato inválido — falta "tabelas"');
+
+    const tenants = (_importData.tabelas?.tenants||[]).length;
+    const users   = (_importData.tabelas?.sys_users||[]).length;
+    const items   = (_importData.tabelas?.menu_items||[]).length;
+    const orders  = (_importData.tabelas?.orders||[]).length;
+    const imgs    = Object.keys(_importData.imagens||{}).length;
+    const ts      = _importData.ts ? new Date(_importData.ts).toLocaleString('pt-BR') : '—';
+
+    if (status) status.innerHTML = `
+      <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;padding:12px 14px">
+        <div style="font-weight:700;color:var(--success);margin-bottom:8px">✅ Arquivo válido — ${file.name}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;font-size:12px">
+          <div>🏢 <strong>${tenants}</strong> restaurante(s)</div>
+          <div>👤 <strong>${users}</strong> usuário(s)</div>
+          <div>🍽️ <strong>${items}</strong> item(ns) de cardápio</div>
+          <div>🛎️ <strong>${orders}</strong> pedido(s)</div>
+          <div>🖼️ <strong>${imgs}</strong> imagem(ns)</div>
+          <div>📅 Gerado em: ${ts}</div>
+        </div>
+        <div style="margin-top:10px;font-size:11.5px;color:var(--muted)">Registros já existentes no banco <strong>não serão sobrescritos</strong>.</div>
+      </div>`;
+    if (btnEl) btnEl.style.display = '';
+  } catch(e) {
+    _importData = null;
+    if (status) status.innerHTML = `<span style="color:var(--danger)">❌ Erro ao ler arquivo: ${e.message}</span>`;
+    if (btnEl)  btnEl.style.display = 'none';
+  }
+}
+
+// ── Executar importação/restauração ───────────────────
+async function importarBackup() {
+  if (!_importData) { toast('err', 'Nenhum arquivo válido selecionado'); return; }
+  if (!confirm(`Restaurar backup de ${new Date(_importData.ts||0).toLocaleDateString('pt-BR')}?\n\nRegistros existentes NÃO serão sobrescritos.`)) return;
+
+  const btn    = document.getElementById('btn-importar');
+  const status = document.getElementById('import-status');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Restaurando...'; }
+  if (status) status.innerHTML = '<span style="color:var(--muted)">Enviando dados ao servidor...</span>';
+
+  try {
+    const res = await fetch('/api/admin-backup-restore-global', {
+      method: 'POST',
+      headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(_importData)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Erro ${res.status}`);
+
+    if (status) status.innerHTML = `
+      <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;padding:12px 14px">
+        <div style="font-weight:700;color:var(--success);margin-bottom:6px">✅ Restauração concluída!</div>
+        <div style="font-size:12px;display:flex;gap:16px;flex-wrap:wrap">
+          <div>📋 Registros inseridos: <strong>${data.registros}</strong></div>
+          <div>⏭️ Já existiam: <strong>${data.registros_ignorados}</strong></div>
+          <div>🖼️ Imagens restauradas: <strong>${data.imagens}</strong></div>
+          ${data.imagens_falha ? `<div style="color:var(--danger)">⚠️ Imagens com erro: ${data.imagens_falha}</div>` : ''}
+        </div>
+      </div>`;
+    toast('ok', `✅ Backup restaurado! ${data.registros} registros, ${data.imagens} imagens`);
+    await loadAll(); // Recarrega os dados do painel
+  } catch(e) {
+    if (status) status.innerHTML = `<span style="color:var(--danger)">❌ Erro: ${e.message}</span>`;
+    toast('err', 'Erro na restauração: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⬆️ Restaurar'; }
   }
 }
 </script>
