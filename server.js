@@ -1185,6 +1185,33 @@ const server = http.createServer(async (req,res) => {
     if(!mpId){send(res,400,{error:'mp_payment_id obrigatório'});return}
     const row=db.prepare('SELECT * FROM pagamentos_pix WHERE mp_payment_id=? AND tenant_id=?').get(mpId,tid)
     if(!row){send(res,404,{error:'Pagamento não encontrado'});return}
+
+    // Se ainda pendente → consulta MP diretamente (não depende de webhook)
+    if(row.status==='pendente'){
+      try{
+        let mpToken=MP_TOKEN
+        try{const cfgMp=db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get();const g=cfgMp?.ia_config?JSON.parse(cfgMp.ia_config):{};if(g.mp_token)mpToken=g.mp_token}catch(e2){}
+        if(mpToken){
+          const r=await fetch('https://api.mercadopago.com/v1/payments/'+mpId,{headers:{'Authorization':'Bearer '+mpToken}})
+          const pd=await r.json()
+          if(r.ok){
+            const novoStatus=pd.status==='approved'?'aprovado':pd.status==='rejected'?'rejeitado':pd.status==='cancelled'?'cancelado':'pendente'
+            const paidAt=pd.date_approved||null
+            db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=?,payer_name=? WHERE mp_payment_id=?')
+              .run(novoStatus,paidAt,pd.payer&&pd.payer.first_name?pd.payer.first_name:row.payer_name||'',String(mpId))
+            if(novoStatus==='aprovado'){
+              log('✅','PIX aprovado (polling): R$'+row.valor+' tenant='+tid)
+              if(row.order_id){
+                db.prepare("UPDATE orders SET pag='pix_mp',status=CASE WHEN status='analise' THEN 'producao' ELSE status END WHERE id=? AND tenant_id=?").run(row.order_id,tid)
+                sseBroadcast('orders-rt:'+tid,'orders:UPDATE',{id:row.order_id,status:'producao',pag:'pix_mp'})
+              }
+              marcarDirty()
+            }
+            send(res,200,Object.assign({},row,{status:novoStatus}));return
+          }
+        }
+      }catch(e){log('\u26a0\ufe0f','PIX status polling erro:',{error:e.message})}
+    }
     send(res,200,row);return
   }
 
