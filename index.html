@@ -1521,8 +1521,18 @@ async function init() {
     }
     _tenantId = info.id;
     _tenantPlano = (info.plano || 'pro').toLowerCase();
-    // Usa chave separada para não sobrescrever a sessão do gestor/admin
+    // Sempre grava cardapio_session (chave dedicada, não conflita com gestor)
     sessionStorage.setItem('cardapio_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
+    // Grava sys_session SOMENTE se não houver sessão de gestor/admin válida
+    // (garante compatibilidade com versões antigas do api-client.js)
+    try {
+      const _ex = JSON.parse(sessionStorage.getItem('sys_session') || 'null');
+      if (!_ex || !(_ex.nome || _ex.role)) {
+        sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
+      }
+    } catch(e) {
+      sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
+    }
     applyBranding(info.branding, info.nome);
 
     const [itemsR, catsR, cuponsR, cfgR] = await Promise.all([
