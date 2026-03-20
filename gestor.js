@@ -162,7 +162,7 @@ async function loadAllData(silent = false) {
       safe(sb.from('mesas').select('*').order('num')),
       safe(sb.from('estoque').select('*').order('id')),
       safe(sb.from('fidelidade').select('*').order('pts',{ascending:false})),
-      safe(sb.from('store_config').select('caixa_open,store_open').single()),
+      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema').single()),
       safe(sb.from('customers').select('*').order('id',{ascending:false}))
     ]);
 
@@ -222,7 +222,15 @@ async function loadAllData(silent = false) {
       if (st)   st.textContent = stOpen ? 'Online' : 'Offline';
       if (dot)  dot.style.background  = stOpen ? 'var(--success)' : 'var(--danger)';
       if (pill) { pill.style.background = stOpen ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'; pill.style.borderColor = stOpen ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'; pill.style.color = stOpen ? 'var(--success)' : 'var(--danger)'; }
-      // Tema gerenciado pelo CSS :root — não sobrescreve via banco no init()
+      // Aplica tema salvo no banco
+      const modoSalvo = cfgRes.data.gestor_tema || 'escuro';
+      _aplicarVars(modoSalvo === 'claro' ? MODO_CLARO : MODO_ESCURO);
+      if (modoSalvo === 'claro') {
+        _aplicarOverrideClaro(MODO_CLARO);
+      } else {
+        const el = document.getElementById('tema-light-override');
+        if (el) el.remove();
+      }
     }
 
     await loadFidConfig();
@@ -6639,13 +6647,15 @@ function temaAplicarModo(modo) {
     const el = document.getElementById('tema-light-override');
     if (el) el.remove();
   }
-  try { localStorage.setItem('ef_modo', modo); } catch(e) {}
+  // Salva no banco de dados
+  sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, gestor_tema: modo }).then(() => {}).catch(() => {});
   temaUpdateCardSelection();
   sbToast('ok', modo === 'claro' ? '☀️ Modo claro ativado!' : '🌑 Modo escuro ativado!');
 }
 
 function temaUpdateCardSelection() {
-  const modo = (localStorage.getItem('ef_modo') || 'escuro');
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  const modo = (bg && bg.startsWith('#f')) ? 'claro' : 'escuro';
   const cardClaro  = document.getElementById('tema-card-claro');
   const cardEscuro = document.getElementById('tema-card-escuro');
   if (cardClaro)  { cardClaro.style.borderColor  = modo==='claro'  ? 'var(--accent)':'var(--border)'; cardClaro.style.boxShadow  = modo==='claro'  ? '0 0 0 3px var(--accent-glow)':'none'; }
@@ -6666,18 +6676,7 @@ function temaBuildFields() {}
 function temaUpdatePreview() {}
 function temaUpdateInputs() {}
 
-// ── Aplica tema salvo ou escuro padrão ao carregar ────
-(function(){
-  // Limpa chaves antigas
-  try { ['ef_tema_modo','ef_tema_v2','tema','theme'].forEach(k=>localStorage.removeItem(k)); } catch(e){}
-  const modo = localStorage.getItem('ef_modo') || 'escuro';
-  const vars = modo === 'claro' ? MODO_CLARO : MODO_ESCURO;
-  _aplicarVars(vars);
-  if (modo === 'claro') {
-    // Override claro aplicado após DOM estar pronto
-    document.addEventListener('DOMContentLoaded', function(){ _aplicarOverrideClaro(MODO_CLARO); });
-  }
-})();
+// Tema aplicado via init() após leitura do banco de dados
 
 // ── Registra webhook na Evolution API automaticamente ──
 async function iaRegistrarWebhook(webhookUrl) {
