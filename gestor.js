@@ -6871,3 +6871,48 @@ async function _renderConfiguracoes() {
       : 'Nenhum pedido registrado ainda.';
   } catch(e) { el.textContent = '—'; }
 }
+
+// ── Backup completo (dados + imagens) ────────────────
+async function baixarBackupCompleto() {
+  const btn  = document.getElementById('btn-backup-completo');
+  const info = document.getElementById('cfg-backup-info');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Gerando backup...'; }
+  if (info) info.textContent = 'Coletando dados e imagens...';
+
+  try {
+    const tid = _sessao?.tenant_id;
+    if (!tid) throw new Error('Sessão inválida — faça login novamente.');
+
+    const res = await fetch('/api/backup-completo-gestor', {
+      headers: { 'x-tenant-id': tid }
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ${res.status}`);
+    }
+
+    // Determina nome do arquivo pelo header Content-Disposition
+    const cd       = res.headers.get('Content-Disposition') || '';
+    const match    = cd.match(/filename="([^"]+)"/);
+    const filename = match ? match[1] : `backup-completo-${new Date().toISOString().slice(0,10)}.json.gz`;
+
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    const kb = Math.round(blob.size / 1024);
+    if (info) info.textContent = `✅ Backup gerado com sucesso! (${kb} KB)`;
+    sbToast('ok', `💾 Backup completo baixado! (${kb} KB)`);
+  } catch(e) {
+    if (info) info.textContent = '❌ Erro: ' + e.message;
+    sbToast('err', 'Erro ao gerar backup: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⬇️ Baixar backup completo'; }
+  }
+}

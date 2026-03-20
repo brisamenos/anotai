@@ -189,7 +189,6 @@ const MIGRATIONS = [
   { version:13, description:'customer_id em orders',           up:`ALTER TABLE orders ADD COLUMN customer_id INTEGER` },
   { version:14, description:'tabela ratings',                  up:`CREATE TABLE IF NOT EXISTS ratings (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE, order_id INTEGER, client TEXT, phone TEXT, nota INTEGER NOT NULL DEFAULT 5, comentario TEXT, created_at TEXT DEFAULT (datetime('now')))` },
   { version:15, description:'troco em orders',                 up:`ALTER TABLE orders ADD COLUMN troco REAL` },
-  { version:16, description:'order_num_offset em store_config', up:`ALTER TABLE store_config ADD COLUMN order_num_offset INTEGER DEFAULT 0` },
 ]
 
 function runMigrations() {
@@ -353,7 +352,7 @@ function emit(tenantId, table, record, type) {
 const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','expires_at','created_at'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
-  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_tempo_entrega','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset'],
+  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_tempo_entrega','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
@@ -996,7 +995,63 @@ const server = http.createServer(async (req,res) => {
 
   if(req.method==='POST'&&(upath.startsWith('/webhook/whatsapp')||upath.startsWith('/webhook/'))){await handleIAWebhook(req,res);return}
 
-  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa'])
+
+  // ── Backup completo do gestor (dados + imagens em base64) ─────────────────
+  if(req.method==='GET'&&upath==='/api/backup-completo-gestor'){
+    const tid=req.headers['x-tenant-id']
+    if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
+    const tenant=db.prepare('SELECT id,nome,slug FROM tenants WHERE id=?').get(tid)
+    if(!tenant){send(res,404,{error:'Tenant não encontrado'});return}
+    try{
+      // Tabelas do tenant
+      const TABS=['sys_users','store_config','categories','menu_items','cupons','mesas','garcons',
+                  'orders','movimentos','estoque','fidelidade','customers','ratings']
+      const snapshot={ts:new Date().toISOString(),tenant_id:tid,tenant_nome:tenant.nome,tabelas:{tenants:[tenant]},imagens:{}}
+      for(const t of TABS){
+        try{snapshot.tabelas[t]=db.prepare(`SELECT * FROM "${t}" WHERE tenant_id=?`).all(tid)}catch{snapshot.tabelas[t]=[]}
+      }
+
+      // Coleta todas as URLs de imagem do tenant
+      const imageUrls=new Set()
+      ;(snapshot.tabelas.menu_items||[]).forEach(r=>{if(r.image_url)imageUrls.add(r.image_url)})
+      const cfg=(snapshot.tabelas.store_config||[])[0]
+      if(cfg){
+        if(cfg.store_logo_url)  imageUrls.add(cfg.store_logo_url)
+        if(cfg.store_banner_url)imageUrls.add(cfg.store_banner_url)
+      }
+
+      // Lê cada imagem e codifica em base64
+      for(const url of imageUrls){
+        const fname=path.basename(url.split('?')[0])
+        const fpath=path.join(UPLOADS_DIR,fname)
+        if(fs.existsSync(fpath)){
+          const ext=(path.extname(fname).slice(1)||'jpeg').toLowerCase()
+          const mime=ext==='png'?'image/png':ext==='webp'?'image/webp':ext==='gif'?'image/gif':'image/jpeg'
+          snapshot.imagens[fname]={mime,data:fs.readFileSync(fpath).toString('base64')}
+        }
+      }
+
+      const json=JSON.stringify(snapshot)
+      const slug=tenant.slug||tid
+      const fname=`backup-completo-${slug}-${new Date().toISOString().slice(0,10)}.json`
+      log('💾',`Backup completo gestor: ${slug} (${imageUrls.size} imagem(ns), ${Math.round(json.length/1024)}KB)`)
+
+      // Comprime com gzip para reduzir o tamanho do download
+      zlib.gzip(Buffer.from(json,'utf8'),(err,compressed)=>{
+        if(err){
+          res.writeHead(200,{'Content-Type':'application/json','Content-Disposition':`attachment; filename="${fname}"`,'Content-Length':Buffer.byteLength(json)})
+          res.end(json)
+        } else {
+          const fnameGz=fname+'.gz'
+          res.writeHead(200,{'Content-Type':'application/octet-stream','Content-Disposition':`attachment; filename="${fnameGz}"`,'Content-Encoding':'gzip','Content-Length':compressed.length})
+          res.end(compressed)
+        }
+      })
+    }catch(e){send(res,500,{error:'Erro ao gerar backup: '+e.message})}
+    return
+  }
+
+  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return
