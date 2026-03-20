@@ -6604,38 +6604,110 @@ function _aplicarOverrideClaro(vars) {
   style.textContent = `
     body,.app{background:var(--bg)!important;color:${text}!important}
     .main,.page{background:var(--bg)!important;color:${text}!important}
-    .topnav{background:var(--topnav-bg)!important;border-bottom:1px solid rgba(255,255,255,.06)!important;box-shadow:0 1px 8px rgba(0,0,0,.3)!important}
-    .topnav *{color:#f1f5f9!important}
-    .topnav .tnav-pill{color:#f1f5f9!important;border-color:rgba(255,255,255,.15)!important;background:rgba(255,255,255,.07)!important}
-    .sidebar{background:var(--sidebar-bg)!important;border-right:1px solid rgba(255,255,255,.06)!important;box-shadow:2px 0 20px rgba(0,0,0,.4)!important}
-    .sfoot{background:var(--sfoot-bg)!important}
-    .si{color:rgba(255,255,255,.55)!important}
-    .si:hover{background:rgba(255,255,255,.07)!important;color:rgba(255,255,255,.9)!important}
-    .si.on{background:rgba(26,111,212,.25)!important;color:#60a5fa!important}
-    .si.on::before{background:#60a5fa!important}
-    .shead{color:rgba(255,255,255,.3)!important;border-color:rgba(255,255,255,.06)!important}
-    .urow *{color:rgba(255,255,255,.7)!important}
-    .sidebar-search > div{background:rgba(255,255,255,.07)!important;border-color:rgba(255,255,255,.1)!important}
-    .sidebar-search input{color:#f1f5f9!important}
-    .sidebar-search input::placeholder{color:rgba(255,255,255,.35)!important}
+
+    /* ── TopNav escuro ── */
+    .topnav{background:var(--topnav-bg)!important;border-bottom:1px solid rgba(255,255,255,.08)!important;box-shadow:0 2px 12px rgba(0,0,0,.4)!important}
+    .topnav *{color:#e2e8f0!important}
+    .topnav .logo{color:#ffffff!important}
+    .logo span,.logo-text{color:#ffffff!important;font-weight:700!important}
+    .tnav-pill{color:#cbd5e1!important;border-color:rgba(255,255,255,.18)!important;background:rgba(255,255,255,.08)!important}
+    .tnav-pill:hover{color:#fff!important;background:rgba(255,255,255,.14)!important}
+    .tnav-pill.on{background:rgba(34,197,94,.2)!important;border-color:rgba(34,197,94,.4)!important;color:#86efac!important}
+    .ibtn{background:rgba(255,255,255,.08)!important;border-color:rgba(255,255,255,.15)!important;color:#cbd5e1!important}
+    .ibtn:hover{color:#fff!important;background:rgba(255,255,255,.15)!important}
+    .tbadge{background:rgba(255,255,255,.08)!important;border-color:rgba(255,255,255,.15)!important;color:#cbd5e1!important}
+
+    /* ── Sidebar navy ── */
+    .sidebar{background:var(--sidebar-bg)!important;border-right:1px solid rgba(255,255,255,.06)!important;box-shadow:4px 0 24px rgba(0,0,0,.5)!important}
+    .sfoot{background:var(--sfoot-bg)!important;border-top-color:rgba(255,255,255,.08)!important}
+
+    /* Itens da sidebar — texto bem visível */
+    .si{color:#94a3b8!important;font-weight:500!important}
+    .si svg{opacity:.7!important}
+    .si:hover{background:rgba(255,255,255,.08)!important;color:#e2e8f0!important}
+    .si:hover svg{opacity:1!important}
+    .si.on{background:rgba(59,130,246,.22)!important;color:#93c5fd!important;font-weight:600!important}
+    .si.on svg{opacity:1!important;color:#93c5fd!important}
+    .si.on::before{background:#3b82f6!important;box-shadow:0 0 8px rgba(59,130,246,.5)!important}
+    .shead{color:rgba(255,255,255,.35)!important;border-color:rgba(255,255,255,.08)!important;letter-spacing:1.2px!important}
+    .sbc{background:#3b82f6!important;color:#fff!important}
+
+    /* Footer sidebar */
+    .urow{border-top-color:rgba(255,255,255,.08)!important}
+    .urow *{color:#94a3b8!important}
+    .urow:hover *{color:#e2e8f0!important}
+    .sfoot-info,.sfoot-info *{color:#94a3b8!important}
+
+    /* Busca sidebar */
+    .sidebar-search > div{background:rgba(255,255,255,.07)!important;border-color:rgba(255,255,255,.12)!important}
+    .sidebar-search input{color:#e2e8f0!important}
+    .sidebar-search input::placeholder{color:rgba(255,255,255,.3)!important}
+
+    /* ── Conteúdo principal claro ── */
     .ph .pt,.ph h1,.ph h2{color:${text}!important}
     .ph .ps{color:${muted}!important}
     .card,.sc,.sbox,.tw{background:${sur}!important;border-color:${bord}!important;color:${text}!important}
+    .card *,.sc *{color:${text}!important}
+    .sl,.str,.ps{color:${muted}!important}
+    .sv{color:${text}!important;font-weight:700!important}
     .kol{background:${sur2}!important;border-color:${bord}!important}
     .kol-head{background:${sur}!important;border-bottom-color:${bord}!important}
-    .kol-title{color:${text}!important}
-    .order-card{background:${sur}!important;border-color:${bord}!important;color:${text}!important}
+    .kol-title{color:${text}!important;font-weight:700!important}
+    .kol-analise{background:rgba(234,88,12,.06)!important;border-color:rgba(234,88,12,.2)!important}
+    .kol-producao{background:rgba(245,158,11,.06)!important;border-color:rgba(245,158,11,.18)!important}
+    .kol-pronto{background:rgba(34,197,94,.06)!important;border-color:rgba(34,197,94,.18)!important}
+    .kol-analise .kol-title{color:#9a3412!important}
+    .kol-producao .kol-title{color:#92400e!important}
+    .kol-pronto .kol-title{color:#14532d!important}
+    .kol-cnt{background:rgba(0,0,0,.08)!important;color:${text}!important}
+    .order-card{background:${sur}!important;border-color:${bord}!important;color:${text}!important;box-shadow:0 1px 4px rgba(0,0,0,.07)!important}
+    .order-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.12)!important;border-color:rgba(26,111,212,.3)!important}
     .order-card *{color:${text}!important}
     .oc-id{color:${acc}!important;font-weight:700!important}
+    .oc-client{color:${text}!important;font-weight:500!important}
+    .oc-items,.oc-time,.oc-addr{color:${muted}!important}
+    .oc-total{color:${acc}!important;font-weight:700!important}
+    .oc-btn-ok{background:rgba(22,163,74,.1)!important;color:#15803d!important;border-color:rgba(22,163,74,.25)!important}
+    .oc-btn-no{background:rgba(220,38,38,.08)!important;color:#b91c1c!important;border-color:rgba(220,38,38,.2)!important}
+    .oc-btn-fin{background:rgba(26,111,212,.1)!important;color:#1d4ed8!important;border-color:rgba(26,111,212,.2)!important}
     .kol-empty,.kol-empty *{color:${muted}!important}
+    .kol-config{background:rgba(0,0,0,.04)!important;border-color:${bord}!important;color:${muted}!important}
+    .kol-config strong{color:${text}!important}
+
+    /* Botões */
     .btn.bg{background:${sur2}!important;color:${text}!important;border-color:${bord}!important}
-    .modal{background:${sur}!important;color:${text}!important;border-color:${bord}!important}
+    .btn.bg:hover{background:${sur3}!important}
+
+    /* Tabs / filtros kanban */
+    .kf-btn,.tnav-filter{background:${sur2}!important;color:${muted}!important;border-color:${bord}!important}
+    .kf-btn.on{background:${acc}!important;color:#fff!important;border-color:${acc}!important}
+
+    /* Search bar */
+    .sbox{background:${sur}!important;border-color:${bord}!important}
+    .sbox input{color:${text}!important}
+    .sbox input::placeholder{color:${muted}!important}
+
+    /* Modais */
+    .modal{background:${sur}!important;color:${text}!important;border-color:${bord}!important;box-shadow:0 8px 40px rgba(0,0,0,.18)!important}
     .modal *{color:${text}!important}
-    .modal-bg{background:rgba(0,0,0,.3)!important}
+    .modal-bg{background:rgba(0,0,0,.35)!important}
+    .modal-close{color:${muted}!important;background:${sur2}!important}
+
+    /* Inputs */
     input,textarea,select,.form-input{background:${sur}!important;color:${text}!important;border-color:${bord}!important}
     input::placeholder,textarea::placeholder{color:${muted}!important}
-    .toggle{background:${sur3}!important}
-    .toggle.on{background:var(--success)!important}
+    .form-label{color:${muted}!important}
+
+    /* Tabelas */
+    .tw table th{background:${sur2}!important;color:${muted}!important;border-color:${bord}!important}
+    .tw table td{border-color:${bord}!important;color:${text}!important}
+    .tw table tr:hover td{background:${sur2}!important}
+
+    /* Toggle */
+    .toggle{background:${sur3}!important;border-color:${bord}!important}
+    .toggle.on{background:var(--success)!important;border-color:var(--success)!important}
+
+    /* PDV */
     .pdvb-wrap,.pdvb-left,.pdvb-right{background:var(--bg)!important}
     .pdvb-grid-item{background:${sur}!important;border-color:${bord}!important;color:${text}!important}
   `;
