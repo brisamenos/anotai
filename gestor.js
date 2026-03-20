@@ -6576,7 +6576,17 @@ const TEMA_VARS = {
 
 const TEMAS_PRONTOS = [
   {
-    nome:'🔥 Açafrão', desc:'Padrão premium',
+    nome:'💠 Azure Blue', desc:'Claro corporativo — padrão',
+    vars:{'--bg':'#f4f8ff','--surface':'#ffffff','--surface2':'#e8f0fe','--surface3':'#d6e4ff',
+          '--border':'rgba(30,100,220,.13)','--border2':'rgba(30,100,220,.22)',
+          '--accent':'#1a6fd4','--accent2':'#2196f3','--accent3':'#f59e0b',
+          '--accent-dim':'rgba(26,111,212,.12)','--accent-glow':'rgba(26,111,212,.3)',
+          '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
+          '--pink':'#db2777','--orange':'#ea580c',
+          '--text':'#0a1929','--muted':'rgba(10,25,41,.45)','--muted2':'rgba(10,25,41,.65)'}
+  },
+  {
+    nome:'🔥 Açafrão', desc:'Dark premium',
     vars:{'--bg':'#0a0a0a','--surface':'rgba(255,255,255,.035)','--surface2':'rgba(255,255,255,.06)','--surface3':'rgba(255,255,255,.09)',
           '--accent':'#e76f51','--accent2':'#f4a261','--accent3':'#f59e0b',
           '--accent-dim':'rgba(231,111,81,.18)','--accent-glow':'rgba(231,111,81,.35)',
@@ -7054,7 +7064,7 @@ function initTemaPage() {
   temaUpdatePreview();
 }
 
-// Aplica tema padrão Açafrão ao carregar — tema definitivo vem do banco via init()
+// Aplica tema padrão Azure Blue ao carregar — tema definitivo vem do banco via init()
 (function() {
   try { temaApply(TEMAS_PRONTOS[0].vars); } catch(e) {}
 })();
