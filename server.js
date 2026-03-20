@@ -711,10 +711,11 @@ async function handleOrderStatus(req, res) {
     if (order.phone&&oldStatus!==new_status) {
       setImmediate(async () => {
         try {
-          const cfg   = db.prepare("SELECT evo_instance,evo_automacoes,store_name FROM store_config WHERE tenant_id=?").get(tid)
+          const cfg   = db.prepare("SELECT evo_instance,evo_automacoes,store_name,order_num_offset FROM store_config WHERE tenant_id=?").get(tid)
           const inst  = cfg?.evo_instance||EVO_INST
           const auto  = jsonParse(cfg?.evo_automacoes)||{}
-          const nome  = order.client||'Cliente', idStr=String(order.id).padStart(3,'0')
+          const offset = parseInt(cfg?.order_num_offset)||0
+          const nome  = order.client||'Cliente', idStr=String(Math.max(1,order.id-offset)).padStart(3,'0')
           const items = (()=>{try{return(JSON.parse(order.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}catch{return''}})()
           const isDelivery = (order.addr||'').includes('Mesa')?'🪑 Mesa':(order.addr||'').toLowerCase().includes('balc')?'🏪 Balcão':'🛵 Entrega'
           const total = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
@@ -1110,11 +1111,12 @@ const server = http.createServer(async (req,res) => {
 
   if(req.method==='POST'&&upath==='/api/rastreio-wa'){
     const{phone,order_id,tenant_id}=await readBody(req);if(!phone||!order_id||!tenant_id){send(res,400,{ok:false});return}
-    const cfg=db.prepare('SELECT evo_instance,store_name,ia_config FROM store_config WHERE tenant_id=?').get(tenant_id),inst=cfg?.evo_instance||EVO_INST,ia=jsonParse(cfg?.ia_config)||{}
+    const cfg=db.prepare('SELECT evo_instance,store_name,ia_config,order_num_offset FROM store_config WHERE tenant_id=?').get(tenant_id),inst=cfg?.evo_instance||EVO_INST,ia=jsonParse(cfg?.ia_config)||{}
     if(!ia.ativo&&!ia.resp_rastreio_manual){send(res,200,{ok:false,msg:'IA inativa'});return}
     const pedido=db.prepare('SELECT id,status,items,total FROM orders WHERE id=? AND tenant_id=?').get(order_id,tenant_id);if(!pedido){send(res,400,{ok:false});return}
     const sl={analise:'⏳ aguardando confirmação',producao:'👨‍🍳 em preparo',pronto:'🛵 saindo para entrega',entregue:'✅ entregue',cancelado:'❌ cancelado'}
-    const msg=`🍽️ *${cfg?.store_name||'Restaurante'}*\n\nOlá! Seu pedido *#${String(pedido.id).padStart(3,'0')}* está:\n\n${sl[pedido.status]||pedido.status}\n\nTotal: R$ ${parseFloat(pedido.total).toFixed(2).replace('.',',')}\n\nQualquer dúvida é só responder! 😊`
+    const offsetRastr=parseInt(cfg?.order_num_offset||0)||0
+    const msg=`🍽️ *${cfg?.store_name||'Restaurante'}*\n\nOlá! Seu pedido *#${String(Math.max(1,pedido.id-offsetRastr)).padStart(3,'0')}* está:\n\n${sl[pedido.status]||pedido.status}\n\nTotal: R$ ${parseFloat(pedido.total).toFixed(2).replace('.',',')}\n\nQualquer dúvida é só responder! 😊`
     const r=await sendWA(phone,msg,inst);send(res,r.ok?200:500,r);return
   }
 
@@ -1381,7 +1383,7 @@ const server = http.createServer(async (req,res) => {
     return
   }
 
-  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle'])
+  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/mp-config'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return
