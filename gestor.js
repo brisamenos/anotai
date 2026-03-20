@@ -6570,7 +6570,7 @@ const TEMA_VARS = {
 
 const TEMAS_PRONTOS = [
   {
-    nome:'💠 Azure Blue', desc:'Claro corporativo — padrão',
+    nome:'☀️ Modo Claro', desc:'Claro corporativo — padrão',
     vars:{'--bg':'#f4f8ff','--surface':'#ffffff','--surface2':'#e8f0fe','--surface3':'#d6e4ff',
           '--border':'rgba(30,100,220,.13)','--border2':'rgba(30,100,220,.22)',
           '--accent':'#1a6fd4','--accent2':'#2196f3','--accent3':'#f59e0b',
@@ -6580,157 +6580,13 @@ const TEMAS_PRONTOS = [
           '--text':'#0a1929','--muted':'rgba(10,25,41,.45)','--muted2':'rgba(10,25,41,.65)'}
   },
   {
-    nome:'🔥 Açafrão', desc:'Dark premium',
+    nome:'🌑 Modo Escuro', desc:'Dark premium',
     vars:{'--bg':'#0a0a0a','--surface':'rgba(255,255,255,.035)','--surface2':'rgba(255,255,255,.06)','--surface3':'rgba(255,255,255,.09)',
           '--accent':'#e76f51','--accent2':'#f4a261','--accent3':'#f59e0b',
           '--accent-dim':'rgba(231,111,81,.18)','--accent-glow':'rgba(231,111,81,.35)',
           '--success':'#22c55e','--danger':'#ef4444','--purple':'#a78bfa',
           '--pink':'#f472b6','--orange':'#e76f51','--text':'#f5f5f7','--muted':'rgba(245,245,247,.42)','--muted2':'rgba(245,245,247,.62)',
           '--border':'rgba(255,255,255,.08)','--border2':'rgba(255,255,255,.13)'}
-  },
-  {
-    nome:'🌑 Dark Blue', desc:'Clássico original',
-    vars:{'--bg':'#0f1117','--surface':'#181b24','--surface2':'#1e2130','--surface3':'#242840',
-          '--accent':'#3b82f6','--accent2':'#06b6d4','--accent3':'#f59e0b',
-          '--accent-dim':'rgba(59,130,246,.18)','--accent-glow':'rgba(59,130,246,.35)',
-          '--success':'#22c55e','--danger':'#ef4444','--purple':'#8b5cf6',
-          '--pink':'#ec4899','--orange':'#f97316','--text':'#f1f5f9','--muted':'#64748b','--muted2':'#94a3b8',
-          '--border':'rgba(255,255,255,.07)','--border2':'rgba(255,255,255,.13)'}
-  },
-  {
-    nome:'🟣 Roxo Neon', desc:'Dark violeta',
-    vars:{'--bg':'#0d0a1a','--surface':'#16112b','--surface2':'#1e1840','--surface3':'#261f52',
-          '--accent':'#8b5cf6','--accent2':'#a78bfa','--accent3':'#f59e0b',
-          '--success':'#22c55e','--danger':'#ef4444','--purple':'#c4b5fd',
-          '--pink':'#ec4899','--orange':'#f97316','--text':'#f5f3ff','--muted':'#7c6f9e'}
-  },
-  {
-    nome:'🟢 Dark Green', desc:'Floresta noturna',
-    vars:{'--bg':'#0a110e','--surface':'#111c16','--surface2':'#172419','--surface3':'#1e2e20',
-          '--accent':'#22c55e','--accent2':'#4ade80','--accent3':'#facc15',
-          '--success':'#86efac','--danger':'#f87171','--purple':'#a78bfa',
-          '--pink':'#f472b6','--orange':'#fb923c','--text':'#f0fdf4','--muted':'#6b7280'}
-  },
-  {
-    nome:'🔴 Dark Red', desc:'Ember escuro',
-    vars:{'--bg':'#120808','--surface':'#1c1010','--surface2':'#261616','--surface3':'#301b1b',
-          '--accent':'#ef4444','--accent2':'#f97316','--accent3':'#fbbf24',
-          '--success':'#22c55e','--danger':'#dc2626','--purple':'#8b5cf6',
-          '--pink':'#ec4899','--orange':'#f97316','--text':'#fef2f2','--muted':'#9ca3af'}
-  },
-  {
-    nome:'🌊 Oceano', desc:'Azul profundo',
-    vars:{'--bg':'#060d1a','--surface':'#0c1929','--surface2':'#122235','--surface3':'#192c42',
-          '--accent':'#0ea5e9','--accent2':'#38bdf8','--accent3':'#f59e0b',
-          '--success':'#22c55e','--danger':'#ef4444','--purple':'#818cf8',
-          '--pink':'#f472b6','--orange':'#fb923c','--text':'#e0f2fe','--muted':'#64748b'}
-  },
-  {
-    nome:'☀️ Dark Âmbar', desc:'Quente e profundo',
-    vars:{'--bg':'#12100a','--surface':'#1c1910','--surface2':'#262216','--surface3':'#302a1c',
-          '--accent':'#f59e0b','--accent2':'#fbbf24','--accent3':'#fb923c',
-          '--success':'#22c55e','--danger':'#ef4444','--purple':'#a78bfa',
-          '--pink':'#f472b6','--orange':'#f97316','--text':'#fffbeb','--muted':'#92400e'}
-  },
-  {
-    nome:'🩷 Dark Rose', desc:'Rosa moderno',
-    vars:{'--bg':'#110a10','--surface':'#1a101a','--surface2':'#241424','--surface3':'#2e1a2e',
-          '--accent':'#ec4899','--accent2':'#f472b6','--accent3':'#f59e0b',
-          '--success':'#22c55e','--danger':'#ef4444','--purple':'#c084fc',
-          '--pink':'#fb7185','--orange':'#fb923c','--text':'#fdf2f8','--muted':'#9d4f8a'}
-  },
-  {
-    nome:'🤍 Dark Grafite', desc:'Minimalista cinza',
-    vars:{'--bg':'#0c0c0c','--surface':'#161616','--surface2':'#1e1e1e','--surface3':'#262626',
-          '--accent':'#e5e7eb','--accent2':'#9ca3af','--accent3':'#f59e0b',
-          '--success':'#22c55e','--danger':'#ef4444','--purple':'#8b5cf6',
-          '--pink':'#ec4899','--orange':'#f97316','--text':'#f9fafb','--muted':'#6b7280'}
-  },
-  {
-    nome:'🌿 Matcha', desc:'Verde-oliva suave',
-    vars:{'--bg':'#0e1208','--surface':'#161b0e','--surface2':'#1e2414','--surface3':'#262d1a',
-          '--accent':'#84cc16','--accent2':'#a3e635','--accent3':'#fbbf24',
-          '--success':'#4ade80','--danger':'#f87171','--purple':'#a78bfa',
-          '--pink':'#f472b6','--orange':'#fb923c','--text':'#f7fee7','--muted':'#65a30d'}
-  },
-  {
-    nome:'🌙 Midnight', desc:'Azul meia-noite',
-    vars:{'--bg':'#020617','--surface':'#0f172a','--surface2':'#1e293b','--surface3':'#334155',
-          '--accent':'#6366f1','--accent2':'#818cf8','--accent3':'#f59e0b',
-          '--success':'#22c55e','--danger':'#ef4444','--purple':'#a78bfa',
-          '--pink':'#f472b6','--orange':'#fb923c','--text':'#f1f5f9','--muted':'#64748b'}
-  },
-  {
-    nome:'🦊 Sunset', desc:'Laranja degradê',
-    vars:{'--bg':'#100a06','--surface':'#1a1008','--surface2':'#24160a','--surface3':'#2e1c0e',
-          '--accent':'#f97316','--accent2':'#fb923c','--accent3':'#fbbf24',
-          '--success':'#22c55e','--danger':'#ef4444','--purple':'#a78bfa',
-          '--pink':'#f472b6','--orange':'#ea580c','--text':'#fff7ed','--muted':'#78350f'}
-  },
-  {
-    nome:'💎 Sapphire', desc:'Azul safira',
-    vars:{'--bg':'#07080f','--surface':'#0e1021','--surface2':'#141733','--surface3':'#1a1e45',
-          '--accent':'#4f46e5','--accent2':'#6366f1','--accent3':'#f59e0b',
-          '--success':'#22c55e','--danger':'#ef4444','--purple':'#7c3aed',
-          '--pink':'#ec4899','--orange':'#f97316','--text':'#eef2ff','--muted':'#6366f1'}
-  },
-
-  // ════ TEMAS CLAROS ════
-  {
-    nome:'☀️ Light Classic', desc:'Claro elegante',
-    vars:{'--bg':'#f8fafc','--surface':'#ffffff','--surface2':'#f1f5f9','--surface3':'#e2e8f0','--border':'#cbd5e1',
-          '--accent':'#3b82f6','--accent2':'#06b6d4','--accent3':'#f59e0b',
-          '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
-          '--pink':'#db2777','--orange':'#ea580c','--text':'#0f172a','--muted':'#64748b'}
-  },
-  {
-    nome:'🌸 Light Rose', desc:'Rosa pastel claro',
-    vars:{'--bg':'#fff1f5','--surface':'#ffffff','--surface2':'#fce7f0','--surface3':'#fbcfe8','--border':'#fda4af',
-          '--accent':'#e11d48','--accent2':'#f43f5e','--accent3':'#f59e0b',
-          '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
-          '--pink':'#be185d','--orange':'#ea580c','--text':'#1e0a14','--muted':'#9d4f7a'}
-  },
-  {
-    nome:'🌿 Light Green', desc:'Verde suave e fresco',
-    vars:{'--bg':'#f0fdf4','--surface':'#ffffff','--surface2':'#dcfce7','--surface3':'#bbf7d0','--border':'#86efac',
-          '--accent':'#16a34a','--accent2':'#22c55e','--accent3':'#ca8a04',
-          '--success':'#15803d','--danger':'#dc2626','--purple':'#7c3aed',
-          '--pink':'#db2777','--orange':'#ea580c','--text':'#052e16','--muted':'#4b7a5a'}
-  },
-  {
-    nome:'🍊 Light Orange', desc:'Quente e vibrante',
-    vars:{'--bg':'#fff7ed','--surface':'#ffffff','--surface2':'#ffedd5','--surface3':'#fed7aa','--border':'#fdba74',
-          '--accent':'#ea580c','--accent2':'#f97316','--accent3':'#ca8a04',
-          '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
-          '--pink':'#db2777','--orange':'#c2410c','--text':'#431407','--muted':'#92400e'}
-  },
-  {
-    nome:'💜 Light Lavender', desc:'Roxo pastel suave',
-    vars:{'--bg':'#faf5ff','--surface':'#ffffff','--surface2':'#f3e8ff','--surface3':'#e9d5ff','--border':'#d8b4fe',
-          '--accent':'#7c3aed','--accent2':'#8b5cf6','--accent3':'#d97706',
-          '--success':'#16a34a','--danger':'#dc2626','--purple':'#6d28d9',
-          '--pink':'#db2777','--orange':'#ea580c','--text':'#2e1065','--muted':'#7c5c9e'}
-  },
-  {
-    nome:'🩵 Light Sky', desc:'Azul céu limpo',
-    vars:{'--bg':'#f0f9ff','--surface':'#ffffff','--surface2':'#e0f2fe','--surface3':'#bae6fd','--border':'#7dd3fc',
-          '--accent':'#0284c7','--accent2':'#0ea5e9','--accent3':'#d97706',
-          '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
-          '--pink':'#db2777','--orange':'#ea580c','--text':'#082f49','--muted':'#0369a1'}
-  },
-  {
-    nome:'🤍 Light Minimal', desc:'Cinza neutro limpo',
-    vars:{'--bg':'#f9fafb','--surface':'#ffffff','--surface2':'#f3f4f6','--surface3':'#e5e7eb','--border':'#d1d5db',
-          '--accent':'#111827','--accent2':'#374151','--accent3':'#d97706',
-          '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
-          '--pink':'#db2777','--orange':'#ea580c','--text':'#111827','--muted':'#6b7280'}
-  },
-  {
-    nome:'🍫 Light Caramelo', desc:'Marrom quente aconchegante',
-    vars:{'--bg':'#fdf8f0','--surface':'#ffffff','--surface2':'#fdf3e3','--surface3':'#fde8c8','--border':'#f6d599',
-          '--accent':'#92400e','--accent2':'#b45309','--accent3':'#059669',
-          '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
-          '--pink':'#db2777','--orange':'#c2410c','--text':'#451a03','--muted':'#92400e'}
   },
 ];
 
@@ -7043,14 +6899,24 @@ function temaReset() {
 
 // ── Inicialização da página ───────────────────────────
 function initTemaPage() {
-  temaBuildPresets();
-  temaBuildFields('tema-bg-fields',     TEMA_VARS.bg);
-  temaBuildFields('tema-text-fields',   TEMA_VARS.text);
-  temaBuildFields('tema-accent-fields', TEMA_VARS.accent);
-  temaBuildFields('tema-status-fields', TEMA_VARS.status);
   _temaAtual = temaGetCurrent();
-  temaUpdateInputs();
-  temaUpdatePreview();
+  temaUpdateCardSelection();
+}
+
+function temaAplicarModo(modo) {
+  const vars = modo === 'escuro' ? TEMAS_PRONTOS[1].vars : TEMAS_PRONTOS[0].vars;
+  temaApply(vars, true);
+  temaUpdateCardSelection();
+  sbToast('ok', modo === 'escuro' ? '🌑 Modo escuro ativado!' : '☀️ Modo claro ativado!');
+}
+
+function temaUpdateCardSelection() {
+  const bg = (_temaAtual['--bg'] || getComputedStyle(document.documentElement).getPropertyValue('--bg')).trim();
+  const isEscuro = parseInt(bg.replace('#','').slice(0,2)||'ff',16) < 50 || bg.startsWith('rgba(0') || bg === '#0a0a0a';
+  const cardClaro  = document.getElementById('tema-card-claro');
+  const cardEscuro = document.getElementById('tema-card-escuro');
+  if (cardClaro)  { cardClaro.style.borderColor  = isEscuro ? 'var(--border)' : 'var(--accent)'; cardClaro.style.boxShadow  = isEscuro ? 'none' : '0 0 0 3px var(--accent-glow)'; }
+  if (cardEscuro) { cardEscuro.style.borderColor = isEscuro ? 'var(--accent)' : 'var(--border)'; cardEscuro.style.boxShadow = isEscuro ? '0 0 0 3px var(--accent-glow)' : 'none'; }
 }
 
 // Aplica tema padrão Azure Blue ao carregar — tema definitivo vem do banco via init()
