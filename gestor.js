@@ -6539,399 +6539,144 @@ loadAllData();
 setTimeout(_iniciarSchedulerAniversario, 3000);
 
 // ════════════════════════════════════════════════════════
-// TEMA & CORES — Editor completo em tempo real
+// TEMA — Dois modos: Escuro (navy) e Claro (azul)
 // ════════════════════════════════════════════════════════
 
-const TEMA_VARS = {
-  bg: [
-    { id:'--bg',       label:'Fundo principal',    hint:'Cor mais escura do app' },
-    { id:'--surface',  label:'Superfície (cards)',  hint:'Cor de painéis e sidebar' },
-    { id:'--surface2', label:'Superfície 2',        hint:'Inputs, hover' },
-    { id:'--surface3', label:'Superfície 3',        hint:'Elementos elevados' },
-  ],
-  text: [
-    { id:'--text',   label:'Texto principal',   hint:'Títulos e labels' },
-    { id:'--muted',  label:'Texto secundário',  hint:'Subtítulos e dicas' },
-    { id:'--muted2', label:'Texto terciário',   hint:'Labels, placeholders' },
-  ],
-  accent: [
-    { id:'--accent',      label:'Destaque principal', hint:'Botões, links ativos' },
-    { id:'--accent2',     label:'Destaque 2',          hint:'Realtime badge, ícones' },
-    { id:'--accent3',     label:'Destaque 3 (âmbar)',  hint:'Avisos, preços' },
-    { id:'--purple',      label:'Roxo',                hint:'Tags PRO, badges' },
-    { id:'--pink',        label:'Rosa',                hint:'Promoções' },
-    { id:'--orange',      label:'Laranja',             hint:'Alertas' },
-  ],
-  status: [
-    { id:'--success', label:'Sucesso (verde)',  hint:'Status aberto, confirmado' },
-    { id:'--danger',  label:'Perigo (vermelho)', hint:'Erros, fechado' },
-  ],
+const MODO_ESCURO = {
+  '--bg':'#0f1117','--surface':'#181b24','--surface2':'#1e2130','--surface3':'#242840',
+  '--border':'rgba(255,255,255,.07)','--border2':'rgba(255,255,255,.13)',
+  '--accent':'#3b82f6','--accent2':'#06b6d4','--accent3':'#f59e0b',
+  '--accent-dim':'rgba(59,130,246,.18)','--accent-glow':'rgba(59,130,246,.35)',
+  '--success':'#22c55e','--danger':'#ef4444','--purple':'#8b5cf6',
+  '--pink':'#ec4899','--orange':'#f97316',
+  '--text':'#f1f5f9','--muted':'#64748b','--muted2':'#94a3b8',
+  '--sidebar-bg':'#131929','--topnav-bg':'#0d1117','--sfoot-bg':'rgba(8,10,18,.6)'
 };
 
+const MODO_CLARO = {
+  '--bg':'#f4f8ff','--surface':'#ffffff','--surface2':'#e8f0fe','--surface3':'#d6e4ff',
+  '--border':'rgba(30,100,220,.13)','--border2':'rgba(30,100,220,.22)',
+  '--accent':'#1a6fd4','--accent2':'#2196f3','--accent3':'#f59e0b',
+  '--accent-dim':'rgba(26,111,212,.12)','--accent-glow':'rgba(26,111,212,.3)',
+  '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
+  '--pink':'#db2777','--orange':'#ea580c',
+  '--text':'#0a1929','--muted':'rgba(10,25,41,.45)','--muted2':'rgba(10,25,41,.65)',
+  '--sidebar-bg':'#ffffff','--topnav-bg':'#ffffff','--sfoot-bg':'rgba(240,246,255,.8)'
+};
+
+// Compatibilidade com código legado que referencia TEMAS_PRONTOS
 const TEMAS_PRONTOS = [
-  {
-    nome:'🌑 Modo Escuro', desc:'Dark navy — padrão',
-    vars:{
-      '--bg':'#0f1117','--surface':'#181b24','--surface2':'#1e2130','--surface3':'#242840',
-      '--border':'rgba(255,255,255,.07)','--border2':'rgba(255,255,255,.13)',
-      '--accent':'#3b82f6','--accent2':'#06b6d4','--accent3':'#f59e0b',
-      '--accent-dim':'rgba(59,130,246,.18)','--accent-glow':'rgba(59,130,246,.35)',
-      '--success':'#22c55e','--danger':'#ef4444','--purple':'#8b5cf6',
-      '--pink':'#ec4899','--orange':'#f97316',
-      '--text':'#f1f5f9','--muted':'#64748b','--muted2':'#94a3b8',
-      '--sidebar-bg':'#131929','--topnav-bg':'#0d1117','--sfoot-bg':'rgba(8,10,18,.6)'
-    }
-  },
-  {
-    nome:'☀️ Modo Claro', desc:'Claro corporativo',
-    vars:{
-      '--bg':'#f4f8ff','--surface':'#ffffff','--surface2':'#e8f0fe','--surface3':'#d6e4ff',
-      '--border':'rgba(30,100,220,.13)','--border2':'rgba(30,100,220,.22)',
-      '--accent':'#1a6fd4','--accent2':'#2196f3','--accent3':'#f59e0b',
-      '--accent-dim':'rgba(26,111,212,.12)','--accent-glow':'rgba(26,111,212,.3)',
-      '--success':'#16a34a','--danger':'#dc2626','--purple':'#7c3aed',
-      '--pink':'#db2777','--orange':'#ea580c',
-      '--text':'#0a1929','--muted':'rgba(10,25,41,.45)','--muted2':'rgba(10,25,41,.65)',
-      '--sidebar-bg':'#ffffff','--topnav-bg':'#ffffff','--sfoot-bg':'rgba(240,246,255,.8)'
-    }
-  },
+  { nome:'🌑 Modo Escuro', vars: MODO_ESCURO },
+  { nome:'☀️ Modo Claro',  vars: MODO_CLARO  },
 ];
 
-// ── Estado atual do tema ──────────────────────────────
-let _temaAtual = {};
-
-function temaGetCurrent() {
-  const root = document.documentElement;
-  const all = {};
-  Object.values(TEMA_VARS).flat().forEach(v => {
-    all[v.id] = getComputedStyle(root).getPropertyValue(v.id).trim();
-  });
-  return all;
+// ── Aplica um objeto de vars CSS no :root ─────────────
+function _aplicarVars(vars) {
+  const r = document.documentElement;
+  Object.entries(vars).forEach(([k,v]) => r.style.setProperty(k, v));
 }
 
-function temaApply(vars, save = false) {
-  const root = document.documentElement;
-  Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
-  _temaAtual = { ..._temaAtual, ...vars };
+// ── Remove/injeta override para tema claro ────────────
+function _aplicarOverrideClaro(vars) {
+  const el = document.getElementById('tema-light-override');
+  if (el) el.remove();
 
-  // Detecta se o tema é claro pelo fundo principal
-  const bg = vars['--bg'] || _temaAtual['--bg'] || '';
-  const isLight = bg && parseInt(bg.replace('#','').slice(0,2), 16) >= 50;
+  const text = vars['--text'] || '#111827';
+  const muted= vars['--muted']|| '#6b7280';
+  const sur  = vars['--surface']  || '#fff';
+  const sur2 = vars['--surface2'] || '#f3f4f6';
+  const sur3 = vars['--surface3'] || '#e5e7eb';
+  const bord = vars['--border']   || '#d1d5db';
+  const acc  = vars['--accent']   || '#1a6fd4';
+  const sb   = vars['--sidebar-bg']|| '#fff';
+  const tn   = vars['--topnav-bg'] || '#fff';
 
-  // Remove override anterior
-  let overrideEl = document.getElementById('tema-light-override');
-  if (overrideEl) overrideEl.remove();
-
-  if (isLight) {
-    // Injeta CSS fixes para temas claros
-    const text  = vars['--text']  || _temaAtual['--text']  || '#111827';
-    const muted = vars['--muted'] || _temaAtual['--muted'] || '#6b7280';
-    const sur   = vars['--surface']  || _temaAtual['--surface']  || '#ffffff';
-    const sur2  = vars['--surface2'] || _temaAtual['--surface2'] || '#f3f4f6';
-    const sur3  = vars['--surface3'] || _temaAtual['--surface3'] || '#e5e7eb';
-    const bord  = vars['--border']   || _temaAtual['--border']   || '#d1d5db';
-    const acc   = vars['--accent']   || _temaAtual['--accent']   || '#3b82f6';
-    const css = `
-      /* ══ Tema Claro — override global ══ */
-      :root { --border: ${bord} !important; }
-
-      /* Base */
-      *, *::before, *::after { border-color: ${bord}; }
-      body, .app { background: var(--bg) !important; color: ${text} !important; }
-
-      /* Layout principal */
-      .main       { background: var(--bg) !important; }
-      .page       { background: var(--bg) !important; color: ${text} !important; }
-      .topnav     { background: ${sur} !important; border-bottom: 1px solid ${bord} !important; box-shadow: 0 1px 4px rgba(0,0,0,.08) !important; }
-      .topnav *   { color: ${text} !important; }
-      .sidebar    { background: ${sur} !important; border-right: 1px solid ${bord} !important; box-shadow: 2px 0 8px rgba(0,0,0,.06) !important; }
-
-      /* Sidebar items */
-      .si         { color: ${muted} !important; }
-      .si:hover   { background: rgba(0,0,0,.05) !important; color: ${text} !important; }
-      .si.on      { background: rgba(0,0,0,.07) !important; color: ${acc} !important; }
-      .shead      { color: ${muted} !important; border-top-color: ${bord} !important; }
-      .urow       { border-top-color: ${bord} !important; color: ${text} !important; }
-      .urow *     { color: ${text} !important; }
-
-      /* Títulos de página */
-      .ph .pt, .ph h1, .ph h2 { color: ${text} !important; }
-      .ph .ps                  { color: ${muted} !important; }
-      .card-title              { color: ${text} !important; }
-
-      /* Cards e superfícies */
-      .card, .sc, .sbox     { background: ${sur} !important; border-color: ${bord} !important; color: ${text} !important; box-shadow: 0 1px 4px rgba(0,0,0,.06) !important; }
-      .sg .sc .sl           { color: ${muted} !important; }
-      .sg .sc .sv           { color: ${text} !important; }
-      .surface2, .s2        { background: ${sur2} !important; }
-
-      /* Kanban */
-      .kol           { background: ${sur2} !important; border: 1px solid ${bord} !important; }
-      .kol-head      { border-bottom: 2px solid ${bord} !important; background: ${sur} !important; }
-      .kol-title     { color: ${text} !important; }
-      .kol-title span { color: ${muted} !important; }
-      .order-card    { background: ${sur} !important; border: 1px solid ${bord} !important; color: ${text} !important; box-shadow: 0 1px 6px rgba(0,0,0,.08) !important; }
-      .order-card:hover { box-shadow: 0 3px 14px rgba(0,0,0,.14) !important; transform: translateY(-1px); }
-      .order-card *  { color: ${text} !important; }
-      .oc-id         { color: ${acc} !important; font-weight: 700 !important; }
-      .oc-client     { color: ${text} !important; }
-      .oc-info       { color: ${muted} !important; }
-      .oc-total      { color: ${text} !important; font-weight: 700 !important; }
-      .oc-time       { color: ${muted} !important; }
-      .kol-empty     { color: ${muted} !important; }
-      .kol-empty *   { color: ${muted} !important; }
-
-      /* Botões */
-      .btn           { color: ${text} !important; border-color: ${bord} !important; }
-      .btn.bg        { background: ${sur2} !important; color: ${text} !important; }
-      .btn.bp        { background: ${acc} !important; color: #fff !important; border-color: ${acc} !important; }
-      .btn.bd        { background: transparent !important; border-color: var(--danger) !important; color: var(--danger) !important; }
-      .btn:hover     { filter: brightness(.94) !important; }
-
-      /* Kanban avançar botões */
-      .oc-advance-btn  { background: rgba(0,0,0,.06) !important; color: ${text} !important; border-color: ${bord} !important; }
-
-      /* Filtros kanban */
-      .kf-btn        { background: ${sur2} !important; color: ${muted} !important; border-color: ${bord} !important; }
-      .kf-btn.on     { background: ${acc} !important; color: #fff !important; border-color: ${acc} !important; }
-
-      /* Tabs */
-      .tabs          { border-bottom-color: ${bord} !important; }
-      .tab           { color: ${muted} !important; }
-      .tab.on        { color: ${acc} !important; border-bottom-color: ${acc} !important; }
-      .ts            { background: var(--bg) !important; }
-
-      /* Tabelas */
-      .tw            { background: ${sur} !important; border-color: ${bord} !important; }
-      .tw table th   { background: ${sur2} !important; color: ${muted} !important; border-color: ${bord} !important; }
-      .tw table td   { border-color: ${bord} !important; color: ${text} !important; }
-      .tw table tr:hover td { background: ${sur2} !important; }
-      .tmeta         { color: ${muted} !important; }
-
-      /* Inputs e forms */
-      input, textarea, select { background: ${sur} !important; color: ${text} !important; border-color: ${bord} !important; }
-      input::placeholder, textarea::placeholder { color: ${muted} !important; opacity: .6 !important; }
-      .form-label    { color: ${muted} !important; }
-      .sw select     { background: ${sur} !important; color: ${text} !important; }
-      .form-input    { background: ${sur} !important; color: ${text} !important; border-color: ${bord} !important; }
-
-      /* Modais */
-      .modal         { background: ${sur} !important; color: ${text} !important; border: 1px solid ${bord} !important; box-shadow: 0 8px 40px rgba(0,0,0,.18) !important; }
-      .modal *       { color: ${text} !important; }
-      .modal h2      { color: ${text} !important; }
-      .modal-bg      { background: rgba(0,0,0,.3) !important; }
-      .modal-close   { color: ${muted} !important; background: ${sur2} !important; }
-
-      /* Toggle */
-      .toggle        { background: ${sur3} !important; }
-      .toggle.on     { background: var(--success) !important; }
-
-      /* Badges de status */
-      .badge-analise  { background: rgba(234,88,12,.12) !important; color: #9a3412 !important; }
-      .badge-producao { background: rgba(202,138,4,.12)  !important; color: #713f12 !important; }
-      .badge-pronto   { background: rgba(22,163,74,.12)  !important; color: #14532d !important; }
-      .badge-cancelado{ background: rgba(220,38,38,.12)  !important; color: #7f1d1d !important; }
-
-      /* PDV balcão */
-      .pdvb-wrap, .pdvb-left, .pdvb-right { background: var(--bg) !important; }
-      .pdvb-right    { border-left-color: ${bord} !important; background: ${sur} !important; }
-      .pdvb-toolbar, .pdvb-cats { border-bottom-color: ${bord} !important; background: ${sur} !important; }
-      .pdvb-grid-item { background: ${sur} !important; color: ${text} !important; border: 1px solid ${bord} !important; }
-      .pdvb-grid-item .pdvb-item-name { color: ${text} !important; }
-      .pdvb-grid-item .pdvb-item-price { color: ${acc} !important; }
-      .pdvb-cat-btn  { color: ${muted} !important; border-bottom: 2px solid transparent !important; }
-      .pdvb-cat-btn.on { color: ${acc} !important; border-bottom-color: ${acc} !important; }
-      .pdvb-order-head { color: ${muted} !important; border-bottom-color: ${bord} !important; background: ${sur2} !important; }
-      .pdvb-order-item { border-bottom-color: ${bord} !important; color: ${text} !important; }
-      .pdvb-order-item * { color: ${text} !important; }
-      .pdvb-tot-row  { color: ${text} !important; }
-      .pdvb-gerar-btn { background: ${acc} !important; color: #fff !important; }
-      .pdvb-bar-btn  { background: ${sur2} !important; color: ${text} !important; border-color: ${bord} !important; }
-      .pdvb-bar-btn.primary { background: ${acc} !important; color: #fff !important; }
-      .pdvb-search-wrap input { background: ${sur2} !important; color: ${text} !important; }
-      .pdvb-topbar   { background: ${sur} !important; border-bottom-color: ${bord} !important; color: ${text} !important; }
-      .pdvb-tab      { color: ${muted} !important; border-bottom-color: transparent !important; }
-      .pdvb-tab.on   { color: ${acc} !important; border-bottom-color: ${acc} !important; }
-      .pdvb-bottom-bar { background: ${sur} !important; border-top-color: ${bord} !important; }
-      .pdvb-empty-order, .pdvb-empty-order * { color: ${muted} !important; }
-
-      /* Chips e badges misc */
-      .chip          { background: ${sur2} !important; color: ${text} !important; border-color: ${bord} !important; }
-      .chip-blue     { background: rgba(59,130,246,.12) !important; color: #1d4ed8 !important; }
-      .chip-green    { background: rgba(22,163,74,.12)  !important; color: #15803d !important; }
-      .chip-orange   { background: rgba(234,88,12,.12)  !important; color: #9a3412 !important; }
-
-      /* Misc */
-      .caixa-btn     { color: ${text} !important; border-color: ${bord} !important; }
-      .tw .tmeta span { color: ${muted} !important; }
-      .order-detail .od-info-card { background: ${sur2} !important; border-color: ${bord} !important; }
-      .od-info-card * { color: ${text} !important; }
-      .od-info-card-title { color: ${muted} !important; }
-      [id^="page-"] { color: ${text} !important; }
-    `;
-    overrideEl = document.createElement('style');
-    overrideEl.id = 'tema-light-override';
-    overrideEl.textContent = css;
-    document.head.appendChild(overrideEl);
-  }
-
-  temaUpdatePreview();
-  temaUpdateInputs();
-  if (save) temaSalvarStorage();
+  const style = document.createElement('style');
+  style.id = 'tema-light-override';
+  style.textContent = `
+    body,.app{background:var(--bg)!important;color:${text}!important}
+    .main,.page{background:var(--bg)!important;color:${text}!important}
+    .topnav{background:${tn}!important;border-bottom:1px solid ${bord}!important;box-shadow:0 1px 4px rgba(0,0,0,.08)!important}
+    .topnav *{color:${text}!important}
+    .sidebar{background:${sb}!important;border-right:1px solid ${bord}!important;box-shadow:2px 0 8px rgba(0,0,0,.06)!important}
+    .sfoot{background:var(--sfoot-bg)!important}
+    .si{color:${muted}!important}
+    .si:hover{background:rgba(0,0,0,.05)!important;color:${text}!important}
+    .si.on{background:rgba(26,111,212,.1)!important;color:${acc}!important}
+    .shead{color:${muted}!important}
+    .urow *{color:${text}!important}
+    .ph .pt,.ph h1,.ph h2{color:${text}!important}
+    .ph .ps{color:${muted}!important}
+    .card,.sc,.sbox,.tw{background:${sur}!important;border-color:${bord}!important;color:${text}!important}
+    .kol{background:${sur2}!important;border-color:${bord}!important}
+    .kol-head{background:${sur}!important;border-bottom-color:${bord}!important}
+    .kol-title{color:${text}!important}
+    .order-card{background:${sur}!important;border-color:${bord}!important;color:${text}!important}
+    .order-card *{color:${text}!important}
+    .oc-id{color:${acc}!important;font-weight:700!important}
+    .kol-empty,.kol-empty *{color:${muted}!important}
+    .btn.bg{background:${sur2}!important;color:${text}!important;border-color:${bord}!important}
+    .modal{background:${sur}!important;color:${text}!important;border-color:${bord}!important}
+    .modal *{color:${text}!important}
+    .modal-bg{background:rgba(0,0,0,.3)!important}
+    input,textarea,select,.form-input{background:${sur}!important;color:${text}!important;border-color:${bord}!important}
+    input::placeholder,textarea::placeholder{color:${muted}!important}
+    .toggle{background:${sur3}!important}
+    .toggle.on{background:var(--success)!important}
+    .pdvb-wrap,.pdvb-left,.pdvb-right{background:var(--bg)!important}
+    .pdvb-grid-item{background:${sur}!important;border-color:${bord}!important;color:${text}!important}
+  `;
+  document.head.appendChild(style);
 }
 
-// ── Inputs e fields ──────────────────────────────────
-function temaBuildFields(containerId, vars) {
-  const el = document.getElementById(containerId);
-  if (!el) return;
-  el.innerHTML = vars.map(v => `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-      <input type="color" id="ti${v.id.replace(/--/g,'_')}" value="#000000"
-        oninput="temaApply({'${v.id}':this.value})"
-        style="width:38px;height:38px;border:none;border-radius:8px;cursor:pointer;background:none;padding:0;flex-shrink:0">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:12.5px;font-weight:600">${v.label}</div>
-        <div style="font-size:11px;color:var(--muted)">${v.hint}</div>
-      </div>
-      <div id="ti${v.id.replace(/--/g,'_')}_hex"
-        style="font-size:10.5px;font-family:monospace;color:var(--muted);min-width:56px;text-align:right"></div>
-    </div>
-  `).join('');
-}
-
-function temaUpdateInputs() {
-  const root = document.documentElement;
-  Object.values(TEMA_VARS).flat().forEach(v => {
-    const raw = (_temaAtual[v.id] || getComputedStyle(root).getPropertyValue(v.id)).trim();
-    // Converte rgb/rgba para hex se necessário
-    const hex = raw.startsWith('#') ? raw : rgbToHex(raw);
-    const inp = document.getElementById('ti' + v.id.replace(/--/g,'_'));
-    const hexEl = document.getElementById('ti' + v.id.replace(/--/g,'_') + '_hex');
-    if (inp && hex.startsWith('#')) inp.value = hex.slice(0,7);
-    if (hexEl) hexEl.textContent = hex.slice(0,7);
-  });
-}
-
-function rgbToHex(str) {
-  const m = str.match(/[\d.]+/g);
-  if (!m || m.length < 3) return '#000000';
-  return '#' + [m[0],m[1],m[2]].map(n => parseInt(n).toString(16).padStart(2,'0')).join('');
-}
-
-// ── Preview ──────────────────────────────────────────
-function temaUpdatePreview() {
-  const g  = (v) => (_temaAtual[v] || getComputedStyle(document.documentElement).getPropertyValue(v)).trim();
-  const bg = g('--bg'), sur = g('--surface'), sur2 = g('--surface2');
-  const acc = g('--accent'), acc2 = g('--accent2'), acc3 = g('--accent3');
-  const suc = g('--success'), dan = g('--danger'), pur = g('--purple');
-  const txt = g('--text'), mut = g('--muted');
-
-  const s = (id, styles) => { const e=document.getElementById(id); if(e) Object.assign(e.style,styles); };
-  s('tp-topnav',  { background: sur });
-  s('tp-logo',    { background: acc });
-  s('tp-logo-txt',{ color: txt });
-  s('tp-pill',    { background: `${suc}22`, color: suc, border: `1px solid ${suc}44` });
-  s('tp-btn',     { background: acc });
-  s('tp-sidebar', { background: sur });
-  s('tp-si-on',   { background: `${acc}22`, color: acc });
-  s('tp-main',    { background: bg });
-  s('tp-col1',    { background: 'rgba(249,115,22,.18)' });
-  s('tp-col2',    { background: 'rgba(245,158,11,.16)' });
-  s('tp-col3',    { background: 'rgba(34,197,94,.14)' });
-  s('tp-card',    { background: sur2, border: `1px solid ${acc}33`, color: txt });
-  s('tp-btn-p',   { background: acc });
-  s('tp-btn-g',   { background: sur2, color: txt });
-  s('tp-success', { background: `${suc}22`, color: suc });
-  s('tp-danger',  { background: `${dan}22`, color: dan });
-  s('tp-accent3', { background: `${acc3}22`, color: acc3 });
-  s('tp-purple',  { background: `${pur}22`, color: pur });
-}
-
-// ── Presets ──────────────────────────────────────────
-function temaBuildPresets() {
-  const el = document.getElementById('tema-presets');
-  if (!el) return;
-  const escuros = TEMAS_PRONTOS.filter(t => parseInt(t.vars['--bg'].replace('#','').slice(0,2), 16) < 50);
-  const claros  = TEMAS_PRONTOS.filter(t => parseInt(t.vars['--bg'].replace('#','').slice(0,2), 16) >= 50);
-  const buildCard = (t, i) => {
-    const swatches = [t.vars['--accent'], t.vars['--accent2'], t.vars['--success'], t.vars['--bg']];
-    const idx = TEMAS_PRONTOS.indexOf(t);
-    return `<div onclick="temaApply(TEMAS_PRONTOS[${idx}].vars)"
-      style="background:${t.vars['--surface']};border:2px solid ${t.vars['--surface3']};border-radius:12px;
-             padding:13px;cursor:pointer;transition:all .18s;position:relative;overflow:hidden"
-      onmouseover="this.style.transform='translateY(-2px)';this.style.borderColor='${t.vars['--accent']}';this.style.boxShadow='0 4px 16px ${t.vars['--accent']}33'"
-      onmouseout="this.style.transform='';this.style.borderColor='${t.vars['--surface3']}';this.style.boxShadow=''">
-      <div style="display:flex;gap:5px;margin-bottom:9px">
-        ${swatches.map(c=>`<div style="width:20px;height:20px;border-radius:50%;background:${c};border:1.5px solid rgba(0,0,0,.1)"></div>`).join('')}
-      </div>
-      <div style="font-size:12.5px;font-weight:700;color:${t.vars['--text']}">${t.nome}</div>
-      <div style="font-size:10.5px;color:${t.vars['--muted']};margin-top:2px">${t.desc}</div>
-      <div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:${t.vars['--accent']}"></div>
-    </div>`;
-  };
-  el.innerHTML =
-    `<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;margin-bottom:4px">
-       <div style="flex:1;height:1px;background:var(--border)"></div>
-       <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">🌑 Temas Escuros</span>
-       <div style="flex:1;height:1px;background:var(--border)"></div>
-     </div>` +
-    escuros.map(buildCard).join('') +
-    `<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;margin:8px 0 4px">
-       <div style="flex:1;height:1px;background:var(--border)"></div>
-       <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">☀️ Temas Claros</span>
-       <div style="flex:1;height:1px;background:var(--border)"></div>
-     </div>` +
-    claros.map(buildCard).join('');
-}
-
-// ── Salvar / Carregar / Reset ─────────────────────────
-function temaSalvarStorage() {
-  // sem persistência — tema vem do CSS :root
-}
-
-async function temaSalvar() {
-  sbToast('ok', '🎨 Tema aplicado com sucesso!');
-}
-
-function temaCarregarStorage() {
-  // sem persistência — tema vem do CSS :root
-}
-
-function temaReset() {
-  if (!confirm('Resetar para o tema padrão?')) return;
-  temaApply(TEMAS_PRONTOS[0].vars);
-  sbToast('ok', 'Tema resetado!');
-}
-
-// ── Inicialização da página ───────────────────────────
-function initTemaPage() {
-  _temaAtual = temaGetCurrent();
-  temaUpdateCardSelection();
-}
-
+// ── Função principal: aplica tema e salva ─────────────
 function temaAplicarModo(modo) {
-  const vars = modo === 'escuro' ? TEMAS_PRONTOS[0].vars : TEMAS_PRONTOS[1].vars;
-  temaApply(vars, true);
+  const vars = modo === 'claro' ? MODO_CLARO : MODO_ESCURO;
+  _aplicarVars(vars);
+  if (modo === 'claro') {
+    _aplicarOverrideClaro(vars);
+  } else {
+    const el = document.getElementById('tema-light-override');
+    if (el) el.remove();
+  }
+  try { localStorage.setItem('ef_modo', modo); } catch(e) {}
   temaUpdateCardSelection();
-  sbToast('ok', modo === 'escuro' ? '🌑 Modo escuro ativado!' : '☀️ Modo claro ativado!');
+  sbToast('ok', modo === 'claro' ? '☀️ Modo claro ativado!' : '🌑 Modo escuro ativado!');
 }
 
 function temaUpdateCardSelection() {
-  const bg = (_temaAtual['--bg'] || getComputedStyle(document.documentElement).getPropertyValue('--bg')).trim();
-  const isEscuro = parseInt(bg.replace('#','').slice(0,2)||'ff',16) < 50 || bg.startsWith('rgba(0') || bg === '#0a0a0a';
+  const modo = (localStorage.getItem('ef_modo') || 'escuro');
   const cardClaro  = document.getElementById('tema-card-claro');
   const cardEscuro = document.getElementById('tema-card-escuro');
-  if (cardClaro)  { cardClaro.style.borderColor  = isEscuro ? 'var(--border)' : 'var(--accent)'; cardClaro.style.boxShadow  = isEscuro ? 'none' : '0 0 0 3px var(--accent-glow)'; }
-  if (cardEscuro) { cardEscuro.style.borderColor = isEscuro ? 'var(--accent)' : 'var(--border)'; cardEscuro.style.boxShadow = isEscuro ? '0 0 0 3px var(--accent-glow)' : 'none'; }
+  if (cardClaro)  { cardClaro.style.borderColor  = modo==='claro'  ? 'var(--accent)':'var(--border)'; cardClaro.style.boxShadow  = modo==='claro'  ? '0 0 0 3px var(--accent-glow)':'none'; }
+  if (cardEscuro) { cardEscuro.style.borderColor = modo==='escuro' ? 'var(--accent)':'var(--border)'; cardEscuro.style.boxShadow = modo==='escuro' ? '0 0 0 3px var(--accent-glow)':'none'; }
 }
 
-// Aplica tema escuro padrão — limpa qualquer cache antigo
-(function() {
-  try {
-    // Remove todas as chaves antigas de tema
-    ['ef_tema_modo','ef_tema_v2','tema','theme','gestor_tema'].forEach(k => localStorage.removeItem(k));
-  } catch(e) {}
-  try { temaApply(TEMAS_PRONTOS[0].vars); } catch(e) {}
+function initTemaPage() { temaUpdateCardSelection(); }
+
+// Funções legadas — mantidas para não quebrar chamadas existentes
+function temaApply(vars, save) { _aplicarVars(vars); }
+function temaGetCurrent() { return {}; }
+function temaSalvarStorage() {}
+function temaCarregarStorage() {}
+function temaReset() { temaAplicarModo('escuro'); }
+async function temaSalvar() { sbToast('ok','🎨 Tema aplicado!'); }
+function temaBuildPresets() {}
+function temaBuildFields() {}
+function temaUpdatePreview() {}
+function temaUpdateInputs() {}
+
+// ── Aplica tema salvo ou escuro padrão ao carregar ────
+(function(){
+  // Limpa chaves antigas
+  try { ['ef_tema_modo','ef_tema_v2','tema','theme'].forEach(k=>localStorage.removeItem(k)); } catch(e){}
+  const modo = localStorage.getItem('ef_modo') || 'escuro';
+  const vars = modo === 'claro' ? MODO_CLARO : MODO_ESCURO;
+  _aplicarVars(vars);
+  if (modo === 'claro') {
+    // Override claro aplicado após DOM estar pronto
+    document.addEventListener('DOMContentLoaded', function(){ _aplicarOverrideClaro(MODO_CLARO); });
+  }
 })();
 
 // ── Registra webhook na Evolution API automaticamente ──
