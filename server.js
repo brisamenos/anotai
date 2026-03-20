@@ -15,6 +15,8 @@ const EVO_URL     = process.env.EVOLUTION_URL  || 'https://projeto-evolution-api
 const EVO_KEY     = process.env.EVOLUTION_KEY  || '429683C4C977415CAAFCCE10F7D57E11'
 const EVO_INST    = process.env.EVOLUTION_INST || 'estima-food'
 const DB_PATH     = process.env.DB_PATH        || '/app/data/estima.db'
+const MP_TOKEN    = process.env.MP_ACCESS_TOKEN || ''   // Token do Mercado Pago (prod ou test)
+const TAXA_PIX    = parseFloat(process.env.TAXA_PIX || '1.00')  // R$1,00 fixo por pagamento
 const UPLOADS_DIR = process.env.UPLOADS_DIR    || '/app/data/uploads'
 const BACKUP_PATH = path.join(path.dirname(DB_PATH), 'backup.json')
 
@@ -161,6 +163,39 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS pagamentos_pix (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    order_id INTEGER,
+    mp_payment_id TEXT UNIQUE,
+    mp_external_ref TEXT,
+    valor REAL NOT NULL,
+    taxa REAL NOT NULL DEFAULT 1.0,
+    valor_liquido REAL NOT NULL,
+    status TEXT DEFAULT 'pendente',
+    payer_name TEXT, payer_doc TEXT,
+    qr_code TEXT, qr_code_base64 TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    paid_at TEXT
+  );
+  CREATE TABLE IF NOT EXISTS saques (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    tenant_nome TEXT,
+    valor_solicitado REAL NOT NULL,
+    num_pagamentos INTEGER DEFAULT 0,
+    taxa_total REAL DEFAULT 0,
+    valor_liquido REAL NOT NULL,
+    pix_key TEXT NOT NULL,
+    pix_key_tipo TEXT DEFAULT 'aleatoria',
+    status TEXT DEFAULT 'pendente',
+    obs_admin TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    paid_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_pix_tenant    ON pagamentos_pix(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_pix_status    ON pagamentos_pix(tenant_id, status);
+  CREATE INDEX IF NOT EXISTS idx_saques_tenant ON saques(tenant_id);
   CREATE INDEX IF NOT EXISTS idx_orders_tenant     ON orders(tenant_id);
   CREATE INDEX IF NOT EXISTS idx_orders_status     ON orders(tenant_id, status);
   CREATE INDEX IF NOT EXISTS idx_orders_phone      ON orders(tenant_id, phone);
@@ -189,6 +224,13 @@ const MIGRATIONS = [
   { version:13, description:'customer_id em orders',           up:`ALTER TABLE orders ADD COLUMN customer_id INTEGER` },
   { version:14, description:'tabela ratings',                  up:`CREATE TABLE IF NOT EXISTS ratings (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE, order_id INTEGER, client TEXT, phone TEXT, nota INTEGER NOT NULL DEFAULT 5, comentario TEXT, created_at TEXT DEFAULT (datetime('now')))` },
   { version:15, description:'troco em orders',                 up:`ALTER TABLE orders ADD COLUMN troco REAL` },
+  { version:16, description:'order_num_offset em store_config', up:`ALTER TABLE store_config ADD COLUMN order_num_offset INTEGER DEFAULT 0` },
+  { version:17, description:'tabelas pix e saques',             up:[
+    `CREATE TABLE IF NOT EXISTS pagamentos_pix (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE, order_id INTEGER, mp_payment_id TEXT UNIQUE, mp_external_ref TEXT, valor REAL NOT NULL, taxa REAL NOT NULL DEFAULT 1.0, valor_liquido REAL NOT NULL, status TEXT DEFAULT 'pendente', payer_name TEXT, payer_doc TEXT, qr_code TEXT, qr_code_base64 TEXT, created_at TEXT DEFAULT (datetime('now')), paid_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS saques (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE, tenant_nome TEXT, valor_solicitado REAL NOT NULL, num_pagamentos INTEGER DEFAULT 0, taxa_total REAL DEFAULT 0, valor_liquido REAL NOT NULL, pix_key TEXT NOT NULL, pix_key_tipo TEXT DEFAULT 'aleatoria', status TEXT DEFAULT 'pendente', obs_admin TEXT, created_at TEXT DEFAULT (datetime('now')), paid_at TEXT)`,
+    `CREATE INDEX IF NOT EXISTS idx_pix_tenant ON pagamentos_pix(tenant_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_saques_tenant ON saques(tenant_id)`
+  ]},
 ]
 
 function runMigrations() {
@@ -217,7 +259,7 @@ runMigrations()
 // BACKUP / RESTORE
 // ════════════════════════════════════════════════════════
 const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_items',
-  'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers']
+  'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques']
 
 let _dirty = false
 function marcarDirty() { _dirty = true }
@@ -352,7 +394,7 @@ function emit(tenantId, table, record, type) {
 const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','expires_at','created_at'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
-  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_tempo_entrega','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config'],
+  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_tempo_entrega','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
@@ -1081,6 +1123,209 @@ const server = http.createServer(async (req,res) => {
   if(req.method==='POST'&&(upath.startsWith('/webhook/whatsapp')||upath.startsWith('/webhook/'))){await handleIAWebhook(req,res);return}
 
 
+
+  // ════════════════════════════════════════════════════════
+  // PIX — MERCADO PAGO
+  // ════════════════════════════════════════════════════════
+
+  // ── Gera cobrança PIX via MP ─────────────────────────
+  if(req.method==='POST'&&upath==='/api/pix/criar'){
+    const tid=req.headers['x-tenant-id'];if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
+    const body=await readBody(req)
+    const{valor,order_id,client,email='pagador@email.com'}=body
+    if(!valor||valor<=0){send(res,400,{error:'valor inválido'});return}
+
+    // Obtém token MP — tenta do banco (_global), fallback env
+    let mpToken=MP_TOKEN
+    try{
+      const cfgMp=db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const gCfg=cfgMp?.ia_config?JSON.parse(cfgMp.ia_config):{}
+      if(gCfg.mp_token)mpToken=gCfg.mp_token
+    }catch{}
+    if(!mpToken){send(res,400,{error:'Token Mercado Pago não configurado. Configure no painel Admin → Configurações.'});return}
+
+    const extRef=`ef-${tid.slice(0,8)}-${order_id||Date.now()}`
+    const taxa=TAXA_PIX
+    const valorLiq=Math.max(0,parseFloat(valor)-taxa)
+
+    try{
+      const mp=await fetch('https://api.mercadopago.com/v1/payments',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${mpToken}`,'X-Idempotency-Key':extRef},
+        body:JSON.stringify({
+          transaction_amount:parseFloat(valor),
+          description:`Pedido #${order_id||'?'} - ${client||'Cliente'}`,
+          payment_method_id:'pix',
+          external_reference:extRef,
+          payer:{email,first_name:client||'Cliente',last_name:''},
+        })
+      })
+      const mpData=await mp.json()
+      if(!mp.ok){log('❌','MP PIX erro:',mpData);send(res,400,{error:mpData.message||'Erro MP'});return}
+
+      const qr=mpData.point_of_interaction?.transaction_data?.qr_code||''
+      const qrB64=mpData.point_of_interaction?.transaction_data?.qr_code_base64||''
+
+      // Salva no banco
+      db.prepare(`INSERT OR IGNORE INTO pagamentos_pix
+        (tenant_id,order_id,mp_payment_id,mp_external_ref,valor,taxa,valor_liquido,status,payer_name,qr_code,qr_code_base64)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(tid,order_id||null,String(mpData.id),extRef,parseFloat(valor),taxa,valorLiq,mpData.status||'pendente',client||'',qr,qrB64)
+
+      log('💳',`PIX criado: R$${valor} tenant=${tid} mp_id=${mpData.id}`)
+      send(res,200,{ok:true,mp_payment_id:mpData.id,qr_code:qr,qr_code_base64:qrB64,valor,taxa,valor_liquido:valorLiq,status:mpData.status})
+    }catch(e){log('❌','MP fetch erro:',{error:e.message});send(res,500,{error:'Erro ao criar PIX: '+e.message})}
+    return
+  }
+
+  // ── Consulta status de um pagamento PIX ──────────────
+  if(req.method==='GET'&&upath==='/api/pix/status'){
+    const tid=req.headers['x-tenant-id'];if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
+    const mpId=params.get('mp_payment_id')
+    if(!mpId){send(res,400,{error:'mp_payment_id obrigatório'});return}
+    const row=db.prepare('SELECT * FROM pagamentos_pix WHERE mp_payment_id=? AND tenant_id=?').get(mpId,tid)
+    if(!row){send(res,404,{error:'Pagamento não encontrado'});return}
+    send(res,200,row);return
+  }
+
+  // ── Webhook do Mercado Pago ───────────────────────────
+  if(req.method==='POST'&&upath==='/webhook/mercadopago'){
+    const body=await readBody(req)
+    const mpId=body?.data?.id||body?.id
+    if(!mpId){send(res,200,{ok:true});return}
+
+    let mpToken=MP_TOKEN
+    try{const cfgMp=db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get();const g=cfgMp?.ia_config?JSON.parse(cfgMp.ia_config):{};if(g.mp_token)mpToken=g.mp_token}catch{}
+    if(!mpToken){send(res,200,{ok:true});return}
+
+    try{
+      const r=await fetch(`https://api.mercadopago.com/v1/payments/${mpId}`,{headers:{'Authorization':`Bearer ${mpToken}`}})
+      const pd=await r.json()
+      if(!r.ok){send(res,200,{ok:true});return}
+
+      const row=db.prepare('SELECT * FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
+      if(!row){send(res,200,{ok:true});return}
+
+      const novoStatus=pd.status==='approved'?'aprovado':pd.status==='rejected'?'rejeitado':pd.status==='cancelled'?'cancelado':'pendente'
+      const paidAt=pd.date_approved||null
+      db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=?,payer_name=?,payer_doc=? WHERE mp_payment_id=?')
+        .run(novoStatus,paidAt,pd.payer?.first_name||row.payer_name||'',pd.payer?.identification?.number||'',String(mpId))
+
+      if(novoStatus==='aprovado'){
+        log('✅',`PIX aprovado: R$${row.valor} tenant=${row.tenant_id}`)
+        // Atualiza status do pedido para "producao" se tiver order_id
+        if(row.order_id)db.prepare("UPDATE orders SET pag='pix_mp',status=CASE WHEN status='analise' THEN 'producao' ELSE status END WHERE id=? AND tenant_id=?").run(row.order_id,row.tenant_id)
+        sseBroadcast(`orders-rt:${row.tenant_id}`,`orders:UPDATE`,{id:row.order_id,status:'producao',pag:'pix_mp'})
+      }
+      marcarDirty()
+    }catch(e){log('⚠️','Webhook MP erro:',{error:e.message})}
+    send(res,200,{ok:true});return
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // CARTEIRA & SAQUES
+  // ═══════════════════════════════════════════════════════
+
+  // ── Saldo da carteira do gestor ──────────────────────
+  if(req.method==='GET'&&upath==='/api/carteira'){
+    const tid=req.headers['x-tenant-id'];if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
+    const totalRecebido=db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v||0
+    const totalSacado  =db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM saques WHERE tenant_id=? AND status IN ('pendente','aprovado','pago')").get(tid)?.v||0
+    const saldoDisp    =Math.max(0,totalRecebido-totalSacado)
+    const totalPix     =db.prepare("SELECT COUNT(*) as c FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.c||0
+    const totalTaxas   =db.prepare("SELECT COALESCE(SUM(taxa),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v||0
+    const ultimosPix   =db.prepare("SELECT * FROM pagamentos_pix WHERE tenant_id=? ORDER BY created_at DESC LIMIT 10").all(tid)
+    send(res,200,{saldo_disponivel:saldoDisp,total_recebido:totalRecebido,total_sacado:totalSacado,total_pagamentos:totalPix,total_taxas:totalTaxas,ultimos_pagamentos:ultimosPix});return
+  }
+
+  // ── Solicitar saque ──────────────────────────────────
+  if(req.method==='POST'&&upath==='/api/saques/solicitar'){
+    const tid=req.headers['x-tenant-id'];if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
+    const body=await readBody(req)
+    const{pix_key,pix_key_tipo='aleatoria'}=body
+    if(!pix_key){send(res,400,{error:'Chave PIX obrigatória'});return}
+
+    // Calcula saldo disponível
+    const totalRecebido=db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v||0
+    const totalSacado  =db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM saques WHERE tenant_id=? AND status IN ('pendente','aprovado','pago')").get(tid)?.v||0
+    const saldo        =Math.max(0,totalRecebido-totalSacado)
+
+    if(saldo<1){send(res,400,{error:'Saldo insuficiente para saque'});return}
+    // Verifica se já tem saque pendente
+    const jaTemPendente=db.prepare("SELECT id FROM saques WHERE tenant_id=? AND status='pendente'").get(tid)
+    if(jaTemPendente){send(res,400,{error:'Você já tem um saque pendente aguardando aprovação'});return}
+
+    // Conta pagamentos que serão incluídos neste saque
+    const numPag=db.prepare("SELECT COUNT(*) as c,COALESCE(SUM(taxa),0) as t FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)
+    const tenant=db.prepare('SELECT nome FROM tenants WHERE id=?').get(tid)
+
+    db.prepare(`INSERT INTO saques (tenant_id,tenant_nome,valor_solicitado,num_pagamentos,taxa_total,valor_liquido,pix_key,pix_key_tipo)
+      VALUES (?,?,?,?,?,?,?,?)`)
+      .run(tid,tenant?.nome||tid,saldo,numPag?.c||0,numPag?.t||0,saldo,pix_key,pix_key_tipo)
+
+    marcarDirty()
+    log('💰',`Saque solicitado: R$${saldo.toFixed(2)} tenant=${tid}`)
+    send(res,200,{ok:true,valor:saldo,pix_key});return
+  }
+
+  // ── Lista saques do gestor ───────────────────────────
+  if(req.method==='GET'&&upath==='/api/saques/meus'){
+    const tid=req.headers['x-tenant-id'];if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
+    const saques=db.prepare('SELECT * FROM saques WHERE tenant_id=? ORDER BY created_at DESC').all(tid)
+    send(res,200,saques);return
+  }
+
+  // ── Admin: lista todos os saques pendentes ───────────
+  if(req.method==='GET'&&upath==='/api/admin/saques'){
+    if(!validarSessaoAdmin(req)){send(res,401,{error:'Não autorizado'});return}
+    const status=params.get('status')||'pendente'
+    const saques=db.prepare('SELECT s.*,t.slug FROM saques s LEFT JOIN tenants t ON s.tenant_id=t.id WHERE s.status=? ORDER BY s.created_at ASC').all(status)
+    send(res,200,saques);return
+  }
+
+  // ── Admin: atualiza status de um saque ───────────────
+  if(req.method==='PATCH'&&upath==='/api/admin/saques/atualizar'){
+    if(!validarSessaoAdmin(req)){send(res,401,{error:'Não autorizado'});return}
+    const body=await readBody(req)
+    const{id,status,obs_admin}=body
+    if(!id||!status){send(res,400,{error:'id e status obrigatórios'});return}
+    const paid_at=status==='pago'?new Date().toISOString():null
+    db.prepare('UPDATE saques SET status=?,obs_admin=?,paid_at=COALESCE(?,paid_at) WHERE id=?').run(status,obs_admin||null,paid_at,id)
+    marcarDirty()
+    log('💰',`Saque #${id} → ${status}`)
+    send(res,200,{ok:true});return
+  }
+
+  // ── Admin: salvar token MP ───────────────────────────
+  if(req.method==='POST'&&upath==='/api/admin/mp-config'){
+    if(!validarSessaoAdmin(req)){send(res,401,{error:'Não autorizado'});return}
+    const body=await readBody(req)
+    const{mp_token,taxa_pix}=body
+    try{
+      const cfgMp=db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const cur=cfgMp?.ia_config?JSON.parse(cfgMp.ia_config):{}
+      if(mp_token)cur.mp_token=mp_token
+      if(taxa_pix!==undefined)cur.taxa_pix=parseFloat(taxa_pix)
+      db.prepare("INSERT INTO store_config (tenant_id,ia_config) VALUES ('_global',?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config").run(JSON.stringify(cur))
+      marcarDirty()
+      send(res,200,{ok:true})
+    }catch(e){send(res,500,{error:e.message})}
+    return
+  }
+
+  // ── Admin: ler config MP ─────────────────────────────
+  if(req.method==='GET'&&upath==='/api/admin/mp-config'){
+    if(!validarSessaoAdmin(req)){send(res,401,{error:'Não autorizado'});return}
+    try{
+      const row=db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const cfg=row?.ia_config?JSON.parse(row.ia_config):{}
+      const mp_token=cfg.mp_token?'••••'+cfg.mp_token.slice(-6):''
+      const taxa_pix=cfg.taxa_pix||TAXA_PIX
+      send(res,200,{mp_token_mascarado:mp_token,taxa_pix,mp_configurado:!!cfg.mp_token})
+    }catch(e){send(res,500,{error:e.message})}
+    return
+  }
+
   // ── Backup completo do gestor (dados + imagens em base64) ─────────────────
   if(req.method==='GET'&&upath==='/api/backup-completo-gestor'){
     const tid=req.headers['x-tenant-id']
@@ -1136,7 +1381,7 @@ const server = http.createServer(async (req,res) => {
     return
   }
 
-  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor'])
+  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/mp-config'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return

@@ -1039,6 +1039,7 @@ function nav(id){
   if(id==='impressao') renderImpressao();
   if(id==='caixa') _renderCaixaTela();
   if(id==='configuracoes') _renderConfiguracoes();
+  if(id==='saques') carregarCarteira();
   if(id==='taxa') renderTaxaPage();
   if(id==='clientes') renderClientesPage();
   if(id==='meu-plano') renderMeuPlano();
@@ -6914,5 +6915,105 @@ async function baixarBackupCompleto() {
     sbToast('err', 'Erro ao gerar backup: ' + e.message);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '⬇️ Baixar backup completo'; }
+  }
+}
+
+// ════════════════════════════════════════════════════════
+// CARTEIRA & SAQUES
+// ════════════════════════════════════════════════════════
+const _fmtR = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
+
+async function carregarCarteira() {
+  try {
+    const tid = _sessao?.tenant_id;
+    if (!tid) return;
+    const [cartRes, saqRes] = await Promise.all([
+      fetch('/api/carteira', { headers: { 'x-tenant-id': tid } }),
+      fetch('/api/saques/meus', { headers: { 'x-tenant-id': tid } })
+    ]);
+    const cart = cartRes.ok ? await cartRes.json() : {};
+    const saques = saqRes.ok ? await saqRes.json() : [];
+
+    // Cards de saldo
+    const se = id => document.getElementById(id);
+    if(se('crt-saldo'))  se('crt-saldo').textContent  = _fmtR(cart.saldo_disponivel);
+    if(se('crt-total'))  se('crt-total').textContent  = _fmtR(cart.total_recebido);
+    if(se('crt-sacado')) se('crt-sacado').textContent = _fmtR(cart.total_sacado);
+    if(se('crt-npag'))   se('crt-npag').textContent   = cart.total_pagamentos || 0;
+    if(se('crt-taxas'))  se('crt-taxas').textContent  = _fmtR(cart.total_taxas);
+
+    // Preview do valor de saque
+    const saldo = parseFloat(cart.saldo_disponivel || 0);
+    if(se('saque-valor-preview')) se('saque-valor-preview').textContent = _fmtR(saldo);
+
+    // Verifica se tem saque pendente
+    const temPendente = saques.some(s => s.status === 'pendente');
+    if(se('saque-form-wrap'))       se('saque-form-wrap').style.display       = temPendente ? 'none' : '';
+    if(se('saque-pendente-aviso'))  se('saque-pendente-aviso').style.display  = temPendente ? '' : 'none';
+    if(se('btn-solicitar-saque'))   se('btn-solicitar-saque').disabled        = saldo < 1;
+
+    // Histórico de saques
+    _renderSaqueHistorico(saques);
+
+    // Últimos pagamentos PIX
+    _renderPixHistorico(cart.ultimos_pagamentos || []);
+  } catch(e) {
+    sbToast('err', 'Erro ao carregar carteira: ' + e.message);
+  }
+}
+
+function _renderSaqueHistorico(saques) {
+  const el = document.getElementById('saque-historico');
+  if (!el) return;
+  if (!saques.length) { el.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Nenhum saque solicitado ainda.</div>'; return; }
+  const badge = { pendente:'background:rgba(249,115,22,.15);color:var(--orange)', aprovado:'background:rgba(59,130,246,.15);color:var(--accent)', pago:'background:rgba(34,197,94,.15);color:var(--success)', cancelado:'background:rgba(239,68,68,.15);color:var(--danger)' };
+  const label = { pendente:'⏳ Pendente', aprovado:'✅ Aprovado', pago:'✅ Pago', cancelado:'❌ Cancelado' };
+  el.innerHTML = saques.map(s => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-weight:600;font-size:13px">${_fmtR(s.valor_liquido)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${s.pix_key_tipo?.toUpperCase()}: ${s.pix_key} · ${new Date(s.created_at).toLocaleDateString('pt-BR')}</div>
+        ${s.obs_admin ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">📝 ${s.obs_admin}</div>` : ''}
+      </div>
+      <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;${badge[s.status]||badge.pendente}">${label[s.status]||s.status}</span>
+    </div>`).join('');
+}
+
+function _renderPixHistorico(pagamentos) {
+  const el = document.getElementById('pix-historico');
+  if (!el) return;
+  if (!pagamentos.length) { el.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Nenhum pagamento PIX ainda.</div>'; return; }
+  const badge = { aprovado:'background:rgba(34,197,94,.15);color:var(--success)', pendente:'background:rgba(249,115,22,.15);color:var(--orange)', rejeitado:'background:rgba(239,68,68,.15);color:var(--danger)', cancelado:'background:rgba(239,68,68,.15);color:var(--danger)' };
+  el.innerHTML = pagamentos.map(p => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-weight:600;font-size:13px">${_fmtR(p.valor)} <span style="font-weight:400;color:var(--muted);font-size:12px">→ líquido ${_fmtR(p.valor_liquido)}</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${p.payer_name||'—'} · Pedido #${_orderNum(p.order_id||0)} · ${new Date(p.created_at).toLocaleDateString('pt-BR')}</div>
+      </div>
+      <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;${badge[p.status]||badge.pendente}">${p.status}</span>
+    </div>`).join('');
+}
+
+async function solicitarSaque() {
+  const pixKey  = document.getElementById('saque-pix-key')?.value.trim();
+  const pixTipo = document.getElementById('saque-pix-tipo')?.value || 'aleatoria';
+  if (!pixKey) { sbToast('err', 'Informe a chave PIX'); return; }
+
+  const btn = document.getElementById('btn-solicitar-saque');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Solicitando...'; }
+  try {
+    const tid = _sessao?.tenant_id;
+    const res = await fetch('/api/saques/solicitar', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify({ pix_key: pixKey, pix_key_tipo: pixTipo })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro');
+    sbToast('ok', `✅ Saque de ${_fmtR(data.valor)} solicitado! O administrador irá processar em breve.`);
+    await carregarCarteira();
+  } catch(e) {
+    sbToast('err', 'Erro: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '💸 Solicitar saque'; }
   }
 }

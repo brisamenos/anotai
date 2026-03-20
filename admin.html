@@ -154,6 +154,7 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
       <div class="sb-sec" style="margin-top:6px">Gestão</div>
       <button class="sb-item" id="nav-clientes" onclick="navTo('clientes')">🏢 Clientes</button>
       <button class="sb-item" id="nav-ia" onclick="navTo('ia')">🧠 Agente IA</button>
+      <button class="sb-item" id="nav-saques" onclick="navTo('saques')">💰 Saques PIX</button>
       <button class="sb-item" id="nav-backup" onclick="navTo('backup')">💾 Backup</button>
     </nav>
     <div class="sb-foot">
@@ -330,6 +331,65 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
             <button class="btn bp" id="btn-importar" onclick="importarBackup()" style="display:none">⬆️ Restaurar</button>
           </div>
           <div id="import-status" style="margin-top:12px;font-size:12.5px"></div>
+        </div>
+      </div>
+
+    </div>
+
+      <!-- SAQUES PIX -->
+      <div id="sec-saques" style="display:none">
+        <!-- Config MP -->
+        <div class="card" style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+            <div>
+              <div class="card-title">⚙️ Configuração Mercado Pago</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:3px" id="mp-status-txt">Carregando...</div>
+            </div>
+            <button class="btn bp bsm" onclick="salvarMpConfig()">💾 Salvar</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div>
+              <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Access Token MP</label>
+              <input class="minput" id="mp-token-input" type="password" placeholder="APP_USR-..." autocomplete="off">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">Obtido em mercadopago.com/developers</div>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Taxa por pagamento (R$)</label>
+              <input class="minput" id="mp-taxa-input" type="number" step="0.01" min="0" value="1.00" placeholder="1.00">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">Valor fixo descontado de cada PIX recebido</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Estatísticas -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+          <div class="sc" style="--ca:var(--orange)"><div class="sc-icon">⏳</div><div class="sc-label">Pendentes</div><div class="sc-val" id="saq-cnt-pendentes" style="color:var(--orange)">—</div></div>
+          <div class="sc" style="--ca:var(--success)"><div class="sc-icon">✅</div><div class="sc-label">Pagos (mês)</div><div class="sc-val" id="saq-cnt-pagos" style="color:var(--success)">—</div></div>
+          <div class="sc" style="--ca:var(--accent)"><div class="sc-icon">💰</div><div class="sc-label">Volume pendente</div><div class="sc-val" id="saq-vol-pendente" style="color:var(--accent)">R$ —</div></div>
+        </div>
+
+        <!-- Lista de saques pendentes -->
+        <div class="tw" style="margin-bottom:16px">
+          <div class="tmeta">
+            <div class="card-title">⏳ Saques Pendentes</div>
+            <button class="btn bg2 bsm" onclick="carregarSaquesAdmin()">🔄 Atualizar</button>
+          </div>
+          <table>
+            <thead><tr><th>Restaurante</th><th>Saldo solicitado</th><th>Chave PIX</th><th>Pagamentos</th><th>Data</th><th>Ações</th></tr></thead>
+            <tbody id="saq-tbody-pendentes"></tbody>
+          </table>
+        </div>
+
+        <!-- Lista de saques pagos -->
+        <div class="tw">
+          <div class="tmeta">
+            <div class="card-title">✅ Saques Pagos / Histórico</div>
+            <button class="btn bg2 bsm" onclick="carregarSaquesAdmin('pago')">🔄 Ver pagos</button>
+          </div>
+          <table>
+            <thead><tr><th>Restaurante</th><th>Valor pago</th><th>Chave PIX</th><th>Data pagamento</th><th>Obs</th></tr></thead>
+            <tbody id="saq-tbody-pagos"></tbody>
+          </table>
         </div>
       </div>
 
@@ -515,15 +575,16 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // ── NAVEGAÇÃO ────────────────────────────
 function navTo(id) {
-  ['dash','clientes','ia','backup'].forEach(s => {
+  ['dash','clientes','ia','backup','saques'].forEach(s => {
     const sec = document.getElementById('sec-'+s);
     if (sec) sec.style.display = s===id ? 'block' : 'none';
     document.getElementById('nav-'+s)?.classList.toggle('on', s===id);
   });
-  const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA', backup:'Backup & Restore' };
+  const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA', backup:'Backup & Restore', saques:'Saques PIX' };
   document.getElementById('topbar-title').textContent = titles[id] || id;
   if (id==='ia') iaAdminCarregar();
   if (id==='backup') renderBackupList();
+  if (id==='saques') { carregarSaquesAdmin(); carregarMpConfig(); }
 }
 
 // ── CARREGAR DADOS ───────────────────────
@@ -1106,6 +1167,169 @@ async function importarBackup() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '⬆️ Restaurar'; }
   }
+}
+
+// ════════════════════════════════════════════════════════
+// SAQUES PIX — ADMIN
+// ════════════════════════════════════════════════════════
+
+async function carregarMpConfig() {
+  try {
+    const r = await fetch('/api/admin/mp-config', { headers: adminAuthHeader() });
+    const d = r.ok ? await r.json() : {};
+    const txtEl = document.getElementById('mp-status-txt');
+    if (txtEl) txtEl.innerHTML = d.mp_configurado
+      ? `<span style="color:var(--success)">✅ MP configurado · Taxa: R$ ${parseFloat(d.taxa_pix||1).toFixed(2)}</span>`
+      : `<span style="color:var(--danger)">⚠️ Token MP não configurado</span>`;
+    const taxaEl = document.getElementById('mp-taxa-input');
+    if (taxaEl && d.taxa_pix) taxaEl.value = parseFloat(d.taxa_pix).toFixed(2);
+    const tokenEl = document.getElementById('mp-token-input');
+    if (tokenEl) {
+      tokenEl.value = d.mp_token_mascarado || '';
+      tokenEl.addEventListener('focus', () => { if (tokenEl.value.startsWith('•')) tokenEl.value = ''; }, { once: true });
+    }
+  } catch(e) { console.error(e); }
+}
+
+async function salvarMpConfig() {
+  const token = document.getElementById('mp-token-input')?.value || '';
+  const taxa  = document.getElementById('mp-taxa-input')?.value  || '1.00';
+  const body  = { taxa_pix: parseFloat(taxa) };
+  if (token && !token.startsWith('•')) body.mp_token = token;
+  try {
+    const r = await fetch('/api/admin/mp-config', {
+      method: 'POST',
+      headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    toast('ok', '✅ Configuração MP salva!');
+    carregarMpConfig();
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+async function carregarSaquesAdmin(statusFiltro = 'pendente') {
+  try {
+    const r = await fetch(`/api/admin/saques?status=${statusFiltro}`, { headers: adminAuthHeader() });
+    const saques = r.ok ? await r.json() : [];
+
+    if (statusFiltro === 'pendente') {
+      const total = saques.reduce((s, x) => s + parseFloat(x.valor_liquido || 0), 0);
+      const cntEl = document.getElementById('saq-cnt-pendentes');
+      const volEl = document.getElementById('saq-vol-pendente');
+      if (cntEl) cntEl.textContent = saques.length;
+      if (volEl) volEl.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+      _renderSaquesPendentes(saques);
+    } else {
+      _renderSaquesPagos(saques);
+      const cntEl = document.getElementById('saq-cnt-pagos');
+      if (cntEl) cntEl.textContent = saques.length;
+    }
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+function _renderSaquesPendentes(saques) {
+  const el = document.getElementById('saq-tbody-pendentes');
+  if (!el) return;
+  if (!saques.length) {
+    el.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--muted)">Nenhum saque pendente 🎉</td></tr>';
+    return;
+  }
+  el.innerHTML = saques.map(s => `
+    <tr>
+      <td>
+        <div style="font-weight:600">${s.tenant_nome||'—'}</div>
+        <div style="font-size:11px;color:var(--muted)">${s.slug||s.tenant_id}</div>
+      </td>
+      <td>
+        <div style="font-weight:700;font-size:15px;color:var(--success)">R$ ${parseFloat(s.valor_liquido).toFixed(2).replace('.',',')}</div>
+        <div style="font-size:11px;color:var(--muted)">${s.num_pagamentos} pagamento(s) · Taxa: R$ ${parseFloat(s.taxa_total||0).toFixed(2)}</div>
+      </td>
+      <td>
+        <div style="font-weight:600">${s.pix_key}</div>
+        <div style="font-size:11px;color:var(--muted)">${s.pix_key_tipo?.toUpperCase()}</div>
+      </td>
+      <td style="font-size:12px;color:var(--muted)">${s.num_pagamentos}</td>
+      <td style="font-size:12px;color:var(--muted)">${new Date(s.created_at).toLocaleString('pt-BR')}</td>
+      <td>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn bg2 bsm" onclick="navigator.clipboard.writeText('${s.pix_key}').then(()=>toast('ok','Chave PIX copiada!'))" title="Copiar chave PIX">📋</button>
+          <button class="btn bp bsm" onclick="abrirModalPagarSaque(${s.id},'${s.tenant_nome?.replace(/'/g,"\'")||''}','${s.valor_liquido}','${s.pix_key}','${s.pix_key_tipo}')">✅ Marcar pago</button>
+          <button class="btn bd bsm" onclick="atualizarSaque(${s.id},'cancelado','Cancelado pelo administrador')">✕</button>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+function _renderSaquesPagos(saques) {
+  const el = document.getElementById('saq-tbody-pagos');
+  if (!el) return;
+  if (!saques.length) { el.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--muted)">Nenhum saque pago ainda</td></tr>'; return; }
+  el.innerHTML = saques.map(s => `
+    <tr>
+      <td><div style="font-weight:600">${s.tenant_nome||'—'}</div></td>
+      <td style="font-weight:700;color:var(--success)">R$ ${parseFloat(s.valor_liquido).toFixed(2).replace('.',',')}</td>
+      <td><div style="font-size:12px">${s.pix_key_tipo?.toUpperCase()}: ${s.pix_key}</div></td>
+      <td style="font-size:12px;color:var(--muted)">${s.paid_at ? new Date(s.paid_at).toLocaleString('pt-BR') : '—'}</td>
+      <td style="font-size:12px;color:var(--muted)">${s.obs_admin||'—'}</td>
+    </tr>`).join('');
+}
+
+function abrirModalPagarSaque(id, nome, valor, pixKey, pixTipo) {
+  // Cria modal dinamicamente
+  const existing = document.getElementById('modal-pagar-saque');
+  if (existing) existing.remove();
+  const fmtVal = 'R$ ' + parseFloat(valor).toFixed(2).replace('.', ',');
+  const m = document.createElement('div');
+  m.id = 'modal-pagar-saque';
+  m.className = 'modal-bg on';
+  m.innerHTML = `
+    <div class="modal" style="max-width:440px">
+      <button class="modal-x" onclick="this.closest('.modal-bg').remove()">✕</button>
+      <h2>✅ Confirmar pagamento</h2>
+      <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:16px;margin-bottom:16px">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:4px">Restaurante</div>
+        <div style="font-weight:700;font-size:15px">${nome}</div>
+        <div style="margin-top:12px;font-size:13px;color:var(--muted);margin-bottom:4px">Valor a transferir</div>
+        <div style="font-weight:800;font-size:24px;color:var(--success)">${fmtVal}</div>
+        <div style="margin-top:12px;font-size:13px;color:var(--muted);margin-bottom:4px">Chave PIX (${pixTipo?.toUpperCase()})</div>
+        <div style="font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px">
+          <span id="mpag-key">${pixKey}</span>
+          <button onclick="navigator.clipboard.writeText('${pixKey}').then(()=>toast('ok','Copiado!'))" style="background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:2px 8px;color:var(--muted);cursor:pointer;font-size:11px;font-family:inherit">📋 Copiar</button>
+        </div>
+      </div>
+      <div class="mrow">
+        <label class="mlabel">Observação (opcional)</label>
+        <input class="minput" id="mpag-obs" placeholder="Ex: Transferido via PIX Itaú">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn bg2" style="flex:1;justify-content:center" onclick="this.closest('.modal-bg').remove()">Cancelar</button>
+        <button class="btn bp" style="flex:1;justify-content:center" onclick="confirmarPagamento(${id})">✅ Confirmar pagamento</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+}
+
+async function confirmarPagamento(id) {
+  const obs = document.getElementById('mpag-obs')?.value || '';
+  await atualizarSaque(id, 'pago', obs);
+  document.getElementById('modal-pagar-saque')?.remove();
+}
+
+async function atualizarSaque(id, status, obs) {
+  try {
+    const r = await fetch('/api/admin/saques/atualizar', {
+      method: 'PATCH',
+      headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status, obs_admin: obs })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    toast('ok', status === 'pago' ? '✅ Saque marcado como pago!' : '✅ Status atualizado!');
+    carregarSaquesAdmin('pendente');
+    carregarSaquesAdmin('pago');
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
 }
 </script>
 </body>

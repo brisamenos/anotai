@@ -183,6 +183,10 @@
     <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3" width="13" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1.5 6h13" stroke="currentColor" stroke-width="1.4"/><path d="M4 9.5h2M4 11.5h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Meu Plano
   </button>
+  <button class="si" id="sn-saques" onclick="nav('saques')">
+    <svg viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/><circle cx="4.5" cy="10.5" r="1" fill="currentColor"/></svg>
+    Carteira &amp; Saques
+  </button>
   <button class="si" id="sn-configuracoes" onclick="nav('configuracoes')">
     <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M4 4l1 1M11 11l1 1M4 12l1-1M11 5l1-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Configurações
@@ -2352,6 +2356,77 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
   </div>
   </div><!-- end cx-tela-aberto -->
 </div><!-- end page-caixa -->
+
+<!-- CARTEIRA & SAQUES -->
+<div class="page" id="page-saques">
+  <div class="ph">
+    <div><div class="pt">Carteira & Saques</div><div class="ps">Seus recebimentos via PIX e solicitações de saque</div></div>
+    <button class="btn bg" onclick="carregarCarteira()">🔄 Atualizar</button>
+  </div>
+
+  <!-- Cards de saldo -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px">
+    <div class="card" style="padding:18px;border-color:rgba(34,197,94,.2);background:rgba(34,197,94,.04)">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">💰 Saldo disponível</div>
+      <div style="font-size:28px;font-weight:800;color:var(--success);font-family:'Playfair Display',serif" id="crt-saldo">R$ —</div>
+    </div>
+    <div class="card" style="padding:18px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📥 Total recebido</div>
+      <div style="font-size:22px;font-weight:800;font-family:'Playfair Display',serif" id="crt-total">R$ —</div>
+    </div>
+    <div class="card" style="padding:18px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🏦 Total sacado</div>
+      <div style="font-size:22px;font-weight:800;font-family:'Playfair Display',serif" id="crt-sacado">R$ —</div>
+    </div>
+    <div class="card" style="padding:18px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🛎️ Pagamentos PIX</div>
+      <div style="font-size:22px;font-weight:800;font-family:'Playfair Display',serif" id="crt-npag">—</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Taxa plataforma: <span id="crt-taxas">R$ —</span></div>
+    </div>
+  </div>
+
+  <!-- Solicitar saque -->
+  <div class="card" style="padding:20px;margin-bottom:16px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:14px">🏦 Solicitar Saque</div>
+    <div id="saque-form-wrap">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div>
+          <label class="form-label">Chave PIX</label>
+          <input class="form-input" id="saque-pix-key" placeholder="CPF, e-mail, telefone ou chave aleatória">
+        </div>
+        <div>
+          <label class="form-label">Tipo da chave</label>
+          <div class="sw"><select class="form-input" id="saque-pix-tipo">
+            <option value="cpf">CPF</option>
+            <option value="cnpj">CNPJ</option>
+            <option value="email">E-mail</option>
+            <option value="telefone">Telefone</option>
+            <option value="aleatoria" selected>Chave aleatória</option>
+          </select></div>
+        </div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:12.5px">
+        Você receberá <strong id="saque-valor-preview">R$ 0,00</strong> (saldo disponível já descontada a taxa de R$ 1,00 por pagamento PIX)
+      </div>
+      <button class="btn bp" id="btn-solicitar-saque" onclick="solicitarSaque()">💸 Solicitar saque</button>
+    </div>
+    <div id="saque-pendente-aviso" style="display:none;background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.25);border-radius:10px;padding:12px 14px;font-size:12.5px;color:var(--orange)">
+      ⏳ Você tem um saque pendente sendo processado pelo administrador.
+    </div>
+  </div>
+
+  <!-- Histórico de saques -->
+  <div class="card" style="padding:20px;margin-bottom:16px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:14px">📋 Histórico de Saques</div>
+    <div id="saque-historico"><div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Carregando...</div></div>
+  </div>
+
+  <!-- Últimos pagamentos PIX -->
+  <div class="card" style="padding:20px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:14px">💳 Últimos Pagamentos PIX</div>
+    <div id="pix-historico"><div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Carregando...</div></div>
+  </div>
+</div>
 
 <!-- CONFIGURAÇÕES -->
 <div class="page" id="page-configuracoes">
