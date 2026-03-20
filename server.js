@@ -222,6 +222,26 @@ const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_
 let _dirty = false
 function marcarDirty() { _dirty = true }
 
+// ── Sessões Admin (token em memória, válido 8h) ───────
+const _adminSessions = new Map()
+const ADMIN_SESSION_TTL = 8 * 60 * 60 * 1000
+
+function criarSessaoAdmin(user) {
+  const token = crypto.randomBytes(32).toString('hex')
+  _adminSessions.set(token, { ...user, ts: Date.now() })
+  return token
+}
+
+function validarSessaoAdmin(req) {
+  const auth = req.headers['authorization'] || ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+  if (!token) return null
+  const s = _adminSessions.get(token)
+  if (!s) return null
+  if (Date.now() - s.ts > ADMIN_SESSION_TTL) { _adminSessions.delete(token); return null }
+  return s
+}
+
 function fazerBackup(forcar = false) {
   if (!forcar && !_dirty) return
   _dirty = false
@@ -258,10 +278,10 @@ function restaurarBackup() {
 if (!_dbExistia) { log('♻️', 'Banco novo — tentando restaurar backup...'); restaurarBackup() }
 
 if (!db.prepare("SELECT id FROM sys_users WHERE role='superadmin' LIMIT 1").get()) {
-  const hash = crypto.createHash('sha256').update('admin123').digest('hex')
+  const hash = crypto.createHash('sha256').update('Igor@18129512').digest('hex')
   db.prepare("INSERT OR IGNORE INTO tenants (id,nome,plano,slug) VALUES ('system','Sistema Admin','premium','admin')").run()
   db.prepare("INSERT INTO sys_users (nome,email,senha_hash,role,tenant_id) VALUES (?,?,?,?,?)").run('Administrador','admin@estimafood.com',hash,'superadmin','system')
-  log('🔑','Superadmin criado: admin@estimafood.com / admin123')
+  log('🔑','Superadmin criado: admin@estimafood.com / Igor@18129512')
 }
 db.prepare("INSERT OR IGNORE INTO tenants (id,nome,plano,slug) VALUES ('_global','Global Config','premium','_global')").run()
 db.prepare("INSERT OR IGNORE INTO store_config (tenant_id) VALUES ('_global')").run()
@@ -345,6 +365,14 @@ const TABLE_COLS = {
   customers:    ['id','tenant_id','name','phone','addr','orders_count','total_spent','last_order_at','email','birthday','senha_hash','customer_id','created_at'],
   ratings:      ['id','tenant_id','order_id','client','phone','nota','comentario','created_at'],
 }
+// Colunas que NUNCA aparecem na resposta GET — mas ainda funcionam como filtro WHERE e em escrita
+const STRIP_FROM_OUTPUT = {
+  sys_users:    new Set(['senha_hash']),
+  garcons:      new Set(['senha']),
+  customers:    new Set(['senha_hash']),
+  store_config: new Set(['ia_config']),   // ia_config só acessível pelo painel admin via endpoint dedicado
+}
+
 const NO_TENANT_FILTER = new Set(['tenants','sys_users'])
 const JSON_FIELDS = {
   orders:       new Set(['items']),
@@ -356,12 +384,17 @@ const SSE_TABLES   = new Set(['orders','mesas','store_config','menu_items','cate
 
 function jsonParse(v) { if(typeof v!=='string')return v; try{return JSON.parse(v)}catch{return v} }
 
-function parseRow(table, row) {
+function parseRow(table, row, opts={}) {
   if (!row) return row
   const out = { ...row }
   const jf  = JSON_FIELDS[table]
   if (jf) for (const f of jf) { if (f in out) out[f] = jsonParse(out[f]) }
   for (const f of BOOL_FIELDS) { if (f in out) out[f] = out[f] === 1 || out[f] === true }
+  // Remove colunas sensíveis do output (a menos que seja chamada interna com {raw:true})
+  if (!opts.raw) {
+    const strip = STRIP_FROM_OUTPUT[table]
+    if (strip) for (const f of strip) delete out[f]
+  }
   return out
 }
 
@@ -849,68 +882,77 @@ const server = http.createServer(async (req,res) => {
   if(req.method==='POST'&&upath==='/api/backup'){fazerBackup(true);const size=fs.existsSync(BACKUP_PATH)?fs.statSync(BACKUP_PATH).size:0;send(res,200,{ok:true,path:BACKUP_PATH,size});return}
   if(req.method==='POST'&&upath==='/api/restore'){const ok=restaurarBackup();send(res,200,{ok,msg:ok?'Restauração concluída':'Nenhum backup encontrado'});return}
 
-  // ── Admin login (sem credencial no HTML) ─────────────
+  // ── Admin login — valida credenciais e retorna token ─
   if(req.method==='POST'&&upath==='/api/admin-login'){
     const body=await readBody(req),{email,senha_hash}=body
     if(!email||!senha_hash){send(res,400,{error:'email e senha_hash obrigatórios'});return}
     const u=db.prepare("SELECT id,nome,email,role FROM sys_users WHERE email=? AND senha_hash=? AND ativo=1 AND role IN ('superadmin','admin')").get(email.toLowerCase().trim(),senha_hash)
     if(!u){send(res,401,{error:'Acesso negado. Credenciais inválidas.'});return}
-    send(res,200,{ok:true,id:u.id,nome:u.nome,email:u.email,role:u.role})
+    const token=criarSessaoAdmin(u)
+    send(res,200,{ok:true,id:u.id,nome:u.nome,email:u.email,role:u.role,token})
     return
   }
 
-  // ── Download de backup completo (todos os gestores) ──
-  if(req.method==='GET'&&upath==='/api/admin-backup-download'){
-    fazerBackup(true)
-    if(!fs.existsSync(BACKUP_PATH)){send(res,404,{error:'Nenhum backup disponível'});return}
-    const data=fs.readFileSync(BACKUP_PATH,'utf8')
-    const fname=`backup-completo-${new Date().toISOString().slice(0,10)}.json`
-    res.writeHead(200,{'Content-Type':'application/json','Content-Disposition':`attachment; filename="${fname}"`,'Content-Length':Buffer.byteLength(data)})
-    res.end(data)
-    return
+  // ── Admin logout ─────────────────────────────────────
+  if(req.method==='POST'&&upath==='/api/admin-logout'){
+    const auth=req.headers['authorization']||'',token=auth.startsWith('Bearer ')?auth.slice(7):null
+    if(token)_adminSessions.delete(token)
+    send(res,200,{ok:true});return
   }
 
-  // ── Download de backup de um tenant específico ───────
-  if(req.method==='GET'&&upath==='/api/admin-backup-tenant'){
-    const tid=params.get('tenant_id')
-    if(!tid){send(res,400,{error:'tenant_id obrigatório'});return}
-    const tenant=db.prepare('SELECT id,nome,slug FROM tenants WHERE id=?').get(tid)
-    if(!tenant){send(res,404,{error:'Tenant não encontrado'});return}
-    const TABELAS_TENANT=['sys_users','store_config','categories','menu_items','cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','ratings']
-    const snapshot={ts:new Date().toISOString(),tenant_id:tid,tenant_nome:tenant.nome,tabelas:{tenants:[tenant]}}
-    for(const t of TABELAS_TENANT){
-      try{snapshot.tabelas[t]=db.prepare(`SELECT * FROM "${t}" WHERE tenant_id=?`).all(tid)}catch{snapshot.tabelas[t]=[]}
+  // ── Endpoints protegidos por sessão admin ─────────────
+  if(upath.startsWith('/api/admin-backup')){
+    if(!validarSessaoAdmin(req)){send(res,401,{error:'Não autorizado. Faça login no painel admin.'});return}
+    if(req.method==='GET'&&upath==='/api/admin-backup-download'){
+      fazerBackup(true)
+      if(!fs.existsSync(BACKUP_PATH)){send(res,404,{error:'Nenhum backup disponível'});return}
+      const data=fs.readFileSync(BACKUP_PATH,'utf8')
+      const fname=`backup-completo-${new Date().toISOString().slice(0,10)}.json`
+      res.writeHead(200,{'Content-Type':'application/json','Content-Disposition':`attachment; filename="${fname}"`,'Content-Length':Buffer.byteLength(data)})
+      res.end(data);return
     }
-    const data=JSON.stringify(snapshot)
-    const fname=`backup-${tenant.slug||tid}-${new Date().toISOString().slice(0,10)}.json`
-    res.writeHead(200,{'Content-Type':'application/json','Content-Disposition':`attachment; filename="${fname}"`,'Content-Length':Buffer.byteLength(data)})
-    res.end(data)
-    return
-  }
-
-  // ── Importar backup (upload de arquivo JSON) ─────────
-  if(req.method==='POST'&&upath==='/api/admin-backup-import'){
-    const body=await readBody(req)
-    let snapshot=body
-    // aceita tanto { tabelas:{...} } quanto { ts, tabelas:{...} }
-    if(!snapshot?.tabelas){send(res,400,{error:'JSON de backup inválido (falta "tabelas")'});return}
-    try{
-      let totalOk=0,totalFail=0
-      for(const t of TABELAS_BACKUP){
-        const rows=snapshot.tabelas?.[t]
-        if(!rows?.length) continue
-        try{
-          const cols=Object.keys(rows[0])
-          const stmt=db.prepare(`INSERT OR IGNORE INTO "${t}" (${cols.map(c=>`"${c}"`).join(',')}) VALUES (${cols.map(()=>'?').join(',')})`)
-          const ins=db.transaction(items=>{let ok=0;for(const r of items){try{stmt.run(Object.values(r));ok++}catch{totalFail++}};return ok})
-          totalOk+=ins(rows)
-        }catch(e){log('⚠️',`Import ${t}: ${e.message}`)}
+    if(req.method==='GET'&&upath==='/api/admin-backup-tenant'){
+      const tid=params.get('tenant_id')
+      if(!tid){send(res,400,{error:'tenant_id obrigatório'});return}
+      const tenant=db.prepare('SELECT id,nome,slug FROM tenants WHERE id=?').get(tid)
+      if(!tenant){send(res,404,{error:'Tenant não encontrado'});return}
+      const TABELAS_TENANT=['sys_users','store_config','categories','menu_items','cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','ratings']
+      const snapshot={ts:new Date().toISOString(),tenant_id:tid,tenant_nome:tenant.nome,tabelas:{tenants:[tenant]}}
+      for(const t of TABELAS_TENANT){
+        try{snapshot.tabelas[t]=db.prepare(`SELECT * FROM "${t}" WHERE tenant_id=?`).all(tid)}catch{snapshot.tabelas[t]=[]}
       }
-      marcarDirty()
-      setTimeout(()=>fazerBackup(true),2000)
-      send(res,200,{ok:true,inserted:totalOk,skipped:totalFail,ts:snapshot.ts||null})
-    }catch(e){send(res,400,{error:'Erro ao importar: '+e.message})}
-    return
+      const data=JSON.stringify(snapshot)
+      const fname=`backup-${tenant.slug||tid}-${new Date().toISOString().slice(0,10)}.json`
+      res.writeHead(200,{'Content-Type':'application/json','Content-Disposition':`attachment; filename="${fname}"`,'Content-Length':Buffer.byteLength(data)})
+      res.end(data);return
+    }
+    if(req.method==='POST'&&upath==='/api/admin-backup-import'){
+      const body=await readBody(req)
+      if(!body?.tabelas){send(res,400,{error:'JSON inválido (falta "tabelas")'});return}
+      try{
+        let totalOk=0,totalFail=0
+        for(const t of TABELAS_BACKUP){
+          const rows=body.tabelas?.[t];if(!rows?.length)continue
+          try{const cols=Object.keys(rows[0]);const stmt=db.prepare(`INSERT OR IGNORE INTO "${t}" (${cols.map(c=>`"${c}"`).join(',')}) VALUES (${cols.map(()=>'?').join(',')})`);const ins=db.transaction(items=>{let ok=0;for(const r of items){try{stmt.run(Object.values(r));ok++}catch{totalFail++}};return ok});totalOk+=ins(rows)}catch(e){log('⚠️',`Import ${t}: ${e.message}`)}
+        }
+        marcarDirty();setTimeout(()=>fazerBackup(true),2000)
+        send(res,200,{ok:true,inserted:totalOk,skipped:totalFail,ts:body.ts||null})
+      }catch(e){send(res,400,{error:'Erro ao importar: '+e.message})}
+      return
+    }
+    // ia_config — leitura protegida (só admin autenticado)
+    if(req.method==='GET'&&upath==='/api/admin-ia-config'){
+      const tid=params.get('tenant_id')||'_global'
+      const row=db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+      send(res,200,{ia_config:row?.ia_config||null});return
+    }
+    // ia_config — leitura e escrita protegidas (só admin autenticado)
+    if(req.method==='GET'&&upath==='/api/admin-backup/ia-config'){
+      const tid=params.get('tenant_id')||'_global'
+      const row=db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+      send(res,200,{ia_config:row?.ia_config||null});return
+    }
+    send(res,404,{error:'Rota admin não encontrada'});return
   }
 
   if(upath.startsWith('/api/evo')){
@@ -953,7 +995,7 @@ const server = http.createServer(async (req,res) => {
 
   if(req.method==='POST'&&(upath.startsWith('/webhook/whatsapp')||upath.startsWith('/webhook/'))){await handleIAWebhook(req,res);return}
 
-  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-backup-download','/api/admin-backup-tenant','/api/admin-backup-import','/api/ia-humano-assumiu','/api/rastreio-wa'])
+  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return
