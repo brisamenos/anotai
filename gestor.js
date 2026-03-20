@@ -6557,16 +6557,17 @@ const TEMA_VARS = {
     { id:'--surface3', label:'Superfície 3',        hint:'Elementos elevados' },
   ],
   text: [
-    { id:'--text',  label:'Texto principal', hint:'Títulos e labels' },
-    { id:'--muted', label:'Texto secundário', hint:'Subtítulos e dicas' },
+    { id:'--text',   label:'Texto principal',   hint:'Títulos e labels' },
+    { id:'--muted',  label:'Texto secundário',  hint:'Subtítulos e dicas' },
+    { id:'--muted2', label:'Texto terciário',   hint:'Labels, placeholders' },
   ],
   accent: [
-    { id:'--accent',  label:'Destaque principal', hint:'Botões, links ativos' },
-    { id:'--accent2', label:'Destaque 2',          hint:'Realtime badge, ícones' },
-    { id:'--accent3', label:'Destaque 3 (âmbar)',  hint:'Avisos, preços' },
-    { id:'--purple',  label:'Roxo',                hint:'Tags PRO, badges' },
-    { id:'--pink',    label:'Rosa',                hint:'Promoções' },
-    { id:'--orange',  label:'Laranja',             hint:'Alertas' },
+    { id:'--accent',      label:'Destaque principal', hint:'Botões, links ativos' },
+    { id:'--accent2',     label:'Destaque 2',          hint:'Realtime badge, ícones' },
+    { id:'--accent3',     label:'Destaque 3 (âmbar)',  hint:'Avisos, preços' },
+    { id:'--purple',      label:'Roxo',                hint:'Tags PRO, badges' },
+    { id:'--pink',        label:'Rosa',                hint:'Promoções' },
+    { id:'--orange',      label:'Laranja',             hint:'Alertas' },
   ],
   status: [
     { id:'--success', label:'Sucesso (verde)',  hint:'Status aberto, confirmado' },
@@ -6576,11 +6577,22 @@ const TEMA_VARS = {
 
 const TEMAS_PRONTOS = [
   {
-    nome:'🌑 Dark Blue', desc:'Padrão original',
+    nome:'🔥 Açafrão', desc:'Padrão premium',
+    vars:{'--bg':'#0a0a0a','--surface':'rgba(255,255,255,.035)','--surface2':'rgba(255,255,255,.06)','--surface3':'rgba(255,255,255,.09)',
+          '--accent':'#e76f51','--accent2':'#f4a261','--accent3':'#f59e0b',
+          '--accent-dim':'rgba(231,111,81,.18)','--accent-glow':'rgba(231,111,81,.35)',
+          '--success':'#22c55e','--danger':'#ef4444','--purple':'#a78bfa',
+          '--pink':'#f472b6','--orange':'#e76f51','--text':'#f5f5f7','--muted':'rgba(245,245,247,.42)','--muted2':'rgba(245,245,247,.62)',
+          '--border':'rgba(255,255,255,.08)','--border2':'rgba(255,255,255,.13)'}
+  },
+  {
+    nome:'🌑 Dark Blue', desc:'Clássico original',
     vars:{'--bg':'#0f1117','--surface':'#181b24','--surface2':'#1e2130','--surface3':'#242840',
           '--accent':'#3b82f6','--accent2':'#06b6d4','--accent3':'#f59e0b',
+          '--accent-dim':'rgba(59,130,246,.18)','--accent-glow':'rgba(59,130,246,.35)',
           '--success':'#22c55e','--danger':'#ef4444','--purple':'#8b5cf6',
-          '--pink':'#ec4899','--orange':'#f97316','--text':'#f1f5f9','--muted':'#64748b'}
+          '--pink':'#ec4899','--orange':'#f97316','--text':'#f1f5f9','--muted':'#64748b','--muted2':'#94a3b8',
+          '--border':'rgba(255,255,255,.07)','--border2':'rgba(255,255,255,.13)'}
   },
   {
     nome:'🟣 Roxo Neon', desc:'Dark violeta',
@@ -7051,11 +7063,22 @@ function initTemaPage() {
   temaUpdatePreview();
 }
 
-// Aplica tema salvo ao carregar a página
+// Aplica tema ao carregar: sempre garante variáveis do tema Açafrão
+// (novas variáveis como --accent-dim, --accent-glow, --muted2 etc.)
 (function() {
   try {
+    // Sempre parte do tema base Açafrão para garantir novas variáveis
+    const base = TEMAS_PRONTOS[0].vars;
+    temaApply(base);
+    // Se havia um tema salvo, sobrepõe as variáveis que o usuário customizou
     const saved = localStorage.getItem('gestor_tema');
-    if (saved) temaApply(JSON.parse(saved));
+    if (saved) {
+      const savedVars = JSON.parse(saved);
+      // Só reaplicar se não for o tema azul antigo (bg #0f1117)
+      if (savedVars['--bg'] && savedVars['--bg'] !== '#0f1117') {
+        temaApply(savedVars);
+      }
+    }
   } catch(e) {}
 })();
 
