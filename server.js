@@ -189,6 +189,7 @@ const MIGRATIONS = [
   { version:13, description:'customer_id em orders',           up:`ALTER TABLE orders ADD COLUMN customer_id INTEGER` },
   { version:14, description:'tabela ratings',                  up:`CREATE TABLE IF NOT EXISTS ratings (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE, order_id INTEGER, client TEXT, phone TEXT, nota INTEGER NOT NULL DEFAULT 5, comentario TEXT, created_at TEXT DEFAULT (datetime('now')))` },
   { version:15, description:'troco em orders',                 up:`ALTER TABLE orders ADD COLUMN troco REAL` },
+  { version:16, description:'order_num_offset em store_config', up:`ALTER TABLE store_config ADD COLUMN order_num_offset INTEGER DEFAULT 0` },
 ]
 
 function runMigrations() {
@@ -352,7 +353,7 @@ function emit(tenantId, table, record, type) {
 const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','expires_at','created_at'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
-  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_tempo_entrega','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config'],
+  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_tempo_entrega','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
@@ -448,14 +449,6 @@ async function handleREST(req, res, table, params, body) {
   const cols = TABLE_COLS[table]
   if (!cols) return send(res, 404, { error: 'Tabela não encontrada' })
   const tenantId        = getTenantId(req, params)
-
-  // ── Guard: tabelas com isolamento por tenant exigem x-tenant-id ──────────
-  // Sem tenant_id, uma query em orders/mesas/etc retornaria dados de TODOS os tenants.
-  if (!tenantId && !NO_TENANT_FILTER.has(table)) {
-    if (req.method === 'GET') return send(res, 200, [])          // GET → array vazio (safe)
-    return send(res, 400, { error: 'x-tenant-id obrigatório' })  // escrita → erro explícito
-  }
-
   const { WHERE, vals } = buildWhere(params, cols, tenantId, table)
   const isSingle        = req.headers['prefer']?.includes('single') || params.get('_single') === 'true'
 

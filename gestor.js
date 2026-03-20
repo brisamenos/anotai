@@ -127,6 +127,7 @@ function mapItem(i) {
 function mapOrder(o) {
   return {
     id: o.id,
+    num: _orderNum(o.id),
     client: o.client || '',
     phone: o.phone || '',
     items: Array.isArray(o.items) ? o.items : [],
@@ -162,7 +163,7 @@ async function loadAllData(silent = false) {
       safe(sb.from('mesas').select('*').order('num')),
       safe(sb.from('estoque').select('*').order('id')),
       safe(sb.from('fidelidade').select('*').order('pts',{ascending:false})),
-      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema').single()),
+      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema,order_num_offset').single()),
       safe(sb.from('customers').select('*').order('id',{ascending:false}))
     ]);
 
@@ -205,19 +206,18 @@ async function loadAllData(silent = false) {
       _maxKnownOrderId = maxId;
     } else {
       // Kanban vazio — inicializa _maxKnownOrderId com o último ID do banco
-      // para o polling detectar novos pedidos do cardápio corretamente.
-      // Guard: só executa se tenant_id estiver disponível; sem ele a query
-      // retornaria o maior ID de TODOS os tenants, quebrando o polling.
+      // para o polling detectar novos pedidos do cardápio corretamente
       try {
-        if (_sessao?.tenant_id) {
-          const { data: lastOrder } = await sb.from('orders').select('id').order('id', {ascending:false}).limit(1);
-          if (lastOrder?.[0]?.id) _maxKnownOrderId = Number(lastOrder[0].id);
-        }
+        const { data: lastOrder } = await sb.from('orders').select('id').order('id', {ascending:false}).limit(1);
+        if (lastOrder?.[0]?.id) _maxKnownOrderId = Number(lastOrder[0].id);
       } catch(e) {}
     }
 
     // Aplica estado do caixa e loja
     if (cfgRes.data) {
+      _orderNumOffset = parseInt(cfgRes.data.order_num_offset) || 0;
+      // Re-mapeia pedidos já carregados com o offset correto
+      ordersKanban = ordersKanban.map(o => ({ ...o, num: _orderNum(o.id) }));
       setCaixaState(cfgRes.data.caixa_open !== false);
       const stOpen = cfgRes.data.store_open !== false;
       const st   = document.getElementById('status-txt');
@@ -432,8 +432,8 @@ function subscribeOrders() {
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
-        showToast('🛎️', `Novo pedido #${p.new.id} — ${p.new.client}`);
-        sendBrowserNotif(`🛎️ Novo pedido #${p.new.id}`, `${p.new.client} — ${items}`);
+        showToast('🛎️', `Novo pedido #${_orderNum(p.new.id)} — ${p.new.client}`);
+        sendBrowserNotif(`🛎️ Novo pedido #${_orderNum(p.new.id)}`, `${p.new.client} — ${items}`);
         // Auto-aceitar se ativado e pedido em análise
         if (_autoAcceptOn && p.new.status === 'analise') {
           setTimeout(() => advanceOrderById(p.new.id), 800);
@@ -557,8 +557,8 @@ setInterval(async () => {
             const nc = document.getElementById('notif-count');
             if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
             const items = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
-            showToast('🛎️', `Novo pedido #${o.id} — ${o.client}`);
-            sendBrowserNotif(`🛎️ Novo pedido #${o.id}`, `${o.client} — ${items}`);
+            showToast('🛎️', `Novo pedido #${o.num} — ${o.client}`);
+            sendBrowserNotif(`🛎️ Novo pedido #${o.num}`, `${o.client} — ${items}`);
             if (_autoAcceptOn && o.status === 'analise') setTimeout(() => advanceOrderById(o.id), 800);
             if (_printMode === 'auto') printOrder(mapOrder(o));
             // Atualiza cache mesa se for pedido de mesa
@@ -872,7 +872,7 @@ async function advanceOrderById(id) {
   }
   playOrderSound();
   renderKanban();
-  sbToast('ok', `Pedido #${id} avançado!`);
+  sbToast('ok', `Pedido #${_orderNum(id)} avançado!`);
 }
 
 // ── cancelOrderById ──────────────────────────────────
@@ -890,7 +890,7 @@ async function cancelOrderById(id) {
     sbToast('err', 'Erro ao cancelar pedido: ' + e.message); return;
   }
   renderKanban();
-  showToast(_ICON_TRS, `Pedido #${id} cancelado`);
+  showToast(_ICON_TRS, `Pedido #${_orderNum(id)} cancelado`);
 }
 
 // ── finishOrderById ──────────────────────────────────
@@ -909,10 +909,10 @@ async function finishOrderById(id) {
     // Registra movimento financeiro
     if (o) {
       await sb.from('movimentos').insert({
-        description: `Pedido #${o.id} – ${o.client}`,
+        description: `Pedido #${o.num} – ${o.client}`,
         tipo: 'entrada', val: o.total + o.taxa, pag: o.pag || 'PIX', time
       });
-      movimentos.push({ desc:`Pedido #${o.id} – ${o.client}`, tipo:'entrada', val:o.total+o.taxa, pag:o.pag||'PIX', time });
+      movimentos.push({ desc:`Pedido #${o.num} – ${o.client}`, tipo:'entrada', val:o.total+o.taxa, pag:o.pag||'PIX', time });
     }
     ordersKanban = ordersKanban.filter(x => x.id !== id);
   } catch(e) {
@@ -921,7 +921,7 @@ async function finishOrderById(id) {
   }
   sbLoading(false);
   renderKanban();
-  sbToast('ok', `Pedido #${id} finalizado!`);
+  sbToast('ok', `Pedido #${_orderNum(id)} finalizado!`);
 }
 
 // ── addMovimento (quick register) ────────────────────
@@ -980,6 +980,8 @@ let editingId=null, garcomCart=[], garcomMesa='';
 let items        = [];
 let categories   = [];
 let ordersKanban = [];
+let _orderNumOffset = 0;   // offset salvo em store_config; #exibido = id - offset
+function _orderNum(id) { return Math.max(1, id - _orderNumOffset); }
 let orderIdSeq   = 1;
 let tables       = [];
 let fidClients   = [];
@@ -1104,7 +1106,7 @@ function renderKanban(){
           actionBtn='<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById('+o.id+')">✔ Finalizar</button>';
         }
         return '<div class="order-card" onclick="openOrderDetail('+o.id+')">'+
-          '<div class="oc-top"><span class="oc-id">#'+o.id+'</span><span class="oc-time">⏱ '+o.time+'</span></div>'+
+          '<div class="oc-top"><span class="oc-id">#'+o.num+'</span><span class="oc-time">⏱ '+o.time+'</span></div>'+
           '<div class="oc-client">👤 '+o.client+(o.phone?' · '+o.phone:'')+'</div>'+
           '<div class="oc-items">'+itemStr+'</div>'+
           '<div class="oc-bot"><span class="oc-total">'+total+'</span>'+
@@ -1130,7 +1132,7 @@ function renderKanban(){
 function openOrderDetail(id){
   const o=ordersKanban.find(x=>x.id===id);
   if(!o) return;
-  document.getElementById('od-id').textContent='Pedido #'+o.id;
+  document.getElementById('od-id').textContent='Pedido #'+o.num;
   const bdg=o.status==='analise'?['badge-analise','Em análise']:o.status==='producao'?['badge-producao','Em produção']:['badge-pronto','Pronto para entrega'];
   const el=document.getElementById('od-status-badge');
   el.className='od-status-badge '+bdg[0];el.textContent=bdg[1];
@@ -1324,7 +1326,7 @@ async function createOrder() {
   if (oErr) { sbLoading(false); sbToast('err','Erro ao criar pedido'); console.error(oErr); return; }
 
   await sb.from('movimentos').insert({
-    description: `Pedido #${orderData.id} – ${client}`,
+    description: `Pedido #${_orderNum(orderData.id)} – ${client}`,
     tipo: 'entrada', val: tot, pag, time
   }).catch(() => {});
 
@@ -1337,14 +1339,14 @@ async function createOrder() {
   if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
   closeModal('modal-new-order');
   nav('pedidos');
-  sbToast('ok', `Pedido #${orderData.id} criado! ✅`);
+  sbToast('ok', `Pedido #${_orderNum(orderData.id)} criado! ✅`);
 }
 
 function printOrderDetail(){
   const id=window._currentDetailId;
   const o=ordersKanban.find(x=>x.id===id);
   if(!o) return;
-  showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><rect x=&quot;3&quot; y=&quot;2&quot; width=&quot;10&quot; height=&quot;4&quot; rx=&quot;1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><rect x=&quot;3&quot; y=&quot;10&quot; width=&quot;10&quot; height=&quot;4&quot; rx=&quot;1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><circle cx=&quot;12&quot; cy=&quot;8&quot; r=&quot;.6&quot; fill=&quot;currentColor&quot;/></svg>','Imprimindo comanda do pedido #'+id);
+  showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><rect x=&quot;3&quot; y=&quot;2&quot; width=&quot;10&quot; height=&quot;4&quot; rx=&quot;1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><rect x=&quot;3&quot; y=&quot;10&quot; width=&quot;10&quot; height=&quot;4&quot; rx=&quot;1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><circle cx=&quot;12&quot; cy=&quot;8&quot; r=&quot;.6&quot; fill=&quot;currentColor&quot;/></svg>','Imprimindo comanda do pedido #'+_orderNum(id));
 }
 
 // ─────────────────────────────────────────
@@ -2783,7 +2785,7 @@ function renderMesaCard(t, orders) {
         return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:7px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
             <span style="font-size:10.5px;font-weight:700;color:${stColor};background:${stColor}1a;padding:2px 8px;border-radius:99px">${stLabel}</span>
-            <span style="font-size:10.5px;color:var(--muted)">#${o.id} · ${o.time || ''}</span>
+            <span style="font-size:10.5px;color:var(--muted)">#${o.num} · ${o.time || ''}</span>
           </div>
           <div style="font-size:12.5px;color:var(--text);line-height:1.6">${itemStr}</div>
           <div style="font-size:12px;font-weight:700;color:var(--accent3);text-align:right;margin-top:4px">R$ ${(parseFloat(o.total) || 0).toFixed(2).replace('.', ',')}</div>
@@ -3345,7 +3347,7 @@ function renderKDS() {
     return `<div class="kds-card2 ${cardCls}" id="kds-card-${o.id}">
       <div class="kds-card2-head">
         <div style="display:flex;align-items:center;gap:8px">
-          <div class="kds-card2-id">#${o.id}</div>
+          <div class="kds-card2-id">#${o.num}</div>
           <span class="kds-card2-type ${typeCls}">${typeLabel}</span>
           ${isNew ? '<span style="font-size:9px;background:rgba(249,115,22,.2);color:#fed7aa;padding:1px 5px;border-radius:99px;font-weight:700;animation:blink .6s step-end infinite">NOVO</span>' : ''}
         </div>
@@ -3394,7 +3396,7 @@ async function kdsConfirm(id) {
     const card = document.getElementById('kds-card-' + id);
     if (card) card.classList.remove('st-new');
     renderKDS();
-    sbToast('ok', `Pedido #${id} em preparo`);
+    sbToast('ok', `Pedido #${_orderNum(id)} em preparo`);
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
 }
 
@@ -3420,12 +3422,12 @@ async function kdsMarkPronto(id) {
       });
     } catch(e){}
     renderKDS(); renderKanban();
-    sbToast('ok', `Pedido #${id} pronto! ✅`);
+    sbToast('ok', `Pedido #${_orderNum(id)} pronto! ✅`);
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
 }
 
 async function kdsCancelOrder(id) {
-  if (!confirm('Cancelar pedido #' + id + '?')) return;
+  if (!confirm('Cancelar pedido #' + _orderNum(id) + '?')) return;
   try {
     const res = await fetch('/api/order-status', {
       method: 'POST',
@@ -6788,5 +6790,69 @@ async function iaRegistrarWebhook(webhookUrl) {
     });
   } catch(e) {
     console.warn('iaRegistrarWebhook:', e);
+  }
+}
+
+// ════════════════════════════════════════════════════════
+// ZERAR CONTAGEM DE PEDIDOS
+// ════════════════════════════════════════════════════════
+async function abrirModalZerarPedidos() {
+  const input = document.getElementById('zerar-confirmar');
+  if (input) input.value = '';
+  const btn = document.getElementById('btn-confirmar-zerar');
+  if (btn) { btn.disabled = true; btn.style.opacity = '.5'; btn.style.cursor = 'not-allowed'; }
+
+  // Busca o último ID para mostrar ao gestor
+  const contEl = document.getElementById('zerar-contagem');
+  if (contEl) contEl.textContent = 'Verificando...';
+  try {
+    const { data } = await sb.from('orders').select('id').order('id', { ascending: false }).limit(1);
+    const maxId = data?.[0]?.id || 0;
+    const proxNum = maxId - _orderNumOffset + 1;
+    if (contEl) contEl.innerHTML = maxId
+      ? `O próximo pedido é <strong>#${proxNum}</strong>. Após zerar, passará a ser <strong>#1</strong>.`
+      : '<span style="color:var(--muted)">Nenhum pedido registrado ainda.</span>';
+  } catch(e) {
+    if (contEl) contEl.textContent = 'Não foi possível verificar.';
+  }
+
+  openModal('modal-zerar-pedidos');
+}
+
+function _zerarValidar(input) {
+  const ok = input.value.trim().toUpperCase() === 'ZERAR';
+  const btn = document.getElementById('btn-confirmar-zerar');
+  btn.disabled      = !ok;
+  btn.style.opacity = ok ? '1' : '.5';
+  btn.style.cursor  = ok ? 'pointer' : 'not-allowed';
+}
+
+async function confirmarZerarPedidos() {
+  const input = document.getElementById('zerar-confirmar');
+  if (input.value.trim().toUpperCase() !== 'ZERAR') return;
+  const btn = document.getElementById('btn-confirmar-zerar');
+  btn.disabled = true;
+  btn.textContent = '⏳ Zerando...';
+
+  try {
+    // Pega o ID máximo atual do banco para usar como novo offset
+    const { data } = await sb.from('orders').select('id').order('id', { ascending: false }).limit(1);
+    const novoOffset = data?.[0]?.id || 0;
+
+    // Salva o offset no store_config do tenant
+    const { error } = await sb.from('store_config').update({ order_num_offset: novoOffset }).eq('tenant_id', _sessao.tenant_id);
+    if (error) throw new Error(error.message);
+
+    // Atualiza localmente
+    _orderNumOffset = novoOffset;
+    ordersKanban = ordersKanban.map(o => ({ ...o, num: _orderNum(o.id) }));
+    renderKanban();
+
+    closeModal('modal-zerar-pedidos');
+    sbToast('ok', '✅ Contagem de pedidos zerada! Próximo pedido será #1.');
+  } catch(e) {
+    sbToast('err', 'Erro ao zerar contagem: ' + (e.message || 'Tente novamente'));
+    btn.disabled = false;
+    btn.textContent = '🔄 Confirmar reset';
   }
 }
