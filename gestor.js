@@ -1115,6 +1115,7 @@ function renderKanban(){
             (o.addr?'<span class="oc-addr">📍 '+o.addr+'</span>':'')+
           '</div>'+
           (o.pag==='dinheiro'?'<div style="font-size:11px;color:var(--amber);margin:4px 0 0;padding:0 2px">💵 Dinheiro · '+(o.troco>0?'Troco p/ R$'+parseFloat(o.troco).toFixed(2).replace('.',','):o.troco===-1?'Precisa de troco':'Sem troco')+'</div>':'')+
+          (o.pag==='pix_mp'?'<div style="font-size:11px;color:#22c55e;margin:4px 0 0;padding:0 2px;font-weight:700">✅ Pago via PIX</div>':'')+
           '<div class="oc-actions">'+actionBtn+'</div>'+
         '</div>';
       }).join('');
@@ -1161,6 +1162,9 @@ function openOrderDetail(id){
         : o.troco === -1
         ? `<span>💵 Precisa de troco</span><span style="color:var(--amber)">Valor não informado</span>`
         : `<span>💵 Sem troco</span><span style="color:var(--muted)">Valor exato</span>`;
+    } else if (o.pag === 'pix_mp') {
+      trocoRow.style.display = '';
+      trocoRow.innerHTML = `<span style="color:var(--success);font-weight:700">✅ Pago via PIX</span><span style="color:var(--success);font-size:11px;font-weight:700">CONFIRMADO</span>`;
     } else {
       trocoRow.style.display = 'none';
     }
