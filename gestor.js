@@ -6879,16 +6879,18 @@ function temaBuildPresets() {
 
 // ── Salvar / Carregar / Reset ─────────────────────────
 function temaSalvarStorage() {
-  // localStorage desativado — tema salvo apenas no banco
+  try { localStorage.setItem('ef_tema_modo', JSON.stringify(_temaAtual)); } catch(e) {}
 }
 
 async function temaSalvar() {
-  // Tema é aplicado em tempo real via CSS variables — salvo na sessão atual
   sbToast('ok', '🎨 Tema aplicado com sucesso!');
 }
 
 function temaCarregarStorage() {
-  // localStorage desativado — tema vem do banco
+  try {
+    const saved = localStorage.getItem('ef_tema_modo');
+    if (saved) { const vars = JSON.parse(saved); if (vars && typeof vars === 'object') temaApply(vars); }
+  } catch(e) {}
 }
 
 function temaReset() {
@@ -6919,8 +6921,12 @@ function temaUpdateCardSelection() {
   if (cardEscuro) { cardEscuro.style.borderColor = isEscuro ? 'var(--accent)' : 'var(--border)'; cardEscuro.style.boxShadow = isEscuro ? '0 0 0 3px var(--accent-glow)' : 'none'; }
 }
 
-// Aplica tema padrão Azure Blue ao carregar — tema definitivo vem do banco via init()
+// Aplica tema salvo ou padrão ao carregar
 (function() {
+  try {
+    const saved = localStorage.getItem('ef_tema_modo');
+    if (saved) { const vars = JSON.parse(saved); if (vars && typeof vars === 'object') { temaApply(vars); return; } }
+  } catch(e) {}
   try { temaApply(TEMAS_PRONTOS[0].vars); } catch(e) {}
 })();
 
