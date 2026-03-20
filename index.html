@@ -1373,14 +1373,14 @@ input,textarea{font-family:inherit}
   <div class="pix-sheet">
     <div class="pix-handle"></div>
     <div id="pix-body-waiting">
-      <div style="font-size:46px;margin-bottom:8px">⚡</div>
+      <div style="font-size:44px;margin-bottom:8px">⚡</div>
       <div class="pix-title">Pagar com PIX</div>
-      <div class="pix-sub">Escaneie o QR Code ou copie o código.<br>O pedido é enviado automaticamente após o pagamento.</div>
+      <div class="pix-sub">Escaneie o QR Code ou copie o código.<br>O pedido é enviado após a confirmação do pagamento.</div>
       <div class="pix-valor" id="pix-valor">R$ 0,00</div>
       <div class="pix-qr-wrap" id="pix-qr-wrap"><span class="pix-loading">⏳</span></div>
       <div class="pix-copy-wrap" id="pix-copy-wrap" style="display:none">
         <input class="pix-code-input" id="pix-code-input" readonly>
-        <button class="pix-copy-btn" id="pix-copy-btn" onclick="pixCopiar()">📋 Copiar</button>
+        <button class="pix-copy-btn" id="pix-copy-btn" onclick="pixCopiar()">📋 Copiar código</button>
       </div>
       <div class="pix-status-bar">
         <div class="pix-dot" id="pix-dot"></div>
@@ -1390,8 +1390,8 @@ input,textarea{font-family:inherit}
     </div>
     <div class="pix-ok-wrap" id="pix-body-ok">
       <div class="pix-ok-icon">✅</div>
-      <div class="pix-ok-title">Pagamento aprovado!</div>
-      <div class="pix-ok-sub">Enviando pedido ao restaurante…</div>
+      <div class="pix-ok-title">Pagamento confirmado!</div>
+      <div class="pix-ok-sub">Enviando seu pedido ao restaurante…</div>
     </div>
   </div>
 </div>
@@ -2778,7 +2778,8 @@ async function submitOrder() {
   if (selectedPay === 'pix') {
     _pendingOrderAddr = addr;
     _pendingOrderName = name;
-    await abrirPixModal(name, phone);
+    _pendingOrderPhone = phone;
+    await abrirPixModal();
     return;
   }
 
@@ -2791,12 +2792,21 @@ async function submitOrder() {
   await _doSubmitOrder(addr, null);
 }
 
-// ══ TRACKER LOCAL (sem login) ══
+// ═══════════════════════════════════════════
+//  TRACKER LOCAL — persiste sem login
+// ═══════════════════════════════════════════
 const TRACK_KEY = 'ef_track_v1';
-let _pendingOrderName = '';
+let _pendingOrderName  = '';
+let _pendingOrderPhone = '';
 
 function salvarTrackerLocal(orderId, items, client) {
-  try { localStorage.setItem(TRACK_KEY, JSON.stringify({ orderId, items, client, tenantId: _tenantId, ts: Date.now() })); } catch(e) {}
+  try {
+    localStorage.setItem(TRACK_KEY, JSON.stringify({
+      orderId, items, client,
+      tenantId: _tenantId,
+      ts: Date.now()
+    }));
+  } catch(e) {}
 }
 function limparTrackerLocal() {
   try { localStorage.removeItem(TRACK_KEY); } catch(e) {}
@@ -2804,20 +2814,23 @@ function limparTrackerLocal() {
 function restaurarTrackerLocal() {
   try {
     const d = JSON.parse(localStorage.getItem(TRACK_KEY) || 'null');
-    if (!d || !d.orderId || d.tenantId !== _tenantId) return;
+    if (!d || !d.orderId) return;
+    if (d.tenantId && d.tenantId !== _tenantId) return;
     if (Date.now() - d.ts > 4 * 60 * 60 * 1000) { limparTrackerLocal(); return; }
     startTracking(d.orderId, d.items || [], d.client || '');
   } catch(e) {}
 }
 
-// ══ PIX — QR Code + polling direto MP ══
-let _pixMpId     = null;
-let _pixPollT    = null;
-let _pixExpT     = null;
-let _pixAddr     = '';
-let _pixDone     = false;
+// ═══════════════════════════════════════════
+//  PIX — QR Code + polling direto à API MP
+// ═══════════════════════════════════════════
+let _pixMpId  = null;
+let _pixPollT = null;
+let _pixExpT  = null;
+let _pixDone  = false;
+let _pixAddr  = '';
 
-async function abrirPixModal(clientName, phone) {
+async function abrirPixModal() {
   _pixDone = false;
   _pixAddr = _pendingOrderAddr;
 
@@ -2832,76 +2845,77 @@ async function abrirPixModal(clientName, phone) {
   document.getElementById('pix-overlay').classList.add('on');
 
   try {
+    const phoneNum = (_pendingOrderPhone || '').replace(/[^0-9]/g, '');
     const r = await fetch('/api/pix/criar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
       body: JSON.stringify({
         valor:    grandTotal(),
-        client:   clientName,
-        email:    (phone || '').replace(/\D/g, '') + '@pedido.com',
-        order_id: 'pendente-' + Date.now()
+        client:   _pendingOrderName,
+        email:    (phoneNum || 'cliente') + '@pedido.com',
+        order_id: 'pend-' + Date.now()
       })
     });
     const d = await r.json();
-
     if (!r.ok || !d.ok) {
-      toast('❌', d.error || 'Erro ao gerar PIX. Use outra forma de pagamento.');
+      toast('❌', d.error || 'Erro ao gerar PIX. Tente outra forma.');
       pixCancelar(); return;
     }
 
     _pixMpId = String(d.mp_payment_id);
 
-    // QR Code
+    // Exibe QR Code
     const qrEl = document.getElementById('pix-qr-wrap');
     if (d.qr_code_base64) {
       qrEl.innerHTML = '<img src="data:image/png;base64,' + d.qr_code_base64 + '" alt="QR PIX">';
     } else {
-      qrEl.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:12px">Sem QR Code.<br>Use o código abaixo.</div>';
+      qrEl.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:10px">Sem QR.<br>Use o código abaixo.</div>';
     }
     if (d.qr_code) {
       document.getElementById('pix-code-input').value    = d.qr_code;
       document.getElementById('pix-copy-wrap').style.display = '';
     }
+
     document.getElementById('pix-status-txt').textContent = 'Aguardando pagamento…';
 
-    // Polling a cada 4s
-    _pixPollT = setInterval(pixVerificar, 4000);
-    // Expira em 10min
+    // Polling a cada 4 segundos
+    _pixPollT = setInterval(pixPoll, 4000);
+    // Expira em 10 minutos
     _pixExpT = setTimeout(() => {
       pixPararPolling();
-      document.getElementById('pix-dot').className        = 'pix-dot err';
-      document.getElementById('pix-status-txt').textContent = 'PIX expirado. Tente novamente.';
+      document.getElementById('pix-dot').className         = 'pix-dot err';
+      document.getElementById('pix-status-txt').textContent = 'Tempo esgotado. Gere um novo PIX.';
     }, 10 * 60 * 1000);
 
   } catch(e) {
-    toast('❌', 'Erro de conexão. Tente outra forma de pagamento.');
+    toast('❌', 'Erro ao gerar PIX. Tente outra forma de pagamento.');
     pixCancelar();
   }
 }
 
-async function pixVerificar() {
+async function pixPoll() {
   if (!_pixMpId || _pixDone) return;
   try {
-    const r = await fetch('/api/pix/status?mp_payment_id=' + _pixMpId, {
+    const r = await fetch('/api/pix/status?mp_payment_id=' + encodeURIComponent(_pixMpId), {
       headers: { 'x-tenant-id': _tenantId }
     });
     if (!r.ok) return;
     const d = await r.json();
+    console.log('[PIX poll] status=', d.status, 'mp_id=', _pixMpId);
+
     if (d.status === 'aprovado') {
       _pixDone = true;
       pixPararPolling();
-      // Feedback aprovado
-      document.getElementById('pix-dot').className        = 'pix-dot ok';
+      document.getElementById('pix-dot').className         = 'pix-dot ok';
       document.getElementById('pix-status-txt').textContent = '✅ Pagamento confirmado!';
       document.getElementById('pix-body-waiting').style.display = 'none';
       document.getElementById('pix-body-ok').style.display      = 'flex';
-      // 1.5s → envia pedido
       setTimeout(async () => {
         document.getElementById('pix-overlay').classList.remove('on');
         await _doSubmitOrder(_pixAddr, null, 'pix_mp', _pixMpId);
       }, 1500);
     }
-  } catch(e) {}
+  } catch(e) { console.warn('[PIX poll erro]', e); }
 }
 
 function pixPararPolling() {
@@ -2918,9 +2932,14 @@ function pixCopiar() {
   if (!code) return;
   navigator.clipboard.writeText(code).then(() => {
     const btn = document.getElementById('pix-copy-btn');
-    if (btn) { btn.textContent = '✅ Copiado!'; setTimeout(() => { btn.textContent = '📋 Copiar'; }, 2000); }
+    if (btn) { btn.textContent = '✅ Copiado!'; setTimeout(() => { btn.textContent = '📋 Copiar código'; }, 2000); }
     toast('✅', 'Código PIX copiado!');
-  }).catch(() => toast('❌', 'Não foi possível copiar'));
+  }).catch(() => {
+    // fallback para mobile
+    const input = document.getElementById('pix-code-input');
+    input.select(); document.execCommand('copy');
+    toast('✅', 'Código copiado!');
+  });
 }
 
 // ─── Troco ───────────────────────────────────────────
@@ -3023,7 +3042,7 @@ async function _doSubmitOrder(addr, troco, pagOverride, mpPaymentId) {
 
     if (error) throw error;
 
-    // Vincula pagamento PIX ao pedido real (se veio de PIX aprovado)
+    // Vincula o mp_payment_id ao pedido real (se veio via PIX)
     if (mpPaymentId && order && order.id) {
       try {
         await fetch('/api/pix/vincular', {
@@ -3031,7 +3050,7 @@ async function _doSubmitOrder(addr, troco, pagOverride, mpPaymentId) {
           headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
           body: JSON.stringify({ mp_payment_id: mpPaymentId, order_id: order.id })
         });
-      } catch(e) {}
+      } catch(e) { console.warn('pix/vincular falhou:', e); }
     }
 
     cart = [];
