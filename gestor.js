@@ -997,8 +997,10 @@ function nav(id){
       return; // Não navega
     }
   }
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.page').forEach(p=>{p.classList.remove('on');p.style.display='';});
   document.querySelectorAll('.si').forEach(s=>s.classList.remove('on'));
+  // Fecha sidebar no mobile ao navegar
+  document.querySelector('.sidebar')?.classList.remove('mobile-open');
   const pg=document.getElementById('page-'+id);
   if(pg) pg.classList.add('on');
   const sn=document.getElementById('sn-'+id);
