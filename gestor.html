@@ -187,8 +187,6 @@
     <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M4 4l1 1M11 11l1 1M4 12l1-1M11 5l1-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Configurações
   </button>
-  <button class="si ssub" id="sn-configuracoes-main" onclick="nav('configuracoes')">Geral</button>
-  <button class="si ssub" id="sn-zona-perigo" onclick="nav('configuracoes')">⚠️ Zona de Perigo</button>
   </div><!-- end sidebar-group gestao -->
 
   </div><!-- end scroll wrapper -->
@@ -2364,32 +2362,12 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
     </div>
   </div>
 
-  <!-- Numeração de Pedidos -->
-  <div class="card" style="padding:20px;margin-bottom:16px">
-    <div style="font-size:13px;font-weight:700;margin-bottom:4px">🔢 Numeração de Pedidos</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">
-      O número exibido em cada pedido é calculado automaticamente.<br>
-      Você pode reiniciar a contagem a qualquer momento — pedidos existentes não são deletados.
-    </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
-      <div style="font-size:12.5px;color:var(--muted)" id="cfg-prox-pedido">Carregando...</div>
-      <button class="btn" onclick="abrirModalZerarPedidos()"
-        style="background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.3);color:var(--orange);font-weight:700">
-        🔄 Zerar contagem
-      </button>
-    </div>
-  </div>
-
-  <!-- Zona de Perigo -->
   <div class="card" style="padding:20px;border-color:rgba(239,68,68,.2);background:rgba(239,68,68,.04)">
     <div style="font-size:13px;font-weight:700;color:var(--danger);margin-bottom:4px">⚠️ Zona de Perigo</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">
-      Ações irreversíveis. Use com cuidado.
-    </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:14px;background:var(--surface2);border:1px solid rgba(239,68,68,.15);border-radius:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:14px;background:var(--surface2);border:1px solid rgba(239,68,68,.15);border-radius:10px;margin-top:8px">
       <div>
         <div style="font-size:12.5px;font-weight:600;margin-bottom:2px">Reiniciar numeração dos pedidos</div>
-        <div style="font-size:11.5px;color:var(--muted)">O próximo pedido passará a ser <strong>#1</strong>. Histórico mantido.</div>
+        <div style="font-size:11.5px;color:var(--muted)" id="cfg-prox-pedido">Carregando...</div>
       </div>
       <button class="btn" onclick="abrirModalZerarPedidos()"
         style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:var(--danger);font-weight:700;white-space:nowrap">
