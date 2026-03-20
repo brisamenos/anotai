@@ -5,39 +5,29 @@
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Outfit:wght@300;400;500;600;700&display=swap');
 
 :root{
-  /* ── Modo Escuro — padrão (igual à foto) ─────────────── */
+  /* ── Modo Escuro Navy — padrão ───────────────────────── */
   --bg:#0f1117;
   --surface:#181b24;
   --surface2:#1e2130;
   --surface3:#242840;
   --border:rgba(255,255,255,.07);
   --border2:rgba(255,255,255,.13);
-
-  /* ── Brand accent — Azul ─────────────────────────────── */
   --accent:#3b82f6;
   --accent-dim:rgba(59,130,246,.18);
   --accent-glow:rgba(59,130,246,.35);
   --accent2:#06b6d4;
-
-  /* ── Semantic ─────────────────────────────────────────── */
   --danger:#ef4444;
   --success:#22c55e;
   --accent3:#f59e0b;
   --purple:#8b5cf6;
   --orange:#f97316;
   --pink:#ec4899;
-
-  /* ── Text ─────────────────────────────────────────────── */
   --text:#f1f5f9;
   --muted:#64748b;
   --muted2:#94a3b8;
-
-  /* ── Sidebar / TopNav ────────────────────────────────── */
   --sidebar-bg:#131929;
   --topnav-bg:#0d1117;
   --sfoot-bg:rgba(8,10,18,.6);
-
-  /* ── Layout ───────────────────────────────────────────── */
   --sw:224px;
   --nav-h:52px;
   --radius:12px;

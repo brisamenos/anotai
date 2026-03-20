@@ -6547,7 +6547,7 @@ loadAllData();
 setTimeout(_iniciarSchedulerAniversario, 3000);
 
 // ════════════════════════════════════════════════════════
-// TEMA — Dois modos: Escuro (navy) e Claro (azul)
+// TEMA — Modo Escuro (navy) e Modo Claro (sidebar navy)
 // ════════════════════════════════════════════════════════
 
 const MODO_ESCURO = {
@@ -6572,149 +6572,151 @@ const MODO_CLARO = {
   '--sidebar-bg':'#1a2744','--topnav-bg':'rgba(10,10,10,.92)','--sfoot-bg':'rgba(16,22,40,.8)'
 };
 
-// Compatibilidade com código legado que referencia TEMAS_PRONTOS
+// Compatibilidade com código legado
 const TEMAS_PRONTOS = [
   { nome:'🌑 Modo Escuro', vars: MODO_ESCURO },
   { nome:'☀️ Modo Claro',  vars: MODO_CLARO  },
 ];
 
-// ── Aplica um objeto de vars CSS no :root ─────────────
 function _aplicarVars(vars) {
   const r = document.documentElement;
   Object.entries(vars).forEach(([k,v]) => r.style.setProperty(k, v));
 }
 
-// ── Remove/injeta override para tema claro ────────────
 function _aplicarOverrideClaro(vars) {
   const el = document.getElementById('tema-light-override');
   if (el) el.remove();
-
-  const text = vars['--text'] || '#111827';
-  const muted= vars['--muted']|| '#6b7280';
+  const text = vars['--text'] || '#0a1929';
+  const muted= vars['--muted']|| 'rgba(10,25,41,.45)';
   const sur  = vars['--surface']  || '#fff';
-  const sur2 = vars['--surface2'] || '#f3f4f6';
-  const sur3 = vars['--surface3'] || '#e5e7eb';
-  const bord = vars['--border']   || '#d1d5db';
+  const sur2 = vars['--surface2'] || '#e8f0fe';
+  const sur3 = vars['--surface3'] || '#d6e4ff';
+  const bord = vars['--border']   || 'rgba(30,100,220,.13)';
   const acc  = vars['--accent']   || '#1a6fd4';
-  const sb   = vars['--sidebar-bg']|| '#fff';
-  const tn   = vars['--topnav-bg'] || '#fff';
-
   const style = document.createElement('style');
   style.id = 'tema-light-override';
   style.textContent = `
     body,.app{background:var(--bg)!important;color:${text}!important}
     .main,.page{background:var(--bg)!important;color:${text}!important}
-
-    /* ── TopNav escuro ── */
-    .topnav{background:var(--topnav-bg)!important;border-bottom:1px solid rgba(255,255,255,.08)!important;box-shadow:0 2px 12px rgba(0,0,0,.4)!important}
+    .topnav{background:var(--topnav-bg)!important;border-bottom:1px solid rgba(255,255,255,.06)!important;box-shadow:0 2px 16px rgba(0,0,0,.45)!important}
     .topnav *{color:#e2e8f0!important}
-    .topnav .logo{color:#ffffff!important}
-    .logo span,.logo-text{color:#ffffff!important;font-weight:700!important}
+    .logo,.logo *{color:#fff!important}
     .tnav-pill{color:#cbd5e1!important;border-color:rgba(255,255,255,.18)!important;background:rgba(255,255,255,.08)!important}
     .tnav-pill:hover{color:#fff!important;background:rgba(255,255,255,.14)!important}
     .tnav-pill.on{background:rgba(34,197,94,.2)!important;border-color:rgba(34,197,94,.4)!important;color:#86efac!important}
     .ibtn{background:rgba(255,255,255,.08)!important;border-color:rgba(255,255,255,.15)!important;color:#cbd5e1!important}
     .ibtn:hover{color:#fff!important;background:rgba(255,255,255,.15)!important}
     .tbadge{background:rgba(255,255,255,.08)!important;border-color:rgba(255,255,255,.15)!important;color:#cbd5e1!important}
-
-    /* ── Sidebar navy ── */
+    .nbadge{background:var(--accent)!important;color:#fff!important}
+    .caixa-btn.fechado{background:rgba(255,255,255,.1)!important;border-color:rgba(255,255,255,.2)!important;color:#e2e8f0!important}
+    .mobile-menu-btn{background:rgba(255,255,255,.1)!important;border-color:rgba(255,255,255,.2)!important;color:#e2e8f0!important}
     .sidebar{background:var(--sidebar-bg)!important;border-right:1px solid rgba(255,255,255,.06)!important;box-shadow:4px 0 24px rgba(0,0,0,.5)!important}
     .sfoot{background:var(--sfoot-bg)!important;border-top-color:rgba(255,255,255,.08)!important}
-
-    /* Itens da sidebar — texto bem visível */
     .si{color:#94a3b8!important;font-weight:500!important}
-    .si svg{opacity:.7!important}
+    .si svg{opacity:.75!important;color:#94a3b8!important}
     .si:hover{background:rgba(255,255,255,.08)!important;color:#e2e8f0!important}
-    .si:hover svg{opacity:1!important}
+    .si:hover svg{opacity:1!important;color:#e2e8f0!important}
     .si.on{background:rgba(59,130,246,.22)!important;color:#93c5fd!important;font-weight:600!important}
     .si.on svg{opacity:1!important;color:#93c5fd!important}
-    .si.on::before{background:#3b82f6!important;box-shadow:0 0 8px rgba(59,130,246,.5)!important}
-    .shead{color:rgba(255,255,255,.35)!important;border-color:rgba(255,255,255,.08)!important;letter-spacing:1.2px!important}
+    .si.on::before{background:#3b82f6!important;box-shadow:0 0 8px rgba(59,130,246,.6)!important}
+    .shead{color:rgba(255,255,255,.32)!important;border-color:rgba(255,255,255,.07)!important}
+    .shead:hover{background:rgba(255,255,255,.05)!important}
     .sbc{background:#3b82f6!important;color:#fff!important}
-
-    /* Footer sidebar */
-    .urow{border-top-color:rgba(255,255,255,.08)!important}
+    .ssub{color:rgba(255,255,255,.45)!important}
+    .ssub:hover{color:#e2e8f0!important}
     .urow *{color:#94a3b8!important}
     .urow:hover *{color:#e2e8f0!important}
-    .sfoot-info,.sfoot-info *{color:#94a3b8!important}
-
-    /* Busca sidebar */
+    .sb-pin{background:rgba(255,255,255,.08)!important;border-color:rgba(255,255,255,.15)!important;color:#94a3b8!important}
     .sidebar-search > div{background:rgba(255,255,255,.07)!important;border-color:rgba(255,255,255,.12)!important}
     .sidebar-search input{color:#e2e8f0!important}
-    .sidebar-search input::placeholder{color:rgba(255,255,255,.3)!important}
-
-    /* ── Conteúdo principal claro ── */
-    .ph .pt,.ph h1,.ph h2{color:${text}!important}
-    .ph .ps{color:${muted}!important}
-    .card,.sc,.sbox,.tw{background:${sur}!important;border-color:${bord}!important;color:${text}!important}
-    .card *,.sc *{color:${text}!important}
-    .sl,.str,.ps{color:${muted}!important}
+    .sidebar-search input::placeholder{color:rgba(255,255,255,.28)!important}
+    .pt,.ph .pt,.ph h1,.ph h2,.card-title,.iname{color:${text}!important;font-weight:700!important}
+    .ps,.ph .ps,.icat,.sl,.str{color:${muted}!important}
     .sv{color:${text}!important;font-weight:700!important}
-    .kol{background:${sur2}!important;border-color:${bord}!important}
-    .kol-head{background:${sur}!important;border-bottom-color:${bord}!important}
-    .kol-title{color:${text}!important;font-weight:700!important}
-    .kol-analise{background:rgba(234,88,12,.06)!important;border-color:rgba(234,88,12,.2)!important}
-    .kol-producao{background:rgba(245,158,11,.06)!important;border-color:rgba(245,158,11,.18)!important}
-    .kol-pronto{background:rgba(34,197,94,.06)!important;border-color:rgba(34,197,94,.18)!important}
-    .kol-analise .kol-title{color:#9a3412!important}
-    .kol-producao .kol-title{color:#92400e!important}
-    .kol-pronto .kol-title{color:#14532d!important}
-    .kol-cnt{background:rgba(0,0,0,.08)!important;color:${text}!important}
-    .order-card{background:${sur}!important;border-color:${bord}!important;color:${text}!important;box-shadow:0 1px 4px rgba(0,0,0,.07)!important}
-    .order-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.12)!important;border-color:rgba(26,111,212,.3)!important}
-    .order-card *{color:${text}!important}
-    .oc-id{color:${acc}!important;font-weight:700!important}
-    .oc-client{color:${text}!important;font-weight:500!important}
-    .oc-items,.oc-time,.oc-addr{color:${muted}!important}
-    .oc-total{color:${acc}!important;font-weight:700!important}
-    .oc-btn-ok{background:rgba(22,163,74,.1)!important;color:#15803d!important;border-color:rgba(22,163,74,.25)!important}
-    .oc-btn-no{background:rgba(220,38,38,.08)!important;color:#b91c1c!important;border-color:rgba(220,38,38,.2)!important}
-    .oc-btn-fin{background:rgba(26,111,212,.1)!important;color:#1d4ed8!important;border-color:rgba(26,111,212,.2)!important}
-    .kol-empty,.kol-empty *{color:${muted}!important}
-    .kol-config{background:rgba(0,0,0,.04)!important;border-color:${bord}!important;color:${muted}!important}
+    .card,.sc,.sbox,.tw,.pm-tabs{background:${sur}!important;border-color:${bord}!important}
+    .card *,.sc *{color:${text}!important}
+    .kol{border-color:${bord}!important}
+    .kol-analise{background:rgba(234,88,12,.07)!important;border-color:rgba(234,88,12,.22)!important}
+    .kol-producao{background:rgba(245,158,11,.07)!important;border-color:rgba(245,158,11,.2)!important}
+    .kol-pronto{background:rgba(34,197,94,.07)!important;border-color:rgba(34,197,94,.2)!important}
+    .kol-head{background:transparent!important;border-bottom:1px solid ${bord}!important}
+    .kol-analise .kol-title{color:#c2410c!important}
+    .kol-producao .kol-title{color:#b45309!important}
+    .kol-pronto .kol-title{color:#15803d!important}
+    .kol-cnt{background:rgba(0,0,0,.1)!important;color:${text}!important}
+    .kol-empty,.kol-empty *{color:${muted}!important;opacity:.7!important}
+    .kol-config{background:rgba(0,0,0,.05)!important;border-color:${bord}!important;color:${muted}!important}
     .kol-config strong{color:${text}!important}
-
-    /* Botões */
-    .btn.bg{background:${sur2}!important;color:${text}!important;border-color:${bord}!important}
-    .btn.bg:hover{background:${sur3}!important}
-
-    /* Tabs / filtros kanban */
-    .kf-btn,.tnav-filter{background:${sur2}!important;color:${muted}!important;border-color:${bord}!important}
-    .kf-btn.on{background:${acc}!important;color:#fff!important;border-color:${acc}!important}
-
-    /* Search bar */
+    .order-card{background:${sur}!important;border:1px solid ${bord}!important;color:${text}!important;box-shadow:0 2px 8px rgba(0,0,0,.08)!important;transition:all .2s ease!important}
+    .order-card:hover{border-color:${acc}!important;transform:translateY(-2px)!important;box-shadow:0 6px 20px rgba(26,111,212,.15),0 0 0 3px rgba(26,111,212,.08)!important}
+    .order-card *{color:${text}!important}
+    .oc-id{color:${acc}!important;font-weight:700!important;font-size:13px!important}
+    .oc-client{color:${text}!important;font-weight:600!important}
+    .oc-items{color:${muted}!important}
+    .oc-total{color:#15803d!important;font-weight:700!important}
+    .oc-time,.oc-addr{color:${muted}!important}
+    .oc-btn-ok{background:rgba(22,163,74,.12)!important;color:#15803d!important;border-color:rgba(22,163,74,.3)!important;font-weight:600!important}
+    .oc-btn-ok:hover{background:rgba(22,163,74,.22)!important}
+    .oc-btn-no{background:rgba(220,38,38,.08)!important;color:#b91c1c!important;border-color:rgba(220,38,38,.25)!important;font-weight:600!important}
+    .oc-btn-no:hover{background:rgba(220,38,38,.16)!important}
+    .oc-btn-fin{background:rgba(26,111,212,.1)!important;color:#1d4ed8!important;border-color:rgba(26,111,212,.25)!important;font-weight:600!important}
+    .oc-btn-fin:hover{background:rgba(26,111,212,.18)!important}
+    .kf-btn,.filter-btn{background:${sur2}!important;color:${muted}!important;border-color:${bord}!important}
+    .kf-btn.on,.filter-btn.on{background:${acc}!important;color:#fff!important;border-color:${acc}!important}
+    .pm-tab{color:${muted}!important}
+    .pm-tab.on{background:${sur2}!important;color:${text}!important}
     .sbox{background:${sur}!important;border-color:${bord}!important}
     .sbox input{color:${text}!important}
     .sbox input::placeholder{color:${muted}!important}
-
-    /* Modais */
-    .modal{background:${sur}!important;color:${text}!important;border-color:${bord}!important;box-shadow:0 8px 40px rgba(0,0,0,.18)!important}
-    .modal *{color:${text}!important}
-    .modal-bg{background:rgba(0,0,0,.35)!important}
-    .modal-close{color:${muted}!important;background:${sur2}!important}
-
-    /* Inputs */
+    .sbox:focus-within{border-color:${acc}!important;box-shadow:0 0 0 3px rgba(26,111,212,.1)!important}
     input,textarea,select,.form-input{background:${sur}!important;color:${text}!important;border-color:${bord}!important}
     input::placeholder,textarea::placeholder{color:${muted}!important}
     .form-label{color:${muted}!important}
-
-    /* Tabelas */
-    .tw table th{background:${sur2}!important;color:${muted}!important;border-color:${bord}!important}
+    .sw select{background:${sur}!important;color:${text}!important;border-color:${bord}!important}
+    .btn.bg,.bg{background:${sur2}!important;color:${text}!important;border-color:${bord}!important}
+    .btn.bg:hover{background:${sur3}!important}
+    .tw table thead th{background:${sur2}!important;color:${muted}!important;border-color:${bord}!important}
+    .tw table tbody tr:hover td{background:${sur2}!important}
     .tw table td{border-color:${bord}!important;color:${text}!important}
-    .tw table tr:hover td{background:${sur2}!important}
-
-    /* Toggle */
+    .tmeta *{color:${text}!important}
+    .modal{background:${sur}!important;color:${text}!important;border-color:${bord}!important;box-shadow:0 16px 48px rgba(0,0,0,.2)!important}
+    .modal *{color:${text}!important}
+    .modal-close{color:${muted}!important;background:${sur2}!important}
+    .modal-bg{background:rgba(0,0,0,.4)!important}
     .toggle{background:${sur3}!important;border-color:${bord}!important}
     .toggle.on{background:var(--success)!important;border-color:var(--success)!important}
-
-    /* PDV */
-    .pdvb-wrap,.pdvb-left,.pdvb-right{background:var(--bg)!important}
+    .stbadge.sta{background:rgba(22,163,74,.1)!important;color:#15803d!important}
+    .stbadge.ste{background:rgba(220,38,38,.1)!important;color:#b91c1c!important}
+    .stbadge.stp{background:rgba(180,83,9,.1)!important;color:#92400e!important}
+    .chip{background:${sur2}!important;color:${text}!important;border-color:${bord}!important}
+    .cat-row{background:${sur}!important;border-color:${bord}!important}
+    .cat-head *,.cat-name{color:${text}!important}
+    .qpill{background:${sur2}!important;border-color:${bord}!important}
+    .qpill-label{color:${muted}!important}
+    .qpill-val{color:${text}!important}
+    .pdvb-wrap,.pdvb-left{background:var(--bg)!important}
+    .pdvb-right{border-left-color:${bord}!important;background:${sur}!important}
+    .pdvb-toolbar,.pdvb-cats{border-bottom-color:${bord}!important;background:${sur}!important}
     .pdvb-grid-item{background:${sur}!important;border-color:${bord}!important;color:${text}!important}
+    .pdvb-grid-item *{color:${text}!important}
+    .pdvb-cat-btn{color:${muted}!important}
+    .pdvb-cat-btn.on{color:${acc}!important;border-bottom-color:${acc}!important}
+    .pdvb-order-item{border-bottom-color:${bord}!important;color:${text}!important}
+    .pdvb-order-item *{color:${text}!important}
+    .pdvb-bar-btn{background:${sur2}!important;color:${text}!important;border-color:${bord}!important}
+    .pdvb-topbar{background:${sur}!important;border-bottom-color:${bord}!important;color:${text}!important}
+    .pdvb-tab{color:${muted}!important}
+    .pdvb-tab.on{color:${acc}!important;border-bottom-color:${acc}!important}
+    .pdvb-bottom-bar{background:${sur}!important;border-top-color:${bord}!important}
+    .pdvb-empty-order,.pdvb-empty-order *{color:${muted}!important}
+    .pdvb-order-head{color:${muted}!important;background:${sur2}!important}
+    .pdvb-tot-row{color:${text}!important}
+    .pdvb-gerar-btn{background:${acc}!important;color:#fff!important}
+    ::-webkit-scrollbar-thumb{background:${bord}!important}
   `;
   document.head.appendChild(style);
 }
 
-// ── Função principal: aplica tema e salva ─────────────
 function temaAplicarModo(modo) {
   const vars = modo === 'claro' ? MODO_CLARO : MODO_ESCURO;
   _aplicarVars(vars);
@@ -6724,15 +6726,14 @@ function temaAplicarModo(modo) {
     const el = document.getElementById('tema-light-override');
     if (el) el.remove();
   }
-  // Salva no banco de dados
-  sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, gestor_tema: modo }).then(() => {}).catch(() => {});
+  sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, gestor_tema: modo }).then(()=>{}).catch(()=>{});
   temaUpdateCardSelection();
   sbToast('ok', modo === 'claro' ? '☀️ Modo claro ativado!' : '🌑 Modo escuro ativado!');
 }
 
 function temaUpdateCardSelection() {
   const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
-  const modo = (bg && bg.startsWith('#f')) ? 'claro' : 'escuro';
+  const modo = bg.startsWith('#f') ? 'claro' : 'escuro';
   const cardClaro  = document.getElementById('tema-card-claro');
   const cardEscuro = document.getElementById('tema-card-escuro');
   if (cardClaro)  { cardClaro.style.borderColor  = modo==='claro'  ? 'var(--accent)':'var(--border)'; cardClaro.style.boxShadow  = modo==='claro'  ? '0 0 0 3px var(--accent-glow)':'none'; }
@@ -6741,7 +6742,7 @@ function temaUpdateCardSelection() {
 
 function initTemaPage() { temaUpdateCardSelection(); }
 
-// Funções legadas — mantidas para não quebrar chamadas existentes
+// Stubs para não quebrar chamadas legadas
 function temaApply(vars, save) { _aplicarVars(vars); }
 function temaGetCurrent() { return {}; }
 function temaSalvarStorage() {}
@@ -6752,8 +6753,13 @@ function temaBuildPresets() {}
 function temaBuildFields() {}
 function temaUpdatePreview() {}
 function temaUpdateInputs() {}
+function temaBuildPreview() {}
 
-// Tema aplicado via init() após leitura do banco de dados
+// Aplica tema escuro imediatamente (antes do banco carregar)
+(function(){
+  try { ['ef_tema_modo','ef_tema_v2','tema','theme'].forEach(k=>localStorage.removeItem(k)); } catch(e){}
+  _aplicarVars(MODO_ESCURO);
+})();
 
 // ── Registra webhook na Evolution API automaticamente ──
 async function iaRegistrarWebhook(webhookUrl) {
