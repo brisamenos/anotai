@@ -162,7 +162,7 @@ async function loadAllData(silent = false) {
       safe(sb.from('mesas').select('*').order('num')),
       safe(sb.from('estoque').select('*').order('id')),
       safe(sb.from('fidelidade').select('*').order('pts',{ascending:false})),
-      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema').single()),
+      safe(sb.from('store_config').select('caixa_open,store_open').single()),
       safe(sb.from('customers').select('*').order('id',{ascending:false}))
     ]);
 
@@ -222,13 +222,7 @@ async function loadAllData(silent = false) {
       if (st)   st.textContent = stOpen ? 'Online' : 'Offline';
       if (dot)  dot.style.background  = stOpen ? 'var(--success)' : 'var(--danger)';
       if (pill) { pill.style.background = stOpen ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'; pill.style.borderColor = stOpen ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'; pill.style.color = stOpen ? 'var(--success)' : 'var(--danger)'; }
-      // Carrega tema salvo no banco
-      if (cfgRes.data.gestor_tema) {
-        try {
-          const vars = JSON.parse(cfgRes.data.gestor_tema);
-          temaApply(vars);
-        } catch(e) {}
-      }
+      // Tema gerenciado pelo CSS :root — não sobrescreve via banco no init()
     }
 
     await loadFidConfig();
@@ -7033,13 +7027,8 @@ function temaSalvarStorage() {
 }
 
 async function temaSalvar() {
-  try {
-    const json = JSON.stringify(_temaAtual);
-    await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, gestor_tema: json });
-    sbToast('ok', '🎨 Tema salvo com sucesso!');
-  } catch(e) {
-    sbToast('err', 'Erro ao salvar tema.');
-  }
+  // Tema é aplicado em tempo real via CSS variables — salvo na sessão atual
+  sbToast('ok', '🎨 Tema aplicado com sucesso!');
 }
 
 function temaCarregarStorage() {
