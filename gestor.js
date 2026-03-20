@@ -1038,6 +1038,7 @@ function nav(id){
   if(id==='satisfacao') renderSatisfacao();
   if(id==='impressao') renderImpressao();
   if(id==='caixa') _renderCaixaTela();
+  if(id==='configuracoes') _renderConfiguracoes();
   if(id==='taxa') renderTaxaPage();
   if(id==='clientes') renderClientesPage();
   if(id==='meu-plano') renderMeuPlano();
@@ -6855,4 +6856,18 @@ async function confirmarZerarPedidos() {
     btn.disabled = false;
     btn.textContent = '🔄 Confirmar reset';
   }
+}
+
+// ── Configurações ─────────────────────────────────────
+async function _renderConfiguracoes() {
+  const el = document.getElementById('cfg-prox-pedido');
+  if (!el) return;
+  try {
+    const { data } = await sb.from('orders').select('id').order('id', { ascending: false }).limit(1);
+    const maxId  = data?.[0]?.id || 0;
+    const proxNum = maxId - _orderNumOffset + 1;
+    el.innerHTML = maxId
+      ? `Próximo pedido: <strong>#${proxNum}</strong> &nbsp;·&nbsp; Offset atual: ${_orderNumOffset}`
+      : 'Nenhum pedido registrado ainda.';
+  } catch(e) { el.textContent = '—'; }
 }
