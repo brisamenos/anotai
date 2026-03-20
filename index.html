@@ -2776,8 +2776,8 @@ async function submitOrder() {
   }
 
   if (selectedPay === 'pix') {
-    _pendingOrderAddr = addr;
-    _pendingOrderName = name;
+    _pendingOrderAddr  = addr;
+    _pendingOrderName  = name;
     _pendingOrderPhone = phone;
     await abrirPixModal();
     return;
@@ -2792,21 +2792,13 @@ async function submitOrder() {
   await _doSubmitOrder(addr, null);
 }
 
-// ═══════════════════════════════════════════
-//  TRACKER LOCAL — persiste sem login
-// ═══════════════════════════════════════════
+// ═══ TRACKER LOCAL — persiste sem login ═══
 const TRACK_KEY = 'ef_track_v1';
 let _pendingOrderName  = '';
 let _pendingOrderPhone = '';
 
 function salvarTrackerLocal(orderId, items, client) {
-  try {
-    localStorage.setItem(TRACK_KEY, JSON.stringify({
-      orderId, items, client,
-      tenantId: _tenantId,
-      ts: Date.now()
-    }));
-  } catch(e) {}
+  try { localStorage.setItem(TRACK_KEY, JSON.stringify({ orderId, items, client, tenantId: _tenantId, ts: Date.now() })); } catch(e) {}
 }
 function limparTrackerLocal() {
   try { localStorage.removeItem(TRACK_KEY); } catch(e) {}
@@ -2821,9 +2813,7 @@ function restaurarTrackerLocal() {
   } catch(e) {}
 }
 
-// ═══════════════════════════════════════════
-//  PIX — QR Code + polling direto à API MP
-// ═══════════════════════════════════════════
+// ═══ PIX — QR Code + polling direto MP ═══
 let _pixMpId  = null;
 let _pixPollT = null;
 let _pixExpT  = null;
@@ -2834,7 +2824,6 @@ async function abrirPixModal() {
   _pixDone = false;
   _pixAddr = _pendingOrderAddr;
 
-  // Reset visual
   document.getElementById('pix-body-waiting').style.display = '';
   document.getElementById('pix-body-ok').style.display      = 'none';
   document.getElementById('pix-qr-wrap').innerHTML          = '<span class="pix-loading">⏳</span>';
@@ -2864,23 +2853,21 @@ async function abrirPixModal() {
 
     _pixMpId = String(d.mp_payment_id);
 
-    // Exibe QR Code
     const qrEl = document.getElementById('pix-qr-wrap');
     if (d.qr_code_base64) {
       qrEl.innerHTML = '<img src="data:image/png;base64,' + d.qr_code_base64 + '" alt="QR PIX">';
     } else {
-      qrEl.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:10px">Sem QR.<br>Use o código abaixo.</div>';
+      qrEl.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:10px">Sem QR Code.<br>Use o código abaixo.</div>';
     }
     if (d.qr_code) {
       document.getElementById('pix-code-input').value    = d.qr_code;
       document.getElementById('pix-copy-wrap').style.display = '';
     }
-
     document.getElementById('pix-status-txt').textContent = 'Aguardando pagamento…';
 
-    // Polling a cada 4 segundos
+    // Polling a cada 4s
     _pixPollT = setInterval(pixPoll, 4000);
-    // Expira em 10 minutos
+    // Expira em 10min
     _pixExpT = setTimeout(() => {
       pixPararPolling();
       document.getElementById('pix-dot').className         = 'pix-dot err';
@@ -2901,13 +2888,11 @@ async function pixPoll() {
     });
     if (!r.ok) return;
     const d = await r.json();
-    console.log('[PIX poll] status=', d.status, 'mp_id=', _pixMpId);
-
     if (d.status === 'aprovado') {
       _pixDone = true;
       pixPararPolling();
-      document.getElementById('pix-dot').className         = 'pix-dot ok';
-      document.getElementById('pix-status-txt').textContent = '✅ Pagamento confirmado!';
+      document.getElementById('pix-dot').className              = 'pix-dot ok';
+      document.getElementById('pix-status-txt').textContent     = '✅ Pagamento confirmado!';
       document.getElementById('pix-body-waiting').style.display = 'none';
       document.getElementById('pix-body-ok').style.display      = 'flex';
       setTimeout(async () => {
@@ -2915,7 +2900,7 @@ async function pixPoll() {
         await _doSubmitOrder(_pixAddr, null, 'pix_mp', _pixMpId);
       }, 1500);
     }
-  } catch(e) { console.warn('[PIX poll erro]', e); }
+  } catch(e) {}
 }
 
 function pixPararPolling() {
@@ -2935,10 +2920,7 @@ function pixCopiar() {
     if (btn) { btn.textContent = '✅ Copiado!'; setTimeout(() => { btn.textContent = '📋 Copiar código'; }, 2000); }
     toast('✅', 'Código PIX copiado!');
   }).catch(() => {
-    // fallback para mobile
-    const input = document.getElementById('pix-code-input');
-    input.select(); document.execCommand('copy');
-    toast('✅', 'Código copiado!');
+    try { document.getElementById('pix-code-input').select(); document.execCommand('copy'); toast('✅','Copiado!'); } catch(e2) {}
   });
 }
 
@@ -3042,15 +3024,13 @@ async function _doSubmitOrder(addr, troco, pagOverride, mpPaymentId) {
 
     if (error) throw error;
 
-    // Vincula o mp_payment_id ao pedido real (se veio via PIX)
+    // Vincula mp_payment_id ao pedido real (se veio de PIX)
     if (mpPaymentId && order && order.id) {
-      try {
-        await fetch('/api/pix/vincular', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
-          body: JSON.stringify({ mp_payment_id: mpPaymentId, order_id: order.id })
-        });
-      } catch(e) { console.warn('pix/vincular falhou:', e); }
+      fetch('/api/pix/vincular', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
+        body: JSON.stringify({ mp_payment_id: mpPaymentId, order_id: order.id })
+      }).catch(() => {});
     }
 
     cart = [];
