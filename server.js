@@ -952,6 +952,91 @@ const server = http.createServer(async (req,res) => {
       const row=db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
       send(res,200,{ia_config:row?.ia_config||null});return
     }
+    // ── Backup GLOBAL com imagens (todos os tenants) ─────────────────────────
+    if(req.method==='GET'&&upath==='/api/admin-backup-global-imagens'){
+      try{
+        const TABS=['tenants','sys_users','store_config','categories','menu_items','cupons',
+                    'mesas','garcons','orders','movimentos','estoque','fidelidade','customers','ratings']
+        const snapshot={ts:new Date().toISOString(),versao:2,tabelas:{},imagens:{}}
+        for(const t of TABS){
+          try{snapshot.tabelas[t]=db.prepare(`SELECT * FROM "${t}"`).all()}catch{snapshot.tabelas[t]=[]}
+        }
+        // Coleta todas as URLs de imagem de todos os tenants
+        const imageUrls=new Set()
+        ;(snapshot.tabelas.menu_items||[]).forEach(r=>{if(r.image_url)imageUrls.add(r.image_url)})
+        ;(snapshot.tabelas.store_config||[]).forEach(r=>{
+          if(r.store_logo_url)  imageUrls.add(r.store_logo_url)
+          if(r.store_banner_url)imageUrls.add(r.store_banner_url)
+        })
+        // Lê cada imagem como base64
+        for(const url of imageUrls){
+          const fname=path.basename(url.split('?')[0])
+          const fpath=path.join(UPLOADS_DIR,fname)
+          if(fs.existsSync(fpath)){
+            const ext=(path.extname(fname).slice(1)||'jpeg').toLowerCase()
+            const mime=ext==='png'?'image/png':ext==='webp'?'image/webp':ext==='gif'?'image/gif':'image/jpeg'
+            snapshot.imagens[fname]={mime,data:fs.readFileSync(fpath).toString('base64')}
+          }
+        }
+        const json=JSON.stringify(snapshot)
+        const fname=`backup-global-${new Date().toISOString().slice(0,10)}.json`
+        const totalImg=Object.keys(snapshot.imagens).length
+        log('💾',`Backup global admin: ${(snapshot.tabelas.tenants||[]).length} tenants, ${totalImg} imagens, ${Math.round(json.length/1024)}KB`)
+        zlib.gzip(Buffer.from(json,'utf8'),(err,compressed)=>{
+          if(err){
+            res.writeHead(200,{'Content-Type':'application/json','Content-Disposition':`attachment; filename="${fname}"`,'Content-Length':Buffer.byteLength(json)})
+            res.end(json)
+          } else {
+            res.writeHead(200,{'Content-Type':'application/octet-stream','Content-Disposition':`attachment; filename="${fname}.gz"`,'Content-Encoding':'gzip','Content-Length':compressed.length})
+            res.end(compressed)
+          }
+        })
+      }catch(e){send(res,500,{error:'Erro ao gerar backup: '+e.message})}
+      return
+    }
+
+    // ── Restore GLOBAL com imagens ────────────────────────────────────────────
+    if(req.method==='POST'&&upath==='/api/admin-backup-restore-global'){
+      try{
+        // Aceita JSON puro ou gzip (base64 encapsulado no body)
+        const body=await readBody(req)
+        if(!body?.tabelas){send(res,400,{error:'JSON inválido (falta "tabelas")'});return}
+
+        const TABS=['tenants','sys_users','store_config','categories','menu_items','cupons',
+                    'mesas','garcons','orders','movimentos','estoque','fidelidade','customers','ratings']
+        let totalOk=0,totalFail=0
+
+        // Restaura tabelas
+        for(const t of TABS){
+          const rows=body.tabelas?.[t];if(!rows?.length)continue
+          try{
+            const cols=Object.keys(rows[0])
+            const stmt=db.prepare(`INSERT OR IGNORE INTO "${t}" (${cols.map(c=>`"${c}"`).join(',')}) VALUES (${cols.map(()=>'?').join(',')})`)
+            const ins=db.transaction(items=>{let ok=0;for(const r of items){try{stmt.run(Object.values(r));ok++}catch{totalFail++}};return ok})
+            totalOk+=ins(rows)
+          }catch(e){log('⚠️',`Restore ${t}: ${e.message}`)}
+        }
+
+        // Restaura imagens
+        let imgOk=0,imgFail=0
+        const imagens=body.imagens||{}
+        for(const[fname,img]of Object.entries(imagens)){
+          try{
+            if(!img?.data||!/^[A-Za-z0-9+/=]+$/.test(img.data.replace(/\s/g,'')))continue
+            const safeName=path.basename(fname)
+            const fpath=path.join(UPLOADS_DIR,safeName)
+            fs.writeFileSync(fpath,Buffer.from(img.data,'base64'))
+            imgOk++
+          }catch(e){imgFail++;log('⚠️',`Restore img ${fname}: ${e.message}`)}
+        }
+
+        marcarDirty();setTimeout(()=>fazerBackup(true),2000)
+        log('✅',`Restore global: ${totalOk} registros, ${imgOk} imagens`)
+        send(res,200,{ok:true,registros:totalOk,registros_ignorados:totalFail,imagens:imgOk,imagens_falha:imgFail,ts:body.ts||null})
+      }catch(e){send(res,400,{error:'Erro ao restaurar: '+e.message})}
+      return
+    }
+
     send(res,404,{error:'Rota admin não encontrada'});return
   }
 
