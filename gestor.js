@@ -663,7 +663,7 @@ function _toastUpgradePlano() {
       ">⭐</div>
 
       <!-- Título -->
-      <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;letter-spacing:-.3px;">
+      <div style="font-family:'Playfair Display',sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;letter-spacing:-.3px;">
         Recurso exclusivo Premium
       </div>
       <div style="font-size:13px;color:rgba(255,255,255,.55);margin-bottom:24px;line-height:1.6;">
@@ -719,7 +719,7 @@ function _toastUpgradePlano() {
       " style="
         width:100%;padding:13px;border-radius:11px;border:none;cursor:pointer;
         background:linear-gradient(135deg,#7c3aed,#4f46e5);
-        color:#fff;font-family:'Syne',sans-serif;font-size:14px;font-weight:800;
+        color:#fff;font-family:'Playfair Display',sans-serif;font-size:14px;font-weight:800;
         box-shadow:0 6px 20px rgba(124,58,237,.45);
         transition:transform .15s,box-shadow .15s;
         margin-bottom:10px;
@@ -2348,7 +2348,7 @@ function showConfirmDialog(title, msg) {
       el.id = 'confirm-dialog';
       el.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9998;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
       el.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px 24px;max-width:360px;width:90%;text-align:center">
-        <div id="cd-title" style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:8px"></div>
+        <div id="cd-title" style="font-family:'Playfair Display',sans-serif;font-size:16px;font-weight:800;margin-bottom:8px"></div>
         <div id="cd-msg" style="font-size:12.5px;color:var(--muted);margin-bottom:22px;line-height:1.5"></div>
         <div style="display:flex;gap:10px">
           <button id="cd-cancel" style="flex:1;padding:10px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Cancelar</button>
@@ -2843,12 +2843,12 @@ function renderMesaCard(t, orders) {
   return `<div style="background:var(--surface);border:1.5px solid ${bordColor};border-radius:14px;padding:16px;margin-bottom:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:10px">
-        <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:900">Mesa ${t.num}</div>
+        <div style="font-family:'Playfair Display',sans-serif;font-size:20px;font-weight:900">Mesa ${t.num}</div>
         ${t.guests ? `<span style="font-size:11.5px;color:var(--muted)">${t.guests} pessoas</span>` : ''}
         ${statusLabel}
         <button onclick="event.stopPropagation();openEditMesa(${t.num})" style="margin-left:4px;background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--muted);cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif" title="Editar mesa">✏️</button>
       </div>
-      <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:900;color:var(--accent3)">R$ ${displayTotal.toFixed(2).replace('.', ',')}</div>
+      <div style="font-family:'Playfair Display',sans-serif;font-size:20px;font-weight:900;color:var(--accent3)">R$ ${displayTotal.toFixed(2).replace('.', ',')}</div>
     </div>
     ${ordersHtml}
     ${actionBtn}
@@ -3499,7 +3499,7 @@ function renderEstoque() {
                 <div style="font-size:11px;color:var(--muted)">${e.unit}${e.updated_at ? ' · atualizado ' + new Date(e.updated_at).toLocaleDateString('pt-BR') : ''}</div>
               </td>
               <td style="padding:12px 14px;text-align:center">
-                <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:${isZero?'var(--danger)':isBaixo?'var(--accent3)':'var(--text)'}">${e.qty}</div>
+                <div style="font-family:'Playfair Display',sans-serif;font-size:15px;font-weight:700;color:${isZero?'var(--danger)':isBaixo?'var(--accent3)':'var(--text)'}">${e.qty}</div>
                 <div style="font-size:11px;color:var(--muted)">mín: ${e.min_qty}</div>
               </td>
               <td style="padding:12px 14px;min-width:120px">
@@ -3988,7 +3988,7 @@ async function renderRelatorios() {
             <span style="font-size:14px;font-weight:700;color:var(--accent);width:22px">#${i+1}</span>
             <div class="fid-av">${c.name?.[0]||'?'}</div>
             <div style="flex:1"><div style="font-weight:600;font-size:13px">${c.name}</div><div style="font-size:11.5px;color:var(--muted)">${c.orders} pedido${c.orders!==1?'s':''} · ${c.pts} pts</div></div>
-            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px;color:var(--success)">${money(c.orders * ticket)}</div>
+            <div style="font-family:'Playfair Display',sans-serif;font-weight:700;font-size:15px;color:var(--success)">${money(c.orders * ticket)}</div>
           </div>`).join('')
         : '<div style="color:var(--muted);font-size:12.5px;padding:12px">Nenhum cliente cadastrado</div>';
     }
@@ -4005,15 +4005,15 @@ async function renderRelatorios() {
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">
           <div style="background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.15);border-radius:10px;padding:12px;text-align:center">
             <div style="font-size:10.5px;color:var(--muted);margin-bottom:4px">Entradas</div>
-            <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--success)">${money(totEnt)}</div>
+            <div style="font-family:'Playfair Display',sans-serif;font-size:18px;font-weight:800;color:var(--success)">${money(totEnt)}</div>
           </div>
           <div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.15);border-radius:10px;padding:12px;text-align:center">
             <div style="font-size:10.5px;color:var(--muted);margin-bottom:4px">Saídas</div>
-            <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--danger)">${money(totSai)}</div>
+            <div style="font-family:'Playfair Display',sans-serif;font-size:18px;font-weight:800;color:var(--danger)">${money(totSai)}</div>
           </div>
           <div style="background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.15);border-radius:10px;padding:12px;text-align:center">
             <div style="font-size:10.5px;color:var(--muted);margin-bottom:4px">Saldo</div>
-            <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:${totEnt-totSai>=0?'var(--success)':'var(--danger)'}">${money(totEnt-totSai)}</div>
+            <div style="font-family:'Playfair Display',sans-serif;font-size:18px;font-weight:800;color:${totEnt-totSai>=0?'var(--success)':'var(--danger)'}">${money(totEnt-totSai)}</div>
           </div>
         </div>
         ${movs.length ? movs.map(m => `
@@ -5376,7 +5376,7 @@ function updateTaxaPreview() {
       <span style="font-size:24px">🛵</span>
       <div>
         <div style="font-weight:600;font-size:13px">Taxa de entrega</div>
-        <div style="font-size:18px;font-weight:700;color:var(--accent3);font-family:'Syne',sans-serif">R$ ${val.toFixed(2).replace('.',',')}</div>
+        <div style="font-size:18px;font-weight:700;color:var(--accent3);font-family:'Playfair Display',sans-serif">R$ ${val.toFixed(2).replace('.',',')}</div>
       </div>
     </div>`;
   } else {
@@ -5386,7 +5386,7 @@ function updateTaxaPreview() {
       <div style="background:var(--surface2);border-radius:10px;overflow:hidden">
         ${faixas.map((f,i) => `<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center${i===0?';background:rgba(59,130,246,.08)':''}">
           <span style="font-size:13px">Até ${f.ate_km} km${i===0?' <span style="font-size:10px;background:rgba(59,130,246,.15);color:var(--accent);padding:1px 6px;border-radius:99px;margin-left:6px">selecionado</span>':''}</span>
-          <span style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent3)">R$ ${f.taxa.toFixed(2).replace('.',',')}</span>
+          <span style="font-family:'Playfair Display',sans-serif;font-weight:700;color:var(--accent3)">R$ ${f.taxa.toFixed(2).replace('.',',')}</span>
         </div>`).join('')}
       </div>`;
   }

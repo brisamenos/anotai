@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Anota AI – Sistema Completo</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Outfit:wght@300;400;500;600;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/gestor.css">
   <script src="/api-client.js"></script>
 </head>
@@ -256,15 +256,15 @@
   <!-- Stats -->
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px;text-align:center">
-      <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--success)" id="pm-stat-livres">0</div>
+      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:800;color:var(--success)" id="pm-stat-livres">0</div>
       <div style="font-size:11px;color:var(--muted)">Livres</div>
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px;text-align:center">
-      <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--danger)" id="pm-stat-ocupadas">0</div>
+      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:800;color:var(--danger)" id="pm-stat-ocupadas">0</div>
       <div style="font-size:11px;color:var(--muted)">Ocupadas</div>
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px;text-align:center">
-      <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--accent3)" id="pm-stat-aguardando">0</div>
+      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:800;color:var(--accent3)" id="pm-stat-aguardando">0</div>
       <div style="font-size:11px;color:var(--muted)">Aguard. pag.</div>
     </div>
   </div>
@@ -309,7 +309,7 @@
     <div style="padding:16px 20px 20px;display:flex;flex-direction:column;gap:12px">
       <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:14px;text-align:center">
         <div style="font-size:11.5px;color:var(--muted);margin-bottom:4px">Total a receber</div>
-        <div style="font-family:'Syne',sans-serif;font-size:30px;font-weight:900;color:var(--accent3)" id="modal-pag-total">R$ 0,00</div>
+        <div style="font-family:'Playfair Display',serif;font-size:30px;font-weight:900;color:var(--accent3)" id="modal-pag-total">R$ 0,00</div>
       </div>
       <div>
         <label class="form-label">Forma de pagamento</label>
@@ -371,7 +371,7 @@
   <!-- Qualidade do Cardápio -->
   <div class="quality-bar">
     <div class="quality-score" style="background:conic-gradient(var(--accent3) 0% 35%,var(--surface2) 35% 100%);box-shadow:0 0 0 3px var(--surface)">
-      <div style="position:absolute;inset:6px;background:var(--surface);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:13px;font-weight:800">35%</div>
+      <div style="position:absolute;inset:6px;background:var(--surface);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-size:13px;font-weight:800">35%</div>
     </div>
     <div style="font-size:11.5px;color:var(--muted)">Qualidade<br>do Cardápio</div>
     <div class="quality-pills">
@@ -451,7 +451,7 @@
 <!-- PEDIDOS BALCÃO PDV -->
 <div class="page" id="page-pdv-balcao" style="padding:0;height:calc(100vh - 52px);flex-direction:column;overflow:hidden">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0">
-    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;letter-spacing:-.3px">Pedidos balcão (PDV)</div>
+    <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:800;letter-spacing:-.3px">Pedidos balcão (PDV)</div>
     <button class="btn bg" style="font-size:11.5px;padding:5px 10px" onclick="pdvbClearCart()">🗑 Limpar</button>
   </div>
   <div class="pdvb-wrap" style="flex:1">
@@ -638,7 +638,7 @@
     <div class="card-title">Valor da taxa fixa</div>
     <div style="margin-top:12px;display:flex;align-items:center;gap:10px;max-width:260px">
       <span style="font-size:13px;color:var(--muted);flex-shrink:0">R$</span>
-      <input class="form-input" id="taxa-fixo-val" type="number" min="0" step="0.50" placeholder="0,00" style="font-size:20px;font-weight:700;font-family:'Syne',sans-serif;max-width:160px">
+      <input class="form-input" id="taxa-fixo-val" type="number" min="0" step="0.50" placeholder="0,00" style="font-size:20px;font-weight:700;font-family:'Playfair Display',serif;max-width:160px">
       <span style="font-size:12px;color:var(--muted)">por entrega</span>
     </div>
   </div>
@@ -1380,7 +1380,7 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px">
         <div>
           <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Plano atual</div>
-          <div style="font-size:28px;font-weight:800;font-family:'Syne',sans-serif;letter-spacing:-.5px" id="plano-nome-display">—</div>
+          <div style="font-size:28px;font-weight:800;font-family:'Playfair Display',serif;letter-spacing:-.5px" id="plano-nome-display">—</div>
         </div>
         <div id="plano-badge-wrap"></div>
       </div>
@@ -2205,7 +2205,7 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
     <h2>🎁 Resgatar Recompensa</h2>
     <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:14px;margin-bottom:14px;text-align:center">
       <div style="font-size:13px;font-weight:600" id="modal-resg-name">—</div>
-      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--success);margin-top:4px" id="modal-resg-valor">—</div>
+      <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:800;color:var(--success);margin-top:4px" id="modal-resg-valor">—</div>
       <div style="font-size:12px;color:var(--muted);margin-top:2px" id="modal-resg-pts">—</div>
     </div>
     <p style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:14px">Confirmar resgate? Os pontos serão zerados.</p>
