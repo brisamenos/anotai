@@ -6851,6 +6851,7 @@ async function confirmarZerarPedidos() {
     renderKanban();
 
     closeModal('modal-zerar-pedidos');
+    _renderConfiguracoes(); // atualiza o painel de config imediatamente
     sbToast('ok', '✅ Contagem de pedidos zerada! Próximo pedido será #1.');
   } catch(e) {
     sbToast('err', 'Erro ao zerar contagem: ' + (e.message || 'Tente novamente'));

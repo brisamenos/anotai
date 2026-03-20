@@ -910,6 +910,9 @@ input,textarea{font-family:inherit}
 .rating-success-icon{font-size:56px}
 .rating-success-title{font-family:'Fraunces',serif;font-size:22px;font-weight:900}
 .rating-success-sub{font-size:13.5px;color:var(--muted2);line-height:1.5}
+/* ── PIX QR / Manual ── */
+#pix-qr-img{display:block;margin:0 auto 14px;border:2px solid var(--border);background:#fff;border-radius:10px;width:180px;height:180px}
+#pix-copy-code{flex:1;background:var(--s3);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:10px;color:var(--text);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>
 <script src="/api-client.js"></script>
 </head>
@@ -1069,7 +1072,37 @@ input,textarea{font-family:inherit}
         <div class="success-subtitle" id="success-subtitle">Seu pedido foi recebido com sucesso.</div>
         <div class="success-order-num" id="success-num">#000</div>
 
-        <!-- Rastrear em tempo real -->
+        <!-- ── PIX: QR Code MP ou Chave Manual ── -->
+        <div id="pix-section" style="display:none;width:100%;margin-bottom:12px">
+
+          <!-- QR Code Mercado Pago -->
+          <div id="pix-qr-wrap" style="display:none;background:var(--s2);border:1px solid var(--border);border-radius:16px;padding:20px;text-align:center">
+            <div style="font-size:13px;font-weight:700;color:var(--muted2);margin-bottom:4px">💳 Pague via PIX</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Escaneie o QR Code no app do seu banco</div>
+            <img id="pix-qr-img" src="" alt="QR Code PIX">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Ou copie o código Pix Copia e Cola:</div>
+            <div style="display:flex;gap:6px;align-items:stretch;margin-bottom:12px">
+              <input id="pix-copy-code" readonly value="">
+              <button onclick="_pixCopiar()" style="background:var(--accent-g);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">📋 Copiar</button>
+            </div>
+            <div id="pix-status-label" style="font-size:12.5px;font-weight:700;color:var(--muted)">⏳ Aguardando pagamento...</div>
+            <div id="pix-aprovado-msg" style="display:none;margin-top:8px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:10px;padding:10px;font-size:13px;font-weight:700;color:var(--success)">✅ Pagamento confirmado!</div>
+          </div>
+
+          <!-- Chave PIX Manual -->
+          <div id="pix-manual-success-wrap" style="display:none;background:var(--s2);border:1px solid var(--border);border-radius:16px;padding:18px;text-align:center">
+            <div style="font-size:22px;margin-bottom:6px">🔑</div>
+            <div style="font-size:13px;font-weight:700;margin-bottom:4px">Pagamento via PIX</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Transfira o valor exato para a chave abaixo</div>
+            <div id="pix-manual-banco-lbl" style="font-size:11px;color:var(--muted);margin-bottom:6px"></div>
+            <div style="display:flex;gap:6px;align-items:stretch;margin-bottom:10px">
+              <input id="pix-manual-key-show" readonly style="flex:1;background:var(--s3);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-weight:600;color:var(--text);text-align:center" value="">
+              <button onclick="_pixCopiarManual()" style="background:var(--accent-g);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">📋 Copiar</button>
+            </div>
+            <div id="pix-manual-valor-show" style="font-size:20px;font-weight:700;font-family:'Fraunces',serif;color:var(--amber)"></div>
+          </div>
+
+        </div>
         <button id="success-tracker-btn" class="confirm-btn" style="margin-bottom:10px;background:var(--s2);color:var(--text);box-shadow:none;border:1.5px solid var(--border)" onclick="closeCart();openTracker()">
           📡 Rastrear em tempo real
         </button>
@@ -1395,6 +1428,10 @@ let _lojaAberta  = true;
 let _trackOrderId= null;
 let _trackChannel= null;
 let _waOptIn     = false;  // reservado para uso futuro
+
+// ── PIX ──
+let _pixPollTimer = null;
+let _pixMpId      = null;
 
 // ── Auth state ──
 let _customer    = null;
@@ -2864,6 +2901,11 @@ async function _doSubmitOrder(addr, troco) {
 
     startTracking(order.id, items, name);
 
+    // ── PIX: gera QR Code MP ou exibe chave manual ──
+    if (selectedPay === 'pix') {
+      await _iniciarFluxoPix(order);
+    }
+
     // 1. Salva no localStorage (celular próprio)
     try {
       localStorage.setItem('ef_order_' + (_tenantId||''), JSON.stringify({
@@ -2890,7 +2932,108 @@ async function _doSubmitOrder(addr, troco) {
   }
 }
 
+// ══════════════════════════════════════════
+//  PIX — QR Code / Chave Manual
+// ══════════════════════════════════════════
+function _pixCopiar() {
+  const v = document.getElementById('pix-copy-code')?.value;
+  if (!v) return;
+  navigator.clipboard.writeText(v)
+    .then(() => toast('📋','Código PIX copiado!'))
+    .catch(() => {});
+}
+function _pixCopiarManual() {
+  const v = document.getElementById('pix-manual-key-show')?.value;
+  if (!v) return;
+  navigator.clipboard.writeText(v)
+    .then(() => toast('📋','Chave PIX copiada!'))
+    .catch(() => {});
+}
+function _stopPixPoll() {
+  if (_pixPollTimer) { clearInterval(_pixPollTimer); _pixPollTimer = null; }
+  _pixMpId = null;
+}
+function _startPixPoll(mpId, orderId) {
+  _stopPixPoll();
+  _pixMpId = mpId;
+  _pixPollTimer = setInterval(async () => {
+    try {
+      const r = await fetch(`/api/pix/status?mp_payment_id=${mpId}`, {
+        headers: { 'x-tenant-id': _tenantId }
+      });
+      const d = await r.json();
+      const lbl = document.getElementById('pix-status-label');
+      const ap  = document.getElementById('pix-aprovado-msg');
+      if (d.status === 'aprovado') {
+        if (lbl) lbl.style.display = 'none';
+        if (ap)  ap.style.display = '';
+        _stopPixPoll();
+        try {
+          await fetch('/api/pix/vincular', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
+            body: JSON.stringify({ mp_payment_id: mpId, order_id: orderId })
+          });
+        } catch(e) {}
+      } else if (d.status === 'rejeitado' || d.status === 'cancelado') {
+        if (lbl) lbl.textContent = '❌ Pagamento não realizado. Tente outra forma.';
+        _stopPixPoll();
+      }
+    } catch(e) {}
+  }, 4000);
+}
+async function _iniciarFluxoPix(order) {
+  const sec = document.getElementById('pix-section');
+  if (!sec) return;
+  sec.style.display = '';
+  document.getElementById('pix-qr-wrap').style.display           = 'none';
+  document.getElementById('pix-manual-success-wrap').style.display = 'none';
+  try {
+    const cfgR = await fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } });
+    const cfg  = cfgR.ok ? await cfgR.json() : {};
+
+    if (cfg.pix_ativo) {
+      // Mercado Pago — gera QR Code
+      const pr = await fetch('/api/pix/criar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
+        body: JSON.stringify({ valor: order.total, order_id: order.id, client: order.client })
+      });
+      const pd = pr.ok ? await pr.json() : null;
+      if (pd?.qr_code) {
+        document.getElementById('pix-qr-wrap').style.display = '';
+        if (pd.qr_code_base64) {
+          document.getElementById('pix-qr-img').src = 'data:image/png;base64,' + pd.qr_code_base64;
+        }
+        document.getElementById('pix-copy-code').value = pd.qr_code;
+        document.getElementById('pix-status-label').textContent = '⏳ Aguardando pagamento...';
+        document.getElementById('pix-aprovado-msg').style.display = 'none';
+        _startPixPoll(pd.mp_payment_id, order.id);
+        return;
+      }
+    }
+
+    // Fallback: chave PIX manual
+    if (cfg.pix_key_manual) {
+      document.getElementById('pix-manual-success-wrap').style.display = '';
+      document.getElementById('pix-manual-key-show').value = cfg.pix_key_manual;
+      const banco = cfg.pix_key_manual_banco ? `🏦 ${cfg.pix_key_manual_banco}` : '';
+      document.getElementById('pix-manual-banco-lbl').textContent = banco;
+      document.getElementById('pix-manual-valor-show').textContent = 'R$ ' + fmt(order.total);
+      return;
+    }
+
+    // Nada configurado — esconde a seção
+    sec.style.display = 'none';
+  } catch(e) {
+    sec.style.display = 'none';
+  }
+}
+
 function resetCart() {
+  _stopPixPoll();
+  const ps = document.getElementById('pix-section');
+  if (ps) ps.style.display = 'none';
   try { localStorage.removeItem('ef_order_' + (_tenantId||'')); } catch(e) {}
   try {
     const u = new URL(window.location.href);
