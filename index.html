@@ -1521,7 +1521,8 @@ async function init() {
     }
     _tenantId = info.id;
     _tenantPlano = (info.plano || 'pro').toLowerCase();
-    sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
+    // Usa chave separada para não sobrescrever a sessão do gestor/admin
+    sessionStorage.setItem('cardapio_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
     applyBranding(info.branding, info.nome);
 
     const [itemsR, catsR, cuponsR, cfgR] = await Promise.all([

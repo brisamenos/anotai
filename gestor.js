@@ -205,10 +205,14 @@ async function loadAllData(silent = false) {
       _maxKnownOrderId = maxId;
     } else {
       // Kanban vazio — inicializa _maxKnownOrderId com o último ID do banco
-      // para o polling detectar novos pedidos do cardápio corretamente
+      // para o polling detectar novos pedidos do cardápio corretamente.
+      // Guard: só executa se tenant_id estiver disponível; sem ele a query
+      // retornaria o maior ID de TODOS os tenants, quebrando o polling.
       try {
-        const { data: lastOrder } = await sb.from('orders').select('id').order('id', {ascending:false}).limit(1);
-        if (lastOrder?.[0]?.id) _maxKnownOrderId = Number(lastOrder[0].id);
+        if (_sessao?.tenant_id) {
+          const { data: lastOrder } = await sb.from('orders').select('id').order('id', {ascending:false}).limit(1);
+          if (lastOrder?.[0]?.id) _maxKnownOrderId = Number(lastOrder[0].id);
+        }
       } catch(e) {}
     }
 

@@ -448,6 +448,14 @@ async function handleREST(req, res, table, params, body) {
   const cols = TABLE_COLS[table]
   if (!cols) return send(res, 404, { error: 'Tabela não encontrada' })
   const tenantId        = getTenantId(req, params)
+
+  // ── Guard: tabelas com isolamento por tenant exigem x-tenant-id ──────────
+  // Sem tenant_id, uma query em orders/mesas/etc retornaria dados de TODOS os tenants.
+  if (!tenantId && !NO_TENANT_FILTER.has(table)) {
+    if (req.method === 'GET') return send(res, 200, [])          // GET → array vazio (safe)
+    return send(res, 400, { error: 'x-tenant-id obrigatório' })  // escrita → erro explícito
+  }
+
   const { WHERE, vals } = buildWhere(params, cols, tenantId, table)
   const isSingle        = req.headers['prefer']?.includes('single') || params.get('_single') === 'true'
 

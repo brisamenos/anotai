@@ -12,8 +12,19 @@
   // ── Sessão / tenant ───────────────────────────────────
   function getTenantId() {
     try {
+      // Sessão do gestor/admin tem prioridade
       const s = sessionStorage.getItem('sys_session');
-      return s ? JSON.parse(s).tenant_id : null;
+      if (s) {
+        const parsed = JSON.parse(s);
+        if (parsed.tenant_id) return parsed.tenant_id;
+      }
+      // Fallback: sessão do cardápio (chave separada para não sobrescrever gestor)
+      const c = sessionStorage.getItem('cardapio_session');
+      if (c) {
+        const parsed = JSON.parse(c);
+        if (parsed.tenant_id) return parsed.tenant_id;
+      }
+      return null;
     } catch (e) { return null; }
   }
 
