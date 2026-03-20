@@ -674,7 +674,6 @@
   <div style="display:flex;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;padding:0 24px">
     <div class="pdvb-tab on" id="robo-tab-wp"   onclick="roboTab('wp')">📱 WhatsApp</div>
     <div class="pdvb-tab"     id="robo-tab-auto" onclick="roboTab('auto')">⚡ Automações</div>
-    <div class="pdvb-tab"     id="robo-tab-msgs" onclick="roboTab('msgs')">💬 Mensagens</div>
     <div class="pdvb-tab"     id="robo-tab-ia"   onclick="roboTab('ia')">🧠 Agente IA</div>
     <div class="pdvb-tab"     id="robo-tab-chat" onclick="roboTab('chat')">🤖 Simulador</div>
   </div>
@@ -728,41 +727,6 @@
         </div>
       </div>
 
-      <!-- Servidor de automações -->
-      <div class="card" style="padding:20px;margin-bottom:16px">
-        <div class="card-title" style="margin-bottom:14px">🖥️ Servidor de Automações 24/7</div>
-        <div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:flex-end">
-          <div class="form-row" style="margin:0">
-            <label class="form-label">URL do servidor (mesma URL do gestor no Easypanel)</label>
-            <input class="form-input" id="wa-server-url" placeholder="https://sites-anotai.xtknqq.easypanel.host" oninput="salvarWaServerUrl()">
-          </div>
-          <button class="btn bg" onclick="testarServidorWA()" style="white-space:nowrap">🔍 Testar</button>
-          <div id="wa-server-status" style="display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap">
-            <div style="width:7px;height:7px;border-radius:50%;background:var(--muted)" id="wa-sdot"></div>
-            <span id="wa-stxt">Não testado</span>
-          </div>
-        </div>
-        <div style="margin-top:8px;font-size:11.5px;color:var(--muted)">
-          💡 Use a mesma URL do gestor. O <code style="background:rgba(59,130,246,.1);color:var(--accent);padding:1px 5px;border-radius:4px">server.js</code> serve o gestor.html <strong>e</strong> roda as automações — tudo em um único app no Easypanel.
-        </div>
-      </div>
-
-      <!-- Teste de envio -->
-      <div class="card" style="padding:20px">
-        <div class="card-title" style="margin-bottom:14px">🧪 Testar Envio de Mensagem</div>
-        <div style="display:grid;grid-template-columns:1fr 2fr auto;gap:10px;align-items:flex-end">
-          <div class="form-row" style="margin:0">
-            <label class="form-label">Número (com DDD)</label>
-            <input class="form-input" id="evo-test-phone" placeholder="85912345678">
-          </div>
-          <div class="form-row" style="margin:0">
-            <label class="form-label">Mensagem</label>
-            <input class="form-input" id="evo-test-msg" value="Olá! Teste do sistema Estima Food 🍕">
-          </div>
-          <button class="btn bp" onclick="evoTestarEnvio()" style="white-space:nowrap">📤 Enviar teste</button>
-        </div>
-        <div id="evo-test-result" style="margin-top:10px;font-size:12.5px;display:none"></div>
-      </div>
     </div>
 
     <!-- ══ TAB: AUTOMAÇÕES ══ -->
@@ -999,22 +963,7 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
       </div>
     </div>
 
-    <!-- ══ TAB: HISTÓRICO MENSAGENS ══ -->
-    <div id="robo-section-msgs" style="display:none">
-      <div class="ph" style="margin-bottom:20px">
-        <div><div class="pt">Histórico de Mensagens</div><div class="ps">Todas as mensagens enviadas pelo sistema</div></div>
-        <button class="btn bg" onclick="evoCarregarHistorico()">🔄 Atualizar</button>
-      </div>
-      <div class="tw">
-        <div class="tmeta"><span id="msgs-count" style="font-size:12.5px;color:var(--muted)">—</span></div>
-        <table>
-          <thead><tr><th>Destinatário</th><th>Tipo</th><th>Mensagem</th><th>Status</th><th>Horário</th></tr></thead>
-          <tbody id="msgs-tbody"><tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted);font-size:13px">Clique em "Atualizar" para carregar o histórico</td></tr></tbody>
-        </table>
-      </div>
-    </div>
 
-    <!-- ══ TAB: SIMULADOR ══ -->
     <!-- ══ TAB: AGENTE IA ══ -->
     <div id="robo-section-ia" style="display:none">
 
@@ -1032,7 +981,7 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div style="display:grid;grid-template-columns:1fr;gap:16px;max-width:700px">
 
         <!-- O que a IA responde -->
         <div class="card" style="padding:18px">
@@ -1085,38 +1034,10 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
           </label>
         </div>
 
-        <!-- Info + webhook -->
-        <div style="display:flex;flex-direction:column;gap:14px">
-          <div class="card" style="padding:18px;border:1px solid rgba(34,197,94,.2);background:rgba(34,197,94,.04)">
-            <div style="font-size:12px;font-weight:700;color:var(--success);margin-bottom:8px">ℹ️ Como funciona</div>
-            <div style="font-size:12px;color:var(--muted);line-height:1.7">
-              A IA responde automaticamente os clientes via WhatsApp <strong>apenas sobre os tópicos selecionados</strong>.<br><br>
-              Ela <strong>não</strong> entra em conversas livres — só responde dúvidas relacionadas ao seu restaurante.<br><br>
-              Quando um atendente responde manualmente, a IA pausa automaticamente para aquele cliente.
-            </div>
-          </div>
-
-          <div class="card" style="padding:18px;border:1px solid rgba(34,197,94,.2);background:rgba(34,197,94,.04)">
-            <div style="font-size:12px;font-weight:700;color:var(--success);margin-bottom:4px">🔗 Webhook — mesma conexão das automações</div>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:8px">A IA usa a mesma instância e URL já configurada. Não precisa criar uma nova conexão.</div>
-            <div id="ia-webhook-url" style="font-size:11.5px;font-family:monospace;background:var(--surface2);padding:8px 10px;border-radius:8px;word-break:break-all;margin-bottom:8px"></div>
-            <div style="display:flex;gap:8px">
-              <button class="btn bg" style="font-size:11.5px;flex:1;justify-content:center"
-                onclick="navigator.clipboard.writeText(document.getElementById('ia-webhook-url').textContent).then(()=>sbToast('ok','URL copiada!'))">
-                📋 Copiar URL
-              </button>
-              <button class="btn bp" style="font-size:11.5px;flex:1;justify-content:center"
-                onclick="iaRegistrarWebhook().then(()=>sbToast('ok','Webhook registrado na Evolution!'))">
-                ⚡ Registrar automaticamente
-              </button>
-            </div>
-            <div style="font-size:11px;color:var(--muted);margin-top:6px">Ou cole manualmente: Evolution API → Instância → Webhook → MESSAGES_UPSERT</div>
-          </div>
-        </div>
-
       </div>
     </div><!-- fim robo-section-ia -->
 
+    <!-- ══ TAB: SIMULADOR ══ -->
     <div id="robo-section-chat" style="display:none">
       <div class="chat-wrap" style="height:calc(100vh - 220px)">
         <div class="chat-left">
