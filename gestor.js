@@ -1039,7 +1039,7 @@ function nav(id){
   if(id==='impressao') renderImpressao();
   if(id==='caixa') _renderCaixaTela();
   if(id==='configuracoes') _renderConfiguracoes();
-  if(id==='saques') carregarCarteira();
+  if(id==='saques') { carregarCarteira(); conectarSaquesSSE(); }
   if(id==='taxa') renderTaxaPage();
   if(id==='clientes') renderClientesPage();
   if(id==='meu-plano') renderMeuPlano();
@@ -1115,7 +1115,6 @@ function renderKanban(){
             (o.addr?'<span class="oc-addr">📍 '+o.addr+'</span>':'')+
           '</div>'+
           (o.pag==='dinheiro'?'<div style="font-size:11px;color:var(--amber);margin:4px 0 0;padding:0 2px">💵 Dinheiro · '+(o.troco>0?'Troco p/ R$'+parseFloat(o.troco).toFixed(2).replace('.',','):o.troco===-1?'Precisa de troco':'Sem troco')+'</div>':'')+
-          (o.pag==='pix_mp'?'<div style="font-size:11px;color:#22c55e;margin:4px 0 0;padding:0 2px;font-weight:700">✅ Pago via PIX</div>':'')+
           '<div class="oc-actions">'+actionBtn+'</div>'+
         '</div>';
       }).join('');
@@ -1162,9 +1161,6 @@ function openOrderDetail(id){
         : o.troco === -1
         ? `<span>💵 Precisa de troco</span><span style="color:var(--amber)">Valor não informado</span>`
         : `<span>💵 Sem troco</span><span style="color:var(--muted)">Valor exato</span>`;
-    } else if (o.pag === 'pix_mp') {
-      trocoRow.style.display = '';
-      trocoRow.innerHTML = `<span style="color:var(--success);font-weight:700">✅ Pago via PIX</span><span style="color:var(--success);font-size:11px;font-weight:700">CONFIRMADO</span>`;
     } else {
       trocoRow.style.display = 'none';
     }
@@ -6927,6 +6923,29 @@ async function baixarBackupCompleto() {
 // ════════════════════════════════════════════════════════
 const _fmtR = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
 
+let _saquesSSE = null;
+
+function conectarSaquesSSE() {
+  if (_saquesSSE) return;
+  const tid = _sessao?.tenant_id;
+  if (!tid) return;
+  _saquesSSE = new EventSource('/sse/saques-rt:'+tid);
+  _saquesSSE.addEventListener('saques:INSERT', () => carregarCarteira());
+  _saquesSSE.addEventListener('saques:UPDATE', (e) => {
+    try {
+      const d = JSON.parse(e.data);
+      carregarCarteira();
+      if (d.status === 'pago') sbToast('ok', '✅ Seu saque foi pago! Verifique seu PIX.');
+      else if (d.status === 'aprovado') sbToast('ok', '✅ Saque aprovado! O pagamento está em processamento.');
+      else if (d.status === 'cancelado') sbToast('err', '❌ Saque cancelado. Entre em contato com o suporte.');
+    } catch(ex) { carregarCarteira(); }
+  });
+  _saquesSSE.onerror = () => {
+    _saquesSSE.close(); _saquesSSE = null;
+    setTimeout(conectarSaquesSSE, 5000);
+  };
+}
+
 async function carregarCarteira() {
   try {
     const tid = _sessao?.tenant_id;
@@ -7014,7 +7033,7 @@ async function solicitarSaque() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erro');
-    sbToast('ok', `✅ Saque de ${_fmtR(data.valor)} solicitado! O administrador irá processar em breve.`);
+    sbToast('ok', `✅ Saque de ${_fmtR(data.valor)} solicitado! O pagamento é realizado em até 24 horas úteis.`);
     await carregarCarteira();
   } catch(e) {
     sbToast('err', 'Erro: ' + e.message);

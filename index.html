@@ -2750,6 +2750,40 @@ function showWaToast(orderId) {
 // ══════════════════════════════════════════
 //  SUBMIT
 // ══════════════════════════════════════════
+// ═══ TRACKER LOCAL ═══
+const TRACK_KEY = 'ef_track_v1';
+let _pendingOrderName  = '';
+let _pendingOrderPhone = '';
+let _pixAtivo = true; // carregado do servidor
+
+function salvarTrackerLocal(id, items, client) {
+  try { localStorage.setItem(TRACK_KEY, JSON.stringify({orderId:id,items,client,tenantId:_tenantId,ts:Date.now()})); } catch(e) {}
+}
+function limparTrackerLocal() { try { localStorage.removeItem(TRACK_KEY); } catch(e) {} }
+function restaurarTrackerLocal() {
+  try {
+    const d = JSON.parse(localStorage.getItem(TRACK_KEY)||'null');
+    if (!d||!d.orderId) return;
+    if (d.tenantId&&d.tenantId!==_tenantId) return;
+    if (Date.now()-d.ts > 4*60*60*1000) { limparTrackerLocal(); return; }
+    startTracking(d.orderId, d.items||[], d.client||'');
+  } catch(e) {}
+}
+
+async function carregarConfigPix() {
+  try {
+    if (!_tenantId) return;
+    const r = await fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } });
+    if (r.ok) {
+      const d = await r.json();
+      _pixAtivo = d.pix_ativo !== false;
+      // Esconde ou mostra opção PIX no grid de pagamento
+      const pixOpt = document.querySelector('.pay-opt[data-pay="pix"]');
+      if (pixOpt) pixOpt.style.display = _pixAtivo ? '' : 'none';
+    }
+  } catch(e) {}
+}
+
 async function submitOrder() {
   const name  = document.getElementById('f-name').value.trim();
   const phone = document.getElementById('f-phone').value.trim();
@@ -2776,39 +2810,16 @@ async function submitOrder() {
   }
 
   if (selectedPay === 'pix') {
-    _pendingOrderAddr  = addr;
-    _pendingOrderName  = name;
-    _pendingOrderPhone = phone;
-    await abrirPixModal();
-    return;
+    if (!_pixAtivo) { toast('❌','Pagamento PIX indisponível no momento. Escolha outra forma.'); return; }
+    _pendingOrderAddr = addr; _pendingOrderName = name; _pendingOrderPhone = phone;
+    await abrirPixModal(); return;
   }
 
   if (selectedPay === 'dinheiro') {
-    _pendingOrderAddr = addr;
-    openTrocoModal();
-    return;
+    _pendingOrderAddr = addr; openTrocoModal(); return;
   }
 
   await _doSubmitOrder(addr, null);
-}
-
-// ═══ TRACKER LOCAL ═══
-const TRACK_KEY = 'ef_track_v1';
-let _pendingOrderName  = '';
-let _pendingOrderPhone = '';
-
-function salvarTrackerLocal(id, items, client) {
-  try { localStorage.setItem(TRACK_KEY, JSON.stringify({orderId:id,items,client,tenantId:_tenantId,ts:Date.now()})); } catch(e) {}
-}
-function limparTrackerLocal() { try { localStorage.removeItem(TRACK_KEY); } catch(e) {} }
-function restaurarTrackerLocal() {
-  try {
-    const d = JSON.parse(localStorage.getItem(TRACK_KEY)||'null');
-    if (!d||!d.orderId) return;
-    if (d.tenantId&&d.tenantId!==_tenantId) return;
-    if (Date.now()-d.ts > 4*60*60*1000) { limparTrackerLocal(); return; }
-    startTracking(d.orderId, d.items||[], d.client||'');
-  } catch(e) {}
 }
 
 // ═══ PIX — QR Code + polling direto ═══
@@ -2867,8 +2878,7 @@ async function pixPoll() {
 function pixPararPolling(){if(_pixPollT){clearInterval(_pixPollT);_pixPollT=null;}if(_pixExpT){clearTimeout(_pixExpT);_pixExpT=null;}}
 function pixCancelar(){pixPararPolling();_pixMpId='';_pixDone=false;document.getElementById('pix-overlay').classList.remove('on');}
 function pixCopiar(){
-  const code=document.getElementById('pix-code-input').value;
-  if(!code)return;
+  const code=document.getElementById('pix-code-input').value;if(!code)return;
   navigator.clipboard.writeText(code).then(()=>{
     const btn=document.getElementById('pix-copy-btn');
     if(btn){btn.textContent='✅ Copiado!';setTimeout(()=>{btn.textContent='📋 Copiar código';},2000);}
@@ -3229,7 +3239,10 @@ async function submitRating() {
 })();
 
 init();
-window.addEventListener('load',()=>{setTimeout(restaurarTrackerLocal,1200);});
+window.addEventListener('load', () => {
+  setTimeout(restaurarTrackerLocal, 1200);
+  setTimeout(carregarConfigPix, 800);
+});
 
 // Garante limpeza do campo de busca mesmo quando Chrome autofill ocorre após load
 document.addEventListener('DOMContentLoaded', clearSearchInput);

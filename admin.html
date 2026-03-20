@@ -562,10 +562,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   try {
     const s = JSON.parse(raw);
     if (!s.token || Date.now() - s.ts >= 8*60*60*1000) { sessionStorage.removeItem('adm_session'); return; }
-    // Valida token no servidor (sobrevive a restarts porque agora está no SQLite)
-    const check = await fetch('/api/admin/mp-config', {
-      headers: { 'Authorization': 'Bearer ' + s.token, 'Content-Type': 'application/json' }
-    }).catch(() => null);
+    const check = await fetch('/api/admin/mp-config', { headers: { 'Authorization': 'Bearer '+s.token, 'Content-Type': 'application/json' } }).catch(()=>null);
     if (!check || check.status === 401) { sessionStorage.removeItem('adm_session'); return; }
     _sessao = s;
     document.getElementById('login').style.display  = 'none';
@@ -587,10 +584,53 @@ function navTo(id) {
   document.getElementById('topbar-title').textContent = titles[id] || id;
   if (id==='ia') iaAdminCarregar();
   if (id==='backup') renderBackupList();
-  if (id==='saques') { carregarSaquesAdmin(); carregarMpConfig(); }
+  if (id==='saques') { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); conectarAdminSSE(); }
 }
 
 // ── CARREGAR DADOS ───────────────────────
+let _pixAtivoPorTenant = {};
+let _adminSseSource = null;
+
+function conectarAdminSSE() {
+  if (_adminSseSource) return;
+  _adminSseSource = new EventSource('/sse/saques-admin');
+  _adminSseSource.addEventListener('saques:INSERT', () => {
+    toast('ok', '🔔 Nova solicitação de saque!');
+    carregarSaquesAdmin('pendente');
+  });
+  _adminSseSource.addEventListener('saques:UPDATE', () => {
+    carregarSaquesAdmin('pendente');
+    carregarSaquesAdmin('pago');
+  });
+  _adminSseSource.onerror = () => {
+    _adminSseSource.close(); _adminSseSource = null;
+    setTimeout(conectarAdminSSE, 5000);
+  };
+}
+
+async function togglePix(tenantId, ativo) {
+  try {
+    const r = await fetch('/api/admin/pix-toggle', {
+      method: 'POST',
+      headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenant_id: tenantId, pix_ativo: !ativo })
+    });
+    if (r.status === 401) { toast('err','Sessão expirada'); setTimeout(doLogout,1500); return; }
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    _pixAtivoPorTenant[tenantId] = d.pix_ativo;
+    renderClientes();
+    toast('ok', d.pix_ativo ? '⚡ PIX ativado!' : '⚡ PIX desativado!');
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+async function carregarPixStatus() {
+  await Promise.all(_clientes.filter(c=>c.slug!=='_global').map(c =>
+    fetch('/api/pix/config?tenant_id='+c.id).then(r=>r.ok?r.json():{}).then(d=>{_pixAtivoPorTenant[c.id]=d.pix_ativo!==false}).catch(()=>{})
+  ));
+  renderClientes();
+}
+
 async function loadAll() {
   const [cr, ur] = await Promise.all([
     sb.from('tenants').select('*').neq('slug','_admin').order('created_at',{ascending:false}),
@@ -605,6 +645,7 @@ async function loadAll() {
   document.getElementById('st-users').textContent   = _usuarios.length;
 
   renderDash(); renderClientes();
+  carregarPixStatus();
 }
 
 // ── Mapeamento de planos (global) ─────────────────────
@@ -1179,12 +1220,12 @@ async function importarBackup() {
 async function carregarMpConfig() {
   try {
     const r = await fetch('/api/admin/mp-config', { headers: adminAuthHeader() });
-    if (r.status === 401) { toast('err','Sessão expirada. Faça login novamente.'); setTimeout(doLogout,1500); return; }
+    if (r.status === 401) { toast('err','Sessão expirada.'); setTimeout(doLogout,1500); return; }
     const d = r.ok ? await r.json() : {};
     const txtEl = document.getElementById('mp-status-txt');
     if (txtEl) txtEl.innerHTML = d.mp_configurado
       ? `<span style="color:var(--success)">✅ MP configurado · Taxa: R$ ${parseFloat(d.taxa_pix||1).toFixed(2)}</span>`
-      : `<span style="color:var(--danger)">⚠️ Token MP não configurado. Cole o token abaixo e salve.</span>`;
+      : `<span style="color:var(--danger)">⚠️ Token MP não configurado</span>`;
     const taxaEl = document.getElementById('mp-taxa-input');
     if (taxaEl && d.taxa_pix) taxaEl.value = parseFloat(d.taxa_pix).toFixed(2);
     const tokenEl = document.getElementById('mp-token-input');
@@ -1206,7 +1247,7 @@ async function salvarMpConfig() {
       headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    if (r.status === 401) { toast('err','Sessão expirada. Faça login novamente.'); setTimeout(doLogout,1500); return; }
+    if (r.status === 401) { toast('err','Sessão expirada.'); setTimeout(doLogout,1500); return; }
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
     toast('ok', '✅ Configuração MP salva!');
