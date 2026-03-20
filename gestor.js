@@ -222,12 +222,11 @@ async function loadAllData(silent = false) {
       if (st)   st.textContent = stOpen ? 'Online' : 'Offline';
       if (dot)  dot.style.background  = stOpen ? 'var(--success)' : 'var(--danger)';
       if (pill) { pill.style.background = stOpen ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'; pill.style.borderColor = stOpen ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'; pill.style.color = stOpen ? 'var(--success)' : 'var(--danger)'; }
-      // Carrega tema salvo no banco (sobrepõe localStorage se existir)
+      // Carrega tema salvo no banco
       if (cfgRes.data.gestor_tema) {
         try {
           const vars = JSON.parse(cfgRes.data.gestor_tema);
           temaApply(vars);
-          localStorage.setItem('gestor_tema', cfgRes.data.gestor_tema);
         } catch(e) {}
       }
     }
@@ -7020,34 +7019,26 @@ function temaBuildPresets() {
 
 // ── Salvar / Carregar / Reset ─────────────────────────
 function temaSalvarStorage() {
-  try { localStorage.setItem('gestor_tema', JSON.stringify(_temaAtual)); } catch(e){}
+  // localStorage desativado — tema salvo apenas no banco
 }
 
 async function temaSalvar() {
-  temaSalvarStorage();
   try {
     const json = JSON.stringify(_temaAtual);
     await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, gestor_tema: json });
     sbToast('ok', '🎨 Tema salvo com sucesso!');
   } catch(e) {
-    sbToast('ok', '🎨 Tema salvo localmente!');
+    sbToast('err', 'Erro ao salvar tema.');
   }
 }
 
 function temaCarregarStorage() {
-  try {
-    const saved = localStorage.getItem('gestor_tema');
-    if (saved) {
-      const vars = JSON.parse(saved);
-      temaApply(vars);
-    }
-  } catch(e){}
+  // localStorage desativado — tema vem do banco
 }
 
 function temaReset() {
   if (!confirm('Resetar para o tema padrão?')) return;
   temaApply(TEMAS_PRONTOS[0].vars);
-  try { localStorage.removeItem('gestor_tema'); } catch(e){}
   sbToast('ok', 'Tema resetado!');
 }
 
@@ -7063,23 +7054,9 @@ function initTemaPage() {
   temaUpdatePreview();
 }
 
-// Aplica tema ao carregar: sempre garante variáveis do tema Açafrão
-// (novas variáveis como --accent-dim, --accent-glow, --muted2 etc.)
+// Aplica tema padrão Açafrão ao carregar — tema definitivo vem do banco via init()
 (function() {
-  try {
-    // Sempre parte do tema base Açafrão para garantir novas variáveis
-    const base = TEMAS_PRONTOS[0].vars;
-    temaApply(base);
-    // Se havia um tema salvo, sobrepõe as variáveis que o usuário customizou
-    const saved = localStorage.getItem('gestor_tema');
-    if (saved) {
-      const savedVars = JSON.parse(saved);
-      // Só reaplicar se não for o tema azul antigo (bg #0f1117)
-      if (savedVars['--bg'] && savedVars['--bg'] !== '#0f1117') {
-        temaApply(savedVars);
-      }
-    }
-  } catch(e) {}
+  try { temaApply(TEMAS_PRONTOS[0].vars); } catch(e) {}
 })();
 
 // ── Registra webhook na Evolution API automaticamente ──
