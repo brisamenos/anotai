@@ -2017,19 +2017,19 @@ function renderGestor(){
         </div>
         ${cat.open?`<div class="cat-items">
           ${catItems.map(item=>`
-            <div class="cat-item-row" data-itemid="${item.id}" onclick="openEditItem(parseInt(this.dataset.itemid))">
+            <div class="cat-item-row" data-id="${item.id}" onclick="openEditItem(+this.dataset.id)">
               <div class="cat-item-thumb">${item.imageUrl
-                ? `<img src="${item.imageUrl}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;display:block;flex-shrink:0">`
+                ? `<img src="${item.imageUrl}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;display:block">`
                 : `<svg viewBox="0 0 24 24" fill="none" width="18" height="18" style="opacity:.35"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z" stroke="currentColor" stroke-width="1.5"/><path d="M3 16l5-5 3 3 3-4 4 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" opacity=".5"/></svg>`
               }</div>
               <div style="flex:1;min-width:0">
                 <div class="cat-item-name">${item.name}${item.promo?' <span class="ptag">promo</span>':''}${item.itemType==='pizza'?' <span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--accent3);border-radius:4px;padding:1px 4px;font-weight:700;margin-left:2px">🍕</span>':''}</div>
                 <div class="cat-item-price">R$ ${item.price.toFixed(2).replace('.',',')} · ${item.status==='active'?'<span style="color:var(--success)">Disponível</span>':item.status==='esgotado'?'<span style="color:var(--danger)">Esgotado</span>':'<span style="color:var(--accent3)">Pausado</span>'}</div>
               </div>
-              <button class="btn bg" style="font-size:10.5px;padding:3px 8px;flex-shrink:0" data-itemid="${item.id}" onclick="event.stopPropagation();openEditItem(parseInt(this.dataset.itemid))">✏️ Editar</button>
+              <button class="btn bg" style="font-size:10.5px;padding:3px 8px;flex-shrink:0" data-id="${item.id}" onclick="event.stopPropagation();openEditItem(+this.dataset.id)">✏️ Editar</button>
             </div>
           `).join('')}
-          <div class="cat-add" data-catname="${cat.name.replace(/"/g,'&quot;')}" onclick="openAddItemModal(this.dataset.catname)">
+          <div class="cat-add" data-cat="${cat.name.replace(/"/g,'&quot;')}" onclick="openAddItemModal(this.dataset.cat)">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
             Adicionar Item
           </div>
@@ -2296,8 +2296,8 @@ async function addItem() {
 }
 
 function openEditItem(id) {
-  editingId = id;
-  const it = items.find(i => i.id === id);
+  editingId = +id;  // garante número para comparar com i.id
+  const it = items.find(i => i.id === editingId);
   if (!it) return;
 
   populateCatSelects();
@@ -2476,7 +2476,7 @@ function renderImagens() {
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:all .2s"
          onmouseenter="this.style.borderColor='var(--accent)'"
          onmouseleave="this.style.borderColor='var(--border)'">
-      <div style="height:72px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:32px;border-bottom:1px solid var(--border);position:relative;overflow:hidden">
+      <div style="height:110px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:48px;border-bottom:1px solid var(--border);position:relative;overflow:hidden">
         ${i.imageUrl
           ? `<img src="${i.imageUrl}" style="width:100%;height:100%;object-fit:cover">`
           : `<div>${i.emoji}</div>`}
@@ -2503,7 +2503,7 @@ function renderPotencializador(){
       <div style="font-size:26px">${i.emoji}</div>
       <div style="flex:1"><div style="font-weight:600;font-size:13px">${i.name}</div><div style="font-size:11.5px;color:var(--muted);margin-top:2px">R$ ${i.price.toFixed(2).replace('.',',')} • ${i.cat}</div></div>
       <div style="font-size:12px;color:var(--accent3)">★ ${(4.2+idx*0.1).toFixed(1)}</div>
-      <button class="btn bp" style="font-size:11px;padding:4px 9px" data-itemname="${i.name.replace(/"/g,'&quot;')}" onclick="sbToast('ok',this.dataset.itemname+' em destaque!')">Destacar</button>
+      <button class="btn bp" style="font-size:11px;padding:4px 9px" data-n="${i.name.replace(/"/g,'&quot;')}" onclick="sbToast('ok',this.dataset.n+' em destaque!')">Destacar</button>
     </div>`).join('');
 }
 
@@ -4753,13 +4753,24 @@ function openAddItemModal(catKeyDefault) {
     const sel = document.getElementById('new-cat');
     if (sel) sel.value = catKeyDefault;
   }
-  // Reset form
+  // Reset form fields
   ['new-name','new-desc','new-ingredients','new-price','new-price-old'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
   const nt = document.getElementById('new-item-type'); if(nt) nt.value='normal';
   const ns = document.getElementById('new-status'); if(ns) ns.value='active';
-  document.querySelectorAll('#emoji-grid .emo-btn').forEach(b=>b.classList.remove('on'));
+  // Reset image preview
+  const t = document.getElementById('new-img-thumb'); if(t){ t.src=''; t.style.display='none'; }
+  const p2 = document.getElementById('new-img-placeholder'); if(p2) p2.style.display='flex';
+  const c2 = document.getElementById('new-img-change'); if(c2) c2.style.display='none';
+  const pr = document.getElementById('new-img-preview'); if(pr) pr.style.border='2px dashed var(--border)';
+  // Reset destaque and grupos
+  const nd = document.getElementById('new-destaque'); if(nd) nd.classList.remove('on');
+  const ngl = document.getElementById('new-grupos-list'); if(ngl) ngl.innerHTML='';
+  // Reset emoji grid (guarded)
+  try { document.querySelectorAll('#emoji-grid .emo-btn').forEach(b=>b.classList.remove('on')); } catch(e){}
+  togglePizzaOptions('new');
+  _newItemImageFile = null;
   openModal('modal-add-item');
 }
 
