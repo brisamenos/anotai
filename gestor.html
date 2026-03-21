@@ -1829,6 +1829,16 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
     <h2 style="margin-bottom:18px">➕ Novo Item do Cardápio</h2>
 
     <div class="form-row"><label class="form-label">Nome do item *</label><input class="form-input" id="new-name" placeholder="Ex: X-Tudo Especial"></div>
+
+    <div class="form-row">
+      <label class="form-label">Ícone / Emoji</label>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span id="new-emoji-current" style="font-size:26px;line-height:1;min-width:30px">🍽️</span>
+        <span style="font-size:11px;color:var(--muted)">Clique para selecionar</span>
+      </div>
+      <div id="emoji-grid" class="emoji-grid"></div>
+    </div>
+
     <div class="form-row"><label class="form-label">Descrição</label><textarea class="form-input" id="new-desc" rows="2" placeholder="Descreva o item..."></textarea></div>
     <div class="form-row"><label class="form-label">Ingredientes <span style="color:var(--muted);font-size:10.5px">(separados por vírgula)</span></label><input class="form-input" id="new-ingredients" placeholder="Ex: Pão, Carne, Queijo, Alface, Tomate"></div>
 
@@ -1923,6 +1933,16 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
     <h2 style="margin-bottom:18px">✏️ Editar Item</h2>
 
     <div class="form-row"><label class="form-label">Nome *</label><input class="form-input" id="edit-name"></div>
+
+    <div class="form-row">
+      <label class="form-label">Ícone / Emoji</label>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span id="edit-emoji-current" style="font-size:26px;line-height:1;min-width:30px">🍽️</span>
+        <span style="font-size:11px;color:var(--muted)">Clique para selecionar</span>
+      </div>
+      <div id="edit-emoji-grid" class="emoji-grid"></div>
+    </div>
+
     <div class="form-row"><label class="form-label">Descrição</label><textarea class="form-input" id="edit-desc" rows="2" placeholder="Descreva o item..."></textarea></div>
     <div class="form-row"><label class="form-label">Ingredientes <span style="color:var(--muted);font-size:10.5px">(separados por vírgula)</span></label><input class="form-input" id="edit-ingredients" placeholder="Ex: Pão, Carne, Queijo"></div>
 
