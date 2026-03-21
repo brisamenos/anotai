@@ -473,6 +473,11 @@ function subscribeOrders() {
       }
       if (idx !== -1) {
         if (['entregue','cancelado'].includes(p.new.status)) {
+          // Notifica o gestor quando o CLIENTE cancela o pedido
+          if (p.new.status === 'cancelado') {
+            showToast('❌', `Pedido #${_orderNum(p.new.id)} cancelado pelo cliente — ${p.new.client}`);
+            sendBrowserNotif(`❌ Pedido cancelado pelo cliente`, `#${_orderNum(p.new.id)} — ${p.new.client}`);
+          }
           ordersKanban.splice(idx, 1);
         } else {
           ordersKanban[idx] = mapOrder(p.new);
@@ -1028,9 +1033,6 @@ function nav(id){
   document.querySelector('.sidebar')?.classList.remove('mobile-open');
   const pg=document.getElementById('page-'+id);
   if(pg) pg.classList.add('on');
-  // Reseta scroll ao trocar de aba
-  const _mainEl = document.querySelector('.main');
-  if (_mainEl) _mainEl.scrollTop = 0;
   const sn=document.getElementById('sn-'+id);
   if(sn) sn.classList.add('on');
   closeNotif();
