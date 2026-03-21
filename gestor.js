@@ -2301,6 +2301,7 @@ function openEditItem(id) {
   if (!it) return;
 
   populateCatSelects();
+  buildEditEmojiGrid(it.emoji || '🍽️');
 
   document.getElementById('edit-name').value        = it.name;
   document.getElementById('edit-desc').value        = it.desc || '';
@@ -4739,11 +4740,23 @@ function buildEmojiGrid(){
   g.innerHTML=EMOJIS_PLAIN.map(e=>`<div class="emo-btn" onclick="selEmoji(this,'add')">${e}</div>`).join('');
 }
 
+function buildEditEmojiGrid(currentEmoji){
+  const g=document.getElementById('edit-emoji-grid');
+  if(!g) return;
+  g.innerHTML=EMOJIS_PLAIN.map(e=>`<div class="emo-btn${currentEmoji===e?' on':''}" onclick="selEmoji(this,'edit')">${e}</div>`).join('');
+  const prev=document.getElementById('edit-emoji-current');
+  if(prev) prev.textContent=currentEmoji||'🍽️';
+}
+
 function selEmoji(el, ctx){
   // Only deselect emojis in the same grid context
   const grid = el.closest('.emoji-grid');
   if (grid) grid.querySelectorAll('.emo-btn').forEach(b=>b.classList.remove('on'));
   el.classList.add('on');
+  // Atualiza o preview do emoji selecionado
+  const prevId = ctx === 'edit' ? 'edit-emoji-current' : 'new-emoji-current';
+  const prev = document.getElementById(prevId);
+  if (prev) prev.textContent = el.textContent.trim();
 }
 
 // Open add-item modal and populate category select
