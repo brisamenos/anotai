@@ -1108,7 +1108,11 @@ function nav(id){
   if(id==='configuracoes') _renderConfiguracoes();
   if(id==='saques') { carregarCarteira(); conectarSaquesSSE(); carregarConfigPixGestor(); }
   if(id==='taxa') renderTaxaPage();
-  if(id==='clientes') renderClientesPage();
+  if(id==='clientes') {
+    const pgCheck = document.getElementById('page-clientes');
+    console.log('[NAV] page-clientes encontrada?', !!pgCheck, '| classList:', pgCheck?.className);
+    renderClientesPage();
+  }
   if(id==='meu-plano') renderMeuPlano();
   if(id==='cardapio-publico') {
     const cpPg = document.getElementById('page-cardapio-publico');
@@ -5638,7 +5642,11 @@ function renderClientes() {
 
   const tbody = document.getElementById('cli-tbody');
   if (!tbody) { console.error('[CLIENTES] cli-tbody NÃO encontrado no DOM!'); return; }
+  const pgEl = document.getElementById('page-clientes');
   console.log('[CLIENTES] Renderizando', clientes.length, 'clientes na tabela');
+  console.log('[CLIENTES] page-clientes tem classe on?', pgEl?.classList.contains('on'));
+  console.log('[CLIENTES] page-clientes display:', pgEl ? window.getComputedStyle(pgEl).display : 'N/A');
+  console.log('[CLIENTES] tbody visível?', tbody ? window.getComputedStyle(tbody.closest('table')||tbody).display : 'N/A');
   if (!clientes.length) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted);font-size:13px">${search?'Nenhum cliente encontrado':'Nenhum cliente cadastrado ainda.'}</td></tr>`;
     return;
@@ -5689,6 +5697,8 @@ function renderClientes() {
       return `<tr><td colspan="7" style="color:var(--danger);font-size:11px;padding:8px">Erro ao exibir cliente: ${err.message}</td></tr>`;
     }
   }).join('');
+  console.log('[CLIENTES] tbody.innerHTML length após set:', tbody.innerHTML.length);
+  console.log('[CLIENTES] tbody rows count:', tbody.rows?.length);
 }
 
 function _diasAteAniversario(birthday) {
