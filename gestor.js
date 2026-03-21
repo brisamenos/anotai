@@ -453,20 +453,28 @@ function subscribeOrders() {
       }
       _syncSwState();
     })
-    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, p => {
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, async p => {
       const idx = ordersKanban.findIndex(x => x.id === p.new.id);
       // Pedido PIX confirmado — entra no kanban agora
       if (idx === -1 && p.new.status === 'analise' && p.new.pag === 'pix_mp') {
-        ordersKanban.unshift(mapOrder(p.new));
+        // Se o payload SSE veio incompleto (sem client/items), busca o pedido completo
+        let orderData = p.new;
+        if (!p.new.client || !Array.isArray(p.new.items)) {
+          try {
+            const { data: full } = await sb.from('orders').select('*').eq('id', p.new.id).single();
+            if (full) orderData = full;
+          } catch(e) {}
+        }
+        ordersKanban.unshift(mapOrder(orderData));
         renderKanban();
         playOrderSound();
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
-        const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
-        showToast('💳', `PIX confirmado! Pedido #${_orderNum(p.new.id)} — ${p.new.client}`);
-        sendBrowserNotif(`💳 PIX confirmado! #${_orderNum(p.new.id)}`, `${p.new.client} — ${items}`);
-        if (_autoAcceptOn) setTimeout(() => advanceOrderById(p.new.id), 800);
-        if (_printMode === 'auto') printOrder(mapOrder(p.new));
+        const items = Array.isArray(orderData.items) ? orderData.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
+        showToast('💳', `PIX confirmado! Pedido #${_orderNum(orderData.id)} — ${orderData.client}`);
+        sendBrowserNotif(`💳 PIX confirmado! #${_orderNum(orderData.id)}`, `${orderData.client} — ${items}`);
+        if (_autoAcceptOn) setTimeout(() => advanceOrderById(orderData.id), 800);
+        if (_printMode === 'auto') printOrder(mapOrder(orderData));
         return;
       }
       if (idx !== -1) {
@@ -581,6 +589,36 @@ setInterval(async () => {
             if (o.mesa_num) { _updateMesaOrdersCache(o); _renderMesaPageFromCache(); }
           }
           if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id;
+        }
+        if (houveMudanca) renderKanban();
+      }
+    }
+
+    // 1b. PIX recém-confirmados cujo ID ficou abaixo de _maxKnownOrderId
+    // (o pedido entrou como aguardando_pix, não bumpa _maxKnownOrderId,
+    //  e um pedido normal posterior avança o ponteiro — o PIX ficaria perdido)
+    {
+      const { data: pixNovos } = await sb.from('orders')
+        .select('*')
+        .eq('status', 'analise')
+        .eq('pag', 'pix_mp')
+        .order('id', {ascending: false})
+        .limit(20);
+      if (pixNovos?.length) {
+        let houveMudanca = false;
+        for (const o of pixNovos) {
+          if (!ordersKanban.find(x => x.id === o.id)) {
+            ordersKanban.unshift(mapOrder(o));
+            houveMudanca = true;
+            if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id;
+            playOrderSound();
+            const nc = document.getElementById('notif-count');
+            if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
+            showToast('💳', `PIX confirmado! Pedido #${_orderNum(o.id)} — ${o.client}`);
+            sendBrowserNotif(`💳 PIX confirmado! #${_orderNum(o.id)}`, o.client);
+            if (_autoAcceptOn) setTimeout(() => advanceOrderById(o.id), 800);
+            if (_printMode === 'auto') printOrder(mapOrder(o));
+          }
         }
         if (houveMudanca) renderKanban();
       }
