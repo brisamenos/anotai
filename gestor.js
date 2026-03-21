@@ -5643,10 +5643,12 @@ function renderClientes() {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted);font-size:13px">${search?'Nenhum cliente encontrado':'Nenhum cliente cadastrado ainda.'}</td></tr>`;
     return;
   }
-  tbody.innerHTML = clientes.map(c => {
+  tbody.innerHTML = clientes.map((c, _ci) => {
+    try {
     const anivLabel   = c.birthday ? _formatAniversario(c.birthday, c.isAnivHoje, c.isAnivMes) : '<span style="color:var(--muted)">—</span>';
     const ptsBar      = c.max ? Math.min(100, Math.round((c.pts/c.max)*100)) : 0;
-    const gastoLabel  = c.total_spent > 0 ? `<span style="font-size:12px;font-weight:600;color:var(--success)">R$ ${c.total_spent.toFixed(2).replace('.',',')}</span>` : '<span style="color:var(--muted)">—</span>';
+    const totalSpent  = parseFloat(c.total_spent) || 0;
+    const gastoLabel  = totalSpent > 0 ? `<span style="font-size:12px;font-weight:600;color:var(--success)">R$ ${totalSpent.toFixed(2).replace('.',',')}</span>` : '<span style="color:var(--muted)">—</span>';
     const badge       = c.fromCardapio ? '<span style="font-size:9px;background:rgba(59,130,246,.15);color:var(--accent);padding:1px 6px;border-radius:99px;margin-left:5px;font-weight:600">APP</span>' : '';
     const emailLabel  = c.email ? `<div style="font-size:10.5px;color:var(--muted)">${c.email}</div>` : '';
     return `<tr>
@@ -5682,6 +5684,10 @@ function renderClientes() {
         </div>
       </td>
     </tr>`;
+    } catch(err) {
+      console.error('[CLIENTES] Erro ao renderizar cliente #' + _ci, JSON.stringify(c), err);
+      return `<tr><td colspan="7" style="color:var(--danger);font-size:11px;padding:8px">Erro ao exibir cliente: ${err.message}</td></tr>`;
+    }
   }).join('');
 }
 
