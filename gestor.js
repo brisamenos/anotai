@@ -243,9 +243,6 @@ async function loadAllData(silent = false) {
     if (!_rtConnected) subscribeOrders();
     renderKanban();
     renderCaixa();
-    renderGestor();
-    renderTable();
-    populateCatSelects();
     // Sincroniza SW com os dados carregados
     setTimeout(() => _initSwState(), 500);
   } catch(e) {
@@ -1199,7 +1196,7 @@ function openOrderDetail(id){
   const bdg=o.status==='analise'?['badge-analise','Em análise']:o.status==='producao'?['badge-producao','Em produção']:['badge-pronto','Pronto para entrega'];
   const el=document.getElementById('od-status-badge');
   el.className='od-status-badge '+bdg[0];el.textContent=bdg[1];
-  document.getElementById('od-timer').innerHTML=`<svg width='13' height='13' viewBox='0 0 16 16' fill='none' style='display:inline-block;vertical-align:middle' xmlns='http://www.w3.org/2000/svg'><circle cx='8' cy='9' r='5' stroke='currentColor' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/><path d='M8 6.5V9l1.5 1.5' stroke='currentColor' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/><path d='M6 2h4M8 2v2' stroke='currentColor' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg> `+o.time;
+  document.getElementById('od-timer').innerHTML='<svg width=\"13\" height=\"13\" viewBox=\"0 0 16 16\" fill=\"none\" style=\"display:inline-block;vertical-align:middle\" xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"8\" cy=\"9\" r=\"5\" stroke=\"currentColor\" stroke-width=\"1.4\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M8 6.5V9l1.5 1.5\" stroke=\"currentColor\" stroke-width=\"1.4\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M6 2h4M8 2v2\" stroke=\"currentColor\" stroke-width=\"1.4\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg> '+o.time;
   document.getElementById('od-client-name').textContent=o.client;
   document.getElementById('od-client-phone').textContent=o.phone||o.addr||'';
   document.getElementById('od-items-list').innerHTML=o.items.map(item=>`
@@ -1409,7 +1406,7 @@ function printOrderDetail(){
   const id=window._currentDetailId;
   const o=ordersKanban.find(x=>x.id===id);
   if(!o) return;
-  showToast(_ICON_SAV,'Imprimindo comanda do pedido #'+_orderNum(id));
+  showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><rect x=&quot;3&quot; y=&quot;2&quot; width=&quot;10&quot; height=&quot;4&quot; rx=&quot;1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><rect x=&quot;3&quot; y=&quot;10&quot; width=&quot;10&quot; height=&quot;4&quot; rx=&quot;1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><circle cx=&quot;12&quot; cy=&quot;8&quot; r=&quot;.6&quot; fill=&quot;currentColor&quot;/></svg>','Imprimindo comanda do pedido #'+_orderNum(id));
 }
 
 // ─────────────────────────────────────────
@@ -1484,14 +1481,14 @@ const MODELOS_CARDAPIO = {
         name: 'tamanhos',
         type: 'Itens principais',
         itens: [
-          { name: 'Açaí 300ml',   emoji: '', price: 12.00, description: 'Açaí 300ml — base pura, monte do seu jeito' },
-          { name: 'Açaí 400ml',   emoji: '', price: 15.00, description: 'Açaí 400ml — tamanho ideal para um lanche' },
-          { name: 'Açaí 500ml',   emoji: '', price: 18.00, description: 'Açaí 500ml — generoso e bem servido' },
-          { name: 'Açaí 700ml',   emoji: '', price: 23.00, description: 'Açaí 700ml — o favorito da galera' },
-          { name: 'Açaí 1 Litro', emoji: '', price: 30.00, description: 'Açaí 1 litro — para compartilhar' },
-          { name: 'Tigela P',     emoji: '', price: 14.00, description: 'Tigela pequena de açaí' },
-          { name: 'Tigela M',     emoji: '', price: 20.00, description: 'Tigela média de açaí' },
-          { name: 'Tigela G',     emoji: '', price: 27.00, description: 'Tigela grande de açaí' },
+          { name: 'Açaí 300ml',   emoji: '🍇', price: 12.00, description: 'Açaí 300ml — base pura, monte do seu jeito' },
+          { name: 'Açaí 400ml',   emoji: '🍇', price: 15.00, description: 'Açaí 400ml — tamanho ideal para um lanche' },
+          { name: 'Açaí 500ml',   emoji: '🍇', price: 18.00, description: 'Açaí 500ml — generoso e bem servido' },
+          { name: 'Açaí 700ml',   emoji: '🍇', price: 23.00, description: 'Açaí 700ml — o favorito da galera' },
+          { name: 'Açaí 1 Litro', emoji: '🪣', price: 30.00, description: 'Açaí 1 litro — para compartilhar' },
+          { name: 'Tigela P',     emoji: '🥣', price: 14.00, description: 'Tigela pequena de açaí' },
+          { name: 'Tigela M',     emoji: '🥣', price: 20.00, description: 'Tigela média de açaí' },
+          { name: 'Tigela G',     emoji: '🥣', price: 27.00, description: 'Tigela grande de açaí' },
         ]
       },
       {
@@ -1499,15 +1496,15 @@ const MODELOS_CARDAPIO = {
         name: 'complementos',
         type: 'checklist',
         itens: [
-          { name: 'Granola',          emoji: '', price: 0.00, description: 'Granola crocante' },
-          { name: 'Leite em Pó',      emoji: '', price: 0.00, description: 'Leite em pó' },
-          { name: 'Paçoca',           emoji: '', price: 0.00, description: 'Paçoca triturada' },
-          { name: 'Amendoim',         emoji: '', price: 0.00, description: 'Amendoim torrado' },
-          { name: 'Aveia',            emoji: '', price: 0.00, description: 'Aveia em flocos' },
-          { name: 'Sucrilhos',        emoji: '', price: 0.00, description: 'Sucrilhos crocantes' },
-          { name: 'Coco Ralado',      emoji: '', price: 0.00, description: 'Coco ralado' },
-          { name: 'Confeito',         emoji: '', price: 0.00, description: 'Confeito colorido' },
-          { name: 'Granulado',        emoji: '', price: 0.00, description: 'Granulado de chocolate' },
+          { name: 'Granola',          emoji: '🌾', price: 0.00, description: 'Granola crocante' },
+          { name: 'Leite em Pó',      emoji: '🥛', price: 0.00, description: 'Leite em pó' },
+          { name: 'Paçoca',           emoji: '🥜', price: 0.00, description: 'Paçoca triturada' },
+          { name: 'Amendoim',         emoji: '🥜', price: 0.00, description: 'Amendoim torrado' },
+          { name: 'Aveia',            emoji: '🌾', price: 0.00, description: 'Aveia em flocos' },
+          { name: 'Sucrilhos',        emoji: '🥣', price: 0.00, description: 'Sucrilhos crocantes' },
+          { name: 'Coco Ralado',      emoji: '🥥', price: 0.00, description: 'Coco ralado' },
+          { name: 'Confeito',         emoji: '🍬', price: 0.00, description: 'Confeito colorido' },
+          { name: 'Granulado',        emoji: '🍫', price: 0.00, description: 'Granulado de chocolate' },
         ]
       },
       {
@@ -1515,11 +1512,11 @@ const MODELOS_CARDAPIO = {
         name: 'coberturas',
         type: 'checklist',
         itens: [
-          { name: 'Mel',              emoji: '', price: 0.00, description: 'Mel puro' },
-          { name: 'Leite Condensado', emoji: '', price: 0.00, description: 'Leite condensado' },
-          { name: 'Calda de Morango', emoji: '', price: 0.00, description: 'Calda de morango' },
-          { name: 'Calda de Chocolate', emoji: '', price: 0.00, description: 'Calda de chocolate' },
-          { name: 'Nutella',          emoji: '', price: 3.00, description: 'Nutella — adicional' },
+          { name: 'Mel',              emoji: '🍯', price: 0.00, description: 'Mel puro' },
+          { name: 'Leite Condensado', emoji: '🥛', price: 0.00, description: 'Leite condensado' },
+          { name: 'Calda de Morango', emoji: '🍓', price: 0.00, description: 'Calda de morango' },
+          { name: 'Calda de Chocolate', emoji: '🍫', price: 0.00, description: 'Calda de chocolate' },
+          { name: 'Nutella',          emoji: '🫙', price: 3.00, description: 'Nutella — adicional' },
         ]
       },
       {
@@ -1527,10 +1524,10 @@ const MODELOS_CARDAPIO = {
         name: 'frutas',
         type: 'checklist',
         itens: [
-          { name: 'Morango',  emoji: '', price: 0.00, description: 'Morango fresco' },
-          { name: 'Banana',   emoji: '', price: 0.00, description: 'Banana fatiada' },
-          { name: 'Kiwi',     emoji: '', price: 0.00, description: 'Kiwi fatiado' },
-          { name: 'Uva',      emoji: '', price: 0.00, description: 'Uva sem semente' },
+          { name: 'Morango',  emoji: '🍓', price: 0.00, description: 'Morango fresco' },
+          { name: 'Banana',   emoji: '🍌', price: 0.00, description: 'Banana fatiada' },
+          { name: 'Kiwi',     emoji: '🥝', price: 0.00, description: 'Kiwi fatiado' },
+          { name: 'Uva',      emoji: '🍇', price: 0.00, description: 'Uva sem semente' },
         ]
       },
       {
@@ -1538,9 +1535,9 @@ const MODELOS_CARDAPIO = {
         name: 'adicionais_acai',
         type: 'checklist',
         itens: [
-          { name: 'Chantilly',       emoji: '', price: 2.00, description: 'Chantilly' },
-          { name: 'Sorvete extra',   emoji: '', price: 4.00, description: 'Bola de sorvete extra' },
-          { name: 'Proteína em pó',  emoji: '', price: 5.00, description: 'Scoop de proteína' },
+          { name: 'Chantilly',       emoji: '🍦', price: 2.00, description: 'Chantilly' },
+          { name: 'Sorvete extra',   emoji: '🍨', price: 4.00, description: 'Bola de sorvete extra' },
+          { name: 'Proteína em pó',  emoji: '💪', price: 5.00, description: 'Scoop de proteína' },
         ]
       },
     ]
@@ -1549,27 +1546,27 @@ const MODELOS_CARDAPIO = {
     label: 'Restaurante',
     categorias: [
       { label: 'Entradas', name: 'entradas', itens: [
-        { name: 'Caldo de Feijão',   emoji: '', price: 12.00, description: 'Caldo de feijão temperado' },
-        { name: 'Isca de Frango',    emoji: '', price: 22.00, description: 'Isca de frango empanada' },
-        { name: 'Camarão ao Alho',   emoji: '', price: 35.00, description: 'Camarão ao alho e óleo' },
+        { name: 'Caldo de Feijão',   emoji: '🫕', price: 12.00, description: 'Caldo de feijão temperado' },
+        { name: 'Isca de Frango',    emoji: '🍗', price: 22.00, description: 'Isca de frango empanada' },
+        { name: 'Camarão ao Alho',   emoji: '🦐', price: 35.00, description: 'Camarão ao alho e óleo' },
       ]},
       { label: 'Pratos Principais', name: 'pratos_principais', itens: [
-        { name: 'Frango Grelhado',   emoji: '', price: 35.00, description: 'Frango grelhado com acompanhamentos' },
-        { name: 'Picanha na Brasa',  emoji: '', price: 65.00, description: 'Picanha na brasa 300g' },
-        { name: 'Filé de Peixe',     emoji: '', price: 42.00, description: 'Filé de peixe grelhado' },
-        { name: 'Marmita P',         emoji: '', price: 18.00, description: 'Marmita pequena completa' },
-        { name: 'Marmita G',         emoji: '', price: 25.00, description: 'Marmita grande completa' },
+        { name: 'Frango Grelhado',   emoji: '🍗', price: 35.00, description: 'Frango grelhado com acompanhamentos' },
+        { name: 'Picanha na Brasa',  emoji: '🥩', price: 65.00, description: 'Picanha na brasa 300g' },
+        { name: 'Filé de Peixe',     emoji: '🐟', price: 42.00, description: 'Filé de peixe grelhado' },
+        { name: 'Marmita P',         emoji: '🍱', price: 18.00, description: 'Marmita pequena completa' },
+        { name: 'Marmita G',         emoji: '🍱', price: 25.00, description: 'Marmita grande completa' },
       ]},
       { label: 'Sobremesas', name: 'sobremesas', itens: [
-        { name: 'Pudim',             emoji: '', price: 10.00, description: 'Pudim de leite condensado' },
-        { name: 'Mousse de Maracujá',emoji: '', price: 10.00, description: 'Mousse de maracujá' },
-        { name: 'Sorvete',           emoji: '', price: 8.00, description: '2 bolas de sorvete' },
+        { name: 'Pudim',             emoji: '🍮', price: 10.00, description: 'Pudim de leite condensado' },
+        { name: 'Mousse de Maracujá',emoji: '🍨', price: 10.00, description: 'Mousse de maracujá' },
+        { name: 'Sorvete',           emoji: '🍦', price: 8.00, description: '2 bolas de sorvete' },
       ]},
       { label: 'Bebidas', name: 'bebidas', itens: [
-        { name: 'Suco Natural',   emoji: '', price: 8.00, description: 'Suco da fruta natural 400ml' },
-        { name: 'Refrigerante',   emoji: '', price: 6.00, description: 'Lata 350ml' },
-        { name: 'Água',           emoji: '', price: 3.00, description: 'Água mineral 500ml' },
-        { name: 'Cerveja',        emoji: '', price: 9.00, description: 'Garrafa 600ml' },
+        { name: 'Suco Natural',   emoji: '🥤', price: 8.00, description: 'Suco da fruta natural 400ml' },
+        { name: 'Refrigerante',   emoji: '🥤', price: 6.00, description: 'Lata 350ml' },
+        { name: 'Água',           emoji: '💧', price: 3.00, description: 'Água mineral 500ml' },
+        { name: 'Cerveja',        emoji: '🍺', price: 9.00, description: 'Garrafa 600ml' },
       ]},
     ]
   },
@@ -1577,26 +1574,26 @@ const MODELOS_CARDAPIO = {
     label: 'Pizzaria',
     categorias: [
       { label: 'Pizzas Salgadas', name: 'pizzas_salgadas', itens: [
-        { name: 'Margherita',         emoji: '', price: 48.00, description: 'Molho de tomate, mussarela e manjericão' },
-        { name: 'Calabresa',          emoji: '', price: 52.00, description: 'Molho, mussarela e calabresa' },
-        { name: 'Frango com Catupiry',emoji: '', price: 58.00, description: 'Molho, mussarela, frango e catupiry' },
-        { name: 'Portuguesa',         emoji: '', price: 60.00, description: 'Molho, mussarela, presunto, ovo e pimentão' },
-        { name: 'Quatro Queijos',     emoji: '', price: 65.00, description: 'Molho, mussarela, provolone, parmesão e gorgonzola' },
+        { name: 'Margherita',         emoji: '🍕', price: 48.00, description: 'Molho de tomate, mussarela e manjericão' },
+        { name: 'Calabresa',          emoji: '🍕', price: 52.00, description: 'Molho, mussarela e calabresa' },
+        { name: 'Frango com Catupiry',emoji: '🍕', price: 58.00, description: 'Molho, mussarela, frango e catupiry' },
+        { name: 'Portuguesa',         emoji: '🍕', price: 60.00, description: 'Molho, mussarela, presunto, ovo e pimentão' },
+        { name: 'Quatro Queijos',     emoji: '🍕', price: 65.00, description: 'Molho, mussarela, provolone, parmesão e gorgonzola' },
       ]},
       { label: 'Pizzas Doces', name: 'pizzas_doces', itens: [
-        { name: 'Chocolate com Morango', emoji: '', price: 55.00, description: 'Chocolate ao leite e morangos frescos' },
-        { name: 'Romeu e Julieta',    emoji: '', price: 50.00, description: 'Mussarela e goiabada' },
-        { name: 'Banana com Canela',  emoji: '', price: 48.00, description: 'Banana, canela e leite condensado' },
+        { name: 'Chocolate com Morango', emoji: '🍕', price: 55.00, description: 'Chocolate ao leite e morangos frescos' },
+        { name: 'Romeu e Julieta',    emoji: '🍕', price: 50.00, description: 'Mussarela e goiabada' },
+        { name: 'Banana com Canela',  emoji: '🍕', price: 48.00, description: 'Banana, canela e leite condensado' },
       ]},
       { label: 'Bordas', name: 'bordas', itens: [
-        { name: 'Borda Recheada Catupiry', emoji: '', price: 8.00, description: 'Borda recheada com catupiry' },
-        { name: 'Borda Recheada Cheddar',  emoji: '', price: 8.00, description: 'Borda recheada com cheddar' },
-        { name: 'Borda Simples',           emoji: '', price: 0.00, description: 'Borda tradicional' },
+        { name: 'Borda Recheada Catupiry', emoji: '🧀', price: 8.00, description: 'Borda recheada com catupiry' },
+        { name: 'Borda Recheada Cheddar',  emoji: '🧀', price: 8.00, description: 'Borda recheada com cheddar' },
+        { name: 'Borda Simples',           emoji: '🍞', price: 0.00, description: 'Borda tradicional' },
       ]},
       { label: 'Bebidas', name: 'bebidas_pizza', itens: [
-        { name: 'Refrigerante 2L',    emoji: '', price: 12.00, description: 'Refrigerante 2 litros' },
-        { name: 'Cerveja Long Neck',  emoji: '', price: 10.00, description: 'Cerveja long neck 355ml' },
-        { name: 'Suco de Uva',        emoji: '', price: 12.00, description: 'Suco de uva integral' },
+        { name: 'Refrigerante 2L',    emoji: '🥤', price: 12.00, description: 'Refrigerante 2 litros' },
+        { name: 'Cerveja Long Neck',  emoji: '🍺', price: 10.00, description: 'Cerveja long neck 355ml' },
+        { name: 'Suco de Uva',        emoji: '🍇', price: 12.00, description: 'Suco de uva integral' },
       ]},
     ]
   },
@@ -1604,25 +1601,25 @@ const MODELOS_CARDAPIO = {
     label: 'Hamburgueria',
     categorias: [
       { label: 'Hambúrgueres', name: 'hamburgueres', itens: [
-        { name: 'Classic Burger',    emoji: '', price: 28.00, description: 'Pão, carne 150g, queijo, alface e tomate' },
-        { name: 'Double Smash',      emoji: '', price: 38.00, description: 'Pão brioche, 2 smash patties, queijo american' },
-        { name: 'Chicken Crispy',    emoji: '', price: 32.00, description: 'Pão, frango crocante, cheddar e bacon' },
-        { name: 'Veggie Burger',     emoji: '', price: 30.00, description: 'Pão, hambúrguer de grão-de-bico, rúcula' },
+        { name: 'Classic Burger',    emoji: '🍔', price: 28.00, description: 'Pão, carne 150g, queijo, alface e tomate' },
+        { name: 'Double Smash',      emoji: '🍔', price: 38.00, description: 'Pão brioche, 2 smash patties, queijo american' },
+        { name: 'Chicken Crispy',    emoji: '🍗', price: 32.00, description: 'Pão, frango crocante, cheddar e bacon' },
+        { name: 'Veggie Burger',     emoji: '🥗', price: 30.00, description: 'Pão, hambúrguer de grão-de-bico, rúcula' },
       ]},
       { label: 'Combos', name: 'combos', itens: [
-        { name: 'Combo Clássico',    emoji: '', price: 42.00, description: 'Hambúrguer + Batata M + Refrigerante' },
-        { name: 'Combo Duplo',       emoji: '', price: 55.00, description: 'Hambúrguer Duplo + Batata G + Refrigerante' },
+        { name: 'Combo Clássico',    emoji: '🍔', price: 42.00, description: 'Hambúrguer + Batata M + Refrigerante' },
+        { name: 'Combo Duplo',       emoji: '🍔', price: 55.00, description: 'Hambúrguer Duplo + Batata G + Refrigerante' },
       ]},
       { label: 'Acompanhamentos', name: 'acompanhamentos', itens: [
-        { name: 'Batata Frita P',    emoji: '', price: 12.00, description: 'Porção pequena de batata frita' },
-        { name: 'Batata Frita G',    emoji: '', price: 18.00, description: 'Porção grande de batata frita' },
-        { name: 'Onion Rings',       emoji: '', price: 16.00, description: 'Anéis de cebola empanados' },
-        { name: 'Fritas com Cheddar',emoji: '', price: 22.00, description: 'Batata frita com cheddar e bacon' },
+        { name: 'Batata Frita P',    emoji: '🍟', price: 12.00, description: 'Porção pequena de batata frita' },
+        { name: 'Batata Frita G',    emoji: '🍟', price: 18.00, description: 'Porção grande de batata frita' },
+        { name: 'Onion Rings',       emoji: '🧅', price: 16.00, description: 'Anéis de cebola empanados' },
+        { name: 'Fritas com Cheddar',emoji: '🧀', price: 22.00, description: 'Batata frita com cheddar e bacon' },
       ]},
       { label: 'Bebidas', name: 'bebidas_burger', itens: [
-        { name: 'Milkshake',         emoji: '', price: 20.00, description: 'Milkshake 400ml — vários sabores' },
-        { name: 'Refrigerante Lata', emoji: '', price: 6.00, description: 'Lata 350ml' },
-        { name: 'Água',              emoji: '', price: 4.00, description: 'Água mineral 500ml' },
+        { name: 'Milkshake',         emoji: '🥛', price: 20.00, description: 'Milkshake 400ml — vários sabores' },
+        { name: 'Refrigerante Lata', emoji: '🥤', price: 6.00, description: 'Lata 350ml' },
+        { name: 'Água',              emoji: '💧', price: 4.00, description: 'Água mineral 500ml' },
       ]},
     ]
   },
@@ -1630,25 +1627,25 @@ const MODELOS_CARDAPIO = {
     label: 'Cafeteria',
     categorias: [
       { label: 'Cafés', name: 'cafes', itens: [
-        { name: 'Espresso',      emoji: '', price: 6.00, description: 'Espresso tradicional' },
-        { name: 'Cappuccino',    emoji: '', price: 10.00, description: 'Cappuccino 300ml' },
-        { name: 'Latte',         emoji: '', price: 12.00, description: 'Café latte com leite vaporizado' },
-        { name: 'Café Gelado',   emoji: '', price: 14.00, description: 'Cold brew 400ml' },
+        { name: 'Espresso',      emoji: '☕', price: 6.00, description: 'Espresso tradicional' },
+        { name: 'Cappuccino',    emoji: '☕', price: 10.00, description: 'Cappuccino 300ml' },
+        { name: 'Latte',         emoji: '☕', price: 12.00, description: 'Café latte com leite vaporizado' },
+        { name: 'Café Gelado',   emoji: '🧊', price: 14.00, description: 'Cold brew 400ml' },
       ]},
       { label: 'Sucos e Vitaminas', name: 'sucos', itens: [
-        { name: 'Suco Verde',    emoji: '', price: 12.00, description: 'Couve, maçã e gengibre' },
-        { name: 'Vitamina',      emoji: '', price: 14.00, description: 'Vitamina de banana com aveia' },
-        { name: 'Água de Coco',  emoji: '', price: 8.00, description: 'Água de coco natural' },
+        { name: 'Suco Verde',    emoji: '🥤', price: 12.00, description: 'Couve, maçã e gengibre' },
+        { name: 'Vitamina',      emoji: '🥛', price: 14.00, description: 'Vitamina de banana com aveia' },
+        { name: 'Água de Coco',  emoji: '🥥', price: 8.00, description: 'Água de coco natural' },
       ]},
       { label: 'Salgados', name: 'salgados', itens: [
-        { name: 'Croissant',     emoji: '', price: 12.00, description: 'Croissant de presunto e queijo' },
-        { name: 'Coxinha',       emoji: '', price: 7.00, description: 'Coxinha de frango' },
-        { name: 'Wrap',          emoji: '', price: 18.00, description: 'Wrap de frango grelhado' },
+        { name: 'Croissant',     emoji: '🥐', price: 12.00, description: 'Croissant de presunto e queijo' },
+        { name: 'Coxinha',       emoji: '🍗', price: 7.00, description: 'Coxinha de frango' },
+        { name: 'Wrap',          emoji: '🌯', price: 18.00, description: 'Wrap de frango grelhado' },
       ]},
       { label: 'Doces', name: 'doces_cafe', itens: [
-        { name: 'Brownie',       emoji: '', price: 10.00, description: 'Brownie de chocolate' },
-        { name: 'Muffin',        emoji: '', price: 9.00, description: 'Muffin de blueberry' },
-        { name: 'Cheesecake',    emoji: '', price: 15.00, description: 'Fatia de cheesecake com calda de frutas' },
+        { name: 'Brownie',       emoji: '🍫', price: 10.00, description: 'Brownie de chocolate' },
+        { name: 'Muffin',        emoji: '🧁', price: 9.00, description: 'Muffin de blueberry' },
+        { name: 'Cheesecake',    emoji: '🍰', price: 15.00, description: 'Fatia de cheesecake com calda de frutas' },
       ]},
     ]
   },
@@ -1656,30 +1653,30 @@ const MODELOS_CARDAPIO = {
     label: 'Padaria',
     categorias: [
       { label: 'Pães', name: 'paes', itens: [
-        { name: 'Pão Francês',   emoji: '', price: 0.70, description: 'Pão francês fresquinho — unidade' },
-        { name: 'Pão de Queijo', emoji: '', price: 3.50, description: 'Pão de queijo mineiro — unidade' },
-        { name: 'Pão de Forma',  emoji: '', price: 9.00, description: 'Pão de forma fatiado — pacote' },
-        { name: 'Baguete',       emoji: '', price: 8.00, description: 'Baguete tradicional' },
+        { name: 'Pão Francês',   emoji: '🥖', price: 0.70, description: 'Pão francês fresquinho — unidade' },
+        { name: 'Pão de Queijo', emoji: '🧀', price: 3.50, description: 'Pão de queijo mineiro — unidade' },
+        { name: 'Pão de Forma',  emoji: '🍞', price: 9.00, description: 'Pão de forma fatiado — pacote' },
+        { name: 'Baguete',       emoji: '🥖', price: 8.00, description: 'Baguete tradicional' },
       ]},
       { label: 'Salgados', name: 'salgados_padaria', itens: [
-        { name: 'Esfiha',        emoji: '', price: 5.00, description: 'Esfiha de carne' },
-        { name: 'Enroladinho',   emoji: '', price: 4.50, description: 'Enroladinho de presunto e queijo' },
-        { name: 'Pastel',        emoji: '', price: 6.00, description: 'Pastel de carne' },
-        { name: 'Pizza Pão',     emoji: '', price: 7.00, description: 'Pizza pão individual' },
+        { name: 'Esfiha',        emoji: '🥙', price: 5.00, description: 'Esfiha de carne' },
+        { name: 'Enroladinho',   emoji: '🌯', price: 4.50, description: 'Enroladinho de presunto e queijo' },
+        { name: 'Pastel',        emoji: '🥟', price: 6.00, description: 'Pastel de carne' },
+        { name: 'Pizza Pão',     emoji: '🍕', price: 7.00, description: 'Pizza pão individual' },
       ]},
       { label: 'Doces', name: 'doces_padaria', itens: [
-        { name: 'Sonho',         emoji: '', price: 5.00, description: 'Sonho com recheio de creme' },
-        { name: 'Brigadeirão',   emoji: '', price: 4.50, description: 'Fatia de brigadeirão' },
-        { name: 'Bolo de Cenoura', emoji: '', price: 6.00, description: 'Fatia de bolo de cenoura com cobertura' },
+        { name: 'Sonho',         emoji: '🍩', price: 5.00, description: 'Sonho com recheio de creme' },
+        { name: 'Brigadeirão',   emoji: '🍫', price: 4.50, description: 'Fatia de brigadeirão' },
+        { name: 'Bolo de Cenoura', emoji: '🍰', price: 6.00, description: 'Fatia de bolo de cenoura com cobertura' },
       ]},
       { label: 'Bolos', name: 'bolos', itens: [
-        { name: 'Bolo Festa 1kg',  emoji: '', price: 65.00, description: 'Bolo de festa confeitado 1kg' },
-        { name: 'Bolo de Pote',    emoji: '', price: 15.00, description: 'Bolo de pote individual' },
+        { name: 'Bolo Festa 1kg',  emoji: '🎂', price: 65.00, description: 'Bolo de festa confeitado 1kg' },
+        { name: 'Bolo de Pote',    emoji: '🍮', price: 15.00, description: 'Bolo de pote individual' },
       ]},
       { label: 'Bebidas', name: 'bebidas_padaria', itens: [
-        { name: 'Café Coado',    emoji: '', price: 4.00, description: 'Café coado — copo' },
-        { name: 'Achocolatado',  emoji: '', price: 6.00, description: 'Achocolatado quente ou frio 300ml' },
-        { name: 'Suco de Laranja', emoji: '', price: 7.00, description: 'Suco de laranja natural' },
+        { name: 'Café Coado',    emoji: '☕', price: 4.00, description: 'Café coado — copo' },
+        { name: 'Achocolatado',  emoji: '🥛', price: 6.00, description: 'Achocolatado quente ou frio 300ml' },
+        { name: 'Suco de Laranja', emoji: '🍊', price: 7.00, description: 'Suco de laranja natural' },
       ]},
     ]
   },
@@ -1727,8 +1724,15 @@ function selecionarModelo(tipo) {
 
 // ── Limpa todo o cardápio do tenant ──────────────────
 async function limparCardapioAtual() {
-  if (items.length > 0)      await sb.from('menu_items').delete().neq('id', 0);
-  if (categories.length > 0) await sb.from('categories').delete().neq('id', 0);
+  // Deleta itens primeiro (dependência de categorias)
+  if (items.length > 0) {
+    const { error: errItems } = await sb.from('menu_items').delete().neq('id', 0);
+    if (errItems) throw new Error('Erro ao limpar itens: ' + (errItems.message || errItems));
+  }
+  if (categories.length > 0) {
+    const { error: errCats } = await sb.from('categories').delete().neq('id', 0);
+    if (errCats) throw new Error('Erro ao limpar categorias: ' + (errCats.message || errCats));
+  }
   items.length = 0;
   categories.length = 0;
 }
@@ -1752,31 +1756,33 @@ async function excluirTodoCardapio() {
     await limparCardapioAtual();
     renderGestor();
     renderTable();
+    populateCatSelects();
     sbToast('ok', '🗑️ Cardápio excluído com sucesso.');
   } catch(e) {
     sbToast('err', 'Erro ao excluir: ' + e.message);
-    console.error(e);
+    console.error('[excluirTodoCardapio]', e);
   } finally {
     sbLoading(false);
   }
 }
 
 async function aplicarModelo() {
-  if (!_modeloSelecionado) return;
+  if (!_modeloSelecionado) { sbToast('err', 'Selecione um modelo primeiro'); return; }
   const modelo = MODELOS_CARDAPIO[_modeloSelecionado];
-  if (!modelo) return;
+  if (!modelo) { sbToast('err', 'Modelo inválido'); return; }
 
   const substituir = document.getElementById('toggle-limpar-cardapio')?.classList.contains('on');
 
-  if (substituir) {
+  if (substituir && (categories.length > 0 || items.length > 0)) {
     const ok = confirm(`Tem certeza? Isso vai APAGAR todo o cardápio atual (${categories.length} categoria(s) · ${items.length} item(s)) e substituir pelo modelo "${modelo.label}".`);
     if (!ok) return;
   }
 
   const btn = document.getElementById('btn-aplicar-modelo');
-  btn.disabled = true;
-  btn.innerHTML = '<div class="spin"></div> Aplicando...';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Aplicando...'; }
   sbLoading(true);
+
+  let catsCriadas = 0, itensCriados = 0, erros = 0;
 
   try {
     if (substituir) {
@@ -1786,59 +1792,100 @@ async function aplicarModelo() {
     let catSortOrder = categories.length;
 
     for (const catDef of modelo.categorias) {
+      // ── Inserir categoria ──────────────────────────
       const { data: catData, error: catErr } = await sb.from('categories').insert({
-        name: catDef.name,
-        label: catDef.label,
-        type: catDef.type || 'Itens principais',
-        promo: false,
+        name:       catDef.name,
+        label:      catDef.label,
+        type:       catDef.type || 'Itens principais',
+        promo:      false,
         sort_order: ++catSortOrder
       }).select().single();
 
-      if (catErr) { console.error('Erro ao criar cat:', catErr); continue; }
+      if (catErr || !catData) {
+        erros++;
+        console.error('[modelo] Erro ao criar categoria:', catDef.name, catErr);
+        sbToast('err', `Erro ao criar categoria "${catDef.label}": ${catErr?.message || 'resposta inválida'}`);
+        continue; // tenta a próxima categoria
+      }
 
+      catsCriadas++;
       categories.push({
-        id: catData.id, name: catData.name, label: catData.label,
-        type: catData.type, promo: false, open: false
+        id:    catData.id,
+        name:  catData.name,
+        label: catData.label || catDef.label,
+        type:  catData.type  || catDef.type || 'Itens principais',
+        promo: false,
+        open:  false
       });
 
-      for (const itemDef of catDef.itens) {
+      // ── Inserir itens da categoria ─────────────────
+      const itensDef = catDef.itens || [];
+      for (const itemDef of itensDef) {
         const { data: itemData, error: itemErr } = await sb.from('menu_items').insert({
-          emoji:       itemDef.emoji,
-          name:        itemDef.name,
-          description: itemDef.description,
-          price:       itemDef.price,
-          price_old:   null,
-          cat:         catData.label,
-          cat_key:     catData.name,
-          item_type:   'normal',
-          allow_half:  false,
-          max_flavors: 1,
-          promo:       false,
-          status:      'active',
-          days:        [1,1,1,1,1,1,1],
-          ingredients: []
+          emoji:        itemDef.emoji       || '🍽️',
+          name:         itemDef.name,
+          description:  itemDef.description || '',
+          price:        parseFloat(itemDef.price) || 0,
+          price_old:    null,
+          cat:          catData.label,
+          cat_key:      catData.name,
+          item_type:    'normal',
+          allow_half:   false,
+          max_flavors:  1,
+          promo:        false,
+          destaque:     false,
+          status:       'active',
+          days:         [1,1,1,1,1,1,1],
+          ingredients:  [],
+          custom_groups: []
         }).select().single();
 
-        if (itemErr) { console.error('Erro ao criar item:', itemErr); continue; }
+        if (itemErr || !itemData) {
+          erros++;
+          console.error('[modelo] Erro ao criar item:', itemDef.name, itemErr);
+          continue;
+        }
+
+        itensCriados++;
         items.push(mapItem(itemData));
       }
     }
 
+    // Fecha modal e reseta estado
     closeModal('modal-modelos');
-    // Reset toggle
     document.getElementById('toggle-limpar-cardapio')?.classList.remove('on');
+    document.getElementById('modelos-aviso').style.display    = 'none';
+    document.getElementById('modelo-preview').style.display   = 'none';
+    document.getElementById('btn-aplicar-modelo').style.display = 'none';
+    // Reseta seleção visual dos cards
+    document.querySelectorAll('.modelo-card').forEach(c => {
+      c.style.borderColor = 'var(--border)';
+      c.style.background  = 'var(--surface2)';
+    });
+
     renderGestor();
     renderTable();
-    sbToast('ok', `✅ Modelo "${modelo.label}" aplicado com ${modelo.categorias.length} categorias!`);
+    populateCatSelects();
+
+    if (erros > 0) {
+      sbToast('err', `⚠️ Modelo aplicado com ${erros} erro(s). ${catsCriadas} cat · ${itensCriados} itens criados.`);
+    } else {
+      sbToast('ok', `✅ Modelo "${modelo.label}" aplicado! ${catsCriadas} categorias · ${itensCriados} itens criados.`);
+    }
 
   } catch(e) {
     sbToast('err', 'Erro ao aplicar modelo: ' + e.message);
-    console.error(e);
+    console.error('[aplicarModelo]', e);
+    // Mesmo em caso de erro grave, renderiza o que foi criado
+    renderGestor();
+    renderTable();
   } finally {
     sbLoading(false);
-    btn.disabled = false;
-    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.4"/><path d="M9 2v4h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg> Aplicar modelo`;
     _modeloSelecionado = null;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.4"/><path d="M9 2v4h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg> Aplicar modelo`;
+    }
   }
 }
 
@@ -1906,16 +1953,15 @@ async function importarCardapio(inputEl) {
     return;
   }
 
-  // Valida estrutura mínima
   if (!parsed?.categorias || !Array.isArray(parsed.categorias)) {
-    sbToast('err', 'Arquivo não reconhecido — estrutura inválida');
+    sbToast('err', 'Arquivo não reconhecido — falta a chave "categorias"');
     return;
   }
 
   const total = parsed.categorias.reduce((s, c) => s + (c.itens?.length || 0), 0);
 
   const substituir = categories.length > 0 && confirm(
-    `Deseja SUBSTITUIR o cardápio atual?\n\nAtual: ${categories.length} categoria(s) · ${items.length} item(s)\nImportando: ${parsed.categorias.length} categoria(s) · ${total} item(s)\n\nClique OK para substituir ou Cancelar para adicionar ao existente.`
+    `Deseja SUBSTITUIR o cardápio atual?\n\nAtual: ${categories.length} categoria(s) · ${items.length} item(s)\nImportando: ${parsed.categorias.length} categoria(s) · ${total} item(s)\n\nOK = substituir | Cancelar = adicionar ao existente.`
   );
 
   closeModal('modal-modelos');
@@ -1931,7 +1977,7 @@ async function importarCardapio(inputEl) {
     let catSortOrder = categories.length;
 
     for (const catDef of parsed.categorias) {
-      if (!catDef.name || !catDef.label) continue;
+      if (!catDef.name || !catDef.label) { erros++; continue; }
 
       const { data: catData, error: catErr } = await sb.from('categories').insert({
         name:       catDef.name,
@@ -1941,36 +1987,36 @@ async function importarCardapio(inputEl) {
         sort_order: ++catSortOrder
       }).select().single();
 
-      if (catErr) { console.error('Erro ao criar cat:', catErr); erros++; continue; }
+      if (catErr || !catData) { console.error('[importar] cat:', catErr); erros++; continue; }
       catsCriadas++;
-
       categories.push({
         id: catData.id, name: catData.name, label: catData.label,
         type: catData.type, promo: catData.promo || false, open: false
       });
 
-      const itens = catDef.itens || [];
-      for (const itemDef of itens) {
-        if (!itemDef.name) continue;
+      for (const itemDef of (catDef.itens || [])) {
+        if (!itemDef.name) { erros++; continue; }
 
         const { data: itemData, error: itemErr } = await sb.from('menu_items').insert({
-          emoji:       itemDef.emoji       || '🍽️',
-          name:        itemDef.name,
-          description: itemDef.description || '',
-          price:       parseFloat(itemDef.price) || 0,
-          price_old:   itemDef.price_old   || null,
-          cat:         catData.label,
-          cat_key:     catData.name,
-          item_type:   itemDef.item_type   || 'normal',
-          allow_half:  itemDef.allow_half  || false,
-          max_flavors: itemDef.max_flavors || 1,
-          promo:       false,
-          status:      itemDef.status      || 'active',
-          days:        itemDef.days        || [1,1,1,1,1,1,1],
-          ingredients: itemDef.ingredients || []
+          emoji:         itemDef.emoji         || '🍽️',
+          name:          itemDef.name,
+          description:   itemDef.description   || '',
+          price:         parseFloat(itemDef.price) || 0,
+          price_old:     itemDef.price_old      || null,
+          cat:           catData.label,
+          cat_key:       catData.name,
+          item_type:     itemDef.item_type      || 'normal',
+          allow_half:    itemDef.allow_half     || false,
+          max_flavors:   itemDef.max_flavors    || 1,
+          promo:         false,
+          destaque:      false,
+          status:        itemDef.status         || 'active',
+          days:          itemDef.days           || [1,1,1,1,1,1,1],
+          ingredients:   itemDef.ingredients    || [],
+          custom_groups: itemDef.custom_groups  || []
         }).select().single();
 
-        if (itemErr) { console.error('Erro ao criar item:', itemErr); erros++; continue; }
+        if (itemErr || !itemData) { console.error('[importar] item:', itemErr); erros++; continue; }
         itensCriados++;
         items.push(mapItem(itemData));
       }
@@ -1978,12 +2024,14 @@ async function importarCardapio(inputEl) {
 
     renderGestor();
     renderTable();
-    const msg = `✅ Importado: ${catsCriadas} categoria(s) · ${itensCriados} item(s)` + (erros ? ` · ${erros} erro(s)` : '');
-    sbToast('ok', msg);
+    populateCatSelects();
+    const msg = `✅ Importado: ${catsCriadas} categoria(s) · ${itensCriados} item(s)` + (erros ? ` · ⚠️ ${erros} erro(s)` : '');
+    sbToast(erros ? 'err' : 'ok', msg);
 
   } catch(e) {
     sbToast('err', 'Erro ao importar: ' + e.message);
-    console.error(e);
+    console.error('[importarCardapio]', e);
+    renderGestor();
   } finally {
     sbLoading(false);
   }
@@ -2097,24 +2145,47 @@ async function deleteCatById(id) {
 }
 
 async function addCategory() {
-  const name = document.getElementById('cat-name-input').value.trim();
-  if (!name) { sbToast('err','Informe o nome da categoria'); return; }
+  const nameEl = document.getElementById('cat-name-input');
+  const typeEl = document.getElementById('cat-type-input');
+  const name   = nameEl ? nameEl.value.trim() : '';
+  const type   = typeEl ? typeEl.value : 'Itens principais';
+
+  if (!name) { sbToast('err', 'Informe o nome da categoria'); return; }
+
+  // Verifica se já existe categoria com esse nome neste tenant
+  const duplicada = categories.find(c => c.name.toLowerCase() === name.toLowerCase());
+  if (duplicada) { sbToast('err', `Já existe uma categoria chamada "${name}"`); return; }
+
   sbLoading(true);
   const { data, error } = await sb.from('categories').insert({
-    name: name.toLowerCase(), label: name,
-    type: 'Itens principais', promo: false,
+    name:       name.toLowerCase().replace(/\s+/g, '_'),
+    label:      name,
+    type:       type || 'Itens principais',
+    promo:      false,
     sort_order: categories.length + 1
   }).select().single();
   sbLoading(false);
-  if (error) { sbToast('err','Erro ao criar categoria'); console.error(error); return; }
+
+  if (error || !data) {
+    sbToast('err', 'Erro ao criar categoria: ' + (error?.message || 'resposta inválida'));
+    console.error('[addCategory]', error);
+    return;
+  }
+
   categories.push({
-    id: data.id, name: data.name, label: data.label || data.name,
-    type: data.type || 'Itens principais', promo: false, open: false
+    id:    data.id,
+    name:  data.name,
+    label: data.label || name,
+    type:  data.type  || type,
+    promo: false,
+    open:  false
   });
+
   closeModal('modal-add-cat');
-  document.getElementById('cat-name-input').value = '';
+  if (nameEl) nameEl.value = '';
   renderGestor();
-  sbToast('ok','Categoria criada!');
+  populateCatSelects();
+  sbToast('ok', `Categoria "${name}" criada!`);
 }
 
 function handleGestorAction(val){
@@ -2232,68 +2303,79 @@ function populateCatSelects() {
 
 async function addItem() {
   const name = document.getElementById('new-name').value.trim();
-  if (!name) { sbToast('err','Informe o nome do item'); return; }
+  if (!name) { sbToast('err', 'Informe o nome do item'); return; }
+
   const price    = parseFloat(document.getElementById('new-price').value) || 0;
   const priceOld = parseFloat(document.getElementById('new-price-old').value) || null;
   const catEl    = document.getElementById('new-cat');
   const catKey   = catEl ? catEl.value : '';
   const catLabel = catEl ? (catEl.options[catEl.selectedIndex]?.text || catKey) : catKey;
   const selEmo   = document.querySelector('#emoji-grid .emo-btn.on');
-  const emoji    = selEmo ? selEmo.textContent.trim() : '🍽️';
+  const emoji    = (selEmo ? selEmo.textContent.trim() : '') || '🍽️';
   const desc     = document.getElementById('new-desc').value.trim();
   const ingrRaw  = document.getElementById('new-ingredients').value.trim();
-  const ingredients = ingrRaw ? ingrRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
-  const itemType  = document.getElementById('new-item-type').value;
-  const allowHalf = itemType === 'pizza' && document.getElementById('new-meio-meio').classList.contains('on');
-  const maxFlavors= itemType === 'pizza' ? (parseInt(document.getElementById('new-max-flavors').value) || 1) : 1;
-  const status    = document.getElementById('new-status').value;
-  const destaque  = document.getElementById('new-destaque')?.classList.contains('on') || false;
+  const ingredients  = ingrRaw ? ingrRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const itemType     = document.getElementById('new-item-type').value || 'normal';
+  const allowHalf    = itemType === 'pizza' && document.getElementById('new-meio-meio')?.classList.contains('on');
+  const maxFlavors   = itemType === 'pizza' ? (parseInt(document.getElementById('new-max-flavors')?.value) || 1) : 1;
+  const status       = document.getElementById('new-status').value || 'active';
+  const destaque     = document.getElementById('new-destaque')?.classList.contains('on') || false;
   const customGroups = readGrupos('new');
 
-  if (!catKey) { sbToast('err','Selecione uma categoria'); return; }
+  if (!catKey) { sbToast('err', 'Selecione uma categoria'); return; }
+  if (price < 0) { sbToast('err', 'Preço inválido'); return; }
 
   sbLoading(true);
   const { data, error } = await sb.from('menu_items').insert({
-    emoji, name,
-    cat: catLabel, cat_key: catKey,
-    price, price_old: priceOld,
-    description: desc, ingredients, item_type: itemType,
-    allow_half: allowHalf, max_flavors: maxFlavors,
-    promo: destaque, destaque, custom_groups: customGroups, status,
+    emoji,
+    name,
+    cat:          catLabel,
+    cat_key:      catKey,
+    price,
+    price_old:    priceOld,
+    description:  desc,
+    ingredients,
+    item_type:    itemType,
+    allow_half:   allowHalf,
+    max_flavors:  maxFlavors,
+    promo:        destaque,
+    destaque,
+    custom_groups: customGroups,
+    status,
     days: [1,1,1,1,1,1,1]
   }).select().single();
   sbLoading(false);
 
-  if (error) { sbToast('err','Erro ao salvar item'); console.error(error); return; }
+  if (error || !data) {
+    sbToast('err', 'Erro ao salvar item: ' + (error?.message || 'resposta inválida do servidor'));
+    console.error('[addItem]', error);
+    return;
+  }
 
-  // Upload image if selected
+  // Upload de imagem se selecionada
   if (_newItemImageFile) {
     try {
       const url = await uploadItemImage(_newItemImageFile, data.id);
       await sb.from('menu_items').update({ image_url: url }).eq('id', data.id);
       data.image_url = url;
-    } catch(e) { sbToast('err','Item criado mas erro ao enviar foto'); }
+    } catch(e) { sbToast('err', 'Item criado, mas erro ao enviar foto'); }
     _newItemImageFile = null;
   }
 
   items.push(mapItem(data));
 
-  // Reset form
+  // Reset do formulário
   ['new-name','new-desc','new-ingredients','new-price','new-price-old'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
-  // Reset image preview
-  const t = document.getElementById('new-img-thumb'); if(t){ t.src=''; t.style.display='none'; }
-  const p = document.getElementById('new-img-placeholder'); if(p) p.style.display='flex';
-  const c = document.getElementById('new-img-change'); if(c) c.style.display='none';
-  const pr = document.getElementById('new-img-preview'); if(pr) pr.style.border='2px dashed var(--border)';
-  document.getElementById('new-item-type').value = 'normal';
-  document.getElementById('new-status').value = 'active';
-  const _nd = document.getElementById('new-destaque'); if(_nd) _nd.classList.remove('on');
-  const _ngl = document.getElementById('new-grupos-list'); if(_ngl) _ngl.innerHTML='';
-  // Reset emoji preview
-  try { document.querySelectorAll('#emoji-grid .emo-btn').forEach(b=>b.classList.remove('on')); } catch(e){}
-  const _nec2 = document.getElementById('new-emoji-current'); if(_nec2) _nec2.textContent = '🍽️';
+  const t  = document.getElementById('new-img-thumb');        if(t)  { t.src = ''; t.style.display = 'none'; }
+  const p2 = document.getElementById('new-img-placeholder');  if(p2) p2.style.display = 'flex';
+  const c2 = document.getElementById('new-img-change');        if(c2) c2.style.display = 'none';
+  const pr = document.getElementById('new-img-preview');       if(pr) pr.style.border  = '2px dashed var(--border)';
+  const ni = document.getElementById('new-item-type');         if(ni) ni.value = 'normal';
+  const ns = document.getElementById('new-status');            if(ns) ns.value = 'active';
+  const nd = document.getElementById('new-destaque');          if(nd) nd.classList.remove('on');
+  const ng = document.getElementById('new-grupos-list');       if(ng) ng.innerHTML = '';
   togglePizzaOptions('new');
 
   closeModal('modal-add-item');
@@ -2307,7 +2389,6 @@ function openEditItem(id) {
   if (!it) return;
 
   populateCatSelects();
-  buildEditEmojiGrid(it.emoji || '🍽️');
 
   document.getElementById('edit-name').value        = it.name;
   document.getElementById('edit-desc').value        = it.desc || '';
@@ -2361,49 +2442,64 @@ function selectEditEmoji(el, emoji) {
 
 async function saveEditItem() {
   const it = items.find(i => i.id === editingId);
-  if (!it) return;
+  if (!it) { sbToast('err', 'Item não encontrado'); return; }
 
-  it.name        = document.getElementById('edit-name').value.trim();
+  const novoNome = document.getElementById('edit-name').value.trim();
+  if (!novoNome) { sbToast('err', 'Informe o nome do item'); return; }
+
+  it.name        = novoNome;
   it.desc        = document.getElementById('edit-desc').value.trim();
   it.price       = parseFloat(document.getElementById('edit-price').value) || it.price;
   it.priceOld    = parseFloat(document.getElementById('edit-price-old').value) || null;
-  it.catKey      = document.getElementById('edit-cat').value;
   const catEl    = document.getElementById('edit-cat');
+  it.catKey      = catEl ? catEl.value : it.catKey;
   it.cat         = catEl ? (catEl.options[catEl.selectedIndex]?.text || it.catKey) : it.catKey;
-  it.status      = document.getElementById('edit-status').value;
+  it.status      = document.getElementById('edit-status')?.value || it.status;
   const ingrRaw  = document.getElementById('edit-ingredients').value;
-  it.ingredients = ingrRaw ? ingrRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
-  it.itemType   = document.getElementById('edit-item-type').value;
-  const meioEl  = document.getElementById('edit-meio-meio');
-  it.allowHalf  = it.itemType === 'pizza' && meioEl && meioEl.classList.contains('on');
-  it.maxFlavors = it.itemType === 'pizza' ? (parseInt(document.getElementById('edit-max-flavors').value) || 1) : 1;
-  it.destaque     = document.getElementById('edit-destaque')?.classList.contains('on') || false;
+  it.ingredients = ingrRaw ? ingrRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+  it.itemType    = document.getElementById('edit-item-type')?.value || 'normal';
+  const meioEl   = document.getElementById('edit-meio-meio');
+  it.allowHalf   = it.itemType === 'pizza' && meioEl && meioEl.classList.contains('on');
+  it.maxFlavors  = it.itemType === 'pizza' ? (parseInt(document.getElementById('edit-max-flavors')?.value) || 1) : 1;
+  it.destaque    = document.getElementById('edit-destaque')?.classList.contains('on') || false;
   it.customGroups = readGrupos('edit');
 
-  const selEmo   = document.querySelector('#edit-emoji-grid .emo-btn.on');
-  if (selEmo) it.emoji = selEmo.textContent.trim();
-
-  if (!it.name) { sbToast('err','Informe o nome do item'); return; }
+  const selEmo = document.querySelector('#edit-emoji-grid .emo-btn.on');
+  if (selEmo && selEmo.textContent.trim()) it.emoji = selEmo.textContent.trim();
 
   sbLoading(true);
   const { error } = await sb.from('menu_items').update({
-    name: it.name, description: it.desc,
-    price: it.price, price_old: it.priceOld || null,
-    cat: it.cat, cat_key: it.catKey, status: it.status,
-    ingredients: it.ingredients, item_type: it.itemType, allow_half: it.allowHalf, max_flavors: it.maxFlavors,
-    emoji: it.emoji, destaque: it.destaque, custom_groups: it.customGroups, promo: it.destaque
+    name:         it.name,
+    description:  it.desc,
+    price:        it.price,
+    price_old:    it.priceOld || null,
+    cat:          it.cat,
+    cat_key:      it.catKey,
+    status:       it.status,
+    emoji:        it.emoji,
+    ingredients:  it.ingredients,
+    item_type:    it.itemType,
+    allow_half:   it.allowHalf,
+    max_flavors:  it.maxFlavors,
+    destaque:     it.destaque,
+    promo:        it.destaque,
+    custom_groups: it.customGroups
   }).eq('id', editingId);
   sbLoading(false);
 
-  if (error) { sbToast('err','Erro ao atualizar item'); console.error(error); return; }
+  if (error) {
+    sbToast('err', 'Erro ao atualizar item: ' + (error.message || 'servidor indisponível'));
+    console.error('[saveEditItem]', error);
+    return;
+  }
 
-  // Upload new image if selected
+  // Upload de nova imagem se selecionada
   if (_editItemImageFile) {
     try {
       const url = await uploadItemImage(_editItemImageFile, editingId);
       await sb.from('menu_items').update({ image_url: url }).eq('id', editingId);
       it.imageUrl = url;
-    } catch(e) { sbToast('err','Item salvo mas erro ao enviar foto'); }
+    } catch(e) { sbToast('err', 'Item salvo, mas erro ao enviar foto'); }
     _editItemImageFile = null;
   }
 
@@ -2413,18 +2509,22 @@ async function saveEditItem() {
 }
 
 async function deleteItem() {
-  // Use inline confirm since native confirm() may be blocked in iframes
   const it = items.find(i => i.id === editingId);
-  const name = it ? it.name : 'este item';
+  if (!it) { sbToast('err', 'Item não encontrado'); return; }
+  const name = it.name;
   if (!await showConfirmDialog(`Excluir "${name}"?`, 'Esta ação não pode ser desfeita.')) return;
   sbLoading(true);
   const { error } = await sb.from('menu_items').delete().eq('id', editingId);
   sbLoading(false);
-  if (error) { sbToast('err','Erro ao excluir item'); console.error(error); return; }
+  if (error) {
+    sbToast('err', 'Erro ao excluir item: ' + (error.message || 'servidor indisponível'));
+    console.error('[deleteItem]', error);
+    return;
+  }
   items = items.filter(i => i.id !== editingId);
   closeModal('modal-edit-item');
   renderTable(); renderGestor(); renderPDV();
-  sbToast('ok','Item excluído do cardápio!');
+  sbToast('ok', `"${name}" removido do cardápio!`);
 }
 
 function showConfirmDialog(title, msg) {
@@ -4567,9 +4667,7 @@ function renderCaixa() {
   document.getElementById('cx-list').innerHTML=movimentos.slice().reverse().map(m=>`
     <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px">
       <div style="width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;background:${m.tipo==='entrada'?'rgba(34,197,94,.12)':'rgba(239,68,68,.12)'}">
-        ${m.tipo==='entrada'
-          ? `<svg width='14' height='14' viewBox='0 0 16 16' fill='none' style='display:inline-block;vertical-align:middle;flex-shrink:0'><path d='M8 13V3M3 8l5-5 5 5' stroke='currentColor' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>`
-          : `<svg width='14' height='14' viewBox='0 0 16 16' fill='none' style='display:inline-block;vertical-align:middle;flex-shrink:0'><path d='M8 3v10M3 8l5 5 5-5' stroke='currentColor' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>`}
+        ${m.tipo==='entrada'?'<svg width=&quot;14&quot; height=&quot;14&quot; viewBox=&quot;0 0 16 16&quot; fill=&quot;none&quot; style=&quot;display:inline-block;vertical-align:middle;flex-shrink:0&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;><path d=&quot;M8 13V3M3 8l5-5 5 5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>':'<svg width=&quot;14&quot; height=&quot;14&quot; viewBox=&quot;0 0 16 16&quot; fill=&quot;none&quot; style=&quot;display:inline-block;vertical-align:middle;flex-shrink:0&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;><path d=&quot;M8 3v10M3 8l5 5 5-5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>'}
       </div>
       <div style="flex:1"><div style="font-size:12.5px;font-weight:600">${m.desc}</div><div style="font-size:11px;color:var(--muted)">${m.pag} • ${m.time}</div></div>
       <div style="font-size:13.5px;font-weight:700;color:${m.tipo==='entrada'?'var(--success)':'var(--danger)'}">${m.tipo==='entrada'?'+':'-'}R$${m.val.toFixed(2).replace('.',',')}</div>
@@ -4748,23 +4846,11 @@ function buildEmojiGrid(){
   g.innerHTML=EMOJIS_PLAIN.map(e=>`<div class="emo-btn" onclick="selEmoji(this,'add')">${e}</div>`).join('');
 }
 
-function buildEditEmojiGrid(currentEmoji){
-  const g=document.getElementById('edit-emoji-grid');
-  if(!g) return;
-  g.innerHTML=EMOJIS_PLAIN.map(e=>`<div class="emo-btn${currentEmoji===e?' on':''}" onclick="selEmoji(this,'edit')">${e}</div>`).join('');
-  const prev=document.getElementById('edit-emoji-current');
-  if(prev) prev.textContent=currentEmoji||'🍽️';
-}
-
 function selEmoji(el, ctx){
   // Only deselect emojis in the same grid context
   const grid = el.closest('.emoji-grid');
   if (grid) grid.querySelectorAll('.emo-btn').forEach(b=>b.classList.remove('on'));
   el.classList.add('on');
-  // Atualiza o preview do emoji selecionado
-  const prevId = ctx === 'edit' ? 'edit-emoji-current' : 'new-emoji-current';
-  const prev = document.getElementById(prevId);
-  if (prev) prev.textContent = el.textContent.trim();
 }
 
 // Open add-item modal and populate category select
@@ -4790,7 +4876,6 @@ function openAddItemModal(catKeyDefault) {
   const ngl = document.getElementById('new-grupos-list'); if(ngl) ngl.innerHTML='';
   // Reset emoji grid (guarded)
   try { document.querySelectorAll('#emoji-grid .emo-btn').forEach(b=>b.classList.remove('on')); } catch(e){}
-  const _nec = document.getElementById('new-emoji-current'); if(_nec) _nec.textContent = '🍽️';
   togglePizzaOptions('new');
   _newItemImageFile = null;
   openModal('modal-add-item');
@@ -4805,7 +4890,7 @@ function clearNotifs(){
   document.getElementById('notif-panel').querySelectorAll('.notif-item').forEach(n=>n.remove());
   const nc=document.getElementById('notif-count');
   nc.textContent='0';nc.style.display='none';
-  closeNotif();showToast(_ICON_OK,'Notificações limpas');
+  closeNotif();showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><circle cx=&quot;8&quot; cy=&quot;8&quot; r=&quot;6&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M5.5 8l2 2 3-3&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>','Notificações limpas');
 }
 
 // ─────────────────────────────────────────
