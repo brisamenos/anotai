@@ -222,19 +222,7 @@ body{
 /* ══ MAIN & PAGES ══════════════════════════════════════════ */
 .main{flex:1;overflow-y:auto;overflow-x:hidden;min-height:0;scroll-behavior:smooth}
 .page{display:none;padding:24px 28px;animation:fadeUp .28s ease;min-height:0;max-width:100%}
-.page.on{display:block}
-/* ══ CARTEIRA: scroll próprio ══════════════════════════ */
-#page-saques{
-  display:none;
-  overflow-y:auto;
-  overflow-x:hidden;
-  height:calc(100dvh - var(--nav-h));
-  padding-bottom:48px;
-}
-#page-saques.on{
-  display:block;
-}
-
+.page.on{display:block;min-height:0;overflow-x:hidden}
 .page.on#page-cardapio-publico{display:flex}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:26px;flex-wrap:wrap;gap:10px}
@@ -437,6 +425,30 @@ td:first-child{padding-left:18px}
 .cat-head{display:flex;align-items:center;gap:10px;padding:13px 16px;cursor:pointer}
 .cat-drag{color:var(--muted);cursor:grab;font-size:18px;padding:0 4px;user-select:none;flex-shrink:0}
 .cat-drag:active{cursor:grabbing}
+.cat-items{border-top:1px solid var(--border)}
+.cat-item-row{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 14px;cursor:pointer;
+  border-bottom:1px solid var(--border);
+  transition:background .14s;
+}
+.cat-item-row:last-child{border-bottom:none}
+.cat-item-row:hover{background:var(--surface2)}
+.cat-item-thumb{
+  width:36px;height:36px;border-radius:7px;
+  background:var(--surface2);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;overflow:hidden;color:var(--muted2);
+}
+.cat-item-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cat-item-price{font-size:11.5px;color:var(--muted);margin-top:1px}
+.cat-add{
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  padding:10px;font-size:12.5px;color:var(--muted);
+  cursor:pointer;transition:all .15s;
+  border-top:1px dashed var(--border);
+}
+.cat-add:hover{color:var(--accent);background:var(--accent-dim)}
 .cat-row.drag-over{border-color:var(--accent)!important;background:var(--accent-dim)}
 .cat-row.dragging{opacity:.4}
 .cat-name{font-weight:700;font-size:14px;flex:1;font-family:'Outfit',sans-serif}
