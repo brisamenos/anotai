@@ -1,9 +1,19 @@
 // ═══════════════════════════════════════════════════════
 // CLIENTE REST — ESTIMA FOOD
 // ═══════════════════════════════════════════════════════
+console.log('[v0] gestor.js iniciando...');
+
 // URL do servidor de automações — carregada do banco
 let WA_SERVER = '';
+
+// Verificar se AppAPI existe
+if (!window.AppAPI) {
+  console.error('[v0] ERRO CRITICO: window.AppAPI nao existe! api-client.js nao carregou.');
+  alert('Erro: API nao carregou. Recarregue a pagina.');
+}
 const sb = window.AppAPI;
+
+console.log('[v0] sb (AppAPI) inicializado:', sb ? 'OK' : 'FALHOU');
 
 // ── Autenticação ──────────────────────────────────────
 let _sessao = null;
@@ -3032,7 +3042,7 @@ async function mesaCancelOrder(id) {
   } catch(e) { sbToast('err', 'Erro ao cancelar: ' + e.message); }
 }
 
-// ─────────────────────────────────────────
+// ──────────────────────��──────────────────
 // ─────────────────────────────────────────
 
 
@@ -6228,7 +6238,7 @@ async function evoCarregarAutomacoesSalvas() {
   }
 }
 
-// ════════════════════════════════════════════════════════
+// ═════════���══════════════════════════════════════════════
 // AGENTE IA
 // ════════════════════════════════════════════════════════
 
@@ -7367,3 +7377,21 @@ function readGrupos(ctx) {
     };
   }).filter(function(g){ return g.nome || g.opcoes.length; });
 }
+
+// ═══════════════════════════════════════════════════════
+// DEBUG: Verificar se funcoes estao no escopo global
+// ═══════════════════════════════════════════════════════
+console.log('[v0] gestor.js carregado completamente!');
+console.log('[v0] Verificando funcoes criticas:');
+console.log('[v0] - openModal:', typeof openModal);
+console.log('[v0] - closeModal:', typeof closeModal);
+console.log('[v0] - openAddItemModal:', typeof openAddItemModal);
+console.log('[v0] - addCategory:', typeof addCategory);
+console.log('[v0] - addItem:', typeof addItem);
+console.log('[v0] - saveEditItem:', typeof saveEditItem);
+
+// Handler global de erros para debug
+window.onerror = function(msg, url, line, col, error) {
+  console.error('[v0] ERRO GLOBAL:', msg, 'em', url, 'linha', line);
+  return false;
+};
