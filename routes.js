@@ -302,21 +302,16 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (rowAtual && rowAtual.status !== novoStatus) {
         db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=? WHERE mp_payment_id=?').run(novoStatus, pd.date_approved || null, String(mpId))
         if (novoStatus === 'aprovado') {
-          log('✅', `PIX APROVADO: R$${rowAtual.valor} tenant=${rowAtual.tenant_id} order=${rowAtual.order_id}`)
+          log('✅', `PIX APROVADO: R$${rowAtual.valor} tenant=${rowAtual.tenant_id}`)
           marcarDirty()
-          // Libera o pedido para o kanban do gestor
+          // Se pedido ainda estava aguardando PIX, libera para o gestor agora
           if (rowAtual.order_id) {
             const pedAtual = db.prepare("SELECT status FROM orders WHERE id=?").get(rowAtual.order_id)
             if (pedAtual?.status === 'aguardando_pix') {
               db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=?").run(rowAtual.order_id)
-              // Busca o pedido completo para o SSE (evita card vazio no kanban)
-              const fullOrder = db.prepare("SELECT * FROM orders WHERE id=?").get(rowAtual.order_id)
-              if (fullOrder) {
-                const items = typeof fullOrder.items === 'string' ? (() => { try { return JSON.parse(fullOrder.items) } catch { return [] } })() : (fullOrder.items || [])
-                sseBroadcast(`orders-rt:${rowAtual.tenant_id}`, `orders:UPDATE`, { ...fullOrder, items, status: 'analise', pag: 'pix_mp' })
-              } else {
-                sseBroadcast(`orders-rt:${rowAtual.tenant_id}`, `orders:UPDATE`, { id: rowAtual.order_id, status: 'analise', pag: 'pix_mp' })
-              }
+              const _fo1 = db.prepare("SELECT * FROM orders WHERE id=?").get(rowAtual.order_id)
+              const _it1 = _fo1 && typeof _fo1.items==='string' ? (() => { try{return JSON.parse(_fo1.items)}catch{return []} })() : (_fo1?.items||[])
+              sseBroadcast(`orders-rt:${rowAtual.tenant_id}`, `orders:UPDATE`, _fo1 ? {..._fo1, items:_it1, status:'analise', pag:'pix_mp'} : { id: rowAtual.order_id, status: 'analise', pag: 'pix_mp' })
             }
           }
         }
@@ -406,14 +401,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
             } else {
               db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=?").run(row.order_id)
             }
-            const newStatus = pedAtual?.status === 'aguardando_pix' ? 'analise' : pedAtual?.status
-            const fullOrder = db.prepare("SELECT * FROM orders WHERE id=?").get(row.order_id)
-            if (fullOrder) {
-              const items = typeof fullOrder.items === 'string' ? (() => { try { return JSON.parse(fullOrder.items) } catch { return [] } })() : (fullOrder.items || [])
-              sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, { ...fullOrder, items, status: newStatus, pag: 'pix_mp' })
-            } else {
-              sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, { id: row.order_id, status: newStatus, pag: 'pix_mp' })
-            }
+            const _ns4 = pedAtual?.status === 'aguardando_pix' ? 'analise' : pedAtual?.status
+            const _fo4 = db.prepare("SELECT * FROM orders WHERE id=?").get(row.order_id)
+            const _it4 = _fo4 && typeof _fo4.items==='string' ? (() => { try{return JSON.parse(_fo4.items)}catch{return []} })() : (_fo4?.items||[])
+            sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, _fo4 ? {..._fo4, items:_it4, status:_ns4, pag:'pix_mp'} : { id: row.order_id, status: _ns4, pag: 'pix_mp' })
           }
         }
       }
@@ -427,11 +418,14 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const tid = req.headers['x-tenant-id']
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
     const totalRecebido = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+    const totalTaxas    = db.prepare("SELECT COALESCE(SUM(taxa),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
     const totalSacado   = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM saques WHERE tenant_id=? AND status IN ('pendente','aprovado','pago')").get(tid)?.v || 0
     const saldoDisp     = Math.max(0, totalRecebido - totalSacado)
     const totalPix      = db.prepare("SELECT COUNT(*) as c FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.c || 0
     const ultimosPix    = db.prepare("SELECT * FROM pagamentos_pix WHERE tenant_id=? ORDER BY created_at DESC LIMIT 10").all(tid)
-    send(res, 200, { saldo_disponivel: saldoDisp, total_recebido: totalRecebido, total_sacado: totalSacado, total_pagamentos: totalPix, ultimos_pagamentos: ultimosPix })
+    let taxaPorPag = 1.00
+    try { const gc = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get(); const g = gc?.ia_config ? JSON.parse(gc.ia_config) : {}; if (g.taxa_pix !== undefined) taxaPorPag = parseFloat(g.taxa_pix) || 0 } catch {}
+    send(res, 200, { saldo_disponivel: saldoDisp, total_recebido: totalRecebido, total_sacado: totalSacado, total_taxas: totalTaxas, taxa_por_pagamento: taxaPorPag, total_pagamentos: totalPix, ultimos_pagamentos: ultimosPix })
     return true
   }
 
