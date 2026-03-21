@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#0c0e14">
 <title>Cardápio</title>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 /* ═══════════════════════════════════════
    TOKENS
@@ -911,7 +912,8 @@ input,textarea{font-family:inherit}
 .rating-success-title{font-family:'Fraunces',serif;font-size:22px;font-weight:900}
 .rating-success-sub{font-size:13.5px;color:var(--muted2);line-height:1.5}
 /* ── PIX QR / Manual ── */
-#pix-qr-img{display:block;margin:0 auto 14px;border:2px solid var(--border);background:#fff;border-radius:10px;width:180px;height:180px}
+#pix-qr-img{display:block;margin:0 auto 14px;border:2px solid var(--border);background:#fff;border-radius:10px;width:180px;height:180px;overflow:hidden}
+#pix-qr-img img,#pix-qr-img canvas{width:180px!important;height:180px!important;display:block}
 #pix-copy-code{flex:1;background:var(--s3);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:10px;color:var(--text);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>
 <script src="/api-client.js"></script>
@@ -1079,7 +1081,7 @@ input,textarea{font-family:inherit}
           <div id="pix-qr-wrap" style="display:none;background:var(--s2);border:1px solid var(--border);border-radius:16px;padding:20px;text-align:center">
             <div style="font-size:13px;font-weight:700;color:var(--muted2);margin-bottom:4px">💳 Pague via PIX</div>
             <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Escaneie o QR Code no app do seu banco</div>
-            <img id="pix-qr-img" src="" alt="QR Code PIX">
+            <div id="pix-qr-img"></div>
             <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Ou copie o código Pix Copia e Cola:</div>
             <div style="display:flex;gap:6px;align-items:stretch;margin-bottom:12px">
               <input id="pix-copy-code" readonly value="">
@@ -3000,12 +3002,8 @@ async function _iniciarFluxoPix(order) {
   document.getElementById('pix-qr-wrap').style.display           = 'none';
   document.getElementById('pix-manual-success-wrap').style.display = 'none';
 
-  // Mostra spinner enquanto gera
-  document.getElementById('pix-status-label').textContent = '⏳ Gerando QR Code...';
-  document.getElementById('pix-qr-wrap').style.display = '';
-
   try {
-    // Busca config e gera QR em paralelo — elimina espera sequencial
+    // Busca config e gera cobrança MP em paralelo
     const [cfgR, pr] = await Promise.all([
       fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } }),
       fetch('/api/pix/criar', {
@@ -3018,14 +3016,18 @@ async function _iniciarFluxoPix(order) {
     const pd  = pr.ok  ? await pr.json()  : null;
 
     if (pr.ok && pd?.qr_code) {
+      // Gera QR Code localmente no browser (sem depender de base64 do MP ou serviço externo)
+      const qrEl = document.getElementById('pix-qr-img');
+      qrEl.innerHTML = '';
+      new QRCode(qrEl, {
+        text:          pd.qr_code,
+        width:         180,
+        height:        180,
+        colorDark:     '#000000',
+        colorLight:    '#ffffff',
+        correctLevel:  QRCode.CorrectLevel.M
+      });
       document.getElementById('pix-qr-wrap').style.display = '';
-      if (pd.qr_code_base64) {
-        document.getElementById('pix-qr-img').src = 'data:image/png;base64,' + pd.qr_code_base64;
-      } else {
-        document.getElementById('pix-qr-img').src =
-          'https://api.qrserver.com/v1/create-qr-code/?size=220x220&ecc=M&data=' +
-          encodeURIComponent(pd.qr_code);
-      }
       document.getElementById('pix-copy-code').value = pd.qr_code;
       document.getElementById('pix-status-label').textContent = '⏳ Aguardando pagamento...';
       document.getElementById('pix-aprovado-msg').style.display = 'none';
@@ -3033,8 +3035,7 @@ async function _iniciarFluxoPix(order) {
       return;
     }
 
-    // Falha no MP — tenta chave manual
-    document.getElementById('pix-qr-wrap').style.display = 'none';
+    // MP falhou — tenta chave manual
     if (cfg.pix_key_manual) {
       document.getElementById('pix-manual-success-wrap').style.display = '';
       document.getElementById('pix-manual-key-show').value = cfg.pix_key_manual;
@@ -3043,9 +3044,10 @@ async function _iniciarFluxoPix(order) {
       return;
     }
 
-    // Nada funcionou — esconde seção
+    // Nada configurado
     sec.style.display = 'none';
   } catch(e) {
+    console.error('_iniciarFluxoPix:', e);
     sec.style.display = 'none';
   }
 }
