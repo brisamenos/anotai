@@ -1367,6 +1367,10 @@ input,textarea{font-family:inherit}
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Itens do pedido</div>
       <div id="track-items-list" style="display:flex;flex-direction:column;gap:4px"></div>
     </div>
+    <div id="track-cancel-wrap" style="display:none;margin:0 20px 28px">
+      <button id="track-cancel-btn" onclick="solicitarCancelamento()" style="width:100%;padding:13px;border-radius:12px;border:1.5px solid rgba(239,68,68,.3);background:rgba(239,68,68,.07);color:#fca5a5;font-size:13px;font-weight:700;cursor:pointer;transition:all .18s;font-family:'DM Sans',sans-serif">✕ Cancelar pedido</button>
+      <div style="font-size:11px;color:var(--muted);text-align:center;margin-top:6px">Só é possível cancelar enquanto aguarda confirmação</div>
+    </div>
   </div>
 </div>
 
@@ -1573,7 +1577,7 @@ function _orderNum(id) { return Math.max(1, id - _orderNumOffset); }
 // ── PIX ──
 let _pixPollTimer    = null;
 let _pixMpId         = null;
-let _pixAtivoGestor  = true;   // false = QR desativado pelo gestor
+let _pixAtivoGestor  = true;
 let _pixKeyManual    = '';
 let _pixKeyManualBanco = '';
 
@@ -1767,7 +1771,6 @@ async function init() {
       }
     }
 
-    // Config PIX — determina se QR Code está ativo ou modo manual
     _pixAtivoGestor    = pixCfgR.pix_ativo_gestor !== false;
     _pixKeyManual      = pixCfgR.pix_key_manual      || '';
     _pixKeyManualBanco = pixCfgR.pix_key_manual_banco || '';
@@ -3236,41 +3239,28 @@ async function _iniciarFluxoPix(order) {
   sec.style.display = '';
   document.getElementById('pix-qr-wrap').style.display            = 'none';
   document.getElementById('pix-manual-success-wrap').style.display = 'none';
-
   try {
-    // ── MODO MANUAL: QR Code desativado pelo gestor ──
-    // Pedido já criado com status 'analise' — chega direto ao gestor
+    // MODO MANUAL: QR desativado — pedido já chegou como analise, só mostra chave
     if (!_pixAtivoGestor) {
       if (_pixKeyManual) {
         document.getElementById('pix-manual-success-wrap').style.display = '';
         document.getElementById('pix-manual-key-show').value             = _pixKeyManual;
         document.getElementById('pix-manual-banco-lbl').textContent      = _pixKeyManualBanco ? `🏦 ${_pixKeyManualBanco}` : '';
         document.getElementById('pix-manual-valor-show').textContent     = 'R$ ' + fmt(order.total);
-      } else {
-        sec.style.display = 'none';
-      }
+      } else { sec.style.display = 'none'; }
       return;
     }
-
-    // ── MODO QR CODE: gera cobrança no Mercado Pago ──
+    // MODO QR CODE: gera cobrança no Mercado Pago
     const pr = await fetch('/api/pix/criar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
       body: JSON.stringify({ valor: order.total, order_id: order.id, client: order.client })
     });
     const pd = pr.ok ? await pr.json() : null;
-
     if (pr.ok && pd?.qr_code) {
       const qrEl = document.getElementById('pix-qr-img');
       qrEl.innerHTML = '';
-      new QRCode(qrEl, {
-        text:          pd.qr_code,
-        width:         180,
-        height:        180,
-        colorDark:     '#000000',
-        colorLight:    '#ffffff',
-        correctLevel:  QRCode.CorrectLevel.M
-      });
+      new QRCode(qrEl, { text: pd.qr_code, width: 180, height: 180, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
       document.getElementById('pix-qr-wrap').style.display = '';
       document.getElementById('pix-copy-code').value = pd.qr_code;
       document.getElementById('pix-status-label').textContent = '⏳ Aguardando pagamento...';
@@ -3278,7 +3268,6 @@ async function _iniciarFluxoPix(order) {
       _startPixPoll(pd.mp_payment_id, order.id);
       return;
     }
-
     // MP falhou — fallback para chave manual
     if (_pixKeyManual) {
       document.getElementById('pix-manual-success-wrap').style.display = '';
@@ -3287,12 +3276,8 @@ async function _iniciarFluxoPix(order) {
       document.getElementById('pix-manual-valor-show').textContent     = 'R$ ' + fmt(order.total);
       return;
     }
-
     sec.style.display = 'none';
-  } catch(e) {
-    console.error('_iniciarFluxoPix:', e);
-    sec.style.display = 'none';
-  }
+  } catch(e) { console.error('_iniciarFluxoPix:', e); sec.style.display = 'none'; }
 }
 
 function resetCart() {
@@ -3370,6 +3355,14 @@ function updateTracker(status) {
   const curIdx = stepIndexFor(status);
   const tl     = document.getElementById('track-timeline');
   if (!tl) return;
+  if (status === 'cancelado') {
+    tl.innerHTML = `<div class="tstep"><div class="tstep-left"><div class="tstep-icon" style="background:rgba(239,68,68,.12);border-color:var(--red)">✕</div></div><div class="tstep-content"><div class="tstep-title" style="color:var(--red)">Pedido cancelado</div><div class="tstep-desc">Este pedido foi cancelado.</div></div></div>`;
+    const cw = document.getElementById('track-cancel-wrap');
+    if (cw) cw.style.display = 'none';
+    document.getElementById('track-fab')?.classList.remove('show');
+    try { localStorage.removeItem('ef_order_' + (_tenantId||'')); } catch(e) {}
+    return;
+  }
   tl.innerHTML = STEPS.map((s, i) => {
     const isDone   = i < curIdx;
     const isActive = i === curIdx;
@@ -3386,6 +3379,8 @@ function updateTracker(status) {
       </div>
     </div>`;
   }).join('');
+  const cancelWrap = document.getElementById('track-cancel-wrap');
+  if (cancelWrap) cancelWrap.style.display = ['analise','aguardando_pix'].includes(status) ? '' : 'none';
 }
 
 function renderTrackItems(items, client) {
@@ -3400,6 +3395,29 @@ function renderTrackItems(items, client) {
 
 function openTracker()  { document.getElementById('track-drawer-bg').classList.add('on'); }
 function closeTracker() { document.getElementById('track-drawer-bg').classList.remove('on'); }
+
+async function solicitarCancelamento() {
+  if (!_trackOrderId) return;
+  if (!confirm('Tem certeza que deseja cancelar este pedido?')) return;
+  const btn = document.getElementById('track-cancel-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Cancelando…'; }
+  try {
+    const res = await fetch(`/api/orders?id=eq.${_trackOrderId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
+      body: JSON.stringify({ status: 'cancelado' })
+    });
+    if (!res.ok) throw new Error('Erro ao cancelar');
+    toast('✅', 'Pedido cancelado.');
+    updateTracker('cancelado');
+    closeTracker();
+    try { localStorage.removeItem('ef_order_' + (_tenantId||'')); } catch(e) {}
+    try { const u=new URL(window.location.href); u.searchParams.delete('acompanhar'); window.history.replaceState({},'',u.toString()); } catch(e) {}
+  } catch(e) {
+    toast('❌', 'Não foi possível cancelar.');
+    if (btn) { btn.disabled = false; btn.textContent = '✕ Cancelar pedido'; }
+  }
+}
 
 // ══════════════════════════════════════════
 //  TOAST
