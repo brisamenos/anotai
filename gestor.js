@@ -4932,28 +4932,38 @@ function clearNotifs(){
 // MODAL
 // ─────────────────────────────────────────
 function openModal(id){
-  console.log('[MODAL] openModal chamado:', id);
   const el = document.getElementById(id);
-  if (!el) { console.error('[MODAL] ERRO — elemento não encontrado:', id); return; }
-  el.classList.add('on');
-  // Checa estilo computado real do browser
-  const cs = window.getComputedStyle(el);
-  console.log('[MODAL] modal aberto OK:', id, '| classes:', el.className);
-  console.log('[MODAL] computed display:', cs.display, '| visibility:', cs.visibility, '| opacity:', cs.opacity, '| z-index:', cs.zIndex, '| position:', cs.position);
-  console.log('[MODAL] bounding rect:', JSON.stringify(el.getBoundingClientRect()));
-  // Checa se algum pai tem transform (quebra position:fixed)
-  let parent = el.parentElement;
-  while (parent && parent !== document.body) {
-    const pcs = window.getComputedStyle(parent);
-    if (pcs.transform !== 'none' || pcs.filter !== 'none' || pcs.willChange !== 'auto') {
-      console.warn('[MODAL] ⚠️ pai com transform/filter:', parent.tagName, parent.id || parent.className, '| transform:', pcs.transform, '| filter:', pcs.filter);
-    }
-    parent = parent.parentElement;
+  if (!el) { console.error('[MODAL] elemento não encontrado:', id); return; }
+  // Teleporta para o body para evitar que overflow:hidden do .main quebre position:fixed
+  if (el.parentElement !== document.body) {
+    el._originalParent = el.parentElement;
+    el._originalNextSibling = el.nextSibling;
+    document.body.appendChild(el);
   }
+  el.classList.add('on');
+  console.log('[MODAL] aberto:', id, '| rect:', JSON.stringify(el.getBoundingClientRect()));
   closeNotif();
 }
+function closeModal(id){
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('on');
+  // Devolve ao lugar original no DOM
+  if (el._originalParent) {
+    if (el._originalNextSibling) {
+      el._originalParent.insertBefore(el, el._originalNextSibling);
+    } else {
+      el._originalParent.appendChild(el);
+    }
+    el._originalParent = null;
+    el._originalNextSibling = null;
+  }
+}
+document.querySelectorAll('.modal-bg').forEach(m=>{
+  m.addEventListener('click',e=>{if(e.target===m) closeModal(m.id);});
+});
 
-// ── Verifica se o CSS do modal foi carregado corretamente ──
+// Verifica CSS do modal no carregamento
 (function _checkModalCSS() {
   const dummy = document.createElement('div');
   dummy.className = 'modal-bg on';
@@ -4962,20 +4972,12 @@ function openModal(id){
   const cs = window.getComputedStyle(dummy);
   console.log('[CSS-CHECK] .modal-bg.on → display:', cs.display, '| z-index:', cs.zIndex, '| position:', cs.position);
   if (cs.display === 'none') {
-    console.error('[CSS-CHECK] ⚠️ PROBLEMA: .modal-bg.on está com display:none! O CSS pode não ter carregado ou está sendo sobrescrito.');
+    console.error('[CSS-CHECK] ⚠️ CSS do modal NÃO carregado corretamente!');
   } else {
-    console.log('[CSS-CHECK] ✅ CSS do modal carregado corretamente');
+    console.log('[CSS-CHECK] ✅ CSS do modal OK');
   }
   document.body.removeChild(dummy);
 })();
-function closeModal(id){
-  console.log('[MODAL] closeModal:', id);
-  const el = document.getElementById(id);
-  if (el) el.classList.remove('on');
-}
-document.querySelectorAll('.modal-bg').forEach(m=>{
-  m.addEventListener('click',e=>{if(e.target===m) m.classList.remove('on');});
-});
 
 // ─────────────────────────────────────────
 // STATUS & SOUND
