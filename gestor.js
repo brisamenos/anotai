@@ -4211,245 +4211,546 @@ function _relGetRange() {
 }
 
 async function renderRelatorios() {
-  const money = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
-  const loading = id => { const el=document.getElementById(id); if(el) el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center">Carregando...</div>'; };
+  const money  = v => 'R$\u00a0' + parseFloat(v||0).toFixed(2).replace('.', ',');
+  const moneyK = v => { const n=parseFloat(v||0); return n>=1000 ? 'R$\u00a0'+Math.round(n/1000)+'k' : money(n); };
+  const pct    = (a,b) => b>0 ? Math.round(a/b*100)+'%' : '0%';
+  const elv    = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
+  const loading = id  => { const e=document.getElementById(id); if(e) e.innerHTML='<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center">Carregando...</div>'; };
 
-  ['rel-month-bar','rel-day-bar','rel-gauges','rel-platforms','rel-areas',
-   'rel-top-clients','rel-entradas-list','rel-produtos-list','rel-sat-list'].forEach(loading);
+  ['rel-line-chart','rel-hour-bar','rel-day-bar','rel-gauges','rel-platforms',
+   'rel-areas','rel-heatmap','rel-month-bar','rel-produtos-list','rel-produtos-fat',
+   'rel-cats-bar','rel-top-clients','rel-top-gastos','rel-novos-clientes',
+   'rel-entradas-list','rel-fat-pag','rel-sat-list','rel-sat-resumo'].forEach(loading);
 
-  const now    = new Date();
-  const range  = _relGetRange();
-  const inicioISO = range.inicio.toISOString();
-  const fimISO    = range.fim.toISOString();
-  // Para o grafico de barras: ano inteiro em modo anual, senao so o periodo
-  const anoIn  = new Date(now.getFullYear(), 0, 1).toISOString();
+  const now      = new Date();
+  const range    = _relGetRange();
+  const iniISO   = range.inicio.toISOString();
+  const fimISO   = range.fim.toISOString();
+  const anoIn    = new Date(now.getFullYear(), 0, 1).toISOString();
+  const lbl30ago = new Date(now - 30*86400000).toISOString();
 
-  // Atualiza label do periodo na tela
+  const periLabel = { diario:'hoje', semanal:'na semana', mensal:'no mês', anual:'no ano' }[_relPeriodo] || 'no período';
   const lblEl = document.getElementById('rel-periodo-label');
-  if (lblEl) lblEl.textContent = range.label;
+  if (lblEl) lblEl.textContent = '📅 ' + range.label;
+
+  // Atualiza botões de período
+  ['diario','semanal','mensal','anual'].forEach(id => {
+    const btn = document.getElementById('rpb-'+id);
+    if (!btn) return;
+    const on = id === _relPeriodo;
+    btn.style.background  = on ? 'var(--accent)' : 'none';
+    btn.style.color       = on ? '#fff'           : 'var(--muted)';
+  });
 
   try {
-    const [{ data: periodOrders }, { data: anoOrdersRaw }, { data: movimentos }] = await Promise.all([
-      sb.from('orders').select('id,status,total,items,mesa_num,addr,pag,garcom_nome,created_at')
-        .gte('created_at', inicioISO).lt('created_at', fimISO).order('created_at', { ascending: true }),
+    const [
+      { data: periodOrdersRaw },
+      { data: anoOrdersRaw },
+      { data: movsFromDB },
+      { data: ratings },
+      { data: allCustomers }
+    ] = await Promise.all([
+      sb.from('orders').select('id,status,total,taxa,items,mesa_num,addr,pag,phone,customer_id,created_at')
+        .gte('created_at', iniISO).lt('created_at', fimISO).order('created_at', { ascending: true }),
       sb.from('orders').select('id,status,total,created_at')
         .gte('created_at', anoIn).order('created_at', { ascending: true }),
-      sb.from('movimentos').select('*').gte('time', range.inicio.toLocaleDateString('pt-BR')).order('id', { ascending: false })
+      sb.from('movimentos').select('*').order('id', { ascending: false }).limit(200),
+      sb.from('ratings').select('*').order('created_at', { ascending: false }),
+      fetch('/api/clientes-gestor', { headers: { 'Content-Type':'application/json', 'x-tenant-id': (() => { try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||'' } catch{return''} })() } }).then(r=>r.ok?r.json():[]).then(d=>({data:d})).catch(()=>({data:[]}))
     ]);
 
+    const mesPedidos = periodOrdersRaw || [];
+    const mesValidos = mesPedidos.filter(o => o.status !== 'cancelado' && o.status !== 'aguardando_pix');
     const allYear    = anoOrdersRaw || [];
-    const mesPedidos = periodOrders || [];
-    const mesValidos = mesPedidos.filter(o => o.status !== 'cancelado');
 
-    // ── KPIs do mês ──
-    const fatMes    = mesValidos.reduce((s,o) => s + parseFloat(o.total||0), 0);
+    // ─── KPIs ───────────────────────────────────────────
+    const fatMes    = mesValidos.reduce((s,o) => s + parseFloat(o.total||0) + parseFloat(o.taxa||0), 0);
     const qtdMes    = mesPedidos.length;
-    const ticket    = qtdMes > 0 ? fatMes / qtdMes : 0;
+    const ticket    = mesValidos.length > 0 ? fatMes / mesValidos.length : 0;
     const cancelMes = mesPedidos.filter(o => o.status === 'cancelado').length;
-    const pctCancel = qtdMes > 0 ? (cancelMes / qtdMes * 100).toFixed(1) : '0';
+    const pctCancel = qtdMes > 0 ? (cancelMes/qtdMes*100).toFixed(1) : '0';
 
-    const elv = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
-    const periodoLabel = { diario:'hoje', semanal:'na semana', mensal:'no mês', anual:'no ano' }[_relPeriodo] || 'no período';
-    elv('rel-kpi-fat',    money(fatMes));
-    elv('rel-kpi-fat-sub', qtdMes + ' pedidos ' + periodoLabel);
-    elv('rel-kpi-ped',    qtdMes);
-    elv('rel-kpi-ped-sub', mesValidos.length + ' confirmados');
-    elv('rel-kpi-ticket', money(ticket));
-    elv('rel-kpi-cancel', cancelMes);
-    elv('rel-kpi-cancel-sub', pctCancel + '% do total');
+    elv('rel-kpi-fat',        moneyK(fatMes));
+    elv('rel-kpi-fat-sub',    mesValidos.length + ' pedidos confirmados ' + periLabel);
+    elv('rel-kpi-ped',        qtdMes);
+    elv('rel-kpi-ped-sub',    mesValidos.length + ' confirmados · ' + cancelMes + ' cancelados');
+    elv('rel-kpi-ticket',     money(ticket));
+    elv('rel-kpi-cancel',     cancelMes);
+    elv('rel-kpi-cancel-sub', pctCancel + '% do total de pedidos');
 
-    // ── Grafico de barras (dinamico por periodo) ──
-    const mb = document.getElementById('rel-month-bar');
-    const chartTitle = mb?.closest('.card')?.querySelector('.card-title');
-    if (mb) {
-      const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-      let barData = [], barLabels = [];
+    // Trends (compara com período anterior simples — positivo/negativo por ticket)
+    const trendFat  = document.getElementById('rel-kpi-fat-trend');
+    const trendPed  = document.getElementById('rel-kpi-ped-trend');
+    if (trendFat) trendFat.innerHTML = fatMes>0
+      ? `<span style="color:var(--success)">↑ ${pct(mesValidos.length,qtdMes||1)} confirmação</span>`
+      : '<span style="color:var(--muted)">Sem dados</span>';
+    if (trendPed) trendPed.innerHTML = mesValidos.length > 0
+      ? `<span style="color:var(--success)">✓ ${mesValidos.length} pedidos válidos</span>`
+      : '<span style="color:var(--muted)">Sem pedidos confirmados</span>';
+
+    // ─── Gráfico de linha (SVG) ─────────────────────────
+    const lineEl = document.getElementById('rel-line-chart');
+    if (lineEl) {
+      const titleEl = document.getElementById('rel-chart-title');
+      let points = [], labels = [], granLabel = '';
       if (_relPeriodo === 'anual') {
-        if (chartTitle) chartTitle.innerHTML = chartTitle.innerHTML.replace(/Faturamento.*/, 'Faturamento mensal (' + range.label + ')');
-        barData   = new Array(12).fill(0);
-        barLabels = months;
-        allYear.filter(o => o.status !== 'cancelado').forEach(o => {
-          barData[new Date(o.created_at).getMonth()] += parseFloat(o.total||0);
+        granLabel = 'Faturamento mensal';
+        points = new Array(12).fill(0);
+        labels = ['J','F','M','A','M','J','J','A','S','O','N','D'];
+        allYear.filter(o=>o.status!=='cancelado').forEach(o=>{
+          points[new Date(o.created_at).getMonth()] += parseFloat(o.total||0);
         });
       } else if (_relPeriodo === 'mensal') {
-        if (chartTitle) chartTitle.innerHTML = chartTitle.innerHTML.replace(/Faturamento.*/, 'Faturamento por semana');
-        barData = [0,0,0,0,0]; barLabels = ['Sem 1','Sem 2','Sem 3','Sem 4','Sem 5'];
-        mesValidos.forEach(o => {
-          const d = new Date(o.created_at).getDate();
-          const w = Math.min(Math.floor((d-1)/7), 4);
-          barData[w] += parseFloat(o.total||0);
+        granLabel = 'Faturamento por semana';
+        const semanas = Math.ceil(new Date(now.getFullYear(),now.getMonth()+1,0).getDate()/7);
+        points = new Array(semanas).fill(0);
+        labels = points.map((_,i)=>'S'+(i+1));
+        mesValidos.forEach(o=>{
+          const w = Math.min(Math.floor((new Date(o.created_at).getDate()-1)/7), semanas-1);
+          points[w] += parseFloat(o.total||0) + parseFloat(o.taxa||0);
         });
       } else if (_relPeriodo === 'semanal') {
-        if (chartTitle) chartTitle.innerHTML = chartTitle.innerHTML.replace(/Faturamento.*/, 'Faturamento por dia');
-        const dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-        barData = [0,0,0,0,0,0,0]; barLabels = dias;
-        mesValidos.forEach(o => {
-          barData[new Date(o.created_at).getDay()] += parseFloat(o.total||0);
-        });
-      } else { // diario — por hora
-        if (chartTitle) chartTitle.innerHTML = chartTitle.innerHTML.replace(/Faturamento.*/, 'Faturamento por hora');
-        barData = new Array(24).fill(0);
-        barLabels = Array.from({length:24}, (_,i) => i % 4 === 0 ? i + 'h' : '');
-        mesValidos.forEach(o => {
-          barData[new Date(o.created_at).getHours()] += parseFloat(o.total||0);
-        });
+        granLabel = 'Faturamento por dia';
+        labels = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+        points = new Array(7).fill(0);
+        mesValidos.forEach(o=>{ points[new Date(o.created_at).getDay()] += parseFloat(o.total||0)+parseFloat(o.taxa||0); });
+      } else {
+        granLabel = 'Faturamento por hora';
+        points = new Array(24).fill(0);
+        labels = Array.from({length:24},(_,i)=>i%6===0?i+'h':'');
+        mesValidos.forEach(o=>{ points[new Date(o.created_at).getHours()] += parseFloat(o.total||0)+parseFloat(o.taxa||0); });
       }
-      const maxM = Math.max(...barData, 1);
-      mb.innerHTML = barLabels.map((lbl, i) => [
-        '<div class="bar-col">',
-        '<div class="bar-val" style="font-size:9px">' + (barData[i]>0 ? 'R$'+Math.round(barData[i]) : '') + '</div>',
-        '<div class="bar-fill" style="height:' + Math.max(Math.round(barData[i]/maxM*100), barData[i]>0?3:1) + '%;' + (barData[i]===0?'opacity:.2':'') + '"></div>',
-        '<div class="bar-label">' + lbl + '</div>',
-        '</div>'
-      ].join('')).join('');
+      if (titleEl) titleEl.textContent = '📈 '+granLabel;
+
+      const maxP = Math.max(...points, 1);
+      const W=580, H=140, pad=10, botPad=24, topPad=10;
+      const n = points.length;
+      const xStep = (W-pad*2)/(n-1||1);
+      const toX = i => pad + i*xStep;
+      const toY = v => topPad + (H-botPad-topPad)*(1-v/maxP);
+      const pathD = points.map((v,i) => (i===0?'M':'L')+toX(i).toFixed(1)+','+toY(v).toFixed(1)).join(' ');
+      const areaD = pathD + ` L${toX(n-1).toFixed(1)},${H-botPad} L${pad},${H-botPad} Z`;
+
+      lineEl.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:100%" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="lg1" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#3b82f6" stop-opacity=".4"/>
+            <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        ${points.map((_,i) => i%Math.max(1,Math.floor(n/5))===0 ? `<line x1="${toX(i).toFixed(1)}" y1="${topPad}" x2="${toX(i).toFixed(1)}" y2="${H-botPad}" stroke="rgba(255,255,255,.04)" stroke-width="1"/>` : '').join('')}
+        <path d="${areaD}" fill="url(#lg1)"/>
+        <path d="${pathD}" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+        ${points.map((v,i)=> v>0 ? `<circle cx="${toX(i).toFixed(1)}" cy="${toY(v).toFixed(1)}" r="3" fill="#3b82f6"/>
+          <text x="${toX(i).toFixed(1)}" y="${(toY(v)-6).toFixed(1)}" font-size="8" text-anchor="middle" fill="#94a3b8">${v>=1000?Math.round(v/1000)+'k':'R$'+Math.round(v)}</text>` : '').join('')}
+        ${labels.map((l,i)=> l ? `<text x="${toX(i).toFixed(1)}" y="${H-4}" font-size="9" text-anchor="middle" fill="#64748b">${l}</text>` : '').join('')}
+      </svg>`;
     }
 
-    // ── Pedidos por dia da semana (mês atual) ──
+    // ─── Pedidos por hora ───────────────────────────────
+    const hourCounts = new Array(24).fill(0);
+    mesPedidos.forEach(o => { hourCounts[new Date(o.created_at).getHours()]++; });
+    const maxH = Math.max(...hourCounts, 1);
+    const hourEl = document.getElementById('rel-hour-bar');
+    if (hourEl) hourEl.innerHTML = hourCounts.map((v,i)=>`
+      <div class="bar-col">
+        <div class="bar-val" style="font-size:8px">${v>0?v:''}</div>
+        <div class="bar-fill" style="height:${Math.max(Math.round(v/maxH*100),v>0?4:1)}%;background:${v===Math.max(...hourCounts)?'var(--orange)':'var(--accent2)'};${v===0?'opacity:.15':''}"></div>
+        <div class="bar-label" style="font-size:8px">${i%4===0?i+'h':''}</div>
+      </div>`).join('');
+
+    // ─── Dias da semana ─────────────────────────────────
     const dayC = [0,0,0,0,0,0,0];
-    mesPedidos.forEach(o => { dayC[new Date(o.created_at).getDay()]++; });
+    mesPedidos.forEach(o=>{ dayC[new Date(o.created_at).getDay()]++; });
     const maxDy = Math.max(...dayC, 1);
-    const db = document.getElementById('rel-day-bar');
-    if (db) db.innerHTML = DAYS_FULL.map((d,i) => `
+    const dayEl = document.getElementById('rel-day-bar');
+    if (dayEl) dayEl.innerHTML = DAYS_FULL.map((d,i)=>`
       <div class="bar-col">
         <div class="bar-val">${dayC[i]}</div>
-        <div class="bar-fill" style="height:${Math.max(Math.round(dayC[i]/maxDy*100),2)}%;background:var(--accent3)"></div>
+        <div class="bar-fill" style="height:${Math.max(Math.round(dayC[i]/maxDy*100),2)}%;background:${dayC[i]===Math.max(...dayC)?'var(--success)':'var(--accent3)'}"></div>
         <div class="bar-label">${d}</div>
       </div>`).join('');
 
-    // ── Métodos de pagamento (mês) ──
+    // ─── Heatmap hora × dia ─────────────────────────────
+    const hmEl = document.getElementById('rel-heatmap');
+    if (hmEl) {
+      const hm = Array.from({length:7},()=>new Array(24).fill(0));
+      mesPedidos.forEach(o=>{
+        const d=new Date(o.created_at);
+        hm[d.getDay()][d.getHours()]++;
+      });
+      const maxHM = Math.max(...hm.flat(), 1);
+      const dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+      hmEl.innerHTML = `<table style="border-collapse:collapse;font-size:9px;width:100%">
+        <tr><td style="color:var(--muted);padding:2px 6px"></td>${Array.from({length:24},(_,h)=>`<td style="text-align:center;color:var(--muted);padding:1px 1px;width:3.8%">${h%4===0?h+'h':''}</td>`).join('')}</tr>
+        ${dias.map((dia,d)=>`<tr>
+          <td style="color:var(--muted2);padding:2px 6px;white-space:nowrap;font-size:9.5px;font-weight:600">${dia}</td>
+          ${hm[d].map(v=>{
+            const ratio = v/maxHM;
+            const bg = ratio===0 ? 'rgba(255,255,255,.04)' :
+              ratio<.25 ? 'rgba(59,130,246,.25)' :
+              ratio<.5  ? 'rgba(59,130,246,.55)' :
+              ratio<.75 ? 'rgba(249,115,22,.6)'  : 'rgba(239,68,68,.8)';
+            return `<td title="${v} pedidos" style="background:${bg};border:1px solid rgba(0,0,0,.2);border-radius:2px;height:16px"></td>`;
+          }).join('')}
+        </tr>`).join('')}
+        <tr><td></td><td colspan="24"><div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:9px;color:var(--muted)">
+          <span>Baixo</span>
+          <div style="width:12px;height:10px;background:rgba(59,130,246,.25);border-radius:2px"></div>
+          <div style="width:12px;height:10px;background:rgba(59,130,246,.55);border-radius:2px"></div>
+          <div style="width:12px;height:10px;background:rgba(249,115,22,.6);border-radius:2px"></div>
+          <div style="width:12px;height:10px;background:rgba(239,68,68,.8);border-radius:2px"></div>
+          <span>Alto</span>
+        </div></td></tr>
+      </table>`;
+    }
+
+    // ─── Gráfico de barras anual ────────────────────────
+    const mbEl = document.getElementById('rel-month-bar');
+    const mTitle = document.getElementById('rel-month-title');
+    if (mbEl) {
+      const monthData = new Array(12).fill(0);
+      allYear.filter(o=>o.status!=='cancelado').forEach(o=>{
+        monthData[new Date(o.created_at).getMonth()] += parseFloat(o.total||0);
+      });
+      const maxMB = Math.max(...monthData, 1);
+      const mNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+      mbEl.innerHTML = monthData.map((v,i)=>`
+        <div class="bar-col">
+          <div class="bar-val" style="font-size:9px">${v>0?'R$'+Math.round(v/1000)+'k':''}</div>
+          <div class="bar-fill" style="height:${Math.max(Math.round(v/maxMB*100),v>0?3:1)}%;${v===0?'opacity:.15':''}"></div>
+          <div class="bar-label">${mNames[i]}</div>
+        </div>`).join('');
+      if (mTitle) mTitle.textContent = '📊 Faturamento mensal '+now.getFullYear();
+    }
+
+    // ─── Pagamentos ─────────────────────────────────────
     const pagMap = {};
-    mesValidos.forEach(o => {
-      const k = (o.pag||'Outro').trim();
-      if (!pagMap[k]) pagMap[k] = 0;
-      pagMap[k]++;
+    mesValidos.forEach(o=>{
+      const k = (o.pag||'outro').toLowerCase().includes('pix')   ? 'PIX'
+              : (o.pag||'').toLowerCase().includes('cart')        ? 'Cartão'
+              : (o.pag||'').toLowerCase().includes('dinheiro')    ? 'Dinheiro'
+              : (o.pag||'').toLowerCase().includes('mesa')        ? 'Mesa'
+              : (o.pag||'outro');
+      if (!pagMap[k]) pagMap[k] = {count:0, fat:0};
+      pagMap[k].count++; pagMap[k].fat += parseFloat(o.total||0)+parseFloat(o.taxa||0);
     });
-    const pagColors = { PIX:'var(--purple)', Cartão:'var(--accent)', Dinheiro:'var(--success)', Mesa:'var(--accent3)' };
+    const pagCols = { PIX:'var(--purple)', Cartão:'var(--accent)', Dinheiro:'var(--success)', Mesa:'var(--accent3)' };
+    const pagEmojis = { PIX:'💠', Cartão:'💳', Dinheiro:'💵', Mesa:'🪑' };
     const pagEl = document.getElementById('rel-gauges');
     if (pagEl) {
-      const pagEntries = Object.entries(pagMap).sort((a,b)=>b[1]-a[1]);
-      pagEl.innerHTML = pagEntries.length
-        ? pagEntries.map(([k,v]) => `<div class="gauge"><div class="gauge-val" style="color:${pagColors[k]||'var(--muted)'}">${v}</div><div class="gauge-label" style="color:${pagColors[k]||'var(--muted)'}">${k}</div></div>`).join('')
-        : '<div style="color:var(--muted);font-size:12px;padding:12px">Sem dados no mês</div>';
+      const ents = Object.entries(pagMap).sort((a,b)=>b[1].count-a[1].count);
+      const totPag = ents.reduce((s,[,v])=>s+v.count,0)||1;
+      pagEl.innerHTML = ents.length ? ents.map(([k,v])=>`
+        <div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <div style="display:flex;align-items:center;gap:7px">
+              <span style="font-size:16px">${pagEmojis[k]||'💰'}</span>
+              <span style="font-size:13px;font-weight:600">${k}</span>
+            </div>
+            <div style="text-align:right">
+              <span style="font-size:13px;font-weight:700;color:${pagCols[k]||'var(--accent)'}">${v.count} pedidos</span>
+              <span style="font-size:11px;color:var(--muted);margin-left:6px">${money(v.fat)}</span>
+            </div>
+          </div>
+          <div style="height:7px;background:var(--border);border-radius:99px;overflow:hidden">
+            <div style="height:100%;width:${pct(v.count,totPag)};background:${pagCols[k]||'var(--accent)'};border-radius:99px;transition:width .5s"></div>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px">${pct(v.count,totPag)} dos pedidos</div>
+        </div>`).join('')
+        : '<div style="color:var(--muted);font-size:12px;padding:12px">Sem dados no período</div>';
     }
 
-    // ── Faturamento por origem (mesa vs delivery) ──
+    // ─── Receita por pagamento (financeiro) ─────────────
+    const fatPagEl = document.getElementById('rel-fat-pag');
+    if (fatPagEl) {
+      const ents = Object.entries(pagMap).sort((a,b)=>b[1].fat-a[1].fat);
+      const maxFP = Math.max(...ents.map(([,v])=>v.fat), 1);
+      fatPagEl.innerHTML = ents.length ? ents.map(([k,v])=>`
+        <div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+            <span style="font-size:12.5px;font-weight:600">${pagEmojis[k]||'💰'} ${k}</span>
+            <span style="font-size:13px;font-weight:700;color:${pagCols[k]||'var(--accent)'}">${money(v.fat)}</span>
+          </div>
+          <div style="height:8px;background:var(--border);border-radius:99px;overflow:hidden">
+            <div style="height:100%;width:${Math.round(v.fat/maxFP*100)}%;background:${pagCols[k]||'var(--accent)'};border-radius:99px"></div>
+          </div>
+        </div>`).join('')
+        : '<div style="color:var(--muted);font-size:12px;padding:12px">Sem dados</div>';
+    }
+
+    // ─── Origem (plataforma) ─────────────────────────────
     const originMap = {};
-    mesValidos.forEach(o => {
-      let origem = 'Outros';
-      if (o.mesa_num)                            origem = 'Mesa (Garçom)';
-      else if ((o.addr||'').startsWith('Mesa'))  origem = 'Mesa (Garçom)';
-      else if (o.pag === 'Mesa')                 origem = 'Mesa (Garçom)';
-      else                                        origem = 'Delivery / Balcão';
-      if (!originMap[origem]) originMap[origem] = 0;
-      originMap[origem] += parseFloat(o.total||0);
+    mesValidos.forEach(o=>{
+      const ori = o.mesa_num || (o.addr||'').startsWith('Mesa') ? '🪑 Mesa (Garçom)'
+                : (o.addr||'').toLowerCase().includes('balc')   ? '🏪 Balcão / Retirada'
+                :                                                  '🛵 Delivery';
+      if(!originMap[ori]) originMap[ori]={count:0,fat:0};
+      originMap[ori].count++; originMap[ori].fat+=parseFloat(o.total||0)+parseFloat(o.taxa||0);
     });
-    const originColors = { 'Mesa (Garçom)':'var(--purple)', 'Delivery / Balcão':'var(--accent3)', 'Outros':'var(--muted)' };
-    const pe = document.getElementById('rel-platforms');
-    if (pe) {
-      const entries = Object.entries(originMap).sort((a,b)=>b[1]-a[1]);
-      const maxO = Math.max(...entries.map(e=>e[1]), 1);
-      pe.innerHTML = entries.length
-        ? entries.map(([k,v]) => `<div class="platform-row"><div class="platform-name">${k}</div><div class="platform-bar"><div class="platform-fill" style="width:${Math.round(v/maxO*100)}%;background:${originColors[k]||'var(--accent)'}"></div></div><div class="platform-val">${money(v)}</div></div>`).join('')
-        : '<div style="color:var(--muted);font-size:12px;padding:12px">Sem dados no mês</div>';
+    const peEl = document.getElementById('rel-platforms');
+    if (peEl) {
+      const ents = Object.entries(originMap).sort((a,b)=>b[1].fat-a[1].fat);
+      const maxOF = Math.max(...ents.map(([,v])=>v.fat),1);
+      peEl.innerHTML = ents.length ? ents.map(([k,v])=>`
+        <div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <span style="font-size:13px;font-weight:600">${k}</span>
+            <div style="text-align:right">
+              <span style="font-size:13px;font-weight:700;color:var(--accent)">${money(v.fat)}</span>
+              <span style="font-size:11px;color:var(--muted);margin-left:5px">${v.count} ped.</span>
+            </div>
+          </div>
+          <div style="height:7px;background:var(--border);border-radius:99px;overflow:hidden">
+            <div style="height:100%;width:${Math.round(v.fat/maxOF*100)}%;background:var(--accent);border-radius:99px"></div>
+          </div>
+        </div>`).join('')
+        : '<div style="color:var(--muted);font-size:12px;padding:8px">Sem pedidos no período</div>';
     }
 
-    // ── Áreas de entrega (top endereços) ──
+    // ─── Top bairros ─────────────────────────────────────
     const areaMap = {};
-    mesValidos.filter(o => !o.mesa_num && o.addr && !o.addr.startsWith('Mesa')).forEach(o => {
+    mesValidos.filter(o=>!o.mesa_num&&o.addr&&!o.addr.startsWith('Mesa')).forEach(o=>{
       const parts = (o.addr||'').split(',');
-      const bairro = (parts[1]||parts[0]||'').trim().split(' ').slice(0,3).join(' ') || 'Sem endereço';
-      if (!areaMap[bairro]) areaMap[bairro] = { fat:0, ped:0 };
-      areaMap[bairro].fat += parseFloat(o.total||0);
-      areaMap[bairro].ped++;
+      const bairro = (parts[1]||parts[0]||'').trim().split(' ').slice(0,3).join(' ') || 'Não informado';
+      if(!areaMap[bairro]) areaMap[bairro]={fat:0,ped:0};
+      areaMap[bairro].fat+=parseFloat(o.total||0); areaMap[bairro].ped++;
     });
-    const ae = document.getElementById('rel-areas');
-    if (ae) {
-      const areaEntries = Object.entries(areaMap).sort((a,b)=>b[1].ped-a[1].ped).slice(0,6);
-      ae.innerHTML = areaEntries.length
-        ? areaEntries.map(([k,v]) => `<div style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-weight:600;font-size:13px">${k}</div><div style="font-size:12px;color:var(--accent)">${money(v.fat)}</div><div style="font-size:11.5px;color:var(--muted)">${v.ped} pedido${v.ped!==1?'s':''}</div></div>`).join('')
-        : '<div style="color:var(--muted);font-size:12px;padding:8px">Apenas pedidos de mesa no mês</div>';
+    const aeEl = document.getElementById('rel-areas');
+    if (aeEl) {
+      const ents = Object.entries(areaMap).sort((a,b)=>b[1].ped-a[1].ped).slice(0,6);
+      aeEl.innerHTML = ents.length ? ents.map(([k,v],i)=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <span style="font-size:13px;font-weight:800;color:var(--accent);width:20px">#${i+1}</span>
+          <div style="flex:1">
+            <div style="font-weight:600;font-size:12.5px">${k}</div>
+            <div style="font-size:11px;color:var(--muted)">${v.ped} pedido${v.ped!==1?'s':''}</div>
+          </div>
+          <div style="font-size:12.5px;font-weight:700;color:var(--success)">${money(v.fat)}</div>
+        </div>`).join('')
+        : '<div style="color:var(--muted);font-size:12px;padding:8px">Apenas pedidos de mesa</div>';
     }
 
-    // ── Clientes mais frequentes (via fidClients já carregado) ──
-    const rtc = document.getElementById('rel-top-clients');
-    if (rtc) {
-      const sorted = [...fidClients].sort((a,b)=>b.orders-a.orders).slice(0,10);
-      rtc.innerHTML = sorted.length
-        ? sorted.map((c,i) => `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
-            <span style="font-size:14px;font-weight:700;color:var(--accent);width:22px">#${i+1}</span>
-            <div class="fid-av">${c.name?.[0]||'?'}</div>
-            <div style="flex:1"><div style="font-weight:600;font-size:13px">${c.name}</div><div style="font-size:11.5px;color:var(--muted)">${c.orders} pedido${c.orders!==1?'s':''} · ${c.pts} pts</div></div>
-            <div style="font-family:'Playfair Display',sans-serif;font-weight:700;font-size:15px;color:var(--success)">${money(c.orders * ticket)}</div>
-          </div>`).join('')
-        : '<div style="color:var(--muted);font-size:12.5px;padding:12px">Nenhum cliente cadastrado</div>';
-    }
-
-    // ── Entradas do mês (movimentos) ──
-    const el = document.getElementById('rel-entradas-list');
-    if (el) {
-      const movs = (movimentos||[]);
-      const entradas = movs.filter(m=>m.tipo==='entrada');
-      const saidas   = movs.filter(m=>m.tipo==='saida');
-      const totEnt   = entradas.reduce((s,m)=>s+parseFloat(m.val||0),0);
-      const totSai   = saidas.reduce((s,m)=>s+parseFloat(m.val||0),0);
-      el.innerHTML = `
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">
-          <div style="background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.15);border-radius:10px;padding:12px;text-align:center">
-            <div style="font-size:10.5px;color:var(--muted);margin-bottom:4px">Entradas</div>
-            <div style="font-family:'Playfair Display',sans-serif;font-size:18px;font-weight:800;color:var(--success)">${money(totEnt)}</div>
-          </div>
-          <div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.15);border-radius:10px;padding:12px;text-align:center">
-            <div style="font-size:10.5px;color:var(--muted);margin-bottom:4px">Saídas</div>
-            <div style="font-family:'Playfair Display',sans-serif;font-size:18px;font-weight:800;color:var(--danger)">${money(totSai)}</div>
-          </div>
-          <div style="background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.15);border-radius:10px;padding:12px;text-align:center">
-            <div style="font-size:10.5px;color:var(--muted);margin-bottom:4px">Saldo</div>
-            <div style="font-family:'Playfair Display',sans-serif;font-size:18px;font-weight:800;color:${totEnt-totSai>=0?'var(--success)':'var(--danger)'}">${money(totEnt-totSai)}</div>
-          </div>
-        </div>
-        ${movs.length ? movs.map(m => `
-          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-            <span style="font-size:16px">${m.tipo==='entrada'?'↑':'↓'}</span>
-            <div style="flex:1"><div style="font-size:13px;font-weight:500">${m.description||'—'}</div><div style="font-size:11.5px;color:var(--muted)">${m.time||''} · ${m.pag||''}</div></div>
-            <div style="font-weight:700;font-size:13.5px;color:${m.tipo==='entrada'?'var(--success)':'var(--danger)'}">${m.tipo==='entrada'?'+':'-'}${money(m.val)}</div>
-          </div>`).join('') : '<div style="color:var(--muted);font-size:12.5px;padding:12px;text-align:center">Nenhuma movimentação no mês</div>'}`;
-    }
-
-    // ── Produtos mais vendidos (mês) ──
-    const itemMapR = {};
-    mesValidos.forEach(o => {
-      if (!Array.isArray(o.items)) return;
-      o.items.forEach(i => {
-        const k = i.name;
-        if (!itemMapR[k]) itemMapR[k] = { qty:0, rev:0 };
-        itemMapR[k].qty += (i.qty||1);
-        itemMapR[k].rev += parseFloat(i.price||0) * (i.qty||1);
+    // ─── Produtos mais vendidos ─────────────────────────
+    const itemMap = {};
+    mesValidos.forEach(o=>{
+      (Array.isArray(o.items)?o.items:[]).forEach(i=>{
+        const k=i.name||'?';
+        if(!itemMap[k]) itemMap[k]={qty:0,fat:0,cat:i.cat||''};
+        itemMap[k].qty+=(i.qty||1);
+        itemMap[k].fat+=parseFloat(i.price||0)*(i.qty||1);
       });
     });
-    const sortedP = Object.entries(itemMapR).sort((a,b)=>b[1].qty-a[1].qty).slice(0,15);
-    const rpl = document.getElementById('rel-produtos-list');
-    if (rpl) rpl.innerHTML = sortedP.length
-      ? sortedP.map(([name,{qty,rev}],idx) => {
-          const mi = items.find(i=>i.name===name);
-          return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
-            <span style="width:20px;font-size:12px;font-weight:700;color:var(--accent)">${idx+1}</span>
-            <span style="font-size:18px">${mi?.emoji||'🍽️'}</span>
-            <span style="flex:1;font-size:13px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</span>
-            <span style="font-size:12px;color:var(--muted);margin-right:8px">${qty}x</span>
-            <span style="font-size:12.5px;font-weight:700;color:var(--success);flex-shrink:0">${money(rev)}</span>
-          </div>`;
-        }).join('')
-      : '<div style="color:var(--muted);font-size:12.5px;padding:12px;text-align:center">Nenhum produto vendido no mês</div>';
+    const sortedQty = Object.entries(itemMap).sort((a,b)=>b[1].qty-a[1].qty).slice(0,12);
+    const sortedFat = Object.entries(itemMap).sort((a,b)=>b[1].fat-a[1].fat).slice(0,12);
+    const totalQty  = sortedQty.reduce((s,[,v])=>s+v.qty,0)||1;
+    const totalFat  = sortedFat.reduce((s,[,v])=>s+v.fat,0)||1;
 
-    // ── Satisfação (aba dentro de relatorios) ──
-    const relSat = document.getElementById('rel-sat-list');
-    if (relSat) relSat.innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:12px;text-align:center">Módulo de avaliações não configurado</div>';
+    const renderProdList = (sorted, field, total, color) => sorted.map(([name,v],idx)=>{
+      const mi = items.find(i=>i.name===name);
+      return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+        <span style="width:18px;font-size:11.5px;font-weight:700;color:var(--muted)">${idx+1}</span>
+        <span style="font-size:17px">${mi?.emoji||'🍽️'}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
+          <div style="height:4px;background:var(--border);border-radius:99px;margin-top:4px;overflow:hidden">
+            <div style="height:100%;width:${Math.round(v[field]/total*100)}%;background:${color};border-radius:99px"></div>
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          ${field==='qty'
+            ? `<div style="font-size:13px;font-weight:700;color:${color}">${v.qty}x</div><div style="font-size:11px;color:var(--muted)">${money(v.fat)}</div>`
+            : `<div style="font-size:13px;font-weight:700;color:${color}">${money(v.fat)}</div><div style="font-size:11px;color:var(--muted)">${v.qty}x vendidos</div>`}
+        </div>
+      </div>`;
+    }).join('');
+
+    const rpl = document.getElementById('rel-produtos-list');
+    if (rpl) rpl.innerHTML = sortedQty.length ? renderProdList(sortedQty,'qty',totalQty,'var(--accent)')
+      : '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">Sem vendas no período</div>';
+
+    const rpf = document.getElementById('rel-produtos-fat');
+    if (rpf) rpf.innerHTML = sortedFat.length ? renderProdList(sortedFat,'fat',totalFat,'var(--success)')
+      : '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">Sem vendas no período</div>';
+
+    // ─── Faturamento por categoria ───────────────────────
+    const catMap = {};
+    mesValidos.forEach(o=>{
+      (Array.isArray(o.items)?o.items:[]).forEach(i=>{
+        const k = i.cat || i.cat_key || 'Outros';
+        if(!catMap[k]) catMap[k]={fat:0,qty:0};
+        catMap[k].fat+=parseFloat(i.price||0)*(i.qty||1);
+        catMap[k].qty+=(i.qty||1);
+      });
+    });
+    const catEnt = Object.entries(catMap).sort((a,b)=>b[1].fat-a[1].fat);
+    const maxCF  = Math.max(...catEnt.map(([,v])=>v.fat),1);
+    const catColors = ['var(--accent)','var(--success)','var(--purple)','var(--accent3)','var(--accent2)','var(--orange)'];
+    const catEl  = document.getElementById('rel-cats-bar');
+    if (catEl) catEl.innerHTML = catEnt.length ? catEnt.map(([k,v],i)=>`
+      <div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+          <span style="font-size:12.5px;font-weight:600">${k}</span>
+          <div>
+            <span style="font-size:13px;font-weight:700;color:${catColors[i%catColors.length]}">${money(v.fat)}</span>
+            <span style="font-size:11px;color:var(--muted);margin-left:6px">${v.qty} itens</span>
+          </div>
+        </div>
+        <div style="height:9px;background:var(--border);border-radius:99px;overflow:hidden">
+          <div style="height:100%;width:${Math.round(v.fat/maxCF*100)}%;background:${catColors[i%catColors.length]};border-radius:99px;transition:width .6s"></div>
+        </div>
+      </div>`).join('')
+      : '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">Sem vendas no período</div>';
+
+    // ─── Clientes ────────────────────────────────────────
+    const cliAll  = allCustomers || [];
+    const limite30 = new Date(now - 30*86400000).toISOString();
+    const cliTotal   = cliAll.length;
+    const cliComPed  = cliAll.filter(c=>(c.orders_count||0)>0).length;
+    const cliFid     = fidClients.length;
+    const cliInativos= cliAll.filter(c=>c.last_order_at && c.last_order_at<limite30 && (c.orders_count||0)>0).length;
+    elv('rel-cli-total',    cliTotal);
+    elv('rel-cli-com-pedido', cliComPed);
+    elv('rel-cli-fid',      cliFid);
+    elv('rel-cli-inativos', cliInativos);
+
+    // Top frequentes
+    const topFreq = [...cliAll].sort((a,b)=>(b.orders_count||0)-(a.orders_count||0)).slice(0,8);
+    const rtcEl = document.getElementById('rel-top-clients');
+    if (rtcEl) rtcEl.innerHTML = topFreq.length ? topFreq.map((c,i)=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:13px;font-weight:800;color:var(--accent);width:20px">#${i+1}</span>
+        <div class="fid-av" style="width:30px;height:30px;min-width:30px;font-size:12px">${(c.name||'?')[0].toUpperCase()}</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:12.5px">${c.name||'—'}</div>
+          <div style="font-size:11px;color:var(--muted)">${c.phone||''}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:13px;font-weight:700;color:var(--accent)">${c.orders_count||0} pedidos</div>
+          <div style="font-size:11px;color:var(--success)">${money(c.total_spent||0)}</div>
+        </div>
+      </div>`).join('')
+      : '<div style="color:var(--muted);font-size:12px;padding:12px">Nenhum cliente com pedidos</div>';
+
+    // Top gastadores
+    const topGasto = [...cliAll].sort((a,b)=>(b.total_spent||0)-(a.total_spent||0)).slice(0,8);
+    const tgEl = document.getElementById('rel-top-gastos');
+    if (tgEl) tgEl.innerHTML = topGasto.length ? topGasto.map((c,i)=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:13px;font-weight:800;color:var(--success);width:20px">#${i+1}</span>
+        <div class="fid-av" style="width:30px;height:30px;min-width:30px;font-size:12px">${(c.name||'?')[0].toUpperCase()}</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:12.5px">${c.name||'—'}</div>
+          <div style="font-size:11px;color:var(--muted)">${c.orders_count||0} pedidos</div>
+        </div>
+        <div style="font-size:14px;font-weight:800;color:var(--success)">${money(c.total_spent||0)}</div>
+      </div>`).join('')
+      : '<div style="color:var(--muted);font-size:12px;padding:12px">Nenhum cliente com gastos</div>';
+
+    // Novos clientes no período
+    const novos = cliAll.filter(c=>c.created_at>=iniISO&&c.created_at<fimISO);
+    const ncEl = document.getElementById('rel-novos-clientes');
+    if (ncEl) ncEl.innerHTML = novos.length
+      ? `<div style="margin-bottom:12px;font-size:13px;color:var(--success);font-weight:700">✨ ${novos.length} novo${novos.length!==1?'s':''} cliente${novos.length!==1?'s':''} cadastrado${novos.length!==1?'s':''} ${periLabel}</div>`
+        + novos.slice(0,10).map(c=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
+          <div class="fid-av" style="width:28px;height:28px;min-width:28px;font-size:11px">${(c.name||'?')[0].toUpperCase()}</div>
+          <div style="flex:1"><div style="font-size:12.5px;font-weight:600">${c.name||'—'}</div><div style="font-size:11px;color:var(--muted)">${c.phone||''}</div></div>
+          <div style="font-size:11px;color:var(--muted)">${new Date(c.created_at).toLocaleDateString('pt-BR')}</div>
+        </div>`).join('')
+      : '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">Nenhum cliente cadastrado '+periLabel+'</div>';
+
+    // ─── Financeiro: movimentos ───────────────────────────
+    // movimentos.time usa formato SQLite 'YYYY-MM-DD HH:MM:SS' — normaliza para ISO
+    const normDate = s => s ? new Date(s.replace(' ', 'T')) : null;
+    const movsFiltrados = (movsFromDB||[]).filter(m=>{
+      const t = normDate(m.created_at||m.time);
+      return t && t >= range.inicio && t < range.fim;
+    });
+    const totEnt = movsFiltrados.filter(m=>m.tipo==='entrada').reduce((s,m)=>s+parseFloat(m.val||0),0);
+    const totSai = movsFiltrados.filter(m=>m.tipo==='saida').reduce((s,m)=>s+parseFloat(m.val||0),0);
+    const saldo  = totEnt - totSai;
+
+    elv('rel-fin-entradas', money(totEnt));
+    elv('rel-fin-saidas',   money(totSai));
+    const saldoEl = document.getElementById('rel-fin-saldo');
+    if (saldoEl) { saldoEl.textContent = money(saldo); saldoEl.style.color = saldo>=0?'var(--success)':'var(--danger)'; }
+
+    const movEl = document.getElementById('rel-entradas-list');
+    if (movEl) movEl.innerHTML = movsFiltrados.length
+      ? movsFiltrados.slice(0,30).map(m=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <div style="width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;
+            background:${m.tipo==='entrada'?'rgba(34,197,94,.12)':'rgba(239,68,68,.12)'}">
+            ${m.tipo==='entrada'?'↑':'↓'}
+          </div>
+          <div style="flex:1">
+            <div style="font-size:12.5px;font-weight:500">${m.description||'—'}</div>
+            <div style="font-size:11px;color:var(--muted)">${m.pag||''} ${m.time||m.created_at?'· '+new Date(m.created_at||m.time).toLocaleDateString('pt-BR'):''}</div>
+          </div>
+          <div style="font-weight:700;font-size:13px;color:${m.tipo==='entrada'?'var(--success)':'var(--danger)'}">
+            ${m.tipo==='entrada'?'+':'-'}${money(m.val)}
+          </div>
+        </div>`).join('')
+      : '<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center">Nenhuma movimentação no período</div>';
+
+    // ─── Satisfação ───────────────────────────────────────
+    const ratList = ratings || [];
+    const ratPeriodo = ratList.filter(r=>r.created_at>=iniISO);
+    const satResumoEl = document.getElementById('rel-sat-resumo');
+    if (satResumoEl) {
+      if (!ratList.length) {
+        satResumoEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">Nenhuma avaliação recebida</div>';
+      } else {
+        const media = ratList.reduce((s,r)=>s+(r.nota||5),0) / ratList.length;
+        const dist  = [5,4,3,2,1].map(n=>({ nota:n, count:ratList.filter(r=>(r.nota||5)===n).length }));
+        satResumoEl.innerHTML = `
+          <div style="text-align:center;margin-bottom:16px">
+            <div style="font-size:42px;font-weight:900;color:var(--accent3)">${media.toFixed(1)}</div>
+            <div style="font-size:18px;margin:4px 0">${'⭐'.repeat(Math.round(media))}</div>
+            <div style="font-size:12px;color:var(--muted)">${ratList.length} avaliações</div>
+          </div>
+          ${dist.map(({nota,count})=>`
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <span style="font-size:12px;color:var(--muted);width:12px">${nota}</span>
+              <div style="flex:1;height:7px;background:var(--border);border-radius:99px;overflow:hidden">
+                <div style="height:100%;width:${ratList.length?Math.round(count/ratList.length*100):0}%;background:var(--accent3);border-radius:99px"></div>
+              </div>
+              <span style="font-size:11px;color:var(--muted);width:24px">${count}</span>
+            </div>`).join('')}`;
+      }
+    }
+    const satListEl = document.getElementById('rel-sat-list');
+    if (satListEl) satListEl.innerHTML = ratList.length
+      ? ratList.slice(0,20).map(r=>`
+        <div style="padding:12px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <div style="font-weight:600;font-size:12.5px">${r.client||'Anônimo'}</div>
+            <div>
+              <span style="font-size:13px">${'⭐'.repeat(r.nota||5)}</span>
+              <span style="font-size:11px;color:var(--muted);margin-left:6px">${r.created_at?new Date(r.created_at).toLocaleDateString('pt-BR'):''}</span>
+            </div>
+          </div>
+          ${r.comentario?`<div style="font-size:12px;color:var(--muted2);font-style:italic">"${r.comentario}"</div>`:''}
+        </div>`).join('')
+      : '<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center">Nenhuma avaliação com comentário</div>';
 
   } catch(e) {
     console.error('renderRelatorios error:', e);
-    sbToast('err', 'Erro ao carregar relatórios');
+    sbToast('err', 'Erro ao carregar relatórios: ' + e.message);
   }
 }
+
+function relExportar() {
+  const range = _relGetRange();
+  const rows  = [['Período', range.label], ['Gerado em', new Date().toLocaleString('pt-BR')]];
+  const csv   = rows.map(r=>r.join(';')).join('\n');
+  const a     = document.createElement('a');
+  a.href      = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download  = 'relatorio-' + _relPeriodo + '.csv';
+  a.click();
+  sbToast('ok', 'CSV exportado!');
+}
+
 
 // ─────────────────────────────────────────
 // SATISFAÇÃO
