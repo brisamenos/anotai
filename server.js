@@ -382,6 +382,7 @@ const TABLE_CHANNELS = {
   categories:   (tid) => [`cats-rt:${tid}`, `menu-rt:${tid}`],
   garcons:      (tid) => [`orders-rt:${tid}`],
   saques:       (tid) => [`saques-rt:${tid}`, `saques-admin`],
+  customers:    (tid) => [`customers-rt:${tid}`],
 }
 const GARCOM_PREFIXES = ['garcom-mesas-', 'garcom-orders-']
 
@@ -435,7 +436,7 @@ const JSON_FIELDS = {
   store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config']),
 }
 const BOOL_FIELDS  = new Set(['ativo','store_open','caixa_open','destaque'])
-const SSE_TABLES   = new Set(['orders','mesas','store_config','menu_items','categories','garcons'])
+const SSE_TABLES   = new Set(['orders','mesas','store_config','menu_items','categories','garcons','customers'])
 
 function jsonParse(v) { if(typeof v!=='string')return v; try{return JSON.parse(v)}catch{return v} }
 

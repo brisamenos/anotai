@@ -529,13 +529,31 @@ function subscribeOrders() {
     })
     .subscribe();
 
+  // Canal de clientes — sincroniza cadastros feitos no cardápio em tempo real
+  const chCustomers = sb.channel('customers-rt')
+    .on('postgres_changes', {event:'INSERT', schema:'public', table:'customers'}, p => {
+      if (!customersData.find(c => c.id === p.new.id)) {
+        customersData.unshift(p.new);
+      }
+      const pg = document.getElementById('page-clientes');
+      if (pg && pg.classList.contains('on')) renderClientes();
+    })
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'customers'}, p => {
+      const idx = customersData.findIndex(c => c.id === p.new.id);
+      if (idx !== -1) customersData[idx] = { ...customersData[idx], ...p.new };
+      else customersData.unshift(p.new);
+      const pg = document.getElementById('page-clientes');
+      if (pg && pg.classList.contains('on')) renderClientes();
+    })
+    .subscribe();
+
   // Heartbeat: mantém WS vivo em background (a cada 25s)
   _heartbeat = setInterval(() => {
     try { sb.channel('orders-rt').send({ type:'broadcast', event:'ping', payload:{} }); }
     catch(e){}
   }, 25000);
 
-  _rtChannels = [chOrders, chMesas, chConfig];
+  _rtChannels = [chOrders, chMesas, chConfig, chCustomers];
 }
 
 // Sync ao voltar para a aba
