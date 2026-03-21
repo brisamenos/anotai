@@ -6870,7 +6870,7 @@ async function confirmarZerarPedidos() {
     const novoOffset = data?.[0]?.id || 0;
 
     // Salva o offset no store_config do tenant
-    const { error } = await sb.from('store_config').update({ order_num_offset: novoOffset });
+    const { error } = await sb.from('store_config').update({ order_num_offset: novoOffset }).eq('tenant_id', _sessao.tenant_id);
     if (error) throw new Error(error.message);
 
     // Atualiza localmente
@@ -7050,9 +7050,16 @@ async function carregarCarteira() {
   try {
     const tid = _sessao?.tenant_id;
     if (!tid) return;
+    // AbortController com 10s — evita que fetch travada deixe a tela em "Carregando..." para sempre
+    const _fetchTenant = (url) => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 10000);
+      return fetch(url, { headers: { 'x-tenant-id': tid }, signal: ctrl.signal })
+        .finally(() => clearTimeout(timer));
+    };
     const [cartRes, saqRes] = await Promise.all([
-      fetch('/api/carteira', { headers: { 'x-tenant-id': tid } }),
-      fetch('/api/saques/meus', { headers: { 'x-tenant-id': tid } })
+      _fetchTenant('/api/carteira'),
+      _fetchTenant('/api/saques/meus')
     ]);
     const cart = cartRes.ok ? await cartRes.json() : {};
     const saques = saqRes.ok ? await saqRes.json() : [];
