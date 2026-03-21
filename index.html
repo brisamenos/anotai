@@ -3004,6 +3004,11 @@ async function _iniciarFluxoPix(order) {
         document.getElementById('pix-qr-wrap').style.display = '';
         if (pd.qr_code_base64) {
           document.getElementById('pix-qr-img').src = 'data:image/png;base64,' + pd.qr_code_base64;
+        } else {
+          // Fallback: MP não retornou base64 — gera QR visualmente a partir do texto
+          document.getElementById('pix-qr-img').src =
+            'https://api.qrserver.com/v1/create-qr-code/?size=220x220&ecc=M&data=' +
+            encodeURIComponent(pd.qr_code);
         }
         document.getElementById('pix-copy-code').value = pd.qr_code;
         document.getElementById('pix-status-label').textContent = '⏳ Aguardando pagamento...';
