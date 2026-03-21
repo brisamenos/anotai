@@ -331,7 +331,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const mpConfigurado = !!(gIa.mp_token || MP_TOKEN)
     const pixAtivo = ia.pix_ativo !== false
     send(res, 200, {
-      pix_ativo:           pixAtivo && mpConfigurado,
+      pix_ativo:           pixAtivo,          // true se gestor ativou — index tenta criar; erro vem do /api/pix/criar
       pix_ativo_gestor:    pixAtivo,
       mp_configurado:      mpConfigurado,
       taxa_pix:            gIa.taxa_pix !== undefined ? parseFloat(gIa.taxa_pix) : parseFloat(process.env.TAXA_PIX || '1.00'),
