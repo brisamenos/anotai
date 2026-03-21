@@ -909,7 +909,13 @@ const server = http.createServer(async (req,res) => {
     validarSessaoAdmin, criarSessaoAdmin, fazerBackup, restaurarBackup, getTenantId,
     MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
     EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano }
-  if (await handleRoutes(req, res, _routeCtx)) return
+  try {
+    if (await handleRoutes(req, res, _routeCtx)) return
+  } catch(e) {
+    log('❌', `handleRoutes exception [${req.method} ${upath}]:`, e.message)
+    if (!res.writableEnded) send(res, 500, { error: 'Erro interno do servidor', detail: e.message })
+    return
+  }
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
