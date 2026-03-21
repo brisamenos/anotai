@@ -958,13 +958,11 @@ async function confirmarPagamentoPix(id) {
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': _sessao?.tenant_id },
       body: JSON.stringify({ pag: 'pix_mp' })
     });
-    if (!res.ok) throw new Error('Erro ao atualizar pagamento');
+    if (!res.ok) throw new Error('Erro');
     if (o) o.pag = 'pix_mp';
     sbToast('ok', `✅ Pagamento PIX do pedido #${o.num} confirmado!`);
     renderKanban();
-  } catch(e) {
-    sbToast('err', 'Erro: ' + e.message);
-  }
+  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
   sbLoading(false);
 }
 
@@ -1054,8 +1052,7 @@ function nav(id){
   document.querySelector('.sidebar')?.classList.remove('mobile-open');
   const pg=document.getElementById('page-'+id);
   if(pg) pg.classList.add('on');
-  const _mainEl = document.querySelector('.main');
-  if (_mainEl) _mainEl.scrollTop = 0;
+  const _mainEl=document.querySelector('.main'); if(_mainEl) _mainEl.scrollTop=0;
   const sn=document.getElementById('sn-'+id);
   if(sn) sn.classList.add('on');
   closeNotif();
@@ -1144,11 +1141,8 @@ function renderKanban(){
         const total='R$ '+(o.total+o.taxa).toFixed(2).replace('.',',');
         let actionBtn='';
         if(st==='analise'){
-          const _pixManualBtn = o.pag === 'pix_manual'
-            ? '<button class="oc-btn oc-btn-pix-confirmar" onclick="event.stopPropagation();confirmarPagamentoPix('+o.id+')">&#9989; Confirmar Pago PIX</button>'
-            : '';
-          actionBtn=
-            _pixManualBtn+
+          const _pixManualBtn = o.pag === 'pix_manual' ? '<button class="oc-btn oc-btn-pix-confirmar" onclick="event.stopPropagation();confirmarPagamentoPix('+o.id+')">&#9989; Confirmar Pago PIX</button>' : '';
+          actionBtn= _pixManualBtn+
             '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById('+o.id+')">✔ Confirmar</button>'+
             '<button class="oc-btn oc-btn-no" onclick="event.stopPropagation();cancelOrderById('+o.id+')">✕ Cancelar</button>'+
             (_printMode==='manual'?'<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById('+o.id+')">🖨️</button>':'');
