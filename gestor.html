@@ -27,6 +27,29 @@
   Object.keys(dark).forEach(function(k){ r.style.setProperty(k, dark[k]); });
 })();
 </script>
+
+<script>
+// ── Limpeza agressiva de SW e cache — garante versão mais recente do gestor.js ──
+(function() {
+  if (!('serviceWorker' in navigator)) return;
+  // Desregistra todos os Service Workers imediatamente
+  navigator.serviceWorker.getRegistrations().then(function(regs) {
+    regs.forEach(function(reg) {
+      reg.unregister();
+      console.log('[SW-CLEANUP] Desregistrado:', reg.scope);
+    });
+  });
+  // Limpa todos os caches do browser
+  if ('caches' in window) {
+    caches.keys().then(function(names) {
+      names.forEach(function(name) {
+        caches.delete(name);
+        console.log('[SW-CLEANUP] Cache removido:', name);
+      });
+    });
+  }
+})();
+</script>
 </head>
 <body>
 
@@ -2927,6 +2950,6 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
 .add-grp-btn{width:100%;padding:9px;background:none;border:1.5px dashed rgba(59,130,246,.35);border-radius:10px;color:#60a5fa;font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s;margin-top:4px}
 .add-grp-btn:hover{border-color:var(--accent);background:rgba(59,130,246,.06)}
 </style>
-<script src="/gestor.js"></script>
+<script>document.write('<script src="/gestor.js?v=' + Date.now() + '"><\/script>');</script>
 </body>
 </html>
