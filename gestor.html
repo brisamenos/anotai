@@ -6,7 +6,7 @@
 <title>EstimaFood</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Outfit:wght@300;400;500;600;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/gestor.css">
-  <script>document.write('<script src="/api-client.js?v=' + Date.now() + '"><\/script>');</script>
+  <script src="/api-client.js"></script>
 <script>
 // ══ TEMA ESCURO NAVY — aplicado antes do gestor.js ══
 (function(){
@@ -182,9 +182,10 @@
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="9" width="12" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="2" width="12" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><circle cx="5" cy="4.5" r="1" fill="currentColor"/><circle cx="5" cy="11.5" r="1" fill="currentColor"/></svg>
     Controle de estoque
   </button>
+
   <button class="si" id="sn-clientes" onclick="nav('clientes')">
-    <svg viewBox="0 0 16 16" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 13c0-2.76 2.24-5 5-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="12" cy="8" r="2" stroke="currentColor" stroke-width="1.4"/><path d="M9.5 13c0-1.93 1.12-3.5 2.5-3.5s2.5 1.57 2.5 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-    Clientes <span style="font-size:9px;background:var(--accent);color:#fff;padding:1px 4px;border-radius:4px;margin-left:2px;font-weight:700">NOVO</span>
+    <svg viewBox="0 0 16 16" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 13c0-2.76 2.24-5 5-5h1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M9.5 15c0-1.38.9-2.5 2.5-2.5s2.5 1.12 2.5 2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7.5" x2="12" y2="10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    Clientes
   </button>
   <button class="si" id="sn-desempenho" onclick="nav('desempenho')">
     <svg viewBox="0 0 16 16" fill="none"><path d="M2 12l4-4 3 3 5-6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1491,6 +1492,129 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
   </div>
 </div>
 
+<!-- CLIENTES -->
+<div class="page" id="page-clientes">
+  <div class="ph" style="flex-wrap:wrap;gap:12px">
+    <div>
+      <div class="pt">Clientes</div>
+      <div class="ps">Base de clientes cadastrados no cardápio digital</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn bg" id="btn-cli-tab-todos" onclick="cliTab('todos')" style="background:var(--accent);color:#fff;border-color:var(--accent)">👥 Todos</button>
+      <button class="btn bg" id="btn-cli-tab-aniversario" onclick="cliTab('aniversario')">🎂 Aniversariantes</button>
+      <button class="btn bg" id="btn-cli-tab-inativos" onclick="cliTab('inativos')">😴 Sem pedido há 30d</button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="sg" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+    <div class="sc" style="--ca:var(--accent)"><div class="si2">👥</div><div class="sl">Total cadastrados</div><div class="sv" id="cli-st-total">0</div></div>
+    <div class="sc" style="--ca:var(--success)"><div class="si2">🎂</div><div class="sl">Aniv. hoje</div><div class="sv" id="cli-st-aniv-hoje" style="color:var(--success)">0</div></div>
+    <div class="sc" style="--ca:var(--accent3)"><div class="si2">📅</div><div class="sl">Aniv. este mês</div><div class="sv" id="cli-st-aniv-mes" style="color:var(--accent3)">0</div></div>
+    <div class="sc" style="--ca:var(--purple)"><div class="si2">🛒</div><div class="sl">Com pedidos</div><div class="sv" id="cli-st-com-pedido" style="color:var(--purple)">0</div></div>
+  </div>
+
+  <!-- Busca + Ordenação -->
+  <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap">
+    <div class="sbox" style="flex:1;min-width:200px">
+      <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <input id="cli-search" placeholder="Buscar por nome ou telefone..." style="background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:12.5px;color:var(--text);width:100%" oninput="renderClientes()">
+    </div>
+    <div class="sw">
+      <select id="cli-order" onchange="renderClientes()" style="font-size:12.5px">
+        <option value="recente">Mais recente</option>
+        <option value="nome">Nome A-Z</option>
+        <option value="pedidos">Mais pedidos</option>
+        <option value="gasto">Maior gasto</option>
+        <option value="aniversario">Aniversário próximo</option>
+      </select>
+    </div>
+    <span id="cli-count" style="font-size:12px;color:var(--muted);white-space:nowrap">0 clientes</span>
+  </div>
+
+  <!-- Banner aniversariantes hoje -->
+  <div id="cli-aniv-banner" style="display:none;background:linear-gradient(135deg,rgba(139,92,246,.15),rgba(236,72,153,.12));border:1px solid rgba(139,92,246,.3);border-radius:12px;padding:14px 18px;margin-bottom:16px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px">🎉 Aniversariantes hoje <span id="cli-aniv-hoje-badge" style="background:var(--purple);color:#fff;font-size:10px;padding:1px 7px;border-radius:99px">0</span></div>
+    <div id="cli-aniv-hoje-list" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+  </div>
+
+  <!-- Tabela -->
+  <div class="tw">
+    <div class="tmeta"><span id="cli-count2" style="font-size:12px;color:var(--muted)"></span></div>
+    <table>
+      <thead>
+        <tr>
+          <th>Cliente</th>
+          <th>Telefone</th>
+          <th>Aniversário</th>
+          <th>Pedidos</th>
+          <th>Total gasto</th>
+          <th>Último pedido</th>
+          <th>Fidelidade</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="cli-tbody"></tbody>
+    </table>
+    <div id="cli-empty" style="display:none;text-align:center;padding:48px 20px;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:12px">👥</div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:6px">Nenhum cliente encontrado</div>
+      <div style="font-size:12px">Os clientes aparecerão aqui quando se cadastrarem no cardápio digital</div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Ver / Editar cliente -->
+<div class="modal-bg" id="modal-cliente-detalhe">
+  <div class="modal" style="width:560px;max-height:90vh;overflow-y:auto">
+    <button class="modal-close" onclick="closeModal('modal-cliente-detalhe')">✕</button>
+    <h2 id="modal-cli-title">👤 Cliente</h2>
+
+    <!-- Tabs internas -->
+    <div style="display:flex;gap:6px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:0">
+      <button class="tab active" id="cli-tab-info" onclick="cliModalTab('info')">📋 Dados</button>
+      <button class="tab" id="cli-tab-pedidos" onclick="cliModalTab('pedidos')">🛒 Pedidos</button>
+    </div>
+
+    <!-- Aba: Dados -->
+    <div id="cli-modal-info">
+      <input type="hidden" id="edit-cli-id">
+      <div class="form-row"><label class="form-label">Nome</label><input class="form-input" id="edit-cli-nome" placeholder="Nome completo"></div>
+      <div class="form-row"><label class="form-label">Telefone</label><input class="form-input" id="edit-cli-phone" placeholder="(XX) X XXXX-XXXX"></div>
+      <div class="form-row"><label class="form-label">E-mail</label><input class="form-input" id="edit-cli-email" type="email" placeholder="email@exemplo.com"></div>
+      <div class="form-row">
+        <label class="form-label">Data de aniversário</label>
+        <input class="form-input" id="edit-cli-aniversario" type="date">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Deixe vazio se não souber</div>
+      </div>
+      <div class="form-row"><label class="form-label">Endereço</label><input class="form-input" id="edit-cli-addr" placeholder="Rua, número, bairro"></div>
+
+      <!-- Info somente leitura -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:16px 0;padding:14px;background:var(--surface2);border-radius:10px">
+        <div style="text-align:center"><div style="font-size:11px;color:var(--muted);margin-bottom:4px">Pedidos</div><div id="cli-det-orders" style="font-size:20px;font-weight:700;color:var(--accent)">0</div></div>
+        <div style="text-align:center"><div style="font-size:11px;color:var(--muted);margin-bottom:4px">Total gasto</div><div id="cli-det-gasto" style="font-size:16px;font-weight:700;color:var(--success)">R$ 0</div></div>
+        <div style="text-align:center"><div style="font-size:11px;color:var(--muted);margin-bottom:4px">Pontos fid.</div><div id="cli-det-pts" style="font-size:20px;font-weight:700;color:var(--purple)">—</div></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:16px">
+        Cadastrado em: <span id="cli-det-criado" style="color:var(--text)">—</span> &nbsp;·&nbsp; Último pedido: <span id="cli-det-ultimo" style="color:var(--text)">—</span>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-cliente-detalhe')">Cancelar</button>
+        <button class="btn" style="flex:1;justify-content:center;background:rgba(239,68,68,.15);color:#ef4444;border-color:rgba(239,68,68,.3)" onclick="deleteCliente()">🗑️ Excluir</button>
+        <button class="btn bp" style="flex:1;justify-content:center" onclick="saveCliente()">💾 Salvar</button>
+      </div>
+    </div>
+
+    <!-- Aba: Pedidos -->
+    <div id="cli-modal-pedidos" style="display:none">
+      <div id="cli-pedidos-list" style="display:flex;flex-direction:column;gap:10px">
+        <div style="text-align:center;padding:32px;color:var(--muted)">Carregando pedidos...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- IMPRESSÃO -->
 <div class="page" id="page-impressao">
   <div class="ph">
@@ -1613,91 +1737,6 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
         <div style="font-size:11.5px;color:var(--muted);font-weight:600;margin-bottom:7px">Formas de pagamento hoje</div>
         <div id="cx-pagamentos"></div>
       </div>
-    </div>
-  </div>
-</div>
-
-
-<!-- CLIENTES -->
-<div class="page" id="page-clientes">
-  <div class="ph">
-    <div>
-      <div class="pt">Clientes</div>
-      <div class="ps">Gerencie sua base de clientes e veja aniversariantes</div>
-    </div>
-    <div style="display:flex;gap:8px">
-      <button class="btn bg" id="btn-tab-todos" onclick="clientesTab('todos')" style="background:var(--accent);color:#fff;border-color:var(--accent)">👥 Todos</button>
-      <button class="btn bg" id="btn-tab-cadastrados" onclick="clientesTab('cadastrados')">📱 Cadastrados App</button>
-      <button class="btn bg" id="btn-tab-aniversario" onclick="clientesTab('aniversario')">🎂 Aniversariantes</button>
-    </div>
-  </div>
-
-  <!-- Stats -->
-  <div class="sg" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
-    <div class="sc" style="--ca:var(--accent)"><div class="si2">👥</div><div class="sl">Total clientes</div><div class="sv" id="cli-total">0</div></div>
-    <div class="sc" style="--ca:var(--success)"><div class="si2">🎂</div><div class="sl">Aniversariantes hoje</div><div class="sv" id="cli-aniv-hoje" style="color:var(--success)">0</div></div>
-    <div class="sc" style="--ca:var(--accent3)"><div class="si2">📅</div><div class="sl">Aniversariantes mês</div><div class="sv" id="cli-aniv-mes" style="color:var(--accent3)">0</div></div>
-    <div class="sc" style="--ca:var(--purple)"><div class="si2">⭐</div><div class="sl">Com pontos fidelidade</div><div class="sv" id="cli-com-pts" style="color:var(--purple)">0</div></div>
-  </div>
-
-  <!-- Busca -->
-  <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center">
-    <div class="sbox" style="flex:1"><svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><input id="cli-search" placeholder="Buscar por nome ou telefone..." style="background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:12.5px;color:var(--text);width:100%" oninput="renderClientes()"></div>
-    <div class="sw"><select id="cli-order" onchange="renderClientes()" style="font-size:12.5px">
-      <option value="nome">Nome A-Z</option>
-      <option value="pts">Mais pontos</option>
-      <option value="pedidos">Mais pedidos</option>
-      <option value="gasto">Maior gasto</option>
-      <option value="aniversario">Aniversário próximo</option>
-    </select></div>
-  </div>
-
-  <!-- Painel aniversariantes hoje (oculto por padrão) -->
-  <div id="cli-aniv-banner" style="display:none;background:linear-gradient(135deg,rgba(139,92,246,.15),rgba(236,72,153,.12));border:1px solid rgba(139,92,246,.3);border-radius:12px;padding:14px 18px;margin-bottom:16px">
-    <div style="font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px">🎉 Aniversariantes hoje <span id="cli-aniv-hoje-badge" style="background:var(--purple);color:#fff;font-size:10px;padding:1px 7px;border-radius:99px">0</span></div>
-    <div id="cli-aniv-hoje-list" style="display:flex;flex-wrap:wrap;gap:8px"></div>
-  </div>
-
-  <!-- Lista -->
-  <div class="tw">
-    <div class="tmeta">
-      <span id="cli-count" style="font-size:12.5px;color:var(--muted)">0 clientes</span>
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th>Cliente</th>
-          <th>Telefone</th>
-          <th>Aniversário</th>
-          <th>Pedidos</th>
-          <th>Gasto total</th>
-          <th>Pontos</th>
-          <th>Ações</th>
-        </tr>
-      </thead>
-      <tbody id="cli-tbody"></tbody>
-    </table>
-  </div>
-</div>
-
-<!-- MODAL: Editar cliente -->
-<div class="modal-bg" id="modal-edit-cliente">
-  <div class="modal" style="width:460px">
-    <button class="modal-close" onclick="closeModal('modal-edit-cliente')">✕</button>
-    <h2>✏️ Editar Cliente</h2>
-    <input type="hidden" id="edit-cli-id">
-    <input type="hidden" id="edit-cli-cust-id">
-    <div class="form-row"><label class="form-label">Nome</label><input class="form-input" id="edit-cli-nome" placeholder="Nome completo"></div>
-    <div class="form-row"><label class="form-label">Telefone</label><input class="form-input" id="edit-cli-phone" placeholder="(XX) X XXXX-XXXX"></div>
-    <div class="form-row"><label class="form-label">E-mail</label><input class="form-input" id="edit-cli-email" type="email" placeholder="email@exemplo.com"></div>
-    <div class="form-row">
-      <label class="form-label">Data de aniversário</label>
-      <input class="form-input" id="edit-cli-aniversario" type="date">
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">Deixe vazio se não souber</div>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-edit-cliente')">Cancelar</button>
-      <button class="btn bp" style="flex:1;justify-content:center" onclick="saveCliente()">Salvar</button>
     </div>
   </div>
 </div>
