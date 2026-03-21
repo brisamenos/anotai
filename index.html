@@ -51,56 +51,59 @@ input,textarea{font-family:inherit}
 @keyframes dotPulse{0%,80%,100%{opacity:.2}40%{opacity:1}}
 
 /* ═══════════════════════════════════════
-   HERO
+   HERO — compact iFood-style header
 ═══════════════════════════════════════ */
 .hero{
-  position:relative;min-height:220px;
-  background:linear-gradient(180deg,rgba(0,0,0,.4) 0%,rgba(0,0,0,.85) 100%),
-    linear-gradient(135deg,#0c0e14 0%,#1a1f35 100%);
-  background-size:cover;background-position:center;
-  padding:20px 20px 28px;
-  display:flex;flex-direction:column;justify-content:flex-end;
-  overflow:hidden;
+  background:var(--s1);border-bottom:1px solid var(--border);
+  padding:0;position:relative;overflow:hidden;
 }
-.hero::after{
-  content:'';position:absolute;inset:0;
-  background:radial-gradient(ellipse 70% 60% at 20% 120%,rgba(249,115,22,.15) 0%,transparent 65%);
-  pointer-events:none;
+.hero-banner{
+  width:100%;height:140px;overflow:hidden;display:none;
+  background:linear-gradient(135deg,#0c0e14,#1a1f35);
 }
-.hero-close-btn{
-  position:absolute;top:16px;right:16px;z-index:10;
-  width:36px;height:36px;border-radius:50%;
-  background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);
-  color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;
-  backdrop-filter:blur(8px);transition:background .15s;
+.hero-banner.show{ display:block }
+.hero-banner img{ width:100%;height:100%;object-fit:cover;display:block }
+.hero-inner{
+  display:flex;align-items:center;gap:14px;
+  padding:16px 16px 0;
 }
-.hero-close-btn:hover{background:rgba(255,255,255,.18)}
-
-.hero-logo-img{
-  width:68px;height:68px;border-radius:16px;object-fit:cover;
-  border:2px solid rgba(255,255,255,.15);margin-bottom:14px;
-  box-shadow:0 8px 24px rgba(0,0,0,.4);
+.hero-logo{
+  width:56px;height:56px;border-radius:50%;flex-shrink:0;overflow:hidden;
+  background:rgba(249,115,22,.12);border:2px solid rgba(249,115,22,.25);
+  display:flex;align-items:center;justify-content:center;font-size:26px;
+  box-shadow:0 4px 16px rgba(0,0,0,.4);
 }
-.hero-emoji{
-  width:68px;height:68px;border-radius:16px;
-  background:rgba(249,115,22,.12);border:1.5px solid rgba(249,115,22,.2);
-  display:flex;align-items:center;justify-content:center;font-size:32px;
-  margin-bottom:14px;
-}
+.hero-logo img,.hero-logo-img{ width:100%;height:100%;object-fit:cover;border-radius:50%;display:block }
+.hero-info{ flex:1;min-width:0 }
 .hero-name{
-  font-family:'Fraunces',serif;font-size:28px;font-weight:900;
-  color:var(--white);letter-spacing:-.5px;line-height:1.1;margin-bottom:6px;
+  font-family:'Fraunces',serif;font-size:20px;font-weight:900;
+  color:var(--white);letter-spacing:-.3px;line-height:1.2;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
-.hero-desc{font-size:13px;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:12px;max-width:320px}
-.hero-badges{display:flex;flex-wrap:wrap;gap:6px}
-.hero-badge{
-  display:inline-flex;align-items:center;gap:5px;
-  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);
-  border-radius:99px;padding:5px 11px;font-size:12px;color:rgba(255,255,255,.8);
-  backdrop-filter:blur(6px);
+.hero-desc{font-size:12px;color:var(--muted2);line-height:1.4;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hero-actions{ display:flex;gap:8px;flex-shrink:0 }
+.hero-icon-btn{
+  width:36px;height:36px;border-radius:50%;
+  background:rgba(255,255,255,.07);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--muted2);font-size:15px;cursor:pointer;transition:all .15s;
 }
-.hero-badge .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
-.hero-badge.closed .dot{background:var(--red)}
+.hero-icon-btn:hover{ background:rgba(255,255,255,.12);color:var(--text) }
+.hero-meta{
+  display:flex;align-items:center;flex-wrap:wrap;gap:0;
+  padding:10px 16px 14px;font-size:12px;color:var(--muted);
+}
+.hero-meta-item{ display:flex;align-items:center;gap:4px;white-space:nowrap }
+.hero-meta-sep{ margin:0 8px;color:var(--border2) }
+.hero-meta-dot{ width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;animation:hblink 2s infinite }
+@keyframes hblink{0%,100%{opacity:1}50%{opacity:.4}}
+.hero-meta-dot.closed{ background:var(--red);animation:none }
+.hero-meta-status{ font-weight:700 }
+.hero-meta-status.open{ color:var(--green) }
+.hero-meta-status.closed{ color:var(--red) }
+.hero-meta-link{ color:var(--accent);font-weight:600;cursor:pointer;text-decoration:none;margin-left:auto }
+/* legado */
+.hero-emoji,.hero-close-btn,.hero-badges,.hero-badge{ display:none!important }
 
 /* ═══════════════════════════════════════
    SEARCH + CATS
@@ -111,76 +114,101 @@ input,textarea{font-family:inherit}
   padding:12px 16px 0;
 }
 .search-wrap{position:relative;margin-bottom:12px}
-.search-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:16px;pointer-events:none}
+.search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px;pointer-events:none}
 .search-input{
-  width:100%;background:var(--s2);border:1px solid var(--border);border-radius:12px;
-  padding:11px 14px 11px 38px;color:var(--text);font-size:14px;outline:none;
+  width:100%;background:var(--s2);border:1px solid var(--border);border-radius:10px;
+  padding:10px 14px 10px 36px;color:var(--text);font-size:13.5px;outline:none;
   transition:border-color .18s;
 }
 .search-input:focus{border-color:rgba(249,115,22,.4)}
 .search-input::placeholder{color:var(--muted)}
-.cats-scroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:12px;scrollbar-width:none}
+.cats-scroll{display:flex;gap:0;overflow-x:auto;padding-bottom:0;scrollbar-width:none}
 .cats-scroll::-webkit-scrollbar{display:none}
 .cat-btn{
-  flex-shrink:0;background:var(--s2);border:1px solid var(--border);
-  border-radius:99px;padding:7px 15px;font-size:12.5px;font-weight:600;
+  flex-shrink:0;background:transparent;border:none;border-bottom:2.5px solid transparent;
+  padding:9px 16px 9px;font-size:13px;font-weight:600;
   color:var(--muted2);transition:all .18s;white-space:nowrap;
 }
-.cat-btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.cat-btn.on{color:var(--accent);border-bottom-color:var(--accent)}
 
 /* ═══════════════════════════════════════
    MENU
 ═══════════════════════════════════════ */
-#menu-wrap{padding:20px 16px 120px}
+#menu-wrap{padding:0 0 120px}
 .section-label{
-  font-family:'Fraunces',serif;font-size:18px;font-weight:700;
-  color:var(--text);margin-bottom:12px;padding-top:4px;letter-spacing:-.3px;
+  font-family:'Fraunces',serif;font-size:17px;font-weight:700;
+  color:var(--text);margin-bottom:0;padding:18px 16px 8px;letter-spacing:-.3px;
 }
-.section+.section{margin-top:28px}
-.item-grid{display:flex;flex-direction:column;gap:10px}
+.section+.section{margin-top:8px}
+.item-grid{display:flex;flex-direction:column;gap:0}
 
+/* Destaque scroll horizontal */
+.destaques-wrap{padding:0 0 4px;overflow:hidden}
+.destaques-scroll{display:flex;gap:10px;overflow-x:auto;padding:0 16px 12px;scrollbar-width:none}
+.destaques-scroll::-webkit-scrollbar{display:none}
+.dest-card{
+  flex-shrink:0;width:150px;background:var(--s1);border:1px solid var(--border);
+  border-radius:14px;overflow:hidden;cursor:pointer;transition:all .18s;position:relative;
+}
+.dest-card:active{transform:scale(.97)}
+.dest-img{
+  width:100%;height:96px;background:var(--s2);overflow:hidden;
+  display:flex;align-items:center;justify-content:center;font-size:36px;position:relative;
+}
+.dest-img img{width:100%;height:100%;object-fit:cover}
+.dest-promo-badge{
+  position:absolute;top:6px;left:6px;
+  background:var(--red);color:#fff;font-size:9px;font-weight:800;
+  padding:2px 7px;border-radius:4px;letter-spacing:.3px;
+}
+.dest-body{padding:8px 10px 10px}
+.dest-name{font-size:12.5px;font-weight:700;line-height:1.3;margin-bottom:4px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.dest-prices{display:flex;align-items:baseline;gap:5px}
+.dest-price-old{font-size:11px;color:var(--muted);text-decoration:line-through}
+.dest-price{font-family:'Fraunces',serif;font-size:14px;font-weight:700;color:var(--accent)}
+
+/* Item card — iFood style: texto esquerda, imagem direita */
 .item-card{
-  display:flex;gap:12px;align-items:center;
-  background:var(--s1);border:1px solid var(--border);border-radius:var(--r);
-  padding:12px;cursor:pointer;transition:all .18s;position:relative;overflow:hidden;
+  display:flex;align-items:center;gap:12px;
+  background:transparent;border:none;border-bottom:1px solid var(--border);
+  padding:14px 16px;cursor:pointer;transition:background .15s;position:relative;
 }
-.item-card:active{transform:scale(.985)}
-.item-card::before{
-  content:'';position:absolute;inset:0;
-  background:var(--accent);opacity:0;transition:opacity .18s;
-  pointer-events:none;
+.item-card:active{background:rgba(255,255,255,.03)}
+.item-card::before{display:none}
+.item-body{flex:1;min-width:0;padding-right:4px}
+.item-name{font-weight:700;font-size:14px;line-height:1.35;margin-bottom:3px;color:var(--text)}
+.item-desc{font-size:12px;color:var(--muted);line-height:1.45;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:10px}
+.item-foot{display:flex;align-items:center;gap:8px}
+.item-price-old{font-size:12px;color:var(--muted);text-decoration:line-through}
+.item-price{font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:var(--text)}
+.item-price-promo{color:var(--accent)!important}
+.item-add-btn{
+  width:28px;height:28px;border-radius:50%;
+  background:transparent;border:2px solid var(--accent);
+  color:var(--accent);font-size:20px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0;line-height:1;
 }
-.item-card:active::before{opacity:.04}
+.item-add-btn:hover{background:var(--accent);color:#fff}
+.item-add-btn:disabled{border-color:var(--s3);color:var(--muted);cursor:not-allowed}
 .item-img{
-  width:76px;height:76px;border-radius:12px;flex-shrink:0;overflow:hidden;
-  background:var(--s2);border:1px solid var(--border);
+  width:88px;height:88px;border-radius:12px;flex-shrink:0;overflow:hidden;
+  background:var(--s2);
   display:flex;align-items:center;justify-content:center;font-size:32px;position:relative;
 }
 .item-img img{width:100%;height:100%;object-fit:cover}
 .item-promo-badge{
   position:absolute;top:4px;left:4px;
-  background:var(--accent);color:#fff;font-size:9px;font-weight:800;
-  padding:2px 5px;border-radius:4px;letter-spacing:.3px;
+  background:var(--red);color:#fff;font-size:9px;font-weight:800;
+  padding:2px 6px;border-radius:4px;letter-spacing:.3px;
 }
 .item-esgotado-overlay{
-  position:absolute;inset:0;background:rgba(0,0,0,.7);
+  position:absolute;inset:0;background:rgba(0,0,0,.65);
   display:flex;align-items:center;justify-content:center;
   color:#fff;font-size:10px;font-weight:700;border-radius:12px;letter-spacing:.3px;
 }
-.item-body{flex:1;min-width:0}
-.item-name{font-weight:700;font-size:14px;line-height:1.3;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.item-desc{font-size:12px;color:var(--muted);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:8px}
-.item-foot{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.item-price{font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:var(--amber)}
-.item-price-old{font-size:12px;color:var(--muted);text-decoration:line-through;margin-right:4px}
-.item-add-btn{
-  width:30px;height:30px;border-radius:50%;
-  background:var(--accent);border:none;color:#fff;font-size:19px;font-weight:700;
-  display:flex;align-items:center;justify-content:center;
-  transition:all .15s;flex-shrink:0;line-height:1;
-}
-.item-add-btn:hover{background:var(--accent-d);transform:scale(1.1)}
-.item-add-btn:disabled{background:var(--s3);color:var(--muted);transform:none;cursor:not-allowed}
 
 .empty-state{
   padding:60px 20px;text-align:center;
@@ -673,11 +701,9 @@ input,textarea{font-family:inherit}
    RESPONSIVE
 ═══════════════════════════════════════ */
 @media(min-width:520px){
-  .item-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  .item-card{flex-direction:column;align-items:stretch}
-  .item-img{width:100%;height:140px;border-radius:12px 12px 0 0;border:none}
-  .item-body{padding:10px 10px 8px}
-  .item-name{white-space:normal}
+  .item-card{padding:16px 20px}
+  .item-img{width:96px;height:96px}
+  .dest-card{width:170px}
 }
 
 /* ═══════════════════════════════════════
@@ -932,21 +958,37 @@ input,textarea{font-family:inherit}
 
 <!-- HERO -->
 <div class="hero" id="hero">
-  <button class="profile-fab" id="profile-fab" onclick="onProfileFabClick()" style="display:none">
-    <div class="profile-fab-av" id="profile-fab-av">?</div>
-    <span id="profile-fab-name">Entrar</span>
-  </button>
-  <div class="hero-emoji" id="hero-emoji">🍽️</div>
-  <div class="hero-name" id="hero-name">Carregando…</div>
-  <div class="hero-desc" id="hero-desc"></div>
-  <div class="hero-badges">
-    <div class="hero-badge" id="status-badge">
-      <div class="dot" id="status-dot"></div>
-      <span id="status-txt">Verificando…</span>
+  <!-- banner opcional -->
+  <div class="hero-banner" id="hero-banner"></div>
+  <div class="hero-inner">
+    <!-- logo -->
+    <div class="hero-logo" id="hero-logo-wrap">
+      <span id="hero-emoji">🍽️</span>
     </div>
-    <div class="hero-badge" id="badge-tempo" style="display:none">🛵 <span id="hero-tempo"></span></div>
-    <div class="hero-badge" id="badge-aval"  style="display:none">⭐ <span id="hero-aval"></span></div>
+    <div class="hero-info">
+      <div class="hero-name" id="hero-name">Carregando…</div>
+      <div class="hero-desc" id="hero-desc"></div>
+    </div>
+    <div class="hero-actions">
+      <button class="hero-icon-btn" id="profile-fab" onclick="onProfileFabClick()" style="display:none" title="Minha conta">
+        <span id="profile-fab-av">👤</span>
+      </button>
+    </div>
   </div>
+  <!-- meta bar: status · tempo · avaliação · Perfil da loja -->
+  <div class="hero-meta">
+    <div class="hero-meta-item">
+      <div class="hero-meta-dot" id="status-dot"></div>
+      <span class="hero-meta-status open" id="status-txt">Verificando…</span>
+    </div>
+    <span class="hero-meta-sep">·</span>
+    <div class="hero-meta-item" id="badge-tempo" style="display:none">🛵 <span id="hero-tempo"></span></div>
+    <span class="hero-meta-sep" id="sep-tempo" style="display:none">·</span>
+    <div class="hero-meta-item" id="badge-aval" style="display:none">⭐ <span id="hero-aval"></span></div>
+    <a class="hero-meta-link" onclick="onProfileFabClick()" id="profile-fab-name">Entrar</a>
+  </div>
+  <!-- legado: mantém status-badge para não quebrar JS -->
+  <div id="status-badge" style="display:none"><div class="dot" id="status-dot-legacy"></div></div>
 </div>
 
 <!-- BANNER LOJA FECHADA -->
@@ -1478,31 +1520,48 @@ function applyBranding(b, nome) {
   if (b?.store_descricao) document.getElementById('hero-desc').textContent = b.store_descricao;
   const cor = b?.store_cor || '#f97316';
   document.documentElement.style.setProperty('--accent', cor);
-  if (b?.store_logo_url) {
-    const emoEl = document.getElementById('hero-emoji');
-    if (emoEl) {
-      const img = document.createElement('img');
-      img.src = b.store_logo_url;
-      img.alt = n;
-      img.className = 'hero-logo-img';
-      img.onerror = ()=>img.remove();
-      emoEl.replaceWith(img);
+
+  // Logo circular
+  const logoWrap = document.getElementById('hero-logo-wrap');
+  if (b?.store_logo_url && logoWrap) {
+    const img = document.createElement('img');
+    img.src = b.store_logo_url;
+    img.alt = n;
+    img.className = 'hero-logo-img';
+    img.onerror = () => { logoWrap.innerHTML = '<span id="hero-emoji">🍽️</span>'; };
+    logoWrap.innerHTML = '';
+    logoWrap.appendChild(img);
+  }
+
+  // Banner
+  if (b?.store_banner_url) {
+    const bannerEl = document.getElementById('hero-banner');
+    if (bannerEl) {
+      const url = b.store_banner_url.startsWith('http') ? b.store_banner_url : location.origin + b.store_banner_url;
+      bannerEl.innerHTML = `<img src="${url}" alt="banner" onerror="this.parentElement.classList.remove('show')">`;
+      bannerEl.classList.add('show');
     }
   }
-  if (b?.store_banner_url) {
-    const hero = document.getElementById('hero');
-    const url  = b.store_banner_url.startsWith('http') ? b.store_banner_url : location.origin + b.store_banner_url;
-    hero.style.background = `linear-gradient(180deg,rgba(0,0,0,.3) 0%,rgba(0,0,0,.85) 100%),url('${url}') center/cover no-repeat`;
-  }
+
+  // Tempo de entrega
   if (b?.store_tempo_entrega) {
-    document.getElementById('hero-tempo').textContent = b.store_tempo_entrega;
-    document.getElementById('badge-tempo').style.display = '';
+    const el = document.getElementById('hero-tempo');
+    if (el) el.textContent = b.store_tempo_entrega;
+    const badge = document.getElementById('badge-tempo');
+    if (badge) { badge.style.display = ''; }
+    const sep = document.getElementById('sep-tempo');
+    if (sep) sep.style.display = '';
   }
+
+  // Avaliação
   if (b?.store_avaliacao) {
-    document.getElementById('hero-aval').textContent = b.store_avaliacao;
-    document.getElementById('badge-aval').style.display = '';
+    const el = document.getElementById('hero-aval');
+    if (el) el.textContent = b.store_avaliacao;
+    const badge = document.getElementById('badge-aval');
+    if (badge) badge.style.display = '';
   }
-  // Salva número WA para usar no toast pós-pedido
+
+  // WhatsApp
   if (b?.store_whatsapp) {
     _waNumero = b.store_whatsapp.replace(/\D/g, '');
     if (_waNumero.length <= 11) _waNumero = '55' + _waNumero;
@@ -1538,7 +1597,10 @@ function applyStatus(store_open, horarios) {
   const btn  = document.getElementById('confirm-btn');
   if (dot)  dot.style.background = _lojaAberta ? 'var(--green)' : 'var(--red)';
   if (badge) badge.classList.toggle('closed', !_lojaAberta);
-  if (txt)  txt.textContent = _lojaAberta ? 'Aberto agora' : 'Fechado';
+  if (txt) {
+    txt.textContent = _lojaAberta ? 'Aberto' : 'Fechado';
+    txt.className = 'hero-meta-status ' + (_lojaAberta ? 'open' : 'closed');
+  }
   if (ban)  ban.classList.toggle('on', !_lojaAberta);
   if (btn) {
     btn.disabled = !_lojaAberta || cart.length === 0;
@@ -1690,43 +1752,49 @@ function applyBrandingLive(cfg) {
     document.documentElement.style.setProperty('--accent', cfg.store_cor);
   }
 
-  // Logo
+  // Logo circular
   if (cfg.store_logo_url) {
-    // Tenta atualizar img existente ou substituir o emoji
-    const existingImg = document.querySelector('.hero-logo-img');
-    if (existingImg) {
-      existingImg.src = cfg.store_logo_url;
-    } else {
-      const emoEl = document.getElementById('hero-emoji');
-      if (emoEl) {
+    const logoWrap = document.getElementById('hero-logo-wrap');
+    if (logoWrap) {
+      const existing = logoWrap.querySelector('img');
+      if (existing) { existing.src = cfg.store_logo_url; }
+      else {
         const img = document.createElement('img');
         img.src = cfg.store_logo_url;
         img.className = 'hero-logo-img';
-        img.onerror = () => img.remove();
-        emoEl.replaceWith(img);
+        img.onerror = () => { logoWrap.innerHTML = '<span id="hero-emoji">🍽️</span>'; };
+        logoWrap.innerHTML = '';
+        logoWrap.appendChild(img);
       }
     }
   }
 
   // Banner
   if (cfg.store_banner_url) {
-    const hero = document.getElementById('hero');
-    if (hero) {
+    const bannerEl = document.getElementById('hero-banner');
+    if (bannerEl) {
       const url = cfg.store_banner_url.startsWith('http')
         ? cfg.store_banner_url
         : location.origin + cfg.store_banner_url;
-      hero.style.background = `linear-gradient(180deg,rgba(0,0,0,.3) 0%,rgba(0,0,0,.85) 100%),url('${url}') center/cover no-repeat`;
+      bannerEl.innerHTML = `<img src="${url}" alt="banner" onerror="this.parentElement.classList.remove('show')">`;
+      bannerEl.classList.add('show');
     }
   }
 
   // Tempo e avaliação
   if (cfg.store_tempo_entrega) {
     const el = document.getElementById('hero-tempo');
-    if (el) { el.textContent = cfg.store_tempo_entrega; el.closest('.hero-badge').style.display = ''; }
+    if (el) { el.textContent = cfg.store_tempo_entrega; }
+    const badge = document.getElementById('badge-tempo');
+    if (badge) { badge.style.display = ''; }
+    const sep = document.getElementById('sep-tempo');
+    if (sep) sep.style.display = '';
   }
   if (cfg.store_avaliacao) {
     const el = document.getElementById('hero-aval');
-    if (el) { el.textContent = cfg.store_avaliacao; el.closest('.hero-badge').style.display = ''; }
+    if (el) { el.textContent = cfg.store_avaliacao; }
+    const badge = document.getElementById('badge-aval');
+    if (badge) badge.style.display = '';
   }
 
   // WhatsApp
@@ -1769,11 +1837,11 @@ function updateProfileFab() {
   if (!fab) return;
   fab.style.display = 'flex';
   if (_customer) {
-    av.textContent   = (_customer.name||'?').charAt(0).toUpperCase();
-    name.textContent = (_customer.name||'Eu').split(' ')[0];
+    if (av)   av.textContent   = (_customer.name||'?').charAt(0).toUpperCase();
+    if (name) name.textContent = (_customer.name||'Eu').split(' ')[0];
   } else {
-    av.textContent   = '👤';
-    name.textContent = 'Entrar';
+    if (av)   av.textContent   = '👤';
+    if (name) name.textContent = 'Entrar';
   }
 }
 
@@ -2015,7 +2083,7 @@ function renderMenu() {
     return;
   }
 
-  let html = '<div style="padding:20px 16px 120px">';
+  let html = '<div>';
 
   if (searchQ || activeCat) {
     // Em busca/filtro, mostra só cards normais
@@ -2031,6 +2099,31 @@ function renderMenu() {
     html += '</div>';
     document.getElementById('menu-wrap').innerHTML = html;
     return;
+  }
+
+  // ── Seção Destaques (promos e price_old) ──
+  const destItems = normalItems.filter(i => i.promo || i.price_old);
+  if (destItems.length >= 2) {
+    html += `<div class="destaques-wrap"><div class="section-label">⭐ Destaques</div>`;
+    html += `<div class="destaques-scroll">`;
+    destItems.forEach(i => {
+      const esg = i.status === 'esgotado';
+      html += `
+      <div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}>
+        <div class="dest-img">
+          ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy">` : `<span>${i.emoji||'🍽️'}</span>`}
+          <span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span>
+        </div>
+        <div class="dest-body">
+          <div class="dest-name">${i.name}</div>
+          <div class="dest-prices">
+            ${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}
+            <span class="dest-price">R$ ${fmt(i.price)}</span>
+          </div>
+        </div>
+      </div>`;
+    });
+    html += `</div></div>`;
   }
 
   // Renderiza grupos normais
@@ -2197,23 +2290,22 @@ function addChecklistToCart(clId) {
 function itemCard(i) {
   const esg  = i.status === 'esgotado';
   const click= esg ? '' : `onclick="openItemModal(${i.id})"`;
+  const hasImg = i.image_url || i.emoji;
   return `
   <div class="item-card" ${click} style="${esg?'opacity:.55;cursor:not-allowed':''}">
-    <div class="item-img">
-      ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy">` : `<span>${i.emoji||'🍽️'}</span>`}
-      ${i.promo ? '<span class="item-promo-badge">PROMO</span>' : ''}
-      ${esg ? '<div class="item-esgotado-overlay">Esgotado</div>' : ''}
-    </div>
     <div class="item-body">
       <div class="item-name">${i.name}</div>
-      <div class="item-desc">${i.description||''}</div>
+      ${i.description ? `<div class="item-desc">${i.description}</div>` : ''}
       <div class="item-foot">
-        <div>
-          ${i.price_old ? `<span class="item-price-old">R$ ${fmt(i.price_old)}</span>` : ''}
-          <span class="item-price">R$ ${fmt(i.price)}</span>
-        </div>
+        ${i.price_old ? `<span class="item-price-old">R$ ${fmt(i.price_old)}</span>` : ''}
+        <span class="item-price${i.promo||i.price_old?' item-price-promo':''}">R$ ${fmt(i.price)}</span>
         <button class="item-add-btn" ${esg?'disabled':''} onclick="event.stopPropagation();addToCart(${i.id})">+</button>
       </div>
+    </div>
+    <div class="item-img">
+      ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy">` : `<span>${i.emoji||'🍽️'}</span>`}
+      ${i.promo||i.price_old ? '<span class="item-promo-badge">PROMO</span>' : ''}
+      ${esg ? '<div class="item-esgotado-overlay">Esgotado</div>' : ''}
     </div>
   </div>`;
 }
@@ -3016,31 +3108,22 @@ async function _iniciarFluxoPix(order) {
     const pd  = pr.ok  ? await pr.json()  : null;
 
     if (pr.ok && pd?.qr_code) {
-      // Mostra o wrapper ANTES de instanciar QRCode — biblioteca precisa do container visível
-      // para calcular dimensões do canvas corretamente
+      // Gera QR Code localmente no browser (sem depender de base64 do MP ou serviço externo)
+      const qrEl = document.getElementById('pix-qr-img');
+      qrEl.innerHTML = '';
+      new QRCode(qrEl, {
+        text:          pd.qr_code,
+        width:         180,
+        height:        180,
+        colorDark:     '#000000',
+        colorLight:    '#ffffff',
+        correctLevel:  QRCode.CorrectLevel.M
+      });
       document.getElementById('pix-qr-wrap').style.display = '';
       document.getElementById('pix-copy-code').value = pd.qr_code;
       document.getElementById('pix-status-label').textContent = '⏳ Aguardando pagamento...';
       document.getElementById('pix-aprovado-msg').style.display = 'none';
-
-      // requestAnimationFrame garante que o browser computou o layout antes de renderizar o QR
-      const qrCode = pd.qr_code;
-      const orderId = order.id;
-      const mpPayId = pd.mp_payment_id;
-      requestAnimationFrame(() => {
-        const qrEl = document.getElementById('pix-qr-img');
-        qrEl.innerHTML = '';
-        new QRCode(qrEl, {
-          text:         qrCode,
-          width:        180,
-          height:       180,
-          colorDark:    '#000000',
-          colorLight:   '#ffffff',
-          correctLevel: QRCode.CorrectLevel.M
-        });
-      });
-
-      _startPixPoll(mpPayId, orderId);
+      _startPixPoll(pd.mp_payment_id, order.id);
       return;
     }
 
