@@ -144,7 +144,7 @@
       };
 
       ['INSERT', 'UPDATE', 'DELETE'].forEach(evType => {
-        ['orders', 'mesas', 'menu_items', 'categories', 'store_config', 'garcons'].forEach(tbl => {
+        ['orders', 'mesas', 'menu_items', 'categories', 'store_config', 'garcons', 'customers'].forEach(tbl => {
           self._sse.addEventListener(`${tbl}:${evType}`, handle);
         });
       });
