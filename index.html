@@ -1571,8 +1571,11 @@ let _orderNumOffset = 0;  // lido de store_config.order_num_offset; sincronizado
 function _orderNum(id) { return Math.max(1, id - _orderNumOffset); }
 
 // ── PIX ──
-let _pixPollTimer = null;
-let _pixMpId      = null;
+let _pixPollTimer    = null;
+let _pixMpId         = null;
+let _pixAtivoGestor  = true;   // carregado no init(); false = modo manual (chave estática)
+let _pixKeyManual    = '';
+let _pixKeyManualBanco = '';
 
 // ── Auth state ──
 let _customer    = null;
@@ -1733,11 +1736,12 @@ async function init() {
     }
     applyBranding(info.branding, info.nome);
 
-    const [itemsR, catsR, cuponsR, cfgR] = await Promise.all([
+    const [itemsR, catsR, cuponsR, cfgR, pixCfgR] = await Promise.all([
       sb.from('menu_items').select('*').not('status','eq','pausado').order('id'),
       sb.from('categories').select('*').eq('ativo', true).order('sort_order'),
       sb.from('cupons').select('*').eq('ativo', true),
-      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp,order_num_offset').single()
+      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp,order_num_offset').single(),
+      fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } }).then(r => r.ok ? r.json() : {}).catch(() => ({}))
     ]);
 
     allItems  = (itemsR.data  || []).map(x => ({
@@ -1762,6 +1766,11 @@ async function init() {
         if (_waNumero.length <= 11) _waNumero = '55' + _waNumero;
       }
     }
+
+    // ── Config Pix: determina se QR Code está ativo ou modo manual ──
+    _pixAtivoGestor  = pixCfgR.pix_ativo_gestor !== false;
+    _pixKeyManual    = pixCfgR.pix_key_manual    || '';
+    _pixKeyManualBanco = pixCfgR.pix_key_manual_banco || '';
 
     buildCats();
     renderMenu();
@@ -3099,7 +3108,7 @@ async function _doSubmitOrder(addr, troco) {
     const { data: order, error } = await sb.from('orders').insert({
       client: name, phone, addr,
       items, total: grandTotal(), taxa: getTaxa(),
-      status: selectedPay === 'pix' ? 'aguardando_pix' : 'analise',
+      status: selectedPay === 'pix' && _pixAtivoGestor ? 'aguardando_pix' : 'analise',
       time, pag: selectedPay,
       troco: troco || null,
       customer_id: customerId
@@ -3229,16 +3238,14 @@ async function _iniciarFluxoPix(order) {
   document.getElementById('pix-manual-success-wrap').style.display = 'none';
 
   try {
-    // Busca config PRIMEIRO para checar se QR Code está ativo
-    const cfgR = await fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } });
-    const cfg  = cfgR.ok ? await cfgR.json() : {};
-
-    // ── QR Code desativado pelo gestor → exibe somente chave PIX manual ──
-    if (cfg.pix_ativo_gestor === false) {
-      if (cfg.pix_key_manual) {
+    // ── Modo MANUAL: QR Code desativado pelo gestor ──
+    // Pedido já foi criado com status 'analise' (chega direto ao gestor)
+    // Aqui só exibimos a chave PIX para o cliente transferir
+    if (!_pixAtivoGestor) {
+      if (_pixKeyManual) {
         document.getElementById('pix-manual-success-wrap').style.display = '';
-        document.getElementById('pix-manual-key-show').value             = cfg.pix_key_manual;
-        document.getElementById('pix-manual-banco-lbl').textContent      = cfg.pix_key_manual_banco ? `🏦 ${cfg.pix_key_manual_banco}` : '';
+        document.getElementById('pix-manual-key-show').value             = _pixKeyManual;
+        document.getElementById('pix-manual-banco-lbl').textContent      = _pixKeyManualBanco ? `🏦 ${_pixKeyManualBanco}` : '';
         document.getElementById('pix-manual-valor-show').textContent     = 'R$ ' + fmt(order.total);
       } else {
         sec.style.display = 'none'; // desativado e sem chave manual configurada
@@ -3246,7 +3253,8 @@ async function _iniciarFluxoPix(order) {
       return;
     }
 
-    // ── QR Code ativo — gera cobrança no Mercado Pago ──
+    // ── Modo QR CODE: gera cobrança no Mercado Pago ──
+    // Pedido foi criado com status 'aguardando_pix' e só avança após confirmação
     const pr = await fetch('/api/pix/criar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
@@ -3255,7 +3263,6 @@ async function _iniciarFluxoPix(order) {
     const pd = pr.ok ? await pr.json() : null;
 
     if (pr.ok && pd?.qr_code) {
-      // Gera QR Code localmente no browser (sem depender de base64 do MP ou serviço externo)
       const qrEl = document.getElementById('pix-qr-img');
       qrEl.innerHTML = '';
       new QRCode(qrEl, {
@@ -3274,11 +3281,11 @@ async function _iniciarFluxoPix(order) {
       return;
     }
 
-    // MP falhou — tenta chave manual como fallback
-    if (cfg.pix_key_manual) {
+    // MP falhou — tenta chave manual como fallback (se configurada)
+    if (_pixKeyManual) {
       document.getElementById('pix-manual-success-wrap').style.display = '';
-      document.getElementById('pix-manual-key-show').value             = cfg.pix_key_manual;
-      document.getElementById('pix-manual-banco-lbl').textContent      = cfg.pix_key_manual_banco ? `🏦 ${cfg.pix_key_manual_banco}` : '';
+      document.getElementById('pix-manual-key-show').value             = _pixKeyManual;
+      document.getElementById('pix-manual-banco-lbl').textContent      = _pixKeyManualBanco ? `🏦 ${_pixKeyManualBanco}` : '';
       document.getElementById('pix-manual-valor-show').textContent     = 'R$ ' + fmt(order.total);
       return;
     }
