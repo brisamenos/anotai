@@ -2288,6 +2288,9 @@ async function addItem() {
   document.getElementById('new-status').value = 'active';
   const _nd = document.getElementById('new-destaque'); if(_nd) _nd.classList.remove('on');
   const _ngl = document.getElementById('new-grupos-list'); if(_ngl) _ngl.innerHTML='';
+  // Reset emoji preview
+  try { document.querySelectorAll('#emoji-grid .emo-btn').forEach(b=>b.classList.remove('on')); } catch(e){}
+  const _nec2 = document.getElementById('new-emoji-current'); if(_nec2) _nec2.textContent = '🍽️';
   togglePizzaOptions('new');
 
   closeModal('modal-add-item');
@@ -4782,6 +4785,7 @@ function openAddItemModal(catKeyDefault) {
   const ngl = document.getElementById('new-grupos-list'); if(ngl) ngl.innerHTML='';
   // Reset emoji grid (guarded)
   try { document.querySelectorAll('#emoji-grid .emo-btn').forEach(b=>b.classList.remove('on')); } catch(e){}
+  const _nec = document.getElementById('new-emoji-current'); if(_nec) _nec.textContent = '🍽️';
   togglePizzaOptions('new');
   _newItemImageFile = null;
   openModal('modal-add-item');
