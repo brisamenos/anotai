@@ -2657,12 +2657,6 @@ function imConfirm() {
   if (gruposDesc) cartObs = [gruposDesc, cartObs].filter(Boolean).join(' | ');
   cartPrice = cartPrice + gruposExtra;
 
-  // Grupos: add description and extra price
-  const gruposDesc  = _buildGruposDesc(i);
-  const gruposExtra = _calcGruposExtra(i);
-  if (gruposDesc) cartObs = [gruposDesc, cartObs].filter(Boolean).join(' | ');
-  cartPrice = cartPrice + gruposExtra;
-
   const cartItem = {
     ...i,
     name:      cartName,
@@ -2690,6 +2684,7 @@ function imConfirm() {
   closeItemModal();
   updateCartFloat();
   toast('🛒', `${isPizza && _halfItem ? 'Pizza meio a meio' : i.name} adicionado!`);
+}
 
 // ══════════════════════════════════════════
 //  CARRINHO
