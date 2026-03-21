@@ -6931,7 +6931,7 @@ function conectarSaquesSSE() {
   if (_saquesSSE) return;
   const tid = _sessao?.tenant_id;
   if (!tid) return;
-  _saquesSSE = new EventSource('/sse/' + encodeURIComponent('saques-rt:' + tid));
+  _saquesSSE = new EventSource('/sse/saques-rt:'+tid);
   _saquesSSE.addEventListener('saques:INSERT', () => carregarCarteira());
   _saquesSSE.addEventListener('saques:UPDATE', (e) => {
     try {
@@ -6961,10 +6961,12 @@ async function carregarConfigPixGestor() {
       btn.className = 'btn ' + (_pixAtivoGestor ? 'bp' : 'bd');
     }
     if (statusEl) {
+      const taxaStr = 'Taxa por pagamento: <strong>R$ ' + parseFloat(d.taxa_pix||0).toFixed(2).replace('.',',') + '</strong>';
       if (!d.mp_configurado) statusEl.innerHTML = '<span style="color:var(--danger)">⚠️ Token MP não configurado pelo administrador</span>';
-      else statusEl.innerHTML = _pixAtivoGestor
+      else statusEl.innerHTML = (_pixAtivoGestor
         ? '<span style="color:var(--success)">✅ QR Code via Mercado Pago ativo</span>'
-        : '<span style="color:var(--orange)">⚡ QR Code desativado — usando chave PIX manual</span>';
+        : '<span style="color:var(--orange)">⚡ QR Code desativado — usando chave PIX manual</span>')
+        + ' &nbsp;·&nbsp; <span style="color:var(--muted)">' + taxaStr + '</span>';
     }
     if (manualWrap) manualWrap.style.display = _pixAtivoGestor ? 'none' : '';
     // Preenche campos da chave manual
@@ -7067,7 +7069,7 @@ function _renderSaqueHistorico(saques) {
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px">
       <div>
         <div style="font-weight:600;font-size:13px">${_fmtR(s.valor_liquido)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${(s.pix_key_tipo||'chave').toUpperCase()}: ${s.pix_key} · ${new Date(s.created_at).toLocaleDateString('pt-BR')}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${s.pix_key_tipo?.toUpperCase()}: ${s.pix_key} · ${new Date(s.created_at).toLocaleDateString('pt-BR')}</div>
         ${s.obs_admin ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">📝 ${s.obs_admin}</div>` : ''}
       </div>
       <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;${badge[s.status]||badge.pendente}">${label[s.status]||s.status}</span>
@@ -7083,7 +7085,7 @@ function _renderPixHistorico(pagamentos) {
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px">
       <div>
         <div style="font-weight:600;font-size:13px">${_fmtR(p.valor)} <span style="font-weight:400;color:var(--muted);font-size:12px">→ líquido ${_fmtR(p.valor_liquido)}</span></div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${p.payer_name||'—'} · ${p.order_id ? 'Pedido #' + _orderNum(p.order_id) : '—'} · ${new Date(p.created_at).toLocaleDateString('pt-BR')}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${p.payer_name||'—'} · Pedido #${_orderNum(p.order_id||0)} · ${new Date(p.created_at).toLocaleDateString('pt-BR')}</div>
       </div>
       <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;${badge[p.status]||badge.pendente}">${p.status}</span>
     </div>`).join('');
