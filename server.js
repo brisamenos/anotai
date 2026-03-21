@@ -238,6 +238,7 @@ const MIGRATIONS = [
     `ALTER TABLE menu_items ADD COLUMN custom_groups TEXT DEFAULT '[]'`,
     `ALTER TABLE menu_items ADD COLUMN destaque INTEGER DEFAULT 0`
   ]},
+  { version:19, description:'sort_order em menu_items', up:`ALTER TABLE menu_items ADD COLUMN sort_order INTEGER DEFAULT 0` },
 ]
 
 function runMigrations() {
@@ -408,7 +409,7 @@ const TABLE_COLS = {
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
   store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_tempo_entrega','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
-  menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','created_at'],
+  menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
