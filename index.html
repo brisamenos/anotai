@@ -1429,6 +1429,10 @@ let _trackOrderId= null;
 let _trackChannel= null;
 let _waOptIn     = false;  // reservado para uso futuro
 
+// ── Numeração de pedidos ──
+let _orderNumOffset = 0;  // lido de store_config.order_num_offset; sincronizado com o gestor
+function _orderNum(id) { return Math.max(1, id - _orderNumOffset); }
+
 // ── PIX ──
 let _pixPollTimer = null;
 let _pixMpId      = null;
@@ -1576,7 +1580,7 @@ async function init() {
       sb.from('menu_items').select('*').not('status','eq','pausado').order('id'),
       sb.from('categories').select('*').eq('ativo', true).order('sort_order'),
       sb.from('cupons').select('*').eq('ativo', true),
-      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp').single()
+      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp,order_num_offset').single()
     ]);
 
     allItems  = (itemsR.data  || []).map(x => ({
@@ -1591,6 +1595,8 @@ async function init() {
       const c = cfgR.data;
       applyStatus(c.store_open, c.horarios_config);
       feeConfig = c.delivery_fee_config || {};
+      // Sincroniza offset de numeração com o gestor
+      _orderNumOffset = parseInt(c.order_num_offset) || 0;
       // Fallback: se não veio pelo branding, pega do store_config direto
       if (!_waNumero && c.store_whatsapp) {
         _waNumero = c.store_whatsapp.replace(/\D/g, '');
@@ -1651,6 +1657,10 @@ function subscribeRealtime() {
       const cfg = p.new;
       // Status aberto/fechado
       applyStatus(cfg.store_open, cfg.horarios_config || _cachedHorarios);
+      // Offset de numeração — atualiza imediatamente quando gestor zera a contagem
+      if (cfg.order_num_offset !== undefined) {
+        _orderNumOffset = parseInt(cfg.order_num_offset) || 0;
+      }
       // Branding completo — atualiza logo, banner, cor, nome, etc. em tempo real
       applyBrandingLive(cfg);
     })
@@ -1913,7 +1923,7 @@ async function loadMyOrders() {
       return `
       <div class="order-card" onclick="${isActive?`openOrderTracker(${o.id})`:'void(0)'}">
         <div class="order-card-head">
-          <span class="order-card-num">#${String(o.id).padStart(3,'0')}</span>
+          <span class="order-card-num">#${String(_orderNum(o.id)).padStart(3,'0')}</span>
           <span class="order-card-status ${o.status}">${SL[o.status]||o.status}</span>
         </div>
         <div class="order-card-items">${itemsTxt}</div>
@@ -1932,7 +1942,7 @@ async function loadMyOrders() {
 function openOrderTracker(orderId) {
   closeAccount();
   _trackOrderId = orderId;
-  document.getElementById('track-order-num').textContent = 'Pedido #' + String(orderId).padStart(3,'0');
+  document.getElementById('track-order-num').textContent = 'Pedido #' + String(_orderNum(orderId)).padStart(3,'0');
   sb.from('orders').select('id,status,items,client').eq('id', orderId).single().then(({data})=>{
     if (data) {
       updateTracker(data.status);
@@ -1945,7 +1955,7 @@ function openOrderTracker(orderId) {
       if (Number(p.new.id) === orderId) updateTracker(p.new.status);
     }).subscribe();
   document.getElementById('track-fab').classList.add('show');
-  document.getElementById('track-num').textContent = '#' + String(orderId).padStart(3,'0');
+  document.getElementById('track-num').textContent = '#' + String(_orderNum(orderId)).padStart(3,'0');
   openTracker();
 }
 
@@ -2632,7 +2642,7 @@ function applyCupom() {
 //  WHATSAPP — gera link com mensagem pré-pronta
 // ══════════════════════════════════════════
 function buildWaLink(orderId) {
-  const num = String(orderId).padStart(3, '0');
+  const num = String(_orderNum(orderId)).padStart(3, '0');
   const msg = `Olá! Quero acompanhar meu pedido *#${num}* 🍽️`;
   const numero = _waNumero || '';
   if (!numero) return null;
@@ -2643,7 +2653,7 @@ function showWaToast(orderId) {
   if (!_waNumero) return;
   const link = buildWaLink(orderId);
   if (!link) return;
-  const num  = String(orderId).padStart(3,'0');
+  const num  = String(_orderNum(orderId)).padStart(3,'0');
 
   // Remove toast anterior se existir
   const prev = document.getElementById('wa-track-toast');
@@ -2877,7 +2887,7 @@ async function _doSubmitOrder(addr, troco) {
     // ── Tela de sucesso ──
     document.getElementById('cart-content').style.display = 'none';
     document.getElementById('success-screen').classList.add('on');
-    const numFormatado = '#' + String(order.id).padStart(3,'0');
+    const numFormatado = '#' + String(_orderNum(order.id)).padStart(3,'0');
     document.getElementById('success-num').textContent = numFormatado;
 
     // Botão WhatsApp — aparece sempre que houver número configurado
@@ -3004,11 +3014,6 @@ async function _iniciarFluxoPix(order) {
         document.getElementById('pix-qr-wrap').style.display = '';
         if (pd.qr_code_base64) {
           document.getElementById('pix-qr-img').src = 'data:image/png;base64,' + pd.qr_code_base64;
-        } else {
-          // Fallback: MP não retornou base64 — gera QR visualmente a partir do texto
-          document.getElementById('pix-qr-img').src =
-            'https://api.qrserver.com/v1/create-qr-code/?size=220x220&ecc=M&data=' +
-            encodeURIComponent(pd.qr_code);
         }
         document.getElementById('pix-copy-code').value = pd.qr_code;
         document.getElementById('pix-status-label').textContent = '⏳ Aguardando pagamento...';
@@ -3090,7 +3095,7 @@ function startTracking(orderId, items, client) {
   _trackOrderId = orderId;
   const fab = document.getElementById('track-fab');
   fab.classList.add('show');
-  document.getElementById('track-num').textContent = '#' + String(orderId).padStart(3,'0');
+  document.getElementById('track-num').textContent = '#' + String(_orderNum(orderId)).padStart(3,'0');
   if (_trackChannel) { try { sb.removeChannel(_trackChannel); } catch(e){} }
   _trackChannel = sb.channel('orders-rt')
     .on('postgres_changes',{event:'UPDATE',table:'orders'}, p => {
@@ -3103,7 +3108,7 @@ function startTracking(orderId, items, client) {
     .subscribe();
   updateTracker('analise');
   renderTrackItems(items, client);
-  document.getElementById('track-order-num').textContent = 'Pedido #' + String(orderId).padStart(3,'0');
+  document.getElementById('track-order-num').textContent = 'Pedido #' + String(_orderNum(orderId)).padStart(3,'0');
 }
 
 function updateTracker(status) {
@@ -3193,7 +3198,7 @@ function openRatingModal(orderId) {
   if (fw) fw.style.display = '';
   if (sw) sw.style.display = 'none';
   const sub = document.getElementById('rating-sub');
-  if (sub && orderId) sub.textContent = `Pedido #${String(orderId).padStart(3,'0')} — sua opinião é muito importante!`;
+  if (sub && orderId) sub.textContent = `Pedido #${String(_orderNum(orderId)).padStart(3,'0')} — sua opinião é muito importante!`;
   document.getElementById('rating-overlay')?.classList.add('on');
 }
 
