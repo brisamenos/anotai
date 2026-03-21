@@ -243,6 +243,9 @@ async function loadAllData(silent = false) {
     if (!_rtConnected) subscribeOrders();
     renderKanban();
     renderCaixa();
+    renderGestor();
+    renderTable();
+    populateCatSelects();
     // Sincroniza SW com os dados carregados
     setTimeout(() => _initSwState(), 500);
   } catch(e) {
@@ -1196,7 +1199,7 @@ function openOrderDetail(id){
   const bdg=o.status==='analise'?['badge-analise','Em análise']:o.status==='producao'?['badge-producao','Em produção']:['badge-pronto','Pronto para entrega'];
   const el=document.getElementById('od-status-badge');
   el.className='od-status-badge '+bdg[0];el.textContent=bdg[1];
-  document.getElementById('od-timer').innerHTML='<svg width=\"13\" height=\"13\" viewBox=\"0 0 16 16\" fill=\"none\" style=\"display:inline-block;vertical-align:middle\" xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"8\" cy=\"9\" r=\"5\" stroke=\"currentColor\" stroke-width=\"1.4\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M8 6.5V9l1.5 1.5\" stroke=\"currentColor\" stroke-width=\"1.4\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M6 2h4M8 2v2\" stroke=\"currentColor\" stroke-width=\"1.4\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg> '+o.time;
+  document.getElementById('od-timer').innerHTML=`<svg width='13' height='13' viewBox='0 0 16 16' fill='none' style='display:inline-block;vertical-align:middle' xmlns='http://www.w3.org/2000/svg'><circle cx='8' cy='9' r='5' stroke='currentColor' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/><path d='M8 6.5V9l1.5 1.5' stroke='currentColor' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/><path d='M6 2h4M8 2v2' stroke='currentColor' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg> `+o.time;
   document.getElementById('od-client-name').textContent=o.client;
   document.getElementById('od-client-phone').textContent=o.phone||o.addr||'';
   document.getElementById('od-items-list').innerHTML=o.items.map(item=>`
