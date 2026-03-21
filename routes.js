@@ -278,7 +278,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
       db.prepare(`INSERT OR IGNORE INTO pagamentos_pix
         (tenant_id,order_id,mp_payment_id,mp_external_ref,valor,taxa,valor_liquido,status,payer_name,qr_code,qr_code_base64)
         VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(tid, order_id || null, String(mpData.id), extRef, parseFloat(valor), taxa, valorLiq, mpData.status || 'pendente', client || '', qr, qrB64)
+        .run(tid, order_id || null, String(mpData.id), extRef, parseFloat(valor), taxa, valorLiq,
+          (mpData.status==='approved'?'aprovado':mpData.status==='rejected'?'rejeitado':mpData.status==='cancelled'?'cancelado':'pendente'),
+          client || '', qr, qrB64)
 
       log('💳', `PIX criado: R$${valor} tenant=${tid} mp_id=${mpData.id}`)
       send(res, 200, { ok: true, mp_payment_id: mpData.id, qr_code: qr, qr_code_base64: qrB64, valor, taxa, valor_liquido: valorLiq, status: mpData.status })
@@ -427,9 +429,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const saldoDisp     = Math.max(0, totalRecebido - totalSacado)
       const totalPix      = db.prepare("SELECT COUNT(*) as c FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.c || 0
       const ultimosPix    = db.prepare("SELECT * FROM pagamentos_pix WHERE tenant_id=? ORDER BY created_at DESC LIMIT 10").all(tid)
+      const ultimosPendentes = db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(valor),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='pendente'").get(tid)
       let taxaPorPag = 1.00
       try { const gc = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get(); const g = gc?.ia_config ? JSON.parse(gc.ia_config) : {}; if (g.taxa_pix !== undefined) taxaPorPag = parseFloat(g.taxa_pix) || 0 } catch {}
-      send(res, 200, { saldo_disponivel: saldoDisp, total_recebido: totalRecebido, total_sacado: totalSacado, total_taxas: totalTaxas, taxa_por_pagamento: taxaPorPag, total_pagamentos: totalPix, ultimos_pagamentos: ultimosPix })
+      send(res, 200, { saldo_disponivel: saldoDisp, total_recebido: totalRecebido, total_sacado: totalSacado, total_taxas: totalTaxas, taxa_por_pagamento: taxaPorPag, total_pagamentos: totalPix, ultimos_pagamentos: ultimosPix, pendentes_count: ultimosPendentes?.c || 0, pendentes_valor: ultimosPendentes?.v || 0 })
     } catch (e) { log('❌', '/api/carteira erro:', e.message); send(res, 500, { error: e.message }) }
     return true
   }
