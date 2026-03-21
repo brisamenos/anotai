@@ -3016,22 +3016,31 @@ async function _iniciarFluxoPix(order) {
     const pd  = pr.ok  ? await pr.json()  : null;
 
     if (pr.ok && pd?.qr_code) {
-      // Gera QR Code localmente no browser (sem depender de base64 do MP ou serviço externo)
-      const qrEl = document.getElementById('pix-qr-img');
-      qrEl.innerHTML = '';
-      new QRCode(qrEl, {
-        text:          pd.qr_code,
-        width:         180,
-        height:        180,
-        colorDark:     '#000000',
-        colorLight:    '#ffffff',
-        correctLevel:  QRCode.CorrectLevel.M
-      });
+      // Mostra o wrapper ANTES de instanciar QRCode — biblioteca precisa do container visível
+      // para calcular dimensões do canvas corretamente
       document.getElementById('pix-qr-wrap').style.display = '';
       document.getElementById('pix-copy-code').value = pd.qr_code;
       document.getElementById('pix-status-label').textContent = '⏳ Aguardando pagamento...';
       document.getElementById('pix-aprovado-msg').style.display = 'none';
-      _startPixPoll(pd.mp_payment_id, order.id);
+
+      // requestAnimationFrame garante que o browser computou o layout antes de renderizar o QR
+      const qrCode = pd.qr_code;
+      const orderId = order.id;
+      const mpPayId = pd.mp_payment_id;
+      requestAnimationFrame(() => {
+        const qrEl = document.getElementById('pix-qr-img');
+        qrEl.innerHTML = '';
+        new QRCode(qrEl, {
+          text:         qrCode,
+          width:        180,
+          height:       180,
+          colorDark:    '#000000',
+          colorLight:   '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      });
+
+      _startPixPoll(mpPayId, orderId);
       return;
     }
 
