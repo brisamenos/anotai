@@ -473,6 +473,10 @@ function subscribeOrders() {
       }
       if (idx !== -1) {
         if (['entregue','cancelado'].includes(p.new.status)) {
+          if (p.new.status === 'cancelado') {
+            showToast('❌', `Pedido #${_orderNum(p.new.id)} cancelado pelo cliente — ${p.new.client}`);
+            sendBrowserNotif(`❌ Pedido cancelado pelo cliente`, `#${_orderNum(p.new.id)} — ${p.new.client}`);
+          }
           ordersKanban.splice(idx, 1);
         } else {
           ordersKanban[idx] = mapOrder(p.new);
@@ -942,6 +946,28 @@ async function finishOrderById(id) {
   sbToast('ok', `Pedido #${_orderNum(id)} finalizado!`);
 }
 
+// ── confirmarPagamentoPix (PIX manual) ──────────────
+async function confirmarPagamentoPix(id) {
+  const o = ordersKanban.find(x => x.id === id);
+  if (!o) return;
+  if (!confirm(`Confirmar que o pagamento PIX do pedido #${o.num} foi recebido?`)) return;
+  sbLoading(true);
+  try {
+    const res = await fetch(`/api/orders?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _sessao?.tenant_id },
+      body: JSON.stringify({ pag: 'pix_mp' })
+    });
+    if (!res.ok) throw new Error('Erro ao atualizar pagamento');
+    if (o) o.pag = 'pix_mp';
+    sbToast('ok', `✅ Pagamento PIX do pedido #${o.num} confirmado!`);
+    renderKanban();
+  } catch(e) {
+    sbToast('err', 'Erro: ' + e.message);
+  }
+  sbLoading(false);
+}
+
 // ── addMovimento (quick register) ────────────────────
 
 // ── addMovimentoModal ────────────────────────────────
@@ -1028,6 +1054,8 @@ function nav(id){
   document.querySelector('.sidebar')?.classList.remove('mobile-open');
   const pg=document.getElementById('page-'+id);
   if(pg) pg.classList.add('on');
+  const _mainEl = document.querySelector('.main');
+  if (_mainEl) _mainEl.scrollTop = 0;
   const sn=document.getElementById('sn-'+id);
   if(sn) sn.classList.add('on');
   closeNotif();
@@ -1116,7 +1144,11 @@ function renderKanban(){
         const total='R$ '+(o.total+o.taxa).toFixed(2).replace('.',',');
         let actionBtn='';
         if(st==='analise'){
+          const _pixManualBtn = o.pag === 'pix_manual'
+            ? '<button class="oc-btn oc-btn-pix-confirmar" onclick="event.stopPropagation();confirmarPagamentoPix('+o.id+')">&#9989; Confirmar Pago PIX</button>'
+            : '';
           actionBtn=
+            _pixManualBtn+
             '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById('+o.id+')">✔ Confirmar</button>'+
             '<button class="oc-btn oc-btn-no" onclick="event.stopPropagation();cancelOrderById('+o.id+')">✕ Cancelar</button>'+
             (_printMode==='manual'?'<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById('+o.id+')">🖨️</button>':'');
@@ -1128,7 +1160,8 @@ function renderKanban(){
         // Badge de pagamento — visível no card para identificação rápida
         const _pagBadge = (() => {
           const p = o.pag || '';
-          if (p === 'pix_mp' || p === 'pix' || p === 'pix_manual') return '<div class="oc-pag-badge oc-pag-pix">&#9889; PAGO PIX</div>';
+          if (p === 'pix_mp' || p === 'pix') return '<div class="oc-pag-badge oc-pag-pix">&#9889; PAGO PIX</div>';
+          if (p === 'pix_manual') return '<div class="oc-pag-badge oc-pag-pix-pendente">&#9203; PIX PENDENTE</div>';
           if (p === 'cartao' || p === 'credito' || p === 'debito')  return '<div class="oc-pag-badge oc-pag-cartao">&#128179; CART\u00C3O</div>';
           if (p === 'dinheiro') {
             var tr = '';
@@ -1993,7 +2026,7 @@ function renderGestor(){
             <div class="cat-item-row" onclick="openEditItem(${item.id})">
               <div class="cat-item-thumb">${item.imageUrl
                 ? `<img src="${item.imageUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`
-                : `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="18" height="18" style="opacity:.35"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z" stroke="currentColor" stroke-width="1.5"/><path d="M3 16l5-5 3 3 3-4 4 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" opacity=".5"/></svg>`
+                : `<svg viewBox="0 0 24 24" fill="none" width="18" height="18" style="opacity:.35"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z" stroke="currentColor" stroke-width="1.5"/><path d="M3 16l5-5 3 3 3-4 4 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" opacity=".5"/></svg>`
               }</div>
               <div style="flex:1;min-width:0">
                 <div class="cat-item-name">${item.name}${item.promo?' <span class="ptag">promo</span>':''}${item.itemType==='pizza'?' <span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--accent3);border-radius:4px;padding:1px 4px;font-weight:700;margin-left:2px">🍕</span>':''}</div>
