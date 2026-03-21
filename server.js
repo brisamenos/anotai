@@ -872,8 +872,8 @@ function getEtag(fpath) {
 
 function serveStatic(req,res,fpath,ext) {
   try {
-    const etag=getEtag(fpath), isHtml=ext==='.html'
-    res.setHeader('Cache-Control',isHtml?'no-cache':'public, max-age=604800, immutable')
+    const etag=getEtag(fpath), isHtml=ext==='.html', isScript=['.js','.css'].includes(ext)
+    res.setHeader('Cache-Control',(isHtml||isScript)?'no-cache':'public, max-age=604800, immutable')
     res.setHeader('ETag',etag)
     if(req.headers['if-none-match']===etag){res.writeHead(304);res.end();return}
     res.setHeader('Content-Type',MIME[ext]||'text/plain')
