@@ -225,7 +225,7 @@ body{
 .page.on{display:block;min-height:0;padding-bottom:48px}
 .page.on#page-cardapio-publico{display:flex}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:26px;flex-wrap:wrap;gap:10px}
+.ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:26px;flex-wrap:wrap;gap:10px;position:relative;z-index:2}
 .pt{
   font-family:'Playfair Display',serif;
   font-size:22px;font-weight:700;
@@ -412,7 +412,7 @@ td:first-child{padding-left:18px}
 .pb:hover{border-color:var(--accent);color:var(--accent)}
 
 /* ══ CARDÁPIO GESTOR ═══════════════════════════════════════ */
-.quality-bar{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 22px;margin-bottom:18px;display:flex;align-items:center;gap:20px}
+.quality-bar{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 22px;margin-bottom:18px;display:flex;align-items:center;gap:20px;position:relative;z-index:1}
 .quality-score{width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;font-family:'Playfair Display',serif;font-weight:700;font-size:15px}
 .quality-pills{display:flex;gap:10px;flex:1;flex-wrap:wrap}
 .qpill{background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:10px 14px;text-align:center;cursor:pointer;transition:border-color .18s;min-width:120px}
