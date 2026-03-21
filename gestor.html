@@ -1850,12 +1850,28 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
       </div>
     </div>
 
-    <div class="form-row"><label class="form-label">Status</label>
-      <div class="sw" style="width:100%"><select id="new-status" class="form-input" style="width:100%">
-        <option value="active">✅ Disponível</option>
-        <option value="esgotado">❌ Esgotado</option>
-        <option value="pausado">⏸️ Pausado</option>
-      </select></div>
+    <div class="form-row" style="display:flex;gap:12px;align-items:center">
+      <div style="flex:1"><label class="form-label">Status</label>
+        <div class="sw" style="width:100%"><select id="new-status" class="form-input" style="width:100%">
+          <option value="active">✅ Disponível</option>
+          <option value="esgotado">❌ Esgotado</option>
+          <option value="pausado">⏸️ Pausado</option>
+        </select></div>
+      </div>
+      <div style="flex-shrink:0">
+        <label class="form-label">⭐ Destaque</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:6px">
+          <div class="toggle" id="new-destaque" onclick="this.classList.toggle('on')"></div>
+          <span style="font-size:12px;color:var(--muted)">Carrossel</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Grupos de customização -->
+    <div class="form-row">
+      <label class="form-label" style="margin-bottom:8px">🎛️ Grupos de Customização <span style="font-size:10.5px;color:var(--muted);font-weight:400">(tamanho, complementos, sabores…)</span></label>
+      <div id="new-grupos-list"></div>
+      <button type="button" class="add-grp-btn" onclick="addGrupo('new')">+ Adicionar grupo</button>
     </div>
 
     <div class="form-row">
@@ -1928,12 +1944,28 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
       </div>
     </div>
 
-    <div class="form-row"><label class="form-label">Status</label>
-      <div class="sw" style="width:100%"><select id="edit-status" class="form-input" style="width:100%">
-        <option value="active">✅ Disponível</option>
-        <option value="esgotado">❌ Esgotado</option>
-        <option value="pausado">⏸️ Pausado</option>
-      </select></div>
+    <div class="form-row" style="display:flex;gap:12px;align-items:center">
+      <div style="flex:1"><label class="form-label">Status</label>
+        <div class="sw" style="width:100%"><select id="edit-status" class="form-input" style="width:100%">
+          <option value="active">✅ Disponível</option>
+          <option value="esgotado">❌ Esgotado</option>
+          <option value="pausado">⏸️ Pausado</option>
+        </select></div>
+      </div>
+      <div style="flex-shrink:0">
+        <label class="form-label">⭐ Destaque</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:6px">
+          <div class="toggle" id="edit-destaque" onclick="this.classList.toggle('on')"></div>
+          <span style="font-size:12px;color:var(--muted)">Carrossel</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Grupos de customização -->
+    <div class="form-row">
+      <label class="form-label" style="margin-bottom:8px">🎛️ Grupos de Customização <span style="font-size:10.5px;color:var(--muted);font-weight:400">(tamanho, complementos, sabores…)</span></label>
+      <div id="edit-grupos-list"></div>
+      <button type="button" class="add-grp-btn" onclick="addGrupo('edit')">+ Adicionar grupo</button>
     </div>
 
     <div class="form-row">
@@ -2873,6 +2905,28 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
   </div>
 </div>
 
+<style>
+/* ── Grupos de customização ── */
+.grp-wrap{background:rgba(59,130,246,.05);border:1px solid rgba(59,130,246,.2);border-radius:12px;padding:14px;margin-bottom:8px}
+.grp-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.grp-title-input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;font-weight:700;outline:none}
+.grp-title-input:focus{border-color:var(--accent)}
+.grp-del{background:none;border:none;color:#ef4444;font-size:19px;cursor:pointer;padding:0 4px;line-height:1;flex-shrink:0}
+.grp-opts-list{display:flex;flex-direction:column;gap:5px;margin-bottom:8px}
+.grp-opt-row{display:flex;gap:5px;align-items:center}
+.grp-opt-name{flex:2;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 9px;color:var(--text);font-size:12.5px;outline:none}
+.grp-opt-price{width:80px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 9px;color:var(--text);font-size:12.5px;outline:none;text-align:right}
+.grp-opt-del{background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:0 4px;flex-shrink:0}
+.grp-add-opt{background:none;border:1px dashed var(--border);border-radius:7px;padding:6px 10px;color:var(--muted);font-size:12px;cursor:pointer;width:100%;transition:all .15s}
+.grp-add-opt:hover{border-color:var(--accent);color:var(--accent)}
+.grp-type-row{display:flex;gap:6px;margin-bottom:8px}
+.grp-type-btn{flex:1;padding:5px 0;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s;text-align:center}
+.grp-type-btn.on{border-color:var(--accent);color:var(--accent);background:rgba(59,130,246,.08)}
+.grp-min-max{display:flex;gap:6px;margin-bottom:8px}
+.grp-min-max input{width:60px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:6px 8px;color:var(--text);font-size:12px;text-align:center;outline:none}
+.add-grp-btn{width:100%;padding:9px;background:none;border:1.5px dashed rgba(59,130,246,.35);border-radius:10px;color:#60a5fa;font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s;margin-top:4px}
+.add-grp-btn:hover{border-color:var(--accent);background:rgba(59,130,246,.06)}
+</style>
 <script src="/gestor.js"></script>
 </body>
 </html>

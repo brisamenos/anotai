@@ -234,6 +234,10 @@ const MIGRATIONS = [
     `CREATE INDEX IF NOT EXISTS idx_pix_tenant ON pagamentos_pix(tenant_id)`,
     `CREATE INDEX IF NOT EXISTS idx_saques_tenant ON saques(tenant_id)`
   ]},
+  { version:18, description:'custom_groups e destaque em menu_items', up:[
+    `ALTER TABLE menu_items ADD COLUMN custom_groups TEXT DEFAULT '[]'`,
+    `ALTER TABLE menu_items ADD COLUMN destaque INTEGER DEFAULT 0`
+  ]},
 ]
 
 function runMigrations() {
@@ -426,10 +430,10 @@ const STRIP_FROM_OUTPUT = {
 const NO_TENANT_FILTER = new Set(['tenants','sys_users'])
 const JSON_FIELDS = {
   orders:       new Set(['items']),
-  menu_items:   new Set(['days','ingredients']),
+  menu_items:   new Set(['days','ingredients','custom_groups']),
   store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config']),
 }
-const BOOL_FIELDS  = new Set(['ativo','store_open','caixa_open'])
+const BOOL_FIELDS  = new Set(['ativo','store_open','caixa_open','destaque'])
 const SSE_TABLES   = new Set(['orders','mesas','store_config','menu_items','categories','garcons'])
 
 function jsonParse(v) { if(typeof v!=='string')return v; try{return JSON.parse(v)}catch{return v} }

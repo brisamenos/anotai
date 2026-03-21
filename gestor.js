@@ -120,7 +120,9 @@ function mapItem(i) {
     ingredients: Array.isArray(i.ingredients) ? i.ingredients : [],
     itemType: i.item_type || 'normal',
     allowHalf: !!i.allow_half,
-    maxFlavors: i.max_flavors || 1
+    maxFlavors: i.max_flavors || 1,
+    customGroups: Array.isArray(i.custom_groups) ? i.custom_groups : [],
+    destaque: !!i.destaque
   };
 }
 
@@ -453,28 +455,20 @@ function subscribeOrders() {
       }
       _syncSwState();
     })
-    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, async p => {
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, p => {
       const idx = ordersKanban.findIndex(x => x.id === p.new.id);
       // Pedido PIX confirmado — entra no kanban agora
       if (idx === -1 && p.new.status === 'analise' && p.new.pag === 'pix_mp') {
-        // Se o payload SSE veio incompleto (sem client/items), busca o pedido completo
-        let orderData = p.new;
-        if (!p.new.client || !Array.isArray(p.new.items)) {
-          try {
-            const { data: full } = await sb.from('orders').select('*').eq('id', p.new.id).single();
-            if (full) orderData = full;
-          } catch(e) {}
-        }
-        ordersKanban.unshift(mapOrder(orderData));
+        ordersKanban.unshift(mapOrder(p.new));
         renderKanban();
         playOrderSound();
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
-        const items = Array.isArray(orderData.items) ? orderData.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
-        showToast('💳', `PIX confirmado! Pedido #${_orderNum(orderData.id)} — ${orderData.client}`);
-        sendBrowserNotif(`💳 PIX confirmado! #${_orderNum(orderData.id)}`, `${orderData.client} — ${items}`);
-        if (_autoAcceptOn) setTimeout(() => advanceOrderById(orderData.id), 800);
-        if (_printMode === 'auto') printOrder(mapOrder(orderData));
+        const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
+        showToast('💳', `PIX confirmado! Pedido #${_orderNum(p.new.id)} — ${p.new.client}`);
+        sendBrowserNotif(`💳 PIX confirmado! #${_orderNum(p.new.id)}`, `${p.new.client} — ${items}`);
+        if (_autoAcceptOn) setTimeout(() => advanceOrderById(p.new.id), 800);
+        if (_printMode === 'auto') printOrder(mapOrder(p.new));
         return;
       }
       if (idx !== -1) {
@@ -589,36 +583,6 @@ setInterval(async () => {
             if (o.mesa_num) { _updateMesaOrdersCache(o); _renderMesaPageFromCache(); }
           }
           if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id;
-        }
-        if (houveMudanca) renderKanban();
-      }
-    }
-
-    // 1b. PIX recém-confirmados cujo ID ficou abaixo de _maxKnownOrderId
-    // (o pedido entrou como aguardando_pix, não bumpa _maxKnownOrderId,
-    //  e um pedido normal posterior avança o ponteiro — o PIX ficaria perdido)
-    {
-      const { data: pixNovos } = await sb.from('orders')
-        .select('*')
-        .eq('status', 'analise')
-        .eq('pag', 'pix_mp')
-        .order('id', {ascending: false})
-        .limit(20);
-      if (pixNovos?.length) {
-        let houveMudanca = false;
-        for (const o of pixNovos) {
-          if (!ordersKanban.find(x => x.id === o.id)) {
-            ordersKanban.unshift(mapOrder(o));
-            houveMudanca = true;
-            if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id;
-            playOrderSound();
-            const nc = document.getElementById('notif-count');
-            if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
-            showToast('💳', `PIX confirmado! Pedido #${_orderNum(o.id)} — ${o.client}`);
-            sendBrowserNotif(`💳 PIX confirmado! #${_orderNum(o.id)}`, o.client);
-            if (_autoAcceptOn) setTimeout(() => advanceOrderById(o.id), 800);
-            if (_printMode === 'auto') printOrder(mapOrder(o));
-          }
         }
         if (houveMudanca) renderKanban();
       }
@@ -2237,6 +2201,8 @@ async function addItem() {
   const allowHalf = itemType === 'pizza' && document.getElementById('new-meio-meio').classList.contains('on');
   const maxFlavors= itemType === 'pizza' ? (parseInt(document.getElementById('new-max-flavors').value) || 1) : 1;
   const status    = document.getElementById('new-status').value;
+  const destaque  = document.getElementById('new-destaque')?.classList.contains('on') || false;
+  const customGroups = readGrupos('new');
 
   if (!catKey) { sbToast('err','Selecione uma categoria'); return; }
 
@@ -2247,7 +2213,7 @@ async function addItem() {
     price, price_old: priceOld,
     description: desc, ingredients, item_type: itemType,
     allow_half: allowHalf, max_flavors: maxFlavors,
-    promo: false, status,
+    promo: destaque, destaque, custom_groups: customGroups, status,
     days: [1,1,1,1,1,1,1]
   }).select().single();
   sbLoading(false);
@@ -2277,6 +2243,8 @@ async function addItem() {
   const pr = document.getElementById('new-img-preview'); if(pr) pr.style.border='2px dashed var(--border)';
   document.getElementById('new-item-type').value = 'normal';
   document.getElementById('new-status').value = 'active';
+  const nd = document.getElementById('new-destaque'); if(nd) nd.classList.remove('on');
+  const ngl = document.getElementById('new-grupos-list'); if(ngl) ngl.innerHTML='';
   togglePizzaOptions('new');
 
   closeModal('modal-add-item');
@@ -2327,6 +2295,12 @@ function openEditItem(id) {
     preview.style.border = '2px dashed var(--border)';
   }
 
+  // destaque
+  const desel = document.getElementById('edit-destaque');
+  if (desel) desel.classList.toggle('on', !!it.destaque);
+  // custom groups
+  renderGrupos('edit', it.customGroups || []);
+
   openModal('modal-edit-item');
 }
 
@@ -2355,6 +2329,8 @@ async function saveEditItem() {
   const meioEl  = document.getElementById('edit-meio-meio');
   it.allowHalf  = it.itemType === 'pizza' && meioEl && meioEl.classList.contains('on');
   it.maxFlavors = it.itemType === 'pizza' ? (parseInt(document.getElementById('edit-max-flavors').value) || 1) : 1;
+  it.destaque      = document.getElementById('edit-destaque')?.classList.contains('on') || false;
+  it.customGroups  = readGrupos('edit');
 
   const selEmo   = document.querySelector('#edit-emoji-grid .emo-btn.on');
   if (selEmo) it.emoji = selEmo.textContent.trim();
@@ -2367,7 +2343,8 @@ async function saveEditItem() {
     price: it.price, price_old: it.priceOld || null,
     cat: it.cat, cat_key: it.catKey, status: it.status,
     ingredients: it.ingredients, item_type: it.itemType, allow_half: it.allowHalf, max_flavors: it.maxFlavors,
-    emoji: it.emoji
+    emoji: it.emoji, destaque: it.destaque, custom_groups: it.customGroups,
+    promo: it.destaque
   }).eq('id', editingId);
   sbLoading(false);
 
@@ -7165,4 +7142,94 @@ async function solicitarSaque() {
     sbToast('err', 'Erro: ' + e.message);
     if (btn) { btn.disabled = false; btn.textContent = '💸 Solicitar saque'; }
   }
+}
+
+// ══════════════════════════════════════════
+//  GRUPOS DE CUSTOMIZAÇÃO
+// ══════════════════════════════════════════
+function addGrupo(ctx) {
+  const list = document.getElementById(ctx + '-grupos-list');
+  if (!list) return;
+  const idx = list.children.length;
+  const div = document.createElement('div');
+  div.className = 'grp-wrap';
+  div.dataset.idx = idx;
+  div.innerHTML = _grupoHtml(idx, {nome:'', tipo:'radio', min:1, max:1, opcoes:[]});
+  list.appendChild(div);
+}
+
+function _grupoHtml(idx, g) {
+  const optsHtml = (g.opcoes||[]).map((o,oi) => _optHtml(idx, oi, o)).join('');
+  return `
+  <div class="grp-header">
+    <input class="grp-title-input" placeholder="Nome do grupo (ex: Tamanho, Sabor, Complementos)" value="${g.nome||''}" oninput="syncGrupoNome(this)">
+    <button type="button" class="grp-del" onclick="this.closest('.grp-wrap').remove()" title="Remover grupo">×</button>
+  </div>
+  <div class="grp-type-row">
+    <button type="button" class="grp-type-btn ${(g.tipo||'radio')==='radio'?'on':''}" onclick="setGrupoTipo(this,'radio')">● Escolha 1</button>
+    <button type="button" class="grp-type-btn ${g.tipo==='checkbox'?'on':''}" onclick="setGrupoTipo(this,'checkbox')">☑ Múltipla</button>
+  </div>
+  <div class="grp-min-max" style="display:${g.tipo==='checkbox'?'flex':'none'}">
+    <label style="font-size:11px;color:var(--muted);align-self:center">Mín</label>
+    <input type="number" class="grp-min" min="0" max="99" value="${g.min||0}" placeholder="0">
+    <label style="font-size:11px;color:var(--muted);align-self:center">Máx</label>
+    <input type="number" class="grp-max" min="1" max="99" value="${g.max||1}" placeholder="1">
+  </div>
+  <div class="grp-opts-list">${optsHtml}</div>
+  <button type="button" class="grp-add-opt" onclick="addGrupoOpt(this)">+ Adicionar opção</button>`;
+}
+
+function _optHtml(gIdx, oIdx, o) {
+  return `<div class="grp-opt-row">
+    <input class="grp-opt-name" placeholder="Nome da opção" value="${(o.nome||'').replace(/"/g,'&quot;')}">
+    <input class="grp-opt-price" type="number" step="0.01" min="0" placeholder="+R$" value="${o.preco||''}">
+    <button type="button" class="grp-opt-del" onclick="this.closest('.grp-opt-row').remove()">×</button>
+  </div>`;
+}
+
+function syncGrupoNome(el) { /* live — value already read on save */ }
+
+function setGrupoTipo(btn, tipo) {
+  const wrap = btn.closest('.grp-wrap');
+  wrap.querySelectorAll('.grp-type-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  const mmRow = wrap.querySelector('.grp-min-max');
+  if (mmRow) mmRow.style.display = tipo === 'checkbox' ? 'flex' : 'none';
+}
+
+function addGrupoOpt(btn) {
+  const wrap = btn.closest('.grp-wrap');
+  const list = wrap.querySelector('.grp-opts-list');
+  const div = document.createElement('div');
+  div.innerHTML = _optHtml(0, list.children.length, {});
+  list.appendChild(div.firstElementChild);
+}
+
+function renderGrupos(ctx, grupos) {
+  const list = document.getElementById(ctx + '-grupos-list');
+  if (!list) return;
+  list.innerHTML = '';
+  (grupos||[]).forEach((g, idx) => {
+    const div = document.createElement('div');
+    div.className = 'grp-wrap';
+    div.dataset.idx = idx;
+    div.innerHTML = _grupoHtml(idx, g);
+    list.appendChild(div);
+  });
+}
+
+function readGrupos(ctx) {
+  const list = document.getElementById(ctx + '-grupos-list');
+  if (!list) return [];
+  return Array.from(list.querySelectorAll('.grp-wrap')).map(wrap => {
+    const nome  = wrap.querySelector('.grp-title-input')?.value.trim() || '';
+    const tipo  = wrap.querySelector('.grp-type-btn.on')?.textContent.includes('Múltipla') ? 'checkbox' : 'radio';
+    const min   = parseInt(wrap.querySelector('.grp-min')?.value) || 0;
+    const max   = parseInt(wrap.querySelector('.grp-max')?.value) || 1;
+    const opcoes = Array.from(wrap.querySelectorAll('.grp-opt-row')).map(row => ({
+      nome:  row.querySelector('.grp-opt-name')?.value.trim() || '',
+      preco: parseFloat(row.querySelector('.grp-opt-price')?.value) || 0
+    })).filter(o => o.nome);
+    return { nome, tipo, min, max, opcoes };
+  }).filter(g => g.nome || g.opcoes.length);
 }

@@ -941,6 +941,93 @@ input,textarea{font-family:inherit}
 #pix-qr-img{display:block;margin:0 auto 14px;border:2px solid var(--border);background:#fff;border-radius:10px;width:180px;height:180px;overflow:hidden}
 #pix-qr-img img,#pix-qr-img canvas{width:180px!important;height:180px!important;display:block}
 #pix-copy-code{flex:1;background:var(--s3);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:10px;color:var(--text);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ═══════════════════════════════════════
+   GRUPOS DE CUSTOMIZAÇÃO (modal steps)
+═══════════════════════════════════════ */
+.grp-section{ margin:16px 0 0 }
+.grp-section-title{
+  font-size:12px;font-weight:800;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.grp-required-badge{
+  background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);
+  color:#fca5a5;font-size:10px;font-weight:700;
+  padding:2px 7px;border-radius:99px;letter-spacing:.3px;text-transform:uppercase;
+}
+.grp-optional-badge{
+  background:rgba(100,116,139,.08);border:1px solid var(--border);
+  color:var(--muted);font-size:10px;font-weight:700;
+  padding:2px 7px;border-radius:99px;letter-spacing:.3px;text-transform:uppercase;
+}
+.grp-opts{ display:flex;flex-direction:column;gap:6px }
+.grp-opt-item{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--s2);border:1.5px solid var(--border);border-radius:12px;
+  padding:12px 14px;cursor:pointer;transition:all .18s;
+}
+.grp-opt-item:active{ transform:scale(.985) }
+.grp-opt-item.on{
+  background:rgba(249,115,22,.08);border-color:var(--accent);
+}
+.grp-opt-left{ display:flex;align-items:center;gap:10px }
+.grp-opt-indicator{
+  width:20px;height:20px;border-radius:50%;border:2px solid var(--border);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  transition:all .15s;font-size:11px;
+}
+.grp-opt-item.on .grp-opt-indicator{ background:var(--accent);border-color:var(--accent);color:#fff }
+.grp-opt-indicator.multi{ border-radius:6px }
+.grp-opt-item.on .grp-opt-indicator.multi{ background:var(--accent);border-color:var(--accent);color:#fff }
+.grp-opt-name{ font-size:14px;font-weight:600;color:var(--text) }
+.grp-opt-price{ font-size:13px;font-weight:700;color:var(--accent);flex-shrink:0 }
+.grp-opt-price.free{ color:var(--muted) }
+
+/* qty stepper dentro de opção múltipla */
+.grp-opt-qty{
+  display:none;align-items:center;gap:8px;flex-shrink:0;
+}
+.grp-opt-item.on .grp-opt-qty.show{ display:flex }
+.grp-qty-btn{
+  width:26px;height:26px;border-radius:50%;
+  background:var(--s3);border:1px solid var(--border);
+  color:var(--text);font-size:15px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .15s;flex-shrink:0;
+}
+.grp-qty-btn:active{ background:var(--accent);border-color:var(--accent);color:#fff }
+.grp-qty-num{ font-size:13px;font-weight:700;min-width:16px;text-align:center }
+
+/* cross-sell section */
+.xsell-section{ margin-top:20px;padding-top:16px;border-top:1px solid var(--border) }
+.xsell-title{
+  font-size:12px;font-weight:800;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;
+}
+.xsell-scroll{ display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none }
+.xsell-scroll::-webkit-scrollbar{ display:none }
+.xsell-card{
+  flex-shrink:0;width:120px;background:var(--s2);border:1.5px solid var(--border);
+  border-radius:12px;overflow:hidden;cursor:pointer;transition:all .18s;
+}
+.xsell-card.on{ border-color:var(--accent);background:rgba(249,115,22,.07) }
+.xsell-card:active{ transform:scale(.96) }
+.xsell-img{
+  width:100%;height:70px;background:var(--s3);overflow:hidden;
+  display:flex;align-items:center;justify-content:center;font-size:26px;
+}
+.xsell-img img{ width:100%;height:100%;object-fit:cover }
+.xsell-body{ padding:6px 8px 8px }
+.xsell-name{ font-size:11.5px;font-weight:700;line-height:1.3;margin-bottom:3px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden }
+.xsell-price{ font-size:12px;font-weight:700;color:var(--accent) }
+.xsell-check{
+  position:absolute;top:5px;right:5px;width:18px;height:18px;border-radius:50%;
+  background:var(--accent);color:#fff;font-size:10px;
+  display:none;align-items:center;justify-content:center;
+}
+.xsell-card.on .xsell-check{ display:flex }
 </style>
 <script src="/api-client.js"></script>
 </head>
@@ -1049,6 +1136,12 @@ input,textarea{font-family:inherit}
           <button class="im-qty-btn" onclick="imQty(1)">+</button>
         </div>
       </div>
+      <!-- ── Grupos de customização (renderizados via JS) ── -->
+      <div id="im-grupos-wrap"></div>
+
+      <!-- ── Cross-sell (bebidas, acompanhamentos) ── -->
+      <div id="im-xsell-wrap"></div>
+
       <textarea class="im-obs" id="im-obs" rows="2" placeholder="Observações (opcional): sem cebola, bem passado…"></textarea>
 
       <!-- ── Ingredientes selecionáveis ── -->
@@ -1650,7 +1743,8 @@ async function init() {
     allItems  = (itemsR.data  || []).map(x => ({
       ...x,
       id: Number(x.id),
-      ingredients: (() => { try { return Array.isArray(x.ingredients) ? x.ingredients : JSON.parse(x.ingredients||'[]'); } catch(e){ return []; } })()
+      ingredients: (() => { try { return Array.isArray(x.ingredients) ? x.ingredients : JSON.parse(x.ingredients||'[]'); } catch(e){ return []; } })(),
+      custom_groups: (() => { try { return Array.isArray(x.custom_groups) ? x.custom_groups : JSON.parse(x.custom_groups||'[]'); } catch(e){ return []; } })()
     }));
     allCats   = (catsR.data   || []);
     allCupons = (cuponsR.data || []);
@@ -1812,7 +1906,8 @@ async function reloadMenu() {
   allItems = (itemsR.data || []).map(x => ({
     ...x,
     id: Number(x.id),
-    ingredients: (() => { try { return Array.isArray(x.ingredients) ? x.ingredients : JSON.parse(x.ingredients||'[]'); } catch(e){ return []; } })()
+    ingredients: (() => { try { return Array.isArray(x.ingredients) ? x.ingredients : JSON.parse(x.ingredients||'[]'); } catch(e){ return []; } })(),
+    custom_groups: (() => { try { return Array.isArray(x.custom_groups) ? x.custom_groups : JSON.parse(x.custom_groups||'[]'); } catch(e){ return []; } })()
   }));
   allCats  = (catsR.data  || []);
   buildCats();
@@ -2340,6 +2435,11 @@ function openItemModal(id) {
   document.getElementById('im-obs').value = '';
   document.getElementById('im-add-btn').disabled = !_lojaAberta;
 
+  // ── Grupos de customização ──
+  _imGruposState = {};
+  renderImGrupos(i);
+  renderImXsell(i);
+
   // ── Ingredientes selecionáveis ──
   const ingrSection = document.getElementById('im-ingr-section');
   const ingrGrid    = document.getElementById('im-ingr-grid');
@@ -2499,6 +2599,21 @@ function toggleIngr(chip) {
 function imConfirm() {
   const i   = allItems.find(x => x.id === _imItemId);
   if (!i) return;
+
+  // Validate required grupos
+  const grupos = i.custom_groups || [];
+  for (const g of grupos) {
+    if (g.tipo === 'radio' && g.min !== 0) {
+      const sel = _imGruposState[g.nome] || [];
+      if (!sel.length) { toast('⚠️', `Escolha: ${g.nome}`); return; }
+    }
+    if (g.tipo === 'checkbox' && g.min > 0) {
+      const sel = _imGruposState[g.nome] || [];
+      const total = sel.reduce((s,o) => s + (o.qty||1), 0);
+      if (total < g.min) { toast('⚠️', `${g.nome}: mínimo ${g.min} ${g.min===1?'opção':'opções'}`); return; }
+    }
+  }
+
   const obs = document.getElementById('im-obs').value.trim();
   const isPizza = isPizzaItem(i);
 
@@ -2536,6 +2651,18 @@ function imConfirm() {
     cartImg   = i.image_url || null;
   }
 
+  // Grupos: add description and extra price
+  const gruposDesc  = _buildGruposDesc(i);
+  const gruposExtra = _calcGruposExtra(i);
+  if (gruposDesc) cartObs = [gruposDesc, cartObs].filter(Boolean).join(' | ');
+  cartPrice = cartPrice + gruposExtra;
+
+  // Grupos: add description and extra price
+  const gruposDesc  = _buildGruposDesc(i);
+  const gruposExtra = _calcGruposExtra(i);
+  if (gruposDesc) cartObs = [gruposDesc, cartObs].filter(Boolean).join(' | ');
+  cartPrice = cartPrice + gruposExtra;
+
   const cartItem = {
     ...i,
     name:      cartName,
@@ -2543,16 +2670,26 @@ function imConfirm() {
     obs:       cartObs,
     emoji:     cartEmoji,
     image_url: cartImg,
+    _grupos:   JSON.parse(JSON.stringify(_imGruposState)),
   };
 
   const existing = cart.find(c => c.name === cartName && (c.obs||'') === (cartObs||''));
   if (existing) existing.qty += _imQty;
   else cart.push({ ...cartItem, qty: _imQty });
 
+  // Add cross-sell items
+  for (const xid of _xsellSelected) {
+    const xi = allItems.find(x => x.id === xid);
+    if (!xi) continue;
+    const xexist = cart.find(c => c.id === xi.id && !c.obs);
+    if (xexist) xexist.qty += 1;
+    else cart.push({ ...xi, qty: 1, obs: '' });
+  }
+  _xsellSelected.clear();
+
   closeItemModal();
   updateCartFloat();
   toast('🛒', `${isPizza && _halfItem ? 'Pizza meio a meio' : i.name} adicionado!`);
-}
 
 // ══════════════════════════════════════════
 //  CARRINHO
@@ -3353,6 +3490,176 @@ async function submitRating() {
     });
   }
 })();
+
+
+// ══════════════════════════════════════════
+//  GRUPOS DE CUSTOMIZAÇÃO — CARDÁPIO
+// ══════════════════════════════════════════
+let _imGruposState = {}; // { [grupoNome]: [{nome,preco,qty}] }
+
+function renderImGrupos(item) {
+  const wrap = document.getElementById('im-grupos-wrap');
+  if (!wrap) return;
+  const grupos = item.custom_groups || [];
+  if (!grupos.length) { wrap.innerHTML = ''; return; }
+
+  wrap.innerHTML = grupos.map(g => {
+    const isRequired = g.tipo === 'radio' || (g.tipo === 'checkbox' && g.min > 0);
+    const badge = isRequired
+      ? `<span class="grp-required-badge">Obrigatório</span>`
+      : `<span class="grp-optional-badge">Opcional</span>`;
+    const optsHtml = (g.opcoes || []).map(o => {
+      const priceLabel = o.preco > 0
+        ? `<span class="grp-opt-price">+ R$ ${fmt(o.preco)}</span>`
+        : `<span class="grp-opt-price free">Grátis</span>`;
+      const indicator = g.tipo === 'checkbox'
+        ? `<div class="grp-opt-indicator multi"></div>`
+        : `<div class="grp-opt-indicator"></div>`;
+      const qtyEl = g.tipo === 'checkbox'
+        ? `<div class="grp-opt-qty" id="gqty_${_slug(g.nome)}_${_slug(o.nome)}">
+             <button class="grp-qty-btn" onclick="event.stopPropagation();grpQty('${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},-1)">−</button>
+             <span class="grp-qty-num" id="gqnum_${_slug(g.nome)}_${_slug(o.nome)}">1</span>
+             <button class="grp-qty-btn" onclick="event.stopPropagation();grpQty('${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},1)">+</button>
+           </div>` : '';
+      return `<div class="grp-opt-item" data-grupo="${_escape(g.nome)}" data-nome="${_escape(o.nome)}" data-preco="${o.preco||0}" data-tipo="${g.tipo}" onclick="grpToggle(this,'${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},'${g.tipo}',${g.max||1})">
+        <div class="grp-opt-left">${indicator}<span class="grp-opt-name">${o.nome}</span></div>
+        <div style="display:flex;align-items:center;gap:8px">${priceLabel}${qtyEl}</div>
+      </div>`;
+    }).join('');
+
+    return `<div class="grp-section">
+      <div class="grp-section-title">${g.nome} ${badge}</div>
+      <div class="grp-opts">${optsHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+function _slug(s) { return (s||'').replace(/[^a-z0-9]/gi,'_').toLowerCase(); }
+function _escape(s) { return (s||'').replace(/'/g,"\'").replace(/"/g,'&quot;'); }
+
+function grpToggle(el, grupoNome, optNome, preco, tipo, maxSel) {
+  if (!_imGruposState[grupoNome]) _imGruposState[grupoNome] = [];
+  const state = _imGruposState[grupoNome];
+
+  if (tipo === 'radio') {
+    // Deselect all in group, select this one
+    el.closest('.grp-opts').querySelectorAll('.grp-opt-item').forEach(e => e.classList.remove('on'));
+    _imGruposState[grupoNome] = [{ nome: optNome, preco, qty: 1 }];
+    el.classList.add('on');
+  } else {
+    // checkbox
+    const idx = state.findIndex(o => o.nome === optNome);
+    if (idx !== -1) {
+      state.splice(idx, 1);
+      el.classList.remove('on');
+      // hide qty stepper
+      const qtyEl = document.getElementById(`gqty_${_slug(grupoNome)}_${_slug(optNome)}`);
+      if (qtyEl) qtyEl.classList.remove('show');
+    } else {
+      const totalSel = state.reduce((s,o) => s + (o.qty||1), 0);
+      if (maxSel > 1 && totalSel >= maxSel) {
+        toast('⚠️', `Máximo ${maxSel} opções para ${grupoNome}`);
+        return;
+      }
+      state.push({ nome: optNome, preco, qty: 1 });
+      el.classList.add('on');
+      // show qty stepper for checkbox
+      const qtyEl = document.getElementById(`gqty_${_slug(grupoNome)}_${_slug(optNome)}`);
+      if (qtyEl) qtyEl.classList.add('show');
+    }
+  }
+  _updateImPrice();
+}
+
+function grpQty(grupoNome, optNome, preco, delta) {
+  if (!_imGruposState[grupoNome]) return;
+  const opt = _imGruposState[grupoNome].find(o => o.nome === optNome);
+  if (!opt) return;
+  opt.qty = Math.max(1, (opt.qty||1) + delta);
+  const el = document.getElementById(`gqnum_${_slug(grupoNome)}_${_slug(optNome)}`);
+  if (el) el.textContent = opt.qty;
+  _updateImPrice();
+}
+
+function _calcGruposExtra(item) {
+  let extra = 0;
+  const grupos = item.custom_groups || [];
+  for (const g of grupos) {
+    const sel = _imGruposState[g.nome] || [];
+    for (const o of sel) extra += (o.preco||0) * (o.qty||1);
+  }
+  return extra;
+}
+
+function _buildGruposDesc(item) {
+  const grupos = item.custom_groups || [];
+  const parts = [];
+  for (const g of grupos) {
+    const sel = _imGruposState[g.nome] || [];
+    if (sel.length) {
+      const names = sel.map(o => o.qty > 1 ? `${o.qty}x ${o.nome}` : o.nome).join(', ');
+      parts.push(`${g.nome}: ${names}`);
+    }
+  }
+  return parts.join(' · ');
+}
+
+function _updateImPrice() {
+  const i = allItems.find(x => x.id === _imItemId);
+  if (!i) return;
+  const extra = _calcGruposExtra(i);
+  const total = (i.price + extra) * _imQty;
+  const btn = document.getElementById('im-add-btn');
+  const priceEl = document.getElementById('im-price');
+  if (priceEl) priceEl.textContent = 'R$ ' + fmt(i.price + extra);
+  if (btn && _lojaAberta) btn.innerHTML = `🛒 Adicionar · R$ ${fmt(total)}`;
+}
+
+// Cross-sell: suggest items from other categories
+function renderImXsell(item) {
+  const wrap = document.getElementById('im-xsell-wrap');
+  if (!wrap) return;
+  const itemCat = item.cat_key || item.cat || '';
+  // Get up to 8 items from different categories
+  const others = allItems.filter(x =>
+    x.id !== item.id &&
+    x.status !== 'pausado' && x.status !== 'esgotado' &&
+    (x.cat_key || x.cat) !== itemCat
+  ).slice(0, 8);
+  if (!others.length) { wrap.innerHTML = ''; return; }
+
+  const cards = others.map(o => `
+    <div class="xsell-card" id="xsell_${o.id}" onclick="xsellToggle(${o.id})" style="position:relative">
+      <div class="xsell-img">${o.image_url ? `<img src="${o.image_url}" loading="lazy">` : (o.emoji||'🍽️')}</div>
+      <div class="xsell-body">
+        <div class="xsell-name">${o.name}</div>
+        <div class="xsell-price">R$ ${fmt(o.price)}</div>
+      </div>
+      <div class="xsell-check">✓</div>
+    </div>`).join('');
+
+  wrap.innerHTML = `<div class="xsell-section">
+    <div class="xsell-title">Adicionar ao pedido</div>
+    <div class="xsell-scroll">${cards}</div>
+  </div>`;
+}
+
+// Cross-sell state
+const _xsellSelected = new Set();
+
+function xsellToggle(itemId) {
+  const card = document.getElementById(`xsell_${itemId}`);
+  if (!card) return;
+  if (_xsellSelected.has(itemId)) {
+    _xsellSelected.delete(itemId);
+    card.classList.remove('on');
+  } else {
+    _xsellSelected.add(itemId);
+    card.classList.add('on');
+  }
+}
+
+
 
 init();
 
