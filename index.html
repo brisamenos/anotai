@@ -2871,7 +2871,8 @@ async function _doSubmitOrder(addr, troco) {
     const { data: order, error } = await sb.from('orders').insert({
       client: name, phone, addr,
       items, total: grandTotal(), taxa: getTaxa(),
-      status: 'analise', time, pag: selectedPay,
+      status: selectedPay === 'pix' ? 'aguardando_pix' : 'analise',
+      time, pag: selectedPay,
       troco: troco || null,
       customer_id: customerId
     }).select().single();
@@ -2998,61 +2999,51 @@ async function _iniciarFluxoPix(order) {
   sec.style.display = '';
   document.getElementById('pix-qr-wrap').style.display           = 'none';
   document.getElementById('pix-manual-success-wrap').style.display = 'none';
-  try {
-    const cfgR = await fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } });
-    const cfg  = cfgR.ok ? await cfgR.json() : {};
 
-    if (cfg.pix_ativo) {
-      // Mercado Pago — gera QR Code
-      const pr = await fetch('/api/pix/criar', {
+  // Mostra spinner enquanto gera
+  document.getElementById('pix-status-label').textContent = '⏳ Gerando QR Code...';
+  document.getElementById('pix-qr-wrap').style.display = '';
+
+  try {
+    // Busca config e gera QR em paralelo — elimina espera sequencial
+    const [cfgR, pr] = await Promise.all([
+      fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } }),
+      fetch('/api/pix/criar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
         body: JSON.stringify({ valor: order.total, order_id: order.id, client: order.client })
-      });
-      const pd = pr.ok ? await pr.json() : null;
-      if (!pr.ok || !pd) {
-        // Falha ao gerar QR — mostra chave manual se disponível, senão aviso
-        if (cfg.pix_key_manual) {
-          document.getElementById('pix-manual-success-wrap').style.display = '';
-          document.getElementById('pix-manual-key-show').value = cfg.pix_key_manual;
-          document.getElementById('pix-manual-banco-lbl').textContent = cfg.pix_key_manual_banco ? `🏦 ${cfg.pix_key_manual_banco}` : '';
-          document.getElementById('pix-manual-valor-show').textContent = 'R$ ' + fmt(order.total);
-        } else {
-          const errMsg = pd?.error || 'Erro ao gerar QR Code PIX.';
-          document.getElementById('pix-status-label').textContent = '⚠️ ' + errMsg;
-          document.getElementById('pix-qr-wrap').style.display = '';
-        }
-        return;
+      })
+    ]);
+    const cfg = cfgR.ok ? await cfgR.json() : {};
+    const pd  = pr.ok  ? await pr.json()  : null;
+
+    if (pr.ok && pd?.qr_code) {
+      document.getElementById('pix-qr-wrap').style.display = '';
+      if (pd.qr_code_base64) {
+        document.getElementById('pix-qr-img').src = 'data:image/png;base64,' + pd.qr_code_base64;
+      } else {
+        document.getElementById('pix-qr-img').src =
+          'https://api.qrserver.com/v1/create-qr-code/?size=220x220&ecc=M&data=' +
+          encodeURIComponent(pd.qr_code);
       }
-      if (pd?.qr_code) {
-        document.getElementById('pix-qr-wrap').style.display = '';
-        if (pd.qr_code_base64) {
-          document.getElementById('pix-qr-img').src = 'data:image/png;base64,' + pd.qr_code_base64;
-        } else {
-          // MP não retornou base64 — gera QR a partir do texto da chave
-          document.getElementById('pix-qr-img').src =
-            'https://api.qrserver.com/v1/create-qr-code/?size=220x220&ecc=M&data=' +
-            encodeURIComponent(pd.qr_code);
-        }
-        document.getElementById('pix-copy-code').value = pd.qr_code;
-        document.getElementById('pix-status-label').textContent = '⏳ Aguardando pagamento...';
-        document.getElementById('pix-aprovado-msg').style.display = 'none';
-        _startPixPoll(pd.mp_payment_id, order.id);
-        return;
-      }
+      document.getElementById('pix-copy-code').value = pd.qr_code;
+      document.getElementById('pix-status-label').textContent = '⏳ Aguardando pagamento...';
+      document.getElementById('pix-aprovado-msg').style.display = 'none';
+      _startPixPoll(pd.mp_payment_id, order.id);
+      return;
     }
 
-    // Fallback: chave PIX manual
+    // Falha no MP — tenta chave manual
+    document.getElementById('pix-qr-wrap').style.display = 'none';
     if (cfg.pix_key_manual) {
       document.getElementById('pix-manual-success-wrap').style.display = '';
       document.getElementById('pix-manual-key-show').value = cfg.pix_key_manual;
-      const banco = cfg.pix_key_manual_banco ? `🏦 ${cfg.pix_key_manual_banco}` : '';
-      document.getElementById('pix-manual-banco-lbl').textContent = banco;
+      document.getElementById('pix-manual-banco-lbl').textContent = cfg.pix_key_manual_banco ? `🏦 ${cfg.pix_key_manual_banco}` : '';
       document.getElementById('pix-manual-valor-show').textContent = 'R$ ' + fmt(order.total);
       return;
     }
 
-    // Nada configurado — esconde a seção
+    // Nada funcionou — esconde seção
     sec.style.display = 'none';
   } catch(e) {
     sec.style.display = 'none';

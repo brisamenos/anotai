@@ -301,7 +301,18 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const rowAtual = db.prepare('SELECT status,valor,tenant_id FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
       if (rowAtual && rowAtual.status !== novoStatus) {
         db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=? WHERE mp_payment_id=?').run(novoStatus, pd.date_approved || null, String(mpId))
-        if (novoStatus === 'aprovado') { log('✅', `PIX APROVADO: R$${rowAtual.valor} tenant=${rowAtual.tenant_id}`); marcarDirty() }
+        if (novoStatus === 'aprovado') {
+          log('✅', `PIX APROVADO: R$${rowAtual.valor} tenant=${rowAtual.tenant_id}`)
+          marcarDirty()
+          // Se pedido ainda estava aguardando PIX, libera para o gestor agora
+          if (rowAtual.order_id) {
+            const pedAtual = db.prepare("SELECT status FROM orders WHERE id=?").get(rowAtual.order_id)
+            if (pedAtual?.status === 'aguardando_pix') {
+              db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=?").run(rowAtual.order_id)
+              sseBroadcast(`orders-rt:${rowAtual.tenant_id}`, `orders:UPDATE`, { id: rowAtual.order_id, status: 'analise', pag: 'pix_mp' })
+            }
+          }
+        }
       }
       send(res, 200, { status: novoStatus, mp_status: pd.status })
     } catch (e) { send(res, 500, { error: e.message }) }
@@ -382,8 +393,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
         if (novoStatus === 'aprovado') {
           log('✅', `Webhook MP APROVADO: R$${row.valor} tenant=${row.tenant_id}`)
           if (row.order_id) {
-            db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=?").run(row.order_id)
-            sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, { id: row.order_id, status: 'producao', pag: 'pix_mp' })
+            const pedAtual = db.prepare("SELECT status FROM orders WHERE id=?").get(row.order_id)
+            if (pedAtual?.status === 'aguardando_pix') {
+              db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=?").run(row.order_id)
+            } else {
+              db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=?").run(row.order_id)
+            }
+            sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, { id: row.order_id, status: pedAtual?.status === 'aguardando_pix' ? 'analise' : pedAtual?.status, pag: 'pix_mp' })
           }
         }
       }

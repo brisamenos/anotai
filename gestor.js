@@ -424,6 +424,8 @@ function subscribeOrders() {
 
   const chOrders = sb.channel('orders-rt')
     .on('postgres_changes', {event:'INSERT', schema:'public', table:'orders'}, p => {
+      // Pedidos aguardando PIX não entram no kanban — só aparecem após pagamento confirmado
+      if (p.new.status === 'aguardando_pix') return;
       if (!ordersKanban.find(x => x.id === p.new.id)) {
         ordersKanban.unshift(mapOrder(p.new));
         if (p.new.id > _maxKnownOrderId) _maxKnownOrderId = p.new.id;
@@ -453,6 +455,20 @@ function subscribeOrders() {
     })
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, p => {
       const idx = ordersKanban.findIndex(x => x.id === p.new.id);
+      // Pedido PIX confirmado — entra no kanban agora
+      if (idx === -1 && p.new.status === 'analise' && p.new.pag === 'pix_mp') {
+        ordersKanban.unshift(mapOrder(p.new));
+        renderKanban();
+        playOrderSound();
+        const nc = document.getElementById('notif-count');
+        if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
+        const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
+        showToast('💳', `PIX confirmado! Pedido #${_orderNum(p.new.id)} — ${p.new.client}`);
+        sendBrowserNotif(`💳 PIX confirmado! #${_orderNum(p.new.id)}`, `${p.new.client} — ${items}`);
+        if (_autoAcceptOn) setTimeout(() => advanceOrderById(p.new.id), 800);
+        if (_printMode === 'auto') printOrder(mapOrder(p.new));
+        return;
+      }
       if (idx !== -1) {
         if (['entregue','cancelado'].includes(p.new.status)) {
           ordersKanban.splice(idx, 1);
@@ -6967,9 +6983,6 @@ async function carregarConfigPixGestor() {
         : '<span style="color:var(--orange)">⚡ QR Code desativado — usando chave PIX manual</span>';
     }
     if (manualWrap) manualWrap.style.display = _pixAtivoGestor ? 'none' : '';
-    // Exibe taxa configurada pelo admin no card de Pagamentos PIX
-    const taxaConfigEl = document.getElementById('crt-taxa-config');
-    if (taxaConfigEl) taxaConfigEl.textContent = 'R$ ' + parseFloat(d.taxa_pix||0).toFixed(2).replace('.',',');
     // Preenche campos da chave manual
     if (!_pixAtivoGestor) {
       const keyEl = document.getElementById('pix-manual-key');
@@ -7038,6 +7051,7 @@ async function carregarCarteira() {
     if(se('crt-total'))  se('crt-total').textContent  = _fmtR(cart.total_recebido);
     if(se('crt-sacado')) se('crt-sacado').textContent = _fmtR(cart.total_sacado);
     if(se('crt-npag'))   se('crt-npag').textContent   = cart.total_pagamentos || 0;
+    if(se('crt-taxas'))  se('crt-taxas').textContent  = _fmtR(cart.total_taxas);
 
     // Preview do valor de saque
     const saldo = parseFloat(cart.saldo_disponivel || 0);
