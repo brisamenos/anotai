@@ -6870,7 +6870,7 @@ async function confirmarZerarPedidos() {
     const novoOffset = data?.[0]?.id || 0;
 
     // Salva o offset no store_config do tenant
-    const { error } = await sb.from('store_config').update({ order_num_offset: novoOffset });
+    const { error } = await sb.from('store_config').update({ order_num_offset: novoOffset }).eq('tenant_id', _sessao.tenant_id);
     if (error) throw new Error(error.message);
 
     // Atualiza localmente
