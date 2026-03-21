@@ -7066,7 +7066,7 @@ async function carregarCarteira() {
     if(se('crt-total'))  se('crt-total').textContent  = _fmtR(cart.total_recebido);
     if(se('crt-sacado')) se('crt-sacado').textContent = _fmtR(cart.total_sacado);
     if(se('crt-npag'))   se('crt-npag').textContent   = cart.total_pagamentos || 0;
-    if(se('crt-taxas'))  se('crt-taxas').textContent  = _fmtR(cart.total_taxas);
+    if(se('crt-taxa-config')) se('crt-taxa-config').textContent = _fmtR(cart.taxa_por_pagamento || 1);
 
     // Preview do valor de saque
     const saldo = parseFloat(cart.saldo_disponivel || 0);
