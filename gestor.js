@@ -1409,7 +1409,7 @@ function printOrderDetail(){
   const id=window._currentDetailId;
   const o=ordersKanban.find(x=>x.id===id);
   if(!o) return;
-  showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><rect x=&quot;3&quot; y=&quot;2&quot; width=&quot;10&quot; height=&quot;4&quot; rx=&quot;1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><rect x=&quot;3&quot; y=&quot;10&quot; width=&quot;10&quot; height=&quot;4&quot; rx=&quot;1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><circle cx=&quot;12&quot; cy=&quot;8&quot; r=&quot;.6&quot; fill=&quot;currentColor&quot;/></svg>','Imprimindo comanda do pedido #'+_orderNum(id));
+  showToast(_ICON_SAV,'Imprimindo comanda do pedido #'+_orderNum(id));
 }
 
 // ─────────────────────────────────────────
@@ -4567,7 +4567,9 @@ function renderCaixa() {
   document.getElementById('cx-list').innerHTML=movimentos.slice().reverse().map(m=>`
     <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px">
       <div style="width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;background:${m.tipo==='entrada'?'rgba(34,197,94,.12)':'rgba(239,68,68,.12)'}">
-        ${m.tipo==='entrada'?'<svg width=&quot;14&quot; height=&quot;14&quot; viewBox=&quot;0 0 16 16&quot; fill=&quot;none&quot; style=&quot;display:inline-block;vertical-align:middle;flex-shrink:0&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;><path d=&quot;M8 13V3M3 8l5-5 5 5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>':'<svg width=&quot;14&quot; height=&quot;14&quot; viewBox=&quot;0 0 16 16&quot; fill=&quot;none&quot; style=&quot;display:inline-block;vertical-align:middle;flex-shrink:0&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;><path d=&quot;M8 3v10M3 8l5 5 5-5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>'}
+        ${m.tipo==='entrada'
+          ? `<svg width='14' height='14' viewBox='0 0 16 16' fill='none' style='display:inline-block;vertical-align:middle;flex-shrink:0'><path d='M8 13V3M3 8l5-5 5 5' stroke='currentColor' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>`
+          : `<svg width='14' height='14' viewBox='0 0 16 16' fill='none' style='display:inline-block;vertical-align:middle;flex-shrink:0'><path d='M8 3v10M3 8l5 5 5-5' stroke='currentColor' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>`}
       </div>
       <div style="flex:1"><div style="font-size:12.5px;font-weight:600">${m.desc}</div><div style="font-size:11px;color:var(--muted)">${m.pag} • ${m.time}</div></div>
       <div style="font-size:13.5px;font-weight:700;color:${m.tipo==='entrada'?'var(--success)':'var(--danger)'}">${m.tipo==='entrada'?'+':'-'}R$${m.val.toFixed(2).replace('.',',')}</div>
@@ -4803,7 +4805,7 @@ function clearNotifs(){
   document.getElementById('notif-panel').querySelectorAll('.notif-item').forEach(n=>n.remove());
   const nc=document.getElementById('notif-count');
   nc.textContent='0';nc.style.display='none';
-  closeNotif();showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><circle cx=&quot;8&quot; cy=&quot;8&quot; r=&quot;6&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M5.5 8l2 2 3-3&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>','Notificações limpas');
+  closeNotif();showToast(_ICON_OK,'Notificações limpas');
 }
 
 // ─────────────────────────────────────────
