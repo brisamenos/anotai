@@ -1346,58 +1346,228 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
 
 <!-- RELATÓRIOS -->
 <div class="page" id="page-relatorios">
-  <div class="ph"><div><div class="pt">Relatórios</div><div class="ps">Visão completa do seu negócio</div></div><button class="btn bg" onclick="showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><path d=&quot;M8 3v8M5 8l3 3 3-3&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M3 13h10&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>','Exportando relatório...')"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 3v8M5 8l3 3 3-3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13h10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Exportar</button></div>
-  <!-- Filtro de período -->
-  <div style="display:flex;gap:7px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
-    <span style="font-size:11.5px;color:var(--muted);font-weight:600;margin-right:4px">Período:</span>
-    <button class="btn bg rel-periodo-btn" id="rpb-diario"  onclick="setRelPeriodo('diario')"  style="font-size:12px;padding:4px 14px">Diário</button>
-    <button class="btn bg rel-periodo-btn" id="rpb-semanal" onclick="setRelPeriodo('semanal')" style="font-size:12px;padding:4px 14px">Semanal</button>
-    <button class="btn bp rel-periodo-btn" id="rpb-mensal"  onclick="setRelPeriodo('mensal')"  style="font-size:12px;padding:4px 14px">Mensal</button>
-    <button class="btn bg rel-periodo-btn" id="rpb-anual"   onclick="setRelPeriodo('anual')"   style="font-size:12px;padding:4px 14px">Anual</button>
-    <span id="rel-periodo-label" style="margin-left:6px;font-size:11.5px;color:var(--muted)"></span>
+
+  <!-- Header -->
+  <div class="ph" style="flex-wrap:wrap;gap:12px">
+    <div>
+      <div class="pt">Relatórios</div>
+      <div class="ps">Dashboard completo do seu negócio</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div style="display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:3px">
+        <button class="rel-periodo-btn" id="rpb-diario"  onclick="setRelPeriodo('diario')"  style="padding:4px 12px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:none;color:var(--muted);transition:all .15s">Hoje</button>
+        <button class="rel-periodo-btn" id="rpb-semanal" onclick="setRelPeriodo('semanal')" style="padding:4px 12px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:none;color:var(--muted);transition:all .15s">Semana</button>
+        <button class="rel-periodo-btn" id="rpb-mensal"  onclick="setRelPeriodo('mensal')"  style="padding:4px 12px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:var(--accent);color:#fff;transition:all .15s">Mês</button>
+        <button class="rel-periodo-btn" id="rpb-anual"   onclick="setRelPeriodo('anual')"   style="padding:4px 12px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:none;color:var(--muted);transition:all .15s">Ano</button>
+      </div>
+      <span id="rel-periodo-label" style="font-size:12px;color:var(--muted)"></span>
+      <button class="btn bg" onclick="relExportar()" style="font-size:12px">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 3v8M5 8l3 3 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M3 13h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Exportar CSV
+      </button>
+    </div>
   </div>
-  <div class="tabs">
-    <button class="tab on" onclick="switchTab(this,'t-rel-geral')">Geral</button>
-    <button class="tab" onclick="switchTab(this,'t-rel-clientes')">Clientes</button>
-    <button class="tab" onclick="switchTab(this,'t-rel-entradas')">Entradas</button>
-    <button class="tab" onclick="switchTab(this,'t-rel-produtos')">Produtos</button>
-    <button class="tab" onclick="switchTab(this,'t-rel-satisfacao')">Satisfação</button>
+
+  <!-- KPI Cards -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+    <div id="kpi-fat"     class="rel-kpi-card" style="background:linear-gradient(135deg,rgba(59,130,246,.15),rgba(59,130,246,.05));border:1px solid rgba(59,130,246,.25);border-radius:14px;padding:16px 18px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Faturamento</div>
+          <div id="rel-kpi-fat" style="font-size:24px;font-weight:800;color:var(--text);font-family:'Playfair Display',sans-serif">—</div>
+          <div id="rel-kpi-fat-sub" style="font-size:11.5px;color:var(--muted);margin-top:4px">carregando...</div>
+        </div>
+        <div style="width:38px;height:38px;border-radius:10px;background:rgba(59,130,246,.2);display:flex;align-items:center;justify-content:center;font-size:18px">💰</div>
+      </div>
+      <div id="rel-kpi-fat-trend" style="margin-top:10px;font-size:11px;font-weight:600"></div>
+    </div>
+    <div id="kpi-ped"    class="rel-kpi-card" style="background:linear-gradient(135deg,rgba(34,197,94,.15),rgba(34,197,94,.05));border:1px solid rgba(34,197,94,.25);border-radius:14px;padding:16px 18px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Pedidos</div>
+          <div id="rel-kpi-ped" style="font-size:24px;font-weight:800;color:var(--text);font-family:'Playfair Display',sans-serif">—</div>
+          <div id="rel-kpi-ped-sub" style="font-size:11.5px;color:var(--muted);margin-top:4px">carregando...</div>
+        </div>
+        <div style="width:38px;height:38px;border-radius:10px;background:rgba(34,197,94,.2);display:flex;align-items:center;justify-content:center;font-size:18px">📦</div>
+      </div>
+      <div id="rel-kpi-ped-trend" style="margin-top:10px;font-size:11px;font-weight:600"></div>
+    </div>
+    <div id="kpi-ticket"  class="rel-kpi-card" style="background:linear-gradient(135deg,rgba(139,92,246,.15),rgba(139,92,246,.05));border:1px solid rgba(139,92,246,.25);border-radius:14px;padding:16px 18px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Ticket Médio</div>
+          <div id="rel-kpi-ticket" style="font-size:24px;font-weight:800;color:var(--text);font-family:'Playfair Display',sans-serif">—</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:4px">por pedido confirmado</div>
+        </div>
+        <div style="width:38px;height:38px;border-radius:10px;background:rgba(139,92,246,.2);display:flex;align-items:center;justify-content:center;font-size:18px">🎯</div>
+      </div>
+      <div id="rel-kpi-ticket-trend" style="margin-top:10px;font-size:11px;font-weight:600"></div>
+    </div>
+    <div id="kpi-cancel"  class="rel-kpi-card" style="background:linear-gradient(135deg,rgba(239,68,68,.12),rgba(239,68,68,.04));border:1px solid rgba(239,68,68,.2);border-radius:14px;padding:16px 18px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Cancelamentos</div>
+          <div id="rel-kpi-cancel" style="font-size:24px;font-weight:800;color:var(--text);font-family:'Playfair Display',sans-serif">—</div>
+          <div id="rel-kpi-cancel-sub" style="font-size:11.5px;color:var(--muted);margin-top:4px">carregando...</div>
+        </div>
+        <div style="width:38px;height:38px;border-radius:10px;background:rgba(239,68,68,.18);display:flex;align-items:center;justify-content:center;font-size:18px">❌</div>
+      </div>
+      <div id="rel-kpi-cancel-trend" style="margin-top:10px;font-size:11px;font-weight:600"></div>
+    </div>
   </div>
+
+  <!-- Tabs -->
+  <div class="tabs" style="margin-bottom:0">
+    <button class="tab on" onclick="switchTab(this,'t-rel-geral')">📊 Visão Geral</button>
+    <button class="tab" onclick="switchTab(this,'t-rel-produtos')">🍽️ Produtos</button>
+    <button class="tab" onclick="switchTab(this,'t-rel-clientes')">👥 Clientes</button>
+    <button class="tab" onclick="switchTab(this,'t-rel-entradas')">💵 Financeiro</button>
+    <button class="tab" onclick="switchTab(this,'t-rel-satisfacao')">⭐ Satisfação</button>
+  </div>
+
+  <!-- ═══ TAB GERAL ═══ -->
   <div class="ts on" id="t-rel-geral">
-    <div class="sg">
-      <div class="sc" style="--ca:var(--accent)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 4v8M5.5 6.5A2 1.5 0 0 1 8 5a2 1.5 0 0 1 0 3 2 1.5 0 0 0 0 3 2 1.5 0 0 0 2.5-1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Faturamento mês</div><div class="sv" id="rel-kpi-fat">—</div><div class="str" id="rel-kpi-fat-sub" style="color:var(--muted)">carregando...</div></div>
-      <div class="sc" style="--ca:var(--success)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 5l6-3 6 3v6l-6 3-6-3V5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 2v12M2 5l6 3 6-3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Pedidos mês</div><div class="sv" id="rel-kpi-ped">—</div><div class="str" id="rel-kpi-ped-sub" style="color:var(--muted)">carregando...</div></div>
-      <div class="sc" style="--ca:var(--purple)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Ticket médio</div><div class="sv" id="rel-kpi-ticket">—</div><div class="str" style="color:var(--muted)">por pedido</div></div>
-      <div class="sc" style="--ca:var(--accent3)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5L8 2z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Cancelamentos mês</div><div class="sv" id="rel-kpi-cancel">—</div><div class="str" id="rel-kpi-cancel-sub" style="color:var(--muted)">carregando...</div></div>
+    <!-- Gráfico principal + Pedidos por hora -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+      <div class="card" style="padding:18px">
+        <div class="card-title" id="rel-chart-title">📈 Faturamento por período</div>
+        <div id="rel-line-chart" style="height:160px;margin-top:8px"></div>
+      </div>
+      <div class="card" style="padding:18px">
+        <div class="card-title">🕐 Pedidos por hora do dia</div>
+        <div id="rel-hour-bar" class="bar-chart-wrap" style="height:160px;margin-top:8px"></div>
+      </div>
     </div>
-    <div class="rel-grid">
-      <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 12V7M6 12V3M10 12V8M14 12V5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Faturamento mensal</div><div class="bar-chart-wrap" id="rel-month-bar" style="height:140px"></div></div>
-      <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 7h12" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 2v2M11 2v2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Pedidos por dia da semana</div><div class="bar-chart-wrap" id="rel-day-bar" style="height:140px"></div></div>
+
+    <!-- Heatmap + dias da semana -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+      <div class="card" style="padding:18px">
+        <div class="card-title">📅 Pedidos por dia da semana</div>
+        <div id="rel-day-bar" class="bar-chart-wrap" style="height:140px;margin-top:8px"></div>
+      </div>
+      <div class="card" style="padding:18px">
+        <div class="card-title">💳 Formas de pagamento</div>
+        <div id="rel-gauges" style="margin-top:8px"></div>
+      </div>
     </div>
-    <div class="rel-grid">
-      <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 8h14" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 12h3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Métodos de pagamento</div><div class="gauge-wrap" id="rel-gauges"></div></div>
-      <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="1" width="8" height="14" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="12" r=".8" fill="currentColor"/></svg> Faturamento por plataforma</div><div id="rel-platforms" style="padding:4px 0"></div></div>
+
+    <!-- Origem dos pedidos + Áreas -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+      <div class="card" style="padding:18px">
+        <div class="card-title">🏪 Origem dos pedidos</div>
+        <div id="rel-platforms" style="padding:4px 0;margin-top:8px"></div>
+      </div>
+      <div class="card" style="padding:18px">
+        <div class="card-title">📍 Top bairros / áreas</div>
+        <div id="rel-areas" style="margin-top:8px"></div>
+      </div>
     </div>
-    <div class="card" style="margin-top:16px"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M1 3l5 2 4-2 5 2v10l-5-2-4 2L1 13V3z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 5v10M10 3v10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Áreas de entrega</div>
-      <div style="display:grid;grid-template-columns:1fr 220px;gap:14px">
-        <div class="map-placeholder"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M1 3l5 2 4-2 5 2v10l-5-2-4 2L1 13V3z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 5v10M10 3v10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Mapa de áreas de entrega<br><small style="font-size:10px">Integração com Google Maps</small></span></div>
-        <div id="rel-areas" style="display:flex;flex-direction:column;gap:6px;font-size:12.5px"></div>
+
+    <!-- Mapa de calor semanal -->
+    <div class="card" style="padding:18px;margin-bottom:14px">
+      <div class="card-title">🔥 Mapa de calor — horários de pico</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Intensidade de pedidos por hora e dia da semana no período</div>
+      <div id="rel-heatmap" style="overflow-x:auto"></div>
+    </div>
+
+    <!-- Comparativo mês a mês -->
+    <div class="card" style="padding:18px">
+      <div class="card-title" id="rel-month-title">📊 Faturamento mensal (ano atual)</div>
+      <div id="rel-month-bar" class="bar-chart-wrap" style="height:140px;margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB PRODUTOS ═══ -->
+  <div class="ts" id="t-rel-produtos">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+      <!-- Top vendidos -->
+      <div class="card" style="padding:18px">
+        <div class="card-title">🏆 Mais vendidos por quantidade</div>
+        <div id="rel-produtos-list" style="margin-top:8px"></div>
+      </div>
+      <!-- Top por faturamento -->
+      <div class="card" style="padding:18px">
+        <div class="card-title">💰 Mais vendidos por faturamento</div>
+        <div id="rel-produtos-fat" style="margin-top:8px"></div>
+      </div>
+    </div>
+    <!-- Categorias -->
+    <div class="card" style="padding:18px">
+      <div class="card-title">📂 Faturamento por categoria</div>
+      <div id="rel-cats-bar" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB CLIENTES ═══ -->
+  <div class="ts" id="t-rel-clientes">
+    <!-- Stats clientes -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
+      <div class="sc" style="--ca:var(--accent)"><div class="si2">👥</div><div class="sl">Total cadastrados</div><div class="sv" id="rel-cli-total">—</div></div>
+      <div class="sc" style="--ca:var(--success)"><div class="si2">🔄</div><div class="sl">Com pedidos</div><div class="sv" id="rel-cli-com-pedido">—</div></div>
+      <div class="sc" style="--ca:var(--purple)"><div class="si2">⭐</div><div class="sl">No programa fid.</div><div class="sv" id="rel-cli-fid">—</div></div>
+      <div class="sc" style="--ca:var(--accent3)"><div class="si2">😴</div><div class="sl">Inativos 30d</div><div class="sv" id="rel-cli-inativos">—</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="card" style="padding:18px">
+        <div class="card-title">🏅 Clientes mais frequentes</div>
+        <div id="rel-top-clients" style="margin-top:8px"></div>
+      </div>
+      <div class="card" style="padding:18px">
+        <div class="card-title">💎 Maiores gastadores</div>
+        <div id="rel-top-gastos" style="margin-top:8px"></div>
+      </div>
+    </div>
+    <div class="card" style="padding:18px;margin-top:14px">
+      <div class="card-title">📅 Novos clientes cadastrados no período</div>
+      <div id="rel-novos-clientes" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB FINANCEIRO ═══ -->
+  <div class="ts" id="t-rel-entradas">
+    <!-- Resumo financeiro -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px">
+      <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:14px;padding:18px;text-align:center">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Total Entradas</div>
+        <div id="rel-fin-entradas" style="font-size:26px;font-weight:800;color:var(--success);font-family:'Playfair Display',sans-serif">—</div>
+      </div>
+      <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:14px;padding:18px;text-align:center">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Total Saídas</div>
+        <div id="rel-fin-saidas" style="font-size:26px;font-weight:800;color:var(--danger);font-family:'Playfair Display',sans-serif">—</div>
+      </div>
+      <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:14px;padding:18px;text-align:center">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Saldo Líquido</div>
+        <div id="rel-fin-saldo" style="font-size:26px;font-weight:800;font-family:'Playfair Display',sans-serif">—</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="card" style="padding:18px">
+        <div class="card-title">📋 Movimentações</div>
+        <div id="rel-entradas-list" style="margin-top:8px"></div>
+      </div>
+      <div class="card" style="padding:18px">
+        <div class="card-title">💳 Receita por forma de pagamento</div>
+        <div id="rel-fat-pag" style="margin-top:12px"></div>
       </div>
     </div>
   </div>
-  <div class="ts" id="t-rel-clientes">
-    <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="6" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 14c0-2.5 2-4.5 5-4.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 14c0-2.5-2-4.5-5-4.5s-5 2-5 4.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Clientes mais frequentes</div><div id="rel-top-clients"></div></div>
-  </div>
-  <div class="ts" id="t-rel-entradas">
-    <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 4v8M5.5 6.5A2 1.5 0 0 1 8 5a2 1.5 0 0 1 0 3 2 1.5 0 0 0 0 3 2 1.5 0 0 0 2.5-1.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Entradas do mês</div><div id="rel-entradas-list"></div></div>
-  </div>
-  <div class="ts" id="t-rel-produtos">
-    <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M5 2h6v6a3 3 0 0 1-6 0V2z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 2h3M11 2h3M2 5H5M11 5h3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 8v4M5.5 14h5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Produtos mais vendidos</div><div id="rel-produtos-list"></div></div>
-  </div>
+
+  <!-- ═══ TAB SATISFAÇÃO ═══ -->
   <div class="ts" id="t-rel-satisfacao">
-    <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5L8 2z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Avaliações dos clientes</div><div id="rel-sat-list"></div></div>
+    <div style="display:grid;grid-template-columns:280px 1fr;gap:14px">
+      <div class="card" style="padding:18px">
+        <div class="card-title">⭐ Resumo de avaliações</div>
+        <div id="rel-sat-resumo" style="margin-top:12px"></div>
+      </div>
+      <div class="card" style="padding:18px">
+        <div class="card-title">💬 Comentários recentes</div>
+        <div id="rel-sat-list" style="margin-top:8px;max-height:400px;overflow-y:auto"></div>
+      </div>
+    </div>
   </div>
+
 </div>
+
 
 <!-- SATISFAÇÃO -->
 <div class="page" id="page-satisfacao">
