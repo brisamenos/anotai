@@ -156,7 +156,7 @@ async function loadAllData(silent = false) {
 
     const [
       itemsRes, catsRes, ordersRes, movsRes,
-      cuponsRes, mesasRes, estoqueRes, fidRes, cfgRes, customersRes
+      cuponsRes, mesasRes, estoqueRes, fidRes, cfgRes
     ] = await Promise.all([
       safe(sb.from('menu_items').select('*').order('sort_order').order('id')),
       safe(sb.from('categories').select('*').order('sort_order')),
@@ -166,8 +166,7 @@ async function loadAllData(silent = false) {
       safe(sb.from('mesas').select('*').order('num')),
       safe(sb.from('estoque').select('*').order('id')),
       safe(sb.from('fidelidade').select('*').order('pts',{ascending:false})),
-      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema,order_num_offset').single()),
-      safe(sb.from('customers').select('*').order('id',{ascending:false}))
+      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema,order_num_offset').single())
     ]);
 
     if (itemsRes.data?.length)    items         = itemsRes.data.map(mapItem);
@@ -199,7 +198,6 @@ async function loadAllData(silent = false) {
       max:f.max_pts||_fidConfig.meta_pts||500,
       orders:f.orders_count||0, resgates:f.resgates||0
     }));
-    if (customersRes.data) customersData = customersRes.data;
 
 
     // Set orderIdSeq above DB max and init polling tracker
@@ -529,36 +527,13 @@ function subscribeOrders() {
     })
     .subscribe();
 
-  // Canal de clientes — sincroniza cadastros feitos no cardápio em tempo real
-  const chCustomers = sb.channel('customers-rt')
-    .on('postgres_changes', {event:'INSERT', schema:'public', table:'customers'}, p => {
-      console.log('[CLIENTES-RT] INSERT recebido:', p.new);
-      if (!customersData.find(c => c.id === p.new.id)) {
-        customersData.unshift(p.new);
-        console.log('[CLIENTES-RT] Novo cliente adicionado. Total:', customersData.length);
-      }
-      const pg = document.getElementById('page-clientes');
-      if (pg && pg.classList.contains('on')) renderClientes();
-    })
-    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'customers'}, p => {
-      console.log('[CLIENTES-RT] UPDATE recebido:', p.new);
-      const idx = customersData.findIndex(c => c.id === p.new.id);
-      if (idx !== -1) customersData[idx] = { ...customersData[idx], ...p.new };
-      else customersData.unshift(p.new);
-      const pg = document.getElementById('page-clientes');
-      if (pg && pg.classList.contains('on')) renderClientes();
-    })
-    .subscribe(status => {
-      console.log('[CLIENTES-RT] Status do canal:', status);
-    });
-
   // Heartbeat: mantém WS vivo em background (a cada 25s)
   _heartbeat = setInterval(() => {
     try { sb.channel('orders-rt').send({ type:'broadcast', event:'ping', payload:{} }); }
     catch(e){}
   }, 25000);
 
-  _rtChannels = [chOrders, chMesas, chConfig, chCustomers];
+  _rtChannels = [chOrders, chMesas, chConfig];
 }
 
 // Sync ao voltar para a aba
@@ -1051,7 +1026,8 @@ function _orderNum(id) { return Math.max(1, id - _orderNumOffset); }
 let orderIdSeq   = 1;
 let tables       = [];
 let fidClients   = [];
-let customersData = [];
+let cliData      = [];  // customers carregados
+let _cliTab      = 'todos';
 let estoqueItems = [];
 let cartItems    = [];
 let filters      = {search:'', cat:'', status:''};
@@ -1103,16 +1079,13 @@ function nav(id){
   if(id==='desempenho') { setDesempPrd(_desempPrd); }
   if(id==='relatorios') { setRelPeriodo(_relPeriodo); }
   if(id==='satisfacao') renderSatisfacao();
+  if(id==='clientes') cliCarregar();
   if(id==='impressao') renderImpressao();
   if(id==='caixa') _renderCaixaTela();
   if(id==='configuracoes') _renderConfiguracoes();
   if(id==='saques') { carregarCarteira(); conectarSaquesSSE(); carregarConfigPixGestor(); }
   if(id==='taxa') renderTaxaPage();
-  if(id==='clientes') {
-    const pgCheck = document.getElementById('page-clientes');
-    console.log('[NAV] page-clientes encontrada?', !!pgCheck, '| classList:', pgCheck?.className);
-    renderClientesPage();
-  }
+
   if(id==='meu-plano') renderMeuPlano();
   if(id==='cardapio-publico') {
     const cpPg = document.getElementById('page-cardapio-publico');
@@ -5468,312 +5441,6 @@ function _pdvbKeyHandler(e){
   }
 }
 
-// ═══════════════════════════════════════
-// CLIENTES & ANIVERSARIANTES
-// ═══════════════════════════════════════
-let _clientesTab = 'todos';
-
-function clientesTab(tab) {
-  _clientesTab = tab;
-  const btnTodos = document.getElementById('btn-tab-todos');
-  const btnAniv  = document.getElementById('btn-tab-aniversario');
-  const btnCad   = document.getElementById('btn-tab-cadastrados');
-  if (btnTodos) { btnTodos.style.background = tab==='todos'?'var(--accent)':''; btnTodos.style.color = tab==='todos'?'#fff':''; btnTodos.style.borderColor = tab==='todos'?'var(--accent)':'var(--border)'; }
-  if (btnAniv)  { btnAniv.style.background  = tab==='aniversario'?'var(--purple)':''; btnAniv.style.color = tab==='aniversario'?'#fff':''; btnAniv.style.borderColor = tab==='aniversario'?'var(--purple)':'var(--border)'; }
-  if (btnCad)   { btnCad.style.background   = tab==='cadastrados'?'var(--accent3)':''; btnCad.style.color = tab==='cadastrados'?'#fff':''; btnCad.style.borderColor = tab==='cadastrados'?'var(--accent3)':'var(--border)'; }
-  renderClientes();
-}
-
-async function renderClientesPage() {
-  console.log('[CLIENTES] renderClientesPage iniciado');
-  console.log('[CLIENTES] customersData atual:', customersData.length, 'registros');
-  console.log('[CLIENTES] fidClients atual:', fidClients.length, 'registros');
-  _clientesTab = 'todos';
-  clientesTab('todos');
-  renderClientes();
-
-  try {
-    console.log('[CLIENTES] Buscando dados frescos do banco...');
-    const [custRes, fidRes] = await Promise.all([
-      sb.from('customers').select('*').order('id', {ascending: false}),
-      sb.from('fidelidade').select('*').order('pts', {ascending: false})
-    ]);
-
-    console.log('[CLIENTES] custRes:', { data: custRes.data?.length, error: custRes.error });
-    console.log('[CLIENTES] fidRes:', { data: fidRes.data?.length, error: fidRes.error });
-
-    if (custRes.error) console.error('[CLIENTES] ERRO ao buscar customers:', custRes.error);
-    if (fidRes.error)  console.error('[CLIENTES] ERRO ao buscar fidelidade:', fidRes.error);
-
-    let updated = false;
-    if (custRes.data) {
-      console.log('[CLIENTES] customers carregados:', custRes.data.length);
-      if (custRes.data.length > 0) console.log('[CLIENTES] primeiro customer:', JSON.stringify(custRes.data[0]));
-      customersData = custRes.data;
-      updated = true;
-    } else {
-      console.warn('[CLIENTES] customers retornou vazio ou null');
-    }
-
-    if (fidRes.data) {
-      console.log('[CLIENTES] fidelidade carregados:', fidRes.data.length);
-      fidClients = fidRes.data.map(f => ({
-        id: f.id, name: f.name, phone: f.phone||'', birthday: f.birthday||null,
-        pts: f.pts||0, max: f.max_pts||_fidConfig.meta_pts||500,
-        orders: f.orders_count||0, resgates: f.resgates||0
-      }));
-      updated = true;
-    }
-
-    if (updated) {
-      console.log('[CLIENTES] Dados atualizados, re-renderizando...');
-      renderClientes();
-    }
-  } catch(e) {
-    console.error('[CLIENTES] EXCEÇÃO em renderClientesPage:', e);
-  }
-}
-
-// Mescla fidelidade + customers numa lista unificada
-function _mergeClientes() {
-  console.log('[CLIENTES] _mergeClientes | fidClients:', fidClients.length, '| customersData:', customersData.length);
-  const today   = new Date();
-  const todayMD = String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
-  const mesMes  = today.getMonth() + 1;
-
-  // Base: fidelidade
-  const byPhone = {};
-  fidClients.forEach(c => {
-    const key = (c.phone||'').replace(/\D/g,'');
-    byPhone[key] = {
-      _fidId: c.id, _custId: null,
-      name: c.name, phone: c.phone||'', birthday: c.birthday||null,
-      pts: c.pts||0, max: c.max||500,
-      orders: c.orders||0, resgates: c.resgates||0,
-      email: null, addr: null, total_spent: 0, created_at: null,
-      fromCardapio: false
-    };
-  });
-
-  // Mescla customers (cadastros do cardápio)
-  customersData.forEach(c => {
-    const key = (c.phone||'').replace(/\D/g,'');
-    if (byPhone[key]) {
-      // Enriquece registro existente
-      byPhone[key]._custId     = c.id;
-      byPhone[key].email       = c.email || byPhone[key].email;
-      byPhone[key].birthday    = byPhone[key].birthday || c.birthday;
-      byPhone[key].addr        = c.addr || null;
-      byPhone[key].total_spent = parseFloat(c.total_spent)||0;
-      byPhone[key].orders      = Math.max(byPhone[key].orders, c.orders_count||0);
-      byPhone[key].created_at  = c.created_at;
-      byPhone[key].fromCardapio = true;
-    } else {
-      byPhone[key] = {
-        _fidId: null, _custId: c.id,
-        name: c.name||'(sem nome)', phone: c.phone||'', birthday: c.birthday||null,
-        pts: 0, max: 500,
-        orders: c.orders_count||0, resgates: 0,
-        email: c.email||null, addr: c.addr||null,
-        total_spent: parseFloat(c.total_spent)||0,
-        created_at: c.created_at, fromCardapio: true
-      };
-    }
-  });
-
-  const result = Object.values(byPhone).map(c => ({
-    ...c,
-    isAnivHoje: c.birthday ? c.birthday.slice(5) === todayMD : false,
-    isAnivMes:  c.birthday ? parseInt(c.birthday.slice(5,7)) === mesMes : false,
-    diasAteAniv: c.birthday ? _diasAteAniversario(c.birthday) : 999
-  }));
-  console.log('[CLIENTES] _mergeClientes resultado:', result.length, 'clientes mesclados');
-  return result;
-}
-
-function renderClientes() {
-  console.log('[CLIENTES] renderClientes | tab:', _clientesTab, '| customersData:', customersData.length, '| fidClients:', fidClients.length);
-  const search  = (document.getElementById('cli-search')?.value || '').toLowerCase();
-  const order   = document.getElementById('cli-order')?.value || 'nome';
-
-  let clientes = _mergeClientes();
-
-  // Stats
-  document.getElementById('cli-total').textContent      = clientes.length;
-  document.getElementById('cli-aniv-hoje').textContent  = clientes.filter(c=>c.isAnivHoje).length;
-  document.getElementById('cli-aniv-mes').textContent   = clientes.filter(c=>c.isAnivMes).length;
-  document.getElementById('cli-com-pts').textContent    = clientes.filter(c=>c.pts>0).length;
-
-  // Banner aniversariantes hoje
-  const hoje = clientes.filter(c => c.isAnivHoje);
-  const banner     = document.getElementById('cli-aniv-banner');
-  const hojeBadge  = document.getElementById('cli-aniv-hoje-badge');
-  const hojeList   = document.getElementById('cli-aniv-hoje-list');
-  if (banner) banner.style.display = hoje.length ? 'block' : 'none';
-  if (hojeBadge) hojeBadge.textContent = hoje.length;
-  if (hojeList) hojeList.innerHTML = hoje.map(c=>`
-    <div style="display:flex;align-items:center;gap:7px;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.25);border-radius:8px;padding:6px 10px">
-      <span style="font-size:18px">🎂</span>
-      <div><div style="font-size:12.5px;font-weight:600">${c.name}</div><div style="font-size:11px;color:var(--muted)">${c.phone||'—'}</div></div>
-    </div>`).join('');
-
-  // Filtrar por tab
-  if (_clientesTab === 'aniversario') {
-    clientes = clientes.filter(c => c.birthday);
-    clientes.sort((a,b) => a.diasAteAniv - b.diasAteAniv);
-  } else if (_clientesTab === 'cadastrados') {
-    clientes = clientes.filter(c => c.fromCardapio);
-    if (order === 'nome')    clientes.sort((a,b) => a.name.localeCompare(b.name));
-    else if (order === 'pedidos') clientes.sort((a,b) => (b.orders||0) - (a.orders||0));
-    else if (order === 'gasto')   clientes.sort((a,b) => (b.total_spent||0) - (a.total_spent||0));
-  } else {
-    if (order === 'nome')         clientes.sort((a,b) => a.name.localeCompare(b.name));
-    else if (order === 'pts')     clientes.sort((a,b) => b.pts - a.pts);
-    else if (order === 'pedidos') clientes.sort((a,b) => (b.orders||0) - (a.orders||0));
-    else if (order === 'gasto')   clientes.sort((a,b) => (b.total_spent||0) - (a.total_spent||0));
-    else if (order === 'aniversario') clientes.sort((a,b) => a.diasAteAniv - b.diasAteAniv);
-  }
-
-  if (search) clientes = clientes.filter(c =>
-    (c.name||''). toLowerCase().includes(search) || (c.phone||'').includes(search) || (c.email||'').toLowerCase().includes(search)
-  );
-
-  document.getElementById('cli-count').textContent = `${clientes.length} cliente${clientes.length!==1?'s':''}`;
-
-  const tbody = document.getElementById('cli-tbody');
-  if (!tbody) { console.error('[CLIENTES] cli-tbody NÃO encontrado no DOM!'); return; }
-  const pgEl = document.getElementById('page-clientes');
-  console.log('[CLIENTES] Renderizando', clientes.length, 'clientes na tabela');
-  console.log('[CLIENTES] page-clientes tem classe on?', pgEl?.classList.contains('on'));
-  console.log('[CLIENTES] page-clientes display:', pgEl ? window.getComputedStyle(pgEl).display : 'N/A');
-  console.log('[CLIENTES] tbody visível?', tbody ? window.getComputedStyle(tbody.closest('table')||tbody).display : 'N/A');
-  if (!clientes.length) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted);font-size:13px">${search?'Nenhum cliente encontrado':'Nenhum cliente cadastrado ainda.'}</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = clientes.map((c, _ci) => {
-    try {
-    const anivLabel   = c.birthday ? _formatAniversario(c.birthday, c.isAnivHoje, c.isAnivMes) : '<span style="color:var(--muted)">—</span>';
-    const ptsBar      = c.max ? Math.min(100, Math.round((c.pts/c.max)*100)) : 0;
-    const totalSpent  = parseFloat(c.total_spent) || 0;
-    const gastoLabel  = totalSpent > 0 ? `<span style="font-size:12px;font-weight:600;color:var(--success)">R$ ${totalSpent.toFixed(2).replace('.',',')}</span>` : '<span style="color:var(--muted)">—</span>';
-    const badge       = c.fromCardapio ? '<span style="font-size:9px;background:rgba(59,130,246,.15);color:var(--accent);padding:1px 6px;border-radius:99px;margin-left:5px;font-weight:600">APP</span>' : '';
-    const emailLabel  = c.email ? `<div style="font-size:10.5px;color:var(--muted)">${c.email}</div>` : '';
-    return `<tr>
-      <td>
-        <div style="display:flex;align-items:center;gap:10px">
-          <div style="width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;color:#fff">${(c.name||'?').charAt(0).toUpperCase()}</div>
-          <div>
-            <div style="font-weight:600;font-size:13px">${c.name||'—'}${badge}</div>
-            ${emailLabel}
-            ${c.isAnivHoje?'<div style="font-size:10px;color:var(--purple);font-weight:600">🎂 Aniversário hoje!</div>':''}
-          </div>
-        </div>
-      </td>
-      <td style="color:var(--muted);font-size:12.5px">${c.phone||'—'}</td>
-      <td>${anivLabel}</td>
-      <td style="font-size:12.5px;font-weight:600">${c.orders||0}</td>
-      <td>${gastoLabel}</td>
-      <td>
-        <div style="display:flex;align-items:center;gap:7px">
-          <div style="flex:1;height:5px;background:var(--surface2);border-radius:99px;overflow:hidden;min-width:50px"><div style="height:100%;width:${ptsBar}%;background:var(--accent);border-radius:99px"></div></div>
-          <span style="font-size:12px;font-weight:600;color:var(--accent);min-width:30px">${c.pts}</span>
-        </div>
-      </td>
-      <td>
-        <div style="display:flex;gap:5px">
-          <button class="btn bg" style="font-size:11px;padding:3px 9px" onclick="openEditCliente('${(c.phone||'').replace(/\D/g,'')}')">
-            <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3-9 9H2v-3L11 2z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Editar
-          </button>
-          ${c._fidId ? `<button class="btn bd" style="font-size:11px;padding:3px 9px" onclick="deleteCliente(${c._fidId})">
-            <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2.5A.5.5 0 0 1 6.5 2h3a.5.5 0 0 1 .5.5V4M5 4l.7 9.5a.5.5 0 0 0 .5.5h3.6a.5.5 0 0 0 .5-.5L11 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-          </button>` : ''}
-        </div>
-      </td>
-    </tr>`;
-    } catch(err) {
-      console.error('[CLIENTES] Erro ao renderizar cliente #' + _ci, JSON.stringify(c), err);
-      return `<tr><td colspan="7" style="color:var(--danger);font-size:11px;padding:8px">Erro ao exibir cliente: ${err.message}</td></tr>`;
-    }
-  }).join('');
-  console.log('[CLIENTES] tbody.innerHTML length após set:', tbody.innerHTML.length);
-  console.log('[CLIENTES] tbody rows count:', tbody.rows?.length);
-}
-
-function _diasAteAniversario(birthday) {
-  if (!birthday) return 999;
-  const today = new Date();
-  const aniv = new Date(today.getFullYear(), parseInt(birthday.slice(5,7))-1, parseInt(birthday.slice(8,10)));
-  if (aniv < today) aniv.setFullYear(today.getFullYear() + 1);
-  return Math.round((aniv - today) / (1000*60*60*24));
-}
-
-function _formatAniversario(birthday, isHoje, isMes) {
-  if (!birthday) return '<span style="color:var(--muted)">—</span>';
-  const [,m,d] = birthday.split('-');
-  const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  const label = `${d}/${meses[parseInt(m)-1]}`;
-  if (isHoje) return `<span style="color:var(--purple);font-weight:700">🎂 ${label} — Hoje!</span>`;
-  if (isMes)  return `<span style="color:var(--accent3);font-weight:600">📅 ${label} — Este mês</span>`;
-  return `<span style="color:var(--muted)">${label}</span>`;
-}
-
-function openEditCliente(phone) {
-  // Busca pelo telefone nos dois arrays
-  const phoneSan = (phone||'').replace(/\D/g,'');
-  const fid  = fidClients.find(c => (c.phone||'').replace(/\D/g,'') === phoneSan);
-  const cust = customersData.find(c => (c.phone||'').replace(/\D/g,'') === phoneSan);
-  if (!fid && !cust) return;
-  document.getElementById('edit-cli-id').value          = fid ? fid.id : '';
-  document.getElementById('edit-cli-cust-id').value     = cust ? cust.id : '';
-  document.getElementById('edit-cli-nome').value        = (fid||cust).name || '';
-  document.getElementById('edit-cli-phone').value       = (fid||cust).phone || '';
-  document.getElementById('edit-cli-aniversario').value = (fid?.birthday || cust?.birthday) || '';
-  document.getElementById('edit-cli-email').value       = cust?.email || '';
-  openModal('modal-edit-cliente');
-}
-
-async function saveCliente() {
-  const fidId   = parseInt(document.getElementById('edit-cli-id').value) || null;
-  const custId  = parseInt(document.getElementById('edit-cli-cust-id').value) || null;
-  const name    = document.getElementById('edit-cli-nome').value.trim();
-  const phone   = document.getElementById('edit-cli-phone').value.trim();
-  const birthday = document.getElementById('edit-cli-aniversario').value || null;
-  const email    = document.getElementById('edit-cli-email').value.trim() || null;
-  if (!name) { sbToast('err','Informe o nome'); return; }
-  sbLoading(true);
-  let ok = true;
-  if (fidId) {
-    const { error } = await sb.from('fidelidade').update({ name, phone, birthday }).eq('id', fidId);
-    if (error) ok = false;
-    else { const c = fidClients.find(x => x.id === fidId); if (c) { c.name=name; c.phone=phone; c.birthday=birthday; } }
-  }
-  if (custId) {
-    const { error } = await sb.from('customers').update({ name, phone, birthday, email }).eq('id', custId);
-    if (error) ok = false;
-    else { const c = customersData.find(x => x.id === custId); if (c) { c.name=name; c.phone=phone; c.birthday=birthday; c.email=email; } }
-  }
-  sbLoading(false);
-  if (!ok) { sbToast('err','Erro ao salvar'); return; }
-  closeModal('modal-edit-cliente');
-  renderClientes();
-  sbToast('ok', `${name} atualizado!`);
-}
-
-async function deleteCliente(fidId) {
-  const c = fidClients.find(x => x.id === fidId);
-  const name = c?.name || 'este cliente';
-  if (!confirm(`Remover "${name}" do programa de fidelidade?`)) return;
-  sbLoading(true);
-  const { error } = await sb.from('fidelidade').delete().eq('id', fidId);
-  sbLoading(false);
-  if (error) { sbToast('err','Erro ao remover'); return; }
-  fidClients = fidClients.filter(x => x.id !== fidId);
-  renderClientes();
-  sbToast('ok', `${name} removido da fidelidade`);
-}
-
 let _autoAcceptOn = false;
 
 function toggleAutoAccept(el) {
@@ -7760,3 +7427,354 @@ function readGrupos(ctx) {
     };
   }).filter(function(g){ return g.nome || g.opcoes.length; });
 }
+
+
+// ═══════════════════════════════════════════════════════
+// CLIENTES — Base de clientes cadastrados no cardápio
+// ═══════════════════════════════════════════════════════
+
+let _cliModalId = null; // id do cliente aberto no modal
+
+function cliTab(tab) {
+  _cliTab = tab;
+  ['todos','aniversario','inativos'].forEach(t => {
+    const b = document.getElementById('btn-cli-tab-' + t);
+    if (!b) return;
+    if (t === tab) {
+      b.style.background = 'var(--accent)';
+      b.style.color = '#fff';
+      b.style.borderColor = 'var(--accent)';
+    } else {
+      b.style.background = '';
+      b.style.color = '';
+      b.style.borderColor = '';
+    }
+  });
+  renderClientes();
+}
+
+async function cliCarregar() {
+  sbLoading(true);
+  try {
+    // Carrega customers + fidelidade para cruzar pontos
+    const [custRes, fidRes2] = await Promise.all([
+      sb.from('customers').select('*').order('created_at', {ascending: false}),
+      sb.from('fidelidade').select('id,phone,pts,resgates').order('id')
+    ]);
+
+    if (custRes.data) {
+      // Monta mapa de fidelidade por telefone
+      const fidMap = {};
+      (fidRes2.data || []).forEach(f => {
+        const ph = (f.phone || '').replace(/\D/g, '').slice(-8);
+        if (ph) fidMap[ph] = f;
+      });
+
+      cliData = custRes.data.map(c => {
+        const ph = (c.phone || '').replace(/\D/g, '').slice(-8);
+        const fid = fidMap[ph] || null;
+        return {
+          ...c,
+          fid_pts: fid ? (fid.pts || 0) : null,
+          fid_id: fid ? fid.id : null,
+          // Converte datas
+          _lastOrderDate: c.last_order_at ? new Date(c.last_order_at) : null,
+          _createdDate: c.created_at ? new Date(c.created_at) : null,
+          _birthdayMMDD: c.birthday ? c.birthday.slice(5) : null // MM-DD
+        };
+      });
+    }
+
+    _cliTab = 'todos';
+    cliTab('todos');
+    renderClientes();
+  } catch(e) {
+    sbToast('err', 'Erro ao carregar clientes');
+  }
+  sbLoading(false);
+}
+
+function _cliDiasAteAniv(mmdd) {
+  if (!mmdd) return 9999;
+  const hoje = new Date();
+  const ano = hoje.getFullYear();
+  const [m, d] = mmdd.split('-').map(Number);
+  let aniv = new Date(ano, m - 1, d);
+  if (aniv < hoje) aniv = new Date(ano + 1, m - 1, d);
+  return Math.round((aniv - hoje) / 86400000);
+}
+
+function renderClientes() {
+  const hoje = new Date();
+  const mesAtual = String(hoje.getMonth() + 1).padStart(2, '0');
+  const diaHoje = `${mesAtual}-${String(hoje.getDate()).padStart(2, '0')}`;
+  const limite30 = new Date(hoje - 30 * 86400000);
+
+  // Enriquece com flags de aniversário
+  const enriched = cliData.map(c => ({
+    ...c,
+    isAnivHoje: c._birthdayMMDD === diaHoje,
+    isAnivMes: c._birthdayMMDD && c._birthdayMMDD.startsWith(mesAtual),
+    diasAteAniv: _cliDiasAteAniv(c._birthdayMMDD),
+    isInativo: !c._lastOrderDate || c._lastOrderDate < limite30
+  }));
+
+  // Stats
+  elv('cli-st-total', enriched.length);
+  elv('cli-st-aniv-hoje', enriched.filter(c => c.isAnivHoje).length);
+  elv('cli-st-aniv-mes', enriched.filter(c => c.isAnivMes).length);
+  elv('cli-st-com-pedido', enriched.filter(c => (c.orders_count || 0) > 0).length);
+
+  // Banner aniversariantes hoje
+  const anivHoje = enriched.filter(c => c.isAnivHoje);
+  const banner = document.getElementById('cli-aniv-banner');
+  if (banner) {
+    banner.style.display = anivHoje.length ? 'block' : 'none';
+    const badge = document.getElementById('cli-aniv-hoje-badge');
+    if (badge) badge.textContent = anivHoje.length;
+    const list = document.getElementById('cli-aniv-hoje-list');
+    if (list) list.innerHTML = anivHoje.map(c =>
+      `<div style="background:rgba(139,92,246,.2);border:1px solid rgba(139,92,246,.3);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600">
+        🎂 ${c.name} ${c.phone ? `<span style="color:var(--muted);font-weight:400">${c.phone}</span>` : ''}
+      </div>`
+    ).join('');
+  }
+
+  // Filtro por tab
+  let lista = [...enriched];
+  if (_cliTab === 'aniversario') lista = lista.filter(c => c._birthdayMMDD);
+  else if (_cliTab === 'inativos') lista = lista.filter(c => c.isInativo && (c.orders_count || 0) > 0);
+
+  // Filtro de busca
+  const search = (document.getElementById('cli-search')?.value || '').trim().toLowerCase();
+  if (search) lista = lista.filter(c =>
+    (c.name || '').toLowerCase().includes(search) ||
+    (c.phone || '').includes(search) ||
+    (c.email || '').toLowerCase().includes(search)
+  );
+
+  // Ordenação
+  const order = document.getElementById('cli-order')?.value || 'recente';
+  if (order === 'nome')         lista.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  else if (order === 'pedidos') lista.sort((a, b) => (b.orders_count || 0) - (a.orders_count || 0));
+  else if (order === 'gasto')   lista.sort((a, b) => (b.total_spent || 0) - (a.total_spent || 0));
+  else if (order === 'aniversario') lista.sort((a, b) => a.diasAteAniv - b.diasAteAniv);
+  else lista.sort((a, b) => (b._createdDate || 0) - (a._createdDate || 0));
+
+  // Contadores
+  const countEl = document.getElementById('cli-count');
+  const count2El = document.getElementById('cli-count2');
+  const txt = `${lista.length} cliente${lista.length !== 1 ? 's' : ''}`;
+  if (countEl) countEl.textContent = txt;
+  if (count2El) count2El.textContent = txt;
+
+  // Tabela
+  const tbody = document.getElementById('cli-tbody');
+  const empty = document.getElementById('cli-empty');
+  if (!tbody) return;
+
+  if (!lista.length) {
+    tbody.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  tbody.innerHTML = lista.map(c => {
+    const anivStr = c.birthday
+      ? (() => {
+          const [y, m, d] = c.birthday.split('-');
+          const label = `${d}/${m}${y && y !== '0000' ? `/${y}` : ''}`;
+          return c.isAnivHoje
+            ? `<span style="color:var(--purple);font-weight:700">🎂 ${label} hoje!</span>`
+            : c.isAnivMes
+            ? `<span style="color:var(--accent3)">📅 ${label}</span>`
+            : `<span style="color:var(--muted)">${label}</span>`;
+        })()
+      : `<span style="color:var(--border2)">—</span>`;
+
+    const ultimoStr = c.last_order_at
+      ? (() => {
+          const d = new Date(c.last_order_at);
+          const diff = Math.floor((hoje - d) / 86400000);
+          const label = d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'2-digit'});
+          const cor = diff > 60 ? 'var(--danger)' : diff > 30 ? 'var(--accent3)' : 'var(--success)';
+          return `<span style="color:${cor}">${label}</span><br><span style="font-size:10px;color:var(--muted)">${diff === 0 ? 'hoje' : diff === 1 ? 'ontem' : `${diff}d atrás`}</span>`;
+        })()
+      : `<span style="color:var(--muted)">Nenhum</span>`;
+
+    const fidStr = c.fid_pts !== null
+      ? `<span style="background:rgba(139,92,246,.18);color:var(--purple);padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700">⭐ ${c.fid_pts} pts</span>`
+      : `<span style="color:var(--border2)">—</span>`;
+
+    const gastoStr = c.total_spent
+      ? `<span style="color:var(--success);font-weight:600">R$ ${parseFloat(c.total_spent).toFixed(2).replace('.', ',')}</span>`
+      : `<span style="color:var(--muted)">R$ 0,00</span>`;
+
+    return `<tr>
+      <td>
+        <div style="font-weight:600;font-size:13px">${c.name || '—'}</div>
+        ${c.email ? `<div style="font-size:11px;color:var(--muted)">${c.email}</div>` : ''}
+        ${c.addr ? `<div style="font-size:10px;color:var(--border2)">${c.addr.slice(0,40)}${c.addr.length > 40 ? '…' : ''}</div>` : ''}
+      </td>
+      <td style="font-size:13px">${c.phone || '—'}</td>
+      <td>${anivStr}</td>
+      <td style="text-align:center;font-weight:700;font-size:14px;color:var(--accent)">${c.orders_count || 0}</td>
+      <td>${gastoStr}</td>
+      <td>${ultimoStr}</td>
+      <td>${fidStr}</td>
+      <td>
+        <button class="btn bp" style="font-size:11px;padding:4px 10px" onclick="openClienteModal(${c.id})">
+          Ver
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Abre modal de detalhes ───────────────────────────
+async function openClienteModal(id) {
+  const c = cliData.find(x => x.id === id);
+  if (!c) return;
+  _cliModalId = id;
+
+  // Preenche dados
+  document.getElementById('modal-cli-title').textContent = `👤 ${c.name || 'Cliente'}`;
+  document.getElementById('edit-cli-id').value = c.id;
+  document.getElementById('edit-cli-nome').value = c.name || '';
+  document.getElementById('edit-cli-phone').value = c.phone || '';
+  document.getElementById('edit-cli-email').value = c.email || '';
+  document.getElementById('edit-cli-aniversario').value = c.birthday || '';
+  document.getElementById('edit-cli-addr').value = c.addr || '';
+
+  // Stats somente leitura
+  elv('cli-det-orders', c.orders_count || 0);
+  document.getElementById('cli-det-gasto').textContent =
+    `R$ ${parseFloat(c.total_spent || 0).toFixed(2).replace('.', ',')}`;
+  document.getElementById('cli-det-pts').textContent =
+    c.fid_pts !== null ? `${c.fid_pts} pts` : '—';
+  document.getElementById('cli-det-criado').textContent =
+    c.created_at ? new Date(c.created_at).toLocaleDateString('pt-BR') : '—';
+  document.getElementById('cli-det-ultimo').textContent =
+    c.last_order_at ? new Date(c.last_order_at).toLocaleDateString('pt-BR') : 'Nenhum';
+
+  // Reseta para aba de dados e abre modal
+  cliModalTab('info');
+  openModal('modal-cliente-detalhe');
+}
+
+// ── Tabs internas do modal ───────────────────────────
+function cliModalTab(tab) {
+  document.getElementById('cli-modal-info').style.display = tab === 'info' ? 'block' : 'none';
+  document.getElementById('cli-modal-pedidos').style.display = tab === 'pedidos' ? 'block' : 'none';
+  document.getElementById('cli-tab-info').classList.toggle('active', tab === 'info');
+  document.getElementById('cli-tab-pedidos').classList.toggle('active', tab === 'pedidos');
+
+  if (tab === 'pedidos') cliCarregarPedidos(_cliModalId);
+}
+
+// ── Carrega pedidos do cliente no modal ──────────────
+async function cliCarregarPedidos(id) {
+  const listEl = document.getElementById('cli-pedidos-list');
+  if (!listEl) return;
+  listEl.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)">Carregando...</div>';
+
+  const c = cliData.find(x => x.id === id);
+  if (!c) { listEl.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)">Cliente não encontrado</div>'; return; }
+
+  // Busca por customer_id ou phone
+  const res = await sb.from('orders')
+    .select('id,client,items,total,taxa,pag,status,created_at,addr,mesa_num')
+    .eq('customer_id', c.id)
+    .order('id', { ascending: false })
+    .limit(30);
+
+  // Se não achou por customer_id, tenta por phone
+  let orders = res.data || [];
+  if (!orders.length && c.phone) {
+    const res2 = await sb.from('orders')
+      .select('id,client,items,total,taxa,pag,status,created_at,addr,mesa_num')
+      .eq('phone', c.phone)
+      .order('id', { ascending: false })
+      .limit(30);
+    orders = res2.data || [];
+  }
+
+  if (!orders.length) {
+    listEl.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)">Nenhum pedido encontrado</div>';
+    return;
+  }
+
+  const statusLabel = { analise:'⏳ Aguardando', producao:'👨‍🍳 Preparo', pronto:'✅ Pronto', saiu:'🛵 Saiu', entregue:'🎉 Entregue', cancelado:'❌ Cancelado', finalizado:'✅ Finalizado', aguardando_pix:'⏳ Aguard. PIX' };
+  const statusCor = { analise:'var(--accent3)', producao:'var(--accent)', pronto:'var(--success)', saiu:'var(--accent2)', entregue:'var(--success)', cancelado:'var(--danger)', finalizado:'var(--success)', aguardando_pix:'var(--muted)' };
+
+  listEl.innerHTML = orders.map(o => {
+    const items = Array.isArray(o.items) ? o.items : (() => { try { return JSON.parse(o.items) } catch { return [] } })();
+    const itensStr = items.map(i => `${i.qty}x ${i.name}`).join(', ');
+    const total = parseFloat(o.total || 0) + parseFloat(o.taxa || 0);
+    const data = o.created_at ? new Date(o.created_at).toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+    const st = o.status || 'analise';
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-weight:700;font-size:13px">Pedido #${o.id}</div>
+        <span style="color:${statusCor[st]||'var(--muted)'};font-size:11.5px;font-weight:600">${statusLabel[st]||st}</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted2);margin-bottom:6px">${itensStr || 'Sem itens'}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px">
+        <span style="color:var(--muted)">${data}${o.addr ? ` · ${o.addr.slice(0,30)}` : ''}</span>
+        <span style="font-weight:700;color:var(--success)">R$ ${total.toFixed(2).replace('.', ',')}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Salva edição do cliente ──────────────────────────
+async function saveCliente() {
+  const id = parseInt(document.getElementById('edit-cli-id').value);
+  if (!id) return;
+  const nome     = document.getElementById('edit-cli-nome').value.trim();
+  const phone    = document.getElementById('edit-cli-phone').value.trim();
+  const email    = document.getElementById('edit-cli-email').value.trim() || null;
+  const birthday = document.getElementById('edit-cli-aniversario').value || null;
+  const addr     = document.getElementById('edit-cli-addr').value.trim() || null;
+
+  if (!nome) { sbToast('err', 'Informe o nome'); return; }
+
+  sbLoading(true);
+  const { error } = await sb.from('customers')
+    .update({ name: nome, phone, email, birthday, addr })
+    .eq('id', id);
+  sbLoading(false);
+
+  if (error) { sbToast('err', 'Erro ao salvar'); return; }
+
+  // Atualiza cache local
+  const idx = cliData.findIndex(x => x.id === id);
+  if (idx >= 0) Object.assign(cliData[idx], { name: nome, phone, email, birthday, addr,
+    _birthdayMMDD: birthday ? birthday.slice(5) : null });
+
+  closeModal('modal-cliente-detalhe');
+  renderClientes();
+  sbToast('ok', `${nome} atualizado!`);
+}
+
+// ── Exclui cliente ───────────────────────────────────
+async function deleteCliente() {
+  const id = parseInt(document.getElementById('edit-cli-id').value);
+  const c = cliData.find(x => x.id === id);
+  if (!c) return;
+  if (!confirm(`Excluir o cliente "${c.name || 'este cliente'}"? Esta ação não pode ser desfeita.`)) return;
+
+  sbLoading(true);
+  const { error } = await sb.from('customers').delete().eq('id', id);
+  sbLoading(false);
+
+  if (error) { sbToast('err', 'Erro ao excluir'); return; }
+
+  cliData = cliData.filter(x => x.id !== id);
+  closeModal('modal-cliente-detalhe');
+  renderClientes();
+  sbToast('ok', `${c.name || 'Cliente'} removido`);
+}
+
+// ── Fim CLIENTES ─────────────────────────────────────
