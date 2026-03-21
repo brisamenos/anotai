@@ -2017,19 +2017,19 @@ function renderGestor(){
         </div>
         ${cat.open?`<div class="cat-items">
           ${catItems.map(item=>`
-            <div class="cat-item-row" onclick="openEditItem(${item.id})">
+            <div class="cat-item-row" data-itemid="${item.id}" onclick="openEditItem(parseInt(this.dataset.itemid))">
               <div class="cat-item-thumb">${item.imageUrl
-                ? `<img src="${item.imageUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`
+                ? `<img src="${item.imageUrl}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;display:block;flex-shrink:0">`
                 : `<svg viewBox="0 0 24 24" fill="none" width="18" height="18" style="opacity:.35"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z" stroke="currentColor" stroke-width="1.5"/><path d="M3 16l5-5 3 3 3-4 4 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" opacity=".5"/></svg>`
               }</div>
               <div style="flex:1;min-width:0">
                 <div class="cat-item-name">${item.name}${item.promo?' <span class="ptag">promo</span>':''}${item.itemType==='pizza'?' <span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--accent3);border-radius:4px;padding:1px 4px;font-weight:700;margin-left:2px">🍕</span>':''}</div>
                 <div class="cat-item-price">R$ ${item.price.toFixed(2).replace('.',',')} · ${item.status==='active'?'<span style="color:var(--success)">Disponível</span>':item.status==='esgotado'?'<span style="color:var(--danger)">Esgotado</span>':'<span style="color:var(--accent3)">Pausado</span>'}</div>
               </div>
-              <button class="btn bg" style="font-size:10.5px;padding:3px 8px;flex-shrink:0" onclick="event.stopPropagation();openEditItem(${item.id})">✏️ Editar</button>
+              <button class="btn bg" style="font-size:10.5px;padding:3px 8px;flex-shrink:0" data-itemid="${item.id}" onclick="event.stopPropagation();openEditItem(parseInt(this.dataset.itemid))">✏️ Editar</button>
             </div>
           `).join('')}
-          <div class="cat-add" onclick="openAddItemModal('${cat.name}')">
+          <div class="cat-add" data-catname="${cat.name.replace(/"/g,'&quot;')}" onclick="openAddItemModal(this.dataset.catname)">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
             Adicionar Item
           </div>
@@ -2476,7 +2476,7 @@ function renderImagens() {
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:all .2s"
          onmouseenter="this.style.borderColor='var(--accent)'"
          onmouseleave="this.style.borderColor='var(--border)'">
-      <div style="height:110px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:48px;border-bottom:1px solid var(--border);position:relative;overflow:hidden">
+      <div style="height:72px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:32px;border-bottom:1px solid var(--border);position:relative;overflow:hidden">
         ${i.imageUrl
           ? `<img src="${i.imageUrl}" style="width:100%;height:100%;object-fit:cover">`
           : `<div>${i.emoji}</div>`}
@@ -2503,7 +2503,7 @@ function renderPotencializador(){
       <div style="font-size:26px">${i.emoji}</div>
       <div style="flex:1"><div style="font-weight:600;font-size:13px">${i.name}</div><div style="font-size:11.5px;color:var(--muted);margin-top:2px">R$ ${i.price.toFixed(2).replace('.',',')} • ${i.cat}</div></div>
       <div style="font-size:12px;color:var(--accent3)">★ ${(4.2+idx*0.1).toFixed(1)}</div>
-      <button class="btn bp" style="font-size:11px;padding:4px 9px" onclick="showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><path d=&quot;M2 12l3-3 2.5 2.5L12 5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M9 5h3v3&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>','${i.name} em destaque!')">Destacar</button>
+      <button class="btn bp" style="font-size:11px;padding:4px 9px" data-itemname="${i.name.replace(/"/g,'&quot;')}" onclick="sbToast('ok',this.dataset.itemname+' em destaque!')">Destacar</button>
     </div>`).join('');
 }
 
