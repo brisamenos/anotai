@@ -298,18 +298,25 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const pd = await r.json()
       if (!r.ok) { const fb = db.prepare('SELECT status FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId)); send(res, 200, { status: fb ? fb.status : 'pendente' }); return true }
       const novoStatus = pd.status === 'approved' ? 'aprovado' : pd.status === 'rejected' ? 'rejeitado' : pd.status === 'cancelled' ? 'cancelado' : 'pendente'
-      const rowAtual = db.prepare('SELECT status,valor,tenant_id FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
+      const rowAtual = db.prepare('SELECT status,valor,tenant_id,order_id FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
       if (rowAtual && rowAtual.status !== novoStatus) {
         db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=? WHERE mp_payment_id=?').run(novoStatus, pd.date_approved || null, String(mpId))
         if (novoStatus === 'aprovado') {
-          log('✅', `PIX APROVADO: R$${rowAtual.valor} tenant=${rowAtual.tenant_id}`)
+          log('✅', `PIX APROVADO: R$${rowAtual.valor} tenant=${rowAtual.tenant_id} order=${rowAtual.order_id}`)
           marcarDirty()
-          // Se pedido ainda estava aguardando PIX, libera para o gestor agora
+          // Libera o pedido para o kanban do gestor
           if (rowAtual.order_id) {
             const pedAtual = db.prepare("SELECT status FROM orders WHERE id=?").get(rowAtual.order_id)
             if (pedAtual?.status === 'aguardando_pix') {
               db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=?").run(rowAtual.order_id)
-              sseBroadcast(`orders-rt:${rowAtual.tenant_id}`, `orders:UPDATE`, { id: rowAtual.order_id, status: 'analise', pag: 'pix_mp' })
+              // Busca o pedido completo para o SSE (evita card vazio no kanban)
+              const fullOrder = db.prepare("SELECT * FROM orders WHERE id=?").get(rowAtual.order_id)
+              if (fullOrder) {
+                const items = typeof fullOrder.items === 'string' ? (() => { try { return JSON.parse(fullOrder.items) } catch { return [] } })() : (fullOrder.items || [])
+                sseBroadcast(`orders-rt:${rowAtual.tenant_id}`, `orders:UPDATE`, { ...fullOrder, items, status: 'analise', pag: 'pix_mp' })
+              } else {
+                sseBroadcast(`orders-rt:${rowAtual.tenant_id}`, `orders:UPDATE`, { id: rowAtual.order_id, status: 'analise', pag: 'pix_mp' })
+              }
             }
           }
         }
@@ -399,7 +406,14 @@ module.exports = async function handleRoutes(req, res, ctx) {
             } else {
               db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=?").run(row.order_id)
             }
-            sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, { id: row.order_id, status: pedAtual?.status === 'aguardando_pix' ? 'analise' : pedAtual?.status, pag: 'pix_mp' })
+            const newStatus = pedAtual?.status === 'aguardando_pix' ? 'analise' : pedAtual?.status
+            const fullOrder = db.prepare("SELECT * FROM orders WHERE id=?").get(row.order_id)
+            if (fullOrder) {
+              const items = typeof fullOrder.items === 'string' ? (() => { try { return JSON.parse(fullOrder.items) } catch { return [] } })() : (fullOrder.items || [])
+              sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, { ...fullOrder, items, status: newStatus, pag: 'pix_mp' })
+            } else {
+              sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, { id: row.order_id, status: newStatus, pag: 'pix_mp' })
+            }
           }
         }
       }
