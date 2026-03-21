@@ -16,16 +16,27 @@
       const s = sessionStorage.getItem('sys_session');
       if (s) {
         const parsed = JSON.parse(s);
-        if (parsed.tenant_id) return parsed.tenant_id;
+        if (parsed.tenant_id) {
+          console.log('[v0] getTenantId: encontrado tenant_id na sys_session:', parsed.tenant_id);
+          return parsed.tenant_id;
+        }
+        console.warn('[v0] getTenantId: sys_session existe mas sem tenant_id:', parsed);
       }
       // Fallback: sessão do cardápio (chave separada para não sobrescrever gestor)
       const c = sessionStorage.getItem('cardapio_session');
       if (c) {
         const parsed = JSON.parse(c);
-        if (parsed.tenant_id) return parsed.tenant_id;
+        if (parsed.tenant_id) {
+          console.log('[v0] getTenantId: encontrado tenant_id na cardapio_session:', parsed.tenant_id);
+          return parsed.tenant_id;
+        }
       }
+      console.warn('[v0] getTenantId: nenhum tenant_id encontrado nas sessões');
       return null;
-    } catch (e) { return null; }
+    } catch (e) { 
+      console.error('[v0] getTenantId: erro ao ler sessão:', e);
+      return null; 
+    }
   }
 
   // ── Cabeçalhos padrão ─────────────────────────────────
@@ -221,19 +232,40 @@
 
     then(resolve, reject) { return this._run().then(resolve, reject); }
 
-    async _run() {
-      const url = `${API_BASE}/${this._table}${toQS(this._params)}`;
-      const hdrs = defaultHeaders(this._headers);
-      if (this._single) hdrs['Prefer'] = (hdrs['Prefer'] ? hdrs['Prefer'] + ',' : '') + 'single';
-      const opts = { method: this._method, headers: hdrs };
-      if (this._body !== null) opts.body = JSON.stringify(this._body);
-      try {
-        const res = await fetch(url, opts);
-        const json = await res.json().catch(() => null);
-        return res.ok ? { data: json, error: null } : { data: null, error: { message: json?.error || res.statusText } };
-      } catch (e) { return { data: null, error: { message: e.message } }; }
+  async _run() {
+    const url = `${API_BASE}/${this._table}${toQS(this._params)}`;
+    const hdrs = defaultHeaders(this._headers);
+    if (this._single) hdrs['Prefer'] = (hdrs['Prefer'] ? hdrs['Prefer'] + ',' : '') + 'single';
+    const opts = { method: this._method, headers: hdrs };
+    if (this._body !== null) opts.body = JSON.stringify(this._body);
+    
+    // Log para debug
+    if (this._method !== 'GET') {
+      console.log(`[v0] API ${this._method} ${this._table}:`, {
+        url, 
+        headers: hdrs,
+        body: this._body
+      });
+    }
+    
+    try {
+      const res = await fetch(url, opts);
+      const json = await res.json().catch(() => null);
+      
+      if (!res.ok) {
+        console.error(`[v0] API ${this._method} ${this._table} ERRO:`, {
+          status: res.status,
+          response: json
+        });
+      }
+      
+      return res.ok ? { data: json, error: null } : { data: null, error: { message: json?.error || res.statusText } };
+    } catch (e) { 
+      console.error(`[v0] API ${this._method} ${this._table} EXCEÇÃO:`, e);
+      return { data: null, error: { message: e.message } }; 
     }
   }
+}
 
   // ── Cliente principal ─────────────────────────────────
   class AppClient {
