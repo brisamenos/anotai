@@ -1,108 +1,35 @@
-// ══ GESTOR SERVICE WORKER ══════════════════
-const SW_VERSION = 'gestor-sw-v3';
-const POLL_MS   = 15000; // polling a cada 15s em background
+// gestor-sw.js — Service Worker sem cache
+// Atualizado para sempre buscar arquivos frescos do servidor (sem cache de JS/HTML)
+const CACHE_VERSION = 'gestor-v' + Date.now();
 
-let pollTimer      = null;
-let tenantId       = null; // ← filtra por restaurante
-let lastOrderIds   = new Set();
-let lastMesaOrders = new Set();
-
-self.addEventListener('install',  () => self.skipWaiting());
-self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
-
-// ── Mensagens da página ──────────────────
-self.addEventListener('message', e => {
-  const { type, tenant_id, orderIds, mesaOrderIds } = e.data || {};
-
-  if (type === 'INIT') {
-    tenantId = tenant_id || null;
-    if (orderIds)     lastOrderIds   = new Set(orderIds);
-    if (mesaOrderIds) lastMesaOrders = new Set(mesaOrderIds);
-    startPolling();
-  }
-  if (type === 'SYNC') {
-    if (orderIds)     lastOrderIds   = new Set(orderIds);
-    if (mesaOrderIds) lastMesaOrders = new Set(mesaOrderIds);
-  }
-  if (type === 'STOP') {
-    stopPolling();
-  }
+self.addEventListener('install', (event) => {
+  // Ativa imediatamente sem esperar páginas antigas fecharem
+  self.skipWaiting();
 });
 
-function startPolling() {
-  stopPolling();
-  pollTimer = setInterval(doPoll, POLL_MS);
-}
-
-function stopPolling() {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-}
-
-async function doPoll() {
-  try {
-    const headers = { "Content-Type": "application/json" };
-    if (tenantId) headers['x-tenant-id'] = tenantId;
-
-    // 1. Pedidos delivery/balcão novos em análise
-    const ordRes = await fetch(
-      `/api/orders?status=in.(analise)&select=id,client,items,addr&order=id.desc&limit=20`,
-      { headers }
-    );
-    if (ordRes.ok) {
-      const orders = await ordRes.json();
-      for (const o of orders) {
-        if (!lastOrderIds.has(o.id)) {
-          const items = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
-          notify(`🛎️ Novo pedido #${o.id}`, `${o.client} — ${items}`);
-          lastOrderIds.add(o.id);
-        }
-      }
-    }
-
-    // 2. Pedidos de mesa novos (analise ou producao)
-    const mesaRes = await fetch(
-      `/api/orders?mesa_num=not.is.null&status=in.(analise,producao)&select=id,client,mesa_num,items&order=id.desc&limit=20`,
-      { headers }
-    );
-    if (mesaRes.ok) {
-      const orders = await mesaRes.json();
-      for (const o of orders) {
-        if (!lastMesaOrders.has(o.id)) {
-          const items = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
-          notify(`🍽️ Pedido Mesa ${o.mesa_num} #${o.id}`, items || 'Novo pedido de mesa');
-          lastMesaOrders.add(o.id);
-        }
-      }
-    }
-
-    // Avisa a página para sincronizar se estiver aberta
-    const clients = await self.clients.matchAll({ type: 'window' });
-    clients.forEach(c => c.postMessage({ type: 'SW_POLL_DONE' }));
-
-  } catch(e) {}
-}
-
-function notify(title, body) {
-  if (self.Notification?.permission === 'granted') {
-    self.registration.showNotification(title, {
-      body,
-      icon: '/favicon.ico',
-      badge: '/favicon.ico',
-      vibrate: [200, 100, 200],
-      tag: 'gestor-' + Date.now(),
-      requireInteraction: true, // gestor precisa ver — fica até clicar
-    });
-  }
-}
-
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  e.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
-      for (const c of clients) {
-        if (c.url.includes('gestor') && 'focus' in c) return c.focus();
-      }
-      if (self.clients.openWindow) return self.clients.openWindow('./gestor.html');
-    })
+self.addEventListener('activate', (event) => {
+  // Toma controle de todas as páginas imediatamente
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.map(key => {
+        console.log('[SW] Removendo cache antigo:', key);
+        return caches.delete(key);
+      }))
+    ).then(() => self.clients.claim())
   );
+});
+
+// Pass-through: todos os requests vão direto para a rede
+// Arquivos .js e .html NUNCA são cacheados para garantir versões atualizadas
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  const ext = url.pathname.split('.').pop().toLowerCase();
+
+  // JS, HTML e CSS sempre da rede — nunca do cache
+  if (['js', 'html', 'css'].includes(ext)) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+  // Outros recursos (imagens, etc): tenta rede, fallback cache
+  event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
 });
