@@ -473,11 +473,6 @@ function subscribeOrders() {
       }
       if (idx !== -1) {
         if (['entregue','cancelado'].includes(p.new.status)) {
-          // Notifica o gestor quando o CLIENTE cancela o pedido
-          if (p.new.status === 'cancelado') {
-            showToast('❌', `Pedido #${_orderNum(p.new.id)} cancelado pelo cliente — ${p.new.client}`);
-            sendBrowserNotif(`❌ Pedido cancelado pelo cliente`, `#${_orderNum(p.new.id)} — ${p.new.client}`);
-          }
           ordersKanban.splice(idx, 1);
         } else {
           ordersKanban[idx] = mapOrder(p.new);
@@ -1996,7 +1991,10 @@ function renderGestor(){
         ${cat.open?`<div class="cat-items">
           ${catItems.map(item=>`
             <div class="cat-item-row" onclick="openEditItem(${item.id})">
-              <div class="cat-item-thumb">${item.imageUrl?`<img src="${item.imageUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`:(item.emoji||'🍽️')}</div>
+              <div class="cat-item-thumb">${item.imageUrl
+                ? `<img src="${item.imageUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`
+                : `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="18" height="18" style="opacity:.35"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z" stroke="currentColor" stroke-width="1.5"/><path d="M3 16l5-5 3 3 3-4 4 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" opacity=".5"/></svg>`
+              }</div>
               <div style="flex:1;min-width:0">
                 <div class="cat-item-name">${item.name}${item.promo?' <span class="ptag">promo</span>':''}${item.itemType==='pizza'?' <span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--accent3);border-radius:4px;padding:1px 4px;font-weight:700;margin-left:2px">🍕</span>':''}</div>
                 <div class="cat-item-price">R$ ${item.price.toFixed(2).replace('.',',')} · ${item.status==='active'?'<span style="color:var(--success)">Disponível</span>':item.status==='esgotado'?'<span style="color:var(--danger)">Esgotado</span>':'<span style="color:var(--accent3)">Pausado</span>'}</div>
