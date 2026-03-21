@@ -1144,15 +1144,16 @@ const server = http.createServer(async (req,res) => {
 
     // Obtém token MP — tenta do banco (_global), fallback env
     let mpToken=MP_TOKEN
+    let taxa=TAXA_PIX
     try{
       const cfgMp=db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
       const gCfg=cfgMp?.ia_config?JSON.parse(cfgMp.ia_config):{}
       if(gCfg.mp_token)mpToken=gCfg.mp_token
+      if(gCfg.taxa_pix!==undefined)taxa=parseFloat(gCfg.taxa_pix)||0
     }catch{}
     if(!mpToken){send(res,400,{error:'Token Mercado Pago não configurado. Configure no painel Admin → Configurações.'});return}
 
     const extRef=`ef-${tid.slice(0,8)}-${order_id||Date.now()}`
-    const taxa=TAXA_PIX
     const valorLiq=Math.max(0,parseFloat(valor)-taxa)
 
     try{
