@@ -1125,6 +1125,19 @@ function renderKanban(){
         } else {
           actionBtn='<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById('+o.id+')">✔ Finalizar</button>';
         }
+        // Badge de pagamento — visível no card para identificação rápida
+        const _pagBadge = (() => {
+          const p = o.pag || '';
+          if (p === 'pix_mp' || p === 'pix' || p === 'pix_manual') return '<div class="oc-pag-badge oc-pag-pix">&#9889; PAGO PIX</div>';
+          if (p === 'cartao' || p === 'credito' || p === 'debito')  return '<div class="oc-pag-badge oc-pag-cartao">&#128179; CART\u00C3O</div>';
+          if (p === 'dinheiro') {
+            var tr = '';
+            if (o.troco > 0) tr = ' &middot; Troco p/ R$' + parseFloat(o.troco).toFixed(2).replace('.',',');
+            else if (o.troco === -1) tr = ' &middot; Precisa troco';
+            return '<div class="oc-pag-badge oc-pag-dinheiro">&#128181; DINHEIRO' + tr + '</div>';
+          }
+          return '';
+        })();
         return '<div class="order-card" onclick="openOrderDetail('+o.id+')">'+
           '<div class="oc-top"><span class="oc-id">#'+o.num+'</span><span class="oc-time">⏱ '+o.time+'</span></div>'+
           '<div class="oc-client">👤 '+o.client+(o.phone?' · '+o.phone:'')+'</div>'+
@@ -1132,7 +1145,7 @@ function renderKanban(){
           '<div class="oc-bot"><span class="oc-total">'+total+'</span>'+
             (o.addr?'<span class="oc-addr">📍 '+o.addr+'</span>':'')+
           '</div>'+
-          (o.pag==='dinheiro'?'<div style="font-size:11px;color:var(--amber);margin:4px 0 0;padding:0 2px">💵 Dinheiro · '+(o.troco>0?'Troco p/ R$'+parseFloat(o.troco).toFixed(2).replace('.',','):o.troco===-1?'Precisa de troco':'Sem troco')+'</div>':'')+
+          _pagBadge+
           '<div class="oc-actions">'+actionBtn+'</div>'+
         '</div>';
       }).join('');
@@ -7050,7 +7063,10 @@ async function carregarCarteira() {
   try {
     const tid = _sessao?.tenant_id;
     if (!tid) return;
-    // AbortController com 10s — evita que fetch travada deixe a tela em "Carregando..." para sempre
+    // ⚠️ BLINDADO — NÃO remover o AbortController. Se o servidor não responder
+    // (ex: exceção não tratada), o fetch ficaria pendente para sempre e a tela
+    // nunca sairia do estado "Carregando...". O timeout de 10s garante que o
+    // catch() seja chamado e o usuário veja uma mensagem de erro.
     const _fetchTenant = (url) => {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 10000);
