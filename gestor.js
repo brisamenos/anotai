@@ -1129,9 +1129,9 @@ function renderKanban(){
     const col=document.getElementById('col-'+st);
     const cnt=document.getElementById('cnt-'+st);
     let filtered=ordersKanban.filter(o=>o.status===st);
-    if(_kanbanFilter==='delivery') filtered=filtered.filter(o=>o.addr&&!o.addr.includes('Mesa')&&!o.addr.includes('balcão'));
-    if(_kanbanFilter==='balcao')   filtered=filtered.filter(o=>!o.addr||o.addr.includes('balcão'));
-    if(_kanbanFilter==='mesa')     filtered=filtered.filter(o=>o.addr&&o.addr.includes('Mesa'));
+    if(_kanbanFilter==='delivery') filtered=filtered.filter(o=>o.addr&&!o.addr.includes('Mesa')&&!o.addr.toLowerCase().includes('retirada')&&!o.addr.toLowerCase().includes('balcão')&&!o.addr.toLowerCase().includes('balcao'));
+    if(_kanbanFilter==='balcao')   filtered=filtered.filter(o=>!o.addr||o.addr.toLowerCase().includes('retirada')||o.addr.toLowerCase().includes('balcão')||o.addr.toLowerCase().includes('balcao'));
+    if(_kanbanFilter==='mesa')     filtered=filtered.filter(o=>o.mesa_num||(o.addr&&o.addr.includes('Mesa')));
     if(cnt) cnt.textContent=filtered.length;
     if(!col) return;
     if(filtered.length===0){
@@ -1140,6 +1140,18 @@ function renderKanban(){
       col.innerHTML=filtered.map(o=>{
         const itemStr=o.items.map(i=>i.qty+'x '+i.name).join(', ');
         const total='R$ '+(o.total+o.taxa).toFixed(2).replace('.',',');
+
+        // ── Tipo de entrega ──────────────────────────────
+        const isMesa     = !!(o.mesa_num||(o.addr&&o.addr.includes('Mesa')));
+        const isRetirada = !isMesa && !!(o.addr&&(o.addr.toLowerCase().includes('retirada')||o.addr.toLowerCase().includes('balcão')||o.addr.toLowerCase().includes('balcao')));
+        const isDelivery = !isMesa && !isRetirada;
+        const _tipoBadge = isMesa
+          ? `<span class="oc-tipo-badge oc-tipo-mesa">🍽️ Mesa ${o.mesa_num||''}</span>`
+          : isRetirada
+          ? `<span class="oc-tipo-badge oc-tipo-retirada">🏪 Retirada</span>`
+          : `<span class="oc-tipo-badge oc-tipo-delivery">🛵 Delivery</span>`;
+
+        // ── Botões de ação por tipo ──────────────────────
         let actionBtn='';
         if(st==='analise'){
           const _pixManualBtn = o.pag === 'pix_manual' ? '<button class="oc-btn oc-btn-pix-confirmar" onclick="event.stopPropagation();confirmarPagamentoPix('+o.id+')">&#9989; Confirmar Pago PIX</button>' : '';
@@ -1148,11 +1160,14 @@ function renderKanban(){
             '<button class="oc-btn oc-btn-no" onclick="event.stopPropagation();cancelOrderById('+o.id+')">✕ Cancelar</button>'+
             (_printMode==='manual'?'<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById('+o.id+')">🖨️</button>':'');
         } else if(st==='producao'){
-          actionBtn='<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById('+o.id+')">🚀 Pronto!</button>'+(_printMode==='manual'?'<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById('+o.id+')">🖨️</button>':'');
+          const prontoLabel = isMesa ? '🍽️ Pronto p/ servir!' : isRetirada ? '✅ Pronto no balcão!' : '🚀 Pronto!';
+          actionBtn='<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById('+o.id+')">'+prontoLabel+'</button>'+(_printMode==='manual'?'<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById('+o.id+')">🖨️</button>':'');
         } else {
-          actionBtn='<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById('+o.id+')">✔ Finalizar</button>';
+          const finLabel = isMesa ? '✔ Servido!' : isRetirada ? '✔ Retirado!' : '✔ Finalizar';
+          actionBtn='<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById('+o.id+')">'+finLabel+'</button>';
         }
-        // Badge de pagamento — visível no card para identificação rápida
+
+        // Badge de pagamento
         const _pagBadge = (() => {
           const p = o.pag || '';
           if (p === 'pix_mp' || p === 'pix') return '<div class="oc-pag-badge oc-pag-pix">&#9889; PAGO PIX</div>';
@@ -1166,12 +1181,13 @@ function renderKanban(){
           }
           return '';
         })();
+
         return '<div class="order-card" onclick="openOrderDetail('+o.id+')">'+
-          '<div class="oc-top"><span class="oc-id">#'+o.num+'</span><span class="oc-time">⏱ '+o.time+'</span></div>'+
+          '<div class="oc-top"><span class="oc-id">#'+o.num+'</span>'+_tipoBadge+'<span class="oc-time">⏱ '+o.time+'</span></div>'+
           '<div class="oc-client">👤 '+o.client+(o.phone?' · '+o.phone:'')+'</div>'+
           '<div class="oc-items">'+itemStr+'</div>'+
           '<div class="oc-bot"><span class="oc-total">'+total+'</span>'+
-            (o.addr?'<span class="oc-addr">📍 '+o.addr+'</span>':'')+
+            (o.addr&&!isMesa?'<span class="oc-addr">📍 '+o.addr+'</span>':'')+
           '</div>'+
           _pagBadge+
           '<div class="oc-actions">'+actionBtn+'</div>'+
@@ -2078,7 +2094,7 @@ function renderGestor(){
             <span class="cat-badge">${catItems.length} ite${catItems.length===1?'m':'ns'}</span>
           </div>
           <div class="cat-actions">
-            <div class="sw"><select onclick="event.stopPropagation()" style="font-size:11.5px;padding:4px 22px 4px 9px" onchange="handleCatAction(${cat.id},this.value)"><option value="">Ações ▾</option><option value="edit">Editar</option><option value="pause">Pausar</option><option value="delete">Excluir</option></select></div>
+            <div class="sw"><select onclick="event.stopPropagation()" style="font-size:11.5px;padding:4px 22px 4px 9px" onchange="handleCatAction(${cat.id},this.value)"><option value="">Ações ▾</option><option value="edit">Editar</option><option value="duplicate">Duplicar</option><option value="pause">Pausar</option><option value="delete">Excluir</option></select></div>
             <div class="cat-toggle${cat.open?' open':''}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
           </div>
         </div>
@@ -2093,7 +2109,10 @@ function renderGestor(){
                 <div class="cat-item-name">${item.name}${item.promo?' <span class="ptag">promo</span>':''}${item.itemType==='pizza'?' <span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--accent3);border-radius:4px;padding:1px 4px;font-weight:700;margin-left:2px">🍕</span>':''}</div>
                 <div class="cat-item-price">R$ ${item.price.toFixed(2).replace('.',',')} · ${item.status==='active'?'<span style="color:var(--success)">Disponível</span>':item.status==='esgotado'?'<span style="color:var(--danger)">Esgotado</span>':'<span style="color:var(--accent3)">Pausado</span>'}</div>
               </div>
-              <button class="btn bg" style="font-size:10.5px;padding:3px 8px;flex-shrink:0" data-id="${item.id}" onclick="event.stopPropagation();openEditItem(+this.dataset.id)">✏️ Editar</button>
+              <div style="display:flex;gap:4px;flex-shrink:0">
+                <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();duplicateItem(+this.dataset.id)" title="Duplicar item">⎘</button>
+                <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();openEditItem(+this.dataset.id)">✏️ Editar</button>
+              </div>
             </div>
           `).join('')}
           <div class="cat-add" data-cat="${cat.name.replace(/"/g,'&quot;')}" onclick="openAddItemModal(this.dataset.cat)">
@@ -2120,10 +2139,103 @@ function handleCatAction(id, action) {
     document.getElementById('edit-cat-id').value   = id;
     document.getElementById('edit-cat-name').value = cat.label;
     openModal('modal-edit-cat');
+  } else if (action === 'duplicate') {
+    duplicateCategory(id);
   } else if (action === 'delete') {
     deleteCatById(id);
   } else if (action === 'pause') {
     sbToast('ok', 'Categoria pausada!');
+  }
+}
+
+// ── Duplicar categoria (cria cópia com todos os itens) ────
+async function duplicateCategory(id) {
+  const cat = categories.find(c => c.id === id);
+  if (!cat) return;
+  const novoLabel = cat.label + ' (cópia)';
+  const novoName  = cat.name + '_copia_' + Date.now().toString().slice(-4);
+  sbLoading(true);
+  try {
+    // 1. Cria nova categoria
+    const { data: newCat, error: catErr } = await sb.from('categories').insert({
+      name:       novoName,
+      label:      novoLabel,
+      type:       cat.type  || 'Itens principais',
+      promo:      false,
+      sort_order: categories.length + 1
+    }).select().single();
+    if (catErr || !newCat) throw new Error(catErr?.message || 'Erro ao criar categoria');
+
+    categories.push({ id: newCat.id, name: newCat.name, label: newCat.label, type: newCat.type, promo: false, open: false });
+
+    // 2. Duplica todos os itens desta categoria
+    const catItems = items.filter(i => i.catKey === cat.name || i.cat === cat.name);
+    let itensCriados = 0;
+    for (const it of catItems) {
+      const { data: newItem, error: itemErr } = await sb.from('menu_items').insert({
+        emoji:        it.emoji        || '🍽️',
+        name:         it.name,
+        description:  it.desc         || '',
+        price:        it.price        || 0,
+        price_old:    it.priceOld     || null,
+        cat:          newCat.label,
+        cat_key:      newCat.name,
+        item_type:    it.itemType     || 'normal',
+        allow_half:   it.allowHalf    || false,
+        max_flavors:  it.maxFlavors   || 1,
+        promo:        it.promo        || false,
+        destaque:     it.destaque     || false,
+        status:       it.status       || 'active',
+        days:         it.days         || [1,1,1,1,1,1,1],
+        ingredients:  it.ingredients  || [],
+        custom_groups: it.customGroups || [],
+        image_url:    it.imageUrl     || null
+      }).select().single();
+      if (!itemErr && newItem) { items.push(mapItem(newItem)); itensCriados++; }
+    }
+
+    renderGestor(); renderTable(); populateCatSelects();
+    sbToast('ok', `📋 "${novoLabel}" criada com ${itensCriados} item(s) duplicado(s)!`);
+  } catch(e) {
+    sbToast('err', 'Erro ao duplicar categoria: ' + e.message);
+  } finally {
+    sbLoading(false);
+  }
+}
+
+// ── Duplicar item ─────────────────────────────────────────
+async function duplicateItem(id) {
+  const it = items.find(i => i.id === id);
+  if (!it) return;
+  sbLoading(true);
+  try {
+    const { data: newItem, error } = await sb.from('menu_items').insert({
+      emoji:        it.emoji        || '🍽️',
+      name:         it.name + ' (cópia)',
+      description:  it.desc         || '',
+      price:        it.price        || 0,
+      price_old:    it.priceOld     || null,
+      cat:          it.cat,
+      cat_key:      it.catKey,
+      item_type:    it.itemType     || 'normal',
+      allow_half:   it.allowHalf    || false,
+      max_flavors:  it.maxFlavors   || 1,
+      promo:        false,
+      destaque:     false,
+      status:       'active',
+      days:         it.days         || [1,1,1,1,1,1,1],
+      ingredients:  it.ingredients  || [],
+      custom_groups: it.customGroups || [],
+      image_url:    it.imageUrl     || null
+    }).select().single();
+    if (error || !newItem) throw new Error(error?.message || 'Resposta inválida');
+    items.push(mapItem(newItem));
+    renderGestor(); renderTable();
+    sbToast('ok', `📋 "${it.name}" duplicado!`);
+  } catch(e) {
+    sbToast('err', 'Erro ao duplicar item: ' + e.message);
+  } finally {
+    sbLoading(false);
   }
 }
 
