@@ -3225,21 +3225,34 @@ async function _iniciarFluxoPix(order) {
   const sec = document.getElementById('pix-section');
   if (!sec) return;
   sec.style.display = '';
-  document.getElementById('pix-qr-wrap').style.display           = 'none';
+  document.getElementById('pix-qr-wrap').style.display            = 'none';
   document.getElementById('pix-manual-success-wrap').style.display = 'none';
 
   try {
-    // Busca config e gera cobrança MP em paralelo
-    const [cfgR, pr] = await Promise.all([
-      fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } }),
-      fetch('/api/pix/criar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
-        body: JSON.stringify({ valor: order.total, order_id: order.id, client: order.client })
-      })
-    ]);
-    const cfg = cfgR.ok ? await cfgR.json() : {};
-    const pd  = pr.ok  ? await pr.json()  : null;
+    // Busca config PRIMEIRO para checar se QR Code está ativo
+    const cfgR = await fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } });
+    const cfg  = cfgR.ok ? await cfgR.json() : {};
+
+    // ── QR Code desativado pelo gestor → exibe somente chave PIX manual ──
+    if (cfg.pix_ativo_gestor === false) {
+      if (cfg.pix_key_manual) {
+        document.getElementById('pix-manual-success-wrap').style.display = '';
+        document.getElementById('pix-manual-key-show').value             = cfg.pix_key_manual;
+        document.getElementById('pix-manual-banco-lbl').textContent      = cfg.pix_key_manual_banco ? `🏦 ${cfg.pix_key_manual_banco}` : '';
+        document.getElementById('pix-manual-valor-show').textContent     = 'R$ ' + fmt(order.total);
+      } else {
+        sec.style.display = 'none'; // desativado e sem chave manual configurada
+      }
+      return;
+    }
+
+    // ── QR Code ativo — gera cobrança no Mercado Pago ──
+    const pr = await fetch('/api/pix/criar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
+      body: JSON.stringify({ valor: order.total, order_id: order.id, client: order.client })
+    });
+    const pd = pr.ok ? await pr.json() : null;
 
     if (pr.ok && pd?.qr_code) {
       // Gera QR Code localmente no browser (sem depender de base64 do MP ou serviço externo)
@@ -3261,12 +3274,12 @@ async function _iniciarFluxoPix(order) {
       return;
     }
 
-    // MP falhou — tenta chave manual
+    // MP falhou — tenta chave manual como fallback
     if (cfg.pix_key_manual) {
       document.getElementById('pix-manual-success-wrap').style.display = '';
-      document.getElementById('pix-manual-key-show').value = cfg.pix_key_manual;
-      document.getElementById('pix-manual-banco-lbl').textContent = cfg.pix_key_manual_banco ? `🏦 ${cfg.pix_key_manual_banco}` : '';
-      document.getElementById('pix-manual-valor-show').textContent = 'R$ ' + fmt(order.total);
+      document.getElementById('pix-manual-key-show').value             = cfg.pix_key_manual;
+      document.getElementById('pix-manual-banco-lbl').textContent      = cfg.pix_key_manual_banco ? `🏦 ${cfg.pix_key_manual_banco}` : '';
+      document.getElementById('pix-manual-valor-show').textContent     = 'R$ ' + fmt(order.total);
       return;
     }
 
