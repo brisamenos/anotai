@@ -222,7 +222,19 @@ body{
 /* ══ MAIN & PAGES ══════════════════════════════════════════ */
 .main{flex:1;overflow-y:auto;overflow-x:hidden;min-height:0;scroll-behavior:smooth}
 .page{display:none;padding:24px 28px;animation:fadeUp .28s ease;min-height:0;max-width:100%}
-.page.on{display:block;padding-bottom:48px}
+.page.on{display:block}
+/* ══ CARTEIRA: scroll próprio ══════════════════════════ */
+#page-saques{
+  display:none;
+  overflow-y:auto;
+  overflow-x:hidden;
+  height:calc(100dvh - var(--nav-h));
+  padding-bottom:48px;
+}
+#page-saques.on{
+  display:block;
+}
+
 .page.on#page-cardapio-publico{display:flex}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:26px;flex-wrap:wrap;gap:10px}
