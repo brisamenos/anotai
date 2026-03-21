@@ -2243,8 +2243,8 @@ async function addItem() {
   const pr = document.getElementById('new-img-preview'); if(pr) pr.style.border='2px dashed var(--border)';
   document.getElementById('new-item-type').value = 'normal';
   document.getElementById('new-status').value = 'active';
-  const nd = document.getElementById('new-destaque'); if(nd) nd.classList.remove('on');
-  const ngl = document.getElementById('new-grupos-list'); if(ngl) ngl.innerHTML='';
+  const _nd = document.getElementById('new-destaque'); if(_nd) _nd.classList.remove('on');
+  const _ngl = document.getElementById('new-grupos-list'); if(_ngl) _ngl.innerHTML='';
   togglePizzaOptions('new');
 
   closeModal('modal-add-item');
@@ -2295,10 +2295,8 @@ function openEditItem(id) {
     preview.style.border = '2px dashed var(--border)';
   }
 
-  // destaque
-  const desel = document.getElementById('edit-destaque');
-  if (desel) desel.classList.toggle('on', !!it.destaque);
-  // custom groups
+  const _desel = document.getElementById('edit-destaque');
+  if (_desel) _desel.classList.toggle('on', !!it.destaque);
   renderGrupos('edit', it.customGroups || []);
 
   openModal('modal-edit-item');
@@ -2329,8 +2327,8 @@ async function saveEditItem() {
   const meioEl  = document.getElementById('edit-meio-meio');
   it.allowHalf  = it.itemType === 'pizza' && meioEl && meioEl.classList.contains('on');
   it.maxFlavors = it.itemType === 'pizza' ? (parseInt(document.getElementById('edit-max-flavors').value) || 1) : 1;
-  it.destaque      = document.getElementById('edit-destaque')?.classList.contains('on') || false;
-  it.customGroups  = readGrupos('edit');
+  it.destaque     = document.getElementById('edit-destaque')?.classList.contains('on') || false;
+  it.customGroups = readGrupos('edit');
 
   const selEmo   = document.querySelector('#edit-emoji-grid .emo-btn.on');
   if (selEmo) it.emoji = selEmo.textContent.trim();
@@ -2343,8 +2341,7 @@ async function saveEditItem() {
     price: it.price, price_old: it.priceOld || null,
     cat: it.cat, cat_key: it.catKey, status: it.status,
     ingredients: it.ingredients, item_type: it.itemType, allow_half: it.allowHalf, max_flavors: it.maxFlavors,
-    emoji: it.emoji, destaque: it.destaque, custom_groups: it.customGroups,
-    promo: it.destaque
+    emoji: it.emoji, destaque: it.destaque, custom_groups: it.customGroups, promo: it.destaque
   }).eq('id', editingId);
   sbLoading(false);
 
@@ -7148,88 +7145,95 @@ async function solicitarSaque() {
 //  GRUPOS DE CUSTOMIZAÇÃO
 // ══════════════════════════════════════════
 function addGrupo(ctx) {
-  const list = document.getElementById(ctx + '-grupos-list');
+  var list = document.getElementById(ctx + '-grupos-list');
   if (!list) return;
-  const idx = list.children.length;
-  const div = document.createElement('div');
+  var div = document.createElement('div');
   div.className = 'grp-wrap';
-  div.dataset.idx = idx;
-  div.innerHTML = _grupoHtml(idx, {nome:'', tipo:'radio', min:1, max:1, opcoes:[]});
+  div.innerHTML = _grupoHtml({nome:'', tipo:'radio', min:1, max:1, opcoes:[]});
   list.appendChild(div);
 }
 
-function _grupoHtml(idx, g) {
-  const optsHtml = (g.opcoes||[]).map((o,oi) => _optHtml(idx, oi, o)).join('');
-  return `
-  <div class="grp-header">
-    <input class="grp-title-input" placeholder="Nome do grupo (ex: Tamanho, Sabor, Complementos)" value="${g.nome||''}" oninput="syncGrupoNome(this)">
-    <button type="button" class="grp-del" onclick="this.closest('.grp-wrap').remove()" title="Remover grupo">×</button>
-  </div>
-  <div class="grp-type-row">
-    <button type="button" class="grp-type-btn ${(g.tipo||'radio')==='radio'?'on':''}" onclick="setGrupoTipo(this,'radio')">● Escolha 1</button>
-    <button type="button" class="grp-type-btn ${g.tipo==='checkbox'?'on':''}" onclick="setGrupoTipo(this,'checkbox')">☑ Múltipla</button>
-  </div>
-  <div class="grp-min-max" style="display:${g.tipo==='checkbox'?'flex':'none'}">
-    <label style="font-size:11px;color:var(--muted);align-self:center">Mín</label>
-    <input type="number" class="grp-min" min="0" max="99" value="${g.min||0}" placeholder="0">
-    <label style="font-size:11px;color:var(--muted);align-self:center">Máx</label>
-    <input type="number" class="grp-max" min="1" max="99" value="${g.max||1}" placeholder="1">
-  </div>
-  <div class="grp-opts-list">${optsHtml}</div>
-  <button type="button" class="grp-add-opt" onclick="addGrupoOpt(this)">+ Adicionar opção</button>`;
+function _grupoHtml(g) {
+  var isCheck = g.tipo === 'checkbox';
+  var optsHtml = (g.opcoes||[]).map(_optHtml).join('');
+  var html = '<div class="grp-header">';
+  html += '<input class="grp-title-input" placeholder="Nome do grupo" value="' + (g.nome||'').replace(/"/g,'&quot;') + '">';
+  html += '<button type="button" class="grp-del" onclick="delGrupo(this)">×</button>';
+  html += '</div>';
+  html += '<div class="grp-type-row">';
+  html += '<button type="button" class="grp-type-btn ' + (!isCheck?'on':'') + '" onclick="setGrupoTipo(this,\'radio\')">● Escolha 1</button>';
+  html += '<button type="button" class="grp-type-btn ' + (isCheck?'on':'') + '" onclick="setGrupoTipo(this,\'checkbox\')">☑ Múltipla</button>';
+  html += '</div>';
+  html += '<div class="grp-min-max" style="display:' + (isCheck?'flex':'none') + '">';
+  html += '<label style="font-size:11px;color:var(--muted);align-self:center">Mín</label>';
+  html += '<input type="number" class="grp-min" min="0" max="99" value="' + (g.min||0) + '">';
+  html += '<label style="font-size:11px;color:var(--muted);align-self:center">Máx</label>';
+  html += '<input type="number" class="grp-max" min="1" max="99" value="' + (g.max||1) + '">';
+  html += '</div>';
+  html += '<div class="grp-opts-list">' + optsHtml + '</div>';
+  html += '<button type="button" class="grp-add-opt" onclick="addGrupoOpt(this)">+ Adicionar opção</button>';
+  return html;
 }
 
-function _optHtml(gIdx, oIdx, o) {
-  return `<div class="grp-opt-row">
-    <input class="grp-opt-name" placeholder="Nome da opção" value="${(o.nome||'').replace(/"/g,'&quot;')}">
-    <input class="grp-opt-price" type="number" step="0.01" min="0" placeholder="+R$" value="${o.preco||''}">
-    <button type="button" class="grp-opt-del" onclick="this.closest('.grp-opt-row').remove()">×</button>
-  </div>`;
+function _optHtml(o) {
+  var html = '<div class="grp-opt-row">';
+  html += '<input class="grp-opt-name" placeholder="Nome da opção" value="' + (o.nome||'').replace(/"/g,'&quot;') + '">';
+  html += '<input class="grp-opt-price" type="number" step="0.01" min="0" placeholder="+R$" value="' + (o.preco||'') + '">';
+  html += '<button type="button" class="grp-opt-del" onclick="delGrupoOpt(this)">×</button>';
+  html += '</div>';
+  return html;
 }
 
-function syncGrupoNome(el) { /* live — value already read on save */ }
+function delGrupo(btn)    { btn.closest('.grp-wrap').remove(); }
+function delGrupoOpt(btn) { btn.closest('.grp-opt-row').remove(); }
 
 function setGrupoTipo(btn, tipo) {
-  const wrap = btn.closest('.grp-wrap');
-  wrap.querySelectorAll('.grp-type-btn').forEach(b => b.classList.remove('on'));
+  var wrap = btn.closest('.grp-wrap');
+  wrap.querySelectorAll('.grp-type-btn').forEach(function(b){ b.classList.remove('on'); });
   btn.classList.add('on');
-  const mmRow = wrap.querySelector('.grp-min-max');
-  if (mmRow) mmRow.style.display = tipo === 'checkbox' ? 'flex' : 'none';
+  var mm = wrap.querySelector('.grp-min-max');
+  if (mm) mm.style.display = (tipo === 'checkbox') ? 'flex' : 'none';
 }
 
 function addGrupoOpt(btn) {
-  const wrap = btn.closest('.grp-wrap');
-  const list = wrap.querySelector('.grp-opts-list');
-  const div = document.createElement('div');
-  div.innerHTML = _optHtml(0, list.children.length, {});
-  list.appendChild(div.firstElementChild);
+  var list = btn.closest('.grp-wrap').querySelector('.grp-opts-list');
+  var tmp = document.createElement('div');
+  tmp.innerHTML = _optHtml({});
+  list.appendChild(tmp.firstElementChild);
 }
 
 function renderGrupos(ctx, grupos) {
-  const list = document.getElementById(ctx + '-grupos-list');
+  var list = document.getElementById(ctx + '-grupos-list');
   if (!list) return;
   list.innerHTML = '';
-  (grupos||[]).forEach((g, idx) => {
-    const div = document.createElement('div');
+  (grupos||[]).forEach(function(g) {
+    var div = document.createElement('div');
     div.className = 'grp-wrap';
-    div.dataset.idx = idx;
-    div.innerHTML = _grupoHtml(idx, g);
+    div.innerHTML = _grupoHtml(g);
     list.appendChild(div);
   });
 }
 
 function readGrupos(ctx) {
-  const list = document.getElementById(ctx + '-grupos-list');
+  var list = document.getElementById(ctx + '-grupos-list');
   if (!list) return [];
-  return Array.from(list.querySelectorAll('.grp-wrap')).map(wrap => {
-    const nome  = wrap.querySelector('.grp-title-input')?.value.trim() || '';
-    const tipo  = wrap.querySelector('.grp-type-btn.on')?.textContent.includes('Múltipla') ? 'checkbox' : 'radio';
-    const min   = parseInt(wrap.querySelector('.grp-min')?.value) || 0;
-    const max   = parseInt(wrap.querySelector('.grp-max')?.value) || 1;
-    const opcoes = Array.from(wrap.querySelectorAll('.grp-opt-row')).map(row => ({
-      nome:  row.querySelector('.grp-opt-name')?.value.trim() || '',
-      preco: parseFloat(row.querySelector('.grp-opt-price')?.value) || 0
-    })).filter(o => o.nome);
-    return { nome, tipo, min, max, opcoes };
-  }).filter(g => g.nome || g.opcoes.length);
+  return Array.from(list.querySelectorAll('.grp-wrap')).map(function(wrap) {
+    var nameEl  = wrap.querySelector('.grp-title-input');
+    var tipoBtn = wrap.querySelector('.grp-type-btn.on');
+    var minEl   = wrap.querySelector('.grp-min');
+    var maxEl   = wrap.querySelector('.grp-max');
+    var tipo    = (tipoBtn && tipoBtn.textContent.indexOf('Múltipla') >= 0) ? 'checkbox' : 'radio';
+    var opcoes  = Array.from(wrap.querySelectorAll('.grp-opt-row')).map(function(row) {
+      var n = (row.querySelector('.grp-opt-name') || {}).value || '';
+      var p = parseFloat((row.querySelector('.grp-opt-price') || {}).value) || 0;
+      return { nome: n.trim(), preco: p };
+    }).filter(function(o){ return o.nome; });
+    return {
+      nome:   (nameEl ? nameEl.value : '').trim(),
+      tipo:   tipo,
+      min:    parseInt(minEl ? minEl.value : 0) || 0,
+      max:    parseInt(maxEl ? maxEl.value : 1) || 1,
+      opcoes: opcoes
+    };
+  }).filter(function(g){ return g.nome || g.opcoes.length; });
 }
