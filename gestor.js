@@ -4936,9 +4936,38 @@ function openModal(id){
   const el = document.getElementById(id);
   if (!el) { console.error('[MODAL] ERRO — elemento não encontrado:', id); return; }
   el.classList.add('on');
+  // Checa estilo computado real do browser
+  const cs = window.getComputedStyle(el);
   console.log('[MODAL] modal aberto OK:', id, '| classes:', el.className);
+  console.log('[MODAL] computed display:', cs.display, '| visibility:', cs.visibility, '| opacity:', cs.opacity, '| z-index:', cs.zIndex, '| position:', cs.position);
+  console.log('[MODAL] bounding rect:', JSON.stringify(el.getBoundingClientRect()));
+  // Checa se algum pai tem transform (quebra position:fixed)
+  let parent = el.parentElement;
+  while (parent && parent !== document.body) {
+    const pcs = window.getComputedStyle(parent);
+    if (pcs.transform !== 'none' || pcs.filter !== 'none' || pcs.willChange !== 'auto') {
+      console.warn('[MODAL] ⚠️ pai com transform/filter:', parent.tagName, parent.id || parent.className, '| transform:', pcs.transform, '| filter:', pcs.filter);
+    }
+    parent = parent.parentElement;
+  }
   closeNotif();
 }
+
+// ── Verifica se o CSS do modal foi carregado corretamente ──
+(function _checkModalCSS() {
+  const dummy = document.createElement('div');
+  dummy.className = 'modal-bg on';
+  dummy.style.cssText = 'position:absolute;left:-9999px;top:-9999px';
+  document.body.appendChild(dummy);
+  const cs = window.getComputedStyle(dummy);
+  console.log('[CSS-CHECK] .modal-bg.on → display:', cs.display, '| z-index:', cs.zIndex, '| position:', cs.position);
+  if (cs.display === 'none') {
+    console.error('[CSS-CHECK] ⚠️ PROBLEMA: .modal-bg.on está com display:none! O CSS pode não ter carregado ou está sendo sobrescrito.');
+  } else {
+    console.log('[CSS-CHECK] ✅ CSS do modal carregado corretamente');
+  }
+  document.body.removeChild(dummy);
+})();
 function closeModal(id){
   console.log('[MODAL] closeModal:', id);
   const el = document.getElementById(id);
