@@ -23,7 +23,6 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // Auth — Clientes
   // ═══════════════════════════════════════════════════════
 
-  const { upath, params, db, send, readBody, log, marcarDirty, getTenantId } = ctx
 
   // ── Registro de cliente (cardápio) ───────────────────
   if (req.method === 'POST' && upath === '/api/customer-register') {
@@ -83,7 +82,6 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // Admin, Backup & Tenants
   // ═══════════════════════════════════════════════════════
 
-  const { upath, params, db, send, readBody, log, marcarDirty, fazerBackup, restaurarBackup, validarSessaoAdmin, criarSessaoAdmin, BACKUP_PATH, UPLOADS_DIR } = ctx
 
   // ── Login admin ──────────────────────────────────────
   if (req.method === 'POST' && upath === '/api/admin-login') {
@@ -237,7 +235,6 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // PIX, Carteira & Saques
   // ═══════════════════════════════════════════════════════
 
-  const { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty, validarSessaoAdmin, MP_TOKEN, TAXA_PIX } = ctx
 
   // ── Gera cobrança PIX via Mercado Pago ───────────────
   if (req.method === 'POST' && upath === '/api/pix/criar') {
@@ -519,7 +516,6 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // WhatsApp, IA & Webhooks
   // ═══════════════════════════════════════════════════════
 
-  const { upath, params, db, send, readBody, log, EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano } = ctx
 
   // ── Envio manual de mensagem WA ──────────────────────
   if (req.method === 'POST' && upath === '/enviar') {
