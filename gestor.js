@@ -6961,14 +6961,15 @@ async function carregarConfigPixGestor() {
       btn.className = 'btn ' + (_pixAtivoGestor ? 'bp' : 'bd');
     }
     if (statusEl) {
-      const taxaStr = 'Taxa por pagamento: <strong>R$ ' + parseFloat(d.taxa_pix||0).toFixed(2).replace('.',',') + '</strong>';
       if (!d.mp_configurado) statusEl.innerHTML = '<span style="color:var(--danger)">⚠️ Token MP não configurado pelo administrador</span>';
-      else statusEl.innerHTML = (_pixAtivoGestor
+      else statusEl.innerHTML = _pixAtivoGestor
         ? '<span style="color:var(--success)">✅ QR Code via Mercado Pago ativo</span>'
-        : '<span style="color:var(--orange)">⚡ QR Code desativado — usando chave PIX manual</span>')
-        + ' &nbsp;·&nbsp; <span style="color:var(--muted)">' + taxaStr + '</span>';
+        : '<span style="color:var(--orange)">⚡ QR Code desativado — usando chave PIX manual</span>';
     }
     if (manualWrap) manualWrap.style.display = _pixAtivoGestor ? 'none' : '';
+    // Exibe taxa configurada pelo admin no card de Pagamentos PIX
+    const taxaConfigEl = document.getElementById('crt-taxa-config');
+    if (taxaConfigEl) taxaConfigEl.textContent = 'R$ ' + parseFloat(d.taxa_pix||0).toFixed(2).replace('.',',');
     // Preenche campos da chave manual
     if (!_pixAtivoGestor) {
       const keyEl = document.getElementById('pix-manual-key');
@@ -7037,7 +7038,6 @@ async function carregarCarteira() {
     if(se('crt-total'))  se('crt-total').textContent  = _fmtR(cart.total_recebido);
     if(se('crt-sacado')) se('crt-sacado').textContent = _fmtR(cart.total_sacado);
     if(se('crt-npag'))   se('crt-npag').textContent   = cart.total_pagamentos || 0;
-    if(se('crt-taxas'))  se('crt-taxas').textContent  = _fmtR(cart.total_taxas);
 
     // Preview do valor de saque
     const saldo = parseFloat(cart.saldo_disponivel || 0);
