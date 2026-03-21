@@ -7072,6 +7072,23 @@ async function carregarCarteira() {
     if(se('crt-npag'))   se('crt-npag').textContent   = cart.total_pagamentos || 0;
     if(se('crt-taxa-config')) se('crt-taxa-config').textContent = _fmtR(cart.taxa_por_pagamento || 1);
 
+    // Aviso de pagamentos PIX ainda pendentes (aguardando confirmação MP)
+    if (cart.pendentes_count > 0) {
+      let avisoEl = se('crt-pendentes-aviso');
+      if (!avisoEl) {
+        avisoEl = document.createElement('div');
+        avisoEl.id = 'crt-pendentes-aviso';
+        avisoEl.style.cssText = 'background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.25);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--orange);margin-bottom:16px';
+        const cardsEl = se('crt-saldo')?.closest('.card')?.parentElement;
+        if (cardsEl?.nextElementSibling) cardsEl.parentElement.insertBefore(avisoEl, cardsEl.nextElementSibling);
+      }
+      avisoEl.innerHTML = `⏳ <strong>${cart.pendentes_count} pagamento(s) PIX pendente(s)</strong> aguardando confirmação do Mercado Pago — total de ${_fmtR(cart.pendentes_valor)}. Esses valores <strong>não entram no saldo</strong> até serem confirmados.`;
+      avisoEl.style.display = '';
+    } else {
+      const avisoEl = se('crt-pendentes-aviso');
+      if (avisoEl) avisoEl.style.display = 'none';
+    }
+
     // Preview do valor de saque
     const saldo = parseFloat(cart.saldo_disponivel || 0);
     if(se('saque-valor-preview')) se('saque-valor-preview').textContent = _fmtR(saldo);
