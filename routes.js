@@ -37,13 +37,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (existing) {
         db.prepare('UPDATE customers SET name=?,email=?,birthday=?,senha_hash=? WHERE tenant_id=? AND phone=?').run(name, email || null, birthday || null, hash, tid, phone)
         const c = db.prepare('SELECT id,name,phone,email,birthday,orders_count,total_spent,created_at FROM customers WHERE tenant_id=? AND phone=?').get(tid, phone)
-        sseBroadcast(`customers-rt:${tid}`, `customers:UPDATE`, c)
         send(res, 200, { ...c, token: Buffer.from(`${c.id}:${tid}:${hash.slice(0, 16)}`).toString('base64') })
         return true
       }
       const info = db.prepare('INSERT INTO customers (tenant_id,name,phone,email,birthday,senha_hash,orders_count,total_spent) VALUES (?,?,?,?,?,?,0,0)').run(tid, name, phone, email || null, birthday || null, hash)
       const c    = db.prepare('SELECT id,name,phone,email,birthday,orders_count,total_spent,created_at FROM customers WHERE id=?').get(info.lastInsertRowid)
-      sseBroadcast(`customers-rt:${tid}`, `customers:INSERT`, c)
       marcarDirty()
       send(res, 201, { ...c, token: Buffer.from(`${c.id}:${tid}:${hash.slice(0, 16)}`).toString('base64') })
     } catch (e) { send(res, 400, { error: e.message }) }
@@ -645,6 +643,60 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+
+
+  // ── Clientes do gestor com stats calculados em tempo real ──
+  if (req.method === 'GET' && upath === '/api/clientes-gestor') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    try {
+      // Customers com stats calculados via JOIN com orders
+      const customers = db.prepare(`
+        SELECT
+          c.id, c.name, c.phone, c.email, c.birthday, c.addr,
+          c.created_at,
+          COUNT(o.id)                       AS orders_count,
+          COALESCE(SUM(o.total + o.taxa), 0) AS total_spent,
+          MAX(o.created_at)                  AS last_order_at
+        FROM customers c
+        LEFT JOIN orders o ON o.tenant_id = c.tenant_id
+          AND (o.customer_id = c.id OR o.phone = c.phone)
+          AND o.status NOT IN ('cancelado', 'aguardando_pix')
+        WHERE c.tenant_id = ?
+        GROUP BY c.id
+        ORDER BY c.created_at DESC
+      `).all(tid)
+
+      // Fidelidade por telefone (para pontos)
+      const fid = db.prepare(
+        'SELECT id, phone, pts, resgates FROM fidelidade WHERE tenant_id = ?'
+      ).all(tid)
+      const fidMap = {}
+      fid.forEach(f => {
+        const ph = (f.phone || '').replace(/\D/g, '').slice(-8)
+        if (ph) fidMap[ph] = f
+      })
+
+      const result = customers.map(c => {
+        const ph = (c.phone || '').replace(/\D/g, '').slice(-8)
+        const f  = fidMap[ph] || null
+        return {
+          ...c,
+          orders_count: c.orders_count || 0,
+          total_spent:  parseFloat(c.total_spent || 0),
+          last_order_at: c.last_order_at || null,
+          fid_pts:  f ? (f.pts || 0) : null,
+          fid_id:   f ? f.id : null
+        }
+      })
+
+      send(res, 200, result)
+    } catch (e) {
+      log('❌', '/api/clientes-gestor erro:', e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
 
   return false // nenhuma rota tratada aqui — passa para o REST engine
 }
