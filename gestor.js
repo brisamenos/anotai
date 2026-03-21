@@ -532,20 +532,25 @@ function subscribeOrders() {
   // Canal de clientes — sincroniza cadastros feitos no cardápio em tempo real
   const chCustomers = sb.channel('customers-rt')
     .on('postgres_changes', {event:'INSERT', schema:'public', table:'customers'}, p => {
+      console.log('[CLIENTES-RT] INSERT recebido:', p.new);
       if (!customersData.find(c => c.id === p.new.id)) {
         customersData.unshift(p.new);
+        console.log('[CLIENTES-RT] Novo cliente adicionado. Total:', customersData.length);
       }
       const pg = document.getElementById('page-clientes');
       if (pg && pg.classList.contains('on')) renderClientes();
     })
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'customers'}, p => {
+      console.log('[CLIENTES-RT] UPDATE recebido:', p.new);
       const idx = customersData.findIndex(c => c.id === p.new.id);
       if (idx !== -1) customersData[idx] = { ...customersData[idx], ...p.new };
       else customersData.unshift(p.new);
       const pg = document.getElementById('page-clientes');
       if (pg && pg.classList.contains('on')) renderClientes();
     })
-    .subscribe();
+    .subscribe(status => {
+      console.log('[CLIENTES-RT] Status do canal:', status);
+    });
 
   // Heartbeat: mantém WS vivo em background (a cada 25s)
   _heartbeat = setInterval(() => {
@@ -5475,14 +5480,59 @@ function clientesTab(tab) {
   renderClientes();
 }
 
-function renderClientesPage() {
+async function renderClientesPage() {
+  console.log('[CLIENTES] renderClientesPage iniciado');
+  console.log('[CLIENTES] customersData atual:', customersData.length, 'registros');
+  console.log('[CLIENTES] fidClients atual:', fidClients.length, 'registros');
   _clientesTab = 'todos';
   clientesTab('todos');
   renderClientes();
+
+  try {
+    console.log('[CLIENTES] Buscando dados frescos do banco...');
+    const [custRes, fidRes] = await Promise.all([
+      sb.from('customers').select('*').order('id', {ascending: false}),
+      sb.from('fidelidade').select('*').order('pts', {ascending: false})
+    ]);
+
+    console.log('[CLIENTES] custRes:', { data: custRes.data?.length, error: custRes.error });
+    console.log('[CLIENTES] fidRes:', { data: fidRes.data?.length, error: fidRes.error });
+
+    if (custRes.error) console.error('[CLIENTES] ERRO ao buscar customers:', custRes.error);
+    if (fidRes.error)  console.error('[CLIENTES] ERRO ao buscar fidelidade:', fidRes.error);
+
+    let updated = false;
+    if (custRes.data) {
+      console.log('[CLIENTES] customers carregados:', custRes.data.length);
+      if (custRes.data.length > 0) console.log('[CLIENTES] primeiro customer:', JSON.stringify(custRes.data[0]));
+      customersData = custRes.data;
+      updated = true;
+    } else {
+      console.warn('[CLIENTES] customers retornou vazio ou null');
+    }
+
+    if (fidRes.data) {
+      console.log('[CLIENTES] fidelidade carregados:', fidRes.data.length);
+      fidClients = fidRes.data.map(f => ({
+        id: f.id, name: f.name, phone: f.phone||'', birthday: f.birthday||null,
+        pts: f.pts||0, max: f.max_pts||_fidConfig.meta_pts||500,
+        orders: f.orders_count||0, resgates: f.resgates||0
+      }));
+      updated = true;
+    }
+
+    if (updated) {
+      console.log('[CLIENTES] Dados atualizados, re-renderizando...');
+      renderClientes();
+    }
+  } catch(e) {
+    console.error('[CLIENTES] EXCEÇÃO em renderClientesPage:', e);
+  }
 }
 
 // Mescla fidelidade + customers numa lista unificada
 function _mergeClientes() {
+  console.log('[CLIENTES] _mergeClientes | fidClients:', fidClients.length, '| customersData:', customersData.length);
   const today   = new Date();
   const todayMD = String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
   const mesMes  = today.getMonth() + 1;
@@ -5527,15 +5577,18 @@ function _mergeClientes() {
     }
   });
 
-  return Object.values(byPhone).map(c => ({
+  const result = Object.values(byPhone).map(c => ({
     ...c,
     isAnivHoje: c.birthday ? c.birthday.slice(5) === todayMD : false,
     isAnivMes:  c.birthday ? parseInt(c.birthday.slice(5,7)) === mesMes : false,
     diasAteAniv: c.birthday ? _diasAteAniversario(c.birthday) : 999
   }));
+  console.log('[CLIENTES] _mergeClientes resultado:', result.length, 'clientes mesclados');
+  return result;
 }
 
 function renderClientes() {
+  console.log('[CLIENTES] renderClientes | tab:', _clientesTab, '| customersData:', customersData.length, '| fidClients:', fidClients.length);
   const search  = (document.getElementById('cli-search')?.value || '').toLowerCase();
   const order   = document.getElementById('cli-order')?.value || 'nome';
 
@@ -5584,7 +5637,8 @@ function renderClientes() {
   document.getElementById('cli-count').textContent = `${clientes.length} cliente${clientes.length!==1?'s':''}`;
 
   const tbody = document.getElementById('cli-tbody');
-  if (!tbody) return;
+  if (!tbody) { console.error('[CLIENTES] cli-tbody NÃO encontrado no DOM!'); return; }
+  console.log('[CLIENTES] Renderizando', clientes.length, 'clientes na tabela');
   if (!clientes.length) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted);font-size:13px">${search?'Nenhum cliente encontrado':'Nenhum cliente cadastrado ainda.'}</td></tr>`;
     return;
