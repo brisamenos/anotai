@@ -199,7 +199,7 @@ async function loadAllData(silent = false) {
       max:f.max_pts||_fidConfig.meta_pts||500,
       orders:f.orders_count||0, resgates:f.resgates||0
     }));
-    if (customersRes.data?.length) customersData = customersRes.data;
+    if (customersRes.data) customersData = customersRes.data;
 
 
     // Set orderIdSeq above DB max and init polling tracker
@@ -5499,7 +5499,7 @@ function _mergeClientes() {
     } else {
       byPhone[key] = {
         _fidId: null, _custId: c.id,
-        name: c.name, phone: c.phone||'', birthday: c.birthday||null,
+        name: c.name||'(sem nome)', phone: c.phone||'', birthday: c.birthday||null,
         pts: 0, max: 500,
         orders: c.orders_count||0, resgates: 0,
         email: c.email||null, addr: c.addr||null,
@@ -5560,7 +5560,7 @@ function renderClientes() {
   }
 
   if (search) clientes = clientes.filter(c =>
-    c.name.toLowerCase().includes(search) || (c.phone||'').includes(search) || (c.email||'').toLowerCase().includes(search)
+    (c.name||''). toLowerCase().includes(search) || (c.phone||'').includes(search) || (c.email||'').toLowerCase().includes(search)
   );
 
   document.getElementById('cli-count').textContent = `${clientes.length} cliente${clientes.length!==1?'s':''}`;
@@ -5580,9 +5580,9 @@ function renderClientes() {
     return `<tr>
       <td>
         <div style="display:flex;align-items:center;gap:10px">
-          <div style="width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;color:#fff">${c.name.charAt(0).toUpperCase()}</div>
+          <div style="width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;color:#fff">${(c.name||'?').charAt(0).toUpperCase()}</div>
           <div>
-            <div style="font-weight:600;font-size:13px">${c.name}${badge}</div>
+            <div style="font-weight:600;font-size:13px">${c.name||'—'}${badge}</div>
             ${emailLabel}
             ${c.isAnivHoje?'<div style="font-size:10px;color:var(--purple);font-weight:600">🎂 Aniversário hoje!</div>':''}
           </div>
