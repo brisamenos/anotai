@@ -942,6 +942,28 @@ async function finishOrderById(id) {
   sbToast('ok', `Pedido #${_orderNum(id)} finalizado!`);
 }
 
+// ── confirmarPagamentoPix (PIX manual) ──────────────
+async function confirmarPagamentoPix(id) {
+  const o = ordersKanban.find(x => x.id === id);
+  if (!o) return;
+  if (!confirm(`Confirmar que o pagamento PIX do pedido #${o.num} foi recebido?`)) return;
+  sbLoading(true);
+  try {
+    const res = await fetch(`/api/orders?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _sessao?.tenant_id },
+      body: JSON.stringify({ pag: 'pix_mp' })
+    });
+    if (!res.ok) throw new Error('Erro ao atualizar pagamento');
+    if (o) o.pag = 'pix_mp';
+    sbToast('ok', `✅ Pagamento PIX do pedido #${o.num} confirmado!`);
+    renderKanban();
+  } catch(e) {
+    sbToast('err', 'Erro: ' + e.message);
+  }
+  sbLoading(false);
+}
+
 // ── addMovimento (quick register) ────────────────────
 
 // ── addMovimentoModal ────────────────────────────────
@@ -1116,7 +1138,11 @@ function renderKanban(){
         const total='R$ '+(o.total+o.taxa).toFixed(2).replace('.',',');
         let actionBtn='';
         if(st==='analise'){
+          const _pixManualBtn = o.pag === 'pix_manual'
+            ? '<button class="oc-btn oc-btn-pix-confirmar" onclick="event.stopPropagation();confirmarPagamentoPix('+o.id+')">&#9989; Confirmar Pago PIX</button>'
+            : '';
           actionBtn=
+            _pixManualBtn+
             '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById('+o.id+')">✔ Confirmar</button>'+
             '<button class="oc-btn oc-btn-no" onclick="event.stopPropagation();cancelOrderById('+o.id+')">✕ Cancelar</button>'+
             (_printMode==='manual'?'<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById('+o.id+')">🖨️</button>':'');
@@ -1128,7 +1154,8 @@ function renderKanban(){
         // Badge de pagamento — visível no card para identificação rápida
         const _pagBadge = (() => {
           const p = o.pag || '';
-          if (p === 'pix_mp' || p === 'pix' || p === 'pix_manual') return '<div class="oc-pag-badge oc-pag-pix">&#9889; PAGO PIX</div>';
+          if (p === 'pix_mp' || p === 'pix') return '<div class="oc-pag-badge oc-pag-pix">&#9889; PAGO PIX</div>';
+          if (p === 'pix_manual') return '<div class="oc-pag-badge oc-pag-pix-pendente">&#9203; PIX PENDENTE</div>';
           if (p === 'cartao' || p === 'credito' || p === 'debito')  return '<div class="oc-pag-badge oc-pag-cartao">&#128179; CART\u00C3O</div>';
           if (p === 'dinheiro') {
             var tr = '';

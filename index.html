@@ -3109,7 +3109,7 @@ async function _doSubmitOrder(addr, troco) {
       client: name, phone, addr,
       items, total: grandTotal(), taxa: getTaxa(),
       status: selectedPay === 'pix' && _pixAtivoGestor ? 'aguardando_pix' : 'analise',
-      time, pag: selectedPay,
+      time, pag: selectedPay === 'pix' && !_pixAtivoGestor ? 'pix_manual' : selectedPay,
       troco: troco || null,
       customer_id: customerId
     }).select().single();
