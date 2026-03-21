@@ -1744,7 +1744,8 @@ async function init() {
       ...x,
       id: Number(x.id),
       ingredients: (() => { try { return Array.isArray(x.ingredients) ? x.ingredients : JSON.parse(x.ingredients||'[]'); } catch(e){ return []; } })(),
-      custom_groups: (() => { try { return Array.isArray(x.custom_groups) ? x.custom_groups : JSON.parse(x.custom_groups||'[]'); } catch(e){ return []; } })()
+      custom_groups: (() => { try { return Array.isArray(x.custom_groups) ? x.custom_groups : JSON.parse(x.custom_groups||'[]'); } catch(e){ return []; } })(),
+      destaque: !!x.destaque
     }));
     allCats   = (catsR.data   || []);
     allCupons = (cuponsR.data || []);
@@ -1907,7 +1908,8 @@ async function reloadMenu() {
     ...x,
     id: Number(x.id),
     ingredients: (() => { try { return Array.isArray(x.ingredients) ? x.ingredients : JSON.parse(x.ingredients||'[]'); } catch(e){ return []; } })(),
-    custom_groups: (() => { try { return Array.isArray(x.custom_groups) ? x.custom_groups : JSON.parse(x.custom_groups||'[]'); } catch(e){ return []; } })()
+    custom_groups: (() => { try { return Array.isArray(x.custom_groups) ? x.custom_groups : JSON.parse(x.custom_groups||'[]'); } catch(e){ return []; } })(),
+    destaque: !!x.destaque
   }));
   allCats  = (catsR.data  || []);
   buildCats();
@@ -2197,7 +2199,7 @@ function renderMenu() {
   }
 
   // ── Seção Destaques (promos e price_old) ──
-  const destItems = normalItems.filter(i => i.promo || i.price_old);
+  const destItems = normalItems.filter(i => i.destaque || i.promo || i.price_old);
   if (destItems.length >= 2) {
     html += `<div class="destaques-wrap"><div class="section-label">⭐ Destaques</div>`;
     html += `<div class="destaques-scroll">`;
