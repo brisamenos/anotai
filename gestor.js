@@ -158,7 +158,7 @@ async function loadAllData(silent = false) {
       itemsRes, catsRes, ordersRes, movsRes,
       cuponsRes, mesasRes, estoqueRes, fidRes, cfgRes, customersRes
     ] = await Promise.all([
-      safe(sb.from('menu_items').select('*').order('id')),
+      safe(sb.from('menu_items').select('*').order('sort_order').order('id')),
       safe(sb.from('categories').select('*').order('sort_order')),
       safe(sb.from('orders').select('*').in('status',['analise','producao','pronto']).order('id',{ascending:false})),
       safe(sb.from('movimentos').select('*').gte('created_at', new Date().toISOString().split('T')[0]).order('created_at')),
@@ -1484,6 +1484,62 @@ async function catDrop(e, targetId) {
 }
 
 // ─────────────────────────────────────────
+// GESTOR — DRAG & DROP ITENS
+// ─────────────────────────────────────────
+let _dragItemId = null;
+
+function itemDragStart(e, id) {
+  _dragItemId = id;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', id);
+  setTimeout(() => e.target.closest('.cat-item-row')?.classList.add('dragging'), 0);
+}
+
+function itemDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const row = e.target.closest('.cat-item-row');
+  document.querySelectorAll('.cat-item-row.drag-over').forEach(r => r.classList.remove('drag-over'));
+  if (row && parseInt(row.dataset.id) !== _dragItemId) {
+    row.classList.add('drag-over');
+  }
+}
+
+function itemDragEnd(e) {
+  document.querySelectorAll('.cat-item-row').forEach(r => {
+    r.classList.remove('dragging');
+    r.classList.remove('drag-over');
+  });
+  _dragItemId = null;
+}
+
+async function itemDrop(e, targetId) {
+  e.preventDefault();
+  if (!_dragItemId || _dragItemId === targetId) return;
+
+  const fromIdx = items.findIndex(i => i.id === _dragItemId);
+  const toIdx   = items.findIndex(i => i.id === targetId);
+  if (fromIdx === -1 || toIdx === -1) return;
+
+  const moved = items.splice(fromIdx, 1)[0];
+  items.splice(toIdx, 0, moved);
+
+  renderGestor();
+
+  // Persiste a nova ordem para os itens da mesma categoria
+  const catKey = moved.catKey;
+  const catItems = items.filter(i => i.catKey === catKey || i.cat === catKey);
+  try {
+    await Promise.all(catItems.map((item, i) =>
+      sb.from('menu_items').update({ sort_order: i + 1 }).eq('id', item.id)
+    ));
+    sbToast('ok', 'Ordem dos itens salva!');
+  } catch(err) {
+    sbToast('err', 'Erro ao salvar ordem dos itens');
+  }
+}
+
+// ─────────────────────────────────────────
 // GESTOR DE CARDÁPIO
 // ─────────────────────────────────────────
 // ─────────────────────────────────────────
@@ -2100,7 +2156,8 @@ function renderGestor(){
         </div>
         ${cat.open?`<div class="cat-items">
           ${catItems.map(item=>`
-            <div class="cat-item-row" data-id="${item.id}" onclick="openEditItem(+this.dataset.id)">
+            <div class="cat-item-row" data-id="${item.id}" draggable="true" ondragstart="itemDragStart(event,${item.id})" ondragover="itemDragOver(event)" ondrop="itemDrop(event,${item.id})" ondragend="itemDragEnd(event)" onclick="openEditItem(+this.dataset.id)">
+              <span class="cat-drag" style="cursor:grab;padding:0 6px 0 2px;opacity:.35;flex-shrink:0;font-size:16px;align-self:center" onmousedown="event.stopPropagation()" title="Arrastar para reordenar">⠿</span>
               <div class="cat-item-thumb">${item.imageUrl
                 ? `<img src="${item.imageUrl}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;display:block">`
                 : `<svg viewBox="0 0 24 24" fill="none" width="18" height="18" style="opacity:.35"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z" stroke="currentColor" stroke-width="1.5"/><path d="M3 16l5-5 3 3 3-4 4 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" opacity=".5"/></svg>`
@@ -2245,13 +2302,14 @@ async function saveEditCategory() {
   const type = document.getElementById('edit-cat-type').value;
   if (!name) { sbToast('err','Informe o nome'); return; }
   sbLoading(true);
+  // Só atualiza 'label' e 'type' — nunca muda 'name' (chave interna usada pelo catKey dos itens)
   const { error } = await sb.from('categories').update({
-    label: name, name: name.toLowerCase(), type
+    label: name, type
   }).eq('id', id);
   sbLoading(false);
   if (error) { sbToast('err','Erro ao salvar'); return; }
   const cat = categories.find(c => c.id === id);
-  if (cat) { cat.label = name; cat.name = name.toLowerCase(); cat.type = type; }
+  if (cat) { cat.label = name; cat.type = type; }
   closeModal('modal-edit-cat');
   renderGestor();
   populateCatSelects();
