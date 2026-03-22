@@ -426,7 +426,7 @@ function subscribeOrders() {
   const chOrders = sb.channel('orders-rt')
     .on('postgres_changes', {event:'INSERT', schema:'public', table:'orders'}, p => {
       // Pedidos aguardando PIX não entram no kanban — só aparecem após pagamento confirmado
-      if (p.new.status === 'aguardando_pix') return;
+      if (p.new.status === 'aguardando_pix' || p.new.status === 'aguardando_cartao') return;
       if (!ordersKanban.find(x => x.id === p.new.id)) {
         ordersKanban.unshift(mapOrder(p.new));
         if (p.new.id > _maxKnownOrderId) _maxKnownOrderId = p.new.id;
@@ -1085,7 +1085,7 @@ function nav(id){
   if(id==='impressao') renderImpressao();
   if(id==='caixa') _renderCaixaTela();
   if(id==='configuracoes') _renderConfiguracoes();
-  if(id==='saques') { carregarCarteira(); conectarSaquesSSE(); carregarConfigPixGestor(); }
+  if(id==='saques') { carregarCarteira(); conectarSaquesSSE(); carregarConfigPixGestor(); carregarCartaoMpStatus(); }
   if(id==='taxa') renderTaxaPage();
 
   if(id==='meu-plano') renderMeuPlano();
@@ -1174,7 +1174,7 @@ function renderKanban(){
           const p = o.pag || '';
           if (p === 'pix_mp' || p === 'pix') return '<div class="oc-pag-badge oc-pag-pix">&#9889; PAGO PIX</div>';
           if (p === 'pix_manual') return '<div class="oc-pag-badge oc-pag-pix-pendente">&#9203; PIX PENDENTE</div>';
-          if (p === 'cartao' || p === 'credito' || p === 'debito')  return '<div class="oc-pag-badge oc-pag-cartao">&#128179; CART\u00C3O</div>';
+          if (p === 'cartao' || p === 'credito' || p === 'debito' || p === 'cartao_mp')  return '<div class="oc-pag-badge oc-pag-cartao">&#128179; CARTÃO</div>';
           if (p === 'dinheiro') {
             var tr = '';
             if (o.troco > 0) tr = ' &middot; Troco p/ R$' + parseFloat(o.troco).toFixed(2).replace('.',',');
@@ -1286,7 +1286,7 @@ function openOrderDetail(id) {
   // Pagamento
   const pagLabel = {
     dinheiro:'💵 Dinheiro', pix:'💠 PIX', pix_mp:'💠 PIX (Mercado Pago)',
-    cartao:'💳 Cartão', credito:'💳 Crédito', debito:'💳 Débito', mesa:'🪑 Fechamento Mesa'
+    cartao:'💳 Cartão', credito:'💳 Crédito', debito:'💳 Débito', cartao_mp:'💳 Cartão (Mercado Pago)', mesa:'🪑 Fechamento Mesa'
   }[(o.pag||'').toLowerCase()] || o.pag || '—';
   setEl('od-pag', pagLabel);
   setEl('od-pag-sub', o.pag === 'dinheiro' || o.pag === 'Dinheiro'
@@ -4333,7 +4333,7 @@ async function renderRelatorios() {
     ]);
 
     const mesPedidos = periodOrdersRaw || [];
-    const mesValidos = mesPedidos.filter(o => o.status !== 'cancelado' && o.status !== 'aguardando_pix');
+    const mesValidos = mesPedidos.filter(o => o.status !== 'cancelado' && o.status !== 'aguardando_pix' && o.status !== 'aguardando_cartao');
     const allYear    = anoOrdersRaw || [];
 
     // ─── KPIs ───────────────────────────────────────────
@@ -7732,6 +7732,8 @@ async function carregarConfigPixGestor() {
       if (tipoEl && d.pix_key_manual_tipo) tipoEl.value = d.pix_key_manual_tipo;
       if (bancoEl) bancoEl.value = d.pix_key_manual_banco || '';
     }
+    // Toggle pagamentos online
+    _renderPagOnlineToggle(d.pag_online_ativo !== false);
   } catch(e) {}
 }
 
@@ -7771,6 +7773,91 @@ async function salvarPixManual() {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
     sbToast('ok', 'Chave PIX salva!');
+  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
+}
+
+// ── Toggle: Pagamentos Online (PIX + Cartão MP) ──────
+let _pagOnlineAtivo = true;
+
+function _renderPagOnlineToggle(ativo) {
+  _pagOnlineAtivo = ativo;
+  const btn    = document.getElementById('btn-pag-online-toggle');
+  const status = document.getElementById('pag-online-status-txt');
+  if (btn) {
+    btn.textContent = ativo ? '✅ Ativado' : '🔴 Desativado';
+    btn.className   = 'btn ' + (ativo ? 'bp' : 'bd');
+  }
+  if (status) {
+    status.innerHTML = ativo
+      ? '<span style="color:var(--success)">PIX e Cartão de Crédito MP disponíveis no cardápio público</span>'
+      : '<span style="color:var(--danger)">PIX e Cartão desativados — clientes só pagam dinheiro/cartão na entrega</span>';
+  }
+}
+
+async function togglePagOnline() {
+  const tid = _sessao?.tenant_id;
+  if (!tid) return;
+  const btn = document.getElementById('btn-pag-online-toggle');
+  if (btn) btn.disabled = true;
+  try {
+    const novoEstado = !_pagOnlineAtivo;
+    const r = await fetch('/api/pix/gestor-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify({ pag_online_ativo: novoEstado })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Erro ao salvar');
+    _renderPagOnlineToggle(d.pag_online_ativo !== false);
+    sbToast('ok', novoEstado ? '💳 Pagamentos online ativados!' : '🔴 Pagamentos online desativados!');
+  } catch(e) {
+    sbToast('err', 'Erro: ' + e.message);
+  } finally {
+    const btn2 = document.getElementById('btn-pag-online-toggle');
+    if (btn2) btn2.disabled = false;
+  }
+}
+
+// ── Cartão de Crédito MP ─────────────────────────────
+async function carregarCartaoMpStatus() {
+  try {
+    const r = await fetch('/api/admin/mp-config', {
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _sessao?.tenant_id }
+    });
+    if (!r.ok) return;
+    const d = await r.json();
+    const statusEl = document.getElementById('cartao-mp-status');
+    const pkStatus = document.getElementById('mp-public-key-status');
+    if (statusEl) {
+      if (d.mp_public_key_configurado) {
+        statusEl.innerHTML = '<span style="color:var(--success)">✅ Chave Pública configurada — cartão ativo no cardápio</span>';
+      } else {
+        statusEl.innerHTML = '<span style="color:var(--muted)">⚠️ Chave Pública não configurada — cartão não aparece no cardápio</span>';
+      }
+    }
+    if (pkStatus && d.mp_public_key_mascarado) {
+      pkStatus.textContent = 'Chave atual: ' + d.mp_public_key_mascarado;
+    }
+  } catch(e) {}
+}
+
+async function salvarMpPublicKey() {
+  const key = document.getElementById('mp-public-key-input')?.value.trim();
+  if (!key) { sbToast('err', 'Cole a Chave Pública do Mercado Pago'); return; }
+  if (!key.startsWith('TEST-') && !key.startsWith('APP_USR-')) {
+    sbToast('err', 'Chave inválida — deve começar com TEST- ou APP_USR-'); return;
+  }
+  try {
+    const r = await fetch('/api/admin/mp-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _sessao?.tenant_id },
+      body: JSON.stringify({ mp_public_key: key })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Erro ao salvar');
+    sbToast('ok', 'Chave Pública salva! Cartão ativo no cardápio.');
+    document.getElementById('mp-public-key-input').value = '';
+    await carregarCartaoMpStatus();
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
 }
 
@@ -8258,8 +8345,8 @@ async function cliCarregarPedidos(id) {
     return;
   }
 
-  const stLabel = { analise:'⏳ Aguardando', producao:'👨‍🍳 Preparo', pronto:'✅ Pronto', saiu:'🛵 Saiu', entregue:'🎉 Entregue', cancelado:'❌ Cancelado', finalizado:'✅ Finalizado', aguardando_pix:'⏳ Aguard. PIX' };
-  const stCor   = { analise:'var(--accent3)', producao:'var(--accent)', pronto:'var(--success)', saiu:'var(--accent2)', entregue:'var(--success)', cancelado:'var(--danger)', finalizado:'var(--success)', aguardando_pix:'var(--muted)' };
+  const stLabel = { analise:'⏳ Aguardando', producao:'👨‍🍳 Preparo', pronto:'✅ Pronto', saiu:'🛵 Saiu', entregue:'🎉 Entregue', cancelado:'❌ Cancelado', finalizado:'✅ Finalizado', aguardando_pix:'⏳ Aguard. PIX', aguardando_cartao:'💳 Aguard. Cartão' };
+  const stCor   = { analise:'var(--accent3)', producao:'var(--accent)', pronto:'var(--success)', saiu:'var(--accent2)', entregue:'var(--success)', cancelado:'var(--danger)', finalizado:'var(--success)', aguardando_pix:'var(--muted)', aguardando_cartao:'var(--muted)' };
 
   listEl.innerHTML = orders.map(o => {
     const items = Array.isArray(o.items) ? o.items : (() => { try { return JSON.parse(o.items) } catch { return [] } })();

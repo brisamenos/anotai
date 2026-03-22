@@ -347,6 +347,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const gIa  = safeJson(gCfg?.ia_config)
       const mpConfigurado = !!(gIa.mp_token || MP_TOKEN)
       const pixAtivo = ia.pix_ativo !== false
+      const pagOnlineAtivo = ia.pag_online_ativo !== false
       send(res, 200, {
         pix_ativo:           pixAtivo,
         pix_ativo_gestor:    pixAtivo,
@@ -354,7 +355,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
         taxa_pix:            gIa.taxa_pix !== undefined ? parseFloat(gIa.taxa_pix) : parseFloat(process.env.TAXA_PIX || '1.00'),
         pix_key_manual:      ia.pix_key_manual || '',
         pix_key_manual_tipo: ia.pix_key_manual_tipo || '',
-        pix_key_manual_banco:ia.pix_key_manual_banco || ''
+        pix_key_manual_banco:ia.pix_key_manual_banco || '',
+        pag_online_ativo:    pagOnlineAtivo,
       })
     } catch (e) { log('❌', '/api/pix/config erro:', e.message); send(res, 500, { error: e.message }) }
     return true
@@ -372,10 +374,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (body.pix_key_manual !== undefined)        ia.pix_key_manual       = body.pix_key_manual || ''
       if (body.pix_key_manual_tipo !== undefined)   ia.pix_key_manual_tipo  = body.pix_key_manual_tipo || ''
       if (body.pix_key_manual_banco !== undefined)  ia.pix_key_manual_banco = body.pix_key_manual_banco || ''
+      if (body.pag_online_ativo !== undefined)      ia.pag_online_ativo     = body.pag_online_ativo !== false
       db.prepare('INSERT INTO store_config (tenant_id,ia_config) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config').run(tid, JSON.stringify(ia))
       marcarDirty()
-      log('⚙️', `PIX config salva tenant=${tid} ativo=${ia.pix_ativo}`)
-      send(res, 200, { ok: true, pix_ativo: ia.pix_ativo, pix_key_manual: ia.pix_key_manual || '' })
+      log('⚙️', `PIX/pagamentos config salva tenant=${tid} pix_ativo=${ia.pix_ativo} pag_online=${ia.pag_online_ativo}`)
+      send(res, 200, { ok: true, pix_ativo: ia.pix_ativo, pix_key_manual: ia.pix_key_manual || '', pag_online_ativo: ia.pag_online_ativo !== false })
     } catch (e) { send(res, 500, { error: e.message }) }
     return true
   }
@@ -505,11 +508,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'POST' && upath === '/api/admin/mp-config') {
     if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
     const body = await readBody(req)
-    const { mp_token, taxa_pix } = body
+    const { mp_token, taxa_pix, mp_public_key } = body
     try {
       const cfgMp = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
       const cur   = cfgMp?.ia_config ? JSON.parse(cfgMp.ia_config) : {}
-      if (mp_token) cur.mp_token = mp_token
+      if (mp_token)      cur.mp_token      = mp_token
+      if (mp_public_key) cur.mp_public_key = mp_public_key
       if (taxa_pix !== undefined) cur.taxa_pix = parseFloat(taxa_pix)
       db.prepare("INSERT INTO store_config (tenant_id,ia_config) VALUES ('_global',?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config").run(JSON.stringify(cur))
       marcarDirty()
@@ -526,7 +530,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const cfg      = row?.ia_config ? JSON.parse(row.ia_config) : {}
       const mp_token = cfg.mp_token ? '••••' + cfg.mp_token.slice(-6) : ''
       const taxa_pix = cfg.taxa_pix !== undefined ? cfg.taxa_pix : TAXA_PIX
-      send(res, 200, { mp_token_mascarado: mp_token, taxa_pix, mp_configurado: !!cfg.mp_token })
+      const mp_public_key_mascarado = cfg.mp_public_key ? '••••' + cfg.mp_public_key.slice(-6) : ''
+      send(res, 200, { mp_token_mascarado: mp_token, taxa_pix, mp_configurado: !!cfg.mp_token, mp_public_key_mascarado, mp_public_key_configurado: !!cfg.mp_public_key })
     } catch (e) { send(res, 500, { error: e.message }) }
     return true
   }
@@ -694,6 +699,136 @@ module.exports = async function handleRoutes(req, res, ctx) {
     } catch (e) {
       log('❌', '/api/clientes-gestor erro:', e.message)
       send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  // ══════════════════════════════════════════════════════
+  // CARTÃO DE CRÉDITO — Mercado Pago
+  // ══════════════════════════════════════════════════════
+
+  // ── Retorna public_key para o frontend inicializar o SDK ──
+  if (req.method === 'GET' && upath === '/api/cartao/public-key') {
+    try {
+      const row = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const cfg = row?.ia_config ? JSON.parse(row.ia_config) : {}
+      const pk  = cfg.mp_public_key || ''
+      if (!pk) { send(res, 200, { ok: false, public_key: '', cartao_ativo: false }); return true }
+      send(res, 200, { ok: true, public_key: pk, cartao_ativo: true })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Cria pagamento de cartão com card_token do SDK MP ──
+  if (req.method === 'POST' && upath === '/api/cartao/criar') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    const body = await readBody(req)
+    const { card_token, payment_method_id, valor, order_id, client, email = 'cliente@email.com', issuer_id } = body
+    if (!card_token)         { send(res, 400, { error: 'card_token obrigatório' }); return true }
+    if (!payment_method_id)  { send(res, 400, { error: 'payment_method_id obrigatório' }); return true }
+    if (!valor || valor <= 0){ send(res, 400, { error: 'valor inválido' }); return true }
+
+    // Busca token MP
+    let mpToken = MP_TOKEN
+    try {
+      const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+      if (g.mp_token) mpToken = g.mp_token
+    } catch {}
+    if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago não configurado' }); return true }
+
+    const extRef = `ef-card-${tid.slice(0,8)}-${order_id || Date.now()}`
+
+    try {
+      const mpBody = {
+        transaction_amount: parseFloat(valor),
+        token:              card_token,
+        description:        `Pedido #${order_id || '?'} - ${client || 'Cliente'}`,
+        installments:       1,
+        payment_method_id,
+        external_reference: extRef,
+        payer: { email, first_name: client || 'Cliente', last_name: '' },
+      }
+      if (issuer_id) mpBody.issuer_id = issuer_id
+
+      const mp = await fetch('https://api.mercadopago.com/v1/payments', {
+        method:  'POST',
+        headers: {
+          'Content-Type':    'application/json',
+          'Authorization':   `Bearer ${mpToken}`,
+          'X-Idempotency-Key': extRef
+        },
+        body: JSON.stringify(mpBody)
+      })
+      const mpData = await mp.json()
+
+      if (!mp.ok) {
+        log('❌', 'MP Cartão erro:', mpData)
+        send(res, 400, { error: mpData.message || 'Erro ao processar cartão', cause: mpData.cause || [] })
+        return true
+      }
+
+      const statusMap = { approved: 'aprovado', rejected: 'rejeitado', cancelled: 'cancelado', in_process: 'em_processo', pending: 'pendente' }
+      const novoStatus = statusMap[mpData.status] || 'pendente'
+      const lastFour   = mpData.card?.last_four_digits || ''
+
+      db.prepare(`INSERT OR IGNORE INTO pagamentos_cartao
+        (tenant_id, order_id, mp_payment_id, mp_external_ref, valor, status, status_detail, payer_name, payer_email, last_four_digits, payment_method_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(tid, order_id || null, String(mpData.id), extRef, parseFloat(valor),
+          novoStatus, mpData.status_detail || '', client || '', email, lastFour, payment_method_id)
+
+      // Se aprovado, atualiza o pedido para 'analise'
+      if (novoStatus === 'aprovado' && order_id) {
+        db.prepare("UPDATE orders SET status='analise', pag='cartao_mp' WHERE id=? AND status='aguardando_cartao'").run(order_id)
+        marcarDirty()
+        const ord = db.prepare('SELECT * FROM orders WHERE id=?').get(order_id)
+        if (ord) {
+          const its = (() => { try { return JSON.parse(ord.items) } catch { return [] } })()
+          sseBroadcast(`orders-rt:${tid}`, 'orders:UPDATE', { ...ord, items: its, status: 'analise', pag: 'cartao_mp' })
+        }
+      }
+
+      log('💳', `Cartão ${novoStatus}: R$${valor} tenant=${tid} mp_id=${mpData.id} detail=${mpData.status_detail}`)
+      send(res, 200, {
+        ok:             novoStatus === 'aprovado',
+        mp_payment_id:  mpData.id,
+        status:         novoStatus,
+        status_detail:  mpData.status_detail || '',
+        last_four:      lastFour,
+        payment_method: payment_method_id,
+      })
+    } catch(e) {
+      log('❌', 'Cartão fetch erro:', e.message)
+      send(res, 500, { error: 'Erro ao processar pagamento: ' + e.message })
+    }
+    return true
+  }
+
+  // ── Consulta status de pagamento de cartão ──
+  if (req.method === 'GET' && upath === '/api/cartao/status') {
+    const mpId = params.get('mp_payment_id') || ''
+    if (!mpId) { send(res, 400, { error: 'mp_payment_id obrigatório' }); return true }
+    let mpToken = MP_TOKEN
+    try {
+      const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+      if (g.mp_token) mpToken = g.mp_token
+    } catch {}
+    if (!mpToken) { send(res, 400, { error: 'Token MP não configurado' }); return true }
+    try {
+      const r  = await fetch(`https://api.mercadopago.com/v1/payments/${mpId}`, { headers: { 'Authorization': `Bearer ${mpToken}` } })
+      const pd = await r.json()
+      const statusMap = { approved: 'aprovado', rejected: 'rejeitado', cancelled: 'cancelado', in_process: 'em_processo', pending: 'pendente' }
+      const novoStatus = statusMap[pd.status] || 'pendente'
+      // Atualiza banco
+      db.prepare('UPDATE pagamentos_cartao SET status=?, status_detail=?, paid_at=? WHERE mp_payment_id=?')
+        .run(novoStatus, pd.status_detail || '', pd.date_approved || null, String(mpId))
+      send(res, 200, { status: novoStatus, status_detail: pd.status_detail || '', mp_status: pd.status })
+    } catch(e) {
+      const fb = db.prepare('SELECT status,status_detail FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpId))
+      send(res, 200, { status: fb?.status || 'pendente', status_detail: fb?.status_detail || '' })
     }
     return true
   }
