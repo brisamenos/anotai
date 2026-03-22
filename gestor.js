@@ -70,8 +70,33 @@ function confirmarLogout() {
   }
 }
 
+// Garante que sys_session sempre tem tenant_id (admin-login não retorna tenant_id)
+async function _resolverTenantId() {
+  if (_sessao?.tenant_id) return; // já tem — nada a fazer
+  try {
+    const res = await fetch(`/api/sys_users?id=eq.${_sessao.id}&select=tenant_id`);
+    if (!res.ok) return;
+    const rows = await res.json();
+    const tid = Array.isArray(rows) ? rows[0]?.tenant_id : rows?.tenant_id;
+    if (!tid) return;
+    _sessao.tenant_id = tid;
+    const raw = sessionStorage.getItem('sys_session');
+    const sess = raw ? JSON.parse(raw) : {};
+    sess.tenant_id = tid;
+    sessionStorage.setItem('sys_session', JSON.stringify(sess));
+    console.log('[gestor] tenant_id resolvido e gravado na sessão:', tid);
+  } catch(e) {
+    console.warn('[gestor] _resolverTenantId falhou:', e);
+  }
+}
+
 if (!_verificarSessao()) { /* redireciona */ }
-else { _carregarPlano(); } // Busca plano real do servidor (ignora cache da sessão)
+else {
+  // Resolve tenant_id antes de qualquer coisa (pode estar ausente no login legado)
+  _resolverTenantId().then(() => {
+    _carregarPlano();
+  });
+}
 
 // ── Tenant injetado automaticamente pelo api-client.js ────
 // O shim lê tenant_id da sessionStorage e envia x-tenant-id em cada request.
@@ -6217,8 +6242,8 @@ function setChatSoundPref(id) {
   try { localStorage.setItem('ef_chat_sound', id); } catch {}
   document.querySelectorAll('.chat-sound-opt').forEach(el => {
     const active = el.dataset.sound === id;
-    el.style.borderColor    = active ? 'var(--accent)'     : 'var(--border)';
-    el.style.background     = active ? 'var(--accent-dim)' : 'var(--surface2)';
+    el.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+    el.style.background  = active ? 'var(--accent-dim)' : 'var(--surface2)';
     el.querySelector('.chat-sound-check').style.opacity = active ? '1' : '0';
   });
   if (id !== 'desligado') previewSound(id);
@@ -6254,7 +6279,6 @@ function renderChatSoundConfig() {
       </div>
     </div>`).join('');
 }
-
 
 
 // ─────────────────────────────────────────
@@ -7578,7 +7602,7 @@ loadAllData();
 // Inicia scheduler automático de aniversário
 setTimeout(_iniciarSchedulerAniversario, 3000);
 // Inicia SSE do chat de suporte
-setTimeout(chatGestorSubscribeSSE, 2000);
+setTimeout(chatGestorSubscribeSSE, 3500);
 
 // ════════════════════════════════════════════════════════
 // TEMA — Modo Escuro (navy) e Modo Claro (sidebar navy)
