@@ -146,6 +146,30 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (upath.startsWith('/api/admin-backup')) {
     if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado. Faça login no painel admin.' }); return true }
 
+    // ── Lê ia_config de um tenant (usado pelo painel IA) ──
+    if (req.method === 'GET' && upath === '/api/admin-backup/ia-config') {
+      const tid = params.get('tenant_id') || '_global'
+      try {
+        const row = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+        send(res, 200, { ia_config: row?.ia_config || null })
+      } catch(e) { send(res, 500, { error: e.message }) }
+      return true
+    }
+
+    // ── Salva ia_config de um tenant (usado pelo painel IA) ──
+    if (req.method === 'POST' && upath === '/api/admin-backup/ia-config') {
+      const tid  = params.get('tenant_id') || '_global'
+      const body = await readBody(req)
+      const { ia_config } = body
+      if (!ia_config) { send(res, 400, { error: 'ia_config obrigatório' }); return true }
+      try {
+        db.prepare("INSERT INTO store_config (tenant_id,ia_config) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config").run(tid, typeof ia_config === 'string' ? ia_config : JSON.stringify(ia_config))
+        marcarDirty()
+        send(res, 200, { ok: true })
+      } catch(e) { send(res, 500, { error: e.message }) }
+      return true
+    }
+
     // Download backup JSON
     if (req.method === 'GET' && upath === '/api/admin-backup-download') {
       fazerBackup(true)
@@ -431,16 +455,51 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const tid = req.headers['x-tenant-id']
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
     try {
-      const totalRecebido = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
-      const totalTaxas    = db.prepare("SELECT COALESCE(SUM(taxa),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+      // PIX aprovados
+      const pixRecebido  = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+      const pixTaxas     = db.prepare("SELECT COALESCE(SUM(taxa),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+      const pixCount     = db.prepare("SELECT COUNT(*) as c FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.c || 0
+      const ultimosPix   = db.prepare("SELECT * FROM pagamentos_pix WHERE tenant_id=? ORDER BY created_at DESC LIMIT 10").all(tid)
+      const pixPendentes = db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(valor),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='pendente'").get(tid)
+
+      // Cartão online aprovados (taxa = 7% já descontada na hora do pagamento)
+      const cartaoRows   = db.prepare("SELECT COALESCE(SUM(valor),0) as bruto, COUNT(*) as c FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)
+      const cartaoBruto  = cartaoRows?.bruto || 0
+      const cartaoCount  = cartaoRows?.c || 0
+      const TAXA_CARTAO  = 0.07
+      const cartaoLiq    = cartaoBruto * (1 - TAXA_CARTAO)
+      const cartaoTaxas  = cartaoBruto * TAXA_CARTAO
+      const ultimosCartao= db.prepare("SELECT * FROM pagamentos_cartao WHERE tenant_id=? ORDER BY created_at DESC LIMIT 10").all(tid)
+
+      // Total recebido = PIX líquido + Cartão líquido
+      const totalRecebido = pixRecebido + cartaoLiq
+      const totalTaxas    = pixTaxas + cartaoTaxas
+      const totalPagamentos = pixCount + cartaoCount
+
+      // Saques já solicitados/pagos
       const totalSacado   = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM saques WHERE tenant_id=? AND status IN ('pendente','aprovado','pago')").get(tid)?.v || 0
       const saldoDisp     = Math.max(0, totalRecebido - totalSacado)
-      const totalPix      = db.prepare("SELECT COUNT(*) as c FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.c || 0
-      const ultimosPix    = db.prepare("SELECT * FROM pagamentos_pix WHERE tenant_id=? ORDER BY created_at DESC LIMIT 10").all(tid)
-      const ultimosPendentes = db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(valor),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='pendente'").get(tid)
-      let taxaPorPag = 1.00
-      try { const gc = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get(); const g = gc?.ia_config ? JSON.parse(gc.ia_config) : {}; if (g.taxa_pix !== undefined) taxaPorPag = parseFloat(g.taxa_pix) || 0 } catch {}
-      send(res, 200, { saldo_disponivel: saldoDisp, total_recebido: totalRecebido, total_sacado: totalSacado, total_taxas: totalTaxas, taxa_por_pagamento: taxaPorPag, total_pagamentos: totalPix, ultimos_pagamentos: ultimosPix, pendentes_count: ultimosPendentes?.c || 0, pendentes_valor: ultimosPendentes?.v || 0 })
+
+      let taxaPix = 1.00
+      try { const gc = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get(); const g = gc?.ia_config ? JSON.parse(gc.ia_config) : {}; if (g.taxa_pix !== undefined) taxaPix = parseFloat(g.taxa_pix) || 0 } catch {}
+
+      send(res, 200, {
+        saldo_disponivel:  saldoDisp,
+        total_recebido:    totalRecebido,
+        total_sacado:      totalSacado,
+        total_taxas:       totalTaxas,
+        taxa_por_pagamento: taxaPix,
+        total_pagamentos:  totalPagamentos,
+        pix_recebido:      pixRecebido,
+        pix_count:         pixCount,
+        cartao_recebido:   cartaoLiq,
+        cartao_bruto:      cartaoBruto,
+        cartao_count:      cartaoCount,
+        ultimos_pagamentos: ultimosPix,
+        ultimos_cartao:    ultimosCartao,
+        pendentes_count:   pixPendentes?.c || 0,
+        pendentes_valor:   pixPendentes?.v || 0,
+      })
     } catch (e) { log('❌', '/api/carteira erro:', e.message); send(res, 500, { error: e.message }) }
     return true
   }
@@ -453,21 +512,34 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const body = await readBody(req)
       const { pix_key, pix_key_tipo = 'aleatoria' } = body
       if (!pix_key) { send(res, 400, { error: 'Chave PIX obrigatória' }); return true }
-      const totalRecebido = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+
+      // PIX aprovados
+      const pixLiq  = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+      // Cartão aprovados (desconta 7% taxa)
+      const cartaoB = db.prepare("SELECT COALESCE(SUM(valor),0) as v FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+      const cartaoLiq = cartaoB * 0.93
+
+      const totalRecebido = pixLiq + cartaoLiq
       const totalSacado   = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM saques WHERE tenant_id=? AND status IN ('pendente','aprovado','pago')").get(tid)?.v || 0
       const saldo = Math.max(0, totalRecebido - totalSacado)
+
       if (saldo < 1) { send(res, 400, { error: 'Saldo insuficiente para saque' }); return true }
       const jaTemPendente = db.prepare("SELECT id FROM saques WHERE tenant_id=? AND status='pendente'").get(tid)
       if (jaTemPendente) { send(res, 400, { error: 'Você já tem um saque pendente aguardando aprovação' }); return true }
-      const numPag  = db.prepare("SELECT COUNT(*) as c,COALESCE(SUM(taxa),0) as t FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)
+
+      const numPix    = db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(taxa),0) as t FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)
+      const numCartao = db.prepare("SELECT COUNT(*) as c FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)
+      const numTotal  = (numPix?.c || 0) + (numCartao?.c || 0)
+      const taxaTotal = (numPix?.t || 0) + (cartaoB * 0.07)
+
       const tenant  = db.prepare('SELECT nome FROM tenants WHERE id=?').get(tid)
       const saqInfo = db.prepare(`INSERT INTO saques (tenant_id,tenant_nome,valor_solicitado,num_pagamentos,taxa_total,valor_liquido,pix_key,pix_key_tipo)
-        VALUES (?,?,?,?,?,?,?,?)`).run(tid, tenant?.nome || tid, saldo, numPag?.c || 0, numPag?.t || 0, saldo, pix_key, pix_key_tipo)
+        VALUES (?,?,?,?,?,?,?,?)`).run(tid, tenant?.nome || tid, saldo, numTotal, taxaTotal, saldo, pix_key, pix_key_tipo)
       const saqNovo = db.prepare('SELECT * FROM saques WHERE id=?').get(saqInfo.lastInsertRowid)
       sseBroadcast('saques-admin', 'saques:INSERT', saqNovo)
       sseBroadcast(`saques-rt:${tid}`, 'saques:INSERT', saqNovo)
       marcarDirty()
-      log('💰', `Saque solicitado: R${saldo.toFixed(2)} tenant=${tid}`)
+      log('💰', `Saque solicitado: R$${saldo.toFixed(2)} tenant=${tid} (pix=${pixLiq.toFixed(2)} + cartão=${cartaoLiq.toFixed(2)})`)
       send(res, 200, { ok: true, valor: saldo, pix_key })
     } catch (e) { log('❌', '/api/saques/solicitar erro:', e.message); send(res, 500, { error: e.message }) }
     return true
