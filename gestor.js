@@ -71,30 +71,7 @@ function confirmarLogout() {
 }
 
 if (!_verificarSessao()) { /* redireciona */ }
-else {
-  // Se tenant_id não estiver na sessão (login antigo/admin), busca e grava antes de inicializar SSE
-  (async function _startup() {
-    if (!_sessao?.tenant_id) {
-      try {
-        const res = await fetch(`/api/sys_users?id=eq.${_sessao.id}&select=tenant_id`);
-        if (res.ok) {
-          const rows = await res.json();
-          const tid = Array.isArray(rows) ? rows[0]?.tenant_id : rows?.tenant_id;
-          if (tid) {
-            _sessao.tenant_id = tid;
-            const raw = sessionStorage.getItem('sys_session');
-            const sess = raw ? JSON.parse(raw) : {};
-            sess.tenant_id = tid;
-            sessionStorage.setItem('sys_session', JSON.stringify(sess));
-          }
-        }
-      } catch(e) { console.warn('[gestor] startup: falha ao resolver tenant_id', e); }
-    }
-    _carregarPlano();
-    // SSE do chat só depois de ter tenant_id garantido na sessionStorage
-    setTimeout(chatGestorSubscribeSSE, 500);
-  })();
-}
+else { _carregarPlano(); } // Busca plano real do servidor (ignora cache da sessão)
 
 // ── Tenant injetado automaticamente pelo api-client.js ────
 // O shim lê tenant_id da sessionStorage e envia x-tenant-id em cada request.
@@ -5505,210 +5482,6 @@ function clearNotifs(){
 }
 
 // ─────────────────────────────────────────
-// CHAT DE SUPORTE — GESTOR
-// ─────────────────────────────────────────
-let _chatGestorPhone   = null; // telefone da conversa aberta
-let _chatGestorMsgs    = [];
-let _chatGestorChannel = null;
-
-function openChatGestor() {
-  const overlay = document.getElementById('chat-gestor-overlay');
-  const panel   = document.getElementById('chat-gestor-panel');
-  if (overlay) overlay.style.display = 'block';
-  if (panel)   panel.style.display   = 'flex';
-  chatGestorVoltarLista();
-  chatGestorCarregarConversas();
-  chatGestorSubscribeSSE();
-  // Zera badge
-  const badge = document.getElementById('chat-unread-badge');
-  if (badge) { badge.textContent = '0'; badge.style.display = 'none'; }
-}
-
-function closeChatGestor() {
-  document.getElementById('chat-gestor-overlay').style.display = 'none';
-  document.getElementById('chat-gestor-panel').style.display   = 'none';
-}
-
-function chatGestorVoltarLista() {
-  _chatGestorPhone = null;
-  _chatGestorMsgs  = [];
-  document.getElementById('chat-gestor-lista').style.display = '';
-  document.getElementById('chat-gestor-conv').style.display  = 'none';
-  document.getElementById('chat-gestor-back').style.display  = 'none';
-  document.getElementById('chat-gestor-title').textContent   = '💬 Chat — Clientes';
-  document.getElementById('chat-gestor-sub').textContent     = 'Mensagens de suporte';
-  chatGestorCarregarConversas();
-}
-
-async function chatGestorCarregarConversas() {
-  const tid = _sessao?.tenant_id;
-  if (!tid) return;
-  const lista = document.getElementById('chat-gestor-lista');
-  try {
-    const r = await fetch('/api/chat/conversas', { headers: { 'x-tenant-id': tid } });
-    const convs = r.ok ? await r.json() : [];
-    if (!convs.length) {
-      lista.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Nenhuma mensagem de clientes ainda.</div>';
-      return;
-    }
-    // Atualiza badge total de não lidas
-    const totalUnread = convs.reduce((s, c) => s + (c.unread || 0), 0);
-    const badge = document.getElementById('chat-unread-badge');
-    if (badge) {
-      badge.textContent   = totalUnread > 9 ? '9+' : String(totalUnread);
-      badge.style.display = totalUnread > 0 ? '' : 'none';
-    }
-    lista.innerHTML = convs.map(c => `
-      <div onclick="chatGestorAbrirConversa('${_esc(c.customer_phone)}','${_esc(c.customer_name)}')"
-        style="display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s"
-        onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
-        <div style="width:40px;height:40px;border-radius:50%;background:var(--accent-g);color:#fff;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          ${(c.customer_name||'?').charAt(0).toUpperCase()}
-        </div>
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-            <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(c.customer_name||'Cliente')}</div>
-            <div style="font-size:10.5px;color:var(--muted);flex-shrink:0">${_chatGestorFmtTime(c.last_at)}</div>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:2px">
-            <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-              ${c.last_sender==='gestor'?'Você: ':''}${_esc((c.last_message||'').slice(0,50))}
-            </div>
-            ${c.unread > 0 ? `<span style="min-width:18px;height:18px;border-radius:99px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;flex-shrink:0">${c.unread}</span>` : ''}
-          </div>
-          <div style="font-size:10.5px;color:var(--muted2);margin-top:2px">📞 ${_esc(c.customer_phone||'')}</div>
-        </div>
-      </div>`).join('');
-  } catch(e) {
-    lista.innerHTML = '<div style="padding:20px;text-align:center;color:var(--danger);font-size:13px">Erro ao carregar conversas.</div>';
-  }
-}
-
-function _esc(t) { return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-function _chatGestorFmtTime(ts) {
-  try {
-    const d = new Date(ts);
-    const now = new Date();
-    const diffMs = now - d;
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1)  return 'agora';
-    if (diffMin < 60) return diffMin + 'min';
-    const diffH = Math.floor(diffMin / 60);
-    if (diffH < 24)   return diffH + 'h';
-    return d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
-  } catch { return ''; }
-}
-
-async function chatGestorAbrirConversa(phone, name) {
-  const tid = _sessao?.tenant_id;
-  if (!tid || !phone) return;
-  _chatGestorPhone = phone;
-  document.getElementById('chat-gestor-lista').style.display = 'none';
-  document.getElementById('chat-gestor-conv').style.display  = 'flex';
-  document.getElementById('chat-gestor-back').style.display  = '';
-  document.getElementById('chat-gestor-title').textContent   = name || 'Cliente';
-  document.getElementById('chat-gestor-sub').textContent     = '📞 ' + phone;
-  document.getElementById('chat-gestor-msgs').innerHTML      = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:16px">Carregando…</div>';
-  // Marca como lido
-  fetch('/api/chat/ler', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ customer_phone: phone }) });
-  try {
-    const r = await fetch(`/api/chat/historico?phone=${encodeURIComponent(phone)}`, { headers: { 'x-tenant-id': tid } });
-    _chatGestorMsgs = r.ok ? await r.json() : [];
-    _chatGestorRenderMsgs();
-  } catch(e) {}
-  setTimeout(() => {
-    const el = document.getElementById('chat-gestor-msgs');
-    if (el) el.scrollTop = el.scrollHeight;
-  }, 80);
-  document.getElementById('chat-gestor-input').focus();
-}
-
-function _chatGestorRenderMsgs() {
-  const el = document.getElementById('chat-gestor-msgs');
-  if (!el) return;
-  if (!_chatGestorMsgs.length) {
-    el.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;padding:20px">Nenhuma mensagem nesta conversa.</div>';
-    return;
-  }
-  el.innerHTML = _chatGestorMsgs.map(m => {
-    const isGestor = m.sender === 'gestor';
-    const time = (() => { try { return new Date(m.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); } catch { return ''; } })();
-    return `
-      <div style="display:flex;flex-direction:column;max-width:80%;align-self:${isGestor?'flex-end':'flex-start'};align-items:${isGestor?'flex-end':'flex-start'}">
-        <div style="padding:9px 13px;border-radius:14px;font-size:13px;line-height:1.5;word-break:break-word;
-          ${isGestor
-            ? 'background:var(--accent);color:#fff;border-bottom-right-radius:4px'
-            : 'background:var(--surface2);color:var(--text);border:1px solid var(--border);border-bottom-left-radius:4px'}">
-          ${_esc(m.message)}
-        </div>
-        <div style="font-size:10.5px;color:var(--muted);margin-top:3px;padding:0 2px">${time}</div>
-      </div>`;
-  }).join('');
-  el.scrollTop = el.scrollHeight;
-}
-
-async function chatGestorResponder() {
-  const tid   = _sessao?.tenant_id;
-  const input = document.getElementById('chat-gestor-input');
-  const msg   = input?.value.trim();
-  if (!tid || !msg || !_chatGestorPhone) return;
-  input.value = ''; input.style.height = 'auto';
-  try {
-    const r = await fetch('/api/chat/responder', {
-      method: 'POST',
-      headers: { 'Content-Type':'application/json', 'x-tenant-id': tid },
-      body: JSON.stringify({ message: msg, customer_phone: _chatGestorPhone })
-    });
-    const d = r.ok ? await r.json() : null;
-    if (d?.message) {
-      _chatGestorMsgs.push(d.message);
-      _chatGestorRenderMsgs();
-    }
-  } catch(e) { sbToast('err', 'Erro ao enviar resposta'); }
-}
-
-function chatGestorSubscribeSSE() {
-  if (_chatGestorChannel) return;
-  const tid = _sessao?.tenant_id;
-  if (!tid) return;
-  _chatGestorChannel = sb.channel('chat-gestor')
-    .on('postgres_changes', { event:'INSERT', table:'chat_messages' }, p => {
-      const msg = p.new;
-      if (!msg || msg.sender !== 'client') return;
-      // Atualiza badge
-      const badge = document.getElementById('chat-unread-badge');
-      if (badge) {
-        const cur = parseInt(badge.textContent)||0;
-        const next = cur + 1;
-        badge.textContent   = next > 9 ? '9+' : String(next);
-        badge.style.display = '';
-      }
-      // Notificação no sino
-      const nc = document.getElementById('notif-count');
-      if (nc) { const n = (parseInt(nc.textContent)||0)+1; nc.textContent=n; nc.style.display=''; }
-      const np = document.getElementById('notif-panel');
-      if (np) {
-        const item = document.createElement('div');
-        item.className = 'notif-item';
-        item.style.cssText = 'padding:10px 14px;border-bottom:1px solid var(--border);font-size:12.5px;cursor:pointer';
-        item.innerHTML = `<strong>💬 ${_esc(msg.customer_name||'Cliente')}</strong><br><span style="color:var(--muted)">${_esc((msg.message||'').slice(0,60))}</span>`;
-        item.onclick = () => { openChatGestor(); closeNotif(); chatGestorAbrirConversa(msg.customer_phone, msg.customer_name); };
-        np.appendChild(item);
-      }
-      // Se conversa está aberta com este cliente, adiciona a msg
-      if (_chatGestorPhone === msg.customer_phone) {
-        _chatGestorMsgs.push(msg);
-        _chatGestorRenderMsgs();
-        fetch('/api/chat/ler', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ customer_phone: msg.customer_phone }) });
-      }
-      // Toca som de notificação
-      try { playChatSound(); } catch(e) {}
-    })
-    .subscribe();
-}
-
-// ─────────────────────────────────────────
 // MODAL
 // ─────────────────────────────────────────
 function openModal(id){
@@ -6104,10 +5877,6 @@ let _soundPref = (() => {
   try { return localStorage.getItem('ef_sound') || 'sino'; } catch { return 'sino'; }
 })();
 
-let _chatSoundPref = (() => {
-  try { return localStorage.getItem('ef_chat_sound') || 'duplo'; } catch { return 'duplo'; }
-})();
-
 function _getAudioCtx() {
   return new (window.AudioContext || window.webkitAudioContext)();
 }
@@ -6175,14 +5944,6 @@ function playOrderSound() {
   } catch(e) {}
 }
 
-function playChatSound() {
-  if (_chatSoundPref === 'desligado') return;
-  try {
-    const ctx = _getAudioCtx();
-    (SOUNDS[_chatSoundPref] || SOUNDS.duplo)(ctx);
-  } catch(e) {}
-}
-
 function previewSound(id) {
   if (id === 'desligado') return;
   try {
@@ -6227,49 +5988,6 @@ function renderSoundConfig() {
         Ouvir
       </button>
       <div class="sound-check" style="opacity:${_soundPref===s.id?'1':'0'};color:var(--accent);transition:opacity .15s">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/>
-          <path d="M5 8l2.5 2.5L11 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </div>
-    </div>`).join('');
-}
-
-function setChatSoundPref(id) {
-  _chatSoundPref = id;
-  try { localStorage.setItem('ef_chat_sound', id); } catch {}
-  document.querySelectorAll('.chat-sound-opt').forEach(el => {
-    const active = el.dataset.sound === id;
-    el.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
-    el.style.background  = active ? 'var(--accent-dim)' : 'var(--surface2)';
-    el.querySelector('.chat-sound-check').style.opacity = active ? '1' : '0';
-  });
-  if (id !== 'desligado') previewSound(id);
-}
-
-function renderChatSoundConfig() {
-  const el = document.getElementById('cfg-chat-sound-list');
-  if (!el) return;
-  el.innerHTML = SOUND_OPTIONS.map(s => `
-    <div class="chat-sound-opt" data-sound="${s.id}"
-      onclick="setChatSoundPref('${s.id}')"
-      style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:10px;border:1.5px solid ${_chatSoundPref===s.id?'var(--accent)':'var(--border)'};background:${_chatSoundPref===s.id?'var(--accent-dim)':'var(--surface2)'};cursor:pointer;transition:all .15s;margin-bottom:8px">
-      <div style="width:34px;height:34px;border-radius:9px;background:var(--surface3);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">${s.id==='desligado'
-          ? '<line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M6 4.5V3L4 6H2v4h2l2 3V9M12 4a6 6 0 0 1 0 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>'
-          : '<path d="M3 6H1v4h2l4 3V3L3 6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 5a4 4 0 0 1 0 6M13.5 3a7 7 0 0 1 0 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'
-        }</svg>
-      </div>
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:600">${s.label}</div>
-        <div style="font-size:11.5px;color:var(--muted);margin-top:1px">${s.desc}</div>
-      </div>
-      <button onclick="event.stopPropagation();previewSound('${s.id}')"
-        style="background:var(--surface3);border:1px solid var(--border);border-radius:7px;padding:4px 10px;color:var(--muted2);font-size:11.5px;cursor:pointer;white-space:nowrap"
-        ${s.id==='desligado'?'disabled style="opacity:.3;pointer-events:none"':''}>
-        Ouvir
-      </button>
-      <div class="chat-sound-check" style="opacity:${_chatSoundPref===s.id?'1':'0'};color:var(--accent);transition:opacity .15s">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/>
           <path d="M5 8l2.5 2.5L11 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
@@ -7909,7 +7627,6 @@ async function confirmarZerarPedidos() {
 // ── Configurações ─────────────────────────────────────
 async function _renderConfiguracoes() {
   renderSoundConfig();
-  renderChatSoundConfig();
   const el = document.getElementById('cfg-prox-pedido');
   if (!el) return;
   try {

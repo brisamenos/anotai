@@ -270,21 +270,6 @@ const MIGRATIONS = [
     `CREATE INDEX IF NOT EXISTS idx_cartao_tenant ON pagamentos_cartao(tenant_id)`,
     `CREATE INDEX IF NOT EXISTS idx_cartao_status ON pagamentos_cartao(tenant_id, status)`,
   ]},
-  { version:23, description:'tabela chat_messages para suporte ao cliente', up:[
-    `CREATE TABLE IF NOT EXISTS chat_messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-      customer_id INTEGER,
-      customer_name TEXT,
-      customer_phone TEXT,
-      sender TEXT NOT NULL DEFAULT 'client',
-      message TEXT NOT NULL,
-      read_by_gestor INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now'))
-    )`,
-    `CREATE INDEX IF NOT EXISTS idx_chat_tenant ON chat_messages(tenant_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_chat_customer ON chat_messages(tenant_id, customer_phone)`,
-  ]},
 ]
 
 function runMigrations() {
@@ -313,7 +298,7 @@ runMigrations()
 // BACKUP / RESTORE
 // ════════════════════════════════════════════════════════
 const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_items',
-  'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','chat_messages']
+  'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao']
 
 let _dirty = false
 function marcarDirty() { _dirty = true }
@@ -428,7 +413,6 @@ const TABLE_CHANNELS = {
   categories:   (tid) => [`cats-rt:${tid}`, `menu-rt:${tid}`],
   garcons:      (tid) => [`orders-rt:${tid}`],
   saques:       (tid) => [`saques-rt:${tid}`, `saques-admin`],
-  chat_messages:(tid) => [`chat-rt:${tid}`, `chat-gestor:${tid}`],
   customers:    (tid) => [`customers-rt:${tid}`],
 }
 const GARCOM_PREFIXES = ['garcom-mesas-', 'garcom-orders-']
@@ -468,7 +452,6 @@ const TABLE_COLS = {
   customers:    ['id','tenant_id','name','phone','addr','orders_count','total_spent','last_order_at','email','birthday','senha_hash','cashback_saldo','created_at'],
   ratings:      ['id','tenant_id','order_id','client','phone','nota','comentario','created_at'],
   pagamentos_cartao: ['id','tenant_id','order_id','mp_payment_id','mp_external_ref','valor','status','status_detail','payer_name','payer_email','last_four_digits','payment_method_id','created_at','paid_at'],
-  chat_messages: ['id','tenant_id','customer_id','customer_name','customer_phone','sender','message','read_by_gestor','created_at'],
 }
 // Colunas que NUNCA aparecem na resposta GET — mas ainda funcionam como filtro WHERE e em escrita
 const STRIP_FROM_OUTPUT = {
@@ -485,7 +468,7 @@ const JSON_FIELDS = {
   store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config','cashback_config','tipos_entrega']),
 }
 const BOOL_FIELDS  = new Set(['ativo','store_open','caixa_open','destaque'])
-const SSE_TABLES   = new Set(['orders','mesas','store_config','menu_items','categories','garcons','customers','chat_messages'])
+const SSE_TABLES   = new Set(['orders','mesas','store_config','menu_items','categories','garcons','customers'])
 
 function jsonParse(v) { if(typeof v!=='string')return v; try{return JSON.parse(v)}catch{return v} }
 
@@ -1113,7 +1096,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/fidelidade/sync','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/chat/enviar','/api/chat/responder','/api/chat/historico','/api/chat/conversas','/api/chat/ler'])
+  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/fidelidade/sync','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return
