@@ -1174,7 +1174,9 @@ function renderKanban(){
           const p = o.pag || '';
           if (p === 'pix_mp' || p === 'pix') return '<div class="oc-pag-badge oc-pag-pix">&#9889; PAGO PIX</div>';
           if (p === 'pix_manual') return '<div class="oc-pag-badge oc-pag-pix-pendente">&#9203; PIX PENDENTE</div>';
-          if (p === 'cartao' || p === 'credito' || p === 'debito' || p === 'cartao_mp')  return '<div class="oc-pag-badge oc-pag-cartao">&#128179; CARTÃO</div>';
+          if (p === 'cartao' || p === 'credito')   return '<div class="oc-pag-badge oc-pag-cartao">💳 CRÉDITO</div>';
+          if (p === 'debito')                        return '<div class="oc-pag-badge oc-pag-cartao">🏧 DÉBITO</div>';
+          if (p === 'cartao_mp')                     return '<div class="oc-pag-badge oc-pag-cartao" style="background:rgba(34,197,94,.12);color:var(--success)">💳 CRÉD. ONLINE</div>';
           if (p === 'dinheiro') {
             var tr = '';
             if (o.troco > 0) tr = ' &middot; Troco p/ R$' + parseFloat(o.troco).toFixed(2).replace('.',',');
@@ -1285,9 +1287,16 @@ function openOrderDetail(id) {
 
   // Pagamento
   const pagLabel = {
-    dinheiro:'💵 Dinheiro', pix:'💠 PIX', pix_mp:'💠 PIX (Mercado Pago)',
-    cartao:'💳 Cartão', credito:'💳 Crédito', debito:'💳 Débito', cartao_mp:'💳 Cartão (Mercado Pago)', mesa:'🪑 Fechamento Mesa'
+    dinheiro:'💵 Dinheiro', pix:'💠 PIX Online', pix_manual:'💠 PIX', pix_mp:'💠 PIX Online',
+    cartao:'💳 Cartão', credito:'💳 Crédito', debito:'💳 Débito',
+    cartao_mp:'💳 Crédito Online', mesa:'🪑 Fechamento Mesa'
   }[(o.pag||'').toLowerCase()] || o.pag || '—';
+  // Adiciona indicador de quando foi/será pago
+  const momento = o.pag_momento || (
+    (o.pag||'').includes('mp') || (o.pag||'').includes('pix') ? 'online' : 'entrega'
+  );
+  if (momento === 'online') pagLabel += ' <span style="font-size:10px;background:rgba(34,197,94,.15);color:#16a34a;padding:1px 6px;border-radius:99px;font-weight:700">✓ PAGO</span>';
+  else if (o.pag !== 'dinheiro' && o.pag !== 'mesa') pagLabel += ' <span style="font-size:10px;background:rgba(245,158,11,.15);color:#b45309;padding:1px 6px;border-radius:99px;font-weight:700">NA ENTREGA</span>';
   setEl('od-pag', pagLabel);
   setEl('od-pag-sub', o.pag === 'dinheiro' || o.pag === 'Dinheiro'
     ? (o.troco > 0 ? 'Troco: ' + fmt(o.troco) : 'Valor exato') : '');
