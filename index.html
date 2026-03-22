@@ -2248,6 +2248,7 @@ async function init() {
     renderMenu();
     subscribeRealtime();
     loadCustomerSession();
+    if (_customer) chatSubscribeSSE(); // _tenantId já está definido aqui
     setupPlanFeatures();
     applyTiposEntrega();
     applyDeliveryInfo();
@@ -2408,7 +2409,6 @@ function loadCustomerSession() {
     if (saved && saved.id && saved.token) _customer = saved;
   } catch(e) {}
   updateProfileFab();
-  if (_customer && _tenantId) chatSubscribeSSE();
 }
 
 function updateProfileFab() {
@@ -4864,8 +4864,7 @@ function chatSubscribeSSE() {
     .on('postgres_changes', { event: 'INSERT', table: 'chat_messages' }, p => {
       const msg = p.new;
       if (!msg || msg.sender !== 'gestor') return;
-      // Filtra apenas mensagens para este cliente
-      if (_customer && msg.customer_phone && msg.customer_phone !== _customer.phone) return;
+      if (_customer?.phone && msg.customer_phone && msg.customer_phone !== _customer.phone) return;
       _chatMsgs.push(msg);
       _chatRenderMsgs();
       if (!_chatOpen) {
@@ -4889,7 +4888,7 @@ function _playChatNotifSound() {
       g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + s + d);
       o.start(ctx.currentTime + s); o.stop(ctx.currentTime + s + d + 0.01);
     };
-    t(1046, 0,    0.22, 0.25);
+    t(1046, 0, 0.22, 0.25);
     t(1318, 0.28, 0.25, 0.22);
   } catch(e) {}
 }
