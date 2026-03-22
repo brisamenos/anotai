@@ -8260,103 +8260,41 @@ async function deleteCliente() {
 
 // ── Fim CLIENTES ─────────────────────────────────────
 
-// ═══════════════════════════════════════════════════════
-// MOBILE NAV
-// ═══════════════════════════════════════════════════════
-
-// Map of nav id → which bottom tab to highlight
-const MOB_TAB_MAP = {
-  'pedidos':      'pedidos',
-  'pedidos-mesa': 'pedidos',
-  'gestor':       'cardapio',
-  'gestor-main':  'cardapio',
-  'edicao':       'cardapio',
-  'imagens':      'cardapio',
-  'potencializador': 'cardapio',
-  'taxa':         'cardapio',
-  'cardapio-publico': 'cardapio',
-  'tema':         'cardapio',
-  'pdv':          'pdv',
-  'pdv-balcao':   'pdv',
-  'relatorios':   'relatorios',
-  'desempenho':   'relatorios',
-  'satisfacao':   'relatorios',
+// ── Mobile Nav ────────────────────────────────────────────────
+const _MOB_TABS = {
+  pedidos: 'pedidos', 'pedidos-mesa': 'pedidos',
+  gestor: 'cardapio', 'gestor-main': 'cardapio', edicao: 'cardapio',
+  imagens: 'cardapio', potencializador: 'cardapio', taxa: 'cardapio',
+  'cardapio-publico': 'cardapio', tema: 'cardapio',
+  'pdv-balcao': 'pdv', pdv: 'pdv',
+  relatorios: 'relatorios', desempenho: 'relatorios', satisfacao: 'relatorios',
 };
 
-function mobSetActiveTab(pageId) {
-  const tab = MOB_TAB_MAP[pageId] || null;
-  ['pedidos','cardapio','pdv','relatorios'].forEach(t => {
+function mobNav(id) {
+  nav(id);
+  ['pedidos','cardapio','pdv','relatorios','menu'].forEach(t => {
     const el = document.getElementById('mob-tab-' + t);
-    if (el) el.classList.toggle('active', t === tab);
+    if (el) el.classList.toggle('active', _MOB_TABS[id] === t);
   });
-  // menu tab active for everything else
-  const menuTab = document.getElementById('mob-tab-menu');
-  if (menuTab) menuTab.classList.toggle('active', !tab && pageId !== 'pedidos');
 }
-
-function mobNav(pageId) {
-  nav(pageId);
-  mobSetActiveTab(pageId);
+function mobDrawerOpen() {
+  document.getElementById('mob-drawer')?.classList.add('open');
+  document.getElementById('mob-overlay')?.classList.add('on');
 }
-
-function mobNavClose(pageId) {
-  mobCloseDrawer();
-  mobNav(pageId);
+function mobDrawerClose() {
+  document.getElementById('mob-drawer')?.classList.remove('open');
+  document.getElementById('mob-overlay')?.classList.remove('on');
 }
-
-function mobToggleDrawer() {
-  const drawer  = document.getElementById('mob-drawer');
-  const overlay = document.getElementById('mob-drawer-overlay');
-  if (!drawer) return;
-  const isOpen = drawer.classList.contains('open');
-  if (isOpen) {
-    mobCloseDrawer();
-  } else {
-    drawer.classList.add('open');
-    overlay.classList.add('on');
-    document.body.style.overflow = 'hidden';
-  }
+function mobNavDrawer(id) {
+  mobDrawerClose();
+  mobNav(id);
 }
-
-function mobCloseDrawer() {
-  const drawer  = document.getElementById('mob-drawer');
-  const overlay = document.getElementById('mob-drawer-overlay');
-  if (drawer)  drawer.classList.remove('open');
-  if (overlay) overlay.classList.remove('on');
-  document.body.style.overflow = '';
-}
-
-// Sync bottom nav badge with main pedidos badge
-function mobSyncBadge() {
-  const mainBadge = document.getElementById('pedidos-badge');
-  const mobBadge  = document.getElementById('mob-badge-pedidos');
-  if (!mobBadge) return;
-  const count = mainBadge ? mainBadge.textContent.trim() : '';
-  if (count && count !== '0') {
-    mobBadge.textContent  = count;
-    mobBadge.style.display = 'flex';
-  } else {
-    mobBadge.style.display = 'none';
-  }
-}
-
-// Observe badge changes to sync
-(function() {
-  const mainBadge = document.getElementById('pedidos-badge');
-  if (mainBadge && window.MutationObserver) {
-    new MutationObserver(mobSyncBadge).observe(mainBadge, { childList: true, characterData: true, subtree: true });
-  }
-})();
-
-// Hook into nav() to update mobile tab state
-const _origNav = nav;
-(function() {
-  const _patchNav = function(id) {
-    _origNav(id);
-    mobSetActiveTab(id);
-  };
-  window.nav = _patchNav;
-})();
-
-// Init on load
-mobSetActiveTab('pedidos');
+// Sync badge
+setInterval(() => {
+  const src = document.getElementById('pedidos-badge');
+  const dst = document.getElementById('mob-badge');
+  if (!dst) return;
+  const v = src?.textContent?.trim();
+  dst.style.display = v && v !== '0' ? 'flex' : 'none';
+  if (dst.style.display !== 'none') dst.textContent = v;
+}, 1000);
