@@ -375,7 +375,7 @@ function _renderMesaPageFromCache() {
   elv('pm-stat-aguardando',tables.filter(t => t.status === 'waiting').length);
 
   if (!activeTables.length) {
-    grid.innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted);font-size:13px"><div style="font-size:40px;margin-bottom:12px">🍽️</div>Nenhuma mesa ocupada no momento</div>';
+    grid.innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted);font-size:13px"><div><div style="margin:0 auto 10px;text-align:center"><svg width="40" height="40" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;opacity:.25"><path d="M5 2h6v6a3 3 0 0 1-6 0V2z" stroke="currentColor" stroke-width="1.2"/><path d="M2 2h3M11 2h3M2 5H5M11 5h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M8 8v4M5.5 14h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></div><div style="display:none"></div>Nenhuma mesa ocupada no momento</div>';
     return;
   }
 
@@ -435,7 +435,7 @@ function subscribeOrders() {
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
-        showToast('🛎️', `Novo pedido #${_orderNum(p.new.id)} — ${p.new.client}`);
+        showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${_orderNum(p.new.id)} — ${p.new.client}`);
         sendBrowserNotif(`🛎️ Novo pedido #${_orderNum(p.new.id)}`, `${p.new.client} — ${items}`);
         // Auto-aceitar se ativado e pedido em análise
         if (_autoAcceptOn && p.new.status === 'analise') {
@@ -464,7 +464,7 @@ function subscribeOrders() {
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
-        showToast('💳', `PIX confirmado! Pedido #${_orderNum(p.new.id)} — ${p.new.client}`);
+        showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg>', `PIX confirmado! Pedido #${_orderNum(p.new.id)} — ${p.new.client}`);
         sendBrowserNotif(`💳 PIX confirmado! #${_orderNum(p.new.id)}`, `${p.new.client} — ${items}`);
         if (_autoAcceptOn) setTimeout(() => advanceOrderById(p.new.id), 800);
         if (_printMode === 'auto') printOrder(mapOrder(p.new));
@@ -473,7 +473,7 @@ function subscribeOrders() {
       if (idx !== -1) {
         if (['entregue','cancelado'].includes(p.new.status)) {
           if (p.new.status === 'cancelado') {
-            showToast('❌', `Pedido #${_orderNum(p.new.id)} cancelado pelo cliente — ${p.new.client}`);
+            showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>', `Pedido #${_orderNum(p.new.id)} cancelado pelo cliente — ${p.new.client}`);
             sendBrowserNotif(`❌ Pedido cancelado pelo cliente`, `#${_orderNum(p.new.id)} — ${p.new.client}`);
           }
           ordersKanban.splice(idx, 1);
@@ -578,7 +578,7 @@ setInterval(async () => {
             const nc = document.getElementById('notif-count');
             if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
             const items = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
-            showToast('🛎️', `Novo pedido #${o.num} — ${o.client}`);
+            showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${o.num} — ${o.client}`);
             sendBrowserNotif(`🛎️ Novo pedido #${o.num}`, `${o.client} — ${items}`);
             if (_autoAcceptOn && o.status === 'analise') setTimeout(() => advanceOrderById(o.id), 800);
             if (_printMode === 'auto') printOrder(mapOrder(o));
@@ -710,10 +710,10 @@ function _toastUpgradePlano() {
         ">
           <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.35);letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px;">Plano Pro</div>
           <div style="font-size:12px;color:rgba(255,255,255,.5);line-height:1.8;">
-            ✅ Pedidos<br>
-            ✅ Cardápio<br>
-            ✅ Mesas & PDV<br>
-            ❌ Robô WhatsApp
+            Pedidos<br>
+            Cardápio<br>
+            Mesas & PDV<br>
+            <span style="opacity:.4">Robô WhatsApp</span>
           </div>
         </div>
         <div style="
@@ -730,10 +730,10 @@ function _toastUpgradePlano() {
           ">ATUAL</div>
           <div style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px;">⭐ Premium</div>
           <div style="font-size:12px;color:rgba(255,255,255,.7);line-height:1.8;">
-            ✅ Pedidos<br>
-            ✅ Cardápio<br>
-            ✅ Mesas & PDV<br>
-            ✅ <strong style="color:#a78bfa">Robô WhatsApp</strong>
+            Pedidos<br>
+            Cardápio<br>
+            Mesas & PDV<br>
+            <strong style="color:#a78bfa">Robô WhatsApp</strong>
           </div>
         </div>
       </div>
@@ -754,7 +754,7 @@ function _toastUpgradePlano() {
       onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 10px 28px rgba(124,58,237,.6)'"
       onmouseout="this.style.transform='';this.style.boxShadow='0 6px 20px rgba(124,58,237,.45)'"
       >
-        🚀 Fazer Upgrade para Premium
+        Fazer Upgrade para Premium
       </button>
       <button onclick="document.getElementById('upgrade-modal-overlay').remove()" style="
         width:100%;padding:10px;border-radius:11px;border:1px solid rgba(255,255,255,.1);
@@ -959,7 +959,7 @@ async function confirmarPagamentoPix(id) {
     });
     if (!res.ok) throw new Error('Erro');
     if (o) o.pag = 'pix_mp';
-    sbToast('ok', `✅ Pagamento PIX do pedido #${o.num} confirmado!`);
+    sbToast('ok', `Pagamento PIX do pedido #${o.num} confirmado!`);
     renderKanban();
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
   sbLoading(false);
@@ -1206,47 +1206,114 @@ function renderKanban(){
   document.getElementById('pedidos-badge').textContent=ordersKanban.filter(o=>o.status==='analise').length||'';
 }
 
-function openOrderDetail(id){
-  const o=ordersKanban.find(x=>x.id===id);
-  if(!o) return;
-  document.getElementById('od-id').textContent='Pedido #'+o.num;
-  const bdg=o.status==='analise'?['badge-analise','Em análise']:o.status==='producao'?['badge-producao','Em produção']:['badge-pronto','Pronto para entrega'];
-  const el=document.getElementById('od-status-badge');
-  el.className='od-status-badge '+bdg[0];el.textContent=bdg[1];
-  document.getElementById('od-timer').innerHTML='<svg width=\"13\" height=\"13\" viewBox=\"0 0 16 16\" fill=\"none\" style=\"display:inline-block;vertical-align:middle\" xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"8\" cy=\"9\" r=\"5\" stroke=\"currentColor\" stroke-width=\"1.4\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M8 6.5V9l1.5 1.5\" stroke=\"currentColor\" stroke-width=\"1.4\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M6 2h4M8 2v2\" stroke=\"currentColor\" stroke-width=\"1.4\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg> '+o.time;
-  document.getElementById('od-client-name').textContent=o.client;
-  document.getElementById('od-client-phone').textContent=o.phone||o.addr||'';
-  document.getElementById('od-items-list').innerHTML=o.items.map(item=>`
+function openOrderDetail(id) {
+  const o = ordersKanban.find(x => x.id === id);
+  if (!o) return;
+  window._currentDetailId = id;
+
+  // Número e status
+  document.getElementById('od-id').textContent = 'Pedido #' + o.num;
+  const statusMap = {
+    analise:   ['badge-analise',   'Em análise'],
+    producao:  ['badge-producao',  'Em produção'],
+    pronto:    ['badge-pronto',    'Pronto para entrega'],
+    saiu:      ['badge-pronto',    'Saiu para entrega'],
+    entregue:  ['badge-pronto',    'Entregue'],
+    finalizado:['badge-pronto',    'Finalizado'],
+    cancelado: ['badge-analise',   'Cancelado'],
+  };
+  const [cls, lbl] = statusMap[o.status] || ['badge-analise', o.status];
+  const badgeEl = document.getElementById('od-status-badge');
+  badgeEl.className = 'od-status-badge ' + cls;
+  badgeEl.textContent = lbl;
+
+  // Horário
+  document.getElementById('od-timer').textContent = o.time || '';
+
+  // Itens
+  document.getElementById('od-items-list').innerHTML = (o.items || []).map(item => `
     <div class="od-item-row">
       <div class="od-item-qty">${item.qty}x</div>
-      <div><div class="od-item-name">${item.name}</div>${item.obs?`<div class="od-item-obs">Observação: ${item.obs}</div>`:''}</div>
-      <div class="od-item-price">R$ ${(item.price).toFixed(2).replace('.',',')}</div>
-    </div>
-    <div class="od-subtotal-row" style="padding:4px 0 8px"><span style="padding-left:32px">Subtotal</span><span>R$ ${(item.qty*item.price).toFixed(2).replace('.',',')}</span></div>
-  `).join('');
-  document.getElementById('od-subtotal').textContent='R$ '+o.total.toFixed(2).replace('.',',');
-  document.getElementById('od-total').textContent='R$ '+(o.total+o.taxa).toFixed(2).replace('.',',');
+      <div style="flex:1">
+        <div class="od-item-name">${item.name}</div>
+        ${item.obs ? `<div class="od-item-obs">Obs: ${item.obs}</div>` : ''}
+        ${Array.isArray(item.extras) && item.extras.length ? `<div class="od-item-obs">+ ${item.extras.join(', ')}</div>` : ''}
+      </div>
+      <div class="od-item-price">R$&nbsp;${(item.price).toFixed(2).replace('.', ',')}</div>
+    </div>`).join('');
+
+  // Totais
+  const fmt = v => 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ',');
+  document.getElementById('od-subtotal').textContent = fmt(o.total);
+  document.getElementById('od-total').textContent    = fmt(o.total + o.taxa);
+
+  const taxaRow = document.getElementById('od-taxa-row');
+  if (taxaRow) {
+    taxaRow.style.display = o.taxa > 0 ? '' : 'none';
+    const taxaEl = document.getElementById('od-taxa-val');
+    if (taxaEl) taxaEl.textContent = fmt(o.taxa);
+  }
+
   // Troco
   const trocoRow = document.getElementById('od-troco-row');
   if (trocoRow) {
-    if (o.pag === 'dinheiro') {
+    if (o.pag === 'dinheiro' || o.pag === 'Dinheiro') {
       trocoRow.style.display = '';
       trocoRow.innerHTML = o.troco > 0
-        ? `<span>💵 Troco para</span><span style="color:var(--amber);font-weight:700">R$ ${parseFloat(o.troco).toFixed(2).replace('.',',')}</span>`
+        ? `<span>Troco para</span><span style="color:var(--accent3);font-weight:600">${fmt(o.troco)}</span>`
         : o.troco === -1
-        ? `<span>💵 Precisa de troco</span><span style="color:var(--amber)">Valor não informado</span>`
-        : `<span>💵 Sem troco</span><span style="color:var(--muted)">Valor exato</span>`;
+        ? `<span>Troco solicitado</span><span style="color:var(--muted)">Valor não informado</span>`
+        : `<span>Sem troco</span><span style="color:var(--muted)">Valor exato</span>`;
     } else {
       trocoRow.style.display = 'none';
     }
   }
+
+  // Dados do cliente
+  const setEl = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v || ''; };
+  setEl('od-client-name',  o.client || 'Não informado');
+  setEl('od-client-phone', o.phone  || '');
+
+  // Tipo de entrega
+  const isMesa     = !!(o.mesa_num || (o.addr || '').startsWith('Mesa'));
+  const isBalcao   = !isMesa && (o.addr || '').toLowerCase().includes('balc');
+  const tipoLabel  = isMesa ? '🪑 Mesa ' + (o.mesa_num || '') : isBalcao ? '🏪 Balcão / Retirada' : '🛵 Delivery';
+  setEl('od-tipo',  tipoLabel);
+  setEl('od-addr',  !isMesa && !isBalcao ? (o.addr || '') : o.garcom_nome ? 'Garçom: ' + o.garcom_nome : '');
+
+  // Pagamento
+  const pagLabel = {
+    dinheiro:'💵 Dinheiro', pix:'💠 PIX', pix_mp:'💠 PIX (Mercado Pago)',
+    cartao:'💳 Cartão', credito:'💳 Crédito', debito:'💳 Débito', mesa:'🪑 Fechamento Mesa'
+  }[(o.pag||'').toLowerCase()] || o.pag || '—';
+  setEl('od-pag', pagLabel);
+  setEl('od-pag-sub', o.pag === 'dinheiro' || o.pag === 'Dinheiro'
+    ? (o.troco > 0 ? 'Troco: ' + fmt(o.troco) : 'Valor exato') : '');
+
+  // Origem
+  const origemEl = document.getElementById('od-origem-row');
+  if (origemEl) {
+    origemEl.innerHTML = o.garcom_nome
+      ? `<span style="color:var(--purple)">👨‍💼 Pedido via Garçom — ${o.garcom_nome}</span>`
+      : `<span>🌐 Pedido via Cardápio Digital</span>`;
+  }
+
   openModal('modal-order-detail');
-  window._currentDetailId=id;
 }
 
-function advanceOrder(){
-  const id=window._currentDetailId;
+function advanceOrder() {
+  const id = window._currentDetailId;
   advanceOrderById(id);
+  closeModal('modal-order-detail');
+}
+
+function cancelarPedidoDetalhe() {
+  const id = window._currentDetailId;
+  if (!id) return;
+  const o = ordersKanban.find(x => x.id === id);
+  if (!o) return;
+  if (!confirm('Cancelar o Pedido #' + o.num + '? Esta ação não pode ser desfeita.')) return;
+  cancelOrderById(id);
   closeModal('modal-order-detail');
 }
 
@@ -1416,14 +1483,15 @@ async function createOrder() {
   if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
   closeModal('modal-new-order');
   nav('pedidos');
-  sbToast('ok', `Pedido #${_orderNum(orderData.id)} criado! ✅`);
+  sbToast('ok', `Pedido #${_orderNum(orderData.id)} criado`));
 }
 
-function printOrderDetail(){
-  const id=window._currentDetailId;
-  const o=ordersKanban.find(x=>x.id===id);
-  if(!o) return;
-  showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><rect x=&quot;3&quot; y=&quot;2&quot; width=&quot;10&quot; height=&quot;4&quot; rx=&quot;1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><rect x=&quot;3&quot; y=&quot;10&quot; width=&quot;10&quot; height=&quot;4&quot; rx=&quot;1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><circle cx=&quot;12&quot; cy=&quot;8&quot; r=&quot;.6&quot; fill=&quot;currentColor&quot;/></svg>','Imprimindo comanda do pedido #'+_orderNum(id));
+function printOrderDetail() {
+  const id = window._currentDetailId;
+  const o  = ordersKanban.find(x => x.id === id);
+  if (!o) return;
+  printOrder(o);
+  sbToast('ok', 'Imprimindo comanda do Pedido #' + o.num);
 }
 
 // ─────────────────────────────────────────
@@ -1836,7 +1904,7 @@ async function excluirTodoCardapio() {
     renderGestor();
     renderTable();
     populateCatSelects();
-    sbToast('ok', '🗑️ Cardápio excluído com sucesso.');
+    sbToast('ok', 'Cardápio excluído com sucesso.');
   } catch(e) {
     sbToast('err', 'Erro ao excluir: ' + e.message);
     console.error('[excluirTodoCardapio]', e);
@@ -1957,9 +2025,9 @@ async function aplicarModelo() {
     populateCatSelects();
 
     if (erros > 0) {
-      sbToast('err', `⚠️ Modelo aplicado com ${erros} erro(s). ${catsCriadas} cat · ${itensCriados} itens criados.`);
+      sbToast('err', `Modelo aplicado com ${erros} erro(s). ${catsCriadas} cat · ${itensCriados} itens criados.`);
     } else {
-      sbToast('ok', `✅ Modelo "${modelo.label}" aplicado! ${catsCriadas} categorias · ${itensCriados} itens criados.`);
+      sbToast('ok', `Modelo "${modelo.label}" aplicado! ${catsCriadas} categorias · ${itensCriados} itens criados.`);
     }
 
   } catch(e) {
@@ -2019,7 +2087,7 @@ function exportarCardapio() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    sbToast('ok', `📥 Cardápio exportado com ${categories.length} categoria(s)!`);
+    sbToast('ok', `Cardápio exportado com ${categories.length} categoria(s)!`);
   } catch(e) {
     sbToast('err', 'Erro ao exportar: ' + e.message);
     console.error(e);
@@ -2168,7 +2236,7 @@ function renderGestor(){
               </div>
               <div style="display:flex;gap:4px;flex-shrink:0">
                 <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();duplicateItem(+this.dataset.id)" title="Duplicar item">⎘</button>
-                <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();openEditItem(+this.dataset.id)">✏️ Editar</button>
+                <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();openEditItem(+this.dataset.id)">Editar</button>
               </div>
             </div>
           `).join('')}
@@ -2252,7 +2320,7 @@ async function duplicateCategory(id) {
     }
 
     renderGestor(); renderTable(); populateCatSelects();
-    sbToast('ok', `📋 "${novoLabel}" criada com ${itensCriados} item(s) duplicado(s)!`);
+    sbToast('ok', `"${novoLabel}" criada com ${itensCriados} item(s) duplicado(s)!`);
   } catch(e) {
     sbToast('err', 'Erro ao duplicar categoria: ' + e.message);
   } finally {
@@ -2288,7 +2356,7 @@ async function duplicateItem(id) {
     if (error || !newItem) throw new Error(error?.message || 'Resposta inválida');
     items.push(mapItem(newItem));
     renderGestor(); renderTable();
-    sbToast('ok', `📋 "${it.name}" duplicado!`);
+    sbToast('ok', `"${it.name}" duplicado!`);
   } catch(e) {
     sbToast('err', 'Erro ao duplicar item: ' + e.message);
   } finally {
@@ -2418,7 +2486,7 @@ function renderTable(){
       <td style="color:var(--muted);font-size:12px">${item.cat}</td>
       <td><div class="dps">${item.days.map((on,i)=>`<div class="dp${on?' on':''}" onclick="toggleDay(${item.id},${i},this)">${DAYS[i]}</div>`).join('')}</div></td>
       <td><div class="stbadge ${scClass(item.status)}" onclick="cycleStatus(${item.id},this)"><div class="stdot"></div>&nbsp;${scLabel(item.status)}</div></td>
-      <td><button class="btn bg" style="font-size:10.5px;padding:3px 8px" onclick="openEditItem(${item.id})">✏️ Editar</button></td>
+      <td><button class="btn bg" style="font-size:10.5px;padding:3px 8px" onclick="openEditItem(${item.id})">Editar</button></td>
     </tr>`).join('');
 }
 
@@ -2774,7 +2842,7 @@ function applyBulk(){
   });
   closeModal('modal-bulk');
   renderTable();
-  showToast('⚡',`Ação aplicada em ${checked.length} item(s)!`);
+  showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',`Ação aplicada em ${checked.length} item(s)!`);
 }
 
 // ─────────────────────────────────────────
@@ -2842,7 +2910,7 @@ function addToCart(id){
   if(ci) ci.qty++;
   else cartItems.push({...it,qty:1});
   renderCart();
-  showToast('🛒',`${it.name} adicionado!`);
+  showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>',`${it.name} adicionado!`);
 }
 
 function renderCart(){
@@ -3035,7 +3103,7 @@ function openEditMesa(num) {
   document.getElementById('edit-mesa-old-num').value  = num;
   document.getElementById('edit-mesa-num').value      = num;
   document.getElementById('edit-mesa-guests').value   = t.guests || '';
-  document.getElementById('modal-edit-mesa-title').textContent = `✏️ Editar Mesa ${num}`;
+  document.getElementById('modal-edit-mesa-title').textContent = `Mesa ${num}`;
   openModal('modal-edit-mesa');
 }
 
@@ -3108,7 +3176,7 @@ async function renderMesasPage() {
 
   const activeTables = tables.filter(t => t.status !== 'free');
   if (!activeTables.length) {
-    grid.innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted);font-size:13px"><div style="font-size:40px;margin-bottom:12px">🍽️</div>Nenhuma mesa ocupada no momento</div>';
+    grid.innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted);font-size:13px"><div><div style="margin:0 auto 10px;text-align:center"><svg width="40" height="40" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;opacity:.25"><path d="M5 2h6v6a3 3 0 0 1-6 0V2z" stroke="currentColor" stroke-width="1.2"/><path d="M2 2h3M11 2h3M2 5H5M11 5h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M8 8v4M5.5 14h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></div><div style="display:none"></div>Nenhuma mesa ocupada no momento</div>';
     return;
   }
 
@@ -3237,7 +3305,7 @@ function renderMesaCard(t, orders) {
         <div style="font-family:'Playfair Display',sans-serif;font-size:20px;font-weight:900">Mesa ${t.num}</div>
         ${t.guests ? `<span style="font-size:11.5px;color:var(--muted)">${t.guests} pessoas</span>` : ''}
         ${statusLabel}
-        <button onclick="event.stopPropagation();openEditMesa(${t.num})" style="margin-left:4px;background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--muted);cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif" title="Editar mesa">✏️</button>
+        <button onclick="event.stopPropagation();openEditMesa(${t.num})" style="margin-left:4px;background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--muted);cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif" title="Editar mesa"></button>
       </div>
       <div style="font-family:'Playfair Display',sans-serif;font-size:20px;font-weight:900;color:var(--accent3)">R$ ${displayTotal.toFixed(2).replace('.', ',')}</div>
     </div>
@@ -3274,7 +3342,7 @@ async function mesaServOrder(id) {
     mesaOrdersCache   = mesaOrdersCache.filter(x => x.id !== id);
     renderKanban();
     _renderMesaPageFromCache();
-    sbToast('ok', 'Pedido entregue ✓');
+    sbToast('ok', 'Pedido entregue');
   } catch(e) { sbToast('err', 'Erro ao atualizar pedido: ' + e.message); }
 }
 
@@ -3320,7 +3388,7 @@ function renderCupons(){
     </div>`).join('');
 }
 
-function toggleCupom(i){cupons[i].ativo=!cupons[i].ativo;renderCupons();showToast(cupons[i].ativo?'✅':'⏸️',`Cupom ${cupons[i].code} ${cupons[i].ativo?'ativado':'pausado'}!`);}
+function toggleCupom(i){cupons[i].ativo=!cupons[i].ativo;renderCupons();showToast('ok',`Cupom ${cupons[i].code} ${cupons[i].ativo?'ativado':'pausado'}!`);}
 async function deleteCupom(idx) {
   const c = cupons[idx];
   if (!c) return;
@@ -3458,7 +3526,7 @@ async function confirmAddPts() {
   closeModal('modal-add-pts');
   renderFidelidade();
   sbToast('ok', `+${qty} pontos para ${cl.name}!`);
-  if (newPts >= cl.max) sbToast('ok', `🎁 ${cl.name} pode resgatar a recompensa!`);
+  if (newPts >= cl.max) sbToast('ok', `${cl.name} pode resgatar a recompensa!`);
 }
 
 function openResgatar(id, name, pts, max) {
@@ -3479,7 +3547,7 @@ async function confirmResgatar() {
   cl.resgates = (cl.resgates||0)+1;
   closeModal('modal-resgatar');
   renderFidelidade();
-  sbToast('ok', `🎁 Recompensa resgatada para ${cl.name}!`);
+  sbToast('ok', `Recompensa resgatada para ${cl.name}!`);
 }
 
 async function addFidClient() {
@@ -3517,8 +3585,8 @@ async function _autoAddFidPoints(clientPhone, totalVal) {
   const newPts = cl.pts + pts;
   await sb.from('fidelidade').update({ pts: newPts, orders_count: cl.orders+1 }).eq('id', cl.id);
   cl.pts = newPts; cl.orders++;
-  sbToast('ok', `⭐ +${pts} pontos fidelidade para ${cl.name}`);
-  if (newPts >= cl.max) sbToast('ok', `🎁 ${cl.name} atingiu a recompensa!`);
+  sbToast('ok', `+${pts} pontos fidelidade para ${cl.name}`);
+  if (newPts >= cl.max) sbToast('ok', `${cl.name} atingiu a recompensa!`);
 }
 
 
@@ -3695,7 +3763,7 @@ function renderKDS() {
   se('kds-cnt-late',  late);
 
   if (!orders.length) {
-    g.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:80px 20px;color:var(--muted)"><div style="font-size:52px;margin-bottom:16px">✅</div><div style="font-size:16px;font-weight:600">Cozinha vazia</div><div style="font-size:13px;margin-top:6px">Nenhum pedido em preparo no momento</div></div>';
+    g.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:80px 20px;color:var(--muted)"><div style="display:none">x</div><div style="font-size:16px;font-weight:600">Cozinha vazia</div><div style="font-size:13px;margin-top:6px">Nenhum pedido em preparo no momento</div></div>';
     return;
   }
 
@@ -3806,7 +3874,7 @@ async function kdsMarkPronto(id) {
       });
     } catch(e){}
     renderKDS(); renderKanban();
-    sbToast('ok', `Pedido #${_orderNum(id)} pronto! ✅`);
+    sbToast('ok', `Pedido #${_orderNum(id)} confirmado`));
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
 }
 
@@ -3906,7 +3974,7 @@ function renderEstoque() {
                 ${e.custo ? 'R$ '+valorTotal : '—'}
               </td>
               <td style="padding:12px 6px;text-align:right">
-                <button class="btn bg" style="font-size:11px;padding:3px 8px" onclick="openEditIngrediente(${e.id})">✏️</button>
+                <button class="btn bg" style="font-size:11px;padding:3px 8px" onclick="openEditIngrediente(${e.id})"></button>
               </td>
             </tr>`;
           }).join('')}
@@ -4231,7 +4299,7 @@ async function renderRelatorios() {
 
   const periLabel = { diario:'hoje', semanal:'na semana', mensal:'no mês', anual:'no ano' }[_relPeriodo] || 'no período';
   const lblEl = document.getElementById('rel-periodo-label');
-  if (lblEl) lblEl.textContent = '📅 ' + range.label;
+  if (lblEl) lblEl.textContent = range.label;
 
   // Atualiza botões de período
   ['diario','semanal','mensal','anual'].forEach(id => {
@@ -4320,7 +4388,7 @@ async function renderRelatorios() {
         labels = Array.from({length:24},(_,i)=>i%6===0?i+'h':'');
         mesValidos.forEach(o=>{ points[new Date(o.created_at).getHours()] += parseFloat(o.total||0)+parseFloat(o.taxa||0); });
       }
-      if (titleEl) titleEl.textContent = '📈 '+granLabel;
+      if (titleEl) titleEl.textContent = granLabel;
 
       const maxP = Math.max(...points, 1);
       const W=580, H=140, pad=10, botPad=24, topPad=10;
@@ -4421,7 +4489,7 @@ async function renderRelatorios() {
           <div class="bar-fill" style="height:${Math.max(Math.round(v/maxMB*100),v>0?3:1)}%;${v===0?'opacity:.15':''}"></div>
           <div class="bar-label">${mNames[i]}</div>
         </div>`).join('');
-      if (mTitle) mTitle.textContent = '📊 Faturamento mensal '+now.getFullYear();
+      if (mTitle) mTitle.textContent = 'Faturamento mensal '+now.getFullYear();
     }
 
     // ─── Pagamentos ─────────────────────────────────────
@@ -4445,7 +4513,7 @@ async function renderRelatorios() {
         <div style="margin-bottom:12px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
             <div style="display:flex;align-items:center;gap:7px">
-              <span style="font-size:16px">${pagEmojis[k]||'💰'}</span>
+              <span style="font-size:16px">${''}</span>
               <span style="font-size:13px;font-weight:600">${k}</span>
             </div>
             <div style="text-align:right">
@@ -4469,7 +4537,7 @@ async function renderRelatorios() {
       fatPagEl.innerHTML = ents.length ? ents.map(([k,v])=>`
         <div style="margin-bottom:14px">
           <div style="display:flex;justify-content:space-between;margin-bottom:5px">
-            <span style="font-size:12.5px;font-weight:600">${pagEmojis[k]||'💰'} ${k}</span>
+            <span style="font-size:12.5px;font-weight:600">${''} ${k}</span>
             <span style="font-size:13px;font-weight:700;color:${pagCols[k]||'var(--accent)'}">${money(v.fat)}</span>
           </div>
           <div style="height:8px;background:var(--border);border-radius:99px;overflow:hidden">
@@ -4706,7 +4774,7 @@ async function renderRelatorios() {
         satResumoEl.innerHTML = `
           <div style="text-align:center;margin-bottom:16px">
             <div style="font-size:42px;font-weight:900;color:var(--accent3)">${media.toFixed(1)}</div>
-            <div style="font-size:18px;margin:4px 0">${'⭐'.repeat(Math.round(media))}</div>
+            <div style="margin-bottom:6px">${''}</div>
             <div style="font-size:12px;color:var(--muted)">${ratList.length} avaliações</div>
           </div>
           ${dist.map(({nota,count})=>`
@@ -4726,7 +4794,7 @@ async function renderRelatorios() {
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
             <div style="font-weight:600;font-size:12.5px">${r.client||'Anônimo'}</div>
             <div>
-              <span style="font-size:13px">${'⭐'.repeat(r.nota||5)}</span>
+              <span style="font-size:13px">${''}</span>
               <span style="font-size:11px;color:var(--muted);margin-left:6px">${r.created_at?new Date(r.created_at).toLocaleDateString('pt-BR'):''}</span>
             </div>
           </div>
@@ -4773,7 +4841,7 @@ async function renderSatisfacao(){
 
     if (total === 0) {
       const vazio = `<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:13px">
-        <div style="font-size:44px;margin-bottom:12px">⭐</div>
+        <div style="margin-bottom:12px;color:var(--accent3)"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5L8 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
         Nenhuma avaliação ainda.<br>
         <small style="font-size:11.5px">Quando clientes responderem ao link de avaliação, os dados aparecerão aqui.</small>
       </div>`;
@@ -4804,7 +4872,7 @@ async function renderSatisfacao(){
       const clr   = nota >= 4 ? 'var(--success)' : nota === 3 ? '#f59e0b' : 'var(--danger)';
       return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <span style="font-size:12px;font-weight:700;min-width:14px;text-align:right">${nota}</span>
-        <span style="font-size:12px">⭐</span>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5L8 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
         <div style="flex:1;height:9px;background:var(--surface2);border-radius:99px;overflow:hidden">
           <div style="width:${pct}%;height:100%;background:${clr};border-radius:99px"></div>
         </div>
@@ -5026,7 +5094,7 @@ function setPrintMode(mode) {
   if (lm) { lm.style.background = !isAuto ? 'rgba(59,130,246,.1)' : 'var(--surface2)'; lm.style.borderColor = !isAuto ? 'var(--accent)' : 'var(--border)'; }
   if (da) da.style.background = isAuto ? '#fff' : 'transparent';
   if (dm) dm.style.background = !isAuto ? '#fff' : 'transparent';
-  sbToast('ok', isAuto ? '🖨️ Impressão automática ativada' : '👆 Impressão manual ativada');
+  sbToast('ok', isAuto ? 'Impressão automática ativada' : 'Impressão manual ativada');
 }
 
 function _getPrintConfig() {
@@ -5102,7 +5170,7 @@ function testPrint() {
   const ex = { id:99, client:'TESTE IMPRESSÃO', addr:'Balcão', mesa_num:null, pag:'PIX', taxa:5,
     items:[{qty:1,name:'X-Salada',price:18},{qty:1,name:'Batata Frita',price:10}] };
   printOrder(ex);
-  sbToast('ok', '🖨️ Enviando para impressora...');
+  sbToast('ok', 'Enviando para impressora...');
 }
 
 // ─────────────────────────────────────────
@@ -5134,7 +5202,7 @@ async function toggleCaixa() {
 
 async function abrirCaixa() {
   setCaixaState(true);
-  sbToast('ok', '🟢 Caixa aberto!');
+  sbToast('ok', 'Caixa aberto!');
   try { await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, caixa_open: true }); }
   catch(e) { console.warn('caixa sync:', e); }
   _renderCaixaTela();
@@ -5144,7 +5212,7 @@ async function fecharCaixa() {
   if (!confirm('Fechar o caixa agora?\n\nIsso registrará o fechamento mas não apaga os movimentos do dia.')) return;
   setCaixaState(false);
   const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-  sbToast('ok', '🔒 Caixa fechado às ' + time);
+  sbToast('ok', 'Caixa fechado às ' + time);
   try { await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, caixa_open: false }); }
   catch(e) { console.warn('caixa sync:', e); }
   _renderCaixaTela();
@@ -5336,7 +5404,7 @@ function pdvConfirmPizza() {
   const names = pdvPz.selected.map(f => f.name).join(' + ');
   cartItems.push({ id: Date.now(), name: '🍕 '+names, price: maxP, qty: 1, emoji: '🍕', _isPizza: true });
   renderCart();
-  showToast('🍕', 'Pizza adicionada!');
+  showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>', 'Pizza adicionada!');
   closePDVPizza();
 }
 
@@ -5623,7 +5691,7 @@ function pdvbConfirmEntrega(){
     pdvbEntregaAddr='';
   }
   pdvbRenderOrder();closeModal('modal-pdvb-entrega');
-  sbToast('ok',tipo==='delivery'?`🛵 Delivery — R$ ${pdvbEntregaTaxa.toFixed(2).replace('.',',')}`:'🏪 Balcão / Retirada');
+  sbToast('ok',tipo==='delivery'?`Delivery — R$ ${pdvbEntregaTaxa.toFixed(2).replace('.',',')}`:'Balcão / Retirada');
 }
 function pdvbPagamentos(){openModal('modal-pdvb-pag');}
 function pdvbSelectPag(label,val){
@@ -5670,7 +5738,7 @@ async function pdvbGerarPedido(){
     if(pdvbMesaNum){await sb.from('mesas').update({status:'busy'}).eq('num',pdvbMesaNum);const t=tables.find(x=>x.num===pdvbMesaNum);if(t)t.status='busy';}
     await sb.from('movimentos').insert({description:`PDV — ${client}`,tipo:'entrada',val:total,pag:pdvbPagamento,time});
     if(ord)ordersKanban.unshift({id:ord.id,client:ord.client,phone:ord.phone,items:itemsData,total,taxa:pdvbEntregaTaxa,status:'analise',time,addr,pag:pdvbPagamento});
-    playOrderSound();sbToast('ok',`✅ Pedido #${ord?.id||'?'} gerado — R$ ${total.toFixed(2).replace('.',',')}`);pdvbClearCart();
+    playOrderSound();sbToast('ok',`Pedido #${ord?.id||'?'} gerado — R$ ${total.toFixed(2).replace('.',',')}`);pdvbClearCart();
   }catch(e){console.error(e);sbToast('err','Erro: '+(e?.message||JSON.stringify(e)));}
   finally{sbLoading(false);}
 }
@@ -5749,7 +5817,7 @@ function toggleAutoAccept(el) {
   _autoAcceptOn = el.classList.contains('on');
   // Persiste localmente
   try { localStorage.setItem('gestor_auto_accept', _autoAcceptOn ? '1' : '0'); } catch(e) {}
-  showToast('🔄', 'Aceitar automaticamente: ' + (_autoAcceptOn ? 'Ativado' : 'Desativado'));
+  showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M13 8A5 5 0 1 1 8 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 1v4h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>', 'Aceitar automaticamente: ' + (_autoAcceptOn ? 'Ativado' : 'Desativado'));
 }
 
 // Restaura estado do auto-accept ao carregar
@@ -5772,7 +5840,7 @@ async function toggleStatus(){
   st.textContent = newOpen ? 'Online' : 'Offline';
   if (dot)  dot.style.background  = newOpen ? 'var(--success)' : 'var(--danger)';
   if (pill) { pill.style.background = newOpen ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'; pill.style.borderColor = newOpen ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'; pill.style.color = newOpen ? 'var(--success)' : 'var(--danger)'; }
-  showToast(newOpen?'⚡':'⏸️', newOpen?'Loja aberta para pedidos!':'Loja pausada');
+  showToast('ok', newOpen?'Loja aberta para pedidos!':'Loja pausada');
   try {
     await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, store_open: newOpen });
   } catch(e) { console.warn('store_config sync:', e); }
@@ -5874,7 +5942,7 @@ function updateTaxaPreview() {
   if (tipo === 'fixo') {
     const val = parseFloat(document.getElementById('taxa-fixo-val').value) || 0;
     el.innerHTML = `<div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border-radius:10px;padding:12px 16px">
-      <span style="font-size:24px">🛵</span>
+      <span style="font-size:0">
       <div>
         <div style="font-weight:600;font-size:13px">Taxa de entrega</div>
         <div style="font-size:18px;font-weight:700;color:var(--accent3);font-family:'Playfair Display',sans-serif">R$ ${val.toFixed(2).replace('.',',')}</div>
@@ -5972,7 +6040,7 @@ function openRegistrarPagamento(num, totalJaCalculado) {
       .reduce((s, o) => s + parseFloat(o.total || 0), 0);
   }
 
-  document.getElementById('modal-pag-mesa-title').textContent = `💰 Registrar Pagamento — Mesa ${num}`;
+  document.getElementById('modal-pag-mesa-title').textContent = `Registrar Pagamento — Mesa ${num}`;
   document.getElementById('modal-pag-total').textContent = 'R$ ' + totalVal.toFixed(2).replace('.',',');
   document.getElementById('modal-pag-mesa-num').value = num;
   // Pré-seleciona forma de pagamento se garçom já informou
@@ -6034,7 +6102,7 @@ async function confirmarPagamentoMesa() {
     // Monta e exibe comprovante
     const caixaMsg = movErr ? ' (caixa não registrado)' : '';
     abrirComprovantesMesa(num, totalVal, forma, time);
-    sbToast('ok', `✅ Mesa ${num} liberada — R$ ${totalVal.toFixed(2).replace('.',',')}${caixaMsg}`);
+    sbToast('ok', `Mesa ${num} liberada — R$ ${totalVal.toFixed(2).replace('.',',')}${caixaMsg}`);
   } catch(e) {
     console.error('confirmarPagamentoMesa error:', e);
     const msg = e?.message || e?.details || e?.hint || JSON.stringify(e);
@@ -6235,18 +6303,18 @@ async function testarServidorWA() {
     const d = await r.json().catch(() => ({}));
     if (r.ok && d.ok) {
       if (dot) dot.style.background = 'var(--success)';
-      if (txt) txt.textContent = '🟢 Online';
+      if (txt) txt.textContent = 'Online';
       if (box) { box.style.borderColor = 'rgba(34,197,94,.3)'; box.style.color = 'var(--success)'; }
-      sbToast('ok', '✅ Servidor online! Automações 24/7 ativas.');
+      sbToast('ok', 'Servidor online! Automações 24/7 ativas.');
       await salvarWaServerUrl();
     } else {
       if (dot) dot.style.background = 'var(--danger)';
-      if (txt) txt.textContent = '❌ Erro';
+      if (txt) txt.textContent = 'Erro';
       sbToast('err', 'Servidor respondeu com erro');
     }
   } catch(e) {
     if (dot) dot.style.background = 'var(--danger)';
-    if (txt) txt.textContent = '❌ Offline';
+    if (txt) txt.textContent = 'Offline';
     if (box) box.style.borderColor = 'rgba(239,68,68,.3)';
     sbToast('err', 'Servidor não alcançado: ' + e.message);
   }
@@ -6267,17 +6335,17 @@ async function carregarWaServerUrl() {
         const box = document.getElementById('wa-server-status');
         if (r.ok && d.ok) {
           if (dot) dot.style.background = 'var(--success)';
-          if (txt) txt.textContent = '🟢 Online';
+          if (txt) txt.textContent = 'Online';
           if (box) { box.style.borderColor = 'rgba(34,197,94,.3)'; box.style.color = 'var(--success)'; }
         } else {
           if (dot) dot.style.background = 'var(--danger)';
-          if (txt) txt.textContent = '❌ Offline';
+          if (txt) txt.textContent = 'Offline';
         }
       } catch(e) {
         const dot = document.getElementById('wa-sdot');
         const txt = document.getElementById('wa-stxt');
         if (dot) dot.style.background = 'var(--danger)';
-        if (txt) txt.textContent = '❌ Offline';
+        if (txt) txt.textContent = 'Offline';
       }
     }
   } catch(e){}
@@ -6383,17 +6451,17 @@ async function evoCheckStatus() {
 
 async function evoConectar() {
   const qrArea = document.getElementById('evo-qr-area');
-  if (qrArea) qrArea.innerHTML='<div style="font-size:32px;margin-bottom:10px">⏳</div><div style="font-size:13px;color:var(--muted)">Gerando QR Code...</div>';
+  if (qrArea) qrArea.innerHTML='<div style="margin-bottom:10px"><div style="font-size:13px;color:var(--muted)">Gerando QR Code...</div>';
   const r = await EVO.req('GET', `/instance/connect/${EVO.instance}`);
   if (!r.ok || !r.data?.code) {
-    if (qrArea) qrArea.innerHTML=`<div style="font-size:13px;color:var(--danger);margin-bottom:12px">❌ ${r.data?.message||'Erro ao gerar QR. Crie a instância primeiro.'}</div><button class="btn bp" onclick="evoCriarInstancia()">➕ Criar instância</button>`;
+    if (qrArea) qrArea.innerHTML=`<div style="font-size:13px;color:var(--danger);margin-bottom:12px">${r.data?.message||'Erro ao gerar QR. Crie a instância primeiro.'}</div><button class="btn bp" onclick="evoCriarInstancia()">Criar instância</button>`;
     return;
   }
   if (qrArea) {
     if (r.data.base64) {
-      qrArea.innerHTML=`<div style="font-size:13px;font-weight:600;margin-bottom:12px">📲 Escaneie com seu WhatsApp</div><img src="${r.data.base64}" style="width:220px;height:220px;border-radius:12px;border:3px solid var(--accent);margin-bottom:12px"><div style="font-size:11px;color:var(--muted);margin-bottom:12px">QR Code expira em 60 segundos</div><button class="btn bg" style="font-size:11.5px" onclick="evoConectar()">🔄 Novo QR Code</button>`;
+      qrArea.innerHTML=`<div style="font-size:13px;font-weight:600;margin-bottom:12px">Escaneie com seu WhatsApp</div><img src="${r.data.base64}" style="width:220px;height:220px;border-radius:12px;border:3px solid var(--accent);margin-bottom:12px"><div style="font-size:11px;color:var(--muted);margin-bottom:12px">QR Code expira em 60 segundos</div><button class="btn bg" style="font-size:11.5px" onclick="evoConectar()">Gerar novo QR Code</button>`;
     } else {
-      qrArea.innerHTML=`<div style="font-size:12px;word-break:break-all;padding:10px;background:var(--surface2);border-radius:8px;margin-bottom:12px;color:var(--muted)">${(r.data.code||'').slice(0,80)}...</div><button class="btn bg" onclick="evoConectar()">🔄 Novo QR</button>`;
+      qrArea.innerHTML=`<div style="font-size:12px;word-break:break-all;padding:10px;background:var(--surface2);border-radius:8px;margin-bottom:12px;color:var(--muted)">${(r.data.code||'').slice(0,80)}...</div><button class="btn bg" onclick="evoConectar()">Gerar novo QR</button>`;
     }
   }
   if (evoQrInterval) clearInterval(evoQrInterval);
@@ -6402,7 +6470,7 @@ async function evoConectar() {
     tries++;
     const s = await EVO.req('GET', `/instance/connectionState/${EVO.instance}`);
     const state = s.data?.instance?.state||s.data?.state||'close';
-    if (state==='open') { clearInterval(evoQrInterval); evoConnected=true; _evoSetStatus('connected','Conectado'); _evoShowConnected(s.data?.instance?.profileName||'WhatsApp'); sbToast('ok','✅ WhatsApp conectado!'); }
+    if (state==='open') { clearInterval(evoQrInterval); evoConnected=true; _evoSetStatus('connected','Conectado'); _evoShowConnected(s.data?.instance?.profileName||'WhatsApp'); sbToast('ok',' WhatsApp conectado!'); }
     if (tries>30) clearInterval(evoQrInterval);
   }, 4000);
 }
@@ -6419,14 +6487,14 @@ async function evoTestarEnvio() {
   const res   = document.getElementById('evo-test-result');
   if (!phone || phone.length < 10) { sbToast('err','Número inválido. Ex: 85912345678'); return; }
   if (!msg)  { sbToast('err','Informe a mensagem'); return; }
-  if (res) { res.style.display='block'; res.innerHTML='<span style="color:var(--muted)">⏳ Enviando...</span>'; }
+  if (res) { res.style.display='block'; res.innerHTML='<span style="color:var(--muted)">Enviando...</span>'; }
 
   const r = await EVO.sendText(phone, msg);
   console.log('[EVO TEST]', r);
 
   if (r.ok) {
-    if (res) res.innerHTML='<span style="color:var(--success)">✅ Mensagem enviada com sucesso!</span>';
-    sbToast('ok','✅ Mensagem enviada!');
+    if (res) res.innerHTML='<span style="color:var(--success)">Mensagem enviada!</span>';
+    sbToast('ok','Mensagem enviada!');
     evoMsgHistory.unshift({ to:phone, tipo:'Teste', msg:(msg||'').slice(0,60), status:'enviado', time: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) });
   } else {
     // Extrai erro real da resposta da API
@@ -6467,7 +6535,7 @@ async function evoEnviarAniversariantesManual() {
   try {
     const r = await fetch(`${WA_SERVER}/aniversario`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
     const d = await r.json().catch(() => ({}))
-    sbToast(r.ok ? 'ok' : 'err', r.ok ? '🎂 Verificação de aniversários iniciada no servidor!' : 'Erro: servidor offline?')
+    sbToast(r.ok ? 'ok' : 'err', r.ok ? 'Verificação de aniversários iniciada!' : 'Erro: servidor offline?')
   } catch(e) {
     // Fallback: roda no browser se servidor offline
     evoEnviarAniversariantesHoje(false)
@@ -6500,8 +6568,8 @@ async function evoEnviarAniversariantesHoje(silencioso = false) {
   // Atualiza label na tela
   const lastEl = document.getElementById('aniv-last-send');
   if (lastEl) lastEl.textContent = 'Último envio: ' + todayMD + ' às ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-  if (!silencioso) sbToast('ok', '🎂 Enviado para ' + ok + ' aniversariante(s)' + (fail ? ' | ' + fail + ' falhou' : '') + '!');
-  else if (ok > 0) sbToast('ok', '🎂 Felicitações automáticas enviadas para ' + ok + ' aniversariante(s)!');
+  if (!silencioso) sbToast('ok', 'Enviado para ' + ok + ' aniversariante(s)' + (fail ? ' | ' + fail + ' falhou' : '') + '!');
+  else if (ok > 0) sbToast('ok', 'Felicitações enviadas para ' + ok + ' aniversariante(s)!');
 }
 
 // ── Scheduler automático de aniversário ──────────────────
@@ -6563,7 +6631,7 @@ async function evoSalvarAutomacoes() {
   try {
     const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_automacoes: data });
     if (error) throw error;
-    sbToast('ok', '✅ Automações salvas!');
+    sbToast('ok', 'Automações salvas!');
   } catch(e) {
     sbToast('err', 'Erro ao salvar: ' + (e.message || JSON.stringify(e)));
   }
@@ -6626,7 +6694,7 @@ function iaAtualizarStatus() {
   const on  = document.getElementById('ia-toggle-ativo')?.classList.contains('on');
   const lbl = document.getElementById('ia-status-lbl');
   if (lbl) {
-    lbl.textContent = on ? '🟢 Ativo — respondendo 24/7' : 'Inativo';
+    lbl.textContent = on ? 'Ativo — respondendo 24/7' : 'Inativo';
     lbl.style.color = on ? 'var(--success)' : 'var(--muted)';
   }
 }
@@ -6654,7 +6722,7 @@ async function iaSalvarConfig() {
   try {
     const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, ia_config: JSON.stringify(ia) });
     if (error) throw error;
-    sbToast('ok', '✅ Configurações da IA salvas!');
+    sbToast('ok', 'Configurações da IA salvas!');
     iaAtualizarStatus();
   } catch(e) {
     sbToast('err', 'Erro ao salvar: ' + (e.message||JSON.stringify(e)));
@@ -6701,7 +6769,7 @@ async function evoEnviarPromocao() {
   const total = fidClients.filter(c => c.phone && (destino === 'todos' || (destino === 'com_pedido' && c.orders > 0))).length;
   if (!total) { sbToast('err','Nenhum cliente com telefone encontrado'); return; }
   if (!confirm(`Enviar promoção para ${total} cliente(s)? Este processo roda no servidor e pode demorar alguns minutos.`)) return;
-  if (res) { res.style.display='block'; res.innerHTML='<span style="color:var(--muted)">⏳ Iniciando envio no servidor...</span>'; }
+  if (res) { res.style.display='block'; res.innerHTML='<span style="color:var(--muted)">Iniciando envio no servidor...</span>'; }
   sbLoading(true);
   try {
     // Chama a Edge Function — roda no servidor Supabase, não no browser
@@ -6713,16 +6781,16 @@ async function evoEnviarPromocao() {
     const data = await r.json().catch(() => ({}));
     sbLoading(false);
     if (r.ok && data.ok) {
-      if (res) res.innerHTML = `<span style="color:var(--success)">✅ ${data.enviados} enviados${data.falhou ? ` | ❌ ${data.falhou} falhou` : ''}</span>`;
+      if (res) res.innerHTML = `<span style="color:var(--success)">${data.enviados} enviados${data.falhou ? ` | ${data.falhou} falharam` : ''}</span>`;
       sbToast('ok', `Promoção enviada para ${data.enviados} clientes!`);
     } else {
       const err = data.error || `HTTP ${r.status}`;
-      if (res) res.innerHTML = `<span style="color:var(--danger)">❌ Erro: ${err}</span>`;
+      if (res) res.innerHTML = `<span style="color:var(--danger)">Erro: ${err}</span>`;
       sbToast('err', 'Erro: ' + err);
     }
   } catch(e) {
     sbLoading(false);
-    if (res) res.innerHTML = `<span style="color:var(--danger)">❌ ${e.message}</span>`;
+    if (res) res.innerHTML = `<span style="color:var(--danger)">${e.message}</span>`;
     sbToast('err', 'Erro de conexão');
   }
 }
@@ -6772,7 +6840,7 @@ async function topnavCopiarCardapio(btn) {
       svg.innerHTML = '<path d="M3 8l3.5 3.5L13 4" stroke="var(--success)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>';
       setTimeout(() => svg.innerHTML = orig, 1800);
     }
-    sbToast('ok', '🔗 Link do cardápio copiado!');
+    sbToast('ok', 'Link copiado!');
   } catch(e) {
     sbToast('err', 'Erro ao copiar link');
   }
@@ -6783,7 +6851,7 @@ function _evoShowConnected(name) {
 }
 function _evoShowQRPrompt() {
   const qr=document.getElementById('evo-qr-area'), cn=document.getElementById('evo-connected-area');
-  if(qr){ qr.style.display='block'; qr.innerHTML='<div style="font-size:48px;margin-bottom:12px">📱</div><div style="font-size:14px;font-weight:600;margin-bottom:6px">WhatsApp desconectado</div><div style="font-size:12px;color:var(--muted);margin-bottom:16px">Clique para gerar o QR Code</div><button class="btn bp" onclick="evoConectar()">📲 Conectar WhatsApp</button>'; }
+  if(qr){ qr.style.display='block'; qr.innerHTML='<div style="margin-bottom:12px;color:var(--muted)"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 8a2.5 2.5 0 1 0 5 0 2.5 2.5 0 0 0-5 0" stroke="currentColor" stroke-width="1.4"/></svg></div><div style="font-size:14px;font-weight:600;margin-bottom:6px">WhatsApp desconectado</div><div style="font-size:12px;color:var(--muted);margin-bottom:16px">Clique para gerar o QR Code</div><button class="btn bp" onclick="evoConectar()">Conectar WhatsApp</button>'; }
   if(cn) cn.style.display='none';
 }
 // ══ HORÁRIOS DE FUNCIONAMENTO ════════════════════════
@@ -7027,7 +7095,7 @@ async function salvarCardapioPublico() {
 
     const { error } = await sb.from('store_config').upsert(payload);
     if (error) throw error;
-    sbToast('ok', '✅ Cardápio público salvo!');
+    sbToast('ok', 'Cardápio público salvo!');
     // Recarrega dados e atualiza iframe (sincroniza com o cardápio real)
     await loadCardapioPublico();
     // Pequeno delay para o banco propagar via SSE antes de recarregar o iframe
@@ -7228,7 +7296,7 @@ function temaAplicarModo(modo) {
   }
   sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, gestor_tema: modo }).then(()=>{}).catch(()=>{});
   temaUpdateCardSelection();
-  sbToast('ok', modo === 'claro' ? '☀️ Modo claro ativado!' : '🌑 Modo escuro ativado!');
+  sbToast('ok', modo === 'claro' ? 'Modo claro ativado!' : 'Modo escuro ativado!');
 }
 
 function temaUpdateCardSelection() {
@@ -7248,7 +7316,7 @@ function temaGetCurrent() { return {}; }
 function temaSalvarStorage() {}
 function temaCarregarStorage() {}
 function temaReset() { temaAplicarModo('escuro'); }
-async function temaSalvar() { sbToast('ok','🎨 Tema aplicado!'); }
+async function temaSalvar() { sbToast('ok','Tema aplicado!'); }
 function temaBuildPresets() {}
 function temaBuildFields() {}
 function temaUpdatePreview() {}
@@ -7326,7 +7394,7 @@ async function confirmarZerarPedidos() {
   if (input.value.trim().toUpperCase() !== 'ZERAR') return;
   const btn = document.getElementById('btn-confirmar-zerar');
   btn.disabled = true;
-  btn.textContent = '⏳ Zerando...';
+  btn.textContent = 'Zerando...';
 
   try {
     // Pega o ID máximo atual do banco para usar como novo offset
@@ -7344,11 +7412,11 @@ async function confirmarZerarPedidos() {
 
     closeModal('modal-zerar-pedidos');
     _renderConfiguracoes(); // atualiza o painel de config imediatamente
-    sbToast('ok', '✅ Contagem de pedidos zerada! Próximo pedido será #1.');
+    sbToast('ok', 'Contagem zerada! Próximo pedido será #1.');
   } catch(e) {
     sbToast('err', 'Erro ao zerar contagem: ' + (e.message || 'Tente novamente'));
     btn.disabled = false;
-    btn.textContent = '🔄 Confirmar reset';
+    btn.textContent = 'Confirmar reset';
   }
 }
 
@@ -7370,7 +7438,7 @@ async function _renderConfiguracoes() {
 async function baixarBackupCompleto() {
   const btn  = document.getElementById('btn-backup-completo');
   const info = document.getElementById('cfg-backup-info');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Gerando backup...'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Gerando backup...'; }
   if (info) info.textContent = 'Coletando dados e imagens...';
 
   try {
@@ -7401,13 +7469,13 @@ async function baixarBackupCompleto() {
     URL.revokeObjectURL(url);
 
     const kb = Math.round(blob.size / 1024);
-    if (info) info.textContent = `✅ Backup gerado com sucesso! (${kb} KB)`;
-    sbToast('ok', `💾 Backup completo baixado! (${kb} KB)`);
+    if (info) info.textContent = `Backup gerado! (${kb} KB)`;
+    sbToast('ok', `Backup baixado! (${kb} KB)`);
   } catch(e) {
-    if (info) info.textContent = '❌ Erro: ' + e.message;
+    if (info) info.textContent = 'Erro: ' + e.message;
     sbToast('err', 'Erro ao gerar backup: ' + e.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '⬇️ Baixar backup completo'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Baixar backup completo'; }
   }
 }
 
@@ -7429,9 +7497,9 @@ function conectarSaquesSSE() {
     try {
       const d = JSON.parse(e.data);
       carregarCarteira();
-      if (d.status === 'pago')      sbToast('ok', '✅ Seu saque foi pago! Verifique seu PIX.');
-      else if (d.status === 'aprovado')  sbToast('ok', '✅ Saque aprovado! Pagamento em processamento.');
-      else if (d.status === 'cancelado') sbToast('err', '❌ Saque cancelado. Entre em contato com o suporte.');
+      if (d.status === 'pago')      sbToast('ok', 'Saque pago! Verifique seu PIX.');
+      else if (d.status === 'aprovado')  sbToast('ok', 'Saque aprovado. Pagamento em processamento.');
+      else if (d.status === 'cancelado') sbToast('err', 'Saque cancelado. Entre em contato com o suporte.');
     } catch(ex) { carregarCarteira(); }
   });
   _saquesSSE.onerror = () => { _saquesSSE.close(); _saquesSSE = null; setTimeout(conectarSaquesSSE, 5000); };
@@ -7449,11 +7517,11 @@ async function carregarConfigPixGestor() {
     const statusEl = document.getElementById('pix-config-status');
     const manualWrap = document.getElementById('pix-manual-wrap');
     if (btn) {
-      btn.textContent = _pixAtivoGestor ? '✅ Ativado' : '❌ Desativado';
+      btn.textContent = _pixAtivoGestor ? 'Ativado' : 'Desativado';
       btn.className = 'btn ' + (_pixAtivoGestor ? 'bp' : 'bd');
     }
     if (statusEl) {
-      if (!d.mp_configurado) statusEl.innerHTML = '<span style="color:var(--danger)">⚠️ Token MP não configurado pelo administrador</span>';
+      if (!d.mp_configurado) statusEl.innerHTML = '<span style="color:var(--danger)">Token MP não configurado pelo administrador</span>';
       else statusEl.innerHTML = _pixAtivoGestor
         ? '<span style="color:var(--success)">✅ QR Code via Mercado Pago ativo</span>'
         : '<span style="color:var(--orange)">⚡ QR Code desativado — usando chave PIX manual</span>';
@@ -7485,7 +7553,7 @@ async function togglePixGestor() {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
     _pixAtivoGestor = d.pix_ativo;
-    sbToast('ok', _pixAtivoGestor ? '⚡ PIX QR Code ativado!' : '⚡ PIX QR Code desativado!');
+    sbToast('ok', _pixAtivoGestor ? 'PIX QR Code ativado!' : 'PIX QR Code desativado!');
     await carregarConfigPixGestor();
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
   finally { if (btn) btn.disabled = false; }
@@ -7506,7 +7574,7 @@ async function salvarPixManual() {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
-    sbToast('ok', '✅ Chave PIX manual salva!');
+    sbToast('ok', 'Chave PIX salva!');
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
 }
 
@@ -7549,7 +7617,7 @@ async function carregarCarteira() {
         const cardsEl = se('crt-saldo')?.closest('.card')?.parentElement;
         if (cardsEl?.nextElementSibling) cardsEl.parentElement.insertBefore(avisoEl, cardsEl.nextElementSibling);
       }
-      avisoEl.innerHTML = `⏳ <strong>${cart.pendentes_count} pagamento(s) PIX pendente(s)</strong> aguardando confirmação do Mercado Pago — total de ${_fmtR(cart.pendentes_valor)}. Esses valores <strong>não entram no saldo</strong> até serem confirmados.`;
+      avisoEl.innerHTML = `<strong>${cart.pendentes_count} pagamento(s) PIX pendente(s)</strong> aguardando confirmação do Mercado Pago — total de ${_fmtR(cart.pendentes_valor)}. Esses valores <strong>não entram no saldo</strong> até serem confirmados.`;
       avisoEl.style.display = '';
     } else {
       const avisoEl = se('crt-pendentes-aviso');
@@ -7587,7 +7655,7 @@ function _renderSaqueHistorico(saques) {
       <div>
         <div style="font-weight:600;font-size:13px">${_fmtR(s.valor_liquido)}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${s.pix_key_tipo?.toUpperCase()}: ${s.pix_key} · ${new Date(s.created_at).toLocaleDateString('pt-BR')}</div>
-        ${s.obs_admin ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">📝 ${s.obs_admin}</div>` : ''}
+        ${s.obs_admin ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${s.obs_admin}</div>` : ''}
       </div>
       <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;${badge[s.status]||badge.pendente}">${label[s.status]||s.status}</span>
     </div>`).join('');
@@ -7614,7 +7682,7 @@ async function solicitarSaque() {
   if (!pixKey) { sbToast('err', 'Informe a chave PIX'); return; }
 
   const btn = document.getElementById('btn-solicitar-saque');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Solicitando...'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Solicitando...'; }
   try {
     const tid = _sessao?.tenant_id;
     const res = await fetch('/api/saques/solicitar', {
@@ -7624,11 +7692,11 @@ async function solicitarSaque() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erro');
-    sbToast('ok', `✅ Saque de ${_fmtR(data.valor)} solicitado! Pagamento em até 24 horas úteis.`);
+    sbToast('ok', `Saque de ${_fmtR(data.valor)} solicitado! Pagamento em até 24 horas úteis.`);
     await carregarCarteira();
   } catch(e) {
     sbToast('err', 'Erro: ' + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = '💸 Solicitar saque'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Solicitar saque'; }
   }
 }
 
@@ -7899,7 +7967,7 @@ function renderClientes() {
 
     // Fidelidade
     const fidStr = c.fid_pts !== null
-      ? `<span style="background:rgba(139,92,246,.18);color:var(--purple);padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700">⭐ ${c.fid_pts} pts</span>`
+      ? `<span style="background:rgba(139,92,246,.18);color:var(--purple);padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700">${c.fid_pts} pts</span>`
       : `<span style="color:var(--border2)">—</span>`;
 
     // Gasto
