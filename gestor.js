@@ -5649,7 +5649,7 @@ function chatGestorSubscribeSSE() {
   if (_chatGestorChannel) return;
   const tid = _sessao?.tenant_id;
   if (!tid) return;
-  _chatGestorChannel = sb.channel(`chat-gestor:${tid}`)
+  _chatGestorChannel = sb.channel('chat-gestor')
     .on('postgres_changes', { event:'INSERT', table:'chat_messages' }, p => {
       const msg = p.new;
       if (!msg || msg.sender !== 'client') return;
@@ -5679,7 +5679,7 @@ function chatGestorSubscribeSSE() {
         _chatGestorRenderMsgs();
         fetch('/api/chat/ler', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ customer_phone: msg.customer_phone }) });
       }
-      // Toca som de notificação do chat
+      // Toca som de notificação
       try { playChatSound(); } catch(e) {}
     })
     .subscribe();
@@ -6081,7 +6081,6 @@ let _soundPref = (() => {
   try { return localStorage.getItem('ef_sound') || 'sino'; } catch { return 'sino'; }
 })();
 
-// Som separado para o chat de clientes
 let _chatSoundPref = (() => {
   try { return localStorage.getItem('ef_chat_sound') || 'duplo'; } catch { return 'duplo'; }
 })();
@@ -6153,56 +6152,12 @@ function playOrderSound() {
   } catch(e) {}
 }
 
-// Som específico para mensagens do chat
 function playChatSound() {
   if (_chatSoundPref === 'desligado') return;
   try {
     const ctx = _getAudioCtx();
     (SOUNDS[_chatSoundPref] || SOUNDS.duplo)(ctx);
   } catch(e) {}
-}
-
-function setChatSoundPref(id) {
-  _chatSoundPref = id;
-  try { localStorage.setItem('ef_chat_sound', id); } catch {}
-  document.querySelectorAll('.chat-sound-opt').forEach(el => {
-    const active = el.dataset.sound === id;
-    el.style.borderColor    = active ? 'var(--accent)'     : 'var(--border)';
-    el.style.background     = active ? 'var(--accent-dim)' : 'var(--surface2)';
-    el.querySelector('.chat-sound-check').style.opacity = active ? '1' : '0';
-  });
-  if (id !== 'desligado') previewSound(id);
-}
-
-function renderChatSoundConfig() {
-  const el = document.getElementById('cfg-chat-sound-list');
-  if (!el) return;
-  el.innerHTML = SOUND_OPTIONS.map(s => `
-    <div class="chat-sound-opt" data-sound="${s.id}"
-      onclick="setChatSoundPref('${s.id}')"
-      style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:10px;border:1.5px solid ${_chatSoundPref===s.id?'var(--accent)':'var(--border)'};background:${_chatSoundPref===s.id?'var(--accent-dim)':'var(--surface2)'};cursor:pointer;transition:all .15s;margin-bottom:8px">
-      <div style="width:34px;height:34px;border-radius:9px;background:var(--surface3);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">${s.id==='desligado'
-          ? '<line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M6 4.5V3L4 6H2v4h2l2 3V9M12 4a6 6 0 0 1 0 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>'
-          : '<path d="M3 6H1v4h2l4 3V3L3 6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 5a4 4 0 0 1 0 6M13.5 3a7 7 0 0 1 0 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'
-        }</svg>
-      </div>
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:600">${s.label}</div>
-        <div style="font-size:11.5px;color:var(--muted);margin-top:1px">${s.desc}</div>
-      </div>
-      <button onclick="event.stopPropagation();previewSound('${s.id}')"
-        style="background:var(--surface3);border:1px solid var(--border);border-radius:7px;padding:4px 10px;color:var(--muted2);font-size:11.5px;cursor:pointer;white-space:nowrap"
-        ${s.id==='desligado'?'disabled style="opacity:.3;pointer-events:none"':''}>
-        Ouvir
-      </button>
-      <div class="chat-sound-check" style="opacity:${_chatSoundPref===s.id?'1':'0'};color:var(--accent);transition:opacity .15s">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/>
-          <path d="M5 8l2.5 2.5L11 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </div>
-    </div>`).join('');
 }
 
 function previewSound(id) {
@@ -6256,6 +6211,50 @@ function renderSoundConfig() {
       </div>
     </div>`).join('');
 }
+
+function setChatSoundPref(id) {
+  _chatSoundPref = id;
+  try { localStorage.setItem('ef_chat_sound', id); } catch {}
+  document.querySelectorAll('.chat-sound-opt').forEach(el => {
+    const active = el.dataset.sound === id;
+    el.style.borderColor    = active ? 'var(--accent)'     : 'var(--border)';
+    el.style.background     = active ? 'var(--accent-dim)' : 'var(--surface2)';
+    el.querySelector('.chat-sound-check').style.opacity = active ? '1' : '0';
+  });
+  if (id !== 'desligado') previewSound(id);
+}
+
+function renderChatSoundConfig() {
+  const el = document.getElementById('cfg-chat-sound-list');
+  if (!el) return;
+  el.innerHTML = SOUND_OPTIONS.map(s => `
+    <div class="chat-sound-opt" data-sound="${s.id}"
+      onclick="setChatSoundPref('${s.id}')"
+      style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:10px;border:1.5px solid ${_chatSoundPref===s.id?'var(--accent)':'var(--border)'};background:${_chatSoundPref===s.id?'var(--accent-dim)':'var(--surface2)'};cursor:pointer;transition:all .15s;margin-bottom:8px">
+      <div style="width:34px;height:34px;border-radius:9px;background:var(--surface3);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">${s.id==='desligado'
+          ? '<line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M6 4.5V3L4 6H2v4h2l2 3V9M12 4a6 6 0 0 1 0 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>'
+          : '<path d="M3 6H1v4h2l4 3V3L3 6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 5a4 4 0 0 1 0 6M13.5 3a7 7 0 0 1 0 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'
+        }</svg>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${s.label}</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:1px">${s.desc}</div>
+      </div>
+      <button onclick="event.stopPropagation();previewSound('${s.id}')"
+        style="background:var(--surface3);border:1px solid var(--border);border-radius:7px;padding:4px 10px;color:var(--muted2);font-size:11.5px;cursor:pointer;white-space:nowrap"
+        ${s.id==='desligado'?'disabled style="opacity:.3;pointer-events:none"':''}>
+        Ouvir
+      </button>
+      <div class="chat-sound-check" style="opacity:${_chatSoundPref===s.id?'1':'0'};color:var(--accent);transition:opacity .15s">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/>
+          <path d="M5 8l2.5 2.5L11 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    </div>`).join('');
+}
+
 
 
 // ─────────────────────────────────────────

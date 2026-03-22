@@ -2408,7 +2408,6 @@ function loadCustomerSession() {
     if (saved && saved.id && saved.token) _customer = saved;
   } catch(e) {}
   updateProfileFab();
-  // Inicia SSE do chat assim que o cliente está logado (não espera abrir o painel)
   if (_customer && _tenantId) chatSubscribeSSE();
 }
 
@@ -2469,7 +2468,7 @@ async function doLogin() {
     closeAuth();
     toast('👋', `Olá, ${data.name.split(' ')[0]}!`);
     fillCartForm();
-    chatSubscribeSSE(); // inicia SSE do chat imediatamente após login
+    chatSubscribeSSE();
     // Sincroniza com programa de fidelidade (caso ainda não esteja cadastrado)
     fetch('/api/fidelidade/sync', {
       method: 'POST',
@@ -2514,7 +2513,7 @@ async function doRegister() {
     closeAuth();
     toast('🎉', `Bem-vindo, ${data.name.split(' ')[0]}!`);
     fillCartForm();
-    chatSubscribeSSE(); // inicia SSE do chat imediatamente após cadastro
+    chatSubscribeSSE();
     // Sincroniza com programa de fidelidade
     fetch('/api/fidelidade/sync', {
       method: 'POST',
@@ -2535,7 +2534,6 @@ function doLogout() {
   updateProfileFab();
   closeAccount();
   toast('👋','Você saiu da conta');
-  // Encerra canal SSE do chat ao deslogar
   if (_chatChannel) { sb.removeChannel(_chatChannel); _chatChannel = null; }
 }
 
@@ -4862,39 +4860,37 @@ async function chatEnviar() {
 
 function chatSubscribeSSE() {
   if (_chatChannel || !_tenantId) return;
-  _chatChannel = sb.channel(`chat-rt:${_tenantId}`)
+  _chatChannel = sb.channel('chat-rt')
     .on('postgres_changes', { event: 'INSERT', table: 'chat_messages' }, p => {
       const msg = p.new;
       if (!msg || msg.sender !== 'gestor') return;
+      // Filtra apenas mensagens para este cliente
+      if (_customer && msg.customer_phone && msg.customer_phone !== _customer.phone) return;
       _chatMsgs.push(msg);
       _chatRenderMsgs();
       if (!_chatOpen) {
         const badge = document.getElementById('chat-fab-badge');
         if (badge) badge.classList.add('on');
         toast('💬', `${msg.customer_name||'Restaurante'}: ${msg.message.slice(0,40)}`);
-        // Toca som de notificação do chat
         _playChatNotifSound();
       }
     })
     .subscribe();
 }
 
-// Som discreto para notificação de chat no cardápio (dois dings suaves)
 function _playChatNotifSound() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const _t = (f, start, dur, vol) => {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
+    const t = (f, s, d, v) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
       o.connect(g); g.connect(ctx.destination);
       o.type = 'sine'; o.frequency.value = f;
-      g.gain.setValueAtTime(vol, ctx.currentTime + start);
-      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
-      o.start(ctx.currentTime + start);
-      o.stop(ctx.currentTime + start + dur + 0.01);
+      g.gain.setValueAtTime(v, ctx.currentTime + s);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + s + d);
+      o.start(ctx.currentTime + s); o.stop(ctx.currentTime + s + d + 0.01);
     };
-    _t(1046, 0,    0.22, 0.25);
-    _t(1318, 0.28, 0.25, 0.22);
+    t(1046, 0,    0.22, 0.25);
+    t(1318, 0.28, 0.25, 0.22);
   } catch(e) {}
 }
 
