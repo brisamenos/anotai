@@ -1071,7 +1071,7 @@ function nav(id){
     initChat();
   }
   if(id==='qrcode') renderQR();
-  if(id==='cupom') renderCupons();
+  if(id==='cupom') { renderCupons(); loadCashbackConfig(); }
   if(id==='fidelidade') renderFidelidade();
   if(id==='garcom') { renderGarcom(); loadGarcons(); }
   if(id==='kds') renderKDS();
@@ -3416,6 +3416,187 @@ async function addCupom() {
 }
 
 // ─────────────────────────────────────────
+// CASHBACK
+// ─────────────────────────────────────────
+let _cbConfig = { ativo: false, pct: 0, min_pedido: 0, validade_dias: 0 };
+let _cbClientes = [];
+
+async function loadCashbackConfig() {
+  try {
+    const tid = _sessao?.tenant_id || '';
+    const r = await fetch('/api/cashback/config', { headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid } });
+    if (r.ok) _cbConfig = await r.json();
+  } catch(e) {}
+  _renderCbStats();
+}
+
+function _renderCbStats() {
+  const pctEl = document.getElementById('cb-stat-pct');
+  if (pctEl) pctEl.textContent = _cbConfig.ativo ? (_cbConfig.pct || 0) + '%' : 'Inativo';
+}
+
+async function renderCashbackClientes() {
+  const listEl = document.getElementById('cb-clientes-list');
+  const bannerEl = document.getElementById('cb-status-banner');
+  if (!listEl) return;
+
+  // Banner status
+  if (bannerEl) {
+    if (_cbConfig.ativo) {
+      bannerEl.innerHTML = `<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px;font-size:12.5px">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="color:var(--success);flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <div><strong style="color:var(--success)">Cashback ativo</strong> — ${_cbConfig.pct}% de devolução em cada pedido${_cbConfig.min_pedido > 0 ? ` acima de R$ ${parseFloat(_cbConfig.min_pedido).toFixed(2).replace('.',',')}` : ''}.
+        Saldo creditado automaticamente ao finalizar/entregar.</div>
+      </div>`;
+    } else {
+      bannerEl.innerHTML = `<div style="background:rgba(100,116,139,.08);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted)">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3M8 11v.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <div>Cashback desativado. <button class="btn bg" style="font-size:11px;padding:2px 10px;margin-left:6px" onclick="openModal('modal-cashback-config')">Configurar</button></div>
+      </div>`;
+    }
+  }
+
+  listEl.innerHTML = `<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px">Carregando...</div>`;
+
+  try {
+    const { data } = await sb.from('customers')
+      .select('id,name,phone,cashback_saldo,orders_count,total_spent')
+      .gt('cashback_saldo', 0)
+      .order('cashback_saldo', { ascending: false });
+
+    _cbClientes = data || [];
+
+    // Atualiza stats
+    const totalSaldo = _cbClientes.reduce((s, c) => s + parseFloat(c.cashback_saldo||0), 0);
+    const stSaldo = document.getElementById('cb-stat-saldo');
+    const stCli   = document.getElementById('cb-stat-clientes');
+    if (stSaldo) stSaldo.textContent = 'R$ ' + totalSaldo.toFixed(2).replace('.', ',');
+    if (stCli)   stCli.textContent   = _cbClientes.length;
+
+    const q = (document.getElementById('cb-search')?.value || '').toLowerCase();
+    const filtered = _cbClientes.filter(c =>
+      !q || (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q)
+    );
+
+    if (!filtered.length) {
+      listEl.innerHTML = `<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">
+        ${_cbConfig.ativo ? 'Nenhum cliente com saldo de cashback ainda.' : 'Ative o cashback para começar a acumular saldos.'}
+      </div>`;
+      return;
+    }
+
+    listEl.innerHTML = `
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border)">
+            <th style="padding:10px 20px;text-align:left;font-weight:600">Cliente</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:600">Telefone</th>
+            <th style="padding:10px 14px;text-align:center;font-weight:600">Pedidos</th>
+            <th style="padding:10px 14px;text-align:right;font-weight:600">Saldo cashback</th>
+            <th style="padding:10px 20px;text-align:right;font-weight:600">Ação</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filtered.map(c => {
+            const saldo = parseFloat(c.cashback_saldo||0);
+            return `<tr style="border-bottom:1px solid var(--border);font-size:13px">
+              <td style="padding:11px 20px">
+                <div style="font-weight:600">${c.name || '—'}</div>
+              </td>
+              <td style="padding:11px 14px;color:var(--muted2)">${c.phone || '—'}</td>
+              <td style="padding:11px 14px;text-align:center;color:var(--muted)">${c.orders_count || 0}</td>
+              <td style="padding:11px 14px;text-align:right">
+                <span style="font-weight:700;color:var(--success);font-size:14px">R$ ${saldo.toFixed(2).replace('.',',')}</span>
+              </td>
+              <td style="padding:11px 20px;text-align:right">
+                <button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="openCbAjuste(${c.id},'${(c.name||'').replace(/'/g,"\\'")}',${saldo})">Ajustar</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  } catch(e) {
+    listEl.innerHTML = `<div style="padding:24px;text-align:center;color:var(--danger);font-size:12px">Erro ao carregar: ${e.message}</div>`;
+  }
+}
+
+function openCbAjuste(id, nome, saldo) {
+  document.getElementById('cb-ajuste-id').value = id;
+  document.getElementById('cb-ajuste-nome').textContent = nome;
+  document.getElementById('cb-ajuste-saldo-atual').textContent = 'R$ ' + parseFloat(saldo).toFixed(2).replace('.', ',');
+  document.getElementById('cb-ajuste-valor').value = '';
+  openModal('modal-cb-ajuste');
+}
+
+async function salvarCbAjuste() {
+  const id    = parseInt(document.getElementById('cb-ajuste-id').value);
+  const valor = parseFloat(document.getElementById('cb-ajuste-valor').value);
+  if (!id || isNaN(valor) || valor === 0) { sbToast('err', 'Informe um valor válido'); return; }
+  sbLoading(true);
+  const tid = _sessao?.tenant_id || '';
+  const r = await fetch('/api/cashback/ajustar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+    body: JSON.stringify({ customer_id: id, valor })
+  });
+  sbLoading(false);
+  const data = await r.json();
+  if (!r.ok) { sbToast('err', data.error || 'Erro ao ajustar'); return; }
+  closeModal('modal-cb-ajuste');
+  sbToast('ok', `Saldo atualizado: R$ ${parseFloat(data.saldo).toFixed(2).replace('.', ',')}`);
+  renderCashbackClientes();
+}
+
+async function salvarCashbackConfig() {
+  const ativo       = document.getElementById('cb-ativo').checked;
+  const pct         = parseFloat(document.getElementById('cb-pct').value) || 0;
+  const min_pedido  = parseFloat(document.getElementById('cb-min-pedido').value) || 0;
+  const validade    = parseInt(document.getElementById('cb-validade').value) || 0;
+  if (pct < 0 || pct > 50) { sbToast('err', 'Percentual deve ser entre 0 e 50%'); return; }
+  sbLoading(true);
+  const tid = _sessao?.tenant_id || '';
+  const r = await fetch('/api/cashback/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+    body: JSON.stringify({ ativo, pct, min_pedido, validade_dias: validade })
+  });
+  sbLoading(false);
+  if (!r.ok) { sbToast('err', 'Erro ao salvar'); return; }
+  _cbConfig = { ativo, pct, min_pedido, validade_dias: validade };
+  closeModal('modal-cashback-config');
+  _renderCbStats();
+  sbToast('ok', ativo ? `Cashback de ${pct}% ativado!` : 'Cashback desativado');
+}
+
+function _openCashbackConfigModal() {
+  document.getElementById('cb-ativo').checked  = !!_cbConfig.ativo;
+  document.getElementById('cb-ativo-track').style.background = _cbConfig.ativo ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('cb-ativo-thumb').style.transform  = _cbConfig.ativo ? 'translateX(18px)' : 'translateX(0)';
+  document.getElementById('cb-pct').value         = _cbConfig.pct || '';
+  document.getElementById('cb-min-pedido').value  = _cbConfig.min_pedido || '';
+  document.getElementById('cb-validade').value    = _cbConfig.validade_dias || '';
+}
+
+// Patch openModal para preencher modal cashback ao abrir
+const _origOpenModal = typeof openModal === 'function' ? openModal : null;
+if (_origOpenModal) {
+  const _prev = openModal;
+  openModal = function(id) {
+    _prev(id);
+    if (id === 'modal-cashback-config') _openCashbackConfigModal();
+  };
+}
+
+// Patch do toggle do switch
+document.addEventListener('change', e => {
+  if (e.target.id === 'cb-ativo') {
+    const on = e.target.checked;
+    document.getElementById('cb-ativo-track').style.background = on ? 'var(--accent)' : 'var(--border)';
+    document.getElementById('cb-ativo-thumb').style.transform  = on ? 'translateX(18px)' : 'translateX(0)';
+  }
+});
+
+// ─────────────────────────────────────────
 // FIDELIDADE
 // ─────────────────────────────────────────
 // ─────────────────────────────────────────
@@ -4088,9 +4269,9 @@ function setDesempPrd(prd) {
     const btn = document.getElementById('dpb-' + id);
     if (!btn) return;
     const active = id === prd;
-    btn.style.background = active ? 'var(--accent)' : 'transparent';
-    btn.style.color      = active ? '#fff'           : 'var(--muted)';
-    btn.style.fontWeight = active ? '700'            : '600';
+    btn.style.background  = active ? 'var(--accent)' : '';
+    btn.style.color       = active ? '#fff' : '';
+    btn.style.borderColor = active ? 'var(--accent)' : '';
   });
   renderDesempenho();
 }
@@ -4109,7 +4290,8 @@ async function renderDesempenho() {
   const bar = document.getElementById('desemp-bar');
   const top = document.getElementById('desemp-top');
 
-  if (dg)  dg.innerHTML  = Array(6).fill('<div class="desemp-card"><div class="desemp-label" style="color:var(--muted)">Carregando...</div><div class="desemp-val" style="font-size:18px;color:var(--muted)">—</div></div>').join('');
+  // Loading state
+  if (dg)  dg.innerHTML  = Array(6).fill('<div class="desemp-card"><div class="desemp-label">Carregando...</div><div class="desemp-val" style="font-size:18px;color:var(--muted)">—</div></div>').join('');
   if (bar) bar.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:20px;text-align:center">Carregando...</div>';
   if (top) top.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px">Carregando...</div>';
 
@@ -4118,9 +4300,11 @@ async function renderDesempenho() {
     const since = range.inicio.toISOString();
     const ate   = range.fim.toISOString();
 
+    // Atualiza label do periodo
     const lblEl = document.getElementById('desemp-periodo-label');
     if (lblEl) lblEl.textContent = range.label;
 
+    // Busca pedidos reais do período
     const { data: allOrders } = await sb.from('orders')
       .select('id,status,total,items,mesa_num,pag,created_at,garcom_nome')
       .gte('created_at', since)
@@ -4128,78 +4312,70 @@ async function renderDesempenho() {
       .order('created_at', { ascending: true });
 
     const orders = allOrders || [];
-    const entregues = orders.filter(o => o.status !== 'cancelado');
+    const entregues = orders.filter(o => !['cancelado'].includes(o.status));
 
-    const totalPedidos     = orders.length;
-    const faturamento      = entregues.reduce((s,o) => s + parseFloat(o.total||0), 0);
-    const ticketMedio      = entregues.length > 0 ? faturamento / entregues.length : 0;
-    const cancelados       = orders.filter(o => o.status === 'cancelado').length;
+    // ── KPIs ─────────────────────────────
+    const totalPedidos   = orders.length;
+    const faturamento    = entregues.reduce((s,o) => s + parseFloat(o.total||0), 0);
+    const ticketMedio    = totalPedidos > 0 ? faturamento / totalPedidos : 0;
+    const cancelados     = orders.filter(o => o.status === 'cancelado').length;
     const taxaCancelamento = totalPedidos > 0 ? (cancelados / totalPedidos * 100) : 0;
-    const mesasSet         = new Set(orders.map(o => o.mesa_num).filter(Boolean));
-    const itensQtd         = entregues.reduce((s,o) => {
+    const mesasSet       = new Set(orders.map(o => o.mesa_num).filter(Boolean));
+    const itensQtd       = entregues.reduce((s,o) => {
       if (!Array.isArray(o.items)) return s;
       return s + o.items.reduce((si,i) => si + (i.qty||1), 0);
     }, 0);
 
-    // SVG icons (sem emojis)
-    const svgMoney  = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 4v8M5.5 6.5A2 1.5 0 0 1 8 5a2 1.5 0 0 1 0 3 2 1.5 0 0 0 0 3 2 1.5 0 0 0 2.5-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
-    const svgOrder  = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 2h6v6a3 3 0 0 1-6 0V2z" stroke="currentColor" stroke-width="1.4"/><path d="M2 2h3M11 2h3M2 5H5M11 5h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 8v4M5.5 14h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
-    const svgTicket = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 6a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1a2 2 0 0 0 0 4v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1a2 2 0 0 0 0-4V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
-    const svgTable  = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="4" width="12" height="2" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M4 6v6M12 6v6M2 12h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
-    const svgBox    = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 5l6-3 6 3v6l-6 3-6-3V5z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 2v12M2 5l6 3 6-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
-    const svgCancel = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
-
     const metrics = [
-      { label:'Faturamento',    val: 'R$\u00a0' + faturamento.toFixed(2).replace('.',','),   icon: svgMoney,  color:'var(--accent)',  sub: entregues.length + ' pedidos confirmados' },
-      { label:'Total pedidos',  val: totalPedidos,                                             icon: svgOrder,  color:'var(--accent2)', sub: totalPedidos === 1 ? '1 pedido recebido' : totalPedidos + ' recebidos no período' },
-      { label:'Ticket médio',   val: 'R$\u00a0' + ticketMedio.toFixed(2).replace('.',','),   icon: svgTicket, color:'var(--purple)',  sub: 'por pedido confirmado' },
-      { label:'Mesas atendidas',val: mesasSet.size,                                            icon: svgTable,  color:'var(--success)', sub: mesasSet.size > 0 ? mesasSet.size + ' mesas distintas' : 'Nenhuma mesa no período' },
-      { label:'Itens vendidos', val: itensQtd,                                                 icon: svgBox,    color:'var(--accent3)', sub: entregues.length > 0 ? (itensQtd / entregues.length).toFixed(1) + ' itens/pedido em média' : '—' },
-      { label:'Cancelamentos',  val: cancelados,                                               icon: svgCancel, color: cancelados > 0 ? 'var(--danger)' : 'var(--muted)', sub: taxaCancelamento > 0 ? taxaCancelamento.toFixed(1) + '% do total de pedidos' : 'Nenhum cancelamento' },
+      { label:'Faturamento', val: 'R$ ' + faturamento.toFixed(2).replace('.',','), icon:'💰', color:'var(--accent3)' },
+      { label:'Total de pedidos', val: totalPedidos, icon:'🛎️', color:'var(--accent)' },
+      { label:'Ticket médio', val: 'R$ ' + ticketMedio.toFixed(2).replace('.',','), icon:'🎯', color:'var(--purple)' },
+      { label:'Mesas atendidas', val: mesasSet.size, icon:'🍽️', color:'var(--success)' },
+      { label:'Itens vendidos', val: itensQtd, icon:'📦', color:'var(--accent2)' },
+      { label:'Cancelamentos', val: cancelados + (taxaCancelamento > 0 ? ` (${taxaCancelamento.toFixed(1)}%)` : ''), icon:'❌', color: cancelados > 0 ? 'var(--danger)' : 'var(--muted)' },
     ];
 
     if (dg) dg.innerHTML = metrics.map(m => `
-      <div class="desemp-card" style="--dc:${m.color}">
-        <div class="desemp-card-icon" style="background:color-mix(in srgb,${m.color} 15%,transparent);color:${m.color}">${m.icon}</div>
+      <div class="desemp-card">
+        <div style="font-size:24px;margin-bottom:4px">${m.icon}</div>
         <div class="desemp-label">${m.label}</div>
-        <div class="desemp-val" style="color:${m.color}">${m.val}</div>
-        <div class="desemp-sub">${m.sub}</div>
+        <div class="desemp-val" style="font-size:22px;color:${m.color}">${m.val}</div>
       </div>`).join('');
 
-    // ── Gráfico dinâmico por período ────────
-    const barTitleEl = document.getElementById('desemp-bar-title');
+    // ── Grafico dinamico por periodo ────────
+    const barCard = bar?.closest('.card')?.querySelector('.card-title');
     if (bar) {
-      let barData = [], barLabels = [], titulo = '';
+      let barData = [], barLabels = [];
       if (_desempPrd === 'anual') {
-        titulo = 'Pedidos por mês';
+        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por mês');
         const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
         barData = new Array(12).fill(0); barLabels = months;
         orders.forEach(o => { barData[new Date(o.created_at).getMonth()]++; });
       } else if (_desempPrd === 'mensal') {
-        titulo = 'Pedidos por semana';
+        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por semana');
         barData = [0,0,0,0,0]; barLabels = ['Sem 1','Sem 2','Sem 3','Sem 4','Sem 5'];
         orders.forEach(o => {
           const w = Math.min(Math.floor((new Date(o.created_at).getDate()-1)/7), 4);
           barData[w]++;
         });
       } else if (_desempPrd === 'semanal') {
-        titulo = 'Pedidos por dia da semana';
+        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por dia da semana');
         barData = [0,0,0,0,0,0,0]; barLabels = DAYS_FULL;
         orders.forEach(o => { barData[new Date(o.created_at).getDay()]++; });
-      } else {
-        titulo = 'Pedidos por hora';
+      } else { // diario
+        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por hora');
         barData = new Array(24).fill(0);
         barLabels = Array.from({length:24}, (_,i) => i % 4 === 0 ? i + 'h' : '');
         orders.forEach(o => { barData[new Date(o.created_at).getHours()]++; });
       }
-      if (barTitleEl) barTitleEl.textContent = titulo;
       const maxD = Math.max(...barData, 1);
-      bar.innerHTML = barLabels.map((lbl, i) => `
-        <div class="bar-col">
-          <div class="bar-val">${barData[i] || ''}</div>
-          <div class="bar-fill" style="height:${Math.max(Math.round(barData[i]/maxD*100), barData[i]>0?3:2)}%;background:var(--accent)${barData[i]===0?';opacity:.2':''}"></div>
-          <div class="bar-label">${lbl}</div>
-        </div>`).join('');
+      bar.innerHTML = barLabels.map((lbl, i) => [
+        '<div class="bar-col">',
+        '<div class="bar-val">' + (barData[i] || '') + '</div>',
+        '<div class="bar-fill" style="height:' + Math.max(Math.round(barData[i]/maxD*100), barData[i]>0?3:2) + '%;background:var(--accent)' + (barData[i]===0?';opacity:.2':'') + '"></div>',
+        '<div class="bar-label">' + lbl + '</div>',
+        '</div>'
+      ].join('')).join('');
     }
 
     // ── Top itens mais vendidos ──────────
@@ -4214,32 +4390,29 @@ async function renderDesempenho() {
       });
     });
     const sorted = Object.entries(itemMap).sort((a,b) => b[1].qty - a[1].qty).slice(0,8);
-    const maxQty = sorted[0]?.[1].qty || 1;
 
     if (top) {
       if (!sorted.length) {
-        top.innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:16px;text-align:center">Nenhum item no período</div>';
+        top.innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:12px;text-align:center">Nenhum item no período</div>';
       } else {
-        top.innerHTML = sorted.map(([name, {qty, rev}], idx) => `
-          <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
-            <span style="width:18px;font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0">${idx+1}</span>
-            <div style="flex:1;min-width:0">
-              <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
-              <div style="height:3px;background:var(--border);border-radius:99px;margin-top:5px;overflow:hidden">
-                <div style="height:100%;width:${Math.round(qty/maxQty*100)}%;background:var(--accent);border-radius:99px"></div>
-              </div>
-            </div>
-            <div style="text-align:right;flex-shrink:0">
-              <div style="font-size:12.5px;font-weight:700;color:var(--accent)">${qty}x</div>
-              <div style="font-size:11px;color:var(--muted)">R$\u00a0${rev.toFixed(2).replace('.',',')}</div>
-            </div>
-          </div>`).join('');
+        // Find emoji from items list if available
+        top.innerHTML = sorted.map(([name, {qty, rev}], idx) => {
+          const menuItem = items.find(i => i.name === name);
+          const emoji = menuItem?.emoji || '🍽️';
+          return `<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:12px;font-weight:700;color:var(--accent);width:18px">${idx+1}</span>
+            <span style="font-size:18px">${emoji}</span>
+            <span style="flex:1;font-size:12.5px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</span>
+            <span style="font-size:11px;color:var(--muted);margin-right:6px">${qty}x</span>
+            <span style="font-size:12px;font-weight:700;color:var(--success);flex-shrink:0">R$ ${rev.toFixed(2).replace('.',',')}</span>
+          </div>`;
+        }).join('');
       }
     }
 
   } catch(e) {
     console.error('renderDesempenho error:', e);
-    if (dg) dg.innerHTML = '<div style="color:var(--danger);font-size:13px;padding:12px;grid-column:span 3">Erro ao carregar dados</div>';
+    if (dg) dg.innerHTML = '<div style="color:var(--danger);font-size:13px;padding:12px;grid-column:span 3">Erro ao carregar dados de desempenho</div>';
   }
 }
 

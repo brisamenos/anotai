@@ -239,6 +239,10 @@ const MIGRATIONS = [
     `ALTER TABLE menu_items ADD COLUMN destaque INTEGER DEFAULT 0`
   ]},
   { version:19, description:'sort_order em menu_items', up:`ALTER TABLE menu_items ADD COLUMN sort_order INTEGER DEFAULT 0` },
+  { version:20, description:'cashback em customers e store_config', up:[
+    `ALTER TABLE customers ADD COLUMN cashback_saldo REAL DEFAULT 0`,
+    `ALTER TABLE store_config ADD COLUMN cashback_config TEXT DEFAULT '{}'`,
+  ]},
 ]
 
 function runMigrations() {
@@ -418,7 +422,7 @@ const TABLE_COLS = {
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','updated_at'],
   fidelidade:   ['id','tenant_id','name','phone','birthday','pts','max_pts','orders_count','resgates','created_at'],
-  customers:    ['id','tenant_id','name','phone','addr','orders_count','total_spent','last_order_at','email','birthday','senha_hash','created_at'],
+  customers:    ['id','tenant_id','name','phone','addr','orders_count','total_spent','last_order_at','email','birthday','senha_hash','cashback_saldo','created_at'],
   ratings:      ['id','tenant_id','order_id','client','phone','nota','comentario','created_at'],
 }
 // Colunas que NUNCA aparecem na resposta GET — mas ainda funcionam como filtro WHERE e em escrita
@@ -433,7 +437,7 @@ const NO_TENANT_FILTER = new Set(['tenants','sys_users'])
 const JSON_FIELDS = {
   orders:       new Set(['items']),
   menu_items:   new Set(['days','ingredients','custom_groups']),
-  store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config']),
+  store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config','cashback_config']),
 }
 const BOOL_FIELDS  = new Set(['ativo','store_open','caixa_open','destaque'])
 const SSE_TABLES   = new Set(['orders','mesas','store_config','menu_items','categories','garcons','customers'])
@@ -594,6 +598,32 @@ async function handleREST(req, res, table, params, body) {
       }
       db.prepare(`UPDATE "${table}" SET ${keys.map(k=>`"${k}"=?`).join(', ')} ${WHERE}`).run(...keys.map(k=>sanitize(payload[k])),...vals)
       if (SSE_TABLES.has(table)) { const updatedRow=db.prepare(`SELECT * FROM "${table}" ${WHERE} LIMIT 1`).get(...vals); emit(tenantId||payload.tenant_id, table, updatedRow?parseRow(table,updatedRow):payload, 'UPDATE') }
+
+      // ── Cashback automático ao finalizar pedido ─────────
+      if (table === 'orders' && payload.status && ['finalizado','entregue'].includes(payload.status)) {
+        try {
+          const idVal = vals[0]
+          const order = db.prepare('SELECT * FROM orders WHERE id=?').get(idVal)
+          const cfg   = db.prepare('SELECT cashback_config FROM store_config WHERE tenant_id=?').get(tenantId)
+          const cbCfg = (() => { try { return JSON.parse(cfg?.cashback_config||'{}') } catch { return {} } })()
+          if (cbCfg.ativo && cbCfg.pct > 0 && order?.phone) {
+            const total    = parseFloat(order.total||0)
+            const minPed   = parseFloat(cbCfg.min_pedido||0)
+            if (total >= minPed) {
+              const credito = parseFloat((total * cbCfg.pct / 100).toFixed(2))
+              // Upsert customer e acumula saldo
+              const cust = db.prepare('SELECT id,cashback_saldo FROM customers WHERE tenant_id=? AND phone=?').get(tenantId, order.phone)
+              if (cust) {
+                db.prepare('UPDATE customers SET cashback_saldo=cashback_saldo+? WHERE id=?').run(credito, cust.id)
+              } else {
+                db.prepare('INSERT OR IGNORE INTO customers (tenant_id,name,phone,cashback_saldo) VALUES (?,?,?,?)').run(tenantId, order.client||order.phone, order.phone, credito)
+              }
+              log('💰', `Cashback R$${credito} creditado para ${order.phone} (pedido #${idVal})`)
+            }
+          }
+        } catch(cbErr) { log('⚠️', 'Erro ao creditar cashback:', cbErr.message) }
+      }
+
       marcarDirty(); return send(res, 200, { updated: 1 })
     } catch(e) { return send(res, 400, { error: e.message }) }
   }
@@ -906,6 +936,53 @@ const server = http.createServer(async (req,res) => {
   if(upath==='/status'){send(res,200,{ok:true,uptime:Math.floor(process.uptime()),db:'sqlite-multitenant',version:'4.0.0',backup:fs.existsSync(BACKUP_PATH)?fs.statSync(BACKUP_PATH).mtime:null});return}
   if(req.method==='POST'&&upath==='/api/order-status'){await handleOrderStatus(req,res);return}
 
+  // ── Cashback ─────────────────────────────────────────────
+  if(upath==='/api/cashback/config'){
+    const tid=req.headers['x-tenant-id']||params.get('tenant_id')||''
+    if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
+    if(req.method==='GET'){
+      const cfg=db.prepare('SELECT cashback_config FROM store_config WHERE tenant_id=?').get(tid)
+      const parsed=(() => { try { return JSON.parse(cfg?.cashback_config||'{}') } catch { return {} } })()
+      send(res,200,parsed);return
+    }
+    if(req.method==='POST'||req.method==='PATCH'){
+      const body=await readBody(req)
+      const cfgStr=JSON.stringify({ativo:!!body.ativo,pct:parseFloat(body.pct)||0,min_pedido:parseFloat(body.min_pedido)||0,validade_dias:parseInt(body.validade_dias)||0})
+      db.prepare('INSERT INTO store_config (tenant_id,cashback_config) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET cashback_config=excluded.cashback_config').run(tid,cfgStr)
+      marcarDirty();send(res,200,{ok:true});return
+    }
+  }
+  if(req.method==='GET'&&upath==='/api/cashback/saldo'){
+    const tid=req.headers['x-tenant-id']||params.get('tenant_id')||''
+    const phone=(params.get('phone')||'').replace(/\D/g,'')
+    if(!tid||!phone){send(res,400,{error:'tenant_id e phone obrigatórios'});return}
+    const cust=db.prepare('SELECT cashback_saldo FROM customers WHERE tenant_id=? AND phone LIKE ?').get(tid,`%${phone.slice(-8)}%`)
+    send(res,200,{saldo:parseFloat(cust?.cashback_saldo||0)});return
+  }
+  if(req.method==='POST'&&upath==='/api/cashback/usar'){
+    const tid=req.headers['x-tenant-id']||params.get('tenant_id')||''
+    const body=await readBody(req)
+    const phone=(body.phone||'').replace(/\D/g,'')
+    const valor=parseFloat(body.valor)||0
+    if(!tid||!phone||valor<=0){send(res,400,{error:'Parâmetros inválidos'});return}
+    const cust=db.prepare('SELECT id,cashback_saldo FROM customers WHERE tenant_id=? AND phone LIKE ?').get(tid,`%${phone.slice(-8)}%`)
+    if(!cust){send(res,404,{error:'Cliente não encontrado'});return}
+    const saldo=parseFloat(cust.cashback_saldo||0)
+    if(saldo<valor){send(res,400,{error:'Saldo insuficiente',saldo});return}
+    db.prepare('UPDATE customers SET cashback_saldo=cashback_saldo-? WHERE id=?').run(valor,cust.id)
+    marcarDirty();send(res,200,{ok:true,saldo_restante:parseFloat((saldo-valor).toFixed(2))});return
+  }
+  if(req.method==='POST'&&upath==='/api/cashback/ajustar'){
+    const tid=req.headers['x-tenant-id']||params.get('tenant_id')||''
+    const body=await readBody(req)
+    const custId=parseInt(body.customer_id)||0
+    const valor=parseFloat(body.valor)||0
+    if(!tid||!custId){send(res,400,{error:'Parâmetros inválidos'});return}
+    db.prepare('UPDATE customers SET cashback_saldo=MAX(0,cashback_saldo+?) WHERE id=? AND tenant_id=?').run(valor,custId,tid)
+    const updated=db.prepare('SELECT cashback_saldo FROM customers WHERE id=?').get(custId)
+    marcarDirty();send(res,200,{ok:true,saldo:parseFloat(updated?.cashback_saldo||0)});return
+  }
+
   // ── Rotas especiais — todas em routes.js ───────────────────────────────────
   const _routeCtx = { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
     validarSessaoAdmin, criarSessaoAdmin, fazerBackup, restaurarBackup, getTenantId,
@@ -921,7 +998,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle'])
+  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return

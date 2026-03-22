@@ -553,7 +553,7 @@ input,textarea{font-family:inherit}
 }
 .form-input:focus{border-color:rgba(249,115,22,.4)}
 .form-input::placeholder{color:var(--muted)}
-.form-row2{display:grid;grid-template-columns:90px 1fr;gap:8px}
+.form-row2{display:grid;grid-template-columns:1fr 80px;gap:8px}
 
 /* pagamento */
 .pay-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
@@ -1302,6 +1302,27 @@ input,textarea{font-family:inherit}
         </div>
         <div id="cupom-msg"></div>
 
+        <!-- cashback -->
+        <div id="cashback-block" style="display:none;margin-top:14px">
+          <div class="form-section-label" style="margin-bottom:6px">Cashback disponível</div>
+          <div style="background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:12px;padding:13px 15px;display:flex;align-items:center;gap:12px">
+            <div style="width:36px;height:36px;border-radius:9px;background:rgba(34,197,94,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="color:var(--success,#22c55e)"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 4v8M5.5 6.5A2 1.5 0 0 1 8 5a2 1.5 0 0 1 0 3 2 1.5 0 0 0 0 3 2 1.5 0 0 0 2.5-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            </div>
+            <div style="flex:1">
+              <div style="font-size:12px;color:#166534;font-weight:600">Você tem <span id="cb-saldo-display" style="font-size:14px;font-weight:800">R$ 0,00</span> de cashback</div>
+              <div style="font-size:11px;color:#4ade80;margin-top:2px">Ganho em pedidos anteriores</div>
+            </div>
+            <div>
+              <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12.5px;font-weight:600;color:#166534">
+                <input type="checkbox" id="cb-usar-check" onchange="toggleUsarCashback()" style="width:15px;height:15px;accent-color:#22c55e">
+                Usar
+              </label>
+            </div>
+          </div>
+          <div id="cb-usar-msg" style="margin-top:5px;font-size:11.5px;color:#16a34a"></div>
+        </div>
+
         <!-- endereço delivery -->
         <div id="addr-block">
           <div class="form-section-label">Endereço de entrega</div>
@@ -1328,7 +1349,7 @@ input,textarea{font-family:inherit}
         <!-- dados do cliente -->
         <div class="form-section-label">Seus dados</div>
         <input class="form-input" id="f-name"  placeholder="Seu nome completo">
-        <input class="form-input" id="f-phone" placeholder="WhatsApp (DDD + número)" type="tel">
+        <input class="form-input" id="f-phone" placeholder="WhatsApp (DDD + número)" type="tel" oninput="onPhoneCashback(this.value)">
 
         <!-- pagamento -->
         <div class="form-section-label">Forma de pagamento</div>
@@ -1563,6 +1584,8 @@ let searchQ      = '';
 let deliveryType = 'delivery';
 let selectedPay  = 'dinheiro';
 let appliedCupom = null;
+let _cbSaldo       = 0;   // saldo cashback disponível
+let _cbUsar        = false; // cliente optou por usar cashback
 let feeConfig    = {};
 let selectedFaixa= 0;
 let _lojaAberta  = true;
@@ -2752,7 +2775,14 @@ function getTaxa() {
   return parseFloat(feeConfig.valor ?? feeConfig.value ?? 0);
 }
 
-function grandTotal() { return Math.max(0, cartSubtotal() - getDiscount() + getTaxa()); }
+function grandTotal() {
+  const sub  = cartSubtotal();
+  const disc = getDiscount();
+  const taxa = getTaxa();
+  const net  = Math.max(0, sub - disc + taxa);
+  if (_cbUsar && _cbSaldo > 0) return Math.max(0, net - Math.min(_cbSaldo, net));
+  return net;
+}
 
 function updateCartFloat() {
   const qty = cart.reduce((s,i) => s+i.qty, 0);
@@ -2844,7 +2874,9 @@ function renderTotals() {
   const sub  = cartSubtotal();
   const disc = getDiscount();
   const taxa = getTaxa();
-  const tot  = grandTotal();
+  const net  = Math.max(0, sub - disc + taxa);
+  const cbDesc = (_cbUsar && _cbSaldo > 0) ? Math.min(_cbSaldo, Math.max(0, sub - disc + taxa)) : 0;
+  const tot  = Math.max(0, net - cbDesc);
   let taxaLabel = 'Taxa de entrega';
   if (deliveryType === 'delivery' && feeConfig?.tipo === 'por_km') {
     const f = (feeConfig.faixas||[])[selectedFaixa];
@@ -2853,7 +2885,8 @@ function renderTotals() {
   document.getElementById('totals-wrap').innerHTML = `
     <div class="total-row"><span>Subtotal</span><span>R$ ${fmt(sub)}</span></div>
     ${deliveryType === 'delivery' ? `<div class="total-row"><span>${taxaLabel}</span><span>${taxa>0?'R$ '+fmt(taxa):'Grátis'}</span></div>` : ''}
-    ${disc > 0 ? `<div class="total-row total-disc"><span>🏷 Desconto (${appliedCupom.code})</span><span>− R$ ${fmt(disc)}</span></div>` : ''}
+    ${disc > 0 ? `<div class="total-row total-disc"><span>Desconto (${appliedCupom.code})</span><span>− R$ ${fmt(disc)}</span></div>` : ''}
+    ${cbDesc > 0 ? `<div class="total-row total-disc"><span>Cashback usado</span><span>− R$ ${fmt(cbDesc)}</span></div>` : ''}
     <div class="total-row big"><span>Total</span><span>R$ ${fmt(tot)}</span></div>`;
 }
 
@@ -2874,6 +2907,58 @@ function applyCupom() {
       appliedCupom = found;
       msg.innerHTML = `<div class="cupom-ok">✅ Cupom "${found.code}" aplicado!</div>`;
     }
+  }
+  renderTotals();
+}
+
+// ── Cashback no checkout ─────────────────────────────
+let _cbLookupTimer = null;
+async function onPhoneCashback(raw) {
+  const phone = raw.replace(/\D/g,'');
+  if (phone.length < 8) { _resetCashbackUI(); return; }
+  clearTimeout(_cbLookupTimer);
+  _cbLookupTimer = setTimeout(async () => {
+    try {
+      const tid = _tenantId || '';
+      const r = await fetch(`/api/cashback/saldo?phone=${phone}&tenant_id=${encodeURIComponent(tid)}`);
+      if (!r.ok) { _resetCashbackUI(); return; }
+      const d = await r.json();
+      _cbSaldo = parseFloat(d.saldo || 0);
+      const block = document.getElementById('cashback-block');
+      const disp  = document.getElementById('cb-saldo-display');
+      if (_cbSaldo > 0 && block) {
+        block.style.display = '';
+        if (disp) disp.textContent = 'R$ ' + _cbSaldo.toFixed(2).replace('.', ',');
+      } else {
+        _resetCashbackUI();
+      }
+    } catch(e) { _resetCashbackUI(); }
+  }, 600);
+}
+
+function _resetCashbackUI() {
+  _cbSaldo = 0; _cbUsar = false;
+  const block = document.getElementById('cashback-block');
+  const check = document.getElementById('cb-usar-check');
+  const msg   = document.getElementById('cb-usar-msg');
+  if (block) block.style.display = 'none';
+  if (check) check.checked = false;
+  if (msg)   msg.textContent = '';
+  renderTotals();
+}
+
+function toggleUsarCashback() {
+  const check = document.getElementById('cb-usar-check');
+  _cbUsar = check?.checked || false;
+  const msg = document.getElementById('cb-usar-msg');
+  if (_cbUsar) {
+    const sub  = cartSubtotal();
+    const disc = getDiscount();
+    const net  = sub - disc;
+    const usar = Math.min(_cbSaldo, net);
+    if (msg) msg.textContent = `✅ R$ ${usar.toFixed(2).replace('.', ',')} de cashback será descontado do total.`;
+  } else {
+    if (msg) msg.textContent = '';
   }
   renderTotals();
 }
@@ -3118,6 +3203,22 @@ async function _doSubmitOrder(addr, troco) {
     }).select().single();
 
     if (error) throw error;
+
+    // ── Debitar cashback se cliente usou ──────────────
+    if (_cbUsar && _cbSaldo > 0) {
+      try {
+        const cbDesc = Math.min(_cbSaldo, Math.max(0, cartSubtotal() - getDiscount() + getTaxa()));
+        if (cbDesc > 0) {
+          const tid = _tenantId || '';
+          await fetch('/api/cashback/usar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+            body: JSON.stringify({ phone: phone.replace(/\D/g,''), valor: cbDesc })
+          });
+        }
+      } catch(e) {}
+      _resetCashbackUI();
+    }
 
     cart = [];
     appliedCupom = null;
