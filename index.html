@@ -1072,10 +1072,21 @@ input,textarea{font-family:inherit}
     <div class="hero-meta-item" id="badge-tempo" style="display:none"><svg width="14" height="12" viewBox="0 0 16 14" fill="none"><circle cx="3" cy="11" r="2" stroke="currentColor" stroke-width="1.3"/><circle cx="13" cy="11" r="2" stroke="currentColor" stroke-width="1.3"/><path d="M5 11H3M11 11h2M6 11L7.5 5.5h3L12 8.5H6z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg> <span id="hero-tempo"></span></div>
     <span class="hero-meta-sep" id="sep-tempo" style="display:none">·</span>
     <div class="hero-meta-item" id="badge-aval" style="display:none">⭐ <span id="hero-aval"></span></div>
+    <span class="hero-meta-sep" id="sep-aval" style="display:none">·</span>
+    <div class="hero-meta-item" id="badge-minimo" style="display:none">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 4v4l2.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      Mín. R$ <span id="hero-minimo"></span>
+    </div>
     <a class="hero-meta-link" onclick="onProfileFabClick()" id="profile-fab-name">Entrar</a>
   </div>
   <!-- legado: mantém status-badge para não quebrar JS -->
   <div id="status-badge" style="display:none"><div class="dot" id="status-dot-legacy"></div></div>
+
+  <!-- Endereço do estabelecimento (aparece se gestor cadastrou) -->
+  <div id="hero-address-bar" style="display:none;padding:7px 16px 10px;font-size:11.5px;color:var(--muted2);display:none;align-items:center;gap:5px">
+    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:.7"><path d="M8 1.5C5.51 1.5 3.5 3.51 3.5 6c0 3.75 4.5 8.5 4.5 8.5S12.5 9.75 12.5 6c0-2.49-2.01-4.5-4.5-4.5z" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="6" r="1.5" stroke="currentColor" stroke-width="1.3"/></svg>
+    <span id="hero-address-txt"></span>
+  </div>
 </div>
 
 <!-- BANNER LOJA FECHADA -->
@@ -1295,6 +1306,12 @@ input,textarea{font-family:inherit}
             Endereço para retirada
           </div>
           <div id="retirada-addr-text" style="font-size:12.5px;color:#166534"></div>
+        </div>
+
+        <!-- Pedido mínimo delivery (info sempre visível quando aplicável) -->
+        <div id="cart-minimo-bar" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.2);border-radius:8px;font-size:12px;color:var(--accent);display:none;align-items:center;gap:6px">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3M8 10v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Pedido mínimo para delivery: <strong id="cart-minimo-val"></strong>
         </div>
 
         <!-- itens -->
@@ -1706,12 +1723,43 @@ function applyBranding(b, nome) {
     if (el) el.textContent = b.store_avaliacao;
     const badge = document.getElementById('badge-aval');
     if (badge) badge.style.display = '';
+    const sep = document.getElementById('sep-aval');
+    if (sep) sep.style.display = '';
   }
 
   // WhatsApp
   if (b?.store_whatsapp) {
     _waNumero = b.store_whatsapp.replace(/\D/g, '');
     if (_waNumero.length <= 11) _waNumero = '55' + _waNumero;
+  }
+}
+
+// Mostra pedido mínimo e endereço no hero após carregar store_config
+function applyDeliveryInfo() {
+  // Pedido mínimo — badge no hero
+  if (_pedidoMinimo > 0) {
+    const el = document.getElementById('hero-minimo');
+    const badge = document.getElementById('badge-minimo');
+    const sep = document.getElementById('sep-aval');
+    if (el) el.textContent = fmt(_pedidoMinimo);
+    if (badge) badge.style.display = '';
+    if (sep) sep.style.display = '';
+  }
+
+  // Pedido mínimo — barra no carrinho (aba delivery é o padrão)
+  const minimoBar = document.getElementById('cart-minimo-bar');
+  const minimoVal = document.getElementById('cart-minimo-val');
+  if (minimoBar && _pedidoMinimo > 0 && deliveryType === 'delivery') {
+    minimoBar.style.display = 'flex';
+    if (minimoVal) minimoVal.textContent = 'R$ ' + fmt(_pedidoMinimo);
+  }
+
+  // Endereço do estabelecimento — barra no hero
+  if (_storeAddress) {
+    const bar = document.getElementById('hero-address-bar');
+    const txt = document.getElementById('hero-address-txt');
+    if (bar) bar.style.display = 'flex';
+    if (txt) txt.textContent = _storeAddress;
   }
 }
 
@@ -1833,6 +1881,7 @@ async function init() {
     loadCustomerSession();
     setupPlanFeatures();
     applyTiposEntrega();
+    applyDeliveryInfo();
     setInterval(() => applyStatus(undefined, undefined), 60000);
   } catch(e) {
     console.error(e);
@@ -2914,6 +2963,17 @@ function setDelivery(type) {
     retBlock.style.display = (type === 'retirada' && _storeAddress) ? '' : 'none';
     retText.textContent    = _storeAddress;
   }
+  // Pedido mínimo delivery — mostra só na aba delivery
+  const minimoBar = document.getElementById('cart-minimo-bar');
+  const minimoVal = document.getElementById('cart-minimo-val');
+  if (minimoBar) {
+    if (type === 'delivery' && _pedidoMinimo > 0) {
+      minimoBar.style.display = 'flex';
+      if (minimoVal) minimoVal.textContent = 'R$ ' + fmt(_pedidoMinimo);
+    } else {
+      minimoBar.style.display = 'none';
+    }
+  }
   renderFaixas();
   renderGeoBlock();
   renderTotals();
@@ -2987,8 +3047,7 @@ function renderTotals() {
     if (f) taxaLabel = `Entrega até ${f.ate_km} km`;
   }
   // Aviso de pedido mínimo
-  const minimoAtingido = deliveryType !== 'delivery' || _pedidoMinimo <= 0 || sub >= _pedidoMinimo;
-  const minimoFalta    = _pedidoMinimo > 0 && deliveryType === 'delivery' && sub < _pedidoMinimo ? _pedidoMinimo - sub : 0;
+  const minimoFalta = _pedidoMinimo > 0 && deliveryType === 'delivery' && sub < _pedidoMinimo ? _pedidoMinimo - sub : 0;
   document.getElementById('totals-wrap').innerHTML = `
     ${minimoFalta > 0 ? `<div style="padding:8px 12px;margin-bottom:8px;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:12px;color:#92400e;display:flex;align-items:center;gap:7px">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3M8 10v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
