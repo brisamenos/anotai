@@ -4088,9 +4088,9 @@ function setDesempPrd(prd) {
     const btn = document.getElementById('dpb-' + id);
     if (!btn) return;
     const active = id === prd;
-    btn.style.background  = active ? 'var(--accent)' : '';
-    btn.style.color       = active ? '#fff' : '';
-    btn.style.borderColor = active ? 'var(--accent)' : '';
+    btn.style.background = active ? 'var(--accent)' : 'transparent';
+    btn.style.color      = active ? '#fff'           : 'var(--muted)';
+    btn.style.fontWeight = active ? '700'            : '600';
   });
   renderDesempenho();
 }
@@ -4109,8 +4109,7 @@ async function renderDesempenho() {
   const bar = document.getElementById('desemp-bar');
   const top = document.getElementById('desemp-top');
 
-  // Loading state
-  if (dg)  dg.innerHTML  = Array(6).fill('<div class="desemp-card"><div class="desemp-label">Carregando...</div><div class="desemp-val" style="font-size:18px;color:var(--muted)">—</div></div>').join('');
+  if (dg)  dg.innerHTML  = Array(6).fill('<div class="desemp-card"><div class="desemp-label" style="color:var(--muted)">Carregando...</div><div class="desemp-val" style="font-size:18px;color:var(--muted)">—</div></div>').join('');
   if (bar) bar.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:20px;text-align:center">Carregando...</div>';
   if (top) top.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px">Carregando...</div>';
 
@@ -4119,11 +4118,9 @@ async function renderDesempenho() {
     const since = range.inicio.toISOString();
     const ate   = range.fim.toISOString();
 
-    // Atualiza label do periodo
     const lblEl = document.getElementById('desemp-periodo-label');
     if (lblEl) lblEl.textContent = range.label;
 
-    // Busca pedidos reais do período
     const { data: allOrders } = await sb.from('orders')
       .select('id,status,total,items,mesa_num,pag,created_at,garcom_nome')
       .gte('created_at', since)
@@ -4131,70 +4128,78 @@ async function renderDesempenho() {
       .order('created_at', { ascending: true });
 
     const orders = allOrders || [];
-    const entregues = orders.filter(o => !['cancelado'].includes(o.status));
+    const entregues = orders.filter(o => o.status !== 'cancelado');
 
-    // ── KPIs ─────────────────────────────
-    const totalPedidos   = orders.length;
-    const faturamento    = entregues.reduce((s,o) => s + parseFloat(o.total||0), 0);
-    const ticketMedio    = totalPedidos > 0 ? faturamento / totalPedidos : 0;
-    const cancelados     = orders.filter(o => o.status === 'cancelado').length;
+    const totalPedidos     = orders.length;
+    const faturamento      = entregues.reduce((s,o) => s + parseFloat(o.total||0), 0);
+    const ticketMedio      = entregues.length > 0 ? faturamento / entregues.length : 0;
+    const cancelados       = orders.filter(o => o.status === 'cancelado').length;
     const taxaCancelamento = totalPedidos > 0 ? (cancelados / totalPedidos * 100) : 0;
-    const mesasSet       = new Set(orders.map(o => o.mesa_num).filter(Boolean));
-    const itensQtd       = entregues.reduce((s,o) => {
+    const mesasSet         = new Set(orders.map(o => o.mesa_num).filter(Boolean));
+    const itensQtd         = entregues.reduce((s,o) => {
       if (!Array.isArray(o.items)) return s;
       return s + o.items.reduce((si,i) => si + (i.qty||1), 0);
     }, 0);
 
+    // SVG icons (sem emojis)
+    const svgMoney  = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 4v8M5.5 6.5A2 1.5 0 0 1 8 5a2 1.5 0 0 1 0 3 2 1.5 0 0 0 0 3 2 1.5 0 0 0 2.5-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+    const svgOrder  = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 2h6v6a3 3 0 0 1-6 0V2z" stroke="currentColor" stroke-width="1.4"/><path d="M2 2h3M11 2h3M2 5H5M11 5h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 8v4M5.5 14h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+    const svgTicket = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 6a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1a2 2 0 0 0 0 4v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1a2 2 0 0 0 0-4V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+    const svgTable  = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="4" width="12" height="2" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M4 6v6M12 6v6M2 12h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+    const svgBox    = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 5l6-3 6 3v6l-6 3-6-3V5z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 2v12M2 5l6 3 6-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+    const svgCancel = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+
     const metrics = [
-      { label:'Faturamento', val: 'R$ ' + faturamento.toFixed(2).replace('.',','), icon:'💰', color:'var(--accent3)' },
-      { label:'Total de pedidos', val: totalPedidos, icon:'🛎️', color:'var(--accent)' },
-      { label:'Ticket médio', val: 'R$ ' + ticketMedio.toFixed(2).replace('.',','), icon:'🎯', color:'var(--purple)' },
-      { label:'Mesas atendidas', val: mesasSet.size, icon:'🍽️', color:'var(--success)' },
-      { label:'Itens vendidos', val: itensQtd, icon:'📦', color:'var(--accent2)' },
-      { label:'Cancelamentos', val: cancelados + (taxaCancelamento > 0 ? ` (${taxaCancelamento.toFixed(1)}%)` : ''), icon:'❌', color: cancelados > 0 ? 'var(--danger)' : 'var(--muted)' },
+      { label:'Faturamento',    val: 'R$\u00a0' + faturamento.toFixed(2).replace('.',','),   icon: svgMoney,  color:'var(--accent)',  sub: entregues.length + ' pedidos confirmados' },
+      { label:'Total pedidos',  val: totalPedidos,                                             icon: svgOrder,  color:'var(--accent2)', sub: totalPedidos === 1 ? '1 pedido recebido' : totalPedidos + ' recebidos no período' },
+      { label:'Ticket médio',   val: 'R$\u00a0' + ticketMedio.toFixed(2).replace('.',','),   icon: svgTicket, color:'var(--purple)',  sub: 'por pedido confirmado' },
+      { label:'Mesas atendidas',val: mesasSet.size,                                            icon: svgTable,  color:'var(--success)', sub: mesasSet.size > 0 ? mesasSet.size + ' mesas distintas' : 'Nenhuma mesa no período' },
+      { label:'Itens vendidos', val: itensQtd,                                                 icon: svgBox,    color:'var(--accent3)', sub: entregues.length > 0 ? (itensQtd / entregues.length).toFixed(1) + ' itens/pedido em média' : '—' },
+      { label:'Cancelamentos',  val: cancelados,                                               icon: svgCancel, color: cancelados > 0 ? 'var(--danger)' : 'var(--muted)', sub: taxaCancelamento > 0 ? taxaCancelamento.toFixed(1) + '% do total de pedidos' : 'Nenhum cancelamento' },
     ];
 
     if (dg) dg.innerHTML = metrics.map(m => `
-      <div class="desemp-card">
-        <div style="font-size:24px;margin-bottom:4px">${m.icon}</div>
+      <div class="desemp-card" style="--dc:${m.color}">
+        <div class="desemp-card-icon" style="background:color-mix(in srgb,${m.color} 15%,transparent);color:${m.color}">${m.icon}</div>
         <div class="desemp-label">${m.label}</div>
-        <div class="desemp-val" style="font-size:22px;color:${m.color}">${m.val}</div>
+        <div class="desemp-val" style="color:${m.color}">${m.val}</div>
+        <div class="desemp-sub">${m.sub}</div>
       </div>`).join('');
 
-    // ── Grafico dinamico por periodo ────────
-    const barCard = bar?.closest('.card')?.querySelector('.card-title');
+    // ── Gráfico dinâmico por período ────────
+    const barTitleEl = document.getElementById('desemp-bar-title');
     if (bar) {
-      let barData = [], barLabels = [];
+      let barData = [], barLabels = [], titulo = '';
       if (_desempPrd === 'anual') {
-        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por mês');
+        titulo = 'Pedidos por mês';
         const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
         barData = new Array(12).fill(0); barLabels = months;
         orders.forEach(o => { barData[new Date(o.created_at).getMonth()]++; });
       } else if (_desempPrd === 'mensal') {
-        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por semana');
+        titulo = 'Pedidos por semana';
         barData = [0,0,0,0,0]; barLabels = ['Sem 1','Sem 2','Sem 3','Sem 4','Sem 5'];
         orders.forEach(o => {
           const w = Math.min(Math.floor((new Date(o.created_at).getDate()-1)/7), 4);
           barData[w]++;
         });
       } else if (_desempPrd === 'semanal') {
-        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por dia da semana');
+        titulo = 'Pedidos por dia da semana';
         barData = [0,0,0,0,0,0,0]; barLabels = DAYS_FULL;
         orders.forEach(o => { barData[new Date(o.created_at).getDay()]++; });
-      } else { // diario
-        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por hora');
+      } else {
+        titulo = 'Pedidos por hora';
         barData = new Array(24).fill(0);
         barLabels = Array.from({length:24}, (_,i) => i % 4 === 0 ? i + 'h' : '');
         orders.forEach(o => { barData[new Date(o.created_at).getHours()]++; });
       }
+      if (barTitleEl) barTitleEl.textContent = titulo;
       const maxD = Math.max(...barData, 1);
-      bar.innerHTML = barLabels.map((lbl, i) => [
-        '<div class="bar-col">',
-        '<div class="bar-val">' + (barData[i] || '') + '</div>',
-        '<div class="bar-fill" style="height:' + Math.max(Math.round(barData[i]/maxD*100), barData[i]>0?3:2) + '%;background:var(--accent)' + (barData[i]===0?';opacity:.2':'') + '"></div>',
-        '<div class="bar-label">' + lbl + '</div>',
-        '</div>'
-      ].join('')).join('');
+      bar.innerHTML = barLabels.map((lbl, i) => `
+        <div class="bar-col">
+          <div class="bar-val">${barData[i] || ''}</div>
+          <div class="bar-fill" style="height:${Math.max(Math.round(barData[i]/maxD*100), barData[i]>0?3:2)}%;background:var(--accent)${barData[i]===0?';opacity:.2':''}"></div>
+          <div class="bar-label">${lbl}</div>
+        </div>`).join('');
     }
 
     // ── Top itens mais vendidos ──────────
@@ -4209,29 +4214,32 @@ async function renderDesempenho() {
       });
     });
     const sorted = Object.entries(itemMap).sort((a,b) => b[1].qty - a[1].qty).slice(0,8);
+    const maxQty = sorted[0]?.[1].qty || 1;
 
     if (top) {
       if (!sorted.length) {
-        top.innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:12px;text-align:center">Nenhum item no período</div>';
+        top.innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:16px;text-align:center">Nenhum item no período</div>';
       } else {
-        // Find emoji from items list if available
-        top.innerHTML = sorted.map(([name, {qty, rev}], idx) => {
-          const menuItem = items.find(i => i.name === name);
-          const emoji = menuItem?.emoji || '🍽️';
-          return `<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--border)">
-            <span style="font-size:12px;font-weight:700;color:var(--accent);width:18px">${idx+1}</span>
-            <span style="font-size:18px">${emoji}</span>
-            <span style="flex:1;font-size:12.5px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</span>
-            <span style="font-size:11px;color:var(--muted);margin-right:6px">${qty}x</span>
-            <span style="font-size:12px;font-weight:700;color:var(--success);flex-shrink:0">R$ ${rev.toFixed(2).replace('.',',')}</span>
-          </div>`;
-        }).join('');
+        top.innerHTML = sorted.map(([name, {qty, rev}], idx) => `
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+            <span style="width:18px;font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0">${idx+1}</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
+              <div style="height:3px;background:var(--border);border-radius:99px;margin-top:5px;overflow:hidden">
+                <div style="height:100%;width:${Math.round(qty/maxQty*100)}%;background:var(--accent);border-radius:99px"></div>
+              </div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:12.5px;font-weight:700;color:var(--accent)">${qty}x</div>
+              <div style="font-size:11px;color:var(--muted)">R$\u00a0${rev.toFixed(2).replace('.',',')}</div>
+            </div>
+          </div>`).join('');
       }
     }
 
   } catch(e) {
     console.error('renderDesempenho error:', e);
-    if (dg) dg.innerHTML = '<div style="color:var(--danger);font-size:13px;padding:12px;grid-column:span 3">Erro ao carregar dados de desempenho</div>';
+    if (dg) dg.innerHTML = '<div style="color:var(--danger);font-size:13px;padding:12px;grid-column:span 3">Erro ao carregar dados</div>';
   }
 }
 

@@ -1325,22 +1325,31 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
 
 <!-- MEU DESEMPENHO -->
 <div class="page" id="page-desempenho">
-  <div class="ph"><div><div class="pt">Meu Desempenho</div><div class="ps">Métricas e evolução do seu negócio</div></div>
-    <div style="display:flex;gap:7px;align-items:center">
-      <span style="font-size:11.5px;color:var(--muted);font-weight:600;margin-right:4px">Período:</span>
-      <button class="btn bg desemp-prd-btn" id="dpb-diario"  onclick="setDesempPrd('diario')">Diário</button>
-      <button class="btn bg desemp-prd-btn" id="dpb-semanal" onclick="setDesempPrd('semanal')">Semanal</button>
-      <button class="btn bp desemp-prd-btn" id="dpb-mensal"  onclick="setDesempPrd('mensal')">Mensal</button>
-      <button class="btn bg desemp-prd-btn" id="dpb-anual"   onclick="setDesempPrd('anual')">Anual</button>
-      <span id="desemp-periodo-label" style="margin-left:6px;font-size:11.5px;color:var(--muted)"></span>
+  <div class="ph" style="flex-wrap:wrap;gap:12px">
+    <div>
+      <div class="pt">Meu Desempenho</div>
+      <div class="ps">Métricas e evolução do seu negócio</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div style="display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:3px">
+        <button class="desemp-prd-btn" id="dpb-diario"  onclick="setDesempPrd('diario')"  style="padding:4px 14px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:transparent;color:var(--muted);transition:all .18s">Diário</button>
+        <button class="desemp-prd-btn" id="dpb-semanal" onclick="setDesempPrd('semanal')" style="padding:4px 14px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:transparent;color:var(--muted);transition:all .18s">Semanal</button>
+        <button class="desemp-prd-btn" id="dpb-mensal"  onclick="setDesempPrd('mensal')"  style="padding:4px 14px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:transparent;color:var(--muted);transition:all .18s">Mensal</button>
+        <button class="desemp-prd-btn" id="dpb-anual"   onclick="setDesempPrd('anual')"   style="padding:4px 14px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:transparent;color:var(--muted);transition:all .18s">Anual</button>
+      </div>
+      <span id="desemp-periodo-label" style="font-size:12px;color:var(--muted)"></span>
     </div>
   </div>
   <div class="desemp-grid" id="desemp-grid"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-    <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 12V7M6 12V3M10 12V8M14 12V5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Pedidos por dia da semana</div>
+    <div class="card">
+      <div class="card-title" id="desemp-bar-title">Evolução no período</div>
       <div class="bar-chart-wrap" id="desemp-bar"></div>
     </div>
-    <div class="card"><div class="card-title"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M5 2h6v6a3 3 0 0 1-6 0V2z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 2h3M11 2h3M2 5H5M11 5h3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 8v4M5.5 14h5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Itens mais vendidos</div><div id="desemp-top"></div></div>
+    <div class="card">
+      <div class="card-title">Itens mais vendidos</div>
+      <div id="desemp-top"></div>
+    </div>
   </div>
 </div>
 
@@ -1355,10 +1364,10 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:3px">
-        <button class="rel-periodo-btn" id="rpb-diario"  onclick="setRelPeriodo('diario')"  style="padding:4px 12px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:none;color:var(--muted);transition:all .15s">Hoje</button>
-        <button class="rel-periodo-btn" id="rpb-semanal" onclick="setRelPeriodo('semanal')" style="padding:4px 12px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:none;color:var(--muted);transition:all .15s">Semana</button>
-        <button class="rel-periodo-btn" id="rpb-mensal"  onclick="setRelPeriodo('mensal')"  style="padding:4px 12px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:var(--accent);color:#fff;transition:all .15s">Mês</button>
-        <button class="rel-periodo-btn" id="rpb-anual"   onclick="setRelPeriodo('anual')"   style="padding:4px 12px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:none;color:var(--muted);transition:all .15s">Ano</button>
+        <button class="rel-periodo-btn" id="rpb-diario"  onclick="setRelPeriodo('diario')"  style="padding:4px 14px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:transparent;color:var(--muted);transition:all .18s">Hoje</button>
+        <button class="rel-periodo-btn" id="rpb-semanal" onclick="setRelPeriodo('semanal')" style="padding:4px 14px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:transparent;color:var(--muted);transition:all .18s">Semana</button>
+        <button class="rel-periodo-btn" id="rpb-mensal"  onclick="setRelPeriodo('mensal')"  style="padding:4px 14px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:transparent;color:var(--muted);transition:all .18s">Mês</button>
+        <button class="rel-periodo-btn" id="rpb-anual"   onclick="setRelPeriodo('anual')"   style="padding:4px 14px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:transparent;color:var(--muted);transition:all .18s">Ano</button>
       </div>
       <span id="rel-periodo-label" style="font-size:12px;color:var(--muted)"></span>
       <button class="btn bg" onclick="relExportar()" style="font-size:12px">

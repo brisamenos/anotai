@@ -727,9 +727,16 @@ td:first-child{padding-left:18px}
 .rating-fill{height:100%;border-radius:99px;background:var(--accent)}
 .rating-cnt{width:28px;text-align:right;font-size:11.5px;color:var(--muted2)}
 .desemp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}
-.desemp-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;text-align:center}
-.desemp-val{font-family:'Playfair Display',serif;font-size:28px;font-weight:700;margin:6px 0}
-.desemp-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.desemp-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:20px 22px;position:relative;overflow:hidden;transition:all .22s ease;
+}
+.desemp-card:hover{border-color:var(--border2);transform:translateY(-2px);box-shadow:0 10px 28px rgba(0,0,0,.35)}
+.desemp-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--dc,var(--accent));border-radius:14px 14px 0 0;opacity:.85}
+.desemp-card-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+.desemp-val{font-family:'Playfair Display',serif;font-size:26px;font-weight:700;margin:4px 0 2px;line-height:1.1}
+.desemp-label{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.55px;font-weight:600}
+.desemp-sub{font-size:11px;color:var(--muted);margin-top:5px}
 .desemp-trend{font-size:12px;margin-top:4px}
 .trend-up{color:var(--success)}
 .trend-down{color:var(--danger)}
