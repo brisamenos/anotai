@@ -596,6 +596,14 @@ async function handleREST(req, res, table, params, body) {
         const row = db.prepare('SELECT * FROM store_config WHERE tenant_id=?').get(pTid)
         const parsed = parseRow(table, row); emit(pTid, table, parsed, 'UPDATE'); marcarDirty(); return send(res, 200, parsed)
       }
+      // ── Lê status anterior ANTES do UPDATE (para cashback) ─
+      let _prevOrderStatus = null
+      if (table === 'orders' && payload.status) {
+        const idVal = vals[0]
+        const prev = db.prepare('SELECT status FROM orders WHERE id=?').get(idVal)
+        _prevOrderStatus = prev?.status || null
+      }
+
       db.prepare(`UPDATE "${table}" SET ${keys.map(k=>`"${k}"=?`).join(', ')} ${WHERE}`).run(...keys.map(k=>sanitize(payload[k])),...vals)
       if (SSE_TABLES.has(table)) { const updatedRow=db.prepare(`SELECT * FROM "${table}" ${WHERE} LIMIT 1`).get(...vals); emit(tenantId||payload.tenant_id, table, updatedRow?parseRow(table,updatedRow):payload, 'UPDATE') }
 
@@ -603,27 +611,27 @@ async function handleREST(req, res, table, params, body) {
       if (table === 'orders' && payload.status && ['finalizado','entregue'].includes(payload.status)) {
         try {
           const idVal = vals[0]
-          const order = db.prepare('SELECT * FROM orders WHERE id=?').get(idVal)
-          // BUG A fix: só credita se o status ANTERIOR não era já finalizado/entregue
-          const prevStatus = order?.status || ''
-          const jaFinalizado = ['finalizado','entregue'].includes(prevStatus)
-          if (!jaFinalizado && order?.phone) {
-            const cfg   = db.prepare('SELECT cashback_config FROM store_config WHERE tenant_id=?').get(tenantId)
-            const cbCfg = (() => { try { return JSON.parse(cfg?.cashback_config||'{}') } catch { return {} } })()
-            if (cbCfg.ativo && cbCfg.pct > 0) {
-              const total  = parseFloat(order.total||0)
-              const minPed = parseFloat(cbCfg.min_pedido||0)
-              if (total >= minPed) {
-                const credito = parseFloat((total * cbCfg.pct / 100).toFixed(2))
-                // BUG B fix: usa LIKE consistente com os outros endpoints
-                const phone8 = order.phone.replace(/\D/g,'').slice(-8)
-                const cust = db.prepare('SELECT id,cashback_saldo FROM customers WHERE tenant_id=? AND phone LIKE ?').get(tenantId, `%${phone8}%`)
-                if (cust) {
-                  db.prepare('UPDATE customers SET cashback_saldo=cashback_saldo+? WHERE id=?').run(credito, cust.id)
-                } else {
-                  db.prepare('INSERT OR IGNORE INTO customers (tenant_id,name,phone,cashback_saldo) VALUES (?,?,?,?)').run(tenantId, order.client||order.phone, order.phone, credito)
+          // Usa status anterior lido ANTES do UPDATE
+          const jaFinalizado = ['finalizado','entregue'].includes(_prevOrderStatus || '')
+          if (!jaFinalizado) {
+            const order = db.prepare('SELECT * FROM orders WHERE id=?').get(idVal)
+            if (order?.phone) {
+              const cfg   = db.prepare('SELECT cashback_config FROM store_config WHERE tenant_id=?').get(tenantId)
+              const cbCfg = (() => { try { return JSON.parse(cfg?.cashback_config||'{}') } catch { return {} } })()
+              if (cbCfg.ativo && cbCfg.pct > 0) {
+                const total  = parseFloat(order.total||0)
+                const minPed = parseFloat(cbCfg.min_pedido||0)
+                if (total >= minPed) {
+                  const credito = parseFloat((total * cbCfg.pct / 100).toFixed(2))
+                  const phone8  = order.phone.replace(/\D/g,'').slice(-8)
+                  const cust    = db.prepare('SELECT id,cashback_saldo FROM customers WHERE tenant_id=? AND phone LIKE ?').get(tenantId, `%${phone8}%`)
+                  if (cust) {
+                    db.prepare('UPDATE customers SET cashback_saldo=cashback_saldo+? WHERE id=?').run(credito, cust.id)
+                  } else {
+                    db.prepare('INSERT OR IGNORE INTO customers (tenant_id,name,phone,cashback_saldo) VALUES (?,?,?,?)').run(tenantId, order.client||order.phone, order.phone, credito)
+                  }
+                  log('💰', `Cashback R$${credito} creditado para ${order.phone} (pedido #${idVal})`)
                 }
-                log('💰', `Cashback R$${credito} creditado para ${order.phone} (pedido #${idVal})`)
               }
             }
           }
