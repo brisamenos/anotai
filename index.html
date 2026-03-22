@@ -3884,22 +3884,32 @@ setTimeout(clearSearchInput, 400);
 /* ── Builder Overlay ──────────────────────────────────────────── */
 #builder-overlay{
   position:fixed;inset:0;z-index:3000;
-  display:none;flex-direction:column;
-  background:rgba(0,0,0,.6);
+  display:flex;align-items:flex-end;
+  background:rgba(0,0,0,0);
+  backdrop-filter:blur(0px);
+  -webkit-backdrop-filter:blur(0px);
+  pointer-events:none;
+  transition:background .3s ease, backdrop-filter .3s ease;
+}
+#builder-overlay.open{
+  background:rgba(0,0,0,.62);
   backdrop-filter:blur(6px);
   -webkit-backdrop-filter:blur(6px);
+  pointer-events:all;
 }
-#builder-overlay.open{display:flex;align-items:flex-end}
-
 #builder-sheet{
   width:100%;max-width:520px;margin:0 auto;
   background:var(--s1);
   border-radius:26px 26px 0 0;
   max-height:96vh;overflow-y:auto;
-  animation:builderUp .38s cubic-bezier(.34,1.56,.64,1);
   position:relative;
+  transform:translateY(100%);
+  transition:transform .42s cubic-bezier(.34,1.2,.64,1);
+  will-change:transform;
 }
-@keyframes builderUp{from{transform:translateY(110%)}to{transform:translateY(0)}}
+#builder-overlay.open #builder-sheet{
+  transform:translateY(0);
+}
 
 .builder-handle{width:38px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);margin:14px auto 0}
 
@@ -4269,14 +4279,23 @@ window.openBuilder = function(id) {
   renderContent();
   updateBuilderBtn();
 
-  document.getElementById('builder-overlay').classList.add('open');
+  // rAF garante que o browser renderizou translateY(100%) antes de adicionar .open
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      document.getElementById('builder-overlay').classList.add('open');
+    });
+  });
   document.body.style.overflow = 'hidden';
 };
 
 window.closeBuilder = function() {
-  document.getElementById('builder-overlay').classList.remove('open');
+  const overlay = document.getElementById('builder-overlay');
+  overlay.classList.remove('open');
+  // Wait for transition to finish before clearing state
+  setTimeout(function() {
+    _bItem = null;
+  }, 420);
   document.body.style.overflow = '';
-  _bItem = null;
 };
 
 // ── Qty ────────────────────────────────────────────────────────
