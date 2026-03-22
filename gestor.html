@@ -3209,11 +3209,105 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
 .grp-type-btn.on{border-color:var(--accent);color:var(--accent);background:rgba(59,130,246,.08)}
 .grp-min-max{display:flex;gap:6px;margin-bottom:8px}
 .grp-min-max input{width:60px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:6px 8px;color:var(--text);font-size:12px;text-align:center;outline:none}
-.add-grp-btn{width:100%;padding:9px;background:none;border:1.5px dashed rgba(59,130,246,.35);border-radius:10px;color:#60a5fa;font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s;margin-top:4px}
-.add-grp-btn:hover{border-color:var(--accent);background:rgba(59,130,246,.06)}
+.add-grp-btn{width:100%;padding:9px;background:none;border:1.5px dashed rgba(201,169,110,.3);border-radius:10px;color:var(--accent);font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s;margin-top:4px}
+.add-grp-btn:hover{border-color:var(--accent);background:var(--accent-dim)}
 </style>
 <script>document.write('<script src="/gestor.js?v=' + Date.now() + '"><\/script>');</script>
 
+<!-- ══ LUXURY OVERRIDE — executa DEPOIS do gestor.js ══════════════
+     O gestor.js chama temaAplicarModo('escuro') no boot e sobrescreve
+     os CSS vars via element.style.setProperty. Este bloco:
+     1. Re-aplica as vars luxury após DOMContentLoaded
+     2. Envolve temaAplicarModo para sempre injetar luxury no lugar
+     3. Usa MutationObserver como safety net se vars mudarem
+══════════════════════════════════════════════════════════════════ -->
+<script>
+(function() {
+  var LUXURY = {
+    '--bg':          '#141210',
+    '--surface':     '#1c1915',
+    '--surface2':    '#231f1b',
+    '--surface3':    '#2d2823',
+    '--border':      'rgba(201,169,110,.1)',
+    '--border2':     'rgba(201,169,110,.22)',
+    '--accent':      '#c9a96e',
+    '--accent2':     '#b08848',
+    '--accent3':     '#d4bc8c',
+    '--accent-dim':  'rgba(201,169,110,.12)',
+    '--accent-glow': 'rgba(201,169,110,.28)',
+    '--success':     '#6dbf94',
+    '--danger':      '#d47070',
+    '--purple':      '#9b8fc4',
+    '--pink':        '#c47a8a',
+    '--orange':      '#cc8b5a',
+    '--text':        '#ede8df',
+    '--muted':       '#6a6358',
+    '--muted2':      '#8a8070',
+    '--sidebar-bg':  '#0f0d0b',
+    '--topnav-bg':   '#0f0d0b',
+    '--sfoot-bg':    'rgba(10,9,8,.8)'
+  };
+
+  function applyLuxury() {
+    var r = document.documentElement;
+    Object.keys(LUXURY).forEach(function(k) { r.style.setProperty(k, LUXURY[k]); });
+    // Remove qualquer override de tema claro que o gestor.js injetar
+    var el = document.getElementById('tema-light-override');
+    if (el) el.remove();
+  }
+
+  // Aplica imediatamente (inline inline script no <head> já rodou,
+  // mas gestor.js pode sobrescrever logo depois)
+  applyLuxury();
+
+  // Aguarda gestor.js carregar completamente e re-aplica
+  window.addEventListener('load', function() {
+    applyLuxury();
+
+    // Intercepta temaAplicarModo para que mudanças de tema
+    // dentro do gestor.js sempre apliquem luxury
+    if (typeof temaAplicarModo === 'function') {
+      window._originalTemaAplicarModo = temaAplicarModo;
+      window.temaAplicarModo = function(modo) {
+        // Chama o original para salvar no banco etc.
+        window._originalTemaAplicarModo(modo);
+        // Mas depois re-aplica luxury por cima
+        setTimeout(applyLuxury, 0);
+      };
+    }
+
+    // Intercepta _aplicarVars (função interna do gestor.js)
+    if (typeof _aplicarVars === 'function') {
+      window._originalAplicarVars = _aplicarVars;
+      window._aplicarVars = function(vars) {
+        // Ignora — aplicamos luxury direto
+        applyLuxury();
+      };
+    }
+  });
+
+  // DOMContentLoaded como segundo ponto de aplicação
+  document.addEventListener('DOMContentLoaded', applyLuxury);
+
+  // Observer: detecta se alguém muda o style do <html> e re-aplica
+  // (garante que nenhum setTimeout tardio vai reverter)
+  var _luxuryLocked = false;
+  var observer = new MutationObserver(function(mutations) {
+    if (_luxuryLocked) return;
+    mutations.forEach(function(m) {
+      if (m.type === 'attributes' && m.attributeName === 'style') {
+        var bg = document.documentElement.style.getPropertyValue('--bg');
+        if (bg && bg.trim() !== '#141210') {
+          _luxuryLocked = true;
+          applyLuxury();
+          setTimeout(function() { _luxuryLocked = false; }, 100);
+        }
+      }
+    });
+  });
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+})();
+</script>
 
 </body>
 </html>
