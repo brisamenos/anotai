@@ -6008,8 +6008,17 @@ let _taxaConfig = { tipo: 'fixo', valor: 5, faixas: [] };
 
 async function renderTaxaPage() {
   try {
-    const { data } = await sb.from('store_config').select('delivery_fee_config').single();
+    const { data } = await sb.from('store_config').select('delivery_fee_config,store_lat,store_lng').single();
     if (data?.delivery_fee_config) _taxaConfig = data.delivery_fee_config;
+    // Atualiza aviso de localização
+    const locStatus = document.getElementById('taxa-loc-status');
+    if (locStatus) {
+      const hasLoc = data?.store_lat && data?.store_lng;
+      locStatus.textContent = hasLoc
+        ? `✅ Localização configurada (${parseFloat(data.store_lat).toFixed(4)}, ${parseFloat(data.store_lng).toFixed(4)})`
+        : '⚠️ Localização ainda não configurada — os clientes verão as faixas mas sem cálculo automático.';
+      locStatus.style.color = hasLoc ? '#16a34a' : '#b45309';
+    }
   } catch(e) {}
 
   const tipo = _taxaConfig.tipo || 'fixo';
@@ -7062,16 +7071,32 @@ let _cpBannerUrl = '';
 
 async function loadCardapioPublico() {
   const { data } = await sb.from('store_config').select(
-    'store_name,store_descricao,store_logo_url,store_banner_url,store_cor,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config'
+    'store_name,store_descricao,store_logo_url,store_banner_url,store_cor,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega'
   ).single();
   if (!data) return;
 
-  const v = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
-  v('cp-nome',      data.store_name);
-  v('cp-descricao', data.store_descricao);
-  v('cp-whatsapp',  data.store_whatsapp);
-  v('cp-tempo',     data.store_tempo_entrega);
-  v('cp-avaliacao', data.store_avaliacao);
+  const v = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined && val !== null) el.value = val; };
+  v('cp-nome',          data.store_name);
+  v('cp-descricao',     data.store_descricao);
+  v('cp-whatsapp',      data.store_whatsapp);
+  v('cp-tempo',         data.store_tempo_entrega);
+  v('cp-avaliacao',     data.store_avaliacao);
+  v('cp-pedido-minimo', data.pedido_minimo ?? 0);
+  v('cp-store-address', data.store_address);
+  v('cp-store-lat',     data.store_lat ?? '');
+  v('cp-store-lng',     data.store_lng ?? '');
+
+  // Tipos de entrega
+  const tipos = Array.isArray(data.tipos_entrega)
+    ? data.tipos_entrega
+    : ['delivery','retirada','mesa'];
+  const el_d = document.getElementById('cp-tipo-delivery');
+  const el_r = document.getElementById('cp-tipo-retirada');
+  const el_m = document.getElementById('cp-tipo-mesa');
+  if (el_d) el_d.checked = tipos.includes('delivery');
+  if (el_r) el_r.checked = tipos.includes('retirada');
+  if (el_m) el_m.checked = tipos.includes('mesa');
+  cpTipoChange(); // atualiza bordas visuais
 
   // Horários de funcionamento
   let horarios = {};
@@ -7217,6 +7242,11 @@ async function salvarCardapioPublico() {
       store_avaliacao:     document.getElementById('cp-avaliacao')?.value.trim() || '5.0',
       store_cor:           document.getElementById('cp-cor')?.value              || '#3b82f6',
       horarios_config:     JSON.stringify(cpGetHorarios()),
+      pedido_minimo:       parseFloat(document.getElementById('cp-pedido-minimo')?.value) || 0,
+      store_address:       document.getElementById('cp-store-address')?.value.trim() || null,
+      store_lat:           parseFloat(document.getElementById('cp-store-lat')?.value)  || null,
+      store_lng:           parseFloat(document.getElementById('cp-store-lng')?.value)  || null,
+      tipos_entrega:       cpGetTiposEntrega(),
     };
     if (_cpLogoUrl)   payload.store_logo_url   = _cpLogoUrl;
     if (_cpBannerUrl) payload.store_banner_url = _cpBannerUrl;
@@ -7234,6 +7264,43 @@ async function salvarCardapioPublico() {
   } finally {
     sbLoading(false);
   }
+}
+
+function cpTipoChange() {
+  const ids = ['delivery','retirada','mesa'];
+  ids.forEach(id => {
+    const cb  = document.getElementById('cp-tipo-' + id);
+    const lbl = document.getElementById('cp-tipo-' + id + '-lbl');
+    if (cb && lbl) lbl.style.borderColor = cb.checked ? 'var(--accent)' : 'var(--border)';
+  });
+}
+
+function cpGetTiposEntrega() {
+  const tipos = [];
+  if (document.getElementById('cp-tipo-delivery')?.checked) tipos.push('delivery');
+  if (document.getElementById('cp-tipo-retirada')?.checked) tipos.push('retirada');
+  if (document.getElementById('cp-tipo-mesa')?.checked)     tipos.push('mesa');
+  // Garante pelo menos delivery
+  if (!tipos.length) tipos.push('delivery');
+  return tipos;
+}
+
+function cpGetStoreLoc() {
+  if (!navigator.geolocation) { sbToast('err', 'Geolocalização não suportada'); return; }
+  sbToast('ok', 'Obtendo localização...');
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const lat = pos.coords.latitude.toFixed(6);
+      const lng = pos.coords.longitude.toFixed(6);
+      const elLat = document.getElementById('cp-store-lat');
+      const elLng = document.getElementById('cp-store-lng');
+      if (elLat) elLat.value = lat;
+      if (elLng) elLng.value = lng;
+      sbToast('ok', `📍 Localização obtida: ${lat}, ${lng}`);
+    },
+    err => sbToast('err', 'Erro ao obter localização: ' + err.message),
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
 }
 buildEmojiGrid();
 initSidebarState();

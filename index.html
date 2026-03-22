@@ -1288,6 +1288,15 @@ input,textarea{font-family:inherit}
           </div>
         </div>
 
+        <!-- Endereço de retirada (aparece quando loja tem endereço cadastrado e tab retirada ativa) -->
+        <div id="retirada-addr-block" style="display:none;margin-top:10px;padding:11px 14px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.22);border-radius:10px">
+          <div style="font-size:12px;font-weight:700;color:#15803d;margin-bottom:3px;display:flex;align-items:center;gap:6px">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 1.5C5.51 1.5 3.5 3.51 3.5 6c0 3.75 4.5 8.5 4.5 8.5S12.5 9.75 12.5 6c0-2.49-2.01-4.5-4.5-4.5z" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="6" r="1.5" stroke="currentColor" stroke-width="1.3"/></svg>
+            Endereço para retirada
+          </div>
+          <div id="retirada-addr-text" style="font-size:12.5px;color:#166534"></div>
+        </div>
+
         <!-- itens -->
         <div id="cart-list-wrap">
           <div class="form-section-label">Itens</div>
@@ -1337,6 +1346,16 @@ input,textarea{font-family:inherit}
           <div id="faixas-wrap" style="display:none;margin-bottom:8px">
             <div class="form-section-label">Região de entrega</div>
             <div id="faixas-list"></div>
+          </div>
+
+          <!-- Localização do cliente (apenas quando taxa por km e loja tem GPS) -->
+          <div id="geo-block" style="display:none;margin-bottom:10px">
+            <div class="form-section-label">Sua localização</div>
+            <button onclick="clientGetGeo()" style="width:100%;padding:9px 14px;background:rgba(59,130,246,.09);border:1.5px solid rgba(59,130,246,.25);border-radius:9px;font-size:12.5px;font-weight:600;color:var(--accent);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;font-family:inherit">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1.5C5.51 1.5 3.5 3.51 3.5 6c0 3.75 4.5 8.5 4.5 8.5S12.5 9.75 12.5 6c0-2.49-2.01-4.5-4.5-4.5z" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="6" r="1.5" stroke="currentColor" stroke-width="1.3"/></svg>
+              Usar minha localização para ver distância
+            </button>
+            <div id="geo-result" style="margin-top:6px;font-size:12px;color:var(--muted);text-align:center;min-height:16px"></div>
           </div>
         </div>
 
@@ -1586,8 +1605,13 @@ let selectedPay  = 'dinheiro';
 let appliedCupom = null;
 let _cbSaldo       = 0;   // saldo cashback disponível
 let _cbUsar        = false; // cliente optou por usar cashback
-let feeConfig    = {};
-let selectedFaixa= 0;
+let feeConfig     = {};
+let selectedFaixa = 0;
+let _pedidoMinimo = 0;
+let _storeAddress = '';
+let _storeLat     = null;
+let _storeLng     = null;
+let _tiposEntrega = ['delivery','retirada','mesa'];
 let _lojaAberta  = true;
 let _trackOrderId= null;
 let _trackChannel= null;
@@ -1767,7 +1791,7 @@ async function init() {
       sb.from('menu_items').select('*').not('status','eq','pausado').order('id'),
       sb.from('categories').select('*').eq('ativo', true).order('sort_order'),
       sb.from('cupons').select('*').eq('ativo', true),
-      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp,order_num_offset').single(),
+      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp,order_num_offset,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega').single(),
       fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } }).then(r => r.ok ? r.json() : {}).catch(() => ({}))
     ]);
 
@@ -1784,7 +1808,12 @@ async function init() {
     if (cfgR.data) {
       const c = cfgR.data;
       applyStatus(c.store_open, c.horarios_config);
-      feeConfig = c.delivery_fee_config || {};
+      feeConfig     = c.delivery_fee_config || {};
+      _pedidoMinimo = parseFloat(c.pedido_minimo) || 0;
+      _storeAddress = c.store_address || '';
+      _storeLat     = parseFloat(c.store_lat) || null;
+      _storeLng     = parseFloat(c.store_lng) || null;
+      _tiposEntrega = Array.isArray(c.tipos_entrega) ? c.tipos_entrega : ['delivery','retirada','mesa'];
       // Sincroniza offset de numeração com o gestor
       _orderNumOffset = parseInt(c.order_num_offset) || 0;
       // Fallback: se não veio pelo branding, pega do store_config direto
@@ -1803,6 +1832,7 @@ async function init() {
     subscribeRealtime();
     loadCustomerSession();
     setupPlanFeatures();
+    applyTiposEntrega();
     setInterval(() => applyStatus(undefined, undefined), 60000);
   } catch(e) {
     console.error(e);
@@ -2819,14 +2849,73 @@ function closeCart() {
   document.getElementById('drawer-bg').classList.remove('on');
 }
 
+// ── Tipos de entrega ─────────────────────────────────
+function applyTiposEntrega() {
+  ['delivery','retirada','mesa'].forEach(t => {
+    const el = document.getElementById('dtab-' + t);
+    if (el) el.style.display = _tiposEntrega.includes(t) ? '' : 'none';
+  });
+  // Se o tipo ativo foi removido das opções, muda para o primeiro disponível
+  if (!_tiposEntrega.includes(deliveryType)) {
+    setDelivery(_tiposEntrega[0] || 'delivery');
+  }
+}
+
+// ── Bloco de geo do cliente (delivery por km) ─────────
+function renderGeoBlock() {
+  const wrap = document.getElementById('geo-block');
+  if (!wrap) return;
+  // Só aparece se: delivery + taxa por km + loja tem GPS
+  wrap.style.display = (deliveryType === 'delivery' && feeConfig?.tipo === 'por_km' && _storeLat && _storeLng) ? '' : 'none';
+}
+
+function clientGetGeo() {
+  if (!navigator.geolocation) { toast('⚠️','GPS não suportado'); return; }
+  const res = document.getElementById('geo-result');
+  if (res) res.textContent = '📡 Obtendo localização...';
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const dist = calcDist(_storeLat, _storeLng, pos.coords.latitude, pos.coords.longitude);
+      // Auto-seleciona a faixa mais barata que cobre a distância
+      const faixas = feeConfig?.faixas || [];
+      let idx = faixas.findIndex(f => f.ate_km >= dist);
+      if (idx === -1) idx = faixas.length - 1;  // Se além de tudo, aplica a última faixa
+      if (idx >= 0) selectFaixa(idx);
+      if (res) res.textContent = `📍 Distância aprox. da loja: ${dist.toFixed(1)} km`;
+    },
+    err => {
+      if (res) res.textContent = 'Não foi possível obter a localização.';
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
+
+function calcDist(lat1, lng1, lat2, lng2) {
+  if (!lat1 || !lng1 || !lat2 || !lng2) return 0;
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) ** 2
+    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng/2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function setDelivery(type) {
   deliveryType = type;
   ['delivery','retirada','mesa'].forEach(t => {
     document.getElementById('dtab-'+t).classList.toggle('on', t===type);
   });
-  document.getElementById('addr-block').style.display  = type==='delivery' ? '' : 'none';
-  document.getElementById('mesa-block').style.display  = type==='mesa'     ? '' : 'none';
+  document.getElementById('addr-block').style.display       = type==='delivery' ? '' : 'none';
+  document.getElementById('mesa-block').style.display       = type==='mesa'     ? '' : 'none';
+  // Endereço de retirada
+  const retBlock = document.getElementById('retirada-addr-block');
+  const retText  = document.getElementById('retirada-addr-text');
+  if (retBlock && retText) {
+    retBlock.style.display = (type === 'retirada' && _storeAddress) ? '' : 'none';
+    retText.textContent    = _storeAddress;
+  }
   renderFaixas();
+  renderGeoBlock();
   renderTotals();
   updateCartFloat();
 }
@@ -2842,7 +2931,7 @@ function renderFaixas() {
   const list   = document.getElementById('faixas-list');
   const faixas = feeConfig?.faixas || [];
   if (deliveryType !== 'delivery' || feeConfig?.tipo !== 'por_km' || !faixas.length) {
-    wrap.style.display = 'none'; return;
+    wrap.style.display = 'none'; renderGeoBlock(); return;
   }
   wrap.style.display = '';
   list.innerHTML = faixas.map((f,i) => `
@@ -2850,6 +2939,7 @@ function renderFaixas() {
       <span class="faixa-label"><svg width="14" height="12" viewBox="0 0 16 14" fill="none"><circle cx="3" cy="11" r="2" stroke="currentColor" stroke-width="1.3"/><circle cx="13" cy="11" r="2" stroke="currentColor" stroke-width="1.3"/><path d="M5 11H3M11 11h2M6 11L7.5 5.5h3L12 8.5H6z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg> Até ${f.ate_km} km</span>
       <span class="faixa-val">R$ ${fmt(f.taxa)}</span>
     </div>`).join('');
+  renderGeoBlock();
 }
 
 function selectFaixa(i) {
@@ -2896,7 +2986,14 @@ function renderTotals() {
     const f = (feeConfig.faixas||[])[selectedFaixa];
     if (f) taxaLabel = `Entrega até ${f.ate_km} km`;
   }
+  // Aviso de pedido mínimo
+  const minimoAtingido = deliveryType !== 'delivery' || _pedidoMinimo <= 0 || sub >= _pedidoMinimo;
+  const minimoFalta    = _pedidoMinimo > 0 && deliveryType === 'delivery' && sub < _pedidoMinimo ? _pedidoMinimo - sub : 0;
   document.getElementById('totals-wrap').innerHTML = `
+    ${minimoFalta > 0 ? `<div style="padding:8px 12px;margin-bottom:8px;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:12px;color:#92400e;display:flex;align-items:center;gap:7px">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3M8 10v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      Faltam <strong>R$ ${fmt(minimoFalta)}</strong> para o pedido mínimo delivery (R$ ${fmt(_pedidoMinimo)})
+    </div>` : ''}
     <div class="total-row"><span>Subtotal</span><span>R$ ${fmt(sub)}</span></div>
     ${deliveryType === 'delivery' ? `<div class="total-row"><span>${taxaLabel}</span><span>${taxa>0?'R$ '+fmt(taxa):'Grátis'}</span></div>` : ''}
     ${disc > 0 ? `<div class="total-row total-disc"><span>Desconto (${appliedCupom.code})</span><span>− R$ ${fmt(disc)}</span></div>` : ''}
@@ -3089,6 +3186,15 @@ async function submitOrder() {
   if (!phone) { toast('⚠️','Informe seu WhatsApp');  return; }
   if (!cart.length) { toast('⚠️','Carrinho vazio');  return; }
   if (!_lojaAberta) { toast('🔴','Loja fechada');     return; }
+
+  // Valida pedido mínimo para delivery
+  if (deliveryType === 'delivery' && _pedidoMinimo > 0) {
+    const sub = cart.reduce((s, i) => s + (i.price * (i.qty||1)), 0);
+    if (sub < _pedidoMinimo) {
+      toast('⚠️', `Pedido mínimo delivery: R$ ${fmt(_pedidoMinimo)}`);
+      return;
+    }
+  }
 
   let addr = '';
   if (deliveryType === 'delivery') {

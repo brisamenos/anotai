@@ -708,6 +708,16 @@
       <span></span>
     </div>
     <div id="taxa-faixas-list" style="display:flex;flex-direction:column;gap:8px"></div>
+
+    <!-- Aviso de localização da loja -->
+    <div id="taxa-loc-aviso" style="margin-top:14px;padding:12px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:9px;font-size:12px;color:#92400e;display:flex;align-items:flex-start;gap:9px">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;margin-top:1px;color:#d97706"><path d="M8 1.5C5.51 1.5 3.5 3.51 3.5 6c0 3.75 4.5 8.5 4.5 8.5S12.5 9.75 12.5 6c0-2.49-2.01-4.5-4.5-4.5z" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="6" r="1.5" stroke="currentColor" stroke-width="1.3"/></svg>
+      <div>
+        <strong>Localização da loja:</strong> para que os clientes vejam a distância exata, configure o endereço e GPS da loja em
+        <span onclick="nav('cardapio-publico')" style="color:var(--accent);cursor:pointer;font-weight:600;text-decoration:underline">Cardápio Público → Endereço do Estabelecimento</span>.
+        <span id="taxa-loc-status" style="display:block;margin-top:4px;font-weight:600"></span>
+      </div>
+    </div>
   </div>
 
   <!-- Preview -->
@@ -2974,6 +2984,47 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
     <input id="cp-tempo" class="form-input" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;margin-bottom:12px;transition:border-color .18s" placeholder="Ex: 30-45 min">
     <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Avaliação exibida</label>
     <input id="cp-avaliacao" class="form-input" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;transition:border-color .18s" placeholder="Ex: 4.8">
+
+    <!-- PEDIDO MÍNIMO -->
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:4px"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 4v4l3 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Pedido mínimo para delivery (R$)
+      </label>
+      <input id="cp-pedido-minimo" class="form-input" type="number" min="0" step="0.50" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;transition:border-color .18s" placeholder="0,00 = sem mínimo">
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Clientes não conseguirão finalizar pedido delivery abaixo deste valor. Deixe 0 para sem restrição.</div>
+    </div>
+
+    <!-- MODALIDADES DE ENTREGA -->
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:4px"><circle cx="3.5" cy="11" r="2" stroke="currentColor" stroke-width="1.3"/><circle cx="12.5" cy="11" r="2" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 11H3.5M10.5 11H12.5M6 11L7.5 6h3l1.5 3H6z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Modalidades no cardápio
+      </label>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:9px;cursor:pointer" id="cp-tipo-delivery-lbl">
+          <input type="checkbox" id="cp-tipo-delivery" checked style="width:15px;height:15px;accent-color:var(--accent)" onchange="cpTipoChange()">
+          <div>
+            <div style="font-size:12.5px;font-weight:600">🛵 Delivery</div>
+            <div style="font-size:11px;color:var(--muted)">Entrega no endereço do cliente</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:9px;cursor:pointer" id="cp-tipo-retirada-lbl">
+          <input type="checkbox" id="cp-tipo-retirada" checked style="width:15px;height:15px;accent-color:var(--accent)" onchange="cpTipoChange()">
+          <div>
+            <div style="font-size:12.5px;font-weight:600">🏪 Retirada no local</div>
+            <div style="font-size:11px;color:var(--muted)">Cliente retira no estabelecimento</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:9px;cursor:pointer" id="cp-tipo-mesa-lbl">
+          <input type="checkbox" id="cp-tipo-mesa" checked style="width:15px;height:15px;accent-color:var(--accent)" onchange="cpTipoChange()">
+          <div>
+            <div style="font-size:12.5px;font-weight:600">🪑 Mesa</div>
+            <div style="font-size:11px;color:var(--muted)">Pedido em mesa no local</div>
+          </div>
+        </label>
+      </div>
+    </div>
   </div>
 
   <!-- Horários de funcionamento -->
@@ -2985,6 +3036,35 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
     <div id="cp-horarios-list" style="display:flex;flex-direction:column;gap:7px">
       <!-- Gerado por JS -->
     </div>
+  </div>
+
+  <!-- Endereço e Localização do Estabelecimento -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:7px">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--accent);flex-shrink:0"><path d="M8 1.5C5.51 1.5 3.5 3.51 3.5 6c0 3.75 4.5 8.5 4.5 8.5S12.5 9.75 12.5 6c0-2.49-2.01-4.5-4.5-4.5z" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="6" r="1.5" stroke="currentColor" stroke-width="1.3"/></svg>
+      Endereço do Estabelecimento
+    </div>
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:14px">Usado na opção de retirada e para calcular distância no delivery por km (opcional)</div>
+
+    <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Endereço completo</label>
+    <input id="cp-store-address" class="form-input" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;margin-bottom:10px;transition:border-color .18s" placeholder="Ex: Rua das Flores, 100 - Centro, Cidade - UF">
+
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <div style="flex:1">
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Latitude</label>
+        <input id="cp-store-lat" class="form-input" type="number" step="any" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;outline:none;transition:border-color .18s" placeholder="-3.7327">
+      </div>
+      <div style="flex:1">
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Longitude</label>
+        <input id="cp-store-lng" class="form-input" type="number" step="any" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;outline:none;transition:border-color .18s" placeholder="-38.5270">
+      </div>
+    </div>
+
+    <button class="btn bg" style="width:100%;justify-content:center;gap:7px" onclick="cpGetStoreLoc()">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1.5C5.51 1.5 3.5 3.51 3.5 6c0 3.75 4.5 8.5 4.5 8.5S12.5 9.75 12.5 6c0-2.49-2.01-4.5-4.5-4.5z" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="6" r="1.5" stroke="currentColor" stroke-width="1.3"/></svg>
+      Usar minha localização atual
+    </button>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Preenche a latitude/longitude automaticamente via GPS do navegador</div>
   </div>
 
   <!-- Cor principal -->
