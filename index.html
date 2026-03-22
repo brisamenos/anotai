@@ -2019,6 +2019,12 @@ async function doLogin() {
     closeAuth();
     toast('👋', `Olá, ${data.name.split(' ')[0]}!`);
     fillCartForm();
+    // Sincroniza com programa de fidelidade (caso ainda não esteja cadastrado)
+    fetch('/api/fidelidade/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
+      body: JSON.stringify({ phone: data.phone, name: data.name })
+    }).catch(() => {});
   } catch(e) {
     showAuthErr('Erro de conexão. Tente novamente.');
   } finally {
@@ -2057,6 +2063,12 @@ async function doRegister() {
     closeAuth();
     toast('🎉', `Bem-vindo, ${data.name.split(' ')[0]}!`);
     fillCartForm();
+    // Sincroniza com programa de fidelidade
+    fetch('/api/fidelidade/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
+      body: JSON.stringify({ phone: data.phone, name: data.name })
+    }).catch(() => {});
   } catch(e) {
     showAuthErr('Erro de conexão. Tente novamente.');
   } finally {
