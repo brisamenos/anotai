@@ -1483,7 +1483,7 @@ async function createOrder() {
   if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
   closeModal('modal-new-order');
   nav('pedidos');
-  sbToast('ok', `Pedido #${_orderNum(orderData.id)} criado`));
+  sbToast('ok', `Pedido #${_orderNum(orderData.id)} criado`);
 }
 
 function printOrderDetail() {
@@ -3388,7 +3388,7 @@ function renderCupons(){
     </div>`).join('');
 }
 
-function toggleCupom(i){cupons[i].ativo=!cupons[i].ativo;renderCupons();showToast('ok',`Cupom ${cupons[i].code} ${cupons[i].ativo?'ativado':'pausado'}!`);}
+function toggleCupom(i){cupons[i].ativo=!cupons[i].ativo;renderCupons();sbToast('ok',`Cupom ${cupons[i].code} ${cupons[i].ativo?'ativado':'pausado'}!`);}
 async function deleteCupom(idx) {
   const c = cupons[idx];
   if (!c) return;
@@ -3874,7 +3874,7 @@ async function kdsMarkPronto(id) {
       });
     } catch(e){}
     renderKDS(); renderKanban();
-    sbToast('ok', `Pedido #${_orderNum(id)} confirmado`));
+    sbToast('ok', `Pedido #${_orderNum(id)} confirmado`);
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
 }
 
@@ -5840,7 +5840,7 @@ async function toggleStatus(){
   st.textContent = newOpen ? 'Online' : 'Offline';
   if (dot)  dot.style.background  = newOpen ? 'var(--success)' : 'var(--danger)';
   if (pill) { pill.style.background = newOpen ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'; pill.style.borderColor = newOpen ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'; pill.style.color = newOpen ? 'var(--success)' : 'var(--danger)'; }
-  showToast('ok', newOpen?'Loja aberta para pedidos!':'Loja pausada');
+  sbToast('ok', newOpen?'Loja aberta para pedidos!':'Loja pausada');
   try {
     await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, store_open: newOpen });
   } catch(e) { console.warn('store_config sync:', e); }
