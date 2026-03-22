@@ -766,6 +766,30 @@ async function handleOrderStatus(req, res) {
     const updated = db.prepare("SELECT * FROM orders WHERE id=?").get(order_id)
     emit(tid,'orders',parseRow('orders',updated),'UPDATE')
     send(res,200,{ok:true,order:parseRow('orders',updated)})
+
+    // ── Cashback automático ─────────────────────────────
+    if (['finalizado','entregue'].includes(new_status) && !['finalizado','entregue'].includes(oldStatus)) {
+      try {
+        const cfg   = db.prepare('SELECT cashback_config FROM store_config WHERE tenant_id=?').get(tid)
+        const cbCfg = (() => { try { return JSON.parse(cfg?.cashback_config||'{}') } catch { return {} } })()
+        if (cbCfg.ativo && cbCfg.pct > 0 && order.phone) {
+          const total  = parseFloat(order.total||0)
+          const minPed = parseFloat(cbCfg.min_pedido||0)
+          if (total >= minPed) {
+            const credito = parseFloat((total * cbCfg.pct / 100).toFixed(2))
+            const phone8  = order.phone.replace(/\D/g,'').slice(-8)
+            const cust    = db.prepare('SELECT id FROM customers WHERE tenant_id=? AND phone LIKE ?').get(tid, `%${phone8}%`)
+            if (cust) {
+              db.prepare('UPDATE customers SET cashback_saldo=cashback_saldo+? WHERE id=?').run(credito, cust.id)
+            } else {
+              db.prepare('INSERT OR IGNORE INTO customers (tenant_id,name,phone,cashback_saldo) VALUES (?,?,?,?)').run(tid, order.client||order.phone, order.phone, credito)
+            }
+            marcarDirty()
+            log('💰', `Cashback R$${credito} creditado → ${order.phone} (pedido #${order_id})`)
+          }
+        }
+      } catch(cbErr) { log('⚠️', 'Cashback erro:', cbErr.message) }
+    }
     if (order.phone&&oldStatus!==new_status) {
       setImmediate(async () => {
         try {
