@@ -992,6 +992,20 @@ Seu saldo atual: {pontos_total} pontos 🎯
 Faltam {pontos_faltam} pontos para sua próxima recompensa!</textarea>
         </div>
 
+        <!-- Cashback -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(34,197,94,.15);display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 4v8M5.5 6.5A2 1.5 0 0 1 8 5a2 1.5 0 0 1 0 3 2 1.5 0 0 0 0 3 2 1.5 0 0 0 2.5-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+              <div><div style="font-weight:600;font-size:13.5px">Cashback creditado</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando o cliente ganha cashback ao finalizar um pedido</div></div>
+            </div>
+            <div class="toggle on" id="auto-toggle-cashback" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-cashback" rows="3" style="font-size:12.5px">💰 {nome}, você ganhou R$ {credito} de cashback com seu pedido!
+Seu saldo total: R$ {saldo} 💳
+Use no seu próximo pedido!</textarea>
+        </div>
+
         <!-- Lembrete pagamento mesa -->
         <div class="card" style="padding:18px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -1141,126 +1155,14 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
 </div>
 
 <div class="page" id="page-cupom">
-  <div class="ph" style="flex-wrap:wrap;gap:12px">
-    <div><div class="pt">Cupons &amp; Cashback</div><div class="ps">Descontos e devolução automática para seus clientes</div></div>
-    <div style="display:flex;gap:8px">
-      <button class="btn bg" onclick="_openCashbackConfigModal();openModal('modal-cashback-config')">
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 4v8M5.5 6.5A2 1.5 0 0 1 8 5a2 1.5 0 0 1 0 3 2 1.5 0 0 0 0 3 2 1.5 0 0 0 2.5-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        Configurar Cashback
-      </button>
-      <button class="btn bp" onclick="openModal('modal-add-cupom')">+ Criar cupom</button>
-    </div>
-  </div>
-
-  <!-- Stats row -->
+  <div class="ph"><div><div class="pt">Cupons de Desconto</div><div class="ps">Crie e gerencie cupons para seus clientes</div></div><button class="btn bp" onclick="openModal('modal-add-cupom')">+ Criar cupom</button></div>
   <div class="sg">
-    <div class="sc" style="--ca:var(--accent)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 6a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1a2 2 0 0 0 0 4v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1a2 2 0 0 0 0-4V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 4v2M10 10v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div><div class="sl">Cupons ativos</div><div class="sv" id="cupom-count">—</div></div>
-    <div class="sc" style="--ca:var(--success)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 4v8M5.5 6.5A2 1.5 0 0 1 8 5a2 1.5 0 0 1 0 3 2 1.5 0 0 0 0 3 2 1.5 0 0 0 2.5-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div><div class="sl">Cashback em saldo</div><div class="sv" id="cb-stat-saldo">R$ —</div></div>
-    <div class="sc" style="--ca:var(--purple)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="6" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 13c0-2.76 2.24-5 5-5h4c2.76 0 5 2.24 5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div><div class="sl">Clientes com saldo</div><div class="sv" id="cb-stat-clientes">—</div></div>
-    <div class="sc" style="--ca:var(--accent3)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 8h12M8 2l4 6-4 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Taxa cashback</div><div class="sv" id="cb-stat-pct">—</div></div>
+    <div class="sc" style="--ca:var(--accent)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 6a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1a2 2 0 0 0 0 4v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1a2 2 0 0 0 0-4V6z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 4v2M10 10v2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Cupons ativos</div><div class="sv" id="cupom-count">4</div></div>
+    <div class="sc" style="--ca:var(--success)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Utilizados hoje</div><div class="sv">8</div></div>
+    <div class="sc" style="--ca:var(--purple)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h8l1 2-4 5-4-5 1-2z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="14" r="1" fill="currentColor"/></svg></div><div class="sl">Desconto dado</div><div class="sv">R$48</div></div>
+    <div class="sc" style="--ca:var(--accent3)"><div class="si2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 12l4-4 3 3 5-6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 5h3v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sl">Conversão</div><div class="sv">67%</div></div>
   </div>
-
-  <!-- Tabs -->
-  <div class="tabs" style="margin-bottom:16px">
-    <button class="tab on" onclick="switchTab(this,'t-cupons')">Cupons de desconto</button>
-    <button class="tab"    onclick="switchTab(this,'t-cashback');renderCashbackClientes()">Cashback — Saldos</button>
-  </div>
-
-  <div class="ts on" id="t-cupons">
-    <div id="cupom-list"></div>
-  </div>
-
-  <div class="ts" id="t-cashback">
-    <!-- Banner de status -->
-    <div id="cb-status-banner" style="margin-bottom:16px"></div>
-
-    <!-- Tabela de clientes com saldo -->
-    <div class="card" style="padding:0;overflow:hidden">
-      <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-        <div class="card-title" style="margin:0">Saldos por cliente</div>
-        <div class="sbox" style="margin:0">
-          <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-          <input id="cb-search" placeholder="Buscar cliente..." oninput="renderCashbackClientes()" style="width:180px">
-        </div>
-      </div>
-      <div id="cb-clientes-list" style="min-height:80px"></div>
-    </div>
-  </div>
-</div>
-
-<!-- Modal configurar cashback -->
-<div class="modal-bg" id="modal-cashback-config">
-  <div class="modal" style="max-width:440px">
-    <button class="modal-close" onclick="closeModal('modal-cashback-config')"></button>
-    <h2><svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;margin-right:6px"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 4v8M5.5 6.5A2 1.5 0 0 1 8 5a2 1.5 0 0 1 0 3 2 1.5 0 0 0 0 3 2 1.5 0 0 0 2.5-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>Configurar Cashback</h2>
-
-    <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:10px;padding:12px 14px;font-size:12px;color:var(--muted2);margin-bottom:18px;line-height:1.6">
-      O cashback é creditado automaticamente ao saldo do cliente quando o pedido é marcado como <strong>Finalizado</strong> ou <strong>Entregue</strong>. O cliente pode usar o saldo no próximo pedido no cardápio.
-    </div>
-
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding:14px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
-      <div>
-        <div style="font-size:13px;font-weight:600">Cashback ativo</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">Habilita o programa de cashback</div>
-      </div>
-      <label style="position:relative;display:inline-block;width:42px;height:24px;cursor:pointer">
-        <input type="checkbox" id="cb-ativo" onchange="var on=this.checked;document.getElementById('cb-ativo-track').style.background=on?'var(--accent)':'var(--border)';document.getElementById('cb-ativo-thumb').style.transform=on?'translateX(18px)':'translateX(0)'" style="opacity:0;width:0;height:0;position:absolute">
-        <span id="cb-ativo-track" style="position:absolute;inset:0;border-radius:99px;background:var(--border);transition:background .2s;cursor:pointer"></span>
-        <span id="cb-ativo-thumb" style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3);transition:transform .2s;pointer-events:none"></span>
-      </label>
-    </div>
-
-    <div class="form-row-2">
-      <div class="form-row">
-        <label class="form-label">% de devolução</label>
-        <div style="position:relative">
-          <input class="form-input" id="cb-pct" type="number" min="0" max="50" step="0.5" placeholder="Ex: 5">
-          <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--muted);pointer-events:none">%</span>
-        </div>
-      </div>
-      <div class="form-row">
-        <label class="form-label">Pedido mínimo</label>
-        <div style="position:relative">
-          <input class="form-input" id="cb-min-pedido" type="number" min="0" step="1" placeholder="0">
-          <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--muted);pointer-events:none">R$</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="form-row">
-      <label class="form-label">Validade do saldo (dias)</label>
-      <input class="form-input" id="cb-validade" type="number" min="0" placeholder="0 = sem validade">
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">0 = saldo não expira. Funcionalidade visual; expiração automática não é aplicada no servidor ainda.</div>
-    </div>
-
-    <div style="display:flex;gap:8px;margin-top:4px">
-      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-cashback-config')">Cancelar</button>
-      <button class="btn bp" style="flex:1;justify-content:center" onclick="salvarCashbackConfig()">Salvar configuração</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal ajuste manual de saldo -->
-<div class="modal-bg" id="modal-cb-ajuste">
-  <div class="modal" style="max-width:380px">
-    <button class="modal-close" onclick="closeModal('modal-cb-ajuste')"></button>
-    <h2>Ajustar saldo cashback</h2>
-    <input type="hidden" id="cb-ajuste-id">
-    <div style="font-size:13px;color:var(--muted);margin-bottom:14px" id="cb-ajuste-nome"></div>
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;text-align:center">
-      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Saldo atual</div>
-      <div style="font-size:26px;font-weight:800;font-family:'Playfair Display',serif;color:var(--success)" id="cb-ajuste-saldo-atual">R$ 0,00</div>
-    </div>
-    <div class="form-row">
-      <label class="form-label">Valor a adicionar / subtrair</label>
-      <input class="form-input" id="cb-ajuste-valor" type="number" step="0.01" placeholder="Ex: 10 ou -5">
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">Use valor positivo para creditar, negativo para debitar.</div>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:4px">
-      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-cb-ajuste')">Cancelar</button>
-      <button class="btn bp" style="flex:1;justify-content:center" onclick="salvarCbAjuste()">Confirmar</button>
-    </div>
-  </div>
+  <div id="cupom-list"></div>
 </div>
 
 <!-- FIDELIDADE -->

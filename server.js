@@ -596,47 +596,8 @@ async function handleREST(req, res, table, params, body) {
         const row = db.prepare('SELECT * FROM store_config WHERE tenant_id=?').get(pTid)
         const parsed = parseRow(table, row); emit(pTid, table, parsed, 'UPDATE'); marcarDirty(); return send(res, 200, parsed)
       }
-      // ── Lê status anterior ANTES do UPDATE (para cashback) ─
-      let _prevOrderStatus = null
-      if (table === 'orders' && payload.status) {
-        const idVal = vals[0]
-        const prev = db.prepare('SELECT status FROM orders WHERE id=?').get(idVal)
-        _prevOrderStatus = prev?.status || null
-      }
-
       db.prepare(`UPDATE "${table}" SET ${keys.map(k=>`"${k}"=?`).join(', ')} ${WHERE}`).run(...keys.map(k=>sanitize(payload[k])),...vals)
       if (SSE_TABLES.has(table)) { const updatedRow=db.prepare(`SELECT * FROM "${table}" ${WHERE} LIMIT 1`).get(...vals); emit(tenantId||payload.tenant_id, table, updatedRow?parseRow(table,updatedRow):payload, 'UPDATE') }
-
-      // ── Cashback automático ao finalizar pedido ─────────
-      if (table === 'orders' && payload.status && ['finalizado','entregue'].includes(payload.status)) {
-        try {
-          const idVal = vals[0]
-          // Usa status anterior lido ANTES do UPDATE
-          const jaFinalizado = ['finalizado','entregue'].includes(_prevOrderStatus || '')
-          if (!jaFinalizado) {
-            const order = db.prepare('SELECT * FROM orders WHERE id=?').get(idVal)
-            if (order?.phone) {
-              const cfg   = db.prepare('SELECT cashback_config FROM store_config WHERE tenant_id=?').get(tenantId)
-              const cbCfg = (() => { try { return JSON.parse(cfg?.cashback_config||'{}') } catch { return {} } })()
-              if (cbCfg.ativo && cbCfg.pct > 0) {
-                const total  = parseFloat(order.total||0)
-                const minPed = parseFloat(cbCfg.min_pedido||0)
-                if (total >= minPed) {
-                  const credito = parseFloat((total * cbCfg.pct / 100).toFixed(2))
-                  const phone8  = order.phone.replace(/\D/g,'').slice(-8)
-                  const cust    = db.prepare('SELECT id,cashback_saldo FROM customers WHERE tenant_id=? AND phone LIKE ?').get(tenantId, `%${phone8}%`)
-                  if (cust) {
-                    db.prepare('UPDATE customers SET cashback_saldo=cashback_saldo+? WHERE id=?').run(credito, cust.id)
-                  } else {
-                    db.prepare('INSERT OR IGNORE INTO customers (tenant_id,name,phone,cashback_saldo) VALUES (?,?,?,?)').run(tenantId, order.client||order.phone, order.phone, credito)
-                  }
-                  log('💰', `Cashback R$${credito} creditado para ${order.phone} (pedido #${idVal})`)
-                }
-              }
-            }
-          }
-        } catch(cbErr) { log('⚠️', 'Erro ao creditar cashback:', cbErr.message) }
-      }
 
       marcarDirty(); return send(res, 200, { updated: 1 })
     } catch(e) { return send(res, 400, { error: e.message }) }
@@ -770,25 +731,72 @@ async function handleOrderStatus(req, res) {
     // ── Cashback automático ─────────────────────────────
     if (['finalizado','entregue'].includes(new_status) && !['finalizado','entregue'].includes(oldStatus)) {
       try {
-        const cfg   = db.prepare('SELECT cashback_config FROM store_config WHERE tenant_id=?').get(tid)
-        const cbCfg = (() => { try { return JSON.parse(cfg?.cashback_config||'{}') } catch { return {} } })()
+        const cfg    = db.prepare('SELECT cashback_config, evo_automacoes, evo_instance, fid_config FROM store_config WHERE tenant_id=?').get(tid)
+        const inst   = cfg?.evo_instance || EVO_INST
+        const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
+
+        // ── Cashback ────────────────────────────────────
+        const cbCfg  = (() => { try { return JSON.parse(cfg?.cashback_config||'{}') } catch { return {} } })()
         if (cbCfg.ativo && cbCfg.pct > 0 && order.phone) {
           const total  = parseFloat(order.total||0)
           const minPed = parseFloat(cbCfg.min_pedido||0)
           if (total >= minPed) {
             const credito = parseFloat((total * cbCfg.pct / 100).toFixed(2))
             const phone8  = order.phone.replace(/\D/g,'').slice(-8)
-            const cust    = db.prepare('SELECT id FROM customers WHERE tenant_id=? AND phone LIKE ?').get(tid, `%${phone8}%`)
+            const cust    = db.prepare('SELECT id, cashback_saldo FROM customers WHERE tenant_id=? AND phone LIKE ?').get(tid, `%${phone8}%`)
             if (cust) {
               db.prepare('UPDATE customers SET cashback_saldo=cashback_saldo+? WHERE id=?').run(credito, cust.id)
+              const novoSaldo = parseFloat(((cust.cashback_saldo||0) + credito).toFixed(2))
+              // WA cashback
+              const cbAuto = auto['cashback'] || {}
+              if (cbAuto.on !== false) {
+                const nome = order.client || 'Cliente'
+                const msgPadrao = `💰 *${nome}*, você ganhou *R$ ${credito.toFixed(2).replace('.',',')}* de cashback com seu pedido!\n\nSeu saldo total: *R$ ${novoSaldo.toFixed(2).replace('.',',')}*\nUse no seu próximo pedido! 🛍️`
+                const msgFinal  = cbAuto.on && cbAuto.msg ? fillVars(cbAuto.msg, { nome, credito: credito.toFixed(2).replace('.',','), saldo: novoSaldo.toFixed(2).replace('.',',') }) : msgPadrao
+                setImmediate(async () => { try { await sendWA(order.phone, msgFinal, inst) } catch(e) {} })
+              }
             } else {
               db.prepare('INSERT OR IGNORE INTO customers (tenant_id,name,phone,cashback_saldo) VALUES (?,?,?,?)').run(tid, order.client||order.phone, order.phone, credito)
+              const cbAuto = auto['cashback'] || {}
+              if (cbAuto.on !== false) {
+                const nome = order.client || 'Cliente'
+                const msgPadrao = `💰 *${nome}*, você ganhou *R$ ${credito.toFixed(2).replace('.',',')}* de cashback com seu pedido!\n\nSeu saldo total: *R$ ${credito.toFixed(2).replace('.',',')}*\nUse no seu próximo pedido! 🛍️`
+                const msgFinal  = cbAuto.on && cbAuto.msg ? fillVars(cbAuto.msg, { nome, credito: credito.toFixed(2).replace('.',','), saldo: credito.toFixed(2).replace('.',',') }) : msgPadrao
+                setImmediate(async () => { try { await sendWA(order.phone, msgFinal, inst) } catch(e) {} })
+              }
             }
             marcarDirty()
             log('💰', `Cashback R$${credito} creditado → ${order.phone} (pedido #${order_id})`)
           }
         }
-      } catch(cbErr) { log('⚠️', 'Cashback erro:', cbErr.message) }
+
+        // ── Fidelidade pontos ────────────────────────────
+        const fidCfg  = (() => { try { return JSON.parse(cfg?.fid_config||'{}') } catch { return {} } })()
+        const ptsPorReal = parseFloat(fidCfg.pts_por_real || 10)
+        if (ptsPorReal > 0 && order.phone) {
+          const phone8 = order.phone.replace(/\D/g,'').slice(-8)
+          const fid    = db.prepare('SELECT id, pts, max_pts, name FROM fidelidade WHERE tenant_id=? AND phone LIKE ?').get(tid, `%${phone8}%`)
+          if (fid) {
+            const totalVal  = parseFloat(order.total||0) + parseFloat(order.taxa||0)
+            const ptosGanhos = Math.floor(totalVal * ptsPorReal)
+            if (ptosGanhos > 0) {
+              const novosPts = (fid.pts || 0) + ptosGanhos
+              const meta     = fid.max_pts || 500
+              db.prepare('UPDATE fidelidade SET pts=?, orders_count=orders_count+1 WHERE id=?').run(novosPts, fid.id)
+              log('⭐', `Fidelidade +${ptosGanhos} pts → ${order.phone} (pedido #${order_id})`)
+              // WA pontos
+              const ptAuto = auto['pontos'] || {}
+              if (ptAuto.on !== false) {
+                const nome       = fid.name || order.client || 'Cliente'
+                const faltam     = Math.max(0, meta - novosPts)
+                const msgPadrao  = `🏆 *${nome}*, você ganhou *${ptosGanhos} pontos* com seu pedido!\nSeu saldo: *${novosPts} pontos* 🎯\n${faltam > 0 ? `Faltam apenas *${faltam} pontos* para sua recompensa!` : '🎁 Você atingiu sua recompensa! Resgate no próximo pedido.'}`
+                const msgFinal   = ptAuto.on && ptAuto.msg ? fillVars(ptAuto.msg, { nome, pontos_ganhos: String(ptosGanhos), pontos_total: String(novosPts), pontos_faltam: String(faltam) }) : msgPadrao
+                setImmediate(async () => { try { await sendWA(order.phone, msgFinal, inst) } catch(e) {} })
+              }
+            }
+          }
+        }
+      } catch(cbErr) { log('⚠️', 'Cashback/Fidelidade erro:', cbErr.message) }
     }
     if (order.phone&&oldStatus!==new_status) {
       setImmediate(async () => {
@@ -1021,6 +1029,30 @@ const server = http.createServer(async (req,res) => {
     marcarDirty();send(res,200,{ok:true,saldo:parseFloat(updated?.cashback_saldo||0)});return
   }
 
+  // ── Fidelidade: sync automático ao cadastrar/logar ───
+  if (req.method === 'POST' && upath === '/api/fidelidade/sync') {
+    const tid = req.headers['x-tenant-id'] || ''
+    const body = await readBody(req)
+    const { phone, name } = body
+    if (!tid || !phone) { send(res, 400, { error: 'tenant_id e phone obrigatórios' }); return }
+    try {
+      const phone8 = phone.replace(/\D/g,'').slice(-8)
+      // Verifica se já está no programa
+      const jaExiste = db.prepare('SELECT id FROM fidelidade WHERE tenant_id=? AND phone LIKE ?').get(tid, `%${phone8}%`)
+      if (!jaExiste) {
+        const cfg    = db.prepare('SELECT fid_config FROM store_config WHERE tenant_id=?').get(tid)
+        const fidCfg = (() => { try { return JSON.parse(cfg?.fid_config||'{}') } catch { return {} } })()
+        const meta   = parseInt(fidCfg.meta_pts || 500)
+        db.prepare('INSERT OR IGNORE INTO fidelidade (tenant_id,name,phone,pts,max_pts,orders_count,resgates) VALUES (?,?,?,0,?,0,0)')
+          .run(tid, name || phone, phone.replace(/\D/g,''), meta)
+        marcarDirty()
+        log('⭐', `Fidelidade: ${name||phone} cadastrado automaticamente (${tid})`)
+        send(res, 200, { ok: true, novo: true }); return
+      }
+      send(res, 200, { ok: true, novo: false }); return
+    } catch(e) { send(res, 500, { error: e.message }); return }
+  }
+
   // ── Rotas especiais — todas em routes.js ───────────────────────────────────
   const _routeCtx = { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
     validarSessaoAdmin, criarSessaoAdmin, fazerBackup, restaurarBackup, getTenantId,
@@ -1036,7 +1068,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar'])
+  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/fidelidade/sync'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return
