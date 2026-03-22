@@ -3873,5 +3873,1082 @@ window.addEventListener('load', clearSearchInput);
 setTimeout(clearSearchInput, 100);
 setTimeout(clearSearchInput, 400);
 </script>
+
+<!-- ══════════════════════════════════════════════════════════════
+     FOOD BUILDER — Sistema de Montagem Animado
+     Detecta segmento pelo nome da categoria e abre o builder
+     visual correspondente: Pizza · Açaí · Açougue · Hamburguer
+     Frutaria · Genérico
+══════════════════════════════════════════════════════════════════ -->
+<style>
+/* ── Builder Overlay ──────────────────────────────────────────── */
+#builder-overlay{
+  position:fixed;inset:0;z-index:3000;
+  display:none;flex-direction:column;
+  background:rgba(0,0,0,.6);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+}
+#builder-overlay.open{display:flex;align-items:flex-end}
+
+#builder-sheet{
+  width:100%;max-width:520px;margin:0 auto;
+  background:var(--s1);
+  border-radius:26px 26px 0 0;
+  max-height:96vh;overflow-y:auto;
+  animation:builderUp .38s cubic-bezier(.34,1.56,.64,1);
+  position:relative;
+}
+@keyframes builderUp{from{transform:translateY(110%)}to{transform:translateY(0)}}
+
+.builder-handle{width:38px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);margin:14px auto 0}
+
+.builder-close{
+  position:absolute;top:16px;right:16px;
+  width:32px;height:32px;border-radius:50%;
+  background:rgba(255,255,255,.08);border:none;
+  color:rgba(255,255,255,.6);font-size:14px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;z-index:10;
+  transition:all .15s;
+}
+.builder-close:hover{background:rgba(255,255,255,.15);color:#fff}
+
+/* ── Stage (visual animation area) ───────────────────────────── */
+.builder-stage{
+  width:100%;height:220px;
+  display:flex;align-items:center;justify-content:center;
+  position:relative;overflow:hidden;
+  background:linear-gradient(180deg,var(--s2),var(--s1));
+  flex-shrink:0;
+}
+
+/* ── Builder Body ─────────────────────────────────────────────── */
+.builder-body{padding:0 20px 28px}
+
+.builder-name{
+  font-family:'Fraunces',serif;
+  font-size:22px;font-weight:900;
+  margin:16px 0 4px;line-height:1.2;
+  color:var(--text);
+}
+.builder-desc{font-size:13px;color:var(--muted2);line-height:1.5;margin-bottom:12px}
+
+.builder-section-label{
+  font-size:10px;font-weight:800;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);
+  margin-bottom:10px;margin-top:20px;
+  display:flex;align-items:center;gap:8px;
+}
+.builder-section-label::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* ── Flavor grid ──────────────────────────────────────────────── */
+.builder-flavor-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(140px,1fr));
+  gap:8px;
+  max-height:260px;overflow-y:auto;
+}
+.builder-flavor-card{
+  background:var(--s2);border:1.5px solid var(--border);
+  border-radius:14px;padding:12px 10px;
+  cursor:pointer;transition:all .2s;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  position:relative;overflow:hidden;
+  text-align:center;
+}
+.builder-flavor-card::before{
+  content:'';position:absolute;inset:0;
+  background:var(--accent);opacity:0;transition:opacity .2s;
+}
+.builder-flavor-card:hover{border-color:rgba(255,255,255,.2)}
+.builder-flavor-card.selected{border-color:var(--accent)}
+.builder-flavor-card.selected::before{opacity:.08}
+.builder-flavor-card .bfc-emoji{font-size:28px;position:relative;z-index:1}
+.builder-flavor-card .bfc-name{
+  font-size:12px;font-weight:600;color:var(--text);
+  position:relative;z-index:1;line-height:1.3;
+}
+.builder-flavor-card .bfc-price{
+  font-size:11px;color:var(--accent);font-weight:700;
+  position:relative;z-index:1;
+}
+.builder-flavor-card .bfc-check{
+  position:absolute;top:8px;right:8px;
+  width:18px;height:18px;border-radius:50%;
+  background:var(--accent);
+  display:none;align-items:center;justify-content:center;
+  font-size:10px;color:#fff;z-index:2;
+}
+.builder-flavor-card.selected .bfc-check{display:flex}
+
+/* ── Ingredient chips ─────────────────────────────────────────── */
+.builder-chip-grid{display:flex;flex-wrap:wrap;gap:8px}
+.builder-chip{
+  display:flex;align-items:center;gap:6px;
+  padding:8px 14px;border-radius:99px;
+  background:var(--s2);border:1.5px solid var(--border);
+  font-size:13px;font-weight:500;color:var(--muted2);
+  cursor:pointer;transition:all .18s;user-select:none;
+}
+.builder-chip .bc-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--border);transition:background .18s;
+}
+.builder-chip.on{
+  background:rgba(255,255,255,.06);
+  border-color:var(--accent);color:var(--text);
+}
+.builder-chip.on .bc-dot{background:var(--accent)}
+.builder-chip:active{transform:scale(.93)}
+
+/* ── Quantity row ─────────────────────────────────────────────── */
+.builder-qty-row{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-top:20px;padding-top:16px;
+  border-top:1px solid var(--border);
+  gap:12px;
+}
+.builder-qty-ctrl{display:flex;align-items:center;gap:14px}
+.builder-qty-btn{
+  width:38px;height:38px;border-radius:50%;
+  background:var(--s2);border:1.5px solid var(--border);
+  color:var(--text);font-size:22px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .15s;
+}
+.builder-qty-btn:hover{border-color:var(--accent);background:rgba(249,115,22,.1)}
+.builder-qty-num{font-family:'Fraunces',serif;font-size:20px;font-weight:700;min-width:24px;text-align:center}
+.builder-add-btn{
+  flex:1;padding:14px;border-radius:14px;
+  background:var(--accent);border:none;
+  color:#fff;font-size:14px;font-weight:700;
+  cursor:pointer;transition:all .22s;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  font-family:'DM Sans',sans-serif;
+}
+.builder-add-btn:hover{filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 6px 20px rgba(249,115,22,.35)}
+.builder-add-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+
+/* ── OBS textarea ─────────────────────────────────────────────── */
+.builder-obs{
+  width:100%;background:var(--s2);border:1px solid var(--border);
+  border-radius:12px;padding:11px 14px;color:var(--text);
+  font-size:13px;outline:none;resize:none;margin-top:16px;
+  transition:border-color .18s;font-family:'DM Sans',sans-serif;
+}
+.builder-obs:focus{border-color:rgba(249,115,22,.4)}
+.builder-obs::placeholder{color:var(--muted)}
+
+/* ── Step indicator (pizza halves) ───────────────────────────── */
+.builder-steps{
+  display:flex;gap:8px;margin-bottom:14px;
+}
+.builder-step{
+  flex:1;padding:10px;border-radius:12px;
+  background:var(--s2);border:1.5px solid var(--border);
+  text-align:center;transition:all .2s;
+  cursor:pointer;
+}
+.builder-step.active{border-color:var(--accent)}
+.builder-step.done{border-color:var(--green)}
+.builder-step-label{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.builder-step-value{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.builder-step.active .builder-step-label{color:var(--accent)}
+.builder-step.done .builder-step-label{color:var(--green)}
+.builder-step.done .builder-step-value{color:var(--green)}
+
+/* ── Price note ───────────────────────────────────────────────── */
+.builder-price-note{font-size:11px;color:var(--muted);text-align:center;margin-top:4px}
+
+/* ═══════════════════════════════════════════════════
+   SVG ANIMATIONS
+═══════════════════════════════════════════════════ */
+
+/* PIZZA SVG */
+.pizza-svg-wrap{
+  width:180px;height:180px;position:relative;
+}
+.pizza-svg{width:100%;height:100%;filter:drop-shadow(0 8px 24px rgba(0,0,0,.5))}
+.pizza-half-left,.pizza-half-right{
+  transition:all .5s cubic-bezier(.34,1.2,.64,1);
+}
+.pizza-topping{
+  animation:toppingPop .4s cubic-bezier(.34,1.56,.64,1) forwards;
+  transform-origin:center;opacity:0;
+}
+@keyframes toppingPop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+.pizza-label{
+  position:absolute;font-size:10px;font-weight:700;color:rgba(255,255,255,.8);
+  pointer-events:none;text-shadow:0 1px 4px rgba(0,0,0,.8);
+  letter-spacing:.04em;text-transform:uppercase;
+}
+.pizza-label.left{left:22px;top:50%;transform:translateY(-50%)}
+.pizza-label.right{right:22px;top:50%;transform:translateY(-50%)}
+.pizza-divider{
+  position:absolute;top:0;bottom:0;left:50%;width:2px;
+  background:rgba(255,255,255,.25);transform:translateX(-50%);
+}
+.pizza-check-badge{
+  position:absolute;font-size:18px;
+  animation:toppingPop .4s cubic-bezier(.34,1.56,.64,1) forwards;
+  opacity:0;
+}
+.pizza-check-badge.l{left:28px;top:50%;transform:translateY(-50%)}
+.pizza-check-badge.r{right:28px;top:50%;transform:translateY(-50%)}
+
+/* AÇAÍ CUP */
+.acai-cup-wrap{
+  width:140px;height:200px;position:relative;
+  display:flex;align-items:flex-end;justify-content:center;
+}
+.acai-cup-svg{position:absolute;inset:0;width:100%;height:100%}
+.acai-liquid{
+  position:absolute;bottom:18px;left:18px;right:18px;
+  border-radius:0 0 16px 16px;
+  transition:height .5s cubic-bezier(.34,1.2,.64,1), background-color .4s ease;
+  overflow:hidden;
+}
+.acai-liquid-surface{
+  position:absolute;top:0;left:0;right:0;height:10px;
+  border-radius:50% 50% 0 0;
+  background:rgba(255,255,255,.15);
+  animation:liquidWave 2s ease-in-out infinite;
+}
+@keyframes liquidWave{
+  0%,100%{transform:scaleY(1)}
+  50%{transform:scaleY(1.4)}
+}
+.acai-topping-layer{
+  position:absolute;left:0;right:0;
+  display:flex;justify-content:center;align-items:center;
+  gap:4px;flex-wrap:wrap;padding:4px;
+  animation:toppingPop .4s ease forwards;opacity:0;
+}
+.acai-fill-label{
+  position:absolute;bottom:-24px;left:0;right:0;
+  text-align:center;font-size:11px;font-weight:600;
+  color:var(--accent);letter-spacing:.03em;
+}
+
+/* MEAT / AÇOUGUE */
+.meat-board-wrap{
+  width:200px;height:180px;position:relative;
+}
+.meat-board-svg{width:100%;height:100%}
+.meat-item{
+  opacity:0;transform-origin:center;
+  transition:all .4s cubic-bezier(.34,1.56,.64,1);
+}
+.meat-item.show{opacity:1}
+
+/* HAMBURGUER */
+.burger-wrap{
+  width:160px;height:180px;position:relative;
+  display:flex;flex-direction:column;justify-content:flex-end;align-items:center;
+}
+.burger-layer{
+  width:100%;position:absolute;bottom:0;left:0;right:0;
+  transition:all .4s cubic-bezier(.34,1.56,.64,1);
+  transform:translateY(0);
+}
+
+/* FRUTARIA */
+.fruit-basket-wrap{width:200px;height:190px;position:relative}
+.fruit-item{
+  position:absolute;opacity:0;
+  animation-fill-mode:forwards;
+  transition:opacity .3s;
+}
+.fruit-item.show{animation:fruitDrop .5s cubic-bezier(.34,1.56,.64,1) forwards}
+@keyframes fruitDrop{
+  from{opacity:0;transform:translateY(-30px) scale(.6) rotate(-15deg)}
+  to{opacity:1;transform:translateY(0) scale(1) rotate(0)}
+}
+
+/* ── Shine effect on stage ────────────────────────────────────── */
+.stage-shine{
+  position:absolute;top:-40%;left:-40%;
+  width:80%;height:80%;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,255,255,.04),transparent 70%);
+  pointer-events:none;
+}
+
+/* ── Pulse ring on selection ──────────────────────────────────── */
+@keyframes pulseRing{
+  0%{transform:scale(1);opacity:.6}
+  100%{transform:scale(1.8);opacity:0}
+}
+.pulse-ring{
+  position:absolute;border-radius:50%;
+  border:2px solid var(--accent);
+  animation:pulseRing .5s ease-out forwards;
+}
+</style>
+
+<!-- Builder Modal DOM -->
+<div id="builder-overlay" onclick="if(event.target===this)closeBuilder()">
+  <div id="builder-sheet">
+    <div class="builder-handle"></div>
+    <button class="builder-close" onclick="closeBuilder()">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <!-- Stage animation area -->
+    <div class="builder-stage" id="builder-stage">
+      <div class="stage-shine"></div>
+    </div>
+    <!-- Body -->
+    <div class="builder-body">
+      <div class="builder-name" id="builder-name"></div>
+      <div class="builder-desc" id="builder-desc"></div>
+      <!-- Dynamic content injected here -->
+      <div id="builder-content"></div>
+      <div class="builder-qty-row">
+        <div class="builder-qty-ctrl">
+          <button class="builder-qty-btn" onclick="builderQty(-1)">−</button>
+          <span class="builder-qty-num" id="builder-qty">1</span>
+          <button class="builder-qty-btn" onclick="builderQty(1)">+</button>
+        </div>
+        <button class="builder-add-btn" id="builder-add-btn" onclick="builderConfirm()">
+          Adicionar · R$ <span id="builder-price-display">0,00</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   FOOD BUILDER ENGINE
+══════════════════════════════════════════════════════════════════ */
+(function() {
+
+// State
+let _bItem     = null;   // item principal
+let _bQty      = 1;
+let _bSegment  = 'generic'; // pizza | acai | burger | meat | fruit | generic
+let _bHalf1    = null;   // pizza: metade 1 (o próprio item)
+let _bHalf2    = null;   // pizza: metade 2 escolhida
+let _bPickingHalf = 1;   // qual metade estamos escolhendo (1 ou 2)
+let _bSelected = new Set(); // ingredientes selecionados (açaí/genérico)
+let _bGruposState = {};
+
+// ── Segment detection ──────────────────────────────────────────
+function detectSegment(item) {
+  const cat = (window.allCats||[]).find(c => c.name === (item.cat_key || item.cat));
+  const catName = ((cat?.name||'') + ' ' + (cat?.label||'')).toLowerCase();
+  const itemName = (item.name||'').toLowerCase();
+  const combined = catName + ' ' + itemName;
+  if (/pizza|pizzar/.test(combined) || item.meio_a_meio || item.tipo==='pizza') return 'pizza';
+  if (/açaí|acai|açai/.test(combined)) return 'acai';
+  if (/açoug|açogue|carnic|carne|steak|butch|churrasco/.test(combined)) return 'meat';
+  if (/hambur|burger|lanche|x-burg|smash/.test(combined)) return 'burger';
+  if (/frutar|fruta|feira|hortifrut|verdur|greens/.test(combined)) return 'fruit';
+  return 'generic';
+}
+
+// ── Open builder ───────────────────────────────────────────────
+window.openBuilder = function(id) {
+  const item = (window.allItems||[]).find(x => x.id === id);
+  if (!item) return;
+  _bItem    = item;
+  _bQty     = 1;
+  _bHalf1   = item;
+  _bHalf2   = null;
+  _bPickingHalf = 2; // item 1 já selecionado, escolher item 2
+  _bSelected = new Set();
+  _bGruposState = {};
+  _bSegment = detectSegment(item);
+
+  document.getElementById('builder-name').textContent = item.name;
+  document.getElementById('builder-desc').textContent = item.description || '';
+
+  renderStage();
+  renderContent();
+  updateBuilderBtn();
+
+  document.getElementById('builder-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+};
+
+window.closeBuilder = function() {
+  document.getElementById('builder-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+  _bItem = null;
+};
+
+// ── Qty ────────────────────────────────────────────────────────
+window.builderQty = function(d) {
+  _bQty = Math.max(1, _bQty + d);
+  document.getElementById('builder-qty').textContent = _bQty;
+  updateBuilderBtn();
+};
+
+// ── Confirm ────────────────────────────────────────────────────
+window.builderConfirm = function() {
+  if (!_bItem) return;
+  if (_bSegment === 'pizza' && !_bHalf2) { showBuilderError('Escolha a 2ª metade! 🍕'); return; }
+
+  let name = _bItem.name;
+  let price = parseFloat(_bItem.price);
+  let obs = (document.getElementById('builder-obs')?.value || '').trim();
+
+  if (_bSegment === 'pizza' && _bHalf2) {
+    price = (price + parseFloat(_bHalf2.price)) / 2;
+    name = `½ ${_bItem.name} + ½ ${_bHalf2.name}`;
+    obs = obs || `Meio a meio`;
+  }
+
+  // Ingredientes selecionados
+  if (_bSelected.size > 0) {
+    const ingrs = [..._bSelected].join(', ');
+    obs = obs ? obs + ' · ' + ingrs : ingrs;
+  }
+
+  // Custom groups
+  const gruposText = Object.values(_bGruposState)
+    .filter(v => v && v.length > 0)
+    .map(v => Array.isArray(v) ? v.map(x => x.text).join(', ') : v.text)
+    .join(' · ');
+  if (gruposText) obs = obs ? obs + ' · ' + gruposText : gruposText;
+
+  const cartItem = {
+    id: _bItem.id,
+    name,
+    price,
+    qty: _bQty,
+    obs,
+    image_url: _bItem.image_url,
+    emoji: _bItem.emoji
+  };
+
+  // Use existing addCartItem if available
+  if (window.cart) {
+    window.cart.push(cartItem);
+    if (window.updateCartUI) window.updateCartUI();
+    if (window.saveCartSession) window.saveCartSession();
+  }
+  if (window.toast) window.toast('🛒', `${name} adicionado!`);
+  closeBuilder();
+};
+
+function showBuilderError(msg) {
+  const btn = document.getElementById('builder-add-btn');
+  const orig = btn.innerHTML;
+  btn.innerHTML = '⚠️ ' + msg;
+  btn.style.background = 'var(--red)';
+  setTimeout(() => { btn.innerHTML = orig; btn.style.background = ''; }, 1800);
+}
+
+// ── Price display ──────────────────────────────────────────────
+function calcBuilderPrice() {
+  if (!_bItem) return 0;
+  let p = parseFloat(_bItem.price);
+  if (_bSegment === 'pizza' && _bHalf2) {
+    p = (p + parseFloat(_bHalf2.price)) / 2;
+  }
+  Object.values(_bGruposState).forEach(v => {
+    if (Array.isArray(v)) v.forEach(x => { if (x.price) p += parseFloat(x.price); });
+    else if (v?.price) p += parseFloat(v.price);
+  });
+  return p * _bQty;
+}
+
+function fmtB(n) {
+  return n.toFixed(2).replace('.', ',');
+}
+
+function updateBuilderBtn() {
+  const btn = document.getElementById('builder-add-btn');
+  const pd  = document.getElementById('builder-price-display');
+  if (pd) pd.textContent = fmtB(calcBuilderPrice());
+  const isPizza = _bSegment === 'pizza';
+  if (btn) btn.disabled = isPizza && !_bHalf2;
+}
+
+/* ══════════════════════════════════════════════════════
+   STAGE RENDERERS
+══════════════════════════════════════════════════════ */
+
+function renderStage() {
+  const stage = document.getElementById('builder-stage');
+  switch (_bSegment) {
+    case 'pizza':  stage.innerHTML = buildPizzaStage(); break;
+    case 'acai':   stage.innerHTML = buildAcaiStage();  break;
+    case 'burger': stage.innerHTML = buildBurgerStage(); break;
+    case 'meat':   stage.innerHTML = buildMeatStage(); break;
+    case 'fruit':  stage.innerHTML = buildFruitStage(); break;
+    default:       stage.innerHTML = buildGenericStage(); break;
+  }
+}
+
+// ── PIZZA Stage ────────────────────────────────────────────────
+function buildPizzaStage() {
+  const c1 = '#e8631a'; // left half color
+  const c2 = _bHalf2 ? '#c44a9a' : '#2d3048'; // right half - filled or empty
+  const rightOpacity = _bHalf2 ? 1 : 0.3;
+
+  const left = _bItem?.name || '?';
+  const right = _bHalf2?.name || 'Escolher';
+
+  return `
+  <div class="pizza-svg-wrap">
+    <svg class="pizza-svg" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <clipPath id="cp-left"><rect x="0" y="0" width="90" height="180"/></clipPath>
+        <clipPath id="cp-right"><rect x="90" y="0" width="90" height="180"/></clipPath>
+        <radialGradient id="crust-g" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#c8832a"/>
+          <stop offset="100%" stop-color="#8b4513"/>
+        </radialGradient>
+        <radialGradient id="sauce-l" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="${c1}"/>
+          <stop offset="100%" stop-color="${c1}dd"/>
+        </radialGradient>
+        <radialGradient id="sauce-r" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="${c2}"/>
+          <stop offset="100%" stop-color="${c2}dd"/>
+        </radialGradient>
+        <filter id="shadow">
+          <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="rgba(0,0,0,.6)"/>
+        </filter>
+      </defs>
+
+      <!-- Outer crust -->
+      <circle cx="90" cy="90" r="82" fill="url(#crust-g)" filter="url(#shadow)"/>
+
+      <!-- Left half filling -->
+      <circle cx="90" cy="90" r="72" fill="url(#sauce-l)" clip-path="url(#cp-left)"
+        class="pizza-half-left" id="pizza-left-fill"
+        style="transition:all .5s ease"/>
+
+      <!-- Right half filling -->
+      <circle cx="90" cy="90" r="72" fill="url(#sauce-r)" clip-path="url(#cp-right)"
+        class="pizza-half-right" id="pizza-right-fill"
+        style="opacity:${rightOpacity};transition:all .5s ease"/>
+
+      <!-- Cheese blobs left -->
+      <circle cx="60" cy="72" r="14" fill="#fdf0a0" fill-opacity=".85" clip-path="url(#cp-left)"/>
+      <circle cx="68" cy="100" r="10" fill="#fdf0a0" fill-opacity=".7"  clip-path="url(#cp-left)"/>
+      <circle cx="45" cy="98" r="12" fill="#fdf0a0" fill-opacity=".75" clip-path="url(#cp-left)"/>
+      <circle cx="72" cy="65" r="8"  fill="#fdf0a0" fill-opacity=".6"  clip-path="url(#cp-left)"/>
+
+      <!-- Cheese blobs right -->
+      <circle cx="120" cy="72" r="14" fill="#fdf0a0" fill-opacity="${_bHalf2 ? .85 : .15}" clip-path="url(#cp-right)" style="transition:fill-opacity .5s"/>
+      <circle cx="112" cy="100" r="10" fill="#fdf0a0" fill-opacity="${_bHalf2 ? .7 : .1}"  clip-path="url(#cp-right)" style="transition:fill-opacity .5s"/>
+      <circle cx="135" cy="98" r="12" fill="#fdf0a0" fill-opacity="${_bHalf2 ? .75 : .12}" clip-path="url(#cp-right)" style="transition:fill-opacity .5s"/>
+
+      <!-- Toppings left (pepperoni-like) -->
+      <circle cx="55" cy="80" r="7" fill="#8b1a1a" fill-opacity=".9" clip-path="url(#cp-left)"/>
+      <circle cx="75" cy="88" r="6" fill="#8b1a1a" fill-opacity=".85" clip-path="url(#cp-left)"/>
+      <circle cx="58" cy="108" r="7" fill="#8b1a1a" fill-opacity=".9" clip-path="url(#cp-left)"/>
+
+      <!-- Toppings right (appear when half2 selected) -->
+      <g id="pizza-right-toppings" style="transition:opacity .5s;opacity:${_bHalf2 ? 1 : 0}">
+        <circle cx="125" cy="80" r="7" fill="${_bHalf2 ? '#2d5a1b' : '#444'}" fill-opacity=".9" clip-path="url(#cp-right)"/>
+        <circle cx="105" cy="92" r="6" fill="${_bHalf2 ? '#2d5a1b' : '#444'}" fill-opacity=".85" clip-path="url(#cp-right)"/>
+        <circle cx="122" cy="108" r="7" fill="${_bHalf2 ? '#2d5a1b' : '#444'}" fill-opacity=".9" clip-path="url(#cp-right)"/>
+      </g>
+
+      <!-- Center divider line -->
+      <line x1="90" y1="8" x2="90" y2="172" stroke="rgba(255,255,255,.25)" stroke-width="2" stroke-dasharray="4 4"/>
+
+      <!-- Crust ring -->
+      <circle cx="90" cy="90" r="82" fill="none" stroke="#6b3a1f" stroke-width="2" opacity=".5"/>
+    </svg>
+
+    <!-- Labels -->
+    <div class="pizza-label left" style="max-width:60px;font-size:9px">${left.substring(0,12)}</div>
+    <div class="pizza-label right" style="max-width:60px;font-size:9px;${_bHalf2 ? 'color:#fff' : 'color:rgba(255,255,255,.35)'}">${right.substring(0,12)}</div>
+
+    ${_bHalf2 ? '<div class="pizza-check-badge l">✓</div><div class="pizza-check-badge r" style="animation-delay:.15s">✓</div>' : ''}
+  </div>`;
+}
+
+// ── AÇAÍ Stage ─────────────────────────────────────────────────
+const ACAI_COLORS = ['#7b4fd8','#9b6fe8','#5c3ab0','#4a2d9e'];
+const TOPPING_COLORS = {
+  'granola':'#c8a060', 'leite':'#f5f0e0', 'leite condensado':'#f5eec0',
+  'morango':'#e84060', 'banana':'#f5d060', 'kiwi':'#60c840',
+  'manga':'#f5a030', 'mel':'#d4a820', 'paçoca':'#c09050',
+  'chocolate':'#6b3a1f', 'coco':'#f5f0e0', 'amendoim':'#c09050',
+  'default':'#888'
+};
+
+function getAcaiColor(selected) {
+  if (selected.size === 0) return '#3a1f7a';
+  const items = [...selected].map(s => s.toLowerCase());
+  if (items.some(i => /morango|straw/.test(i))) return '#8b2060';
+  if (items.some(i => /manga/.test(i)))   return '#8b6020';
+  if (items.some(i => /maracujá|passion/.test(i))) return '#7b6010';
+  if (items.some(i => /leite condensado/.test(i))) return '#604896';
+  return ACAI_COLORS[selected.size % ACAI_COLORS.length] || '#7b4fd8';
+}
+
+function buildAcaiStage() {
+  const fillPct = Math.min(85, _bSelected.size * 18);
+  const color   = getAcaiColor(_bSelected);
+  const toppings = [..._bSelected].slice(0,4);
+
+  return `
+  <div class="acai-cup-wrap" style="width:130px;height:200px;position:relative">
+    <!-- Cup SVG -->
+    <svg class="acai-cup-svg" viewBox="0 0 130 200" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="cup-glass" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"   stop-color="rgba(255,255,255,.25)"/>
+          <stop offset="40%"  stop-color="rgba(255,255,255,.06)"/>
+          <stop offset="100%" stop-color="rgba(255,255,255,.15)"/>
+        </linearGradient>
+        <linearGradient id="liquid-g" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stop-color="${color}"/>
+          <stop offset="100%" stop-color="${color}aa"/>
+        </linearGradient>
+        <clipPath id="cup-clip">
+          <path d="M20 30 L15 185 Q15 195 25 195 L105 195 Q115 195 115 185 L110 30 Z"/>
+        </clipPath>
+        <filter id="cup-glow">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feComposite in="SourceGraphic" in2="blur"/>
+        </filter>
+      </defs>
+
+      <!-- Liquid fill (clipped inside cup) -->
+      <g clip-path="url(#cup-clip)">
+        <rect x="15" y="${195 - fillPct * 1.65}" width="100" height="${fillPct * 1.65 + 10}"
+          fill="url(#liquid-g)" id="acai-liquid-rect"
+          style="transition:y .6s cubic-bezier(.34,1.2,.64,1),height .6s cubic-bezier(.34,1.2,.64,1)"/>
+        <!-- Liquid surface shimmer -->
+        <ellipse cx="65" cy="${195 - fillPct * 1.65}" rx="50" ry="6"
+          fill="rgba(255,255,255,.18)" id="acai-surface"
+          style="transition:cy .6s cubic-bezier(.34,1.2,.64,1)"/>
+        <!-- Topping emojis in cup -->
+        ${toppings.map((t, i) => {
+          const emoji = getAcaiEmoji(t);
+          const x = 28 + (i % 3) * 28;
+          const y = 185 - fillPct * 1.65 - 18 - Math.floor(i/3)*22;
+          return fillPct > 10 ? `<text x="${x}" y="${y}" font-size="18"
+            style="opacity:0;animation:toppingPop .4s ${i*0.15}s forwards">${emoji}</text>` : '';
+        }).join('')}
+      </g>
+
+      <!-- Cup outline -->
+      <path d="M20 30 L15 185 Q15 195 25 195 L105 195 Q115 195 115 185 L110 30 Z"
+        fill="none" stroke="rgba(255,255,255,.3)" stroke-width="2.5" stroke-linejoin="round"/>
+
+      <!-- Cup glass shine -->
+      <path d="M22 35 L18 175" stroke="rgba(255,255,255,.4)" stroke-width="4" stroke-linecap="round" opacity=".4"/>
+      <path d="M30 35 L27 170" stroke="rgba(255,255,255,.2)" stroke-width="2" stroke-linecap="round" opacity=".3"/>
+
+      <!-- Cup rim -->
+      <ellipse cx="65" cy="30" rx="45" ry="8" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2.5"/>
+
+      <!-- Lid rim top -->
+      <path d="M20 30 Q65 22 110 30" fill="rgba(255,255,255,.05)" stroke="rgba(255,255,255,.2)" stroke-width="1.5"/>
+    </svg>
+
+    <!-- Fill % label -->
+    ${fillPct > 0 ? `<div class="acai-fill-label">${_bSelected.size} ingrediente${_bSelected.size !== 1 ? 's' : ''}</div>` : ''}
+    ${fillPct === 0 ? `<div style="position:absolute;bottom:-28px;left:0;right:0;text-align:center;font-size:12px;color:var(--muted);font-weight:600">Escolha os ingredientes</div>` : ''}
+  </div>`;
+}
+
+function getAcaiEmoji(name) {
+  const n = name.toLowerCase();
+  if (/granola/.test(n)) return '🌾';
+  if (/morango/.test(n)) return '🍓';
+  if (/banana/.test(n))  return '🍌';
+  if (/kiwi/.test(n))    return '🥝';
+  if (/manga/.test(n))   return '🥭';
+  if (/mel/.test(n))     return '🍯';
+  if (/chocolate/.test(n)) return '🍫';
+  if (/coco/.test(n))    return '🥥';
+  if (/amendoim/.test(n)||/paçoca/.test(n)) return '🥜';
+  if (/leite/.test(n))   return '🥛';
+  return '✨';
+}
+
+// ── HAMBURGUER Stage ───────────────────────────────────────────
+const BURGER_LAYERS = [
+  { name:'bun-top',  color:'#c8832a', h:28, r:14 },
+  { name:'sesame',   color:'#f5d8a0', h:6,  r:0  },
+  { name:'cheese',   color:'#f5c518', h:8,  r:4  },
+  { name:'beef',     color:'#5a2010', h:18, r:6  },
+  { name:'tomato',   color:'#e84030', h:6,  r:2  },
+  { name:'lettuce',  color:'#30a040', h:10, r:6  },
+  { name:'bun-bot',  color:'#c8832a', h:20, r:10 },
+];
+
+function buildBurgerStage() {
+  const totalH = BURGER_LAYERS.reduce((s,l) => s+l.h+3, 0);
+  const shown = Math.min(BURGER_LAYERS.length, 2 + _bSelected.size);
+  return `
+  <div class="burger-wrap" style="width:160px;height:${Math.min(totalH+20, 180)}px;position:relative">
+    <svg viewBox="0 0 160 180" width="160" height="180" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="burger-shadow"><feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="rgba(0,0,0,.5)"/></filter>
+      </defs>
+      ${BURGER_LAYERS.slice(0, shown).map((l, i) => {
+        const y = 20 + i * (l.h + 3);
+        const delay = i * 0.08;
+        const w = 130 - i * 3;
+        const x = (160 - w) / 2;
+        return `
+        <g style="opacity:0;animation:builderLayerIn .4s ${delay}s cubic-bezier(.34,1.56,.64,1) forwards">
+          <rect x="${x}" y="${y}" width="${w}" height="${l.h}" rx="${l.r}"
+            fill="${l.color}" filter="url(#burger-shadow)"/>
+          ${l.name === 'sesame' ? `
+            <circle cx="${x+20}" cy="${y+3}" r="4" fill="#d4a820" opacity=".8"/>
+            <circle cx="${x+40}" cy="${y+2}" r="3.5" fill="#d4a820" opacity=".8"/>
+            <circle cx="${x+60}" cy="${y+4}" r="4" fill="#d4a820" opacity=".8"/>
+            <circle cx="${x+80}" cy="${y+2}" r="3" fill="#d4a820" opacity=".8"/>
+            <circle cx="${x+100}" cy="${y+3}" r="4" fill="#d4a820" opacity=".8"/>` : ''}
+          ${l.name === 'lettuce' ? `
+            <path d="M${x} ${y+5} Q${x+w/4} ${y-2} ${x+w/2} ${y+5} Q${x+3*w/4} ${y+12} ${x+w} ${y+5}"
+              fill="${l.color}" stroke="#228030" stroke-width="1.5" opacity=".7"/>` : ''}
+          ${l.name === 'cheese' ? `
+            <rect x="${x-8}" y="${y}" width="${w+16}" height="${l.h+3}" rx="2"
+              fill="#f5c518" opacity=".5"/>` : ''}
+        </g>`;
+      }).join('')}
+    </svg>
+    <style>@keyframes builderLayerIn{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:none}}</style>
+    ${shown < BURGER_LAYERS.length ? `<div style="position:absolute;bottom:-24px;left:0;right:0;text-align:center;font-size:11px;color:var(--muted)">Escolha os extras</div>` : ''}
+  </div>`;
+}
+
+// ── MEAT Stage ─────────────────────────────────────────────────
+function buildMeatStage() {
+  const items = [..._bSelected].slice(0,4);
+  return `
+  <div style="width:210px;height:175px;position:relative">
+    <svg viewBox="0 0 210 175" width="210" height="175" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="board-g" cx="50%" cy="50%" r="60%">
+          <stop offset="0%" stop-color="#8b5a2b"/>
+          <stop offset="100%" stop-color="#5c3010"/>
+        </radialGradient>
+        <filter id="meat-shadow"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="rgba(0,0,0,.5)"/></filter>
+      </defs>
+      <!-- Cutting board -->
+      <rect x="10" y="20" width="190" height="140" rx="14" fill="url(#board-g)" filter="url(#meat-shadow)"/>
+      <rect x="10" y="20" width="190" height="140" rx="14" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="2"/>
+      <!-- Board grain lines -->
+      <line x1="10" y1="60" x2="200" y2="60" stroke="rgba(0,0,0,.15)" stroke-width="1.5"/>
+      <line x1="10" y1="100" x2="200" y2="100" stroke="rgba(0,0,0,.15)" stroke-width="1.5"/>
+      <line x1="10" y1="140" x2="200" y2="140" stroke="rgba(0,0,0,.15)" stroke-width="1.5"/>
+      <!-- Board handle -->
+      <rect x="180" y="75" width="30" height="25" rx="4" fill="#4a2808" stroke="rgba(255,255,255,.08)" stroke-width="1"/>
+
+      <!-- Meat cuts (appear as selected) -->
+      ${_bSelected.size === 0 ? `
+        <text x="105" y="97" text-anchor="middle" font-size="13" fill="rgba(255,255,255,.3)" font-family="DM Sans,sans-serif">Escolha os cortes</text>
+      ` : ''}
+
+      ${items.map((item, i) => {
+        const positions = [[40,55],[100,55],[40,115],[100,115]];
+        const [px,py] = positions[i] || [60, 85];
+        const colors = ['#7a1a1a','#9a3020','#6a1510','#8a2818'];
+        const color = colors[i % colors.length];
+        const delay = i * 0.15;
+        return `
+        <g style="opacity:0;animation:toppingPop .5s ${delay}s cubic-bezier(.34,1.56,.64,1) forwards">
+          <!-- Meat cut shape -->
+          <ellipse cx="${px}" cy="${py}" rx="28" ry="18" fill="${color}" filter="url(#meat-shadow)"/>
+          <!-- Marbling -->
+          <path d="M${px-12} ${py-4} Q${px} ${py-10} ${px+14} ${py-2}" stroke="rgba(255,220,180,.4)" stroke-width="2" fill="none"/>
+          <path d="M${px-8} ${py+4} Q${px+6} ${py} ${px+12} ${py+6}" stroke="rgba(255,220,180,.3)" stroke-width="1.5" fill="none"/>
+          <!-- Item label -->
+          <text x="${px}" y="${py+32}" text-anchor="middle" font-size="9" fill="rgba(255,255,255,.7)" font-family="DM Sans,sans-serif">${(item).substring(0,10)}</text>
+        </g>`;
+      }).join('')}
+
+      <!-- Knife icon top-right -->
+      <text x="175" y="48" font-size="16" opacity=".4">🔪</text>
+    </svg>
+  </div>`;
+}
+
+// ── FRUIT Stage ────────────────────────────────────────────────
+const FRUIT_EMOJI_MAP = {
+  'maçã':'🍎','apple':'🍎','morango':'🍓','strawberry':'🍓',
+  'banana':'🍌','uva':'🍇','grape':'🍇','laranja':'🍊','orange':'🍊',
+  'manga':'🥭','mango':'🥭','kiwi':'🥝','abacaxi':'🍍','pineapple':'🍍',
+  'pera':'🍐','pear':'🍐','cereja':'🍒','cherry':'🍒','melancia':'🍉',
+  'watermelon':'🍉','melão':'🍈','melon':'🍈','limão':'🍋','lemon':'🍋',
+};
+function getFruitEmoji(name) {
+  const n = name.toLowerCase();
+  for (const [k,v] of Object.entries(FRUIT_EMOJI_MAP)) {
+    if (n.includes(k)) return v;
+  }
+  return '🍑';
+}
+
+function buildFruitStage() {
+  const items = [..._bSelected].slice(0,8);
+  const basketPositions = [
+    [55,120],[90,110],[125,120],[45,95],[105,95],
+    [70,72],[110,78],[80,50]
+  ];
+  return `
+  <div style="width:200px;height:185px;position:relative">
+    <svg viewBox="0 0 200 185" width="200" height="185" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="basket-g" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#c8a050"/>
+          <stop offset="100%" stop-color="#8b6020"/>
+        </linearGradient>
+        <filter id="fruit-shadow"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="rgba(0,0,0,.4)"/></filter>
+      </defs>
+      <!-- Basket body -->
+      <path d="M30 110 Q30 165 100 165 Q170 165 170 110 Z" fill="url(#basket-g)" filter="url(#fruit-shadow)"/>
+      <!-- Basket weave lines horizontal -->
+      <path d="M34 120 Q100 116 166 120" fill="none" stroke="rgba(0,0,0,.2)" stroke-width="1.5"/>
+      <path d="M32 132 Q100 128 168 132" fill="none" stroke="rgba(0,0,0,.2)" stroke-width="1.5"/>
+      <path d="M33 144 Q100 140 167 144" fill="none" stroke="rgba(0,0,0,.2)" stroke-width="1.5"/>
+      <path d="M36 156 Q100 152 164 156" fill="none" stroke="rgba(0,0,0,.2)" stroke-width="1.5"/>
+      <!-- Basket rim -->
+      <ellipse cx="100" cy="110" rx="70" ry="12" fill="#a07830" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
+      <!-- Handle -->
+      <path d="M60 110 Q60 70 100 65 Q140 70 140 110" fill="none" stroke="#8b6020" stroke-width="8" stroke-linecap="round"/>
+      <path d="M60 110 Q60 70 100 65 Q140 70 140 110" fill="none" stroke="#c8a050" stroke-width="4" stroke-linecap="round"/>
+
+      <!-- Fruits (appear as selected) -->
+      ${items.map((item, i) => {
+        const [px, py] = basketPositions[i] || [100, 90];
+        const emoji = getFruitEmoji(item);
+        const delay = i * 0.12;
+        const rot = (Math.random() * 30 - 15).toFixed(0);
+        return `<text x="${px}" y="${py}" font-size="26" text-anchor="middle"
+          style="opacity:0;animation:fruitDrop .5s ${delay}s cubic-bezier(.34,1.56,.64,1) forwards;transform-origin:${px}px ${py}px;transform:rotate(${rot}deg)">${emoji}</text>`;
+      }).join('')}
+
+      ${items.length === 0 ? `<text x="100" y="140" text-anchor="middle" font-size="12" fill="rgba(255,255,255,.3)" font-family="DM Sans,sans-serif">Escolha as frutas</text>` : ''}
+    </svg>
+  </div>`;
+}
+
+// ── GENERIC Stage ──────────────────────────────────────────────
+function buildGenericStage() {
+  if (_bItem?.image_url) {
+    return `<img src="${_bItem.image_url}" alt="${_bItem.name}"
+      style="width:100%;height:100%;object-fit:cover;opacity:.85">`;
+  }
+  return `<span style="font-size:80px;filter:drop-shadow(0 8px 20px rgba(0,0,0,.6))">${_bItem?.emoji||'🍽️'}</span>`;
+}
+
+/* ══════════════════════════════════════════════════════
+   CONTENT RENDERERS
+══════════════════════════════════════════════════════ */
+
+function renderContent() {
+  const cont = document.getElementById('builder-content');
+  switch (_bSegment) {
+    case 'pizza':  cont.innerHTML = renderPizzaContent();  break;
+    case 'acai':   cont.innerHTML = renderAcaiContent();   break;
+    case 'burger': cont.innerHTML = renderBurgerContent(); break;
+    case 'meat':   cont.innerHTML = renderMeatContent();   break;
+    case 'fruit':  cont.innerHTML = renderFruitContent();  break;
+    default:       cont.innerHTML = renderGenericContent(); break;
+  }
+  // Always add obs
+  const obsEl = document.createElement('textarea');
+  obsEl.className = 'builder-obs';
+  obsEl.id = 'builder-obs';
+  obsEl.rows = 2;
+  obsEl.placeholder = 'Observações (opcional): sem cebola, bem passado…';
+  cont.appendChild(obsEl);
+}
+
+// Pizza content
+function renderPizzaContent() {
+  const siblings = (window.allItems||[]).filter(x => {
+    const samecat = (x.cat_key || x.cat) === (_bItem.cat_key || _bItem.cat);
+    return samecat && x.status !== 'esgotado';
+  });
+
+  return `
+  <div class="builder-steps" id="pizza-steps">
+    <div class="builder-step done" id="step1">
+      <div class="builder-step-label">1ª Metade</div>
+      <div class="builder-step-value">${_bItem.name.substring(0,18)}</div>
+    </div>
+    <div class="builder-step ${_bHalf2 ? 'done' : 'active'}" id="step2">
+      <div class="builder-step-label">2ª Metade</div>
+      <div class="builder-step-value">${_bHalf2 ? _bHalf2.name.substring(0,18) : '— escolha →'}</div>
+    </div>
+  </div>
+  <div class="builder-section-label">Escolha a 2ª metade</div>
+  <div class="builder-flavor-grid">
+    ${siblings.map(s => {
+      const sel = _bHalf2 && _bHalf2.id === s.id;
+      const thumb = s.image_url
+        ? `<img src="${s.image_url}" style="width:48px;height:48px;border-radius:10px;object-fit:cover">`
+        : `<span class="bfc-emoji">${s.emoji||'🍕'}</span>`;
+      return `
+      <div class="builder-flavor-card ${sel ? 'selected' : ''}" onclick="builderSelectHalf(${s.id})">
+        ${thumb}
+        <span class="bfc-name">${s.name}</span>
+        <span class="bfc-price">R$ ${fmtB(s.price)}</span>
+        <div class="bfc-check">✓</div>
+      </div>`;
+    }).join('')}
+  </div>
+  <div class="builder-price-note" id="pizza-price-note" style="margin-top:8px">
+    ${_bHalf2 ? `Preço médio: R$ ${fmtB((parseFloat(_bItem.price)+parseFloat(_bHalf2.price))/2)}` : ''}
+  </div>`;
+}
+
+// Açaí content
+function renderAcaiContent() {
+  const ingrs = Array.isArray(_bItem.ingredients) ? _bItem.ingredients.filter(Boolean) : [];
+  const defaultIngrs = ['Granola','Leite Condensado','Leite em Pó','Morango','Banana','Kiwi','Mel','Paçoca','Coco Ralado'];
+  const list = ingrs.length > 0 ? ingrs : defaultIngrs;
+  return `
+  <div class="builder-section-label">Escolha os complementos</div>
+  <div class="builder-chip-grid">
+    ${list.map(ingr => `
+      <div class="builder-chip ${_bSelected.has(ingr) ? 'on' : ''}" onclick="builderToggleIngr('${ingr.replace(/'/g,"\\'")}')">
+        <div class="bc-dot"></div>
+        <span>${getAcaiEmoji(ingr)} ${ingr}</span>
+      </div>`).join('')}
+  </div>`;
+}
+
+// Burger content
+function renderBurgerContent() {
+  const extras = ['Bacon Extra','Queijo Extra','Ovo','Onion Rings','Jalapeño','Molho Especial','Cebola Caramelizada','Picles'];
+  return `
+  <div class="builder-section-label">Extras e complementos</div>
+  <div class="builder-chip-grid">
+    ${extras.map(e => `
+      <div class="builder-chip ${_bSelected.has(e) ? 'on' : ''}" onclick="builderToggleIngr('${e}')">
+        <div class="bc-dot"></div>
+        <span>${e}</span>
+      </div>`).join('')}
+  </div>`;
+}
+
+// Meat content
+function renderMeatContent() {
+  const cuts = _bItem.ingredients?.filter(Boolean).length > 0
+    ? _bItem.ingredients
+    : ['Alcatra','Picanha','Contrafilé','Fraldinha','Maminha','Coxão Mole','Costela'];
+  return `
+  <div class="builder-section-label">Escolha os cortes</div>
+  <div class="builder-flavor-grid">
+    ${cuts.map(c => `
+      <div class="builder-flavor-card ${_bSelected.has(c) ? 'selected' : ''}" onclick="builderToggleIngr('${c.replace(/'/g,"\\'")}')">
+        <span class="bfc-emoji">🥩</span>
+        <span class="bfc-name">${c}</span>
+        <div class="bfc-check">✓</div>
+      </div>`).join('')}
+  </div>`;
+}
+
+// Fruit content
+function renderFruitContent() {
+  const fruits = _bItem.ingredients?.filter(Boolean).length > 0
+    ? _bItem.ingredients
+    : ['Morango','Banana','Manga','Kiwi','Uva','Maçã','Pera','Abacaxi','Melancia'];
+  return `
+  <div class="builder-section-label">Monte sua cesta</div>
+  <div class="builder-chip-grid">
+    ${fruits.map(f => `
+      <div class="builder-chip ${_bSelected.has(f) ? 'on' : ''}" onclick="builderToggleIngr('${f.replace(/'/g,"\\'")}')">
+        <div class="bc-dot"></div>
+        <span>${getFruitEmoji(f)} ${f}</span>
+      </div>`).join('')}
+  </div>`;
+}
+
+// Generic content
+function renderGenericContent() {
+  const ingrs = Array.isArray(_bItem.ingredients) ? _bItem.ingredients.filter(Boolean) : [];
+  if (ingrs.length === 0) return '';
+  return `
+  <div class="builder-section-label">Remover ingredientes</div>
+  <div class="builder-chip-grid">
+    ${ingrs.map(ingr => `
+      <div class="builder-chip ${_bSelected.has(ingr) ? 'on' : ''}" onclick="builderToggleIngr('${ingr.replace(/'/g,"\\'")}')">
+        <div class="bc-dot"></div>
+        <span>${ingr}</span>
+      </div>`).join('')}
+  </div>`;
+}
+
+/* ══════════════════════════════════════════════════════
+   INTERACTION HANDLERS
+══════════════════════════════════════════════════════ */
+
+window.builderSelectHalf = function(id) {
+  _bHalf2 = (window.allItems||[]).find(x => x.id === id) || null;
+  // Animate stage
+  renderStage();
+  // Update steps
+  const step2 = document.getElementById('step2');
+  if (step2) {
+    step2.className = 'builder-step done';
+    step2.querySelector('.builder-step-value').textContent = (_bHalf2.name||'').substring(0,18);
+  }
+  // Update price note
+  const note = document.getElementById('pizza-price-note');
+  if (note && _bHalf2) {
+    note.textContent = `Preço médio: R$ ${fmtB((parseFloat(_bItem.price)+parseFloat(_bHalf2.price))/2)}`;
+  }
+  // Re-render flavor cards (update selection)
+  const cards = document.querySelectorAll('.builder-flavor-card');
+  cards.forEach(card => {
+    const onclick = card.getAttribute('onclick') || '';
+    const match = onclick.match(/builderSelectHalf\((\d+)\)/);
+    if (match) {
+      const cid = parseInt(match[1]);
+      card.classList.toggle('selected', cid === id);
+    }
+  });
+  updateBuilderBtn();
+};
+
+window.builderToggleIngr = function(name) {
+  if (_bSelected.has(name)) _bSelected.delete(name);
+  else _bSelected.add(name);
+
+  // Re-render stage (cup fills, fruit drops, etc)
+  renderStage();
+
+  // Update chip UI
+  document.querySelectorAll('.builder-chip').forEach(chip => {
+    const span = chip.querySelector('span');
+    if (span && span.textContent.includes(name.substring(0,8))) {
+      chip.classList.toggle('on', _bSelected.has(name));
+    }
+  });
+  // Update flavor cards
+  document.querySelectorAll('.builder-flavor-card').forEach(card => {
+    const nm = card.querySelector('.bfc-name')?.textContent || '';
+    if (nm === name || nm.includes(name.substring(0,6))) {
+      card.classList.toggle('selected', _bSelected.has(name));
+    }
+  });
+  updateBuilderBtn();
+};
+
+/* ══════════════════════════════════════════════════════
+   PATCH openItemModal to use builder
+══════════════════════════════════════════════════════ */
+const _origOpenItemModal = window.openItemModal;
+window.openItemModal = function(id) {
+  const item = (window.allItems||[]).find(x => x.id === id);
+  if (!item) return _origOpenItemModal && _origOpenItemModal(id);
+  // Always use builder
+  openBuilder(id);
+};
+
+})(); // end IIFE
+</script>
+
 </body>
 </html>
