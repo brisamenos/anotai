@@ -5846,19 +5846,142 @@ async function toggleStatus(){
   } catch(e) { console.warn('store_config sync:', e); }
 }
 
-function playOrderSound(){
-  try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();
-    [[880,0],[660,0.12],[880,0.24]].forEach(([f,t])=>{
-      const o=ctx.createOscillator(),g=ctx.createGain();
-      o.connect(g);g.connect(ctx.destination);
-      o.type='sine';o.frequency.value=f;
-      g.gain.setValueAtTime(0.25,ctx.currentTime+t);
-      g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+t+0.18);
-      o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+0.2);
-    });
-  }catch(e){}
+// ═══════════════════════════════════════════════════════
+// SONS DE NOTIFICAÇÃO
+// ═══════════════════════════════════════════════════════
+
+const SOUND_OPTIONS = [
+  { id: 'sino',      label: 'Sino',         desc: 'Três bipes suaves'         },
+  { id: 'duplo',     label: 'Duplo alerta',  desc: 'Dois bipes rápidos'        },
+  { id: 'caixa',     label: 'Caixa',        desc: 'Estilo caixa registradora'  },
+  { id: 'urgente',   label: 'Urgente',      desc: 'Alerta rápido e forte'      },
+  { id: 'suave',     label: 'Suave',        desc: 'Toque discreto'             },
+  { id: 'desligado', label: 'Desligado',    desc: 'Sem som'                    },
+];
+
+let _soundPref = (() => {
+  try { return localStorage.getItem('ef_sound') || 'sino'; } catch { return 'sino'; }
+})();
+
+function _getAudioCtx() {
+  return new (window.AudioContext || window.webkitAudioContext)();
 }
+
+// Toca um único oscilador
+function _tone(ctx, type, freq, startAt, dur, vol, endVol = 0.001) {
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.connect(g); g.connect(ctx.destination);
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, ctx.currentTime + startAt);
+  g.gain.exponentialRampToValueAtTime(endVol, ctx.currentTime + startAt + dur);
+  o.start(ctx.currentTime + startAt);
+  o.stop(ctx.currentTime + startAt + dur + 0.01);
+}
+
+const SOUNDS = {
+  // Três dings de sino — suave e claro
+  sino: (ctx) => {
+    [[1046, 0, 0.22, 0.28], [1318, 0.28, 0.22, 0.28], [1568, 0.56, 0.3, 0.36]].forEach(([f, t, d, vol]) => {
+      _tone(ctx, 'sine', f, t, d, vol);
+      _tone(ctx, 'sine', f * 2, t, d * 0.6, vol * 0.15); // harmônico
+    });
+  },
+  // Dois bipes rápidos — urgente mas não agressivo
+  duplo: (ctx) => {
+    [[880, 0, 0.12, 0.3], [880, 0.18, 0.12, 0.3]].forEach(([f, t, d, vol]) =>
+      _tone(ctx, 'square', f, t, d, vol)
+    );
+  },
+  // Caixa registradora — ding + ruído
+  caixa: (ctx) => {
+    _tone(ctx, 'triangle', 1200, 0,    0.08, 0.4);
+    _tone(ctx, 'triangle', 900,  0.08, 0.06, 0.3);
+    _tone(ctx, 'sine',     1600, 0.14, 0.18, 0.25);
+    // Clique inicial
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 0.02, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    const src = ctx.createBufferSource();
+    const gn  = ctx.createGain();
+    src.buffer = buf; src.connect(gn); gn.connect(ctx.destination);
+    gn.gain.setValueAtTime(0.5, ctx.currentTime);
+    src.start(ctx.currentTime);
+  },
+  // Alerta urgente — beep agressivo triplo
+  urgente: (ctx) => {
+    [[1000, 0, 0.07, 0.45], [1000, 0.1, 0.07, 0.45], [1000, 0.2, 0.1, 0.45]].forEach(([f, t, d, vol]) => {
+      _tone(ctx, 'sawtooth', f, t, d, vol);
+    });
+  },
+  // Toque suave — sino único longo
+  suave: (ctx) => {
+    _tone(ctx, 'sine', 880,  0,    0.4, 0.2);
+    _tone(ctx, 'sine', 1100, 0.05, 0.35, 0.12);
+  },
+  desligado: () => {},
+};
+
+function playOrderSound() {
+  if (_soundPref === 'desligado') return;
+  try {
+    const ctx = _getAudioCtx();
+    (SOUNDS[_soundPref] || SOUNDS.sino)(ctx);
+  } catch(e) {}
+}
+
+function previewSound(id) {
+  if (id === 'desligado') return;
+  try {
+    const ctx = _getAudioCtx();
+    (SOUNDS[id] || SOUNDS.sino)(ctx);
+  } catch(e) {}
+}
+
+function setSoundPref(id) {
+  _soundPref = id;
+  try { localStorage.setItem('ef_sound', id); } catch {}
+  // Atualiza UI
+  document.querySelectorAll('.sound-opt').forEach(el => {
+    const active = el.dataset.sound === id;
+    el.style.borderColor    = active ? 'var(--accent)'     : 'var(--border)';
+    el.style.background     = active ? 'var(--accent-dim)' : 'var(--surface2)';
+    el.querySelector('.sound-check').style.opacity = active ? '1' : '0';
+  });
+  previewSound(id);
+}
+
+function renderSoundConfig() {
+  const el = document.getElementById('cfg-sound-list');
+  if (!el) return;
+  el.innerHTML = SOUND_OPTIONS.map(s => `
+    <div class="sound-opt" data-sound="${s.id}"
+      onclick="setSoundPref('${s.id}')"
+      style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:10px;border:1.5px solid ${_soundPref===s.id?'var(--accent)':'var(--border)'};background:${_soundPref===s.id?'var(--accent-dim)':'var(--surface2)'};cursor:pointer;transition:all .15s;margin-bottom:8px">
+      <div style="width:34px;height:34px;border-radius:9px;background:var(--surface3);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">${s.id==='desligado'
+          ? '<line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M6 4.5V3L4 6H2v4h2l2 3V9M12 4a6 6 0 0 1 0 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>'
+          : '<path d="M3 6H1v4h2l4 3V3L3 6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 5a4 4 0 0 1 0 6M13.5 3a7 7 0 0 1 0 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'
+        }</svg>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${s.label}</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:1px">${s.desc}</div>
+      </div>
+      <button onclick="event.stopPropagation();previewSound('${s.id}')"
+        style="background:var(--surface3);border:1px solid var(--border);border-radius:7px;padding:4px 10px;color:var(--muted2);font-size:11.5px;cursor:pointer;white-space:nowrap"
+        ${s.id==='desligado'?'disabled style="opacity:.3;pointer-events:none"':''}>
+        Ouvir
+      </button>
+      <div class="sound-check" style="opacity:${_soundPref===s.id?'1':'0'};color:var(--accent);transition:opacity .15s">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/>
+          <path d="M5 8l2.5 2.5L11 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    </div>`).join('');
+}
+
 
 // ─────────────────────────────────────────
 // TOAST
@@ -7422,6 +7545,7 @@ async function confirmarZerarPedidos() {
 
 // ── Configurações ─────────────────────────────────────
 async function _renderConfiguracoes() {
+  renderSoundConfig();
   const el = document.getElementById('cfg-prox-pedido');
   if (!el) return;
   try {
