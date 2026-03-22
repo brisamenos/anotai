@@ -1071,7 +1071,7 @@ function nav(id){
     initChat();
   }
   if(id==='qrcode') renderQR();
-  if(id==='cupom') { renderCupons(); loadCashbackConfig(); }
+  if(id==='cupom') { renderCupons(); loadCashbackConfig().then(() => renderCashbackClientes()); }
   if(id==='fidelidade') renderFidelidade();
   if(id==='garcom') { renderGarcom(); loadGarcons(); }
   if(id==='kds') renderKDS();
@@ -3451,7 +3451,7 @@ async function renderCashbackClientes() {
     } else {
       bannerEl.innerHTML = `<div style="background:rgba(100,116,139,.08);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted)">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3M8 11v.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        <div>Cashback desativado. <button class="btn bg" style="font-size:11px;padding:2px 10px;margin-left:6px" onclick="openModal('modal-cashback-config')">Configurar</button></div>
+        <div>Cashback desativado. <button class="btn bg" style="font-size:11px;padding:2px 10px;margin-left:6px" onclick="_openCashbackConfigModal();openModal('modal-cashback-config')">Configurar</button></div>
       </div>`;
     }
   }
@@ -3577,24 +3577,7 @@ function _openCashbackConfigModal() {
   document.getElementById('cb-validade').value    = _cbConfig.validade_dias || '';
 }
 
-// Patch openModal para preencher modal cashback ao abrir
-const _origOpenModal = typeof openModal === 'function' ? openModal : null;
-if (_origOpenModal) {
-  const _prev = openModal;
-  openModal = function(id) {
-    _prev(id);
-    if (id === 'modal-cashback-config') _openCashbackConfigModal();
-  };
-}
-
-// Patch do toggle do switch
-document.addEventListener('change', e => {
-  if (e.target.id === 'cb-ativo') {
-    const on = e.target.checked;
-    document.getElementById('cb-ativo-track').style.background = on ? 'var(--accent)' : 'var(--border)';
-    document.getElementById('cb-ativo-thumb').style.transform  = on ? 'translateX(18px)' : 'translateX(0)';
-  }
-});
+// ── fim CASHBACK ──────────────────────────────────────
 
 // ─────────────────────────────────────────
 // FIDELIDADE

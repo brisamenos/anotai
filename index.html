@@ -2084,6 +2084,8 @@ function fillCartForm() {
   const v = (id,val) => { const el=document.getElementById(id); if(el&&val) el.value=val; };
   v('f-name',  _customer.name);
   v('f-phone', _customer.phone);
+  // Dispara consulta de cashback para cliente logado (oninput não é acionado por .value=)
+  if (_customer.phone) onPhoneCashback(_customer.phone);
 }
 
 // ══════════════════════════════════════════
@@ -3157,6 +3159,9 @@ async function _doSubmitOrder(addr, troco) {
 
   const items = cart.map(i => ({ qty: i.qty, name: i.name, price: i.price, obs: i.obs||'' }));
   const time  = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  // Total bruto (sem descontar cashback) — usado no pedido e no total_spent do cliente
+  const _grossTotal = Math.max(0, cartSubtotal() - getDiscount() + getTaxa());
+  const _cbDesconto = (_cbUsar && _cbSaldo > 0) ? Math.min(_cbSaldo, _grossTotal) : 0;
 
   try {
     let customerId = _customer?.id || null;
@@ -3165,11 +3170,11 @@ async function _doSubmitOrder(addr, troco) {
         await sb.from('customers').update({
           name, addr,
           orders_count: (_customer.orders_count||0)+1,
-          total_spent:  (parseFloat(_customer.total_spent)||0)+grandTotal(),
+          total_spent:  (parseFloat(_customer.total_spent)||0)+_grossTotal,
           last_order_at: new Date().toISOString()
         }).eq('id', _customer.id);
         _customer.orders_count = (_customer.orders_count||0)+1;
-        _customer.total_spent  = (parseFloat(_customer.total_spent)||0)+grandTotal();
+        _customer.total_spent  = (parseFloat(_customer.total_spent)||0)+_grossTotal;
         localStorage.setItem(AUTH_KEY, JSON.stringify(_customer));
         updateProfileFab();
       } else {
@@ -3179,13 +3184,13 @@ async function _doSubmitOrder(addr, troco) {
           await sb.from('customers').update({
             name, addr,
             orders_count: (cl.orders_count||0)+1,
-            total_spent:  (parseFloat(cl.total_spent)||0)+grandTotal(),
+            total_spent:  (parseFloat(cl.total_spent)||0)+_grossTotal,
             last_order_at: new Date().toISOString()
           }).eq('id', cl.id);
         } else {
           const { data: ins } = await sb.from('customers').insert({
             name, phone, addr,
-            orders_count: 1, total_spent: grandTotal(),
+            orders_count: 1, total_spent: _grossTotal,
             last_order_at: new Date().toISOString()
           }).select().single();
           customerId = ins?.id || null;
@@ -3205,17 +3210,14 @@ async function _doSubmitOrder(addr, troco) {
     if (error) throw error;
 
     // ── Debitar cashback se cliente usou ──────────────
-    if (_cbUsar && _cbSaldo > 0) {
+    if (_cbUsar && _cbSaldo > 0 && _cbDesconto > 0) {
       try {
-        const cbDesc = Math.min(_cbSaldo, Math.max(0, cartSubtotal() - getDiscount() + getTaxa()));
-        if (cbDesc > 0) {
-          const tid = _tenantId || '';
-          await fetch('/api/cashback/usar', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-            body: JSON.stringify({ phone: phone.replace(/\D/g,''), valor: cbDesc })
-          });
-        }
+        const tid = _tenantId || '';
+        await fetch('/api/cashback/usar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+          body: JSON.stringify({ phone: phone.replace(/\D/g,''), valor: _cbDesconto })
+        });
       } catch(e) {}
       _resetCashbackUI();
     }
@@ -3380,6 +3382,7 @@ async function _iniciarFluxoPix(order) {
 
 function resetCart() {
   _stopPixPoll();
+  _resetCashbackUI();
   const ps = document.getElementById('pix-section');
   if (ps) ps.style.display = 'none';
   try { localStorage.removeItem('ef_order_' + (_tenantId||'')); } catch(e) {}

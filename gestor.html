@@ -1144,7 +1144,7 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
   <div class="ph" style="flex-wrap:wrap;gap:12px">
     <div><div class="pt">Cupons &amp; Cashback</div><div class="ps">Descontos e devolução automática para seus clientes</div></div>
     <div style="display:flex;gap:8px">
-      <button class="btn bg" onclick="openModal('modal-cashback-config')">
+      <button class="btn bg" onclick="_openCashbackConfigModal();openModal('modal-cashback-config')">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 4v8M5.5 6.5A2 1.5 0 0 1 8 5a2 1.5 0 0 1 0 3 2 1.5 0 0 0 0 3 2 1.5 0 0 0 2.5-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         Configurar Cashback
       </button>
@@ -1204,8 +1204,8 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">Habilita o programa de cashback</div>
       </div>
       <label style="position:relative;display:inline-block;width:42px;height:24px;cursor:pointer">
-        <input type="checkbox" id="cb-ativo" style="opacity:0;width:0;height:0">
-        <span id="cb-ativo-track" style="position:absolute;inset:0;border-radius:99px;background:var(--border);transition:background .2s;cursor:pointer" onclick="this.previousElementSibling.click();document.getElementById('cb-ativo-track').style.background=document.getElementById('cb-ativo').checked?'var(--accent)':'var(--border)'"></span>
+        <input type="checkbox" id="cb-ativo" onchange="var on=this.checked;document.getElementById('cb-ativo-track').style.background=on?'var(--accent)':'var(--border)';document.getElementById('cb-ativo-thumb').style.transform=on?'translateX(18px)':'translateX(0)'" style="opacity:0;width:0;height:0;position:absolute">
+        <span id="cb-ativo-track" style="position:absolute;inset:0;border-radius:99px;background:var(--border);transition:background .2s;cursor:pointer"></span>
         <span id="cb-ativo-thumb" style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3);transition:transform .2s;pointer-events:none"></span>
       </label>
     </div>

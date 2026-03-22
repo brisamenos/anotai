@@ -412,7 +412,7 @@ function emit(tenantId, table, record, type) {
 const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','expires_at','created_at'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
-  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_tempo_entrega','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset'],
+  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_tempo_entrega','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','cashback_config'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
@@ -604,21 +604,27 @@ async function handleREST(req, res, table, params, body) {
         try {
           const idVal = vals[0]
           const order = db.prepare('SELECT * FROM orders WHERE id=?').get(idVal)
-          const cfg   = db.prepare('SELECT cashback_config FROM store_config WHERE tenant_id=?').get(tenantId)
-          const cbCfg = (() => { try { return JSON.parse(cfg?.cashback_config||'{}') } catch { return {} } })()
-          if (cbCfg.ativo && cbCfg.pct > 0 && order?.phone) {
-            const total    = parseFloat(order.total||0)
-            const minPed   = parseFloat(cbCfg.min_pedido||0)
-            if (total >= minPed) {
-              const credito = parseFloat((total * cbCfg.pct / 100).toFixed(2))
-              // Upsert customer e acumula saldo
-              const cust = db.prepare('SELECT id,cashback_saldo FROM customers WHERE tenant_id=? AND phone=?').get(tenantId, order.phone)
-              if (cust) {
-                db.prepare('UPDATE customers SET cashback_saldo=cashback_saldo+? WHERE id=?').run(credito, cust.id)
-              } else {
-                db.prepare('INSERT OR IGNORE INTO customers (tenant_id,name,phone,cashback_saldo) VALUES (?,?,?,?)').run(tenantId, order.client||order.phone, order.phone, credito)
+          // BUG A fix: só credita se o status ANTERIOR não era já finalizado/entregue
+          const prevStatus = order?.status || ''
+          const jaFinalizado = ['finalizado','entregue'].includes(prevStatus)
+          if (!jaFinalizado && order?.phone) {
+            const cfg   = db.prepare('SELECT cashback_config FROM store_config WHERE tenant_id=?').get(tenantId)
+            const cbCfg = (() => { try { return JSON.parse(cfg?.cashback_config||'{}') } catch { return {} } })()
+            if (cbCfg.ativo && cbCfg.pct > 0) {
+              const total  = parseFloat(order.total||0)
+              const minPed = parseFloat(cbCfg.min_pedido||0)
+              if (total >= minPed) {
+                const credito = parseFloat((total * cbCfg.pct / 100).toFixed(2))
+                // BUG B fix: usa LIKE consistente com os outros endpoints
+                const phone8 = order.phone.replace(/\D/g,'').slice(-8)
+                const cust = db.prepare('SELECT id,cashback_saldo FROM customers WHERE tenant_id=? AND phone LIKE ?').get(tenantId, `%${phone8}%`)
+                if (cust) {
+                  db.prepare('UPDATE customers SET cashback_saldo=cashback_saldo+? WHERE id=?').run(credito, cust.id)
+                } else {
+                  db.prepare('INSERT OR IGNORE INTO customers (tenant_id,name,phone,cashback_saldo) VALUES (?,?,?,?)').run(tenantId, order.client||order.phone, order.phone, credito)
+                }
+                log('💰', `Cashback R$${credito} creditado para ${order.phone} (pedido #${idVal})`)
               }
-              log('💰', `Cashback R$${credito} creditado para ${order.phone} (pedido #${idVal})`)
             }
           }
         } catch(cbErr) { log('⚠️', 'Erro ao creditar cashback:', cbErr.message) }
