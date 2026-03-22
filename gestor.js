@@ -7811,10 +7811,6 @@ async function carregarCarteira() {
   try {
     const tid = _sessao?.tenant_id;
     if (!tid) return;
-    // ⚠️ BLINDADO — NÃO remover o AbortController. Se o servidor não responder
-    // (ex: exceção não tratada), o fetch ficaria pendente para sempre e a tela
-    // nunca sairia do estado "Carregando...". O timeout de 10s garante que o
-    // catch() seja chamado e o usuário veja uma mensagem de erro.
     const _fetchTenant = (url) => {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 10000);
@@ -7825,18 +7821,20 @@ async function carregarCarteira() {
       _fetchTenant('/api/carteira'),
       _fetchTenant('/api/saques/meus')
     ]);
-    const cart = cartRes.ok ? await cartRes.json() : {};
-    const saques = saqRes.ok ? await saqRes.json() : [];
+    const cart   = cartRes.ok ? await cartRes.json() : {};
+    const saques = saqRes.ok  ? await saqRes.json()  : [];
 
-    // Cards de saldo
     const se = id => document.getElementById(id);
-    if(se('crt-saldo'))  se('crt-saldo').textContent  = _fmtR(cart.saldo_disponivel);
-    if(se('crt-total'))  se('crt-total').textContent  = _fmtR(cart.total_recebido);
-    if(se('crt-sacado')) se('crt-sacado').textContent = _fmtR(cart.total_sacado);
-    if(se('crt-npag'))   se('crt-npag').textContent   = cart.total_pagamentos || 0;
-    if(se('crt-taxa-config')) se('crt-taxa-config').textContent = _fmtR(cart.taxa_por_pagamento || 1);
+    if (se('crt-saldo'))       se('crt-saldo').textContent       = _fmtR(cart.saldo_disponivel);
+    if (se('crt-total'))       se('crt-total').textContent       = _fmtR(cart.total_recebido);
+    if (se('crt-sacado'))      se('crt-sacado').textContent      = _fmtR(cart.total_sacado);
+    if (se('crt-npag'))        se('crt-npag').textContent        = cart.total_pagamentos || 0;
+    if (se('crt-pix-count'))   se('crt-pix-count').textContent   = (cart.pix_count || 0) + ' pagtos';
+    if (se('crt-cartao-count'))se('crt-cartao-count').textContent= (cart.cartao_count || 0) + ' pagtos';
+    if (se('crt-pix-total'))   se('crt-pix-total').textContent   = _fmtR(cart.pix_recebido);
+    if (se('crt-cartao-total'))se('crt-cartao-total').textContent = _fmtR(cart.cartao_recebido);
 
-    // Aviso de pagamentos PIX ainda pendentes (aguardando confirmação MP)
+    // Aviso de PIX pendentes
     if (cart.pendentes_count > 0) {
       let avisoEl = se('crt-pendentes-aviso');
       if (!avisoEl) {
@@ -7846,32 +7844,47 @@ async function carregarCarteira() {
         const cardsEl = se('crt-saldo')?.closest('.card')?.parentElement;
         if (cardsEl?.nextElementSibling) cardsEl.parentElement.insertBefore(avisoEl, cardsEl.nextElementSibling);
       }
-      avisoEl.innerHTML = `<strong>${cart.pendentes_count} pagamento(s) PIX pendente(s)</strong> aguardando confirmação do Mercado Pago — total de ${_fmtR(cart.pendentes_valor)}. Esses valores <strong>não entram no saldo</strong> até serem confirmados.`;
+      avisoEl.innerHTML = `<strong>${cart.pendentes_count} PIX pendente(s)</strong> aguardando confirmação — ${_fmtR(cart.pendentes_valor)}. Não entram no saldo até confirmação.`;
       avisoEl.style.display = '';
     } else {
-      const avisoEl = se('crt-pendentes-aviso');
-      if (avisoEl) avisoEl.style.display = 'none';
+      const av = se('crt-pendentes-aviso'); if (av) av.style.display = 'none';
     }
 
-    // Preview do valor de saque
     const saldo = parseFloat(cart.saldo_disponivel || 0);
-    if(se('saque-valor-preview')) se('saque-valor-preview').textContent = _fmtR(saldo);
-
-    // Verifica se tem saque pendente
+    if (se('saque-valor-preview')) se('saque-valor-preview').textContent = _fmtR(saldo);
     const temPendente = saques.some(s => s.status === 'pendente');
-    if(se('saque-form-wrap'))       se('saque-form-wrap').style.display       = temPendente ? 'none' : '';
-    if(se('saque-pendente-aviso'))  se('saque-pendente-aviso').style.display  = temPendente ? '' : 'none';
-    if(se('btn-solicitar-saque'))   se('btn-solicitar-saque').disabled        = saldo < 1;
+    if (se('saque-form-wrap'))      se('saque-form-wrap').style.display      = temPendente ? 'none' : '';
+    if (se('saque-pendente-aviso')) se('saque-pendente-aviso').style.display = temPendente ? '' : 'none';
+    if (se('btn-solicitar-saque'))  se('btn-solicitar-saque').disabled       = saldo < 1;
 
-    // Histórico de saques
     _renderSaqueHistorico(saques);
-
-    // Últimos pagamentos PIX
     _renderPixHistorico(cart.ultimos_pagamentos || []);
+    _renderCartaoHistorico(cart.ultimos_cartao || []);
   } catch(e) {
     sbToast('err', 'Erro ao carregar carteira: ' + e.message);
   }
 }
+
+function showPayTab(tab) {
+  const isPix = tab === 'pix';
+  const pixDiv    = document.getElementById('pix-historico');
+  const cartaoDiv = document.getElementById('cartao-historico');
+  const btnPix    = document.getElementById('tab-pix-hist');
+  const btnCartao = document.getElementById('tab-cartao-hist');
+  if (pixDiv)    pixDiv.style.display    = isPix ? '' : 'none';
+  if (cartaoDiv) cartaoDiv.style.display = isPix ? 'none' : '';
+  if (btnPix) {
+    btnPix.style.background = isPix ? 'var(--accent)' : 'var(--surface2)';
+    btnPix.style.color      = isPix ? '#fff' : 'var(--muted)';
+  }
+  if (btnCartao) {
+    btnCartao.style.background = isPix ? 'var(--surface2)' : 'var(--accent)';
+    btnCartao.style.color      = isPix ? 'var(--muted)' : '#fff';
+  }
+}
+
+    // Cards de saldo
+    const se = id => document.getElementById(id);
 
 function _renderSaqueHistorico(saques) {
   const el = document.getElementById('saque-historico');
@@ -7903,6 +7916,29 @@ function _renderPixHistorico(pagamentos) {
       </div>
       <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;${badge[p.status]||badge.pendente}">${p.status}</span>
     </div>`).join('');
+}
+
+function _renderCartaoHistorico(pagamentos) {
+  const el = document.getElementById('cartao-historico');
+  if (!el) return;
+  if (!pagamentos.length) { el.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Nenhum pagamento por cartão ainda.</div>'; return; }
+  const badge = { aprovado:'background:rgba(34,197,94,.15);color:var(--success)', rejeitado:'background:rgba(239,68,68,.15);color:var(--danger)', pendente:'background:rgba(249,115,22,.15);color:var(--orange)' };
+  el.innerHTML = pagamentos.map(p => {
+    const liq = parseFloat(p.valor||0) * 0.93;
+    return `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-weight:600;font-size:13px">${_fmtR(p.valor)} <span style="font-weight:400;color:var(--muted);font-size:12px">→ líquido ${_fmtR(liq)}</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">
+          ${p.payer_name||'—'} · Pedido #${_orderNum(p.order_id||0)} ·
+          ${p.payment_method_id ? p.payment_method_id.charAt(0).toUpperCase()+p.payment_method_id.slice(1) : 'Cartão'}
+          ${p.last_four_digits ? '••••'+p.last_four_digits : ''} ·
+          ${new Date(p.created_at).toLocaleDateString('pt-BR')}
+        </div>
+      </div>
+      <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;${badge[p.status]||badge.pendente}">${p.status}</span>
+    </div>`;
+  }).join('');
 }
 
 async function solicitarSaque() {
