@@ -359,6 +359,12 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
               <div style="font-size:11px;color:var(--muted);margin-top:4px">Valor fixo descontado de cada PIX recebido</div>
             </div>
           </div>
+          <!-- Chave Pública — necessária para cartão de crédito -->
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Chave Pública (Public Key) — para Cartão de Crédito</label>
+            <input class="minput" id="mp-public-key-input" type="password" placeholder="TEST-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx  ou  APP_USR-..." autocomplete="off" style="width:100%;font-family:monospace;font-size:12px">
+            <div style="font-size:11px;color:var(--muted);margin-top:4px" id="mp-pk-status-txt">Obtida em mercadopago.com/developers → Credenciais. Obrigatória para aceitar cartão de crédito no cardápio.</div>
+          </div>
         </div>
 
         <!-- Estatísticas -->
@@ -1224,23 +1230,41 @@ async function carregarMpConfig() {
     const d = r.ok ? await r.json() : {};
     const txtEl = document.getElementById('mp-status-txt');
     if (txtEl) txtEl.innerHTML = d.mp_configurado
-      ? `<span style="color:var(--success)">✅ MP configurado · Taxa: R$ ${parseFloat(d.taxa_pix||1).toFixed(2)}</span>`
-      : `<span style="color:var(--danger)">⚠️ Token MP não configurado</span>`;
+      ? `<span style="color:var(--success)">✅ Access Token configurado · Taxa PIX: R$ ${parseFloat(d.taxa_pix||1).toFixed(2)}</span>`
+      : `<span style="color:var(--danger)">⚠️ Access Token MP não configurado</span>`;
     const taxaEl = document.getElementById('mp-taxa-input');
-    if (taxaEl && d.taxa_pix) taxaEl.value = parseFloat(d.taxa_pix).toFixed(2);
+    if (taxaEl && d.taxa_pix !== undefined) taxaEl.value = parseFloat(d.taxa_pix).toFixed(2);
     const tokenEl = document.getElementById('mp-token-input');
     if (tokenEl) {
       tokenEl.value = d.mp_token_mascarado || '';
       tokenEl.addEventListener('focus', () => { if (tokenEl.value.startsWith('•')) tokenEl.value = ''; }, { once: true });
     }
+    // Chave Pública
+    const pkEl     = document.getElementById('mp-public-key-input');
+    const pkStatus = document.getElementById('mp-pk-status-txt');
+    if (pkEl) {
+      pkEl.value = d.mp_public_key_mascarado || '';
+      pkEl.addEventListener('focus', () => { if (pkEl.value.startsWith('•')) pkEl.value = ''; }, { once: true });
+    }
+    if (pkStatus) {
+      pkStatus.innerHTML = d.mp_public_key_configurado
+        ? `<span style="color:var(--success)">✅ Chave Pública configurada — cartão de crédito ativo</span>`
+        : `<span style="color:var(--orange)">⚠️ Chave Pública não configurada — cartão de crédito inativo nos cardápios</span>`;
+    }
   } catch(e) { console.error(e); }
 }
 
 async function salvarMpConfig() {
-  const token = document.getElementById('mp-token-input')?.value || '';
-  const taxa  = document.getElementById('mp-taxa-input')?.value  || '1.00';
+  const token = document.getElementById('mp-token-input')?.value    || '';
+  const taxa  = document.getElementById('mp-taxa-input')?.value     || '1.00';
+  const pk    = document.getElementById('mp-public-key-input')?.value.trim() || '';
   const body  = { taxa_pix: parseFloat(taxa) };
   if (token && !token.startsWith('•')) body.mp_token = token;
+  if (pk    && !pk.startsWith('•'))    body.mp_public_key = pk;
+  // Valida formato da chave pública se preenchida
+  if (pk && !pk.startsWith('•') && !pk.startsWith('TEST-') && !pk.startsWith('APP_USR-')) {
+    toast('err', 'Chave Pública inválida — deve começar com TEST- ou APP_USR-'); return;
+  }
   try {
     const r = await fetch('/api/admin/mp-config', {
       method: 'POST',
