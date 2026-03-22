@@ -936,6 +936,8 @@ async function finishOrderById(id) {
       movimentos.push({ desc:`Pedido #${o.num} – ${o.client}`, tipo:'entrada', val:o.total+o.taxa, pag:o.pag||'PIX', time });
     }
     ordersKanban = ordersKanban.filter(x => x.id !== id);
+    // BUG 1 fix: adiciona pontos de fidelidade ao finalizar
+    if (o?.phone) _autoAddFidPoints(o.phone, o.total + o.taxa);
   } catch(e) {
     sbLoading(false);
     sbToast('err', 'Erro ao finalizar pedido: ' + e.message); return;
@@ -1071,7 +1073,7 @@ function nav(id){
     initChat();
   }
   if(id==='qrcode') renderQR();
-  if(id==='cupom') { renderCupons(); loadCashbackConfig().then(() => renderCashbackClientes()); }
+  if(id==='cupom') renderCupons();
   if(id==='fidelidade') renderFidelidade();
   if(id==='garcom') { renderGarcom(); loadGarcons(); }
   if(id==='kds') renderKDS();
@@ -3338,6 +3340,9 @@ async function mesaServOrder(id) {
       body: JSON.stringify({ order_id: id, new_status: 'entregue', tenant_id: _sessao?.tenant_id })
     });
     if (!res.ok) throw new Error((await res.json()).error || 'Erro');
+    // BUG 1 fix: adiciona pontos de fidelidade ao entregar mesa
+    const o = ordersKanban.find(x => x.id === id) || mesaOrdersCache.find(x => x.id === id);
+    if (o?.phone) _autoAddFidPoints(o.phone, o.total + (o.taxa || 0));
     ordersKanban      = ordersKanban.filter(x => x.id !== id);
     mesaOrdersCache   = mesaOrdersCache.filter(x => x.id !== id);
     renderKanban();
@@ -3416,170 +3421,6 @@ async function addCupom() {
 }
 
 // ─────────────────────────────────────────
-// CASHBACK
-// ─────────────────────────────────────────
-let _cbConfig = { ativo: false, pct: 0, min_pedido: 0, validade_dias: 0 };
-let _cbClientes = [];
-
-async function loadCashbackConfig() {
-  try {
-    const tid = _sessao?.tenant_id || '';
-    const r = await fetch('/api/cashback/config', { headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid } });
-    if (r.ok) _cbConfig = await r.json();
-  } catch(e) {}
-  _renderCbStats();
-}
-
-function _renderCbStats() {
-  const pctEl = document.getElementById('cb-stat-pct');
-  if (pctEl) pctEl.textContent = _cbConfig.ativo ? (_cbConfig.pct || 0) + '%' : 'Inativo';
-}
-
-async function renderCashbackClientes() {
-  const listEl = document.getElementById('cb-clientes-list');
-  const bannerEl = document.getElementById('cb-status-banner');
-  if (!listEl) return;
-
-  // Banner status
-  if (bannerEl) {
-    if (_cbConfig.ativo) {
-      bannerEl.innerHTML = `<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px;font-size:12.5px">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="color:var(--success);flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        <div><strong style="color:var(--success)">Cashback ativo</strong> — ${_cbConfig.pct}% de devolução em cada pedido${_cbConfig.min_pedido > 0 ? ` acima de R$ ${parseFloat(_cbConfig.min_pedido).toFixed(2).replace('.',',')}` : ''}.
-        Saldo creditado automaticamente ao finalizar/entregar.</div>
-      </div>`;
-    } else {
-      bannerEl.innerHTML = `<div style="background:rgba(100,116,139,.08);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted)">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3M8 11v.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        <div>Cashback desativado. <button class="btn bg" style="font-size:11px;padding:2px 10px;margin-left:6px" onclick="_openCashbackConfigModal();openModal('modal-cashback-config')">Configurar</button></div>
-      </div>`;
-    }
-  }
-
-  listEl.innerHTML = `<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px">Carregando...</div>`;
-
-  try {
-    const { data } = await sb.from('customers')
-      .select('id,name,phone,cashback_saldo,orders_count,total_spent')
-      .gt('cashback_saldo', 0)
-      .order('cashback_saldo', { ascending: false });
-
-    _cbClientes = data || [];
-
-    // Atualiza stats
-    const totalSaldo = _cbClientes.reduce((s, c) => s + parseFloat(c.cashback_saldo||0), 0);
-    const stSaldo = document.getElementById('cb-stat-saldo');
-    const stCli   = document.getElementById('cb-stat-clientes');
-    if (stSaldo) stSaldo.textContent = 'R$ ' + totalSaldo.toFixed(2).replace('.', ',');
-    if (stCli)   stCli.textContent   = _cbClientes.length;
-
-    const q = (document.getElementById('cb-search')?.value || '').toLowerCase();
-    const filtered = _cbClientes.filter(c =>
-      !q || (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q)
-    );
-
-    if (!filtered.length) {
-      listEl.innerHTML = `<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">
-        ${_cbConfig.ativo ? 'Nenhum cliente com saldo de cashback ainda.' : 'Ative o cashback para começar a acumular saldos.'}
-      </div>`;
-      return;
-    }
-
-    listEl.innerHTML = `
-      <table style="width:100%;border-collapse:collapse">
-        <thead>
-          <tr style="font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border)">
-            <th style="padding:10px 20px;text-align:left;font-weight:600">Cliente</th>
-            <th style="padding:10px 14px;text-align:left;font-weight:600">Telefone</th>
-            <th style="padding:10px 14px;text-align:center;font-weight:600">Pedidos</th>
-            <th style="padding:10px 14px;text-align:right;font-weight:600">Saldo cashback</th>
-            <th style="padding:10px 20px;text-align:right;font-weight:600">Ação</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${filtered.map(c => {
-            const saldo = parseFloat(c.cashback_saldo||0);
-            return `<tr style="border-bottom:1px solid var(--border);font-size:13px">
-              <td style="padding:11px 20px">
-                <div style="font-weight:600">${c.name || '—'}</div>
-              </td>
-              <td style="padding:11px 14px;color:var(--muted2)">${c.phone || '—'}</td>
-              <td style="padding:11px 14px;text-align:center;color:var(--muted)">${c.orders_count || 0}</td>
-              <td style="padding:11px 14px;text-align:right">
-                <span style="font-weight:700;color:var(--success);font-size:14px">R$ ${saldo.toFixed(2).replace('.',',')}</span>
-              </td>
-              <td style="padding:11px 20px;text-align:right">
-                <button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="openCbAjuste(${c.id},'${(c.name||'').replace(/'/g,"\\'")}',${saldo})">Ajustar</button>
-              </td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>`;
-  } catch(e) {
-    listEl.innerHTML = `<div style="padding:24px;text-align:center;color:var(--danger);font-size:12px">Erro ao carregar: ${e.message}</div>`;
-  }
-}
-
-function openCbAjuste(id, nome, saldo) {
-  document.getElementById('cb-ajuste-id').value = id;
-  document.getElementById('cb-ajuste-nome').textContent = nome;
-  document.getElementById('cb-ajuste-saldo-atual').textContent = 'R$ ' + parseFloat(saldo).toFixed(2).replace('.', ',');
-  document.getElementById('cb-ajuste-valor').value = '';
-  openModal('modal-cb-ajuste');
-}
-
-async function salvarCbAjuste() {
-  const id    = parseInt(document.getElementById('cb-ajuste-id').value);
-  const valor = parseFloat(document.getElementById('cb-ajuste-valor').value);
-  if (!id || isNaN(valor) || valor === 0) { sbToast('err', 'Informe um valor válido'); return; }
-  sbLoading(true);
-  const tid = _sessao?.tenant_id || '';
-  const r = await fetch('/api/cashback/ajustar', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-    body: JSON.stringify({ customer_id: id, valor })
-  });
-  sbLoading(false);
-  const data = await r.json();
-  if (!r.ok) { sbToast('err', data.error || 'Erro ao ajustar'); return; }
-  closeModal('modal-cb-ajuste');
-  sbToast('ok', `Saldo atualizado: R$ ${parseFloat(data.saldo).toFixed(2).replace('.', ',')}`);
-  renderCashbackClientes();
-}
-
-async function salvarCashbackConfig() {
-  const ativo       = document.getElementById('cb-ativo').checked;
-  const pct         = parseFloat(document.getElementById('cb-pct').value) || 0;
-  const min_pedido  = parseFloat(document.getElementById('cb-min-pedido').value) || 0;
-  const validade    = parseInt(document.getElementById('cb-validade').value) || 0;
-  if (pct < 0 || pct > 50) { sbToast('err', 'Percentual deve ser entre 0 e 50%'); return; }
-  sbLoading(true);
-  const tid = _sessao?.tenant_id || '';
-  const r = await fetch('/api/cashback/config', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-    body: JSON.stringify({ ativo, pct, min_pedido, validade_dias: validade })
-  });
-  sbLoading(false);
-  if (!r.ok) { sbToast('err', 'Erro ao salvar'); return; }
-  _cbConfig = { ativo, pct, min_pedido, validade_dias: validade };
-  closeModal('modal-cashback-config');
-  _renderCbStats();
-  sbToast('ok', ativo ? `Cashback de ${pct}% ativado!` : 'Cashback desativado');
-}
-
-function _openCashbackConfigModal() {
-  document.getElementById('cb-ativo').checked  = !!_cbConfig.ativo;
-  document.getElementById('cb-ativo-track').style.background = _cbConfig.ativo ? 'var(--accent)' : 'var(--border)';
-  document.getElementById('cb-ativo-thumb').style.transform  = _cbConfig.ativo ? 'translateX(18px)' : 'translateX(0)';
-  document.getElementById('cb-pct').value         = _cbConfig.pct || '';
-  document.getElementById('cb-min-pedido').value  = _cbConfig.min_pedido || '';
-  document.getElementById('cb-validade').value    = _cbConfig.validade_dias || '';
-}
-
-// ── fim CASHBACK ──────────────────────────────────────
-
-// ─────────────────────────────────────────
 // FIDELIDADE
 // ─────────────────────────────────────────
 // ─────────────────────────────────────────
@@ -3600,8 +3441,8 @@ async function saveFidConfig() {
   const rec  = parseFloat(document.getElementById('fid-cfg-rec')?.value) || 10;
   _fidConfig = { pts_por_real: pts, meta_pts: meta, recompensa_reais: rec };
   await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, fid_config: _fidConfig });
-  // Atualiza max_pts de todos os clientes
-  await sb.from('fidelidade').update({ max_pts: meta }).gte('id', 0);
+  // BUG 3 fix: filtra pelo tenant_id correto para não afetar outros tenants
+  await sb.from('fidelidade').update({ max_pts: meta }).eq('tenant_id', _sessao?.tenant_id);
   fidClients.forEach(c => c.max = meta);
   closeModal('modal-fid-config');
   renderFidelidade();
