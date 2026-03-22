@@ -913,3 +913,480 @@ td:first-child{padding-left:18px}
   border:1px solid rgba(139,92,246,.25);
   color:#c4b5fd;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE COMPLETO — ≤ 768px
+   Desktop intacto acima de 768px
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Variáveis mobile ─────────────────────────────────────── */
+:root {
+  --mob-nav-h: 60px;
+  --mob-safe: env(safe-area-inset-bottom, 0px);
+}
+
+/* ── Bottom Nav ────────────────────────────────────────────── */
+.mob-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: calc(var(--mob-nav-h) + var(--mob-safe));
+  padding-bottom: var(--mob-safe);
+  background: rgba(13, 17, 23, 0.97);
+  border-top: 1px solid var(--border);
+  backdrop-filter: saturate(160%) blur(20px);
+  -webkit-backdrop-filter: saturate(160%) blur(20px);
+  z-index: 400;
+  display: none;
+  align-items: stretch;
+  justify-content: space-around;
+  box-shadow: 0 -8px 32px rgba(0,0,0,.5);
+}
+
+.mob-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 4px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .2px;
+  transition: color .15s;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+}
+.mob-tab svg {
+  width: 22px; height: 22px;
+  transition: all .15s;
+}
+.mob-tab.active {
+  color: var(--accent);
+}
+.mob-tab.active svg {
+  stroke: var(--accent);
+}
+.mob-tab-badge {
+  position: absolute;
+  top: 6px;
+  right: calc(50% - 18px);
+  min-width: 16px; height: 16px;
+  background: var(--danger);
+  border-radius: 99px;
+  font-size: 9px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--bg);
+  padding: 0 3px;
+}
+.mob-tab-center {
+  position: relative;
+}
+.mob-tab-center-icon {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 16px var(--accent-glow);
+  margin-bottom: 0;
+  margin-top: -16px;
+  transition: transform .15s;
+}
+.mob-tab-center-icon svg {
+  width: 22px; height: 22px;
+  stroke: #fff;
+}
+.mob-tab-center.active .mob-tab-center-icon {
+  transform: scale(1.08);
+  box-shadow: 0 6px 24px var(--accent-glow);
+}
+.mob-tab-center span {
+  margin-top: 2px;
+}
+
+/* ── Drawer ─────────────────────────────────────────────────── */
+.mob-drawer-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.6);
+  z-index: 450;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.mob-drawer-overlay.on { display: block; }
+
+.mob-drawer {
+  position: fixed;
+  top: 0; left: 0;
+  width: min(320px, 90vw);
+  height: 100%;
+  height: 100dvh;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(-100%);
+  transition: transform .28s cubic-bezier(.4,0,.2,1);
+  box-shadow: 8px 0 40px rgba(0,0,0,.6);
+}
+.mob-drawer.open { transform: translateX(0); }
+
+.mob-drawer-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  padding-top: calc(16px + env(safe-area-inset-top, 0px));
+}
+
+.mob-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 10px calc(20px + var(--mob-safe));
+  -webkit-overflow-scrolling: touch;
+}
+
+.mob-drawer-section {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 16px 10px 6px;
+}
+
+.mob-drawer-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: none;
+  background: none;
+  color: var(--muted2);
+  font-family: 'Outfit', sans-serif;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+  text-align: left;
+  min-height: 44px;
+  -webkit-tap-highlight-color: transparent;
+}
+.mob-drawer-item svg {
+  flex-shrink: 0;
+  opacity: .7;
+}
+.mob-drawer-item:hover,
+.mob-drawer-item:active {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BREAKPOINT PRINCIPAL: ≤ 768px
+═══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* ── Layout base ──────────────────────────────────────── */
+  body { overflow: hidden; }
+
+  .mob-bottom-nav {
+    display: flex !important;
+  }
+
+  /* Sidebar: oculta completamente, substituída pelo drawer */
+  .sidebar {
+    display: none !important;
+    width: 0 !important;
+  }
+
+  /* Topnav mobile */
+  .topnav {
+    padding: 0 12px;
+    gap: 6px;
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+  .mobile-menu-btn { display: flex !important; }
+  .logo { min-width: auto; font-size: 15px; }
+  .logo svg { width: 22px; height: 22px; }
+  .tnav-pill { display: none !important; }
+  .tbadge { display: none !important; }
+  .tnr { gap: 4px; }
+  .caixa-btn span { display: none; }
+  .caixa-btn { padding: 6px 10px; }
+  .ibtn { width: 34px; height: 34px; }
+
+  /* Main area: account for bottom nav */
+  .main {
+    padding-bottom: calc(var(--mob-nav-h) + var(--mob-safe));
+    height: calc(100dvh - var(--nav-h));
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Pages */
+  .page {
+    padding: 16px 14px !important;
+    padding-bottom: 24px !important;
+    animation: none;
+  }
+  .ph {
+    flex-direction: column;
+    align-items: flex-start;
+    margin-bottom: 16px;
+    gap: 10px;
+  }
+  .pt { font-size: 19px; }
+  .ps { font-size: 12px; }
+
+  /* Stats grid */
+  .sg {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .sc { padding: 14px 14px; }
+  .sv { font-size: 22px; }
+
+  /* ── Kanban ───────────────────────────────────────────── */
+  .kanban {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    gap: 12px;
+    min-height: unset;
+  }
+  .kol { min-height: 160px; }
+  .kol-body { max-height: 50vh; }
+
+  /* ── Tabelas ──────────────────────────────────────────── */
+  .tw { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 12px; }
+  table { min-width: 560px; }
+
+  /* ── Cards ────────────────────────────────────────────── */
+  .card { border-radius: 12px; }
+  .card[style*="padding:18px"] { padding: 14px !important; }
+
+  /* ── Forms ────────────────────────────────────────────── */
+  .form-row-2 { grid-template-columns: 1fr !important; }
+  .form-input {
+    font-size: 16px !important; /* prevent iOS zoom */
+    padding: 12px 13px;
+    min-height: 44px;
+  }
+  .btn {
+    min-height: 40px;
+    font-size: 13px;
+    padding: 9px 16px;
+  }
+
+  /* ── Modais ───────────────────────────────────────────── */
+  .modal-bg {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+  .modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 92dvh !important;
+    border-radius: 20px 20px 0 0 !important;
+    padding: 20px 18px !important;
+    padding-bottom: max(20px, var(--mob-safe)) !important;
+    animation: slideUp .25s cubic-bezier(.4,0,.2,1) !important;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); opacity: .6; }
+    to   { transform: translateY(0);    opacity: 1;   }
+  }
+  .modal h2 {
+    font-size: 16px;
+    margin-bottom: 16px;
+  }
+  /* Order detail modal — full height */
+  .modal.order-detail {
+    max-height: 96dvh !important;
+  }
+
+  /* ── PDV Balcão ───────────────────────────────────────── */
+  #page-pdv-balcao {
+    height: calc(100dvh - var(--nav-h) - var(--mob-nav-h) - var(--mob-safe)) !important;
+  }
+  .pdvb-wrap {
+    grid-template-columns: 1fr !important;
+    height: 100% !important;
+    min-height: unset !important;
+  }
+  .pdvb-right {
+    max-height: 45vh;
+    border-top: 1px solid var(--border);
+    border-right: none !important;
+  }
+  .pdvb-grid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important;
+  }
+  .pdvb-nav-hint { display: none !important; }
+  .pdvb-left { min-height: 0; }
+
+  /* ── Robô / Chat ──────────────────────────────────────── */
+  #page-robo {
+    height: calc(100dvh - var(--nav-h) - var(--mob-nav-h) - var(--mob-safe)) !important;
+  }
+  .chat-wrap {
+    flex-direction: column;
+    height: auto;
+    min-height: unset;
+    gap: 10px;
+  }
+  .chat-right { width: 100%; max-height: 180px; }
+
+  /* ── Relatórios ───────────────────────────────────────── */
+  .rel-grid, [style*="grid-template-columns:1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── KDS ──────────────────────────────────────────────── */
+  #page-kds {
+    height: auto !important;
+  }
+
+  /* ── Desempenho ───────────────────────────────────────── */
+  .desemp-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px;
+  }
+
+  /* ── Mesa Kanban ──────────────────────────────────────── */
+  .mesa-kanban {
+    grid-template-columns: 1fr !important;
+    height: auto !important;
+    min-height: unset !important;
+  }
+
+  /* ── Tabs ─────────────────────────────────────────────── */
+  .tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap !important;
+    gap: 2px;
+    padding-bottom: 4px;
+  }
+  .tab {
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-size: 12px;
+    padding: 7px 12px;
+    min-height: 34px;
+  }
+
+  /* ── Quality bar ──────────────────────────────────────── */
+  .quality-bar { flex-direction: column; gap: 12px; padding: 14px; }
+  .quality-pills { flex-wrap: wrap; gap: 6px; }
+  .qpill { min-width: calc(50% - 6px); }
+
+  /* ── Search boxes ─────────────────────────────────────── */
+  .sbox input { width: 100px; }
+  .ph .sbox { flex: 1 !important; }
+
+  /* ── KPI cards in relatorios ─────────────────────────── */
+  #page-relatorios .sg,
+  [style*="grid-template-columns:repeat(4,1fr)"],
+  [style*="grid-template-columns:repeat(3,1fr)"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ── Bar charts don't overflow ───────────────────────── */
+  .bar-chart-wrap { overflow-x: auto; min-width: 0; }
+
+  /* ── Cardápio público ────────────────────────────────── */
+  #page-cardapio-publico {
+    height: calc(100dvh - var(--nav-h) - var(--mob-nav-h) - var(--mob-safe)) !important;
+  }
+
+  /* ── Tema ────────────────────────────────────────────── */
+  #page-tema {
+    height: calc(100dvh - var(--nav-h) - var(--mob-nav-h) - var(--mob-safe)) !important;
+  }
+
+  /* ── Toast position ─────────────────────────────────── */
+  #toast {
+    bottom: calc(var(--mob-nav-h) + var(--mob-safe) + 10px);
+    right: 12px;
+    left: 12px;
+    font-size: 13px;
+  }
+
+  /* ── Notif panel ─────────────────────────────────────── */
+  .notif-panel {
+    right: 8px;
+    width: calc(100vw - 16px);
+    max-width: 340px;
+    top: calc(var(--nav-h) + 4px);
+  }
+
+  /* ── PDV antigo ──────────────────────────────────────── */
+  .pdv-wrap {
+    grid-template-columns: 1fr !important;
+    height: auto !important;
+    min-height: unset;
+  }
+  .pdv-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ── Ocultar elementos desnecessários no mobile ───────── */
+  .pdvb-nav-hint,
+  .kol-config,
+  .quality-score { display: none !important; }
+
+  /* ── Buttons na ph ─────────────────────────────────────── */
+  .ph > div:last-child {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .ph .btn {
+    font-size: 12px;
+    padding: 7px 12px;
+  }
+
+  /* ── Print frame ──────────────────────────────────────── */
+  #print-frame { display: none; }
+
+  /* ── Fix flexpage heights ─────────────────────────────── */
+  #page-robo.on,
+  #page-tema.on,
+  #page-cardapio-publico.on {
+    overflow-y: auto !important;
+    height: auto !important;
+    min-height: calc(100dvh - var(--nav-h) - var(--mob-nav-h));
+  }
+}
+
+/* ── Very small screens (≤ 375px) ─────────────────────────── */
+@media (max-width: 375px) {
+  .sg { grid-template-columns: 1fr !important; }
+  .topnav .logo span { display: none; }
+  .mob-tab span { font-size: 9px; }
+  .mob-tab-center-icon { width: 42px; height: 42px; margin-top: -14px; }
+}
+
+/* ── Landscape mobile (phone) ─────────────────────────────── */
+@media (max-width: 768px) and (orientation: landscape) {
+  .mob-bottom-nav { height: calc(52px + var(--mob-safe)); }
+  .mob-tab-center-icon { width: 40px; height: 40px; margin-top: -8px; }
+  .modal {
+    max-height: 96dvh !important;
+    border-radius: 14px 14px 0 0 !important;
+  }
+}
