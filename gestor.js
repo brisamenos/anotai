@@ -1085,7 +1085,7 @@ function nav(id){
   if(id==='impressao') renderImpressao();
   if(id==='caixa') _renderCaixaTela();
   if(id==='configuracoes') _renderConfiguracoes();
-  if(id==='saques') { carregarCarteira(); conectarSaquesSSE(); carregarConfigPixGestor(); carregarCartaoMpStatus(); }
+  if(id==='saques') { carregarCarteira(); conectarSaquesSSE(); carregarConfigPixGestor(); }
   if(id==='taxa') renderTaxaPage();
 
   if(id==='meu-plano') renderMeuPlano();
@@ -7701,6 +7701,45 @@ function conectarSaquesSSE() {
   _saquesSSE.onerror = () => { _saquesSSE.close(); _saquesSSE = null; setTimeout(conectarSaquesSSE, 5000); };
 }
 
+// ════════════════════════════════════════════════════
+// PAGAMENTOS ONLINE — PIX e Cartão
+// ════════════════════════════════════════════════════
+
+let _pixOnlineAtivo    = true;
+let _cartaoOnlineAtivo = false; // false até o admin configurar a public key
+
+function _renderPixOnlineToggle(ativo) {
+  _pixOnlineAtivo = ativo;
+  const btn    = document.getElementById('btn-pix-online-toggle');
+  const status = document.getElementById('pix-online-status-txt');
+  const card   = document.getElementById('card-pix-online');
+  if (btn) {
+    btn.textContent = ativo ? '✅ Ativado' : '🔴 Desativado';
+    btn.className   = 'btn ' + (ativo ? 'bp' : 'bd');
+  }
+  if (status) status.textContent = ativo ? 'Ativo — clientes podem pagar via PIX' : 'Inativo — PIX não aparece no cardápio';
+  if (card)  card.style.borderColor = ativo ? 'rgba(34,197,94,.35)' : 'var(--border)';
+}
+
+function _renderCartaoOnlineToggle(ativo, disponivel) {
+  _cartaoOnlineAtivo = ativo;
+  const btn    = document.getElementById('btn-cartao-online-toggle');
+  const status = document.getElementById('cartao-online-status-txt');
+  const card   = document.getElementById('card-cartao-online');
+  if (!disponivel) {
+    if (btn)    { btn.textContent = 'Indisponível'; btn.className = 'btn bg'; btn.disabled = true; }
+    if (status) status.textContent = 'Não disponível — aguardando habilitação pelo suporte';
+    return;
+  }
+  if (btn) {
+    btn.textContent = ativo ? '✅ Ativado' : '🔴 Desativado';
+    btn.className   = 'btn ' + (ativo ? 'bp' : 'bd');
+    btn.disabled    = false;
+  }
+  if (status) status.textContent = ativo ? 'Ativo — clientes podem pagar com cartão online' : 'Inativo — cartão não aparece no cardápio';
+  if (card)  card.style.borderColor = ativo ? 'rgba(59,130,246,.35)' : 'var(--border)';
+}
+
 async function carregarConfigPixGestor() {
   const tid = _sessao?.tenant_id;
   if (!tid) return;
@@ -7708,157 +7747,55 @@ async function carregarConfigPixGestor() {
     const r = await fetch('/api/pix/config', { headers: { 'x-tenant-id': tid } });
     if (!r.ok) return;
     const d = await r.json();
-    _pixAtivoGestor = d.pix_ativo_gestor !== false;
-    const btn = document.getElementById('btn-pix-toggle');
-    const statusEl = document.getElementById('pix-config-status');
-    const manualWrap = document.getElementById('pix-manual-wrap');
-    if (btn) {
-      btn.textContent = _pixAtivoGestor ? 'Ativado' : 'Desativado';
-      btn.className = 'btn ' + (_pixAtivoGestor ? 'bp' : 'bd');
-    }
-    if (statusEl) {
-      if (!d.mp_configurado) statusEl.innerHTML = '<span style="color:var(--danger)">Token MP não configurado pelo administrador</span>';
-      else statusEl.innerHTML = _pixAtivoGestor
-        ? '<span style="color:var(--success)">✅ QR Code via Mercado Pago ativo</span>'
-        : '<span style="color:var(--orange)">⚡ QR Code desativado — usando chave PIX manual</span>';
-    }
-    if (manualWrap) manualWrap.style.display = _pixAtivoGestor ? 'none' : '';
-    // Preenche campos da chave manual
-    if (!_pixAtivoGestor) {
-      const keyEl = document.getElementById('pix-manual-key');
-      const tipoEl = document.getElementById('pix-manual-tipo');
-      const bancoEl = document.getElementById('pix-manual-banco');
-      if (keyEl)  keyEl.value  = d.pix_key_manual || '';
-      if (tipoEl && d.pix_key_manual_tipo) tipoEl.value = d.pix_key_manual_tipo;
-      if (bancoEl) bancoEl.value = d.pix_key_manual_banco || '';
-    }
-    // Toggle pagamentos online
-    _renderPagOnlineToggle(d.pag_online_ativo !== false);
+    // PIX
+    _renderPixOnlineToggle(d.pix_ativo !== false);
+    // Cartão — só aparece se admin configurou a public key
+    const cartaoDisponivel = !!d.cartao_disponivel;
+    const cartaoAtivo      = d.cartao_online_ativo !== false && cartaoDisponivel;
+    _renderCartaoOnlineToggle(cartaoAtivo, cartaoDisponivel);
+    // Mantém _pixAtivoGestor sincronizado (usado no fluxo PIX do cardápio)
+    _pixAtivoGestor = d.pix_ativo !== false;
   } catch(e) {}
 }
 
-async function togglePixGestor() {
+async function togglePixOnline() {
   const tid = _sessao?.tenant_id;
   if (!tid) return;
-  const btn = document.getElementById('btn-pix-toggle');
+  const btn = document.getElementById('btn-pix-online-toggle');
   if (btn) btn.disabled = true;
   try {
+    const novoEstado = !_pixOnlineAtivo;
     const r = await fetch('/api/pix/gestor-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-      body: JSON.stringify({ pix_ativo: !_pixAtivoGestor })
+      body: JSON.stringify({ pix_ativo: novoEstado })
     });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error);
-    _pixAtivoGestor = d.pix_ativo;
-    sbToast('ok', _pixAtivoGestor ? 'PIX QR Code ativado!' : 'PIX QR Code desativado!');
-    await carregarConfigPixGestor();
+    if (!r.ok) throw new Error(d.error || 'Erro');
+    _renderPixOnlineToggle(d.pix_ativo !== false);
+    sbToast('ok', novoEstado ? '💠 PIX Online ativado!' : '🔴 PIX Online desativado!');
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
-  finally { if (btn) btn.disabled = false; }
+  finally { const b = document.getElementById('btn-pix-online-toggle'); if (b) b.disabled = false; }
 }
 
-async function salvarPixManual() {
+async function toggleCartaoOnline() {
   const tid = _sessao?.tenant_id;
   if (!tid) return;
-  const key   = document.getElementById('pix-manual-key')?.value.trim() || '';
-  const tipo  = document.getElementById('pix-manual-tipo')?.value || 'telefone';
-  const banco = document.getElementById('pix-manual-banco')?.value.trim() || '';
-  if (!key) { sbToast('err', 'Informe a chave PIX'); return; }
-  try {
-    const r = await fetch('/api/pix/gestor-config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-      body: JSON.stringify({ pix_key_manual: key, pix_key_manual_tipo: tipo, pix_key_manual_banco: banco })
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error);
-    sbToast('ok', 'Chave PIX salva!');
-  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
-}
-
-// ── Toggle: Pagamentos Online (PIX + Cartão MP) ──────
-let _pagOnlineAtivo = true;
-
-function _renderPagOnlineToggle(ativo) {
-  _pagOnlineAtivo = ativo;
-  const btn    = document.getElementById('btn-pag-online-toggle');
-  const status = document.getElementById('pag-online-status-txt');
-  if (btn) {
-    btn.textContent = ativo ? '✅ Ativado' : '🔴 Desativado';
-    btn.className   = 'btn ' + (ativo ? 'bp' : 'bd');
-  }
-  if (status) {
-    status.innerHTML = ativo
-      ? '<span style="color:var(--success)">PIX e Cartão de Crédito MP disponíveis no cardápio público</span>'
-      : '<span style="color:var(--danger)">PIX e Cartão desativados — clientes só pagam dinheiro/cartão na entrega</span>';
-  }
-}
-
-async function togglePagOnline() {
-  const tid = _sessao?.tenant_id;
-  if (!tid) return;
-  const btn = document.getElementById('btn-pag-online-toggle');
+  const btn = document.getElementById('btn-cartao-online-toggle');
   if (btn) btn.disabled = true;
   try {
-    const novoEstado = !_pagOnlineAtivo;
+    const novoEstado = !_cartaoOnlineAtivo;
     const r = await fetch('/api/pix/gestor-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-      body: JSON.stringify({ pag_online_ativo: novoEstado })
+      body: JSON.stringify({ cartao_online_ativo: novoEstado })
     });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Erro ao salvar');
-    _renderPagOnlineToggle(d.pag_online_ativo !== false);
-    sbToast('ok', novoEstado ? '💳 Pagamentos online ativados!' : '🔴 Pagamentos online desativados!');
-  } catch(e) {
-    sbToast('err', 'Erro: ' + e.message);
-  } finally {
-    const btn2 = document.getElementById('btn-pag-online-toggle');
-    if (btn2) btn2.disabled = false;
-  }
-}
-
-// ── Cartão de Crédito MP ─────────────────────────────
-async function carregarCartaoMpStatus() {
-  try {
-    const r = await fetch('/api/admin/mp-config', {
-      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _sessao?.tenant_id }
-    });
-    if (!r.ok) return;
-    const d = await r.json();
-    const statusEl = document.getElementById('cartao-mp-status');
-    const pkStatus = document.getElementById('mp-public-key-status');
-    if (statusEl) {
-      if (d.mp_public_key_configurado) {
-        statusEl.innerHTML = '<span style="color:var(--success)">✅ Chave Pública configurada — cartão ativo no cardápio</span>';
-      } else {
-        statusEl.innerHTML = '<span style="color:var(--muted)">⚠️ Chave Pública não configurada — cartão não aparece no cardápio</span>';
-      }
-    }
-    if (pkStatus && d.mp_public_key_mascarado) {
-      pkStatus.textContent = 'Chave atual: ' + d.mp_public_key_mascarado;
-    }
-  } catch(e) {}
-}
-
-async function salvarMpPublicKey() {
-  const key = document.getElementById('mp-public-key-input')?.value.trim();
-  if (!key) { sbToast('err', 'Cole a Chave Pública do Mercado Pago'); return; }
-  if (!key.startsWith('TEST-') && !key.startsWith('APP_USR-')) {
-    sbToast('err', 'Chave inválida — deve começar com TEST- ou APP_USR-'); return;
-  }
-  try {
-    const r = await fetch('/api/admin/mp-config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _sessao?.tenant_id },
-      body: JSON.stringify({ mp_public_key: key })
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Erro ao salvar');
-    sbToast('ok', 'Chave Pública salva! Cartão ativo no cardápio.');
-    document.getElementById('mp-public-key-input').value = '';
-    await carregarCartaoMpStatus();
+    if (!r.ok) throw new Error(d.error || 'Erro');
+    _renderCartaoOnlineToggle(d.cartao_online_ativo !== false, true);
+    sbToast('ok', novoEstado ? '💳 Cartão Online ativado!' : '🔴 Cartão Online desativado!');
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
+  finally { const b = document.getElementById('btn-cartao-online-toggle'); if (b) b.disabled = false; }
 }
 
 async function carregarCarteira() {

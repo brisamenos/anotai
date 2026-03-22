@@ -1937,22 +1937,14 @@ async function init() {
     _pixKeyManual      = pixCfgR.pix_key_manual      || '';
     _pixKeyManualBanco = pixCfgR.pix_key_manual_banco || '';
 
-    // Oculta PIX e Cartão MP se o gestor desativou pagamentos online
-    const _pagOnlineAtivo = pixCfgR.pag_online_ativo !== false;
-    if (!_pagOnlineAtivo) {
-      document.querySelectorAll('[data-pay="pix"],[data-pay="cartao_mp"]')
-        .forEach(el => el.style.display = 'none');
+    // Oculta PIX se gestor desativou pagamentos online ou PIX especificamente
+    if (!pixCfgR.pix_ativo) {
+      const pixBtn = document.querySelector('[data-pay="pix"]');
+      if (pixBtn) pixBtn.style.display = 'none';
     }
 
-    buildCats();
-    renderMenu();
-    subscribeRealtime();
-    loadCustomerSession();
-    setupPlanFeatures();
-    applyTiposEntrega();
-    applyDeliveryInfo();
-    // Carrega public key do Mercado Pago para cartão (só se pagamentos online ativos)
-    if (_pagOnlineAtivo) {
+    // Carrega public key e mostra Cartão MP só se disponível E ativo
+    if (pixCfgR.cartao_disponivel && pixCfgR.cartao_online_ativo) {
       fetch('/api/cartao/public-key', { headers: { 'x-tenant-id': _tenantId } })
         .then(r => r.ok ? r.json() : {})
         .then(d => {
@@ -1964,6 +1956,14 @@ async function init() {
           }
         }).catch(() => {});
     }
+
+    buildCats();
+    renderMenu();
+    subscribeRealtime();
+    loadCustomerSession();
+    setupPlanFeatures();
+    applyTiposEntrega();
+    applyDeliveryInfo();
     setInterval(() => applyStatus(undefined, undefined), 60000);
   } catch(e) {
     console.error(e);

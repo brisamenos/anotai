@@ -345,18 +345,22 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const ia   = safeJson(cfg?.ia_config)
       const gCfg = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
       const gIa  = safeJson(gCfg?.ia_config)
-      const mpConfigurado = !!(gIa.mp_token || MP_TOKEN)
-      const pixAtivo = ia.pix_ativo !== false
+      const mpConfigurado  = !!(gIa.mp_token || MP_TOKEN)
+      const pixAtivo       = ia.pix_ativo !== false
       const pagOnlineAtivo = ia.pag_online_ativo !== false
+      const cartaoDisponivel   = !!(gIa.mp_public_key)           // só disponível se admin configurou a public key
+      const cartaoOnlineAtivo  = ia.cartao_online_ativo !== false && cartaoDisponivel
       send(res, 200, {
-        pix_ativo:           pixAtivo,
-        pix_ativo_gestor:    pixAtivo,
-        mp_configurado:      mpConfigurado,
-        taxa_pix:            gIa.taxa_pix !== undefined ? parseFloat(gIa.taxa_pix) : parseFloat(process.env.TAXA_PIX || '1.00'),
-        pix_key_manual:      ia.pix_key_manual || '',
-        pix_key_manual_tipo: ia.pix_key_manual_tipo || '',
-        pix_key_manual_banco:ia.pix_key_manual_banco || '',
-        pag_online_ativo:    pagOnlineAtivo,
+        pix_ativo:            pixAtivo,
+        pix_ativo_gestor:     pixAtivo,
+        mp_configurado:       mpConfigurado,
+        taxa_pix:             gIa.taxa_pix !== undefined ? parseFloat(gIa.taxa_pix) : parseFloat(process.env.TAXA_PIX || '1.00'),
+        pix_key_manual:       ia.pix_key_manual || '',
+        pix_key_manual_tipo:  ia.pix_key_manual_tipo || '',
+        pix_key_manual_banco: ia.pix_key_manual_banco || '',
+        pag_online_ativo:     pagOnlineAtivo,
+        cartao_disponivel:    cartaoDisponivel,
+        cartao_online_ativo:  cartaoOnlineAtivo,
       })
     } catch (e) { log('❌', '/api/pix/config erro:', e.message); send(res, 500, { error: e.message }) }
     return true
@@ -375,10 +379,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (body.pix_key_manual_tipo !== undefined)   ia.pix_key_manual_tipo  = body.pix_key_manual_tipo || ''
       if (body.pix_key_manual_banco !== undefined)  ia.pix_key_manual_banco = body.pix_key_manual_banco || ''
       if (body.pag_online_ativo !== undefined)      ia.pag_online_ativo     = body.pag_online_ativo !== false
+      if (body.cartao_online_ativo !== undefined)   ia.cartao_online_ativo  = body.cartao_online_ativo !== false
       db.prepare('INSERT INTO store_config (tenant_id,ia_config) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config').run(tid, JSON.stringify(ia))
       marcarDirty()
       log('⚙️', `PIX/pagamentos config salva tenant=${tid} pix_ativo=${ia.pix_ativo} pag_online=${ia.pag_online_ativo}`)
-      send(res, 200, { ok: true, pix_ativo: ia.pix_ativo, pix_key_manual: ia.pix_key_manual || '', pag_online_ativo: ia.pag_online_ativo !== false })
+      send(res, 200, { ok: true, pix_ativo: ia.pix_ativo, pix_key_manual: ia.pix_key_manual || '', pag_online_ativo: ia.pag_online_ativo !== false, cartao_online_ativo: ia.cartao_online_ativo !== false })
     } catch (e) { send(res, 500, { error: e.message }) }
     return true
   }
