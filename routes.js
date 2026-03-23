@@ -752,7 +752,51 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
-  // ── Download de mídia WhatsApp (sob demanda) ─────────
+  // ── Proxy de imagem (foto de perfil WA — resolve CORS) ──
+  if (req.method === 'GET' && upath === '/api/wa/avatar') {
+    const url = params.get('url')
+    if (!url) { send(res, 400, { error: 'url obrigatória' }); return true }
+    try {
+      const r = await fetch(decodeURIComponent(url), {
+        headers: { 'User-Agent': 'WhatsApp/2.24.0' }
+      })
+      if (!r.ok) { res.writeHead(404); res.end(); return true }
+      const buf = Buffer.from(await r.arrayBuffer())
+      const ct  = r.headers.get('content-type') || 'image/jpeg'
+      res.writeHead(200, {
+        'Content-Type':  ct,
+        'Cache-Control': 'public, max-age=3600',
+        'Access-Control-Allow-Origin': '*'
+      })
+      res.end(buf)
+    } catch(e) { res.writeHead(502); res.end() }
+    return true
+  }
+
+  // ── Foto de perfil WhatsApp ─────────────────────────
+  if (req.method === 'POST' && upath === '/api/wa/avatar') {
+    const tenantId = req.headers['x-tenant-id']
+    if (!tenantId) { send(res, 401, { error: 'x-tenant-id obrigatório' }); return true }
+    const body = await readBody(req)
+    const { number } = body
+    if (!number) { send(res, 400, { error: 'number obrigatório' }); return true }
+    try {
+      const cfg  = db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tenantId)
+      const inst = cfg?.evo_instance || EVO_INST
+      if (!inst) { send(res, 200, { url: null }); return true }
+      const r    = await fetch(`${EVO_URL}/chat/fetchProfilePictureUrl/${inst}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', apikey: EVO_KEY },
+        body:    JSON.stringify({ number })
+      })
+      const data = await r.json().catch(() => ({}))
+      const url  = data?.profilePictureUrl || data?.image || data?.url || data?.picture || null
+      send(res, 200, { url })
+    } catch(e) { send(res, 200, { url: null }) }
+    return true
+  }
+
+
   if (req.method === 'POST' && upath === '/api/wa/media') {
     const tenantId = req.headers['x-tenant-id']
     if (!tenantId) { send(res, 401, { error: 'x-tenant-id obrigatório' }); return true }
