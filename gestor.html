@@ -682,7 +682,29 @@
           <div style="font-size:11.5px;color:var(--muted)">Taxa varia conforme a distância</div>
         </div>
       </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 16px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);flex:1;min-width:140px;transition:border-color .18s" id="taxa-label-bairro">
+        <input type="radio" name="taxa-tipo" value="por_bairro" id="taxa-tipo-bairro" onchange="onTaxaTipoChange()" style="accent-color:var(--accent)">
+        <div>
+          <div style="font-weight:600;font-size:13px">Por Bairro</div>
+          <div style="font-size:11.5px;color:var(--muted)">Taxa diferente por bairro</div>
+        </div>
+      </label>
     </div>
+  </div>
+
+  <!-- POR BAIRRO -->
+  <div class="card" id="taxa-bairro-block" style="display:none;margin-bottom:16px">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+      Bairros e taxas
+      <button class="btn bp" style="font-size:11px;padding:4px 10px" onclick="addTaxaBairroRow()">+ Adicionar bairro</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin:8px 0 14px">Cadastre cada bairro e sua taxa. O cliente digita o nome no campo de bairro e o sistema reconhece automaticamente.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px">
+      <span style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Bairro</span>
+      <span style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Taxa (R$)</span>
+      <span></span>
+    </div>
+    <div id="taxa-bairros-list" style="display:flex;flex-direction:column;gap:8px"></div>
   </div>
 
   <!-- TAXA FIXA -->
