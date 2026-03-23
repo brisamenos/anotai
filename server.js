@@ -312,7 +312,7 @@ runMigrations()
 // BACKUP / RESTORE
 // ════════════════════════════════════════════════════════
 const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_items',
-  'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao']
+  'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','wa_messages']
 
 let _dirty = false
 function marcarDirty() { _dirty = true }
