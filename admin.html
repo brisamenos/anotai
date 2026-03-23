@@ -153,6 +153,7 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
       <button class="sb-item on" id="nav-dash" onclick="navTo('dash')">📊 Dashboard</button>
       <div class="sb-sec" style="margin-top:6px">Gestão</div>
       <button class="sb-item" id="nav-clientes" onclick="navTo('clientes')">🏢 Clientes</button>
+      <button class="sb-item" id="nav-planos" onclick="navTo('planos')">💳 Planos</button>
       <button class="sb-item" id="nav-ia" onclick="navTo('ia')">🧠 Agente IA</button>
       <button class="sb-item" id="nav-saques" onclick="navTo('saques')">💰 Saques PIX</button>
       <button class="sb-item" id="nav-backup" onclick="navTo('backup')">💾 Backup</button>
@@ -263,6 +264,113 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
           <div id="adm-ia-status-msg" style="font-size:13px;color:var(--muted)">Carregando...</div>
         </div>
       </div>
+
+      <!-- PLANOS -->
+      <div id="sec-planos" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <div>
+            <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800">💳 Gerenciar Planos</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">Configure os precos dos planos Essencial e Premium</div>
+          </div>
+          <button class="btn bp" onclick="salvarPrecosPlanos()">💾 Salvar precos</button>
+        </div>
+
+        <!-- Cards dos planos -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+          <!-- Plano Essencial -->
+          <div class="card" style="padding:24px;border:2px solid var(--border)">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+              <div style="width:48px;height:48px;border-radius:12px;background:rgba(59,130,246,.1);display:flex;align-items:center;justify-content:center">
+                <svg width="24" height="24" viewBox="0 0 16 16" fill="none" style="color:var(--accent)"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 8h6M5 5h3M5 11h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              </div>
+              <div>
+                <div style="font-size:18px;font-weight:800;font-family:'Syne',sans-serif">Plano Essencial</div>
+                <div style="font-size:12px;color:var(--muted)">Sem IA e automacao</div>
+              </div>
+            </div>
+            <div style="margin-bottom:16px">
+              <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Preco mensal (R$)</label>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:16px;color:var(--muted)">R$</span>
+                <input class="minput" id="adm-preco-essencial" type="number" step="0.01" min="0" value="79.99" style="font-size:24px;font-weight:700;text-align:center;max-width:150px">
+              </div>
+            </div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.5">
+              <div style="margin-bottom:4px">Recursos inclusos:</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="color:var(--success)"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                Cardapio digital ilimitado
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="color:var(--success)"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                Gestao de pedidos
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="color:var(--success)"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                Relatorios basicos
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;color:var(--danger)">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                Sem IA/Robo WhatsApp
+              </div>
+            </div>
+          </div>
+
+          <!-- Plano Premium -->
+          <div class="card" style="padding:24px;border:2px solid rgba(139,92,246,.4);background:linear-gradient(135deg,rgba(139,92,246,.05),rgba(236,72,153,.03))">
+            <div style="position:absolute;top:-1px;right:20px;background:linear-gradient(135deg,#7c3aed,#ec4899);color:#fff;font-size:10px;font-weight:700;padding:4px 12px;border-radius:0 0 8px 8px;text-transform:uppercase;letter-spacing:.5px">Mais vendido</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+              <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,rgba(139,92,246,.15),rgba(236,72,153,.1));display:flex;align-items:center;justify-content:center">
+                <svg width="24" height="24" viewBox="0 0 16 16" fill="none" style="color:var(--purple)"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
+              </div>
+              <div>
+                <div style="font-size:18px;font-weight:800;font-family:'Syne',sans-serif;color:var(--purple)">Plano Premium</div>
+                <div style="font-size:12px;color:var(--muted)">Todas as ferramentas</div>
+              </div>
+            </div>
+            <div style="margin-bottom:16px">
+              <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Preco mensal (R$)</label>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:16px;color:var(--muted)">R$</span>
+                <input class="minput" id="adm-preco-premium" type="number" step="0.01" min="0" value="99.90" style="font-size:24px;font-weight:700;text-align:center;max-width:150px;color:var(--purple)">
+              </div>
+            </div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.5">
+              <div style="margin-bottom:4px">Recursos inclusos:</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="color:var(--success)"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                Tudo do Essencial
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="color:var(--purple)"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
+                Robo WhatsApp com IA
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="color:var(--purple)"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
+                Automacoes avancadas
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;color:var(--success);font-weight:600">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                Suporte prioritario
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dica promocao -->
+        <div class="card" style="padding:16px;background:rgba(249,115,22,.05);border:1px solid rgba(249,115,22,.2)">
+          <div style="display:flex;align-items:flex-start;gap:12px">
+            <div style="width:36px;height:36px;border-radius:8px;background:rgba(249,115,22,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" style="color:var(--orange)"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3M8 10v.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            </div>
+            <div>
+              <div style="font-size:13px;font-weight:700;margin-bottom:4px;color:var(--orange)">Dica: Promocoes</div>
+              <div style="font-size:12px;color:var(--muted);line-height:1.5">Voce pode alterar os precos a qualquer momento para criar promocoes especiais. Os novos precos serao aplicados imediatamente para todos os gestores que forem renovar seus planos.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
         <div class="tw">
           <div class="tmeta">
             <div class="card-title">🏢 Clientes / Restaurantes</div>
@@ -581,16 +689,50 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 // ── NAVEGAÇÃO ────────────────────────────
 function navTo(id) {
-  ['dash','clientes','ia','backup','saques'].forEach(s => {
+  ['dash','clientes','ia','backup','saques','planos'].forEach(s => {
     const sec = document.getElementById('sec-'+s);
     if (sec) sec.style.display = s===id ? 'block' : 'none';
     document.getElementById('nav-'+s)?.classList.toggle('on', s===id);
   });
-  const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA', backup:'Backup & Restore', saques:'Saques PIX' };
+  const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA', backup:'Backup & Restore', saques:'Saques PIX', planos:'Gerenciar Planos' };
   document.getElementById('topbar-title').textContent = titles[id] || id;
   if (id==='ia') iaAdminCarregar();
   if (id==='backup') renderBackupList();
   if (id==='saques') { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); conectarAdminSSE(); }
+  if (id==='planos') carregarPrecosPlanos();
+}
+
+// ── PLANOS ───────────────────────────────
+async function carregarPrecosPlanos() {
+  try {
+    const res = await fetch('/api/planos/precos');
+    if (res.ok) {
+      const data = await res.json();
+      const elEss = document.getElementById('adm-preco-essencial');
+      const elPre = document.getElementById('adm-preco-premium');
+      if (elEss) elEss.value = data.essencial || 79.99;
+      if (elPre) elPre.value = data.premium || 99.90;
+    }
+  } catch(e) { console.error('carregarPrecosPlanos:', e); }
+}
+
+async function salvarPrecosPlanos() {
+  const preco_essencial = parseFloat(document.getElementById('adm-preco-essencial').value) || 79.99;
+  const preco_premium = parseFloat(document.getElementById('adm-preco-premium').value) || 99.90;
+  
+  try {
+    const res = await fetch('/api/admin/planos/precos', {
+      method: 'POST',
+      headers: adminAuthHeader(),
+      body: JSON.stringify({ preco_essencial, preco_premium })
+    });
+    if (res.status === 401) { toast('err','Sessao expirada'); setTimeout(doLogout,1500); return; }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro ao salvar');
+    toast('ok', 'Precos atualizados com sucesso!');
+  } catch(e) {
+    toast('err', 'Erro: ' + e.message);
+  }
 }
 
 // ── CARREGAR DADOS ───────────────────────
