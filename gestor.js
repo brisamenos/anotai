@@ -5199,6 +5199,9 @@ async function renderMeuPlano() {
   const elBgDeco = document.getElementById('plano-bg-deco');
 
   if (elNome) elNome.textContent = 'Carregando...';
+  
+  // Carregar precos dos planos
+  carregarPrecosPlanos();
 
   try {
     const tid = _sessao?.tenant_id;
@@ -5351,6 +5354,231 @@ async function renderMeuPlano() {
     if (elStatus) elStatus.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px;text-align:center">Não foi possível carregar as informações do plano.</div>`;
   }
 }
+
+// ─────────────────────────────────────────
+// RENOVACAO DE PLANOS
+// ─────────────────────────────────────────
+let _planoSelecionado = 'premium';
+let _formaPagPlano = 'pix';
+let _precosPlanos = { essencial: 79.99, premium: 99.90 };
+let _pixPlanoInterval = null;
+
+async function carregarPrecosPlanos() {
+  try {
+    const res = await fetch('/api/planos/precos');
+    if (res.ok) {
+      const data = await res.json();
+      _precosPlanos = { essencial: data.essencial || 79.99, premium: data.premium || 99.90 };
+      const elEss = document.getElementById('preco-essencial');
+      const elPre = document.getElementById('preco-premium');
+      if (elEss) elEss.textContent = _precosPlanos.essencial.toFixed(2).replace('.', ',');
+      if (elPre) elPre.textContent = _precosPlanos.premium.toFixed(2).replace('.', ',');
+    }
+  } catch(e) { console.error('carregarPrecosPlanos:', e); }
+}
+
+function selecionarPlano(plano) {
+  _planoSelecionado = plano;
+  const cardEss = document.getElementById('plano-card-essencial');
+  const cardPre = document.getElementById('plano-card-premium');
+  const dotEss = document.getElementById('plano-dot-essencial');
+  const dotPre = document.getElementById('plano-dot-premium');
+  const checkEss = document.getElementById('plano-check-essencial');
+  const checkPre = document.getElementById('plano-check-premium');
+
+  if (plano === 'essencial') {
+    if (cardEss) { cardEss.style.borderColor = 'var(--accent)'; cardEss.style.background = 'rgba(59,130,246,.05)'; }
+    if (cardPre) { cardPre.style.borderColor = 'rgba(139,92,246,.3)'; cardPre.style.background = 'linear-gradient(135deg,rgba(139,92,246,.08),rgba(236,72,153,.05))'; }
+    if (dotEss) dotEss.style.background = 'var(--accent)';
+    if (dotPre) dotPre.style.background = 'transparent';
+    if (checkEss) checkEss.style.borderColor = 'var(--accent)';
+    if (checkPre) checkPre.style.borderColor = 'rgba(139,92,246,.5)';
+  } else {
+    if (cardEss) { cardEss.style.borderColor = 'var(--border)'; cardEss.style.background = 'var(--surface2)'; }
+    if (cardPre) { cardPre.style.borderColor = 'var(--purple)'; cardPre.style.background = 'linear-gradient(135deg,rgba(139,92,246,.12),rgba(236,72,153,.08))'; }
+    if (dotEss) dotEss.style.background = 'transparent';
+    if (dotPre) dotPre.style.background = 'var(--purple)';
+    if (checkEss) checkEss.style.borderColor = 'var(--border)';
+    if (checkPre) checkPre.style.borderColor = 'var(--purple)';
+  }
+}
+
+function selecionarFormaPagPlano(forma) {
+  _formaPagPlano = forma;
+  const optPix = document.getElementById('pag-opt-pix');
+  const optCartao = document.getElementById('pag-opt-cartao');
+  if (forma === 'pix') {
+    if (optPix) { optPix.style.background = 'rgba(59,130,246,.08)'; optPix.style.borderColor = 'var(--accent)'; }
+    if (optCartao) { optCartao.style.background = 'var(--surface)'; optCartao.style.borderColor = 'var(--border)'; }
+  } else {
+    if (optPix) { optPix.style.background = 'var(--surface)'; optPix.style.borderColor = 'var(--border)'; }
+    if (optCartao) { optCartao.style.background = 'rgba(59,130,246,.08)'; optCartao.style.borderColor = 'var(--accent)'; }
+  }
+}
+
+async function iniciarPagamentoPlano() {
+  const btn = document.getElementById('btn-pagar-plano');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processando...'; }
+  
+  const planoNome = _planoSelecionado === 'essencial' ? 'Plano Essencial' : 'Plano Premium';
+  const valor = _precosPlanos[_planoSelecionado];
+  
+  if (_formaPagPlano === 'pix') {
+    try {
+      const tid = _sessao?.tenant_id;
+      const res = await fetch('/api/planos/pagar-pix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+        body: JSON.stringify({ plano: _planoSelecionado, valor })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao criar PIX');
+      
+      // Mostrar modal com QR Code
+      document.getElementById('pix-plano-titulo').textContent = planoNome;
+      document.getElementById('pix-plano-valor').textContent = 'R$ ' + valor.toFixed(2).replace('.', ',');
+      document.getElementById('pix-plano-code').value = data.qr_code || '';
+      document.getElementById('pix-plano-mp-id').value = data.mp_payment_id || '';
+      
+      if (data.qr_code_base64) {
+        document.getElementById('pix-qr-img').innerHTML = `<img src="data:image/png;base64,${data.qr_code_base64}" style="width:200px;height:200px">`;
+      } else {
+        document.getElementById('pix-qr-img').innerHTML = '<div style="color:var(--muted);font-size:12px">QR Code nao disponivel.<br>Use o codigo PIX abaixo.</div>';
+      }
+      
+      document.getElementById('modal-pag-pix-plano').classList.add('on');
+      iniciarPollingPixPlano(data.mp_payment_id);
+      
+    } catch(e) {
+      sbToast('err', e.message);
+    }
+  } else {
+    // Cartao
+    document.getElementById('cartao-plano-titulo').textContent = planoNome;
+    document.getElementById('cartao-plano-valor').textContent = 'R$ ' + valor.toFixed(2).replace('.', ',');
+    document.getElementById('modal-pag-cartao-plano').classList.add('on');
+  }
+  
+  if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Renovar Plano'; }
+}
+
+function iniciarPollingPixPlano(mpId) {
+  if (_pixPlanoInterval) clearInterval(_pixPlanoInterval);
+  let checks = 0;
+  _pixPlanoInterval = setInterval(async () => {
+    checks++;
+    if (checks > 120) { // 10 minutos
+      clearInterval(_pixPlanoInterval);
+      document.getElementById('pix-status-text').textContent = 'Tempo esgotado. Tente novamente.';
+      return;
+    }
+    try {
+      const res = await fetch('/api/planos/status-pix?mp_payment_id=' + mpId);
+      const data = await res.json();
+      if (data.status === 'aprovado') {
+        clearInterval(_pixPlanoInterval);
+        document.getElementById('pix-status-text').textContent = 'Pagamento confirmado!';
+        document.getElementById('pix-status-text').parentElement.style.background = 'rgba(34,197,94,.1)';
+        document.getElementById('pix-status-text').parentElement.style.borderColor = 'rgba(34,197,94,.3)';
+        sbToast('ok', 'Pagamento confirmado! Seu plano foi renovado.');
+        setTimeout(() => {
+          fecharModalPagPlano();
+          renderMeuPlano();
+        }, 2000);
+      }
+    } catch(e) {}
+  }, 5000);
+}
+
+function copiarPixPlano() {
+  const code = document.getElementById('pix-plano-code').value;
+  if (!code) { sbToast('err', 'Codigo PIX nao disponivel'); return; }
+  navigator.clipboard.writeText(code).then(() => {
+    sbToast('ok', 'Codigo PIX copiado!');
+    const btn = document.getElementById('btn-copiar-pix-plano');
+    if (btn) { btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8l4 4 8-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Copiado!'; }
+  });
+}
+
+function fecharModalPagPlano() {
+  document.getElementById('modal-pag-pix-plano')?.classList.remove('on');
+  document.getElementById('modal-pag-cartao-plano')?.classList.remove('on');
+  if (_pixPlanoInterval) { clearInterval(_pixPlanoInterval); _pixPlanoInterval = null; }
+}
+
+function formatarCartao(el) {
+  let v = el.value.replace(/\D/g, '');
+  v = v.replace(/(\d{4})(?=\d)/g, '$1 ');
+  el.value = v.substring(0, 19);
+}
+
+function formatarValidade(el) {
+  let v = el.value.replace(/\D/g, '');
+  if (v.length >= 2) v = v.substring(0,2) + '/' + v.substring(2);
+  el.value = v.substring(0, 5);
+}
+
+function formatarCPF(el) {
+  let v = el.value.replace(/\D/g, '');
+  v = v.replace(/(\d{3})(\d)/, '$1.$2');
+  v = v.replace(/(\d{3})(\d)/, '$1.$2');
+  v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  el.value = v.substring(0, 14);
+}
+
+async function processarPagamentoCartao() {
+  const btn = document.getElementById('btn-pagar-cartao-plano');
+  const numero = document.getElementById('cartao-numero').value.replace(/\s/g, '');
+  const validade = document.getElementById('cartao-validade').value;
+  const cvv = document.getElementById('cartao-cvv').value;
+  const nome = document.getElementById('cartao-nome').value;
+  const cpf = document.getElementById('cartao-cpf').value.replace(/\D/g, '');
+  
+  if (!numero || numero.length < 13) { sbToast('err', 'Numero do cartao invalido'); return; }
+  if (!validade || validade.length < 5) { sbToast('err', 'Validade invalida'); return; }
+  if (!cvv || cvv.length < 3) { sbToast('err', 'CVV invalido'); return; }
+  if (!nome) { sbToast('err', 'Nome no cartao obrigatorio'); return; }
+  if (!cpf || cpf.length < 11) { sbToast('err', 'CPF invalido'); return; }
+  
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processando...'; }
+  
+  try {
+    const tid = _sessao?.tenant_id;
+    const [mes, ano] = validade.split('/');
+    const res = await fetch('/api/planos/pagar-cartao', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify({
+        plano: _planoSelecionado,
+        valor: _precosPlanos[_planoSelecionado],
+        cartao: { numero, mes: parseInt(mes), ano: parseInt('20' + ano), cvv, nome, cpf }
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro ao processar pagamento');
+    
+    if (data.status === 'aprovado') {
+      sbToast('ok', 'Pagamento aprovado! Seu plano foi renovado.');
+      fecharModalPagPlano();
+      renderMeuPlano();
+    } else if (data.status === 'pendente') {
+      sbToast('ok', 'Pagamento em analise. Aguarde confirmacao.');
+    } else {
+      throw new Error(data.status_detail || 'Pagamento recusado');
+    }
+  } catch(e) {
+    sbToast('err', e.message);
+  }
+  
+  if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Pagar agora'; }
+}
+
+// Inicializar selecao padrao
+setTimeout(() => {
+  selecionarPlano('premium');
+  carregarPrecosPlanos();
+}, 100);
+
 // ─────────────────────────────────────────
 // IMPRESSÃO TÉRMICA
 // ─────────────────────────────────────────
