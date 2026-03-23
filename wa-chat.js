@@ -195,11 +195,14 @@ function waConnectSSE() {
 function waOnSseMsg(msg) {
   if (!msg?.key?.remoteJid) return;
   const jid    = msg.key.remoteJid;
-  const fromMe = msg.key.fromMe === true || msg.fromMe === true;
+  if (jid.startsWith('status@') || jid.endsWith('@lid')) return;
 
-  // Salva nome do pushName se vier
-  if (!fromMe && msg.pushName && jid) {
-    WA.nameCache[jid] = msg.pushName;
+  // fromMe pode ser boolean true ou string "true"
+  const fromMe = msg.key.fromMe === true || msg.key.fromMe === 'true';
+
+  // Salva pushName de mensagens RECEBIDAS (EVO zera pushName quando fromMe=true)
+  if (!fromMe && msg.pushName?.trim()) {
+    WA.nameCache[jid] = msg.pushName.trim();
   }
 
   // Badge apenas para msgs recebidas, painel fechado ou outra conversa
@@ -422,11 +425,10 @@ async function waLoadMessages(silent = false) {
   }
 
   try {
-    // POST /chat/findMessages/{instance}
     const r = await EVO.req('POST', `/chat/findMessages/${inst}`, {
-      where: { key: { remoteJid: WA.activeJid } },
-      page:  1,
-      offset: 50   // limit
+      where:  { key: { remoteJid: WA.activeJid } },
+      page:   1,
+      offset: 60
     });
 
     let msgs = [];
@@ -435,12 +437,28 @@ async function waLoadMessages(silent = false) {
     else if (Array.isArray(d?.records))           msgs = d.records;
     else if (Array.isArray(d?.messages?.records)) msgs = d.messages.records;
     else if (Array.isArray(d?.messages))          msgs = d.messages;
-    else if (d?.messages?.records)                msgs = Object.values(d.messages.records);
+
+    // Filtro client-side (bug conhecido EVO 2.7 — where às vezes é ignorado)
+    const targetJid = WA.activeJid.toLowerCase();
+    msgs = msgs.filter(m => (m.key?.remoteJid||'').toLowerCase() === targetJid);
+
+    // Normaliza tipos — fromMe pode vir como string "true"/"false", ts pode ser string
+    msgs = msgs.map(m => ({
+      ...m,
+      key: { ...m.key, fromMe: m.key?.fromMe === true || m.key?.fromMe === 'true' },
+      messageTimestamp: +m.messageTimestamp || 0
+    }));
+
+    // Salva pushName de mensagens RECEBIDAS (fromMe=false tem o nome real)
+    msgs.forEach(m => {
+      if (!m.key.fromMe && m.pushName?.trim())
+        WA.nameCache[m.key.remoteJid] = m.pushName.trim();
+    });
 
     // Ordena crescente
     msgs.sort((a,b) => (a.messageTimestamp||0) - (b.messageTimestamp||0));
 
-    // Polling: ignora se nada novo
+    // Polling: nada novo?
     if (silent && msgs.length > 0) {
       const lts = msgs[msgs.length-1].messageTimestamp || 0;
       if (lts === WA.lastMsgTs) return;
@@ -448,12 +466,6 @@ async function waLoadMessages(silent = false) {
     } else if (msgs.length > 0) {
       WA.lastMsgTs = msgs[msgs.length-1].messageTimestamp || 0;
     }
-
-    // Salva pushNames no cache
-    msgs.forEach(m => {
-      if (m.pushName && m.key?.remoteJid && !m.key.fromMe)
-        WA.nameCache[m.key.remoteJid] = m.pushName;
-    });
 
     if (loadEl) loadEl.style.display = 'none';
     msgsEl.innerHTML = '';
@@ -465,7 +477,7 @@ async function waLoadMessages(silent = false) {
 
     let lastDate = '';
     msgs.forEach(msg => {
-      const ds = waFmtDate(msg.messageTimestamp || msg.key?.timestamp);
+      const ds = waFmtDate(msg.messageTimestamp);
       if (ds && ds !== lastDate) {
         lastDate = ds;
         const sep = document.createElement('div');
@@ -487,12 +499,17 @@ async function waLoadMessages(silent = false) {
 
 /* ─── Construir elemento de mensagem ────────────────── */
 function waBuildMsgEl(msg) {
-  // fromMe: verifica key.fromMe (principal) e msg.fromMe (fallback)
-  // pushName presente = mensagem recebida (exceto se fromMe=true explícito)
-  const fromMe = msg.key?.fromMe === true || (msg.fromMe === true && !msg.pushName);
-  const ts     = msg.messageTimestamp || msg.key?.timestamp;
-  const time   = ts ? new Date((+ts > 9999999999 ? +ts : +ts*1000))
-                        .toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
+  // ── fromMe: ÚNICO campo confiável é key.fromMe (boolean ou string "true"/"false")
+  // Quando fromMe=true, a Evolution API define pushName='' explicitamente
+  // NÃO usar pushName para inferir fromMe — é ambíguo e causa erros
+  const rawFromMe = msg.key?.fromMe;
+  const fromMe = rawFromMe === true || rawFromMe === 'true';
+
+  const rawTs  = msg.messageTimestamp || msg.key?.timestamp || 0;
+  const tsNum  = +rawTs; // converte string "1717689097" para número
+  const ts     = tsNum > 9999999999 ? tsNum : tsNum * 1000; // ms
+  const time   = tsNum ? new Date(ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
+
   const m      = msg.message || {};
   const msgId  = msg.key?.id || '';
   const remJid = msg.key?.remoteJid || WA.activeJid || '';
