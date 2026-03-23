@@ -1861,6 +1861,207 @@ Use no seu próximo pedido 🛍️</textarea>
     <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:16px">Recursos inclusos no seu plano</div>
     <div id="plano-recursos-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px"></div>
   </div>
+
+  <!-- Renovar Plano -->
+  <div class="card" style="padding:24px;margin-top:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:18px;font-weight:800;font-family:'Playfair Display',serif;margin-bottom:4px">Renovar ou Alterar Plano</div>
+        <div style="font-size:13px;color:var(--muted)">Escolha o plano ideal para o seu negocio e pague de forma rapida e segura</div>
+      </div>
+    </div>
+
+    <!-- Planos disponiveis -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px" id="planos-disponiveis-grid">
+      <!-- Plano Essencial -->
+      <div class="plano-card-option" id="plano-card-essencial" onclick="selecionarPlano('essencial')" style="background:var(--surface2);border:2px solid var(--border);border-radius:16px;padding:24px;cursor:pointer;transition:all .2s;position:relative">
+        <div style="position:absolute;top:12px;right:12px;width:20px;height:20px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center" id="plano-check-essencial">
+          <div style="width:10px;height:10px;border-radius:50%;background:transparent" id="plano-dot-essencial"></div>
+        </div>
+        <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Plano Essencial</div>
+        <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:12px">
+          <span style="font-size:11px;color:var(--muted)">R$</span>
+          <span style="font-size:32px;font-weight:800;font-family:'Playfair Display',serif" id="preco-essencial">79,99</span>
+          <span style="font-size:12px;color:var(--muted)">/mes</span>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Ideal para quem esta comecando</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--success)"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            Cardapio digital ilimitado
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--success)"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            Gestao de pedidos
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--success)"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            Relatorios basicos
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--danger)"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            Sem IA e automacao
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--danger)"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            Sem robo WhatsApp
+          </div>
+        </div>
+      </div>
+
+      <!-- Plano Premium -->
+      <div class="plano-card-option" id="plano-card-premium" onclick="selecionarPlano('premium')" style="background:linear-gradient(135deg,rgba(139,92,246,.08),rgba(236,72,153,.05));border:2px solid rgba(139,92,246,.3);border-radius:16px;padding:24px;cursor:pointer;transition:all .2s;position:relative">
+        <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#7c3aed,#ec4899);color:#fff;font-size:10px;font-weight:700;padding:3px 12px;border-radius:99px;text-transform:uppercase;letter-spacing:.5px">Mais popular</div>
+        <div style="position:absolute;top:12px;right:12px;width:20px;height:20px;border-radius:50%;border:2px solid rgba(139,92,246,.5);display:flex;align-items:center;justify-content:center" id="plano-check-premium">
+          <div style="width:10px;height:10px;border-radius:50%;background:transparent" id="plano-dot-premium"></div>
+        </div>
+        <div style="font-size:12px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;margin-top:8px">Plano Premium</div>
+        <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:12px">
+          <span style="font-size:11px;color:var(--muted)">R$</span>
+          <span style="font-size:32px;font-weight:800;font-family:'Playfair Display',serif;color:var(--purple)" id="preco-premium">99,90</span>
+          <span style="font-size:12px;color:var(--muted)">/mes</span>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Todas as ferramentas para escalar</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--success)"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            Tudo do Essencial
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--purple)"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
+            Robo WhatsApp com IA
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--purple)"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
+            Automacoes avancadas
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--purple)"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
+            Relatorios completos
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--success);font-weight:600">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--success)"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            Suporte prioritario
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Forma de pagamento -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px">Forma de pagamento</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <label style="flex:1;min-width:140px;cursor:pointer">
+          <input type="radio" name="forma-pag-plano" value="pix" checked style="display:none" onchange="selecionarFormaPagPlano('pix')">
+          <div id="pag-opt-pix" style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:rgba(59,130,246,.08);border:2px solid var(--accent);border-radius:10px;transition:all .15s">
+            <div style="width:36px;height:36px;border-radius:8px;background:rgba(59,130,246,.15);display:flex;align-items:center;justify-content:center">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" style="color:var(--accent)"><path d="M4 12L8 8l4 4M4 4l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div>
+              <div style="font-size:13px;font-weight:700">PIX QR Code</div>
+              <div style="font-size:11px;color:var(--muted)">Pagamento instantaneo</div>
+            </div>
+          </div>
+        </label>
+        <label style="flex:1;min-width:140px;cursor:pointer">
+          <input type="radio" name="forma-pag-plano" value="cartao" style="display:none" onchange="selecionarFormaPagPlano('cartao')">
+          <div id="pag-opt-cartao" style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--surface);border:2px solid var(--border);border-radius:10px;transition:all .15s">
+            <div style="width:36px;height:36px;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" style="color:var(--muted)"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/><circle cx="4.5" cy="10.5" r="1" fill="currentColor"/></svg>
+            </div>
+            <div>
+              <div style="font-size:13px;font-weight:700">Cartao de Credito</div>
+              <div style="font-size:11px;color:var(--muted)">Visa, Master, Elo</div>
+            </div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Botao de pagamento -->
+    <button class="btn bp" style="width:100%;padding:16px;font-size:15px;justify-content:center" onclick="iniciarPagamentoPlano()" id="btn-pagar-plano">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Renovar Plano
+    </button>
+    <div style="text-align:center;margin-top:12px;font-size:12px;color:var(--muted)">
+      Pagamento seguro via Mercado Pago. Apos a confirmacao, seu plano sera ativado automaticamente.
+    </div>
+  </div>
+</div>
+
+<!-- Modal de Pagamento PIX -->
+<div class="modal-bg" id="modal-pag-pix-plano">
+  <div class="modal" style="width:450px;text-align:center">
+    <button class="modal-x" onclick="fecharModalPagPlano()">x</button>
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Pagamento via PIX</div>
+    <div style="font-size:20px;font-weight:800;font-family:'Playfair Display',serif;margin-bottom:4px" id="pix-plano-titulo">Plano Premium</div>
+    <div style="font-size:28px;font-weight:800;color:var(--accent);margin-bottom:20px" id="pix-plano-valor">R$ 99,90</div>
+    
+    <div id="pix-qr-container" style="background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;display:inline-block">
+      <div id="pix-qr-img" style="width:200px;height:200px;display:flex;align-items:center;justify-content:center;color:var(--muted)">
+        <div class="spinner" style="width:24px;height:24px;border:3px solid rgba(0,0,0,.1);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite"></div>
+      </div>
+    </div>
+    
+    <div style="margin-bottom:16px">
+      <button class="btn bg2" style="width:100%" onclick="copiarPixPlano()" id="btn-copiar-pix-plano">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M3 11V3h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Copiar codigo PIX
+      </button>
+    </div>
+    
+    <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:10px;padding:12px;font-size:12px;color:var(--muted)">
+      <div style="display:flex;align-items:center;gap:8px;justify-content:center">
+        <div class="spinner" style="width:14px;height:14px;border:2px solid rgba(59,130,246,.2);border-top-color:var(--accent);border-radius:50%"></div>
+        <span id="pix-status-text">Aguardando pagamento...</span>
+      </div>
+    </div>
+    <input type="hidden" id="pix-plano-code">
+    <input type="hidden" id="pix-plano-mp-id">
+  </div>
+</div>
+
+<!-- Modal de Pagamento Cartao -->
+<div class="modal-bg" id="modal-pag-cartao-plano">
+  <div class="modal" style="width:450px">
+    <button class="modal-x" onclick="fecharModalPagPlano()">x</button>
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Pagamento via Cartao</div>
+    <div style="font-size:20px;font-weight:800;font-family:'Playfair Display',serif;margin-bottom:4px" id="cartao-plano-titulo">Plano Premium</div>
+    <div style="font-size:28px;font-weight:800;color:var(--accent);margin-bottom:20px;text-align:center" id="cartao-plano-valor">R$ 99,90</div>
+    
+    <div style="margin-bottom:14px">
+      <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Numero do cartao</label>
+      <input class="minput" id="cartao-numero" type="text" placeholder="0000 0000 0000 0000" maxlength="19" oninput="formatarCartao(this)">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Validade</label>
+        <input class="minput" id="cartao-validade" type="text" placeholder="MM/AA" maxlength="5" oninput="formatarValidade(this)">
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">CVV</label>
+        <input class="minput" id="cartao-cvv" type="text" placeholder="123" maxlength="4">
+      </div>
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Nome no cartao</label>
+      <input class="minput" id="cartao-nome" type="text" placeholder="NOME COMO NO CARTAO" style="text-transform:uppercase">
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">CPF do titular</label>
+      <input class="minput" id="cartao-cpf" type="text" placeholder="000.000.000-00" maxlength="14" oninput="formatarCPF(this)">
+    </div>
+    
+    <button class="btn bp" style="width:100%;padding:14px;font-size:14px;justify-content:center" onclick="processarPagamentoCartao()" id="btn-pagar-cartao-plano">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Pagar agora
+    </button>
+    
+    <div style="text-align:center;margin-top:12px;font-size:11px;color:var(--muted)">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:4px"><path d="M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM7 7V5h2v2H7zm0 4V8h2v3H7z" fill="currentColor"/></svg>
+      Pagamento seguro via Mercado Pago
+    </div>
+  </div>
 </div>
 
 <!-- CLIENTES -->
