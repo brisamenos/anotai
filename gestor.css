@@ -1045,23 +1045,28 @@ td:first-child{padding-left:18px}
   .ibtn { width: 36px; height: 36px; }
   .tnr { gap: 4px; }
 
-  /* ── Sidebar ── */
+  /* ── Sidebar — slide animado da esquerda ── */
   .sidebar {
-    display: none;
-    width: 0 !important;
-    transition: none !important;
+    display: flex !important;       /* sempre montado no DOM */
+    width: 282px !important;
+    max-width: 88vw !important;
     position: fixed;
-    inset: 0;
-    z-index: 300;
+    top: 0; bottom: 0; left: 0;
+    z-index: 310;
     padding-top: calc(var(--nav-h) + var(--safe-top));
+    padding-left: var(--safe-left);
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border2);
+    box-shadow: 6px 0 48px rgba(0,0,0,.75);
+    transform: translateX(-100%);       /* escondida por padrão */
+    transition: transform .28s cubic-bezier(.4,0,.2,1) !important;
+    will-change: transform;
+    -webkit-overflow-scrolling: touch;
   }
   .sidebar.mobile-open {
-    display: flex !important;
-    width: 280px !important;
-    max-width: 85vw !important;
-    border-right: 1px solid var(--border2);
-    box-shadow: 6px 0 40px rgba(0,0,0,.7);
-    overflow-y: auto;
+    transform: translateX(0) !important; /* revela ao abrir */
   }
   .sb-pin { display: none !important; }
 
@@ -1369,4 +1374,209 @@ td:first-child{padding-left:18px}
 @media print {
   .mob-bottom-nav,
   .mob-sidebar-overlay { display: none !important; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   FABs FLUTUANTES — Robô + WhatsApp (apenas mobile)
+   Posicionados à esquerda, verticalmente centrados
+══════════════════════════════════════════════════════════ */
+.mob-fab-stack {
+  display: none; /* oculto no desktop */
+}
+
+@media (max-width: 900px) {
+  /* ── Contêiner dos FABs ── */
+  .mob-fab-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    position: fixed;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 290;
+  }
+
+  /* ── FAB base ── */
+  .mob-fab {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    box-shadow: 0 4px 16px rgba(0,0,0,.5);
+    transition: transform .22s cubic-bezier(.34,1.56,.64,1), box-shadow .2s;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  .mob-fab:active { transform: scale(.92) !important; }
+
+  /* ── FAB Robô ── */
+  .mob-fab-robo {
+    background: linear-gradient(145deg,#1e2130,#181b24);
+    color: var(--purple);
+    border-color: rgba(139,92,246,.3);
+  }
+  .mob-fab-robo:active { box-shadow: 0 2px 8px rgba(139,92,246,.4); }
+
+  /* ── FAB WhatsApp ── */
+  .mob-fab-wa {
+    background: linear-gradient(145deg,#0a1f12,#0d1a10);
+    color: #25D366;
+    border-color: rgba(37,211,102,.3);
+  }
+  .mob-fab-wa:active { box-shadow: 0 2px 8px rgba(37,211,102,.4); }
+
+  /* ── Dot de status (robô) ── */
+  .mob-fab-robo .fab-status-dot {
+    position: absolute;
+    top: 6px; right: 6px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    border: 1.5px solid var(--bg);
+    transition: background .3s;
+  }
+
+  /* ── Badge de não-lidos (whatsapp) ── */
+  .mob-fab-wa .fab-badge {
+    position: absolute;
+    top: -4px; right: -4px;
+    min-width: 17px; height: 17px;
+    background: #25D366;
+    border-radius: 99px;
+    font-size: 9px; font-weight: 700;
+    display: none;
+    align-items: center; justify-content: center;
+    border: 2px solid var(--bg);
+    padding: 0 3px;
+    color: #fff;
+    font-family: 'Outfit', sans-serif;
+  }
+  .mob-fab-wa .fab-badge.on { display: flex; }
+
+  /* ── Tooltip label (aparece ao pressionar) ── */
+  .mob-fab::after {
+    content: attr(data-label);
+    position: absolute;
+    left: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(14,14,14,.92);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 4px 9px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'Outfit', sans-serif;
+    color: var(--text);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .18s;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4);
+  }
+  .mob-fab:focus::after,
+  .mob-fab.show-label::after { opacity: 1; }
+
+  /* ── Pulsação no FAB WA quando tem msg nova ── */
+  .mob-fab-wa.has-unread {
+    animation: fabPulse 2.5s ease-in-out infinite;
+  }
+  @keyframes fabPulse {
+    0%,100% { box-shadow: 0 4px 16px rgba(0,0,0,.5); }
+    50%      { box-shadow: 0 4px 20px rgba(37,211,102,.45), 0 0 0 4px rgba(37,211,102,.12); }
+  }
+
+  /* ══ WA CHAT — MOBILE REIMAGINADO ══════════════════════
+     Slide up da parte inferior — experiência nativa
+  ══════════════════════════════════════════════════════ */
+  #wa-panel {
+    align-items: flex-end !important;
+    justify-content: stretch !important;
+  }
+  #wa-panel .wa-backdrop {
+    background: rgba(0,0,0,.7);
+  }
+  #wa-panel .wa-panel-inner {
+    width: 100vw !important;
+    height: 93dvh !important;
+    max-height: 93dvh;
+    margin-top: 0 !important;
+    border-left: none !important;
+    border-radius: 20px 20px 0 0;
+    padding-bottom: var(--safe-bottom);
+    animation: waSlideUp .3s cubic-bezier(.4,0,.2,1) !important;
+    border-top: 1px solid var(--border2);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  @keyframes waSlideUp {
+    from { transform: translateY(100%); opacity: .4; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+  /* Handle bar drag */
+  #wa-panel .wa-panel-inner::before {
+    content: '';
+    flex-shrink: 0;
+    display: block;
+    width: 36px; height: 4px;
+    background: var(--border2);
+    border-radius: 99px;
+    margin: 10px auto 4px;
+  }
+  /* Lista de chats ocupa tela cheia no mobile */
+  #wa-panel .wa-list-col {
+    width: 100% !important;
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    transition: transform .24s cubic-bezier(.4,0,.2,1);
+    padding-top: 4px;
+  }
+  #wa-panel .wa-list-col.hidden {
+    transform: translateX(-100%);
+  }
+  #wa-panel .wa-conv-col {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+  }
+  /* Botão voltar sempre visível */
+  #wa-panel .wa-back-btn {
+    display: flex !important;
+  }
+  /* Input de mensagem — sem zoom iOS */
+  #wa-panel input,
+  #wa-panel textarea {
+    font-size: 16px !important;
+  }
+  /* Head do WA com altura maior para toque */
+  #wa-panel .wa-chat-head {
+    min-height: 56px;
+  }
+  #wa-panel .wa-list-head {
+    min-height: 56px;
+  }
+  /* Botões de ação maiores */
+  #wa-panel .wa-send-btn,
+  #wa-panel .wa-mic-btn {
+    width: 44px !important;
+    height: 44px !important;
+  }
+  /* Área de mensagens scroll suave */
+  #wa-panel .wa-msgs {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+}
+
+/* ─── Impressão: esconde FABs ───────────────────────────── */
+@media print {
+  .mob-fab-stack { display: none !important; }
 }
