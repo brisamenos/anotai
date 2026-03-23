@@ -8570,7 +8570,7 @@ async function waLoadChats() {
   listEl.innerHTML = `<div class="wa-empty-state"><div class="wa-typing-dots"><span></span><span></span><span></span></div><div style="font-size:12px;color:var(--muted);margin-top:10px">Carregando conversas...</div></div>`;
 
   try {
-    const r = await EVO.req('GET', `/chat/findChats/${inst}?page=1&offset=30`);
+    const r = await EVO.req('GET', `/chat/findChats/${inst}?page=1&offset=500`);
     let chats = r.data;
 
     // Evolution API pode retornar em formato diferente
@@ -8580,15 +8580,10 @@ async function waLoadChats() {
       else chats = [];
     }
 
-    // Apenas conversas individuais — exclui grupos, broadcast, status e newsletter
+    // Exibe todas as conversas (individuais, grupos, etc) — exceto status técnico
     chats = chats.filter(c => {
       const id = (c.id || c.remoteJid || '').toLowerCase();
-      // Deve terminar em @s.whatsapp.net (conversa individual)
-      if (id.endsWith('@s.whatsapp.net')) return true;
-      // Aceita também formato numérico puro sem domínio (alguns clientes retornam assim)
-      if (/^\d+$/.test(id)) return true;
-      // Tudo mais (grupos, broadcast, status, newsletter, lid) é descartado
-      return false;
+      return !id.startsWith('status@') && id !== '';
     });
 
     // Ordena por mensagem mais recente
