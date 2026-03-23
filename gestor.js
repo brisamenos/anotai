@@ -1077,7 +1077,7 @@ function nav(id){
     initChat();
   }
   if(id==='qrcode') renderQR();
-  if(id==='cupom') renderCupons();
+  if(id==='cupom') { renderCupons(); loadCashbackConfig(); }
   if(id==='fidelidade') renderFidelidade();
   if(id==='garcom') { renderGarcom(); loadGarcons(); }
   if(id==='kds') renderKDS();
@@ -3431,6 +3431,170 @@ async function addCupom() {
   document.getElementById('cupom-code').value = '';
   renderCupons();
   sbToast('ok','Cupom criado!');
+}
+
+// ─────────────────────────────────────────
+// CASHBACK
+// ─────────────────────────────────────────
+let _cbClienteAtual = null; // { id, name, phone, cashback_saldo }
+
+async function loadCashbackConfig() {
+  try {
+    const tid = _sessao?.tenant_id || '';
+    const res = await fetch('/api/cashback/config', {
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid }
+    });
+    if (!res.ok) return;
+    const cfg = await res.json();
+    const toggle = document.getElementById('cb-toggle-ativo');
+    if (toggle) { toggle.classList.toggle('on', !!cfg.ativo); }
+    const pct = document.getElementById('cb-pct');
+    const min = document.getElementById('cb-min-pedido');
+    const val = document.getElementById('cb-validade');
+    if (pct) pct.value = cfg.pct || '';
+    if (min) min.value = cfg.min_pedido || '';
+    if (val) val.value = cfg.validade_dias || '';
+  } catch(e) {
+    console.error('[Cashback] loadCashbackConfig:', e);
+  }
+}
+
+async function saveCashbackConfig() {
+  const ativo     = document.getElementById('cb-toggle-ativo')?.classList.contains('on') || false;
+  const pct       = parseFloat(document.getElementById('cb-pct')?.value) || 0;
+  const min_pedido= parseFloat(document.getElementById('cb-min-pedido')?.value) || 0;
+  const validade_dias = parseInt(document.getElementById('cb-validade')?.value) || 0;
+
+  if (pct < 0 || pct > 100) { sbToast('err', 'Percentual deve ser entre 0 e 100'); return; }
+
+  sbLoading(true);
+  try {
+    const tid = _sessao?.tenant_id || '';
+    const res = await fetch('/api/cashback/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify({ ativo, pct, min_pedido, validade_dias })
+    });
+    if (res.ok) {
+      sbToast('ok', `Cashback ${ativo ? 'ativado' : 'desativado'} — ${pct}% por pedido`);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      sbToast('err', err.error || 'Erro ao salvar configuração');
+    }
+  } catch(e) {
+    sbToast('err', 'Erro de conexão');
+  }
+  sbLoading(false);
+}
+
+async function cbBuscarCliente() {
+  const phone = (document.getElementById('cb-phone-busca')?.value || '').replace(/\D/g, '');
+  if (!phone || phone.length < 8) { sbToast('err', 'Informe um telefone válido'); return; }
+
+  sbLoading(true);
+  try {
+    const tid = _sessao?.tenant_id || '';
+
+    // Busca saldo
+    const resSaldo = await fetch(`/api/cashback/saldo?phone=${encodeURIComponent(phone)}`, {
+      headers: { 'x-tenant-id': tid }
+    });
+    const saldoData = await resSaldo.json().catch(() => ({}));
+
+    // Busca dados do cliente pelo customers
+    const { data: clientes } = await sb.from('customers').select('id,name,phone,cashback_saldo').eq('tenant_id', tid);
+    const cliente = (clientes || []).find(c => (c.phone || '').replace(/\D/g,'').slice(-8) === phone.slice(-8));
+
+    _cbClienteAtual = cliente ? { ...cliente, cashback_saldo: saldoData.saldo || cliente.cashback_saldo || 0 } : null;
+
+    const saldo = saldoData.saldo || 0;
+    const nome  = cliente?.name || 'Cliente';
+    const tel   = cliente?.phone || phone;
+
+    // Preenche resultado
+    const el = id => document.getElementById(id);
+    if (el('cb-res-nome'))  el('cb-res-nome').textContent  = nome;
+    if (el('cb-res-phone')) el('cb-res-phone').textContent = tel;
+    if (el('cb-res-saldo')) el('cb-res-saldo').textContent = 'R$ ' + saldo.toFixed(2).replace('.', ',');
+
+    // Preenche msg WA com dados reais
+    const msgEl = el('cb-msg-wa');
+    if (msgEl) {
+      msgEl.value = `💰 ${nome}, você tem R$ ${saldo.toFixed(2).replace('.', ',')} de cashback disponível!\nUse no seu próximo pedido 🛍️`;
+    }
+
+    // Exibe resultado
+    if (el('cb-resultado'))   el('cb-resultado').style.display   = '';
+    if (el('cb-busca-vazio')) el('cb-busca-vazio').style.display = 'none';
+
+  } catch(e) {
+    console.error('[Cashback] cbBuscarCliente:', e);
+    sbToast('err', 'Erro ao buscar cliente');
+  }
+  sbLoading(false);
+}
+
+function cbLimparResultado() {
+  const el = id => document.getElementById(id);
+  if (el('cb-resultado'))   el('cb-resultado').style.display   = 'none';
+  if (el('cb-busca-vazio')) el('cb-busca-vazio').style.display = '';
+  _cbClienteAtual = null;
+}
+
+async function cbEnviarWA() {
+  const phone = (document.getElementById('cb-phone-busca')?.value || '').replace(/\D/g, '');
+  if (!phone) { sbToast('err', 'Nenhum cliente selecionado'); return; }
+
+  const msg = document.getElementById('cb-msg-wa')?.value?.trim();
+  if (!msg) { sbToast('err', 'Digite a mensagem'); return; }
+
+  sbLoading(true);
+  try {
+    const r = await EVO.sendText(phone, msg);
+    if (r.ok || r.status === 201) {
+      sbToast('ok', 'Mensagem enviada via WhatsApp ✓');
+    } else {
+      sbToast('err', 'Erro ao enviar — verifique se o WhatsApp está conectado no Robô');
+    }
+  } catch(e) {
+    sbToast('err', 'Erro ao enviar mensagem');
+  }
+  sbLoading(false);
+}
+
+async function cbAjustarSaldo() {
+  if (!_cbClienteAtual?.id) { sbToast('err', 'Busque um cliente primeiro'); return; }
+  const valor = parseFloat(document.getElementById('cb-ajuste-val')?.value);
+  if (isNaN(valor) || valor === 0) { sbToast('err', 'Informe um valor diferente de zero'); return; }
+
+  sbLoading(true);
+  try {
+    const tid = _sessao?.tenant_id || '';
+    const res = await fetch('/api/cashback/ajustar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify({ customer_id: _cbClienteAtual.id, valor })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      const novoSaldo = data.saldo ?? 0;
+      const saldoEl = document.getElementById('cb-res-saldo');
+      if (saldoEl) saldoEl.textContent = 'R$ ' + novoSaldo.toFixed(2).replace('.', ',');
+      // Atualiza msg WA com novo saldo
+      const msgEl = document.getElementById('cb-msg-wa');
+      if (msgEl && _cbClienteAtual) {
+        msgEl.value = `💰 ${_cbClienteAtual.name || 'Cliente'}, você tem R$ ${novoSaldo.toFixed(2).replace('.', ',')} de cashback disponível!\nUse no seu próximo pedido 🛍️`;
+      }
+      _cbClienteAtual.cashback_saldo = novoSaldo;
+      document.getElementById('cb-ajuste-val').value = '';
+      sbToast('ok', `Saldo ${valor > 0 ? 'creditado' : 'debitado'}: R$ ${Math.abs(valor).toFixed(2).replace('.', ',')}`);
+    } else {
+      sbToast('err', data.error || 'Erro ao ajustar saldo');
+    }
+  } catch(e) {
+    sbToast('err', 'Erro de conexão');
+  }
+  sbLoading(false);
 }
 
 // ─────────────────────────────────────────
