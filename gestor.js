@@ -8570,8 +8570,15 @@ async function waLoadChats() {
   listEl.innerHTML = `<div class="wa-empty-state"><div class="wa-typing-dots"><span></span><span></span><span></span></div><div style="font-size:12px;color:var(--muted);margin-top:10px">Carregando conversas...</div></div>`;
 
   try {
-    const r = await EVO.req('GET', `/chat/findChats/${inst}?page=1&offset=500`);
+    // Evolution API v2: POST com body vazio retorna todos os chats
+    let r = await EVO.req('POST', `/chat/findChats/${inst}`, {});
     let chats = r.data;
+
+    // Fallback: alguns versions usam GET sem params
+    if (!r.ok || !chats) {
+      r = await EVO.req('GET', `/chat/findChats/${inst}`);
+      chats = r.data;
+    }
 
     // Evolution API pode retornar em formato diferente
     if (!Array.isArray(chats)) {
