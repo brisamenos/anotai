@@ -161,7 +161,11 @@ async function loadAllData(silent = false) {
       safe(sb.from('menu_items').select('*').order('sort_order').order('id')),
       safe(sb.from('categories').select('*').order('sort_order')),
       safe(sb.from('orders').select('*').in('status',['analise','producao','pronto']).order('id',{ascending:false})),
-      safe(sb.from('movimentos').select('*').gte('created_at', new Date().toISOString().split('T')[0]).order('created_at')),
+      safe(sb.from('movimentos').select('*').gte('created_at', (() => {
+        // Usa data local BR (UTC-3) para não perder movimentos do início do dia
+        const d = new Date(); d.setHours(d.getHours() - 3);
+        return d.toISOString().split('T')[0];
+      })()).order('created_at')),
       safe(sb.from('cupons').select('*').order('id')),
       safe(sb.from('mesas').select('*').order('num')),
       safe(sb.from('estoque').select('*').order('id')),
@@ -8400,4 +8404,3 @@ async function deleteCliente() {
 }
 
 // ── Fim CLIENTES ─────────────────────────────────────
-
