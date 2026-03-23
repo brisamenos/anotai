@@ -3652,6 +3652,71 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
 </nav>
 <div class="mob-sidebar-overlay" id="mob-sidebar-overlay" onclick="document.querySelector('.sidebar').classList.remove('mobile-open');this.classList.remove('on')"></div>
 
+<!-- FABs FLUTUANTES — Robô + WhatsApp (mobile only) -->
+<div class="mob-fab-stack" id="mob-fab-stack">
+  <button class="mob-fab mob-fab-robo" id="mob-fab-robo"
+    onclick="nav('robo');mobBnActivate('menu')"
+    data-label="Robô WhatsApp"
+    title="Robô">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <rect x="7" y="11" width="10" height="8" rx="2" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M9 11V9a3 3 0 0 1 6 0v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="10" cy="15" r="1" fill="currentColor"/>
+      <circle cx="14" cy="15" r="1" fill="currentColor"/>
+      <path d="M12 5v2M5 15H7M17 15h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <span class="fab-status-dot" id="mob-fab-robo-dot"></span>
+  </button>
+  <button class="mob-fab mob-fab-wa" id="mob-fab-wa"
+    onclick="waOpenPanel()"
+    data-label="Chat WhatsApp"
+    title="WhatsApp">
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="none">
+      <path d="M13.5 7.75a5.75 5.75 0 1 1-9.6-4.28L2.5 1.5l1.97 1.17A5.72 5.72 0 0 1 13.5 7.75Z" stroke="#25D366" stroke-width="1.3" fill="none"/>
+      <path d="M6 6.5c.3.8.9 1.5 1.5 2s1.5.9 2 .6l.5-.3c.2-.1.4-.1.5.1l.8 1.1c.1.2.1.4-.1.5-.8.5-2.1.5-3.2-.4C6.9 9.2 6 8 5.8 6.8c-.1-.6.1-1.1.4-1.3.2-.1.4-.1.5.1l.8 1.1c.1.1.1.3 0 .4l-.5.4Z" fill="#25D366"/>
+    </svg>
+    <span class="fab-badge" id="mob-fab-wa-badge">0</span>
+  </button>
+</div>
+
+<script>
+/* ── Sync FAB status dot com o dot do robô no topnav ── */
+(function syncFabStatus() {
+  var srcDot  = document.getElementById('evo-status-dot-top');
+  var fabDot  = document.getElementById('mob-fab-robo-dot');
+  var waBadge = document.getElementById('mob-fab-wa-badge');
+  var waSrc   = document.getElementById('wa-unread-badge');
+
+  function sync() {
+    /* Robô: copia a cor do dot do topnav */
+    if (srcDot && fabDot) {
+      fabDot.style.background = window.getComputedStyle(srcDot).background || '#64748b';
+    }
+    /* WA: copia badge de não-lidos */
+    if (waSrc && waBadge) {
+      var n = waSrc.textContent.trim();
+      var hasUnread = n && n !== '0';
+      waBadge.textContent = n;
+      waBadge.classList.toggle('on', hasUnread);
+      var fabWa = document.getElementById('mob-fab-wa');
+      if (fabWa) fabWa.classList.toggle('has-unread', hasUnread);
+    }
+  }
+  sync();
+  setInterval(sync, 1500);
+})();
+
+/* ── Tooltip ao pressionar FAB (touch feedback) ── */
+document.querySelectorAll('.mob-fab').forEach(function(fab) {
+  fab.addEventListener('touchstart', function() {
+    fab.classList.add('show-label');
+  }, {passive: true});
+  fab.addEventListener('touchend', function() {
+    setTimeout(function() { fab.classList.remove('show-label'); }, 600);
+  }, {passive: true});
+});
+</script>
+
 <script>
 function mobBnActivate(id) {
   document.querySelectorAll('.mob-bn-item').forEach(b => b.classList.remove('on'));
