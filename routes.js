@@ -784,13 +784,26 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const cfg  = db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tenantId)
       const inst = cfg?.evo_instance || EVO_INST
       if (!inst) { send(res, 200, { url: null }); return true }
-      const r    = await fetch(`${EVO_URL}/chat/fetchProfilePictureUrl/${inst}`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', apikey: EVO_KEY },
-        body:    JSON.stringify({ number })
-      })
-      const data = await r.json().catch(() => ({}))
-      const url  = data?.profilePictureUrl || data?.image || data?.url || data?.picture || null
+
+      // Tenta diferentes formatos de número para máxima compatibilidade
+      const n = number.replace(/\D/g,'')
+      const formats = [n, `${n}@s.whatsapp.net`, `${n}@c.us`]
+      // Para BR: tenta também sem o dígito extra (55 88 9XXXX → 55 88 XXXX)
+      if (n.startsWith('55') && n.length === 13) formats.push(n.slice(0,4) + n.slice(5))
+
+      let url = null
+      for (const num of formats) {
+        try {
+          const r = await fetch(`${EVO_URL}/chat/fetchProfilePictureUrl/${inst}`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', apikey: EVO_KEY },
+            body:    JSON.stringify({ number: num })
+          })
+          const data = await r.json().catch(() => ({}))
+          url = data?.profilePictureUrl || data?.image || data?.url || data?.picture || null
+          if (url) break
+        } catch {}
+      }
       send(res, 200, { url })
     } catch(e) { send(res, 200, { url: null }) }
     return true
