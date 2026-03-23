@@ -101,11 +101,23 @@ const WA = {
 
   async fetchAvatar(jid) {
     if (this.avatarCache[jid] !== undefined) return this.avatarCache[jid];
-    this.avatarCache[jid] = null;
+    this.avatarCache[jid] = null; // marca como buscado para não repetir
     try {
       const n = (jid||'').replace(/@.*/,'').replace(/\D/g,'');
-      const r = await EVO.req('GET', `/chat/fetchProfilePictureUrl/${EVO.instance}?number=${n}&type=image`);
-      const url = r.data?.profilePictureUrl || r.data?.image || null;
+      if (!n) return null;
+      // Tenta endpoint v2 com number formatado
+      let url = null;
+      const attempts = [
+        `/chat/fetchProfilePictureUrl/${EVO.instance}?number=${n}@s.whatsapp.net`,
+        `/chat/fetchProfilePictureUrl/${EVO.instance}?number=${n}`,
+      ];
+      for (const path of attempts) {
+        try {
+          const r = await EVO.req('GET', path);
+          url = r.data?.profilePictureUrl || r.data?.image || r.data?.url || null;
+          if (url) break;
+        } catch {}
+      }
       this.avatarCache[jid] = url;
       return url;
     } catch { return null; }
@@ -114,9 +126,13 @@ const WA = {
   async renderAvatar(jid, name, el) {
     if (!el) return;
     const url = await this.fetchAvatar(jid);
+    if (!el.isConnected) return; // elemento pode ter sido removido do DOM
     const ini = (this.initials(name)||'?').replace(/'/g,"\\'");
-    if (url) el.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.parentElement.textContent='${ini}'" alt="">`;
-    else      el.textContent = ini;
+    if (url) {
+      el.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display='none';this.parentElement.textContent='${ini}'" alt="">`;
+    } else {
+      el.textContent = ini;
+    }
   },
 };
 
@@ -175,21 +191,26 @@ function waConnectSSE() {
 
 function waOnSseMessage(msg) {
   if (!msg) return;
-  const jid = msg.key?.remoteJid || '';
+  const jid    = msg.key?.remoteJid || '';
+  const fromMe = msg.key?.fromMe === true || msg.fromMe === true;
   if (!jid || jid.startsWith('status@')) return;
 
-  // Badge no botão do topnav
-  if (!WA.open || WA.activeJid !== jid) waIncrementBadge();
+  // Badge só para mensagens RECEBIDAS (não enviadas por mim)
+  if (!fromMe && (!WA.open || WA.activeJid !== jid)) waIncrementBadge();
 
   // Atualiza preview na lista
-  waUpdateChatPreview(jid, msg);
+  waUpdateChatPreview(jid, msg, fromMe);
 
   // Insere na conversa ativa em tempo real
   if (WA.activeJid === jid) {
     const msgsEl = document.getElementById('wa-messages');
     if (!msgsEl) return;
     const mid = msg.key?.id;
-    if (mid && msgsEl.querySelector(`[data-msgid="${CSS.escape(mid)}"]`)) return; // já existe
+    // Remove mensagem otimista temporária se existir
+    if (mid) {
+      const existing = msgsEl.querySelector(`[data-msgid="${CSS.escape(mid)}"]`);
+      if (existing) return;
+    }
     const el = waCreateMsgEl(msg);
     if (el) { msgsEl.appendChild(el); msgsEl.scrollTop = msgsEl.scrollHeight; }
   }
@@ -207,11 +228,11 @@ function waClearBadge() {
   if (b) { b.textContent = '0'; b.style.display = 'none'; }
 }
 
-function waUpdateChatPreview(jid, msg) {
+function waUpdateChatPreview(jid, msg, fromMe) {
   const chat = WA.chats.find(c => WA.getJid(c) === jid);
   if (chat) {
     chat.lastMessage = msg;
-    if (!msg.key?.fromMe) chat.unreadCount = (chat.unreadCount || 0) + 1;
+    if (!fromMe) chat.unreadCount = (chat.unreadCount || 0) + 1;
     WA.chats = [chat, ...WA.chats.filter(c => WA.getJid(c) !== jid)];
     WA.filteredChats = WA.chats;
     waRenderChatList(WA.chats);
@@ -320,12 +341,26 @@ function waRenderChatList(chats) {
     </div>`;
   }).join('');
 
-  chats.forEach((c,i) => {
-    const jid  = WA.getJid(c);
-    const name = c.name || c.pushName || WA.fmtPhone(jid);
-    const el   = document.getElementById(`wa-av-${i}`);
-    if (el && jid) WA.renderAvatar(jid, name, el);
-  });
+  // Carrega avatares com throttle para não sobrecarregar a API
+  const loadAvatarThrottled = async (list) => {
+    for (let i = 0; i < list.length; i++) {
+      const { jid, name, elId } = list[i];
+      const el = document.getElementById(elId);
+      if (el) await WA.renderAvatar(jid, name, el);
+      // Pausa 250ms entre cada requisição para não rate-limitar
+      if (i < list.length - 1) await new Promise(r => setTimeout(r, 250));
+    }
+  };
+
+  const avatarQueue = chats
+    .map((c, i) => ({
+      jid:  WA.getJid(c),
+      name: c.name || c.pushName || WA.fmtPhone(WA.getJid(c)),
+      elId: `wa-av-${i}`
+    }))
+    .filter(x => x.jid);
+
+  loadAvatarThrottled(avatarQueue);
 }
 
 function waFilterChats(q) {
@@ -439,7 +474,16 @@ async function waLoadMessages(silent = false) {
 // Criar elemento de mensagem
 // ─────────────────────────────────────────────────────
 function waCreateMsgEl(msg) {
-  const fromMe  = msg.key?.fromMe === true;
+  // Evolution API 2.7 pode ter fromMe em vários lugares
+  // Prioridade: key.fromMe > fromMe top-level > inferido por pushName
+  let fromMe = false;
+  if (msg.key?.fromMe === true)        fromMe = true;
+  else if (msg.key?.fromMe === false)  fromMe = false;
+  else if (msg.fromMe === true)        fromMe = true;
+  else if (msg.fromMe === false)       fromMe = false;
+  // Fallback: se tem pushName, é mensagem recebida (do cliente)
+  else if (msg.pushName)               fromMe = false;
+  else                                 fromMe = false; // default: recebida
   const ts      = msg.messageTimestamp || msg.key?.timestamp;
   const time    = ts ? new Date((+ts > 9999999999 ? +ts : +ts * 1000)).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
   const m       = msg.message || {};
