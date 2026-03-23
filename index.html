@@ -1541,7 +1541,7 @@ input,textarea{font-family:inherit}
           <input class="form-input" id="f-rua"    placeholder="Rua / Avenida">
           <div class="form-row2">
             <input class="form-input" id="f-num"  placeholder="Número">
-            <input class="form-input" id="f-bairro" placeholder="Bairro">
+            <input class="form-input" id="f-bairro" placeholder="Bairro" oninput="if(feeConfig?.tipo==='por_bairro')renderTotals()">
           </div>
           <input class="form-input" id="f-compl"  placeholder="Complemento (opcional)">
 
@@ -3108,6 +3108,14 @@ function getTaxa() {
     const faixas = feeConfig.faixas || [];
     return parseFloat(faixas[Math.min(selectedFaixa, faixas.length-1)]?.taxa) || 0;
   }
+  if (feeConfig.tipo === 'por_bairro') {
+    const bairros = feeConfig.bairros || [];
+    if (!bairros.length) return 0;
+    const digitado = (document.getElementById('f-bairro')?.value || '').trim().toLowerCase();
+    if (!digitado) return 0;
+    const match = bairros.find(b => b.bairro.trim().toLowerCase() === digitado);
+    return match ? parseFloat(match.taxa) || 0 : 0;
+  }
   return parseFloat(feeConfig.valor ?? feeConfig.value ?? 0);
 }
 
@@ -3292,6 +3300,11 @@ function renderTotals() {
   if (deliveryType === 'delivery' && feeConfig?.tipo === 'por_km') {
     const f = (feeConfig.faixas||[])[selectedFaixa];
     if (f) taxaLabel = `Entrega até ${f.ate_km} km`;
+  } else if (deliveryType === 'delivery' && feeConfig?.tipo === 'por_bairro') {
+    const digitado = (document.getElementById('f-bairro')?.value || '').trim().toLowerCase();
+    const match = (feeConfig.bairros||[]).find(b => b.bairro.trim().toLowerCase() === digitado);
+    if (match) taxaLabel = `Entrega — ${match.bairro}`;
+    else if (digitado) taxaLabel = 'Bairro não encontrado';
   }
   // Aviso de pedido mínimo
   const minimoFalta = _pedidoMinimo > 0 && deliveryType === 'delivery' && sub < _pedidoMinimo ? _pedidoMinimo - sub : 0;
