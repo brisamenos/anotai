@@ -708,7 +708,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const instance = cfg?.evo_instance || null
     const body     = ['POST', 'DELETE'].includes(req.method) ? await readBody(req) : {}
     const action   = upath.replace('/api/evo', '')
-    if (req.method === 'POST' && body.instanceName === undefined && instance) body.instanceName = instance
+    // Só injeta instanceName em rotas de instância, não em envio de mensagens
+    if (req.method === 'POST' && body.instanceName === undefined && instance && action.startsWith('/instance/')) body.instanceName = instance
     const evoPath  = action.replace(':instance', instance || '')
     try {
       const r    = await fetch(`${EVO_URL}${evoPath}`, { method: req.method, headers: { 'Content-Type': 'application/json', apikey: EVO_KEY }, body: req.method !== 'GET' ? JSON.stringify(body) : undefined })
@@ -721,7 +722,63 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
   // ── Webhook WhatsApp / IA ────────────────────────────
   if (req.method === 'POST' && (upath.startsWith('/webhook/whatsapp') || upath.startsWith('/webhook/'))) {
-    await handleIAWebhook(req, res)
+    // Antes de processar a IA, faz broadcast SSE do evento bruto para o gestor
+    const rawBody = await readBody(req)
+    const event   = rawBody?.event || ''
+    const tid_wh  = (() => {
+      if (upath.startsWith('/webhook/whatsapp')) return upath.split('/')[3] || null
+      const slug = upath.split('/')[2] || null
+      if (!slug) return null
+      const row = db.prepare('SELECT id FROM tenants WHERE slug=? OR id=?').get(slug, slug)
+      return row?.id || null
+    })()
+    // Broadcast mensagem recebida para o painel do gestor via SSE
+    if (tid_wh && (event === 'messages.upsert' || event === 'message.upsert')) {
+      const msgs = rawBody?.data?.messages || (rawBody?.data ? [rawBody.data] : [])
+      for (const m of msgs) {
+        sseBroadcast(`wa-msgs:${tid_wh}`, 'wa:msg', m)
+      }
+    } else if (tid_wh && rawBody?.data?.key) {
+      // Formato alternativo: data é a mensagem diretamente
+      sseBroadcast(`wa-msgs:${tid_wh}`, 'wa:msg', rawBody.data)
+    }
+    // Processa IA normalmente (cria req fake com body já lido)
+    const fakeReq = Object.assign(Object.create(req), { _parsedBody: rawBody })
+    const origReadBody = ctx.readBody
+    const patchedCtx = Object.assign({}, ctx, {
+      readBody: (r) => r._parsedBody !== undefined ? Promise.resolve(r._parsedBody) : origReadBody(r)
+    })
+    await handleIAWebhook(fakeReq, res)
+    return true
+  }
+
+  // ── Download de mídia WhatsApp (sob demanda) ─────────
+  if (req.method === 'POST' && upath === '/api/wa/media') {
+    const tenantId = req.headers['x-tenant-id']
+    if (!tenantId) { send(res, 401, { error: 'x-tenant-id obrigatório' }); return true }
+    const body = await readBody(req)
+    const { messageId, remoteJid } = body
+    if (!messageId || !remoteJid) { send(res, 400, { error: 'messageId e remoteJid obrigatórios' }); return true }
+    try {
+      const cfg  = db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tenantId)
+      const inst = cfg?.evo_instance || EVO_INST
+      if (!inst) { send(res, 400, { error: 'Instância Evolution não configurada' }); return true }
+      // Chama a Evolution API para baixar a mídia em base64
+      const r = await fetch(`${EVO_URL}/chat/getBase64FromMediaMessage/${inst}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', apikey: EVO_KEY },
+        body:    JSON.stringify({ message: { key: { id: messageId, remoteJid } }, convertToMp4: false })
+      })
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) { send(res, r.status, { error: data?.message || 'Erro ao baixar mídia' }); return true }
+      send(res, 200, {
+        base64:   data?.base64   || data?.data   || null,
+        mimetype: data?.mimetype || data?.mimeType || 'application/octet-stream',
+        fileName: data?.fileName || null
+      })
+    } catch(e) {
+      send(res, 500, { error: e.message })
+    }
     return true
   }
 
