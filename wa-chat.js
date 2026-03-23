@@ -13,6 +13,7 @@ const WA = {
   messages:     [],          // msgs da conversa ativa
   mediaCache:   {},          // msgId → {base64,mimetype,fileName}
   nameCache:    {},          // jid → nome (do pushName das msgs)
+  msgCache:     {},          // jid → { msgId → msg } — persiste msgs SSE entre aberturas
   pendingFile:  null,
   mediaRecorder:null,
   audioChunks:  [],
@@ -141,7 +142,21 @@ function waOpenPanel() {
   el.style.display = 'flex';
   WA.open = true;
   if (typeof closeNotif === 'function') closeNotif();
-  waCheckConn().then(() => waLoadChats());
+
+  // Se já tem chats carregados, só re-renderiza (não descarta estado)
+  if (WA.chats.length > 0) {
+    waRenderList();
+    // Restaura conversa ativa se houver
+    if (WA.activeJid) {
+      document.getElementById('wa-conv-empty').style.display  = 'none';
+      document.getElementById('wa-conv-active').style.display = 'flex';
+      // Recarrega msgs mesclando com cache (pega novas sem perder as do SSE)
+      waLoadMessages(false);
+    }
+  } else {
+    waCheckConn().then(() => waLoadChats());
+  }
+
   if (!WA.pollTimer) {
     WA.pollTimer = setInterval(() => {
       if (WA.open && WA.activeJid) waLoadMessages(true);
@@ -200,7 +215,21 @@ function waOnSseMsg(msg) {
   // fromMe pode ser boolean true ou string "true"
   const fromMe = msg.key.fromMe === true || msg.key.fromMe === 'true';
 
-  // Salva pushName de mensagens RECEBIDAS (EVO zera pushName quando fromMe=true)
+  // Normaliza a mensagem
+  const normalized = {
+    ...msg,
+    key: { ...msg.key, fromMe },
+    messageTimestamp: +msg.messageTimestamp || +msg.key?.timestamp || Math.floor(Date.now()/1000)
+  };
+
+  // ── Cache persistente: salva msg para sobreviver ao fechamento do painel ──
+  const mid = msg.key?.id;
+  if (mid) {
+    if (!WA.msgCache[jid]) WA.msgCache[jid] = {};
+    WA.msgCache[jid][mid] = normalized;
+  }
+
+  // Salva pushName de mensagens RECEBIDAS
   if (!fromMe && msg.pushName?.trim()) {
     WA.nameCache[jid] = msg.pushName.trim();
   }
@@ -209,15 +238,14 @@ function waOnSseMsg(msg) {
   if (!fromMe && (!WA.open || WA.activeJid !== jid)) waBadgeInc();
 
   // Atualiza preview da lista
-  waUpdatePreview(jid, msg, fromMe);
+  waUpdatePreview(jid, normalized, fromMe);
 
   // Insere na conversa ativa em tempo real
   if (WA.activeJid === jid) {
     const msgsEl = document.getElementById('wa-messages');
     if (!msgsEl) return;
-    const mid = msg.key?.id;
     if (mid && msgsEl.querySelector(`[data-mid="${CSS.escape(mid)}"]`)) return;
-    const el = waBuildMsgEl(msg);
+    const el = waBuildMsgEl(normalized);
     if (el) { msgsEl.appendChild(el); msgsEl.scrollTop = msgsEl.scrollHeight; }
   }
 }
@@ -448,6 +476,24 @@ async function waLoadMessages(silent = false) {
       key: { ...m.key, fromMe: m.key?.fromMe === true || m.key?.fromMe === 'true' },
       messageTimestamp: +m.messageTimestamp || 0
     }));
+
+    // ── Mescla com cache SSE: garante que msgs recebidas em tempo real não somem ──
+    const cached = WA.msgCache[WA.activeJid] || {};
+    const apiIds  = new Set(msgs.map(m => m.key?.id).filter(Boolean));
+    // Adiciona do cache apenas o que não veio da API (msgs muito recentes)
+    Object.values(cached).forEach(cm => {
+      if (cm.key?.id && !apiIds.has(cm.key.id)) {
+        msgs.push(cm);
+      }
+    });
+    // Salva no cache as msgs que vieram da API (para persistência futura)
+    msgs.forEach(m => {
+      const mid = m.key?.id;
+      if (mid) {
+        if (!WA.msgCache[WA.activeJid]) WA.msgCache[WA.activeJid] = {};
+        WA.msgCache[WA.activeJid][mid] = m;
+      }
+    });
 
     // Salva pushName de mensagens RECEBIDAS (fromMe=false tem o nome real)
     msgs.forEach(m => {
