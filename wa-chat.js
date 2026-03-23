@@ -449,18 +449,32 @@ async function waOpenConv(jid, name) {
   await waLoadMessages();
 }
 
-/* ─── Carregar mensagens (POST /chat/findMessages) ──── */
+/* ─── Carregar mensagens ────────────────────────────── */
 async function waLoadMessages(silent = false) {
   if (!WA.activeJid) return;
   const inst   = EVO.instance;
   const msgsEl = document.getElementById('wa-messages');
   const loadEl = document.getElementById('wa-msgs-loading');
-  if (!inst || !msgsEl) return;
+  if (!msgsEl) return;
 
+  // ── 1. Renderiza cache do banco imediatamente (antes da API) ──
   if (!silent) {
-    msgsEl.innerHTML = '';
-    if (loadEl) { loadEl.style.display='flex'; msgsEl.appendChild(loadEl); }
+    const cached = WA.msgCache[WA.activeJid] || {};
+    const cachedMsgs = Object.values(cached)
+      .sort((a,b) => (a.messageTimestamp||0) - (b.messageTimestamp||0));
+
+    if (cachedMsgs.length > 0) {
+      msgsEl.innerHTML = '';
+      waRenderMsgs(msgsEl, cachedMsgs);
+    } else {
+      // Sem cache ainda — mostra loading
+      msgsEl.innerHTML = '';
+      if (loadEl) { loadEl.style.display = 'flex'; msgsEl.appendChild(loadEl); }
+    }
   }
+
+  // ── 2. Busca da API EVO em paralelo ──────────────────
+  if (!inst) return;
 
   try {
     const r = await EVO.req('POST', `/chat/findMessages/${inst}`, {
@@ -469,90 +483,98 @@ async function waLoadMessages(silent = false) {
       offset: 60
     });
 
-    let msgs = [];
+    let apiMsgs = [];
     const d = r.data;
-    if      (Array.isArray(d))                    msgs = d;
-    else if (Array.isArray(d?.records))           msgs = d.records;
-    else if (Array.isArray(d?.messages?.records)) msgs = d.messages.records;
-    else if (Array.isArray(d?.messages))          msgs = d.messages;
+    if      (Array.isArray(d))                    apiMsgs = d;
+    else if (Array.isArray(d?.records))           apiMsgs = d.records;
+    else if (Array.isArray(d?.messages?.records)) apiMsgs = d.messages.records;
+    else if (Array.isArray(d?.messages))          apiMsgs = d.messages;
 
-    // Filtro client-side (bug conhecido EVO 2.7 — where às vezes é ignorado)
+    // Filtro client-side (bug EVO 2.7)
     const targetJid = WA.activeJid.toLowerCase();
-    msgs = msgs.filter(m => (m.key?.remoteJid||'').toLowerCase() === targetJid);
+    apiMsgs = apiMsgs.filter(m => (m.key?.remoteJid||'').toLowerCase() === targetJid);
 
-    // Normaliza tipos — fromMe pode vir como string "true"/"false", ts pode ser string
-    msgs = msgs.map(m => ({
+    // Normaliza
+    apiMsgs = apiMsgs.map(m => ({
       ...m,
       key: { ...m.key, fromMe: m.key?.fromMe === true || m.key?.fromMe === 'true' },
       messageTimestamp: +m.messageTimestamp || 0
     }));
 
-    // ── Mescla com cache SSE: garante que msgs recebidas em tempo real não somem ──
-    const cached = WA.msgCache[WA.activeJid] || {};
-    const apiIds  = new Set(msgs.map(m => m.key?.id).filter(Boolean));
-    // Adiciona do cache apenas o que não veio da API (msgs muito recentes)
+    // ── 3. Mescla API + cache (cache tem msgs que API não retornou) ──
+    const cached  = WA.msgCache[WA.activeJid] || {};
+    const apiIds  = new Set(apiMsgs.map(m => m.key?.id).filter(Boolean));
     Object.values(cached).forEach(cm => {
-      if (cm.key?.id && !apiIds.has(cm.key.id)) {
-        msgs.push(cm);
-      }
+      if (cm.key?.id && !apiIds.has(cm.key.id)) apiMsgs.push(cm);
     });
-    // Salva no cache as msgs que vieram da API (para persistência futura)
-    msgs.forEach(m => {
+
+    // Salva tudo no cache em memória e no banco
+    apiMsgs.forEach(m => {
       const mid = m.key?.id;
       if (mid) {
         if (!WA.msgCache[WA.activeJid]) WA.msgCache[WA.activeJid] = {};
         WA.msgCache[WA.activeJid][mid] = m;
       }
     });
-    // Persiste no banco em background (não bloqueia render)
-    waCacheSave(msgs);
+    waCacheSave(apiMsgs);
 
-    // Salva pushName de mensagens RECEBIDAS (fromMe=false tem o nome real)
-    msgs.forEach(m => {
+    // pushNames
+    apiMsgs.forEach(m => {
       if (!m.key.fromMe && m.pushName?.trim())
         WA.nameCache[m.key.remoteJid] = m.pushName.trim();
     });
 
     // Ordena crescente
-    msgs.sort((a,b) => (a.messageTimestamp||0) - (b.messageTimestamp||0));
+    apiMsgs.sort((a,b) => (a.messageTimestamp||0) - (b.messageTimestamp||0));
 
     // Polling: nada novo?
-    if (silent && msgs.length > 0) {
-      const lts = msgs[msgs.length-1].messageTimestamp || 0;
+    if (silent && apiMsgs.length > 0) {
+      const lts = apiMsgs[apiMsgs.length-1].messageTimestamp || 0;
       if (lts === WA.lastMsgTs) return;
       WA.lastMsgTs = lts;
-    } else if (msgs.length > 0) {
-      WA.lastMsgTs = msgs[msgs.length-1].messageTimestamp || 0;
+    } else if (apiMsgs.length > 0) {
+      WA.lastMsgTs = apiMsgs[apiMsgs.length-1].messageTimestamp || 0;
     }
 
     if (loadEl) loadEl.style.display = 'none';
-    msgsEl.innerHTML = '';
 
-    if (!msgs.length) {
-      msgsEl.innerHTML = '<div style="text-align:center;color:#64748b;font-size:12px;padding:30px">Sem mensagens nesta conversa.</div>';
+    if (!apiMsgs.length) {
+      if (!silent) msgsEl.innerHTML = '<div style="text-align:center;color:#64748b;font-size:12px;padding:30px">Sem mensagens nesta conversa.</div>';
       return;
     }
 
-    let lastDate = '';
-    msgs.forEach(msg => {
-      const ds = waFmtDate(msg.messageTimestamp);
-      if (ds && ds !== lastDate) {
-        lastDate = ds;
-        const sep = document.createElement('div');
-        sep.className = 'wa-date-sep';
-        sep.innerHTML = `<span>${ds}</span>`;
-        msgsEl.appendChild(sep);
-      }
-      const el = waBuildMsgEl(msg);
-      if (el) msgsEl.appendChild(el);
-    });
-
-    msgsEl.scrollTop = msgsEl.scrollHeight;
+    // ── 4. Re-renderiza com resultado final (API + cache) ──
+    msgsEl.innerHTML = '';
+    waRenderMsgs(msgsEl, apiMsgs);
 
   } catch(e) {
     if (loadEl) loadEl.style.display = 'none';
-    if (!silent) msgsEl.innerHTML = `<div style="text-align:center;color:#ef4444;font-size:12px;padding:20px">Erro: ${waEsc(e.message)}</div>`;
+    // API falhou — mantém o que já está na tela (cache) e avisa discretamente
+    if (!silent) {
+      const err = document.createElement('div');
+      err.style.cssText = 'text-align:center;color:#64748b;font-size:11px;padding:8px';
+      err.textContent = '⚠️ Sem conexão com WhatsApp — exibindo mensagens salvas';
+      msgsEl.prepend(err);
+    }
   }
+}
+
+// Renderiza lista de mensagens num elemento
+function waRenderMsgs(container, msgs) {
+  let lastDate = '';
+  msgs.forEach(msg => {
+    const ds = waFmtDate(msg.messageTimestamp);
+    if (ds && ds !== lastDate) {
+      lastDate = ds;
+      const sep = document.createElement('div');
+      sep.className = 'wa-date-sep';
+      sep.innerHTML = `<span>${ds}</span>`;
+      container.appendChild(sep);
+    }
+    const el = waBuildMsgEl(msg);
+    if (el) container.appendChild(el);
+  });
+  container.scrollTop = container.scrollHeight;
 }
 
 /* ─── Construir elemento de mensagem ────────────────── */
