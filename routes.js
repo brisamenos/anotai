@@ -1180,21 +1180,21 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
-  // ── Pagar plano via Cartao ───────────────────────────
+  // ── Pagar plano via Cartao (usando card_token do SDK MP) ──
   if (req.method === 'POST' && upath === '/api/planos/pagar-cartao') {
     const tid = req.headers['x-tenant-id']
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
     const body = await readBody(req)
-    const { plano, valor, cartao } = body
-    if (!plano || !valor || !cartao) { send(res, 400, { error: 'Dados incompletos' }); return true }
+    const { plano, valor, card_token, payment_method_id, payer_email, payer_cpf } = body
+    if (!plano || !valor) { send(res, 400, { error: 'Plano e valor obrigatorios' }); return true }
+    if (!card_token) { send(res, 400, { error: 'card_token obrigatorio' }); return true }
+    if (!payment_method_id) { send(res, 400, { error: 'payment_method_id obrigatorio' }); return true }
 
     let mpToken = MP_TOKEN
-    let mpPublicKey = ''
     try {
       const cfgMp = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
       const gCfg = cfgMp?.ia_config ? JSON.parse(cfgMp.ia_config) : {}
       if (gCfg.mp_token) mpToken = gCfg.mp_token
-      if (gCfg.mp_public_key) mpPublicKey = gCfg.mp_public_key
     } catch {}
     if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago nao configurado.' }); return true }
 
@@ -1207,22 +1207,15 @@ module.exports = async function handleRoutes(req, res, ctx) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
         body: JSON.stringify({
           transaction_amount: parseFloat(valor),
+          token: card_token,
           description: `Renovacao ${plano === 'premium' ? 'Plano Premium' : 'Plano Essencial'} - ${tenant?.nome || 'Cliente'}`,
-          payment_method_id: 'master', // sera ajustado pelo MP
+          installments: 1,
+          payment_method_id,
           external_reference: extRef,
           payer: {
-            email: 'renovacao@estimafood.com',
-            first_name: cartao.nome || 'Cliente',
-            identification: { type: 'CPF', number: cartao.cpf }
-          },
-          card: {
-            card_number: cartao.numero,
-            expiration_month: cartao.mes,
-            expiration_year: cartao.ano,
-            security_code: cartao.cvv,
-            cardholder: { name: cartao.nome, identification: { type: 'CPF', number: cartao.cpf } }
-          },
-          installments: 1
+            email: payer_email || 'renovacao@estimafood.com',
+            identification: { type: 'CPF', number: (payer_cpf || '').replace(/\D/g,'') }
+          }
         })
       })
       const mpData = await mp.json()
@@ -1251,6 +1244,16 @@ module.exports = async function handleRoutes(req, res, ctx) {
       log('💳', `Cartao plano: R$${valor} plano=${plano} tenant=${tid} status=${novoStatus}`)
       send(res, 200, { ok: true, status: novoStatus, status_detail: mpData.status_detail || '' })
     } catch (e) { log('❌', 'Cartao plano erro:', { error: e.message }); send(res, 500, { error: 'Erro ao processar pagamento: ' + e.message }) }
+    return true
+  }
+  
+  // ── Obter Public Key MP para frontend ────────────────
+  if (req.method === 'GET' && upath === '/api/planos/mp-public-key') {
+    try {
+      const cfgMp = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const gCfg = cfgMp?.ia_config ? JSON.parse(cfgMp.ia_config) : {}
+      send(res, 200, { public_key: gCfg.mp_public_key || '' })
+    } catch { send(res, 200, { public_key: '' }) }
     return true
   }
 
