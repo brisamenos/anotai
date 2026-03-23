@@ -708,7 +708,6 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const instance = cfg?.evo_instance || null
     const body     = ['POST', 'DELETE'].includes(req.method) ? await readBody(req) : {}
     const action   = upath.replace('/api/evo', '')
-    // Só injeta instanceName em rotas de instância, não em envio de mensagens
     if (req.method === 'POST' && body.instanceName === undefined && instance && action.startsWith('/instance/')) body.instanceName = instance
     const evoPath  = action.replace(':instance', instance || '')
     try {
@@ -722,94 +721,59 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
   // ── Webhook WhatsApp / IA ────────────────────────────
   if (req.method === 'POST' && (upath.startsWith('/webhook/whatsapp') || upath.startsWith('/webhook/'))) {
-    // Antes de processar a IA, faz broadcast SSE do evento bruto para o gestor
-    const rawBody = await readBody(req)
-    const event   = rawBody?.event || ''
-    const tid_wh  = (() => {
+    const body  = await readBody(req)
+    const event = body?.event || ''
+
+    // Resolve tenant a partir da URL
+    const tid_wh = (() => {
       if (upath.startsWith('/webhook/whatsapp')) return upath.split('/')[3] || null
       const slug = upath.split('/')[2] || null
       if (!slug) return null
       const row = db.prepare('SELECT id FROM tenants WHERE slug=? OR id=?').get(slug, slug)
       return row?.id || null
     })()
-    // Broadcast mensagem recebida para o painel do gestor via SSE
-    if (tid_wh && (event === 'messages.upsert' || event === 'message.upsert')) {
-      const msgs = rawBody?.data?.messages || (rawBody?.data ? [rawBody.data] : [])
+
+    // Broadcast SSE para o gestor (messages.upsert)
+    if (tid_wh) {
+      const isUpsert = event === 'messages.upsert' || event === 'message.upsert'
+      const msgs = isUpsert
+        ? (Array.isArray(body?.data?.messages) ? body.data.messages : (body?.data ? [body.data] : []))
+        : (body?.data?.key ? [body.data] : [])
       for (const m of msgs) {
         sseBroadcast(`wa-msgs:${tid_wh}`, 'wa:msg', m)
       }
-    } else if (tid_wh && rawBody?.data?.key) {
-      // Formato alternativo: data é a mensagem diretamente
-      sseBroadcast(`wa-msgs:${tid_wh}`, 'wa:msg', rawBody.data)
     }
-    // Processa IA normalmente (cria req fake com body já lido)
-    const fakeReq = Object.assign(Object.create(req), { _parsedBody: rawBody })
-    const origReadBody = ctx.readBody
-    const patchedCtx = Object.assign({}, ctx, {
-      readBody: (r) => r._parsedBody !== undefined ? Promise.resolve(r._parsedBody) : origReadBody(r)
-    })
+
+    // Processa IA (re-usa body já lido)
+    const fakeReq = Object.assign(Object.create(req), { _parsedBody: body })
     await handleIAWebhook(fakeReq, res)
     return true
   }
 
-  // ── Proxy de imagem (foto de perfil WA — resolve CORS) ──
+  // ── Proxy de imagem de perfil (resolve CORS) ─────────
   if (req.method === 'GET' && upath === '/api/wa/avatar') {
-    const url = params.get('url')
-    if (!url) { send(res, 400, { error: 'url obrigatória' }); return true }
+    const rawUrl = params.get('url')
+    if (!rawUrl) { res.writeHead(204); res.end(); return true }
     try {
-      const r = await fetch(decodeURIComponent(url), {
-        headers: { 'User-Agent': 'WhatsApp/2.24.0' }
+      const decoded = decodeURIComponent(rawUrl)
+      const r = await fetch(decoded, {
+        headers: { 'User-Agent': 'WhatsApp/2.2413.51 A' },
+        signal:  AbortSignal.timeout(5000)
       })
       if (!r.ok) { res.writeHead(404); res.end(); return true }
       const buf = Buffer.from(await r.arrayBuffer())
       const ct  = r.headers.get('content-type') || 'image/jpeg'
       res.writeHead(200, {
         'Content-Type':  ct,
-        'Cache-Control': 'public, max-age=3600',
+        'Cache-Control': 'public, max-age=7200',
         'Access-Control-Allow-Origin': '*'
       })
       res.end(buf)
-    } catch(e) { res.writeHead(502); res.end() }
+    } catch { res.writeHead(502); res.end() }
     return true
   }
 
-  // ── Foto de perfil WhatsApp ─────────────────────────
-  if (req.method === 'POST' && upath === '/api/wa/avatar') {
-    const tenantId = req.headers['x-tenant-id']
-    if (!tenantId) { send(res, 401, { error: 'x-tenant-id obrigatório' }); return true }
-    const body = await readBody(req)
-    const { number } = body
-    if (!number) { send(res, 400, { error: 'number obrigatório' }); return true }
-    try {
-      const cfg  = db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tenantId)
-      const inst = cfg?.evo_instance || EVO_INST
-      if (!inst) { send(res, 200, { url: null }); return true }
-
-      // Tenta diferentes formatos de número para máxima compatibilidade
-      const n = number.replace(/\D/g,'')
-      const formats = [n, `${n}@s.whatsapp.net`, `${n}@c.us`]
-      // Para BR: tenta também sem o dígito extra (55 88 9XXXX → 55 88 XXXX)
-      if (n.startsWith('55') && n.length === 13) formats.push(n.slice(0,4) + n.slice(5))
-
-      let url = null
-      for (const num of formats) {
-        try {
-          const r = await fetch(`${EVO_URL}/chat/fetchProfilePictureUrl/${inst}`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json', apikey: EVO_KEY },
-            body:    JSON.stringify({ number: num })
-          })
-          const data = await r.json().catch(() => ({}))
-          url = data?.profilePictureUrl || data?.image || data?.url || data?.picture || null
-          if (url) break
-        } catch {}
-      }
-      send(res, 200, { url })
-    } catch(e) { send(res, 200, { url: null }) }
-    return true
-  }
-
-
+  // ── Download de mídia WhatsApp (sob demanda) ─────────
   if (req.method === 'POST' && upath === '/api/wa/media') {
     const tenantId = req.headers['x-tenant-id']
     if (!tenantId) { send(res, 401, { error: 'x-tenant-id obrigatório' }); return true }
@@ -819,26 +783,29 @@ module.exports = async function handleRoutes(req, res, ctx) {
     try {
       const cfg  = db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tenantId)
       const inst = cfg?.evo_instance || EVO_INST
-      if (!inst) { send(res, 400, { error: 'Instância Evolution não configurada' }); return true }
-      // Chama a Evolution API para baixar a mídia em base64
+      if (!inst) { send(res, 400, { error: 'Instância não configurada' }); return true }
+
+      // EVO 2.7: POST /chat/getBase64FromMediaMessage/{instance}
       const r = await fetch(`${EVO_URL}/chat/getBase64FromMediaMessage/${inst}`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', apikey: EVO_KEY },
-        body:    JSON.stringify({ message: { key: { id: messageId, remoteJid } }, convertToMp4: false })
+        body:    JSON.stringify({
+          message:    { key: { id: messageId, remoteJid } },
+          convertTo:  'base64',
+          convertToMp4: false
+        }),
+        signal: AbortSignal.timeout(30000)
       })
       const data = await r.json().catch(() => ({}))
       if (!r.ok) { send(res, r.status, { error: data?.message || 'Erro ao baixar mídia' }); return true }
       send(res, 200, {
-        base64:   data?.base64   || data?.data   || null,
-        mimetype: data?.mimetype || data?.mimeType || 'application/octet-stream',
-        fileName: data?.fileName || null
+        base64:   data.base64   || data.data   || null,
+        mimetype: data.mimetype || data.mimeType || 'application/octet-stream',
+        fileName: data.fileName || null
       })
-    } catch(e) {
-      send(res, 500, { error: e.message })
-    }
+    } catch(e) { send(res, 500, { error: e.message }) }
     return true
   }
-
 
 
   // ── Clientes do gestor com stats calculados em tempo real ──
