@@ -756,6 +756,7 @@ async function checarAniv() {
 }
 
 const processed = new Set()
+setInterval(() => { if (processed.size > 5000) processed.clear() }, 60 * 60 * 1000)
 async function handleOrderStatus(req, res) {
   const body = await readBody(req)
   const { order_id, new_status } = body
@@ -868,11 +869,12 @@ async function handleOrderStatus(req, res) {
           else if (ct.on&&ct.msg) { msgFinal=fillVars(ct.msg,vars) }
           else { msgFinal=msgPadrao[new_status]||null }
           if (msgFinal) {
+            const _pkey = `${order.id}_${new_status}`
             if (new_status==='finalizado') {
               const min=Math.max(1,parseInt(auto._aval_minutos||1,10)||1)
               log('⏳',`Avaliação agendada em ${min}min para #${idStr}`)
-              setTimeout(async()=>{ const cfgNow=db.prepare("SELECT evo_automacoes FROM store_config WHERE tenant_id=?").get(tid); if(jsonParse(cfgNow?.evo_automacoes)||{}['avaliacao']?.on===false)return; const r=await sendWA(order.phone,msgFinal,inst); if(r.ok)processed.add(`${order.id}_${new_status}`) },min*60*1000)
-            } else { const r=await sendWA(order.phone,msgFinal,inst); if(r.ok)processed.add(`${order.id}_${new_status}`) }
+              setTimeout(async()=>{ if(processed.has(_pkey))return; const cfgNow=db.prepare("SELECT evo_automacoes FROM store_config WHERE tenant_id=?").get(tid); if(jsonParse(cfgNow?.evo_automacoes)||{}['avaliacao']?.on===false)return; const r=await sendWA(order.phone,msgFinal,inst); if(r.ok)processed.add(_pkey) },min*60*1000)
+            } else { if(!processed.has(_pkey)){ const r=await sendWA(order.phone,msgFinal,inst); if(r.ok)processed.add(_pkey) } }
           }
         } catch(e) { log('❌',`Erro WA order-status #${order_id}:`,{error:e.message}) }
       })

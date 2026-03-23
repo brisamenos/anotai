@@ -272,10 +272,7 @@
     constructor() {
       this.realtime = new RealtimeManager();
       this.storage  = new StorageClient();
-      this.auth = {
-        getSession:       async () => ({ data: { session: null }, error: null }),
-        onAuthStateChange: ()   => ({ data: { subscription: { unsubscribe: () => {} } } })
-      };
+;
     }
     from(table)       { return new Query(table); }
     channel(name)     { return this.realtime.channel(name); }

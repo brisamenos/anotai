@@ -1,6 +1,5 @@
 // gestor-sw.js — Service Worker sem cache
 // Atualizado para sempre buscar arquivos frescos do servidor (sem cache de JS/HTML)
-const CACHE_VERSION = 'gestor-v' + Date.now();
 
 self.addEventListener('install', (event) => {
   // Ativa imediatamente sem esperar páginas antigas fecharem
