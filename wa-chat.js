@@ -101,23 +101,22 @@ const WA = {
 
   async fetchAvatar(jid) {
     if (this.avatarCache[jid] !== undefined) return this.avatarCache[jid];
-    this.avatarCache[jid] = null; // marca como buscado para não repetir
+    this.avatarCache[jid] = null;
     try {
       const n = (jid||'').replace(/@.*/,'').replace(/\D/g,'');
       if (!n) return null;
-      // Tenta endpoint v2 com number formatado
-      let url = null;
-      const attempts = [
-        `/chat/fetchProfilePictureUrl/${EVO.instance}?number=${n}@s.whatsapp.net`,
-        `/chat/fetchProfilePictureUrl/${EVO.instance}?number=${n}`,
-      ];
-      for (const path of attempts) {
-        try {
-          const r = await EVO.req('GET', path);
-          url = r.data?.profilePictureUrl || r.data?.image || r.data?.url || null;
-          if (url) break;
-        } catch {}
-      }
+      const tid = (typeof _sessao !== 'undefined') ? (_sessao?.tenant_id || '') : '';
+      const r   = await fetch('/api/wa/avatar', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+        body:    JSON.stringify({ number: n })
+      });
+      const data = await r.json().catch(() => ({}));
+      const rawUrl = data?.url || null;
+      // Usa proxy do servidor para evitar CORS na URL da foto
+      const url = rawUrl
+        ? `/api/wa/avatar?url=${encodeURIComponent(rawUrl)}`
+        : null;
       this.avatarCache[jid] = url;
       return url;
     } catch { return null; }
@@ -126,10 +125,20 @@ const WA = {
   async renderAvatar(jid, name, el) {
     if (!el) return;
     const url = await this.fetchAvatar(jid);
-    if (!el.isConnected) return; // elemento pode ter sido removido do DOM
+    if (!el.isConnected) return;
     const ini = (this.initials(name)||'?').replace(/'/g,"\\'");
     if (url) {
-      el.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display='none';this.parentElement.textContent='${ini}'" alt="">`;
+      // Tenta carregar a imagem; se falhar CORS usa iniciais
+      const img = new Image();
+      img.onload = () => {
+        if (!el.isConnected) return;
+        el.innerHTML = '';
+        el.appendChild(img);
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%';
+      };
+      img.onerror = () => { if (el.isConnected) el.textContent = ini; };
+      img.src = url;
+      img.alt = '';
     } else {
       el.textContent = ini;
     }
