@@ -733,14 +733,19 @@ module.exports = async function handleRoutes(req, res, ctx) {
       return row?.id || null
     })()
 
-    // Broadcast SSE para o gestor (messages.upsert)
-    if (tid_wh) {
-      const isUpsert = event === 'messages.upsert' || event === 'message.upsert'
-      const msgs = isUpsert
-        ? (Array.isArray(body?.data?.messages) ? body.data.messages : (body?.data ? [body.data] : []))
-        : (body?.data?.key ? [body.data] : [])
+    // Broadcast SSE para o gestor — apenas mensagens NOVAS RECEBIDAS
+    if (tid_wh && (event === 'messages.upsert' || event === 'message.upsert')) {
+      const msgs = Array.isArray(body?.data?.messages)
+        ? body.data.messages
+        : (body?.data ? [body.data] : [])
+
       for (const m of msgs) {
-        sseBroadcast(`wa-msgs:${tid_wh}`, 'wa:msg', m)
+        const fromMe = m?.key?.fromMe === true || m?.key?.fromMe === 'true'
+        const jid    = m?.key?.remoteJid || ''
+        // Só envia: mensagens recebidas (não fromMe), com conteúdo real, não status
+        if (!fromMe && jid && !jid.startsWith('status@') && !jid.endsWith('@lid') && m?.message) {
+          sseBroadcast(`wa-msgs:${tid_wh}`, 'wa:msg', m)
+        }
       }
     }
 
