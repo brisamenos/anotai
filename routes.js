@@ -755,7 +755,55 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
-  // ── Proxy de imagem de perfil (resolve CORS) ─────────
+  // ── Cache de mensagens WhatsApp — GET (carrega conversa) ──
+  if (req.method === 'GET' && upath === '/api/wa/messages') {
+    const tenantId = req.headers['x-tenant-id']
+    const jid      = params.get('jid')
+    if (!tenantId || !jid) { send(res, 400, { error: 'tenant e jid obrigatórios' }); return true }
+    try {
+      const rows = db.prepare(
+        'SELECT payload FROM wa_messages WHERE tenant_id=? AND remote_jid=? ORDER BY ts ASC LIMIT 200'
+      ).all(tenantId, jid)
+      const msgs = rows.map(r => { try { return JSON.parse(r.payload) } catch { return null } }).filter(Boolean)
+      send(res, 200, msgs)
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Cache de mensagens WhatsApp — POST (salva batch) ───
+  if (req.method === 'POST' && upath === '/api/wa/messages') {
+    const tenantId = req.headers['x-tenant-id']
+    if (!tenantId) { send(res, 401, { error: 'x-tenant-id obrigatório' }); return true }
+    const body = await readBody(req)
+    const msgs = Array.isArray(body) ? body : (body?.messages || [])
+    if (!msgs.length) { send(res, 200, { saved: 0 }); return true }
+    try {
+      const stmt = db.prepare(
+        'INSERT OR IGNORE INTO wa_messages (tenant_id, remote_jid, msg_id, payload, from_me, ts) VALUES (?,?,?,?,?,?)'
+      )
+      const insert = db.transaction(list => {
+        let n = 0
+        for (const m of list) {
+          const jid   = m.key?.remoteJid
+          const mid   = m.key?.id
+          const fromMe = (m.key?.fromMe === true || m.key?.fromMe === 'true') ? 1 : 0
+          const ts    = +m.messageTimestamp || 0
+          if (!jid || !mid) continue
+          try { stmt.run(tenantId, jid, mid, JSON.stringify(m), fromMe, ts); n++ } catch {}
+        }
+        return n
+      })
+      const saved = insert(msgs)
+      // Limpa mensagens com mais de 7 dias para não crescer indefinidamente
+      const cutoff = Math.floor(Date.now()/1000) - 7*24*3600
+      db.prepare('DELETE FROM wa_messages WHERE tenant_id=? AND ts < ? AND ts > 0').run(tenantId, cutoff)
+      marcarDirty()
+      send(res, 200, { saved })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+
   if (req.method === 'GET' && upath === '/api/wa/avatar') {
     const rawUrl = params.get('url')
     if (!rawUrl) { res.writeHead(204); res.end(); return true }

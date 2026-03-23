@@ -230,10 +230,11 @@ function waOnSseMsg(msg) {
     messageTimestamp: ts || agora
   };
 
-  // Salva no cache persistente
+  // Salva no banco (INSERT OR IGNORE — não duplica)
   if (mid) {
     if (!WA.msgCache[jid]) WA.msgCache[jid] = {};
     WA.msgCache[jid][mid] = normalized;
+    waCacheSave([normalized]);
   }
 
   // pushName de recebidas
@@ -443,6 +444,8 @@ async function waOpenConv(jid, name) {
   const chat = WA.chats.find(c => c._jid === jid);
   if (chat) { chat._unread = 0; waRenderList(); }
 
+  // Carrega cache do banco primeiro (aparece instantaneamente)
+  await waCacheLoad(jid);
   await waLoadMessages();
 }
 
@@ -501,6 +504,8 @@ async function waLoadMessages(silent = false) {
         WA.msgCache[WA.activeJid][mid] = m;
       }
     });
+    // Persiste no banco em background (não bloqueia render)
+    waCacheSave(msgs);
 
     // Salva pushName de mensagens RECEBIDAS (fromMe=false tem o nome real)
     msgs.forEach(m => {
@@ -956,6 +961,42 @@ function waCancelAudio() {
 `;
   document.head.appendChild(s);
 })();
+
+/* ─── Persistência no banco de dados ─────────────────── */
+
+function _waTid() {
+  try { return (typeof _sessao !== 'undefined' ? _sessao?.tenant_id : null) || ''; } catch { return ''; }
+}
+
+// Salva array de mensagens no banco (INSERT OR IGNORE — nunca duplica)
+async function waCacheSave(msgs) {
+  if (!msgs?.length) return;
+  const tid = _waTid();
+  if (!tid) return;
+  try {
+    await fetch('/api/wa/messages', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body:    JSON.stringify(msgs)
+    });
+  } catch(e) { console.warn('[WA] save:', e.message); }
+}
+
+// Carrega msgs de um JID do banco e mescla no WA.msgCache
+async function waCacheLoad(jid) {
+  const tid = _waTid();
+  if (!tid || !jid) return;
+  try {
+    const r    = await fetch(`/api/wa/messages?jid=${encodeURIComponent(jid)}`, {
+      headers: { 'x-tenant-id': tid }
+    });
+    if (!r.ok) return;
+    const msgs = await r.json().catch(() => []);
+    if (!Array.isArray(msgs) || !msgs.length) return;
+    if (!WA.msgCache[jid]) WA.msgCache[jid] = {};
+    msgs.forEach(m => { if (m.key?.id) WA.msgCache[jid][m.key.id] = m; });
+  } catch(e) { console.warn('[WA] load:', e.message); }
+}
 
 /* ─── Init ───────────────────────────────────────────── */
 (function waInit(){

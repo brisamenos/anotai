@@ -270,6 +270,20 @@ const MIGRATIONS = [
     `CREATE INDEX IF NOT EXISTS idx_cartao_tenant ON pagamentos_cartao(tenant_id)`,
     `CREATE INDEX IF NOT EXISTS idx_cartao_status ON pagamentos_cartao(tenant_id, status)`,
   ]},
+  { version:23, description:'tabela wa_messages (cache de msgs WhatsApp)', up:[
+    `CREATE TABLE IF NOT EXISTS wa_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      remote_jid TEXT NOT NULL,
+      msg_id TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      from_me INTEGER DEFAULT 0,
+      ts INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, msg_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_wa_jid ON wa_messages(tenant_id, remote_jid, ts)`
+  ]},
 ]
 
 function runMigrations() {
