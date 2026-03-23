@@ -6291,19 +6291,29 @@ async function renderTaxaPage() {
   } catch(e) {}
 
   const tipo = _taxaConfig.tipo || 'fixo';
-  document.getElementById('taxa-tipo-fixo').checked = tipo === 'fixo';
-  document.getElementById('taxa-tipo-km').checked   = tipo === 'por_km';
-  document.getElementById('taxa-fixo-val').value    = _taxaConfig.valor ?? 5;
+  document.getElementById('taxa-tipo-fixo').checked   = tipo === 'fixo';
+  document.getElementById('taxa-tipo-km').checked     = tipo === 'por_km';
+  document.getElementById('taxa-tipo-bairro').checked = tipo === 'por_bairro';
+  document.getElementById('taxa-fixo-val').value      = _taxaConfig.valor ?? 5;
 
-  // Faixas
+  // Faixas de km
   const faixas = _taxaConfig.faixas || [];
   const list = document.getElementById('taxa-faixas-list');
   list.innerHTML = '';
   if (!faixas.length && tipo === 'por_km') {
-    // Default example rows
     [[1, 3], [3, 5], [7, 8]].forEach(([km, tx]) => _addFaixaRow(km, tx));
   } else {
     faixas.forEach(f => _addFaixaRow(f.ate_km, f.taxa));
+  }
+
+  // Bairros
+  const bairros = _taxaConfig.bairros || [];
+  const listB = document.getElementById('taxa-bairros-list');
+  listB.innerHTML = '';
+  if (!bairros.length && tipo === 'por_bairro') {
+    _addBairroRow('', '');
+  } else {
+    bairros.forEach(b => _addBairroRow(b.bairro, b.taxa));
   }
 
   onTaxaTipoChange();
@@ -6311,11 +6321,13 @@ async function renderTaxaPage() {
 
 function onTaxaTipoChange() {
   const tipo = document.querySelector('input[name="taxa-tipo"]:checked').value;
-  document.getElementById('taxa-fixo-block').style.display = tipo === 'fixo'  ? '' : 'none';
-  document.getElementById('taxa-km-block').style.display   = tipo === 'por_km' ? '' : 'none';
+  document.getElementById('taxa-fixo-block').style.display   = tipo === 'fixo'       ? '' : 'none';
+  document.getElementById('taxa-km-block').style.display     = tipo === 'por_km'     ? '' : 'none';
+  document.getElementById('taxa-bairro-block').style.display = tipo === 'por_bairro' ? '' : 'none';
   // Update label borders
-  document.getElementById('taxa-label-fixo').style.borderColor = tipo === 'fixo'   ? 'var(--accent)' : 'var(--border)';
-  document.getElementById('taxa-label-km').style.borderColor   = tipo === 'por_km' ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('taxa-label-fixo').style.borderColor   = tipo === 'fixo'       ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('taxa-label-km').style.borderColor     = tipo === 'por_km'     ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('taxa-label-bairro').style.borderColor = tipo === 'por_bairro' ? 'var(--accent)' : 'var(--border)';
   updateTaxaPreview();
 }
 
@@ -6333,6 +6345,29 @@ function _addFaixaRow(km, taxa) {
 }
 
 function addTaxaFaixa() { _addFaixaRow('', ''); }
+
+function _addBairroRow(bairro, taxa) {
+  const list = document.getElementById('taxa-bairros-list');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center';
+  row.innerHTML = `
+    <input class="form-input" type="text" placeholder="Ex: Centro" value="${(bairro||'').replace(/"/g,'&quot;')}" oninput="updateTaxaPreview()" style="margin-bottom:0">
+    <input class="form-input" type="number" min="0" step="0.50" placeholder="Ex: 5.00" value="${taxa||''}" oninput="updateTaxaPreview()" style="margin-bottom:0">
+    <button onclick="this.closest('div').remove();updateTaxaPreview()" style="width:28px;height:28px;border-radius:7px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.2);color:var(--danger);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">✕</button>
+  `;
+  list.appendChild(row);
+  updateTaxaPreview();
+}
+
+function addTaxaBairroRow() { _addBairroRow('', ''); }
+
+function getTaxaBairrosFromDOM() {
+  const rows = document.querySelectorAll('#taxa-bairros-list > div');
+  return Array.from(rows).map(r => {
+    const inputs = r.querySelectorAll('input');
+    return { bairro: (inputs[0].value || '').trim(), taxa: parseFloat(inputs[1].value) || 0 };
+  }).filter(f => f.bairro);
+}
 
 function getTaxaFaixasFromDOM() {
   const rows = document.querySelectorAll('#taxa-faixas-list > div');
@@ -6354,7 +6389,7 @@ function updateTaxaPreview() {
         <div style="font-size:18px;font-weight:700;color:var(--accent3);font-family:'Playfair Display',sans-serif">R$ ${val.toFixed(2).replace('.',',')}</div>
       </div>
     </div>`;
-  } else {
+  } else if (tipo === 'por_km') {
     const faixas = getTaxaFaixasFromDOM();
     if (!faixas.length) { el.innerHTML = '<span style="color:var(--muted)">Adicione pelo menos uma faixa acima.</span>'; return; }
     el.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:8px">O cliente verá um seletor como este:</div>
@@ -6364,6 +6399,16 @@ function updateTaxaPreview() {
           <span style="font-family:'Playfair Display',sans-serif;font-weight:700;color:var(--accent3)">R$ ${f.taxa.toFixed(2).replace('.',',')}</span>
         </div>`).join('')}
       </div>`;
+  } else if (tipo === 'por_bairro') {
+    const bairros = getTaxaBairrosFromDOM();
+    if (!bairros.length) { el.innerHTML = '<span style="color:var(--muted)">Adicione pelo menos um bairro acima.</span>'; return; }
+    el.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:8px">O cliente digita o bairro e o sistema identifica a taxa automaticamente:</div>
+      <div style="background:var(--surface2);border-radius:10px;overflow:hidden">
+        ${bairros.map(b => `<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:13px">📍 ${b.bairro}</span>
+          <span style="font-family:'Playfair Display',sans-serif;font-weight:700;color:var(--accent3)">R$ ${b.taxa.toFixed(2).replace('.',',')}</span>
+        </div>`).join('')}
+      </div>`;
   }
 }
 
@@ -6371,11 +6416,17 @@ async function saveTaxaConfig() {
   const tipo = document.querySelector('input[name="taxa-tipo"]:checked').value;
   const config = { tipo };
   if (tipo === 'fixo') {
-    config.valor = parseFloat(document.getElementById('taxa-fixo-val').value) || 0;
+    config.valor  = parseFloat(document.getElementById('taxa-fixo-val').value) || 0;
     config.faixas = [];
-  } else {
-    config.faixas = getTaxaFaixasFromDOM();
-    config.valor = 0;
+    config.bairros = [];
+  } else if (tipo === 'por_km') {
+    config.faixas  = getTaxaFaixasFromDOM();
+    config.bairros = [];
+    config.valor   = 0;
+  } else if (tipo === 'por_bairro') {
+    config.bairros = getTaxaBairrosFromDOM();
+    config.faixas  = [];
+    config.valor   = 0;
   }
   try {
     await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, delivery_fee_config: config });
