@@ -2,7 +2,10 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Login — Estima Food</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -46,6 +49,18 @@ input::placeholder{color:var(--muted)}
 
 .alert-expiry{display:none;background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.25);border-radius:8px;padding:10px 14px;font-size:12.5px;color:#fdba74;margin-bottom:14px}
 .alert-expiry.on{display:block}
+
+/* Mobile */
+@media(max-width:480px){
+  body{padding:env(safe-area-inset-top,0) env(safe-area-inset-right,0) env(safe-area-inset-bottom,0) env(safe-area-inset-left,0)}
+  .card{padding:28px 20px;border-radius:16px;width:100%;max-width:100vw;margin:12px}
+  input{font-size:16px!important;padding:13px 14px}
+  .btn{padding:15px;font-size:15px}
+}
+@media(max-width:360px){
+  .logo-text{font-size:18px}
+  .card{padding:22px 16px}
+}
 </style>
 <script src="/api-client.js"></script>
 </head>
