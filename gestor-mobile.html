@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>EstimaFood</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Outfit:wght@300;400;500;600;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/gestor-mobile.css">
+<script src="/api-client.js"></script>
+<script>
+// ══ TEMA ESCURO NAVY — aplicado antes do gestor.js ══
+(function(){
+  var r = document.documentElement;
+  var dark = {
+    '--bg':'#0f1117','--surface':'#181b24','--surface2':'#1e2130','--surface3':'#242840',
+    '--border':'rgba(255,255,255,.07)','--border2':'rgba(255,255,255,.13)',
+    '--accent':'#3b82f6','--accent2':'#06b6d4','--accent3':'#f59e0b',
+    '--accent-dim':'rgba(59,130,246,.18)','--accent-glow':'rgba(59,130,246,.35)',
+    '--success':'#22c55e','--danger':'#ef4444','--purple':'#8b5cf6',
+    '--pink':'#ec4899','--orange':'#f97316',
+    '--text':'#f1f5f9','--muted':'#64748b','--muted2':'#94a3b8',
+    '--sidebar-bg':'#131929','--topnav-bg':'#0d1117','--sfoot-bg':'rgba(8,10,18,.6)'
+  };
+  try { ['ef_tema_modo','ef_tema_v2','tema','theme'].forEach(function(k){ localStorage.removeItem(k); }); } catch(e){}
+  Object.keys(dark).forEach(function(k){ r.style.setProperty(k, dark[k]); });
+})();
+</script>
+<script>
+(function() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.getRegistrations().then(function(regs) {
+    regs.forEach(function(reg) { reg.unregister(); });
+  });
+  if ('caches' in window) {
+    caches.keys().then(function(names) {
+      names.forEach(function(name) { caches.delete(name); });
+    });
+  }
+})();
+</script>
+</head>
+<body>
+
+<!-- Print frame -->
+<div id="print-frame" style="display:none"></div>
+
+<!-- Toast container -->
+<div id="toast-wrap"></div>
+
+<!-- ══ TOP NAV (mobile) ══════════════════════════════════════ -->
+<nav class="topnav">
+  <a class="logo" href="#" onclick="nav('pedidos');return false">
+    <svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#3b82f6"/><path d="M10 28L20 12L30 28" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 22H26" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/></svg>
+    Estima Food
+  </a>
+  <div class="tnr">
+    <button class="caixa-btn" id="caixa-btn" onclick="toggleCaixa()" title="Abrir/Fechar Caixa" style="display:none">
+      <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><circle cx="8" cy="8.5" r="2" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+      <span id="caixa-btn-txt">Caixa</span>
+    </button>
+    <div class="tbadge" id="rt-badge" style="display:none">
+      <div class="sdot" id="rt-dot" style="background:var(--muted)"></div>
+    </div>
+    <div class="ibtn" id="wa-chat-topbtn" onclick="waOpenPanel()" title="Chat WhatsApp" style="width:36px;height:36px">
+      <svg viewBox="0 0 16 16" fill="none" width="18" height="18"><path d="M13.5 7.75a5.75 5.75 0 1 1-9.6-4.28L2.5 1.5l1.97 1.17A5.72 5.72 0 0 1 13.5 7.75Z" stroke="#25D366" stroke-width="1.3" fill="none"/><path d="M6 6.5c.3.8.9 1.5 1.5 2s1.5.9 2 .6l.5-.3c.2-.1.4-.1.5.1l.8 1.1c.1.2.1.4-.1.5-.8.5-2.1.5-3.2-.4C6.9 9.2 6 8 5.8 6.8c-.1-.6.1-1.1.4-1.3.2-.1.4-.1.5.1l.8 1.1c.1.1.1.3 0 .4l-.5.4Z" fill="#25D366"/></svg>
+      <span class="nbadge" id="wa-unread-badge" style="display:none;background:#25D366">0</span>
+    </div>
+    <div class="ibtn" onclick="toggleNotif()" title="Notificações" style="width:36px;height:36px">
+      <svg viewBox="0 0 16 16" fill="none" width="16" height="16"><path d="M8 2a5 5 0 0 1 5 5c0 2.5-.8 4-2 5H5c-1.2-1-2-2.5-2-5a5 5 0 0 1 5-5Z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13.5a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>
+      <span class="nbadge" id="notif-count" style="display:none">0</span>
+    </div>
+  </div>
+</nav>
+
+<!-- NOTIF PANEL -->
+<div class="notif-panel" id="notif-panel">
+  <div class="np-head">Notificações <button class="btn bg" style="font-size:10.5px;padding:2px 7px" onclick="clearNotifs()">Limpar</button></div>
+</div>
+
+<!-- ══ ELEMENTOS OCULTOS para compatibilidade com gestor.js ══ -->
+<div style="display:none" aria-hidden="true">
+  <!-- Sidebar stubs -->
+  <aside class="sidebar" id="sidebar-compat">
+    <div class="sfoot">
+      <div class="urow">
+        <div class="av" id="sidebar-av">E</div>
+        <div class="sfoot-info">
+          <div id="sidebar-nome">estima</div>
+          <div id="sidebar-role">Administrador</div>
+        </div>
+      </div>
+    </div>
+    <!-- Botões de navegação da sidebar — ocultos mas necessários para gestor.js -->
+    <button class="si on" id="sn-pedidos" onclick="nav('pedidos')"></button>
+    <button class="si" id="sn-pedidos-mesa" onclick="nav('pedidos-mesa')"></button>
+    <button class="si" id="sn-pdv-balcao" onclick="nav('pdv-balcao')"></button>
+    <button class="si" id="sn-gestor" onclick="nav('gestor')"></button>
+    <button class="si" id="sn-gestor-main" onclick="nav('gestor')"></button>
+    <button class="si" id="sn-imagens" onclick="nav('imagens')"></button>
+    <button class="si" id="sn-edicao" onclick="nav('edicao')"></button>
+    <button class="si" id="sn-potencializador" onclick="nav('potencializador')"></button>
+    <button class="si" id="sn-cardapio-publico" onclick="nav('cardapio-publico')"></button>
+    <button class="si" id="sn-tema" onclick="nav('tema')"></button>
+    <button class="si" id="sn-taxa" onclick="nav('taxa')"></button>
+    <button class="si" id="sn-robo" onclick="nav('robo')"></button>
+    <button class="si" id="sn-qrcode" onclick="nav('qrcode')"></button>
+    <button class="si" id="sn-garcom" onclick="nav('garcom')"></button>
+    <button class="si" id="sn-cupom" onclick="nav('cupom')"></button>
+    <button class="si" id="sn-fidelidade" onclick="nav('fidelidade')"></button>
+    <button class="si" id="sn-kds" onclick="nav('kds')"></button>
+    <button class="si" id="sn-caixa" onclick="nav('caixa')"></button>
+    <button class="si" id="sn-estoque" onclick="nav('estoque')"></button>
+    <button class="si" id="sn-clientes" onclick="nav('clientes')"></button>
+    <button class="si" id="sn-desempenho" onclick="nav('desempenho')"></button>
+    <button class="si" id="sn-relatorios" onclick="nav('relatorios')"></button>
+    <button class="si" id="sn-satisfacao" onclick="nav('satisfacao')"></button>
+    <button class="si" id="sn-impressao" onclick="nav('impressao')"></button>
+    <button class="si" id="sn-meu-plano" onclick="nav('meu-plano')"></button>
+    <button class="si" id="sn-saques" onclick="nav('saques')"></button>
+    <button class="si" id="sn-configuracoes" onclick="nav('configuracoes')"></button>
+    <span id="sn-robo-badge" style="display:none"></span>
+    <!-- Seletor de loja stub -->
+    <select id="loja-sel" style="display:none"></select>
+    <!-- Auto-accept toggles duplicados -->
+    <div class="toggle" id="auto-accept-sidebar"></div>
+    <div class="toggle" id="mesa-auto-accept-sidebar"></div>
+  </aside>
+</div>
+
+<!-- ══ LAYOUT PRINCIPAL ══════════════════════════════════════ -->
+<div class="app">
+<div class="main">
+
+<!-- ═══════════════════════════════════════════════════════════
+     MEUS PEDIDOS
+═══════════════════════════════════════════════════════════════ -->
+<div class="page on" id="page-pedidos">
+  <div class="ph">
+    <div><div class="pt">Meus Pedidos</div></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;width:100%">
+      <!-- Filtros de tipo -->
+      <div style="display:flex;gap:3px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:3px;flex:1">
+        <button class="btn" style="padding:6px 10px;font-size:11px;background:var(--accent);color:#fff;border:none;flex:1;justify-content:center" onclick="filterKanban('')">Todos</button>
+        <button class="btn bg" style="padding:6px 8px;font-size:11px;border:none;flex:1;justify-content:center" onclick="filterKanban('balcao')" title="Balcão">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 7l6-5 6 5v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7z" stroke="currentColor" stroke-width="1.4"/><path d="M6 14V9h4v5" stroke="currentColor" stroke-width="1.4"/></svg>
+        </button>
+        <button class="btn bg" style="padding:6px 8px;font-size:11px;border:none;flex:1;justify-content:center" onclick="filterKanban('delivery')" title="Delivery">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/></svg>
+        </button>
+        <button class="btn bg" style="padding:6px 8px;font-size:11px;border:none;flex:1;justify-content:center" onclick="filterKanban('mesa')" title="Mesa">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="2" rx="1" fill="currentColor"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="8" y1="4" x2="8" y2="2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <button class="btn bp" style="justify-content:center" onclick="noOpenModal()">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Novo pedido
+      </button>
+    </div>
+    <!-- Busca -->
+    <div class="sbox" style="width:100%">
+      <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <input placeholder="Buscar cliente ou nº pedido" style="width:100%">
+    </div>
+  </div>
+
+  <!-- Tabs mobile do kanban -->
+  <div class="kanban-tabs-mobile" id="kanban-mobile-tabs">
+    <button class="kanban-tab-m on" id="ktm-analise" onclick="showKanbanCol('analise')">
+      Em análise
+      <span class="ktm-cnt" id="ktm-cnt-analise">0</span>
+    </button>
+    <button class="kanban-tab-m" id="ktm-producao" onclick="showKanbanCol('producao')">
+      Produção
+      <span class="ktm-cnt" id="ktm-cnt-producao">0</span>
+    </button>
+    <button class="kanban-tab-m" id="ktm-pronto" onclick="showKanbanCol('pronto')">
+      Prontos
+      <span class="ktm-cnt" id="ktm-cnt-pronto">0</span>
+    </button>
+  </div>
+
+  <!-- Kanban (1 coluna por vez no mobile) -->
+  <div class="kanban" id="kanban-board" style="flex:1;min-height:0">
+    <!-- Em análise -->
+    <div class="kol kol-analise on" id="kol-mobile-analise">
+      <div class="kol-head">
+        <div class="kol-title">Em análise <div class="kol-cnt" id="cnt-analise">0</div></div>
+        <button class="btn bg" style="font-size:10px;padding:3px 8px;border:none" onclick="document.querySelector('.kol-config').style.display=document.querySelector('.kol-config').style.display==='none'?'block':'none'">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M4 4l1 1M11 11l1 1M4 12l1-1M11 5l1-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="kol-config" style="display:none">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <div class="toggle" id="auto-accept" onclick="toggleAutoAccept(this)"></div>
+          <span style="font-size:12px">Aceitar automaticamente</span>
+        </label>
+      </div>
+      <div class="kol-body" id="col-analise"></div>
+    </div>
+    <!-- Em produção -->
+    <div class="kol kol-producao" id="kol-mobile-producao">
+      <div class="kol-head">
+        <div class="kol-title">Em produção <div class="kol-cnt" id="cnt-producao">0</div></div>
+      </div>
+      <div class="kol-body" id="col-producao"></div>
+    </div>
+    <!-- Prontos para entrega -->
+    <div class="kol kol-pronto" id="kol-mobile-pronto">
+      <div class="kol-head">
+        <div class="kol-title">Prontos para entrega <div class="kol-cnt" id="cnt-pronto">0</div></div>
+      </div>
+      <div class="kol-body" id="col-pronto"></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     PEDIDOS MESA
+═══════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-pedidos-mesa">
+  <div class="ph">
+    <div><div class="pt">Pedidos Mesa</div><div class="ps">Pedidos separados por mesa</div></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;flex:1">
+        <div class="toggle" id="mesa-auto-accept" onclick="toggleMesaAutoAccept(this)"></div>
+        <span style="font-size:12px;font-weight:500">Aceitar auto.</span>
+      </label>
+      <button class="btn bg" onclick="renderMesasPage()">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 1 1 2 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M3 11V8H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Atualizar
+      </button>
+      <button class="btn bp" onclick="openModalNovaMesa()">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Nova Mesa
+      </button>
+    </div>
+  </div>
+  <!-- Stats -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center">
+      <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:800;color:var(--success)" id="pm-stat-livres">0</div>
+      <div style="font-size:10px;color:var(--muted)">Livres</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center">
+      <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:800;color:var(--danger)" id="pm-stat-ocupadas">0</div>
+      <div style="font-size:10px;color:var(--muted)">Ocupadas</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center">
+      <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:800;color:var(--accent3)" id="pm-stat-aguardando">0</div>
+      <div style="font-size:10px;color:var(--muted)">Aguardando</div>
+    </div>
+  </div>
+  <div id="pm-mesas-grid"></div>
+</div>
+
+<!-- MODAL NOVA MESA -->
+<div class="modal-bg" id="modal-nova-mesa">
+  <div class="modal" style="max-width:100%">
+    <div class="modal-head">
+      <div class="modal-title">Nova Mesa</div>
+      <button class="modal-close" onclick="closeModal('modal-nova-mesa')"></button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div><label class="form-label">Número da mesa</label><input class="form-input" id="nova-mesa-num" type="number" min="1" placeholder="Ex: 5"></div>
+      <div><label class="form-label">Capacidade (pessoas)</label><input class="form-input" id="nova-mesa-guests" type="number" min="1" placeholder="Ex: 4"></div>
+      <button class="btn bp" style="width:100%;justify-content:center" onclick="saveNovaMesa()">Criar mesa</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EDITAR MESA -->
+<div class="modal-bg" id="modal-edit-mesa">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-edit-mesa')"></button>
+    <h2 id="modal-edit-mesa-title">Editar Mesa</h2>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div><label class="form-label">Número da mesa</label><input class="form-input" id="edit-mesa-num" type="number" min="1" placeholder="Ex: 1"></div>
+      <div><label class="form-label">Capacidade (pessoas)</label><input class="form-input" id="edit-mesa-guests" type="number" min="1" placeholder="Ex: 4"></div>
+      <input type="hidden" id="edit-mesa-old-num">
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn bp" style="flex:1;justify-content:center" onclick="saveMesaEdit()">Salvar</button>
+        <button class="btn bd" style="flex:1;justify-content:center" onclick="confirmDeleteMesa()">Excluir</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PAGAMENTO MESA -->
+<div class="modal-bg" id="modal-pag-mesa">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="modal-pag-mesa-title">Registrar Pagamento</div>
+      <button class="modal-close" onclick="closeModal('modal-pag-mesa')"></button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:11.5px;color:var(--muted);margin-bottom:4px">Total a receber</div>
+        <div style="font-family:'Playfair Display',serif;font-size:32px;font-weight:900;color:var(--accent3)" id="modal-pag-total">R$ 0,00</div>
+      </div>
+      <div>
+        <label class="form-label">Forma de pagamento</label>
+        <div class="sw" style="width:100%">
+          <select class="form-input" id="modal-pag-forma" style="padding:0">
+            <option value="PIX">PIX</option>
+            <option value="Cartão">Cartão</option>
+            <option value="Dinheiro">Dinheiro</option>
+          </select>
+        </div>
+      </div>
+      <input type="hidden" id="modal-pag-mesa-num">
+      <button class="btn bp" style="justify-content:center;padding:14px;font-size:14px;font-weight:700" onclick="confirmarPagamentoMesa()">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Confirmar e liberar mesa
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     PDV BALCÃO
+═══════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-pdv-balcao" style="padding:0;overflow:hidden">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0">
+    <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:800">Pedidos Balcão (PDV)</div>
+    <button class="btn bg" style="font-size:11px;padding:5px 10px" onclick="pdvbClearCart()">Limpar</button>
+  </div>
+  <div class="pdvb-wrap">
+    <div class="pdvb-left">
+      <div class="pdvb-tabs">
+        <div class="pdvb-tab on" id="pdvb-tab-d" onclick="pdvbSwitchTab('d')">Delivery e Balcão</div>
+        <div class="pdvb-tab" id="pdvb-tab-m" onclick="pdvbSwitchTab('m')">Mesas e Comandas</div>
+      </div>
+      <div class="pdvb-toolbar">
+        <div class="pdvb-search-wrap">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <input id="pdvb-search" placeholder="Pesquisar..." oninput="pdvbRenderGrid()" autocomplete="off">
+        </div>
+        <button class="pdvb-filter-btn" onclick="pdvbToggleFilter()">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div id="pdvb-filter-panel" style="display:none;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface2);flex-shrink:0">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="pdvb-filter-btn on" id="pdvb-f-todos" onclick="pdvbSetFilter('todos')" style="padding:4px 10px;font-size:11px">Todos</button>
+          <button class="pdvb-filter-btn" id="pdvb-f-promo" onclick="pdvbSetFilter('promo')" style="padding:4px 10px;font-size:11px">Promoção</button>
+          <button class="pdvb-filter-btn" id="pdvb-f-pizza" onclick="pdvbSetFilter('pizza')" style="padding:4px 10px;font-size:11px">Pizza</button>
+          <button class="pdvb-filter-btn" onclick="document.getElementById('pdvb-filter-panel').style.display='none'" style="padding:4px 10px;font-size:11px;margin-left:auto;color:var(--danger)">×</button>
+        </div>
+      </div>
+      <div class="pdvb-cats" id="pdvb-cats"></div>
+      <div class="pdvb-grid" id="pdvb-grid"></div>
+      <div class="pdvb-bottom-bar">
+        <button class="pdvb-bar-btn" onclick="pdvbOpenObs()">Observação</button>
+        <button class="pdvb-bar-btn" onclick="pdvbBackCat()">Voltar</button>
+        <button class="pdvb-bar-btn primary" onclick="pdvbGerarPedido()">Finalizar item</button>
+      </div>
+    </div>
+    <div class="pdvb-right">
+      <div class="pdvb-order-head"><span>Itens do pedido</span><span>Subtotal</span></div>
+      <div class="pdvb-order-items" id="pdvb-order-items">
+        <div class="pdvb-empty-order" id="pdvb-empty-msg">
+          <svg width="28" height="28" viewBox="0 0 16 16" fill="none" style="opacity:.3;display:block;margin:0 auto 6px"><path d="M2 2h2l1.5 7.5A1 1 0 0 0 6.5 11h5a1 1 0 0 0 1-.8L14 6H4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="7" cy="13.5" r="1" fill="currentColor"/><circle cx="12" cy="13.5" r="1" fill="currentColor"/></svg>
+          Adicione itens ao pedido
+        </div>
+      </div>
+      <div class="pdvb-totals">
+        <div class="pdvb-tot-row"><span>Subtotal</span><span id="pdvb-subtotal">R$ 0,00</span></div>
+        <div class="pdvb-tot-row"><span>Entrega</span><span id="pdvb-entrega" style="color:var(--success)">Grátis</span></div>
+        <div class="pdvb-tot-row" id="pdvb-desconto-row" style="display:none"><span>Desconto</span><span id="pdvb-desconto" style="color:var(--success)">-R$ 0,00</span></div>
+        <div class="pdvb-tot-row total"><span>Total</span><span id="pdvb-total">R$ 0,00</span></div>
+      </div>
+      <div class="pdvb-inputs">
+        <input class="pdvb-input" id="pdvb-phone" placeholder="(XX) X XXXX-XXXX" oninput="pdvbFormatPhone(this)">
+        <input class="pdvb-input" id="pdvb-client" placeholder="Nome do cliente...">
+      </div>
+      <div class="pdvb-actions">
+        <button class="pdvb-act-btn" onclick="pdvbEntrega()">Entrega</button>
+        <button class="pdvb-act-btn" onclick="pdvbPagamentos()">Pagamento</button>
+        <button class="pdvb-act-btn" onclick="pdvbCPF()">CPF/CNPJ</button>
+        <button class="pdvb-act-btn" onclick="pdvbAjustar()">Desconto</button>
+      </div>
+      <button class="pdvb-gerar-btn" id="pdvb-gerar" onclick="pdvbGerarPedido()">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Gerar pedido
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modais PDV Balcão -->
+<div class="modal-bg" id="modal-pdvb-mesa">
+  <div class="modal">
+    <button class="modal-close" onclick="pdvbCancelMesaModal()"></button>
+    <h2 style="margin-bottom:14px">Selecione uma mesa</h2>
+    <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:14px">
+      <div id="pdvb-mesa-sub-mesas" onclick="pdvbMesaSubSwitch('mesas')" style="padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid var(--accent);color:var(--accent);margin-bottom:-2px">Mesas</div>
+      <div id="pdvb-mesa-sub-comandas" onclick="pdvbMesaSubSwitch('comandas')" style="padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);margin-bottom:-2px">Comandas</div>
+    </div>
+    <div id="pdvb-mesas-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px"></div>
+    <div id="pdvb-comanda-form" style="display:none;margin-top:12px">
+      <div><label class="form-label">Nº da comanda</label><input class="form-input" id="pdvb-comanda-num" type="number" min="1" placeholder="Ex: 42"></div>
+      <button class="btn bp" style="margin-top:10px;width:100%;justify-content:center" onclick="pdvbSelectComanda()">Selecionar</button>
+    </div>
+  </div>
+</div>
+<div class="modal-bg" id="modal-pdvb-pag">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-pdvb-pag')"></button>
+    <h2 style="margin-bottom:14px">Forma de Pagamento</h2>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+      <label style="display:flex;align-items:center;gap:9px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer" onclick="pdvbSelectPag(this,'Dinheiro')"><input type="radio" name="pdvb-pag" value="Dinheiro" style="accent-color:var(--accent)"><span style="font-size:13px;font-weight:600">💵 Dinheiro</span></label>
+      <label style="display:flex;align-items:center;gap:9px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer" onclick="pdvbSelectPag(this,'Cartão')"><input type="radio" name="pdvb-pag" value="Cartão" style="accent-color:var(--accent)"><span style="font-size:13px;font-weight:600">💳 Cartão</span></label>
+      <label style="display:flex;align-items:center;gap:9px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer" onclick="pdvbSelectPag(this,'PIX')"><input type="radio" name="pdvb-pag" value="PIX" style="accent-color:var(--accent)"><span style="font-size:13px;font-weight:600">🟢 PIX</span></label>
+      <label style="display:flex;align-items:center;gap:9px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer" onclick="pdvbSelectPag(this,'Vale Refeição')"><input type="radio" name="pdvb-pag" value="Vale Refeição" style="accent-color:var(--accent)"><span style="font-size:13px;font-weight:600">🎫 Vale Refeição</span></label>
+    </div>
+    <div id="pdvb-troco-wrap" style="margin-bottom:14px"><label class="form-label">Troco para (R$) — opcional</label><input class="form-input" id="pdvb-troco" type="number" step="0.01" placeholder="0,00"></div>
+    <button class="btn bp" style="width:100%;justify-content:center;padding:12px" onclick="pdvbConfirmPag()">Confirmar pagamento</button>
+  </div>
+</div>
+<div class="modal-bg" id="modal-pdvb-entrega">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-pdvb-entrega')"></button>
+    <h2>Tipo de Entrega</h2>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+      <label style="display:flex;align-items:center;gap:9px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer" onclick="pdvbSelectEntrega(this,'balcao')"><input type="radio" name="pdvb-entrega" value="balcao" checked style="accent-color:var(--accent)"><div><div style="font-size:13px;font-weight:600">Balcão / Retirada</div><div style="font-size:11.5px;color:var(--muted);margin-top:2px">Cliente retira — taxa grátis</div></div></label>
+      <label style="display:flex;align-items:center;gap:9px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer" onclick="pdvbSelectEntrega(this,'delivery')"><input type="radio" name="pdvb-entrega" value="delivery" style="accent-color:var(--accent)"><div><div style="font-size:13px;font-weight:600">Delivery</div><div style="font-size:11.5px;color:var(--muted);margin-top:2px">Entrega no endereço</div></div></label>
+    </div>
+    <div id="pdvb-addr-wrap" style="display:none">
+      <div class="form-row"><label class="form-label">Endereço</label><input class="form-input" id="pdvb-addr" placeholder="Rua, número, bairro..."></div>
+      <div class="form-row"><label class="form-label">Taxa (R$)</label><input class="form-input" id="pdvb-taxa-val" type="number" step="0.50" placeholder="0,00" oninput="pdvbUpdateTaxa()"></div>
+    </div>
+    <button class="btn bp" style="width:100%;justify-content:center" onclick="pdvbConfirmEntrega()">Confirmar</button>
+  </div>
+</div>
+<div class="modal-bg" id="modal-pdvb-ajustar">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-pdvb-ajustar')"></button>
+    <h2>Ajustar Valor</h2>
+    <div class="form-row"><label class="form-label">Desconto (%)</label><input class="form-input" id="pdvb-desc-pct" type="number" min="0" max="100" placeholder="0" oninput="pdvbPreviewDesc()"></div>
+    <div class="form-row"><label class="form-label">Desconto (R$)</label><input class="form-input" id="pdvb-desc-val" type="number" min="0" step="0.01" placeholder="0,00" oninput="pdvbPreviewDesc()"></div>
+    <div id="pdvb-desc-preview" style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:14px;display:none"></div>
+    <button class="btn bp" style="width:100%;justify-content:center" onclick="pdvbConfirmAjuste()">Aplicar desconto</button>
+  </div>
+</div>
+<div class="modal-bg" id="modal-pdvb-obs">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-pdvb-obs')"></button>
+    <h2>Observação</h2>
+    <div class="form-row"><label class="form-label">Observação do pedido</label><textarea class="form-input" id="pdvb-obs-text" rows="4" placeholder="Ex: Sem cebola, ponto da carne..."></textarea></div>
+    <button class="btn bp" style="width:100%;justify-content:center" onclick="pdvbSaveObs()">Confirmar</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     GESTOR DE CARDÁPIO
+═══════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-gestor">
+  <div class="ph">
+    <div><div class="pt">Cardápio</div></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;width:100%">
+      <div class="sbox" style="flex:1">
+        <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <input placeholder="Pesquisar" style="width:100%">
+      </div>
+      <button class="btn bp" onclick="openModal('modal-add-cat')">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Categoria
+      </button>
+    </div>
+  </div>
+  <!-- Ações rápidas -->
+  <div style="display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch">
+    <button class="btn bg" style="white-space:nowrap;flex-shrink:0" onclick="openModal('modal-modelos')">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="1" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.4"/><rect x="1" y="9" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="9" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.4"/></svg>
+      Modelos prontos
+    </button>
+    <button class="btn bg" style="white-space:nowrap;flex-shrink:0" onclick="nav('imagens')">📸 Imagens</button>
+    <button class="btn bg" style="white-space:nowrap;flex-shrink:0" onclick="nav('edicao')">✏️ Edição massa</button>
+  </div>
+  <div id="cat-list"></div>
+</div>
+
+<!-- Modais cardápio -->
+<div class="modal-bg" id="modal-add-cat">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Nova Categoria</div>
+      <button class="modal-close" onclick="closeModal('modal-add-cat')"></button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div><label class="form-label">Nome da categoria</label><input class="form-input" id="cat-name" placeholder="Ex: Lanches, Bebidas..."></div>
+      <div>
+        <label class="form-label">Ícone (emoji)</label>
+        <input class="form-input" id="cat-icon" placeholder="Ex: 🍔">
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+        <div class="toggle on" id="cat-ativo" onclick="this.classList.toggle('on')"></div>
+        <span style="font-size:13px">Categoria ativa</span>
+      </div>
+      <button class="btn bp" style="width:100%;justify-content:center" onclick="addCategory()">Criar categoria</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-add-item">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="add-item-title">Novo Item</div>
+      <button class="modal-close" onclick="closeModal('modal-add-item')"></button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div><label class="form-label">Nome do item</label><input class="form-input" id="item-name" placeholder="Ex: X-Burguer"></div>
+      <div><label class="form-label">Descrição</label><textarea class="form-input" id="item-desc" rows="2" placeholder="Descreva o item..."></textarea></div>
+      <div class="form-row-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label class="form-label">Preço (R$)</label><input class="form-input" id="item-price" type="number" step="0.01" placeholder="0,00"></div>
+        <div><label class="form-label">Preço promo. (R$)</label><input class="form-input" id="item-promo" type="number" step="0.01" placeholder="Opcional"></div>
+      </div>
+      <div>
+        <label class="form-label">Categoria</label>
+        <div class="sw" style="width:100%"><select class="form-input" id="item-cat" style="padding:0"></select></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+        <div class="toggle on" id="item-ativo" onclick="this.classList.toggle('on')"></div>
+        <span style="font-size:13px">Item disponível</span>
+      </div>
+      <input type="hidden" id="item-edit-id">
+      <button class="btn bp" style="width:100%;justify-content:center" onclick="addItem()">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M5 2v5h6V2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+        Salvar item
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-modelos">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Modelos Prontos</div>
+      <button class="modal-close" onclick="closeModal('modal-modelos')"></button>
+    </div>
+    <div id="modelos-list" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     CAIXA
+═══════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-caixa">
+  <div id="caixa-content"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     KDS — COZINHA
+═══════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-kds">
+  <div class="ph">
+    <div><div class="pt">Cozinha (KDS)</div></div>
+    <button class="btn bg" onclick="kdsRefresh ? kdsRefresh() : null">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 1 1 2 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M3 11V8H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Atualizar
+    </button>
+  </div>
+  <div class="mesa-kanban" id="kds-board">
+    <div class="kol kol-preparando">
+      <div class="kol-head">
+        <div class="kol-title">Preparando <div class="kol-cnt" id="cnt-kds-prep">0</div></div>
+      </div>
+      <div class="kol-body" id="col-kds-prep"></div>
+    </div>
+    <div class="kol kol-servido">
+      <div class="kol-head">
+        <div class="kol-title">Servido <div class="kol-cnt" id="cnt-kds-serv">0</div></div>
+      </div>
+      <div class="kol-body" id="col-kds-serv"></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     PÁGINAS SECUNDÁRIAS (populadas pelo gestor.js)
+═══════════════════════════════════════════════════════════════ -->
+
+<div class="page" id="page-edicao">
+  <div class="ph">
+    <div><div class="pt">Edição em massa</div><div class="ps">Altere preços e status de vários itens</div></div>
+    <button class="btn bp" onclick="saveAll()">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+      Salvar
+    </button>
+  </div>
+  <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+    <div class="sw" style="flex:1"><select onchange="filterCat(this.value)"><option value="">Todos itens</option></select></div>
+    <div class="sw" style="flex:1"><select onchange="filterSt(this.value)"><option value="">Status</option><option value="active">Disponível</option><option value="esgotado">Esgotado</option><option value="pausado">Pausado</option></select></div>
+  </div>
+  <div class="sbox" style="margin-bottom:12px">
+    <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    <input placeholder="Pesquise pelo nome" oninput="filterSearch(this.value)" style="width:100%">
+  </div>
+  <div class="tw">
+    <table>
+      <thead><tr><th><input type="checkbox" class="cb" id="check-all" onchange="toggleAll(this)"></th><th>Item</th><th>Preço</th><th>Status</th><th>Ações</th></tr></thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="page" id="page-imagens">
+  <div class="ph">
+    <div><div class="pt">Imagens</div><div class="ps">Fotos dos itens do cardápio</div></div>
+    <button class="btn bp" onclick="showToast('','Selecione uma imagem do dispositivo')">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M6 3H4L2 5v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V5l-2-2h-2L9 3H6z" stroke="currentColor" stroke-width="1.4" fill="none"/><circle cx="8" cy="9" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+      Adicionar foto
+    </button>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="img-grid"></div>
+</div>
+
+<div class="page" id="page-potencializador">
+  <div class="ph"><div><div class="pt">Potencializador</div><div class="ps">Destaque seus melhores itens</div></div></div>
+  <div class="sg">
+    <div class="sc" style="--ca:var(--accent3)"><div class="si2">🔥</div><div class="sl">Em destaque</div><div class="sv" id="pot-cnt">3</div></div>
+    <div class="sc" style="--ca:var(--success)"><div class="si2">💰</div><div class="sl">Receita extra</div><div class="sv">R$280</div></div>
+    <div class="sc" style="--ca:var(--accent)"><div class="si2">👁</div><div class="sl">Visualizações</div><div class="sv">1.4k</div></div>
+    <div class="sc" style="--ca:var(--purple)"><div class="si2">📊</div><div class="sl">Conversão</div><div class="sv">32%</div></div>
+  </div>
+  <div class="card"><div class="card-title">Itens com maior destaque</div><div id="pot-items" style="display:flex;flex-direction:column;gap:8px"></div></div>
+</div>
+
+<div class="page" id="page-cardapio-publico">
+  <div id="cp-content"></div>
+</div>
+
+<div class="page" id="page-tema">
+  <div id="tema-content"></div>
+</div>
+
+<div class="page" id="page-taxa">
+  <div class="ph">
+    <div><div class="pt">Taxa de Entrega</div><div class="ps">Configure a taxa cobrada no cardápio</div></div>
+    <button class="btn bp" onclick="saveTaxaConfig()">Salvar</button>
+  </div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">Tipo de cobrança</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2)" id="taxa-label-fixo">
+        <input type="radio" name="taxa-tipo" value="fixo" id="taxa-tipo-fixo" checked onchange="onTaxaTipoChange()" style="accent-color:var(--accent)">
+        <div><div style="font-weight:600;font-size:13px">Taxa Fixa</div><div style="font-size:11.5px;color:var(--muted)">Mesmo valor para toda entrega</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2)" id="taxa-label-km">
+        <input type="radio" name="taxa-tipo" value="por_km" id="taxa-tipo-km" onchange="onTaxaTipoChange()" style="accent-color:var(--accent)">
+        <div><div style="font-weight:600;font-size:13px">Por Faixas de Km</div><div style="font-size:11.5px;color:var(--muted)">Taxa varia conforme a distância</div></div>
+      </label>
+    </div>
+  </div>
+  <div class="card" id="taxa-fixo-block" style="margin-bottom:16px">
+    <div class="card-title">Valor da taxa fixa</div>
+    <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:13px;color:var(--muted)">R$</span>
+      <input class="form-input" id="taxa-fixo-val" type="number" min="0" step="0.50" placeholder="0,00" style="font-size:20px;font-weight:700;max-width:140px">
+      <span style="font-size:12px;color:var(--muted)">por entrega</span>
+    </div>
+  </div>
+  <div class="card" id="taxa-km-block" style="display:none;margin-bottom:16px">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">Faixas de distância<button class="btn bp" style="font-size:11px;padding:4px 10px" onclick="addTaxaFaixa()">+ Faixa</button></div>
+    <div id="taxa-faixas-list" style="display:flex;flex-direction:column;gap:8px;margin-top:10px"></div>
+  </div>
+  <div class="card" id="taxa-preview-block" style="background:rgba(59,130,246,.05);border-color:rgba(59,130,246,.15)">
+    <div class="card-title">Prévia para o cliente</div>
+    <div id="taxa-preview-content" style="margin-top:12px;font-size:13px;color:var(--muted)"></div>
+  </div>
+</div>
+
+<div class="page" id="page-robo" style="padding:0;overflow:hidden">
+  <div style="display:flex;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;overflow-x:auto;-webkit-overflow-scrolling:touch">
+    <div class="pdvb-tab on" id="robo-tab-wp" onclick="roboTab('wp')" style="flex-shrink:0;padding:11px 16px">WhatsApp</div>
+    <div class="pdvb-tab" id="robo-tab-auto" onclick="roboTab('auto')" style="flex-shrink:0;padding:11px 16px">Automações</div>
+    <div class="pdvb-tab" id="robo-tab-ia" onclick="roboTab('ia')" style="flex-shrink:0;padding:11px 16px">Agente IA</div>
+    <div class="pdvb-tab" id="robo-tab-chat" onclick="roboTab('chat')" style="flex-shrink:0;padding:11px 16px">Simulador</div>
+  </div>
+  <div style="flex:1;overflow:auto;padding:16px 14px;padding-bottom:calc(var(--bottom-h) + var(--safe-bottom) + 16px)" id="robo-main-content">
+    <div id="robo-section-wp">
+      <div class="ph" style="margin-bottom:16px">
+        <div><div class="pt">WhatsApp</div><div class="ps">Conecte seu número para mensagens automáticas</div></div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-title">Status da Conexão</div>
+        <div id="evo-status-badge" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);font-size:13px;font-weight:600;color:var(--muted);margin-bottom:12px">
+          <div id="evo-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--muted)"></div>
+          <span id="evo-status-txt">Verificando...</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn bp" style="flex:1;justify-content:center" onclick="evoConectar()">Conectar</button>
+          <button class="btn bg" style="flex:1;justify-content:center" onclick="evoCheckStatus()">Verificar</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Nome da Instância</div>
+        <input class="form-input" id="evo-instance" placeholder="ex: meu-restaurante" style="margin-top:6px">
+        <div id="evo-qr-area" style="text-align:center;padding:20px 0">
+          <div id="evo-qr-code" style="display:inline-block"></div>
+          <p style="font-size:12px;color:var(--muted);margin-top:8px">Escaneie o QR Code com seu WhatsApp</p>
+        </div>
+        <div id="evo-connected-area" style="display:none;text-align:center;padding:16px 0">
+          <div style="font-size:15px;font-weight:700;color:var(--success)">✅ WhatsApp Conectado!</div>
+          <div id="evo-phone-display" style="font-size:12px;color:var(--muted);margin:6px 0"></div>
+          <button class="btn bd" style="margin-top:8px" onclick="evoDesconectar()">Desconectar</button>
+        </div>
+      </div>
+    </div>
+    <div id="robo-section-auto" style="display:none"></div>
+    <div id="robo-section-ia" style="display:none"></div>
+    <div id="robo-section-chat" style="display:none"></div>
+  </div>
+</div>
+
+<div class="page" id="page-qrcode">
+  <div class="ph"><div><div class="pt">Mesas</div><div class="ps">Gerencie mesas e QR Codes</div></div></div>
+  <div id="qrcode-content"></div>
+</div>
+
+<div class="page" id="page-garcom">
+  <div class="ph"><div><div class="pt">Modo Garçom</div></div></div>
+  <div id="garcom-content"></div>
+</div>
+
+<div class="page" id="page-cupom">
+  <div class="ph"><div><div class="pt">Cupons</div><div class="ps">Gerencie seus cupons de desconto</div></div>
+    <button class="btn bp" onclick="typeof openModalCupom === 'function' && openModalCupom()">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      Novo cupom
+    </button>
+  </div>
+  <div id="cupom-list"></div>
+</div>
+
+<div class="page" id="page-fidelidade">
+  <div class="ph"><div><div class="pt">Fidelidade</div><div class="ps">Programa de pontos e recompensas</div></div></div>
+  <div id="fidelidade-content"></div>
+</div>
+
+<div class="page" id="page-pdv">
+  <div class="ph"><div><div class="pt">PDV</div><div class="ps">Ponto de Venda</div></div></div>
+  <div id="pdv-content"></div>
+</div>
+
+<div class="page" id="page-estoque">
+  <div class="ph"><div><div class="pt">Estoque</div><div class="ps">Controle de estoque dos itens</div></div></div>
+  <div id="estoque-content"></div>
+</div>
+
+<div class="page" id="page-clientes">
+  <div class="ph"><div><div class="pt">Clientes</div></div>
+    <div class="sbox" style="flex:1">
+      <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <input placeholder="Buscar cliente" style="width:100%">
+    </div>
+  </div>
+  <div class="tw"><table><thead><tr><th>Nome</th><th>Telefone</th><th>Pedidos</th><th>Total</th></tr></thead><tbody id="clientes-body"></tbody></table></div>
+</div>
+
+<div class="page" id="page-desempenho">
+  <div class="ph">
+    <div><div class="pt">Meu Desempenho</div></div>
+    <div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <button class="desemp-prd-btn on" onclick="loadDesempenho('hoje')">Hoje</button>
+      <button class="desemp-prd-btn" onclick="loadDesempenho('semana')">Semana</button>
+      <button class="desemp-prd-btn" onclick="loadDesempenho('mes')">Mês</button>
+    </div>
+  </div>
+  <div class="desemp-grid" id="desemp-grid"></div>
+  <div id="desemp-charts"></div>
+</div>
+
+<div class="page" id="page-relatorios">
+  <div class="ph"><div><div class="pt">Relatórios</div></div></div>
+  <div id="relatorios-content"></div>
+</div>
+
+<div class="page" id="page-satisfacao">
+  <div class="ph"><div><div class="pt">Satisfação</div><div class="ps">Avaliações dos seus clientes</div></div></div>
+  <div id="satisfacao-content"></div>
+</div>
+
+<div class="page" id="page-impressao">
+  <div class="ph"><div><div class="pt">Impressão Automática</div><div class="ps">Configure sua impressora térmica</div></div></div>
+  <div id="impressao-content"></div>
+</div>
+
+<div class="page" id="page-meu-plano">
+  <div class="ph"><div><div class="pt">Meu Plano</div></div></div>
+  <div id="plano-content"></div>
+</div>
+
+<div class="page" id="page-saques">
+  <div class="ph"><div><div class="pt">Carteira & Saques</div></div></div>
+  <div id="saques-content"></div>
+</div>
+
+<div class="page" id="page-configuracoes">
+  <div id="configuracoes-content"></div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODAIS GLOBAIS
+═══════════════════════════════════════════════════════════════ -->
+
+<!-- Modal Novo Pedido -->
+<div class="modal-bg" id="modal-no">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Novo Pedido</div>
+      <button class="modal-close" onclick="closeModal('modal-no')"></button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div><label class="form-label">Nome do cliente</label><input class="form-input" id="no-nome" placeholder="Ex: João Silva"></div>
+      <div><label class="form-label">Telefone (WhatsApp)</label><input class="form-input" id="no-tel" type="tel" placeholder="(XX) X XXXX-XXXX" oninput="if(typeof formatPhone==='function')formatPhone(this,'no-tel')"></div>
+      <div>
+        <label class="form-label">Tipo de pedido</label>
+        <div class="sw" style="width:100%"><select class="form-input" id="no-tipo" style="padding:0"><option value="delivery">Delivery</option><option value="balcao">Balcão</option><option value="mesa">Mesa</option></select></div>
+      </div>
+      <div><label class="form-label">Endereço (delivery)</label><input class="form-input" id="no-end" placeholder="Rua, número, bairro..."></div>
+      <div>
+        <label class="form-label">Forma de pagamento</label>
+        <div class="sw" style="width:100%"><select class="form-input" id="no-pag" style="padding:0"><option>PIX</option><option>Cartão</option><option>Dinheiro</option></select></div>
+      </div>
+      <div><label class="form-label">Observação</label><textarea class="form-input" id="no-obs" rows="2" placeholder="Ex: Sem cebola..."></textarea></div>
+      <button class="btn bp" style="width:100%;justify-content:center;padding:13px" onclick="typeof criarPedidoManual==='function'&&criarPedidoManual()">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Criar Pedido
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Detalhes Pedido -->
+<div class="modal-bg" id="modal-order">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="modal-order-title">Pedido #0</div>
+      <button class="modal-close" onclick="closeModal('modal-order')"></button>
+    </div>
+    <div id="modal-order-body" style="display:flex;flex-direction:column;gap:12px"></div>
+  </div>
+</div>
+
+<!-- Modal Confirmação Genérica -->
+<div class="modal-bg" id="modal-confirm">
+  <div class="modal" style="max-width:100%">
+    <h2 id="confirm-title" style="margin-bottom:8px">Confirmar?</h2>
+    <p id="confirm-msg" style="font-size:13px;color:var(--muted);margin-bottom:18px"></p>
+    <div style="display:flex;gap:8px">
+      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-confirm')">Cancelar</button>
+      <button class="btn bd" style="flex:1;justify-content:center" id="confirm-ok" onclick="">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Sair -->
+<div class="modal-bg" id="modal-logout">
+  <div class="modal">
+    <h2 style="margin-bottom:8px">Sair do sistema?</h2>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:18px">Sua sessão será encerrada.</p>
+    <div style="display:flex;gap:8px">
+      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-logout')">Cancelar</button>
+      <button class="btn bd" style="flex:1;justify-content:center" onclick="confirmarLogout()">Sair</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- /.main -->
+</div><!-- /.app -->
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     BOTTOM TAB BAR
+═══════════════════════════════════════════════════════════════ -->
+<nav class="bottomnav" role="navigation" aria-label="Navegação principal">
+
+  <!-- Pedidos -->
+  <button class="btab on" id="btab-pedidos" onclick="nav('pedidos');mobileSetTab('pedidos')" aria-label="Meus Pedidos">
+    <div class="btab-icon">
+      <svg viewBox="0 0 16 16" fill="none" width="20" height="20"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <span class="btab-badge" id="btab-badge-pedidos"></span>
+    </div>
+    <span>Pedidos</span>
+  </button>
+
+  <!-- Mesas -->
+  <button class="btab" id="btab-mesa" onclick="nav('pedidos-mesa');mobileSetTab('mesa')" aria-label="Mesas">
+    <div class="btab-icon">
+      <svg viewBox="0 0 16 16" fill="none" width="20" height="20"><rect x="2" y="5" width="12" height="2" rx="1" fill="currentColor"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="8" y1="4" x2="8" y2="2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    </div>
+    <span>Mesas</span>
+  </button>
+
+  <!-- PDV / Balcão (ação central destacada) -->
+  <button class="btab" id="btab-pdv" onclick="nav('pdv-balcao');mobileSetTab('pdv')" aria-label="PDV Balcão" style="position:relative">
+    <div class="btab-icon" style="background:var(--accent);border-radius:14px;width:44px;height:36px;margin-top:-4px">
+      <svg viewBox="0 0 16 16" fill="none" width="20" height="20" style="color:#fff"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><circle cx="8" cy="8.5" r="2" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+    </div>
+    <span>PDV</span>
+  </button>
+
+  <!-- Cardápio -->
+  <button class="btab" id="btab-cardapio" onclick="nav('gestor');mobileSetTab('cardapio')" aria-label="Cardápio">
+    <div class="btab-icon">
+      <svg viewBox="0 0 16 16" fill="none" width="20" height="20"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 8h6M5 5h3M5 11h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    </div>
+    <span>Cardápio</span>
+  </button>
+
+  <!-- Mais -->
+  <button class="btab btab-mais" id="btab-mais" onclick="openMaisDrawer()" aria-label="Mais opções">
+    <div class="btab-icon">
+      <svg viewBox="0 0 16 16" fill="none" width="20" height="20"><circle cx="4" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="12" cy="8" r="1.2" fill="currentColor"/></svg>
+    </div>
+    <span>Mais</span>
+  </button>
+
+</nav>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     MAIS DRAWER
+═══════════════════════════════════════════════════════════════ -->
+<div class="mais-overlay" id="mais-overlay" onclick="closeMaisDrawer()"></div>
+<div class="mais-drawer" id="mais-drawer">
+  <div class="mais-drawer-handle"></div>
+
+  <div class="mais-drawer-title">Gestão</div>
+  <button class="mais-item" onclick="maisNav('caixa')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8.5" r="2.5" stroke="currentColor" stroke-width="1.4"/></svg></div>
+    Caixa
+  </button>
+  <button class="mais-item" onclick="maisNav('kds')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><rect x="2" y="2" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M5 15h6M8 12v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+    Cozinha (KDS)
+    <span class="mais-item-badge new">NOVO</span>
+  </button>
+  <button class="mais-item" onclick="maisNav('desempenho')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><path d="M2 12l4-4 3 3 5-6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    Meu Desempenho
+  </button>
+  <button class="mais-item" onclick="maisNav('relatorios')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><line x1="14" y1="14" x2="14" y2="7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="10" y1="14" x2="10" y2="3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="6" y1="14" x2="6" y2="9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="2" y1="14" x2="2" y2="6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+    Relatórios
+  </button>
+  <button class="mais-item" onclick="maisNav('clientes')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><circle cx="6" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 13c0-2.76 2.24-5 5-5h1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M9.5 15c0-1.38.9-2.5 2.5-2.5s2.5 1.12 2.5 2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+    Clientes
+  </button>
+  <button class="mais-item" onclick="maisNav('estoque')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><rect x="2" y="9" width="12" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="2" width="12" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/></svg></div>
+    Controle de Estoque
+  </button>
+
+  <div class="mais-section-line"></div>
+  <div class="mais-drawer-title">Ferramentas</div>
+  <button class="mais-item" onclick="maisNav('robo')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><rect x="3" y="5" width="10" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="9" r="1" fill="currentColor"/><circle cx="10" cy="9" r="1" fill="currentColor"/><path d="M6 5V3.5M10 5V3.5M6 3.5H10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+    Robô WhatsApp
+    <span class="mais-item-badge">PRO</span>
+  </button>
+  <button class="mais-item" onclick="maisNav('qrcode')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/></svg></div>
+    Mesas & QR Code
+  </button>
+  <button class="mais-item" onclick="maisNav('garcom')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+    Modo Garçom
+  </button>
+  <button class="mais-item" onclick="maisNav('cupom')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><path d="M9 2L7 14M4 5h8M4 11h8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+    Cupons
+  </button>
+  <button class="mais-item" onclick="maisNav('fidelidade')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5L8 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
+    Fidelidade
+  </button>
+  <button class="mais-item" onclick="maisNav('satisfacao')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 9.5c.5 1 1.5 1.5 2.5 1.5s2-.5 2.5-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="5.5" cy="6.5" r="1" fill="currentColor"/><circle cx="10.5" cy="6.5" r="1" fill="currentColor"/></svg></div>
+    Satisfação
+  </button>
+
+  <div class="mais-section-line"></div>
+  <div class="mais-drawer-title">Cardápio</div>
+  <button class="mais-item" onclick="maisNav('cardapio-publico')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 2c-1.5 2-2.5 3.8-2.5 6s1 4 2.5 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M2 8h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+    Cardápio Público
+  </button>
+  <button class="mais-item" onclick="maisNav('tema')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4"/><circle cx="5.5" cy="5.5" r="1.2" fill="#3b82f6"/><circle cx="10.5" cy="5.5" r="1.2" fill="#f59e0b"/><circle cx="5.5" cy="10.5" r="1.2" fill="#22c55e"/><circle cx="10.5" cy="10.5" r="1.2" fill="#ec4899"/></svg></div>
+    Tema & Cores
+  </button>
+  <button class="mais-item" onclick="maisNav('taxa')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+    Taxa de Entrega
+  </button>
+  <button class="mais-item" onclick="maisNav('potencializador')">
+    <div class="mais-item-icon">🔥</div>
+    Potencializador
+  </button>
+
+  <div class="mais-section-line"></div>
+  <div class="mais-drawer-title">Sistema</div>
+  <button class="mais-item" onclick="maisNav('impressao')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="10" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4"/></svg></div>
+    Impressão Automática
+  </button>
+  <button class="mais-item" onclick="maisNav('meu-plano')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><rect x="1.5" y="3" width="13" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1.5 6h13" stroke="currentColor" stroke-width="1.4"/></svg></div>
+    Meu Plano
+  </button>
+  <button class="mais-item" onclick="maisNav('saques')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg></div>
+    Carteira & Saques
+  </button>
+  <button class="mais-item" onclick="maisNav('configuracoes')">
+    <div class="mais-item-icon"><svg viewBox="0 0 16 16" fill="none" width="18" height="18"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+    Configurações
+  </button>
+
+  <div class="mais-section-line"></div>
+  <!-- Usuário logado + sair -->
+  <button class="mais-item" onclick="confirmarLogout()" style="color:var(--danger)">
+    <div class="mais-item-icon" style="background:rgba(239,68,68,.1)">
+      <svg viewBox="0 0 16 16" fill="none" width="18" height="18" style="color:var(--danger)"><path d="M6 3H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    Sair
+  </button>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCRIPTS
+═══════════════════════════════════════════════════════════════ -->
+<script>document.write('<script src="/gestor.js?v=' + Date.now() + '"><\/script>');</script>
+<script>document.write('<script src="/wa-chat.js?v=' + Date.now() + '"><\/script>');</script>
+
+<script>
+/* ══ MOBILE NAVIGATION OVERRIDES ══════════════════════════════
+   Estende o sistema de navegação do gestor.js para o mobile
+════════════════════════════════════════════════════════════════ */
+
+// Tab atual
+var _mobileCurrentTab = 'pedidos';
+
+// Mapeamento: seção → tab da bottom bar
+var _tabMap = {
+  'pedidos': 'pedidos',
+  'pedidos-mesa': 'mesa',
+  'pdv-balcao': 'pdv',
+  'gestor': 'cardapio',
+  'gestor-main': 'cardapio',
+  'imagens': 'cardapio',
+  'edicao': 'cardapio',
+  'potencializador': 'cardapio',
+  // Tudo mais é "mais"
+};
+
+// Ao carregar: aguarda gestor.js e sobrescreve/estende o nav()
+window.addEventListener('DOMContentLoaded', function() {
+  // Kanban: inicia com coluna "analise" visível
+  showKanbanCol('analise');
+});
+
+// Define qual tab está ativa na bottom bar
+function mobileSetTab(tab) {
+  _mobileCurrentTab = tab;
+  document.querySelectorAll('.btab').forEach(function(b) {
+    b.classList.remove('on');
+  });
+  var el = document.getElementById('btab-' + tab);
+  if (el) el.classList.add('on');
+}
+
+// Intercepta o nav() do gestor.js para também atualizar as tabs
+var _originalNav;
+function _mobileInterceptNav() {
+  if (typeof nav === 'function' && !nav._mobileWrapped) {
+    _originalNav = nav;
+    nav = function(section) {
+      _originalNav(section);
+      closeMaisDrawer();
+      // Atualiza tab correspondente
+      var tab = _tabMap[section] || 'mais';
+      mobileSetTab(tab);
+      // Se é "mais", não marcar nenhuma tab como ativa (exceto "mais")
+      if (tab === 'mais') {
+        document.querySelectorAll('.btab').forEach(function(b) { b.classList.remove('on'); });
+        var btabMais = document.getElementById('btab-mais');
+        if (btabMais) btabMais.classList.add('on');
+      }
+    };
+    nav._mobileWrapped = true;
+  }
+}
+
+// Tenta interceptar periodicamente até gestor.js carregar
+var _interceptTimer = setInterval(function() {
+  if (typeof nav === 'function') {
+    _mobileInterceptNav();
+    clearInterval(_interceptTimer);
+  }
+}, 100);
+
+// Navega a partir do drawer "Mais"
+function maisNav(section) {
+  closeMaisDrawer();
+  setTimeout(function() {
+    if (typeof nav === 'function') nav(section);
+  }, 200);
+}
+
+// Abre o drawer "Mais"
+function openMaisDrawer() {
+  document.getElementById('mais-drawer').classList.add('on');
+  document.getElementById('mais-overlay').classList.add('on');
+  document.body.style.overflow = 'hidden';
+}
+
+// Fecha o drawer "Mais"
+function closeMaisDrawer() {
+  document.getElementById('mais-drawer').classList.remove('on');
+  document.getElementById('mais-overlay').classList.remove('on');
+  document.body.style.overflow = '';
+}
+
+// Mostra coluna do kanban no mobile
+function showKanbanCol(col) {
+  // Oculta todas as colunas
+  ['analise', 'producao', 'pronto'].forEach(function(c) {
+    var kol = document.getElementById('kol-mobile-' + c);
+    if (kol) kol.classList.remove('on');
+    var tab = document.getElementById('ktm-' + c);
+    if (tab) tab.classList.remove('on');
+  });
+  // Mostra a selecionada
+  var target = document.getElementById('kol-mobile-' + col);
+  if (target) target.classList.add('on');
+  var tabTarget = document.getElementById('ktm-' + col);
+  if (tabTarget) tabTarget.classList.add('on');
+}
+
+// Atualiza contadores das tabs do kanban mobile
+function _updateKanbanTabCounts() {
+  ['analise', 'producao', 'pronto'].forEach(function(col) {
+    var srcCnt = document.getElementById('cnt-' + col);
+    var dstCnt = document.getElementById('ktm-cnt-' + col);
+    if (srcCnt && dstCnt) {
+      dstCnt.textContent = srcCnt.textContent;
+      dstCnt.style.display = srcCnt.textContent && srcCnt.textContent !== '0' ? 'flex' : 'none';
+    }
+  });
+}
+
+// Observa mudanças nos contadores
+var _cntObserver = new MutationObserver(function() { _updateKanbanTabCounts(); });
+setTimeout(function() {
+  ['cnt-analise', 'cnt-producao', 'cnt-pronto'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) _cntObserver.observe(el, { childList: true, subtree: true, characterData: true });
+  });
+  _updateKanbanTabCounts();
+}, 1000);
+
+// Atualiza badge de pedidos na tab bar
+function _updatePedidosBadge() {
+  var analise = document.getElementById('cnt-analise');
+  var badge = document.getElementById('btab-badge-pedidos');
+  if (!analise || !badge) return;
+  var n = parseInt(analise.textContent) || 0;
+  badge.textContent = n > 0 ? n : '';
+  badge.style.display = n > 0 ? 'flex' : 'none';
+}
+setInterval(_updatePedidosBadge, 2000);
+
+// Fecha drawer ao clicar fora
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeMaisDrawer();
+});
+
+// Confirmar logout adaptado
+function confirmarLogout() {
+  if (confirm('Sair do sistema?')) {
+    sessionStorage.removeItem('sys_session');
+    window.location.href = '/login.html';
+  }
+}
+
+// Ajuste do PDV balcão para não ficar atrás da bottom nav
+document.addEventListener('DOMContentLoaded', function() {
+  var pdv = document.getElementById('page-pdv-balcao');
+  if (pdv) {
+    pdv.style.height = 'calc(100dvh - var(--nav-h) - var(--bottom-h) - var(--safe-top) - var(--safe-bottom))';
+  }
+});
+
+console.log('%c[Estima Food Mobile] ✓ Navegação mobile carregada', 'color:#22c55e;font-weight:bold');
+</script>
+
+</body>
+</html>
