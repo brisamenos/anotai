@@ -208,39 +208,46 @@ function waConnectSSE() {
 }
 
 function waOnSseMsg(msg) {
-  if (!msg?.key?.remoteJid) return;
-  const jid    = msg.key.remoteJid;
+  if (!msg?.key?.remoteJid || !msg?.message) return;
+  const jid = msg.key.remoteJid;
   if (jid.startsWith('status@') || jid.endsWith('@lid')) return;
 
-  // fromMe pode ser boolean true ou string "true"
   const fromMe = msg.key.fromMe === true || msg.key.fromMe === 'true';
+  const mid    = msg.key?.id;
+  const ts     = +msg.messageTimestamp || +msg.key?.timestamp || 0;
 
-  // Normaliza a mensagem
+  // Ignora mensagens muito antigas (mais de 30s atrás) — são acks/leituras, não novas
+  const agora = Math.floor(Date.now() / 1000);
+  if (ts > 0 && agora - ts > 30) return;
+
+  // Deduplica: se já está no cache, ignora
+  if (mid && WA.msgCache[jid]?.[mid]) return;
+
+  // Normaliza
   const normalized = {
     ...msg,
     key: { ...msg.key, fromMe },
-    messageTimestamp: +msg.messageTimestamp || +msg.key?.timestamp || Math.floor(Date.now()/1000)
+    messageTimestamp: ts || agora
   };
 
-  // ── Cache persistente: salva msg para sobreviver ao fechamento do painel ──
-  const mid = msg.key?.id;
+  // Salva no cache persistente
   if (mid) {
     if (!WA.msgCache[jid]) WA.msgCache[jid] = {};
     WA.msgCache[jid][mid] = normalized;
   }
 
-  // Salva pushName de mensagens RECEBIDAS
+  // pushName de recebidas
   if (!fromMe && msg.pushName?.trim()) {
     WA.nameCache[jid] = msg.pushName.trim();
   }
 
-  // Badge apenas para msgs recebidas, painel fechado ou outra conversa
+  // Badge só para mensagens RECEBIDAS e quando não está visualizando essa conversa
   if (!fromMe && (!WA.open || WA.activeJid !== jid)) waBadgeInc();
 
   // Atualiza preview da lista
   waUpdatePreview(jid, normalized, fromMe);
 
-  // Insere na conversa ativa em tempo real
+  // Insere em tempo real se a conversa estiver aberta
   if (WA.activeJid === jid) {
     const msgsEl = document.getElementById('wa-messages');
     if (!msgsEl) return;
