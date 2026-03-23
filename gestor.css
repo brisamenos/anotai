@@ -926,10 +926,15 @@ td:first-child{padding-left:18px}
    Tudo aqui dentro de @media — desktop 100% original
 ══════════════════════════════════════════════════════════ */
 
-/* ── Elementos mobile: ocultos no desktop por padrão ───── */
-.mob-bottom-nav    { display: none; }
-.mob-sidebar-overlay { display: none; }
-.mob-fab-stack     { display: none; }
+/* ── Elementos mobile: FORÇADO oculto em desktop ────────── */
+@media (min-width: 901px) {
+  .mob-bottom-nav,
+  .mob-sidebar-overlay,
+  .mob-fab-stack { display: none !important; }
+
+  /* Garante que sidebar desktop não seja afetada */
+  .sidebar { transform: none !important; position: relative !important; }
+}
 
 /* ══ MOBILE ≤ 900px ══════════════════════════════════════ */
 @media (max-width: 900px) {
