@@ -1397,7 +1397,7 @@ async function carregarMpConfig() {
 }
 
 async function salvarMpConfig() {
-  const token = document.getElementById('mp-token-input')?.value    || '';
+  const token = document.getElementById('mp-token-input')?.value.trim() || '';
   const taxa  = document.getElementById('mp-taxa-input')?.value     || '1.00';
   const pk    = document.getElementById('mp-public-key-input')?.value.trim() || '';
   const body  = { taxa_pix: parseFloat(taxa) };
