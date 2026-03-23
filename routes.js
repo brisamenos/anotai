@@ -1066,5 +1066,193 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ═══════════════════════════════════════════════════════
+  // Planos & Renovacao
+  // ═══════════════════════════════════════════════════════
+
+  // ── Precos dos planos (publico) ──────────────────────
+  if (req.method === 'GET' && upath === '/api/planos/precos') {
+    try {
+      const cfg = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const ia = cfg?.ia_config ? JSON.parse(cfg.ia_config) : {}
+      send(res, 200, {
+        essencial: ia.preco_essencial !== undefined ? parseFloat(ia.preco_essencial) : 79.99,
+        premium: ia.preco_premium !== undefined ? parseFloat(ia.preco_premium) : 99.90
+      })
+    } catch(e) { send(res, 200, { essencial: 79.99, premium: 99.90 }) }
+    return true
+  }
+
+  // ── Admin: Salvar precos dos planos ──────────────────
+  if (req.method === 'POST' && upath === '/api/admin/planos/precos') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Nao autorizado' }); return true }
+    const body = await readBody(req)
+    const { preco_essencial, preco_premium } = body
+    try {
+      const cfg = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const ia = cfg?.ia_config ? JSON.parse(cfg.ia_config) : {}
+      if (preco_essencial !== undefined) ia.preco_essencial = parseFloat(preco_essencial)
+      if (preco_premium !== undefined) ia.preco_premium = parseFloat(preco_premium)
+      db.prepare("INSERT INTO store_config (tenant_id,ia_config) VALUES ('_global',?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config").run(JSON.stringify(ia))
+      marcarDirty()
+      log('⚙️', `Precos planos atualizados: Essencial=R$${ia.preco_essencial} Premium=R$${ia.preco_premium}`)
+      send(res, 200, { ok: true, preco_essencial: ia.preco_essencial, preco_premium: ia.preco_premium })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Pagar plano via PIX ──────────────────────────────
+  if (req.method === 'POST' && upath === '/api/planos/pagar-pix') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    const body = await readBody(req)
+    const { plano, valor } = body
+    if (!plano || !valor || valor <= 0) { send(res, 400, { error: 'Plano e valor obrigatorios' }); return true }
+
+    let mpToken = MP_TOKEN
+    try {
+      const cfgMp = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const gCfg = cfgMp?.ia_config ? JSON.parse(cfgMp.ia_config) : {}
+      if (gCfg.mp_token) mpToken = gCfg.mp_token
+    } catch {}
+    if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago nao configurado.' }); return true }
+
+    const tenant = db.prepare('SELECT nome FROM tenants WHERE id=?').get(tid)
+    const extRef = `plano-${tid.slice(0,8)}-${plano}-${Date.now()}`
+
+    try {
+      const mp = await fetch('https://api.mercadopago.com/v1/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
+        body: JSON.stringify({
+          transaction_amount: parseFloat(valor),
+          description: `Renovacao ${plano === 'premium' ? 'Plano Premium' : 'Plano Essencial'} - ${tenant?.nome || 'Cliente'}`,
+          payment_method_id: 'pix',
+          external_reference: extRef,
+          payer: { email: 'renovacao@estimafood.com', first_name: tenant?.nome || 'Cliente', last_name: '' },
+        })
+      })
+      const mpData = await mp.json()
+      if (!mp.ok) { log('❌', 'MP PIX plano erro:', mpData); send(res, 400, { error: mpData.message || 'Erro MP' }); return true }
+
+      const qr    = mpData.point_of_interaction?.transaction_data?.qr_code || ''
+      const qrB64 = mpData.point_of_interaction?.transaction_data?.qr_code_base64 || ''
+
+      // Salva na tabela de pagamentos de plano
+      db.prepare(`INSERT INTO pagamentos_pix (tenant_id,mp_payment_id,mp_external_ref,valor,taxa,valor_liquido,status,payer_name,qr_code,qr_code_base64)
+        VALUES (?,?,?,?,0,?,?,?,?,?)`)
+        .run(tid, String(mpData.id), extRef, parseFloat(valor), parseFloat(valor),
+          (mpData.status==='approved'?'aprovado':'pendente'), `PLANO:${plano}`, qr, qrB64)
+
+      log('💳', `PIX plano criado: R$${valor} plano=${plano} tenant=${tid} mp_id=${mpData.id}`)
+      send(res, 200, { ok: true, mp_payment_id: mpData.id, qr_code: qr, qr_code_base64: qrB64, valor, status: mpData.status })
+    } catch (e) { log('❌', 'MP plano fetch erro:', { error: e.message }); send(res, 500, { error: 'Erro ao criar PIX: ' + e.message }) }
+    return true
+  }
+
+  // ── Status PIX plano ─────────────────────────────────
+  if (req.method === 'GET' && upath === '/api/planos/status-pix') {
+    const mpId = params.get('mp_payment_id') || ''
+    if (!mpId) { send(res, 400, { error: 'mp_payment_id obrigatorio' }); return true }
+    let mpToken = MP_TOKEN
+    try { const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get(); const g = c?.ia_config ? JSON.parse(c.ia_config) : {}; if (g.mp_token) mpToken = g.mp_token } catch {}
+    if (!mpToken) { send(res, 400, { error: 'Token MP nao configurado' }); return true }
+    try {
+      const r = await fetch('https://api.mercadopago.com/v1/payments/' + mpId, { headers: { 'Authorization': 'Bearer ' + mpToken } })
+      const pd = await r.json()
+      if (!r.ok) { const fb = db.prepare('SELECT status FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId)); send(res, 200, { status: fb ? fb.status : 'pendente' }); return true }
+      const novoStatus = pd.status === 'approved' ? 'aprovado' : pd.status === 'rejected' ? 'rejeitado' : pd.status === 'cancelled' ? 'cancelado' : 'pendente'
+      const rowAtual = db.prepare('SELECT status,valor,tenant_id,payer_name FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
+      if (rowAtual && rowAtual.status !== novoStatus) {
+        db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=? WHERE mp_payment_id=?').run(novoStatus, pd.date_approved || null, String(mpId))
+        if (novoStatus === 'aprovado' && rowAtual.payer_name?.startsWith('PLANO:')) {
+          // Renovar o plano do tenant
+          const plano = rowAtual.payer_name.replace('PLANO:', '')
+          const novaExpira = new Date()
+          novaExpira.setDate(novaExpira.getDate() + 30)
+          db.prepare('UPDATE tenants SET plano=?, expires_at=?, ativo=1 WHERE id=?').run(plano, novaExpira.toISOString().slice(0,10), rowAtual.tenant_id)
+          marcarDirty()
+          log('✅', `PLANO RENOVADO: ${plano} tenant=${rowAtual.tenant_id} expira=${novaExpira.toISOString().slice(0,10)}`)
+        }
+      }
+      send(res, 200, { status: novoStatus, mp_status: pd.status })
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Pagar plano via Cartao ───────────────────────────
+  if (req.method === 'POST' && upath === '/api/planos/pagar-cartao') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    const body = await readBody(req)
+    const { plano, valor, cartao } = body
+    if (!plano || !valor || !cartao) { send(res, 400, { error: 'Dados incompletos' }); return true }
+
+    let mpToken = MP_TOKEN
+    let mpPublicKey = ''
+    try {
+      const cfgMp = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const gCfg = cfgMp?.ia_config ? JSON.parse(cfgMp.ia_config) : {}
+      if (gCfg.mp_token) mpToken = gCfg.mp_token
+      if (gCfg.mp_public_key) mpPublicKey = gCfg.mp_public_key
+    } catch {}
+    if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago nao configurado.' }); return true }
+
+    const tenant = db.prepare('SELECT nome FROM tenants WHERE id=?').get(tid)
+    const extRef = `plano-cartao-${tid.slice(0,8)}-${plano}-${Date.now()}`
+
+    try {
+      const mp = await fetch('https://api.mercadopago.com/v1/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
+        body: JSON.stringify({
+          transaction_amount: parseFloat(valor),
+          description: `Renovacao ${plano === 'premium' ? 'Plano Premium' : 'Plano Essencial'} - ${tenant?.nome || 'Cliente'}`,
+          payment_method_id: 'master', // sera ajustado pelo MP
+          external_reference: extRef,
+          payer: {
+            email: 'renovacao@estimafood.com',
+            first_name: cartao.nome || 'Cliente',
+            identification: { type: 'CPF', number: cartao.cpf }
+          },
+          card: {
+            card_number: cartao.numero,
+            expiration_month: cartao.mes,
+            expiration_year: cartao.ano,
+            security_code: cartao.cvv,
+            cardholder: { name: cartao.nome, identification: { type: 'CPF', number: cartao.cpf } }
+          },
+          installments: 1
+        })
+      })
+      const mpData = await mp.json()
+      if (!mp.ok) {
+        log('❌', 'MP Cartao plano erro:', mpData)
+        send(res, 400, { error: mpData.message || mpData.cause?.[0]?.description || 'Erro no pagamento' })
+        return true
+      }
+
+      const novoStatus = mpData.status === 'approved' ? 'aprovado' : mpData.status === 'rejected' ? 'rejeitado' : 'pendente'
+
+      // Salva pagamento
+      db.prepare(`INSERT INTO pagamentos_cartao (tenant_id,mp_payment_id,mp_external_ref,valor,status,status_detail,payer_name,payment_method_id)
+        VALUES (?,?,?,?,?,?,?,?)`)
+        .run(tid, String(mpData.id), extRef, parseFloat(valor), novoStatus, mpData.status_detail || '', `PLANO:${plano}`, mpData.payment_method_id || '')
+
+      // Se aprovado, renova o plano
+      if (novoStatus === 'aprovado') {
+        const novaExpira = new Date()
+        novaExpira.setDate(novaExpira.getDate() + 30)
+        db.prepare('UPDATE tenants SET plano=?, expires_at=?, ativo=1 WHERE id=?').run(plano, novaExpira.toISOString().slice(0,10), tid)
+        marcarDirty()
+        log('✅', `PLANO RENOVADO (Cartao): ${plano} tenant=${tid} expira=${novaExpira.toISOString().slice(0,10)}`)
+      }
+
+      log('💳', `Cartao plano: R$${valor} plano=${plano} tenant=${tid} status=${novoStatus}`)
+      send(res, 200, { ok: true, status: novoStatus, status_detail: mpData.status_detail || '' })
+    } catch (e) { log('❌', 'Cartao plano erro:', { error: e.message }); send(res, 500, { error: 'Erro ao processar pagamento: ' + e.message }) }
+    return true
+  }
+
   return false // nenhuma rota tratada aqui — passa para o REST engine
 }
