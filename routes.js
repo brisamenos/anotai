@@ -749,21 +749,22 @@ module.exports = async function handleRoutes(req, res, ctx) {
         const mid    = m?.key?.id || ''
         const ts     = +m?.messageTimestamp || 0
 
-        if (!jid || !mid || jid.startsWith('status@') || jid.endsWith('@lid') || !m?.message) continue
+        // Só ignora status e LIDs — qualquer outra mensagem é válida
+        if (!jid || !mid || jid.startsWith('status@') || jid.endsWith('@lid')) continue
 
-        // Salva no banco imediatamente (não depende do browser)
+        // Salva no banco (recebidas e enviadas)
         try {
           stmt.run(tid_wh, jid, mid, JSON.stringify(m), fromMe ? 1 : 0, ts)
           marcarDirty()
-        } catch(e) { /* UNIQUE constraint — msg já existe, ignora */ }
+        } catch(e) { /* UNIQUE — já existe */ }
 
-        // Broadcast SSE apenas para mensagens RECEBIDAS (não fromMe)
+        // SSE para mensagens RECEBIDAS (fromMe=false)
         if (!fromMe) {
           sseBroadcast(`wa-msgs:${tid_wh}`, 'wa:msg', m)
         }
       }
 
-      // Limpa msgs com mais de 7 dias automaticamente
+      // Limpa msgs com mais de 7 dias
       try {
         const cutoff = Math.floor(Date.now()/1000) - 7*24*3600
         db.prepare('DELETE FROM wa_messages WHERE tenant_id=? AND ts < ? AND ts > 0').run(tid_wh, cutoff)
