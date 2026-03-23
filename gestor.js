@@ -3437,6 +3437,7 @@ async function addCupom() {
 // CASHBACK
 // ─────────────────────────────────────────
 let _cbClienteAtual = null; // { id, name, phone, cashback_saldo }
+let _cbTodosClientes = [];  // cache de todos os clientes com saldo > 0
 
 async function loadCashbackConfig() {
   try {
@@ -3447,7 +3448,7 @@ async function loadCashbackConfig() {
     if (!res.ok) return;
     const cfg = await res.json();
     const toggle = document.getElementById('cb-toggle-ativo');
-    if (toggle) { toggle.classList.toggle('on', !!cfg.ativo); }
+    if (toggle) toggle.classList.toggle('on', !!cfg.ativo);
     const pct = document.getElementById('cb-pct');
     const min = document.getElementById('cb-min-pedido');
     const val = document.getElementById('cb-validade');
@@ -3457,12 +3458,108 @@ async function loadCashbackConfig() {
   } catch(e) {
     console.error('[Cashback] loadCashbackConfig:', e);
   }
+  // Carrega lista de clientes com saldo sempre que abre a aba
+  await cbCarregarLista();
+}
+
+async function cbCarregarLista() {
+  const tbody = document.getElementById('cb-lista-tbody');
+  const empty = document.getElementById('cb-lista-vazio');
+  const stat  = document.getElementById('cb-lista-stat');
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)"><div class="spinner" style="margin:0 auto 8px"></div>Carregando...</td></tr>`;
+
+  try {
+    const { data, error } = await sb.from('customers')
+      .select('id,name,phone,cashback_saldo')
+      .gt('cashback_saldo', 0)
+      .order('cashback_saldo', { ascending: false });
+
+    if (error) throw new Error(error.message);
+
+    _cbTodosClientes = data || [];
+    cbRenderLista();
+
+    const total = _cbTodosClientes.reduce((s, c) => s + parseFloat(c.cashback_saldo || 0), 0);
+    if (stat) stat.textContent = `${_cbTodosClientes.length} cliente${_cbTodosClientes.length !== 1 ? 's' : ''} • Total em carteira: R$ ${total.toFixed(2).replace('.', ',')}`;
+  } catch(e) {
+    console.error('[Cashback] cbCarregarLista:', e);
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--danger)">Erro ao carregar clientes</td></tr>`;
+  }
+}
+
+function cbRenderLista() {
+  const tbody  = document.getElementById('cb-lista-tbody');
+  const empty  = document.getElementById('cb-lista-vazio');
+  const search = (document.getElementById('cb-lista-search')?.value || '').toLowerCase();
+
+  const lista = _cbTodosClientes.filter(c =>
+    !search ||
+    (c.name  || '').toLowerCase().includes(search) ||
+    (c.phone || '').includes(search)
+  );
+
+  if (!lista.length) {
+    tbody.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  tbody.innerHTML = lista.map(c => {
+    const saldo = parseFloat(c.cashback_saldo || 0);
+    return `<tr>
+      <td>
+        <div style="font-weight:600;font-size:13px">${c.name || '—'}</div>
+      </td>
+      <td style="font-size:12.5px;color:var(--muted)">${c.phone || '—'}</td>
+      <td>
+        <span style="background:rgba(34,197,94,.15);color:#22c55e;padding:3px 10px;border-radius:99px;font-size:12.5px;font-weight:700">
+          R$ ${saldo.toFixed(2).replace('.', ',')}
+        </span>
+      </td>
+      <td>
+        <button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="cbSelecionarDaLista(${c.id})">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M13.5 7.75a5.75 5.75 0 1 1-9.6-4.28L2.5 1.5l1.97 1.17A5.72 5.72 0 0 1 13.5 7.75Z" stroke="currentColor" stroke-width="1.3"/></svg>
+          Enviar WA
+        </button>
+      </td>
+      <td>
+        <button class="btn bd" style="font-size:11px;padding:3px 10px" onclick="cbSelecionarAjuste(${c.id})">Ajustar</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function cbSelecionarDaLista(id) {
+  const c = _cbTodosClientes.find(x => x.id === id);
+  if (!c) return;
+  _cbClienteAtual = { ...c };
+  // Preenche o painel de busca/ação
+  const phone = (c.phone || '').replace(/\D/g, '');
+  const saldo = parseFloat(c.cashback_saldo || 0);
+  const el = key => document.getElementById(key);
+  if (el('cb-phone-busca'))  el('cb-phone-busca').value = c.phone || '';
+  if (el('cb-res-nome'))     el('cb-res-nome').textContent  = c.name || '—';
+  if (el('cb-res-phone'))    el('cb-res-phone').textContent = c.phone || '—';
+  if (el('cb-res-saldo'))    el('cb-res-saldo').textContent = 'R$ ' + saldo.toFixed(2).replace('.', ',');
+  if (el('cb-msg-wa'))       el('cb-msg-wa').value = `💰 ${c.name || 'Cliente'}, você tem R$ ${saldo.toFixed(2).replace('.', ',')} de cashback disponível!\nUse no seu próximo pedido 🛍️`;
+  if (el('cb-resultado'))    el('cb-resultado').style.display   = '';
+  if (el('cb-busca-vazio'))  el('cb-busca-vazio').style.display = 'none';
+  // Scrolla até o painel
+  el('cb-resultado')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cbSelecionarAjuste(id) {
+  cbSelecionarDaLista(id);
+  setTimeout(() => document.getElementById('cb-ajuste-val')?.focus(), 300);
 }
 
 async function saveCashbackConfig() {
-  const ativo     = document.getElementById('cb-toggle-ativo')?.classList.contains('on') || false;
-  const pct       = parseFloat(document.getElementById('cb-pct')?.value) || 0;
-  const min_pedido= parseFloat(document.getElementById('cb-min-pedido')?.value) || 0;
+  const ativo       = document.getElementById('cb-toggle-ativo')?.classList.contains('on') || false;
+  const pct         = parseFloat(document.getElementById('cb-pct')?.value) || 0;
+  const min_pedido  = parseFloat(document.getElementById('cb-min-pedido')?.value) || 0;
   const validade_dias = parseInt(document.getElementById('cb-validade')?.value) || 0;
 
   if (pct < 0 || pct > 100) { sbToast('err', 'Percentual deve ser entre 0 e 100'); return; }
@@ -3495,37 +3592,32 @@ async function cbBuscarCliente() {
   try {
     const tid = _sessao?.tenant_id || '';
 
-    // Busca saldo
+    // Busca saldo direto pelo endpoint dedicado
     const resSaldo = await fetch(`/api/cashback/saldo?phone=${encodeURIComponent(phone)}`, {
       headers: { 'x-tenant-id': tid }
     });
     const saldoData = await resSaldo.json().catch(() => ({}));
 
-    // Busca dados do cliente pelo customers
-    const { data: clientes } = await sb.from('customers').select('id,name,phone,cashback_saldo').eq('tenant_id', tid);
-    const cliente = (clientes || []).find(c => (c.phone || '').replace(/\D/g,'').slice(-8) === phone.slice(-8));
+    // Tenta achar o cliente no cache ou no banco
+    let cliente = _cbTodosClientes.find(c => (c.phone || '').replace(/\D/g,'').slice(-8) === phone.slice(-8));
+    if (!cliente) {
+      const { data } = await sb.from('customers').select('id,name,phone,cashback_saldo').eq('phone', phone).maybeSingle();
+      cliente = data || null;
+    }
 
-    _cbClienteAtual = cliente ? { ...cliente, cashback_saldo: saldoData.saldo || cliente.cashback_saldo || 0 } : null;
-
-    const saldo = saldoData.saldo || 0;
+    const saldo = parseFloat(saldoData.saldo ?? 0);
     const nome  = cliente?.name || 'Cliente';
     const tel   = cliente?.phone || phone;
 
-    // Preenche resultado
-    const el = id => document.getElementById(id);
-    if (el('cb-res-nome'))  el('cb-res-nome').textContent  = nome;
-    if (el('cb-res-phone')) el('cb-res-phone').textContent = tel;
-    if (el('cb-res-saldo')) el('cb-res-saldo').textContent = 'R$ ' + saldo.toFixed(2).replace('.', ',');
+    _cbClienteAtual = cliente ? { ...cliente, cashback_saldo: saldo } : { id: null, name: nome, phone: tel, cashback_saldo: saldo };
 
-    // Preenche msg WA com dados reais
-    const msgEl = el('cb-msg-wa');
-    if (msgEl) {
-      msgEl.value = `💰 ${nome}, você tem R$ ${saldo.toFixed(2).replace('.', ',')} de cashback disponível!\nUse no seu próximo pedido 🛍️`;
-    }
-
-    // Exibe resultado
-    if (el('cb-resultado'))   el('cb-resultado').style.display   = '';
-    if (el('cb-busca-vazio')) el('cb-busca-vazio').style.display = 'none';
+    const el = key => document.getElementById(key);
+    if (el('cb-res-nome'))   el('cb-res-nome').textContent  = nome;
+    if (el('cb-res-phone'))  el('cb-res-phone').textContent = tel;
+    if (el('cb-res-saldo'))  el('cb-res-saldo').textContent = 'R$ ' + saldo.toFixed(2).replace('.', ',');
+    if (el('cb-msg-wa'))     el('cb-msg-wa').value = `💰 ${nome}, você tem R$ ${saldo.toFixed(2).replace('.', ',')} de cashback disponível!\nUse no seu próximo pedido 🛍️`;
+    if (el('cb-resultado'))  el('cb-resultado').style.display   = '';
+    if (el('cb-busca-vazio'))el('cb-busca-vazio').style.display = 'none';
 
   } catch(e) {
     console.error('[Cashback] cbBuscarCliente:', e);
@@ -3535,7 +3627,7 @@ async function cbBuscarCliente() {
 }
 
 function cbLimparResultado() {
-  const el = id => document.getElementById(id);
+  const el = key => document.getElementById(key);
   if (el('cb-resultado'))   el('cb-resultado').style.display   = 'none';
   if (el('cb-busca-vazio')) el('cb-busca-vazio').style.display = '';
   _cbClienteAtual = null;
