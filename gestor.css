@@ -805,42 +805,6 @@ td:first-child{padding-left:18px}
 .notif-panel.on{display:block}
 
 /* ══ MOBILE ═══════════════════════════════════════════════ */
-.mobile-menu-btn{display:none;width:32px;height:32px;border-radius:99px;background:var(--surface);border:1px solid var(--border);align-items:center;justify-content:center;cursor:pointer;color:var(--muted2);flex-shrink:0}
-@media(max-width:900px){
-  :root{--sw:0px}
-  .sidebar{display:none;width:0 !important;transition:none !important;}
-  .topnav{padding:0 12px;gap:4px}
-  .logo{min-width:auto}
-  .tnav-pill span{display:none}
-  .sg{grid-template-columns:repeat(2,1fr)}
-  .kanban{grid-template-columns:1fr;height:auto;gap:10px;min-height:unset}
-  .pdv-wrap{grid-template-columns:1fr;height:auto;min-height:unset}
-  .pdvb-wrap{grid-template-columns:1fr;height:auto;min-height:unset}
-  .chat-wrap{flex-direction:column;height:auto;min-height:unset}
-  .chat-right{width:100%}
-  .mesa-kanban{grid-template-columns:1fr;height:auto;min-height:unset}
-  .form-row-2{grid-template-columns:1fr}
-  .quality-pills{display:none}
-  .ph{flex-direction:column;align-items:flex-start}
-  .search-bar{flex-wrap:wrap}
-  .page{padding:16px 14px}
-  .mobile-menu-btn{display:flex!important}
-  .sidebar.mobile-open{display:flex !important;position:fixed;inset:0;z-index:300;width:100% !important;max-width:264px !important;border-right:1px solid var(--border)}
-  .desemp-grid{grid-template-columns:repeat(2,1fr)}
-  .tw{overflow-x:auto}
-  table{min-width:600px}
-}
-@media(max-width:600px){
-  .sg{grid-template-columns:1fr 1fr}
-  .topnav .tnav-pill{display:none}
-  .topnav .tnr{gap:4px}
-  .page{padding:14px 12px}
-  .ph{margin-bottom:18px}
-  .desemp-grid{grid-template-columns:1fr}
-  .form-row-2{grid-template-columns:1fr}
-  .modal{border-radius:14px;max-height:96vh}
-}
-
 /* ══ FIXES DE LAYOUT — scroll, devtools, responsividade ══════
    ⚠️ BLINDADO — não remover. Resolve scroll com devtools aberto
    e layouts quebrados em telas menores.
@@ -921,586 +885,397 @@ td:first-child{padding-left:18px}
   color:#c4b5fd;
 }
 
+
 /* ══════════════════════════════════════════════════════════
-   MOBILE COMPLETE OVERHAUL — Estima Food
-   Compatível com iOS Safari, Android Chrome, PWA
-   Sem perda de funcionalidade — tudo adaptado ao toque
+   MOBILE & APP — Estima Food  ·  Único bloco autoritativo
+   iOS Safari · Android Chrome · PWA · sem conflitos
 ══════════════════════════════════════════════════════════ */
 
-/* ── Safe Area (iPhone X+ / notch / home bar) ─────────── */
+/* ── Variáveis globais (safe-area + bottom nav) ─────────── */
 :root {
-  --safe-top:    env(safe-area-inset-top, 0px);
+  --safe-top:    env(safe-area-inset-top,    0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-left:   env(safe-area-inset-left, 0px);
-  --safe-right:  env(safe-area-inset-right, 0px);
-  --mob-bn-h:    60px; /* altura do bottom nav */
+  --safe-left:   env(safe-area-inset-left,   0px);
+  --safe-right:  env(safe-area-inset-right,  0px);
+  --mob-bn-h: 58px;
 }
 
-/* ── Bottom Nav ────────────────────────────────────────── */
+/* ══ BOTTOM NAV ══════════════════════════════════════════ */
 .mob-bottom-nav {
   display: none;
   position: fixed;
   bottom: 0; left: 0; right: 0;
   height: calc(var(--mob-bn-h) + var(--safe-bottom));
   padding-bottom: var(--safe-bottom);
-  background: rgba(13,17,23,.97);
-  border-top: 1px solid var(--border2);
-  backdrop-filter: saturate(160%) blur(20px);
-  -webkit-backdrop-filter: saturate(160%) blur(20px);
+  background: rgba(10,12,18,.97);
+  border-top: 1px solid rgba(255,255,255,.09);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
   z-index: 400;
   flex-direction: row;
   align-items: stretch;
   justify-content: space-around;
-  box-shadow: 0 -4px 24px rgba(0,0,0,.5);
+  box-shadow: 0 -2px 20px rgba(0,0,0,.55);
 }
 .mob-bn-item {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
   gap: 3px;
-  background: none;
-  border: none;
+  background: none; border: none;
   color: var(--muted);
   font-family: 'Outfit', sans-serif;
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: .2px;
+  font-size: 9px; font-weight: 600; letter-spacing: .3px;
   cursor: pointer;
-  transition: color .18s;
   position: relative;
-  padding: 6px 4px 2px;
+  padding: 6px 2px 2px;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  transition: color .18s;
 }
-.mob-bn-item svg { transition: transform .22s cubic-bezier(.34,1.56,.64,1); }
+.mob-bn-item svg { transition: transform .22s cubic-bezier(.34,1.56,.64,1); flex-shrink: 0; }
 .mob-bn-item.on { color: var(--accent); }
-.mob-bn-item.on svg { transform: scale(1.15); }
+.mob-bn-item.on svg { transform: scale(1.18); }
 .mob-bn-item.on::after {
   content: '';
-  position: absolute;
-  bottom: 0; left: 20%; right: 20%;
-  height: 2px;
-  background: var(--accent);
+  position: absolute; bottom: 0; left: 18%; right: 18%;
+  height: 2px; background: var(--accent);
   border-radius: 99px 99px 0 0;
-  box-shadow: 0 0 8px var(--accent-glow);
+  box-shadow: 0 0 10px var(--accent-glow);
 }
+.mob-bn-item:active { opacity: .65; }
 .mob-bn-badge {
-  position: absolute;
-  top: 4px; right: calc(50% - 14px);
+  position: absolute; top: 3px; right: calc(50% - 16px);
   min-width: 16px; height: 16px;
-  background: var(--danger);
-  border-radius: 99px;
+  background: var(--danger); border-radius: 99px;
   font-size: 9px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
-  border: 1.5px solid var(--bg);
-  padding: 0 3px;
+  border: 1.5px solid #0a0c12;
+  padding: 0 3px; color: #fff;
   animation: pulse 2s infinite;
 }
 
-/* ── Sidebar overlay para mobile ───────────────────────── */
+/* ══ SIDEBAR OVERLAY ══════════════════════════════════════ */
 .mob-sidebar-overlay {
   display: none;
   position: fixed; inset: 0;
-  background: rgba(0,0,0,.65);
-  z-index: 299;
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  background: rgba(0,0,0,.72);
+  z-index: 309;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
 }
 .mob-sidebar-overlay.on { display: block; }
 
-/* ══ MEDIA QUERIES MOBILE COMPLETO ═══════════════════════ */
+/* ══ FABs FLUTUANTES (direita, mobile only) ═══════════════ */
+.mob-fab-stack {
+  display: none;
+}
 
+/* ══ MOBILE — max-width 900px ════════════════════════════ */
 @media (max-width: 900px) {
 
-  /* ── Viewport corrigido ── */
-  body { overflow: hidden; }
-
-  /* ── Ativa bottom nav ── */
+  /* ── Activa bottom nav ── */
   .mob-bottom-nav { display: flex; }
-
-  /* ── Body padding para bottom nav ── */
-  .main { padding-bottom: var(--mob-bn-h) !important; }
-
-  /* ── Topnav mobile ── */
-  .topnav {
-    padding: 0 10px 0 calc(10px + var(--safe-left));
-    gap: 6px;
-    height: var(--nav-h);
+  .mob-fab-stack {
+    display: flex; flex-direction: column; gap: 10px;
+    position: fixed;
+    right: 10px; top: 50%;
+    transform: translateY(-50%);
+    z-index: 390;
   }
-  /* Esconde menu hamburguer antigo (substituído pelo bottom nav) */
+
+  /* ── App container ── */
+  .app { overflow: hidden; height: calc(100dvh - var(--nav-h)); }
+
+  /* ── Body / layout global ── */
+  body { overflow: hidden; }
+  .main {
+    overflow-y: auto; overflow-x: hidden;
+    padding-bottom: calc(var(--mob-bn-h) + var(--safe-bottom)) !important;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  /* ── Topnav ── */
+  .topnav {
+    padding: 0 10px;
+    padding-left: max(10px, var(--safe-left));
+    padding-right: max(10px, var(--safe-right));
+    gap: 6px;
+  }
   .mobile-menu-btn { display: none !important; }
-  /* Logo compacto */
-  .logo { min-width: auto; font-size: 15px; gap: 7px; }
+  .logo { min-width: auto; font-size: 15px; gap: 6px; }
   .logo svg { width: 22px; height: 22px; }
-  /* Oculta pills do topnav em telas pequenas */
   .tnav-pill { display: none !important; }
-  /* Botão caixa compacto */
-  .caixa-btn span { display: none; }
-  .caixa-btn { padding: 6px 10px; min-width: 36px; border-radius: 99px; }
-  /* RT badge compacto */
   .tbadge { display: none !important; }
-  /* Ícones do topnav */
-  .ibtn { width: 36px; height: 36px; }
+  .caixa-btn span { display: none; }
+  .caixa-btn { padding: 5px 10px; }
+  .ibtn { width: 36px !important; height: 36px !important; }
   .tnr { gap: 4px; }
 
-  /* ── Sidebar — slide animado da esquerda ── */
+  /* ── Sidebar: slide da esquerda, sem flash ── */
   .sidebar {
-    display: flex !important;       /* sempre montado no DOM */
-    width: 282px !important;
+    display: flex !important;
+    width: 284px !important;
     max-width: 88vw !important;
     position: fixed;
     top: 0; bottom: 0; left: 0;
     z-index: 310;
     padding-top: calc(var(--nav-h) + var(--safe-top));
     padding-left: var(--safe-left);
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow-y: auto; overflow-x: hidden;
     background: var(--sidebar-bg);
     border-right: 1px solid var(--border2);
-    box-shadow: 6px 0 48px rgba(0,0,0,.75);
-    transform: translateX(-100%);       /* escondida por padrão */
-    transition: transform .28s cubic-bezier(.4,0,.2,1) !important;
+    box-shadow: 6px 0 48px rgba(0,0,0,.8);
+    transform: translateX(-105%);
+    transition: transform .3s cubic-bezier(.4,0,.2,1) !important;
     will-change: transform;
     -webkit-overflow-scrolling: touch;
   }
   .sidebar.mobile-open {
-    transform: translateX(0) !important; /* revela ao abrir */
+    transform: translateX(0) !important;
+  }
+  /* Desabilita hover-expand no mobile */
+  .sidebar:hover:not(.mobile-open) {
+    width: 284px !important;
+    transform: translateX(-105%) !important;
+    box-shadow: none !important;
   }
   .sb-pin { display: none !important; }
+  /* Itens da sidebar — sempre visíveis dentro do painel */
+  .sidebar .si {
+    font-size: 12.5px !important;
+    justify-content: flex-start !important;
+    padding: 9px 12px !important;
+    gap: 10px !important;
+    white-space: nowrap !important;
+  }
+  .sidebar .shead {
+    font-size: 9px !important;
+    padding: 10px 10px 4px !important;
+    pointer-events: auto !important;
+  }
+  .sidebar .sidebar-search { display: block !important; }
+  .sidebar .urow { justify-content: flex-start !important; padding: 7px 10px !important; }
+  .sidebar .sfoot-info { display: flex !important; }
 
-  /* ── Pages ── */
-  .page { padding: 14px 12px 24px; }
-  .page.on { padding-bottom: calc(24px + var(--mob-bn-h)); }
-
-  /* ── Stats grid ── */
-  .sg { grid-template-columns: repeat(2,1fr); gap: 10px; }
-  .sc { padding: 14px 14px; }
-  .sv { font-size: 22px; }
+  /* ── Pages — sem overflow lateral ── */
+  .page {
+    padding: 14px 12px 20px;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+  .page.on {
+    padding-bottom: calc(20px + var(--mob-bn-h) + var(--safe-bottom));
+  }
+  .page > * { max-width: 100%; box-sizing: border-box; }
 
   /* ── Page header ── */
-  .ph { flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 16px; }
-  .ph .btn { width: 100%; justify-content: center; padding: 10px 16px; font-size: 13px; }
+  .ph {
+    flex-direction: column; align-items: stretch;
+    gap: 10px; margin-bottom: 16px;
+  }
+  .ph > div:last-child {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .ph .btn { flex: 1; min-width: 120px; justify-content: center; }
+
+  /* ── Stats grid ── */
+  .sg { grid-template-columns: repeat(2,1fr); gap: 10px; margin-bottom: 16px; }
+  .sc { padding: 14px 12px; }
+  .sv { font-size: 20px; }
+  .sl { font-size: 9.5px; }
+
+  /* ── Kanban — scroll horizontal nativo ── */
+  .kanban {
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    overflow-y: hidden;
+    gap: 10px;
+    height: auto !important;
+    min-height: unset !important;
+    padding-bottom: 8px;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding: 0 12px;
+  }
+  .kol {
+    min-width: 82vw;
+    max-width: 82vw;
+    flex-shrink: 0;
+    scroll-snap-align: start;
+    height: auto;
+    max-height: 72vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .kol-body { flex: 1; overflow-y: auto; max-height: unset; -webkit-overflow-scrolling: touch; }
+
+  /* ── Ordem cards: toque-friendly ── */
+  .order-card { padding: 12px 12px; touch-action: manipulation; }
+  .oc-btn { min-height: 38px; font-size: 11px; }
+  .oc-actions { gap: 5px; margin-top: 8px; }
+
+  /* ── Mesa kanban ── */
+  .mesa-kanban {
+    display: flex !important; flex-direction: row !important;
+    overflow-x: auto !important; gap: 10px;
+    height: auto !important; min-height: unset !important;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+  .mesa-kanban .kol {
+    min-width: 80vw; max-width: 80vw;
+    flex-shrink: 0; scroll-snap-align: start;
+    max-height: 65vh;
+  }
+
+  /* ── Tables — scroll horizontal sem quebrar layout ── */
+  .tw { border-radius: 12px; overflow: hidden; }
+  .tw-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tw-scroll table,
+  .tw table { min-width: 540px; }
+  td { padding: 10px 10px; font-size: 12px; }
+  thead th { padding: 8px 10px; font-size: 9px; }
+  td:first-child, thead th:first-child { padding-left: 12px; }
+  .tmeta { flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
 
   /* ── Search bar ── */
   .search-bar { flex-wrap: wrap; gap: 6px; }
   .sbox { flex: 1; min-width: 0; }
-  .sbox input { width: 100%; }
-  .sw select { width: 100%; }
-
-  /* ── Kanban ── */
-  .kanban {
-    grid-template-columns: 1fr;
-    height: auto;
-    gap: 10px;
-    min-height: unset;
-    overflow-x: unset;
-  }
-  .kol { min-height: 200px; }
-  .kol-body { max-height: 50vh; }
-
-  /* ── Tables ── */
-  .tw { border-radius: 10px; }
-  .tw-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; }
-  .tw-scroll table { min-width: 560px; }
-  table { min-width: 560px; }
-  td { padding: 10px 10px; font-size: 12px; }
-  thead th { padding: 8px 10px; font-size: 9.5px; }
-  td:first-child, thead th:first-child { padding-left: 12px; }
-  .tmeta { flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
+  .sbox input { width: 100%; min-width: 0; }
 
   /* ── Forms ── */
   .form-row-2 { grid-template-columns: 1fr; gap: 10px; }
-  .form-input {
-    padding: 12px 14px;
-    font-size: 16px; /* Impede zoom automático no iOS */
-    border-radius: 10px;
-  }
+  .form-input { padding: 12px 13px; font-size: 16px !important; }
+  input[type="text"], input[type="email"], input[type="password"],
+  input[type="number"], input[type="tel"], input[type="search"],
+  textarea, select { font-size: 16px !important; }
 
-  /* ── Modals ── */
-  .modal-bg {
-    align-items: flex-end;
-    padding: 0;
-  }
+  /* ── Modals — bottom sheet ── */
+  .modal-bg { align-items: flex-end; padding: 0; }
   .modal {
     width: 100% !important;
     max-width: 100% !important;
-    max-height: 92vh;
+    max-height: 93dvh;
     border-radius: 20px 20px 0 0;
     padding-bottom: calc(16px + var(--safe-bottom));
     animation: modalSlideUp .28s cubic-bezier(.4,0,.2,1);
   }
   @keyframes modalSlideUp {
-    from { transform: translateY(30px); opacity: 0; }
+    from { transform: translateY(40px); opacity: 0; }
     to   { transform: translateY(0);    opacity: 1; }
   }
-  .modal-head { padding: 16px 18px 0; }
-  /* Handle bar drag indicator */
+  /* Handle bar */
   .modal::before {
     content: '';
     display: block;
     width: 36px; height: 4px;
-    background: var(--border2);
-    border-radius: 99px;
-    margin: 10px auto 0;
+    background: var(--border2); border-radius: 99px;
+    margin: 10px auto 4px;
   }
+  .modal-head { padding: 12px 18px 0; }
   .modal .form-row-2 { grid-template-columns: 1fr; }
 
-  /* ── PDV Balcão ── */
+  /* ── PDV Balcão — vertical stack ── */
   #page-pdv-balcao {
-    height: calc(100dvh - var(--nav-h) - var(--mob-bn-h)) !important;
+    padding: 0 !important;
     overflow: hidden;
+    height: calc(100dvh - var(--nav-h) - var(--mob-bn-h) - var(--safe-bottom)) !important;
   }
   .pdvb-wrap {
     grid-template-columns: 1fr !important;
-    height: auto !important;
-    flex-direction: column;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
     overflow: hidden;
   }
-  .pdvb-left { border-right: none; border-bottom: 1px solid var(--border); height: 55vh; min-height: 300px; }
-  .pdvb-right { height: 45vh; min-height: 280px; overflow: hidden; }
+  .pdvb-left {
+    flex: 1; min-height: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .pdvb-right {
+    height: 46vh; flex-shrink: 0;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .pdvb-order-items { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .pdvb-nav-hint { display: none; }
-  .pdvb-gerar-btn { margin: 6px 10px 8px; padding: 12px; font-size: 13px; }
-  .pdvb-items { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 7px; }
-  .pdvb-item-img { height: 56px; }
+  .pdvb-items {
+    grid-template-columns: repeat(auto-fill, minmax(96px,1fr));
+    gap: 7px; padding: 10px;
+  }
+  .pdvb-item-img { height: 52px; }
+  .pdvb-item-name { font-size: 11px; }
+  .pdvb-gerar-btn { margin: 6px 10px 8px; padding: 13px; font-size: 13px; }
 
   /* ── PDV clássico ── */
   .pdv-wrap {
     grid-template-columns: 1fr !important;
     height: auto !important;
   }
-  .pdv-grid { grid-template-columns: repeat(3,1fr); }
+  .pdv-grid { grid-template-columns: repeat(3,1fr); gap: 7px; }
 
   /* ── Chat / Robô ── */
-  .chat-wrap { flex-direction: column; height: auto; min-height: unset; gap: 10px; }
-  .chat-right { width: 100%; max-height: 200px; }
-  .chat-msgs { max-height: 45vh; }
   #page-robo {
-    height: calc(100dvh - var(--nav-h) - var(--mob-bn-h)) !important;
+    padding: 0 !important;
+    height: calc(100dvh - var(--nav-h) - var(--mob-bn-h) - var(--safe-bottom)) !important;
+    overflow: hidden;
   }
-
-  /* ── Mesa Kanban ── */
-  .mesa-kanban {
-    grid-template-columns: 1fr;
-    height: auto;
-    gap: 10px;
+  .chat-wrap {
+    flex-direction: column !important;
+    height: 100% !important;
+    gap: 0;
+    overflow: hidden;
   }
+  .chat-left { flex: 1; min-height: 0; border-radius: 0; border: none; border-bottom: 1px solid var(--border); }
+  .chat-right { width: 100%; max-height: 180px; flex-shrink: 0; overflow-y: auto; border-radius: 0; border: none; }
+  .chat-msgs { max-height: unset; flex: 1; }
 
-  /* ── Desempenho ── */
-  .desemp-grid { grid-template-columns: repeat(2,1fr); gap: 10px; }
-  .desemp-val { font-size: 22px; }
+  /* ── Cardápio público / Tema — full frame ── */
+  #page-cardapio-publico,
+  #page-tema {
+    padding: 0 !important;
+    height: calc(100dvh - var(--nav-h) - var(--mob-bn-h) - var(--safe-bottom)) !important;
+    overflow: hidden;
+  }
 
   /* ── Quality bar ── */
   .quality-pills { display: none; }
   .quality-bar { padding: 12px 14px; }
 
-  /* ── Cardápio gestor ── */
-  .cat-item-row { padding: 10px 12px; }
-  .cat-item-thumb { width: 40px; height: 40px; }
-  .cat-item-name { font-size: 13px; }
+  /* ── Desempenho ── */
+  .desemp-grid { grid-template-columns: repeat(2,1fr); gap: 10px; }
+  .desemp-val { font-size: 20px; }
 
-  /* ── Inputs touch-friendly ── */
-  select, input, textarea, button {
-    -webkit-appearance: none;
-    appearance: none;
-  }
-  input[type="text"], input[type="email"], input[type="password"],
-  input[type="number"], input[type="tel"], textarea, select {
-    font-size: 16px !important; /* Impede zoom no iOS */
-  }
-  .btn { min-height: 40px; }
-
-  /* ── Botões de ação em pedidos ── */
-  .oc-btn { padding: 8px 6px; font-size: 11px; min-height: 36px; }
-  .oc-actions { gap: 5px; }
-  .order-card { padding: 12px 12px; }
-
-  /* ── Toggle maior no mobile ── */
+  /* ── Toggle maior ── */
   .toggle { width: 42px; height: 24px; }
   .toggle::after { width: 17px; height: 17px; top: 2.5px; left: 2.5px; }
   .toggle.on::after { transform: translateX(18px); }
 
-  /* ── Page especial KDS ── */
-  #page-kds .kanban { grid-template-columns: 1fr; }
-
-  /* ── Pizza modal ── */
-  .pizza-modal {
-    width: 100% !important;
-    max-width: 100% !important;
-    border-radius: 20px 20px 0 0;
-    padding: 20px 16px 24px;
-    padding-bottom: calc(24px + var(--safe-bottom));
-    max-height: 94vh;
-  }
-  .pizza-slices-wrap { width: 200px; height: 200px; }
-  .pz-flavor-list { grid-template-columns: repeat(2,1fr); }
-
-  /* ── Tabelas no mobile com sticky header ── */
-  .tw-sticky thead th {
-    position: sticky; top: 0;
-    z-index: 2;
-    background: var(--surface);
-  }
-
-  /* ── Toasts bottom em mobile (acima do bottom nav) ── */
+  /* ── Toast acima do bottom nav ── */
   #toast {
     bottom: calc(var(--mob-bn-h) + var(--safe-bottom) + 10px);
-    right: 12px;
-    left: 12px;
-    font-size: 12px;
-    justify-content: center;
+    right: 12px; left: 12px;
+    justify-content: center; font-size: 12px;
   }
 
-  /* ── Notification panel ── */
+  /* ── Notif panel ── */
   .notif-panel {
     top: calc(var(--nav-h) + 4px);
-    right: 8px;
-    left: 8px;
-    width: auto;
+    right: 8px; left: 8px; width: auto;
   }
 
-  /* ── WA Chat panel: tela cheia no mobile ── */
-  #wa-panel {
-    position: fixed;
-    inset: 0 !important;
-    top: var(--nav-h) !important;
-    bottom: var(--mob-bn-h) !important;
-    right: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    border-radius: 0 !important;
-    z-index: 350;
-  }
-
-  /* ── Scroll suave global ── */
-  .main, .kol-body, .cart-items, .pdvb-order-items, .modal {
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-  }
-
-  /* ── Página cardápio-público full ── */
-  #page-cardapio-publico {
-    height: calc(100dvh - var(--nav-h) - var(--mob-bn-h)) !important;
-  }
-  #page-tema {
-    height: calc(100dvh - var(--nav-h) - var(--mob-bn-h)) !important;
-  }
-}
-
-/* ─── Telas muito pequenas (≤480px) ────────────────────── */
-@media (max-width: 480px) {
-  .sg { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .sc { padding: 12px 12px; }
-  .sv { font-size: 20px; }
-  .pt { font-size: 18px; }
-  .ps { font-size: 11px; }
-  .page { padding: 12px 10px 20px; }
-  .page.on { padding-bottom: calc(20px + var(--mob-bn-h)); }
-  .desemp-grid { grid-template-columns: 1fr 1fr; }
-  .desemp-val { font-size: 20px; }
-  .pdvb-items { grid-template-columns: repeat(3,1fr); }
-  .pdvb-item-img { height: 48px; font-size: 22px; }
-  .pdvb-item-info { padding: 6px 8px; }
-  .pdvb-item-name { font-size: 10.5px; }
-  .pdvb-item-price { font-size: 11px; }
-  /* Botão gerar pedido grande e fácil de tocar */
-  .pdvb-gerar-btn { font-size: 14px; padding: 14px; }
-  /* Formulários menores */
-  .modal-head .modal-title { font-size: 15px; }
-  .btn { font-size: 12px; }
-  .ph .btn { font-size: 13px; }
-  /* Oculta colunas menos relevantes em tabelas */
-  .tw-hide-xs { display: none !important; }
-  /* Bottom nav um pouco mais compacto */
-  .mob-bn-item { font-size: 9px; gap: 2px; }
-  .mob-bn-item svg { width: 18px; height: 18px; }
-}
-
-/* ─── Tablets (601–900px) ──────────────────────────────── */
-@media (min-width: 601px) and (max-width: 900px) {
-  .sg { grid-template-columns: repeat(2,1fr); }
-  .desemp-grid { grid-template-columns: repeat(2,1fr); }
-  .pdvb-wrap {
-    grid-template-columns: 1fr !important;
-  }
-  .pdvb-left { height: 58vh; }
-  .pdvb-right { height: 42vh; }
-  .pdvb-items { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
-  .kanban {
-    grid-template-columns: repeat(3,1fr);
-    height: auto;
-  }
-  .kol-body { max-height: 40vh; }
-  .form-row-2 { grid-template-columns: 1fr 1fr; }
-  .modal { width: 90% !important; max-width: 500px !important; border-radius: 20px; margin: auto; }
-  .modal-bg { align-items: center; }
-  .modal::before { display: none; }
-}
-
-/* ─── Melhorias de interatividade touch ────────────────── */
-@media (hover: none) and (pointer: coarse) {
-  /* Remove hovers que não fazem sentido no toque */
-  .si:hover { background: none; color: var(--muted2); }
-  .si.on { background: var(--accent-dim); color: var(--accent); }
-  .sc:hover { transform: none; box-shadow: none; }
-  .order-card:hover { transform: none; }
-  .btn:hover { transform: none; filter: none; }
-  .pdvb-item:hover { transform: none; box-shadow: none; }
-  
-  /* Active states para toque (feedback visual) */
-  .si:active { background: var(--surface2); }
-  .btn:active { opacity: .8; transform: scale(.98); }
-  .order-card:active { background: var(--surface2); }
-  .pdvb-item:active { background: var(--accent-dim); border-color: var(--accent); }
-  .mob-bn-item:active { opacity: .7; }
-  .oc-btn:active { opacity: .75; }
-  
-  /* Aumenta touch targets */
-  .oc-btn { min-height: 38px; }
-  .toggle { width: 44px; height: 26px; }
-  .qb, .pdvb-qb { width: 26px; height: 26px; font-size: 14px; }
-  .dp { width: 28px; height: 28px; }
-  .ibtn { width: 40px !important; height: 40px !important; }
-  
-  /* Scroll momentum */
-  .main, .modal, .kol-body, .sidebar {
-    -webkit-overflow-scrolling: touch;
-  }
-}
-
-/* ─── Impressão mantida igual ──────────────────────────── */
-@media print {
-  .mob-bottom-nav,
-  .mob-sidebar-overlay { display: none !important; }
-}
-
-/* ══════════════════════════════════════════════════════════
-   FABs FLUTUANTES — Robô + WhatsApp (apenas mobile)
-   Posicionados à esquerda, verticalmente centrados
-══════════════════════════════════════════════════════════ */
-.mob-fab-stack {
-  display: none; /* oculto no desktop */
-}
-
-@media (max-width: 900px) {
-  /* ── Contêiner dos FABs ── */
-  .mob-fab-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    position: fixed;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 290;
-  }
-
-  /* ── FAB base ── */
-  .mob-fab {
-    width: 46px;
-    height: 46px;
-    border-radius: 14px;
-    border: 1px solid rgba(255,255,255,.1);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    position: relative;
-    box-shadow: 0 4px 16px rgba(0,0,0,.5);
-    transition: transform .22s cubic-bezier(.34,1.56,.64,1), box-shadow .2s;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-  }
-  .mob-fab:active { transform: scale(.92) !important; }
-
-  /* ── FAB Robô ── */
-  .mob-fab-robo {
-    background: linear-gradient(145deg,#1e2130,#181b24);
-    color: var(--purple);
-    border-color: rgba(139,92,246,.3);
-  }
-  .mob-fab-robo:active { box-shadow: 0 2px 8px rgba(139,92,246,.4); }
-
-  /* ── FAB WhatsApp ── */
-  .mob-fab-wa {
-    background: linear-gradient(145deg,#0a1f12,#0d1a10);
-    color: #25D366;
-    border-color: rgba(37,211,102,.3);
-  }
-  .mob-fab-wa:active { box-shadow: 0 2px 8px rgba(37,211,102,.4); }
-
-  /* ── Dot de status (robô) ── */
-  .mob-fab-robo .fab-status-dot {
-    position: absolute;
-    top: 6px; right: 6px;
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: var(--muted);
-    border: 1.5px solid var(--bg);
-    transition: background .3s;
-  }
-
-  /* ── Badge de não-lidos (whatsapp) ── */
-  .mob-fab-wa .fab-badge {
-    position: absolute;
-    top: -4px; right: -4px;
-    min-width: 17px; height: 17px;
-    background: #25D366;
-    border-radius: 99px;
-    font-size: 9px; font-weight: 700;
-    display: none;
-    align-items: center; justify-content: center;
-    border: 2px solid var(--bg);
-    padding: 0 3px;
-    color: #fff;
-    font-family: 'Outfit', sans-serif;
-  }
-  .mob-fab-wa .fab-badge.on { display: flex; }
-
-  /* ── Tooltip label (aparece ao pressionar) ── */
-  .mob-fab::after {
-    content: attr(data-label);
-    position: absolute;
-    right: calc(100% + 8px);
-    top: 50%;
-    transform: translateY(-50%);
-    background: rgba(14,14,14,.92);
-    border: 1px solid var(--border2);
-    border-radius: 8px;
-    padding: 4px 9px;
-    font-size: 11px;
-    font-weight: 600;
-    font-family: 'Outfit', sans-serif;
-    color: var(--text);
-    white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity .18s;
-    box-shadow: 0 4px 14px rgba(0,0,0,.4);
-  }
-  .mob-fab:focus::after,
-  .mob-fab.show-label::after { opacity: 1; }
-
-  /* ── Pulsação no FAB WA quando tem msg nova ── */
-  .mob-fab-wa.has-unread {
-    animation: fabPulse 2.5s ease-in-out infinite;
-  }
-  @keyframes fabPulse {
-    0%,100% { box-shadow: 0 4px 16px rgba(0,0,0,.5); }
-    50%      { box-shadow: 0 4px 20px rgba(37,211,102,.45), 0 0 0 4px rgba(37,211,102,.12); }
-  }
-
-  /* ══ WA CHAT — MOBILE REIMAGINADO ══════════════════════
-     Slide up da parte inferior — experiência nativa
-  ══════════════════════════════════════════════════════ */
+  /* ── WA Chat — full bottom sheet ── */
   #wa-panel {
     align-items: flex-end !important;
     justify-content: stretch !important;
-  }
-  #wa-panel .wa-backdrop {
-    background: rgba(0,0,0,.7);
   }
   #wa-panel .wa-panel-inner {
     width: 100vw !important;
@@ -1509,74 +1284,148 @@ td:first-child{padding-left:18px}
     margin-top: 0 !important;
     border-left: none !important;
     border-radius: 20px 20px 0 0;
+    border-top: 1px solid var(--border2);
     padding-bottom: var(--safe-bottom);
     animation: waSlideUp .3s cubic-bezier(.4,0,.2,1) !important;
-    border-top: 1px solid var(--border2);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+    display: flex; flex-direction: column; overflow: hidden;
   }
   @keyframes waSlideUp {
-    from { transform: translateY(100%); opacity: .4; }
-    to   { transform: translateY(0);    opacity: 1; }
+    from { transform: translateY(100%); opacity: .5; }
+    to   { transform: translateY(0);    opacity: 1;  }
   }
-  /* Handle bar drag */
   #wa-panel .wa-panel-inner::before {
-    content: '';
-    flex-shrink: 0;
+    content: ''; flex-shrink: 0;
     display: block;
     width: 36px; height: 4px;
-    background: var(--border2);
-    border-radius: 99px;
+    background: var(--border2); border-radius: 99px;
     margin: 10px auto 4px;
   }
-  /* Lista de chats ocupa tela cheia no mobile */
   #wa-panel .wa-list-col {
     width: 100% !important;
-    position: absolute;
-    inset: 0;
-    z-index: 2;
+    position: absolute; inset: 0; z-index: 2;
     transition: transform .24s cubic-bezier(.4,0,.2,1);
-    padding-top: 4px;
   }
-  #wa-panel .wa-list-col.hidden {
-    transform: translateX(-100%);
+  #wa-panel .wa-list-col.hidden { transform: translateX(-100%); }
+  #wa-panel .wa-conv-col { position: absolute; inset: 0; z-index: 1; }
+  #wa-panel .wa-back-btn { display: flex !important; }
+  #wa-panel input, #wa-panel textarea { font-size: 16px !important; }
+  #wa-panel .wa-send-btn, #wa-panel .wa-mic-btn { width: 44px !important; height: 44px !important; }
+  #wa-panel .wa-msgs { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+
+  /* ── FABs ── */
+  .mob-fab {
+    width: 46px; height: 46px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,.1);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; position: relative;
+    box-shadow: 0 4px 20px rgba(0,0,0,.55);
+    transition: transform .22s cubic-bezier(.34,1.56,.64,1), box-shadow .2s;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
-  #wa-panel .wa-conv-col {
+  .mob-fab:active { transform: scale(.9) !important; }
+
+  .mob-fab-robo {
+    background: linear-gradient(145deg,#1a1d2e,#151829);
+    color: var(--purple);
+    border-color: rgba(139,92,246,.3);
+  }
+  .mob-fab-wa {
+    background: linear-gradient(145deg,#061510,#071912);
+    color: #25D366;
+    border-color: rgba(37,211,102,.3);
+  }
+  .mob-fab-robo .fab-status-dot {
+    position: absolute; top: 7px; right: 7px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--muted);
+    border: 1.5px solid #0a0c12;
+    transition: background .3s;
+  }
+  .mob-fab-wa .fab-badge {
+    position: absolute; top: -5px; right: -5px;
+    min-width: 17px; height: 17px;
+    background: #25D366; border-radius: 99px;
+    font-size: 9px; font-weight: 700;
+    display: none; align-items: center; justify-content: center;
+    border: 2px solid #0a0c12;
+    padding: 0 3px; color: #fff;
+    font-family: 'Outfit', sans-serif;
+  }
+  .mob-fab-wa .fab-badge.on { display: flex; }
+  .mob-fab-wa.has-unread {
+    animation: fabPulse 2.5s ease-in-out infinite;
+  }
+  @keyframes fabPulse {
+    0%,100% { box-shadow: 0 4px 20px rgba(0,0,0,.55); }
+    50%      { box-shadow: 0 4px 22px rgba(37,211,102,.45), 0 0 0 5px rgba(37,211,102,.1); }
+  }
+  /* Tooltip à esquerda do FAB */
+  .mob-fab::after {
+    content: attr(data-label);
     position: absolute;
-    inset: 0;
-    z-index: 1;
+    right: calc(100% + 9px); top: 50%;
+    transform: translateY(-50%);
+    background: rgba(10,12,18,.95);
+    border: 1px solid var(--border2);
+    border-radius: 8px; padding: 5px 10px;
+    font-size: 11px; font-weight: 600;
+    font-family: 'Outfit', sans-serif;
+    color: var(--text); white-space: nowrap;
+    pointer-events: none; opacity: 0;
+    transition: opacity .18s;
+    box-shadow: 0 4px 16px rgba(0,0,0,.5);
   }
-  /* Botão voltar sempre visível */
-  #wa-panel .wa-back-btn {
-    display: flex !important;
-  }
-  /* Input de mensagem — sem zoom iOS */
-  #wa-panel input,
-  #wa-panel textarea {
-    font-size: 16px !important;
-  }
-  /* Head do WA com altura maior para toque */
-  #wa-panel .wa-chat-head {
-    min-height: 56px;
-  }
-  #wa-panel .wa-list-head {
-    min-height: 56px;
-  }
-  /* Botões de ação maiores */
-  #wa-panel .wa-send-btn,
-  #wa-panel .wa-mic-btn {
-    width: 44px !important;
-    height: 44px !important;
-  }
-  /* Área de mensagens scroll suave */
-  #wa-panel .wa-msgs {
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-  }
+  .mob-fab.show-label::after { opacity: 1; }
 }
 
-/* ─── Impressão: esconde FABs ───────────────────────────── */
+/* ── Tablets (601–900px): kanban volta pra 3 colunas ─── */
+@media (min-width: 601px) and (max-width: 900px) {
+  .kanban {
+    display: grid !important;
+    grid-template-columns: repeat(3,1fr) !important;
+    overflow-x: unset !important;
+    height: auto !important;
+    scroll-snap-type: none !important;
+  }
+  .kol { min-width: unset; max-width: unset; max-height: 60vh; }
+  .form-row-2 { grid-template-columns: 1fr 1fr; }
+  .modal { width: 90% !important; max-width: 500px !important; border-radius: 20px; margin: auto; }
+  .modal-bg { align-items: center; }
+  .modal::before { display: none; }
+  .pdvb-items { grid-template-columns: repeat(auto-fill,minmax(120px,1fr)); }
+}
+
+/* ── Telas muito pequenas ≤ 480px ─────────────────────── */
+@media (max-width: 480px) {
+  .sg { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .sc { padding: 12px 10px; }
+  .sv { font-size: 18px; }
+  .pt { font-size: 17px; }
+  .desemp-grid { grid-template-columns: 1fr 1fr; }
+  .desemp-val { font-size: 18px; }
+  .pdvb-items { grid-template-columns: repeat(3,1fr); gap: 6px; }
+  .pdvb-item-img { height: 44px; font-size: 20px; }
+  .mob-bn-item { font-size: 8.5px; }
+  .mob-bn-item svg { width: 18px; height: 18px; }
+}
+
+/* ── Touch: sem hovers no mobile, active states ─────── */
+@media (hover: none) and (pointer: coarse) {
+  .sc:hover, .order-card:hover, .btn:hover,
+  .pdvb-item:hover, .si:hover { transform: none !important; filter: none !important; box-shadow: inherit !important; background: inherit !important; }
+  .btn:active { opacity: .78; transform: scale(.97) !important; }
+  .order-card:active { background: var(--surface2) !important; }
+  .pdvb-item:active { border-color: var(--accent) !important; background: var(--accent-dim) !important; }
+  .si:active { background: var(--surface2) !important; }
+  .oc-btn { min-height: 40px; }
+  .qb, .pdvb-qb { width: 28px; height: 28px; }
+  .ibtn { width: 38px !important; height: 38px !important; }
+  .main, .modal, .kol-body, .sidebar { -webkit-overflow-scrolling: touch; }
+}
+
+/* ── Print: esconde elementos mobile ──────────────────── */
 @media print {
-  .mob-fab-stack { display: none !important; }
+  .mob-bottom-nav, .mob-sidebar-overlay, .mob-fab-stack { display: none !important; }
 }
