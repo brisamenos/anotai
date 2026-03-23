@@ -1,332 +1,340 @@
-
 // ═══════════════════════════════════════════════════════
-// WHATSAPP CHAT — Gestor de Conversas (Evolution API 2.7)
+// WA-CHAT.JS — Chat WhatsApp do Gestor (Evolution API 2.7)
+// Tempo real via SSE · Mídia sob demanda · Cache em memória
 // ═══════════════════════════════════════════════════════
+'use strict';
 
 const WA = {
-  open: false,
-  chats: [],
+  open:          false,
+  chats:         [],
   filteredChats: [],
-  activeJid: null,
-  activeName: '',
-  messages: [],
-  avatarCache: {},
-  pendingFile: null,
+  activeJid:     null,
+  activeName:    '',
+  messages:      [],
+  avatarCache:   {},
+  mediaCache:    {},   // msgId → { base64, mimetype, fileName }
+  pendingFile:   null,
   mediaRecorder: null,
-  audioChunks: [],
-  recTimer: null,
-  recSeconds: 0,
-  pollTimer: null,
-  lastMsgTs: 0,
+  audioChunks:   [],
+  recTimer:      null,
+  recSeconds:    0,
+  pollTimer:     null,
+  sseConn:       null,
+  lastMsgTs:     0,
 
-  // ── Extrai JID confiável do objeto de chat (v2.7) ────
   getJid(c) {
-    // Em v2.7 o JID real pode estar em vários campos
-    const candidates = [
-      c.remoteJid,
-      c.id,
-      c.key?.remoteJid,
-      c.lastMessage?.key?.remoteJid
-    ];
-    for (const jid of candidates) {
-      if (jid && typeof jid === 'string' && jid.includes('@')) return jid;
-    }
+    for (const f of [c.remoteJid, c.id, c.key?.remoteJid, c.lastMessage?.key?.remoteJid])
+      if (f && typeof f === 'string' && f.includes('@')) return f;
     return null;
   },
 
-  // ── Verifica se o JID é um contato real (não LID) ───
-  isRealContact(jid) {
+  isReal(jid) {
     if (!jid) return false;
-    const num = jid.replace(/@.*/,'').replace(/\D/g,'');
-    // LIDs do v2.7 são IDs curtos (< 9 dígitos) que não são telefones reais
-    // Telefones reais BR: mínimo 12 dígitos com código país 55
-    if (num.length < 9) return false;
-    return true;
+    return (jid.replace(/@.*/,'').replace(/\D/g,'')).length >= 9;
   },
 
-  // ── Formata número para exibição ─────────────────────
-  formatPhone(jid) {
-    const num = (jid || '').replace(/@.*/,'').replace(/\D/g,'');
-    if (!num || num.length < 9) return jid || '';
-    // Brasil: 55 + DDD (2) + número (8 ou 9)
-    if (num.startsWith('55') && num.length >= 12) {
-      const ddd  = num.slice(2,4);
-      const rest = num.slice(4);
-      if (rest.length === 9) return `+55 (${ddd}) ${rest.slice(0,5)}-${rest.slice(5)}`;
-      if (rest.length === 8) return `+55 (${ddd}) ${rest.slice(0,4)}-${rest.slice(4)}`;
+  fmtPhone(jid) {
+    const n = (jid||'').replace(/@.*/,'').replace(/\D/g,'');
+    if (!n || n.length < 9) return jid || '';
+    if (n.startsWith('55') && n.length >= 12) {
+      const ddd = n.slice(2,4), r = n.slice(4);
+      if (r.length === 9) return `+55 (${ddd}) ${r.slice(0,5)}-${r.slice(5)}`;
+      if (r.length === 8) return `+55 (${ddd}) ${r.slice(0,4)}-${r.slice(4)}`;
     }
-    // Internacional: só mostra com +
-    return `+${num}`;
+    return '+' + n;
   },
 
-  // ── Número limpo para envio ──────────────────────────
-  cleanNumber(jid) {
-    return (jid || '').replace(/@.*/,'').replace(/\D/g,'');
+  sendNum(jid) {
+    let n = (jid||'').replace(/@.*/,'').replace(/\D/g,'');
+    if (n.length <= 11 && !n.startsWith('55')) n = '55' + n;
+    return n;
   },
 
-  // ── Número com código do país para envio ─────────────
-  sendNumber(jid) {
-    let num = this.cleanNumber(jid);
-    // Garante que começa com 55 para Brasil
-    if (num.length === 11 && !num.startsWith('55')) num = '55' + num;
-    if (num.length === 10 && !num.startsWith('55')) num = '55' + num;
-    return num;
-  },
-
-  // ── Timestamp → hora ─────────────────────────────────
-  formatTime(ts) {
+  fmtTime(ts) {
     if (!ts) return '';
-    const d = new Date(typeof ts === 'number' ? ts * 1000 : ts);
+    const d = new Date(+ts > 9999999999 ? +ts : +ts * 1000);
     if (isNaN(d)) return '';
-    const now = new Date();
-    if (d.getDate() === now.getDate() && (now - d) < 86400000)
+    const now = new Date(), diff = now - d;
+    if (d.getDate() === now.getDate() && diff < 86400000)
       return d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-    if ((now - d) < 604800000)
-      return d.toLocaleDateString('pt-BR',{weekday:'short'});
+    if (diff < 604800000) return d.toLocaleDateString('pt-BR',{weekday:'short'});
     return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
   },
 
-  // ── Timestamp → data por extenso ─────────────────────
-  formatDate(ts) {
+  fmtDate(ts) {
     if (!ts) return '';
-    const d = new Date(typeof ts === 'number' ? ts * 1000 : ts);
+    const d = new Date(+ts > 9999999999 ? +ts : +ts * 1000);
     if (isNaN(d)) return '';
-    const now = new Date();
-    const diff = now - d;
+    const now = new Date(), diff = now - d;
     if (d.getDate() === now.getDate() && diff < 86400000) return 'Hoje';
     if (diff < 172800000) return 'Ontem';
     return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
   },
 
-  // ── Iniciais para avatar ──────────────────────────────
   initials(name) {
     if (!name || name.startsWith('+')) return '?';
     const p = name.trim().split(' ').filter(Boolean);
-    if (p.length >= 2) return (p[0][0] + p[p.length-1][0]).toUpperCase();
-    return (p[0]?.[0] || '?').toUpperCase();
+    return p.length >= 2
+      ? (p[0][0] + p[p.length-1][0]).toUpperCase()
+      : (p[0]?.[0] || '?').toUpperCase();
   },
 
-  // ── Verificar conexão EVO ─────────────────────────────
-  async checkConnection() {
-    const inst     = EVO.instance;
-    const statusEl = document.getElementById('wa-conn-status');
-    if (!inst) {
-      if (statusEl) statusEl.textContent = '⚠️ Configure a instância no painel Robô';
-      return false;
-    }
-    try {
-      const r     = await EVO.req('GET', `/instance/connectionState/${inst}`);
-      const state = r.data?.instance?.state || r.data?.state || '';
-      const ok    = state === 'open';
-      if (statusEl) statusEl.textContent = ok ? '🟢 Conectado' : `🔴 ${state || 'Desconectado'}`;
-      return ok;
-    } catch(e) {
-      if (statusEl) statusEl.textContent = '⚠️ Erro de conexão';
-      return false;
-    }
+  getTs(c) {
+    return c.lastMessage?.messageTimestamp || c.updatedAt || c.lastMessageTimestamp || 0;
   },
 
-  // ── Buscar foto de perfil (cache) ─────────────────────
+  getPreview(c) {
+    const lm = c.lastMessage; if (!lm) return '';
+    const m  = lm.message || {};
+    if (lm.conversation)                return lm.conversation;
+    if (m.conversation)                 return m.conversation;
+    if (m.extendedTextMessage?.text)    return m.extendedTextMessage.text;
+    if (m.imageMessage)                 return '📷 Imagem' + (m.imageMessage.caption ? ': '+m.imageMessage.caption : '');
+    if (m.videoMessage)                 return '🎥 Vídeo';
+    if (m.audioMessage || m.pttMessage) return '🎵 Áudio';
+    if (m.documentMessage)              return '📎 ' + (m.documentMessage.fileName || 'Documento');
+    if (m.stickerMessage)               return '🎭 Figurinha';
+    if (m.locationMessage)              return '📍 Localização';
+    if (Object.keys(m).length > 0)     return '📎 Mídia';
+    return '';
+  },
+
   async fetchAvatar(jid) {
     if (this.avatarCache[jid] !== undefined) return this.avatarCache[jid];
     this.avatarCache[jid] = null;
     try {
-      const num = this.cleanNumber(jid);
-      const r   = await EVO.req('GET', `/chat/fetchProfilePictureUrl/${EVO.instance}?number=${num}&type=image`);
+      const n = (jid||'').replace(/@.*/,'').replace(/\D/g,'');
+      const r = await EVO.req('GET', `/chat/fetchProfilePictureUrl/${EVO.instance}?number=${n}&type=image`);
       const url = r.data?.profilePictureUrl || r.data?.image || null;
       this.avatarCache[jid] = url;
       return url;
-    } catch(e) { return null; }
+    } catch { return null; }
   },
 
-  // ── Renderiza avatar assíncrono num elemento ──────────
   async renderAvatar(jid, name, el) {
     if (!el) return;
     const url = await this.fetchAvatar(jid);
-    if (url) {
-      const safe = (this.initials(name) || '?').replace(/'/g,"\\'");
-      el.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover" onerror="this.parentElement.textContent='${safe}'" alt="">`;
-    } else {
-      el.textContent = this.initials(name) || '?';
-    }
+    const ini = (this.initials(name)||'?').replace(/'/g,"\\'");
+    if (url) el.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.parentElement.textContent='${ini}'" alt="">`;
+    else      el.textContent = ini;
   },
-
-  // ── Extrai preview da última mensagem ─────────────────
-  getPreview(c) {
-    const lm = c.lastMessage;
-    if (!lm) return '';
-    const m = lm.message || lm.msg || {};
-    // texto direto
-    if (lm.conversation) return lm.conversation;
-    if (m.conversation)  return m.conversation;
-    if (m.extendedTextMessage?.text) return m.extendedTextMessage.text;
-    if (m.imageMessage)  return '📷 Imagem' + (m.imageMessage.caption ? ': ' + m.imageMessage.caption : '');
-    if (m.videoMessage)  return '🎥 Vídeo';
-    if (m.audioMessage)  return '🎵 Áudio';
-    if (m.documentMessage) return '📎 ' + (m.documentMessage.fileName || 'Documento');
-    if (m.stickerMessage)  return '🎭 Figurinha';
-    if (m.locationMessage) return '📍 Localização';
-    if (Object.keys(m).length) return '📎 Mídia';
-    return '';
-  },
-
-  // ── Extrai timestamp ──────────────────────────────────
-  getTs(c) {
-    return c.lastMessage?.messageTimestamp
-        || c.updatedAt
-        || c.lastMessageTimestamp
-        || 0;
-  }
 };
 
+function waEsc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function waSbToast(t, m) { if (typeof sbToast === 'function') sbToast(t, m); }
+
 // ─────────────────────────────────────────────────────
-// Abrir / Fechar painel
+// Abrir / Fechar
 // ─────────────────────────────────────────────────────
 function waOpenPanel() {
   const panel = document.getElementById('wa-panel');
   if (!panel) return;
   panel.style.display = 'flex';
   WA.open = true;
-  closeNotif?.();
-  WA.checkConnection().then(ok => { if (ok) waLoadChats(); else waLoadChats(); });
+  if (typeof closeNotif === 'function') closeNotif();
+  WA.checkConnection().then(() => waLoadChats());
   if (!WA.pollTimer) {
     WA.pollTimer = setInterval(() => {
       if (WA.open && WA.activeJid) waLoadMessages(true);
-    }, 8000);
+    }, 15000);
   }
 }
 
 function waClosePanel() {
-  const panel = document.getElementById('wa-panel');
-  if (panel) panel.style.display = 'none';
+  const p = document.getElementById('wa-panel');
+  if (p) p.style.display = 'none';
   WA.open = false;
   if (WA.pollTimer) { clearInterval(WA.pollTimer); WA.pollTimer = null; }
 }
 
-function waBackToList() {
-  document.getElementById('wa-list-col')?.classList.remove('hidden');
+function waBackToList() { document.getElementById('wa-list-col')?.classList.remove('hidden'); }
+
+// ─────────────────────────────────────────────────────
+// SSE — mensagens em tempo real
+// ─────────────────────────────────────────────────────
+function waConnectSSE() {
+  if (WA.sseConn) return;
+  try {
+    const tid = (typeof _sessao !== 'undefined') ? _sessao?.tenant_id : null;
+    if (!tid) return;
+    const sse = new EventSource(`/sse/wa-msgs:${tid}`);
+    WA.sseConn = sse;
+
+    sse.addEventListener('wa:msg', (e) => {
+      try { waOnSseMessage(JSON.parse(e.data)); } catch {}
+    });
+
+    sse.onerror = () => {
+      sse.close(); WA.sseConn = null;
+      setTimeout(waConnectSSE, 5000);
+    };
+  } catch(e) { console.warn('[WA] SSE erro:', e.message); }
+}
+
+function waOnSseMessage(msg) {
+  if (!msg) return;
+  const jid = msg.key?.remoteJid || '';
+  if (!jid || jid.startsWith('status@')) return;
+
+  // Badge no botão do topnav
+  if (!WA.open || WA.activeJid !== jid) waIncrementBadge();
+
+  // Atualiza preview na lista
+  waUpdateChatPreview(jid, msg);
+
+  // Insere na conversa ativa em tempo real
+  if (WA.activeJid === jid) {
+    const msgsEl = document.getElementById('wa-messages');
+    if (!msgsEl) return;
+    const mid = msg.key?.id;
+    if (mid && msgsEl.querySelector(`[data-msgid="${CSS.escape(mid)}"]`)) return; // já existe
+    const el = waCreateMsgEl(msg);
+    if (el) { msgsEl.appendChild(el); msgsEl.scrollTop = msgsEl.scrollHeight; }
+  }
+}
+
+function waIncrementBadge() {
+  const b = document.getElementById('wa-unread-badge');
+  if (!b) return;
+  b.textContent = (parseInt(b.textContent)||0) + 1;
+  b.style.display = 'flex';
+}
+
+function waClearBadge() {
+  const b = document.getElementById('wa-unread-badge');
+  if (b) { b.textContent = '0'; b.style.display = 'none'; }
+}
+
+function waUpdateChatPreview(jid, msg) {
+  const chat = WA.chats.find(c => WA.getJid(c) === jid);
+  if (chat) {
+    chat.lastMessage = msg;
+    if (!msg.key?.fromMe) chat.unreadCount = (chat.unreadCount || 0) + 1;
+    WA.chats = [chat, ...WA.chats.filter(c => WA.getJid(c) !== jid)];
+    WA.filteredChats = WA.chats;
+    waRenderChatList(WA.chats);
+  } else {
+    waLoadChats();
+  }
 }
 
 // ─────────────────────────────────────────────────────
-// Carregar lista de conversas (Evolution API 2.7)
+// Verificar conexão
+// ─────────────────────────────────────────────────────
+WA.checkConnection = async function() {
+  const inst = EVO.instance;
+  const el   = document.getElementById('wa-conn-status');
+  if (!inst) { if (el) el.textContent = '⚠️ Configure a instância no Robô'; return false; }
+  try {
+    const r     = await EVO.req('GET', `/instance/connectionState/${inst}`);
+    const state = r.data?.instance?.state || r.data?.state || '';
+    const ok    = state === 'open';
+    if (el) el.textContent = ok ? '🟢 Conectado' : `🔴 ${state || 'Desconectado'}`;
+    return ok;
+  } catch { if (el) el.textContent = '⚠️ Erro de conexão'; return false; }
+};
+
+// ─────────────────────────────────────────────────────
+// Carregar conversas
 // ─────────────────────────────────────────────────────
 async function waLoadChats() {
   const listEl = document.getElementById('wa-chat-list');
   if (!listEl) return;
   const inst = EVO.instance;
   if (!inst) {
-    listEl.innerHTML = `<div class="wa-empty-state"><p style="color:#94a3b8;font-size:13px">⚠️ Configure a instância no painel <b>Robô</b> primeiro.</p></div>`;
+    listEl.innerHTML = `<div class="wa-empty-state"><p style="color:#94a3b8;font-size:13px;text-align:center">⚠️ Configure a instância no painel <b>Robô</b>.</p></div>`;
     return;
   }
-
-  listEl.innerHTML = `<div class="wa-empty-state"><div class="wa-typing-dots"><span></span><span></span><span></span></div><p style="color:#64748b;font-size:12px;margin-top:10px">Carregando conversas...</p></div>`;
+  listEl.innerHTML = `<div class="wa-empty-state"><div class="wa-typing-dots"><span></span><span></span><span></span></div><p style="color:#64748b;font-size:12px;margin-top:10px">Carregando...</p></div>`;
 
   try {
-    // Evolution API 2.7: POST /chat/findChats/{instance}
-    const r = await EVO.req('POST', `/chat/findChats/${inst}`, {
-      where: {}
-    });
-
-    let raw = r.data;
-
-    // Normaliza a resposta — v2.7 pode retornar array direto ou objeto
     let chats = [];
-    if (Array.isArray(raw))              chats = raw;
-    else if (Array.isArray(raw?.chats))  chats = raw.chats;
-    else if (Array.isArray(raw?.data))   chats = raw.data;
-    else if (Array.isArray(raw?.records))chats = raw.records;
+    const r  = await EVO.req('POST', `/chat/findChats/${inst}`, { where: {} });
+    const d  = r.data;
+    if      (Array.isArray(d))          chats = d;
+    else if (Array.isArray(d?.chats))   chats = d.chats;
+    else if (Array.isArray(d?.data))    chats = d.data;
+    else if (Array.isArray(d?.records)) chats = d.records;
     else {
-      // Tenta GET como fallback
       const r2 = await EVO.req('GET', `/chat/findChats/${inst}`);
       const d2 = r2.data;
-      if (Array.isArray(d2))             chats = d2;
-      else if (Array.isArray(d2?.chats)) chats = d2.chats;
-      else if (Array.isArray(d2?.data))  chats = d2.data;
+      if      (Array.isArray(d2))         chats = d2;
+      else if (Array.isArray(d2?.chats))  chats = d2.chats;
+      else if (Array.isArray(d2?.data))   chats = d2.data;
     }
 
-    // Remove status@broadcast e chats sem JID válido
     chats = chats.filter(c => {
       const jid = WA.getJid(c);
       if (!jid) return false;
-      if (jid.startsWith('status@'))    return false;
-      if (jid.includes('broadcast'))    return false;
-      if (!WA.isRealContact(jid))       return false; // remove LIDs curtos
+      if (jid.startsWith('status@')) return false;
+      if (jid.includes('broadcast'))  return false;
+      if (!WA.isReal(jid))            return false;
       return true;
     });
 
-    // Ordena por mais recente
-    chats.sort((a, b) => {
-      const ta = WA.getTs(a);
-      const tb = WA.getTs(b);
-      const nta = typeof ta === 'number' ? ta : new Date(ta||0).getTime()/1000;
-      const ntb = typeof tb === 'number' ? tb : new Date(tb||0).getTime()/1000;
-      return ntb - nta;
+    chats.sort((a,b) => {
+      const ta = WA.getTs(a), tb = WA.getTs(b);
+      const na = typeof ta==='number' ? ta : new Date(ta||0).getTime()/1000;
+      const nb = typeof tb==='number' ? tb : new Date(tb||0).getTime()/1000;
+      return nb - na;
     });
 
-    WA.chats = chats;
-    WA.filteredChats = chats;
+    WA.chats = chats; WA.filteredChats = chats;
     waRenderChatList(chats);
-
   } catch(e) {
-    listEl.innerHTML = `<div class="wa-empty-state"><p style="color:#ef4444;font-size:12px">Erro: ${e.message}</p><button class="wa-btn-primary" style="margin-top:12px" onclick="waLoadChats()">Tentar novamente</button></div>`;
+    listEl.innerHTML = `<div class="wa-empty-state"><p style="color:#ef4444;font-size:12px">Erro: ${waEsc(e.message)}</p><button class="wa-btn-primary" style="margin-top:12px" onclick="waLoadChats()">Tentar novamente</button></div>`;
   }
 }
 
 // ─────────────────────────────────────────────────────
-// Renderizar lista de chats
+// Renderizar lista
 // ─────────────────────────────────────────────────────
 function waRenderChatList(chats) {
   const listEl = document.getElementById('wa-chat-list');
   if (!listEl) return;
-
   if (!chats.length) {
-    listEl.innerHTML = `<div class="wa-empty-state"><p style="color:#64748b;font-size:13px;text-align:center">Nenhuma conversa encontrada.</p><button class="wa-btn-primary" style="margin-top:12px" onclick="waLoadChats()">Atualizar</button></div>`;
+    listEl.innerHTML = `<div class="wa-empty-state"><p style="color:#64748b;font-size:13px;text-align:center">Nenhuma conversa.<br><br><button class="wa-btn-primary" onclick="waLoadChats()">Atualizar</button></p></div>`;
     return;
   }
-
-  listEl.innerHTML = chats.map((c, i) => {
-    const jid     = WA.getJid(c);
-    const name    = c.name || c.pushName || c.verifiedName || WA.formatPhone(jid);
-    const preview = WA.getPreview(c);
-    const ts      = WA.getTs(c);
-    const timeStr = WA.formatTime(ts);
-    const unread  = c.unreadCount || 0;
-    const isActive= jid === WA.activeJid;
-    const safeName = (name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    const safeJid  = (jid ||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-
-    return `<div class="wa-chat-item${isActive?' waci-active':''}" onclick="waOpenConversation('${safeJid}','${safeName}')" data-jid="${waEsc(jid)}">
+  listEl.innerHTML = chats.map((c,i) => {
+    const jid    = WA.getJid(c);
+    const name   = c.name || c.pushName || c.verifiedName || WA.fmtPhone(jid);
+    const prev   = WA.getPreview(c);
+    const time   = WA.fmtTime(WA.getTs(c));
+    const unread = c.unreadCount || 0;
+    const active = jid === WA.activeJid;
+    const sj     = (jid||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const sn     = (name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<div class="wa-chat-item${active?' waci-active':''}" onclick="waOpenConversation('${sj}','${sn}')" data-jid="${waEsc(jid)}">
       <div class="wa-chat-avatar" id="wa-av-${i}">${WA.initials(name)}</div>
       <div class="wa-chat-meta">
         <div class="wa-chat-name">${waEsc(name)}</div>
-        <div class="wa-chat-preview">${preview ? waEsc(preview) : '<i style="opacity:.5">Sem mensagens</i>'}</div>
+        <div class="wa-chat-preview">${prev ? waEsc(prev) : '<i style="opacity:.4">Sem mensagens</i>'}</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
-        ${timeStr ? `<div class="wa-chat-time">${timeStr}</div>` : ''}
+        ${time ? `<div class="wa-chat-time">${time}</div>` : ''}
         ${unread > 0 ? `<div class="wa-unread-dot">${unread > 99 ? '99+' : unread}</div>` : ''}
       </div>
     </div>`;
   }).join('');
 
-  // Avatares assíncronos (sem bloquear render)
-  chats.forEach((c, i) => {
+  chats.forEach((c,i) => {
     const jid  = WA.getJid(c);
-    const name = c.name || c.pushName || WA.formatPhone(jid);
+    const name = c.name || c.pushName || WA.fmtPhone(jid);
     const el   = document.getElementById(`wa-av-${i}`);
     if (el && jid) WA.renderAvatar(jid, name, el);
   });
 }
 
-// ─────────────────────────────────────────────────────
-// Filtrar chats por busca
-// ─────────────────────────────────────────────────────
 function waFilterChats(q) {
-  const term = (q || '').toLowerCase().trim();
-  WA.filteredChats = term
+  const t = (q||'').toLowerCase().trim();
+  WA.filteredChats = t
     ? WA.chats.filter(c => {
-        const jid  = WA.getJid(c) || '';
-        const name = (c.name || c.pushName || '').toLowerCase();
-        return name.includes(term) || jid.includes(term);
+        const jid  = WA.getJid(c)||'';
+        const name = (c.name||c.pushName||'').toLowerCase();
+        return name.includes(t) || jid.includes(t);
       })
     : WA.chats;
   waRenderChatList(WA.filteredChats);
@@ -336,37 +344,33 @@ function waFilterChats(q) {
 // Abrir conversa
 // ─────────────────────────────────────────────────────
 async function waOpenConversation(jid, name) {
-  WA.activeJid   = jid;
-  WA.activeName  = name;
-  WA.lastMsgTs   = 0;
+  WA.activeJid = jid; WA.activeName = name; WA.lastMsgTs = 0;
+  waClearBadge();
 
-  // Atualiza header
   const nameEl   = document.getElementById('wa-conv-name');
   const phoneEl  = document.getElementById('wa-conv-phone');
   const avatarEl = document.getElementById('wa-conv-avatar');
-
-  if (nameEl)  nameEl.textContent  = name || WA.formatPhone(jid);
-  if (phoneEl) phoneEl.textContent = WA.formatPhone(jid);
+  if (nameEl)  nameEl.textContent  = name || WA.fmtPhone(jid);
+  if (phoneEl) phoneEl.textContent = WA.fmtPhone(jid);
   if (avatarEl) avatarEl.textContent = WA.initials(name);
 
   document.getElementById('wa-conv-empty').style.display  = 'none';
   document.getElementById('wa-conv-active').style.display = 'flex';
 
   if (avatarEl && jid) WA.renderAvatar(jid, name, avatarEl);
+  if (window.innerWidth <= 640) document.getElementById('wa-list-col')?.classList.add('hidden');
 
-  // Mobile
-  if (window.innerWidth <= 640)
-    document.getElementById('wa-list-col')?.classList.add('hidden');
-
-  // Destaca item ativo
-  document.querySelectorAll('.wa-chat-item').forEach(el => el.classList.remove('waci-active'));
+  document.querySelectorAll('.wa-chat-item').forEach(e => e.classList.remove('waci-active'));
   document.querySelector(`.wa-chat-item[data-jid="${CSS.escape(jid)}"]`)?.classList.add('waci-active');
+
+  const chat = WA.chats.find(c => WA.getJid(c) === jid);
+  if (chat) { chat.unreadCount = 0; waRenderChatList(WA.chats); }
 
   await waLoadMessages();
 }
 
 // ─────────────────────────────────────────────────────
-// Carregar mensagens (Evolution API 2.7)
+// Carregar mensagens
 // ─────────────────────────────────────────────────────
 async function waLoadMessages(silent = false) {
   if (!WA.activeJid) return;
@@ -381,53 +385,38 @@ async function waLoadMessages(silent = false) {
   }
 
   try {
-    // v2.7: POST /chat/findMessages/{instance}
     const r = await EVO.req('POST', `/chat/findMessages/${inst}`, {
-      where: { key: { remoteJid: WA.activeJid } },
-      limit: 60,
-      skip:  0
+      where: { key: { remoteJid: WA.activeJid } }, limit: 60, skip: 0
     });
 
     let msgs = [];
     const d  = r.data;
-    if (Array.isArray(d))                    msgs = d;
-    else if (Array.isArray(d?.records))      msgs = d.records;
-    else if (Array.isArray(d?.messages))     msgs = d.messages;
+    if      (Array.isArray(d))                    msgs = d;
+    else if (Array.isArray(d?.records))           msgs = d.records;
+    else if (Array.isArray(d?.messages))          msgs = d.messages;
     else if (Array.isArray(d?.messages?.records)) msgs = d.messages.records;
-    else if (d?.messages && Array.isArray(Object.values(d.messages))) {
-      // objeto com registros aninhados
-      msgs = d.messages.records || d.messages || [];
-    }
 
-    // Ordena crescente por timestamp
-    msgs.sort((a, b) => {
-      const ta = a.messageTimestamp || a.key?.timestamp || 0;
-      const tb = b.messageTimestamp || b.key?.timestamp || 0;
-      return ta - tb;
-    });
+    msgs.sort((a,b) => (a.messageTimestamp||0) - (b.messageTimestamp||0));
 
-    // Polling: só re-renderiza se houver mensagem nova
-    if (silent && msgs.length > 0) {
-      const lastTs = msgs[msgs.length - 1].messageTimestamp || 0;
+    if (silent && msgs.length) {
+      const lastTs = msgs[msgs.length-1].messageTimestamp || 0;
       if (lastTs === WA.lastMsgTs) return;
       WA.lastMsgTs = lastTs;
-    } else if (msgs.length > 0) {
-      WA.lastMsgTs = msgs[msgs.length - 1].messageTimestamp || 0;
+    } else if (msgs.length) {
+      WA.lastMsgTs = msgs[msgs.length-1].messageTimestamp || 0;
     }
 
     if (loadEl) loadEl.style.display = 'none';
     msgsEl.innerHTML = '';
 
     if (!msgs.length) {
-      msgsEl.innerHTML = '<div style="text-align:center;color:#64748b;font-size:12px;padding:30px">Nenhuma mensagem encontrada nesta conversa.</div>';
+      msgsEl.innerHTML = '<div style="text-align:center;color:#64748b;font-size:12px;padding:30px">Nenhuma mensagem nesta conversa.</div>';
       return;
     }
 
-    // Renderiza com separadores de data
     let lastDate = '';
     msgs.forEach(msg => {
-      const ts      = msg.messageTimestamp || msg.key?.timestamp;
-      const dateStr = WA.formatDate(ts);
+      const dateStr = WA.fmtDate(msg.messageTimestamp || msg.key?.timestamp);
       if (dateStr && dateStr !== lastDate) {
         lastDate = dateStr;
         const sep = document.createElement('div');
@@ -440,99 +429,144 @@ async function waLoadMessages(silent = false) {
     });
 
     msgsEl.scrollTop = msgsEl.scrollHeight;
-
   } catch(e) {
     if (loadEl) loadEl.style.display = 'none';
-    if (!silent)
-      msgsEl.innerHTML = `<div style="text-align:center;color:#ef4444;font-size:12px;padding:20px">Erro ao carregar: ${e.message}</div>`;
+    if (!silent) msgsEl.innerHTML = `<div style="text-align:center;color:#ef4444;font-size:12px;padding:20px">Erro: ${waEsc(e.message)}</div>`;
   }
 }
 
 // ─────────────────────────────────────────────────────
-// Criar elemento DOM de mensagem
+// Criar elemento de mensagem
 // ─────────────────────────────────────────────────────
 function waCreateMsgEl(msg) {
   const fromMe  = msg.key?.fromMe === true;
   const ts      = msg.messageTimestamp || msg.key?.timestamp;
-  const timeStr = ts ? new Date(ts * 1000).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
+  const time    = ts ? new Date((+ts > 9999999999 ? +ts : +ts * 1000)).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
   const m       = msg.message || {};
+  const msgId   = msg.key?.id || '';
+  const remJid  = msg.key?.remoteJid || WA.activeJid || '';
 
-  const text      = m.conversation || m.extendedTextMessage?.text || '';
-  const imgMsg    = m.imageMessage;
-  const vidMsg    = m.videoMessage;
-  const audioMsg  = m.audioMessage || m.pttMessage;
-  const docMsg    = m.documentMessage || m.documentWithCaptionMessage?.message?.documentMessage;
-  const stickerMsg= m.stickerMessage;
-  const locMsg    = m.locationMessage;
-  const btnMsg    = m.buttonsResponseMessage || m.templateButtonReplyMessage;
-  const listMsg   = m.listResponseMessage;
+  const text       = m.conversation || m.extendedTextMessage?.text || '';
+  const imgMsg     = m.imageMessage;
+  const vidMsg     = m.videoMessage;
+  const audioMsg   = m.audioMessage || m.pttMessage;
+  const docMsg     = m.documentMessage || m.documentWithCaptionMessage?.message?.documentMessage;
+  const stickerMsg = m.stickerMessage;
+  const locMsg     = m.locationMessage;
+  const reactMsg   = m.reactionMessage;
+  const btnMsg     = m.buttonsResponseMessage || m.templateButtonReplyMessage;
+  const listMsg    = m.listResponseMessage;
 
-  const wrap   = document.createElement('div');
+  const wrap = document.createElement('div');
   wrap.className = `wa-msg ${fromMe ? 'sent' : 'recv'}`;
+  if (msgId) wrap.dataset.msgid = msgId;
 
   const bubble = document.createElement('div');
   bubble.className = 'wa-bubble';
 
+  function dlBtn(type, label, fname) {
+    const sj = waEsc(msgId), rj = waEsc(remJid), fn = waEsc(fname||'');
+    return `<button class="wa-dl-btn" onclick="waDownloadMedia('${sj}','${rj}','${type}',this,'${fn}')">
+      <svg viewBox="0 0 16 16" fill="none" width="12" height="12"><path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      ${label}
+    </button>`;
+  }
+
+  function mediaThumb(icon, title, sub, dlType, fname) {
+    const cached = msgId ? WA.mediaCache[msgId] : null;
+    if (cached) return null; // já baixado — renderiza direto
+    return `<div class="wa-media-thumb" id="wamt-${waEsc(msgId)}">
+      <span class="wa-media-icon">${icon}</span>
+      <div class="wa-media-info">
+        <div style="font-size:12.5px;color:#f1f5f9;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${waEsc(title)}</div>
+        ${sub ? `<div style="font-size:11px;color:#64748b">${waEsc(sub)}</div>` : ''}
+      </div>
+      ${dlBtn(dlType, dlType==='audio'?'Ouvir':'Baixar', fname)}
+    </div>`;
+  }
+
+  // ── Imagem ──
   if (imgMsg) {
-    const cap = imgMsg.caption || '';
-    const b64 = msg._base64 || imgMsg._base64;
-    if (b64) {
-      bubble.innerHTML = `<img src="data:${imgMsg.mimetype||'image/jpeg'};base64,${b64}" onclick="waViewMedia(this.src)" loading="lazy" style="max-width:220px;max-height:180px;border-radius:8px;display:block;cursor:pointer">${cap?`<div style="margin-top:4px;font-size:13px">${waEsc(cap)}</div>`:''}`;
+    const cap    = imgMsg.caption || '';
+    const cached = msgId ? WA.mediaCache[msgId] : null;
+    if (cached) {
+      bubble.innerHTML = `<img src="data:${cached.mimetype};base64,${cached.base64}" onclick="waViewMedia(this.src)" style="max-width:220px;max-height:180px;border-radius:8px;display:block;cursor:zoom-in">${cap?`<div style="margin-top:4px;font-size:13px">${waEsc(cap)}</div>`:''}`;
     } else {
-      bubble.innerHTML = `<div class="wa-doc-bubble">🖼️ <span>Imagem${cap?': '+waEsc(cap):''}</span></div>`;
+      const thumb = mediaThumb('🖼️', cap||'Imagem', imgMsg.fileLength ? waFmtBytes(imgMsg.fileLength) : '', 'image');
+      bubble.innerHTML = thumb || `<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" style="width:1px;height:1px">`;
     }
   }
+
+  // ── Vídeo ──
   else if (vidMsg) {
-    const cap = vidMsg.caption || '';
-    const b64 = msg._base64;
-    if (b64) {
-      bubble.innerHTML = `<video controls style="max-width:220px;max-height:180px;border-radius:8px;display:block"><source src="data:${vidMsg.mimetype||'video/mp4'};base64,${b64}"></video>${cap?`<div style="margin-top:4px;font-size:13px">${waEsc(cap)}</div>`:''}`;
+    const cap    = vidMsg.caption || '';
+    const cached = msgId ? WA.mediaCache[msgId] : null;
+    if (cached) {
+      bubble.innerHTML = `<video controls style="max-width:220px;max-height:180px;border-radius:8px;display:block"><source src="data:${cached.mimetype};base64,${cached.base64}" type="${cached.mimetype}"></video>${cap?`<div style="margin-top:4px;font-size:13px">${waEsc(cap)}</div>`:''}`;
     } else {
-      bubble.innerHTML = `<div class="wa-doc-bubble">🎥 <span>Vídeo${cap?': '+waEsc(cap):''}</span></div>`;
+      bubble.innerHTML = mediaThumb('🎥', cap||'Vídeo', vidMsg.fileLength ? waFmtBytes(vidMsg.fileLength) : '', 'video') || '';
     }
   }
+
+  // ── Áudio / PTT ──
   else if (audioMsg) {
-    const b64  = msg._base64 || audioMsg._base64;
-    const mime = audioMsg.mimetype || 'audio/ogg; codecs=opus';
-    if (b64) {
-      bubble.innerHTML = `<div class="wa-audio-player"><audio controls style="height:32px;width:190px"><source src="data:${mime};base64,${b64}"></audio></div>`;
+    const cached = msgId ? WA.mediaCache[msgId] : null;
+    const dur    = audioMsg.seconds ? audioMsg.seconds + 's' : '';
+    if (cached) {
+      bubble.innerHTML = `<div class="wa-audio-player"><audio controls style="height:32px;width:200px"><source src="data:${cached.mimetype};base64,${cached.base64}" type="${cached.mimetype}"></audio></div>`;
     } else {
-      bubble.innerHTML = `<div class="wa-audio-player">🎵 <span style="font-size:12px;opacity:.7">Áudio</span></div>`;
+      bubble.innerHTML = mediaThumb('🎵', audioMsg.ptt ? 'Mensagem de voz' : 'Áudio', dur, 'audio') || '';
     }
   }
+
+  // ── Documento ──
   else if (docMsg) {
-    const fname = docMsg.fileName || docMsg.title || 'Documento';
-    const mime  = docMsg.mimetype || '';
-    const icon  = mime.includes('pdf') ? '📄' : mime.includes('sheet') || mime.includes('excel') ? '📊' : mime.includes('word') ? '📝' : '📎';
-    bubble.innerHTML = `<div class="wa-doc-bubble">${icon} <span>${waEsc(fname)}</span></div>`;
+    const fname  = docMsg.fileName || docMsg.title || 'Documento';
+    const mime   = docMsg.mimetype || '';
+    const icon   = mime.includes('pdf') ? '📄' : mime.includes('sheet')||mime.includes('excel') ? '📊' : mime.includes('word') ? '📝' : '📎';
+    const cached = msgId ? WA.mediaCache[msgId] : null;
+    if (cached) {
+      bubble.innerHTML = `<div class="wa-doc-bubble" onclick="waOpenDoc('${waEsc(msgId)}','${waEsc(fname)}')">
+        <span style="font-size:22px">${icon}</span>
+        <div><div style="font-size:12.5px;color:#f1f5f9">${waEsc(fname)}</div><div style="font-size:11px;color:#25D366">Toque para abrir</div></div>
+      </div>`;
+    } else {
+      bubble.innerHTML = mediaThumb(icon, fname, docMsg.fileLength ? waFmtBytes(docMsg.fileLength) : mime, 'document', fname) || '';
+    }
   }
-  else if (stickerMsg) {
-    bubble.innerHTML = `<span style="font-size:14px;opacity:.7">🎭 Figurinha</span>`;
-  }
+
+  // ── Sticker ──
+  else if (stickerMsg) { bubble.innerHTML = `<span style="font-size:28px">🎭</span>`; }
+
+  // ── Localização ──
   else if (locMsg) {
-    bubble.innerHTML = `<div class="wa-doc-bubble">📍 <span>Localização: ${locMsg.degreesLatitude?.toFixed(4)}, ${locMsg.degreesLongitude?.toFixed(4)}</span></div>`;
+    const lat = (locMsg.degreesLatitude  || 0).toFixed(5);
+    const lng = (locMsg.degreesLongitude || 0).toFixed(5);
+    bubble.innerHTML = `<a href="https://maps.google.com/?q=${lat},${lng}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:6px;color:#25D366;text-decoration:none;font-size:13px">📍 Ver localização</a>`;
   }
-  else if (btnMsg) {
-    const t = btnMsg.selectedButtonId || btnMsg.selectedId || btnMsg.title || 'Resposta';
-    bubble.textContent = t;
+
+  // ── Reação ──
+  else if (reactMsg) { bubble.innerHTML = `<span style="font-size:26px">${waEsc(reactMsg.text||'👍')}</span>`; }
+
+  // ── Botão / lista ──
+  else if (btnMsg||listMsg) {
+    bubble.textContent = btnMsg?.selectedButtonId || btnMsg?.selectedId || listMsg?.title || listMsg?.singleSelectReply?.selectedRowId || '(Resposta)';
   }
-  else if (listMsg) {
-    const t = listMsg.title || listMsg.singleSelectReply?.selectedRowId || 'Resposta';
-    bubble.textContent = t;
-  }
+
+  // ── Texto ──
   else if (text) {
-    // Suporta markdown simples: *negrito*, _itálico_
     bubble.innerHTML = waEsc(text)
-      .replace(/\*([^*]+)\*/g, '<b>$1</b>')
-      .replace(/_([^_]+)_/g, '<i>$1</i>');
+      .replace(/\*([^*\n]+)\*/g, '<b>$1</b>')
+      .replace(/_([^_\n]+)_/g,   '<i>$1</i>')
+      .replace(/~([^~\n]+)~/g,   '<s>$1</s>')
+      .replace(/\n/g, '<br>');
   }
-  else {
-    return null; // tipo desconhecido — ignora
-  }
+
+  else { return null; }
 
   const timeDiv = document.createElement('div');
   timeDiv.className = 'wa-msg-time';
-  timeDiv.innerHTML = timeStr + (fromMe ? ' <span class="wa-check">✓✓</span>' : '');
+  timeDiv.innerHTML = time + (fromMe ? ' <span class="wa-check">✓✓</span>' : '');
 
   wrap.appendChild(bubble);
   wrap.appendChild(timeDiv);
@@ -540,205 +574,254 @@ function waCreateMsgEl(msg) {
 }
 
 // ─────────────────────────────────────────────────────
-// Ver imagem em fullscreen
+// Download de mídia sob demanda
 // ─────────────────────────────────────────────────────
+async function waDownloadMedia(msgId, remoteJid, type, btn, fileName) {
+  if (!msgId || !remoteJid) return;
+
+  // Cache hit
+  if (WA.mediaCache[msgId]) { waApplyMedia(msgId, type, fileName); return; }
+
+  const origHTML = btn?.innerHTML;
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="wa-dl-spin"></span>'; }
+
+  try {
+    const tid = (typeof _sessao !== 'undefined') ? (_sessao?.tenant_id || '') : '';
+    const r   = await fetch('/api/wa/media', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body:    JSON.stringify({ messageId: msgId, remoteJid })
+    });
+    const data = await r.json().catch(() => ({}));
+
+    if (!r.ok || !data.base64) {
+      waSbToast('err', data.error || 'Erro ao baixar mídia');
+      if (btn) { btn.disabled = false; btn.innerHTML = origHTML; }
+      return;
+    }
+
+    WA.mediaCache[msgId] = {
+      base64:   data.base64,
+      mimetype: data.mimetype || 'application/octet-stream',
+      fileName: data.fileName || fileName || 'arquivo'
+    };
+
+    waApplyMedia(msgId, type, fileName);
+
+  } catch(e) {
+    waSbToast('err', 'Erro: ' + e.message);
+    if (btn) { btn.disabled = false; btn.innerHTML = origHTML; }
+  }
+}
+
+function waApplyMedia(msgId, type, fileName) {
+  const c = WA.mediaCache[msgId];
+  if (!c) return;
+  const src  = `data:${c.mimetype};base64,${c.base64}`;
+  const thumb = document.getElementById(`wamt-${msgId}`);
+  if (!thumb) return;
+
+  if (type === 'image') {
+    thumb.outerHTML = `<img src="${src}" onclick="waViewMedia('${src}')" style="max-width:220px;max-height:180px;border-radius:8px;display:block;cursor:zoom-in">`;
+  } else if (type === 'video') {
+    thumb.outerHTML = `<video controls style="max-width:220px;max-height:180px;border-radius:8px;display:block"><source src="${src}" type="${c.mimetype}"></video>`;
+  } else if (type === 'audio') {
+    thumb.outerHTML = `<div class="wa-audio-player"><audio controls style="height:32px;width:200px"><source src="${src}" type="${c.mimetype}"></audio></div>`;
+  } else if (type === 'document') {
+    const fn   = c.fileName || fileName || 'arquivo';
+    const mime = c.mimetype;
+    const icon = mime.includes('pdf') ? '📄' : mime.includes('sheet') ? '📊' : mime.includes('word') ? '📝' : '📎';
+    thumb.outerHTML = `<div class="wa-doc-bubble" onclick="waOpenDoc('${waEsc(msgId)}','${waEsc(fn)}')">
+      <span style="font-size:22px">${icon}</span>
+      <div><div style="font-size:12.5px;color:#f1f5f9">${waEsc(fn)}</div><div style="font-size:11px;color:#25D366">Toque para abrir</div></div>
+    </div>`;
+  }
+}
+
+function waOpenDoc(msgId, fileName) {
+  const c = WA.mediaCache[msgId];
+  if (!c) return;
+  const a = document.createElement('a');
+  a.href     = `data:${c.mimetype};base64,${c.base64}`;
+  a.download = c.fileName || fileName || 'arquivo';
+  a.click();
+}
+
 function waViewMedia(src) {
   const ov = document.createElement('div');
-  ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;cursor:zoom-out';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.93);display:flex;align-items:center;justify-content:center;cursor:zoom-out';
   ov.onclick = () => ov.remove();
   const img = document.createElement('img');
   img.src = src;
-  img.style.cssText = 'max-width:92vw;max-height:92vh;border-radius:10px;object-fit:contain;box-shadow:0 8px 40px rgba(0,0,0,.8)';
+  img.style.cssText = 'max-width:92vw;max-height:92vh;border-radius:10px;object-fit:contain';
   ov.appendChild(img);
   document.body.appendChild(ov);
 }
 
+function waFmtBytes(b) {
+  if (!b) return '';
+  if (b < 1024)     return b + ' B';
+  if (b < 1048576)  return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
 // ─────────────────────────────────────────────────────
-// Enviar mensagem de texto
+// Enviar texto
 // ─────────────────────────────────────────────────────
 async function waSendMessage() {
   const inp  = document.getElementById('wa-msg-input');
   const text = (inp?.value || '').trim();
   const inst = EVO.instance;
-
-  if (!inst || !WA.activeJid) { sbToast('err', 'Nenhuma conversa selecionada'); return; }
+  if (!inst || !WA.activeJid) { waSbToast('err', 'Nenhuma conversa selecionada'); return; }
   if (WA.pendingFile) { await waSendMedia(); return; }
   if (!text) return;
 
   inp.value = '';
   waToggleSendMic(false);
 
-  // Otimista: adiciona mensagem na tela imediatamente
-  const fakeMsg = {
-    key: { fromMe: true, id: 'tmp_' + Date.now() },
-    messageTimestamp: Math.floor(Date.now() / 1000),
+  const fake = {
+    key: { fromMe: true, id: 'tmp_'+Date.now(), remoteJid: WA.activeJid },
+    messageTimestamp: Math.floor(Date.now()/1000),
     message: { conversation: text }
   };
   const msgsEl = document.getElementById('wa-messages');
-  const el = waCreateMsgEl(fakeMsg);
+  const el = waCreateMsgEl(fake);
   if (el && msgsEl) { msgsEl.appendChild(el); msgsEl.scrollTop = msgsEl.scrollHeight; }
 
   try {
-    // Evolution API 2.7: POST /message/sendText/{instance}
-    const num = WA.sendNumber(WA.activeJid);
+    const num = WA.sendNum(WA.activeJid);
     const r = await EVO.req('POST', `/message/sendText/${inst}`, {
       number: num,
-      text:   text
+      text,
+      textMessage: { text }
     });
-    if (!r.ok) {
-      const errMsg = r.data?.message || r.data?.error || 'Erro ao enviar';
-      sbToast('err', errMsg);
-    } else {
-      setTimeout(() => waLoadMessages(true), 2000);
-    }
-  } catch(e) {
-    sbToast('err', 'Erro: ' + e.message);
-  }
+    if (!r.ok) waSbToast('err', r.data?.message || r.data?.error || 'Erro ao enviar');
+    else setTimeout(() => waLoadMessages(true), 2000);
+  } catch(e) { waSbToast('err', 'Erro: ' + e.message); }
 }
 
-// ─────────────────────────────────────────────────────
-// Toggle botão enviar / microfone
-// ─────────────────────────────────────────────────────
-function waOnTyping(inp) {
-  waToggleSendMic(inp.value.trim().length > 0 || !!WA.pendingFile);
-}
+function waOnTyping(inp) { waToggleSendMic(inp.value.trim().length > 0 || !!WA.pendingFile); }
 
-function waToggleSendMic(hasContent) {
+function waToggleSendMic(has) {
   const s = document.getElementById('wa-send-btn');
   const m = document.getElementById('wa-mic-btn');
-  if (s) s.style.display = hasContent ? 'flex' : 'none';
-  if (m) m.style.display = hasContent ? 'none'  : 'flex';
+  if (s) s.style.display = has ? 'flex' : 'none';
+  if (m) m.style.display = has ? 'none'  : 'flex';
 }
 
 // ─────────────────────────────────────────────────────
-// Seleção de arquivo para envio de mídia
+// Seleção de arquivo
 // ─────────────────────────────────────────────────────
 function waOnFileSelect(evt) {
   const file = evt.target.files?.[0];
   if (!file) return;
   WA.pendingFile = file;
-
-  const prev   = document.getElementById('wa-media-preview');
-  const prevImg= document.getElementById('wa-preview-img');
-  const prevNm = document.getElementById('wa-preview-name');
+  const prev  = document.getElementById('wa-media-preview');
+  const prevI = document.getElementById('wa-preview-img');
+  const prevN = document.getElementById('wa-preview-name');
   if (prev)  prev.style.display = 'block';
-  if (prevNm) prevNm.textContent = file.name;
-  if (prevImg) {
-    if (file.type.startsWith('image/')) {
-      const fr = new FileReader();
-      fr.onload = e => { prevImg.src = e.target.result; prevImg.style.display = 'block'; };
-      fr.readAsDataURL(file);
-    } else {
-      prevImg.style.display = 'none';
-    }
-  }
+  if (prevN) prevN.textContent = file.name;
+  if (prevI && file.type.startsWith('image/')) {
+    const fr = new FileReader();
+    fr.onload = e => { prevI.src = e.target.result; prevI.style.display = 'block'; };
+    fr.readAsDataURL(file);
+  } else if (prevI) prevI.style.display = 'none';
   waToggleSendMic(true);
 }
 
 function waClearMedia() {
   WA.pendingFile = null;
-  const prev  = document.getElementById('wa-media-preview');
-  const fi    = document.getElementById('wa-file-input');
+  const prev = document.getElementById('wa-media-preview');
+  const fi   = document.getElementById('wa-file-input');
   if (prev) prev.style.display = 'none';
   if (fi)   fi.value = '';
-  const inp = document.getElementById('wa-msg-input');
-  waToggleSendMic(inp?.value?.trim().length > 0);
+  waToggleSendMic((document.getElementById('wa-msg-input')?.value?.trim().length||0) > 0);
 }
 
-// ─────────────────────────────────────────────────────
-// Enviar mídia
-// ─────────────────────────────────────────────────────
 async function waSendMedia() {
   const file = WA.pendingFile;
   if (!file || !WA.activeJid || !EVO.instance) return;
-
   const fr = new FileReader();
   fr.onload = async (e) => {
     const b64     = e.target.result.split(',')[1];
     const mime    = file.type || 'application/octet-stream';
     const caption = document.getElementById('wa-msg-input')?.value?.trim() || '';
-    let mediatype = 'document';
-    if (mime.startsWith('image/')) mediatype = 'image';
-    else if (mime.startsWith('video/')) mediatype = 'video';
-    else if (mime.startsWith('audio/')) mediatype = 'audio';
-
+    let mt = 'document';
+    if (mime.startsWith('image/')) mt = 'image';
+    else if (mime.startsWith('video/')) mt = 'video';
+    else if (mime.startsWith('audio/')) mt = 'audio';
     waClearMedia();
     if (document.getElementById('wa-msg-input')) document.getElementById('wa-msg-input').value = '';
     waToggleSendMic(false);
-
     try {
       const r = await EVO.req('POST', `/message/sendMedia/${EVO.instance}`, {
-        number:    WA.sendNumber(WA.activeJid),
-        mediatype,
+        number:    WA.sendNum(WA.activeJid),
+        mediatype: mt,
         mimetype:  mime,
         caption,
         media:     b64,
         fileName:  file.name
       });
-      if (r.ok) { sbToast('ok', 'Mídia enviada!'); setTimeout(() => waLoadMessages(true), 2000); }
-      else       sbToast('err', r.data?.message || 'Erro ao enviar mídia');
-    } catch(err) { sbToast('err', 'Erro: ' + err.message); }
+      if (r.ok) { waSbToast('ok', 'Enviado!'); setTimeout(() => waLoadMessages(true), 2000); }
+      else {
+        // Fallback: formato alternativo EVO 2.7
+        const r2 = await EVO.req('POST', `/message/sendMedia/${EVO.instance}`, {
+          number:   WA.sendNum(WA.activeJid),
+          mediaMessage: { mediatype: mt, mimetype: mime, caption, media: b64, fileName: file.name }
+        });
+        if (r2.ok) { waSbToast('ok', 'Enviado!'); setTimeout(() => waLoadMessages(true), 2000); }
+        else waSbToast('err', r2.data?.message || r2.data?.error || 'Erro ao enviar mídia');
+      }
+    } catch(err) { waSbToast('err', 'Erro: '+err.message); }
   };
   fr.readAsDataURL(file);
 }
 
 // ─────────────────────────────────────────────────────
-// Gravação de áudio
+// Áudio
 // ─────────────────────────────────────────────────────
 async function waStartAudio() {
   if (WA.mediaRecorder) return;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    WA.audioChunks = [];
-    WA.recSeconds  = 0;
-    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-      ? 'audio/webm;codecs=opus' : 'audio/webm';
-    WA.mediaRecorder = new MediaRecorder(stream, { mimeType });
+    WA.audioChunks = []; WA.recSeconds = 0;
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+    WA.mediaRecorder = new MediaRecorder(stream, { mimeType: mime });
     WA.mediaRecorder.ondataavailable = e => { if (e.data?.size > 0) WA.audioChunks.push(e.data); };
     WA.mediaRecorder.start(100);
-
     document.getElementById('wa-audio-recording').style.display = 'flex';
     document.getElementById('wa-mic-btn')?.classList.add('recording');
-
     WA.recTimer = setInterval(() => {
       WA.recSeconds++;
       const el = document.getElementById('wa-rec-time');
       if (el) el.textContent = `${Math.floor(WA.recSeconds/60)}:${String(WA.recSeconds%60).padStart(2,'0')}`;
     }, 1000);
-  } catch(e) {
-    sbToast('err', 'Permita o acesso ao microfone');
-  }
+  } catch { waSbToast('err', 'Permita acesso ao microfone'); }
 }
 
 async function waStopAudio() {
   if (!WA.mediaRecorder) return;
   clearInterval(WA.recTimer); WA.recTimer = null;
-
   document.getElementById('wa-audio-recording').style.display = 'none';
   document.getElementById('wa-mic-btn')?.classList.remove('recording');
-
-  const recorder = WA.mediaRecorder;
-  WA.mediaRecorder = null;
-  recorder.stream?.getTracks().forEach(t => t.stop());
-
-  await new Promise(res => { recorder.onstop = res; recorder.stop(); });
-
+  const rec = WA.mediaRecorder; WA.mediaRecorder = null;
+  rec.stream?.getTracks().forEach(t => t.stop());
+  await new Promise(res => { rec.onstop = res; rec.stop(); });
   const chunks = [...WA.audioChunks]; WA.audioChunks = [];
   if (!chunks.length || WA.recSeconds < 1) return;
-
-  const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+  const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
   const fr   = new FileReader();
   fr.onload  = async (e) => {
-    const b64 = e.target.result.split(',')[1];
     try {
       const r = await EVO.req('POST', `/message/sendWhatsAppAudio/${EVO.instance}`, {
-        number:   WA.sendNumber(WA.activeJid),
-        audio:    b64,
-        encoding: true
+        number:   WA.sendNum(WA.activeJid),
+        audio:    e.target.result.split(',')[1],
+        encoding: true,
+        audioMessage: { audio: e.target.result.split(',')[1] }
       });
-      if (r.ok) { sbToast('ok', 'Áudio enviado!'); setTimeout(() => waLoadMessages(true), 2000); }
-      else       sbToast('err', r.data?.message || 'Erro ao enviar áudio');
-    } catch(err) { sbToast('err', 'Erro: ' + err.message); }
+      if (r.ok) { waSbToast('ok', 'Áudio enviado!'); setTimeout(() => waLoadMessages(true), 2000); }
+      else        waSbToast('err', r.data?.message || r.data?.error || 'Erro ao enviar áudio');
+    } catch(err) { waSbToast('err', 'Erro: '+err.message); }
   };
   fr.readAsDataURL(blob);
 }
@@ -747,7 +830,7 @@ function waCancelAudio() {
   if (WA.mediaRecorder) {
     clearInterval(WA.recTimer); WA.recTimer = null;
     WA.mediaRecorder.stream?.getTracks().forEach(t => t.stop());
-    try { WA.mediaRecorder.stop(); } catch(e) {}
+    try { WA.mediaRecorder.stop(); } catch {}
     WA.mediaRecorder = null; WA.audioChunks = [];
   }
   document.getElementById('wa-audio-recording').style.display = 'none';
@@ -755,20 +838,44 @@ function waCancelAudio() {
 }
 
 // ─────────────────────────────────────────────────────
-// Escape HTML
+// CSS extra — botão download + spinner
 // ─────────────────────────────────────────────────────
-function waEsc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+(function waInjectCSS() {
+  const style = document.createElement('style');
+  style.textContent = `
+.wa-media-thumb{display:flex;align-items:center;gap:8px;padding:6px 0;min-width:200px}
+.wa-media-icon{font-size:24px;flex-shrink:0}
+.wa-media-info{flex:1;min-width:0}
+.wa-doc-bubble{display:flex;align-items:center;gap:10px;padding:4px 0;cursor:pointer}
+.wa-doc-bubble:hover div{text-decoration:underline}
+.wa-dl-btn{
+  display:flex;align-items:center;gap:5px;
+  background:#25D366;color:#fff;border:none;border-radius:20px;
+  padding:5px 12px;font-size:11.5px;font-weight:600;
+  cursor:pointer;white-space:nowrap;flex-shrink:0;
+  font-family:'Outfit',sans-serif;transition:background .15s;
 }
+.wa-dl-btn:hover{background:#22c55e}
+.wa-dl-btn:disabled{background:#374151;cursor:wait}
+.wa-dl-spin{
+  display:inline-block;width:12px;height:12px;
+  border:2px solid rgba(255,255,255,.3);border-top-color:#fff;
+  border-radius:50%;animation:waSpin .6s linear infinite;
+}
+@keyframes waSpin{to{transform:rotate(360deg)}}
+.wa-audio-player{display:flex;align-items:center;gap:8px;padding:3px 0}
+`;
+  document.head.appendChild(style);
+})();
 
 // ─────────────────────────────────────────────────────
-// Init: esconde send, mostra mic
+// Init
 // ─────────────────────────────────────────────────────
 (function waInit() {
-  const run = () => { waToggleSendMic(false); };
+  const run = () => { waToggleSendMic(false); waConnectSSE(); };
   document.readyState === 'loading'
     ? document.addEventListener('DOMContentLoaded', run)
     : run();
 })();
 
-// ── Fim WHATSAPP CHAT ─────────────────────────────────
+// ── Fim WA-CHAT ───────────────────────────────────────
