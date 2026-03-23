@@ -19,6 +19,22 @@ module.exports = async function handleRoutes(req, res, ctx) {
           MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
           EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano } = ctx
 
+  // Garante que wa_messages existe (caso migration 23 ainda não tenha rodado)
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS wa_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      remote_jid TEXT NOT NULL,
+      msg_id TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      from_me INTEGER DEFAULT 0,
+      ts INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, msg_id)
+    )`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_wa_jid ON wa_messages(tenant_id, remote_jid, ts)`)
+  } catch(e) { /* já existe */ }
+
   // ═══════════════════════════════════════════════════════
   // Auth — Clientes
   // ═══════════════════════════════════════════════════════
