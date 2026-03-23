@@ -216,11 +216,7 @@ function waOnSseMsg(msg) {
   const mid    = msg.key?.id;
   const ts     = +msg.messageTimestamp || +msg.key?.timestamp || 0;
 
-  // Ignora mensagens muito antigas (mais de 30s atrás) — são acks/leituras, não novas
-  const agora = Math.floor(Date.now() / 1000);
-  if (ts > 0 && agora - ts > 30) return;
-
-  // Deduplica: se já está no cache, ignora
+  // Deduplica por msgId — já está no cache em memória
   if (mid && WA.msgCache[jid]?.[mid]) return;
 
   // Normaliza
