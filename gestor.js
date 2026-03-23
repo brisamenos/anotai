@@ -5526,6 +5526,28 @@ function formatarCPF(el) {
   el.value = v.substring(0, 14);
 }
 
+let _mpPlanoInstance = null;
+
+async function carregarMPSDKPlano() {
+  if (_mpPlanoInstance) return _mpPlanoInstance;
+  // Carrega SDK se ainda nao carregado
+  if (!window.MercadoPago) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://sdk.mercadopago.com/js/v2';
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+  // Busca public key
+  const res = await fetch('/api/planos/mp-public-key');
+  const data = await res.json();
+  if (!data.public_key) throw new Error('Public Key do Mercado Pago nao configurada no Admin');
+  _mpPlanoInstance = new MercadoPago(data.public_key);
+  return _mpPlanoInstance;
+}
+
 async function processarPagamentoCartao() {
   const btn = document.getElementById('btn-pagar-cartao-plano');
   const numero = document.getElementById('cartao-numero').value.replace(/\s/g, '');
@@ -5533,6 +5555,7 @@ async function processarPagamentoCartao() {
   const cvv = document.getElementById('cartao-cvv').value;
   const nome = document.getElementById('cartao-nome').value;
   const cpf = document.getElementById('cartao-cpf').value.replace(/\D/g, '');
+  const email = document.getElementById('cartao-email')?.value || 'cliente@email.com';
   
   if (!numero || numero.length < 13) { sbToast('err', 'Numero do cartao invalido'); return; }
   if (!validade || validade.length < 5) { sbToast('err', 'Validade invalida'); return; }
@@ -5543,15 +5566,44 @@ async function processarPagamentoCartao() {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processando...'; }
   
   try {
-    const tid = _sessao?.tenant_id;
+    // Carrega SDK do Mercado Pago
+    const mp = await carregarMPSDKPlano();
+    
     const [mes, ano] = validade.split('/');
+    
+    // Cria card token usando SDK
+    const cardToken = await mp.createCardToken({
+      cardNumber: numero,
+      cardholderName: nome,
+      cardExpirationMonth: mes,
+      cardExpirationYear: '20' + ano,
+      securityCode: cvv,
+      identificationType: 'CPF',
+      identificationNumber: cpf
+    });
+    
+    if (!cardToken?.id) throw new Error('Erro ao gerar token do cartao');
+    
+    // Detecta bandeira do cartao
+    let paymentMethodId = 'visa';
+    try {
+      const bin = numero.substring(0, 6);
+      const pmRes = await fetch(`https://api.mercadopago.com/v1/payment_methods/search?bin=${bin}&site_id=MLB`);
+      const pmData = await pmRes.json();
+      if (pmData.results?.[0]?.id) paymentMethodId = pmData.results[0].id;
+    } catch {}
+    
+    const tid = _sessao?.tenant_id;
     const res = await fetch('/api/planos/pagar-cartao', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
       body: JSON.stringify({
         plano: _planoSelecionado,
         valor: _precosPlanos[_planoSelecionado],
-        cartao: { numero, mes: parseInt(mes), ano: parseInt('20' + ano), cvv, nome, cpf }
+        card_token: cardToken.id,
+        payment_method_id: paymentMethodId,
+        payer_email: email,
+        payer_cpf: cpf
       })
     });
     const data = await res.json();
