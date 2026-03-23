@@ -12,7 +12,8 @@ const WA = {
   activeName:    '',
   messages:      [],
   avatarCache:   {},
-  mediaCache:    {},   // msgId → { base64, mimetype, fileName }
+  mediaCache:    {},
+  contactCache:  {},   // jid → { name, phone, pushName }
   pendingFile:   null,
   mediaRecorder: null,
   audioChunks:   [],
@@ -33,8 +34,17 @@ const WA = {
     return (jid.replace(/@.*/,'').replace(/\D/g,'')).length >= 9;
   },
 
-  fmtPhone(jid) {
+  // Retorna número real do contato (do cache de contatos)
+  getRealPhone(jid) {
+    const cached = this.contactCache[jid];
+    if (cached?.phone) return cached.phone;
+    // Extrai do JID diretamente
     const n = (jid||'').replace(/@.*/,'').replace(/\D/g,'');
+    return n || '';
+  },
+
+  fmtPhone(jid) {
+    const n = this.getRealPhone(jid);
     if (!n || n.length < 9) return jid || '';
     if (n.startsWith('55') && n.length >= 12) {
       const ddd = n.slice(2,4), r = n.slice(4);
@@ -44,8 +54,20 @@ const WA = {
     return '+' + n;
   },
 
+  // Nome real do contato — usa cache de contatos ou pushName do chat
+  getName(c) {
+    const jid    = this.getJid(c);
+    const cached = jid ? this.contactCache[jid] : null;
+    return cached?.name
+        || cached?.pushName
+        || c.name
+        || c.pushName
+        || c.verifiedName
+        || (jid ? this.fmtPhone(jid) : '');
+  },
+
   sendNum(jid) {
-    let n = (jid||'').replace(/@.*/,'').replace(/\D/g,'');
+    let n = this.getRealPhone(jid) || (jid||'').replace(/@.*/,'').replace(/\D/g,'');
     if (n.length <= 11 && !n.startsWith('55')) n = '55' + n;
     return n;
   },
@@ -72,7 +94,12 @@ const WA = {
   },
 
   initials(name) {
-    if (!name || name.startsWith('+')) return '?';
+    if (!name) return '?';
+    const stripped = name.replace(/[\s\-\(\)\+]/g,'');
+    if (/^\d{6,}$/.test(stripped)) {
+      // É um número de telefone — mostra últimos 2 dígitos
+      return stripped.slice(-2);
+    }
     const p = name.trim().split(' ').filter(Boolean);
     return p.length >= 2
       ? (p[0][0] + p[p.length-1][0]).toUpperCase()
@@ -159,7 +186,10 @@ function waOpenPanel() {
   panel.style.display = 'flex';
   WA.open = true;
   if (typeof closeNotif === 'function') closeNotif();
-  WA.checkConnection().then(() => waLoadChats());
+  WA.checkConnection().then(() => {
+    waFetchContacts(); // busca nomes/números reais dos contatos
+    waLoadChats();
+  });
   if (!WA.pollTimer) {
     WA.pollTimer = setInterval(() => {
       if (WA.open && WA.activeJid) waLoadMessages(true);
@@ -197,6 +227,41 @@ function waConnectSSE() {
     };
   } catch(e) { console.warn('[WA] SSE erro:', e.message); }
 }
+
+// ─────────────────────────────────────────────────────
+// Buscar contatos reais da Evolution API (nome + número)
+// ─────────────────────────────────────────────────────
+async function waFetchContacts() {
+  const inst = EVO.instance;
+  if (!inst) return;
+  try {
+    const r = await EVO.req('POST', `/contact/findContacts/${inst}`, { where: {} });
+    let contacts = [];
+    const d = r.data;
+    if      (Array.isArray(d))           contacts = d;
+    else if (Array.isArray(d?.contacts)) contacts = d.contacts;
+    else if (Array.isArray(d?.data))     contacts = d.data;
+    else if (Array.isArray(d?.records))  contacts = d.records;
+
+    contacts.forEach(c => {
+      const jid   = c.remoteJid || c.id || c.jid || '';
+      if (!jid) return;
+      // Número real = parte numérica do remoteJid
+      const phone = (c.remoteJid || c.id || '').replace(/@.*/,'').replace(/\D/g,'');
+      WA.contactCache[jid] = {
+        name:     c.name || c.pushName || c.verifiedName || null,
+        pushName: c.pushName || null,
+        phone:    phone || null
+      };
+    });
+
+    // Re-renderiza lista com nomes/números corretos
+    if (WA.chats.length) waRenderChatList(WA.chats);
+  } catch(e) {
+    console.warn('[WA] fetchContacts erro:', e.message);
+  }
+}
+
 
 function waOnSseMessage(msg) {
   if (!msg) return;
@@ -330,7 +395,7 @@ function waRenderChatList(chats) {
   }
   listEl.innerHTML = chats.map((c,i) => {
     const jid    = WA.getJid(c);
-    const name   = c.name || c.pushName || c.verifiedName || WA.fmtPhone(jid);
+    const name   = WA.getName(c);
     const prev   = WA.getPreview(c);
     const time   = WA.fmtTime(WA.getTs(c));
     const unread = c.unreadCount || 0;
@@ -350,26 +415,46 @@ function waRenderChatList(chats) {
     </div>`;
   }).join('');
 
-  // Carrega avatares com throttle para não sobrecarregar a API
-  const loadAvatarThrottled = async (list) => {
-    for (let i = 0; i < list.length; i++) {
-      const { jid, name, elId } = list[i];
+  // Carrega avatares em lotes paralelos de 5 (mais rápido que serial com throttle)
+  const avatarQueue = chats.map((c, i) => {
+    const jid  = WA.getJid(c);
+    const name = WA.getName(c);
+    // A Evolution API às vezes já inclui a foto no objeto do chat
+    const photoInline = c.profilePicture || c.photo || c.profilePictureUrl || null;
+    return { jid, name, elId: `wa-av-${i}`, photoInline };
+  }).filter(x => x.jid);
+
+  // Aplica fotos inline imediatamente (sem API call)
+  avatarQueue.forEach(({ jid, name, elId, photoInline }) => {
+    if (!photoInline) return;
+    const el = document.getElementById(elId);
+    if (!el) return;
+    // Guarda no cache para não buscar depois
+    if (!WA.avatarCache[jid]) {
+      const proxied = `/api/wa/avatar?url=${encodeURIComponent(photoInline)}`;
+      WA.avatarCache[jid] = proxied;
+      WA.renderAvatar(jid, name, el);
+    }
+  });
+
+  // Busca via API apenas os que não têm foto inline e não estão em cache
+  const needsFetch = avatarQueue.filter(x => !x.photoInline && WA.avatarCache[x.jid] === undefined);
+
+  const loadBatch = async (batch) => {
+    await Promise.all(batch.map(async ({ jid, name, elId }) => {
       const el = document.getElementById(elId);
       if (el) await WA.renderAvatar(jid, name, el);
-      // Pausa 250ms entre cada requisição para não rate-limitar
-      if (i < list.length - 1) await new Promise(r => setTimeout(r, 250));
-    }
+    }));
   };
 
-  const avatarQueue = chats
-    .map((c, i) => ({
-      jid:  WA.getJid(c),
-      name: c.name || c.pushName || WA.fmtPhone(WA.getJid(c)),
-      elId: `wa-av-${i}`
-    }))
-    .filter(x => x.jid);
-
-  loadAvatarThrottled(avatarQueue);
+  // Processa em lotes de 5 com 500ms entre lotes
+  (async () => {
+    const BATCH = 5;
+    for (let i = 0; i < needsFetch.length; i += BATCH) {
+      await loadBatch(needsFetch.slice(i, i + BATCH));
+      if (i + BATCH < needsFetch.length) await new Promise(r => setTimeout(r, 500));
+    }
+  })();
 }
 
 function waFilterChats(q) {
