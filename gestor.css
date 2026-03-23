@@ -1391,7 +1391,7 @@ td:first-child{padding-left:18px}
     flex-direction: column;
     gap: 10px;
     position: fixed;
-    left: 10px;
+    right: 10px;
     top: 50%;
     transform: translateY(-50%);
     z-index: 290;
@@ -1463,7 +1463,7 @@ td:first-child{padding-left:18px}
   .mob-fab::after {
     content: attr(data-label);
     position: absolute;
-    left: calc(100% + 8px);
+    right: calc(100% + 8px);
     top: 50%;
     transform: translateY(-50%);
     background: rgba(14,14,14,.92);
