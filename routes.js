@@ -733,20 +733,41 @@ module.exports = async function handleRoutes(req, res, ctx) {
       return row?.id || null
     })()
 
-    // Broadcast SSE para o gestor — apenas mensagens NOVAS RECEBIDAS
+    // Broadcast SSE + salva no banco — mensagens recebidas E enviadas
     if (tid_wh && (event === 'messages.upsert' || event === 'message.upsert')) {
       const msgs = Array.isArray(body?.data?.messages)
         ? body.data.messages
         : (body?.data ? [body.data] : [])
 
+      const stmt = db.prepare(
+        'INSERT OR IGNORE INTO wa_messages (tenant_id, remote_jid, msg_id, payload, from_me, ts) VALUES (?,?,?,?,?,?)'
+      )
+
       for (const m of msgs) {
         const fromMe = m?.key?.fromMe === true || m?.key?.fromMe === 'true'
         const jid    = m?.key?.remoteJid || ''
-        // Só envia: mensagens recebidas (não fromMe), com conteúdo real, não status
-        if (!fromMe && jid && !jid.startsWith('status@') && !jid.endsWith('@lid') && m?.message) {
+        const mid    = m?.key?.id || ''
+        const ts     = +m?.messageTimestamp || 0
+
+        if (!jid || !mid || jid.startsWith('status@') || jid.endsWith('@lid') || !m?.message) continue
+
+        // Salva no banco imediatamente (não depende do browser)
+        try {
+          stmt.run(tid_wh, jid, mid, JSON.stringify(m), fromMe ? 1 : 0, ts)
+          marcarDirty()
+        } catch(e) { /* UNIQUE constraint — msg já existe, ignora */ }
+
+        // Broadcast SSE apenas para mensagens RECEBIDAS (não fromMe)
+        if (!fromMe) {
           sseBroadcast(`wa-msgs:${tid_wh}`, 'wa:msg', m)
         }
       }
+
+      // Limpa msgs com mais de 7 dias automaticamente
+      try {
+        const cutoff = Math.floor(Date.now()/1000) - 7*24*3600
+        db.prepare('DELETE FROM wa_messages WHERE tenant_id=? AND ts < ? AND ts > 0').run(tid_wh, cutoff)
+      } catch(e) {}
     }
 
     // Processa IA (re-usa body já lido)
