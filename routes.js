@@ -83,6 +83,23 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // ═══════════════════════════════════════════════════════
 
 
+  // ── Login de garçom ──────────────────────────────────
+  if (req.method === 'POST' && upath === '/api/garcom-login') {
+    const body = await readBody(req)
+    const tid  = getTenantId(req, params)
+    const { usuario, senha } = body
+    if (!usuario || !senha) { send(res, 400, { error: 'Usuário e senha obrigatórios' }); return true }
+    if (!tid) { send(res, 400, { error: 'Restaurante não identificado. Acesse pelo link correto.' }); return true }
+    try {
+      const g = db.prepare(
+        "SELECT id, nome, usuario FROM garcons WHERE tenant_id=? AND LOWER(usuario)=LOWER(?) AND senha=? AND ativo=1"
+      ).get(tid, (usuario || '').trim(), (senha || '').trim())
+      if (!g) { send(res, 401, { error: 'Usuário ou senha incorretos' }); return true }
+      send(res, 200, { id: g.id, nome: g.nome, usuario: g.usuario })
+    } catch (e) { send(res, 400, { error: e.message }) }
+    return true
+  }
+
   // ── Login admin ──────────────────────────────────────
   if (req.method === 'POST' && upath === '/api/admin-login') {
     const body = await readBody(req)
@@ -1138,18 +1155,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const qr    = mpData.point_of_interaction?.transaction_data?.qr_code || ''
       const qrB64 = mpData.point_of_interaction?.transaction_data?.qr_code_base64 || ''
 
-      // Salva na tabela de pagamentos de plano apenas se o tenant existir (leads da landing usam ID temporario)
-      const tenantExiste = db.prepare('SELECT id FROM tenants WHERE id=?').get(tid)
-      if (tenantExiste) {
-        try {
-          db.prepare(`INSERT INTO pagamentos_pix (tenant_id,mp_payment_id,mp_external_ref,valor,taxa,valor_liquido,status,payer_name,qr_code,qr_code_base64)
-            VALUES (?,?,?,?,0,?,?,?,?,?)`)
-            .run(tid, String(mpData.id), extRef, parseFloat(valor), parseFloat(valor),
-              (mpData.status==='approved'?'aprovado':'pendente'), `PLANO:${plano}`, qr, qrB64)
-        } catch (dbErr) { log('⚠️', `PIX plano: nao foi possivel salvar no BD tenant=${tid}:`, dbErr.message) }
-      } else {
-        log('ℹ️', `PIX plano criado para lead externo (sem tenant): mp_id=${mpData.id} plano=${plano}`)
-      }
+      // Salva na tabela de pagamentos de plano
+      db.prepare(`INSERT INTO pagamentos_pix (tenant_id,mp_payment_id,mp_external_ref,valor,taxa,valor_liquido,status,payer_name,qr_code,qr_code_base64)
+        VALUES (?,?,?,?,0,?,?,?,?,?)`)
+        .run(tid, String(mpData.id), extRef, parseFloat(valor), parseFloat(valor),
+          (mpData.status==='approved'?'aprovado':'pendente'), `PLANO:${plano}`, qr, qrB64)
 
       log('💳', `PIX plano criado: R$${valor} plano=${plano} tenant=${tid} mp_id=${mpData.id}`)
       send(res, 200, { ok: true, mp_payment_id: mpData.id, qr_code: qr, qr_code_base64: qrB64, valor, status: mpData.status })
@@ -1261,115 +1271,6 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const gCfg = cfgMp?.ia_config ? JSON.parse(cfgMp.ia_config) : {}
       send(res, 200, { public_key: gCfg.mp_public_key || '' })
     } catch { send(res, 200, { public_key: '' }) }
-    return true
-  }
-
-  // ── Solicitar teste gratis (landing page → WA admin) ─────────────
-  if (req.method === 'POST' && upath === '/api/planos/solicitar-teste') {
-    const body = await readBody(req)
-    const { nome, restaurante, telefone, cidade, plano } = body
-    if (!nome || !telefone) { send(res, 400, { error: 'Nome e telefone obrigatorios' }); return true }
-    try {
-      // Busca numero do admin no config global
-      const cfgG = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
-      const gCfg = cfgG?.ia_config ? JSON.parse(cfgG.ia_config) : {}
-      const adminPhone = (gCfg.admin_phone || '').replace(/\D/g,'')
-      const planoLabel = plano === 'premium' ? 'Premium' : 'Essencial'
-      const msgAdmin = [
-        `*🆕 NOVO LEAD — TESTE GRATIS*`,
-        ``,
-        `*Nome:* ${nome}`,
-        `*Restaurante:* ${restaurante || '—'}`,
-        `*Telefone:* ${telefone}`,
-        `*Cidade:* ${cidade || '—'}`,
-        `*Plano de interesse:* ${planoLabel}`,
-        ``,
-        `_Enviado automaticamente pela landing page_`
-      ].join('\n')
-      // Envia WA para admin
-      if (adminPhone) {
-        try {
-          const evoHeaders = { 'Content-Type': 'application/json', apikey: EVO_KEY }
-          const evoBody = JSON.stringify({ number: adminPhone, text: msgAdmin })
-          await fetch(`${EVO_URL}/message/sendText/${EVO_INST}`, { method: 'POST', headers: evoHeaders, body: evoBody })
-          log('📨', `Trial lead WA enviado para admin (${adminPhone}): ${nome} — ${planoLabel}`)
-        } catch(eWa) { log('⚠️', 'WA admin trial erro:', eWa.message) }
-      } else {
-        log('⚠️', 'admin_phone nao configurado no painel admin — WA nao enviado')
-      }
-      // Salva lead na tabela (cria se nao existir)
-      try {
-        db.prepare(`CREATE TABLE IF NOT EXISTS leads_trial (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          nome TEXT, restaurante TEXT, telefone TEXT, cidade TEXT, plano TEXT,
-          created_at TEXT DEFAULT (datetime('now'))
-        )`).run()
-        db.prepare('INSERT INTO leads_trial (nome,restaurante,telefone,cidade,plano) VALUES (?,?,?,?,?)').run(
-          nome, restaurante||'', telefone, cidade||'', plano||'essencial'
-        )
-      } catch(eDb) { log('⚠️', 'leads_trial insert erro:', eDb.message) }
-      send(res, 200, { ok: true })
-    } catch(e) { log('❌', 'solicitar-teste erro:', e.message); send(res, 500, { error: e.message }) }
-    return true
-  }
-
-  // ── Admin: Configurar telefone admin (WA para receber leads) ──────
-  if (req.method === 'POST' && upath === '/api/admin/planos/admin-phone') {
-    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Nao autorizado' }); return true }
-    const body = await readBody(req)
-    const { admin_phone } = body
-    try {
-      const cfgG = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
-      const ia = cfgG?.ia_config ? JSON.parse(cfgG.ia_config) : {}
-      ia.admin_phone = (admin_phone || '').replace(/\D/g,'')
-      db.prepare("INSERT INTO store_config (tenant_id,ia_config) VALUES ('_global',?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config").run(JSON.stringify(ia))
-      marcarDirty()
-      log('⚙️', `admin_phone configurado: ${ia.admin_phone}`)
-      send(res, 200, { ok: true, admin_phone: ia.admin_phone })
-    } catch(e) { send(res, 500, { error: e.message }) }
-    return true
-  }
-
-  // ── Admin: Obter telefone admin ────────────────────────────────────
-  if (req.method === 'GET' && upath === '/api/admin/planos/admin-phone') {
-    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Nao autorizado' }); return true }
-    try {
-      const cfgG = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
-      const ia = cfgG?.ia_config ? JSON.parse(cfgG.ia_config) : {}
-      send(res, 200, { admin_phone: ia.admin_phone || '' })
-    } catch(e) { send(res, 500, { error: e.message }) }
-    return true
-  }
-
-  // ── Admin: Listar leads trial ──────────────────────────────────────
-  if (req.method === 'GET' && upath === '/api/admin/leads-trial') {
-    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Nao autorizado' }); return true }
-    try {
-      db.prepare(`CREATE TABLE IF NOT EXISTS leads_trial (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT, restaurante TEXT, telefone TEXT, cidade TEXT, plano TEXT,
-        created_at TEXT DEFAULT (datetime('now'))
-      )`).run()
-      const leads = db.prepare('SELECT * FROM leads_trial ORDER BY created_at DESC LIMIT 200').all()
-      send(res, 200, leads)
-    } catch(e) { send(res, 500, { error: e.message }) }
-    return true
-  }
-
-  // ── Login do garçom (endpoint dedicado — senha nunca vai na URL) ──
-  if (req.method === 'POST' && upath === '/api/garcom-login') {
-    const tid  = getTenantId(req, params)
-    const body = await readBody(req)
-    const { usuario, senha } = body
-    if (!usuario || !senha) { send(res, 400, { error: 'Usuário e senha obrigatórios' }); return true }
-    if (!tid)               { send(res, 400, { error: 'Tenant não identificado' }); return true }
-    try {
-      const g = db.prepare(
-        'SELECT id, tenant_id, nome, usuario, ativo FROM garcons WHERE tenant_id=? AND usuario=? AND senha=? AND ativo=1'
-      ).get(tid, usuario.trim().toLowerCase(), senha)
-      if (!g) { send(res, 401, { error: 'Usuário ou senha incorretos' }); return true }
-      send(res, 200, { id: g.id, tenant_id: g.tenant_id, nome: g.nome, usuario: g.usuario, ativo: true })
-    } catch(e) { send(res, 500, { error: e.message }) }
     return true
   }
 
