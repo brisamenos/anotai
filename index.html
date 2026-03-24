@@ -571,7 +571,7 @@ input,textarea{font-family:inherit}
 }
 .form-input:focus{border-color:rgba(249,115,22,.4)}
 .form-input::placeholder{color:var(--muted)}
-.form-row2{display:grid;grid-template-columns:1fr 80px;gap:8px}
+.form-row2{display:grid;grid-template-columns:80px 1fr;gap:8px}
 
 /* pagamento */
 .pay-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
@@ -1538,9 +1538,17 @@ input,textarea{font-family:inherit}
         <!-- endereço delivery -->
         <div id="addr-block">
           <div class="form-section-label">Endereço de entrega</div>
+
+          <!-- Banner endereço salvo -->
+          <div id="saved-addr-banner" style="display:none;align-items:center;gap:10px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.22);border-radius:11px;padding:10px 13px;margin-bottom:10px">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;color:#22c55e"><path d="M8 1.5C5.51 1.5 3.5 3.51 3.5 6c0 3.75 4.5 8.5 4.5 8.5S12.5 9.75 12.5 6c0-2.49-2.01-4.5-4.5-4.5z" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="6" r="1.5" stroke="currentColor" stroke-width="1.3"/></svg>
+            <span id="saved-addr-text" style="flex:1;font-size:12.5px;color:var(--text);font-weight:500;line-height:1.4"></span>
+            <button onclick="clearSavedAddr()" style="background:none;border:none;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;white-space:nowrap;padding:2px 0">Alterar</button>
+          </div>
+
           <input class="form-input" id="f-rua"    placeholder="Rua / Avenida">
           <div class="form-row2">
-            <input class="form-input" id="f-num"  placeholder="Número">
+            <input class="form-input" id="f-num"  placeholder="Nº">
             <input class="form-input" id="f-bairro" placeholder="Bairro" oninput="if(feeConfig?.tipo==='por_bairro')renderTotals()">
           </div>
           <input class="form-input" id="f-compl"  placeholder="Complemento (opcional)">
@@ -1872,6 +1880,7 @@ let _mpCardForm      = null;  // instância do CardForm
 let _customer    = null;
 const AUTH_KEY   = 'estima_customer';
 const PROFILE_KEY= 'estima_profile';
+const ADDR_KEY   = 'ef_addr';
 
 // ── Pizza meio a meio ──
 let _halfItem    = null;   // item da 2ª metade selecionado
@@ -2420,6 +2429,99 @@ function fillCartForm() {
   v('f-phone', _customer.phone);
   // Dispara consulta de cashback para cliente logado (oninput não é acionado por .value=)
   if (_customer.phone) onPhoneCashback(_customer.phone);
+  loadSavedAddr();
+}
+
+// ── Endereço salvo ─────────────────────────────────────
+// Chave por cliente logado (ID) ou por tenant (anônimo)
+function _addrStorageKey() {
+  const tid = _tenantId || 'default';
+  return _customer?.id ? `${ADDR_KEY}_${tid}_c${_customer.id}` : `${ADDR_KEY}_${tid}`;
+}
+
+// Tenta parsear string "Rua, Num, Bairro, Compl" de volta para campos
+function _parseAddrString(addrStr) {
+  if (!addrStr || typeof addrStr !== 'string') return null;
+  const parts = addrStr.split(', ');
+  if (parts.length < 2) return null;
+  return { rua: parts[0] || '', num: parts[1] || '', bairro: parts[2] || '', compl: parts.slice(3).join(', ') || '' };
+}
+
+function _showAddrBanner(a) {
+  const banner = document.getElementById('saved-addr-banner');
+  const txt    = document.getElementById('saved-addr-text');
+  if (!banner || !txt) return;
+  const parts = [a.rua, a.num, a.bairro, a.compl].filter(Boolean);
+  if (!parts.length) return;
+  txt.textContent = '📍 ' + parts.join(', ');
+  banner.style.display = 'flex';
+}
+
+function loadSavedAddr() {
+  if (deliveryType !== 'delivery') return;
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+
+  // 1ª prioridade: localStorage estruturado (mesmo dispositivo ou cliente logado)
+  try {
+    const raw = localStorage.getItem(_addrStorageKey());
+    if (raw) {
+      const a = JSON.parse(raw);
+      set('f-rua',    a.rua);
+      set('f-num',    a.num);
+      set('f-bairro', a.bairro);
+      set('f-compl',  a.compl);
+      _showAddrBanner(a);
+      if (feeConfig?.tipo === 'por_bairro') renderTotals();
+      return;
+    }
+  } catch(e) {}
+
+  // 2ª prioridade: addr do banco (cliente logado em outro dispositivo)
+  if (_customer?.addr) {
+    const a = _parseAddrString(_customer.addr);
+    if (a && a.rua && a.num) {
+      set('f-rua',    a.rua);
+      set('f-num',    a.num);
+      set('f-bairro', a.bairro);
+      set('f-compl',  a.compl);
+      _showAddrBanner(a);
+      // Salva estruturado para próximas vezes neste dispositivo
+      try { localStorage.setItem(_addrStorageKey(), JSON.stringify(a)); } catch(e) {}
+      if (feeConfig?.tipo === 'por_bairro') renderTotals();
+    }
+  }
+}
+
+function saveDeliveryAddr() {
+  if (deliveryType !== 'delivery') return;
+  try {
+    const g = id => (document.getElementById(id)?.value || '').trim();
+    const rua = g('f-rua'); const num = g('f-num');
+    if (!rua || !num) return;
+    const a = { rua, num, bairro: g('f-bairro'), compl: g('f-compl') };
+    // Salva estruturado no localStorage (chave por cliente se logado)
+    localStorage.setItem(_addrStorageKey(), JSON.stringify(a));
+    // Atualiza cache do cliente logado para cross-device via banco
+    if (_customer) {
+      _customer.addr = [rua, num, a.bairro, a.compl].filter(Boolean).join(', ');
+      try { localStorage.setItem(AUTH_KEY, JSON.stringify(_customer)); } catch(e) {}
+    }
+  } catch(e) {}
+}
+
+function clearSavedAddr() {
+  try { localStorage.removeItem(_addrStorageKey()); } catch(e) {}
+  // Limpa do cache do cliente logado também
+  if (_customer) {
+    _customer.addr = '';
+    try { localStorage.setItem(AUTH_KEY, JSON.stringify(_customer)); } catch(e) {}
+  }
+  ['f-rua','f-num','f-bairro','f-compl'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const banner = document.getElementById('saved-addr-banner');
+  if (banner) banner.style.display = 'none';
+  if (typeof renderTotals === 'function') renderTotals();
 }
 
 // ══════════════════════════════════════════
@@ -3143,6 +3245,8 @@ function openCart() {
   document.getElementById('cart-content').style.display = '';
   renderCartDrawer();
   fillCartForm();
+  // Se não está logado, ainda tenta restaurar endereço do localStorage
+  if (!_customer) loadSavedAddr();
   renderFaixas();
 }
 function closeCart() {
@@ -3524,6 +3628,7 @@ async function submitOrder() {
     const bairro = document.getElementById('f-bairro').value.trim();
     const compl  = document.getElementById('f-compl').value.trim();
     addr = [rua, num, bairro, compl].filter(Boolean).join(', ');
+    saveDeliveryAddr();
   } else if (deliveryType === 'mesa') {
     const m = document.getElementById('f-mesa').value.trim();
     if (!m) { toast('⚠️','Informe o número da mesa'); return; }
@@ -3932,6 +4037,7 @@ async function _iniciarSubmit() {
     const bairro = document.getElementById('f-bairro').value.trim();
     const compl  = document.getElementById('f-compl').value.trim();
     addr = [rua, num, bairro, compl].filter(Boolean).join(', ');
+    saveDeliveryAddr();
   } else if (deliveryType === 'mesa') {
     const m = document.getElementById('f-mesa').value.trim();
     if (!m) { toast('⚠️','Informe o número da mesa'); return; }
