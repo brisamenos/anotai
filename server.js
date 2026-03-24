@@ -524,7 +524,7 @@ function buildWhere(params, cols, tenantId, table) {
       for (const p of parts) { const pm=p.match(/^(\w+)\.(eq|neq)\.(.+)$/); if(pm&&colSet.has(pm[1])){orC.push(`"${pm[1]}" ${pm[2]==='eq'?'=':'!='} ?`);vals.push(pm[3])} }
       if (orC.length) conds.push(`(${orC.join(' OR ')})`); continue
     }
-    if ((m=val.match(/^eq\.(.+)$/)))   { let v=m[1]==='null'?null:m[1]; if(v==='true')v=1;else if(v==='false')v=0; conds.push(`"${key}" = ?`);  vals.push(v); continue }
+    if ((m=val.match(/^eq\.(.+)$/)))   { let v=m[1]==='null'?null:m[1]; if(v==='true')v=1;else if(v==='false')v=0;else if(v==='0')v=0;else if(v==='1')v=1; conds.push(`"${key}" = ?`);  vals.push(v); continue }
     if ((m=val.match(/^neq\.(.+)$/)))  { let v=m[1]; if(v==='true')v=1;else if(v==='false')v=0; conds.push(`"${key}" != ?`); vals.push(v); continue }
     if ((m=val.match(/^gte\.(.+)$/)))  { conds.push(`"${key}" >= ?`); vals.push(m[1]); continue }
     if ((m=val.match(/^lte\.(.+)$/)))  { conds.push(`"${key}" <= ?`); vals.push(m[1]); continue }
@@ -1112,7 +1112,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/fidelidade/sync','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key'])
+  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/fidelidade/sync','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return

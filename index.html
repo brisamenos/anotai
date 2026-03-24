@@ -4022,15 +4022,14 @@ async function _initMpCardForm(valor) {
           const cpf = document.getElementById('mp-docNumber')?.value.replace(/\D/g,'');
           if (!cpf || cpf.length !== 11) throw new Error('Informe um CPF válido');
 
-          // getCardFormData() existe DENTRO do onSubmit event — esse é o uso correto do SDK v2
-          const {
-            token,
-            installments,
-            paymentMethodId,
-            issuerId,
-            identificationNumber,
-            cardholderName,
-          } = event.data.getCardFormData();
+          // SDK v2: getCardFormData() é método direto do event (não de event.data)
+          const formData = typeof event.getCardFormData === 'function'
+            ? event.getCardFormData()
+            : (typeof event.data?.getCardFormData === 'function' ? event.data.getCardFormData() : null);
+
+          if (!formData) throw new Error('Não foi possível obter os dados do cartão. Verifique os campos.');
+
+          const { token, installments, paymentMethodId, issuerId, identificationNumber, cardholderName } = formData;
 
           if (!token) throw new Error('Não foi possível processar o cartão. Verifique os dados.');
 

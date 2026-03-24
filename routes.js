@@ -1257,5 +1257,22 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ── Login do garçom (endpoint dedicado — senha nunca vai na URL) ──
+  if (req.method === 'POST' && upath === '/api/garcom-login') {
+    const tid  = getTenantId(req, params)
+    const body = await readBody(req)
+    const { usuario, senha } = body
+    if (!usuario || !senha) { send(res, 400, { error: 'Usuário e senha obrigatórios' }); return true }
+    if (!tid)               { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    try {
+      const g = db.prepare(
+        'SELECT id, tenant_id, nome, usuario, ativo FROM garcons WHERE tenant_id=? AND usuario=? AND senha=? AND ativo=1'
+      ).get(tid, usuario.trim().toLowerCase(), senha)
+      if (!g) { send(res, 401, { error: 'Usuário ou senha incorretos' }); return true }
+      send(res, 200, { id: g.id, tenant_id: g.tenant_id, nome: g.nome, usuario: g.usuario, ativo: true })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
   return false // nenhuma rota tratada aqui — passa para o REST engine
 }

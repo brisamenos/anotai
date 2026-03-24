@@ -688,13 +688,24 @@ async function doLogin() {
   const btn  = document.getElementById('login-btn');
   err.style.display = 'none';
   if (!user || !pass) { err.textContent='Preencha usuário e senha'; err.style.display='block'; return; }
+
+  // Garante que o tenant_id esteja definido antes de tentar o login
+  const tid = _garcomTenantId || (() => {
+    try { const s = sessionStorage.getItem('sys_session'); return s ? JSON.parse(s).tenant_id : null; } catch { return null; }
+  })();
+  if (!tid) { err.textContent='Restaurante não identificado. Recarregue a página.'; err.style.display='block'; return; }
+
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px"></div>';
   try {
-    const { data, error } = await sb.from('garcons')
-      .select('*').eq('usuario', user).eq('senha', pass).eq('ativo', 1).single();
-    if (error || !data) {
-      err.textContent = 'Usuário ou senha incorretos';
+    const res = await fetch('/api/garcom-login', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body:    JSON.stringify({ usuario: user.toLowerCase(), senha: pass })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.id) {
+      err.textContent = data.error || 'Usuário ou senha incorretos';
       err.style.display = 'block';
     } else {
       currentGarcom = { id: data.id, nome: data.nome, usuario: data.usuario };
