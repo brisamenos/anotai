@@ -1138,11 +1138,18 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const qr    = mpData.point_of_interaction?.transaction_data?.qr_code || ''
       const qrB64 = mpData.point_of_interaction?.transaction_data?.qr_code_base64 || ''
 
-      // Salva na tabela de pagamentos de plano
-      db.prepare(`INSERT INTO pagamentos_pix (tenant_id,mp_payment_id,mp_external_ref,valor,taxa,valor_liquido,status,payer_name,qr_code,qr_code_base64)
-        VALUES (?,?,?,?,0,?,?,?,?,?)`)
-        .run(tid, String(mpData.id), extRef, parseFloat(valor), parseFloat(valor),
-          (mpData.status==='approved'?'aprovado':'pendente'), `PLANO:${plano}`, qr, qrB64)
+      // Salva na tabela de pagamentos de plano apenas se o tenant existir (leads da landing usam ID temporario)
+      const tenantExiste = db.prepare('SELECT id FROM tenants WHERE id=?').get(tid)
+      if (tenantExiste) {
+        try {
+          db.prepare(`INSERT INTO pagamentos_pix (tenant_id,mp_payment_id,mp_external_ref,valor,taxa,valor_liquido,status,payer_name,qr_code,qr_code_base64)
+            VALUES (?,?,?,?,0,?,?,?,?,?)`)
+            .run(tid, String(mpData.id), extRef, parseFloat(valor), parseFloat(valor),
+              (mpData.status==='approved'?'aprovado':'pendente'), `PLANO:${plano}`, qr, qrB64)
+        } catch (dbErr) { log('⚠️', `PIX plano: nao foi possivel salvar no BD tenant=${tid}:`, dbErr.message) }
+      } else {
+        log('ℹ️', `PIX plano criado para lead externo (sem tenant): mp_id=${mpData.id} plano=${plano}`)
+      }
 
       log('💳', `PIX plano criado: R$${valor} plano=${plano} tenant=${tid} mp_id=${mpData.id}`)
       send(res, 200, { ok: true, mp_payment_id: mpData.id, qr_code: qr, qr_code_base64: qrB64, valor, status: mpData.status })
