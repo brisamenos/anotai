@@ -2939,6 +2939,7 @@ footer{
         </div>
 
         <div id="pix-gerar-wrap">
+          <div id="pix-gerar-erro" style="display:none;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:10px 14px;font-size:13px;color:#f87171;text-align:center;margin-bottom:12px;line-height:1.5"></div>
           <button class="mbtn-main" id="btnGerarPix" onclick="gerarPix()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l7.07 7.07M20 4l-7.07 7.07M4 20l7.07-7.07M20 20l-7.07-7.07"/></svg>
             Gerar QR Code PIX
@@ -3249,6 +3250,8 @@ function resetPagamento() {
   _pixMpId = null;
   document.getElementById('pix-gerar-wrap').style.display = 'block';
   document.getElementById('pix-qr-wrap').style.display = 'none';
+  const erroBox = document.getElementById('pix-gerar-erro');
+  if (erroBox) { erroBox.style.display = 'none'; erroBox.textContent = ''; }
   const sb = document.getElementById('pix-status-bar');
   sb.className = 'pix-status-bar';
   document.getElementById('pix-status-txt').textContent = 'Aguardando pagamento...';
@@ -3269,21 +3272,65 @@ function setPayTab(tab) {
 // ── PIX ──────────────────────────────────────────
 async function gerarPix() {
   const btn = document.getElementById('btnGerarPix');
+  const erroBox = document.getElementById('pix-gerar-erro');
+
+  // Esconde erro anterior
+  if (erroBox) { erroBox.style.display = 'none'; erroBox.textContent = ''; }
+
   btn.disabled = true;
   btn.innerHTML = '<div class="spin" style="width:18px;height:18px;border-width:2px;margin:0 auto"></div>';
+
+  // Função auxiliar para exibir erro no lugar certo (dentro do pix-gerar-wrap, acima do botão)
+  function mostrarErroGerar(msg) {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l7.07 7.07M20 4l-7.07 7.07M4 20l7.07-7.07M20 20l-7.07-7.07"/></svg> Tentar novamente';
+    if (erroBox) { erroBox.textContent = msg; erroBox.style.display = 'block'; }
+  }
 
   // Para usar a rota de planos precisamos de um tenant_id — para leads da landing sem login, usamos um ID temporario
   const tempTid = 'landing-' + Date.now();
 
   try {
-    const valor = _pagPlano === 'premium' ? _precos.premium : _precos.essencial;
+    // Garante que os precos estejam carregados antes de prosseguir
+    let valor = _pagPlano === 'premium' ? _precos.premium : _precos.essencial;
+    if (!valor || valor <= 0) {
+      try {
+        const rp = await fetch('/api/planos/precos');
+        if (rp.ok) {
+          const dp = await rp.json();
+          if (dp.essencial) _precos.essencial = parseFloat(dp.essencial);
+          if (dp.premium)   _precos.premium   = parseFloat(dp.premium);
+        }
+      } catch(ep) { console.warn('[PIX] Nao foi possivel recarregar precos:', ep.message); }
+      valor = _pagPlano === 'premium' ? _precos.premium : _precos.essencial;
+    }
+
+    if (!valor || valor <= 0) {
+      mostrarErroGerar('Nao foi possivel obter o valor do plano. Recarregue a pagina e tente novamente.');
+      return;
+    }
+
     const r = await fetch('/api/planos/pagar-pix', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': tempTid },
       body: JSON.stringify({ plano: _pagPlano, valor })
     });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Erro ao gerar PIX');
+
+    let d;
+    try { d = await r.json(); } catch(ep) { d = {}; }
+
+    if (!r.ok) {
+      const msgErr = d.error || ('Erro ' + r.status + ' ao gerar PIX. Tente novamente.');
+      console.error('[PIX] Erro do servidor:', r.status, d);
+      mostrarErroGerar(msgErr);
+      return;
+    }
+
+    if (!d.mp_payment_id) {
+      console.error('[PIX] Resposta sem mp_payment_id:', d);
+      mostrarErroGerar('Resposta invalida do servidor. Tente novamente.');
+      return;
+    }
 
     _pixMpId = d.mp_payment_id;
 
@@ -3309,13 +3356,8 @@ async function gerarPix() {
     iniciarTimerPix(600); // 10 minutos
 
   } catch(e) {
-    btn.disabled = false;
-    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l7.07 7.07M20 4l-7.07 7.07M4 20l7.07-7.07M20 20l-7.07-7.07"/></svg> Tentar novamente';
-    const sb = document.getElementById('pix-status-bar');
-    sb.className = 'pix-status-bar';
-    sb.style.background = 'rgba(239,68,68,.08)';
-    sb.style.borderColor = 'rgba(239,68,68,.2)';
-    document.getElementById('pix-status-txt').textContent = e.message || 'Erro ao gerar PIX.';
+    console.error('[PIX] Excecao inesperada:', e);
+    mostrarErroGerar(e.message || 'Erro inesperado ao gerar PIX. Verifique a conexao e tente novamente.');
   }
 }
 
