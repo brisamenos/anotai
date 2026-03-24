@@ -162,65 +162,182 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .page.on { display:block; }
 
 /* ── MESAS ─────────────────────────────── */
-.mesas-stats {
+.mesas-bar {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 14px; padding: 10px 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+}
+.mesas-bar-stat { display: flex; align-items: center; gap: 7px; flex: 1; justify-content: center; }
+.mesas-bar-dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.mesas-bar-dot.green { background: var(--green); }
+.mesas-bar-dot.red   { background: var(--red); }
+.mesas-bar-dot.total { background: var(--accent); }
+.mesas-bar-val { font-family:'Syne',sans-serif; font-size:22px; font-weight:900; line-height:1; }
+.mesas-bar-lbl { font-size:11px; color:var(--muted); font-weight:600; }
+.mesas-bar-sep { width:1px; height:28px; background:var(--border); }
+
+.mesa-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
-  margin-bottom: 16px;
 }
-.mesas-stat {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px 14px;
-  text-align: center;
-}
-.mesas-stat-val { font-family:'Syne',sans-serif; font-size:24px; font-weight:800; }
-.mesas-stat-lbl { font-size:11px; color:var(--muted); margin-top:2px; }
-.mesa-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-@media(min-width:480px){ .mesa-grid { grid-template-columns: repeat(3,1fr); } }
-@media(min-width:700px){ .mesa-grid { grid-template-columns: repeat(4,1fr); } }
+@media(min-width:480px){ .mesa-grid { grid-template-columns: repeat(4,1fr); gap:12px; } }
+@media(min-width:680px){ .mesa-grid { grid-template-columns: repeat(5,1fr); } }
 
-.mesa-card {
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 14px 14px;
-  cursor: pointer;
-  transition: all .2s;
-  position: relative;
-  text-align: center;
+.mesa-block {
+  aspect-ratio: 1 / 1;
+  border-radius: 16px; cursor: pointer;
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  transition: transform .15s, box-shadow .15s;
   animation: fadeUp .3s ease both;
+  border: 2px solid transparent;
+  user-select: none; -webkit-tap-highlight-color: transparent;
 }
-.mesa-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.4); }
-.mesa-card.free  { border-color:rgba(34,197,94,.25); }
-.mesa-card.busy  { border-color:rgba(239,68,68,.25); }
-.mesa-card.free:hover  { border-color:rgba(34,197,94,.5); }
-.mesa-card.busy:hover  { border-color:rgba(239,68,68,.5); }
-.mesa-num { font-family:'Syne',sans-serif; font-size:22px; font-weight:800; margin-bottom:6px; }
-.mesa-guests { font-size:12px; color:var(--muted); margin-bottom:8px; }
-.mesa-status-badge {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size:11.5px; font-weight:700;
-  padding:3px 10px; border-radius:99px;
+.mesa-block:active { transform: scale(.93) !important; }
+.mesa-block.free {
+  background: #071a0c; border-color: #166534;
 }
-.badge-free { background:rgba(34,197,94,.12); color:var(--green); }
-.badge-busy { background:rgba(239,68,68,.12); color:var(--red); }
-.mesa-total { font-size:12px; font-weight:700; color:var(--amber); margin-top:6px; }
+.mesa-block.free:hover {
+  border-color: var(--green);
+  box-shadow: 0 6px 24px rgba(34,197,94,.22);
+  transform: translateY(-2px);
+}
+.mesa-block.busy {
+  background: #1a0505; border-color: #7f1d1d;
+  box-shadow: 0 3px 16px rgba(239,68,68,.1);
+}
+.mesa-block.busy:hover {
+  border-color: var(--red);
+  box-shadow: 0 6px 28px rgba(239,68,68,.28);
+  transform: translateY(-2px);
+}
+.mesa-block.waiting {
+  background: #1a1100; border-color: #92400e;
+  box-shadow: 0 3px 16px rgba(245,158,11,.1);
+}
+.mesa-block.waiting:hover {
+  border-color: var(--amber);
+  box-shadow: 0 6px 28px rgba(245,158,11,.28);
+  transform: translateY(-2px);
+}
+.mesa-block-num {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(26px, 7vw, 46px);
+  font-weight: 900; line-height: 1; letter-spacing: -1px;
+}
+.mesa-block.free    .mesa-block-num { color: #4ade80; }
+.mesa-block.busy    .mesa-block-num { color: #f87171; }
+.mesa-block.waiting .mesa-block-num { color: var(--amber); }
+.mesa-block-label {
+  font-size: 9px; font-weight: 800;
+  letter-spacing: 1.2px; text-transform: uppercase; margin-top: 5px;
+}
+.mesa-block.free    .mesa-block-label { color: rgba(74,222,128,.5); }
+.mesa-block.busy    .mesa-block-label { color: rgba(248,113,113,.5); }
+.mesa-block.waiting .mesa-block-label { color: rgba(245,158,11,.5); }
+.mesa-block-total {
+  font-size: 10.5px; font-weight: 700; color: var(--amber);
+  margin-top: 5px; background: rgba(245,158,11,.12);
+  padding: 2px 7px; border-radius: 5px; max-width: 90%; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mesa-block.busy::before {
+  content: ''; position: absolute; inset: -2px; border-radius: 17px;
+  background: transparent; border: 2px solid rgba(239,68,68,.0);
+  animation: mesa-pulse 3s ease-in-out infinite; pointer-events: none;
+}
+@keyframes mesa-pulse {
+  0%,100% { border-color: rgba(239,68,68,.0); inset: -2px; }
+  50%      { border-color: rgba(239,68,68,.2); inset: -5px; }
+}
+.mesa-block-icon {
+  position: absolute; top: 7px; right: 8px; font-size: 10px; opacity: .45;
+}
+
+/* ══ MODAL DETALHE DA MESA ══════════════ */
+.mesa-detail-bg {
+  display: none; position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,.82); backdrop-filter: blur(6px);
+  align-items: flex-end; justify-content: center;
+}
+.mesa-detail-bg.on { display: flex; }
+.mesa-detail-sheet {
+  background: var(--surface); border-radius: 24px 24px 0 0;
+  width: 100%; max-width: 600px; max-height: 88vh;
+  display: flex; flex-direction: column;
+  animation: slideUp .3s cubic-bezier(.34,1.56,.64,1);
+}
+.mds-handle { width: 36px; height: 4px; background: var(--surface3); border-radius: 99px; margin: 12px auto 0; flex-shrink: 0; }
+.mds-head {
+  padding: 14px 18px 12px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0; display: flex; align-items: center; gap: 12px;
+}
+.mds-num-badge {
+  width: 44px; height: 44px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 900; flex-shrink: 0;
+}
+.mds-num-badge.busy    { background: #1a0505; color: #f87171; border: 2px solid #7f1d1d; }
+.mds-num-badge.waiting { background: #1a1100; color: var(--amber); border: 2px solid #92400e; }
+.mds-head-info { flex: 1; min-width: 0; }
+.mds-head-title { font-family: 'Syne', sans-serif; font-size: 17px; font-weight: 800; }
+.mds-head-sub   { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.mds-close {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--surface2); border: none; color: var(--muted);
+  font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.mds-body { flex: 1; overflow-y: auto; padding: 14px 16px; min-height: 0; }
+.mds-order-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px 14px; margin-bottom: 9px;
+}
+.mds-order-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.mds-order-status { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
+.mds-order-status.producao { background: rgba(59,130,246,.15); color: var(--accent); }
+.mds-order-status.pronto   { background: rgba(34,197,94,.12); color: var(--green); }
+.mds-order-status.analise  { background: rgba(245,158,11,.12); color: var(--amber); }
+.mds-order-items { font-size: 13px; color: var(--text); line-height: 1.6; }
+.mds-order-total { font-size: 13px; font-weight: 700; color: var(--amber); text-align: right; margin-top: 5px; }
+.mds-total-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 0 4px; border-top: 1px solid var(--border); margin-top: 4px;
+}
+.mds-total-lbl { font-size: 13px; color: var(--muted); font-weight: 600; }
+.mds-total-val { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 900; color: var(--amber); }
+.mds-waiting-banner {
+  background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.2);
+  border-radius: 10px; padding: 10px 14px;
+  font-size: 13px; font-weight: 600; color: var(--amber); text-align: center; margin-bottom: 10px;
+}
+.mds-foot {
+  padding: 10px 16px 20px; border-top: 1px solid var(--border);
+  flex-shrink: 0; background: var(--surface);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.mds-btn {
+  width: 100%; padding: 13px; border: none; border-radius: 12px;
+  font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 700;
+  cursor: pointer; transition: all .15s;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+}
+.mds-btn.add    { background: linear-gradient(135deg, var(--accent), #2563eb); color: #fff; box-shadow: 0 4px 16px rgba(59,130,246,.3); }
+.mds-btn.add:hover { filter: brightness(1.08); }
+.mds-btn.finish { background: linear-gradient(135deg, var(--amber), #d97706); color: #000; box-shadow: 0 4px 16px rgba(245,158,11,.25); }
+.mds-btn.finish:hover { filter: brightness(1.05); }
+.mds-empty { text-align: center; padding: 20px 0; color: var(--muted); font-size: 13px; }
+
+/* Keep mesa-action-btn for finalizar sheet compat */
 .mesa-action-btn {
-  width:100%; margin-top:10px; padding:8px;
-  border-radius:8px; border:none;
+  padding:9px 14px; border-radius:8px; border:none;
   font-family:'DM Sans',sans-serif; font-size:12px; font-weight:700;
   cursor:pointer; transition:all .15s;
 }
 .mesa-action-btn.pedido { background:var(--accent); color:#fff; }
 .mesa-action-btn.pedido:hover { background:#2563eb; }
 .mesa-action-btn.livre { background:rgba(34,197,94,.1); color:var(--green); border:1px solid rgba(34,197,94,.2); }
-.mesa-action-btn.livre:hover { background:rgba(34,197,94,.2); }
 
 /* ── SHEET PEDIDO ──────────────────────── */
 .sheet-bg {
@@ -577,22 +694,33 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 
   <!-- PAGE MESAS -->
   <div class="page on" id="page-mesas">
-    <div class="mesas-stats">
-      <div class="mesas-stat">
-        <div class="mesas-stat-val" id="stat-livres" style="color:var(--green)">0</div>
-        <div class="mesas-stat-lbl">Livres</div>
+    <div class="mesas-bar">
+      <div class="mesas-bar-stat">
+        <div class="mesas-bar-dot green"></div>
+        <div>
+          <div class="mesas-bar-val" id="stat-livres" style="color:var(--green)">0</div>
+          <div class="mesas-bar-lbl">Livres</div>
+        </div>
       </div>
-      <div class="mesas-stat">
-        <div class="mesas-stat-val" id="stat-ocupadas" style="color:var(--red)">0</div>
-        <div class="mesas-stat-lbl">Ocupadas</div>
+      <div class="mesas-bar-sep"></div>
+      <div class="mesas-bar-stat">
+        <div class="mesas-bar-dot red"></div>
+        <div>
+          <div class="mesas-bar-val" id="stat-ocupadas" style="color:var(--red)">0</div>
+          <div class="mesas-bar-lbl">Ocupadas</div>
+        </div>
       </div>
-      <div class="mesas-stat">
-        <div class="mesas-stat-val" id="stat-total" style="color:var(--accent)">0</div>
-        <div class="mesas-stat-lbl">Total</div>
+      <div class="mesas-bar-sep"></div>
+      <div class="mesas-bar-stat">
+        <div class="mesas-bar-dot total"></div>
+        <div>
+          <div class="mesas-bar-val" id="stat-total" style="color:var(--accent)">0</div>
+          <div class="mesas-bar-lbl">Total</div>
+        </div>
       </div>
     </div>
     <div class="mesa-grid" id="mesa-grid">
-      <div class="empty"><div class="spinner" style="margin:0 auto"></div></div>
+      <div style="grid-column:span 3;text-align:center;padding:24px"><div class="spinner" style="margin:0 auto"></div></div>
     </div>
   </div>
 
@@ -794,6 +922,23 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
         🍕 Adicionar ao pedido &nbsp;·&nbsp; <span id="pz-total">R$ 0,00</span>
       </button>
     </div>
+  </div>
+</div>
+
+<!-- ══ MODAL DETALHE DA MESA ═════════════ -->
+<div class="mesa-detail-bg" id="mesa-detail-bg" onclick="if(event.target===this)closeMesaDetail()">
+  <div class="mesa-detail-sheet">
+    <div class="mds-handle"></div>
+    <div class="mds-head">
+      <div class="mds-num-badge busy" id="mds-num-badge">1</div>
+      <div class="mds-head-info">
+        <div class="mds-head-title" id="mds-head-title">Mesa 1</div>
+        <div class="mds-head-sub" id="mds-head-sub">Carregando pedidos...</div>
+      </div>
+      <button class="mds-close" onclick="closeMesaDetail()">✕</button>
+    </div>
+    <div class="mds-body" id="mds-body"></div>
+    <div class="mds-foot" id="mds-foot"></div>
   </div>
 </div>
 
@@ -1101,24 +1246,103 @@ function renderMesas() {
   document.getElementById('stat-total').textContent    = tables.length;
 
   if (!tables.length) {
-    g.innerHTML = '<div class="empty" style="grid-column:span 2"><div class="empty-icon">🍽️</div>Nenhuma mesa cadastrada</div>';
+    g.innerHTML = '<div class="empty" style="grid-column:span 3"><div class="empty-icon">🍽️</div>Nenhuma mesa cadastrada</div>';
     return;
   }
   g.innerHTML = tables.map((t,i) => {
-    const free = t.status === 'free';
-    return `<div class="mesa-card ${free?'free':'busy'}" style="animation-delay:${i*.04}s">
-      <div class="mesa-num">Mesa ${t.num}</div>
-      <div class="mesa-guests">${t.guests ? t.guests+' pessoas' : '—'}</div>
-      <div class="mesa-status-badge ${free?'badge-free':'badge-busy'}">
-        <span style="width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block"></span>
-        ${free ? 'Livre' : 'Ocupada'}
-      </div>
-      ${t.total ? `<div class="mesa-total">${t.total}</div>` : ''}
-      <button class="mesa-action-btn ${free?'livre':'pedido'}" onclick="openPedido(${t.num})">
-        ${free ? '✓ Abrir mesa' : '➕ Lançar pedido'}
-      </button>
+    const free    = t.status === 'free';
+    const waiting = t.status === 'waiting';
+    const cls     = free ? 'free' : (waiting ? 'waiting' : 'busy');
+    const lbl     = free ? 'LIVRE' : (waiting ? 'PAGANDO' : 'OCUPADA');
+    const icon    = free ? '🟢' : (waiting ? '⏳' : '🔴');
+
+    // Total da mesa se ocupada
+    const mesaOrders = myOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === t.num);
+    const mesaTotal  = mesaOrders.reduce((s,o)=>s+parseFloat(o.total||0),0);
+    const totalHtml  = !free && mesaTotal > 0
+      ? `<div class="mesa-block-total">R$ ${mesaTotal.toFixed(2).replace('.',',')}</div>`
+      : '';
+
+    const onclick = free
+      ? `openPedido(${t.num})`
+      : `openMesaDetail(${t.num})`;
+
+    return `<div class="mesa-block ${cls}" style="animation-delay:${i*.04}s" onclick="${onclick}">
+      <div class="mesa-block-icon">${icon}</div>
+      <div class="mesa-block-num">${t.num}</div>
+      <div class="mesa-block-label">${lbl}</div>
+      ${totalHtml}
     </div>`;
   }).join('');
+}
+
+// ══ MODAL DETALHE DA MESA ═══════════════
+let _detailMesaNum = null;
+
+async function openMesaDetail(num) {
+  _detailMesaNum = num;
+  const mesa    = tables.find(t => t.num === num);
+  const waiting = mesa?.status === 'waiting';
+
+  // Atualiza cabeçalho
+  const badge = document.getElementById('mds-num-badge');
+  badge.textContent = num;
+  badge.className   = 'mds-num-badge ' + (waiting ? 'waiting' : 'busy');
+  document.getElementById('mds-head-title').textContent = 'Mesa ' + num;
+  document.getElementById('mds-head-sub').textContent   = waiting ? '⏳ Aguardando pagamento' : '🔴 Mesa ocupada';
+
+  // Busca pedidos desta mesa (usa myOrders já carregados)
+  const orders  = myOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
+  const total   = orders.reduce((s,o)=>s+parseFloat(o.total||0),0);
+
+  const body = document.getElementById('mds-body');
+  if (!orders.length) {
+    body.innerHTML = `<div class="mds-empty">📋 Nenhum pedido registrado nesta mesa.</div>`;
+  } else {
+    const statusLabel = { producao:'🍳 Em produção', pronto:'✅ Pronto', analise:'⏳ Aguardando' };
+    const statusCls   = { producao:'producao', pronto:'pronto', analise:'analise' };
+    body.innerHTML = (waiting ? `<div class="mds-waiting-banner">⏳ Mesa aguardando pagamento no caixa</div>` : '') +
+      orders.map(o => {
+        const items = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}× ${i.name}`).join(' · ') : '';
+        const lbl   = statusLabel[o.status] || o.status;
+        const cls   = statusCls[o.status]   || 'analise';
+        return `<div class="mds-order-card">
+          <div class="mds-order-header">
+            <span class="mds-order-status ${cls}">${lbl}</span>
+            <span style="font-size:11px;color:var(--muted)">${o.time||''}</span>
+          </div>
+          <div class="mds-order-items">${items}</div>
+          <div class="mds-order-total">R$ ${(parseFloat(o.total)||0).toFixed(2).replace('.',',')}</div>
+        </div>`;
+      }).join('') +
+      `<div class="mds-total-row">
+        <span class="mds-total-lbl">Total consumido</span>
+        <span class="mds-total-val">R$ ${total.toFixed(2).replace('.',',')}</span>
+      </div>`;
+  }
+
+  // Footer com botões
+  const foot = document.getElementById('mds-foot');
+  if (waiting) {
+    foot.innerHTML = `<div class="mds-waiting-banner" style="margin-bottom:0">⏳ Aguardando confirmação de pagamento no caixa</div>`;
+  } else {
+    foot.innerHTML = `
+      <button class="mds-btn add" onclick="closeMesaDetail();openPedido(${num})">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="2" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Lançar mais itens
+      </button>
+      <button class="mds-btn finish" onclick="closeMesaDetail();abrirFinalizarMesa(${num})">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Finalizar Mesa ${num}
+      </button>`;
+  }
+
+  document.getElementById('mesa-detail-bg').classList.add('on');
+}
+
+function closeMesaDetail() {
+  document.getElementById('mesa-detail-bg').classList.remove('on');
+  _detailMesaNum = null;
 }
 
 // ══ SHEET PEDIDO ═════════════════════════
@@ -1760,6 +1984,10 @@ async function loadPedidosDaMesa() {
 }
 
 function renderMyOrders() {
+  // Se o modal de detalhe está aberto, atualiza ele também
+  if (_detailMesaNum !== null && document.getElementById('mesa-detail-bg')?.classList.contains('on')) {
+    openMesaDetail(_detailMesaNum);
+  }
   // Build mesa filter pills
   const mesaNums = [...new Set(myOrders.map(o => o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')).filter(Boolean))].sort((a,b)=>a-b);
   const filterBar = document.getElementById('mesa-filter-bar');
