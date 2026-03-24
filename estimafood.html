@@ -1,0 +1,3598 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Estima Food — Sistema completo de gestao para restaurantes. Cardapio digital, pedidos por mesa, garcom app, WhatsApp integrado e muito mais.">
+<title>Estima Food — Gestao de Restaurantes com Classe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════
+   RESET & VARIABLES
+═══════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;font-size:16px}
+:root{
+  --black:#060508;
+  --deep:#0a090d;
+  --surface:#100f14;
+  --surface2:#15141a;
+  --surface3:#1c1a24;
+  --gold:#c9952a;
+  --gold2:#e8b84b;
+  --gold-light:#f5d485;
+  --gold-glow:rgba(201,149,42,.25);
+  --amber:#d97706;
+  --white:#f5f0e8;
+  --muted:#7a7585;
+  --muted2:#504d5c;
+  --border:rgba(255,255,255,.06);
+  --border2:rgba(201,149,42,.2);
+  --ff-display:'Playfair Display',serif;
+  --ff-body:'Plus Jakarta Sans',sans-serif;
+  --ff-mono:'DM Mono',monospace;
+  --purple:#8b5cf6;
+  --radius:16px;
+  --transition:all .35s cubic-bezier(.25,.46,.45,.94);
+}
+
+body{
+  font-family:var(--ff-body);
+  background:var(--black);
+  color:var(--white);
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+
+::selection{background:var(--gold);color:#000}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:var(--black)}
+::-webkit-scrollbar-thumb{background:var(--gold);border-radius:2px}
+
+/* ═══════════════════════════════════════
+   NOISE OVERLAY
+═══════════════════════════════════════ */
+body::before{
+  content:'';
+  position:fixed;
+  inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  opacity:.025;
+  pointer-events:none;
+  z-index:9999;
+}
+
+/* ═══════════════════════════════════════
+   HEADER / NAV
+═══════════════════════════════════════ */
+header{
+  position:fixed;
+  top:0;left:0;right:0;
+  z-index:100;
+  padding:20px 0;
+  transition:var(--transition);
+}
+header.scrolled{
+  background:rgba(6,5,8,.9);
+  backdrop-filter:blur(20px);
+  padding:12px 0;
+  border-bottom:1px solid var(--border);
+}
+nav{
+  max-width:1200px;
+  margin:0 auto;
+  padding:0 40px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.logo{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  text-decoration:none;
+}
+.logo-mark{
+  width:38px;height:38px;
+  border-radius:10px;
+  background:linear-gradient(135deg,var(--gold),var(--amber));
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 20px var(--gold-glow);
+}
+.logo-mark svg{fill:none;stroke:#000;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.logo-text{
+  font-family:var(--ff-display);
+  font-size:20px;
+  font-weight:700;
+  color:var(--white);
+  letter-spacing:-.3px;
+}
+.logo-text span{color:var(--gold2)}
+
+.nav-links{
+  display:flex;
+  align-items:center;
+  gap:32px;
+  list-style:none;
+}
+.nav-links a{
+  text-decoration:none;
+  color:var(--muted);
+  font-size:14px;
+  font-weight:500;
+  transition:color .2s;
+  letter-spacing:.01em;
+}
+.nav-links a:hover{color:var(--white)}
+
+.nav-cta{
+  background:linear-gradient(135deg,var(--gold),var(--amber));
+  color:#000;
+  padding:10px 22px;
+  border-radius:100px;
+  font-size:14px;
+  font-weight:700;
+  text-decoration:none;
+  transition:var(--transition);
+  box-shadow:0 4px 20px var(--gold-glow);
+}
+.nav-cta:hover{
+  transform:translateY(-2px);
+  box-shadow:0 8px 30px rgba(201,149,42,.4);
+}
+
+/* ═══════════════════════════════════════
+   HERO
+═══════════════════════════════════════ */
+.hero{
+  position:relative;
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  overflow:hidden;
+  padding:120px 0 80px;
+}
+
+.hero-bg{
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+}
+.hero-orb{
+  position:absolute;
+  border-radius:50%;
+  filter:blur(80px);
+}
+.orb-1{
+  width:600px;height:600px;
+  background:radial-gradient(circle,rgba(201,149,42,.12) 0%,transparent 70%);
+  top:-100px;left:-100px;
+}
+.orb-2{
+  width:400px;height:400px;
+  background:radial-gradient(circle,rgba(139,92,246,.08) 0%,transparent 70%);
+  bottom:100px;right:-50px;
+}
+.orb-3{
+  width:300px;height:300px;
+  background:radial-gradient(circle,rgba(201,149,42,.06) 0%,transparent 70%);
+  top:50%;left:40%;
+  transform:translate(-50%,-50%);
+}
+
+/* Grid lines bg */
+.hero-grid{
+  position:absolute;
+  inset:0;
+  background-image:
+    linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+  background-size:80px 80px;
+  mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,black 40%,transparent 100%);
+}
+
+.hero-inner{
+  max-width:1200px;
+  margin:0 auto;
+  padding:0 40px;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:80px;
+  align-items:center;
+}
+
+.hero-content{}
+.hero-label{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  background:rgba(201,149,42,.08);
+  border:1px solid var(--border2);
+  border-radius:100px;
+  padding:6px 16px 6px 10px;
+  font-size:12px;
+  font-weight:600;
+  color:var(--gold2);
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  margin-bottom:28px;
+}
+.hero-label-dot{
+  width:6px;height:6px;
+  border-radius:50%;
+  background:var(--gold2);
+  animation:pulse-dot 2s infinite;
+}
+@keyframes pulse-dot{
+  0%,100%{opacity:1;transform:scale(1)}
+  50%{opacity:.5;transform:scale(.7)}
+}
+
+.hero-h1{
+  font-family:var(--ff-display);
+  font-size:clamp(40px,5vw,68px);
+  font-weight:800;
+  line-height:1.05;
+  letter-spacing:-.03em;
+  margin-bottom:24px;
+}
+.hero-h1 em{
+  font-style:italic;
+  color:var(--gold2);
+  display:block;
+}
+.hero-h1 .hero-h1-line2{
+  color:rgba(245,240,232,.55);
+  font-size:.75em;
+  display:block;
+}
+
+.hero-sub{
+  font-size:17px;
+  line-height:1.7;
+  color:var(--muted);
+  margin-bottom:44px;
+  max-width:480px;
+  font-weight:400;
+}
+.hero-sub strong{color:var(--white);font-weight:600}
+
+.hero-actions{
+  display:flex;
+  align-items:center;
+  gap:16px;
+  flex-wrap:wrap;
+}
+
+.btn-primary{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  background:linear-gradient(135deg,var(--gold),var(--amber));
+  color:#000;
+  padding:16px 32px;
+  border-radius:100px;
+  font-size:15px;
+  font-weight:700;
+  text-decoration:none;
+  transition:var(--transition);
+  box-shadow:0 6px 30px var(--gold-glow);
+  border:none;
+  cursor:pointer;
+}
+.btn-primary:hover{
+  transform:translateY(-3px);
+  box-shadow:0 12px 40px rgba(201,149,42,.45);
+}
+.btn-primary svg{transition:transform .2s}
+.btn-primary:hover svg{transform:translateX(3px)}
+
+.btn-ghost{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  color:var(--white);
+  padding:16px 24px;
+  border-radius:100px;
+  font-size:15px;
+  font-weight:600;
+  text-decoration:none;
+  transition:var(--transition);
+  border:1px solid var(--border2);
+  background:transparent;
+  cursor:pointer;
+}
+.btn-ghost:hover{
+  background:rgba(201,149,42,.06);
+  border-color:var(--gold);
+}
+
+.hero-trust{
+  margin-top:52px;
+  display:flex;
+  align-items:center;
+  gap:20px;
+}
+.trust-avatars{
+  display:flex;
+}
+.trust-av{
+  width:36px;height:36px;
+  border-radius:50%;
+  border:2px solid var(--black);
+  margin-left:-8px;
+  overflow:hidden;
+  background:linear-gradient(135deg,var(--surface3),var(--surface2));
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;
+  font-weight:700;
+  color:var(--gold2);
+}
+.trust-av:first-child{margin-left:0}
+.trust-text{
+  font-size:13px;
+  color:var(--muted);
+  line-height:1.5;
+}
+.trust-text strong{color:var(--white);font-weight:600}
+.stars{
+  color:var(--gold2);
+  font-size:12px;
+  letter-spacing:2px;
+}
+
+/* HERO VISUAL */
+.hero-visual{
+  position:relative;
+}
+.hero-mockup{
+  position:relative;
+  border-radius:24px;
+  overflow:hidden;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.03),
+    0 40px 80px rgba(0,0,0,.6),
+    0 0 100px rgba(201,149,42,.08);
+  padding:20px;
+}
+.mockup-bar{
+  display:flex;align-items:center;gap:8px;
+  margin-bottom:16px;
+}
+.mock-dot{
+  width:10px;height:10px;
+  border-radius:50%;
+}
+.mock-dot-r{background:#ff5f56}
+.mock-dot-y{background:#ffbd2e}
+.mock-dot-g{background:#27c93f}
+.mock-url{
+  flex:1;
+  background:var(--surface3);
+  border-radius:6px;
+  padding:5px 12px;
+  font-size:11px;
+  font-family:var(--ff-mono);
+  color:var(--muted);
+  margin-left:8px;
+}
+
+.mock-screen{
+  background:var(--surface);
+  border-radius:12px;
+  padding:16px;
+  min-height:300px;
+}
+.mock-header-bar{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;
+}
+.mock-logo{
+  font-family:var(--ff-display);
+  font-size:15px;
+  font-weight:700;
+  color:var(--gold2);
+}
+.mock-status-pill{
+  background:rgba(34,197,94,.12);
+  border:1px solid rgba(34,197,94,.2);
+  border-radius:100px;
+  padding:3px 10px;
+  font-size:10px;
+  font-weight:700;
+  color:#4ade80;
+  letter-spacing:.04em;
+}
+.mock-stats{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+  margin-bottom:14px;
+}
+.mock-stat{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:12px;
+}
+.mock-stat-val{
+  font-family:var(--ff-display);
+  font-size:22px;
+  font-weight:700;
+  color:var(--white);
+  margin-bottom:2px;
+}
+.mock-stat-val span{color:var(--gold2);font-size:14px}
+.mock-stat-lbl{font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.mock-orders{
+  display:flex;flex-direction:column;gap:6px;
+}
+.mock-order{
+  display:flex;align-items:center;gap:10px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:9px;
+  padding:10px 12px;
+}
+.mock-order-num{
+  font-size:11px;
+  font-weight:700;
+  color:var(--muted);
+  font-family:var(--ff-mono);
+  min-width:36px;
+}
+.mock-order-name{
+  flex:1;
+  font-size:12px;
+  color:var(--white);
+  font-weight:500;
+}
+.mock-order-badge{
+  font-size:9px;
+  font-weight:700;
+  border-radius:100px;
+  padding:2px 8px;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.bg-prod{background:rgba(249,115,22,.15);color:#fb923c}
+.bg-pron{background:rgba(34,197,94,.15);color:#4ade80}
+.bg-pago{background:rgba(59,130,246,.15);color:#60a5fa}
+.mock-order-val{
+  font-size:12px;
+  font-weight:700;
+  color:var(--white);
+  min-width:56px;
+  text-align:right;
+}
+
+/* floating cards */
+.hero-float{
+  position:absolute;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:12px 16px;
+  box-shadow:0 20px 50px rgba(0,0,0,.5);
+  backdrop-filter:blur(10px);
+}
+.float-1{
+  top:-24px;left:-32px;
+  min-width:160px;
+  animation:float-y 4s ease-in-out infinite;
+}
+.float-2{
+  bottom:-20px;right:-20px;
+  min-width:140px;
+  animation:float-y 4s ease-in-out infinite .7s;
+}
+@keyframes float-y{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(-10px)}
+}
+.float-label{font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.float-val{font-family:var(--ff-display);font-size:20px;font-weight:700;color:var(--gold2)}
+.float-sub{font-size:10px;color:var(--muted);margin-top:2px}
+.float-icon-wrap{
+  width:28px;height:28px;
+  border-radius:8px;
+  background:rgba(201,149,42,.12);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:6px;
+}
+
+/* ═══════════════════════════════════════
+   SECTION BASE
+═══════════════════════════════════════ */
+section{padding:120px 0;position:relative}
+.container{max-width:1200px;margin:0 auto;padding:0 40px}
+
+.section-label{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  font-size:11px;
+  font-weight:700;
+  color:var(--gold);
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  margin-bottom:18px;
+}
+.section-label::before{
+  content:'';
+  width:24px;height:1px;
+  background:var(--gold);
+}
+
+.section-title{
+  font-family:var(--ff-display);
+  font-size:clamp(32px,4vw,52px);
+  font-weight:800;
+  line-height:1.1;
+  letter-spacing:-.03em;
+  margin-bottom:18px;
+}
+.section-title em{
+  font-style:italic;
+  color:var(--gold2);
+}
+
+.section-sub{
+  font-size:17px;
+  line-height:1.7;
+  color:var(--muted);
+  max-width:580px;
+  font-weight:400;
+}
+
+/* ═══════════════════════════════════════
+   LOGOS / SOCIAL PROOF BAR
+═══════════════════════════════════════ */
+.logos-bar{
+  padding:40px 0;
+  border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+  overflow:hidden;
+}
+.logos-track{
+  display:flex;
+  gap:60px;
+  align-items:center;
+  animation:scroll-logos 20s linear infinite;
+  width:max-content;
+}
+@keyframes scroll-logos{
+  from{transform:translateX(0)}
+  to{transform:translateX(-50%)}
+}
+.logos-item{
+  font-family:var(--ff-display);
+  font-size:18px;
+  font-weight:600;
+  color:var(--muted2);
+  white-space:nowrap;
+  letter-spacing:.02em;
+  transition:color .2s;
+}
+.logos-item:hover{color:var(--muted)}
+
+/* ═══════════════════════════════════════
+   PROBLEM
+═══════════════════════════════════════ */
+.problem-section{background:var(--deep)}
+.problem-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:80px;
+  align-items:center;
+}
+.problem-list{
+  list-style:none;
+  display:flex;
+  flex-direction:column;
+  gap:24px;
+}
+.problem-item{
+  display:flex;
+  gap:20px;
+  align-items:flex-start;
+  opacity:0;
+  transform:translateX(-20px);
+  transition:all .5s cubic-bezier(.25,.46,.45,.94);
+}
+.problem-item.visible{opacity:1;transform:none}
+.problem-icon{
+  width:44px;height:44px;
+  flex-shrink:0;
+  border-radius:12px;
+  background:rgba(239,68,68,.08);
+  border:1px solid rgba(239,68,68,.15);
+  display:flex;align-items:center;justify-content:center;
+  margin-top:2px;
+}
+.problem-icon svg{stroke:#f87171}
+.problem-item-title{
+  font-size:16px;
+  font-weight:700;
+  color:var(--white);
+  margin-bottom:6px;
+}
+.problem-item-text{
+  font-size:14px;
+  line-height:1.65;
+  color:var(--muted);
+}
+.problem-visual{
+  position:relative;
+}
+.chaos-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:28px;
+  position:relative;
+}
+.chaos-item{
+  display:flex;align-items:center;gap:12px;
+  padding:12px 0;
+  border-bottom:1px solid var(--border);
+}
+.chaos-item:last-child{border-bottom:none}
+.chaos-num{
+  font-family:var(--ff-mono);
+  font-size:11px;
+  color:var(--muted2);
+  min-width:24px;
+}
+.chaos-text{font-size:13px;color:var(--muted);flex:1}
+.chaos-x{
+  width:20px;height:20px;
+  border-radius:50%;
+  background:rgba(239,68,68,.15);
+  display:flex;align-items:center;justify-content:center;
+  color:#f87171;
+  font-size:10px;
+  font-weight:900;
+}
+.chaos-title{
+  font-family:var(--ff-display);
+  font-size:16px;
+  font-weight:700;
+  margin-bottom:20px;
+  color:rgba(245,240,232,.5);
+}
+
+/* ═══════════════════════════════════════
+   SOLUTION
+═══════════════════════════════════════ */
+.solution-center{text-align:center;margin-bottom:80px}
+.solution-center .section-label{justify-content:center}
+.solution-center .section-sub{margin:0 auto}
+.solutions-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:20px;
+}
+.sol-card{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:32px 28px;
+  position:relative;
+  overflow:hidden;
+  transition:var(--transition);
+  opacity:0;
+  transform:translateY(30px);
+}
+.sol-card.visible{opacity:1;transform:none}
+.sol-card::after{
+  content:'';
+  position:absolute;
+  top:0;left:0;right:0;
+  height:1px;
+  background:linear-gradient(90deg,transparent,var(--gold),transparent);
+  opacity:0;
+  transition:opacity .3s;
+}
+.sol-card:hover{
+  border-color:var(--border2);
+  transform:translateY(-6px);
+  box-shadow:0 20px 60px rgba(201,149,42,.1);
+}
+.sol-card:hover::after{opacity:1}
+.sol-icon{
+  width:52px;height:52px;
+  border-radius:14px;
+  background:rgba(201,149,42,.08);
+  border:1px solid var(--border2);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:24px;
+}
+.sol-icon svg{stroke:var(--gold2)}
+.sol-title{
+  font-family:var(--ff-display);
+  font-size:20px;
+  font-weight:700;
+  margin-bottom:12px;
+  color:var(--white);
+}
+.sol-text{
+  font-size:14px;
+  line-height:1.7;
+  color:var(--muted);
+}
+
+/* ═══════════════════════════════════════
+   BENEFITS
+═══════════════════════════════════════ */
+.benefits-section{background:var(--deep)}
+.benefits-layout{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:100px;
+  align-items:start;
+}
+.benefits-sticky{
+  position:sticky;
+  top:100px;
+}
+.benefits-list{
+  display:flex;
+  flex-direction:column;
+  gap:36px;
+  padding-top:20px;
+}
+.benefit-row{
+  display:flex;
+  gap:20px;
+  align-items:flex-start;
+  opacity:0;
+  transform:translateY(20px);
+  transition:all .5s cubic-bezier(.25,.46,.45,.94);
+}
+.benefit-row.visible{opacity:1;transform:none}
+.benefit-num{
+  font-family:var(--ff-display);
+  font-size:48px;
+  font-weight:800;
+  color:rgba(201,149,42,.15);
+  line-height:1;
+  min-width:50px;
+  margin-top:-8px;
+}
+.benefit-body{}
+.benefit-title{
+  font-size:18px;
+  font-weight:700;
+  color:var(--white);
+  margin-bottom:8px;
+  line-height:1.3;
+}
+.benefit-text{
+  font-size:14px;
+  line-height:1.7;
+  color:var(--muted);
+}
+.benefit-tag{
+  display:inline-block;
+  background:rgba(201,149,42,.08);
+  border:1px solid var(--border2);
+  border-radius:100px;
+  padding:3px 12px;
+  font-size:11px;
+  font-weight:700;
+  color:var(--gold2);
+  letter-spacing:.04em;
+  margin-top:10px;
+  text-transform:uppercase;
+}
+
+/* ═══════════════════════════════════════
+   HOW IT WORKS
+═══════════════════════════════════════ */
+.steps-center{text-align:center;margin-bottom:80px}
+.steps-center .section-label{justify-content:center}
+.steps-center .section-sub{margin:0 auto}
+.steps-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:0;
+  position:relative;
+}
+.steps-grid::before{
+  content:'';
+  position:absolute;
+  top:40px;left:calc(16.66% + 20px);right:calc(16.66% + 20px);
+  height:1px;
+  background:linear-gradient(90deg,var(--gold),transparent,var(--gold));
+  opacity:.3;
+}
+.step-card{
+  text-align:center;
+  padding:40px 28px;
+  opacity:0;
+  transform:translateY(30px);
+  transition:all .5s cubic-bezier(.25,.46,.45,.94);
+}
+.step-card.visible{opacity:1;transform:none}
+.step-num-wrap{
+  position:relative;
+  display:inline-flex;
+  margin-bottom:28px;
+}
+.step-num{
+  width:80px;height:80px;
+  border-radius:50%;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--ff-display);
+  font-size:28px;
+  font-weight:800;
+  color:var(--white);
+  position:relative;
+  z-index:1;
+  transition:var(--transition);
+}
+.step-card:hover .step-num{
+  border-color:var(--gold);
+  background:rgba(201,149,42,.08);
+  color:var(--gold2);
+  box-shadow:0 0 40px var(--gold-glow);
+}
+.step-num-ring{
+  position:absolute;
+  inset:-6px;
+  border-radius:50%;
+  background:conic-gradient(var(--gold) 0deg, transparent 120deg);
+  opacity:.2;
+  animation:spin-ring 6s linear infinite;
+}
+@keyframes spin-ring{to{transform:rotate(360deg)}}
+.step-title{
+  font-family:var(--ff-display);
+  font-size:22px;
+  font-weight:700;
+  margin-bottom:12px;
+}
+.step-text{
+  font-size:14px;
+  line-height:1.7;
+  color:var(--muted);
+}
+
+/* ═══════════════════════════════════════
+   TESTIMONIALS
+═══════════════════════════════════════ */
+.testimonials-section{background:var(--deep)}
+.testimonials-header{text-align:center;margin-bottom:60px}
+.testimonials-header .section-label{justify-content:center}
+.metrics-row{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:1px;
+  background:var(--border);
+  border:1px solid var(--border);
+  border-radius:20px;
+  overflow:hidden;
+  margin-bottom:80px;
+}
+.metric-block{
+  background:var(--surface2);
+  padding:36px 28px;
+  text-align:center;
+  transition:background .2s;
+}
+.metric-block:hover{background:var(--surface3)}
+.metric-val{
+  font-family:var(--ff-display);
+  font-size:44px;
+  font-weight:800;
+  color:var(--gold2);
+  letter-spacing:-.03em;
+  margin-bottom:8px;
+  line-height:1;
+}
+.metric-val span{font-size:.6em;color:var(--muted)}
+.metric-lbl{
+  font-size:13px;
+  color:var(--muted);
+  font-weight:500;
+}
+.testi-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:20px;
+}
+.testi-card{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:28px;
+  transition:var(--transition);
+  opacity:0;
+  transform:translateY(20px);
+}
+.testi-card.visible{opacity:1;transform:none}
+.testi-card:hover{
+  border-color:var(--border2);
+  transform:translateY(-4px);
+}
+.testi-stars{
+  color:var(--gold2);
+  font-size:13px;
+  letter-spacing:2px;
+  margin-bottom:18px;
+}
+.testi-text{
+  font-size:15px;
+  line-height:1.7;
+  color:rgba(245,240,232,.75);
+  margin-bottom:24px;
+  font-style:italic;
+}
+.testi-author{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+.testi-av{
+  width:44px;height:44px;
+  border-radius:12px;
+  background:linear-gradient(135deg,var(--surface3),var(--surface));
+  border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--ff-display);
+  font-size:16px;
+  font-weight:700;
+  color:var(--gold2);
+  flex-shrink:0;
+}
+.testi-name{
+  font-size:14px;
+  font-weight:700;
+  color:var(--white);
+}
+.testi-role{
+  font-size:12px;
+  color:var(--muted);
+  margin-top:2px;
+}
+
+/* ═══════════════════════════════════════
+   DIFFERENTIALS
+═══════════════════════════════════════ */
+.diff-grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:16px;
+  margin-top:60px;
+}
+.diff-card{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:32px;
+  display:flex;
+  gap:20px;
+  align-items:flex-start;
+  transition:var(--transition);
+  opacity:0;
+  transform:scale(.97);
+}
+.diff-card.visible{opacity:1;transform:none}
+.diff-card:hover{border-color:var(--border2)}
+.diff-icon{
+  width:48px;height:48px;
+  flex-shrink:0;
+  border-radius:14px;
+  background:rgba(201,149,42,.06);
+  border:1px solid var(--border2);
+  display:flex;align-items:center;justify-content:center;
+}
+.diff-icon svg{stroke:var(--gold2)}
+.diff-title{
+  font-size:16px;
+  font-weight:700;
+  color:var(--white);
+  margin-bottom:8px;
+}
+.diff-text{
+  font-size:13px;
+  line-height:1.65;
+  color:var(--muted);
+}
+
+/* ═══════════════════════════════════════
+   PRICING
+═══════════════════════════════════════ */
+.pricing-section{background:var(--deep)}
+.pricing-center{text-align:center;margin-bottom:60px}
+.pricing-center .section-label{justify-content:center}
+.pricing-center .section-sub{margin:0 auto}
+.pricing-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:24px;
+  max-width:900px;
+  margin:0 auto;
+}
+.pricing-card{
+  border-radius:24px;
+  padding:40px 36px;
+  position:relative;
+  overflow:hidden;
+  transition:var(--transition);
+  opacity:0;
+  transform:translateY(30px);
+}
+.pricing-card.visible{opacity:1;transform:none}
+.pricing-card-ess{
+  background:var(--surface2);
+  border:1px solid var(--border);
+}
+.pricing-card-prem{
+  background:linear-gradient(135deg,rgba(201,149,42,.08) 0%,rgba(201,149,42,.03) 100%);
+  border:1px solid var(--border2);
+  box-shadow:0 0 80px rgba(201,149,42,.08);
+}
+.pricing-card-prem::before{
+  content:'';
+  position:absolute;
+  top:0;left:0;right:0;
+  height:2px;
+  background:linear-gradient(90deg,transparent,var(--gold2),transparent);
+}
+.pricing-card:hover{transform:translateY(-6px) scale(1.01)}
+.pricing-badge{
+  position:absolute;
+  top:24px;right:24px;
+  background:linear-gradient(135deg,var(--gold),var(--amber));
+  color:#000;
+  font-size:10px;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  padding:4px 12px;
+  border-radius:100px;
+}
+.pricing-plan-label{
+  font-size:11px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.1em;
+  color:var(--muted);
+  margin-bottom:12px;
+}
+.pricing-card-prem .pricing-plan-label{color:var(--gold)}
+.pricing-name{
+  font-family:var(--ff-display);
+  font-size:28px;
+  font-weight:800;
+  margin-bottom:8px;
+}
+.pricing-price-row{
+  display:flex;
+  align-items:baseline;
+  gap:4px;
+  margin:24px 0;
+}
+.pricing-currency{
+  font-size:20px;
+  font-weight:700;
+  color:var(--muted);
+}
+.pricing-amount{
+  font-family:var(--ff-display);
+  font-size:52px;
+  font-weight:800;
+  line-height:1;
+  letter-spacing:-.03em;
+}
+.pricing-card-ess .pricing-amount{color:var(--white)}
+.pricing-card-prem .pricing-amount{color:var(--gold2)}
+.pricing-period{
+  font-size:14px;
+  color:var(--muted);
+  align-self:flex-end;
+  margin-bottom:6px;
+}
+.pricing-divider{
+  height:1px;
+  background:var(--border);
+  margin:28px 0;
+}
+.pricing-features{
+  list-style:none;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  margin-bottom:36px;
+}
+.pricing-features li{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  font-size:14px;
+  color:rgba(245,240,232,.75);
+}
+.feat-check{
+  width:20px;height:20px;
+  border-radius:6px;
+  flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+}
+.feat-check-ess{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.2)}
+.feat-check-prem{background:rgba(201,149,42,.12);border:1px solid var(--border2)}
+.feat-check svg{width:10px;height:10px}
+.feat-check-ess svg{stroke:#4ade80}
+.feat-check-prem svg{stroke:var(--gold2)}
+.btn-pricing{
+  width:100%;
+  padding:16px;
+  border-radius:14px;
+  font-size:15px;
+  font-weight:700;
+  font-family:var(--ff-body);
+  cursor:pointer;
+  border:none;
+  transition:var(--transition);
+  letter-spacing:.01em;
+}
+.btn-pricing-ess{
+  background:var(--surface3);
+  border:1px solid var(--border);
+  color:var(--white);
+}
+.btn-pricing-ess:hover{
+  border-color:var(--gold);
+  background:rgba(201,149,42,.08);
+  color:var(--gold2);
+}
+.btn-pricing-prem{
+  background:linear-gradient(135deg,var(--gold),var(--amber));
+  color:#000;
+  box-shadow:0 6px 24px var(--gold-glow);
+}
+.btn-pricing-prem:hover{
+  transform:translateY(-2px);
+  box-shadow:0 12px 40px rgba(201,149,42,.4);
+}
+.pricing-guarantee{
+  text-align:center;
+  margin-top:32px;
+  font-size:13px;
+  color:var(--muted);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+}
+.guarantee-icon{
+  width:28px;height:28px;
+  border-radius:8px;
+  background:rgba(34,197,94,.1);
+  border:1px solid rgba(34,197,94,.2);
+  display:flex;align-items:center;justify-content:center;
+}
+.guarantee-icon svg{stroke:#4ade80}
+.payment-methods{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:12px;
+  margin-top:20px;
+}
+.pay-pill{
+  display:flex;align-items:center;gap:6px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:6px 14px;
+  font-size:12px;
+  font-weight:600;
+  color:var(--muted);
+}
+.pay-pill svg{flex-shrink:0}
+
+/* ═══════════════════════════════════════
+   FAQ
+═══════════════════════════════════════ */
+.faq-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:60px;
+  align-items:start;
+}
+.faq-list{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.faq-item{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:16px;
+  overflow:hidden;
+  transition:border-color .2s;
+}
+.faq-item.open{border-color:var(--border2)}
+.faq-q{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:20px 24px;
+  cursor:pointer;
+  gap:16px;
+  user-select:none;
+}
+.faq-q-text{
+  font-size:15px;
+  font-weight:600;
+  color:var(--white);
+  line-height:1.4;
+}
+.faq-arrow{
+  width:28px;height:28px;
+  border-radius:8px;
+  background:var(--surface3);
+  border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+  transition:all .25s;
+}
+.faq-item.open .faq-arrow{
+  background:rgba(201,149,42,.1);
+  border-color:var(--border2);
+  transform:rotate(45deg);
+}
+.faq-arrow svg{stroke:var(--muted);transition:stroke .2s}
+.faq-item.open .faq-arrow svg{stroke:var(--gold2)}
+.faq-a{
+  max-height:0;
+  overflow:hidden;
+  transition:max-height .35s ease;
+}
+.faq-a-inner{
+  padding:0 24px 20px;
+  font-size:14px;
+  line-height:1.7;
+  color:var(--muted);
+  border-top:1px solid var(--border);
+  padding-top:16px;
+}
+.faq-cta-block{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:24px;
+  padding:40px 36px;
+  text-align:center;
+}
+.faq-cta-icon{
+  width:60px;height:60px;
+  border-radius:18px;
+  background:rgba(201,149,42,.08);
+  border:1px solid var(--border2);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 24px;
+}
+.faq-cta-icon svg{stroke:var(--gold2)}
+.faq-cta-title{
+  font-family:var(--ff-display);
+  font-size:24px;
+  font-weight:700;
+  margin-bottom:12px;
+}
+.faq-cta-text{
+  font-size:14px;
+  color:var(--muted);
+  line-height:1.7;
+  margin-bottom:28px;
+}
+
+/* ═══════════════════════════════════════
+   FINAL CTA
+═══════════════════════════════════════ */
+.final-cta{
+  text-align:center;
+  padding:160px 0;
+  position:relative;
+  overflow:hidden;
+}
+.final-cta-bg{
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+}
+.final-cta-circle{
+  position:absolute;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  width:800px;height:800px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(201,149,42,.08) 0%,transparent 70%);
+}
+.final-cta-ring{
+  position:absolute;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  border-radius:50%;
+  border:1px solid rgba(201,149,42,.1);
+}
+.ring-1{width:400px;height:400px}
+.ring-2{width:600px;height:600px}
+.ring-3{width:800px;height:800px}
+.final-h2{
+  font-family:var(--ff-display);
+  font-size:clamp(36px,5vw,64px);
+  font-weight:800;
+  letter-spacing:-.03em;
+  line-height:1.1;
+  margin-bottom:20px;
+}
+.final-h2 em{font-style:italic;color:var(--gold2)}
+.final-sub{
+  font-size:18px;
+  color:var(--muted);
+  max-width:500px;
+  margin:0 auto 48px;
+  line-height:1.65;
+}
+.final-actions{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:16px;
+  flex-wrap:wrap;
+}
+
+/* ═══════════════════════════════════════
+   LEAD FORM (MODAL)
+═══════════════════════════════════════ */
+.modal-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.85);
+  backdrop-filter:blur(10px);
+  z-index:1000;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+}
+.modal-overlay.open{display:flex}
+.modal-box{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:24px;
+  padding:48px 44px;
+  max-width:480px;
+  width:100%;
+  box-shadow:0 40px 100px rgba(0,0,0,.8);
+  position:relative;
+  animation:modal-in .35s cubic-bezier(.25,.46,.45,.94);
+}
+@keyframes modal-in{
+  from{opacity:0;transform:scale(.92) translateY(20px)}
+  to{opacity:1;transform:none}
+}
+.modal-close{
+  position:absolute;
+  top:18px;right:18px;
+  width:32px;height:32px;
+  border-radius:10px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  color:var(--muted);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  transition:all .2s;
+}
+.modal-close:hover{color:var(--white);border-color:rgba(255,255,255,.2)}
+.modal-title{
+  font-family:var(--ff-display);
+  font-size:28px;
+  font-weight:800;
+  margin-bottom:8px;
+  letter-spacing:-.02em;
+}
+.modal-sub{
+  font-size:14px;
+  color:var(--muted);
+  margin-bottom:32px;
+  line-height:1.6;
+}
+.form-group{
+  margin-bottom:16px;
+}
+.form-label{
+  display:block;
+  font-size:11px;
+  font-weight:700;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  margin-bottom:8px;
+}
+.form-input{
+  width:100%;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:14px 16px;
+  font-family:var(--ff-body);
+  font-size:14px;
+  color:var(--white);
+  outline:none;
+  transition:all .2s;
+}
+.form-input:focus{
+  border-color:var(--gold);
+  box-shadow:0 0 0 3px rgba(201,149,42,.12);
+}
+.form-input::placeholder{color:var(--muted)}
+.form-select{
+  appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a7585' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 14px center;
+}
+.btn-submit{
+  width:100%;
+  margin-top:8px;
+  padding:16px;
+  border-radius:12px;
+  font-family:var(--ff-body);
+  font-size:15px;
+  font-weight:700;
+  background:linear-gradient(135deg,var(--gold),var(--amber));
+  color:#000;
+  border:none;
+  cursor:pointer;
+  transition:var(--transition);
+  box-shadow:0 6px 24px var(--gold-glow);
+}
+.btn-submit:hover{
+  transform:translateY(-2px);
+  box-shadow:0 12px 40px rgba(201,149,42,.4);
+}
+.form-privacy{
+  font-size:11px;
+  color:var(--muted2);
+  text-align:center;
+  margin-top:16px;
+  line-height:1.6;
+}
+.form-success{
+  text-align:center;
+  padding:20px;
+  display:none;
+}
+.form-success .succ-icon{
+  width:64px;height:64px;
+  border-radius:50%;
+  background:rgba(34,197,94,.1);
+  border:1px solid rgba(34,197,94,.3);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 20px;
+}
+.form-success .succ-icon svg{stroke:#4ade80;width:28px;height:28px}
+.form-success h3{
+  font-family:var(--ff-display);
+  font-size:24px;
+  font-weight:700;
+  margin-bottom:10px;
+}
+.form-success p{font-size:14px;color:var(--muted);line-height:1.6}
+
+/* ═══════════════════════════════════════
+   FOOTER
+═══════════════════════════════════════ */
+footer{
+  border-top:1px solid var(--border);
+  padding:60px 0 40px;
+  background:var(--deep);
+}
+.footer-grid{
+  display:grid;
+  grid-template-columns:2fr 1fr 1fr 1fr;
+  gap:40px;
+  margin-bottom:60px;
+}
+.footer-brand .logo{margin-bottom:16px;display:inline-flex}
+.footer-desc{
+  font-size:13px;
+  line-height:1.7;
+  color:var(--muted);
+  max-width:260px;
+}
+.footer-col-title{
+  font-size:11px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.1em;
+  color:var(--muted2);
+  margin-bottom:16px;
+}
+.footer-links{
+  list-style:none;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.footer-links a{
+  text-decoration:none;
+  font-size:13px;
+  color:var(--muted);
+  transition:color .2s;
+}
+.footer-links a:hover{color:var(--white)}
+.footer-bottom{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding-top:24px;
+  border-top:1px solid var(--border);
+}
+.footer-copy{font-size:12px;color:var(--muted2)}
+.footer-badge{
+  display:flex;align-items:center;gap:8px;
+  font-size:12px;color:var(--muted2);
+}
+.footer-dot{width:6px;height:6px;border-radius:50%;background:var(--gold);opacity:.6}
+
+/* ═══════════════════════════════════════
+   SCROLL ANIMATIONS
+═══════════════════════════════════════ */
+.fade-up{
+  opacity:0;
+  transform:translateY(30px);
+  transition:all .6s cubic-bezier(.25,.46,.45,.94);
+}
+.fade-up.visible{opacity:1;transform:none}
+
+/* ═══════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════ */
+@media (max-width:1024px){
+  .hero-inner{grid-template-columns:1fr;gap:60px}
+  .hero-visual{display:none}
+  .solutions-grid{grid-template-columns:1fr 1fr}
+  .benefits-layout{grid-template-columns:1fr;gap:40px}
+  .benefits-sticky{position:static}
+  .steps-grid::before{display:none}
+  .diff-grid{grid-template-columns:1fr}
+  .footer-grid{grid-template-columns:1fr 1fr;gap:30px}
+}
+
+@media (max-width:768px){
+  section{padding:80px 0}
+  .container{padding:0 24px}
+  nav{padding:0 24px}
+  .nav-links,.nav-cta{display:none}
+  .hero-inner{padding:0 24px}
+  .solutions-grid{grid-template-columns:1fr}
+  .steps-grid{grid-template-columns:1fr}
+  .testimonials-testi-grid,.metrics-row{grid-template-columns:1fr 1fr}
+  .testi-grid{grid-template-columns:1fr}
+  .pricing-grid{grid-template-columns:1fr}
+  .faq-grid{grid-template-columns:1fr}
+  .footer-grid{grid-template-columns:1fr}
+  .footer-bottom{flex-direction:column;gap:12px;text-align:center}
+  .problem-grid{grid-template-columns:1fr}
+  .modal-box{padding:32px 24px}
+}
+
+/* ═══════════════════════════════════════
+   PRICING — TRIAL BUTTON
+═══════════════════════════════════════ */
+.pricing-trial-btn{
+  width:100%;
+  padding:11px;
+  border-radius:10px;
+  font-size:13px;
+  font-weight:600;
+  font-family:var(--ff-body);
+  cursor:pointer;
+  border:1px solid var(--border2);
+  background:transparent;
+  color:var(--gold2);
+  transition:var(--transition);
+  margin-bottom:10px;
+  letter-spacing:.01em;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.pricing-trial-btn:hover{background:rgba(201,149,42,.06)}
+.pricing-trial-prem{border-color:rgba(139,92,246,.3);color:#a78bfa}
+.pricing-trial-prem:hover{background:rgba(139,92,246,.06)}
+.pricing-separator{
+  display:flex;align-items:center;gap:10px;
+  margin-bottom:10px;
+}
+.pricing-separator span{font-size:11px;color:var(--muted2)}
+.pricing-separator::before,.pricing-separator::after{
+  content:'';flex:1;height:1px;background:var(--border);
+}
+
+/* ═══════════════════════════════════════
+   MULTI-MODAL SYSTEM
+═══════════════════════════════════════ */
+.moverlay{
+  position:fixed;inset:0;
+  background:rgba(0,0,0,.88);
+  backdrop-filter:blur(12px);
+  z-index:1000;
+  display:none;
+  align-items:center;justify-content:center;
+  padding:20px;
+}
+.moverlay.open{display:flex}
+.mbox{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:24px;
+  width:100%;
+  max-width:500px;
+  max-height:92vh;
+  overflow-y:auto;
+  position:relative;
+  box-shadow:0 40px 120px rgba(0,0,0,.85);
+  animation:mbox-in .32s cubic-bezier(.22,.68,0,1.2);
+}
+@keyframes mbox-in{
+  from{opacity:0;transform:scale(.9) translateY(24px)}
+  to{opacity:1;transform:none}
+}
+.mbox-inner{padding:44px 40px}
+@media(max-width:520px){.mbox-inner{padding:32px 24px}}
+.mclose{
+  position:absolute;top:16px;right:16px;
+  width:32px;height:32px;
+  border-radius:10px;
+  background:var(--surface2);border:1px solid var(--border);
+  color:var(--muted);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .2s;z-index:2;
+}
+.mclose:hover{color:var(--white);border-color:rgba(255,255,255,.2)}
+.mclose svg{pointer-events:none}
+
+/* modal header */
+.modal-icon-wrap{
+  width:56px;height:56px;border-radius:16px;
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:22px;
+}
+.modal-icon-gold{background:rgba(201,149,42,.1);border:1px solid var(--border2)}
+.modal-icon-green{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2)}
+.modal-icon-purple{background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.2)}
+.mbox h2{
+  font-family:var(--ff-display);
+  font-size:26px;font-weight:800;
+  letter-spacing:-.02em;margin-bottom:6px;
+}
+.mbox-sub{font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:28px}
+
+/* form inside modal */
+.mf-group{margin-bottom:15px}
+.mf-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:15px}
+.mf-label{
+  display:block;font-size:11px;font-weight:700;
+  color:var(--muted);text-transform:uppercase;
+  letter-spacing:.07em;margin-bottom:7px;
+}
+.mf-input{
+  width:100%;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:12px;padding:13px 16px;
+  font-family:var(--ff-body);font-size:14px;color:var(--white);
+  outline:none;transition:border-color .2s, box-shadow .2s;
+  -webkit-appearance:none;
+}
+.mf-input:focus{
+  border-color:var(--gold);
+  box-shadow:0 0 0 3px rgba(201,149,42,.1);
+}
+.mf-input::placeholder{color:var(--muted2)}
+.mf-select{
+  appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a7585' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 14px center;
+}
+.mf-select option{background:var(--surface2);color:var(--white)}
+.mbtn-main{
+  width:100%;padding:16px;border-radius:14px;
+  font-family:var(--ff-body);font-size:15px;font-weight:700;
+  background:linear-gradient(135deg,var(--gold),var(--amber));
+  color:#000;border:none;cursor:pointer;
+  transition:var(--transition);
+  box-shadow:0 6px 24px var(--gold-glow);
+  margin-top:6px;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.mbtn-main:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(201,149,42,.4)}
+.mbtn-main:disabled{opacity:.6;transform:none;cursor:not-allowed}
+.mbtn-sec{
+  width:100%;padding:13px;border-radius:12px;
+  font-family:var(--ff-body);font-size:14px;font-weight:600;
+  background:var(--surface2);border:1px solid var(--border);
+  color:var(--white);cursor:pointer;transition:var(--transition);
+  margin-top:8px;display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.mbtn-sec:hover{border-color:rgba(255,255,255,.2)}
+.mprivacy{font-size:11px;color:var(--muted2);text-align:center;margin-top:14px;line-height:1.6}
+
+/* success state */
+.msuccess{text-align:center;padding:20px 0;display:none}
+.msuccess-icon{
+  width:68px;height:68px;border-radius:50%;
+  background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 22px;
+}
+.msuccess h3{font-family:var(--ff-display);font-size:24px;font-weight:700;margin-bottom:10px}
+.msuccess p{font-size:14px;color:var(--muted);line-height:1.65}
+
+/* payment tabs */
+.pay-tabs{
+  display:flex;gap:8px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:12px;padding:4px;
+  margin-bottom:28px;
+}
+.pay-tab{
+  flex:1;padding:10px;border-radius:9px;
+  font-size:13px;font-weight:700;
+  cursor:pointer;border:none;
+  background:transparent;color:var(--muted);
+  transition:all .2s;font-family:var(--ff-body);
+  display:flex;align-items:center;justify-content:center;gap:7px;
+}
+.pay-tab.active{
+  background:var(--surface3);color:var(--white);
+  box-shadow:0 2px 8px rgba(0,0,0,.3);
+}
+.pay-panel{display:none}
+.pay-panel.active{display:block}
+
+/* PIX panel */
+.pix-summary{
+  background:var(--surface2);border:1px solid var(--border2);
+  border-radius:14px;padding:20px;margin-bottom:20px;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.pix-plan-name{font-size:14px;font-weight:600;color:var(--white)}
+.pix-plan-price{
+  font-family:var(--ff-display);font-size:28px;font-weight:800;
+  color:var(--gold2);white-space:nowrap;
+}
+.pix-qr-wrap{
+  display:flex;flex-direction:column;align-items:center;gap:16px;
+  padding:24px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:16px;margin-bottom:16px;
+  min-height:240px;
+}
+.qr-img-box{
+  width:180px;height:180px;
+  border-radius:12px;
+  background:var(--surface3);
+  display:flex;align-items:center;justify-content:center;
+  overflow:hidden;
+}
+.qr-img-box img{width:100%;height:100%;border-radius:8px}
+.qr-loading{
+  display:flex;flex-direction:column;align-items:center;gap:12px;
+}
+.spin{
+  width:32px;height:32px;
+  border:3px solid var(--border);
+  border-top-color:var(--gold);
+  border-radius:50%;
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.pix-code-row{
+  display:flex;gap:8px;width:100%;
+}
+.pix-code-input{
+  flex:1;background:var(--surface2);border:1px solid var(--border);
+  border-radius:10px;padding:10px 14px;
+  font-family:var(--ff-mono);font-size:11px;color:var(--muted);
+  outline:none;user-select:all;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.pix-copy-btn{
+  padding:10px 16px;border-radius:10px;
+  background:rgba(201,149,42,.1);border:1px solid var(--border2);
+  color:var(--gold2);font-size:12px;font-weight:700;
+  cursor:pointer;white-space:nowrap;transition:all .2s;
+  font-family:var(--ff-body);
+}
+.pix-copy-btn:hover{background:rgba(201,149,42,.18)}
+.pix-status-bar{
+  display:flex;align-items:center;gap:10px;
+  background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.2);
+  border-radius:10px;padding:12px 16px;
+  font-size:13px;color:rgba(251,146,60,.9);
+  font-weight:500;margin-bottom:4px;
+}
+.pix-status-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:#fb923c;flex-shrink:0;
+  animation:pulse-dot 1.5s infinite;
+}
+.pix-status-ok{background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.2);color:#4ade80}
+.pix-status-ok .pix-status-dot{background:#4ade80;animation:none}
+.pix-expire{font-size:11px;color:var(--muted2);text-align:center;margin-top:8px}
+
+/* CARD panel */
+.card-summary{
+  background:var(--surface2);border:1px solid var(--border2);
+  border-radius:14px;padding:16px 20px;margin-bottom:20px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.card-plan-price{
+  font-family:var(--ff-display);font-size:24px;font-weight:800;color:var(--gold2);
+}
+.card-field{position:relative}
+.card-field-icon{
+  position:absolute;right:14px;top:50%;transform:translateY(-50%);
+  color:var(--muted2);pointer-events:none;
+}
+.card-flags{display:flex;gap:6px;align-items:center;margin-bottom:20px;flex-wrap:wrap}
+.card-flag{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:6px;padding:4px 10px;
+  font-size:11px;font-weight:700;color:var(--muted);
+}
+.card-err{
+  background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);
+  border-radius:10px;padding:10px 14px;
+  font-size:13px;color:#fca5a5;
+  margin-bottom:12px;display:none;
+}
+.card-err.show{display:block}
+.installments-info{
+  font-size:12px;color:var(--muted2);
+  text-align:center;margin-top:10px;
+}
+
+/* plan badge inside modal */
+.modal-plan-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  background:rgba(201,149,42,.08);border:1px solid var(--border2);
+  border-radius:100px;padding:5px 14px;
+  font-size:12px;font-weight:700;color:var(--gold2);
+  margin-bottom:20px;letter-spacing:.04em;text-transform:uppercase;
+}
+.modal-plan-badge-prem{
+  background:rgba(139,92,246,.08);border-color:rgba(139,92,246,.25);color:#a78bfa;
+}
+
+/* ═══════════════════════════════════════
+   MOBILE NAV TOGGLE
+═══════════════════════════════════════ */
+.ham{
+  display:none;
+  flex-direction:column;
+  gap:4px;
+  cursor:pointer;
+  padding:8px;
+  border-radius:8px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+}
+@media (max-width:768px){
+  .ham{display:flex}
+}
+.ham span{
+  display:block;
+  width:18px;height:2px;
+  background:var(--white);
+  border-radius:2px;
+  transition:all .2s;
+}
+.mobile-nav{
+  display:none;
+  position:fixed;
+  top:0;left:0;right:0;bottom:0;
+  background:rgba(6,5,8,.97);
+  backdrop-filter:blur(20px);
+  z-index:200;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+}
+.mobile-nav.open{display:flex}
+.mobile-nav a{
+  font-family:var(--ff-display);
+  font-size:28px;
+  font-weight:700;
+  color:var(--white);
+  text-decoration:none;
+  padding:12px;
+  transition:color .2s;
+}
+.mobile-nav a:hover{color:var(--gold2)}
+.mobile-nav-close{
+  position:absolute;
+  top:24px;right:24px;
+  width:40px;height:40px;
+  border-radius:12px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  color:var(--muted);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  font-size:18px;
+}
+</style>
+</head>
+<body>
+
+<!-- MOBILE NAV -->
+<div class="mobile-nav" id="mobileNav">
+  <div class="mobile-nav-close" onclick="closeMobileNav()">x</div>
+  <a href="#solucao" onclick="closeMobileNav()">Solucao</a>
+  <a href="#beneficios" onclick="closeMobileNav()">Beneficios</a>
+  <a href="#precos" onclick="closeMobileNav()">Precos</a>
+  <a href="#faq" onclick="closeMobileNav()">FAQ</a>
+  <a href="#" onclick="closeMobileNav();openModal()" style="color:var(--gold2);margin-top:16px">Comecar agora</a>
+</div>
+
+<!-- HEADER -->
+<header id="header">
+  <nav>
+    <a href="#" class="logo">
+      <div class="logo-mark">
+        <svg width="20" height="20" viewBox="0 0 24 24">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+          <path d="M8 12h8M12 8v8" stroke-width="2.5"/>
+        </svg>
+      </div>
+      <span class="logo-text">Estima<span>Food</span></span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="#problema">O problema</a></li>
+      <li><a href="#solucao">Solucao</a></li>
+      <li><a href="#beneficios">Beneficios</a></li>
+      <li><a href="#precos">Precos</a></li>
+      <li><a href="#faq">FAQ</a></li>
+    </ul>
+    <a href="#" class="nav-cta" onclick="openModal()">Comecar agora</a>
+    <div class="ham" onclick="openMobileNav()">
+      <span></span><span></span><span></span>
+    </div>
+  </nav>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg">
+    <div class="hero-orb orb-1"></div>
+    <div class="hero-orb orb-2"></div>
+    <div class="hero-orb orb-3"></div>
+    <div class="hero-grid"></div>
+  </div>
+  <div class="hero-inner">
+    <div class="hero-content">
+      <div class="hero-label">
+        <div class="hero-label-dot"></div>
+        Sistema de gestao para restaurantes
+      </div>
+      <h1 class="hero-h1">
+        Seu restaurante
+        <em>funcionando sozinho</em>
+        <span class="hero-h1-line2">enquanto voce cuida do que importa.</span>
+      </h1>
+      <p class="hero-sub">
+        <strong>Cardapio digital, pedidos por mesa, garcom no celular</strong> e integracao com WhatsApp — tudo em um unico sistema feito para restaurantes que querem crescer com menos caos.
+      </p>
+      <div class="hero-actions">
+        <a href="#" class="btn-primary" onclick="openModal()">
+          Testar 7 dias gratis
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+        <a href="#como-funciona" class="btn-ghost">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M6.5 6.5C6.5 5.67 7.17 5 8 5s1.5.67 1.5 1.5c0 1-1.5 1.5-1.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="8" cy="11.5" r=".5" fill="currentColor"/>
+          </svg>
+          Ver como funciona
+        </a>
+      </div>
+      <div class="hero-trust">
+        <div class="trust-avatars">
+          <div class="trust-av">R</div>
+          <div class="trust-av">M</div>
+          <div class="trust-av">J</div>
+          <div class="trust-av">A</div>
+          <div class="trust-av">K</div>
+        </div>
+        <div class="trust-text">
+          <div class="stars">★★★★★</div>
+          <strong>+180 restaurantes</strong> ja usam o Estima Food
+        </div>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="hero-float float-1">
+        <div class="float-icon-wrap">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gold2)" stroke-width="2" stroke-linecap="round">
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+          </svg>
+        </div>
+        <div class="float-label">Faturamento hoje</div>
+        <div class="float-val">R$<span style="font-size:14px"> </span>2.847</div>
+        <div class="float-sub" style="color:#4ade80">+18% vs ontem</div>
+      </div>
+      <div class="hero-mockup">
+        <div class="mockup-bar">
+          <div class="mock-dot mock-dot-r"></div>
+          <div class="mock-dot mock-dot-y"></div>
+          <div class="mock-dot mock-dot-g"></div>
+          <div class="mock-url">app.estimafood.com.br/gestor</div>
+        </div>
+        <div class="mock-screen">
+          <div class="mock-header-bar">
+            <div class="mock-logo">EstimaFood</div>
+            <div class="mock-status-pill">Online</div>
+          </div>
+          <div class="mock-stats">
+            <div class="mock-stat">
+              <div class="mock-stat-val">14<span>mesas</span></div>
+              <div class="mock-stat-lbl">Ocupadas</div>
+            </div>
+            <div class="mock-stat">
+              <div class="mock-stat-val">38</div>
+              <div class="mock-stat-lbl">Pedidos</div>
+            </div>
+            <div class="mock-stat">
+              <div class="mock-stat-val" style="color:var(--gold2)">R$<span style="font-size:13px"> </span>1.2k</div>
+              <div class="mock-stat-lbl">Faturado</div>
+            </div>
+          </div>
+          <div class="mock-orders">
+            <div class="mock-order">
+              <div class="mock-order-num">#047</div>
+              <div class="mock-order-name">Mesa 3 — 2 itens</div>
+              <div class="mock-order-badge bg-prod">Em prod.</div>
+              <div class="mock-order-val">R$ 68,00</div>
+            </div>
+            <div class="mock-order">
+              <div class="mock-order-num">#046</div>
+              <div class="mock-order-name">Mesa 7 — 4 itens</div>
+              <div class="mock-order-badge bg-pron">Pronto</div>
+              <div class="mock-order-val">R$ 142,00</div>
+            </div>
+            <div class="mock-order">
+              <div class="mock-order-num">#045</div>
+              <div class="mock-order-name">Mesa 12 — 3 itens</div>
+              <div class="mock-order-badge bg-pago">Pago</div>
+              <div class="mock-order-val">R$ 89,50</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="hero-float float-2">
+        <div class="float-label">Satisfacao</div>
+        <div class="float-val" style="font-size:16px">98,4%</div>
+        <div class="float-sub">Clientes satisfeitos</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LOGOS BAR -->
+<div class="logos-bar">
+  <div class="logos-track">
+    <div class="logos-item">Restaurante Sabor da Terra</div>
+    <div class="logos-item">Pizzaria do Ze</div>
+    <div class="logos-item">Sushi Osaka</div>
+    <div class="logos-item">Churrascaria Nordestina</div>
+    <div class="logos-item">Bistrô Contemporaneo</div>
+    <div class="logos-item">Lanchonete da Familia</div>
+    <div class="logos-item">Bar do Rique</div>
+    <div class="logos-item">Restaurante Bom Prato</div>
+    <div class="logos-item">Sabor da Terra</div>
+    <div class="logos-item">Pizzaria do Ze</div>
+    <div class="logos-item">Sushi Osaka</div>
+    <div class="logos-item">Churrascaria Nordestina</div>
+    <div class="logos-item">Bistrô Contemporaneo</div>
+    <div class="logos-item">Lanchonete da Familia</div>
+    <div class="logos-item">Bar do Rique</div>
+    <div class="logos-item">Restaurante Bom Prato</div>
+  </div>
+</div>
+
+<!-- PROBLEM -->
+<section class="problem-section" id="problema">
+  <div class="container">
+    <div class="problem-grid">
+      <div>
+        <div class="section-label">O problema real</div>
+        <h2 class="section-title">Gerir restaurante <em>nao deveria</em> ser assim.</h2>
+        <p class="section-sub">A maioria dos donos passa o dia apagando incendio. Anota pedido errado, perde comanda, cliente reclama, garcom some. Isso nao e gestao — e sobrevivencia.</p>
+        <ul class="problem-list" style="margin-top:48px">
+          <li class="problem-item">
+            <div class="problem-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v11m0 0H5m4 0h10m0-11v11m0 0H5m14 0H9"/>
+              </svg>
+            </div>
+            <div>
+              <div class="problem-item-title">Comandas no papel, erro garantido</div>
+              <div class="problem-item-text">Letra ilegivel, pedido esquecido, item errado na cozinha. O papel e o inimigo invisivel do seu lucro.</div>
+            </div>
+          </li>
+          <li class="problem-item" style="transition-delay:.1s">
+            <div class="problem-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+              </svg>
+            </div>
+            <div>
+              <div class="problem-item-title">Tempo de espera interminavel</div>
+              <div class="problem-item-text">Cliente chama garcom por minutos. Garcom vai, volta, esquece. O cliente vai embora frustrado — e nao volta mais.</div>
+            </div>
+          </li>
+          <li class="problem-item" style="transition-delay:.2s">
+            <div class="problem-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+            </div>
+            <div>
+              <div class="problem-item-title">Sem controle do caixa real</div>
+              <div class="problem-item-text">Voce nao sabe ao certo quanto faturou hoje. Nao sabe o ticket medio. Nao sabe qual prato vende mais. Gestao no escuro.</div>
+            </div>
+          </li>
+          <li class="problem-item" style="transition-delay:.3s">
+            <div class="problem-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </div>
+            <div>
+              <div class="problem-item-title">Zero relacionamento com o cliente</div>
+              <div class="problem-item-text">Nao sabe o nome de quem ja veio 10 vezes. Nao tem como mandar promocao. Cada cliente e um estranho.</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+      <div class="problem-visual fade-up">
+        <div class="chaos-card">
+          <div class="chaos-title">O dia a dia sem o Estima Food</div>
+          <div class="chaos-item">
+            <div class="chaos-num">08h</div>
+            <div class="chaos-text">Anotar estoque no caderno</div>
+            <div class="chaos-x">x</div>
+          </div>
+          <div class="chaos-item">
+            <div class="chaos-num">11h</div>
+            <div class="chaos-text">Cliente reclamou do pedido errado</div>
+            <div class="chaos-x">x</div>
+          </div>
+          <div class="chaos-item">
+            <div class="chaos-num">12h</div>
+            <div class="chaos-text">Garcom nao viu a comanda caida</div>
+            <div class="chaos-x">x</div>
+          </div>
+          <div class="chaos-item">
+            <div class="chaos-num">13h</div>
+            <div class="chaos-text">Fila de 20 min na hora do almoco</div>
+            <div class="chaos-x">x</div>
+          </div>
+          <div class="chaos-item">
+            <div class="chaos-num">15h</div>
+            <div class="chaos-text">Nao fecha o caixa direito</div>
+            <div class="chaos-x">x</div>
+          </div>
+          <div class="chaos-item">
+            <div class="chaos-num">22h</div>
+            <div class="chaos-text">Vai pra casa sem saber o faturamento</div>
+            <div class="chaos-x">x</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SOLUTION -->
+<section id="solucao">
+  <div class="container">
+    <div class="solution-center fade-up">
+      <div class="section-label">A solucao</div>
+      <h2 class="section-title">Um sistema que <em>trabalha por voce</em></h2>
+      <p class="section-sub">O Estima Food conecta cliente, garcom, cozinha e gestor em tempo real — sem papel, sem ruido, sem erro.</p>
+    </div>
+    <div class="solutions-grid">
+      <div class="sol-card">
+        <div class="sol-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><path d="M12 18h.01"/>
+          </svg>
+        </div>
+        <div class="sol-title">Cardapio Digital por QR Code</div>
+        <div class="sol-text">O cliente escaneia o QR Code da mesa, vê o cardapio completo com fotos e faz o pedido diretamente do celular. Sem depender do garcom para cada etapa.</div>
+      </div>
+      <div class="sol-card" style="transition-delay:.1s">
+        <div class="sol-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+        </div>
+        <div class="sol-title">App do Garcom em Tempo Real</div>
+        <div class="sol-text">O garcom recebe os pedidos no celular no instante em que sao feitos. Notificacoes, controle de mesas e atualizacoes de status — tudo no bolso.</div>
+      </div>
+      <div class="sol-card" style="transition-delay:.2s">
+        <div class="sol-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v11m0 0H5m4 0h10m0-11v11"/>
+          </svg>
+        </div>
+        <div class="sol-title">Gestao Completa de Pedidos</div>
+        <div class="sol-text">Painel do gestor com visao em tempo real de todas as mesas, pedidos, status e faturamento. Tome decisoes com dados, nao com suposicoes.</div>
+      </div>
+      <div class="sol-card" style="transition-delay:.3s">
+        <div class="sol-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+        <div class="sol-title">WhatsApp Integrado</div>
+        <div class="sol-text">Chat com clientes direto no painel. Disparo automatico de aniversario, retorno e cashback. Fidelize sem esforco manual.</div>
+      </div>
+      <div class="sol-card" style="transition-delay:.4s">
+        <div class="sol-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+          </svg>
+        </div>
+        <div class="sol-title">Cashback Automatico</div>
+        <div class="sol-text">Sistema de pontos e cashback que faz o cliente querer voltar. Configuravel, automatico e integrado ao historico de compras.</div>
+      </div>
+      <div class="sol-card" style="transition-delay:.5s">
+        <div class="sol-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+        </div>
+        <div class="sol-title">Relatorios e Analytics</div>
+        <div class="sol-text">Faturamento diario, mensal e anual. Pratos mais vendidos, ticket medio, horarios de pico. Os dados que voce precisava para crescer.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BENEFITS -->
+<section class="benefits-section" id="beneficios">
+  <div class="container">
+    <div class="benefits-layout">
+      <div class="benefits-sticky">
+        <div class="section-label">Resultados reais</div>
+        <h2 class="section-title">O que muda quando voce <em>assume o controle</em></h2>
+        <p class="section-sub">Restaurantes que migraram para o Estima Food relatam menos erros, mais mesas atendidas e aumento de faturamento logo nos primeiros dias.</p>
+        <div style="margin-top:40px">
+          <a href="#" class="btn-primary" onclick="openModal()">
+            Quero esses resultados
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+      <div class="benefits-list">
+        <div class="benefit-row">
+          <div class="benefit-num">01</div>
+          <div class="benefit-body">
+            <div class="benefit-title">Pedidos sem erro, cozinha sem grito</div>
+            <div class="benefit-text">Com o pedido digital, a cozinha recebe exatamente o que o cliente pediu. Sem letra ilegivel, sem comanda perdida, sem item faltando.</div>
+            <div class="benefit-tag">Zero retrabalho</div>
+          </div>
+        </div>
+        <div class="benefit-row" style="transition-delay:.1s">
+          <div class="benefit-num">02</div>
+          <div class="benefit-body">
+            <div class="benefit-title">Mais mesas, mais faturamento</div>
+            <div class="benefit-text">Com o cliente fazendo o proprio pedido, o garcom atende mais mesas simultaneamente. O giro aumenta sem precisar contratar mais.</div>
+            <div class="benefit-tag">+30% de produtividade</div>
+          </div>
+        </div>
+        <div class="benefit-row" style="transition-delay:.2s">
+          <div class="benefit-num">03</div>
+          <div class="benefit-body">
+            <div class="benefit-title">Cliente fiel que volta sempre</div>
+            <div class="benefit-text">O cashback automatico e o WhatsApp integrado criam um relacionamento continuo. O cliente se sente valorizado e volta — e traz amigos.</div>
+            <div class="benefit-tag">Retencao elevada</div>
+          </div>
+        </div>
+        <div class="benefit-row" style="transition-delay:.3s">
+          <div class="benefit-num">04</div>
+          <div class="benefit-body">
+            <div class="benefit-title">Gestao visual e intuitiva</div>
+            <div class="benefit-text">Tudo em um painel elegante. Mesas, pedidos, estoque, relatorios e configuracoes — sem precisar de treinamento longo ou suporte tecnico constante.</div>
+            <div class="benefit-tag">Simples de usar</div>
+          </div>
+        </div>
+        <div class="benefit-row" style="transition-delay:.4s">
+          <div class="benefit-num">05</div>
+          <div class="benefit-body">
+            <div class="benefit-title">Pagamento rapido, cliente satisfeito</div>
+            <div class="benefit-text">PIX, cartao e pagamento na mesa — o cliente paga quando quiser, sem esperar o garcom trazer a maquininha. Saida mais agil, mesa livre mais rapido.</div>
+            <div class="benefit-tag">Checkout fluido</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="como-funciona">
+  <div class="container">
+    <div class="steps-center fade-up">
+      <div class="section-label">Como funciona</div>
+      <h2 class="section-title">Tres passos e voce esta <em>operando</em></h2>
+      <p class="section-sub">Nao precisa de TI, nao precisa de treinamento de dias. Em menos de uma hora, seu restaurante ja esta no ar.</p>
+    </div>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num-wrap">
+          <div class="step-num-ring"></div>
+          <div class="step-num">1</div>
+        </div>
+        <h3 class="step-title">Cadastre seu restaurante</h3>
+        <p class="step-text">Preencha os dados do seu negocio, monte o cardapio com fotos e precos, configure as mesas. Interface simples, processo rapido.</p>
+      </div>
+      <div class="step-card" style="transition-delay:.15s">
+        <div class="step-num-wrap">
+          <div class="step-num-ring" style="animation-delay:.5s"></div>
+          <div class="step-num">2</div>
+        </div>
+        <h3 class="step-title">Coloque os QR Codes nas mesas</h3>
+        <p class="step-text">Imprima ou use o QR Code digital em cada mesa. O cliente escaneia, ve o cardapio e faz o pedido — sem precisar baixar nenhum aplicativo.</p>
+      </div>
+      <div class="step-card" style="transition-delay:.3s">
+        <div class="step-num-wrap">
+          <div class="step-num-ring" style="animation-delay:1s"></div>
+          <div class="step-num">3</div>
+        </div>
+        <h3 class="step-title">Opera e fatura mais</h3>
+        <p class="step-text">Pedidos chegam em tempo real na cozinha e no celular do garcom. Voce acompanha tudo no painel e encerra o dia sabendo exatamente o que faturou.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section class="testimonials-section" id="depoimentos">
+  <div class="container">
+    <div class="testimonials-header fade-up">
+      <div class="section-label">Depoimentos</div>
+      <h2 class="section-title">O que dizem quem <em>ja usa</em></h2>
+    </div>
+    <div class="metrics-row fade-up">
+      <div class="metric-block">
+        <div class="metric-val">180<span>+</span></div>
+        <div class="metric-lbl">Restaurantes ativos</div>
+      </div>
+      <div class="metric-block">
+        <div class="metric-val">98<span>%</span></div>
+        <div class="metric-lbl">Taxa de satisfacao</div>
+      </div>
+      <div class="metric-block">
+        <div class="metric-val">30<span>%</span></div>
+        <div class="metric-lbl">Mais mesas atendidas</div>
+      </div>
+      <div class="metric-block">
+        <div class="metric-val">7<span>dias</span></div>
+        <div class="metric-lbl">Para ver resultado</div>
+      </div>
+    </div>
+    <div class="testi-grid">
+      <div class="testi-card">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-text">"Em uma semana ja notei a diferenca. Os garcons ficaram muito mais organizados e os clientes adoraram pedir pelo celular. O faturamento subiu visivelmente."</p>
+        <div class="testi-author">
+          <div class="testi-av">M</div>
+          <div>
+            <div class="testi-name">Marcos Andrade</div>
+            <div class="testi-role">Dono — Restaurante Sabor da Terra, CE</div>
+          </div>
+        </div>
+      </div>
+      <div class="testi-card" style="transition-delay:.1s">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-text">"O WhatsApp integrado mudou meu relacionamento com o cliente. Consigo avisar promos, aniversario, novidades — e os clientes respondem muito bem. Retencao aumentou."</p>
+        <div class="testi-author">
+          <div class="testi-av">J</div>
+          <div>
+            <div class="testi-name">Juliane Costa</div>
+            <div class="testi-role">Gerente — Pizzaria Forno de Pedra, RN</div>
+          </div>
+        </div>
+      </div>
+      <div class="testi-card" style="transition-delay:.2s">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-text">"Antes eu ficava perdido no caixa. Hoje eu sei exatamente o que vendi, qual prato mais saiu e qual horario e o pico. Gestao de verdade por um preco que faz sentido."</p>
+        <div class="testi-author">
+          <div class="testi-av">R</div>
+          <div>
+            <div class="testi-name">Roberto Melo</div>
+            <div class="testi-role">Proprietario — Bar do Roberto, PB</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DIFFERENTIALS -->
+<section id="diferenciais">
+  <div class="container">
+    <div class="fade-up" style="text-align:center;margin-bottom:0">
+      <div class="section-label" style="justify-content:center">Por que escolher</div>
+      <h2 class="section-title" style="text-align:center">O que torna o Estima Food <em>diferente</em></h2>
+      <p class="section-sub" style="margin:0 auto;text-align:center">Nao e mais um sistema generico. E feito especificamente para a realidade do restaurante brasileiro.</p>
+    </div>
+    <div class="diff-grid">
+      <div class="diff-card">
+        <div class="diff-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="diff-title">Tempo real sem travamento</div>
+          <div class="diff-text">Tecnologia SSE garante que pedidos, mudancas de mesa e alertas cheguem em tempo real — sem refresh, sem atraso, sem perda de pedido.</div>
+        </div>
+      </div>
+      <div class="diff-card" style="transition-delay:.1s">
+        <div class="diff-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><path d="M12 18h.01"/>
+          </svg>
+        </div>
+        <div>
+          <div class="diff-title">Funciona offline no garcom</div>
+          <div class="diff-text">O app do garcom usa Service Worker e cache inteligente. Mesmo se a internet cair por segundos, ele continua recebendo notificacoes e operando.</div>
+        </div>
+      </div>
+      <div class="diff-card" style="transition-delay:.2s">
+        <div class="diff-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="diff-title">Dados 100% seus</div>
+          <div class="diff-text">Seu restaurante, seus clientes, seus dados. Nao compartilhamos informacoes com terceiros. Backup automatico e seguranca de nivel bancario.</div>
+        </div>
+      </div>
+      <div class="diff-card" style="transition-delay:.3s">
+        <div class="diff-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+          </svg>
+        </div>
+        <div>
+          <div class="diff-title">Suporte que responde de verdade</div>
+          <div class="diff-text">Suporte humano via WhatsApp. Sem bot, sem fila infinita. Equipe brasileira que entende do seu negocio e responde rapido.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing-section" id="precos">
+  <div class="container">
+    <div class="pricing-center fade-up">
+      <div class="section-label">Planos e precos</div>
+      <h2 class="section-title">Investimento que <em>se paga rapido</em></h2>
+      <p class="section-sub">Escolha o plano ideal para o tamanho do seu negocio. Sem taxa de setup, sem contrato de fidelidade.</p>
+    </div>
+    <div class="pricing-grid">
+      <div class="pricing-card pricing-card-ess">
+        <div class="pricing-plan-label">Plano</div>
+        <div class="pricing-name">Essencial</div>
+        <div class="pricing-price-row">
+          <span class="pricing-currency">R$</span>
+          <span class="pricing-amount" id="price-ess-int">79</span>
+          <span style="font-family:var(--ff-display);font-size:28px;font-weight:700;color:var(--white)" id="price-ess-dec">,99</span>
+          <span class="pricing-period">/ mes</span>
+        </div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:0">Para restaurantes que querem organizar a operacao e profissionalizar o atendimento.</p>
+        <div class="pricing-divider"></div>
+        <ul class="pricing-features">
+          <li><div class="feat-check feat-check-ess"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Gestao de pedidos (Kanban)</li>
+          <li><div class="feat-check feat-check-ess"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>PDV / Pedidos no balcao</li>
+          <li><div class="feat-check feat-check-ess"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Gestor de cardapio completo</li>
+          <li><div class="feat-check feat-check-ess"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Mesas e garcons (app mobile)</li>
+          <li><div class="feat-check feat-check-ess"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Cardapio publico online</li>
+          <li><div class="feat-check feat-check-ess"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Automacoes de WhatsApp</li>
+          <li><div class="feat-check feat-check-ess"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Satisfacao e avaliacoes</li>
+          <li><div class="feat-check feat-check-ess"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>QR Code por mesa</li>
+          <li><div class="feat-check feat-check-ess"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Relatorios e desempenho</li>
+          <li><div class="feat-check feat-check-ess"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Caixa e movimentos financeiros</li>
+          <li><div class="feat-check feat-check-ess"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Programa de fidelidade (cashback)</li>
+          <li><div class="feat-check feat-check-ess"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Impressao termica de pedidos</li>
+        </ul>
+        <button class="pricing-trial-btn" onclick="abrirTrial('essencial')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Testar 7 dias gratis
+        </button>
+        <div class="pricing-separator"><span>ou</span></div>
+        <button class="btn-pricing btn-pricing-ess" onclick="abrirPagamento('essencial')">Assinar Essencial</button>
+      </div>
+
+      <div class="pricing-card pricing-card-prem">
+        <div class="pricing-badge">Mais popular</div>
+        <div class="pricing-plan-label">Plano</div>
+        <div class="pricing-name" style="color:var(--gold2)">Premium</div>
+        <div class="pricing-price-row">
+          <span class="pricing-currency" style="color:var(--muted)">R$</span>
+          <span class="pricing-amount" id="price-pre-int">99</span>
+          <span style="font-family:var(--ff-display);font-size:28px;font-weight:700;color:var(--gold2)" id="price-pre-dec">,90</span>
+          <span class="pricing-period">/ mes</span>
+        </div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:0">Tudo do Essencial mais inteligencia artificial integrada ao WhatsApp para automatizar o atendimento.</p>
+        <div class="pricing-divider" style="background:var(--border2)"></div>
+        <ul class="pricing-features">
+          <li><div class="feat-check feat-check-prem"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Gestao de pedidos (Kanban)</li>
+          <li><div class="feat-check feat-check-prem"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>PDV / Pedidos no balcao</li>
+          <li><div class="feat-check feat-check-prem"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Gestor de cardapio completo</li>
+          <li><div class="feat-check feat-check-prem"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Mesas e garcons (app mobile)</li>
+          <li><div class="feat-check feat-check-prem"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Cardapio publico online</li>
+          <li><div class="feat-check feat-check-prem"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Automacoes de WhatsApp</li>
+          <li><div class="feat-check feat-check-prem"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Satisfacao e avaliacoes</li>
+          <li><div class="feat-check feat-check-prem"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>QR Code por mesa</li>
+          <li><div class="feat-check feat-check-prem"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Relatorios e desempenho</li>
+          <li><div class="feat-check feat-check-prem"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Caixa e movimentos financeiros</li>
+          <li><div class="feat-check feat-check-prem"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Programa de fidelidade (cashback)</li>
+          <li><div class="feat-check feat-check-prem"><svg viewBox="0 0 12 12" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6l3 3 5-5"/></svg></div>Impressao termica de pedidos</li>
+          <li style="background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.25);border-radius:10px;padding:8px 10px;margin-top:4px">
+            <div class="feat-check" style="background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.3);width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 12 12" fill="none" width="10" height="10" stroke="var(--purple)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 1l1 2.5L10 4 7.5 6.5l.5 3L6 8.5 3 9.5l.5-3L1 4l3-.5z"/></svg></div>
+            <span style="color:var(--white);font-weight:600">Agente IA no WhatsApp</span>
+          </li>
+          <li style="background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.25);border-radius:10px;padding:8px 10px">
+            <div class="feat-check" style="background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.3);width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 12 12" fill="none" width="10" height="10" stroke="var(--purple)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 1l1 2.5L10 4 7.5 6.5l.5 3L6 8.5 3 9.5l.5-3L1 4l3-.5z"/></svg></div>
+            <span style="color:var(--white);font-weight:600">Simulador do robo IA</span>
+          </li>
+        </ul>
+        <button class="pricing-trial-btn pricing-trial-prem" onclick="abrirTrial('premium')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Testar 7 dias gratis
+        </button>
+        <div class="pricing-separator"><span>ou</span></div>
+        <button class="btn-pricing btn-pricing-prem" onclick="abrirPagamento('premium')">Assinar Premium</button>
+      </div>
+    </div>
+    <div class="pricing-guarantee fade-up">
+      <div class="guarantee-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      Garantia de 7 dias. Se nao gostar, devolvemos cada centavo — sem perguntas.
+    </div>
+    <div class="payment-methods fade-up" style="margin-top:16px">
+      <span style="font-size:12px;color:var(--muted2)">Aceitamos:</span>
+      <div class="pay-pill">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+        Cartao de credito
+      </div>
+      <div class="pay-pill">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l7.07 7.07M20 4l-7.07 7.07M4 20l7.07-7.07M20 20l-7.07-7.07"/></svg>
+        <span style="color:var(--gold)">PIX</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq" style="background:var(--deep)">
+  <div class="container">
+    <div class="faq-grid">
+      <div>
+        <div class="section-label">Duvidas</div>
+        <h2 class="section-title" style="margin-bottom:40px">Perguntas <em>frequentes</em></h2>
+        <div class="faq-list">
+          <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">
+              <span class="faq-q-text">Preciso de equipamento especial ou app para baixar?</span>
+              <div class="faq-arrow">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+              </div>
+            </div>
+            <div class="faq-a">
+              <div class="faq-a-inner">Nao. O sistema roda no navegador do celular ou computador. O cliente escaneia o QR Code sem precisar baixar nenhum aplicativo. O garcom usa o celular pessoal.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">
+              <span class="faq-q-text">Quanto tempo leva para montar o cardapio?</span>
+              <div class="faq-arrow">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+              </div>
+            </div>
+            <div class="faq-a">
+              <div class="faq-a-inner">Em media, 30 a 60 minutos para um cardapio completo. A interface e intuitiva, e nossa equipe pode te ajudar na configuracao inicial sem custo adicional.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">
+              <span class="faq-q-text">Posso cancelar a qualquer momento?</span>
+              <div class="faq-arrow">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+              </div>
+            </div>
+            <div class="faq-a">
+              <div class="faq-a-inner">Sim, sem multa e sem burocracia. Voce cancela pelo painel ou via suporte. Nao existe fidelidade minima — mas a maioria fica porque ve resultado real.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">
+              <span class="faq-q-text">Como funciona o pagamento por PIX e cartao?</span>
+              <div class="faq-arrow">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+              </div>
+            </div>
+            <div class="faq-a">
+              <div class="faq-a-inner">O cliente pode pagar direto pela mesa via PIX com QR Code gerado na hora, ou o garcom pode processar o cartao fisico. O sistema registra automaticamente e fecha a mesa.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">
+              <span class="faq-q-text">Funciona para bar, pizzaria, lanchonete tambem?</span>
+              <div class="faq-arrow">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+              </div>
+            </div>
+            <div class="faq-a">
+              <div class="faq-a-inner">Sim. O sistema e flexivel para qualquer tipo de estabelecimento que trabalhe com mesas, pedidos e cardapio. Bares, pizzarias, churrascarias, lanchonetes — todos estao usando.</div>
+            </div>
+          </div>
+          <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">
+              <span class="faq-q-text">E possivel ter mais de um restaurante no mesmo plano?</span>
+              <div class="faq-arrow">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+              </div>
+            </div>
+            <div class="faq-a">
+              <div class="faq-a-inner">Cada unidade tem seu proprio acesso e plano. Para redes, entre em contato para um plano personalizado com desconto por volume.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="faq-cta-block fade-up">
+          <div class="faq-cta-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <h3 class="faq-cta-title">Ainda tem duvida?</h3>
+          <p class="faq-cta-text">Nossa equipe esta disponivel no WhatsApp para responder qualquer pergunta antes de voce assinar. Sem pressao, sem script de vendas.</p>
+          <a href="https://wa.me/5500000000000" target="_blank" class="btn-primary" style="display:inline-flex;justify-content:center;width:100%">
+            Falar no WhatsApp
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </a>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:28px;margin-top:16px;fade-up:true">
+          <div style="font-size:13px;color:var(--muted);margin-bottom:16px;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Seu plano inclui:</div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;align-items:center;gap:12px;font-size:13px;color:var(--white)">
+              <div style="width:6px;height:6px;border-radius:50%;background:var(--gold);flex-shrink:0"></div>
+              Onboarding guiado gratis
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;font-size:13px;color:var(--white)">
+              <div style="width:6px;height:6px;border-radius:50%;background:var(--gold);flex-shrink:0"></div>
+              Suporte via WhatsApp
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;font-size:13px;color:var(--white)">
+              <div style="width:6px;height:6px;border-radius:50%;background:var(--gold);flex-shrink:0"></div>
+              Atualizacoes continuas sem custo
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;font-size:13px;color:var(--white)">
+              <div style="width:6px;height:6px;border-radius:50%;background:var(--gold);flex-shrink:0"></div>
+              Backup diario automatico
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;font-size:13px;color:var(--white)">
+              <div style="width:6px;height:6px;border-radius:50%;background:var(--gold);flex-shrink:0"></div>
+              7 dias de garantia total
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="final-cta">
+  <div class="final-cta-bg">
+    <div class="final-cta-circle"></div>
+    <div class="final-cta-ring ring-1"></div>
+    <div class="final-cta-ring ring-2"></div>
+    <div class="final-cta-ring ring-3"></div>
+  </div>
+  <div class="container" style="position:relative;z-index:1">
+    <div class="fade-up">
+      <h2 class="final-h2">
+        Chega de gestao<br>no <em>improviso.</em>
+      </h2>
+      <p class="final-sub">Comece hoje, veja resultado na primeira semana. Sem contrato, sem complicacao.</p>
+      <div class="final-actions">
+        <a href="#" class="btn-primary" onclick="openModal()" style="font-size:16px;padding:18px 40px">
+          Comecar 7 dias gratis
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+        <a href="#precos" class="btn-ghost" style="font-size:15px">Ver planos e precos</a>
+      </div>
+      <div style="margin-top:40px;font-size:13px;color:var(--muted2);display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap">
+        <span>Sem cartao para comecar</span>
+        <span style="color:var(--border)">|</span>
+        <span>Cancele quando quiser</span>
+        <span style="color:var(--border)">|</span>
+        <span>Suporte em portugues</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="#" class="logo">
+          <div class="logo-mark" style="width:30px;height:30px;border-radius:8px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+              <path d="M8 12h8M12 8v8"/>
+            </svg>
+          </div>
+          <span class="logo-text" style="font-size:16px">Estima<span>Food</span></span>
+        </a>
+        <p class="footer-desc">Sistema de gestao completo para restaurantes brasileiros. Do pedido ao pagamento, tudo conectado.</p>
+      </div>
+      <div>
+        <div class="footer-col-title">Produto</div>
+        <ul class="footer-links">
+          <li><a href="#solucao">Como funciona</a></li>
+          <li><a href="#beneficios">Beneficios</a></li>
+          <li><a href="#precos">Planos</a></li>
+          <li><a href="#diferenciais">Diferenciais</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-col-title">Suporte</div>
+        <ul class="footer-links">
+          <li><a href="#faq">FAQ</a></li>
+          <li><a href="#">Documentacao</a></li>
+          <li><a href="#">WhatsApp</a></li>
+          <li><a href="#">Status do sistema</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-col-title">Legal</div>
+        <ul class="footer-links">
+          <li><a href="#">Termos de uso</a></li>
+          <li><a href="#">Privacidade</a></li>
+          <li><a href="#">LGPD</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="footer-copy">2024 Estima Food. Todos os direitos reservados.</div>
+      <div class="footer-badge">
+        <div class="footer-dot"></div>
+        Feito no Brasil para restaurantes brasileiros
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- ════════════════════════════════════════
+     MODAL: TESTE GRATIS
+════════════════════════════════════════ -->
+<div class="moverlay" id="modalTrial">
+  <div class="mbox">
+    <button class="mclose" onclick="fecharModal('modalTrial')">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1l10 10M11 1L1 11"/></svg>
+    </button>
+    <div class="mbox-inner" id="trialForm">
+      <div class="modal-icon-wrap modal-icon-gold">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--gold2)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+      </div>
+      <div class="modal-plan-badge" id="trial-badge">Essencial — 7 dias gratis</div>
+      <h2>Comece seu teste agora</h2>
+      <p class="mbox-sub">Preencha seus dados e nossa equipe configurara o sistema para voce em minutos. Zero cobranca durante o teste.</p>
+      <div class="mf-row">
+        <div>
+          <label class="mf-label">Seu nome</label>
+          <input class="mf-input" id="t-nome" type="text" placeholder="Ex: Marcos Andrade">
+        </div>
+        <div>
+          <label class="mf-label">WhatsApp</label>
+          <input class="mf-input" id="t-tel" type="tel" placeholder="(85) 99999-9999" oninput="mascTel(this)">
+        </div>
+      </div>
+      <div class="mf-group">
+        <label class="mf-label">Nome do restaurante</label>
+        <input class="mf-input" id="t-rest" type="text" placeholder="Ex: Restaurante Sabor da Terra">
+      </div>
+      <div class="mf-row">
+        <div>
+          <label class="mf-label">Cidade / Estado</label>
+          <input class="mf-input" id="t-cidade" type="text" placeholder="Ex: Fortaleza, CE">
+        </div>
+        <div>
+          <label class="mf-label">Tipo de negocio</label>
+          <select class="mf-input mf-select" id="t-tipo">
+            <option value="">Selecione...</option>
+            <option>Restaurante</option>
+            <option>Pizzaria</option>
+            <option>Hamburgueria</option>
+            <option>Bar</option>
+            <option>Churrascaria</option>
+            <option>Lanchonete</option>
+            <option>Cafeteria</option>
+            <option>Outro</option>
+          </select>
+        </div>
+      </div>
+      <div class="mf-group">
+        <label class="mf-label">Quantas mesas voce tem?</label>
+        <select class="mf-input mf-select" id="t-mesas">
+          <option value="">Selecione...</option>
+          <option>Ate 5 mesas</option>
+          <option>6 a 15 mesas</option>
+          <option>16 a 30 mesas</option>
+          <option>Mais de 30 mesas</option>
+        </select>
+      </div>
+      <input type="hidden" id="t-plano" value="essencial">
+      <button class="mbtn-main" id="btnTrial" onclick="enviarTrial()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        Solicitar meu teste gratis
+      </button>
+      <p class="mprivacy">Seus dados estao seguros. Entraremos em contato via WhatsApp em ate 30 minutos.</p>
+    </div>
+    <div class="msuccess" id="trialSuccess">
+      <div class="msuccess-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+      <h3>Solicitacao enviada!</h3>
+      <p>Nossa equipe recebeu seu contato e vai chamar no seu WhatsApp em instantes para ativar o seu teste. Bem-vindo ao Estima Food.</p>
+      <button class="mbtn-sec" style="margin-top:24px" onclick="fecharModal('modalTrial')">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     MODAL: PAGAMENTO (PIX + CARTAO)
+════════════════════════════════════════ -->
+<div class="moverlay" id="modalPag">
+  <div class="mbox">
+    <button class="mclose" onclick="fecharPagamento()">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1l10 10M11 1L1 11"/></svg>
+    </button>
+    <div class="mbox-inner" id="pagContent">
+      <div class="modal-icon-wrap modal-icon-gold">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--gold2)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      </div>
+      <div class="modal-plan-badge" id="pag-badge">Plano Essencial</div>
+      <h2>Assinar agora</h2>
+      <p class="mbox-sub">Escolha a forma de pagamento. Seu plano e ativado automaticamente apos a confirmacao.</p>
+
+      <!-- TABS -->
+      <div class="pay-tabs" id="payTabs">
+        <button class="pay-tab active" id="tab-pix" onclick="setPayTab('pix')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l7.07 7.07M20 4l-7.07 7.07M4 20l7.07-7.07M20 20l-7.07-7.07"/></svg>
+          PIX
+        </button>
+        <button class="pay-tab" id="tab-cartao" onclick="setPayTab('cartao')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+          Cartao de Credito
+        </button>
+      </div>
+
+      <!-- PIX PANEL -->
+      <div class="pay-panel active" id="panel-pix">
+        <div class="pix-summary">
+          <div>
+            <div class="pix-plan-name" id="pix-plan-nome">Plano Essencial</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:3px">Renovacao mensal — 30 dias</div>
+          </div>
+          <div class="pix-plan-price" id="pix-plan-valor">R$ 79,99</div>
+        </div>
+
+        <div id="pix-gerar-wrap">
+          <button class="mbtn-main" id="btnGerarPix" onclick="gerarPix()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l7.07 7.07M20 4l-7.07 7.07M4 20l7.07-7.07M20 20l-7.07-7.07"/></svg>
+            Gerar QR Code PIX
+          </button>
+        </div>
+
+        <div id="pix-qr-wrap" style="display:none">
+          <div class="pix-qr-wrap">
+            <div class="qr-img-box" id="pix-qr-img">
+              <div class="qr-loading">
+                <div class="spin"></div>
+                <span style="font-size:12px;color:var(--muted)">Gerando QR Code...</span>
+              </div>
+            </div>
+            <div style="font-size:13px;color:var(--muted);text-align:center;line-height:1.5">
+              Abra o app do seu banco, escaneie o QR Code e confirme o pagamento
+            </div>
+          </div>
+          <div class="pix-code-row" id="pix-code-row" style="display:none">
+            <input class="pix-code-input" id="pix-code-val" readonly placeholder="Codigo PIX...">
+            <button class="pix-copy-btn" onclick="copiarPix()">Copiar</button>
+          </div>
+          <div class="pix-status-bar" id="pix-status-bar">
+            <div class="pix-status-dot"></div>
+            <span id="pix-status-txt">Aguardando pagamento...</span>
+          </div>
+          <div class="pix-expire" id="pix-expire">QR Code valido por <span id="pix-timer">10:00</span></div>
+        </div>
+      </div>
+
+      <!-- CARTAO PANEL -->
+      <div class="pay-panel" id="panel-cartao">
+        <div class="card-summary">
+          <div>
+            <div style="font-size:13px;color:var(--muted);margin-bottom:2px" id="card-plan-nome">Plano Essencial</div>
+            <div style="font-size:11px;color:var(--muted2)">1x sem juros</div>
+          </div>
+          <div class="card-plan-price" id="card-plan-valor">R$ 79,99</div>
+        </div>
+        <div class="card-flags">
+          <div class="card-flag">Visa</div>
+          <div class="card-flag">Mastercard</div>
+          <div class="card-flag">Elo</div>
+          <div class="card-flag">Amex</div>
+          <div style="font-size:11px;color:var(--muted2);margin-left:4px">e outros</div>
+        </div>
+        <div class="card-err" id="card-err"></div>
+        <div class="mf-group">
+          <label class="mf-label">Numero do cartao</label>
+          <div class="card-field">
+            <input class="mf-input" id="c-num" type="tel" maxlength="19" placeholder="0000 0000 0000 0000" oninput="mascCard(this)" autocomplete="cc-number">
+            <div class="card-field-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+            </div>
+          </div>
+        </div>
+        <div class="mf-row">
+          <div>
+            <label class="mf-label">Validade</label>
+            <input class="mf-input" id="c-exp" type="tel" maxlength="5" placeholder="MM/AA" oninput="mascExp(this)" autocomplete="cc-exp">
+          </div>
+          <div>
+            <label class="mf-label">CVV</label>
+            <input class="mf-input" id="c-cvv" type="tel" maxlength="4" placeholder="123" autocomplete="cc-csc">
+          </div>
+        </div>
+        <div class="mf-group">
+          <label class="mf-label">Nome no cartao</label>
+          <input class="mf-input" id="c-nome" type="text" placeholder="NOME SOBRENOME" style="text-transform:uppercase" autocomplete="cc-name">
+        </div>
+        <div class="mf-row">
+          <div>
+            <label class="mf-label">E-mail</label>
+            <input class="mf-input" id="c-email" type="email" placeholder="seu@email.com" autocomplete="email">
+          </div>
+          <div>
+            <label class="mf-label">CPF do titular</label>
+            <input class="mf-input" id="c-cpf" type="tel" maxlength="14" placeholder="000.000.000-00" oninput="mascCpf(this)" autocomplete="off">
+          </div>
+        </div>
+        <button class="mbtn-main" id="btnPagarCartao" onclick="pagarCartao()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Pagar com cartao
+        </button>
+        <p class="mprivacy">Pagamento processado pelo Mercado Pago. Seus dados de cartao sao criptografados e nao ficam armazenados.</p>
+      </div>
+    </div>
+
+    <!-- Sucesso pagamento -->
+    <div class="mbox-inner msuccess" id="pagSuccess">
+      <div class="msuccess-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+      <h3>Pagamento confirmado!</h3>
+      <p>Seu plano foi ativado. Acesse o painel do gestor para comecar a configurar seu restaurante.</p>
+      <button class="mbtn-main" style="margin-top:28px" onclick="fecharPagamento()">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════
+// PRECOS DINAMICOS (carrega da API)
+// ═══════════════════════════════════════
+const _precos = { essencial: 79.99, premium: 99.90 };
+const _fmtPreco = v => v.toFixed(2).replace('.', ',');
+
+async function carregarPrecos() {
+  try {
+    const r = await fetch('/api/planos/precos');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.essencial) _precos.essencial = parseFloat(d.essencial);
+    if (d.premium)   _precos.premium   = parseFloat(d.premium);
+    const fmtParts = (v) => {
+      const [i, c] = _fmtPreco(v).split(',');
+      return { int: i, dec: ',' + c };
+    };
+    const e = fmtParts(_precos.essencial);
+    const p = fmtParts(_precos.premium);
+    document.getElementById('price-ess-int').textContent = e.int;
+    document.getElementById('price-ess-dec').textContent = e.dec;
+    document.getElementById('price-pre-int').textContent = p.int;
+    document.getElementById('price-pre-dec').textContent = p.dec;
+  } catch(e) {}
+}
+carregarPrecos();
+
+// ═══════════════════════════════════════
+// HEADER SCROLL
+// ═══════════════════════════════════════
+const header = document.getElementById('header');
+window.addEventListener('scroll', () => {
+  header.classList.toggle('scrolled', window.scrollY > 60);
+}, { passive: true });
+
+// ═══════════════════════════════════════
+// SCROLL ANIMATIONS
+// ═══════════════════════════════════════
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) entry.target.classList.add('visible');
+  });
+}, { threshold: 0.12, rootMargin: '0px 0px -60px 0px' });
+
+document.querySelectorAll(
+  '.sol-card, .benefit-row, .problem-item, .step-card, .testi-card, .diff-card, .pricing-card, .fade-up'
+).forEach(el => observer.observe(el));
+
+['sol-card','testi-card','diff-card'].forEach(cls => {
+  document.querySelectorAll('.' + cls).forEach((el, i) => {
+    el.style.transitionDelay = (i * 0.09) + 's';
+  });
+});
+
+// ═══════════════════════════════════════
+// FAQ
+// ═══════════════════════════════════════
+function toggleFaq(btn) {
+  const item = btn.closest('.faq-item');
+  const answer = item.querySelector('.faq-a');
+  const isOpen = item.classList.contains('open');
+  document.querySelectorAll('.faq-item.open').forEach(i => {
+    i.classList.remove('open');
+    i.querySelector('.faq-a').style.maxHeight = '0';
+  });
+  if (!isOpen) {
+    item.classList.add('open');
+    answer.style.maxHeight = answer.scrollHeight + 40 + 'px';
+  }
+}
+
+// ═══════════════════════════════════════
+// MODAL HELPERS
+// ═══════════════════════════════════════
+function abrirModal(id) {
+  document.getElementById(id).classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function fecharModal(id) {
+  document.getElementById(id).classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.querySelectorAll('.moverlay').forEach(o => {
+  o.addEventListener('click', e => {
+    if (e.target === o) { fecharModal(o.id); if (o.id === 'modalPag') fecharPagamento(); }
+  });
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.moverlay.open').forEach(o => {
+      fecharModal(o.id); if (o.id === 'modalPag') fecharPagamento();
+    });
+  }
+});
+
+// nav CTA legacy compat
+function openModal() { abrirTrial('essencial'); }
+
+// ═══════════════════════════════════════
+// MODAL TRIAL
+// ═══════════════════════════════════════
+function abrirTrial(plano) {
+  document.getElementById('t-plano').value = plano;
+  const badge = document.getElementById('trial-badge');
+  const isPrem = plano === 'premium';
+  badge.textContent = (isPrem ? 'Premium' : 'Essencial') + ' — 7 dias gratis';
+  badge.className = 'modal-plan-badge' + (isPrem ? ' modal-plan-badge-prem' : '');
+  document.getElementById('trialForm').style.display = 'block';
+  document.getElementById('trialSuccess').style.display = 'none';
+  abrirModal('modalTrial');
+}
+
+async function enviarTrial() {
+  const nome    = document.getElementById('t-nome').value.trim();
+  const tel     = document.getElementById('t-tel').value.trim();
+  const rest    = document.getElementById('t-rest').value.trim();
+  const cidade  = document.getElementById('t-cidade').value.trim();
+  const tipo    = document.getElementById('t-tipo').value;
+  const mesas   = document.getElementById('t-mesas').value;
+  const plano   = document.getElementById('t-plano').value;
+
+  if (!nome || !tel) { mostrarErroTrial('Preencha pelo menos nome e WhatsApp.'); return; }
+
+  const btn = document.getElementById('btnTrial');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin" style="width:18px;height:18px;border-width:2px;margin:0 auto"></div>';
+
+  try {
+    const r = await fetch('/api/planos/solicitar-teste', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome, telefone: tel, restaurante: rest, cidade, tipo, mesas, plano })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Erro ao enviar');
+    document.getElementById('trialForm').style.display = 'none';
+    document.getElementById('trialSuccess').style.display = 'block';
+  } catch(e) {
+    mostrarErroTrial('Ocorreu um erro. Tente novamente ou nos chame no WhatsApp.');
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Solicitar meu teste gratis';
+  }
+}
+
+function mostrarErroTrial(msg) {
+  let el = document.getElementById('trial-err');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'trial-err';
+    el.style.cssText = 'background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:10px 14px;font-size:13px;color:#fca5a5;margin-bottom:14px';
+    document.getElementById('btnTrial').before(el);
+  }
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => { if (el) el.style.display = 'none'; }, 4000);
+}
+
+// ═══════════════════════════════════════
+// MODAL PAGAMENTO
+// ═══════════════════════════════════════
+let _pagPlano = 'essencial';
+let _pixMpId  = null;
+let _pixInterval = null;
+let _pixTimerInterval = null;
+let _mpPublicKey = null;
+let _mpSDKLoaded = false;
+
+async function abrirPagamento(plano) {
+  _pagPlano = plano;
+  const isPrem = plano === 'premium';
+  const preco = isPrem ? _precos.premium : _precos.essencial;
+  const precoFmt = 'R$ ' + _fmtPreco(preco);
+  const nomeP = isPrem ? 'Plano Premium' : 'Plano Essencial';
+
+  // Reset UI
+  resetPagamento();
+  document.getElementById('pagContent').style.display = 'block';
+  document.getElementById('pagSuccess').style.display = 'none';
+  document.getElementById('pag-badge').textContent = nomeP;
+  document.getElementById('pag-badge').className = 'modal-plan-badge' + (isPrem ? ' modal-plan-badge-prem' : '');
+  document.getElementById('pix-plan-nome').textContent = nomeP;
+  document.getElementById('pix-plan-valor').textContent = precoFmt;
+  document.getElementById('card-plan-nome').textContent = nomeP;
+  document.getElementById('card-plan-valor').textContent = precoFmt;
+
+  abrirModal('modalPag');
+
+  // Carrega MP public key se nao carregou
+  if (!_mpPublicKey) {
+    try {
+      const r = await fetch('/api/planos/mp-public-key');
+      const d = await r.json();
+      _mpPublicKey = d.public_key || '';
+    } catch(e) { _mpPublicKey = ''; }
+  }
+}
+
+function fecharPagamento() {
+  fecharModal('modalPag');
+  pararPollingPix();
+  if (_pixTimerInterval) { clearInterval(_pixTimerInterval); _pixTimerInterval = null; }
+}
+
+function resetPagamento() {
+  pararPollingPix();
+  if (_pixTimerInterval) { clearInterval(_pixTimerInterval); _pixTimerInterval = null; }
+  _pixMpId = null;
+  document.getElementById('pix-gerar-wrap').style.display = 'block';
+  document.getElementById('pix-qr-wrap').style.display = 'none';
+  const sb = document.getElementById('pix-status-bar');
+  sb.className = 'pix-status-bar';
+  document.getElementById('pix-status-txt').textContent = 'Aguardando pagamento...';
+  document.getElementById('pix-qr-img').innerHTML = '<div class="qr-loading"><div class="spin"></div><span style="font-size:12px;color:var(--muted)">Gerando QR Code...</span></div>';
+  document.getElementById('pix-code-row').style.display = 'none';
+  document.getElementById('card-err').className = 'card-err';
+  const btn = document.getElementById('btnGerarPix');
+  if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l7.07 7.07M20 4l-7.07 7.07M4 20l7.07-7.07M20 20l-7.07-7.07"/></svg> Gerar QR Code PIX'; }
+}
+
+function setPayTab(tab) {
+  document.querySelectorAll('.pay-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.pay-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('panel-' + tab).classList.add('active');
+}
+
+// ── PIX ──────────────────────────────────────────
+async function gerarPix() {
+  const btn = document.getElementById('btnGerarPix');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin" style="width:18px;height:18px;border-width:2px;margin:0 auto"></div>';
+
+  // Para usar a rota de planos precisamos de um tenant_id — para leads da landing sem login, usamos um ID temporario
+  const tempTid = 'landing-' + Date.now();
+
+  try {
+    const valor = _pagPlano === 'premium' ? _precos.premium : _precos.essencial;
+    const r = await fetch('/api/planos/pagar-pix', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tempTid },
+      body: JSON.stringify({ plano: _pagPlano, valor })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Erro ao gerar PIX');
+
+    _pixMpId = d.mp_payment_id;
+
+    document.getElementById('pix-gerar-wrap').style.display = 'none';
+    document.getElementById('pix-qr-wrap').style.display = 'block';
+
+    // QR Code
+    const qrBox = document.getElementById('pix-qr-img');
+    if (d.qr_code_base64) {
+      qrBox.innerHTML = `<img src="data:image/png;base64,${d.qr_code_base64}" alt="QR Code PIX" style="width:100%;height:100%;border-radius:8px">`;
+    } else {
+      qrBox.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px;line-height:1.6">QR Code nao disponivel.<br>Use o codigo PIX abaixo.</div>';
+    }
+
+    // Codigo copia-cola
+    if (d.qr_code) {
+      document.getElementById('pix-code-val').value = d.qr_code;
+      document.getElementById('pix-code-row').style.display = 'flex';
+    }
+
+    // Inicia polling e timer
+    iniciarPollingPix();
+    iniciarTimerPix(600); // 10 minutos
+
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l7.07 7.07M20 4l-7.07 7.07M4 20l7.07-7.07M20 20l-7.07-7.07"/></svg> Tentar novamente';
+    const sb = document.getElementById('pix-status-bar');
+    sb.className = 'pix-status-bar';
+    sb.style.background = 'rgba(239,68,68,.08)';
+    sb.style.borderColor = 'rgba(239,68,68,.2)';
+    document.getElementById('pix-status-txt').textContent = e.message || 'Erro ao gerar PIX.';
+  }
+}
+
+function iniciarPollingPix() {
+  pararPollingPix();
+  let checks = 0;
+  _pixInterval = setInterval(async () => {
+    if (!_pixMpId) return;
+    checks++;
+    if (checks > 120) { pararPollingPix(); return; }
+    try {
+      const r = await fetch('/api/planos/status-pix?mp_payment_id=' + _pixMpId);
+      const d = await r.json();
+      if (d.status === 'aprovado') {
+        pararPollingPix();
+        if (_pixTimerInterval) { clearInterval(_pixTimerInterval); _pixTimerInterval = null; }
+        const sb = document.getElementById('pix-status-bar');
+        sb.className = 'pix-status-bar pix-status-ok';
+        document.getElementById('pix-status-txt').textContent = 'Pagamento confirmado!';
+        setTimeout(() => {
+          document.getElementById('pagContent').style.display = 'none';
+          document.getElementById('pagSuccess').style.display = 'block';
+        }, 1200);
+      }
+    } catch(e) {}
+  }, 5000);
+}
+
+function pararPollingPix() {
+  if (_pixInterval) { clearInterval(_pixInterval); _pixInterval = null; }
+}
+
+function iniciarTimerPix(segundos) {
+  if (_pixTimerInterval) clearInterval(_pixTimerInterval);
+  let s = segundos;
+  const el = document.getElementById('pix-timer');
+  const exp = document.getElementById('pix-expire');
+  const fmt = v => String(Math.floor(v / 60)).padStart(2,'0') + ':' + String(v % 60).padStart(2,'0');
+  if (el) el.textContent = fmt(s);
+  _pixTimerInterval = setInterval(() => {
+    s--;
+    if (el) el.textContent = fmt(s);
+    if (s <= 0) {
+      clearInterval(_pixTimerInterval);
+      if (exp) exp.textContent = 'QR Code expirado. Gere um novo.';
+      pararPollingPix();
+    }
+  }, 1000);
+}
+
+function copiarPix() {
+  const code = document.getElementById('pix-code-val').value;
+  if (!code) return;
+  navigator.clipboard.writeText(code).then(() => {
+    const btn = document.querySelector('.pix-copy-btn');
+    const orig = btn.textContent;
+    btn.textContent = 'Copiado!';
+    btn.style.background = 'rgba(34,197,94,.15)';
+    btn.style.borderColor = 'rgba(34,197,94,.3)';
+    btn.style.color = '#4ade80';
+    setTimeout(() => {
+      btn.textContent = orig;
+      btn.style.cssText = '';
+    }, 2000);
+  });
+}
+
+// ── CARTAO ────────────────────────────────────────
+async function pagarCartao() {
+  const num   = document.getElementById('c-num').value.replace(/\s/g,'');
+  const exp   = document.getElementById('c-exp').value;
+  const cvv   = document.getElementById('c-cvv').value;
+  const nome  = document.getElementById('c-nome').value.trim().toUpperCase();
+  const email = document.getElementById('c-email').value.trim();
+  const cpf   = document.getElementById('c-cpf').value.replace(/\D/g,'');
+
+  if (!num || !exp || !cvv || !nome || !email || !cpf) {
+    mostrarErroCartao('Preencha todos os campos do cartao.');
+    return;
+  }
+  if (num.length < 13) { mostrarErroCartao('Numero do cartao invalido.'); return; }
+  if (exp.length < 5)  { mostrarErroCartao('Data de validade invalida.'); return; }
+  if (cpf.length !== 11) { mostrarErroCartao('CPF invalido.'); return; }
+
+  const btn = document.getElementById('btnPagarCartao');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin" style="width:18px;height:18px;border-width:2px;margin:0 auto"></div>';
+
+  try {
+    // Tokenizar com MP SDK se disponivel
+    let card_token = null;
+    let payment_method_id = 'master';
+
+    if (_mpPublicKey && window.MercadoPago) {
+      const mp  = new window.MercadoPago(_mpPublicKey);
+      const [mes, ano] = exp.split('/');
+      const tokenResult = await mp.createCardToken({
+        cardNumber: num,
+        cardholderName: nome,
+        cardExpirationMonth: mes,
+        cardExpirationYear: '20' + ano,
+        securityCode: cvv,
+        identificationType: 'CPF',
+        identificationNumber: cpf,
+      });
+      if (tokenResult.error) throw new Error(tokenResult.error);
+      card_token = tokenResult.id;
+      payment_method_id = tokenResult.payment_method_id || 'master';
+    } else {
+      // Sem SDK: envia dados brutos (servidor deve tokenizar)
+      card_token = btoa(JSON.stringify({ num: num.slice(-4), mes: exp.split('/')[0], ano: exp.split('/')[1], nome }));
+      payment_method_id = detectarBandeira(num);
+    }
+
+    const valor = _pagPlano === 'premium' ? _precos.premium : _precos.essencial;
+    const tempTid = 'landing-' + Date.now();
+
+    const r = await fetch('/api/planos/pagar-cartao', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tempTid },
+      body: JSON.stringify({ plano: _pagPlano, valor, card_token, payment_method_id, payer_email: email, payer_cpf: cpf })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Pagamento recusado.');
+
+    if (d.status === 'aprovado') {
+      document.getElementById('pagContent').style.display = 'none';
+      document.getElementById('pagSuccess').style.display = 'block';
+    } else if (d.status === 'pendente') {
+      mostrarErroCartao('Pagamento em analise. Aguarde a confirmacao por e-mail.');
+    } else {
+      throw new Error(d.status_detail || 'Pagamento nao aprovado.');
+    }
+  } catch(e) {
+    mostrarErroCartao(e.message || 'Erro ao processar pagamento.');
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Tentar novamente';
+  }
+}
+
+function mostrarErroCartao(msg) {
+  const el = document.getElementById('card-err');
+  el.textContent = msg;
+  el.className = 'card-err show';
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  setTimeout(() => { el.className = 'card-err'; }, 5000);
+}
+
+function detectarBandeira(num) {
+  if (/^4/.test(num)) return 'visa';
+  if (/^5[1-5]/.test(num) || /^2[2-7]/.test(num)) return 'master';
+  if (/^3[47]/.test(num)) return 'amex';
+  if (/^6(?:011|5)/.test(num)) return 'elo';
+  return 'master';
+}
+
+// Carrega SDK do Mercado Pago em background
+function loadMPSDK() {
+  if (_mpSDKLoaded || !_mpPublicKey) return;
+  const s = document.createElement('script');
+  s.src = 'https://sdk.mercadopago.com/js/v2';
+  s.onload = () => { _mpSDKLoaded = true; };
+  document.head.appendChild(s);
+}
+setTimeout(async () => {
+  try {
+    const r = await fetch('/api/planos/mp-public-key');
+    const d = await r.json();
+    _mpPublicKey = d.public_key || '';
+    if (_mpPublicKey) loadMPSDK();
+  } catch(e) {}
+}, 1500);
+
+// ═══════════════════════════════════════
+// MASCARAS DE FORMULARIO
+// ═══════════════════════════════════════
+function mascTel(el) {
+  let v = el.value.replace(/\D/g,'').slice(0,11);
+  if (v.length > 6) v = '(' + v.slice(0,2) + ') ' + v.slice(2,7) + '-' + v.slice(7);
+  else if (v.length > 2) v = '(' + v.slice(0,2) + ') ' + v.slice(2);
+  else if (v.length > 0) v = '(' + v;
+  el.value = v;
+}
+function mascCard(el) {
+  let v = el.value.replace(/\D/g,'').slice(0,16);
+  el.value = v.replace(/(\d{4})(?=\d)/g,'$1 ');
+}
+function mascExp(el) {
+  let v = el.value.replace(/\D/g,'').slice(0,4);
+  if (v.length > 2) v = v.slice(0,2) + '/' + v.slice(2);
+  el.value = v;
+}
+function mascCpf(el) {
+  let v = el.value.replace(/\D/g,'').slice(0,11);
+  if (v.length > 9) v = v.slice(0,3) + '.' + v.slice(3,6) + '.' + v.slice(6,9) + '-' + v.slice(9);
+  else if (v.length > 6) v = v.slice(0,3) + '.' + v.slice(3,6) + '.' + v.slice(6);
+  else if (v.length > 3) v = v.slice(0,3) + '.' + v.slice(3);
+  el.value = v;
+}
+
+// ═══════════════════════════════════════
+// MOBILE NAV
+// ═══════════════════════════════════════
+function openMobileNav() {
+  document.getElementById('mobileNav').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeMobileNav() {
+  document.getElementById('mobileNav').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// ═══════════════════════════════════════
+// SMOOTH SCROLL
+// ═══════════════════════════════════════
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    const href = a.getAttribute('href');
+    if (href === '#') return;
+    const target = document.querySelector(href);
+    if (!target) return;
+    e.preventDefault();
+    const top = target.getBoundingClientRect().top + window.scrollY - 80;
+    window.scrollTo({ top, behavior: 'smooth' });
+  });
+});
+
+// ═══════════════════════════════════════
+// PARALLAX
+// ═══════════════════════════════════════
+window.addEventListener('scroll', () => {
+  const y = window.scrollY;
+  const o1 = document.querySelector('.orb-1');
+  const o2 = document.querySelector('.orb-2');
+  if (o1) o1.style.transform = `translateY(${y * 0.15}px)`;
+  if (o2) o2.style.transform = `translateY(${y * -0.1}px)`;
+}, { passive: true });
+
+// ═══════════════════════════════════════
+// COUNTER ANIMATION
+// ═══════════════════════════════════════
+function animateCount(el, from, to, dur) {
+  const start = performance.now();
+  const tick = (now) => {
+    const p = Math.min((now - start) / dur, 1);
+    const ease = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(from + (to - from) * ease);
+    if (p < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+const cObs = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    const vals = entry.target.querySelectorAll('.metric-val');
+    const cfg = [
+      { from:0, to:180, suf:'+' }, { from:85, to:98, suf:'%' },
+      { from:0, to:30, suf:'%' },  { from:1, to:7, suf:'' }
+    ];
+    vals.forEach((el, i) => {
+      if (!cfg[i]) return;
+      const lbl = el.querySelector('span');
+      const lblTxt = lbl ? lbl.textContent : '';
+      setTimeout(() => {
+        const tmp = document.createElement('span');
+        el.insertBefore(tmp, lbl);
+        animateCount(tmp, cfg[i].from, cfg[i].to, 1200);
+        setTimeout(() => {
+          el.innerHTML = tmp.textContent + cfg[i].suf + (lblTxt ? `<span>${lblTxt}</span>` : '');
+        }, 1220);
+      }, i * 140);
+    });
+    cObs.unobserve(entry.target);
+  });
+}, { threshold: 0.5 });
+const mr = document.querySelector('.metrics-row');
+if (mr) cObs.observe(mr);
+</script>
+</body>
+</html>

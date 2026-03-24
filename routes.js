@@ -1257,6 +1257,98 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ── Solicitar teste gratis (landing page → WA admin) ─────────────
+  if (req.method === 'POST' && upath === '/api/planos/solicitar-teste') {
+    const body = await readBody(req)
+    const { nome, restaurante, telefone, cidade, plano } = body
+    if (!nome || !telefone) { send(res, 400, { error: 'Nome e telefone obrigatorios' }); return true }
+    try {
+      // Busca numero do admin no config global
+      const cfgG = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const gCfg = cfgG?.ia_config ? JSON.parse(cfgG.ia_config) : {}
+      const adminPhone = (gCfg.admin_phone || '').replace(/\D/g,'')
+      const planoLabel = plano === 'premium' ? 'Premium' : 'Essencial'
+      const msgAdmin = [
+        `*🆕 NOVO LEAD — TESTE GRATIS*`,
+        ``,
+        `*Nome:* ${nome}`,
+        `*Restaurante:* ${restaurante || '—'}`,
+        `*Telefone:* ${telefone}`,
+        `*Cidade:* ${cidade || '—'}`,
+        `*Plano de interesse:* ${planoLabel}`,
+        ``,
+        `_Enviado automaticamente pela landing page_`
+      ].join('\n')
+      // Envia WA para admin
+      if (adminPhone) {
+        try {
+          const evoHeaders = { 'Content-Type': 'application/json', apikey: EVO_KEY }
+          const evoBody = JSON.stringify({ number: adminPhone, text: msgAdmin })
+          await fetch(`${EVO_URL}/message/sendText/${EVO_INST}`, { method: 'POST', headers: evoHeaders, body: evoBody })
+          log('📨', `Trial lead WA enviado para admin (${adminPhone}): ${nome} — ${planoLabel}`)
+        } catch(eWa) { log('⚠️', 'WA admin trial erro:', eWa.message) }
+      } else {
+        log('⚠️', 'admin_phone nao configurado no painel admin — WA nao enviado')
+      }
+      // Salva lead na tabela (cria se nao existir)
+      try {
+        db.prepare(`CREATE TABLE IF NOT EXISTS leads_trial (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          nome TEXT, restaurante TEXT, telefone TEXT, cidade TEXT, plano TEXT,
+          created_at TEXT DEFAULT (datetime('now'))
+        )`).run()
+        db.prepare('INSERT INTO leads_trial (nome,restaurante,telefone,cidade,plano) VALUES (?,?,?,?,?)').run(
+          nome, restaurante||'', telefone, cidade||'', plano||'essencial'
+        )
+      } catch(eDb) { log('⚠️', 'leads_trial insert erro:', eDb.message) }
+      send(res, 200, { ok: true })
+    } catch(e) { log('❌', 'solicitar-teste erro:', e.message); send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Admin: Configurar telefone admin (WA para receber leads) ──────
+  if (req.method === 'POST' && upath === '/api/admin/planos/admin-phone') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Nao autorizado' }); return true }
+    const body = await readBody(req)
+    const { admin_phone } = body
+    try {
+      const cfgG = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const ia = cfgG?.ia_config ? JSON.parse(cfgG.ia_config) : {}
+      ia.admin_phone = (admin_phone || '').replace(/\D/g,'')
+      db.prepare("INSERT INTO store_config (tenant_id,ia_config) VALUES ('_global',?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config").run(JSON.stringify(ia))
+      marcarDirty()
+      log('⚙️', `admin_phone configurado: ${ia.admin_phone}`)
+      send(res, 200, { ok: true, admin_phone: ia.admin_phone })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Admin: Obter telefone admin ────────────────────────────────────
+  if (req.method === 'GET' && upath === '/api/admin/planos/admin-phone') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Nao autorizado' }); return true }
+    try {
+      const cfgG = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const ia = cfgG?.ia_config ? JSON.parse(cfgG.ia_config) : {}
+      send(res, 200, { admin_phone: ia.admin_phone || '' })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Admin: Listar leads trial ──────────────────────────────────────
+  if (req.method === 'GET' && upath === '/api/admin/leads-trial') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Nao autorizado' }); return true }
+    try {
+      db.prepare(`CREATE TABLE IF NOT EXISTS leads_trial (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT, restaurante TEXT, telefone TEXT, cidade TEXT, plano TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      )`).run()
+      const leads = db.prepare('SELECT * FROM leads_trial ORDER BY created_at DESC LIMIT 200').all()
+      send(res, 200, leads)
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
   // ── Login do garçom (endpoint dedicado — senha nunca vai na URL) ──
   if (req.method === 'POST' && upath === '/api/garcom-login') {
     const tid  = getTenantId(req, params)

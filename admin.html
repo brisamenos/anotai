@@ -369,6 +369,42 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
             </div>
           </div>
         </div>
+
+        <!-- WhatsApp Admin -->
+        <div class="card" style="margin-top:16px;padding:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div>
+              <div class="card-title" style="margin-bottom:3px">📲 WhatsApp para receber leads</div>
+              <div style="font-size:12px;color:var(--muted)">Numero que recebe notificacao quando alguem solicita o teste gratis na landing page</div>
+            </div>
+            <button class="btn bp bsm" onclick="salvarAdminPhone()">💾 Salvar</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="position:relative;flex:1;max-width:320px">
+              <input class="minput" id="adm-admin-phone" type="tel" placeholder="5585999990000" style="padding-left:40px">
+              <div style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;font-weight:700">+</div>
+            </div>
+            <div style="font-size:12px;color:var(--muted)">Formato: codigo do pais + DDD + numero (sem espacos ou tracos)</div>
+          </div>
+          <div id="adm-phone-status" style="font-size:12px;margin-top:8px;color:var(--muted)"></div>
+        </div>
+
+        <!-- Leads de Teste Gratis -->
+        <div class="tw" style="margin-top:16px">
+          <div class="tmeta">
+            <div>
+              <div class="card-title">🧪 Leads — Teste Gratis</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">Pessoas que solicitaram o teste pela landing page</div>
+            </div>
+            <button class="btn bg2 bsm" onclick="carregarLeads()">↻ Atualizar</button>
+          </div>
+          <table>
+            <thead><tr><th>Nome</th><th>WhatsApp</th><th>Restaurante</th><th>Cidade</th><th>Plano</th><th>Data</th><th>Acao</th></tr></thead>
+            <tbody id="leads-tbody">
+              <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
         <div class="tw">
@@ -699,7 +735,7 @@ function navTo(id) {
   if (id==='ia') iaAdminCarregar();
   if (id==='backup') renderBackupList();
   if (id==='saques') { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); conectarAdminSSE(); }
-  if (id==='planos') carregarPrecosPlanos();
+  if (id==='planos') { carregarPrecosPlanos(); carregarAdminPhone(); carregarLeads(); }
 }
 
 // ── PLANOS ───────────────────────────────
@@ -733,6 +769,74 @@ async function salvarPrecosPlanos() {
   } catch(e) {
     toast('err', 'Erro: ' + e.message);
   }
+}
+
+async function carregarAdminPhone() {
+  try {
+    const r = await fetch('/api/admin/planos/admin-phone', { headers: adminAuthHeader() });
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById('adm-admin-phone');
+    if (el && d.admin_phone) el.value = d.admin_phone;
+    const st = document.getElementById('adm-phone-status');
+    if (st) st.innerHTML = d.admin_phone
+      ? `<span style="color:var(--success)">✅ Numero configurado: +${d.admin_phone}</span>`
+      : '<span style="color:var(--muted)">Nenhum numero configurado ainda.</span>';
+  } catch(e) {}
+}
+
+async function salvarAdminPhone() {
+  const phone = (document.getElementById('adm-admin-phone')?.value || '').replace(/\D/g,'');
+  if (!phone) { toast('err', 'Informe o numero do WhatsApp'); return; }
+  try {
+    const r = await fetch('/api/admin/planos/admin-phone', {
+      method: 'POST',
+      headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin_phone: phone })
+    });
+    if (r.status === 401) { toast('err','Sessao expirada'); return; }
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    const st = document.getElementById('adm-phone-status');
+    if (st) st.innerHTML = `<span style="color:var(--success)">✅ Salvo: +${phone}</span>`;
+    toast('ok', 'Numero salvo! Leads da landing page serao enviados para esse WhatsApp.');
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+async function carregarLeads() {
+  const tbody = document.getElementById('leads-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">Carregando...</td></tr>';
+  try {
+    const r = await fetch('/api/admin/leads-trial', { headers: adminAuthHeader() });
+    if (!r.ok) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--danger)">Erro ao carregar</td></tr>'; return; }
+    const leads = await r.json();
+    if (!leads.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">Nenhum lead ainda. Compartilhe a landing page para comecar a receber solicitacoes.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = leads.map(l => `
+      <tr>
+        <td><div style="font-weight:600">${l.nome||'—'}</div></td>
+        <td>
+          <a href="https://wa.me/${(l.telefone||'').replace(/\D/g,'')}" target="_blank"
+            style="color:var(--success);font-weight:600;text-decoration:none;display:flex;align-items:center;gap:5px">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/></svg>
+            ${l.telefone||'—'}
+          </a>
+        </td>
+        <td style="font-size:12.5px">${l.restaurante||'—'}</td>
+        <td style="font-size:12px;color:var(--muted)">${l.cidade||'—'}</td>
+        <td>
+          <span class="badge ${l.plano==='premium'?'bg-purple':'bg-blue'}">${l.plano||'essencial'}</span>
+        </td>
+        <td style="font-size:11px;color:var(--muted)">${l.created_at ? new Date(l.created_at).toLocaleString('pt-BR') : '—'}</td>
+        <td>
+          <a href="https://wa.me/${(l.telefone||'').replace(/\D/g,'')}?text=${encodeURIComponent('Oi ' + l.nome + ', vi que voce solicitou o teste gratis do Estima Food! Posso te ajudar a configurar tudo agora?')}"
+            target="_blank" class="btn bp bsm">📲 Chamar</a>
+        </td>
+      </tr>`).join('');
+  } catch(e) { tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--danger)">Erro: ${e.message}</td></tr>`; }
 }
 
 // ── CARREGAR DADOS ───────────────────────
