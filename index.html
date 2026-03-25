@@ -304,6 +304,83 @@ input,textarea{font-family:inherit}
 @keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .im-handle{width:36px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);margin:12px auto 0}
 .im-img{width:100%;height:200px;background:var(--s2);object-fit:cover;display:flex;align-items:center;justify-content:center;font-size:72px;overflow:hidden;position:relative}
+/* ═══════ ANIMAÇÃO INGREDIENTES (açaí / marmita) ════════ */
+#im-anim-layer{
+  position:absolute;inset:0;pointer-events:none;z-index:5;
+  display:flex;align-items:flex-end;justify-content:center;
+}
+.anim-container-wrap{
+  position:relative;width:110px;height:160px;
+  display:flex;align-items:flex-end;justify-content:center;
+}
+.anim-cup-svg{ position:absolute;bottom:0;left:0;width:100%;height:100%; }
+
+/* ingrediente voador */
+.ing-drop{
+  position:fixed;z-index:9999;font-size:22px;
+  pointer-events:none;transform:translateX(-50%);
+  animation:ingFall var(--dur,.55s) cubic-bezier(.36,.07,.19,.97) forwards;
+}
+@keyframes ingFall{
+  0%  { opacity:1; transform:translateX(-50%) scale(1.2) rotate(-10deg); }
+  70% { opacity:1; transform:translateX(-50%) translateY(calc(var(--dist) * .7)) scale(.9) rotate(5deg); }
+  90% { opacity:.4; transform:translateX(-50%) translateY(var(--dist)) scale(.5) rotate(-5deg); }
+  100%{ opacity:0; transform:translateX(-50%) translateY(var(--dist)) scale(0); }
+}
+
+/* splash no copo */
+.cup-splash{
+  position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+  width:6px;height:6px;border-radius:50%;
+  background:rgba(249,115,22,.7);
+  animation:splash .35s ease-out forwards;
+  pointer-events:none;
+}
+@keyframes splash{
+  0%  { transform:translateX(-50%) scale(1); opacity:1; }
+  100%{ transform:translateX(-50%) scale(4); opacity:0; }
+}
+
+/* nível do líquido no copo */
+.cup-fill{
+  position:absolute;bottom:6px;
+  left:18%;width:64%;
+  background:linear-gradient(180deg,rgba(130,60,20,.85),rgba(80,30,10,.95));
+  border-radius:0 0 6px 6px;
+  transition:height .4s cubic-bezier(.34,1.56,.64,1);
+  height:0;max-height:80px;
+}
+.cup-fill.acai{
+  background:linear-gradient(180deg,rgba(90,40,100,.85),rgba(50,10,70,.95));
+}
+
+/* ═══════ ANIMAÇÃO PIZZA MEIO A MEIO ════════ */
+#pizza-visual-wrap{
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  padding:16px 0 8px;
+}
+#pizza-canvas-svg{
+  width:160px;height:160px;
+  filter:drop-shadow(0 4px 12px rgba(0,0,0,.15));
+}
+.pizza-half-label{
+  font-size:11px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;
+  text-align:center;
+}
+.pizza-half-names{
+  display:flex;gap:12px;font-size:12px;font-weight:600;
+  align-items:center;justify-content:center;width:160px;
+}
+.pizza-half-tag{
+  flex:1;text-align:center;padding:5px 8px;border-radius:8px;
+  background:var(--s2);border:1.5px solid var(--border);
+  font-size:11.5px;color:var(--muted);line-height:1.3;
+  transition:all .2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.pizza-half-tag.filled{ border-color:var(--accent);color:var(--accent);background:rgba(249,115,22,.08) }
+.pizza-vs{ font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0 }
+
 .im-img img{width:100%;height:100%;object-fit:cover}
 .im-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,.5);border:none;color:#fff;font-size:14px;display:flex;align-items:center;justify-content:center;z-index:2}
 .im-body{padding:20px 20px 28px}
@@ -1188,6 +1265,7 @@ input,textarea{font-family:inherit}
     <div class="im-handle"></div>
     <div class="im-img" id="im-img">
       <button class="im-close" onclick="closeItemModal()"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+      <div id="im-anim-layer" style="display:none"></div>
     </div>
     <div class="im-body">
       <div class="im-name" id="im-name"></div>
@@ -1225,6 +1303,47 @@ input,textarea{font-family:inherit}
 
       <!-- ── PIZZA: metade a metade ── -->
       <div class="half-section" id="half-section" style="display:none">
+        <!-- Visual animado da pizza -->
+        <div id="pizza-visual-wrap">
+          <div class="pizza-half-label">Monte sua pizza</div>
+          <svg id="pizza-canvas-svg" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
+            <!-- Borda da pizza -->
+            <circle cx="80" cy="80" r="76" fill="#f5e6d0" stroke="#d4a76a" stroke-width="3"/>
+            <!-- Molho base -->
+            <circle cx="80" cy="80" r="68" fill="#e8896a"/>
+            <!-- Linha divisória -->
+            <line id="pizza-divider" x1="80" y1="4" x2="80" y2="156" stroke="#d4a76a" stroke-width="2.5" stroke-dasharray="6 3"/>
+            <!-- Metade esquerda - sabor 1 -->
+            <path id="pizza-left" d="M80 80 L80 12 A68 68 0 0 0 80 148 Z" fill="rgba(249,115,22,.18)" opacity="0">
+              <animate attributeName="opacity" from="0" to="1" dur=".35s" fill="freeze" begin="indefinite" id="anim-left"/>
+            </path>
+            <!-- Metade direita - sabor 2 -->
+            <path id="pizza-right" d="M80 80 L80 12 A68 68 0 0 1 80 148 Z" fill="rgba(249,115,22,.18)" opacity="0">
+              <animate attributeName="opacity" from="0" to="1" dur=".35s" fill="freeze" begin="indefinite" id="anim-right"/>
+            </path>
+            <!-- Queijo (pontilhado) -->
+            <circle cx="56" cy="65" r="5" fill="#f5d76e" opacity=".7"/>
+            <circle cx="72" cy="50" r="4" fill="#f5d76e" opacity=".7"/>
+            <circle cx="63" cy="80" r="6" fill="#f5d76e" opacity=".7"/>
+            <circle cx="50" cy="95" r="4" fill="#f5d76e" opacity=".6"/>
+            <circle cx="104" cy="65" r="5" fill="#f5d76e" opacity=".7"/>
+            <circle cx="88" cy="50" r="4" fill="#f5d76e" opacity=".7"/>
+            <circle cx="97" cy="80" r="6" fill="#f5d76e" opacity=".7"/>
+            <circle cx="110" cy="95" r="4" fill="#f5d76e" opacity=".6"/>
+            <!-- Emoji sabor 1 -->
+            <text id="pizza-emoji-left" x="52" y="88" text-anchor="middle" font-size="22" opacity="0">🍕</text>
+            <!-- Emoji sabor 2 -->
+            <text id="pizza-emoji-right" x="108" y="88" text-anchor="middle" font-size="22" opacity="0">🍕</text>
+            <!-- Rótulo "?" nas metades -->
+            <text id="pizza-q-left" x="52" y="88" text-anchor="middle" font-size="22" fill="#c0885a" opacity=".4">?</text>
+            <text id="pizza-q-right" x="108" y="88" text-anchor="middle" font-size="22" fill="#c0885a" opacity=".4">?</text>
+          </svg>
+          <div class="pizza-half-names">
+            <div class="pizza-half-tag" id="pizza-tag-left">1ª metade</div>
+            <span class="pizza-vs">✕</span>
+            <div class="pizza-half-tag" id="pizza-tag-right">2ª metade</div>
+          </div>
+        </div>
         <div class="half-title">
           2ª metade <span class="half-badge">PIZZA</span>
         </div>
@@ -2975,6 +3094,10 @@ function openItemModal(id) {
 
   document.getElementById('item-modal-bg').classList.add('on');
 
+  // ── Camada de animação (açaí / marmita) ──
+  _animFillLevel = 0;
+  _initAnimLayer(i);
+
   // ── Pizza meio a meio ──
   const isPizza = isPizzaItem(i);
   const halfSec = document.getElementById('half-section');
@@ -2982,6 +3105,8 @@ function openItemModal(id) {
   if (isPizza) {
     updateHalfUI();
     renderHalfPicker(i);
+    // Inicia visual da pizza com a metade esquerda preenchida
+    setTimeout(() => _updatePizzaVisual(), 80);
   }
   updateImAddBtn();
 }
@@ -3035,6 +3160,8 @@ function selectHalf(id) {
   if (baseItem) renderHalfPicker(baseItem);
   updateHalfUI();
   updateImAddBtn();
+  // Atualiza visual animado da pizza
+  _updatePizzaVisual();
 }
 
 function updateHalfUI() {
@@ -3084,6 +3211,182 @@ function updateImAddBtn() {
   document.getElementById('im-add-btn').innerHTML = label;
 }
 
+
+// ══════════════════════════════════════════════════════
+//  ANIMAÇÕES VISUAIS DO MODAL
+// ══════════════════════════════════════════════════════
+
+// Detecta tipo visual do item
+function _itemVisualType(item) {
+  if (!item) return 'normal';
+  const cat  = allCats.find(c => c.name === (item.cat_key || item.cat));
+  const all  = ((item.cat_key||'') + ' ' + (item.cat||'') + ' ' + (cat?.label||'') + ' ' + (item.name||'')).toLowerCase();
+  if (all.includes('pizza'))                                         return 'pizza';
+  if (all.includes('açaí') || all.includes('acai') || all.includes('tigela') || all.includes('bowl')) return 'acai';
+  if (all.includes('marmita') || all.includes('quentinha') || all.includes('prato feito') || all.includes('p.f.')) return 'marmita';
+  return 'normal';
+}
+
+// ── Inicia a camada de animação do copo/marmita ───────
+function _initAnimLayer(item) {
+  const layer = document.getElementById('im-anim-layer');
+  if (!layer) return;
+
+  const vtype = _itemVisualType(item);
+  if (vtype !== 'acai' && vtype !== 'marmita') {
+    layer.style.display = 'none';
+    layer.innerHTML = '';
+    return;
+  }
+
+  layer.style.display = 'flex';
+  _animFillLevel = 0;
+
+  if (vtype === 'acai') {
+    layer.innerHTML = `
+    <div class="anim-container-wrap" id="anim-cup-wrap">
+      <div class="cup-fill acai" id="cup-fill"></div>
+      <svg class="anim-cup-svg" viewBox="0 0 110 160" xmlns="http://www.w3.org/2000/svg">
+        <!-- copo açaí -->
+        <path d="M18 30 L26 138 Q26 148 55 148 Q84 148 84 138 L92 30 Z" fill="#fff" stroke="#d0a88a" stroke-width="2.5"/>
+        <path d="M18 30 L92 30" stroke="#d0a88a" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M26 138 Q26 148 55 148 Q84 148 84 138" fill="#e8d0b8" stroke="#d0a88a" stroke-width="2"/>
+        <!-- tampa / borda superior -->
+        <rect x="12" y="22" width="86" height="12" rx="4" fill="#e8d0b8" stroke="#d0a88a" stroke-width="2"/>
+        <!-- canudinho -->
+        <rect x="60" y="0" width="7" height="50" rx="3.5" fill="#f97316" opacity=".85"/>
+        <!-- logo açaí texto -->
+        <text x="55" y="95" text-anchor="middle" font-size="9" fill="#a0705a" opacity=".6" font-family="sans-serif">AÇAÍ</text>
+      </svg>
+    </div>`;
+  } else {
+    layer.innerHTML = `
+    <div class="anim-container-wrap" id="anim-cup-wrap">
+      <div class="cup-fill" id="cup-fill" style="border-radius:0 0 4px 4px;bottom:8px;left:10%;width:80%;background:linear-gradient(180deg,rgba(180,120,60,.8),rgba(120,70,30,.95))"></div>
+      <svg class="anim-cup-svg" viewBox="0 0 110 160" xmlns="http://www.w3.org/2000/svg">
+        <!-- marmita / quentinha -->
+        <rect x="10" y="55" width="90" height="88" rx="6" fill="#e8e0d4" stroke="#b0a090" stroke-width="2.5"/>
+        <rect x="10" y="55" width="90" height="16" rx="6" fill="#d4c8b8" stroke="#b0a090" stroke-width="2"/>
+        <!-- alça esquerda -->
+        <path d="M20 55 Q16 42 24 38 Q32 34 32 55" fill="none" stroke="#b0a090" stroke-width="2.5" stroke-linecap="round"/>
+        <!-- alça direita -->
+        <path d="M90 55 Q94 42 86 38 Q78 34 78 55" fill="none" stroke="#b0a090" stroke-width="2.5" stroke-linecap="round"/>
+        <!-- divisórias internas -->
+        <line x1="55" y1="71" x2="55" y2="143" stroke="#c0b0a0" stroke-width="1.5" stroke-dasharray="3 2"/>
+        <line x1="10" y1="107" x2="100" y2="107" stroke="#c0b0a0" stroke-width="1.5" stroke-dasharray="3 2"/>
+        <text x="55" y="100" text-anchor="middle" font-size="9" fill="#a09080" opacity=".6" font-family="sans-serif">MARMITA</text>
+      </svg>
+    </div>`;
+  }
+}
+
+let _animFillLevel = 0;
+
+// ── Dispara ingrediente voando pro copo ───────────────
+function _dropIngredient(emoji, fromEl) {
+  const cup = document.getElementById('anim-cup-wrap');
+  if (!cup) return;
+
+  const cupRect  = cup.getBoundingClientRect();
+  const targetY  = cupRect.top + cupRect.height * .72;
+  const targetX  = cupRect.left + cupRect.width * .5;
+
+  let startX = targetX, startY = targetY - 120;
+  if (fromEl) {
+    const r = fromEl.getBoundingClientRect();
+    startX  = r.left + r.width / 2;
+    startY  = r.top  + r.height / 2;
+  }
+
+  const dist = targetY - startY;
+  const drop = document.createElement('div');
+  drop.className = 'ing-drop';
+  drop.textContent = emoji;
+  drop.style.left = startX + 'px';
+  drop.style.top  = startY + 'px';
+  drop.style.setProperty('--dist', dist + 'px');
+  drop.style.setProperty('--dur', '.5s');
+  document.body.appendChild(drop);
+
+  drop.addEventListener('animationend', () => {
+    drop.remove();
+    _splashCup();
+    _raiseFillLevel();
+  }, { once: true });
+}
+
+function _splashCup() {
+  const cup = document.getElementById('anim-cup-wrap');
+  if (!cup) return;
+  const s = document.createElement('div');
+  s.className = 'cup-splash';
+  cup.appendChild(s);
+  s.addEventListener('animationend', () => s.remove(), { once: true });
+}
+
+function _raiseFillLevel() {
+  _animFillLevel = Math.min(_animFillLevel + 12, 76);
+  const fill = document.getElementById('cup-fill');
+  if (fill) fill.style.height = _animFillLevel + 'px';
+}
+
+function _lowerFillLevel() {
+  _animFillLevel = Math.max(_animFillLevel - 12, 0);
+  const fill = document.getElementById('cup-fill');
+  if (fill) fill.style.height = _animFillLevel + 'px';
+}
+
+// ── PIZZA — atualiza SVG das metades ─────────────────
+function _updatePizzaVisual() {
+  const base = allItems.find(x => x.id === _imItemId);
+  if (!base) return;
+
+  // Metade esquerda — item base (sempre preenchido ao abrir)
+  _setPizzaHalf('left', base);
+
+  // Metade direita — escolhida
+  if (_halfItem) _setPizzaHalf('right', _halfItem);
+  else           _clearPizzaHalf('right');
+}
+
+function _setPizzaHalf(side, item) {
+  const colors = ['#f97316','#22c55e','#ef4444','#3b82f6','#a855f7','#f59e0b','#14b8a6'];
+  const idx    = Math.abs((item.id || 0) % colors.length);
+  const color  = colors[idx];
+  const emoji  = item.emoji || '🍕';
+  const path   = document.getElementById('pizza-' + side);
+  const emoEl  = document.getElementById('pizza-emoji-' + side);
+  const qEl    = document.getElementById('pizza-q-' + side);
+  const tag    = document.getElementById('pizza-tag-' + side);
+
+  if (path) {
+    path.setAttribute('fill', color + '55');
+    path.style.transition = 'opacity .35s';
+    path.setAttribute('opacity', '1');
+  }
+  if (emoEl) {
+    emoEl.textContent = emoji;
+    emoEl.style.transition = 'opacity .35s';
+    emoEl.setAttribute('opacity', '1');
+  }
+  if (qEl) qEl.setAttribute('opacity', '0');
+  if (tag) {
+    tag.textContent = item.name.length > 14 ? item.name.slice(0, 13) + '…' : item.name;
+    tag.classList.add('filled');
+  }
+}
+
+function _clearPizzaHalf(side) {
+  const path = document.getElementById('pizza-' + side);
+  const emoEl = document.getElementById('pizza-emoji-' + side);
+  const qEl   = document.getElementById('pizza-q-' + side);
+  const tag   = document.getElementById('pizza-tag-' + side);
+  if (path)  { path.style.transition = 'opacity .3s'; path.setAttribute('opacity', '0'); }
+  if (emoEl) emoEl.setAttribute('opacity', '0');
+  if (qEl)   qEl.setAttribute('opacity', '.4');
+  if (tag)   { tag.textContent = '2ª metade'; tag.classList.remove('filled'); }
+}
+
 function closeItemModal() {
   document.getElementById('item-modal-bg').classList.remove('on');
   _halfItem = null;
@@ -3099,6 +3402,7 @@ function imQty(d) {
 }
 
 function toggleIngr(chip) {
+  const wasOn = chip.classList.contains('on');
   chip.classList.toggle('on');
   // Atualiza contador
   const total = document.querySelectorAll('#im-ingr-grid .im-ingr-chip.on').length;
@@ -3106,6 +3410,18 @@ function toggleIngr(chip) {
   if (cnt) {
     cnt.textContent = total;
     total > 0 ? cnt.classList.add('show') : cnt.classList.remove('show');
+  }
+  // Animação ingrediente
+  const vtype = _itemVisualType(allItems.find(x => x.id === _imItemId));
+  if (vtype === 'acai' || vtype === 'marmita') {
+    const isNowOn = chip.classList.contains('on');
+    if (isNowOn) {
+      const label = chip.querySelector('span')?.textContent?.trim() || '';
+      const emojis = { 'Morango':'🍓','Banana':'🍌','Granola':'🌾','Mel':'🍯','Leite Condensado':'🥛','Paçoca':'🥜','Abacaxi':'🍍','Kiwi':'🥝','Nutella':'🫙','Amendoim':'🥜','Chocolate':'🍫','Coco':'🥥','Aveia':'🌾','Tapioca':'🟡' };
+      _dropIngredient(emojis[label] || label.charAt(0) || '🫐', chip);
+    } else {
+      _lowerFillLevel();
+    }
   }
 }
 
@@ -4611,6 +4927,18 @@ function grpToggle(el, grupoNome, optNome, preco, tipo, maxSel) {
       // show qty stepper for checkbox
       const qtyEl = document.getElementById(`gqty_${_slug(grupoNome)}_${_slug(optNome)}`);
       if (qtyEl) qtyEl.classList.add('show');
+    }
+  }
+  // Animação ingrediente voando
+  const vtype = _itemVisualType(allItems.find(x => x.id === _imItemId));
+  if (vtype === 'acai' || vtype === 'marmita') {
+    const wasAdded = el.classList.contains('on');
+    if (wasAdded) {
+      const emojis = { 'Morango':'🍓','Banana':'🍌','Granola':'🌾','Mel':'🍯','Leite Condensado':'🥛','Paçoca':'🥜','Abacaxi':'🍍','Kiwi':'🥝','Nutella':'🫙','Amendoim':'🥜','Chocolate':'🍫','Coco':'🥥','Aveia':'🌾','Tapioca':'🟡' };
+      const emoji  = emojis[optNome] || el.querySelector('span')?.textContent?.trim()?.charAt(0) || '🫐';
+      _dropIngredient(emoji, el);
+    } else {
+      _lowerFillLevel();
     }
   }
   _updateImPrice();
