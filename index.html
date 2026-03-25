@@ -1105,7 +1105,7 @@ input,textarea{font-family:inherit}
   <div class="hero-banner" id="hero-banner"></div>
   <div class="hero-inner">
     <!-- logo -->
-    <div class="hero-logo" id="hero-logo-wrap">
+    <div class="hero-logo" id="hero-logo-wrap" onclick="openStoreInfoModal()" style="cursor:pointer" title="Ver informações da loja">
       <span id="hero-emoji">🍽️</span>
     </div>
     <div class="hero-info">
@@ -1754,6 +1754,26 @@ input,textarea{font-family:inherit}
   </div>
 </div>
 
+<!-- MODAL INFO DA LOJA -->
+<div id="store-info-overlay" onclick="if(event.target===this)closeStoreInfoModal()" style="display:none;position:fixed;inset:0;z-index:800;background:rgba(0,0,0,.45);backdrop-filter:blur(6px);align-items:flex-end;justify-content:center">
+  <div style="background:#fff;border-radius:22px 22px 0 0;width:100%;max-width:520px;padding:20px 20px 36px;animation:sheetUp .28s cubic-bezier(.34,1.56,.64,1);overflow-y:auto;max-height:90vh">
+    <div style="width:36px;height:4px;border-radius:99px;background:rgba(0,0,0,.1);margin:0 auto 18px"></div>
+    <div id="sinfo-name" style="font-family:'Fraunces',serif;font-size:20px;font-weight:900;color:#0f1117;margin-bottom:4px"></div>
+    <div id="sinfo-desc" style="font-size:13px;color:#6b7280;margin-bottom:16px;line-height:1.5"></div>
+    <div id="sinfo-addr-row" style="display:none;align-items:center;gap:8px;margin-bottom:10px;font-size:13.5px;color:#374151">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><path d="M8 1.5C5.51 1.5 3.5 3.51 3.5 6c0 3.75 4.5 8.5 4.5 8.5S12.5 9.75 12.5 6c0-2.49-2.01-4.5-4.5-4.5z" stroke="#f97316" stroke-width="1.4"/><circle cx="8" cy="6" r="1.5" stroke="#f97316" stroke-width="1.3"/></svg>
+      <span id="sinfo-addr"></span>
+    </div>
+    <div id="sinfo-tempo-row" style="display:none;align-items:center;gap:8px;margin-bottom:18px;font-size:13.5px;color:#374151">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="#f97316" stroke-width="1.4"/><path d="M8 5v3l2 1.5" stroke="#f97316" stroke-width="1.3" stroke-linecap="round"/></svg>
+      <span id="sinfo-tempo"></span> de entrega
+    </div>
+    <div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Horários de funcionamento</div>
+    <div id="sinfo-horarios" style="display:flex;flex-direction:column;gap:5px"></div>
+    <button onclick="closeStoreInfoModal()" style="width:100%;margin-top:22px;padding:14px;border-radius:12px;border:none;background:#f1f3f7;color:#374151;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">Fechar</button>
+  </div>
+</div>
+
 
 <script>
 // ══════════════════════════════════════════
@@ -1940,6 +1960,90 @@ function isLojaAberta(horarios, store_open) {
 }
 
 let _cachedHorarios = null;
+
+// ── Modal info da loja ────────────────────────────────
+function openStoreInfoModal() {
+  const ov = document.getElementById('store-info-overlay');
+  if (!ov) return;
+
+  // Nome e descrição
+  document.getElementById('sinfo-name').textContent = document.getElementById('hero-name')?.textContent || '';
+  document.getElementById('sinfo-desc').textContent = document.getElementById('hero-desc')?.textContent || '';
+
+  // Endereço
+  const addrRow = document.getElementById('sinfo-addr-row');
+  if (_storeAddress) {
+    document.getElementById('sinfo-addr').textContent = _storeAddress;
+    addrRow.style.display = 'flex';
+  } else {
+    addrRow.style.display = 'none';
+  }
+
+  // Tempo de entrega
+  const tempoTxt = document.getElementById('hero-tempo')?.textContent || '';
+  const tempoRow = document.getElementById('sinfo-tempo-row');
+  if (tempoTxt) {
+    document.getElementById('sinfo-tempo').textContent = tempoTxt;
+    tempoRow.style.display = 'flex';
+  } else {
+    tempoRow.style.display = 'none';
+  }
+
+  // Horários
+  const diasNome = { dom:'Domingo', seg:'Segunda-feira', ter:'Terça-feira', qua:'Quarta-feira', qui:'Quinta-feira', sex:'Sexta-feira', sab:'Sábado' };
+  const ordem    = ['seg','ter','qua','qui','sex','sab','dom'];
+  const hoje     = ['dom','seg','ter','qua','qui','sex','sab'][new Date().getDay()];
+  const h        = _cachedHorarios || {};
+
+  const rows = ordem.map(d => {
+    const cfg    = h[d] || {};
+    const isHoje = d === hoje;
+    const aberto = cfg.ativo;
+    const badge  = isHoje ? `<span style="font-size:10px;background:#f97316;color:#fff;border-radius:4px;padding:1px 6px;margin-left:6px;font-weight:800">hoje</span>` : '';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-radius:10px;background:${isHoje?'rgba(249,115,22,.07)':'#f8f9fb'};border:1.5px solid ${isHoje?'rgba(249,115,22,.2)':'transparent'}">
+      <span style="font-size:13px;font-weight:${isHoje?'700':'500'};color:${isHoje?'#f97316':'#374151'};display:flex;align-items:center">${diasNome[d]}${badge}</span>
+      <span style="font-size:13px;font-weight:600;color:${aberto?'#374151':'#9ca3af'}">${aberto ? `${cfg.abertura||'?'} – ${cfg.fechamento||'?'}` : 'Fechado'}</span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('sinfo-horarios').innerHTML = rows || '<div style="font-size:13px;color:#9ca3af;padding:8px 0">Horários não cadastrados</div>';
+  ov.style.display = 'flex';
+}
+
+function closeStoreInfoModal() {
+  const ov = document.getElementById('store-info-overlay');
+  if (ov) ov.style.display = 'none';
+}
+
+// ── Scroll spy: sincroniza aba ativa ao rolar ─────────
+let _scrollSpyActive = false;
+function initScrollSpy() {
+  if (_scrollSpyActive) return; // só registra uma vez
+  _scrollSpyActive = true;
+
+  let ticking = false;
+  window.addEventListener('scroll', () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      const stickyH = (document.querySelector('.sticky-bar')?.offsetHeight || 56) + 8;
+      const sections = document.querySelectorAll('#menu-wrap .section[data-cat]');
+      let current = '';
+      sections.forEach(s => {
+        if (s.getBoundingClientRect().top <= stickyH) current = s.dataset.cat;
+      });
+      document.querySelectorAll('.cat-btn').forEach(b => {
+        const isOn = b.dataset.key === current;
+        if (isOn !== b.classList.contains('on')) {
+          b.classList.toggle('on', isOn);
+          if (isOn) b.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+        }
+      });
+      ticking = false;
+    });
+  }, { passive: true });
+}
+
 function applyStatus(store_open, horarios) {
   if (horarios !== undefined) _cachedHorarios = horarios;
   _lojaAberta = isLojaAberta(_cachedHorarios, store_open);
@@ -2639,7 +2743,7 @@ function renderMenu() {
   groups.forEach((its, key) => {
     const cat   = allCats.find(c => c.name === key);
     const label = cat ? (cat.label || cat.name) : (key === '__outros' ? 'Outros' : key.charAt(0).toUpperCase() + key.slice(1));
-    html += `<div class="section"><div class="section-label">${label}</div><div class="item-grid">${its.map(itemCard).join('')}</div></div>`;
+    html += `<div class="section" data-cat="${key}"><div class="section-label">${label}</div><div class="item-grid">${its.map(itemCard).join('')}</div></div>`;
   });
 
   // Renderiza seções checklist no final
@@ -2652,6 +2756,7 @@ function renderMenu() {
 
   html += '</div>';
   document.getElementById('menu-wrap').innerHTML = html;
+  initScrollSpy();
 }
 
 function renderChecklistSection(cat, catItems, startOpen) {
@@ -2802,7 +2907,7 @@ function itemCard(i) {
       <div class="item-foot">
         ${i.price_old ? `<span class="item-price-old">R$ ${fmt(i.price_old)}</span>` : ''}
         <span class="item-price${i.promo||i.price_old?' item-price-promo':''}">R$ ${fmt(i.price)}</span>
-        <button class="item-add-btn" ${esg?'disabled':''} onclick="event.stopPropagation();addToCart(${i.id})">+</button>
+        <button class="item-add-btn" ${esg?'disabled':''} onclick="event.stopPropagation();openItemModal(${i.id})">+</button>
       </div>
     </div>
     <div class="item-img">
