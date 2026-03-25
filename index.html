@@ -1264,9 +1264,6 @@ input,textarea{font-family:inherit}
       <!-- ── Grupos de customização (renderizados via JS) ── -->
       <div id="im-grupos-wrap"></div>
 
-      <!-- ── Cross-sell (bebidas, acompanhamentos) ── -->
-      <div id="im-xsell-wrap"></div>
-
       <textarea class="im-obs" id="im-obs" rows="2" placeholder="Observações (opcional): sem cebola, bem passado…"></textarea>
 
       <!-- ── Ingredientes selecionáveis ── -->
@@ -1294,13 +1291,13 @@ input,textarea{font-family:inherit}
           </div>
         </div>
         <div class="half-title">
-          2ª metade <span class="half-badge">PIZZA</span>
+          Escolha como quer sua pizza <span class="half-badge">PIZZA</span>
         </div>
         <!-- Metade selecionada (mostra após escolher) -->
         <div class="half-selected" id="half-selected-row" style="display:none" onclick="toggleHalfPicker()">
           <div class="half-selected-emoji" id="half-sel-emoji">🍕</div>
           <div class="half-selected-info">
-            <div class="half-selected-name" id="half-sel-name">Escolha a 2ª metade</div>
+            <div class="half-selected-name" id="half-sel-name">Escolher sabor / tipo</div>
             <div class="half-selected-hint" id="half-sel-hint">Toque para trocar</div>
           </div>
           <span class="half-pick-btn">✏️</span>
@@ -1309,8 +1306,8 @@ input,textarea{font-family:inherit}
         <div class="half-selected" id="half-pick-prompt" onclick="toggleHalfPicker()" style="border-style:dashed;opacity:.8">
           <div class="half-selected-emoji">🍕</div>
           <div class="half-selected-info">
-            <div class="half-selected-name">Escolher 2ª metade</div>
-            <div class="half-selected-hint">Toque para selecionar</div>
+            <div class="half-selected-name">Escolher sabor / tipo</div>
+            <div class="half-selected-hint">Inteira ou meio a meio</div>
           </div>
           <span class="half-pick-btn">→</span>
         </div>
@@ -1322,6 +1319,9 @@ input,textarea{font-family:inherit}
       <button class="im-add-btn" id="im-add-btn" onclick="imConfirm()">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> Adicionar ao carrinho
       </button>
+
+      <!-- ── Cross-sell (bebidas, acompanhamentos) ── -->
+      <div id="im-xsell-wrap"></div>
     </div>
   </div>
 </div>
@@ -3079,19 +3079,46 @@ function getPizzaSiblings(item) {
   );
 }
 
+function _isWholeFlavorSelected() {
+  const base = allItems.find(x => x.id === _imItemId);
+  return !!(base && _halfItem && _halfItem.id === base.id);
+}
+
+function selectHalfWhole() {
+  const base = allItems.find(x => x.id === _imItemId);
+  if (!base) return;
+  _halfItem = { ...base };
+  _halfPickerOpen = false;
+  document.getElementById('half-picker-list').style.display = 'none';
+  renderHalfPicker(base);
+  updateHalfUI();
+  updateImAddBtn();
+  _updatePizzaVisual();
+}
+
 function renderHalfPicker(baseItem) {
   const siblings = getPizzaSiblings(baseItem);
   const list = document.getElementById('half-picker-list');
+  // Opção "Inteira com mesmo sabor"
+  const wholeOn = _isWholeFlavorSelected() ? ' on' : '';
+  const wholeCheck = _isWholeFlavorSelected() ? '✓' : '';
+  const wholeOpt = `
+    <div class="half-opt${wholeOn}" onclick="selectHalfWhole()" style="border-left:3px solid var(--green)">
+      <div class="half-opt-emoji">🍕</div>
+      <span class="half-opt-name">Inteira — mesmo sabor</span>
+      <span class="half-opt-price" style="color:var(--green)">Sem acréscimo</span>
+      <div class="half-opt-check">${wholeCheck}</div>
+    </div>`;
   if (!siblings.length) {
-    list.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--muted);text-align:center">Nenhuma opção disponível</div>';
+    list.innerHTML = wholeOpt;
     return;
   }
-  list.innerHTML = siblings.map(s => {
-    const on = _halfItem && _halfItem.id === s.id ? ' on' : '';
+  list.innerHTML = wholeOpt + siblings.map(s => {
+    const on = (_halfItem && _halfItem.id === s.id && !_isWholeFlavorSelected()) ? ' on' : '';
     const thumbInner = s.image_url
       ? `<img src="${s.image_url}" alt="${s.name}" style="width:100%;height:100%;object-fit:cover;border-radius:7px">`
       : `<span>${s.emoji || '🍕'}</span>`;
-    const check = (_halfItem && _halfItem.id === s.id) ? '✓' : '';
+    const check = (_halfItem && _halfItem.id === s.id && !_isWholeFlavorSelected()) ? '✓' : '';
     return `
     <div class="half-opt${on}" onclick="selectHalf(${s.id})">
       <div class="half-opt-emoji">${thumbInner}</div>
@@ -3126,6 +3153,21 @@ function updateHalfUI() {
   prompt.style.display   = 'none';
   selected.style.display = '';
   const base = allItems.find(x => x.id === _imItemId);
+
+  if (_isWholeFlavorSelected()) {
+    // Pizza inteira — mesmo sabor
+    const emoEl = document.getElementById('half-sel-emoji');
+    if (base && base.image_url) {
+      emoEl.innerHTML = `<img src="${base.image_url}" alt="${base.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`;
+    } else {
+      emoEl.textContent = (base && base.emoji) || '🍕';
+    }
+    document.getElementById('half-sel-name').textContent = 'Inteira — mesmo sabor';
+    document.getElementById('half-sel-hint').textContent  = 'Pizza inteira com um único sabor';
+    document.getElementById('half-price-note').textContent = '';
+    return;
+  }
+
   const avgPrice = base ? (parseFloat(base.price) + parseFloat(_halfItem.price)) / 2 : parseFloat(_halfItem.price);
   // Emoji/img da 2ª metade
   const emoEl = document.getElementById('half-sel-emoji');
@@ -3151,12 +3193,16 @@ function updateImAddBtn() {
   const base = parseFloat(i.price);
   let price = base;
   if (isPizza && _halfItem) {
-    price = (base + parseFloat(_halfItem.price)) / 2;
+    if (_isWholeFlavorSelected()) {
+      price = base; // inteira — preço normal
+    } else {
+      price = (base + parseFloat(_halfItem.price)) / 2;
+    }
   }
   const disabled = !_lojaAberta || (isPizza && !_halfItem);
   document.getElementById('im-add-btn').disabled = disabled;
   const label = isPizza && !_halfItem
-    ? '🍕 Escolha a 2ª metade acima'
+    ? '🍕 Escolha como quer sua pizza acima'
     : `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> Adicionar · R$ ${fmt(price * _imQty)}`;
   document.getElementById('im-add-btn').innerHTML = label;
 }
@@ -3633,11 +3679,19 @@ function _updatePizzaVisual() {
   _pizzaState.leftToppings = _genToppings(colIdx);
 
   if (_halfItem) {
-    const rIdx = Math.abs((_halfItem.id||0) % _pizzaColors.length);
-    _pizzaState.rightColor    = _pizzaColors[rIdx];
-    _pizzaState.rightTarget   = 1;
-    _pizzaState.rightToppings = _genToppings(rIdx);
-    _pizzaState.rotate        = 0.12;
+    if (_isWholeFlavorSelected()) {
+      // Inteira — mesma cor dos dois lados
+      _pizzaState.rightColor    = _pizzaColors[colIdx];
+      _pizzaState.rightTarget   = 1;
+      _pizzaState.rightToppings = _genToppings(colIdx);
+      _pizzaState.rotate        = 0;
+    } else {
+      const rIdx = Math.abs((_halfItem.id||0) % _pizzaColors.length);
+      _pizzaState.rightColor    = _pizzaColors[rIdx];
+      _pizzaState.rightTarget   = 1;
+      _pizzaState.rightToppings = _genToppings(rIdx);
+      _pizzaState.rotate        = 0.12;
+    }
   } else {
     _pizzaState.rightTarget = 0;
   }
@@ -3645,7 +3699,14 @@ function _updatePizzaVisual() {
   const tag1 = document.getElementById('pizza-tag-left');
   const tag2 = document.getElementById('pizza-tag-right');
   if (tag1) { tag1.textContent = base.name.length > 15 ? base.name.slice(0,14)+'…' : base.name; tag1.classList.add('filled'); }
-  if (tag2 && _halfItem) { tag2.textContent = _halfItem.name.length > 15 ? _halfItem.name.slice(0,14)+'…' : _halfItem.name; tag2.classList.add('filled'); }
+  if (tag2 && _halfItem) {
+    if (_isWholeFlavorSelected()) {
+      tag2.textContent = base.name.length > 15 ? base.name.slice(0,14)+'…' : base.name;
+    } else {
+      tag2.textContent = _halfItem.name.length > 15 ? _halfItem.name.slice(0,14)+'…' : _halfItem.name;
+    }
+    tag2.classList.add('filled');
+  }
   else if (tag2) { tag2.textContent = '2ª metade'; tag2.classList.remove('filled'); }
 }
 
@@ -3735,7 +3796,7 @@ function imConfirm() {
 
   // Pizza meio a meio — precisa de 2ª metade
   if (isPizza && !_halfItem) {
-    toast('🍕', 'Escolha a 2ª metade da pizza!');
+    toast('🍕', 'Escolha como quer sua pizza!');
     document.getElementById('half-section').scrollIntoView({behavior:'smooth',block:'center'});
     return;
   }
@@ -3747,11 +3808,19 @@ function imConfirm() {
   let cartImg   = i.image_url;
 
   if (isPizza && _halfItem) {
-    const avgPrice = (parseFloat(i.price) + parseFloat(_halfItem.price)) / 2;
-    cartName  = `${i.name} / ${_halfItem.name}`;
-    cartPrice = avgPrice;
-    cartObs   = obsComIngr ? `Meio a meio · ${obsComIngr}` : 'Meio a meio';
-    cartImg   = i.image_url || null;
+    if (_isWholeFlavorSelected()) {
+      // Inteira com mesmo sabor — preço normal
+      cartName  = i.name;
+      cartPrice = parseFloat(i.price);
+      cartObs   = obsComIngr ? `Pizza inteira · ${obsComIngr}` : 'Pizza inteira';
+      cartImg   = i.image_url || null;
+    } else {
+      const avgPrice = (parseFloat(i.price) + parseFloat(_halfItem.price)) / 2;
+      cartName  = `${i.name} / ${_halfItem.name}`;
+      cartPrice = avgPrice;
+      cartObs   = obsComIngr ? `Meio a meio · ${obsComIngr}` : 'Meio a meio';
+      cartImg   = i.image_url || null;
+    }
   }
 
   // Grupos: add description and extra price
@@ -3786,7 +3855,7 @@ function imConfirm() {
 
   closeItemModal();
   updateCartFloat();
-  toast('🛒', `${isPizza && _halfItem ? 'Pizza meio a meio' : i.name} adicionado!`);
+  toast('🛒', `${isPizza && _halfItem && !_isWholeFlavorSelected() ? 'Pizza meio a meio' : i.name} adicionado!`);
 }
 
 // ══════════════════════════════════════════
