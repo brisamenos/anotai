@@ -826,7 +826,13 @@ async function waSendMessage() {
       text
     });
     if (!r.ok) waSbToast('err', r.data?.message || r.data?.error || 'Erro ao enviar');
-    else setTimeout(() => waLoadMessages(true), 2000);
+    else {
+      // Pausa a IA: humano assumiu esta conversa
+      const _phone = waSendNum(WA.activeJid);
+      const _tid   = (()=>{ try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||'' } catch(e){ return '' } })();
+      if (_phone && _tid) fetch('/api/ia-humano-assumiu', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ phone: _phone, tenant_id: _tid }) }).catch(()=>{});
+      setTimeout(() => waLoadMessages(true), 2000);
+    }
   } catch(e) { waSbToast('err','Erro: '+e.message); }
 }
 
@@ -894,8 +900,13 @@ async function waSendMedia() {
         media:     b64,
         fileName:  file.name
       });
-      if (r.ok) { waSbToast('ok','Enviado!'); setTimeout(()=>waLoadMessages(true),2000); }
-      else       waSbToast('err', r.data?.message||r.data?.error||'Erro ao enviar mídia');
+      if (r.ok) {
+        // Pausa a IA: humano assumiu esta conversa
+        const _phone = waSendNum(WA.activeJid);
+        const _tid   = (()=>{ try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||'' } catch(e){ return '' } })();
+        if (_phone && _tid) fetch('/api/ia-humano-assumiu', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ phone: _phone, tenant_id: _tid }) }).catch(()=>{});
+        waSbToast('ok','Enviado!'); setTimeout(()=>waLoadMessages(true),2000);
+      } else waSbToast('err', r.data?.message||r.data?.error||'Erro ao enviar mídia');
     } catch(err) { waSbToast('err','Erro: '+err.message); }
   };
   fr.readAsDataURL(file);
