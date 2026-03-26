@@ -140,6 +140,8 @@ function mapOrder(o) {
     created_at: o.created_at || '',
     addr: o.addr || '',
     pag: o.pag || '',
+    troco: o.troco != null ? parseFloat(o.troco) : null,
+    pag_momento: o.pag_momento || null,
     mesa_num: o.mesa_num || null,
     garcom_id: o.garcom_id || null,
     garcom_nome: o.garcom_nome || ''
