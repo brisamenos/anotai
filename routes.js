@@ -770,6 +770,16 @@ module.exports = async function handleRoutes(req, res, ctx) {
           marcarDirty()
         } catch(e) { /* UNIQUE — já existe */ }
 
+        // Se gestor enviou mensagem pelo próprio WhatsApp → pausa a IA para este contato
+        if (fromMe && tid_wh) {
+          const phone = jid.replace('@s.whatsapp.net','').replace('@c.us','')
+          if (phone) {
+            const pausaKey = `pausa:${tid_wh}:${phone}`
+            _pausaHumano.set(pausaKey, Date.now())
+            log('👤', `[PAUSA] Gestor enviou via WA (webhook) — IA pausada para ${phone} [${tid_wh}]`)
+          }
+        }
+
         // SSE para mensagens RECEBIDAS (fromMe=false)
         if (!fromMe) {
           sseBroadcast(`wa-msgs:${tid_wh}`, 'wa:msg', m)
