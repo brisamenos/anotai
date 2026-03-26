@@ -77,8 +77,7 @@ else { _carregarPlano(); _carregarSegmento(); } // Busca plano e segmento do ser
 // O shim lê tenant_id da sessionStorage e envia x-tenant-id em cada request.
 // Não precisa mais do proxy manual — sb já funciona com multi-tenant.
 
-// ── Segmento do tenant (restaurante | acougue) ───────
-// Carregado uma vez no boot — lido do servidor para garantir valor correto
+// ── Segmento do tenant (restaurante | acougue) ───────────────────────────
 let _segmento = 'restaurante';
 window._segmento = _segmento;
 
@@ -97,16 +96,13 @@ async function _carregarSegmento() {
 
 function _adaptarParaSegmento() {
   if (_segmento !== 'acougue') return;
-
-  // Marca o body — CSS faz o resto (oculta [data-hide-acougue], tints, badge)
+  // Adiciona classe no body — CSS oculta tudo com data-hide-acougue
   document.body.classList.add('modo-acougue');
-
-  // ── Troca todos os labels marcados com data-label-acougue ──────────────
+  // Troca labels marcados com data-label-acougue
   document.querySelectorAll('[data-label-acougue]').forEach(el => {
     el.textContent = el.getAttribute('data-label-acougue');
   });
-
-  // ── Avisa outros módulos que carregarem depois (ex: gestor-cardapio.js) ─
+  // Dispara evento para outros módulos
   document.dispatchEvent(new CustomEvent('segmento:acougue'));
 }
 

@@ -2192,15 +2192,9 @@ async function init() {
       _storeLat     = parseFloat(c.store_lat) || null;
       _storeLng     = parseFloat(c.store_lng) || null;
       _tiposEntrega = Array.isArray(c.tipos_entrega) ? c.tipos_entrega : ['delivery','retirada','mesa'];
-      // Açougue: mesa não se aplica — remove do array independente do que vier no banco
       try {
         const segR = await fetch('/api/tenant-segmento', { headers: { 'x-tenant-id': _tenantId } });
-        if (segR.ok) {
-          const segD = await segR.json();
-          if (segD.segmento === 'acougue') {
-            _tiposEntrega = _tiposEntrega.filter(t => t !== 'mesa');
-          }
-        }
+        if (segR.ok) { const segD = await segR.json(); if (segD.segmento === 'acougue') _tiposEntrega = _tiposEntrega.filter(t => t !== 'mesa'); }
       } catch(e) {}
       // Sincroniza offset de numeração com o gestor
       _orderNumOffset = parseInt(c.order_num_offset) || 0;
@@ -4679,16 +4673,14 @@ function openPagModal(tipo) {
   const badge = document.getElementById('pag-taxa-badge');
   const desc  = document.getElementById('pag-opt-agora-desc');
   const ico   = document.getElementById('pag-opt-agora-ico');
-  const lblEntrega = document.getElementById('pag-lbl-entrega');
-  const descEntrega = document.getElementById('pag-desc-entrega');
 
   if (title) title.textContent = tipo === 'credito' ? 'Pagar com crédito' : 'Pagar com débito';
-
-  // Adapta texto conforme tipo de entrega
-  const _isRetirada = deliveryType === 'retirada' || deliveryType === 'mesa';
-  if (sub)       sub.textContent  = _isRetirada ? 'Escolha se vai pagar agora (online) ou no balcão' : 'Escolha se vai pagar agora (online) ou na entrega';
-  if (lblEntrega)  lblEntrega.textContent  = _isRetirada ? 'Pagar no balcão' : 'Pagar na entrega';
-  if (descEntrega) descEntrega.textContent = _isRetirada ? 'Você paga quando vier retirar o pedido.' : 'Você paga quando o pedido chegar. Tenha o cartão em mãos.';
+  const _isRet = deliveryType === 'retirada' || deliveryType === 'mesa';
+  if (sub) sub.textContent = _isRet ? 'Escolha se vai pagar agora (online) ou no balcão' : 'Escolha se vai pagar agora (online) ou na entrega';
+  const lblE = document.getElementById('pag-lbl-entrega');
+  const descE = document.getElementById('pag-desc-entrega');
+  if (lblE)  lblE.textContent  = _isRet ? 'Pagar no balcão' : 'Pagar na entrega';
+  if (descE) descE.textContent = _isRet ? 'Você paga quando vier retirar o pedido.' : 'Você paga quando o pedido chegar. Tenha o cartão em mãos.';
 
   // Mostra opção "Pagar agora" só se o cartão online estiver disponível
   const optAgora = document.getElementById('pag-opt-agora');
@@ -5052,17 +5044,12 @@ function updateTracker(status, addr) {
   const curIdx = stepIndexFor(status);
   const tl     = document.getElementById('track-timeline');
   if (!tl) return;
-
   const _addr = (addr || '').toLowerCase();
   const isRetirada = _addr.startsWith('retirada') || _addr.startsWith('mesa');
-
   const steps = STEPS.map((s, i) => {
-    if (i === STEPS.length - 1 && isRetirada) {
-      return { ...s, title: 'Seu pedido está pronto!', desc: 'Pode vir buscar — seu pedido está pronto para retirada!' };
-    }
+    if (i === STEPS.length - 1 && isRetirada) return { ...s, title: 'Seu pedido está pronto!', desc: 'Pode vir buscar — seu pedido está pronto para retirada!' };
     return s;
   });
-
   if (status === 'cancelado') {
     tl.innerHTML = `<div class="tstep"><div class="tstep-left"><div class="tstep-icon" style="background:rgba(239,68,68,.12);border-color:var(--red)">✕</div></div><div class="tstep-content"><div class="tstep-title" style="color:var(--red)">Pedido cancelado</div><div class="tstep-desc">Este pedido foi cancelado.</div></div></div>`;
     const cw = document.getElementById('track-cancel-wrap'); if (cw) cw.style.display = 'none';

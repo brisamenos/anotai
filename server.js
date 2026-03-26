@@ -284,9 +284,6 @@ const MIGRATIONS = [
     )`,
     `CREATE INDEX IF NOT EXISTS idx_wa_jid ON wa_messages(tenant_id, remote_jid, ts)`
   ]},
-  // ─── Segmento multi-negócio ───────────────────────────────────────────────
-  // 'restaurante' (padrão) | 'acougue'
-  // O gestor usa este campo para adaptar sidebar, terminologia e PDV
   { version:24, description:'segmento em tenants (restaurante|acougue)', up:
     `ALTER TABLE tenants ADD COLUMN segmento TEXT DEFAULT 'restaurante'`
   },

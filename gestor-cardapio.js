@@ -354,7 +354,6 @@ function togglePizzaOptions(ctx) {
   const typeEl = document.getElementById(ctx+'-item-type');
   const box    = document.getElementById(ctx+'-pizza-options');
   if (!typeEl || !box) return;
-  // Mostra opções de pizza APENAS quando tipo = pizza; oculta para normal e kg
   box.style.display = typeEl.value === 'pizza' ? '' : 'none';
 }
 function populateCatSelects() {

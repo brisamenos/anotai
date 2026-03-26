@@ -1379,9 +1379,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
-  // ── Segmento do tenant — gestor usa para adaptar UI ──
-  // GET /api/tenant-segmento  →  { segmento: 'restaurante'|'acougue' }
-  // PATCH /api/tenant-segmento  →  { segmento } (apenas superadmin/admin)
+  // ── Segmento do tenant ──────────────────────────────────────────────────
   if (upath === '/api/tenant-segmento') {
     const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }

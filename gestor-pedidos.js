@@ -824,9 +824,9 @@ const MODELOS_CARDAPIO = {
         { name: 'Calabresa',          emoji: '🌭', price: 17.90, item_type: 'kg', description: 'Defumada, tradicional e saborosa' },
       ]},
       { label: 'Temperados', name: 'temperados', type: 'Itens principais', itens: [
-        { name: 'Frango Temperado',   emoji: '🧂', price: 15.90, item_type: 'kg', description: 'Tempero especial da casa, pronto para assar' },
-        { name: 'Costela Temperada',  emoji: '🧂', price: 42.90, item_type: 'kg', description: 'Marinada por 24h no molho secreto' },
-        { name: 'Churrasco Misto',    emoji: '🧂', price: 35.90, item_type: 'kg', description: 'Mix de carnes temperadas para churrasco' },
+        { name: 'Frango Temperado',  emoji: '🧂', price: 15.90, item_type: 'kg', description: 'Tempero especial da casa, pronto para assar' },
+        { name: 'Costela Temperada', emoji: '🧂', price: 42.90, item_type: 'kg', description: 'Marinada por 24h no molho secreto' },
+        { name: 'Churrasco Misto',   emoji: '🧂', price: 35.90, item_type: 'kg', description: 'Mix de carnes temperadas para churrasco' },
       ]},
     ]
   },

@@ -991,3 +991,23 @@ td:first-child{padding-left:18px}
   padding: 6px 0 0;
   opacity: .7;
 }
+
+/* ══ MODO AÇOUGUE ══════════════════════════════════════════ */
+.modo-acougue [data-hide-acougue] { display: none !important; }
+
+/* Modal de peso */
+#modal-peso-kg input[type="number"] { -moz-appearance:textfield; }
+#modal-peso-kg input[type="number"]::-webkit-outer-spin-button,
+#modal-peso-kg input[type="number"]::-webkit-inner-spin-button { -webkit-appearance:none; }
+
+/* Tint vermelho na topnav */
+.modo-acougue .topnav { border-bottom:1px solid rgba(239,68,68,.18); }
+
+/* Badge "AÇOUGUE" no rodapé da sidebar */
+.modo-acougue .sfoot::before {
+  content:'🥩 Modo Açougue';
+  display:block;font-size:10px;font-weight:700;
+  color:var(--danger);letter-spacing:.4px;
+  text-transform:uppercase;text-align:center;
+  padding:6px 0 0;opacity:.7;
+}

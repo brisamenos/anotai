@@ -487,7 +487,6 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
               <tr>
                 <th>Estabelecimento</th>
                 <th>Gestor principal</th>
-                <th>Segmento</th>
                 <th>Plano</th>
                 <th>Expira em</th>
                 <th>Status</th>
@@ -887,7 +886,6 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
         </select>
       </div>
     </div>
-    <!-- SEGMENTO: define o modo de operação do gestor -->
     <div class="mrow2" style="margin-top:12px">
       <div class="mrow" style="margin:0">
         <label class="mlabel">Segmento</label>
@@ -1354,9 +1352,9 @@ async function _abrirModalClienteAsync(id) {
   document.getElementById('m-cli-titulo').textContent = id ? '✏️ Editar Cliente' : '➕ Novo Cliente';
   ['cli-id','cli-nome','cli-slug','cli-email','cli-senha','cli-gestor-nome','cli-expira'].forEach(i => { const el=document.getElementById(i); if(el) el.value=''; });
   document.getElementById('cli-plano').value    = 'pro';
-  document.getElementById('cli-ativo').value    = 'true';
   document.getElementById('cli-segmento').value = 'restaurante';
-  document.getElementById('cli-id').value       = id||'';
+  document.getElementById('cli-ativo').value  = 'true';
+  document.getElementById('cli-id').value     = id||'';
   document.getElementById('cli-ia-section').style.display     = id ? '' : 'none';
   document.getElementById('cli-gestor-section').style.display = id ? 'none' : '';
   document.getElementById('cli-ia-key').value = '';
@@ -1364,11 +1362,11 @@ async function _abrirModalClienteAsync(id) {
   if (id) {
     const c = _clientes.find(x=>x.id===id);
     if (c) {
-      document.getElementById('cli-nome').value    = c.nome;
-      document.getElementById('cli-slug').value    = c.slug;
-      document.getElementById('cli-plano').value   = c.plano;
-      document.getElementById('cli-expira').value  = c.expires_at ? c.expires_at.slice(0,10) : '';
-      document.getElementById('cli-ativo').value   = String(c.ativo);
+      document.getElementById('cli-nome').value   = c.nome;
+      document.getElementById('cli-slug').value   = c.slug;
+      document.getElementById('cli-plano').value  = c.plano;
+      document.getElementById('cli-expira').value = c.expires_at ? c.expires_at.slice(0,10) : '';
+      document.getElementById('cli-ativo').value    = String(c.ativo);
       document.getElementById('cli-segmento').value = c.segmento || 'restaurante';
     }
     try {
