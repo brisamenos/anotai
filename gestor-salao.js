@@ -64,7 +64,7 @@ function _abrirPesoModal(it){
   document.body.appendChild(m);
   const inp=document.getElementById('peso-input');
   const totEl=document.getElementById('peso-total');
-  inp.addEventListener('input',()=>{ totEl.textContent='R$ '+(parseFloat(inp.value)||0)*it.price).toFixed(2).replace('.',','); });
+  inp.addEventListener('input',()=>{ totEl.textContent='R$ '+((parseFloat(inp.value)||0)*it.price).toFixed(2).replace('.',','); });
   inp.focus(); inp.select();
   document.getElementById('btn-add-kg').onclick=()=>{
     const peso=parseFloat(inp.value.replace(',','.'));
@@ -1166,4 +1166,3 @@ function kdsAddTime(id, extra = 300) {
   kdsTimers[id].extra -= extra; // subtrai para "ganhar" mais tempo
   renderKDS();
 }
-
