@@ -1335,7 +1335,7 @@ async function iaSalvarConfigAdmin() {
     prompt_base: document.getElementById('adm-ia-prompt')?.value || '',
     quebra_linha: parseInt(document.getElementById('adm-ia-quebra')?.value) || 0,
     buffer_seg:   parseInt(document.getElementById('adm-ia-buffer')?.value) || 3,
-    pausa_min:    parseInt(document.getElementById('adm-ia-pausa')?.value)  || 30,
+    pausa_min:    parseInt(document.getElementById('adm-ia-pausa')?.value)  ?? 30,
     max_tokens:   parseInt(document.getElementById('adm-ia-tokens')?.value) || 500,
   };
   if (keyVal && !keyVal.startsWith('•')) ia.openai_key = keyVal;
