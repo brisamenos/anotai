@@ -24,9 +24,58 @@ async function toggleCaixa() {
   else await abrirCaixa();
 }
 
-async function abrirCaixa() {
+function abrirCaixa() {
+  // Exibe modal para informar fundo de caixa
+  let modal = document.getElementById('modal-abrir-caixa');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-abrir-caixa';
+    modal.innerHTML = `
+      <div class="modal-bg" onclick="document.getElementById('modal-abrir-caixa').style.display='none'" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center">
+        <div class="modal" onclick="event.stopPropagation()" style="width:100%;max-width:360px;padding:28px 24px;border-radius:16px;background:var(--surface);border:1px solid var(--border);box-shadow:0 16px 48px rgba(0,0,0,.2)">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+            <div style="width:36px;height:36px;border-radius:10px;background:rgba(34,197,94,.12);display:flex;align-items:center;justify-content:center;font-size:18px">💵</div>
+            <div>
+              <div style="font-size:15px;font-weight:700">Abrir Caixa</div>
+              <div style="font-size:12px;color:var(--muted)">Informe o fundo inicial em dinheiro</div>
+            </div>
+          </div>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Valor em dinheiro (R$)</label>
+          <input id="cx-fundo-inicial" type="number" min="0" step="0.01" placeholder="0,00"
+            style="width:100%;padding:10px 14px;border-radius:9px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;font-weight:600;box-sizing:border-box;outline:none"
+            onkeydown="if(event.key==='Enter') _confirmarAbrirCaixa()"
+            onfocus="this.select()" />
+          <div style="display:flex;gap:10px;margin-top:18px">
+            <button class="btn bg" onclick="document.getElementById('modal-abrir-caixa').style.display='none'"
+              style="flex:1;padding:10px">Cancelar</button>
+            <button class="btn bp" onclick="_confirmarAbrirCaixa()"
+              style="flex:2;padding:10px;font-weight:700">Abrir Caixa</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+  const input = document.getElementById('cx-fundo-inicial');
+  if (input) { input.value = ''; }
+  modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('cx-fundo-inicial')?.focus(), 80);
+}
+
+async function _confirmarAbrirCaixa() {
+  const fundo = parseFloat(document.getElementById('cx-fundo-inicial')?.value) || 0;
+  document.getElementById('modal-abrir-caixa').style.display = 'none';
   setCaixaState(true);
-  sbToast('ok', 'Caixa aberto!');
+  const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  // Registra fundo inicial como entrada se valor > 0
+  if (fundo > 0) {
+    try {
+      const { data, error } = await sb.from('movimentos').insert({
+        description: 'Fundo de caixa', tipo: 'entrada', val: fundo, pag: 'Dinheiro', time
+      }).select().single();
+      if (!error && data) movimentos.push({ id: data.id, desc: 'Fundo de caixa', tipo: 'entrada', val: fundo, pag: 'Dinheiro', time });
+    } catch(e) { console.warn('fundo caixa:', e); }
+  }
+  sbToast('ok', fundo > 0 ? `Caixa aberto com R$ ${fundo.toFixed(2).replace('.', ',')}` : 'Caixa aberto!');
   try { await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, caixa_open: true }); }
   catch(e) { console.warn('caixa sync:', e); }
   _renderCaixaTela();
@@ -669,4 +718,3 @@ async function toggleStatus(){
     await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, store_open: newOpen });
   } catch(e) { console.warn('store_config sync:', e); }
 }
-
