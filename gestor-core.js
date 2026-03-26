@@ -442,7 +442,6 @@ function subscribeOrders() {
         showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${_orderNum(p.new.id)} — ${p.new.client}`);
         sendBrowserNotif(`🛎️ Novo pedido #${_orderNum(p.new.id)}`, `${p.new.client} — ${items}`);
         // Automação: mensagem de pedido recebido
-        if (p.new.phone) evoEnviarMensagem(p.new.phone, 'recebido', _buildOrderVars(p.new));
         // Auto-aceitar se ativado e pedido em análise
         if (_autoAcceptOn && p.new.status === 'analise') {
           setTimeout(() => advanceOrderById(p.new.id), 800);
@@ -880,19 +879,6 @@ function triggerImageUpload(itemId, itemName) {
 
 // ── createOrder ──────────────────────────────────────
 
-// ── Helper: monta variáveis para mensagens automáticas ──
-function _buildOrderVars(o) {
-  const itens = (Array.isArray(o.items) ? o.items : [])
-    .map(i => `${i.qty || i.quantity || 1}x ${i.name}${i.price ? ' (R$ ' + parseFloat(i.price).toFixed(2) + ')' : ''}`)
-    .join('\n');
-  const total = parseFloat(o.total || 0).toFixed(2).replace('.', ',');
-  const isDelivery = o.addr && !o.addr.includes('Mesa') && !o.addr.toLowerCase().includes('retirada') && !o.addr.toLowerCase().includes('balcão') && !o.addr.toLowerCase().includes('balcao');
-  const isMesa = o.mesa_num || (o.addr && o.addr.includes('Mesa'));
-  const tipo_entrega = isMesa ? `Mesa ${o.mesa_num || ''}` : isDelivery ? 'Entrega' : 'Retirada no balcão';
-  const endereco = o.addr || '';
-  return { nome: o.client, id: _orderNum(o.id), itens, total, tipo_entrega, endereco };
-}
-
 // ── advanceOrderById ─────────────────────────────────
 async function advanceOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
@@ -909,11 +895,6 @@ async function advanceOrderById(id) {
     o.status = newStatus;
   } catch(e) {
     sbToast('err', 'Erro ao avançar pedido: ' + e.message); return;
-  }
-  // Automação: confirmado (analise→producao) ou pronto (producao→pronto)
-  if (o.phone) {
-    const tipoMsg = newStatus === 'producao' ? 'confirmado' : 'pronto';
-    evoEnviarMensagem(o.phone, tipoMsg, _buildOrderVars(o));
   }
   playOrderSound();
   renderKanban();
@@ -934,8 +915,6 @@ async function cancelOrderById(id) {
   } catch(e) {
     sbToast('err', 'Erro ao cancelar pedido: ' + e.message); return;
   }
-  // Automação: mensagem de pedido cancelado
-  if (o?.phone) evoEnviarMensagem(o.phone, 'cancelado', _buildOrderVars(o));
   renderKanban();
   showToast(_ICON_TRS, `Pedido #${_orderNum(id)} cancelado`);
 }
@@ -967,11 +946,6 @@ async function finishOrderById(id) {
   } catch(e) {
     sbLoading(false);
     sbToast('err', 'Erro ao finalizar pedido: ' + e.message); return;
-  }
-  // Automação: mensagem de saiu para entrega e avaliação
-  if (o?.phone) {
-    evoEnviarMensagem(o.phone, 'entrega',   _buildOrderVars(o));
-    evoEnviarMensagem(o.phone, 'avaliacao', _buildOrderVars(o));
   }
   sbLoading(false);
   renderKanban();
