@@ -1078,46 +1078,49 @@ function nav(id){
   const sn=document.getElementById('sn-'+id);
   if(sn) sn.classList.add('on');
   closeNotif();
-  if(id==='pedidos') renderKanban();
-  if(id==='pedidos-mesa') renderMesasPage();
-  if(id==='gestor'||id==='gestor-main') renderGestor();
-  if(id==='edicao') renderTable();
-  if(id==='imagens') renderImagens();
-  if(id==='potencializador') renderPotencializador();
-  if(id==='pdv') renderPDV();
-  if(id==='pdv-balcao') renderPDVBalcao();
+  // ── Dispatch seguro: verifica typeof antes de chamar módulos externos ──
+  const _call = (fn, ...args) => typeof fn === 'function' && fn(...args);
+  if(id==='pedidos')                 _call(renderKanban);
+  if(id==='pedidos-mesa')            _call(renderMesasPage);
+  if(id==='gestor'||id==='gestor-main') _call(renderGestor);
+  if(id==='edicao')                  _call(renderTable);
+  if(id==='imagens')                 _call(renderImagens);
+  if(id==='potencializador')         _call(renderPotencializador);
+  if(id==='pdv')                     _call(renderPDV);
+  if(id==='pdv-balcao')              _call(renderPDVBalcao);
   if(id==='robo') {
-    evoCarregarInstancia().then(() => {
-      evoCheckStatus();   // vai atualizar QR/conectado porque naAbaRobo=true agora
-    });
-    initChat();
+    if (typeof evoCarregarInstancia === 'function') {
+      evoCarregarInstancia().then(() => {
+        if (typeof evoCheckStatus === 'function') evoCheckStatus();
+      });
+    }
+    _call(initChat);
   }
-  if(id==='qrcode') renderQR();
-  if(id==='cupom') { renderCupons(); loadCashbackConfig(); }
-  if(id==='fidelidade') renderFidelidade();
-  if(id==='garcom') { renderGarcom(); loadGarcons(); }
-  if(id==='kds') renderKDS();
-  if(id==='estoque') renderEstoque();
-  if(id==='desempenho') { setDesempPrd(_desempPrd); }
-  if(id==='relatorios') { setRelPeriodo(_relPeriodo); }
-  if(id==='satisfacao') renderSatisfacao();
-  if(id==='clientes') cliCarregar();
-  if(id==='impressao') renderImpressao();
-  if(id==='caixa') _renderCaixaTela();
-  if(id==='configuracoes') _renderConfiguracoes();
-  if(id==='saques') { carregarCarteira(); conectarSaquesSSE(); carregarConfigPixGestor(); }
-  if(id==='taxa') renderTaxaPage();
-
-  if(id==='meu-plano') renderMeuPlano();
+  if(id==='qrcode')      _call(renderQR);
+  if(id==='cupom')       { _call(renderCupons); _call(loadCashbackConfig); }
+  if(id==='fidelidade')  _call(renderFidelidade);
+  if(id==='garcom')      { _call(renderGarcom); _call(loadGarcons); }
+  if(id==='kds')         _call(renderKDS);
+  if(id==='estoque')     _call(renderEstoque);
+  if(id==='desempenho')  { _call(setDesempPrd, _desempPrd); }
+  if(id==='relatorios')  { _call(setRelPeriodo, _relPeriodo); }
+  if(id==='satisfacao')  _call(renderSatisfacao);
+  if(id==='clientes')    _call(cliCarregar);
+  if(id==='impressao')   _call(renderImpressao);
+  if(id==='caixa')       _call(_renderCaixaTela);
+  if(id==='configuracoes') _call(_renderConfiguracoes);
+  if(id==='saques')      { _call(carregarCarteira); _call(conectarSaquesSSE); _call(carregarConfigPixGestor); }
+  if(id==='taxa')        _call(renderTaxaPage);
+  if(id==='meu-plano')   _call(renderMeuPlano);
   if(id==='cardapio-publico') {
     const cpPg = document.getElementById('page-cardapio-publico');
     if(cpPg) cpPg.style.display = 'flex';
-    loadCardapioPublico();
+    _call(loadCardapioPublico);
   }
   if(id==='tema') {
     const tPg = document.getElementById('page-tema');
     if(tPg) tPg.style.display = 'flex';
-    initTemaPage();
+    _call(initTemaPage);
   }
 }
 
@@ -1141,4 +1144,3 @@ function filterKanban(type) {
   });
   renderKanban();
 }
-
