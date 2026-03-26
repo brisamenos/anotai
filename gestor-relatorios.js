@@ -1632,6 +1632,7 @@ setTimeout(() => {
 // IMPRESSÃO TÉRMICA
 // ─────────────────────────────────────────
 let _printMode = localStorage.getItem('printMode') || 'auto';
+let _printFontSize = parseInt(localStorage.getItem('printFontSize') || '12');
 
 function setPrintMode(mode) {
   _printMode = mode;
@@ -1649,12 +1650,15 @@ function setPrintMode(mode) {
 }
 
 function _getPrintConfig() {
+  const fs = parseInt(document.getElementById('print-font-size')?.value || _printFontSize);
+  if (!isNaN(fs)) { _printFontSize = fs; localStorage.setItem('printFontSize', fs); }
   return {
-    nome:   ((document.getElementById('print-nome')?.value)   || 'ESTIMA FOOD').toUpperCase(),
-    sub:     (document.getElementById('print-sub')?.value)    || '',
-    rodape:  (document.getElementById('print-rodape')?.value) || 'Obrigado!',
-    addr:    document.getElementById('toggle-print-addr')?.classList.contains('on') ?? true,
-    pag:     document.getElementById('toggle-print-pag')?.classList.contains('on')  ?? true,
+    nome:     ((document.getElementById('print-nome')?.value)   || 'ESTIMA FOOD').toUpperCase(),
+    sub:       (document.getElementById('print-sub')?.value)    || '',
+    rodape:    (document.getElementById('print-rodape')?.value) || 'Obrigado!',
+    addr:      document.getElementById('toggle-print-addr')?.classList.contains('on') ?? true,
+    pag:       document.getElementById('toggle-print-pag')?.classList.contains('on')  ?? true,
+    fontSize:  fs || 12,
   };
 }
 
@@ -1670,7 +1674,7 @@ function _buildTicketHtml(order, cfg) {
   const subtotal = items.reduce((s,i) => s + (parseFloat(i.price||0) * (i.qty||1)), 0);
   const taxa = parseFloat(order.taxa || 0);
   const total = subtotal + taxa;
-  return `<div class="print-ticket">
+  return `<div class="print-ticket" style="font-size:${cfg.fontSize}px">
     <div class="pt-center pt-large">${cfg.nome}</div>
     ${cfg.sub ? `<div class="pt-center" style="font-size:11px">${cfg.sub}</div>` : ''}
     <hr class="pt-hr">
@@ -1710,6 +1714,13 @@ function printOrderById(id) {
 function renderImpressao() {
   const p = document.getElementById('print-preview');
   if (!p) return;
+  // Restaura tamanho de fonte salvo no slider
+  const slider = document.getElementById('print-font-size');
+  const valEl  = document.getElementById('print-font-size-val');
+  if (slider && slider.value === slider.defaultValue) {
+    slider.value = _printFontSize;
+    if (valEl) valEl.textContent = _printFontSize;
+  }
   setPrintMode(_printMode);
   const cfg = _getPrintConfig();
   const ex = { id:99, client:'João Silva', addr:'Mesa 3', mesa_num:3, pag:'PIX', taxa:0,
