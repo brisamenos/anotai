@@ -744,7 +744,7 @@ function renderGestor(){
               </div>
             </div>
           `).join('')}
-          <div class="cat-add" data-cat="${cat.name.replace(/"/g,'&quot;')}" onclick="openAddItemModal(this.dataset.cat)">
+          <div class="cat-add" data-cat="${cat.name.replace(/"/g,'"')}" onclick="openAddItemModal(this.dataset.cat)">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
             Adicionar Item
           </div>

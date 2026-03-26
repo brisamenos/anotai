@@ -138,15 +138,6 @@ function renderSoundConfig() {
 // ─────────────────────────────────────────
 // TOAST
 // ─────────────────────────────────────────
-let tTimer;
-function showToast(icon,msg){
-  const t=document.getElementById('toast');
-  document.getElementById('ti').innerHTML=icon;
-  document.getElementById('tm').textContent=msg;
-  t.style.display='flex';
-  clearTimeout(tTimer);
-  tTimer=setTimeout(()=>t.style.display='none',2800);
-}
 
 // ─────────────────────────────────────────
 // TAXA DE ENTREGA
@@ -229,7 +220,7 @@ function _addBairroRow(bairro, taxa) {
   const row = document.createElement('div');
   row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center';
   row.innerHTML = `
-    <input class="form-input" type="text" placeholder="Ex: Centro" value="${(bairro||'').replace(/"/g,'&quot;')}" oninput="updateTaxaPreview()" style="margin-bottom:0">
+    <input class="form-input" type="text" placeholder="Ex: Centro" value="${(bairro||'').replace(/"/g,'"')}" oninput="updateTaxaPreview()" style="margin-bottom:0">
     <input class="form-input" type="number" min="0" step="0.50" placeholder="Ex: 5.00" value="${taxa||''}" oninput="updateTaxaPreview()" style="margin-bottom:0">
     <button onclick="this.closest('div').remove();updateTaxaPreview()" style="width:28px;height:28px;border-radius:7px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.2);color:var(--danger);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">✕</button>
   `;

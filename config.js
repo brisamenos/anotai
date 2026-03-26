@@ -1176,7 +1176,7 @@ function _grupoHtml(g) {
   var isCheck = g.tipo === 'checkbox';
   var optsHtml = (g.opcoes||[]).map(_optHtml).join('');
   var html = '<div class="grp-header">';
-  html += '<input class="grp-title-input" placeholder="Nome do grupo" value="' + (g.nome||'').replace(/"/g,'&quot;') + '">';
+  html += '<input class="grp-title-input" placeholder="Nome do grupo" value="' + (g.nome||'').replace(/"/g,'"') + '">';
   html += '<button type="button" class="grp-del" onclick="delGrupo(this)">×</button>';
   html += '</div>';
   html += '<div class="grp-type-row">';
@@ -1196,7 +1196,7 @@ function _grupoHtml(g) {
 
 function _optHtml(o) {
   var html = '<div class="grp-opt-row">';
-  html += '<input class="grp-opt-name" placeholder="Nome da opção" value="' + (o.nome||'').replace(/"/g,'&quot;') + '">';
+  html += '<input class="grp-opt-name" placeholder="Nome da opção" value="' + (o.nome||'').replace(/"/g,'"') + '">';
   html += '<input class="grp-opt-price" type="number" step="0.01" min="0" placeholder="+R$" value="' + (o.preco||'') + '">';
   html += '<button type="button" class="grp-opt-del" onclick="delGrupoOpt(this)">×</button>';
   html += '</div>';

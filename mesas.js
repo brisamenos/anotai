@@ -424,7 +424,7 @@ function renderPotencializador(){
       <div style="font-size:26px">${i.emoji}</div>
       <div style="flex:1"><div style="font-weight:600;font-size:13px">${i.name}</div><div style="font-size:11.5px;color:var(--muted);margin-top:2px">R$ ${i.price.toFixed(2).replace('.',',')} • ${i.cat}</div></div>
       <div style="font-size:12px;color:var(--accent3)">★ ${(4.2+idx*0.1).toFixed(1)}</div>
-      <button class="btn bp" style="font-size:11px;padding:4px 9px" data-n="${i.name.replace(/"/g,'&quot;')}" onclick="sbToast('ok',this.dataset.n+' em destaque!')">Destacar</button>
+      <button class="btn bp" style="font-size:11px;padding:4px 9px" data-n="${i.name.replace(/"/g,'"')}" onclick="sbToast('ok',this.dataset.n+' em destaque!')">Destacar</button>
     </div>`).join('');
 }
 

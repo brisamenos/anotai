@@ -4,6 +4,22 @@
 // URL do servidor de automações — carregada do banco
 let WA_SERVER = '';
 const sb = window.AppAPI;
+// ── Notificações (definidas aqui para evitar ReferenceError ao chamar nav()) ──
+function closeNotif()  { document.getElementById('notif-panel')?.classList.remove('on'); }
+function toggleNotif() { document.getElementById('notif-panel')?.classList.toggle('on'); }
+// ── Toast (definido aqui pois é usado por múltiplos módulos antes de whatsapp.js) ──
+let tTimer;
+function showToast(icon, msg) {
+  const t = document.getElementById('toast');
+  if (!t) return;
+  document.getElementById('ti').innerHTML = icon;
+  document.getElementById('tm').textContent = msg;
+  t.style.display = 'flex';
+  clearTimeout(tTimer);
+  tTimer = setTimeout(() => t.style.display = 'none', 2800);
+}
+
+
 
 // ── Autenticação ──────────────────────────────────────
 let _sessao = null;
