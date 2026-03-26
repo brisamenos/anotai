@@ -566,6 +566,16 @@ td{padding:12px 14px;font-size:12.5px;vertical-align:middle}
         </select>
       </div>
     </div>
+    <div class="mrow"><label class="mlabel">Segmento</label>
+      <select class="minput" id="cli-segment">
+        <option value="restaurante">🍽️ Restaurante</option>
+        <option value="acougue">🥩 Açougue</option>
+        <option value="padaria">🥖 Padaria</option>
+        <option value="lanchonete">🥪 Lanchonete</option>
+        <option value="pizzaria">🍕 Pizzaria</option>
+        <option value="outros">🏪 Outros</option>
+      </select>
+    </div>
     <div class="mrow2">
       <div class="mrow" style="margin:0"><label class="mlabel">Expira em</label><input class="minput" id="cli-expira" type="date"></div>
       <div class="mrow" style="margin:0"><label class="mlabel">Status</label>
@@ -914,6 +924,8 @@ async function loadAll() {
 // ── Mapeamento de planos (global) ─────────────────────
 const planoBadge = { basico:'bg-gray', pro:'bg-blue', premium:'bg-purple' };
 const planoLabel = { basico:'Básico', pro:'Pro', premium:'⭐ Premium' };
+const segmentIcon = { restaurante:'🍽️', acougue:'🥩', padaria:'🥖', lanchonete:'🥪', pizzaria:'🍕', outros:'🏪' };
+const segmentLabel = { restaurante:'Restaurante', acougue:'Açougue', padaria:'Padaria', lanchonete:'Lanchonete', pizzaria:'Pizzaria', outros:'Outros' };
 
 // ── DASHBOARD ────────────────────────────
 function renderDash() {
@@ -953,7 +965,10 @@ function renderClientes() {
     <td><div style="font-size:12.5px">${gestor?.nome||'—'}</div><div style="font-size:11px;color:var(--muted)">${gestor?.email||c.email||'—'}</div></td>
     <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${planoLabel[c.plano]||c.plano}</span></td>
     <td style="color:var(--muted);font-size:12px">${c.expires_at ? new Date(c.expires_at).toLocaleDateString('pt-BR') : '—'}</td>
-    <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">${c.ativo?'● Ativo':'● Inativo'}</span></td>
+    <td>
+      <span class="badge ${c.ativo?'bg-green':'bg-red'}">${c.ativo?'● Ativo':'● Inativo'}</span>
+      <span class="badge bg-gray" style="margin-top:4px;display:inline-flex">${segmentIcon[c.segment||'restaurante']||'🏪'} ${segmentLabel[c.segment||'restaurante']||c.segment||'Restaurante'}</span>
+    </td>
     <td><div style="display:flex;gap:4px">
       <button class="btn bg2 bsm" onclick="editarCliente('${c.id}')">✏️</button>
       <button class="btn bg2 bsm" title="${userCount} usuário(s)" onclick="abrirUsuariosCliente('${c.id}')">👥${userCount>1?` <span style='font-size:10px'>${userCount}</span>`:''}</button>
@@ -988,6 +1003,7 @@ async function _abrirModalClienteAsync(id) {
   document.getElementById('cli-plano').value      = 'pro';
   document.getElementById('cli-expira').value     = '';
   document.getElementById('cli-ativo').value      = 'true';
+  document.getElementById('cli-segment').value    = 'restaurante';
   // Seção IA: só na edição
   document.getElementById('cli-ia-section').style.display = id ? '' : 'none';
   document.getElementById('cli-ia-key').value     = '';
@@ -1002,6 +1018,7 @@ async function _abrirModalClienteAsync(id) {
       document.getElementById('cli-plano').value = c.plano;
       document.getElementById('cli-expira').value= c.expires_at ? c.expires_at.slice(0,10) : '';
       document.getElementById('cli-ativo').value = String(c.ativo);
+      document.getElementById('cli-segment').value = c.segment || 'restaurante';
     }
     // Carrega ia_config do tenant para mostrar se tem key própria
     try {
@@ -1041,8 +1058,9 @@ async function salvarCliente() {
 
   let error;
   if (id) {
-    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo, expires_at: expira }).eq('id',id));
-    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo,expires_at:expira}; }
+    const segment = document.getElementById('cli-segment').value;
+    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo, expires_at: expira, segment }).eq('id',id));
+    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo,expires_at:expira,segment}; }
     // Salva ia_key do tenant (se foi preenchida e não é máscara)
     const iaKeyVal = (document.getElementById('cli-ia-key')?.value || '').trim();
     if (!error && iaKeyVal && !iaKeyVal.startsWith('•')) {
@@ -1072,7 +1090,7 @@ async function salvarCliente() {
       const res = await fetch('/api/criar-tenant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, slug, email, senha, nomeGestor: gestorNome, plano, role: 'gestor' })
+        body: JSON.stringify({ nome, slug, email, senha, nomeGestor: gestorNome, plano, role: 'gestor', segment: document.getElementById('cli-segment').value })
       });
       const data = await res.json();
       if (!res.ok) { error = { message: data.error || 'Erro ao criar restaurante' }; }
@@ -1405,7 +1423,10 @@ function renderBackupList() {
       <td><div style="font-weight:600;font-size:13px">${c.nome}</div></td>
       <td><span style="font-size:12px;color:var(--muted)">/${c.slug||'—'}</span></td>
       <td><span class="badge ${({basico:'bg-gray',pro:'bg-blue',premium:'bg-purple'})[c.plano]||'bg-blue'}">${({basico:'Básico',pro:'Pro',premium:'⭐ Premium'})[c.plano]||c.plano}</span></td>
-      <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">${c.ativo?'● Ativo':'● Inativo'}</span></td>
+      <td>
+      <span class="badge ${c.ativo?'bg-green':'bg-red'}">${c.ativo?'● Ativo':'● Inativo'}</span>
+      <span class="badge bg-gray" style="margin-top:4px;display:inline-flex">${segmentIcon[c.segment||'restaurante']||'🏪'} ${segmentLabel[c.segment||'restaurante']||c.segment||'Restaurante'}</span>
+    </td>
       <td>
         <button class="btn bg2 bsm" onclick="baixarBackupGestor('${c.id}','${c.slug||c.id}')">⬇️ Backup</button>
       </td>

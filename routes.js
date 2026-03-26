@@ -107,7 +107,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // ── Criar tenant ─────────────────────────────────────
   if (req.method === 'POST' && upath === '/api/criar-tenant') {
     const body = await readBody(req)
-    const { nome, plano, slug, email, senha, role, nomeGestor } = body
+    const { nome, plano, slug, email, senha, role, nomeGestor, segment } = body
     if (!nome || !email || !senha) { send(res, 400, { error: 'nome, email e senha obrigatórios' }); return true }
     try {
       const hash     = crypto.createHash('sha256').update(senha).digest('hex')
@@ -116,7 +116,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
       while (db.prepare('SELECT id FROM tenants WHERE slug=?').get(slugFinal)) slugFinal = `${slugBase}-${suffix++}`
       if (slug && slugFinal !== slug) { send(res, 400, { error: `Slug "${slug}" já em uso. Sugerimos: "${slugFinal}"` }); return true }
       if (db.prepare('SELECT id FROM sys_users WHERE email=?').get(email)) { send(res, 400, { error: `E-mail "${email}" já cadastrado.` }); return true }
-      db.prepare('INSERT INTO tenants (nome,plano,slug) VALUES (?,?,?)').run(nome, plano || 'basic', slugFinal)
+      const segmentoValido = ['restaurante','acougue','padaria','lanchonete','pizzaria','outros'].includes(segment) ? segment : 'restaurante'
+      db.prepare('INSERT INTO tenants (nome,plano,slug,segment) VALUES (?,?,?,?)').run(nome, plano || 'basic', slugFinal, segmentoValido)
       const t = db.prepare('SELECT id FROM tenants WHERE slug=?').get(slugFinal)
       db.prepare('INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)').run(t.id)
       db.prepare('INSERT INTO sys_users (nome,email,senha_hash,role,tenant_id) VALUES (?,?,?,?,?)').run(nomeGestor || nome, email, hash, role || 'gestor', t.id)
