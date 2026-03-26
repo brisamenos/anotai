@@ -889,7 +889,7 @@ const _msgBuffer   = new Map()
 const _pausaHumano = new Map()
 
 async function handleIAWebhook(req, res) {
-  const body = await readBody(req)
+  const body = req._parsedBody !== undefined ? req._parsedBody : await readBody(req)
   const upath = new URL(req.url,`http://x`).pathname
   let tenantId = null
   if (upath.startsWith('/webhook/whatsapp')) tenantId = upath.split('/')[3]||null
@@ -908,7 +908,7 @@ async function handleIAWebhook(req, res) {
     if (!ia.ativo) { send(res,200,{ok:true}); return }
     const cfgGlobal = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
     const iaG = jsonParse(cfgGlobal?.ia_config)||{}
-    const openaiKey = iaG.openai_key||''
+    const openaiKey = ia.openai_key || iaG.openai_key || ''
     if (!openaiKey) { send(res,200,{ok:true}); return }
     const modelo=iaG.modelo||'gpt-4o-mini', maxTokens=iaG.max_tokens||800, bufferSeg=iaG.buffer_seg||3, quebraLen=iaG.quebra_linha||0, pausaMin=iaG.pausa_min||30
     const pausaKey=`pausa:${tenantId}:${phone}`, pausaAt=_pausaHumano.get(pausaKey)
