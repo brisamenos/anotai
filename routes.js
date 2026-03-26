@@ -694,8 +694,20 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
   // ── Humano assumiu conversa (pausa IA) ───────────────
   if (req.method === 'POST' && upath === '/api/ia-humano-assumiu') {
-    const { phone, tenant_id } = await readBody(req)
-    if (phone && tenant_id) { _pausaHumano.set(`pausa:${tenant_id}:${phone}`, Date.now()); log('👤', `Humano assumiu conversa com ${phone}`) }
+    const body = await readBody(req)
+    const { phone, tenant_id } = body
+    log('👤', '[PAUSA-DEBUG] Body recebido:', JSON.stringify(body))
+    log('👤', '[PAUSA-DEBUG] phone extraído:', phone, '| tenant_id extraído:', tenant_id)
+    log('👤', '[PAUSA-DEBUG] x-tenant-id header:', req.headers['x-tenant-id'])
+    if (phone && tenant_id) {
+      const pausaKey = `pausa:${tenant_id}:${phone}`
+      _pausaHumano.set(pausaKey, Date.now())
+      log('👤', `[PAUSA-DEBUG] Chave gravada no _pausaHumano: "${pausaKey}"`)
+      log('👤', `[PAUSA-DEBUG] Total de chaves no _pausaHumano: ${_pausaHumano.size}`)
+      log('👤', `Humano assumiu conversa com ${phone}`)
+    } else {
+      log('⚠️', '[PAUSA-DEBUG] FALHOU — phone ou tenant_id ausente no body:', { phone, tenant_id })
+    }
     send(res, 200, { ok: true })
     return true
   }
