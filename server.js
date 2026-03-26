@@ -927,7 +927,7 @@ async function handleIAWebhook(req, res) {
       const tenantRow=db.prepare("SELECT slug FROM tenants WHERE id=?").get(tenantId)
       const proto=req.headers['x-forwarded-proto']||'https', host=req.headers['host']||''
       const linkCardapio=`${proto}://${host}/index.html?slug=${tenantRow?.slug||tenantId}`
-      const agora=new Date(), diasSemana=['dom','seg','ter','qua','qui','sex','sab'], diaHoje=diasSemana[agora.getDay()], horaMin=agora.getHours()*60+agora.getMinutes()
+      const agora=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Fortaleza'})), diasSemana=['dom','seg','ter','qua','qui','sex','sab'], diaHoje=diasSemana[agora.getDay()], horaMin=agora.getHours()*60+agora.getMinutes()
       let lojaAbertaAgora=cfg.store_open!==false
       const horariosCfg=jsonParse(cfg.horarios_config)||{}, diaConfig=horariosCfg[diaHoje]
       if (diaConfig) { if(!diaConfig.ativo)lojaAbertaAgora=false; else{const[ah,am]=(diaConfig.abertura||'00:00').split(':').map(Number);const[fh,fm]=(diaConfig.fechamento||'23:59').split(':').map(Number);lojaAbertaAgora=horaMin>=ah*60+am&&horaMin<=fh*60+fm} }
