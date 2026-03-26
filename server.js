@@ -899,7 +899,23 @@ async function handleIAWebhook(req, res) {
     const msg    = body?.data?.message?.conversation||body?.data?.message?.extendedTextMessage?.text||''
     const from   = body?.data?.key?.remoteJid||''
     const fromMe = body?.data?.key?.fromMe||false
-    if (!msg||!from||fromMe) { send(res,200,{ok:true}); return }
+    // Se mensagem foi enviada pelo próprio gestor via WhatsApp, registra pausa da IA
+    if (fromMe && from && tenantId) {
+      const phone = from.replace('@s.whatsapp.net','').replace('@c.us','')
+      if (phone) {
+        const cfg2   = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id=?").get(tenantId)
+        const ia2    = jsonParse(cfg2?.ia_config)||{}
+        const cfgG2  = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+        const iaG2   = jsonParse(cfgG2?.ia_config)||{}
+        if (ia2.ativo) {
+          const pausaKey2 = `pausa:${tenantId}:${phone}`
+          _pausaHumano.set(pausaKey2, Date.now())
+          log('👤', `[PAUSA] Gestor enviou via WA — IA pausada para ${phone} [${tenantId}]`)
+        }
+      }
+      send(res,200,{ok:true}); return
+    }
+    if (!msg||!from) { send(res,200,{ok:true}); return }
     const phone = from.replace('@s.whatsapp.net','').replace('@c.us','')
     if (!tenantId) { send(res,200,{ok:true}); return }
     const cfg = db.prepare("SELECT ia_config,evo_instance,store_name,store_descricao,store_whatsapp,store_tempo_entrega,delivery_fee_config,horarios_config,store_open FROM store_config WHERE tenant_id=?").get(tenantId)
