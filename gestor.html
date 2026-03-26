@@ -110,7 +110,7 @@
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Meus pedidos <span class="sbc" id="pedidos-badge"></span>
   </button>
-  <button class="si" id="sn-pedidos-mesa" onclick="nav('pedidos-mesa')" data-segment="restaurante,pizzaria,lanchonete,padaria,outros">
+  <button class="si" id="sn-pedidos-mesa" onclick="nav('pedidos-mesa')">
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="2" rx="1"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="8" y1="4" x2="8" y2="2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Pedidos mesa
   </button>
@@ -120,7 +120,7 @@
   </button>
   </div>
 
-  <div class="shead" style="margin-top:4px" onclick="toggleSideGroup('sg-cardapio')" id="sh-cardapio"><span id="sidebar-cardapio-label">Cardápio</span><span class="shead-arrow"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+  <div class="shead" style="margin-top:4px" onclick="toggleSideGroup('sg-cardapio')" id="sh-cardapio">Cardápio <span class="shead-arrow"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
   <div class="sidebar-group" id="sg-cardapio">
   <button class="si" id="sn-gestor" onclick="nav('gestor')">
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 8h6M5 5h3M5 11h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
@@ -150,11 +150,11 @@
     <svg viewBox="0 0 16 16" fill="none"><rect x="3" y="5" width="10" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="9" r="1" fill="currentColor"/><circle cx="10" cy="9" r="1" fill="currentColor"/><path d="M6 5V3.5M10 5V3.5M6 3.5H10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Robô WhatsApp <span id="sn-robo-badge" style="display:none;font-size:9px;font-weight:700;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;padding:1px 5px;border-radius:99px;margin-left:4px;letter-spacing:.3px;">PRO</span>
   </button>
-  <button class="si" id="sn-qrcode" onclick="nav('qrcode')" data-segment="restaurante,pizzaria,lanchonete,padaria,outros">
+  <button class="si" id="sn-qrcode" onclick="nav('qrcode')">
     <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="3.5" y="3.5" width="2" height="2" fill="currentColor" rx=".3"/><rect x="10.5" y="3.5" width="2" height="2" fill="currentColor" rx=".3"/><rect x="3.5" y="10.5" width="2" height="2" fill="currentColor" rx=".3"/><path d="M9 9h1.5v1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M11.5 11.5H14v3H9v-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
     Mesas
   </button>
-  <button class="si" id="sn-garcom" onclick="nav('garcom')" data-segment="restaurante,pizzaria,lanchonete,padaria,outros">
+  <button class="si" id="sn-garcom" onclick="nav('garcom')">
     <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Modo Garçom
   </button>
@@ -225,7 +225,6 @@
       <div class="sfoot-info" style="flex:1;min-width:0">
         <div style="font-size:12.5px;font-weight:600" id="sidebar-nome">estima</div>
         <div style="font-size:10px;color:var(--muted)" id="sidebar-role">Administrador</div>
-        <div style="font-size:10px;color:var(--accent2);margin-top:1px;font-weight:600" id="sidebar-segment-label"></div>
       </div>
       <svg class="sfoot-info" viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><path d="M6 3H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>

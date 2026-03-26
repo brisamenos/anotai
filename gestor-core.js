@@ -8,7 +8,6 @@ const sb = window.AppAPI;
 // ── Autenticação ──────────────────────────────────────
 let _sessao = null;
 let _planoAtual = 'pro'; // padrão conservador; atualizado via servidor em _carregarPlano()
-let _segmentoAtual = 'restaurante'; // atualizado via servidor em _carregarPlano()
 
 // Busca o plano real do tenant no servidor (não depende da sessão salva)
 async function _carregarPlano() {
@@ -30,54 +29,12 @@ async function _carregarPlano() {
       sessionStorage.setItem('sys_session', JSON.stringify(sess));
     } catch(e) {}
 
-    // Lê e salva segmento
-    _segmentoAtual = (data?.segment || 'restaurante').toLowerCase();
-    try {
-      const sess2 = JSON.parse(sessionStorage.getItem('sys_session') || '{}');
-      sess2.segment = _segmentoAtual;
-      sessionStorage.setItem('sys_session', JSON.stringify(sess2));
-    } catch(e) {}
-    _aplicarSegmento(_segmentoAtual);
-
     // Atualiza badge do botão Robô na sidebar
     const roboBadge = document.getElementById('sn-robo-badge');
     if (roboBadge) {
       roboBadge.style.display = _planoAtual !== 'premium' ? 'inline-block' : 'none';
     }
   } catch(e) {}
-}
-
-// ── Multi-segmento — mostra/oculta itens da sidebar ─────────
-const _SEGMENT_LABELS = {
-  restaurante: '🍽️ Restaurante',
-  acougue:     '🥩 Açougue',
-  padaria:     '🥖 Padaria',
-  lanchonete:  '🥪 Lanchonete',
-  pizzaria:    '🍕 Pizzaria',
-  outros:      '🏪 Estabelecimento',
-};
-
-function _aplicarSegmento(segment) {
-  // Atualiza rótulo do segmento na sidebar se existir
-  const labelEl = document.getElementById('sidebar-segment-label');
-  if (labelEl) {
-    labelEl.textContent = _SEGMENT_LABELS[segment] || segment;
-  }
-
-  // Mostra/oculta itens marcados com data-segment
-  document.querySelectorAll('[data-segment]').forEach(el => {
-    const allowed = el.getAttribute('data-segment').split(',').map(s => s.trim());
-    const visible = allowed.includes('todos') || allowed.includes(segment);
-    el.style.display = visible ? '' : 'none';
-  });
-
-  // Renomeia textos genéricos conforme segmento
-  const cardapioLbl = document.getElementById('sidebar-cardapio-label');
-  if (cardapioLbl) {
-    const nomes = { restaurante: 'Cardápio', acougue: 'Produtos / Cortes', padaria: 'Produtos', lanchonete: 'Cardápio', pizzaria: 'Cardápio', outros: 'Produtos' };
-    cardapioLbl.textContent = nomes[segment] || 'Cardápio';
-  }
-}
 }
 
 function _verificarSessao() {
