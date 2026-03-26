@@ -485,8 +485,9 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
           <table>
             <thead>
               <tr>
-                <th>Restaurante</th>
+                <th>Estabelecimento</th>
                 <th>Gestor principal</th>
+                <th>Segmento</th>
                 <th>Plano</th>
                 <th>Expira em</th>
                 <th>Status</th>
@@ -868,9 +869,9 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
     <h2 id="m-cli-titulo">➕ Novo Cliente</h2>
     <input type="hidden" id="cli-id">
 
-    <div class="modal-sec-title">🏢 Dados do Restaurante</div>
+    <div class="modal-sec-title">🏢 Dados do Estabelecimento</div>
     <div class="mrow">
-      <label class="mlabel">Nome do restaurante *</label>
+      <label class="mlabel">Nome do estabelecimento *</label>
       <input class="minput" id="cli-nome" placeholder="Ex: Estima Food" oninput="autoSlug()">
     </div>
     <div class="mrow2">
@@ -886,11 +887,21 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
         </select>
       </div>
     </div>
+    <!-- SEGMENTO: define o modo de operação do gestor -->
     <div class="mrow2" style="margin-top:12px">
+      <div class="mrow" style="margin:0">
+        <label class="mlabel">Segmento</label>
+        <select class="minput" id="cli-segmento">
+          <option value="restaurante">🍔 Restaurante / Pizzaria / Lanchonete</option>
+          <option value="acougue">🥩 Açougue / Frigorífico</option>
+        </select>
+      </div>
       <div class="mrow" style="margin:0">
         <label class="mlabel">Expira em</label>
         <input class="minput" id="cli-expira" type="date">
       </div>
+    </div>
+    <div class="mrow2" style="margin-top:12px">
       <div class="mrow" style="margin:0">
         <label class="mlabel">Status</label>
         <select class="minput" id="cli-ativo">
@@ -1312,6 +1323,7 @@ function renderClientes() {
         <div style="font-size:11px;color:var(--muted)">${gestor?.email||c.email||'—'}</div>
       </td>
       <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${planoLabel[c.plano]||c.plano}</span></td>
+      <td><span class="badge ${c.segmento==='acougue'?'bg-orange':'bg-blue'}">${c.segmento==='acougue'?'🥩 Açougue':'🍔 Restaurante'}</span></td>
       <td style="font-size:12.5px;color:${expOk?'var(--text-2)':'var(--danger)'}">${c.expires_at ? new Date(c.expires_at).toLocaleDateString('pt-BR') : '—'}</td>
       <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">● ${c.ativo?'Ativo':'Inativo'}</span></td>
       <td>
@@ -1341,9 +1353,10 @@ function abrirModalCliente(id) { _abrirModalClienteAsync(id); }
 async function _abrirModalClienteAsync(id) {
   document.getElementById('m-cli-titulo').textContent = id ? '✏️ Editar Cliente' : '➕ Novo Cliente';
   ['cli-id','cli-nome','cli-slug','cli-email','cli-senha','cli-gestor-nome','cli-expira'].forEach(i => { const el=document.getElementById(i); if(el) el.value=''; });
-  document.getElementById('cli-plano').value  = 'pro';
-  document.getElementById('cli-ativo').value  = 'true';
-  document.getElementById('cli-id').value     = id||'';
+  document.getElementById('cli-plano').value    = 'pro';
+  document.getElementById('cli-ativo').value    = 'true';
+  document.getElementById('cli-segmento').value = 'restaurante';
+  document.getElementById('cli-id').value       = id||'';
   document.getElementById('cli-ia-section').style.display     = id ? '' : 'none';
   document.getElementById('cli-gestor-section').style.display = id ? 'none' : '';
   document.getElementById('cli-ia-key').value = '';
@@ -1351,11 +1364,12 @@ async function _abrirModalClienteAsync(id) {
   if (id) {
     const c = _clientes.find(x=>x.id===id);
     if (c) {
-      document.getElementById('cli-nome').value   = c.nome;
-      document.getElementById('cli-slug').value   = c.slug;
-      document.getElementById('cli-plano').value  = c.plano;
-      document.getElementById('cli-expira').value = c.expires_at ? c.expires_at.slice(0,10) : '';
-      document.getElementById('cli-ativo').value  = String(c.ativo);
+      document.getElementById('cli-nome').value    = c.nome;
+      document.getElementById('cli-slug').value    = c.slug;
+      document.getElementById('cli-plano').value   = c.plano;
+      document.getElementById('cli-expira').value  = c.expires_at ? c.expires_at.slice(0,10) : '';
+      document.getElementById('cli-ativo').value   = String(c.ativo);
+      document.getElementById('cli-segmento').value = c.segmento || 'restaurante';
     }
     try {
       const r = await fetch('/api/admin-backup/ia-config?tenant_id='+id, { headers: adminAuthHeader() });
@@ -1385,6 +1399,7 @@ async function salvarCliente() {
   const plano      = document.getElementById('cli-plano').value;
   const expira     = document.getElementById('cli-expira').value || null;
   const ativo      = document.getElementById('cli-ativo').value === 'true';
+  const segmento   = document.getElementById('cli-segmento').value || 'restaurante';
   const gestorNome = document.getElementById('cli-gestor-nome').value.trim();
   const email      = document.getElementById('cli-email').value.trim().toLowerCase();
   const senha      = document.getElementById('cli-senha').value;
@@ -1392,8 +1407,8 @@ async function salvarCliente() {
   if (!id && (!gestorNome||!email||!senha)) { toast('err','Preencha todos os dados do gestor'); return; }
   let error;
   if (id) {
-    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo, expires_at: expira }).eq('id',id));
-    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo,expires_at:expira}; }
+    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo, expires_at: expira, segmento }).eq('id',id));
+    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo,expires_at:expira,segmento}; }
     const iaKeyVal = (document.getElementById('cli-ia-key')?.value || '').trim();
     if (!error && iaKeyVal && !iaKeyVal.startsWith('•')) {
       try {
@@ -1415,7 +1430,7 @@ async function salvarCliente() {
     }
   } else {
     try {
-      const res = await fetch('/api/criar-tenant', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ nome, slug, email, senha, nomeGestor: gestorNome, plano, role:'gestor' }) });
+      const res = await fetch('/api/criar-tenant', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ nome, slug, email, senha, nomeGestor: gestorNome, plano, role:'gestor', segmento }) });
       const data = await res.json();
       if (!res.ok) { error = { message: data.error || 'Erro ao criar restaurante' }; }
       else { await loadAll(); }

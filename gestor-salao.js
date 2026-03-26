@@ -20,18 +20,37 @@ function renderPDV(){
   if(!g) return;
   const q=(document.getElementById('pdv-search-input')||{}).value||'';
   const fil=items.filter(i=>i.status==='active'&&i.name.toLowerCase().includes(q.toLowerCase()));
-  g.innerHTML=fil.map(i=>`
-    <div class="pdv-item${i.itemType==='pizza'?' pdv-item-pizza':''}" onclick="${i.itemType==='pizza'?'openPDVPizza('+i.id+')':'addToCart('+i.id+')'}">
-      <div class="pdv-emoji">${i.emoji||'🍽️'}</div>
-      <div class="pdv-name">${i.name}${i.itemType==='pizza'?' <span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--accent3);border-radius:4px;padding:1px 4px;font-weight:700">PIZZA</span>':''}</div>
-      <div class="pdv-price">R$ ${i.price.toFixed(2).replace('.',',')}</div>
-    </div>`).join('');
+  g.innerHTML=fil.map(i=>{
+    const isKg  = i.itemType==='kg';
+    const isPizza = i.itemType==='pizza';
+    const badge = isPizza
+      ? '<span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--accent3);border-radius:4px;padding:1px 4px;font-weight:700">PIZZA</span>'
+      : isKg
+        ? '<span style="font-size:9px;background:rgba(34,197,94,.15);color:#16a34a;border-radius:4px;padding:1px 4px;font-weight:700">KG</span>'
+        : '';
+    const priceLabel = isKg
+      ? `R$ ${i.price.toFixed(2).replace('.',',')} <span style="font-size:9px;opacity:.7">/kg</span>`
+      : `R$ ${i.price.toFixed(2).replace('.',',')}`;
+    const click = isPizza ? `openPDVPizza(${i.id})` : `addToCart(${i.id})`;
+    return `<div class="pdv-item${isPizza?' pdv-item-pizza':''}" onclick="${click}">
+      <div class="pdv-emoji">${i.emoji||'🥩'}</div>
+      <div class="pdv-name">${i.name} ${badge}</div>
+      <div class="pdv-price">${priceLabel}</div>
+    </div>`;
+  }).join('');
 }
 
 function addToCart(id){
   const it=items.find(i=>i.id===id);
   if(!it) return;
   if(it.itemType==='pizza'){ openPDVPizza(id); return; }
+
+  // ── MODO AÇOUGUE: itens por kg solicitam peso ───────
+  if(window._segmento==='acougue' && it.itemType==='kg'){
+    _abrirPesoModal(it);
+    return;
+  }
+
   const ci=cartItems.find(c=>c.id===id);
   if(ci) ci.qty++;
   else cartItems.push({...it,qty:1});
@@ -39,26 +58,98 @@ function addToCart(id){
   showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>',`${it.name} adicionado!`);
 }
 
+// ── Modal de peso para itens kg (açougue) ───────────
+function _abrirPesoModal(it) {
+  // Remove modal anterior se existir
+  document.getElementById('modal-peso-kg')?.remove();
+  const m = document.createElement('div');
+  m.id = 'modal-peso-kg';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+  m.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;width:320px;max-width:94vw;box-shadow:0 24px 64px rgba(0,0,0,.5)">
+      <div style="font-weight:700;font-size:15px;margin-bottom:4px">🥩 ${it.name}</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">R$ ${it.price.toFixed(2).replace('.',',')} / kg</div>
+      <label style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;display:block;margin-bottom:6px">Peso (kg)</label>
+      <input id="peso-input" type="number" min="0.001" step="0.001" value="1.000"
+        style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;color:var(--text);font-size:20px;font-weight:700;text-align:center;outline:none;margin-bottom:8px">
+      <div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:16px">
+        Total: <strong id="peso-total">R$ ${it.price.toFixed(2).replace('.',',')}</strong>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('modal-peso-kg').remove()"
+          style="flex:1;padding:10px;border-radius:9px;background:var(--surface2);border:1px solid var(--border);color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">
+          Cancelar
+        </button>
+        <button id="btn-add-kg"
+          style="flex:2;padding:10px;border-radius:9px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">
+          Adicionar ao carrinho
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+
+  const inp  = document.getElementById('peso-input');
+  const totEl = document.getElementById('peso-total');
+  const update = () => {
+    const v = parseFloat(inp.value)||0;
+    totEl.textContent = 'R$ ' + (v * it.price).toFixed(2).replace('.',',');
+  };
+  inp.addEventListener('input', update);
+  inp.focus(); inp.select();
+
+  document.getElementById('btn-add-kg').onclick = () => {
+    const peso = parseFloat(inp.value.replace(',','.'));
+    if(isNaN(peso)||peso<=0){ sbToast('err','Informe um peso válido'); return; }
+    // Açougue: cada pesagem vira um item independente (não agrupa)
+    cartItems.push({...it, qty:peso, isKg:true, _pesoLabel: peso.toFixed(3).replace('.',',')+'kg'});
+    renderCart();
+    document.getElementById('modal-peso-kg').remove();
+    showToast('🥩', `${peso.toFixed(3).replace('.',',')}kg de ${it.name}`);
+  };
+
+  // Fechar clicando fora
+  m.addEventListener('click', e => { if(e.target===m) m.remove(); });
+}
+
 function renderCart(){
   const c=document.getElementById('cart-items');
-  const tot=cartItems.reduce((s,i)=>s+i.price*i.qty,0);
+  const tot=cartItems.reduce((s,i)=>s+(i.price * (i.isKg ? i.qty : i.qty)),0);
   document.getElementById('cart-total').textContent='R$ '+tot.toFixed(2).replace('.',',');
-  document.getElementById('cart-qty').textContent=`(${cartItems.reduce((s,i)=>s+i.qty,0)} itens)`;
+  document.getElementById('cart-qty').textContent=`(${cartItems.reduce((s,i)=>s+(i.isKg?1:i.qty),0)} ${window._segmento==='acougue'?'itens':'itens'})`;
   if(!c) return;
   if(cartItems.length===0){c.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:12.5px">Carrinho vazio<br>Clique nos itens para adicionar</div>';return;}
   c.innerHTML=cartItems.map((i,idx)=>`
     <div class="cart-item">
-      <div class="ci-emoji">${i.emoji}</div>
-      <div class="ci-info"><div class="ci-name">${i.name}</div><div class="ci-price">R$ ${(i.price*i.qty).toFixed(2).replace('.',',')}</div></div>
+      <div class="ci-emoji">${i.emoji||'🥩'}</div>
+      <div class="ci-info">
+        <div class="ci-name">${i.name}${i.isKg?` <span style="font-size:10px;background:rgba(249,115,22,.12);color:var(--accent3);border-radius:4px;padding:1px 4px;font-weight:700">${i._pesoLabel}</span>`:''}</div>
+        <div class="ci-price">R$ ${(i.price*i.qty).toFixed(2).replace('.',',')}</div>
+      </div>
       <div class="qty-ctrl">
-        <div class="qb" onclick="changeQty(${idx},-1)">−</div>
-        <div class="qn">${i.qty}</div>
-        <div class="qb" onclick="changeQty(${idx},1)">+</div>
+        ${i.isKg
+          ? `<div class="qb" onclick="_editarPesoCart(${idx})">✏️</div><div class="qn" style="font-size:11px">${i._pesoLabel}</div><div class="qb" onclick="changeQty(${idx},-1)">🗑</div>`
+          : `<div class="qb" onclick="changeQty(${idx},-1)">−</div><div class="qn">${i.qty}</div><div class="qb" onclick="changeQty(${idx},1)">+</div>`
+        }
       </div>
     </div>`).join('');
 }
 
+// Editar peso de item kg já no carrinho
+function _editarPesoCart(idx) {
+  const ci = cartItems[idx];
+  if (!ci || !ci.isKg) return;
+  const novoStr = prompt(`Novo peso para "${ci.name}" (kg):`, ci.qty.toFixed(3));
+  if (!novoStr) return;
+  const novo = parseFloat(novoStr.replace(',','.'));
+  if (isNaN(novo) || novo <= 0) { sbToast('err','Peso inválido'); return; }
+  ci.qty = novo;
+  ci._pesoLabel = novo.toFixed(3).replace('.',',') + 'kg';
+  renderCart();
+}
+
 function changeQty(idx,delta){
+  // Itens kg: o botão lixeira (delta=-1) remove direto; não soma/subtrai peso
+  if(cartItems[idx]?.isKg){ cartItems.splice(idx,1); renderCart(); return; }
   cartItems[idx].qty+=delta;
   if(cartItems[idx].qty<=0) cartItems.splice(idx,1);
   renderCart();
@@ -69,14 +160,24 @@ function clearCart(){cartItems=[];renderCart();}
 async function finalizeSale() {
   const _ICON_WRN = _ICON_ERR;
   if (cartItems.length === 0) { sbToast('err','Carrinho vazio!'); return; }
-  const tot  = cartItems.reduce((s,i) => s+i.price*i.qty, 0);
+  const tot  = cartItems.reduce((s,i) => s + parseFloat((i.price * i.qty).toFixed(2)), 0);
   const pay  = document.getElementById('pay-method').value;
   const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+
+  // Descrição inteligente — açougue mostra os cortes com peso
+  let descricao = 'PDV – Balcão';
+  if (window._segmento === 'acougue') {
+    const resumo = cartItems.map(i =>
+      i.isKg ? `${i._pesoLabel} ${i.name}` : `${i.qty}x ${i.name}`
+    ).join(', ');
+    descricao = `Atendimento – ${resumo.slice(0, 80)}${resumo.length > 80 ? '…' : ''}`;
+  }
+
   const { data, error } = await sb.from('movimentos').insert({
-    description: 'PDV – Balcão', tipo:'entrada', val:tot, pag:pay, time
+    description: descricao, tipo:'entrada', val: parseFloat(tot.toFixed(2)), pag:pay, time
   }).select().single();
   if (!error && data) movimentos.push({
-    id:data.id, desc:'PDV – Balcão', tipo:'entrada', val:tot, pag:pay, time
+    id:data.id, desc:descricao, tipo:'entrada', val:parseFloat(tot.toFixed(2)), pag:pay, time
   });
   playOrderSound();
   sbToast('ok',`Venda R$${tot.toFixed(2).replace('.',',')} finalizada!`);

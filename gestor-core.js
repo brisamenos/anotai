@@ -71,11 +71,74 @@ function confirmarLogout() {
 }
 
 if (!_verificarSessao()) { /* redireciona */ }
-else { _carregarPlano(); } // Busca plano real do servidor (ignora cache da sessão)
+else { _carregarPlano(); _carregarSegmento(); } // Busca plano e segmento do servidor
 
 // ── Tenant injetado automaticamente pelo api-client.js ────
 // O shim lê tenant_id da sessionStorage e envia x-tenant-id em cada request.
 // Não precisa mais do proxy manual — sb já funciona com multi-tenant.
+
+// ── Segmento do tenant (restaurante | acougue) ───────
+// Carregado uma vez no boot — lido do servidor para garantir valor correto
+let _segmento = 'restaurante';
+window._segmento = _segmento;
+
+async function _carregarSegmento() {
+  try {
+    const tid = _sessao?.tenant_id;
+    if (!tid) return;
+    const r = await fetch('/api/tenant-segmento', { headers: { 'x-tenant-id': tid } });
+    if (!r.ok) return;
+    const d = await r.json();
+    _segmento = d.segmento || 'restaurante';
+    window._segmento = _segmento;
+    _adaptarParaSegmento();
+  } catch(e) {}
+}
+
+function _adaptarParaSegmento() {
+  if (_segmento !== 'acougue') return;
+
+  // Marca o body — CSS faz o resto
+  document.body.classList.add('modo-acougue');
+
+  // ── Ocultar itens do sidebar sem uso no açougue ──
+  // garcom, salão/mesas
+  const _hideSb = ['sn-garcom', 'sn-pedidos-mesa'];
+  _hideSb.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      // O botão do sidebar é o elemento pai mais próximo .si ou o próprio
+      const btn = el.closest('button') || el.closest('[class*="si"]') || el.parentElement;
+      if (btn) btn.style.display = 'none';
+    }
+  });
+
+  // ── Renomear labels de sidebar e headers ──
+  const _labelMap = {
+    // id do elemento de texto → novo label
+    'sn-gestor-label':  'Produtos',
+    'sn-pedidos-label': 'Atendimentos',
+    'sn-edicao-label':  'Editar Produtos',
+    'sn-kds-label':     'Fila de Corte',
+  };
+  Object.entries(_labelMap).forEach(([id, label]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = label;
+  });
+
+  // Troca o título da topbar da página principal se estiver renderizada
+  const titleEl = document.getElementById('page-title-gestor');
+  if (titleEl) titleEl.textContent = '🥩 Produtos';
+
+  // Aplica textos via querySelectorAll para labels dinâmicos
+  document.querySelectorAll('[data-label-restaurante]').forEach(el => {
+    const labelAcougue = el.getAttribute('data-label-acougue');
+    if (labelAcougue) el.textContent = labelAcougue;
+  });
+
+  // ── Avisa outros módulos que carregarem depois ──
+  document.dispatchEvent(new CustomEvent('segmento:acougue'));
+}
 
 // ── Loading overlay ──────────────────────────────────
 let _sbLoadingTimer = null;

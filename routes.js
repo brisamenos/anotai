@@ -107,7 +107,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // ── Criar tenant ─────────────────────────────────────
   if (req.method === 'POST' && upath === '/api/criar-tenant') {
     const body = await readBody(req)
-    const { nome, plano, slug, email, senha, role, nomeGestor } = body
+    const { nome, plano, slug, email, senha, role, nomeGestor, segmento } = body
     if (!nome || !email || !senha) { send(res, 400, { error: 'nome, email e senha obrigatórios' }); return true }
     try {
       const hash     = crypto.createHash('sha256').update(senha).digest('hex')
@@ -116,13 +116,14 @@ module.exports = async function handleRoutes(req, res, ctx) {
       while (db.prepare('SELECT id FROM tenants WHERE slug=?').get(slugFinal)) slugFinal = `${slugBase}-${suffix++}`
       if (slug && slugFinal !== slug) { send(res, 400, { error: `Slug "${slug}" já em uso. Sugerimos: "${slugFinal}"` }); return true }
       if (db.prepare('SELECT id FROM sys_users WHERE email=?').get(email)) { send(res, 400, { error: `E-mail "${email}" já cadastrado.` }); return true }
-      db.prepare('INSERT INTO tenants (nome,plano,slug) VALUES (?,?,?)').run(nome, plano || 'basic', slugFinal)
+      const seg = ['restaurante','acougue'].includes(segmento) ? segmento : 'restaurante'
+      db.prepare('INSERT INTO tenants (nome,plano,slug,segmento) VALUES (?,?,?,?)').run(nome, plano || 'basic', slugFinal, seg)
       const t = db.prepare('SELECT id FROM tenants WHERE slug=?').get(slugFinal)
       db.prepare('INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)').run(t.id)
       db.prepare('INSERT INTO sys_users (nome,email,senha_hash,role,tenant_id) VALUES (?,?,?,?,?)').run(nomeGestor || nome, email, hash, role || 'gestor', t.id)
       marcarDirty()
       setTimeout(() => fazerBackup(true), 2000)
-      send(res, 201, { ok: true, tenant_id: t.id, slug: slugFinal })
+      send(res, 201, { ok: true, tenant_id: t.id, slug: slugFinal, segmento: seg })
     } catch (e) { send(res, 400, { error: e.message }) }
     return true
   }
@@ -1376,6 +1377,25 @@ module.exports = async function handleRoutes(req, res, ctx) {
       send(res, 200, leads)
     } catch(e) { send(res, 500, { error: e.message }) }
     return true
+  }
+
+  // ── Segmento do tenant — gestor usa para adaptar UI ──
+  // GET /api/tenant-segmento  →  { segmento: 'restaurante'|'acougue' }
+  // PATCH /api/tenant-segmento  →  { segmento } (apenas superadmin/admin)
+  if (upath === '/api/tenant-segmento') {
+    const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    if (req.method === 'GET') {
+      const row = db.prepare('SELECT segmento FROM tenants WHERE id=?').get(tid)
+      send(res, 200, { segmento: row?.segmento || 'restaurante' }); return true
+    }
+    if (req.method === 'PATCH') {
+      const body = await readBody(req)
+      const seg  = ['restaurante','acougue'].includes(body.segmento) ? body.segmento : 'restaurante'
+      db.prepare('UPDATE tenants SET segmento=? WHERE id=?').run(seg, tid)
+      marcarDirty()
+      send(res, 200, { ok: true, segmento: seg }); return true
+    }
   }
 
   // ── Login do garçom (endpoint dedicado — senha nunca vai na URL) ──
