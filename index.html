@@ -3786,11 +3786,7 @@ function imConfirm() {
       const sel = _imGruposState[g.nome] || [];
       if (!sel.length) { toast('⚠️', `Escolha: ${g.nome}`); return; }
     }
-    if (g.tipo === 'checkbox' && g.min > 0) {
-      const sel = _imGruposState[g.nome] || [];
-      const total = sel.reduce((s,o) => s + (o.qty||1), 0);
-      if (total < g.min) { toast('⚠️', `${g.nome}: mínimo ${g.min} ${g.min===1?'opção':'opções'}`); return; }
-    }
+    // complementos adicionais (checkbox) são opcionais
   }
 
   const obs = document.getElementById('im-obs').value.trim();
@@ -5223,7 +5219,7 @@ function renderImGrupos(item) {
   if (!grupos.length) { wrap.innerHTML = ''; return; }
 
   wrap.innerHTML = grupos.map(g => {
-    const isRequired = g.tipo === 'radio' || (g.tipo === 'checkbox' && g.min > 0);
+    const isRequired = g.tipo === 'radio';
     const badge = isRequired
       ? `<span class="grp-required-badge">Obrigatório</span>`
       : `<span class="grp-optional-badge">Opcional</span>`;
