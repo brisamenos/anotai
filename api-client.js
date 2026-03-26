@@ -272,7 +272,6 @@
     constructor() {
       this.realtime = new RealtimeManager();
       this.storage  = new StorageClient();
-;
     }
     from(table)       { return new Query(table); }
     channel(name)     { return this.realtime.channel(name); }

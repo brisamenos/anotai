@@ -127,8 +127,7 @@ function setPrintMode(mode) {
   if (qp) qp.style.display = isQz ? 'flex' : 'none';
   // Auto-conecta QZ ao selecionar o modo
   if (isQz && !_qzConnected) qzConectar();
-}
-  sbToast('ok', isAuto ? 'Impressão automática ativada' : 'Impressão manual ativada');
+  sbToast('ok', isAuto ? 'Impressão automática ativada' : mode === 'manual' ? 'Impressão manual ativada' : 'Modo QZ Tray ativado');
 }
 
 function _getPrintConfig() {
