@@ -943,3 +943,51 @@ td:first-child{padding-left:18px}
   border:1px solid rgba(139,92,246,.25);
   color:#c4b5fd;
 }
+
+/* ══════════════════════════════════════════════════════
+   MODO AÇOUGUE — adaptações visuais automáticas
+   Ativado via .modo-acougue no <body>
+══════════════════════════════════════════════════════ */
+
+/* Oculta elementos marcados como exclusivos de restaurante */
+.modo-acougue [data-hide-acougue] {
+  display: none !important;
+}
+
+/* Realce especial no badge KG no PDV */
+.modo-acougue .pdv-item .pdv-price {
+  font-size: 12px;
+}
+
+/* Modal de peso — input grande para facilitar digitação */
+#modal-peso-kg input[type="number"] {
+  -moz-appearance: textfield;
+}
+#modal-peso-kg input[type="number"]::-webkit-outer-spin-button,
+#modal-peso-kg input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+/* Badge KG no carrinho */
+.modo-acougue .cart-item .ci-name span {
+  vertical-align: middle;
+}
+
+/* Tint vermelho suave na topnav para identificar modo açougue */
+.modo-acougue .topnav {
+  border-bottom: 1px solid rgba(239, 68, 68, .18);
+}
+
+/* Badge "AÇOUGUE" na sidebar footer */
+.modo-acougue .sfoot::before {
+  content: '🥩 Modo Açougue';
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--danger);
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 6px 0 0;
+  opacity: .7;
+}

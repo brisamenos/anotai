@@ -98,45 +98,15 @@ async function _carregarSegmento() {
 function _adaptarParaSegmento() {
   if (_segmento !== 'acougue') return;
 
-  // Marca o body — CSS faz o resto
+  // Marca o body — CSS faz o resto (oculta [data-hide-acougue], tints, badge)
   document.body.classList.add('modo-acougue');
 
-  // ── Ocultar itens do sidebar sem uso no açougue ──
-  // garcom, salão/mesas
-  const _hideSb = ['sn-garcom', 'sn-pedidos-mesa'];
-  _hideSb.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      // O botão do sidebar é o elemento pai mais próximo .si ou o próprio
-      const btn = el.closest('button') || el.closest('[class*="si"]') || el.parentElement;
-      if (btn) btn.style.display = 'none';
-    }
+  // ── Troca todos os labels marcados com data-label-acougue ──────────────
+  document.querySelectorAll('[data-label-acougue]').forEach(el => {
+    el.textContent = el.getAttribute('data-label-acougue');
   });
 
-  // ── Renomear labels de sidebar e headers ──
-  const _labelMap = {
-    // id do elemento de texto → novo label
-    'sn-gestor-label':  'Produtos',
-    'sn-pedidos-label': 'Atendimentos',
-    'sn-edicao-label':  'Editar Produtos',
-    'sn-kds-label':     'Fila de Corte',
-  };
-  Object.entries(_labelMap).forEach(([id, label]) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = label;
-  });
-
-  // Troca o título da topbar da página principal se estiver renderizada
-  const titleEl = document.getElementById('page-title-gestor');
-  if (titleEl) titleEl.textContent = '🥩 Produtos';
-
-  // Aplica textos via querySelectorAll para labels dinâmicos
-  document.querySelectorAll('[data-label-restaurante]').forEach(el => {
-    const labelAcougue = el.getAttribute('data-label-acougue');
-    if (labelAcougue) el.textContent = labelAcougue;
-  });
-
-  // ── Avisa outros módulos que carregarem depois ──
+  // ── Avisa outros módulos que carregarem depois (ex: gestor-cardapio.js) ─
   document.dispatchEvent(new CustomEvent('segmento:acougue'));
 }
 
