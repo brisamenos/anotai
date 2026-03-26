@@ -472,7 +472,7 @@ const STRIP_FROM_OUTPUT = {
   sys_users:    new Set(['senha_hash']),
   garcons:      new Set(['senha']),
   customers:    new Set(['senha_hash']),
-  store_config: new Set(['ia_config']),   // ia_config só acessível pelo painel admin via endpoint dedicado
+  store_config: new Set([]),
 }
 
 const NO_TENANT_FILTER = new Set(['tenants','sys_users'])
