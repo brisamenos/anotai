@@ -944,50 +944,753 @@ td:first-child{padding-left:18px}
   color:#c4b5fd;
 }
 
-/* ══════════════════════════════════════════════════════
-   MODO AÇOUGUE — adaptações visuais automáticas
-   Ativado via .modo-acougue no <body>
-══════════════════════════════════════════════════════ */
 
-/* Oculta elementos marcados como exclusivos de restaurante */
-.modo-acougue [data-hide-acougue] {
-  display: none !important;
+/* ╔══════════════════════════════════════════════════════════════╗
+   ║  MOBILE EXPERIENCE — Estima Food Gestor                      ║
+   ║  Redesign mobile-first completo: bottom nav, sheets,         ║
+   ║  kanban swipe, PDV drawer, touch targets 44px               ║
+   ╚══════════════════════════════════════════════════════════════╝ */
+
+/* ── Variáveis mobile ─────────────────────────────────────── */
+:root {
+  --mob-nav-h: 62px;
+  --mob-safe:  env(safe-area-inset-bottom, 0px);
+  --sheet-radius: 22px;
 }
 
-/* Realce especial no badge KG no PDV */
-.modo-acougue .pdv-item .pdv-price {
-  font-size: 12px;
+/* ══════════════════════════════════════════════════════════════
+   BOTTOM NAVIGATION BAR
+══════════════════════════════════════════════════════════════ */
+.mob-nav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: calc(var(--mob-nav-h) + var(--mob-safe));
+  background: rgba(13,17,23,.97);
+  border-top: 1px solid var(--border2);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  z-index: 400;
+  padding-bottom: var(--mob-safe);
+  box-shadow: 0 -8px 32px rgba(0,0,0,.6);
 }
-
-/* Modal de peso — input grande para facilitar digitação */
-#modal-peso-kg input[type="number"] {
-  -moz-appearance: textfield;
+.mob-nav-inner {
+  display: flex;
+  align-items: stretch;
+  height: var(--mob-nav-h);
 }
-#modal-peso-kg input[type="number"]::-webkit-outer-spin-button,
-#modal-peso-kg input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-}
-
-/* Badge KG no carrinho */
-.modo-acougue .cart-item .ci-name span {
-  vertical-align: middle;
-}
-
-/* Tint vermelho suave na topnav para identificar modo açougue */
-.modo-acougue .topnav {
-  border-bottom: 1px solid rgba(239, 68, 68, .18);
-}
-
-/* Badge "AÇOUGUE" na sidebar footer */
-.modo-acougue .sfoot::before {
-  content: '🥩 Modo Açougue';
-  display: block;
+.mob-nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
   font-size: 10px;
-  font-weight: 700;
-  color: var(--danger);
-  letter-spacing: .4px;
-  text-transform: uppercase;
-  text-align: center;
-  padding: 6px 0 0;
-  opacity: .7;
+  font-weight: 600;
+  letter-spacing: .2px;
+  transition: color .15s;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  min-width: 0;
+}
+.mob-nav-btn svg { flex-shrink: 0; transition: transform .2s; }
+.mob-nav-btn.on { color: var(--accent); }
+.mob-nav-btn.on svg { transform: scale(1.15); }
+.mob-nav-btn:active { opacity: .7; }
+.mob-nav-btn .mob-badge {
+  position: absolute;
+  top: 7px; right: calc(50% - 14px);
+  min-width: 16px; height: 16px;
+  background: var(--danger);
+  border-radius: 99px;
+  font-size: 9px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 4px;
+  border: 2px solid var(--bg);
+}
+/* Indicator dot for active state */
+.mob-nav-btn.on::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 24px; height: 2.5px;
+  background: var(--accent);
+  border-radius: 99px 99px 0 0;
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+/* "Mais" button gets a special pill */
+.mob-nav-btn.mais-btn {
+  color: var(--muted2);
+}
+.mob-nav-btn.mais-btn .mais-pill {
+  width: 36px; height: 36px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BACKDROP OVERLAY (sidebar + drawers)
+══════════════════════════════════════════════════════════════ */
+#mob-backdrop {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.65);
+  z-index: 299;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: backdropIn .2s ease;
+}
+#mob-backdrop.on { display: block; }
+@keyframes backdropIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ══════════════════════════════════════════════════════════════
+   "MAIS" DRAWER — menu completo mobile
+══════════════════════════════════════════════════════════════ */
+#mob-mais-drawer {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: rgba(13,17,23,.98);
+  border-top: 1px solid var(--border2);
+  border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+  z-index: 450;
+  padding: 0 0 calc(var(--mob-nav-h) + var(--mob-safe) + 8px);
+  box-shadow: 0 -16px 48px rgba(0,0,0,.7);
+  max-height: 82dvh;
+  overflow-y: auto;
+  animation: sheetUp .28s cubic-bezier(.34,1.2,.64,1);
+}
+#mob-mais-drawer.on { display: block; }
+.mob-drawer-handle {
+  width: 40px; height: 4px;
+  background: var(--border2);
+  border-radius: 99px;
+  margin: 12px auto 0;
+}
+.mob-drawer-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 15px; font-weight: 700;
+  padding: 14px 20px 10px;
+  color: var(--muted2);
+  letter-spacing: -.2px;
+}
+.mob-drawer-section {
+  padding: 4px 14px 0;
+}
+.mob-drawer-sec-label {
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--muted);
+  padding: 10px 6px 6px;
+}
+.mob-drawer-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 2px 0 10px;
+}
+.mob-drawer-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 6px 12px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all .15s;
+  -webkit-tap-highlight-color: transparent;
+  font-family: 'Outfit', sans-serif;
+}
+.mob-drawer-item:active { transform: scale(.95); background: var(--surface2); }
+.mob-drawer-item svg { width: 20px; height: 20px; color: var(--muted2); }
+.mob-drawer-item span {
+  font-size: 10px; font-weight: 600;
+  color: var(--muted2); text-align: center;
+  line-height: 1.3;
+}
+.mob-drawer-item.accent { border-color: var(--accent-dim); }
+.mob-drawer-item.accent svg { color: var(--accent); }
+.mob-drawer-item.accent span { color: var(--accent); }
+
+/* ══════════════════════════════════════════════════════════════
+   MODAIS COMO BOTTOM SHEET no mobile
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .modal-bg {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+  .modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: var(--sheet-radius) var(--sheet-radius) 0 0 !important;
+    max-height: 92dvh !important;
+    animation: sheetUp .28s cubic-bezier(.34,1.2,.64,1) !important;
+    padding: 0 20px calc(16px + var(--mob-safe)) !important;
+  }
+  .modal::before {
+    content: '';
+    display: block;
+    width: 40px; height: 4px;
+    background: var(--border2);
+    border-radius: 99px;
+    margin: 14px auto 18px;
+    flex-shrink: 0;
+  }
+  .modal-head { padding: 0 0 0 !important; }
+  .modal-close { margin-left: auto; }
+  h2 { font-size: 16px !important; margin-bottom: 16px !important; }
+}
+@keyframes sheetUp {
+  from { transform: translateY(40px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   KANBAN — scroll horizontal no mobile (estilo Trello)
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .kanban {
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    scroll-snap-type: x mandatory !important;
+    -webkit-overflow-scrolling: touch !important;
+    gap: 10px !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding-bottom: 6px !important;
+    /* Espaço para o bottom nav */
+    padding-right: 10px !important;
+  }
+  .kanban::-webkit-scrollbar { display: none; }
+  .kol {
+    min-width: 86vw !important;
+    max-width: 86vw !important;
+    flex-shrink: 0 !important;
+    scroll-snap-align: start !important;
+    max-height: calc(100dvh - 240px) !important;
+    overflow-y: auto !important;
+  }
+  /* Indicadores de coluna */
+  .kanban-col-indicator {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 0 0;
+  }
+  .kci-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--border2);
+    transition: all .2s;
+  }
+  .kci-dot.on { width: 18px; border-radius: 99px; background: var(--accent); }
+  /* Page de pedidos no mobile */
+  #page-pedidos .ph {
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+    padding: 12px 0 10px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PDV BALCÃO — mobile: layout em coluna + cart como drawer
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .pdvb-wrap {
+    grid-template-columns: 1fr !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  /* Lado direito (carrinho) vira sheet */
+  .pdvb-right {
+    display: none !important; /* controlado por JS via classe .mob-cart-open */
+  }
+  .pdvb-right.mob-open {
+    display: flex !important;
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 380 !important;
+    flex-direction: column !important;
+    background: rgba(13,17,23,.98) !important;
+    border-top: 1px solid var(--border2) !important;
+    border-radius: var(--sheet-radius) var(--sheet-radius) 0 0 !important;
+    top: auto !important;
+    max-height: 92dvh !important;
+    padding-bottom: calc(var(--mob-nav-h) + var(--mob-safe) + 8px) !important;
+    animation: sheetUp .28s cubic-bezier(.34,1.2,.64,1) !important;
+  }
+  .pdvb-right.mob-open::before {
+    content: '';
+    display: block;
+    width: 40px; height: 4px;
+    background: var(--border2);
+    border-radius: 99px;
+    margin: 14px auto 4px;
+    flex-shrink: 0;
+  }
+  /* Botão flutuante do carrinho */
+  .mob-cart-fab {
+    position: fixed !important;
+    bottom: calc(var(--mob-nav-h) + var(--mob-safe) + 14px) !important;
+    right: 16px !important;
+    z-index: 360 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    background: var(--accent) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 99px !important;
+    padding: 12px 20px !important;
+    font-family: 'Outfit', sans-serif !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    cursor: pointer !important;
+    box-shadow: 0 6px 24px var(--accent-glow) !important;
+    transition: all .2s !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+  .mob-cart-fab:active { transform: scale(.96) !important; }
+  .mob-cart-fab .fab-qty {
+    background: rgba(255,255,255,.25);
+    border-radius: 99px;
+    padding: 1px 8px;
+    font-size: 12px;
+  }
+  /* Grid de itens: 2 colunas em mobile */
+  .pdvb-items,
+  .pdvb-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  /* Fechar carrinho */
+  .pdvb-cart-close-btn {
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted2);
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+}
+.pdvb-cart-close-btn { display: none; } /* escondido no desktop */
+
+/* ══════════════════════════════════════════════════════════════
+   PDV SIMPLES (página PDV) — 2 colunas mobile
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .pdv-wrap {
+    grid-template-columns: 1fr !important;
+    height: auto !important;
+  }
+  .pdv-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .cart {
+    margin-top: 12px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TOPNAV — limpeza mobile
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .topnav {
+    padding: 0 10px !important;
+    gap: 6px !important;
+    height: 50px !important;
+  }
+  /* Esconde itens não essenciais no topnav mobile */
+  .topnav .tbadge,
+  .topnav .tnav-pill { display: none !important; }
+  /* Logo mais compacto */
+  .topnav .logo {
+    font-size: 15px !important;
+    min-width: unset !important;
+    gap: 7px !important;
+  }
+  /* Botão caixa: só ícone */
+  .caixa-btn span { display: none !important; }
+  .caixa-btn {
+    width: 36px !important; height: 36px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    justify-content: center !important;
+  }
+  /* ibtn — tamanho mínimo touch */
+  .ibtn {
+    min-width: 38px !important;
+    min-height: 38px !important;
+  }
+  .tnr { gap: 4px !important; }
+}
+@media (max-width: 420px) {
+  /* Esconde ícones menos importantes no topnav em telas muito pequenas */
+  .topnav [title="Copiar link do cardápio"],
+  .topnav [title="Robô / Automações"] {
+    display: none !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PÁGINAS — headers, títulos, ações
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .page {
+    padding: 14px 14px calc(var(--mob-nav-h) + var(--mob-safe) + 20px) !important;
+  }
+  /* Páginas especiais que usam display:flex */
+  #page-robo.on,
+  #page-pdv-balcao.on {
+    padding: 0 !important;
+  }
+  #page-pdv-balcao.on .pdvb-wrap {
+    padding: 0 0 calc(var(--mob-nav-h) + var(--mob-safe) + 10px) !important;
+  }
+  .ph {
+    flex-direction: column !important;
+    gap: 10px !important;
+    margin-bottom: 16px !important;
+  }
+  .ph > div:last-child {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    width: 100%;
+  }
+  .ph .btn {
+    flex: 1;
+    justify-content: center;
+    min-height: 40px;
+  }
+  /* Título de página maior para mobile */
+  .pt { font-size: 20px !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TOUCH TARGETS — mínimo 44px em todos os clicáveis
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .btn {
+    min-height: 40px;
+    padding: 9px 16px;
+  }
+  /* Itens do gestor de cardápio — mais espaço para tocar */
+  .cat-item-row {
+    padding: 11px 14px !important;
+    gap: 12px !important;
+  }
+  .cat-item-thumb {
+    width: 42px !important;
+    height: 42px !important;
+    border-radius: 9px !important;
+  }
+  .cat-item-name { font-size: 13.5px !important; }
+  .cat-head { padding: 14px 16px !important; }
+  /* Formulários */
+  .form-input {
+    padding: 12px 13px !important;
+    font-size: 16px !important; /* evita zoom no iOS */
+    min-height: 46px !important;
+  }
+  .sw select {
+    padding: 10px 30px 10px 14px !important;
+    font-size: 15px !important;
+    min-height: 44px !important;
+  }
+  /* Botões de qtd no carrinho */
+  .qb, .pdvb-qb {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 14px !important;
+  }
+  /* Order cards no kanban */
+  .order-card { padding: 13px 14px !important; }
+  .oc-btn { padding: 8px 6px !important; min-height: 36px !important; }
+  /* Cat row action select */
+  .cat-actions .sw select {
+    font-size: 12px !important;
+    min-height: 36px !important;
+    padding: 6px 26px 6px 10px !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   STATS GRID — 2×2 compacto no mobile
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 600px) {
+  .sg {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+  }
+  .sc {
+    padding: 14px 16px !important;
+    border-radius: 12px !important;
+  }
+  .sv { font-size: 22px !important; }
+  .sl { font-size: 9.5px !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TABELAS — scroll horizontal com indicador
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .tw { overflow: visible !important; }
+  .tw-scroll, .tw { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+  table { min-width: 560px !important; }
+  /* Indica que a tabela tem scroll */
+  .tw::after {
+    content: '← deslize →';
+    display: block;
+    text-align: center;
+    font-size: 10px;
+    color: var(--muted);
+    padding: 5px;
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PEDIDOS MESA — mesas em grid melhorado no mobile
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .mesa-kanban {
+    grid-template-columns: 1fr 1fr !important;
+    height: auto !important;
+    gap: 10px !important;
+    min-height: 0 !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   QUALIDADE DO CARDÁPIO — ocultar pills e compactar
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .quality-bar {
+    gap: 12px !important;
+    padding: 14px 16px !important;
+    flex-wrap: wrap !important;
+  }
+  .quality-pills { display: none !important; }
+  /* Em mobile mostra um resumo inline */
+  .quality-bar::after {
+    content: 'Expanda no desktop para ver todos os indicadores';
+    font-size: 11px;
+    color: var(--muted);
+    flex-basis: 100%;
+    margin-top: -4px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SIDEBAR mobile — overlay aprimorado
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .sidebar {
+    width: 0 !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    overflow: hidden !important;
+    display: none !important; /* escondido por padrão */
+  }
+  .sidebar.mobile-open {
+    display: flex !important;
+    position: fixed !important;
+    inset: 0 !important;
+    right: auto !important;
+    width: 280px !important;
+    max-width: 80vw !important;
+    z-index: 350 !important;
+    padding: 10px 8px !important;
+    border-right: 1px solid var(--border2) !important;
+    box-shadow: 4px 0 40px rgba(0,0,0,.8) !important;
+    animation: slideInLeft .24s cubic-bezier(.4,0,.2,1) !important;
+    overflow-y: auto !important;
+    /* Sem o hover-expand no mobile */
+    width: 280px !important;
+    transition: none !important;
+  }
+  /* No mobile a sidebar não colapsa — sempre expandida */
+  .sidebar.mobile-open .si {
+    font-size: 13px !important;
+    justify-content: flex-start !important;
+    padding: 11px 10px !important;
+    gap: 10px !important;
+  }
+  .sidebar.mobile-open .ssub {
+    display: flex !important;
+    padding-left: 36px !important;
+    font-size: 12px !important;
+  }
+  .sidebar.mobile-open .shead {
+    font-size: 9px !important;
+    padding: 10px 10px 4px !important;
+    pointer-events: auto !important;
+  }
+  .sidebar.mobile-open .sidebar-search { display: block !important; }
+  .sidebar.mobile-open .sfoot-info { display: flex !important; }
+  .sidebar.mobile-open .urow { justify-content: flex-start !important; padding: 9px 10px !important; }
+  .sidebar.mobile-open .sbc { position: static !important; }
+  .sidebar.mobile-open .si svg { width: 14px !important; height: 14px !important; }
+  .sb-pin { display: none !important; }
+}
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); opacity: .5; }
+  to { transform: none; opacity: 1; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PÁGINA CAIXA — compacta no mobile
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  /* Movimentos financeiros em cards ao invés de tabela */
+  #caixa-movimentos-table { display: none !important; }
+  #caixa-movimentos-cards { display: block !important; }
+}
+#caixa-movimentos-cards { display: none; }
+
+/* ══════════════════════════════════════════════════════════════
+   SBOX (barra de busca) — responsivo
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .sbox input { width: 100% !important; min-width: 0 !important; }
+  .sbox { flex: 1; width: 100% !important; }
+  .search-bar { gap: 8px !important; }
+  .search-bar .sw select { font-size: 13px !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DESEMP / RELATORIOS — 2 colunas mobile
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .desemp-grid { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
+  .desemp-card { padding: 14px 16px !important; }
+  .desemp-val { font-size: 22px !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SWIPE GESTURE HINT (apenas visual — JS na gesture)
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  /* Indicador de swipe no kanban */
+  .kanban::after {
+    content: '';
+    display: block;
+    min-width: 6px;
+    flex-shrink: 0;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   FLOATING ACTION BUTTON (FAB) — ação rápida nas páginas
+══════════════════════════════════════════════════════════════ */
+.page-fab {
+  display: none;
+  position: fixed;
+  bottom: calc(var(--mob-nav-h) + var(--mob-safe) + 14px);
+  right: 16px;
+  z-index: 200;
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  box-shadow: 0 6px 24px var(--accent-glow);
+  align-items: center;
+  justify-content: center;
+  transition: all .2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.page-fab:active { transform: scale(.92); }
+@media (max-width: 900px) {
+  .page-fab { display: flex; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   FORM IMPROVEMENTS — iOS fix (zoom prevention)
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="password"],
+  input[type="tel"],
+  input[type="search"],
+  textarea,
+  select {
+    font-size: 16px !important; /* evita zoom automático no iOS */
+  }
+  /* Mas mantém visual menor para labels */
+  .form-label { font-size: 10px !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PIZZA MODAL — bottom sheet no mobile
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .pizza-modal-bg {
+    align-items: flex-end !important;
+  }
+  .pizza-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: var(--sheet-radius) var(--sheet-radius) 0 0 !important;
+    max-height: 92dvh !important;
+    animation: sheetUp .28s cubic-bezier(.34,1.2,.64,1) !important;
+    padding-bottom: calc(16px + var(--mob-safe)) !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TOAST — posição mobile
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  #toast {
+    bottom: calc(var(--mob-nav-h) + var(--mob-safe) + 12px) !important;
+    left: 12px !important;
+    right: 12px !important;
+    border-radius: 12px !important;
+    justify-content: center !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MODAL PDV MESA — grid 2 colunas
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  #pdvb-mesa-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SAFE AREA — iPhone X e superiores
+══════════════════════════════════════════════════════════════ */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .mob-nav {
+    padding-bottom: env(safe-area-inset-bottom) !important;
+  }
 }
