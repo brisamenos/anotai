@@ -4003,7 +4003,23 @@ Use no seu próximo pedido 🛍️</textarea>
 }
 </style>
 
-<script>document.write('<script src="/gestor.js?v=' + Date.now() + '"><\/script>');</script>
+<script>
+  var _v = Date.now();
+  var _mods = [
+    'gestor-core.js',
+    'gestor-pedidos.js',
+    'gestor-cardapio.js',
+    'gestor-salao.js',
+    'gestor-relatorios.js',
+    'gestor-caixa.js',
+    'gestor-financeiro.js',
+    'gestor-robo.js',
+    'gestor-config.js'
+  ];
+  _mods.forEach(function(m){
+    document.write('<script src="/' + m + '?v=' + _v + '"><\/script>');
+  });
+</script>
 <script>document.write('<script src="/wa-chat.js?v=' + Date.now() + '"><\/script>');</script>
 
 
