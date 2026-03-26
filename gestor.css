@@ -828,46 +828,287 @@ td:first-child{padding-left:18px}
 .notif-panel.on{display:block}
 
 /* ══ MOBILE ═══════════════════════════════════════════════ */
-.mobile-menu-btn{display:none;width:32px;height:32px;border-radius:99px;background:var(--surface);border:1px solid var(--border);align-items:center;justify-content:center;cursor:pointer;color:var(--muted2);flex-shrink:0}
-@media(max-width:900px){
-  :root{--sw:0px}
-  .sidebar{display:none;width:0 !important;transition:none !important;}
-  .topnav{padding:0 12px;gap:4px}
-  .logo{min-width:auto}
-  .tnav-pill span{display:none}
-  .sg{grid-template-columns:repeat(2,1fr)}
-  .kanban{grid-template-columns:1fr;height:auto;gap:10px;min-height:unset}
-  .pdv-wrap{grid-template-columns:1fr;height:auto;min-height:unset}
-  .pdvb-wrap{grid-template-columns:1fr;height:auto;min-height:unset}
-  .chat-wrap{flex-direction:column;height:auto;min-height:unset}
-  .chat-right{width:100%}
-  .mesa-kanban{grid-template-columns:1fr;height:auto;min-height:unset}
-  .form-row-2{grid-template-columns:1fr}
-  .quality-pills{display:none}
-  .ph{flex-direction:column;align-items:flex-start}
-  .search-bar{flex-wrap:wrap}
-  .page{padding:16px 14px}
-  .mobile-menu-btn{display:flex!important}
-  .sidebar.mobile-open{display:flex !important;position:fixed;inset:0;z-index:300;width:100% !important;max-width:264px !important;border-right:1px solid var(--border)}
-  .desemp-grid{grid-template-columns:repeat(2,1fr)}
-  .tw{overflow-x:auto}
-  table{min-width:600px}
+.mobile-menu-btn{display:none;width:36px;height:36px;border-radius:10px;background:var(--surface);border:1px solid var(--border);align-items:center;justify-content:center;cursor:pointer;color:var(--muted2);flex-shrink:0}
+
+/* ── Bottom Nav ──────────────────────────────────────────── */
+:root{ --bnav-h:58px; --safe-b:env(safe-area-inset-bottom,0px); }
+.mob-bnav{
+  display:none;
+  position:fixed;bottom:0;left:0;right:0;
+  height:calc(var(--bnav-h) + var(--safe-b));
+  background:rgba(10,13,20,.96);
+  border-top:1px solid var(--border2);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  z-index:290;
+  padding-bottom:var(--safe-b);
+  box-shadow:0 -4px 20px rgba(0,0,0,.5);
 }
-@media(max-width:600px){
-  .sg{grid-template-columns:1fr 1fr}
-  .topnav .tnav-pill{display:none}
-  .topnav .tnr{gap:4px}
-  .page{padding:14px 12px}
-  .ph{margin-bottom:18px}
-  .desemp-grid{grid-template-columns:1fr}
-  .form-row-2{grid-template-columns:1fr}
-  .modal{border-radius:14px;max-height:96vh}
+.mob-bnav-inner{
+  display:flex;height:var(--bnav-h);
+}
+.mob-bn{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:3px;
+  border:none;background:none;
+  color:var(--muted);cursor:pointer;
+  font-family:'Outfit',sans-serif;font-size:9.5px;font-weight:600;
+  letter-spacing:.1px;
+  position:relative;
+  -webkit-tap-highlight-color:transparent;
+  transition:color .15s;
+  padding:0;
+}
+.mob-bn svg{width:20px;height:20px;flex-shrink:0;transition:transform .18s}
+.mob-bn.on{color:var(--accent)}
+.mob-bn.on svg{transform:scale(1.1)}
+.mob-bn.on::after{
+  content:'';position:absolute;bottom:0;left:50%;transform:translateX(-50%);
+  width:20px;height:2px;border-radius:2px 2px 0 0;
+  background:var(--accent);box-shadow:0 0 6px var(--accent-glow);
+}
+.mob-bn-badge{
+  position:absolute;top:4px;right:calc(50% - 16px);
+  min-width:15px;height:15px;padding:0 3px;
+  background:var(--danger);border-radius:99px;
+  font-size:8.5px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  border:2px solid rgba(10,13,20,.96);
 }
 
-/* ══ FIXES DE LAYOUT — scroll, devtools, responsividade ══════
-   ⚠️ BLINDADO — não remover. Resolve scroll com devtools aberto
-   e layouts quebrados em telas menores.
-══════════════════════════════════════════════════════════════ */
+/* ── Backdrop ─────────────────────────────────────────────── */
+#mob-bd{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.7);
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  z-index:289;
+}
+#mob-bd.on{display:block}
+
+/* ── "Mais" sheet ────────────────────────────────────────── */
+#mob-mais{
+  display:none;
+  position:fixed;bottom:0;left:0;right:0;
+  background:var(--surface);
+  border-top:1px solid var(--border2);
+  border-radius:20px 20px 0 0;
+  z-index:295;
+  max-height:78dvh;overflow-y:auto;
+  padding:0 0 calc(var(--bnav-h) + var(--safe-b) + 4px);
+}
+#mob-mais.on{display:block;animation:maisUp .25s cubic-bezier(.4,0,.2,1)}
+@keyframes maisUp{from{transform:translateY(30px);opacity:0}to{transform:none;opacity:1}}
+.mob-mais-handle{
+  width:36px;height:3px;background:var(--border2);
+  border-radius:99px;margin:10px auto 0;
+}
+.mob-mais-sect{padding:6px 14px 2px}
+.mob-mais-lbl{
+  font-size:9px;font-weight:700;letter-spacing:1px;
+  text-transform:uppercase;color:var(--muted);
+  padding:8px 4px 4px;
+}
+.mob-mais-grid{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:6px;
+  padding:0 0 6px;
+}
+.mob-mi{
+  display:flex;flex-direction:column;align-items:center;
+  gap:5px;padding:12px 4px 10px;
+  border-radius:12px;background:var(--surface2);
+  border:1px solid var(--border);
+  cursor:pointer;
+  font-family:'Outfit',sans-serif;font-size:10px;font-weight:600;
+  color:var(--muted2);text-align:center;line-height:1.3;
+  -webkit-tap-highlight-color:transparent;
+  transition:background .12s,border-color .12s;
+}
+.mob-mi:active{background:var(--surface3);border-color:var(--border2)}
+.mob-mi svg{width:18px;height:18px;flex-shrink:0;color:var(--muted2)}
+.mob-mi.hi svg{color:var(--accent)}
+.mob-mi.hi{border-color:rgba(59,130,246,.2)}
+
+@media(max-width:900px){
+  :root{--sw:0px}
+  .mob-bnav{display:block}
+  /* Espaço extra no fundo das páginas para o bottom nav */
+  .page{padding:14px 14px calc(var(--bnav-h) + var(--safe-b) + 18px)!important}
+  #page-pdv-balcao.on,#page-robo.on{padding:0!important}
+  #page-robo.on{padding-bottom:calc(var(--bnav-h) + var(--safe-b) + 8px)!important}
+
+  /* Topnav: compacto e limpo */
+  .sidebar{display:none;width:0!important;padding:0!important;overflow:hidden!important;border:none!important}
+  .sidebar.mobile-open{
+    display:flex!important;position:fixed;
+    top:0;bottom:0;left:0;right:auto;
+    width:272px!important;z-index:295;
+    padding:10px 8px!important;
+    border-right:1px solid var(--border2)!important;
+    box-shadow:6px 0 32px rgba(0,0,0,.7)!important;
+    overflow-y:auto!important;overflow-x:hidden!important;
+    /* Sem hover-collapse no mobile */
+    width:272px!important;transition:none!important;
+  }
+  .sidebar.mobile-open .si{font-size:13px!important;justify-content:flex-start!important;padding:10px 10px!important;gap:10px!important;white-space:normal!important;overflow:visible!important}
+  .sidebar.mobile-open .ssub{display:flex!important;padding-left:34px!important}
+  .sidebar.mobile-open .shead{font-size:9px!important;padding:10px 10px 4px!important;pointer-events:auto!important}
+  .sidebar.mobile-open .sidebar-search,.sidebar.mobile-open .sfoot-info,.sidebar.mobile-open .urow{display:flex!important}
+  .sidebar.mobile-open .sbc{position:static!important}
+  .sb-pin{display:none!important}
+
+  .mobile-menu-btn{display:flex!important}
+  .topnav{padding:0 10px!important;gap:6px!important;height:50px!important}
+  .logo{min-width:auto!important;font-size:14px!important;gap:7px!important}
+  .logo svg{width:22px!important;height:22px!important}
+  /* Esconde itens não essenciais no topnav */
+  .topnav .tnav-pill,.topnav .tbadge{display:none!important}
+  /* Caixa: só ícone */
+  .caixa-btn span{display:none!important}
+  .caixa-btn{width:34px!important;height:34px!important;padding:0!important;border-radius:50%!important;justify-content:center!important;flex-shrink:0}
+  .ibtn{width:34px!important;height:34px!important;flex-shrink:0}
+  .tnr{gap:5px!important;margin-left:auto}
+
+  /* Esconde ícones extras em telas pequenas (< 400px) */
+  @media(max-width:400px){
+    .topnav [title="Copiar link do cardápio"],
+    .topnav [title="Robô / Automações"]{display:none!important}
+  }
+
+  /* Layouts de página */
+  .sg{grid-template-columns:1fr 1fr!important;gap:10px!important}
+  .ph{flex-direction:column!important;gap:10px!important;margin-bottom:16px!important}
+  .ph>div:last-child{display:flex;flex-wrap:wrap;gap:8px;width:100%}
+  .ph>div:last-child .btn{flex:1;min-width:120px;justify-content:center;min-height:40px}
+  .pt{font-size:19px!important}
+  .form-row-2{grid-template-columns:1fr!important}
+  .quality-pills{display:none!important}
+  .search-bar{flex-wrap:wrap}
+  .desemp-grid{grid-template-columns:1fr 1fr!important;gap:10px!important}
+
+  /* Kanban: scroll horizontal estilo Trello */
+  .kanban{
+    display:flex!important;flex-direction:row!important;
+    overflow-x:auto!important;scroll-snap-type:x mandatory!important;
+    -webkit-overflow-scrolling:touch!important;
+    gap:10px!important;height:auto!important;min-height:0!important;
+    padding-bottom:4px!important;
+  }
+  .kanban::-webkit-scrollbar{display:none}
+  .kol{
+    min-width:82vw!important;max-width:82vw!important;
+    flex-shrink:0!important;scroll-snap-align:start!important;
+    max-height:calc(100dvh - 220px)!important;
+  }
+
+  /* PDV simples: coluna única */
+  .pdv-wrap{grid-template-columns:1fr!important;height:auto!important;gap:12px!important;min-height:unset!important}
+  .pdv-grid{grid-template-columns:repeat(2,1fr)!important}
+
+  /* Mesas */
+  .mesa-kanban{grid-template-columns:1fr 1fr!important;height:auto!important;min-height:0!important}
+
+  /* Tabelas */
+  .tw{overflow-x:auto!important;-webkit-overflow-scrolling:touch!important}
+  table{min-width:520px!important}
+
+  /* Chat */
+  .chat-wrap{flex-direction:column!important;height:auto!important}
+  .chat-right{width:100%!important}
+
+  /* Modais: bottom sheet */
+  .modal-bg{align-items:flex-end!important;padding:0!important}
+  .modal{
+    width:100%!important;max-width:100%!important;
+    border-radius:20px 20px 0 0!important;
+    max-height:92dvh!important;
+    padding-bottom:calc(16px + var(--safe-b))!important;
+    animation:sheetUp .26s cubic-bezier(.34,1.15,.64,1)!important;
+  }
+  @keyframes sheetUp{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
+  /* Handle visual no topo do modal */
+  .modal::before{
+    content:'';display:block;
+    width:36px;height:3px;background:var(--border2);
+    border-radius:99px;margin:12px auto 16px;flex-shrink:0;
+  }
+
+  /* Pizza modal também vira sheet */
+  .pizza-modal-bg{align-items:flex-end!important;padding:0!important}
+  .pizza-modal{
+    width:100%!important;max-width:100%!important;
+    border-radius:20px 20px 0 0!important;
+    max-height:94dvh!important;
+    padding-bottom:calc(16px + var(--safe-b))!important;
+    animation:sheetUp .26s cubic-bezier(.34,1.15,.64,1)!important;
+  }
+
+  /* Toast: acima do bottom nav */
+  #toast{
+    bottom:calc(var(--bnav-h) + var(--safe-b) + 10px)!important;
+    left:12px!important;right:12px!important;
+  }
+
+  /* fix iOS input zoom */
+  input,textarea,select{font-size:16px!important}
+  .form-label{font-size:10px!important}
+}
+
+/* PDV Balcão mobile — layout especial ─────────────────────── */
+@media(max-width:900px){
+  #page-pdv-balcao.on{
+    display:flex!important;flex-direction:column!important;
+    height:calc(100dvh - 50px)!important;  /* 50px = topnav */
+    overflow:hidden!important;
+  }
+  .pdvb-wrap{
+    display:flex!important;flex-direction:column!important;
+    flex:1!important;overflow:hidden!important;
+    height:100%!important;min-height:0!important;
+  }
+  /* Lado esquerdo (produtos) ocupa metade */
+  .pdvb-left{
+    flex:1!important;min-height:0!important;
+    border-right:none!important;
+    border-bottom:1px solid var(--border)!important;
+    max-height:52%!important;
+  }
+  .pdvb-grid,.pdvb-items{
+    grid-template-columns:repeat(2,1fr)!important;
+    gap:7px!important;
+  }
+  /* Lado direito (carrinho) ocupa o resto */
+  .pdvb-right{
+    flex:1!important;min-height:0!important;
+    overflow:hidden!important;
+    max-height:48%!important;
+    padding-bottom:calc(var(--bnav-h) + var(--safe-b))!important;
+  }
+  .pdvb-order-items{flex:1!important;overflow-y:auto!important}
+  /* Inputs e botão em linha */
+  .pdvb-inputs{padding:6px 10px!important;gap:6px!important}
+  .pdvb-input{font-size:13px!important;padding:6px 8px!important}
+  .pdvb-actions{gap:5px!important;padding:5px 10px!important}
+  .pdvb-act-btn{font-size:10.5px!important;padding:6px 5px!important}
+  .pdvb-gerar-btn{
+    margin:6px 10px 8px!important;padding:12px!important;
+    font-size:13px!important;border-radius:12px!important;
+  }
+  .pdvb-nav-hint{display:none!important}
+  .pdvb-bottom-bar .kbd{display:none}
+}
+
+/* Responsivo extra pequeno ────────────────────────────────── */
+@media(max-width:600px){
+  .sg{gap:8px!important}
+  .sc{padding:13px 14px!important}
+  .sv{font-size:22px!important}
+  .modal-bg .form-row-2{grid-template-columns:1fr!important}
+}
+@media(min-width:901px) and (max-width:1200px){
+  .kanban{grid-template-columns:repeat(3,1fr);gap:10px}
+  .page{padding:20px 22px}
+}
+
+/* ══ FIXES DE LAYOUT ════════════════════════════════════════ */
 
 /* Tabelas responsivas */
 .tw-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -886,36 +1127,27 @@ td:first-child{padding-left:18px}
 .sidebar{overflow-y:auto;overflow-x:hidden}
 .sidebar:not(:hover):not(.pinned){overflow:hidden}
 
-/* Stats grid responsivo — 4 cols em desktop, 2 em tablet, 1 em mobile */
+/* Stats grid responsivo */
 @media(max-width:1100px){
   .sg{grid-template-columns:repeat(2,1fr)}
   .desemp-grid{grid-template-columns:repeat(2,1fr)}
 }
 
-/* Formulários em modais não transbordam */
+/* Formulários em modais */
 .modal .form-row-2{grid-template-columns:1fr 1fr}
 @media(max-width:520px){
   .modal .form-row-2{grid-template-columns:1fr}
-  .modal{padding-bottom:env(safe-area-inset-bottom)}
 }
 
-/* PDV Balcão responsivo */
-@media(max-width:768px){
-  .pdvb-wrap{grid-template-columns:1fr;height:auto}
+/* PDV Balcão responsivo desktop intermediário */
+@media(max-width:768px) and (min-width:601px){
   .pdvb-right{max-height:50vh}
   .pdvb-nav-hint{display:none}
 }
 
-/* Kanban colunas mínimas em telas intermediárias */
-@media(min-width:901px) and (max-width:1200px){
-  .kanban{grid-template-columns:repeat(3,1fr);gap:10px}
-  .page{padding:20px 22px}
-}
-
 /* Evita que conteúdo longo quebre a sidebar */
 .si{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.sidebar:hover .si,
-.sidebar.pinned .si{overflow:visible;white-space:normal}
+.sidebar:hover .si,.sidebar.pinned .si{overflow:visible;white-space:normal}
 
 /* ══ BADGE DE PAGAMENTO NO CARD DO PEDIDO ══════════════════ */
 .oc-pag-badge{
@@ -942,755 +1174,4 @@ td:first-child{padding-left:18px}
   background:rgba(139,92,246,.12);
   border:1px solid rgba(139,92,246,.25);
   color:#c4b5fd;
-}
-
-
-/* ╔══════════════════════════════════════════════════════════════╗
-   ║  MOBILE EXPERIENCE — Estima Food Gestor                      ║
-   ║  Redesign mobile-first completo: bottom nav, sheets,         ║
-   ║  kanban swipe, PDV drawer, touch targets 44px               ║
-   ╚══════════════════════════════════════════════════════════════╝ */
-
-/* ── Variáveis mobile ─────────────────────────────────────── */
-:root {
-  --mob-nav-h: 62px;
-  --mob-safe:  env(safe-area-inset-bottom, 0px);
-  --sheet-radius: 22px;
-}
-
-/* ══════════════════════════════════════════════════════════════
-   BOTTOM NAVIGATION BAR
-══════════════════════════════════════════════════════════════ */
-.mob-nav {
-  display: none;
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  height: calc(var(--mob-nav-h) + var(--mob-safe));
-  background: rgba(13,17,23,.97);
-  border-top: 1px solid var(--border2);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  z-index: 400;
-  padding-bottom: var(--mob-safe);
-  box-shadow: 0 -8px 32px rgba(0,0,0,.6);
-}
-.mob-nav-inner {
-  display: flex;
-  align-items: stretch;
-  height: var(--mob-nav-h);
-}
-.mob-nav-btn {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  border: none;
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
-  font-family: 'Outfit', sans-serif;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: .2px;
-  transition: color .15s;
-  position: relative;
-  -webkit-tap-highlight-color: transparent;
-  min-width: 0;
-}
-.mob-nav-btn svg { flex-shrink: 0; transition: transform .2s; }
-.mob-nav-btn.on { color: var(--accent); }
-.mob-nav-btn.on svg { transform: scale(1.15); }
-.mob-nav-btn:active { opacity: .7; }
-.mob-nav-btn .mob-badge {
-  position: absolute;
-  top: 7px; right: calc(50% - 14px);
-  min-width: 16px; height: 16px;
-  background: var(--danger);
-  border-radius: 99px;
-  font-size: 9px; font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
-  padding: 0 4px;
-  border: 2px solid var(--bg);
-}
-/* Indicator dot for active state */
-.mob-nav-btn.on::after {
-  content: '';
-  position: absolute;
-  bottom: 0; left: 50%;
-  transform: translateX(-50%);
-  width: 24px; height: 2.5px;
-  background: var(--accent);
-  border-radius: 99px 99px 0 0;
-  box-shadow: 0 0 8px var(--accent-glow);
-}
-/* "Mais" button gets a special pill */
-.mob-nav-btn.mais-btn {
-  color: var(--muted2);
-}
-.mob-nav-btn.mais-btn .mais-pill {
-  width: 36px; height: 36px;
-  background: var(--surface2);
-  border: 1px solid var(--border2);
-  border-radius: 12px;
-  display: flex; align-items: center; justify-content: center;
-}
-
-/* ══════════════════════════════════════════════════════════════
-   BACKDROP OVERLAY (sidebar + drawers)
-══════════════════════════════════════════════════════════════ */
-#mob-backdrop {
-  display: none;
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,.65);
-  z-index: 299;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  animation: backdropIn .2s ease;
-}
-#mob-backdrop.on { display: block; }
-@keyframes backdropIn { from { opacity: 0; } to { opacity: 1; } }
-
-/* ══════════════════════════════════════════════════════════════
-   "MAIS" DRAWER — menu completo mobile
-══════════════════════════════════════════════════════════════ */
-#mob-mais-drawer {
-  display: none;
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  background: rgba(13,17,23,.98);
-  border-top: 1px solid var(--border2);
-  border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
-  z-index: 450;
-  padding: 0 0 calc(var(--mob-nav-h) + var(--mob-safe) + 8px);
-  box-shadow: 0 -16px 48px rgba(0,0,0,.7);
-  max-height: 82dvh;
-  overflow-y: auto;
-  animation: sheetUp .28s cubic-bezier(.34,1.2,.64,1);
-}
-#mob-mais-drawer.on { display: block; }
-.mob-drawer-handle {
-  width: 40px; height: 4px;
-  background: var(--border2);
-  border-radius: 99px;
-  margin: 12px auto 0;
-}
-.mob-drawer-title {
-  font-family: 'Playfair Display', serif;
-  font-size: 15px; font-weight: 700;
-  padding: 14px 20px 10px;
-  color: var(--muted2);
-  letter-spacing: -.2px;
-}
-.mob-drawer-section {
-  padding: 4px 14px 0;
-}
-.mob-drawer-sec-label {
-  font-size: 9px; font-weight: 700;
-  letter-spacing: 1.2px; text-transform: uppercase;
-  color: var(--muted);
-  padding: 10px 6px 6px;
-}
-.mob-drawer-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  padding: 2px 0 10px;
-}
-.mob-drawer-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 14px 6px 12px;
-  border-radius: 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  cursor: pointer;
-  transition: all .15s;
-  -webkit-tap-highlight-color: transparent;
-  font-family: 'Outfit', sans-serif;
-}
-.mob-drawer-item:active { transform: scale(.95); background: var(--surface2); }
-.mob-drawer-item svg { width: 20px; height: 20px; color: var(--muted2); }
-.mob-drawer-item span {
-  font-size: 10px; font-weight: 600;
-  color: var(--muted2); text-align: center;
-  line-height: 1.3;
-}
-.mob-drawer-item.accent { border-color: var(--accent-dim); }
-.mob-drawer-item.accent svg { color: var(--accent); }
-.mob-drawer-item.accent span { color: var(--accent); }
-
-/* ══════════════════════════════════════════════════════════════
-   MODAIS COMO BOTTOM SHEET no mobile
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 640px) {
-  .modal-bg {
-    align-items: flex-end !important;
-    padding: 0 !important;
-  }
-  .modal {
-    width: 100% !important;
-    max-width: 100% !important;
-    border-radius: var(--sheet-radius) var(--sheet-radius) 0 0 !important;
-    max-height: 92dvh !important;
-    animation: sheetUp .28s cubic-bezier(.34,1.2,.64,1) !important;
-    padding: 0 20px calc(16px + var(--mob-safe)) !important;
-  }
-  .modal::before {
-    content: '';
-    display: block;
-    width: 40px; height: 4px;
-    background: var(--border2);
-    border-radius: 99px;
-    margin: 14px auto 18px;
-    flex-shrink: 0;
-  }
-  .modal-head { padding: 0 0 0 !important; }
-  .modal-close { margin-left: auto; }
-  h2 { font-size: 16px !important; margin-bottom: 16px !important; }
-}
-@keyframes sheetUp {
-  from { transform: translateY(40px); opacity: 0; }
-  to { transform: none; opacity: 1; }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   KANBAN — scroll horizontal no mobile (estilo Trello)
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 900px) {
-  .kanban {
-    display: flex !important;
-    flex-direction: row !important;
-    overflow-x: auto !important;
-    scroll-snap-type: x mandatory !important;
-    -webkit-overflow-scrolling: touch !important;
-    gap: 10px !important;
-    height: auto !important;
-    min-height: 0 !important;
-    padding-bottom: 6px !important;
-    /* Espaço para o bottom nav */
-    padding-right: 10px !important;
-  }
-  .kanban::-webkit-scrollbar { display: none; }
-  .kol {
-    min-width: 86vw !important;
-    max-width: 86vw !important;
-    flex-shrink: 0 !important;
-    scroll-snap-align: start !important;
-    max-height: calc(100dvh - 240px) !important;
-    overflow-y: auto !important;
-  }
-  /* Indicadores de coluna */
-  .kanban-col-indicator {
-    display: flex;
-    justify-content: center;
-    gap: 6px;
-    padding: 8px 0 0;
-  }
-  .kci-dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: var(--border2);
-    transition: all .2s;
-  }
-  .kci-dot.on { width: 18px; border-radius: 99px; background: var(--accent); }
-  /* Page de pedidos no mobile */
-  #page-pedidos .ph {
-    position: sticky;
-    top: 0;
-    background: var(--bg);
-    z-index: 10;
-    padding: 12px 0 10px;
-    margin-bottom: 12px;
-    border-bottom: 1px solid var(--border);
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   PDV BALCÃO — mobile: layout em coluna + cart como drawer
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 900px) {
-  .pdvb-wrap {
-    grid-template-columns: 1fr !important;
-    height: auto !important;
-    min-height: 0 !important;
-  }
-  /* Lado direito (carrinho) vira sheet */
-  .pdvb-right {
-    display: none !important; /* controlado por JS via classe .mob-cart-open */
-  }
-  .pdvb-right.mob-open {
-    display: flex !important;
-    position: fixed !important;
-    inset: 0 !important;
-    z-index: 380 !important;
-    flex-direction: column !important;
-    background: rgba(13,17,23,.98) !important;
-    border-top: 1px solid var(--border2) !important;
-    border-radius: var(--sheet-radius) var(--sheet-radius) 0 0 !important;
-    top: auto !important;
-    max-height: 92dvh !important;
-    padding-bottom: calc(var(--mob-nav-h) + var(--mob-safe) + 8px) !important;
-    animation: sheetUp .28s cubic-bezier(.34,1.2,.64,1) !important;
-  }
-  .pdvb-right.mob-open::before {
-    content: '';
-    display: block;
-    width: 40px; height: 4px;
-    background: var(--border2);
-    border-radius: 99px;
-    margin: 14px auto 4px;
-    flex-shrink: 0;
-  }
-  /* Botão flutuante do carrinho */
-  .mob-cart-fab {
-    position: fixed !important;
-    bottom: calc(var(--mob-nav-h) + var(--mob-safe) + 14px) !important;
-    right: 16px !important;
-    z-index: 360 !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 10px !important;
-    background: var(--accent) !important;
-    color: #fff !important;
-    border: none !important;
-    border-radius: 99px !important;
-    padding: 12px 20px !important;
-    font-family: 'Outfit', sans-serif !important;
-    font-size: 14px !important;
-    font-weight: 700 !important;
-    cursor: pointer !important;
-    box-shadow: 0 6px 24px var(--accent-glow) !important;
-    transition: all .2s !important;
-    -webkit-tap-highlight-color: transparent !important;
-  }
-  .mob-cart-fab:active { transform: scale(.96) !important; }
-  .mob-cart-fab .fab-qty {
-    background: rgba(255,255,255,.25);
-    border-radius: 99px;
-    padding: 1px 8px;
-    font-size: 12px;
-  }
-  /* Grid de itens: 2 colunas em mobile */
-  .pdvb-items,
-  .pdvb-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-  /* Fechar carrinho */
-  .pdvb-cart-close-btn {
-    display: flex !important;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 16px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--muted2);
-    border-bottom: 1px solid var(--border);
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-}
-.pdvb-cart-close-btn { display: none; } /* escondido no desktop */
-
-/* ══════════════════════════════════════════════════════════════
-   PDV SIMPLES (página PDV) — 2 colunas mobile
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 768px) {
-  .pdv-wrap {
-    grid-template-columns: 1fr !important;
-    height: auto !important;
-  }
-  .pdv-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-  .cart {
-    margin-top: 12px;
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   TOPNAV — limpeza mobile
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 900px) {
-  .topnav {
-    padding: 0 10px !important;
-    gap: 6px !important;
-    height: 50px !important;
-  }
-  /* Esconde itens não essenciais no topnav mobile */
-  .topnav .tbadge,
-  .topnav .tnav-pill { display: none !important; }
-  /* Logo mais compacto */
-  .topnav .logo {
-    font-size: 15px !important;
-    min-width: unset !important;
-    gap: 7px !important;
-  }
-  /* Botão caixa: só ícone */
-  .caixa-btn span { display: none !important; }
-  .caixa-btn {
-    width: 36px !important; height: 36px !important;
-    padding: 0 !important;
-    border-radius: 50% !important;
-    justify-content: center !important;
-  }
-  /* ibtn — tamanho mínimo touch */
-  .ibtn {
-    min-width: 38px !important;
-    min-height: 38px !important;
-  }
-  .tnr { gap: 4px !important; }
-}
-@media (max-width: 420px) {
-  /* Esconde ícones menos importantes no topnav em telas muito pequenas */
-  .topnav [title="Copiar link do cardápio"],
-  .topnav [title="Robô / Automações"] {
-    display: none !important;
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   PÁGINAS — headers, títulos, ações
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 900px) {
-  .page {
-    padding: 14px 14px calc(var(--mob-nav-h) + var(--mob-safe) + 20px) !important;
-  }
-  /* Páginas especiais que usam display:flex */
-  #page-robo.on,
-  #page-pdv-balcao.on {
-    padding: 0 !important;
-  }
-  #page-pdv-balcao.on .pdvb-wrap {
-    padding: 0 0 calc(var(--mob-nav-h) + var(--mob-safe) + 10px) !important;
-  }
-  .ph {
-    flex-direction: column !important;
-    gap: 10px !important;
-    margin-bottom: 16px !important;
-  }
-  .ph > div:last-child {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-    width: 100%;
-  }
-  .ph .btn {
-    flex: 1;
-    justify-content: center;
-    min-height: 40px;
-  }
-  /* Título de página maior para mobile */
-  .pt { font-size: 20px !important; }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   TOUCH TARGETS — mínimo 44px em todos os clicáveis
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 900px) {
-  .btn {
-    min-height: 40px;
-    padding: 9px 16px;
-  }
-  /* Itens do gestor de cardápio — mais espaço para tocar */
-  .cat-item-row {
-    padding: 11px 14px !important;
-    gap: 12px !important;
-  }
-  .cat-item-thumb {
-    width: 42px !important;
-    height: 42px !important;
-    border-radius: 9px !important;
-  }
-  .cat-item-name { font-size: 13.5px !important; }
-  .cat-head { padding: 14px 16px !important; }
-  /* Formulários */
-  .form-input {
-    padding: 12px 13px !important;
-    font-size: 16px !important; /* evita zoom no iOS */
-    min-height: 46px !important;
-  }
-  .sw select {
-    padding: 10px 30px 10px 14px !important;
-    font-size: 15px !important;
-    min-height: 44px !important;
-  }
-  /* Botões de qtd no carrinho */
-  .qb, .pdvb-qb {
-    width: 28px !important;
-    height: 28px !important;
-    font-size: 14px !important;
-  }
-  /* Order cards no kanban */
-  .order-card { padding: 13px 14px !important; }
-  .oc-btn { padding: 8px 6px !important; min-height: 36px !important; }
-  /* Cat row action select */
-  .cat-actions .sw select {
-    font-size: 12px !important;
-    min-height: 36px !important;
-    padding: 6px 26px 6px 10px !important;
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   STATS GRID — 2×2 compacto no mobile
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 600px) {
-  .sg {
-    grid-template-columns: 1fr 1fr !important;
-    gap: 10px !important;
-  }
-  .sc {
-    padding: 14px 16px !important;
-    border-radius: 12px !important;
-  }
-  .sv { font-size: 22px !important; }
-  .sl { font-size: 9.5px !important; }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   TABELAS — scroll horizontal com indicador
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 900px) {
-  .tw { overflow: visible !important; }
-  .tw-scroll, .tw { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
-  table { min-width: 560px !important; }
-  /* Indica que a tabela tem scroll */
-  .tw::after {
-    content: '← deslize →';
-    display: block;
-    text-align: center;
-    font-size: 10px;
-    color: var(--muted);
-    padding: 5px;
-    border-top: 1px solid var(--border);
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   PEDIDOS MESA — mesas em grid melhorado no mobile
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 900px) {
-  .mesa-kanban {
-    grid-template-columns: 1fr 1fr !important;
-    height: auto !important;
-    gap: 10px !important;
-    min-height: 0 !important;
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   QUALIDADE DO CARDÁPIO — ocultar pills e compactar
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 900px) {
-  .quality-bar {
-    gap: 12px !important;
-    padding: 14px 16px !important;
-    flex-wrap: wrap !important;
-  }
-  .quality-pills { display: none !important; }
-  /* Em mobile mostra um resumo inline */
-  .quality-bar::after {
-    content: 'Expanda no desktop para ver todos os indicadores';
-    font-size: 11px;
-    color: var(--muted);
-    flex-basis: 100%;
-    margin-top: -4px;
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   SIDEBAR mobile — overlay aprimorado
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 900px) {
-  .sidebar {
-    width: 0 !important;
-    min-width: 0 !important;
-    padding: 0 !important;
-    border: none !important;
-    overflow: hidden !important;
-    display: none !important; /* escondido por padrão */
-  }
-  .sidebar.mobile-open {
-    display: flex !important;
-    position: fixed !important;
-    inset: 0 !important;
-    right: auto !important;
-    width: 280px !important;
-    max-width: 80vw !important;
-    z-index: 350 !important;
-    padding: 10px 8px !important;
-    border-right: 1px solid var(--border2) !important;
-    box-shadow: 4px 0 40px rgba(0,0,0,.8) !important;
-    animation: slideInLeft .24s cubic-bezier(.4,0,.2,1) !important;
-    overflow-y: auto !important;
-    /* Sem o hover-expand no mobile */
-    width: 280px !important;
-    transition: none !important;
-  }
-  /* No mobile a sidebar não colapsa — sempre expandida */
-  .sidebar.mobile-open .si {
-    font-size: 13px !important;
-    justify-content: flex-start !important;
-    padding: 11px 10px !important;
-    gap: 10px !important;
-  }
-  .sidebar.mobile-open .ssub {
-    display: flex !important;
-    padding-left: 36px !important;
-    font-size: 12px !important;
-  }
-  .sidebar.mobile-open .shead {
-    font-size: 9px !important;
-    padding: 10px 10px 4px !important;
-    pointer-events: auto !important;
-  }
-  .sidebar.mobile-open .sidebar-search { display: block !important; }
-  .sidebar.mobile-open .sfoot-info { display: flex !important; }
-  .sidebar.mobile-open .urow { justify-content: flex-start !important; padding: 9px 10px !important; }
-  .sidebar.mobile-open .sbc { position: static !important; }
-  .sidebar.mobile-open .si svg { width: 14px !important; height: 14px !important; }
-  .sb-pin { display: none !important; }
-}
-@keyframes slideInLeft {
-  from { transform: translateX(-100%); opacity: .5; }
-  to { transform: none; opacity: 1; }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   PÁGINA CAIXA — compacta no mobile
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 640px) {
-  /* Movimentos financeiros em cards ao invés de tabela */
-  #caixa-movimentos-table { display: none !important; }
-  #caixa-movimentos-cards { display: block !important; }
-}
-#caixa-movimentos-cards { display: none; }
-
-/* ══════════════════════════════════════════════════════════════
-   SBOX (barra de busca) — responsivo
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 640px) {
-  .sbox input { width: 100% !important; min-width: 0 !important; }
-  .sbox { flex: 1; width: 100% !important; }
-  .search-bar { gap: 8px !important; }
-  .search-bar .sw select { font-size: 13px !important; }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   DESEMP / RELATORIOS — 2 colunas mobile
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 640px) {
-  .desemp-grid { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
-  .desemp-card { padding: 14px 16px !important; }
-  .desemp-val { font-size: 22px !important; }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   SWIPE GESTURE HINT (apenas visual — JS na gesture)
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 900px) {
-  /* Indicador de swipe no kanban */
-  .kanban::after {
-    content: '';
-    display: block;
-    min-width: 6px;
-    flex-shrink: 0;
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   FLOATING ACTION BUTTON (FAB) — ação rápida nas páginas
-══════════════════════════════════════════════════════════════ */
-.page-fab {
-  display: none;
-  position: fixed;
-  bottom: calc(var(--mob-nav-h) + var(--mob-safe) + 14px);
-  right: 16px;
-  z-index: 200;
-  width: 52px; height: 52px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  font-size: 22px;
-  cursor: pointer;
-  box-shadow: 0 6px 24px var(--accent-glow);
-  align-items: center;
-  justify-content: center;
-  transition: all .2s;
-  -webkit-tap-highlight-color: transparent;
-}
-.page-fab:active { transform: scale(.92); }
-@media (max-width: 900px) {
-  .page-fab { display: flex; }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   FORM IMPROVEMENTS — iOS fix (zoom prevention)
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 900px) {
-  input[type="text"],
-  input[type="number"],
-  input[type="email"],
-  input[type="password"],
-  input[type="tel"],
-  input[type="search"],
-  textarea,
-  select {
-    font-size: 16px !important; /* evita zoom automático no iOS */
-  }
-  /* Mas mantém visual menor para labels */
-  .form-label { font-size: 10px !important; }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   PIZZA MODAL — bottom sheet no mobile
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 640px) {
-  .pizza-modal-bg {
-    align-items: flex-end !important;
-  }
-  .pizza-modal {
-    width: 100% !important;
-    max-width: 100% !important;
-    border-radius: var(--sheet-radius) var(--sheet-radius) 0 0 !important;
-    max-height: 92dvh !important;
-    animation: sheetUp .28s cubic-bezier(.34,1.2,.64,1) !important;
-    padding-bottom: calc(16px + var(--mob-safe)) !important;
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   TOAST — posição mobile
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 900px) {
-  #toast {
-    bottom: calc(var(--mob-nav-h) + var(--mob-safe) + 12px) !important;
-    left: 12px !important;
-    right: 12px !important;
-    border-radius: 12px !important;
-    justify-content: center !important;
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   MODAL PDV MESA — grid 2 colunas
-══════════════════════════════════════════════════════════════ */
-@media (max-width: 640px) {
-  #pdvb-mesa-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   SAFE AREA — iPhone X e superiores
-══════════════════════════════════════════════════════════════ */
-@supports (padding-bottom: env(safe-area-inset-bottom)) {
-  .mob-nav {
-    padding-bottom: env(safe-area-inset-bottom) !important;
-  }
 }
