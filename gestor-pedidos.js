@@ -132,16 +132,18 @@ function renderKanban(){
         // Badge de pagamento
         const _pagBadge = (() => {
           const p = o.pag || '';
+          const _naEntregaTag = '<span style="font-size:10px;background:rgba(245,158,11,.2);color:#b45309;padding:1px 5px;border-radius:99px;font-weight:700;margin-left:4px">NA ENTREGA</span>';
+          const _pendenteTag  = '<span style="font-size:10px;background:rgba(245,158,11,.2);color:#b45309;padding:1px 5px;border-radius:99px;font-weight:700;margin-left:4px">PENDENTE</span>';
           if (p === 'pix_mp' || p === 'pix') return '<div class="oc-pag-badge oc-pag-pix">&#9889; PAGO PIX</div>';
           if (p === 'pix_manual') return '<div class="oc-pag-badge oc-pag-pix-pendente">&#9203; PIX PENDENTE</div>';
-          if (p === 'cartao' || p === 'credito')   return '<div class="oc-pag-badge oc-pag-cartao">💳 CRÉDITO</div>';
-          if (p === 'debito')                        return '<div class="oc-pag-badge oc-pag-cartao">🏧 DÉBITO</div>';
+          if (p === 'cartao' || p === 'credito')   return '<div class="oc-pag-badge oc-pag-cartao">💳 CRÉDITO' + _naEntregaTag + '</div>';
+          if (p === 'debito')                        return '<div class="oc-pag-badge oc-pag-cartao">🏧 DÉBITO' + _naEntregaTag + '</div>';
           if (p === 'cartao_mp')                     return '<div class="oc-pag-badge oc-pag-cartao" style="background:rgba(34,197,94,.12);color:var(--success)">💳 CRÉD. ONLINE</div>';
           if (p === 'dinheiro') {
             var tr = '';
             if (o.troco > 0) tr = ' &middot; Troco p/ R$' + parseFloat(o.troco).toFixed(2).replace('.',',');
             else if (o.troco === -1) tr = ' &middot; Precisa troco';
-            return '<div class="oc-pag-badge oc-pag-dinheiro">&#128181; DINHEIRO' + tr + '</div>';
+            return '<div class="oc-pag-badge oc-pag-dinheiro">&#128181; DINHEIRO' + tr + _pendenteTag + '</div>';
           }
           return '';
         })();
