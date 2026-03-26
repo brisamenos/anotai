@@ -922,6 +922,8 @@ async function handleIAWebhook(req, res) {
     msgs.push(msg)
     const timer = setTimeout(async () => {
       _msgBuffer.delete(bufKey)
+      const pausaNow=_pausaHumano.get(pausaKey)
+      if (pausaNow&&(Date.now()-pausaNow)<pausaMin*60*1000) return
       const msgFull=msgs.join('\n'), inst=cfg.evo_instance||EVO_INST, nomeLoja=cfg.store_name||'Restaurante'
       const contexto=[]
       const tenantRow=db.prepare("SELECT slug FROM tenants WHERE id=?").get(tenantId)
