@@ -35,8 +35,8 @@ function renderGestor(){
                 : `<svg viewBox="0 0 24 24" fill="none" width="18" height="18" style="opacity:.35"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z" stroke="currentColor" stroke-width="1.5"/><path d="M3 16l5-5 3 3 3-4 4 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" opacity=".5"/></svg>`
               }</div>
               <div style="flex:1;min-width:0">
-                <div class="cat-item-name">${item.name}${item.promo?' <span class="ptag">promo</span>':''}${item.itemType==='pizza'?' <span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--accent3);border-radius:4px;padding:1px 4px;font-weight:700;margin-left:2px">🍕</span>':''}</div>
-                <div class="cat-item-price">R$ ${item.price.toFixed(2).replace('.',',')} · ${item.status==='active'?'<span style="color:var(--success)">Disponível</span>':item.status==='esgotado'?'<span style="color:var(--danger)">Esgotado</span>':'<span style="color:var(--accent3)">Pausado</span>'}</div>
+                <div class="cat-item-name">${item.name}${item.promo?' <span class="ptag">promo</span>':''}${item.itemType==='pizza'?' <span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--accent3);border-radius:4px;padding:1px 4px;font-weight:700;margin-left:2px">🍕</span>':''}${item.itemType==='kg'?' <span style="font-size:9px;background:rgba(34,197,94,.15);color:#16a34a;border-radius:4px;padding:1px 4px;font-weight:700;margin-left:2px">KG</span>':''}</div>
+                <div class="cat-item-price">R$ ${item.price.toFixed(2).replace('.',',')}${item.itemType==='kg'?'<span style="font-size:10px;color:var(--muted)">/kg</span>':''} · ${item.status==='active'?'<span style="color:var(--success)">Disponível</span>':item.status==='esgotado'?'<span style="color:var(--danger)">Esgotado</span>':'<span style="color:var(--accent3)">Pausado</span>'}</div>
               </div>
               <div style="display:flex;gap:4px;flex-shrink:0">
                 <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();duplicateItem(+this.dataset.id)" title="Duplicar item">⎘</button>
@@ -354,6 +354,7 @@ function togglePizzaOptions(ctx) {
   const typeEl = document.getElementById(ctx+'-item-type');
   const box    = document.getElementById(ctx+'-pizza-options');
   if (!typeEl || !box) return;
+  // Mostra opções de pizza APENAS quando tipo = pizza; oculta para normal e kg
   box.style.display = typeEl.value === 'pizza' ? '' : 'none';
 }
 function populateCatSelects() {

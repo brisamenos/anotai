@@ -794,6 +794,42 @@ const MODELOS_CARDAPIO = {
       ]},
     ]
   },
+  acougue: {
+    label: 'Açougue / Frigorífico',
+    categorias: [
+      { label: 'Bovinos', name: 'bovinos', type: 'Itens principais', itens: [
+        { name: 'Picanha',        emoji: '🥩', price: 89.90, item_type: 'kg', description: 'Corte nobre com capa de gordura, ideal para churrasco' },
+        { name: 'Contrafilé',     emoji: '🥩', price: 54.90, item_type: 'kg', description: 'Macio e saboroso, ótimo para grelhar e assar' },
+        { name: 'Alcatra',        emoji: '🥩', price: 59.90, item_type: 'kg', description: 'Corte versátil, bom para churrasco e assados' },
+        { name: 'Fraldinha',      emoji: '🥩', price: 44.90, item_type: 'kg', description: 'Fibras longas com gordura entremeada, muito saborosa' },
+        { name: 'Costela Bovina', emoji: '🥩', price: 38.90, item_type: 'kg', description: 'Para churrasco lento ou panela de pressão' },
+        { name: 'Patinho Moído',  emoji: '🥩', price: 32.90, item_type: 'kg', description: 'Carne moída fresca de primeira qualidade' },
+        { name: 'Acém',           emoji: '🥩', price: 29.90, item_type: 'kg', description: 'Excelente para ensopados e carne de panela' },
+      ]},
+      { label: 'Suínos', name: 'suinos', type: 'Itens principais', itens: [
+        { name: 'Costelinha Suína', emoji: '🥓', price: 28.90, item_type: 'kg', description: 'Perfeita para churrasco e molho barbecue' },
+        { name: 'Pernil Suíno',     emoji: '🥓', price: 22.90, item_type: 'kg', description: 'Ideal para assar no forno com temperos' },
+        { name: 'Bisteca Suína',    emoji: '🥓', price: 24.90, item_type: 'kg', description: 'Corte com osso para grelhar' },
+        { name: 'Lombo Suíno',      emoji: '🥓', price: 26.90, item_type: 'kg', description: 'Magro e saboroso, ótimo assado' },
+      ]},
+      { label: 'Aves', name: 'aves', type: 'Itens principais', itens: [
+        { name: 'Frango Inteiro',   emoji: '🍗', price: 12.90, item_type: 'kg', description: 'Frango resfriado, limpinho e pronto para temperar' },
+        { name: 'Coxa e Sobrecoxa', emoji: '🍗', price: 11.90, item_type: 'kg', description: 'Suculenta e saborosa' },
+        { name: 'Filé de Peito',    emoji: '🍗', price: 18.90, item_type: 'kg', description: 'Magro e versátil' },
+        { name: 'Asa de Frango',    emoji: '🍗', price: 10.90, item_type: 'kg', description: 'Ótima para fritar ou assar na grelha' },
+      ]},
+      { label: 'Embutidos', name: 'embutidos', type: 'Itens principais', itens: [
+        { name: 'Linguiça Toscana',   emoji: '🌭', price: 19.90, item_type: 'kg', description: 'Artesanal com ervas finas' },
+        { name: 'Linguiça de Frango', emoji: '🌭', price: 16.90, item_type: 'kg', description: 'Mais leve e saborosa' },
+        { name: 'Calabresa',          emoji: '🌭', price: 17.90, item_type: 'kg', description: 'Defumada, tradicional e saborosa' },
+      ]},
+      { label: 'Temperados', name: 'temperados', type: 'Itens principais', itens: [
+        { name: 'Frango Temperado',   emoji: '🧂', price: 15.90, item_type: 'kg', description: 'Tempero especial da casa, pronto para assar' },
+        { name: 'Costela Temperada',  emoji: '🧂', price: 42.90, item_type: 'kg', description: 'Marinada por 24h no molho secreto' },
+        { name: 'Churrasco Misto',    emoji: '🧂', price: 35.90, item_type: 'kg', description: 'Mix de carnes temperadas para churrasco' },
+      ]},
+    ]
+  },
 };
 
 let _modeloSelecionado = null;
@@ -958,7 +994,7 @@ async function aplicarModelo() {
           price_old:    null,
           cat:          catData.label,
           cat_key:      catData.name,
-          item_type:    'normal',
+          item_type:    itemDef.item_type   || 'normal',
           allow_half:   false,
           max_flavors:  1,
           promo:        false,
