@@ -912,6 +912,10 @@ async function handleIAWebhook(req, res) {
     if (!openaiKey) { send(res,200,{ok:true}); return }
     const modelo=iaG.modelo||'gpt-4o-mini', maxTokens=iaG.max_tokens||800, bufferSeg=iaG.buffer_seg||3, quebraLen=iaG.quebra_linha||0, pausaMin=iaG.pausa_min||30
     const pausaKey=`pausa:${tenantId}:${phone}`, pausaAt=_pausaHumano.get(pausaKey)
+    log('🔍', `[PAUSA-DEBUG] Webhook — from JID: "${from}" → phone extraído: "${phone}" | tenantId: "${tenantId}"`)
+    log('🔍', `[PAUSA-DEBUG] Webhook — pausaKey verificada: "${pausaKey}"`)
+    log('🔍', `[PAUSA-DEBUG] Webhook — pausaAt encontrado: ${pausaAt || 'NÃO ENCONTRADO'} | pausaMin config: ${pausaMin}min`)
+    log('🔍', `[PAUSA-DEBUG] Webhook — chaves ativas no _pausaHumano: [${[..._pausaHumano.keys()].join(', ')||'nenhuma'}]`)
     if (pausaAt&&(Date.now()-pausaAt)<pausaMin*60*1000) { log('🔇',`IA bloqueada (humano ativo) — ${phone} [${tenantId}]`); send(res,200,{ok:true}); return }
     const histKey=`conv:${tenantId}:${phone}:hist`
     if (!_msgBuffer.has(histKey)) _msgBuffer.set(histKey,[])
@@ -924,6 +928,7 @@ async function handleIAWebhook(req, res) {
       _msgBuffer.delete(bufKey)
       const pausaNow=_pausaHumano.get(pausaKey)
       if (pausaNow&&(Date.now()-pausaNow)<pausaMin*60*1000) { log('🔇',`IA bloqueada no timer (humano assumiu durante buffer) — ${phone} [${tenantId}]`); return }
+      log('🔍', `[PAUSA-DEBUG] Timer — pausaKey: "${pausaKey}" | pausaNow: ${pausaNow || 'NÃO ENCONTRADO'} — IA vai responder`)
       const msgFull=msgs.join('\n'), inst=cfg.evo_instance||EVO_INST, nomeLoja=cfg.store_name||'Restaurante'
       const contexto=[]
       const tenantRow=db.prepare("SELECT slug FROM tenants WHERE id=?").get(tenantId)
