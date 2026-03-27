@@ -900,37 +900,45 @@ td:first-child{padding-left:18px}
 
   /* ── Kanban: scroll horizontal igual CRM ─── */
   #page-pedidos.on{
+    position:absolute!important;
+    inset:0!important;
     display:flex!important;
     flex-direction:column!important;
     overflow:hidden!important;
     padding:12px 12px 0!important;
   }
   #page-pedidos .ph{flex-shrink:0!important}
+  /* Kanban ocupa o espaço restante abaixo do .ph */
   .kanban{
-    flex:1!important;
+    /* altura fixa = tela - topnav - bottomnav - ph (~120px) */
+    height:calc(calc(var(--vh,1vh)*100) - 50px - 60px - 120px)!important;
+    min-height:200px!important;
+    /* layout horizontal */
     display:flex!important;
     flex-direction:row!important;
-    align-items:flex-start!important;
+    align-items:stretch!important;
+    /* scroll horizontal */
     overflow-x:auto!important;
     overflow-y:hidden!important;
     scroll-snap-type:x proximity!important;
     -webkit-overflow-scrolling:touch!important;
     overscroll-behavior-x:contain!important;
     touch-action:pan-x!important;
+    /* visual */
     gap:12px!important;
     padding:0 4px 8px!important;
-    min-height:0!important;
-    height:auto!important;
+    /* anula grid do desktop */
+    grid-template-columns:unset!important;
   }
   .kanban::-webkit-scrollbar{display:none}
   .kol{
+    /* largura de ~78vw = vê a próxima coluna no canto */
     min-width:78vw!important;max-width:78vw!important;
     flex-shrink:0!important;
     scroll-snap-align:start!important;
     display:flex!important;flex-direction:column!important;
     overflow:hidden!important;
-    height:calc(calc(var(--vh,1vh)*100) - 180px)!important;
-    min-height:200px!important;
+    height:100%!important;
   }
   .kol-body{
     flex:1!important;
