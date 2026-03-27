@@ -799,28 +799,28 @@ td:first-child{padding-left:18px}
 /* ══ SIDEBAR HOVER-EXPAND ═════════════════════════════════
    Colapsado: 52px (só ícones)   Expandido: 224px (hover/pinned)
 ═════════════════════════════════════════════════════════════ */
-.sidebar{ width:52px !important; transition:width .22s cubic-bezier(.4,0,.2,1) !important; overflow:hidden !important; }
-.sidebar:hover, .sidebar.pinned{ width:var(--sw) !important; z-index:100; box-shadow:4px 0 30px rgba(0,0,0,.6); }
+.sidebar:not(.mobile-open){ width:52px !important; transition:width .22s cubic-bezier(.4,0,.2,1) !important; overflow:hidden !important; }
+.sidebar:not(.mobile-open):hover, .sidebar.pinned{ width:var(--sw) !important; z-index:100; box-shadow:4px 0 30px rgba(0,0,0,.6); }
 
-.sidebar:not(:hover):not(.pinned) .si{ font-size:0 !important; justify-content:center; padding:9px; gap:0; }
-.sidebar:not(:hover):not(.pinned) .si svg{ width:16px; height:16px; flex-shrink:0; opacity:.8; }
-.sidebar:not(:hover):not(.pinned) .si .sbc{ position:absolute; top:1px; right:1px; font-size:7px; min-width:11px; height:11px; padding:0 2px; opacity:1; }
-.sidebar:not(:hover):not(.pinned) .ssub{ display:none !important; }
-.sidebar:not(:hover):not(.pinned) .shead{ font-size:0; padding:4px 8px; border-top:1px solid var(--border); pointer-events:none; }
-.sidebar:not(:hover):not(.pinned) .shead-arrow{ display:none; }
-.sidebar:not(:hover):not(.pinned) .sidebar-search{ display:none; }
-.sidebar:not(:hover):not(.pinned) .sfoot-info{ display:none !important; }
-.sidebar:not(:hover):not(.pinned) .urow{ justify-content:center; padding:7px 6px; }
+.sidebar:not(.mobile-open):not(:hover):not(.pinned) .si{ font-size:0 !important; justify-content:center; padding:9px; gap:0; }
+.sidebar:not(.mobile-open):not(:hover):not(.pinned) .si svg{ width:16px; height:16px; flex-shrink:0; opacity:.8; }
+.sidebar:not(.mobile-open):not(:hover):not(.pinned) .si .sbc{ position:absolute; top:1px; right:1px; font-size:7px; min-width:11px; height:11px; padding:0 2px; opacity:1; }
+.sidebar:not(.mobile-open):not(:hover):not(.pinned) .ssub{ display:none !important; }
+.sidebar:not(.mobile-open):not(:hover):not(.pinned) .shead{ font-size:0; padding:4px 8px; border-top:1px solid var(--border); pointer-events:none; }
+.sidebar:not(.mobile-open):not(:hover):not(.pinned) .shead-arrow{ display:none; }
+.sidebar:not(.mobile-open):not(:hover):not(.pinned) .sidebar-search{ display:none; }
+.sidebar:not(.mobile-open):not(:hover):not(.pinned) .sfoot-info{ display:none !important; }
+.sidebar:not(.mobile-open):not(:hover):not(.pinned) .urow{ justify-content:center; padding:7px 6px; }
 
-.sidebar:hover .si, .sidebar.pinned .si{ font-size:12.5px !important; justify-content:flex-start; padding:8px 10px; gap:9px; }
-.sidebar:hover .shead, .sidebar.pinned .shead{ font-size:9px; padding:10px 10px 4px; pointer-events:auto; }
-.sidebar:hover .sidebar-search, .sidebar.pinned .sidebar-search{ display:block; }
-.sidebar:hover .sfoot-info, .sidebar.pinned .sfoot-info{ display:flex !important; }
-.sidebar:hover .urow, .sidebar.pinned .urow{ justify-content:flex-start; padding:7px 10px; }
+.sidebar:not(.mobile-open):hover .si, .sidebar.pinned .si{ font-size:12.5px !important; justify-content:flex-start; padding:8px 10px; gap:9px; }
+.sidebar:not(.mobile-open):hover .shead, .sidebar.pinned .shead{ font-size:9px; padding:10px 10px 4px; pointer-events:auto; }
+.sidebar:not(.mobile-open):hover .sidebar-search, .sidebar.pinned .sidebar-search{ display:block; }
+.sidebar:not(.mobile-open):hover .sfoot-info, .sidebar.pinned .sfoot-info{ display:flex !important; }
+.sidebar:not(.mobile-open):hover .urow, .sidebar.pinned .urow{ justify-content:flex-start; padding:7px 10px; }
 
 /* Pin button */
 .sb-pin{ position:absolute; top:8px; right:6px; width:22px; height:22px; border-radius:99px; background:var(--surface2); border:1px solid var(--border); display:none; align-items:center; justify-content:center; cursor:pointer; font-size:11px; color:var(--muted); transition:all .15s; z-index:10; }
-.sidebar:hover .sb-pin, .sidebar.pinned .sb-pin{ display:flex; }
+.sidebar:not(.mobile-open):hover .sb-pin, .sidebar.pinned .sb-pin{ display:flex; }
 .sb-pin:hover{ color:var(--accent); border-color:var(--accent); }
 .sidebar.pinned .sb-pin{ color:var(--accent); border-color:var(--accent); background:var(--accent-dim); }
 
