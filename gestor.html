@@ -4155,9 +4155,11 @@ Use no seu próximo pedido 🛍️</textarea>
       <span>Pedidos</span>
       <span id="m-badge" style="display:none;position:absolute;top:5px;right:calc(50% - 16px);min-width:16px;height:16px;padding:0 4px;background:#ef4444;border-radius:99px;font-size:9px;font-weight:700;align-items:center;justify-content:center;border:2px solid rgba(10,13,20,.97)">0</span>
     </button>
-    <button class="m-tab" id="mtb-pdv" onclick="nav('pdv-balcao');mTab('pdv')" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:none;color:#64748b;font-family:'Outfit',sans-serif;font-size:9.5px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent">
-      <svg width="21" height="21" viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M5 4V3a3 3 0 0 1 6 0v1" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="9" r="1.5" fill="currentColor"/></svg>
-      <span>PDV</span>
+    <button class="m-tab" id="mtb-novo" onclick="noOpenModal()" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:none;color:#64748b;font-family:'Outfit',sans-serif;font-size:9.5px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent;position:relative">
+      <div style="width:40px;height:40px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px var(--accent-glow);margin-bottom:1px;margin-top:-14px">
+        <svg width="20" height="20" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+      </div>
+      <span style="color:var(--accent)">Novo</span>
     </button>
     <button class="m-tab" id="mtb-caixa" onclick="nav('caixa');mTab('caixa')" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:none;color:#64748b;font-family:'Outfit',sans-serif;font-size:9.5px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent">
       <svg width="21" height="21" viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8.5" r="2.5" stroke="currentColor" stroke-width="1.4"/></svg>
