@@ -898,56 +898,93 @@ td:first-child{padding-left:18px}
   }
   .page.on{display:block!important}
 
-  /* ── Kanban: página com overflow:hidden, kanban desliza ─── */
+  /* ── Kanban: scroll horizontal igual CRM ─── */
   #page-pedidos.on{
     display:flex!important;
     flex-direction:column!important;
     overflow:hidden!important;
-    padding:12px 12px 8px!important;
+    padding:12px 12px 0!important;
   }
   #page-pedidos .ph{flex-shrink:0!important}
   .kanban{
     flex:1!important;
     display:flex!important;
     flex-direction:row!important;
+    align-items:flex-start!important;
     overflow-x:auto!important;
     overflow-y:hidden!important;
-    scroll-snap-type:x mandatory!important;
+    scroll-snap-type:x proximity!important;
     -webkit-overflow-scrolling:touch!important;
     overscroll-behavior-x:contain!important;
     touch-action:pan-x!important;
-    gap:10px!important;
-    padding-bottom:6px!important;
+    gap:12px!important;
+    padding:0 4px 8px!important;
     min-height:0!important;
     height:auto!important;
   }
   .kanban::-webkit-scrollbar{display:none}
   .kol{
-    min-width:80vw!important;max-width:80vw!important;
-    flex-shrink:0!important;scroll-snap-align:start!important;
+    min-width:78vw!important;max-width:78vw!important;
+    flex-shrink:0!important;
+    scroll-snap-align:start!important;
     display:flex!important;flex-direction:column!important;
     overflow:hidden!important;
-    height:100%!important;min-height:200px!important;
+    height:calc(calc(var(--vh,1vh)*100) - 180px)!important;
+    min-height:200px!important;
   }
-  .kol-body{flex:1!important;overflow-y:auto!important;min-height:0!important}
+  .kol-body{
+    flex:1!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    -webkit-overflow-scrolling:touch!important;
+    min-height:0!important;
+  }
 
   /* ── PDV Balcão ─────────────────────────────────────────── */
   #page-pdv-balcao.on{
     display:flex!important;flex-direction:column!important;
     overflow:hidden!important;padding:0!important;
+    /* sobrepõe o height:calc(100vh - 52px) inline */
+    height:auto!important;
+    inset:0!important;position:absolute!important;
   }
   .pdvb-wrap{
     flex:1!important;display:flex!important;flex-direction:column!important;
     overflow:hidden!important;min-height:0!important;
   }
-  .pdvb-left{flex:1!important;min-height:0!important;border-right:none!important;border-bottom:1px solid var(--border)!important;max-height:54%!important;display:flex!important;flex-direction:column!important;overflow:hidden!important}
-  .pdvb-grid,.pdvb-items{grid-template-columns:repeat(2,1fr)!important;gap:7px!important}
+  .pdvb-left{
+    flex:1!important;min-height:0!important;
+    border-right:none!important;border-bottom:1px solid var(--border)!important;
+    max-height:54%!important;
+    display:flex!important;flex-direction:column!important;overflow:hidden!important;
+  }
+  /* Grid de produtos: rola dentro do pdvb-left */
+  .pdvb-grid{
+    grid-template-columns:repeat(2,1fr)!important;gap:7px!important;
+    overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;
+    flex:1!important;min-height:0!important;
+    padding:8px!important;
+  }
+  .pdvb-items{grid-template-columns:repeat(2,1fr)!important;gap:7px!important;overflow-y:auto!important;flex:1!important;min-height:0!important}
   .pdvb-right{flex:1!important;min-height:0!important;max-height:46%!important;overflow:hidden!important;display:flex!important;flex-direction:column!important}
   .pdvb-order-items{flex:1!important;overflow-y:auto!important;min-height:0!important}
   .pdvb-nav-hint{display:none!important}
   .pdvb-actions{gap:4px!important;padding:5px 10px!important}
   .pdvb-act-btn{font-size:10.5px!important;padding:6px 4px!important}
   .pdvb-gerar-btn{margin:5px 10px 6px!important;padding:11px!important;font-size:13px!important}
+
+  /* ── PDV Simples ─────────────────────────────────────────── */
+  /* Produtos em cima, carrinho abaixo — ambos roláveis */
+  #page-pdv.on .pdv-wrap{
+    display:flex!important;flex-direction:column!important;
+    gap:12px!important;height:auto!important;min-height:unset!important;
+  }
+  #page-pdv.on .pdv-items{
+    display:flex!important;flex-direction:column!important;
+    min-height:0!important;
+  }
+  .pdv-grid{grid-template-columns:repeat(2,1fr)!important}
+  .cart{margin-top:4px!important}
 
   /* Robô */
   #page-robo.on{
