@@ -828,40 +828,161 @@ td:first-child{padding-left:18px}
 .notif-panel.on{display:block}
 
 /* ══ MOBILE ═══════════════════════════════════════════════ */
-.mobile-menu-btn{display:none;width:32px;height:32px;border-radius:99px;background:var(--surface);border:1px solid var(--border);align-items:center;justify-content:center;cursor:pointer;color:var(--muted2);flex-shrink:0}
+:root{ --bnav:60px; --safe-b:env(safe-area-inset-bottom,0px); }
+
+.mobile-menu-btn{display:none;width:36px;height:36px;border-radius:10px;background:var(--surface);border:1px solid var(--border);align-items:center;justify-content:center;cursor:pointer;color:var(--muted2);flex-shrink:0}
+
+/* Itens do sheet Mais */
+.m-mi{display:flex;flex-direction:column;align-items:center;gap:5px;padding:13px 4px 11px;border-radius:13px;background:var(--surface2);border:1px solid var(--border);cursor:pointer;font-family:'Outfit',sans-serif;font-size:10px;font-weight:600;color:var(--muted2);text-align:center;line-height:1.3;-webkit-tap-highlight-color:transparent;transition:background .1s}
+.m-mi:active{background:var(--surface3)}
+.m-mi svg{flex-shrink:0;color:var(--muted2)}
+.m-mi.hi svg{color:var(--accent)}
+.m-mi.hi{border-color:rgba(59,130,246,.2)}
+@keyframes mSheetUp{from{transform:translateY(28px);opacity:0}to{transform:none;opacity:1}}
+
 @media(max-width:900px){
+  /* ── Layout base ── */
   :root{--sw:0px}
-  .sidebar{display:none;width:0 !important;transition:none !important;}
-  .topnav{padding:0 12px;gap:4px}
-  .logo{min-width:auto}
-  .tnav-pill span{display:none}
-  .sg{grid-template-columns:repeat(2,1fr)}
-  .kanban{grid-template-columns:1fr;height:auto;gap:10px;min-height:unset}
-  .pdv-wrap{grid-template-columns:1fr;height:auto;min-height:unset}
-  .pdvb-wrap{grid-template-columns:1fr;height:auto;min-height:unset}
-  .chat-wrap{flex-direction:column;height:auto;min-height:unset}
-  .chat-right{width:100%}
-  .mesa-kanban{grid-template-columns:1fr;height:auto;min-height:unset}
-  .form-row-2{grid-template-columns:1fr}
-  .quality-pills{display:none}
-  .ph{flex-direction:column;align-items:flex-start}
-  .search-bar{flex-wrap:wrap}
-  .page{padding:16px 14px}
+  .sidebar{display:none!important}
   .mobile-menu-btn{display:flex!important}
-  .sidebar.mobile-open{display:flex !important;position:fixed;inset:0;z-index:300;width:100% !important;max-width:264px !important;border-right:1px solid var(--border)}
-  .desemp-grid{grid-template-columns:repeat(2,1fr)}
-  .tw{overflow-x:auto}
-  table{min-width:600px}
+
+  /* Topnav compacto */
+  .topnav{padding:0 10px!important;gap:5px!important;height:50px!important}
+  .logo{min-width:auto!important;font-size:14px!important;gap:7px!important}
+  .logo svg{width:22px!important;height:22px!important}
+  .tnav-pill,.tbadge{display:none!important}
+  .caixa-btn span{display:none!important}
+  .caixa-btn{width:34px!important;height:34px!important;padding:0!important;border-radius:50%!important;justify-content:center!important;flex-shrink:0}
+  .ibtn{width:34px!important;height:34px!important;flex-shrink:0}
+  .tnr{gap:4px!important}
+
+  /* Main: padding embaixo para o bottom nav não sobrepor */
+  .page{padding:14px 14px calc(var(--bnav) + var(--safe-b) + 20px)!important}
+  /* Páginas com display flex especial */
+  #page-robo.on{padding-bottom:calc(var(--bnav) + var(--safe-b) + 8px)!important}
+  #page-pdv-balcao.on{padding:0!important}
+
+  /* Layout geral */
+  .sg{grid-template-columns:1fr 1fr!important;gap:10px!important}
+  .sc{padding:13px 14px!important}
+  .sv{font-size:21px!important}
+  .ph{flex-direction:column!important;gap:10px!important;margin-bottom:16px!important}
+  .ph>div:last-child{display:flex;flex-wrap:wrap;gap:8px;width:100%}
+  .ph>div:last-child .btn{flex:1;min-width:100px;justify-content:center;min-height:40px}
+  .pt{font-size:19px!important}
+  .form-row-2{grid-template-columns:1fr!important}
+  .quality-pills{display:none!important}
+  .search-bar{flex-wrap:wrap}
+  .desemp-grid{grid-template-columns:1fr 1fr!important;gap:10px!important}
+
+  /* Kanban: scroll horizontal estilo CRM */
+  .kanban{
+    display:flex!important;
+    flex-direction:row!important;
+    overflow-x:auto!important;
+    scroll-snap-type:x mandatory!important;
+    -webkit-overflow-scrolling:touch!important;
+    gap:10px!important;
+    height:auto!important;
+    min-height:calc(100dvh - 230px)!important;
+    padding-bottom:4px!important;
+  }
+  .kanban::-webkit-scrollbar{display:none}
+  .kol{
+    min-width:83vw!important;max-width:83vw!important;
+    flex-shrink:0!important;scroll-snap-align:start!important;
+    height:auto!important;
+    max-height:calc(100dvh - 230px)!important;
+  }
+  .kol-body{overflow-y:auto!important}
+
+  /* PDV Balcão: lado a lado em coluna */
+  .pdvb-wrap{
+    display:flex!important;flex-direction:column!important;
+    height:calc(100dvh - 50px)!important;overflow:hidden!important;
+  }
+  .pdvb-left{flex:1!important;min-height:0!important;border-right:none!important;border-bottom:1px solid var(--border)!important;max-height:54%!important}
+  .pdvb-grid,.pdvb-items{grid-template-columns:repeat(2,1fr)!important;gap:7px!important}
+  .pdvb-right{flex:1!important;min-height:0!important;max-height:46%!important;padding-bottom:calc(var(--bnav) + var(--safe-b))!important;overflow:hidden!important}
+  .pdvb-order-items{flex:1!important;overflow-y:auto!important}
+  .pdvb-nav-hint{display:none!important}
+  .pdvb-actions{gap:5px!important}
+  .pdvb-act-btn{font-size:10.5px!important;padding:6px 4px!important}
+  .pdvb-gerar-btn{margin:6px 10px 8px!important;padding:11px!important;font-size:13px!important}
+
+  /* PDV simples */
+  .pdv-wrap{grid-template-columns:1fr!important;height:auto!important;min-height:unset!important}
+  .pdv-grid{grid-template-columns:repeat(2,1fr)!important}
+
+  /* Mesas */
+  .mesa-kanban{grid-template-columns:1fr 1fr!important;height:auto!important;min-height:0!important}
+
+  /* Tabelas: scroll horizontal */
+  .tw{overflow-x:auto!important;-webkit-overflow-scrolling:touch!important}
+  table{min-width:520px!important}
+
+  /* Chat */
+  .chat-wrap{flex-direction:column!important;height:auto!important;min-height:unset!important}
+  .chat-right{width:100%!important}
+
+  /* Formulários — fix zoom iOS */
+  input,textarea,select{font-size:16px!important}
+  .form-label{font-size:10px!important}
+
+  /* Botões touch-friendly */
+  .btn{min-height:40px}
+  .oc-btn{padding:8px 6px!important;min-height:36px!important}
+  .qb,.pdvb-qb{width:28px!important;height:28px!important}
+
+  /* Modais como bottom sheet */
+  .modal-bg{align-items:flex-end!important;padding:0!important}
+  .modal{
+    width:100%!important;max-width:100%!important;
+    border-radius:22px 22px 0 0!important;
+    max-height:93dvh!important;
+    padding-bottom:calc(16px + var(--safe-b))!important;
+    animation:mSheetUp .26s cubic-bezier(.34,1.15,.64,1)!important;
+  }
+  .modal::before{
+    content:'';display:block;
+    width:36px;height:3.5px;background:rgba(255,255,255,.15);
+    border-radius:99px;margin:12px auto 14px;flex-shrink:0;
+  }
+  .pizza-modal-bg{align-items:flex-end!important;padding:0!important}
+  .pizza-modal{
+    width:100%!important;max-width:100%!important;
+    border-radius:22px 22px 0 0!important;
+    max-height:94dvh!important;
+    padding-bottom:calc(16px + var(--safe-b))!important;
+    animation:mSheetUp .26s cubic-bezier(.34,1.15,.64,1)!important;
+  }
+
+  /* Toast acima do bottom nav */
+  #toast{bottom:calc(var(--bnav) + var(--safe-b) + 12px)!important;left:12px!important;right:12px!important}
+
+  /* Sidebar mobile-open */
+  .sidebar.mobile-open{
+    display:flex!important;position:fixed;top:0;bottom:0;left:0;right:auto;
+    width:272px!important;z-index:395;
+    border-right:1px solid var(--border2)!important;
+    box-shadow:6px 0 32px rgba(0,0,0,.7)!important;
+    overflow-y:auto!important;overflow-x:hidden!important;
+    transition:none!important;
+  }
+  .sidebar.mobile-open .si{font-size:13px!important;justify-content:flex-start!important;padding:10px!important;gap:10px!important;white-space:normal!important;overflow:visible!important}
+  .sidebar.mobile-open .ssub{display:flex!important}
+  .sidebar.mobile-open .shead{font-size:9px!important;padding:10px 10px 4px!important;pointer-events:auto!important}
+  .sidebar.mobile-open .sbc{position:static!important}
 }
+
 @media(max-width:600px){
-  .sg{grid-template-columns:1fr 1fr}
-  .topnav .tnav-pill{display:none}
-  .topnav .tnr{gap:4px}
-  .page{padding:14px 12px}
-  .ph{margin-bottom:18px}
-  .desemp-grid{grid-template-columns:1fr}
-  .form-row-2{grid-template-columns:1fr}
-  .modal{border-radius:14px;max-height:96vh}
+  .sg{gap:8px!important}
+  .modal .form-row-2{grid-template-columns:1fr!important}
+}
+
+@media(min-width:901px) and (max-width:1200px){
+  .kanban{grid-template-columns:repeat(3,1fr);gap:10px}
+  .page{padding:20px 22px}
 }
 
 /* ══ FIXES DE LAYOUT — scroll, devtools, responsividade ══════
@@ -990,24 +1111,4 @@ td:first-child{padding-left:18px}
   text-align: center;
   padding: 6px 0 0;
   opacity: .7;
-}
-
-/* ══ MODO AÇOUGUE ══════════════════════════════════════════ */
-.modo-acougue [data-hide-acougue] { display: none !important; }
-
-/* Modal de peso */
-#modal-peso-kg input[type="number"] { -moz-appearance:textfield; }
-#modal-peso-kg input[type="number"]::-webkit-outer-spin-button,
-#modal-peso-kg input[type="number"]::-webkit-inner-spin-button { -webkit-appearance:none; }
-
-/* Tint vermelho na topnav */
-.modo-acougue .topnav { border-bottom:1px solid rgba(239,68,68,.18); }
-
-/* Badge "AÇOUGUE" no rodapé da sidebar */
-.modo-acougue .sfoot::before {
-  content:'🥩 Modo Açougue';
-  display:block;font-size:10px;font-weight:700;
-  color:var(--danger);letter-spacing:.4px;
-  text-transform:uppercase;text-align:center;
-  padding:6px 0 0;opacity:.7;
 }
