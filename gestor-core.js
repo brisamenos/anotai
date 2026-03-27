@@ -252,6 +252,25 @@ async function loadAllData(silent = false) {
     // Aplica estado do caixa e loja
     if (cfgRes.data) {
       _orderNumOffset = parseInt(cfgRes.data.order_num_offset) || 0;
+
+      // ── Auto-corrige offset para tenants novos ──────────────
+      // Se offset = 0 e este tenant ainda não tem pedido nenhum,
+      // define offset = MAX(id) global para que o 1º pedido seja #1
+      if (_orderNumOffset === 0 && ordersKanban.length === 0) {
+        try {
+          const { data: lastAny } = await sb.from('orders').select('id').order('id', {ascending:false}).limit(1);
+          const globalMax = lastAny?.[0]?.id ? Number(lastAny[0].id) : 0;
+          // Verifica se este tenant tem algum pedido histórico
+          const { data: tenantHist } = await sb.from('orders').select('id').limit(1);
+          const temHistorico = tenantHist && tenantHist.length > 0;
+          if (!temHistorico && globalMax > 0) {
+            await sb.from('store_config').update({ order_num_offset: globalMax }).eq('tenant_id', _sessao.tenant_id);
+            _orderNumOffset = globalMax;
+          }
+        } catch(e) {}
+      }
+      // ────────────────────────────────────────────────────────
+
       // Re-mapeia pedidos já carregados com o offset correto
       ordersKanban = ordersKanban.map(o => ({ ...o, num: _orderNum(o.id) }));
       setCaixaState(cfgRes.data.caixa_open !== false);
