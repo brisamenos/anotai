@@ -843,18 +843,36 @@ td:first-child{padding-left:18px}
 @media(max-width:900px){
   /* ── Layout base ── */
   :root{--sw:0px}
-  .sidebar{display:none!important}
-  .mobile-menu-btn{display:flex!important}
+  .sidebar,
+  .mobile-menu-btn{ display:none!important; }
 
-  /* Garante que o body não ultrapasse a tela e o .main fica acima do bottom nav */
-  body{height:100dvh!important;overflow:hidden!important}
-  .app{height:calc(100dvh - 50px)!important;overflow:hidden!important}
+  /* ── Altura real do viewport via --vh (fix Safari mobile) ── */
+  body{
+    height:calc(var(--vh,1vh)*100)!important;
+    overflow:hidden!important;
+    overscroll-behavior-y:none!important;
+    position:fixed!important;
+    width:100%!important;
+  }
+  /* Topnav fixo no topo */
+  .topnav{
+    position:fixed!important;top:0;left:0;right:0;
+    z-index:200!important;height:50px!important;
+  }
+  /* App ocupa exatamente entre topnav e bottom nav */
+  .app{
+    position:fixed!important;
+    top:50px!important;
+    bottom:calc(var(--bnav) + var(--safe-b))!important;
+    left:0!important;right:0!important;
+    overflow:hidden!important;
+  }
+  /* Main rola internamente — nunca ultrapassa os limites */
   .main{
-    height:100%!important;
-    overflow-y:auto!important;
-    overflow-x:hidden!important;
+    width:100%!important;height:100%!important;
+    overflow-y:auto!important;overflow-x:hidden!important;
     -webkit-overflow-scrolling:touch!important;
-    padding-bottom:calc(var(--bnav) + var(--safe-b) + 8px)!important;
+    overscroll-behavior-y:contain!important;
   }
 
   /* Topnav compacto */
@@ -867,8 +885,8 @@ td:first-child{padding-left:18px}
   .ibtn{width:34px!important;height:34px!important;flex-shrink:0}
   .tnr{gap:4px!important}
 
-  /* Pages com padding normal — espaço do nav fica no .main */
-  .page{padding:14px 14px 24px!important}
+  /* Pages: padding-bottom generoso para o último item não ficar escondido */
+  .page{padding:14px 14px max(calc(env(safe-area-inset-bottom) + 24px),24px)!important}
   #page-robo.on{padding-bottom:8px!important}
   #page-pdv-balcao.on{padding:0!important}
 
@@ -894,7 +912,7 @@ td:first-child{padding-left:18px}
     -webkit-overflow-scrolling:touch!important;
     gap:10px!important;
     height:auto!important;
-    min-height:calc(100dvh - 230px)!important;
+    min-height:calc(calc(var(--vh,1vh)*100) - 230px)!important;
     padding-bottom:4px!important;
   }
   .kanban::-webkit-scrollbar{display:none}
@@ -902,14 +920,14 @@ td:first-child{padding-left:18px}
     min-width:83vw!important;max-width:83vw!important;
     flex-shrink:0!important;scroll-snap-align:start!important;
     height:auto!important;
-    max-height:calc(100dvh - 230px)!important;
+    max-height:calc(calc(var(--vh,1vh)*100) - 230px)!important;
   }
   .kol-body{overflow-y:auto!important}
 
   /* PDV Balcão: lado a lado em coluna */
   .pdvb-wrap{
     display:flex!important;flex-direction:column!important;
-    height:calc(100dvh - 50px)!important;overflow:hidden!important;
+    height:calc(calc(var(--vh,1vh)*100) - 50px)!important;overflow:hidden!important;
   }
   .pdvb-left{flex:1!important;min-height:0!important;border-right:none!important;border-bottom:1px solid var(--border)!important;max-height:54%!important}
   .pdvb-grid,.pdvb-items{grid-template-columns:repeat(2,1fr)!important;gap:7px!important}
