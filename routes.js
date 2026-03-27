@@ -120,6 +120,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
       db.prepare('INSERT INTO tenants (nome,plano,slug,segmento) VALUES (?,?,?,?)').run(nome, plano || 'basic', slugFinal, seg)
       const t = db.prepare('SELECT id FROM tenants WHERE slug=?').get(slugFinal)
       db.prepare('INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)').run(t.id)
+      // Define offset = max(id) atual para que o 1º pedido deste tenant comece em #1
+      const maxOrderId = db.prepare('SELECT COALESCE(MAX(id),0) as m FROM orders').get()?.m || 0
+      db.prepare('UPDATE store_config SET order_num_offset=? WHERE tenant_id=?').run(maxOrderId, t.id)
       db.prepare('INSERT INTO sys_users (nome,email,senha_hash,role,tenant_id) VALUES (?,?,?,?,?)').run(nomeGestor || nome, email, hash, role || 'gestor', t.id)
       marcarDirty()
       setTimeout(() => fazerBackup(true), 2000)
