@@ -960,6 +960,10 @@ td:first-child{padding-left:18px}
   /* Toast acima do bottom nav */
   #toast{bottom:calc(var(--bnav) + var(--safe-b) + 12px)!important;left:12px!important;right:12px!important}
 
+  /* Esconde sidebar e hamburger no mobile — navegação é pelo bottom nav */
+  .sidebar,
+  .mobile-menu-btn{ display:none!important; }
+
   /* Sidebar mobile-open */
   .sidebar.mobile-open{
     display:flex!important;position:fixed;top:0;bottom:0;left:0;right:auto;
