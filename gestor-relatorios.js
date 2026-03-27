@@ -1634,6 +1634,86 @@ setTimeout(() => {
 let _printMode = localStorage.getItem('printMode') || 'auto';
 let _printFontSize = parseInt(localStorage.getItem('printFontSize') || '12');
 
+// ── QZ Tray ─────────────────────────────────────────────────────
+// QZ Tray é um app Java local que permite impressão silenciosa sem diálogo.
+// Download: https://qz.io  — instalar na máquina que tem a impressora.
+// Quando instalado, conecta via WebSocket em wss://localhost:8181.
+
+let _qzConnected = false;
+let _qzPrinter   = localStorage.getItem('qzPrinter') || null;
+
+async function _qzConnect() {
+  if (_qzConnected) return true;
+  try {
+    if (typeof qz === 'undefined') return false;
+    if (!qz.websocket.isActive()) {
+      await qz.websocket.connect({ retries:1, delay:0.5 });
+    }
+    _qzConnected = true;
+    return true;
+  } catch(e) {
+    _qzConnected = false;
+    return false;
+  }
+}
+
+async function _qzPrint(html, cfg) {
+  try {
+    const ok = await _qzConnect();
+    if (!ok) return false;
+
+    // Pega impressora salva ou a padrão
+    let printer = _qzPrinter;
+    if (!printer) {
+      printer = await qz.printers.getDefault();
+      _qzPrinter = printer;
+      localStorage.setItem('qzPrinter', printer);
+    }
+
+    // HTML → ESC/POS via qz.api.printHTML (imprime silenciosamente)
+    const config = qz.configs.create(printer);
+    const data = [{
+      type: 'pixel',
+      format: 'html',
+      flavor: 'plain',
+      data: `<!DOCTYPE html><html><head>
+        <meta charset="utf-8">
+        <style>
+          * { margin:0; padding:0; box-sizing:border-box; }
+          body { font-family: monospace; font-size:${cfg.fontSize}px; width:80mm; }
+          hr { border:none; border-top:1px dashed #000; margin:4px 0; }
+        </style>
+      </head><body>${html}</body></html>`
+    }];
+    await qz.print(config, data);
+    return true;
+  } catch(e) {
+    console.warn('[QZ] Erro ao imprimir:', e.message);
+    _qzConnected = false;
+    return false;
+  }
+}
+
+// Carrega o script do QZ Tray dinamicamente
+(function _loadQZ() {
+  if (typeof qz !== 'undefined') return;
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
+  s.onload = () => {
+    // Desabilita verificação de certificado p/ uso local
+    qz.security.setCertificatePromise(() => Promise.resolve());
+    qz.security.setSignatureAlgorithm('SHA512');
+    qz.security.setSignaturePromise(() => Promise.resolve());
+    // Tenta conectar ao iniciar
+    _qzConnect().then(ok => {
+      if (ok) sbToast('ok', '🖨️ QZ Tray conectado — impressão silenciosa ativa!');
+    });
+  };
+  document.head.appendChild(s);
+})();
+
+// ────────────────────────────────────────────────────────────────
+
 function setPrintMode(mode) {
   _printMode = mode;
   localStorage.setItem('printMode', mode);
@@ -1693,9 +1773,18 @@ function _buildTicketHtml(order, cfg) {
   </div>`;
 }
 
-function printOrder(order) {
+async function printOrder(order) {
   const cfg = _getPrintConfig();
   const html = _buildTicketHtml(order, cfg);
+
+  // Tenta QZ Tray primeiro (silencioso, sem diálogo)
+  const qzOk = await _qzPrint(html, cfg);
+  if (qzOk) {
+    sbToast('ok', `🖨️ Pedido #${order.id || ''} impresso!`);
+    return;
+  }
+
+  // Fallback: window.print() com iframe oculto
   const frame = document.getElementById('print-frame');
   if (!frame) return;
   frame.innerHTML = html;
@@ -1709,6 +1798,45 @@ function printOrder(order) {
 function printOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
   if (o) printOrder(o); else sbToast('err', 'Pedido não encontrado');
+}
+
+// Seleciona impressora QZ Tray manualmente
+async function qzSelecionarImpressora() {
+  try {
+    const ok = await _qzConnect();
+    if (!ok) { sbToast('err', 'QZ Tray não encontrado. Instale em qz.io'); return; }
+    const printers = await qz.printers.find();
+    if (!printers.length) { sbToast('err', 'Nenhuma impressora encontrada'); return; }
+    // Mostra um select simples para o usuário escolher
+    const sel = prompt('Impressoras disponíveis:\n' + printers.map((p,i)=>`${i+1}. ${p}`).join('\n') + '\n\nDigite o número:');
+    const idx = parseInt(sel) - 1;
+    if (idx >= 0 && idx < printers.length) {
+      _qzPrinter = printers[idx];
+      localStorage.setItem('qzPrinter', _qzPrinter);
+      sbToast('ok', `Impressora selecionada: ${_qzPrinter}`);
+    }
+  } catch(e) {
+    sbToast('err', 'Erro: ' + e.message);
+  }
+}
+
+// Status QZ na página de impressão
+function _renderQZStatus() {
+  const el = document.getElementById('qz-status-box');
+  if (!el) return;
+  _qzConnect().then(ok => {
+    el.innerHTML = ok
+      ? `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px">
+           <div style="width:10px;height:10px;border-radius:50%;background:var(--success)"></div>
+           <div><div style="font-size:13px;font-weight:700;color:var(--success)">QZ Tray conectado</div>
+           <div style="font-size:11px;color:var(--muted)">Impressora: ${_qzPrinter || 'padrão'} · <span style="color:var(--accent);cursor:pointer" onclick="qzSelecionarImpressora()">Trocar</span></div></div>
+         </div>`
+      : `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px">
+           <div style="width:10px;height:10px;border-radius:50%;background:var(--accent3)"></div>
+           <div><div style="font-size:13px;font-weight:700;color:var(--accent3)">QZ Tray não conectado</div>
+           <div style="font-size:11px;color:var(--muted)">Usando impressão com diálogo. <a href="https://qz.io/download" target="_blank" style="color:var(--accent)">Instalar QZ Tray →</a></div></div>
+         </div>`;
+  });
 }
 
 function renderImpressao() {
@@ -1726,6 +1854,7 @@ function renderImpressao() {
   const ex = { id:99, client:'João Silva', addr:'Mesa 3', mesa_num:3, pag:'PIX', taxa:0,
     items:[{qty:1,name:'Pizza Calabreza',price:50},{qty:2,name:'Coca Cola 2L',price:14}] };
   p.innerHTML = _buildTicketHtml(ex, cfg);
+  _renderQZStatus();
 }
 
 function testPrint() {
