@@ -287,6 +287,19 @@ const MIGRATIONS = [
   { version:24, description:'segmento em tenants (restaurante|acougue)', up:
     `ALTER TABLE tenants ADD COLUMN segmento TEXT DEFAULT 'restaurante'`
   },
+  { version:25, description:'tabela print_jobs (fila de impressão para agente local)', up:
+    `CREATE TABLE IF NOT EXISTS print_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      html TEXT NOT NULL,
+      format TEXT DEFAULT 'A4',
+      printer TEXT,
+      status TEXT DEFAULT 'pending',
+      error TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      done_at TEXT
+    )`
+  },
 ]
 
 function runMigrations() {
@@ -1171,7 +1184,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/fidelidade/sync','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/tenant-segmento','/api/print','/api/printers'])
+  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/fidelidade/sync','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return
@@ -1198,6 +1211,22 @@ server.listen(PORT,()=>{
   log('🚀',`Servidor rodando na porta ${PORT}`)
   log('🏢',`Multi-tenant · SQLite`)
 })
+
+// ── Inicializa CUPS automaticamente ──────────────────
+;(function initCups() {
+  const { execSync } = require('child_process')
+  try {
+    execSync('service cups start 2>/dev/null || true', { timeout: 10000 })
+    const lpstat = execSync('lpstat -a 2>/dev/null || echo ""', { encoding: 'utf8', timeout: 5000 })
+    if (!lpstat.includes('PDF')) {
+      execSync('lpadmin -p PDF -E -v cups-pdf:/ -P /usr/share/ppd/cupsfilters/Generic-PDF_Printer-PDF.ppd 2>/dev/null || true', { timeout: 10000 })
+      log('🖨️', 'Impressora PDF virtual registrada')
+    }
+    log('🖨️', 'CUPS inicializado com sucesso')
+  } catch (e) {
+    log('⚠️', 'CUPS nao disponivel:', e.message?.slice(0,80))
+  }
+})()
 
 setInterval(checarAniv,60000)
 setTimeout(checarAniv,5000)
