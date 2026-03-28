@@ -1634,86 +1634,6 @@ setTimeout(() => {
 let _printMode = localStorage.getItem('printMode') || 'auto';
 let _printFontSize = parseInt(localStorage.getItem('printFontSize') || '12');
 
-// ── IMPRESSÃO SILENCIOSA ────────────────────────────────────────
-// Usa window.print() com Chrome configurado com --kiosk-printing.
-// Essa flag faz o Chrome imprimir direto sem abrir nenhum diálogo.
-//
-// Como configurar (uma única vez):
-//   1. Feche o Chrome completamente
-//   2. Clique com botão direito no atalho do Chrome → Propriedades
-//   3. No campo "Destino", adicione ao final:  --kiosk-printing
-//      Exemplo: "C:\...\chrome.exe" --kiosk-printing
-//   4. Salve e abra o Chrome pelo atalho modificado
-//
-// A partir daí todo window.print() imprime direto, sem diálogo.
-// ─────────────────────────────────────────────────────────────────
-
-// Detecta se o Chrome está em modo kiosk-printing
-// (não há API JS direta, mas podemos testar comportamento)
-let _kioskPrintingAtivo = localStorage.getItem('kioskPrintingConfirmado') === 'true';
-
-function _printSilencioso(htmlCompleto) {
-  // Abre popup de impressão — com --kiosk-printing imprime sem diálogo
-  const w = window.open('', '_blank', 'width=400,height=600');
-  if (!w) {
-    // Popup bloqueado — usa iframe
-    const frame = document.getElementById('print-frame');
-    if (frame) {
-      frame.innerHTML = htmlCompleto;
-      frame.style.display = 'block';
-      setTimeout(() => {
-        window.print();
-        setTimeout(() => { frame.style.display = 'none'; }, 2000);
-      }, 150);
-    }
-    return;
-  }
-  w.document.open();
-  w.document.write(htmlCompleto);
-  w.document.close();
-  w.onload = () => {
-    w.print();
-    setTimeout(() => w.close(), 1000);
-  };
-}
-
-function _renderQZStatus() {
-  const el = document.getElementById('qz-status-box');
-  if (!el) return;
-  const kiosk = localStorage.getItem('kioskPrintingConfirmado') === 'true';
-  el.innerHTML = kiosk
-    ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px;flex-wrap:wrap">
-         <div style="display:flex;align-items:center;gap:10px">
-           <div style="width:10px;height:10px;border-radius:50%;background:var(--success);flex-shrink:0"></div>
-           <div>
-             <div style="font-size:13px;font-weight:700;color:var(--success)">🖨️ Impressão silenciosa ativa</div>
-             <div style="font-size:11px;color:var(--muted);margin-top:2px">Chrome com --kiosk-printing configurado · pedidos imprimem sem diálogo</div>
-           </div>
-         </div>
-         <button class="btn bg" style="font-size:11px" onclick="localStorage.removeItem('kioskPrintingConfirmado');_renderQZStatus()">Desativar</button>
-       </div>`
-    : `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:4px">
-         <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px">⚙️ Impressão sem diálogo — Configuração única</div>
-         <div style="display:flex;flex-direction:column;gap:8px;font-size:12.5px;color:var(--muted2);line-height:1.7;margin-bottom:14px">
-           <div><b style="color:var(--text)">1.</b> Feche o Chrome completamente</div>
-           <div><b style="color:var(--text)">2.</b> Botão direito no atalho do Chrome → <b>Propriedades</b></div>
-           <div><b style="color:var(--text)">3.</b> No campo <b>Destino</b>, adicione no final:</div>
-           <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;font-family:monospace;font-size:12px;color:var(--accent);user-select:all;cursor:text"> --kiosk-printing</div>
-           <div><b style="color:var(--text)">4.</b> Clique em OK e abra o Chrome pelo atalho modificado</div>
-           <div><b style="color:var(--text)">5.</b> Volte aqui e clique no botão abaixo para confirmar</div>
-         </div>
-         <button class="btn bp" style="width:100%;justify-content:center" onclick="localStorage.setItem('kioskPrintingConfirmado','true');_renderQZStatus();testPrint()">
-           ✅ Configurei o --kiosk-printing, testar agora
-         </button>
-       </div>`;
-}
-
-
-
-function setPrintMode
-
-function setPrintMode
-
 function setPrintMode(mode) {
   _printMode = mode;
   localStorage.setItem('printMode', mode);
@@ -1776,7 +1696,6 @@ function _buildTicketHtml(order, cfg) {
 function printOrder(order) {
   const cfg = _getPrintConfig();
   const html = _buildTicketHtml(order, cfg);
-  // Com --kiosk-printing no Chrome, window.print() imprime direto sem diálogo
   const frame = document.getElementById('print-frame');
   if (!frame) return;
   frame.innerHTML = html;
@@ -1790,76 +1709,6 @@ function printOrder(order) {
 function printOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
   if (o) printOrder(o); else sbToast('err', 'Pedido não encontrado');
-}
-
-// Diagnóstico QZ Tray
-async function qzDiagnostico() {
-  const linhas = [];
-  linhas.push('QZ typeof: ' + typeof qz);
-  if (typeof qz === 'undefined') { alert('QZ não carregado.\nInstale em: https://qz.io/download'); return; }
-  linhas.push('WebSocket ativo: ' + qz.websocket.isActive());
-  try {
-    if (!qz.websocket.isActive()) {
-      await qz.websocket.connect({ retries:1, delay:0.5 });
-    }
-    linhas.push('Conectou OK');
-    const def = await qz.printers.getDefault();
-    linhas.push('Impressora padrão: ' + def);
-    const list = await qz.printers.find();
-    linhas.push('Todas: ' + list.join(', '));
-  } catch(e) {
-    if (e.message && e.message.toLowerCase().includes('already')) {
-      linhas.push('Conexão já existia — OK');
-      try {
-        const def = await qz.printers.getDefault();
-        linhas.push('Impressora padrão: ' + def);
-        const list = await qz.printers.find();
-        linhas.push('Todas: ' + list.join(', '));
-      } catch(e2) { linhas.push('Erro ao listar impressoras: ' + e2.message); }
-    } else {
-      linhas.push('ERRO: ' + e.message);
-    }
-  }
-  alert(linhas.join('\n'));
-}
-
-// Seleciona impressora QZ Tray manualmente
-async function qzSelecionarImpressora() {
-  try {
-    const ok = await _qzConnect();
-    if (!ok) { sbToast('err', 'QZ Tray não encontrado. Instale em qz.io'); return; }
-    const printers = await qz.printers.find();
-    if (!printers.length) { sbToast('err', 'Nenhuma impressora encontrada'); return; }
-    // Mostra um select simples para o usuário escolher
-    const sel = prompt('Impressoras disponíveis:\n' + printers.map((p,i)=>`${i+1}. ${p}`).join('\n') + '\n\nDigite o número:');
-    const idx = parseInt(sel) - 1;
-    if (idx >= 0 && idx < printers.length) {
-      _qzPrinter = printers[idx];
-      localStorage.setItem('qzPrinter', _qzPrinter);
-      sbToast('ok', `Impressora selecionada: ${_qzPrinter}`);
-    }
-  } catch(e) {
-    sbToast('err', 'Erro: ' + e.message);
-  }
-}
-
-// Status QZ na página de impressão
-function _renderQZStatus() {
-  const el = document.getElementById('qz-status-box');
-  if (!el) return;
-  _qzConnect().then(ok => {
-    el.innerHTML = ok
-      ? `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px">
-           <div style="width:10px;height:10px;border-radius:50%;background:var(--success)"></div>
-           <div><div style="font-size:13px;font-weight:700;color:var(--success)">QZ Tray conectado</div>
-           <div style="font-size:11px;color:var(--muted)">Impressora: ${_qzPrinter || 'padrão'} · <span style="color:var(--accent);cursor:pointer" onclick="qzSelecionarImpressora()">Trocar</span></div></div>
-         </div>`
-      : `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px">
-           <div style="width:10px;height:10px;border-radius:50%;background:var(--accent3)"></div>
-           <div><div style="font-size:13px;font-weight:700;color:var(--accent3)">QZ Tray não conectado</div>
-           <div style="font-size:11px;color:var(--muted)">Usando impressão com diálogo. <a href="https://qz.io/download" target="_blank" style="color:var(--accent)">Instalar QZ Tray →</a></div></div>
-         </div>`;
-  });
 }
 
 function renderImpressao() {
@@ -1877,7 +1726,6 @@ function renderImpressao() {
   const ex = { id:99, client:'João Silva', addr:'Mesa 3', mesa_num:3, pag:'PIX', taxa:0,
     items:[{qty:1,name:'Pizza Calabreza',price:50},{qty:2,name:'Coca Cola 2L',price:14}] };
   p.innerHTML = _buildTicketHtml(ex, cfg);
-  _renderQZStatus();
 }
 
 function testPrint() {
