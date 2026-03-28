@@ -1416,5 +1416,139 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ═══════════════════════════════════════════════════════
+  // IMPRESSÃO SILENCIOSA (server-side via Puppeteer + CUPS/lp)
+  // ═══════════════════════════════════════════════════════
+
+  // ── Lista impressoras disponíveis ────────────────────
+  if (req.method === 'GET' && upath === '/api/printers') {
+    const { execSync } = require('child_process')
+    const os = require('os')
+    try {
+      let list = []
+      if (os.platform() === 'win32') {
+        const out = execSync('wmic printer get name /format:list 2>nul', { timeout: 5000 }).toString()
+        list = out.split('\n').filter(l => l.startsWith('Name=')).map(l => l.replace('Name=', '').trim()).filter(Boolean)
+      } else {
+        try {
+          const out = execSync('lpstat -a 2>/dev/null', { timeout: 5000 }).toString()
+          list = out.split('\n').map(l => l.split(' ')[0]).filter(Boolean)
+        } catch { list = [] }
+      }
+      // Impressora padrão
+      let defaultPrinter = ''
+      try {
+        if (os.platform() === 'win32') {
+          const out2 = execSync('wmic printer where default=true get name /format:list 2>nul', { timeout: 3000 }).toString()
+          defaultPrinter = out2.split('\n').filter(l => l.startsWith('Name=')).map(l => l.replace('Name=', '').trim())[0] || ''
+        } else {
+          defaultPrinter = execSync('lpstat -d 2>/dev/null', { timeout: 3000 }).toString().split(':').pop().trim()
+        }
+      } catch {}
+      send(res, 200, { printers: list, default: defaultPrinter })
+    } catch (e) {
+      send(res, 200, { printers: [], default: '', error: e.message })
+    }
+    return true
+  }
+
+  // ── Imprime HTML silenciosamente via Puppeteer ────────
+  if (req.method === 'POST' && upath === '/api/print') {
+    const { execSync } = require('child_process')
+    const os   = require('os')
+    const body = await readBody(req)
+    const { html, printer, format = 'A4', landscape = false } = body
+
+    if (!html) { send(res, 400, { error: 'html obrigatório' }); return true }
+
+    let puppeteer
+    try { puppeteer = require('puppeteer') } catch {
+      send(res, 500, { error: 'Puppeteer não instalado. Execute: npm install puppeteer' })
+      return true
+    }
+
+    const tmpFile = path.join(os.tmpdir(), `print_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`)
+
+    try {
+      // ── 1. Gera PDF via Puppeteer ──────────────────────
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--no-first-run',
+        ]
+      })
+
+      try {
+        const page = await browser.newPage()
+
+        // Injeta CSS de impressão térmica caso o HTML não tenha
+        const fullHtml = html.includes('<html') ? html : `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Courier New', monospace; font-size: 12px; color: #000; background: #fff; }
+  hr { border: none; border-top: 1px dashed #000; margin: 4px 0; }
+  .pt-center { text-align: center; }
+  .pt-large  { font-size: 15px; font-weight: bold; }
+  .pt-hr     { border: none; border-top: 1px dashed #000; margin: 4px 0; }
+  .print-ticket { padding: 4px; width: 100%; }
+</style>
+</head><body>${html}</body></html>`
+
+        await page.setContent(fullHtml, { waitUntil: 'networkidle0' })
+
+        // Formatos especiais para térmica (80mm, 58mm)
+        const pageFormat = (() => {
+          if (format === '80mm') return { width: '80mm', height: 'auto' }
+          if (format === '58mm') return { width: '58mm', height: 'auto' }
+          return format // 'A4', 'A5', etc
+        })()
+
+        const pdfOpts = {
+          path: tmpFile,
+          printBackground: true,
+          landscape,
+          margin: { top: '4mm', bottom: '4mm', left: '4mm', right: '4mm' },
+        }
+
+        if (typeof pageFormat === 'object') {
+          // Térmica: calcula altura pelo conteúdo
+          pdfOpts.width  = pageFormat.width
+          pdfOpts.height = await page.evaluate(() => document.body.scrollHeight + 20) + 'px'
+        } else {
+          pdfOpts.format = pageFormat
+        }
+
+        await page.pdf(pdfOpts)
+      } finally {
+        await browser.close()
+      }
+
+      // ── 2. Envia para impressora via OS ────────────────
+      if (os.platform() === 'win32') {
+        const printerArg = printer ? `/D:"${printer}"` : ''
+        execSync(`print ${printerArg} "${tmpFile}"`, { timeout: 30000 })
+      } else {
+        const printerArg = printer ? `-d "${printer}"` : ''
+        execSync(`lp ${printerArg} "${tmpFile}"`, { timeout: 30000 })
+      }
+
+      log('🖨️', `Impresso: ${printer || 'padrão'} (${format})`)
+      send(res, 200, { ok: true, printer: printer || 'default', format })
+
+    } catch (e) {
+      log('❌', 'Erro ao imprimir:', e.message)
+      send(res, 500, { error: e.message })
+    } finally {
+      // Limpa PDF temporário
+      try { require('fs').unlinkSync(tmpFile) } catch {}
+    }
+    return true
+  }
+
   return false // nenhuma rota tratada aqui — passa para o REST engine
 }

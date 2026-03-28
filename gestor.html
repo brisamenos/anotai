@@ -2265,6 +2265,41 @@ Use no seu próximo pedido 🛍️</textarea>
         </div>
       </div>
 
+      <!-- Destino de impressão (server/browser) -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px">
+        <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px">Destino de impressão</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div>
+            <label class="form-label">Como imprimir</label>
+            <select class="form-input" id="print-target-select"
+              onchange="_printTarget=this.value;localStorage.setItem('printTarget',this.value)">
+              <option value="server">Servidor (silencioso — sem diálogo)</option>
+              <option value="browser">Navegador (diálogo do sistema)</option>
+            </select>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">
+              Modo servidor envia direto para a impressora sem abrir nenhuma janela
+            </div>
+          </div>
+          <div>
+            <label class="form-label">Impressora</label>
+            <select class="form-input" id="print-printer-select"
+              onchange="_printPrinter=this.value;localStorage.setItem('printPrinter',this.value)">
+              <option value="">Impressora padrão do sistema</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Formato do papel</label>
+            <select class="form-input" id="print-format-select"
+              onchange="_printFormat=this.value;localStorage.setItem('printFormat',this.value)">
+              <option value="A4">A4</option>
+              <option value="A5">A5</option>
+              <option value="80mm">Térmica 80mm</option>
+              <option value="58mm">Térmica 58mm</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <!-- Configurações do comprovante -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px">
         <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px">Dados do comprovante</div>

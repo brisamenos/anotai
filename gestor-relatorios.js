@@ -1629,10 +1629,13 @@ setTimeout(() => {
 }, 100);
 
 // ─────────────────────────────────────────
-// IMPRESSÃO TÉRMICA
+// IMPRESSÃO SILENCIOSA (server-side)
 // ─────────────────────────────────────────
-let _printMode = localStorage.getItem('printMode') || 'auto';
+let _printMode     = localStorage.getItem('printMode')     || 'auto';
 let _printFontSize = parseInt(localStorage.getItem('printFontSize') || '12');
+let _printTarget   = localStorage.getItem('printTarget')   || 'server'; // 'server' | 'browser'
+let _printPrinter  = localStorage.getItem('printPrinter')  || '';       // nome da impressora (vazio = padrão)
+let _printFormat   = localStorage.getItem('printFormat')   || 'A4';     // A4 | A5 | 80mm | 58mm
 
 function setPrintMode(mode) {
   _printMode = mode;
@@ -1693,17 +1696,69 @@ function _buildTicketHtml(order, cfg) {
   </div>`;
 }
 
-function printOrder(order) {
-  const cfg = _getPrintConfig();
+// ── Carrega lista de impressoras do servidor ──────────
+async function loadPrinters() {
+  const sel = document.getElementById('print-printer-select');
+  if (!sel) return;
+  try {
+    const r = await fetch('/api/printers');
+    const d = await r.json();
+    sel.innerHTML = '<option value="">Impressora padrão do sistema</option>' +
+      (d.printers || []).map(p =>
+        `<option value="${p}" ${p === _printPrinter ? 'selected' : ''}>${p}${p === d.default ? ' ★' : ''}</option>`
+      ).join('');
+    if (_printPrinter) sel.value = _printPrinter;
+  } catch { sel.innerHTML = '<option value="">Impressora padrão do sistema</option>'; }
+}
+
+// ── Impressão via servidor (silenciosa) ───────────────
+async function _printViaServer(html) {
+  const printer = document.getElementById('print-printer-select')?.value || _printPrinter || '';
+  const format  = document.getElementById('print-format-select')?.value  || _printFormat  || 'A4';
+  // Salva preferências
+  _printPrinter = printer; localStorage.setItem('printPrinter', printer);
+  _printFormat  = format;  localStorage.setItem('printFormat',  format);
+  const res = await fetch('/api/print', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ html, printer: printer || undefined, format }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Erro no servidor');
+  return data;
+}
+
+// ── Função principal de impressão ─────────────────────
+async function printOrder(order) {
+  const cfg  = _getPrintConfig();
   const html = _buildTicketHtml(order, cfg);
-  const frame = document.getElementById('print-frame');
-  if (!frame) return;
-  frame.innerHTML = html;
-  frame.style.display = 'block';
-  setTimeout(() => {
-    window.print();
-    setTimeout(() => { frame.style.display = 'none'; }, 1500);
-  }, 150);
+  const target = document.getElementById('print-target-select')?.value || _printTarget || 'server';
+  _printTarget = target; localStorage.setItem('printTarget', target);
+
+  if (target === 'browser') {
+    // Fallback: impressão pelo navegador (abre diálogo)
+    const frame = document.getElementById('print-frame');
+    if (!frame) return;
+    frame.innerHTML = html;
+    frame.style.display = 'block';
+    setTimeout(() => { window.print(); setTimeout(() => { frame.style.display = 'none'; }, 1500); }, 150);
+    return;
+  }
+
+  // Impressão server-side (silenciosa)
+  try {
+    await _printViaServer(html);
+    sbToast('ok', '🖨️ Enviado para impressora!');
+  } catch (e) {
+    sbToast('err', '🖨️ Falha ao imprimir: ' + e.message);
+    // Fallback automático para o navegador se servidor falhar
+    const frame = document.getElementById('print-frame');
+    if (frame) {
+      frame.innerHTML = html;
+      frame.style.display = 'block';
+      setTimeout(() => { window.print(); setTimeout(() => { frame.style.display = 'none'; }, 1500); }, 150);
+    }
+  }
 }
 
 function printOrderById(id) {
@@ -1721,17 +1776,23 @@ function renderImpressao() {
     slider.value = _printFontSize;
     if (valEl) valEl.textContent = _printFontSize;
   }
+  // Restaura seleções salvas
+  const tgtSel = document.getElementById('print-target-select');
+  if (tgtSel) tgtSel.value = _printTarget;
+  const fmtSel = document.getElementById('print-format-select');
+  if (fmtSel) fmtSel.value = _printFormat;
   setPrintMode(_printMode);
+  loadPrinters();
   const cfg = _getPrintConfig();
   const ex = { id:99, client:'João Silva', addr:'Mesa 3', mesa_num:3, pag:'PIX', taxa:0,
     items:[{qty:1,name:'Pizza Calabreza',price:50},{qty:2,name:'Coca Cola 2L',price:14}] };
   p.innerHTML = _buildTicketHtml(ex, cfg);
 }
 
-function testPrint() {
+async function testPrint() {
   const ex = { id:99, client:'TESTE IMPRESSÃO', addr:'Balcão', mesa_num:null, pag:'PIX', taxa:5,
     items:[{qty:1,name:'X-Salada',price:18},{qty:1,name:'Batata Frita',price:10}] };
-  printOrder(ex);
+  await printOrder(ex);
   sbToast('ok', 'Enviando para impressora...');
 }
 
