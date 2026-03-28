@@ -348,32 +348,48 @@ function validarSessaoAdmin(req) {
 function fazerBackup(forcar = false) {
   if (!forcar && !_dirty) return
   _dirty = false
-  try {
-    const snapshot = { ts: new Date().toISOString(), tabelas: {} }
-    for (const t of TABELAS_BACKUP) {
-      try {
-        const rows = db.prepare(`SELECT * FROM "${t}"`).all()
-        // Trunca campos muito grandes (ex: base64) para não estourar string limit
-        snapshot.tabelas[t] = rows.map(row => {
-          const r = { ...row }
-          for (const k of Object.keys(r)) {
-            if (typeof r[k] === 'string' && r[k].length > 200000) r[k] = '[DADO_GRANDE_OMITIDO]'
-          }
-          return r
-        })
-      } catch { snapshot.tabelas[t] = [] }
+  // Evita chamadas simultâneas
+  if (fazerBackup._running) return
+  fazerBackup._running = true
+  setImmediate(() => {
+    try {
+      const snapshot = { ts: new Date().toISOString(), tabelas: {} }
+      let total = 0
+      for (const t of TABELAS_BACKUP) {
+        try {
+          const rows = db.prepare(`SELECT * FROM "${t}"`).all()
+          // Remove campos grandes (imagens base64, json extenso) linha a linha
+          snapshot.tabelas[t] = rows.map(row => {
+            const r = {}
+            for (const [k, v] of Object.entries(row)) {
+              if (typeof v === 'string' && v.length > 50000) r[k] = null
+              else r[k] = v
+            }
+            return r
+          })
+          total += rows.length
+        } catch { snapshot.tabelas[t] = [] }
+      }
+      // Escreve em partes para não estourar a heap
+      const ws = fs.createWriteStream(BACKUP_PATH + '.tmp')
+      ws.write(JSON.stringify(snapshot))
+      ws.end()
+      ws.on('finish', () => {
+        try { fs.renameSync(BACKUP_PATH + '.tmp', BACKUP_PATH) } catch {}
+        log('💾', `Backup salvo (${total} registros)`)
+        fazerBackup._running = false
+      })
+      ws.on('error', (e) => {
+        log('❌', 'Erro backup write:', { error: e.message })
+        fazerBackup._running = false
+      })
+    } catch(e) {
+      log('❌', 'Erro backup:', { error: e.message })
+      fazerBackup._running = false
     }
-    const total = Object.values(snapshot.tabelas).reduce((a, b) => a + b.length, 0)
-    const ws = fs.createWriteStream(BACKUP_PATH + '.tmp')
-    ws.write(JSON.stringify(snapshot))
-    ws.end()
-    ws.on('finish', () => {
-      try { fs.renameSync(BACKUP_PATH + '.tmp', BACKUP_PATH) } catch {}
-      log('💾', `Backup salvo (${total} registros)`)
-    })
-    ws.on('error', (e) => log('❌', 'Erro backup write:', { error: e.message }))
-  } catch(e) { log('❌', 'Erro backup:', { error: e.message }) }
+  })
 }
+fazerBackup._running = false
 
 function restaurarBackup() {
   if (!fs.existsSync(BACKUP_PATH)) { log('⚠️', 'Nenhum backup encontrado.'); return false }
