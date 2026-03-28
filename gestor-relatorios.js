@@ -1776,34 +1776,15 @@ function _buildTicketHtml(order, cfg) {
 function printOrder(order) {
   const cfg = _getPrintConfig();
   const html = _buildTicketHtml(order, cfg);
-
-  const fullHtml = `<!DOCTYPE html><html><head>
-    <meta charset="utf-8">
-    <style>
-      * { margin:0; padding:0; box-sizing:border-box; }
-      body { font-family:'Courier New',monospace; font-size:${cfg.fontSize}px; width:80mm; color:#000; background:#fff; }
-      .pt-center { text-align:center; }
-      .pt-large  { font-size:${cfg.fontSize + 2}px; font-weight:bold; }
-      .pt-hr     { border:none; border-top:1px dashed #000; margin:3px 0; }
-      @page { margin:0; size:80mm auto; }
-    </style>
-  </head><body onload="window.print();setTimeout(()=>window.close(),800)">${html}</body></html>`;
-
-  // Abre popup que auto-imprime — com --kiosk-printing não mostra diálogo
-  const w = window.open('', '_blank', 'width=350,height=500,toolbar=no,menubar=no');
-  if (w) {
-    w.document.open();
-    w.document.write(fullHtml);
-    w.document.close();
-  } else {
-    // Fallback se popup bloqueado
-    const frame = document.getElementById('print-frame');
-    if (frame) {
-      frame.innerHTML = html;
-      frame.style.display = 'block';
-      setTimeout(() => { window.print(); setTimeout(() => { frame.style.display='none'; }, 1500); }, 150);
-    }
-  }
+  // Com --kiosk-printing no Chrome, window.print() imprime direto sem diálogo
+  const frame = document.getElementById('print-frame');
+  if (!frame) return;
+  frame.innerHTML = html;
+  frame.style.display = 'block';
+  setTimeout(() => {
+    window.print();
+    setTimeout(() => { frame.style.display = 'none'; }, 1500);
+  }, 150);
 }
 
 function printOrderById(id) {
