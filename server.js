@@ -315,7 +315,8 @@ runMigrations()
 // BACKUP / RESTORE
 // ════════════════════════════════════════════════════════
 const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_items',
-  'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','wa_messages']
+  'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao']
+  // wa_messages excluída — pode conter muita mídia e estourar JSON.stringify
 
 let _dirty = false
 function marcarDirty() { _dirty = true }
@@ -350,11 +351,27 @@ function fazerBackup(forcar = false) {
   try {
     const snapshot = { ts: new Date().toISOString(), tabelas: {} }
     for (const t of TABELAS_BACKUP) {
-      try { snapshot.tabelas[t] = db.prepare(`SELECT * FROM "${t}"`).all() } catch { snapshot.tabelas[t] = [] }
+      try {
+        const rows = db.prepare(`SELECT * FROM "${t}"`).all()
+        // Trunca campos muito grandes (ex: base64) para não estourar string limit
+        snapshot.tabelas[t] = rows.map(row => {
+          const r = { ...row }
+          for (const k of Object.keys(r)) {
+            if (typeof r[k] === 'string' && r[k].length > 200000) r[k] = '[DADO_GRANDE_OMITIDO]'
+          }
+          return r
+        })
+      } catch { snapshot.tabelas[t] = [] }
     }
     const total = Object.values(snapshot.tabelas).reduce((a, b) => a + b.length, 0)
-    fs.writeFileSync(BACKUP_PATH, JSON.stringify(snapshot), 'utf8')
-    log('💾', `Backup salvo (${total} registros)`)
+    const ws = fs.createWriteStream(BACKUP_PATH + '.tmp')
+    ws.write(JSON.stringify(snapshot))
+    ws.end()
+    ws.on('finish', () => {
+      try { fs.renameSync(BACKUP_PATH + '.tmp', BACKUP_PATH) } catch {}
+      log('💾', `Backup salvo (${total} registros)`)
+    })
+    ws.on('error', (e) => log('❌', 'Erro backup write:', { error: e.message }))
   } catch(e) { log('❌', 'Erro backup:', { error: e.message }) }
 }
 
