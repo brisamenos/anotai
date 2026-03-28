@@ -1701,11 +1701,26 @@ async function loadPrinters() {
   const sel = document.getElementById('print-printer-select');
   if (!sel) return;
   try {
-    const r = await fetch('/api/printers');
-    const d = await r.json();
+    let printers = [];
+    let defaultPrinter = '';
+
+    // Electron: busca impressoras do Windows diretamente
+    if (window.ElectronPrint) {
+      const cfg = await window.ElectronPrint.getPrintConfig();
+      printers      = cfg.printers || [];
+      defaultPrinter = cfg.printer || '';
+      _printPrinter  = cfg.printer || _printPrinter;
+    } else {
+      // Web: busca do servidor
+      const r = await fetch('/api/printers');
+      const d = await r.json();
+      printers       = d.printers || [];
+      defaultPrinter = d.default  || '';
+    }
+
     sel.innerHTML = '<option value="">Impressora padrão do sistema</option>' +
-      (d.printers || []).map(p =>
-        `<option value="${p}" ${p === _printPrinter ? 'selected' : ''}>${p}${p === d.default ? ' ★' : ''}</option>`
+      printers.map(p =>
+        `<option value="${p}" ${p === _printPrinter ? 'selected' : ''}>${p}${p === defaultPrinter ? ' ★' : ''}</option>`
       ).join('');
     if (_printPrinter) sel.value = _printPrinter;
   } catch { sel.innerHTML = '<option value="">Impressora padrão do sistema</option>'; }
@@ -1757,12 +1772,16 @@ async function printOrder(order) {
   // 1. App desktop (Electron) — ESC/POS direto, mais rápido e profissional
   if (window.ElectronPrint) {
     try {
-      // Envia config atualizada para o Electron salvar
+      // Salva config + impressora selecionada no Electron
+      const printerSel = document.getElementById('print-printer-select')?.value || _printPrinter || '';
+      const formatSel  = document.getElementById('print-format-select')?.value  || _printFormat  || '80mm';
       await window.ElectronPrint.savePrintConfig({
-        nome:   cfg.nome,
-        sub:    cfg.sub,
-        rodape: cfg.rodape,
-        cols:   32,
+        nome:    cfg.nome,
+        sub:     cfg.sub,
+        rodape:  cfg.rodape,
+        cols:    parseInt(document.getElementById('print-cols')?.value || 32),
+        printer: printerSel,
+        format:  formatSel,
       });
       const r = await window.ElectronPrint.printOrder(order);
       if (r.ok) {
