@@ -1216,6 +1216,15 @@ server.listen(PORT,()=>{
 ;(function initCups() {
   const { execSync } = require('child_process')
   try {
+    // Instala CUPS se não estiver instalado
+    try {
+      execSync('which lp', { timeout: 3000 })
+      log('🖨️', 'CUPS já instalado')
+    } catch {
+      log('🖨️', 'Instalando CUPS...')
+      execSync('apt-get update -qq && apt-get install -y cups cups-filters printer-driver-cups-pdf chromium --no-install-recommends 2>/dev/null', { timeout: 120000 })
+      log('🖨️', 'CUPS instalado com sucesso')
+    }
     execSync('service cups start 2>/dev/null || true', { timeout: 10000 })
     const lpstat = execSync('lpstat -a 2>/dev/null || echo ""', { encoding: 'utf8', timeout: 5000 })
     if (!lpstat.includes('PDF')) {
@@ -1224,7 +1233,7 @@ server.listen(PORT,()=>{
     }
     log('🖨️', 'CUPS inicializado com sucesso')
   } catch (e) {
-    log('⚠️', 'CUPS nao disponivel:', e.message?.slice(0,80))
+    log('⚠️', 'CUPS: ' + e.message?.slice(0,80))
   }
 })()
 
