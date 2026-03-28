@@ -1645,6 +1645,8 @@ let _qzPrinter   = localStorage.getItem('qzPrinter') || null;
 async function _qzConnect() {
   if (_qzConnected) return true;
   if (typeof qz === 'undefined') return false;
+  // Garante segurança configurada SEMPRE antes de conectar
+  _qzSetupSecurity();
   try {
     // Se já está ativo, apenas registra como conectado
     if (qz.websocket.isActive()) {
@@ -1655,8 +1657,8 @@ async function _qzConnect() {
     _qzConnected = true;
     return true;
   } catch(e) {
-    // "already exists" = já conectado por outra aba/instância — trata como OK
-    if (e.message && e.message.toLowerCase().includes('already')) {
+    // "already exists" = já conectado — trata como OK
+    if (e.message && (e.message.toLowerCase().includes('already') || e.message.toLowerCase().includes('active'))) {
       _qzConnected = true;
       return true;
     }
@@ -1731,17 +1733,28 @@ async function _qzPrint(html, cfg) {
   }
 }
 
+// Configura segurança do QZ (deve rodar antes de qualquer chamada)
+function _qzSetupSecurity() {
+  if (typeof qz === 'undefined') return;
+  // Modo sem certificado — para uso local/interno
+  qz.security.setCertificatePromise(function(resolve) { resolve(''); });
+  qz.security.setSignatureAlgorithm('SHA512');
+  qz.security.setSignaturePromise(function(toSign, resolve) { resolve(''); });
+}
+
 // Carrega o script do QZ Tray dinamicamente
 (function _loadQZ() {
-  if (typeof qz !== 'undefined') return;
+  if (typeof qz !== 'undefined') {
+    _qzSetupSecurity();
+    _qzConnect().then(ok => {
+      if (ok) { _qzConnected = true; if(typeof _renderQZStatus==='function') setTimeout(_renderQZStatus,500); }
+    });
+    return;
+  }
   const s = document.createElement('script');
   s.src = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
   s.onload = () => {
-    // Desabilita verificação de certificado p/ uso local
-    qz.security.setCertificatePromise(() => Promise.resolve());
-    qz.security.setSignatureAlgorithm('SHA512');
-    qz.security.setSignaturePromise(() => Promise.resolve());
-    // Tenta conectar ao iniciar
+    _qzSetupSecurity(); // segurança ANTES de conectar
     _qzConnect().then(ok => {
       if (ok) sbToast('ok', '🖨️ QZ Tray conectado — impressão silenciosa ativa!');
     });
