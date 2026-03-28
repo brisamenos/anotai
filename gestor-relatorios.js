@@ -1644,14 +1644,22 @@ let _qzPrinter   = localStorage.getItem('qzPrinter') || null;
 
 async function _qzConnect() {
   if (_qzConnected) return true;
+  if (typeof qz === 'undefined') return false;
   try {
-    if (typeof qz === 'undefined') return false;
-    if (!qz.websocket.isActive()) {
-      await qz.websocket.connect({ retries:1, delay:0.5 });
+    // Se já está ativo, apenas registra como conectado
+    if (qz.websocket.isActive()) {
+      _qzConnected = true;
+      return true;
     }
+    await qz.websocket.connect({ retries:2, delay:1 });
     _qzConnected = true;
     return true;
   } catch(e) {
+    // "already exists" = já conectado por outra aba/instância — trata como OK
+    if (e.message && e.message.toLowerCase().includes('already')) {
+      _qzConnected = true;
+      return true;
+    }
     _qzConnected = false;
     return false;
   }
@@ -1846,14 +1854,26 @@ async function qzDiagnostico() {
   if (typeof qz === 'undefined') { alert('QZ não carregado.\nInstale em: https://qz.io/download'); return; }
   linhas.push('WebSocket ativo: ' + qz.websocket.isActive());
   try {
-    await qz.websocket.connect({ retries:1, delay:0.5 });
+    if (!qz.websocket.isActive()) {
+      await qz.websocket.connect({ retries:1, delay:0.5 });
+    }
     linhas.push('Conectou OK');
     const def = await qz.printers.getDefault();
     linhas.push('Impressora padrão: ' + def);
     const list = await qz.printers.find();
     linhas.push('Todas: ' + list.join(', '));
   } catch(e) {
-    linhas.push('ERRO: ' + e.message);
+    if (e.message && e.message.toLowerCase().includes('already')) {
+      linhas.push('Conexão já existia — OK');
+      try {
+        const def = await qz.printers.getDefault();
+        linhas.push('Impressora padrão: ' + def);
+        const list = await qz.printers.find();
+        linhas.push('Todas: ' + list.join(', '));
+      } catch(e2) { linhas.push('Erro ao listar impressoras: ' + e2.message); }
+    } else {
+      linhas.push('ERRO: ' + e.message);
+    }
   }
   alert(linhas.join('\n'));
 }
