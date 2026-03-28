@@ -1733,13 +1733,21 @@ async function _qzPrint(html, cfg) {
   }
 }
 
-// Configura segurança do QZ (deve rodar antes de qualquer chamada)
+// Configura segurança do QZ (forma correta — sem certificado, uso interno)
 function _qzSetupSecurity() {
   if (typeof qz === 'undefined') return;
-  // Modo sem certificado — para uso local/interno
-  qz.security.setCertificatePromise(function(resolve) { resolve(''); });
-  qz.security.setSignatureAlgorithm('SHA512');
-  qz.security.setSignaturePromise(function(toSign, resolve) { resolve(''); });
+  try {
+    // Retorna certificado vazio — QZ aceita para uso local
+    qz.security.setCertificatePromise(function(resolve, reject) {
+      resolve();
+    });
+    // Retorna assinatura vazia — QZ aceita para uso local
+    qz.security.setSignaturePromise(function(toSign, resolve, reject) {
+      resolve();
+    });
+  } catch(e) {
+    console.warn('[QZ] Security setup error:', e);
+  }
 }
 
 // Carrega o script do QZ Tray dinamicamente
