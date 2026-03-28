@@ -1264,7 +1264,7 @@ input,textarea{font-family:inherit}
       <!-- ── Grupos de customização (renderizados via JS) ── -->
       <div id="im-grupos-wrap"></div>
 
-      <textarea class="im-obs" id="im-obs" rows="2" placeholder="Observações (opcional):"></textarea>
+      <textarea class="im-obs" id="im-obs" rows="2" placeholder="Observação"></textarea>
 
       <!-- ── Ingredientes selecionáveis ── -->
       <div id="im-ingr-section" style="display:none">
@@ -3042,7 +3042,7 @@ function openItemModal(id) {
   } else {
     ingrSection.style.display = 'none';
     ingrGrid.innerHTML = '';
-    document.getElementById('im-obs').placeholder = 'Observações (opcional): sem cebola, bem passado…';
+    document.getElementById('im-obs').placeholder = 'Observação';
   }
 
   document.getElementById('item-modal-bg').classList.add('on');
