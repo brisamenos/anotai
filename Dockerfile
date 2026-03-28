@@ -3,11 +3,12 @@ FROM node:20
 # ── Dependências para better-sqlite3 (nativo C++) ──────────────────
 RUN apt-get update && apt-get install -y python3 make g++ --no-install-recommends
 
-# ── Chromium + CUPS para Puppeteer e impressão silenciosa ───────────
+# ── Chromium + CUPS + impressora PDF virtual ───────────────────────
 RUN apt-get install -y \
     chromium \
     cups \
     cups-filters \
+    printer-driver-cups-pdf \
     fonts-freefont-ttf \
     fonts-noto \
     libnss3 \
@@ -22,7 +23,7 @@ RUN apt-get install -y \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# Diz ao Puppeteer para usar o Chromium do sistema
+# Puppeteer usa o Chromium do sistema
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
