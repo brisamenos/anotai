@@ -1665,30 +1665,59 @@ async function _qzPrint(html, cfg) {
     // Pega impressora salva ou a padrão
     let printer = _qzPrinter;
     if (!printer) {
-      printer = await qz.printers.getDefault();
+      try { printer = await qz.printers.getDefault(); }
+      catch(e) { printer = null; }
+      if (!printer) {
+        // Tenta listar e pegar a primeira
+        try {
+          const list = await qz.printers.find();
+          printer = list[0] || null;
+        } catch(e) {}
+      }
+      if (!printer) { console.warn('[QZ] Nenhuma impressora encontrada'); return false; }
       _qzPrinter = printer;
       localStorage.setItem('qzPrinter', printer);
     }
 
-    // HTML → ESC/POS via qz.api.printHTML (imprime silenciosamente)
-    const config = qz.configs.create(printer);
+    // Monta o HTML completo para impressão pixel
+    const fullHtml = `<!DOCTYPE html><html><head>
+      <meta charset="utf-8">
+      <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Courier New',monospace; font-size:${cfg.fontSize}px; width:72mm; color:#000; background:#fff; }
+        .pt-center { text-align:center; }
+        .pt-large  { font-size:${cfg.fontSize + 2}px; font-weight:bold; }
+        .pt-hr     { border:none; border-top:1px dashed #000; margin:3px 0; }
+        div        { line-height:1.4; }
+      </style>
+    </head><body>${html}</body></html>`;
+
+    const config = qz.configs.create(printer, {
+      colorType:    'blackwhite',
+      duplex:       false,
+      margins:      { top:0, right:0, bottom:0, left:0 },
+      units:        'mm',
+      size:         { width:80, height: null },
+      orientation:  'portrait',
+      fitToPage:    false,
+      ignoreTransparency: true,
+      rasterize:    false,
+    });
+
     const data = [{
-      type: 'pixel',
+      type:   'pixel',
       format: 'html',
       flavor: 'plain',
-      data: `<!DOCTYPE html><html><head>
-        <meta charset="utf-8">
-        <style>
-          * { margin:0; padding:0; box-sizing:border-box; }
-          body { font-family: monospace; font-size:${cfg.fontSize}px; width:80mm; }
-          hr { border:none; border-top:1px dashed #000; margin:4px 0; }
-        </style>
-      </head><body>${html}</body></html>`
+      data:   fullHtml,
+      options:{ pageWidth: 72, pageHeight: 9999 }
     }];
+
     await qz.print(config, data);
     return true;
+
   } catch(e) {
-    console.warn('[QZ] Erro ao imprimir:', e.message);
+    console.error('[QZ] Erro ao imprimir:', e);
+    sbToast('err', '🖨️ QZ Erro: ' + (e.message || e));
     _qzConnected = false;
     return false;
   }
@@ -1777,14 +1806,24 @@ async function printOrder(order) {
   const cfg = _getPrintConfig();
   const html = _buildTicketHtml(order, cfg);
 
-  // Tenta QZ Tray primeiro (silencioso, sem diálogo)
+  // Se QZ Tray está conectado, usa sempre QZ (nunca abre diálogo)
+  if (_qzConnected) {
+    const qzOk = await _qzPrint(html, cfg);
+    if (qzOk) {
+      sbToast('ok', `🖨️ Pedido #${order.id || ''} impresso!`);
+    }
+    // Se falhou, sbToast já mostrou o erro em _qzPrint
+    return;
+  }
+
+  // QZ não instalado: tenta conectar uma vez rápida
   const qzOk = await _qzPrint(html, cfg);
   if (qzOk) {
     sbToast('ok', `🖨️ Pedido #${order.id || ''} impresso!`);
     return;
   }
 
-  // Fallback: window.print() com iframe oculto
+  // Fallback: window.print() (abre diálogo — QZ não disponível)
   const frame = document.getElementById('print-frame');
   if (!frame) return;
   frame.innerHTML = html;
@@ -1798,6 +1837,25 @@ async function printOrder(order) {
 function printOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
   if (o) printOrder(o); else sbToast('err', 'Pedido não encontrado');
+}
+
+// Diagnóstico QZ Tray
+async function qzDiagnostico() {
+  const linhas = [];
+  linhas.push('QZ typeof: ' + typeof qz);
+  if (typeof qz === 'undefined') { alert('QZ não carregado.\nInstale em: https://qz.io/download'); return; }
+  linhas.push('WebSocket ativo: ' + qz.websocket.isActive());
+  try {
+    await qz.websocket.connect({ retries:1, delay:0.5 });
+    linhas.push('Conectou OK');
+    const def = await qz.printers.getDefault();
+    linhas.push('Impressora padrão: ' + def);
+    const list = await qz.printers.find();
+    linhas.push('Todas: ' + list.join(', '));
+  } catch(e) {
+    linhas.push('ERRO: ' + e.message);
+  }
+  alert(linhas.join('\n'));
 }
 
 // Seleciona impressora QZ Tray manualmente
