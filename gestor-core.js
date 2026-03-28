@@ -313,6 +313,12 @@ function _refreshMesaPageIfActive() {
 
 // ── Realtime orders ──────────────────────────────────
 function sendBrowserNotif(title, body) {
+  // App desktop: usa notificação nativa do Windows (mais profissional)
+  if (window.ElectronPrint) {
+    window.ElectronPrint.notify(title, body);
+    return;
+  }
+  // Web: notificação do navegador
   if ('Notification' in window && Notification.permission === 'granted') {
     new Notification(title, { body, icon: '' });
   }
