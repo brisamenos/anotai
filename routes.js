@@ -1534,7 +1534,23 @@ module.exports = async function handleRoutes(req, res, ctx) {
         execSync(`print ${printerArg} "${tmpFile}"`, { timeout: 30000 })
       } else {
         const printerArg = printer ? `-d "${printer}"` : ''
-        execSync(`lp ${printerArg} "${tmpFile}"`, { timeout: 30000 })
+        // Tenta lp nos caminhos mais comuns do Alpine/Debian
+        const lpCandidates = ['/usr/bin/lp', '/usr/sbin/lp', 'lp', '/usr/bin/lpr', 'lpr']
+        let printed = false
+        for (const lp of lpCandidates) {
+          try {
+            if (lp.endsWith('lpr')) {
+              const prArgs = printer ? `-P "${printer}"` : ''
+              execSync(`${lp} ${prArgs} "${tmpFile}"`, { timeout: 30000 })
+            } else {
+              execSync(`${lp} ${printerArg} "${tmpFile}"`, { timeout: 30000 })
+            }
+            printed = true
+            log('🖨️', `Impresso via ${lp}`)
+            break
+          } catch {}
+        }
+        if (!printed) throw new Error('Nenhum cliente de impressão encontrado (lp/lpr). Verifique se o CUPS está instalado.')
       }
 
       log('🖨️', `Impresso: ${printer || 'padrão'} (${format})`)
