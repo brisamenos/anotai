@@ -1711,11 +1711,24 @@ async function loadPrinters() {
   } catch { sel.innerHTML = '<option value="">Impressora padrão do sistema</option>'; }
 }
 
-// ── Impressão via servidor (silenciosa) ───────────────
+// ── Impressão via agente local (computador da loja) ──
+async function _printViaAgent(html) {
+  const printer = document.getElementById('print-printer-select')?.value || _printPrinter || '';
+  const format  = document.getElementById('print-format-select')?.value  || _printFormat  || 'A4';
+  const res = await fetch('/api/print-queue/job', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ html, format, printer: printer || undefined }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Erro ao criar job');
+  return data;
+}
+
+// ── Impressão via servidor (silenciosa, Puppeteer) ───
 async function _printViaServer(html) {
   const printer = document.getElementById('print-printer-select')?.value || _printPrinter || '';
   const format  = document.getElementById('print-format-select')?.value  || _printFormat  || 'A4';
-  // Salva preferências
   _printPrinter = printer; localStorage.setItem('printPrinter', printer);
   _printFormat  = format;  localStorage.setItem('printFormat',  format);
   const res = await fetch('/api/print', {
@@ -1728,37 +1741,64 @@ async function _printViaServer(html) {
   return data;
 }
 
-// ── Função principal de impressão ─────────────────────
+// ── Impressão via navegador (fallback final) ─────────
+function _printViaBrowser(html) {
+  const frame = document.getElementById('print-frame');
+  if (!frame) return;
+  frame.innerHTML = html;
+  frame.style.display = 'block';
+  setTimeout(() => { window.print(); setTimeout(() => { frame.style.display = 'none'; }, 1500); }, 150);
+}
+
+// ── Função principal — tenta: Electron → agente → servidor → navegador ──
 async function printOrder(order) {
-  const cfg  = _getPrintConfig();
-  const html = _buildTicketHtml(order, cfg);
-  const target = document.getElementById('print-target-select')?.value || _printTarget || 'server';
-  _printTarget = target; localStorage.setItem('printTarget', target);
+  const cfg = _getPrintConfig();
 
-  if (target === 'browser') {
-    // Fallback: impressão pelo navegador (abre diálogo)
-    const frame = document.getElementById('print-frame');
-    if (!frame) return;
-    frame.innerHTML = html;
-    frame.style.display = 'block';
-    setTimeout(() => { window.print(); setTimeout(() => { frame.style.display = 'none'; }, 1500); }, 150);
-    return;
-  }
-
-  // Impressão server-side (silenciosa)
-  try {
-    await _printViaServer(html);
-    sbToast('ok', '🖨️ Enviado para impressora!');
-  } catch (e) {
-    sbToast('err', '🖨️ Falha ao imprimir: ' + e.message);
-    // Fallback automático para o navegador se servidor falhar
-    const frame = document.getElementById('print-frame');
-    if (frame) {
-      frame.innerHTML = html;
-      frame.style.display = 'block';
-      setTimeout(() => { window.print(); setTimeout(() => { frame.style.display = 'none'; }, 1500); }, 150);
+  // 1. App desktop (Electron) — ESC/POS direto, mais rápido e profissional
+  if (window.ElectronPrint) {
+    try {
+      // Envia config atualizada para o Electron salvar
+      await window.ElectronPrint.savePrintConfig({
+        nome:   cfg.nome,
+        sub:    cfg.sub,
+        rodape: cfg.rodape,
+        cols:   32,
+      });
+      const r = await window.ElectronPrint.printOrder(order);
+      if (r.ok) {
+        sbToast('ok', '🖨️ Impresso!');
+        return;
+      }
+      if (r.reason === 'paused') { sbToast('err', '🖨️ Impressão pausada'); return; }
+      throw new Error(r.error || 'Erro desconhecido');
+    } catch (e) {
+      sbToast('err', '🖨️ ' + e.message);
+      return;
     }
   }
+
+  const html = _buildTicketHtml(order, cfg);
+
+  // 2. Agente local ativo? (computador da loja com agente rodando)
+  try {
+    const r = await fetch('/api/print-queue/status');
+    const d = await r.json();
+    if (d.active) {
+      await _printViaAgent(html);
+      sbToast('ok', '🖨️ Enviado para a impressora!');
+      return;
+    }
+  } catch {}
+
+  // 3. Impressão via servidor (Puppeteer no EasyPanel)
+  try {
+    await _printViaServer(html);
+    sbToast('ok', '🖨️ Enviado para a impressora!');
+    return;
+  } catch {}
+
+  // 4. Fallback: diálogo do navegador
+  _printViaBrowser(html);
 }
 
 function printOrderById(id) {
