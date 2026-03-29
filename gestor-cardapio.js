@@ -1,4 +1,22 @@
+// ── Detecta segmento do tenant e mostra campos açougue ──
+let _gestorSegmento = 'restaurante';
+async function detectSegmento() {
+  try {
+    const r = await fetch('/api/tenant-segmento', { headers: { 'x-tenant-id': window._tenantId || '' } });
+    if (r.ok) {
+      const d = await r.json();
+      _gestorSegmento = d.segmento || 'restaurante';
+    }
+  } catch {}
+  // Mostra/oculta opção "Por Kg" e tipo "kit" no select
+  document.querySelectorAll('#new-item-type option[value="kg"], #edit-item-type option[value="kg"], #new-item-type option[value="kit"], #edit-item-type option[value="kit"]').forEach(opt => {
+    opt.style.display = _gestorSegmento === 'acougue' ? '' : 'none';
+  });
+}
+
 function renderGestor(){
+  // Chama detectSegmento uma vez
+  if (!renderGestor._segChecked) { renderGestor._segChecked = true; detectSegmento(); }
   try {
     const cl=document.getElementById('cat-list');
     if(!cl) return;
@@ -351,10 +369,51 @@ function setPizzaMax(ctx, val, el) {
 }
 
 function togglePizzaOptions(ctx) {
-  const typeEl = document.getElementById(ctx+'-item-type');
-  const box    = document.getElementById(ctx+'-pizza-options');
-  if (!typeEl || !box) return;
-  box.style.display = typeEl.value === 'pizza' ? '' : 'none';
+  const typeEl    = document.getElementById(ctx+'-item-type');
+  const pizzaBox  = document.getElementById(ctx+'-pizza-options');
+  const acougueBox= document.getElementById(ctx+'-acougue-options');
+  const kitBox    = document.getElementById(ctx+'-kit-options');
+  if (!typeEl) return;
+  const val = typeEl.value;
+  if (pizzaBox)   pizzaBox.style.display   = val === 'pizza' ? '' : 'none';
+  if (acougueBox) acougueBox.style.display = val === 'kg'    ? '' : 'none';
+  if (kitBox)     kitBox.style.display     = val === 'kit'   ? '' : 'none';
+}
+
+// ── Lê cortes/preparos selecionados ──────────────────
+function readAcougueOptions(ctx) {
+  const cortes   = [...document.querySelectorAll(`#${ctx}-cortes-grid input:checked`)].map(i => i.value);
+  const preparos = [...document.querySelectorAll(`#${ctx}-preparos-grid input:checked`)].map(i => i.value);
+  const pesosRaw = document.getElementById(`${ctx}-pesos`)?.value || '';
+  const pesos    = pesosRaw.split(',').map(s => parseInt(s.trim())).filter(n => n > 0);
+  return { cortes, preparos, pesos };
+}
+
+// ── Preenche cortes/preparos no edit ─────────────────
+function fillAcougueOptions(ctx, customGroups) {
+  if (!Array.isArray(customGroups)) return;
+  const cg = typeof customGroups[0] === 'string' ? [] : customGroups;
+  const cortesGroup   = cg.find(g => g.tipo === 'cortes');
+  const preparosGroup = cg.find(g => g.tipo === 'preparos');
+  const pesosGroup    = cg.find(g => g.tipo === 'pesos');
+  if (cortesGroup?.opcoes) {
+    const vals = cortesGroup.opcoes.map(o => o.id || o);
+    document.querySelectorAll(`#${ctx}-cortes-grid input`).forEach(i => { i.checked = vals.includes(i.value); });
+  }
+  if (preparosGroup?.opcoes) {
+    const vals = preparosGroup.opcoes.map(o => o.id || o);
+    document.querySelectorAll(`#${ctx}-preparos-grid input`).forEach(i => { i.checked = vals.includes(i.value); });
+  }
+  if (pesosGroup?.valores) {
+    const el = document.getElementById(`${ctx}-pesos`);
+    if (el) el.value = pesosGroup.valores.join(', ');
+  }
+}
+
+// ── Lê itens do kit ───────────────────────────────────
+function readKitItens(ctx) {
+  const raw = document.getElementById(`${ctx}-kit-itens`)?.value || '';
+  return raw.split('\n').map(s => s.trim()).filter(Boolean);
 }
 function populateCatSelects() {
   const opts = categories.length
@@ -387,6 +446,20 @@ async function addItem() {
   const status       = document.getElementById('new-status').value || 'active';
   const destaque     = document.getElementById('new-destaque')?.classList.contains('on') || false;
   const customGroups = readGrupos('new');
+
+  // Açougue: adiciona cortes/preparos/pesos ao custom_groups
+  const itemTypeNew = document.getElementById('new-item-type').value || 'normal';
+  if (itemTypeNew === 'kg') {
+    const ac = readAcougueOptions('new');
+    if (ac.cortes.length)   customGroups.push({ tipo: 'cortes',   opcoes: ac.cortes.map(id => ({ id, nome: id.charAt(0).toUpperCase()+id.slice(1), icon: '🥩' })) });
+    if (ac.preparos.length) customGroups.push({ tipo: 'preparos', opcoes: ac.preparos.map(id => ({ id, nome: id.charAt(0).toUpperCase()+id.slice(1), icon: '🍳' })) });
+    if (ac.pesos.length)    customGroups.push({ tipo: 'pesos',    valores: ac.pesos });
+  }
+  // Kit: salva itens no custom_groups
+  if (itemTypeNew === 'kit') {
+    const kitItens = readKitItens('new');
+    if (kitItens.length) customGroups.push({ tipo: 'kit_itens', itens: kitItens });
+  }
 
   console.log('[ADD-ITEM] campos | catKey:', catKey, '| catLabel:', catLabel, '| price:', price, '| emoji:', emoji, '| status:', status);
 
@@ -502,6 +575,25 @@ function openEditItem(id) {
   if (_desel) _desel.classList.toggle('on', !!it.destaque);
   renderGrupos('edit', it.customGroups || []);
 
+  // Açougue: preenche cortes/preparos/pesos
+  if (it.itemType === 'kg') {
+    fillAcougueOptions('edit', it.customGroups || []);
+  } else {
+    // Limpa checkboxes
+    document.querySelectorAll('#edit-cortes-grid input, #edit-preparos-grid input').forEach(i => i.checked = false);
+    const ep = document.getElementById('edit-pesos'); if (ep) ep.value = '';
+  }
+
+  // Kit: preenche itens
+  if (it.itemType === 'kit') {
+    const cg = Array.isArray(it.customGroups) ? it.customGroups : [];
+    const kitGroup = cg.find(g => g.tipo === 'kit_itens');
+    const el = document.getElementById('edit-kit-itens');
+    if (el) el.value = kitGroup?.itens?.join('\n') || '';
+  } else {
+    const el = document.getElementById('edit-kit-itens'); if (el) el.value = '';
+  }
+
   openModal('modal-edit-item');
 }
 
@@ -536,6 +628,19 @@ async function saveEditItem() {
   it.maxFlavors  = it.itemType === 'pizza' ? (parseInt(document.getElementById('edit-max-flavors')?.value) || 1) : 1;
   it.destaque    = document.getElementById('edit-destaque')?.classList.contains('on') || false;
   it.customGroups = readGrupos('edit');
+
+  // Açougue: adiciona cortes/preparos/pesos
+  if (it.itemType === 'kg') {
+    const ac = readAcougueOptions('edit');
+    if (ac.cortes.length)   it.customGroups.push({ tipo: 'cortes',   opcoes: ac.cortes.map(id => ({ id, nome: id.charAt(0).toUpperCase()+id.slice(1), icon: '🥩' })) });
+    if (ac.preparos.length) it.customGroups.push({ tipo: 'preparos', opcoes: ac.preparos.map(id => ({ id, nome: id.charAt(0).toUpperCase()+id.slice(1), icon: '🍳' })) });
+    if (ac.pesos.length)    it.customGroups.push({ tipo: 'pesos',    valores: ac.pesos });
+  }
+  // Kit: salva itens
+  if (it.itemType === 'kit') {
+    const kitItens = readKitItens('edit');
+    if (kitItens.length) it.customGroups.push({ tipo: 'kit_itens', itens: kitItens });
+  }
 
   const selEmo = document.querySelector('#edit-emoji-grid .emo-btn.on');
   if (selEmo && selEmo.textContent.trim()) it.emoji = selEmo.textContent.trim();
