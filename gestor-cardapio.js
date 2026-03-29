@@ -1327,7 +1327,8 @@ async function addItem() {
   const maxFlavors   = itemType === 'pizza' ? (parseInt(document.getElementById('new-max-flavors')?.value) || 1) : 1;
   const status       = document.getElementById('new-status').value || 'active';
   const destaque     = document.getElementById('new-destaque')?.classList.contains('on') || false;
-  const customGroups = readGrupos('new');
+  const _AC_TIPOS_F  = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
+  const customGroups = readGrupos('new').filter(g => !_AC_TIPOS_F.includes(g.tipo));
 
   // Açougue: adiciona cortes/preparos/pesos ao custom_groups
   const itemTypeNew = document.getElementById('new-item-type').value || 'normal';
@@ -1463,7 +1464,11 @@ function openEditItem(id) {
 
   const _desel = document.getElementById('edit-destaque');
   if (_desel) _desel.classList.toggle('on', !!it.destaque);
-  renderGrupos('edit', it.customGroups || []);
+
+  // Tipos exclusivos do açougue — não devem aparecer como grupos genéricos
+  const _ACOUGUE_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref'];
+  const genericGroups = (it.customGroups || []).filter(g => !_ACOUGUE_TIPOS.includes(g.tipo));
+  renderGrupos('edit', genericGroups);
 
   // Açougue: preenche cortes/preparos/pesos
   if (it.itemType === 'kg') {
@@ -1520,7 +1525,9 @@ async function saveEditItem() {
   it.allowHalf   = it.itemType === 'pizza' && meioEl && meioEl.classList.contains('on');
   it.maxFlavors  = it.itemType === 'pizza' ? (parseInt(document.getElementById('edit-max-flavors')?.value) || 1) : 1;
   it.destaque    = document.getElementById('edit-destaque')?.classList.contains('on') || false;
-  it.customGroups = readGrupos('edit');
+  // readGrupos retorna só grupos genéricos (radio/checkbox) — filtra resíduos de tipos açougue
+  const _AC_TIPOS_FILTER = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
+  it.customGroups = readGrupos('edit').filter(g => !_AC_TIPOS_FILTER.includes(g.tipo));
 
   // Açougue: adiciona cortes/preparos/pesos
   if (it.itemType === 'kg') {
