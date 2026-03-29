@@ -2573,6 +2573,8 @@ Use no seu próximo pedido 🛍️</textarea>
           <option value="normal">Normal</option>
           <option value="pizza">Pizza (sabor)</option>
           <option value="kg">Por Kg 🥩</option>
+          <option value="kit">Kit / Combo 📦</option>
+          <option value="kit">Kit / Combo 📦</option>
         </select></div>
       </div>
     </div>
@@ -2596,6 +2598,50 @@ Use no seu próximo pedido 🛍️</textarea>
           <button type="button" class="pz-max-btn" data-val="4" onclick="setPizzaMax('new',4,this)">4 sabores</button>
         </div>
         <input type="hidden" id="new-max-flavors" value="1">
+      </div>
+    </div>
+
+
+    <!-- Opções extras quando tipo = kg (açougue) -->
+    <div id="new-acougue-options" style="display:none;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:14px 16px;margin-bottom:4px">
+      <div style="font-size:11px;font-weight:700;color:#16a34a;letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px">🥩 Opções do Açougue</div>
+
+      <div class="form-row" style="margin-bottom:10px">
+        <label class="form-label">Cortes disponíveis <span style="color:var(--muted);font-size:10px">(cliente escolhe no pedido)</span></label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px" id="new-cortes-grid">
+          <label class="corte-chip"><input type="checkbox" value="tirinha"> Tirinha</label>
+          <label class="corte-chip"><input type="checkbox" value="tiras"> Tiras</label>
+          <label class="corte-chip"><input type="checkbox" value="inteiro"> Inteiro</label>
+          <label class="corte-chip"><input type="checkbox" value="grelha"> Grelha</label>
+          <label class="corte-chip"><input type="checkbox" value="espeto"> Espeto</label>
+          <label class="corte-chip"><input type="checkbox" value="peca"> Peça</label>
+        </div>
+      </div>
+
+      <div class="form-row" style="margin-bottom:10px">
+        <label class="form-label">Formas de preparo disponíveis</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px" id="new-preparos-grid">
+          <label class="corte-chip"><input type="checkbox" value="grelha"> Grelha</label>
+          <label class="corte-chip"><input type="checkbox" value="espeto"> Espeto</label>
+          <label class="corte-chip"><input type="checkbox" value="frigideira"> Frigideira</label>
+          <label class="corte-chip"><input type="checkbox" value="airfryer"> Airfryer</label>
+          <label class="corte-chip"><input type="checkbox" value="churrasco"> Churrasco</label>
+          <label class="corte-chip"><input type="checkbox" value="forno"> Forno</label>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">Pesos pré-definidos <span style="color:var(--muted);font-size:10px">(gramas, separados por vírgula)</span></label>
+        <input class="form-input" id="new-pesos" placeholder="Ex: 100, 200, 300, 400, 500" style="margin-top:4px">
+      </div>
+    </div>
+
+    <!-- Opções extras quando tipo = kit -->
+    <div id="new-kit-options" style="display:none;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.2);border-radius:10px;padding:14px 16px;margin-bottom:4px">
+      <div style="font-size:11px;font-weight:700;color:#6366f1;letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px">📦 Conteúdo do Kit</div>
+      <div class="form-row">
+        <label class="form-label">Itens do kit <span style="color:var(--muted);font-size:10px">(um por linha)</span></label>
+        <textarea class="form-input" id="new-kit-itens" rows="4" placeholder="500g Bife de Patinho&#10;500g Barriguinha Cubos&#10;500g Coxa Sobrecoxa&#10;500g File de Frango em Bife" style="margin-top:4px"></textarea>
       </div>
     </div>
 
@@ -2668,6 +2714,8 @@ Use no seu próximo pedido 🛍️</textarea>
           <option value="normal">Normal</option>
           <option value="pizza">Pizza (sabor)</option>
           <option value="kg">Por Kg 🥩</option>
+          <option value="kit">Kit / Combo 📦</option>
+          <option value="kit">Kit / Combo 📦</option>
         </select></div>
       </div>
     </div>
@@ -2694,7 +2742,51 @@ Use no seu próximo pedido 🛍️</textarea>
       </div>
     </div>
 
-    <div class="form-row" style="display:flex;gap:12px;align-items:center">
+    
+    <!-- Opções extras quando tipo = kg (açougue) -->
+    <div id="edit-acougue-options" style="display:none;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:14px 16px;margin-bottom:4px">
+      <div style="font-size:11px;font-weight:700;color:#16a34a;letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px">🥩 Opções do Açougue</div>
+
+      <div class="form-row" style="margin-bottom:10px">
+        <label class="form-label">Cortes disponíveis</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px" id="edit-cortes-grid">
+          <label class="corte-chip"><input type="checkbox" value="tirinha"> Tirinha</label>
+          <label class="corte-chip"><input type="checkbox" value="tiras"> Tiras</label>
+          <label class="corte-chip"><input type="checkbox" value="inteiro"> Inteiro</label>
+          <label class="corte-chip"><input type="checkbox" value="grelha"> Grelha</label>
+          <label class="corte-chip"><input type="checkbox" value="espeto"> Espeto</label>
+          <label class="corte-chip"><input type="checkbox" value="peca"> Peça</label>
+        </div>
+      </div>
+
+      <div class="form-row" style="margin-bottom:10px">
+        <label class="form-label">Formas de preparo disponíveis</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px" id="edit-preparos-grid">
+          <label class="corte-chip"><input type="checkbox" value="grelha"> Grelha</label>
+          <label class="corte-chip"><input type="checkbox" value="espeto"> Espeto</label>
+          <label class="corte-chip"><input type="checkbox" value="frigideira"> Frigideira</label>
+          <label class="corte-chip"><input type="checkbox" value="airfryer"> Airfryer</label>
+          <label class="corte-chip"><input type="checkbox" value="churrasco"> Churrasco</label>
+          <label class="corte-chip"><input type="checkbox" value="forno"> Forno</label>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">Pesos pré-definidos <span style="color:var(--muted);font-size:10px">(gramas, separados por vírgula)</span></label>
+        <input class="form-input" id="edit-pesos" placeholder="Ex: 100, 200, 300, 400, 500" style="margin-top:4px">
+      </div>
+    </div>
+
+    <!-- Opções extras quando tipo = kit -->
+    <div id="edit-kit-options" style="display:none;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.2);border-radius:10px;padding:14px 16px;margin-bottom:4px">
+      <div style="font-size:11px;font-weight:700;color:#6366f1;letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px">📦 Conteúdo do Kit</div>
+      <div class="form-row">
+        <label class="form-label">Itens do kit <span style="color:var(--muted);font-size:10px">(um por linha)</span></label>
+        <textarea class="form-input" id="edit-kit-itens" rows="4" placeholder="500g Bife de Patinho&#10;..." style="margin-top:4px"></textarea>
+      </div>
+    </div>
+
+<div class="form-row" style="display:flex;gap:12px;align-items:center">
       <div style="flex:1"><label class="form-label">Status</label>
         <div class="sw" style="width:100%"><select id="edit-status" class="form-input" style="width:100%">
           <option value="active">Disponível</option>
@@ -2762,7 +2854,20 @@ Use no seu próximo pedido 🛍️</textarea>
     <style>
       #toggle-limpar-cardapio.on { background: var(--danger) !important; border-color: var(--danger) !important; }
       #toggle-limpar-cardapio.on > div { left: 20px !important; background: #fff !important; }
-    </style>
+    
+/* Açougue chips */
+.corte-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 20px; padding: 4px 10px; font-size: 12px;
+  font-weight: 600; cursor: pointer; transition: .15s; color: var(--text);
+}
+.corte-chip input { display: none; }
+.corte-chip:has(input:checked) {
+  background: rgba(34,197,94,.15); border-color: #16a34a; color: #16a34a;
+}
+.corte-chip:hover { border-color: var(--accent); }
+</style>
 
     <!-- Grid de modelos -->
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px" id="modelos-grid">
