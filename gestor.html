@@ -2607,29 +2607,19 @@ Use no seu próximo pedido 🛍️</textarea>
       <div style="font-size:11px;font-weight:700;color:#16a34a;letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px">🥩 Opções do Açougue</div>
 
       <div class="form-row" style="margin-bottom:10px">
-        <label class="form-label">Cortes disponíveis <span style="color:var(--muted);font-size:10px">(cliente escolhe no pedido)</span></label>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px" id="new-cortes-grid">
-          <label class="corte-chip"><input type="checkbox" value="tirinha"> Tirinha</label>
-          <label class="corte-chip"><input type="checkbox" value="tiras"> Tiras</label>
-          <label class="corte-chip"><input type="checkbox" value="inteiro"> Inteiro</label>
-          <label class="corte-chip"><input type="checkbox" value="grelha"> Grelha</label>
-          <label class="corte-chip"><input type="checkbox" value="espeto"> Espeto</label>
-          <label class="corte-chip"><input type="checkbox" value="peca"> Peça</label>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label class="form-label" style="margin-bottom:0">Cortes disponíveis <span style="color:var(--muted);font-size:10px">(cliente escolhe no pedido)</span></label>
+          <button type="button" onclick="acListPick('new','cortes')" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#16a34a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Adicionar</button>
         </div>
+        <div id="new-cortes-list" style="display:flex;flex-direction:column;gap:4px"></div>
       </div>
 
       <div class="form-row" style="margin-bottom:10px">
-        <label class="form-label">Formas de preparo disponíveis</label>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px" id="new-preparos-grid">
-          <label class="corte-chip"><input type="checkbox" value="grelha"> Grelha</label>
-          <label class="corte-chip"><input type="checkbox" value="espeto"> Espeto</label>
-          <label class="corte-chip"><input type="checkbox" value="frigideira"> Frigideira</label>
-          <label class="corte-chip"><input type="checkbox" value="airfryer"> Airfryer</label>
-          <label class="corte-chip"><input type="checkbox" value="churrasco"> Churrasco</label>
-          <label class="corte-chip"><input type="checkbox" value="forno"> Forno</label>
-          <label class="corte-chip"><input type="checkbox" value="panela"> Panela</label>
-          <label class="corte-chip"><input type="checkbox" value="ensopado"> Ensopado</label>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label class="form-label" style="margin-bottom:0">Formas de preparo disponíveis</label>
+          <button type="button" onclick="acListPick('new','preparos')" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#16a34a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Adicionar</button>
         </div>
+        <div id="new-preparos-list" style="display:flex;flex-direction:column;gap:4px"></div>
       </div>
 
       <div class="form-row">
@@ -2760,29 +2750,19 @@ Use no seu próximo pedido 🛍️</textarea>
       <div style="font-size:11px;font-weight:700;color:#16a34a;letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px">🥩 Opções do Açougue</div>
 
       <div class="form-row" style="margin-bottom:10px">
-        <label class="form-label">Cortes disponíveis</label>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px" id="edit-cortes-grid">
-          <label class="corte-chip"><input type="checkbox" value="tirinha"> Tirinha</label>
-          <label class="corte-chip"><input type="checkbox" value="tiras"> Tiras</label>
-          <label class="corte-chip"><input type="checkbox" value="inteiro"> Inteiro</label>
-          <label class="corte-chip"><input type="checkbox" value="grelha"> Grelha</label>
-          <label class="corte-chip"><input type="checkbox" value="espeto"> Espeto</label>
-          <label class="corte-chip"><input type="checkbox" value="peca"> Peça</label>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label class="form-label" style="margin-bottom:0">Cortes disponíveis</label>
+          <button type="button" onclick="acListPick('edit','cortes')" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#16a34a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Adicionar</button>
         </div>
+        <div id="edit-cortes-list" style="display:flex;flex-direction:column;gap:4px"></div>
       </div>
 
       <div class="form-row" style="margin-bottom:10px">
-        <label class="form-label">Formas de preparo disponíveis</label>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px" id="edit-preparos-grid">
-          <label class="corte-chip"><input type="checkbox" value="grelha"> Grelha</label>
-          <label class="corte-chip"><input type="checkbox" value="espeto"> Espeto</label>
-          <label class="corte-chip"><input type="checkbox" value="frigideira"> Frigideira</label>
-          <label class="corte-chip"><input type="checkbox" value="airfryer"> Airfryer</label>
-          <label class="corte-chip"><input type="checkbox" value="churrasco"> Churrasco</label>
-          <label class="corte-chip"><input type="checkbox" value="forno"> Forno</label>
-          <label class="corte-chip"><input type="checkbox" value="panela"> Panela</label>
-          <label class="corte-chip"><input type="checkbox" value="ensopado"> Ensopado</label>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label class="form-label" style="margin-bottom:0">Formas de preparo disponíveis</label>
+          <button type="button" onclick="acListPick('edit','preparos')" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#16a34a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Adicionar</button>
         </div>
+        <div id="edit-preparos-list" style="display:flex;flex-direction:column;gap:4px"></div>
       </div>
 
       <div class="form-row">

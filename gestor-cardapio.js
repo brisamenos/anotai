@@ -1,3 +1,160 @@
+// ══════════════════════════════════════════
+//  AÇOUGUE — Editor dinâmico de cortes e preparos
+// ══════════════════════════════════════════
+
+// Estado das listas por contexto (new / edit) e tipo (cortes / preparos)
+const _acListState = {
+  'new-cortes':    [],
+  'new-preparos':  [],
+  'edit-cortes':   [],
+  'edit-preparos': []
+};
+
+// Catálogo de cortes disponíveis para seleção
+const _AC_CORTES_CATALOG = [
+  { id:'tirinha',    nome:'Tirinha',     icon:null },
+  { id:'tiras',      nome:'Tiras',       icon:null },
+  { id:'inteiro',    nome:'Inteiro',     icon:null },
+  { id:'grelha',     nome:'Grelha',      icon:null },
+  { id:'espeto',     nome:'Espeto',      icon:null },
+  { id:'peca',       nome:'Peça',        icon:null },
+  { id:'moido',      nome:'Moído',       icon:null },
+  { id:'moido2x',    nome:'Moído 2x',    icon:null },
+  { id:'cubos',      nome:'Cubos',       icon:null },
+  { id:'picado',     nome:'Picado',      icon:null },
+  { id:'strogonoff', nome:'Strogonoff',  icon:null },
+  { id:'bife',       nome:'Bife',        icon:null },
+  { id:'bifefino',   nome:'Bife Fino',   icon:null },
+  { id:'bifemedio',  nome:'Bife Médio',  icon:null },
+  { id:'bifegrosso', nome:'Bife Grosso', icon:null },
+  { id:'postas',     nome:'Postas',      icon:null },
+];
+
+// Catálogo de preparos com ícones do S3
+const _AC_PREPAROS_CATALOG = [
+  { id:'churrasco',  nome:'Churrasco',  icon:'https://onbeef.s3.amazonaws.com/tags/icons/churrasco.png' },
+  { id:'grelhar',    nome:'Grelhar',    icon:'https://onbeef.s3.amazonaws.com/tags/icons/grellhar.png' },
+  { id:'frigideira', nome:'Frigideira', icon:'https://onbeef.s3.amazonaws.com/tags/icons/frigideira.png' },
+  { id:'forno',      nome:'Forno',      icon:'https://onbeef.s3.amazonaws.com/tags/icons/forno.png' },
+  { id:'airfryer',   nome:'Airfryer',   icon:'https://onbeef.s3.amazonaws.com/tags/icons/airfryer.png' },
+  { id:'panela',     nome:'Panela',     icon:'https://onbeef.s3.amazonaws.com/tags/icons/panela.png' },
+  { id:'ensopado',   nome:'Ensopado',   icon:'https://onbeef.s3.amazonaws.com/tags/icons/ensopado.png' },
+  { id:'espeto',     nome:'Espeto',     icon:'https://onbeef.s3.amazonaws.com/tags/icons/espeto.png' },
+  { id:'defumado',   nome:'Defumado',   icon:'https://onbeef.s3.amazonaws.com/tags/icons/smoker.png' },
+  { id:'dia_a_dia',  nome:'Dia a dia',  icon:'https://onbeef.s3.amazonaws.com/tags/icons/dia_a_dia.png' },
+  { id:'resfriado',  nome:'Resfriado',  icon:'https://onbeef.s3.amazonaws.com/tags/icons/wind.png' },
+];
+
+// ── Renderiza lista dinâmica ──────────────────────────
+function renderAcList(ctx, tipo) {
+  const key  = `${ctx}-${tipo}`;
+  const list = _acListState[key] || [];
+  const el   = document.getElementById(`${ctx}-${tipo}-list`);
+  if (!el) return;
+
+  if (!list.length) {
+    el.innerHTML = `<div style="font-size:11.5px;color:var(--muted);padding:6px 2px;font-style:italic">Nenhum item. Clique em "+ Adicionar" para começar.</div>`;
+    return;
+  }
+
+  el.innerHTML = list.map((item, idx) => {
+    const iconEl = item.icon
+      ? `<img src="${item.icon}" style="width:26px;height:26px;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'">`
+      : `<span style="font-size:16px;width:26px;text-align:center;flex-shrink:0">${tipo === 'cortes' ? '🥩' : '🍳'}</span>`;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+      ${iconEl}
+      <span style="flex:1;font-size:12.5px;font-weight:600">${item.nome}</span>
+      <div style="display:flex;gap:1px;flex-shrink:0">
+        <button type="button" onclick="acListMove('${ctx}','${tipo}',${idx},-1)" title="Mover para cima" ${idx===0?'disabled':''} style="width:26px;height:26px;border:none;background:transparent;cursor:pointer;color:var(--muted);font-size:13px;border-radius:4px;display:flex;align-items:center;justify-content:center;opacity:${idx===0?.3:1}">↑</button>
+        <button type="button" onclick="acListMove('${ctx}','${tipo}',${idx},1)" title="Mover para baixo" ${idx===list.length-1?'disabled':''} style="width:26px;height:26px;border:none;background:transparent;cursor:pointer;color:var(--muted);font-size:13px;border-radius:4px;display:flex;align-items:center;justify-content:center;opacity:${idx===list.length-1?.3:1}">↓</button>
+        <button type="button" onclick="acListRemove('${ctx}','${tipo}',${idx})" title="Remover" style="width:26px;height:26px;border:none;background:transparent;cursor:pointer;color:#ef4444;font-size:14px;border-radius:4px;display:flex;align-items:center;justify-content:center">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Remove item da lista ──────────────────────────────
+function acListRemove(ctx, tipo, idx) {
+  const key = `${ctx}-${tipo}`;
+  if (_acListState[key]) { _acListState[key].splice(idx, 1); renderAcList(ctx, tipo); }
+}
+
+// ── Move item para cima/baixo ─────────────────────────
+function acListMove(ctx, tipo, idx, dir) {
+  const key  = `${ctx}-${tipo}`;
+  const list = _acListState[key];
+  if (!list) return;
+  const ni = idx + dir;
+  if (ni < 0 || ni >= list.length) return;
+  [list[idx], list[ni]] = [list[ni], list[idx]];
+  renderAcList(ctx, tipo);
+}
+
+// ── Adiciona item à lista ─────────────────────────────
+function acListAdd(ctx, tipo, id, nome, icon) {
+  const key = `${ctx}-${tipo}`;
+  if (!_acListState[key]) _acListState[key] = [];
+  if (_acListState[key].find(i => i.id === id)) {
+    document.getElementById('ac-list-picker-modal')?.remove(); return;
+  }
+  _acListState[key].push({ id, nome, icon: icon || null });
+  renderAcList(ctx, tipo);
+  document.getElementById('ac-list-picker-modal')?.remove();
+}
+
+// ── Adiciona item personalizado ───────────────────────
+function acListAddCustom(ctx, tipo) {
+  const nameEl = document.getElementById('ac-picker-custom-name');
+  const nome = (nameEl?.value || '').trim();
+  if (!nome) { sbToast('err', 'Informe o nome'); return; }
+  const id = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'_');
+  acListAdd(ctx, tipo, id, nome, null);
+  if (nameEl) nameEl.value = '';
+}
+
+// ── Abre picker de seleção ────────────────────────────
+function acListPick(ctx, tipo) {
+  const catalog  = tipo === 'cortes' ? _AC_CORTES_CATALOG : _AC_PREPAROS_CATALOG;
+  const key      = `${ctx}-${tipo}`;
+  const existing = (_acListState[key] || []).map(i => i.id);
+  const available= catalog.filter(c => !existing.includes(c.id));
+
+  document.getElementById('ac-list-picker-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'ac-list-picker-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9999;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(3px)';
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+  const titulo = tipo === 'cortes' ? '🥩 Adicionar Corte' : '🍳 Adicionar Preparo';
+  const listaHTML = available.length
+    ? available.map(item => {
+        const iconEl = item.icon
+          ? `<img src="${item.icon}" style="width:30px;height:30px;object-fit:contain;flex-shrink:0">`
+          : `<span style="font-size:20px;width:30px;text-align:center;flex-shrink:0">${tipo==='cortes'?'🥩':'🍳'}</span>`;
+        return `<button type="button" onclick="acListAdd('${ctx}','${tipo}','${item.id}','${item.nome.replace(/'/g,"\\'")}'${item.icon?`,'${item.icon}'`:''})" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;cursor:pointer;color:var(--text);text-align:left;font-family:inherit;font-size:13px;font-weight:500;transition:all .15s" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">${iconEl}<span>${item.nome}</span></button>`;
+      }).join('')
+    : `<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">Todos os itens do catálogo já foram adicionados.</div>`;
+
+  modal.innerHTML = `<div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:520px;max-height:72vh;display:flex;flex-direction:column">
+    <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 14px"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:14px;font-weight:700">${titulo}</div>
+      <button type="button" onclick="document.getElementById('ac-list-picker-modal').remove()" style="border:none;background:var(--surface2);border-radius:50%;width:30px;height:30px;cursor:pointer;color:var(--text);font-size:16px;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:6px">${listaHTML}</div>
+    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;flex-shrink:0">
+      <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">✏️ Personalizado</div>
+      <div style="display:flex;gap:8px">
+        <input id="ac-picker-custom-name" class="form-input" placeholder="Nome personalizado (ex: Isca, Cubão...)" style="flex:1;font-size:13px">
+        <button type="button" onclick="acListAddCustom('${ctx}','${tipo}')" style="padding:8px 14px;background:var(--accent);border:none;border-radius:8px;color:#000;font-weight:700;cursor:pointer;font-family:inherit;font-size:12.5px;white-space:nowrap">+ Adicionar</button>
+      </div>
+    </div>
+  </div>`;
+
+  document.body.appendChild(modal);
+}
+
 // ── Detecta segmento do tenant e mostra campos açougue ──
 let _gestorSegmento = 'restaurante';
 async function detectSegmento() {
@@ -398,30 +555,58 @@ function updatePorcaoPreview(ctx) {
 }
 
 function readAcougueOptions(ctx) {
-  const cortes   = [...document.querySelectorAll(`#${ctx}-cortes-grid input:checked`)].map(i => i.value);
-  const preparos = [...document.querySelectorAll(`#${ctx}-preparos-grid input:checked`)].map(i => i.value);
-  const pesosRaw = document.getElementById(`${ctx}-pesos`)?.value || '';
-  const pesos    = pesosRaw.split(',').map(s => parseInt(s.trim())).filter(n => n > 0);
-  const porcaoRef = parseInt(document.getElementById(`${ctx}-porcao-ref`)?.value) || 0;
-  return { cortes, preparos, pesos, porcaoRef };
+  const cortesList   = _acListState[`${ctx}-cortes`]   || [];
+  const preparosList = _acListState[`${ctx}-preparos`] || [];
+  const pesosRaw     = document.getElementById(`${ctx}-pesos`)?.value || '';
+  const pesos        = pesosRaw.split(',').map(s => parseInt(s.trim())).filter(n => n > 0);
+  const porcaoRef    = parseInt(document.getElementById(`${ctx}-porcao-ref`)?.value) || 0;
+  return {
+    cortes:        cortesList.map(i => i.id),
+    preparos:      preparosList.map(i => i.id),
+    _cortesList:   cortesList,
+    _preparosList: preparosList,
+    pesos,
+    porcaoRef
+  };
 }
 
 // ── Preenche cortes/preparos no edit ─────────────────
 function fillAcougueOptions(ctx, customGroups) {
-  if (!Array.isArray(customGroups)) return;
+  // Limpa listas
+  _acListState[`${ctx}-cortes`]   = [];
+  _acListState[`${ctx}-preparos`] = [];
+
+  if (!Array.isArray(customGroups)) {
+    renderAcList(ctx, 'cortes'); renderAcList(ctx, 'preparos'); return;
+  }
   const cg = typeof customGroups[0] === 'string' ? [] : customGroups;
   const cortesGroup   = cg.find(g => g.tipo === 'cortes');
   const preparosGroup = cg.find(g => g.tipo === 'preparos');
   const pesosGroup    = cg.find(g => g.tipo === 'pesos');
   const porcaoGroup   = cg.find(g => g.tipo === 'porcao_ref');
+
   if (cortesGroup?.opcoes) {
-    const vals = cortesGroup.opcoes.map(o => o.id || o);
-    document.querySelectorAll(`#${ctx}-cortes-grid input`).forEach(i => { i.checked = vals.includes(i.value); });
+    _acListState[`${ctx}-cortes`] = cortesGroup.opcoes.map(o => ({
+      id:   o.id   || (o.nome||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'_'),
+      nome: o.nome || ((o.id||'').charAt(0).toUpperCase()+(o.id||'').slice(1)),
+      icon: o.icon || null
+    }));
   }
   if (preparosGroup?.opcoes) {
-    const vals = preparosGroup.opcoes.map(o => o.id || o);
-    document.querySelectorAll(`#${ctx}-preparos-grid input`).forEach(i => { i.checked = vals.includes(i.value); });
+    _acListState[`${ctx}-preparos`] = preparosGroup.opcoes.map(o => {
+      const id = o.id || (o.nome||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'_');
+      const catalogItem = _AC_PREPAROS_CATALOG.find(c => c.id === id);
+      return {
+        id,
+        nome: o.nome || catalogItem?.nome || (id.charAt(0).toUpperCase()+id.slice(1)),
+        icon: o.icon || catalogItem?.icon || null
+      };
+    });
   }
+
+  renderAcList(ctx, 'cortes');
+  renderAcList(ctx, 'preparos');
+
   if (pesosGroup?.valores) {
     const el = document.getElementById(`${ctx}-pesos`);
     if (el) el.value = pesosGroup.valores.join(', ');
@@ -474,8 +659,8 @@ async function addItem() {
   const itemTypeNew = document.getElementById('new-item-type').value || 'normal';
   if (itemTypeNew === 'kg') {
     const ac = readAcougueOptions('new');
-    if (ac.cortes.length)   customGroups.push({ tipo: 'cortes',   opcoes: ac.cortes.map(id => ({ id, nome: id.charAt(0).toUpperCase()+id.slice(1), icon: '🥩' })) });
-    if (ac.preparos.length) customGroups.push({ tipo: 'preparos', opcoes: ac.preparos.map(id => ({ id, nome: id.charAt(0).toUpperCase()+id.slice(1), icon: '🍳' })) });
+    if (ac._cortesList.length)   customGroups.push({ tipo: 'cortes',   opcoes: ac._cortesList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
+    if (ac._preparosList.length) customGroups.push({ tipo: 'preparos', opcoes: ac._preparosList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
     if (ac.pesos.length)    customGroups.push({ tipo: 'pesos',    valores: ac.pesos });
     if (ac.porcaoRef > 0)   customGroups.push({ tipo: 'porcao_ref', gramas: ac.porcaoRef });
   }
@@ -545,6 +730,11 @@ async function addItem() {
   const ns = document.getElementById('new-status');            if(ns) ns.value = 'active';
   const nd = document.getElementById('new-destaque');          if(nd) nd.classList.remove('on');
   const ng = document.getElementById('new-grupos-list');       if(ng) ng.innerHTML = '';
+  // Limpa listas dinâmicas de açougue
+  _acListState['new-cortes']   = [];
+  _acListState['new-preparos'] = [];
+  renderAcList('new','cortes');
+  renderAcList('new','preparos');
   togglePizzaOptions('new');
 
   closeModal('modal-add-item');
@@ -603,8 +793,11 @@ function openEditItem(id) {
   if (it.itemType === 'kg') {
     fillAcougueOptions('edit', it.customGroups || []);
   } else {
-    // Limpa checkboxes
-    document.querySelectorAll('#edit-cortes-grid input, #edit-preparos-grid input').forEach(i => i.checked = false);
+    // Limpa listas dinâmicas
+    _acListState['edit-cortes']   = [];
+    _acListState['edit-preparos'] = [];
+    renderAcList('edit','cortes');
+    renderAcList('edit','preparos');
     const ep = document.getElementById('edit-pesos'); if (ep) ep.value = '';
   }
 
@@ -656,8 +849,8 @@ async function saveEditItem() {
   // Açougue: adiciona cortes/preparos/pesos
   if (it.itemType === 'kg') {
     const ac = readAcougueOptions('edit');
-    if (ac.cortes.length)   it.customGroups.push({ tipo: 'cortes',   opcoes: ac.cortes.map(id => ({ id, nome: id.charAt(0).toUpperCase()+id.slice(1), icon: '🥩' })) });
-    if (ac.preparos.length) it.customGroups.push({ tipo: 'preparos', opcoes: ac.preparos.map(id => ({ id, nome: id.charAt(0).toUpperCase()+id.slice(1), icon: '🍳' })) });
+    if (ac._cortesList.length)   it.customGroups.push({ tipo: 'cortes',   opcoes: ac._cortesList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
+    if (ac._preparosList.length) it.customGroups.push({ tipo: 'preparos', opcoes: ac._preparosList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
     if (ac.pesos.length)    it.customGroups.push({ tipo: 'pesos',    valores: ac.pesos });
     if (ac.porcaoRef > 0)   it.customGroups.push({ tipo: 'porcao_ref', gramas: ac.porcaoRef });
   }
