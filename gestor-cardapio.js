@@ -822,15 +822,22 @@ async function detectSegmento() {
       _gestorSegmento = d.segmento || 'restaurante';
     }
   } catch {}
-  // Mostra/oculta opção "Por Kg" e tipo "kit" no select
-  document.querySelectorAll('#new-item-type option[value="kg"], #edit-item-type option[value="kg"], #new-item-type option[value="kit"], #edit-item-type option[value="kit"]').forEach(opt => {
-    opt.style.display = _gestorSegmento === 'acougue' ? '' : 'none';
+
+  const isAcougue = _gestorSegmento === 'acougue';
+
+  // Pizza: visível só no restaurante
+  document.querySelectorAll('#new-item-type option[value="pizza"], #edit-item-type option[value="pizza"]').forEach(opt => {
+    opt.style.display = isAcougue ? 'none' : '';
   });
+  // Kg e Kit: visíveis só no açougue
+  document.querySelectorAll('#new-item-type option[value="kg"], #edit-item-type option[value="kg"], #new-item-type option[value="kit"], #edit-item-type option[value="kit"]').forEach(opt => {
+    opt.style.display = isAcougue ? '' : 'none';
+  });
+
   // Mostra painel de atalhos de catálogos somente no modo açougue
   const panel = document.getElementById('acougue-catalog-panel');
-  if (panel && _gestorSegmento === 'acougue') {
+  if (panel && isAcougue) {
     panel.style.display = '';
-    // Carrega catálogos do banco e depois renderiza
     await _acCatalogsLoad();
     renderAcCatalogCards();
   } else if (panel) {
