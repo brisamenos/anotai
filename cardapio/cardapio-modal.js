@@ -910,7 +910,7 @@ function imConfirm() {
     cartPrice = cartPrice * (totalPesoSel / 1000) * _imQty;
     const existing2 = cart.find(c => c.name === cartName && (c.obs||'') === (cartObs||''));
     if (existing2) existing2.qty += 1;
-    else cart.push({ ...cartItem, price: cartPrice, obs: cartObs, qty: 1 });
+    else cart.push({ ...i, name: cartName, price: cartPrice, obs: cartObs, emoji: cartEmoji, image_url: cartImg, qty: 1 });
     _xsellSelected.clear();
     closeItemModal();
     updateCartFloat();
@@ -955,4 +955,3 @@ function imConfirm() {
   updateCartFloat();
   toast('🛒', `${isPizza && _halfItem && !_isWholeFlavorSelected() ? 'Pizza meio a meio' : i.name} adicionado!`);
 }
-
