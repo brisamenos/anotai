@@ -239,47 +239,78 @@ function _renderAcougueGrupos(item, wrap, grupos) {
 }
 
 // ── Abre o bottom sheet de peso para um corte ──
+const _PICKER_ITEM_H = 42; // altura de cada item em px
+
 function openPesoSheet(corteNome) {
   _acougueAtual = corteNome;
   document.getElementById('ac-peso-corte-nome').textContent = corteNome;
 
-  // Popula lista de pesos
-  const list = document.getElementById('ac-peso-list');
-  const pesoAtual = _acougueCortes[corteNome]?.peso || 0;
-  list.innerHTML = _acouguePesos.map(p => {
-    const on = p === pesoAtual ? ' on' : '';
-    return `<div class="ac-peso-opt${on}" onclick="selectPesoOpt(${p})">
-      <span>${p}g</span>
-      <div class="ac-peso-radio"></div>
-    </div>`;
-  }).join('');
+  const track    = document.getElementById('ac-peso-list');
+  const pesoAtual = _acougueCortes[corteNome]?.peso || _acouguePesos[0] || 0;
+  const idx0      = Math.max(0, _acouguePesos.indexOf(pesoAtual));
 
-  // Restaura separar / instrução extra
+  // Monta itens do drum
+  track.innerHTML =
+    `<div class="peso-picker-spacer"></div>` +
+    _acouguePesos.map((p, i) =>
+      `<div class="peso-picker-item${i === idx0 ? ' selected' : ''}" data-peso="${p}" data-idx="${i}" onclick="_drumClick(${i})">${p}</div>`
+    ).join('') +
+    `<div class="peso-picker-spacer"></div>`;
+
+  // Scrolla para o item correto sem animação
+  track.scrollTo({ top: idx0 * _PICKER_ITEM_H, behavior: 'instant' });
+
+  // Listener de scroll: atualiza seleção enquanto o usuário rola
+  track._drumScrollHandler && track.removeEventListener('scroll', track._drumScrollHandler);
+  track._drumScrollHandler = _drumOnScroll.bind(null, track);
+  track.addEventListener('scroll', track._drumScrollHandler, { passive: true });
+
+  // Restaura campos extras
   const estado = _acougueCortes[corteNome] || {};
   document.getElementById('ac-peso-sep').value = estado.separar || '';
   document.getElementById('ac-extra-textarea').value = estado.extra || '';
-  const extraBody = document.getElementById('ac-extra-body');
+  const extraBody   = document.getElementById('ac-extra-body');
   const extraToggle = document.getElementById('ac-extra-toggle');
-  if (estado.extra) {
-    extraBody.classList.add('on');
-    extraToggle.classList.add('on');
-  } else {
-    extraBody.classList.remove('on');
-    extraToggle.classList.remove('on');
-  }
+  if (estado.extra) { extraBody.classList.add('on'); extraToggle.classList.add('on'); }
+  else              { extraBody.classList.remove('on'); extraToggle.classList.remove('on'); }
 
-  // Estado do botão confirmar
-  const btn = document.getElementById('ac-peso-confirm');
-  if (pesoAtual > 0) {
-    btn.disabled = false;
-    btn.textContent = `Selecionar ${pesoAtual}g`;
-  } else {
-    btn.disabled = true;
-    btn.textContent = 'Selecionar peso';
-  }
+  // Botão confirmar já parte com o peso atual
+  _drumUpdateBtn(pesoAtual);
 
   document.getElementById('ac-peso-overlay').classList.add('on');
   document.body.style.overflow = 'hidden';
+}
+
+function _drumOnScroll(track) {
+  // Debounce: só age após parar de rolar
+  clearTimeout(track._drumTimer);
+  track._drumTimer = setTimeout(() => {
+    const idx = Math.round(track.scrollTop / _PICKER_ITEM_H);
+    const clipped = Math.max(0, Math.min(idx, _acouguePesos.length - 1));
+    // Snap suave para o item mais próximo
+    track.scrollTo({ top: clipped * _PICKER_ITEM_H, behavior: 'smooth' });
+    // Atualiza classe selected
+    track.querySelectorAll('.peso-picker-item').forEach((el, i) =>
+      el.classList.toggle('selected', i === clipped)
+    );
+    _drumUpdateBtn(_acouguePesos[clipped]);
+  }, 80);
+}
+
+function _drumClick(idx) {
+  const track = document.getElementById('ac-peso-list');
+  track.scrollTo({ top: idx * _PICKER_ITEM_H, behavior: 'smooth' });
+  track.querySelectorAll('.peso-picker-item').forEach((el, i) =>
+    el.classList.toggle('selected', i === idx)
+  );
+  _drumUpdateBtn(_acouguePesos[idx]);
+}
+
+function _drumUpdateBtn(peso) {
+  const btn = document.getElementById('ac-peso-confirm');
+  btn.disabled = !peso;
+  btn.textContent = peso ? `Confirmar ${peso}g` : 'Selecionar peso';
+  btn.dataset.peso = peso || 0;
 }
 
 function closePesoSheet() {
@@ -288,15 +319,9 @@ function closePesoSheet() {
 }
 
 function selectPesoOpt(peso) {
-  document.querySelectorAll('.ac-peso-opt').forEach(el => el.classList.remove('on'));
-  const all = document.querySelectorAll('.ac-peso-opt');
-  all.forEach(el => {
-    if (parseInt(el.querySelector('span').textContent) === peso) el.classList.add('on');
-  });
-  const btn = document.getElementById('ac-peso-confirm');
-  btn.disabled = false;
-  btn.textContent = `Selecionar ${peso}g`;
-  btn.dataset.peso = peso;
+  // mantido por compatibilidade — redireciona para drum
+  const idx = _acouguePesos.indexOf(peso);
+  if (idx >= 0) _drumClick(idx);
 }
 
 function confirmPesoSheet() {
@@ -527,3 +552,7 @@ function xsellToggle(itemId) {
     card.classList.add('on');
   }
 }
+
+
+
+

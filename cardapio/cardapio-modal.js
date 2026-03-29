@@ -955,3 +955,4 @@ function imConfirm() {
   updateCartFloat();
   toast('🛒', `${isPizza && _halfItem && !_isWholeFlavorSelected() ? 'Pizza meio a meio' : i.name} adicionado!`);
 }
+
