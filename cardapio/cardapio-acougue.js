@@ -406,6 +406,99 @@ function _buildAcougueDesc() {
 function _slug(s) { return (s||'').replace(/[^a-z0-9]/gi,'_').toLowerCase(); }
 function _escape(s) { return (s||'').replace(/'/g,"\'").replace(/"/g,'&quot;'); }
 
+// ══════════════════════════════════════════
+//  INDICAÇÕES DE PREPARO — Bottom sheet público
+// ══════════════════════════════════════════
+function openPreparoDetail(preparoId) {
+  // Coleta itens que têm este preparo
+  const itensComPreparo = allItems.filter(i => {
+    if (i.status === 'pausado' || i.status === 'esgotado') return false;
+    const cgs = i.custom_groups || [];
+    const grp = cgs.find(g => g.tipo === 'preparos');
+    if (!grp?.opcoes) return false;
+    return grp.opcoes.some(o => (o.id || o.nome || o).toLowerCase().replace(/\s+/g,'_') === preparoId.toLowerCase());
+  });
+
+  const nomePreparo = typeof _getPreparoFilterNome === 'function'
+    ? _getPreparoFilterNome(preparoId)
+    : (preparoId.charAt(0).toUpperCase() + preparoId.slice(1));
+  const iconPreparo = _preparoImgMap[preparoId] || null;
+
+  document.getElementById('preparo-detail-overlay')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'preparo-detail-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:8500;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(3px)';
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  const itensHTML = !itensComPreparo.length
+    ? `<div style="text-align:center;padding:32px 0;color:var(--muted);font-size:13px">
+        <div style="font-size:36px;margin-bottom:10px">🔍</div>
+        Nenhuma carne indicada para este preparo.
+       </div>`
+    : itensComPreparo.map(i => {
+        const cgs       = i.custom_groups || [];
+        const cortesGrp = cgs.find(g => g.tipo === 'cortes');
+        const pesosGrp  = cgs.find(g => g.tipo === 'pesos');
+        const porcaoGrp = cgs.find(g => g.tipo === 'porcao_ref');
+        const cortes = (cortesGrp?.opcoes || []).map(o => o.nome || o.id).join(' · ');
+        const porcao = porcaoGrp?.gramas || null;
+        const pesos  = (pesosGrp?.valores || []).map(p => `${p}g`).join(' / ');
+
+        const imgEl = i.image_url
+          ? `<img src="${i.image_url}" style="width:100%;height:100%;object-fit:cover;border-radius:10px">`
+          : `<span style="font-size:30px">${i.emoji || '🥩'}</span>`;
+
+        return `<div onclick="closePreparoDetail();openItemModal(${i.id})" style="display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent" onmouseenter="this.style.opacity='.8'" onmouseleave="this.style.opacity='1'">
+          <div style="width:56px;height:56px;border-radius:10px;overflow:hidden;flex-shrink:0;background:var(--surface2);display:flex;align-items:center;justify-content:center">${imgEl}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i.name}</div>
+            ${cortes ? `<div style="font-size:11.5px;color:var(--muted);margin-top:3px">Cortes: ${cortes}</div>` : ''}
+            ${porcao ? `<div style="font-size:11.5px;color:var(--accent);font-weight:700;margin-top:2px">Ref: ${porcao}g</div>` : ''}
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-weight:800;font-size:14px">R$ ${fmt(i.price)}<span style="font-size:10px;font-weight:400;color:var(--muted)">/kg</span></div>
+            ${pesos ? `<div style="font-size:10.5px;color:var(--muted);margin-top:2px">${pesos}</div>` : ''}
+            <div style="font-size:10px;color:var(--accent);margin-top:3px;font-weight:600">Ver detalhes →</div>
+          </div>
+        </div>`;
+      }).join('');
+
+  overlay.innerHTML = `<div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:540px;max-height:86vh;display:flex;flex-direction:column">
+    <!-- Handle -->
+    <div style="padding:12px 20px 0;flex-shrink:0">
+      <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div>
+    </div>
+    <!-- Header -->
+    <div style="padding:14px 20px 12px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:14px">
+      <div style="width:48px;height:48px;border-radius:12px;background:var(--surface2);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">
+        ${iconPreparo ? `<img src="${iconPreparo}" style="width:36px;height:36px;object-fit:contain" onerror="this.parentElement.innerHTML='<span style=\\'font-size:24px\\'>🍖</span>'">` : '<span style="font-size:26px">🍖</span>'}
+      </div>
+      <div style="flex:1">
+        <div style="font-weight:800;font-size:16px">${nomePreparo}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">
+          ${itensComPreparo.length} carne${itensComPreparo.length !== 1 ? 's' : ''} indicada${itensComPreparo.length !== 1 ? 's' : ''} · toque para ver e pedir
+        </div>
+      </div>
+      <button onclick="closePreparoDetail()" style="border:none;background:var(--surface2);border-radius:50%;width:34px;height:34px;cursor:pointer;color:var(--muted);font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>
+    </div>
+    <!-- Lista de itens -->
+    <div style="overflow-y:auto;flex:1;padding:0 20px">
+      ${itensHTML}
+    </div>
+    <!-- Rodapé -->
+    <div style="padding:14px 20px;flex-shrink:0;border-top:1px solid var(--border)">
+      <button onclick="closePreparoDetail()" style="width:100%;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;color:var(--text);font-family:inherit">Fechar</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(overlay);
+}
+
+function closePreparoDetail() {
+  document.getElementById('preparo-detail-overlay')?.remove();
+}
+
 function grpToggle(el, grupoNome, optNome, preco, tipo, maxSel) {
   if (!_imGruposState[grupoNome]) _imGruposState[grupoNome] = [];
   const state = _imGruposState[grupoNome];

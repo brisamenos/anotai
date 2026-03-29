@@ -67,9 +67,11 @@ function renderPreparoFilterSection() {
   allPreparos.forEach((nome, id) => {
     const icon = _preparoImgMap[id] ? `<img src="${_preparoImgMap[id]}" alt="${nome}">` : `<span style="font-size:28px">🍖</span>`;
     const isOn = _filterPreparo === id;
+    const hint = isOn ? `<div style="font-size:10px;margin-top:4px;color:var(--accent);font-weight:700;opacity:.85">Ver indicações →</div>` : '';
     cards += `<div class="preparo-filter-card${isOn ? ' on' : ''}" onclick="setFilterPreparo('${id}')">
       <div class="preparo-filter-card-icon">${icon}</div>
       <div class="preparo-filter-card-label">${nome}</div>
+      ${hint}
     </div>`;
   });
 
@@ -88,6 +90,11 @@ function renderPreparoFilterSection() {
 }
 
 function setFilterPreparo(id) {
+  // Se clicar no preparo já ativo → abre sheet de indicações de porções
+  if (_filterPreparo === id && id) {
+    openPreparoDetail(id);
+    return;
+  }
   _filterPreparo = (_filterPreparo === id) ? '' : id;
   renderPreparoFilterSection();
   renderMenu();
