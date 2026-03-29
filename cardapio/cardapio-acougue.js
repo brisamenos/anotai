@@ -1,0 +1,523 @@
+// ══════════════════════════════════════════
+//  AÇOUGUE — Cortes, peso, preparo, grupos/complementos
+//  Estima Food — Cardápio
+// ══════════════════════════════════════════
+// ══════════════════════════════════════════
+//  GRUPOS DE CUSTOMIZAÇÃO — CARDÁPIO
+// ══════════════════════════════════════════
+let _imGruposState = {}; // { [grupoNome]: [{nome,preco,qty}] }
+
+// ══════════════════════════════════════════
+//  AÇOUGUE — Estado e helpers
+// ══════════════════════════════════════════
+let _acougueCortes  = {}; // { [corteNome]: { peso: 0, separar: '', extra: '' } }
+let _acougueAtual   = null; // nome do corte sendo configurado no sheet
+let _acouguePesos   = [];   // array de pesos disponíveis para o item atual
+
+// Ilustrações SVG estilo sketch para cada tipo de corte
+// ── Imagens de cortes servidas localmente (/uploads/cortes/) ──
+const _C = 'https://onbeef.s3.amazonaws.com/imagens-cortes';
+
+const _corteImgMap = {
+  moido:      'https://onbeef.s3.amazonaws.com/imagens-cortes/moida-2x.png',
+  moido2x:    'https://onbeef.s3.amazonaws.com/imagens-cortes/moida-2x.png',
+  tiras:      'https://onbeef.s3.amazonaws.com/imagens-cortes/tiras.png',
+  tirinha:    'https://onbeef.s3.amazonaws.com/imagens-cortes/tirinhas.png',
+  tirinhas:   'https://onbeef.s3.amazonaws.com/imagens-cortes/tirinhas.png',
+  strogonoff: 'https://onbeef.s3.amazonaws.com/imagens-cortes/strogonoff.png',
+  inteiro:    'https://onbeef.s3.amazonaws.com/imagens-cortes/inteira.png',
+  inteira:    'https://onbeef.s3.amazonaws.com/imagens-cortes/inteira.png',
+  espeto:     'https://onbeef.s3.amazonaws.com/imagens-cortes/espeto.png',
+  cubos:      'https://onbeef.s3.amazonaws.com/imagens-cortes/cubos.png',
+  picado:     'https://onbeef.s3.amazonaws.com/imagens-cortes/picado.png',
+  grelha:     'https://onbeef.s3.amazonaws.com/imagens-cortes/grelha.png',
+  peca:       'https://onbeef.s3.amazonaws.com/imagens-cortes/peca.png',
+  bife:       'https://onbeef.s3.amazonaws.com/imagens-cortes/bifemedio.png',
+  bifefino:   'https://onbeef.s3.amazonaws.com/imagens-cortes/bifefino.png',
+  bifemedio:  'https://onbeef.s3.amazonaws.com/imagens-cortes/bifemedio.png',
+  bifegrosso: 'https://onbeef.s3.amazonaws.com/imagens-cortes/bifegrosso.png',
+  postas:     'https://onbeef.s3.amazonaws.com/imagens-cortes/postas.png',
+  default:    'https://onbeef.s3.amazonaws.com/imagens-cortes/bifemedio.png',
+};
+
+const _preparoImgMap = {
+  dia_a_dia:  'https://onbeef.s3.amazonaws.com/tags/icons/dia_a_dia.png',
+  churrasco:  'https://onbeef.s3.amazonaws.com/tags/icons/churrasco.png',
+  resfriado:  'https://onbeef.s3.amazonaws.com/tags/icons/wind.png',
+  grelhar:    'https://onbeef.s3.amazonaws.com/tags/icons/grellhar.png',
+  grelhado:   'https://onbeef.s3.amazonaws.com/tags/icons/grellhar.png',
+  grelha:     'https://onbeef.s3.amazonaws.com/tags/icons/grellhar.png',
+  defumado:   'https://onbeef.s3.amazonaws.com/tags/icons/smoker.png',
+  frigideira: 'https://onbeef.s3.amazonaws.com/tags/icons/frigideira.png',
+  forno:      'https://onbeef.s3.amazonaws.com/tags/icons/forno.png',
+  airfryer:   'https://onbeef.s3.amazonaws.com/tags/icons/airfryer.png',
+  panela:     'https://onbeef.s3.amazonaws.com/tags/icons/panela.png',
+  ensopado:   'https://onbeef.s3.amazonaws.com/tags/icons/ensopado.png',
+  espeto:     'https://onbeef.s3.amazonaws.com/tags/icons/espeto.png',
+};
+
+// Mapa de fallback direto pro S3 original
+const _S3fallback = {
+  'moida-2x': 'https://onbeef.s3.amazonaws.com/imagens-cortes/moida-2x.png',
+  moida:      'https://onbeef.s3.amazonaws.com/imagens-cortes/moida-2x.png',
+  tiras:      'https://onbeef.s3.amazonaws.com/imagens-cortes/tiras.png',
+  tirinhas:   'https://onbeef.s3.amazonaws.com/imagens-cortes/tirinhas.png',
+  inteira:    'https://onbeef.s3.amazonaws.com/imagens-cortes/inteira.png',
+  espeto:     'https://onbeef.s3.amazonaws.com/imagens-cortes/espeto.png',
+  cubos:      'https://onbeef.s3.amazonaws.com/imagens-cortes/cubos.png',
+  grelha:     'https://onbeef.s3.amazonaws.com/imagens-cortes/grelha.png',
+  peca:       'https://onbeef.s3.amazonaws.com/imagens-cortes/peca.png',
+  bifefino:   'https://onbeef.s3.amazonaws.com/imagens-cortes/bifefino.png',
+  bifemedio:  'https://onbeef.s3.amazonaws.com/imagens-cortes/bifemedio.png',
+  bifegrosso: 'https://onbeef.s3.amazonaws.com/imagens-cortes/bifegrosso.png',
+  strogonoff: 'https://onbeef.s3.amazonaws.com/imagens-cortes/strogonoff.png',
+  postas:     'https://onbeef.s3.amazonaws.com/imagens-cortes/postas.png',
+  picado:     'https://onbeef.s3.amazonaws.com/imagens-cortes/picado.png',
+  dia_a_dia:  'https://onbeef.s3.amazonaws.com/tags/icons/dia_a_dia.png',
+  churrasco:  'https://onbeef.s3.amazonaws.com/tags/icons/churrasco.png',
+  resfriado:  'https://onbeef.s3.amazonaws.com/tags/icons/wind.png',
+  grellhar:   'https://onbeef.s3.amazonaws.com/tags/icons/grellhar.png',
+  defumado:   'https://onbeef.s3.amazonaws.com/tags/icons/smoker.png',
+  frigideira: 'https://onbeef.s3.amazonaws.com/tags/icons/frigideira.png',
+  forno:      'https://onbeef.s3.amazonaws.com/tags/icons/forno.png',
+  airfryer:   'https://onbeef.s3.amazonaws.com/tags/icons/airfryer.png',
+};
+
+function _imgTag(url, alt, size) {
+  const s = size || 60;
+  // Pega a chave do nome do arquivo sem extensão para o fallback
+  const key = url.split('/').pop().replace('.png','');
+  const fb = _S3fallback[key] || '';
+  const onerror = fb ? `onerror="if(this.src!=='${fb}')this.src='${fb}'"` : '';
+  return `<img src="${url}" alt="${alt}" width="${s}" height="${s}" style="object-fit:contain;display:block" ${onerror}>`;
+}
+
+function _getCorteIlus(nome) {
+  const n = (nome||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  let key = 'default';
+  if      (n.includes('strogon'))                           key = 'strogonoff';
+  else if (n.includes('posta'))                             key = 'postas';
+  else if (n.includes('tirinha') || n.includes('tirinhas')) key = 'tirinha';
+  else if (n.includes('tira'))                              key = 'tiras';
+  else if (n.includes('moido') && n.includes('2'))          key = 'moido2x';
+  else if (n.includes('moido') || n.includes('moer') || n.includes('moida')) key = 'moido';
+  else if (n.includes('cubo'))                              key = 'cubos';
+  else if (n.includes('picado'))                            key = 'picado';
+  else if (n.includes('grelha'))                            key = 'grelha';
+  else if (n.includes('peca') || n.includes('peca'))        key = 'peca';
+  else if (n.includes('bifefino') || (n.includes('bife') && n.includes('fino'))) key = 'bifefino';
+  else if (n.includes('bifegrosso') || (n.includes('bife') && n.includes('grosso'))) key = 'bifegrosso';
+  else if (n.includes('bifemedio') || (n.includes('bife') && n.includes('medio'))) key = 'bifemedio';
+  else if (n.includes('bife'))                              key = 'bife';
+  else if (n.includes('espeto'))                            key = 'espeto';
+  else if (n.includes('inteiro') || n.includes('inteira'))  key = 'inteiro';
+  const url = _corteImgMap[key] || _corteImgMap.default;
+  return _imgTag(url, nome, 60);
+}
+
+function _getPreparoIcon(nome) {
+  const n = (nome||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  let key = null;
+  if      (n.includes('dia'))        key = 'dia_a_dia';
+  else if (n.includes('churrasco'))  key = 'churrasco';
+  else if (n.includes('resfriado') || n.includes('frio') || n.includes('wind')) key = 'resfriado';
+  else if (n.includes('grelh'))      key = 'grelhar';
+  else if (n.includes('defum') || n.includes('smok')) key = 'defumado';
+  else if (n.includes('frigideira') || n.includes('frigid')) key = 'frigideira';
+  else if (n.includes('forno'))      key = 'forno';
+  else if (n.includes('airfryer') || n.includes('air fryer')) key = 'airfryer';
+  if (key && _preparoImgMap[key]) {
+    return _imgTag(_preparoImgMap[key], nome, 20);
+  }
+  // fallback SVG genérico
+  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4"/></svg>`;
+}
+
+function _isAcougueItem(item) {
+  const cgs = item.custom_groups || [];
+  return (item.item_type === 'kg' || item.itemType === 'kg' || item.tipo === 'kg') ||
+         cgs.some(g => g.tipo === 'cortes' || g.tipo === 'pesos');
+}
+
+function renderImGrupos(item) {
+  const wrap = document.getElementById('im-grupos-wrap');
+  if (!wrap) return;
+  const grupos = item.custom_groups || [];
+  if (!grupos.length) { wrap.innerHTML = ''; return; }
+
+  // ── Modo açougue ────────────────────────────────────────
+  if (_isAcougueItem(item)) {
+    _acougueCortes = {};
+    _acouguePesos  = (grupos.find(g => g.tipo === 'pesos')?.valores) || [];
+    _renderAcougueGrupos(item, wrap, grupos);
+    return;
+  }
+
+  // ── Modo normal (pizza/restaurante) ─────────────────────
+  wrap.innerHTML = grupos.map(g => {
+    const isRequired = g.tipo === 'radio';
+    const badge = isRequired
+      ? `<span class="grp-required-badge">Obrigatório</span>`
+      : `<span class="grp-optional-badge">Opcional</span>`;
+    const optsHtml = (g.opcoes || []).map(o => {
+      const priceLabel = o.preco > 0
+        ? `<span class="grp-opt-price">+ R$ ${fmt(o.preco)}</span>`
+        : `<span class="grp-opt-price free">Grátis</span>`;
+      const indicator = g.tipo === 'checkbox'
+        ? `<div class="grp-opt-indicator multi"></div>`
+        : `<div class="grp-opt-indicator"></div>`;
+      const qtyEl = g.tipo === 'checkbox'
+        ? `<div class="grp-opt-qty" id="gqty_${_slug(g.nome)}_${_slug(o.nome)}">
+             <button class="grp-qty-btn" onclick="event.stopPropagation();grpQty('${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},-1)">−</button>
+             <span class="grp-qty-num" id="gqnum_${_slug(g.nome)}_${_slug(o.nome)}">1</span>
+             <button class="grp-qty-btn" onclick="event.stopPropagation();grpQty('${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},1)">+</button>
+           </div>` : '';
+      return `<div class="grp-opt-item" data-grupo="${_escape(g.nome)}" data-nome="${_escape(o.nome)}" data-preco="${o.preco||0}" data-tipo="${g.tipo}" onclick="grpToggle(this,'${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},'${g.tipo}',${g.max||1})">
+        <div class="grp-opt-left">${indicator}<span class="grp-opt-name">${o.nome}</span></div>
+        <div style="display:flex;align-items:center;gap:8px">${priceLabel}${qtyEl}</div>
+      </div>`;
+    }).join('');
+
+    return `<div class="grp-section">
+      <div class="grp-section-title">${g.nome} ${badge}</div>
+      <div class="grp-opts">${optsHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+function _renderAcougueGrupos(item, wrap, grupos) {
+  const cortesGrp  = grupos.find(g => g.tipo === 'cortes');
+  const preparosGrp= grupos.find(g => g.tipo === 'preparos');
+  let html = '';
+
+  // ── Seção de cortes ──────────────────────────────────────
+  if (cortesGrp?.opcoes?.length) {
+    const cards = cortesGrp.opcoes.map(o => {
+      const slug = _slug(o.nome || o.id);
+      const imgUrl = [o.icon, o.image, o.img, o.image_url].find(v => v && (v.startsWith('http') || v.startsWith('/'))) || null;
+      const ilustracao = imgUrl
+        ? `<img src="${imgUrl}" alt="${o.nome||o.id}" style="width:68px;height:60px;object-fit:contain;display:block" >`
+        : _getCorteIlus(o.nome||o.id);
+      return `<div class="corte-card" id="corte-card-${slug}" onclick="openPesoSheet('${_escape(o.nome||o.id)}')">
+        <div class="corte-card-illus">${ilustracao}</div>
+        <div class="corte-card-name">${o.nome||o.id}</div>
+        <div class="corte-card-hint" id="corte-hint-${slug}">Clique para adicionar</div>
+      </div>`;
+    }).join('');
+    html += `<div class="ac-section">
+      <div class="ac-section-title">Selecione um dos cortes abaixo</div>
+      <div class="corte-grid">${cards}</div>
+      <div style="margin-top:10px;display:flex;flex-wrap:wrap;align-items:center;gap:4px">
+        <span class="ac-peso-var">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          Peso variável
+        </span>
+        <span class="ac-peso-total" id="ac-peso-total" style="display:none">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span id="ac-peso-total-txt">0g selecionados</span>
+        </span>
+      </div>
+    </div>`;
+  }
+
+  // ── Seção de preparos ────────────────────────────────────
+  if (preparosGrp?.opcoes?.length) {
+    const chips = preparosGrp.opcoes.map(o => {
+      const slug = _slug(o.nome || o.id);
+      return `<div class="preparo-chip" id="preparo-chip-${slug}" onclick="togglePreparo('${_escape(o.nome||o.id)}',this)">
+        <div class="preparo-chip-icon">${_getPreparoIcon(o.nome||o.id)}</div>
+        <span>${o.nome||o.id}</span>
+      </div>`;
+    }).join('');
+    html += `<div class="ac-section">
+      <div class="ac-section-title">Forma de preparo</div>
+      <div class="preparo-chips">${chips}</div>
+    </div>`;
+  }
+
+  wrap.innerHTML = html;
+}
+
+// ── Abre o bottom sheet de peso para um corte ──
+function openPesoSheet(corteNome) {
+  _acougueAtual = corteNome;
+  document.getElementById('ac-peso-corte-nome').textContent = corteNome;
+
+  // Popula lista de pesos
+  const list = document.getElementById('ac-peso-list');
+  const pesoAtual = _acougueCortes[corteNome]?.peso || 0;
+  list.innerHTML = _acouguePesos.map(p => {
+    const on = p === pesoAtual ? ' on' : '';
+    return `<div class="ac-peso-opt${on}" onclick="selectPesoOpt(${p})">
+      <span>${p}g</span>
+      <div class="ac-peso-radio"></div>
+    </div>`;
+  }).join('');
+
+  // Restaura separar / instrução extra
+  const estado = _acougueCortes[corteNome] || {};
+  document.getElementById('ac-peso-sep').value = estado.separar || '';
+  document.getElementById('ac-extra-textarea').value = estado.extra || '';
+  const extraBody = document.getElementById('ac-extra-body');
+  const extraToggle = document.getElementById('ac-extra-toggle');
+  if (estado.extra) {
+    extraBody.classList.add('on');
+    extraToggle.classList.add('on');
+  } else {
+    extraBody.classList.remove('on');
+    extraToggle.classList.remove('on');
+  }
+
+  // Estado do botão confirmar
+  const btn = document.getElementById('ac-peso-confirm');
+  if (pesoAtual > 0) {
+    btn.disabled = false;
+    btn.textContent = `Selecionar ${pesoAtual}g`;
+  } else {
+    btn.disabled = true;
+    btn.textContent = 'Selecionar peso';
+  }
+
+  document.getElementById('ac-peso-overlay').classList.add('on');
+  document.body.style.overflow = 'hidden';
+}
+
+function closePesoSheet() {
+  document.getElementById('ac-peso-overlay').classList.remove('on');
+  document.body.style.overflow = '';
+}
+
+function selectPesoOpt(peso) {
+  document.querySelectorAll('.ac-peso-opt').forEach(el => el.classList.remove('on'));
+  const all = document.querySelectorAll('.ac-peso-opt');
+  all.forEach(el => {
+    if (parseInt(el.querySelector('span').textContent) === peso) el.classList.add('on');
+  });
+  const btn = document.getElementById('ac-peso-confirm');
+  btn.disabled = false;
+  btn.textContent = `Selecionar ${peso}g`;
+  btn.dataset.peso = peso;
+}
+
+function confirmPesoSheet() {
+  const corte = _acougueAtual;
+  if (!corte) return;
+  const btn = document.getElementById('ac-peso-confirm');
+  const peso = parseInt(btn.dataset.peso) || _acougueCortes[corte]?.peso || 0;
+  if (!peso) return;
+
+  const separar = document.getElementById('ac-peso-sep').value;
+  const extra   = document.getElementById('ac-extra-textarea').value.trim();
+
+  _acougueCortes[corte] = { peso, separar, extra };
+
+  // Atualiza card visual
+  const slug = _slug(corte);
+  const card = document.getElementById(`corte-card-${slug}`);
+  const hint = document.getElementById(`corte-hint-${slug}`);
+  if (card && hint) {
+    card.classList.add('on');
+    hint.innerHTML = `<span class="corte-card-badge">
+      <svg width="9" height="9" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ${peso}g ${corte}
+    </span>`;
+  }
+
+  // Atualiza total
+  _atualizaTotalPeso();
+  closePesoSheet();
+}
+
+function _atualizaTotalPeso() {
+  const total = Object.values(_acougueCortes).reduce((s, v) => s + (v.peso || 0), 0);
+  const el  = document.getElementById('ac-peso-total');
+  const txt = document.getElementById('ac-peso-total-txt');
+  if (!el || !txt) return;
+  if (total > 0) {
+    el.style.display = '';
+    txt.textContent = total >= 1000
+      ? (total / 1000).toFixed(1).replace('.', ',') + ' kg selecionados'
+      : total + 'g selecionados';
+  } else {
+    el.style.display = 'none';
+  }
+  _updateImPrice();
+}
+
+function toggleAcExtra() {
+  const toggle = document.getElementById('ac-extra-toggle');
+  const body   = document.getElementById('ac-extra-body');
+  toggle.classList.toggle('on');
+  body.classList.toggle('on');
+  if (body.classList.contains('on')) {
+    document.getElementById('ac-extra-textarea').focus();
+  }
+}
+
+function togglePreparo(nome, el) {
+  el.classList.toggle('on');
+  if (!_imGruposState['preparos']) _imGruposState['preparos'] = [];
+  const state = _imGruposState['preparos'];
+  const idx = state.findIndex(o => o.nome === nome);
+  if (idx !== -1) state.splice(idx, 1);
+  else state.push({ nome, preco: 0, qty: 1 });
+}
+
+// ── Açougue: monta descrição para o carrinho ──
+function _buildAcougueDesc() {
+  const partes = [];
+  for (const [corte, v] of Object.entries(_acougueCortes)) {
+    if (!v.peso) continue;
+    let txt = `${v.peso}g ${corte}`;
+    if (v.separar) txt += ` (${v.separar})`;
+    if (v.extra)   txt += ` [${v.extra}]`;
+    partes.push(txt);
+  }
+  const preparos = (_imGruposState['preparos'] || []).map(o => o.nome).join(', ');
+  if (preparos) partes.push('Preparo: ' + preparos);
+  return partes.join(' · ');
+}
+
+function _slug(s) { return (s||'').replace(/[^a-z0-9]/gi,'_').toLowerCase(); }
+function _escape(s) { return (s||'').replace(/'/g,"\'").replace(/"/g,'&quot;'); }
+
+function grpToggle(el, grupoNome, optNome, preco, tipo, maxSel) {
+  if (!_imGruposState[grupoNome]) _imGruposState[grupoNome] = [];
+  const state = _imGruposState[grupoNome];
+
+  if (tipo === 'radio') {
+    // Deselect all in group, select this one
+    el.closest('.grp-opts').querySelectorAll('.grp-opt-item').forEach(e => e.classList.remove('on'));
+    _imGruposState[grupoNome] = [{ nome: optNome, preco, qty: 1 }];
+    el.classList.add('on');
+  } else {
+    // checkbox
+    const idx = state.findIndex(o => o.nome === optNome);
+    if (idx !== -1) {
+      state.splice(idx, 1);
+      el.classList.remove('on');
+      // hide qty stepper
+      const qtyEl = document.getElementById(`gqty_${_slug(grupoNome)}_${_slug(optNome)}`);
+      if (qtyEl) qtyEl.classList.remove('show');
+    } else {
+      const totalSel = state.reduce((s,o) => s + (o.qty||1), 0);
+      if (maxSel > 1 && totalSel >= maxSel) {
+        toast('⚠️', `Máximo ${maxSel} opções para ${grupoNome}`);
+        return;
+      }
+      state.push({ nome: optNome, preco, qty: 1 });
+      el.classList.add('on');
+      // show qty stepper for checkbox
+      const qtyEl = document.getElementById(`gqty_${_slug(grupoNome)}_${_slug(optNome)}`);
+      if (qtyEl) qtyEl.classList.add('show');
+    }
+  }
+  // Animação ingrediente voando
+  const vtype = _itemVisualType(allItems.find(x => x.id === _imItemId));
+  if (vtype === 'acai' || vtype === 'marmita') {
+    const wasAdded = el.classList.contains('on');
+    if (wasAdded) {
+      _dropIngredient(optNome, el);
+    } else {
+      _lowerFillLevel();
+    }
+  }
+  if (vtype === 'burger') {
+    const wasAdded = el.classList.contains('on');
+    if (wasAdded) _addBurgerLayer(optNome);
+    else          _removeBurgerLayer(optNome);
+  }
+  _updateImPrice();
+}
+
+function grpQty(grupoNome, optNome, preco, delta) {
+  if (!_imGruposState[grupoNome]) return;
+  const opt = _imGruposState[grupoNome].find(o => o.nome === optNome);
+  if (!opt) return;
+  opt.qty = Math.max(1, (opt.qty||1) + delta);
+  const el = document.getElementById(`gqnum_${_slug(grupoNome)}_${_slug(optNome)}`);
+  if (el) el.textContent = opt.qty;
+  _updateImPrice();
+}
+
+function _calcGruposExtra(item) {
+  let extra = 0;
+  const grupos = item.custom_groups || [];
+  for (const g of grupos) {
+    const sel = _imGruposState[g.nome] || [];
+    for (const o of sel) extra += (o.preco||0) * (o.qty||1);
+  }
+  return extra;
+}
+
+function _buildGruposDesc(item) {
+  const grupos = item.custom_groups || [];
+  const parts = [];
+  for (const g of grupos) {
+    const sel = _imGruposState[g.nome] || [];
+    if (sel.length) {
+      const names = sel.map(o => o.qty > 1 ? `${o.qty}x ${o.nome}` : o.nome).join(', ');
+      parts.push(`${g.nome}: ${names}`);
+    }
+  }
+  return parts.join(' · ');
+}
+
+function _updateImPrice() {
+  const i = allItems.find(x => x.id === _imItemId);
+  if (!i) return;
+  const extra = _calcGruposExtra(i);
+  const total = (i.price + extra) * _imQty;
+  const btn = document.getElementById('im-add-btn');
+  const priceEl = document.getElementById('im-price');
+  if (priceEl) priceEl.textContent = 'R$ ' + fmt(i.price + extra);
+  if (btn && _lojaAberta) btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> Adicionar · R$ ${fmt(total)}`;
+}
+
+// Cross-sell: suggest items from other categories
+function renderImXsell(item) {
+  const wrap = document.getElementById('im-xsell-wrap');
+  if (!wrap) return;
+  const itemCat = item.cat_key || item.cat || '';
+  // Get up to 8 items from different categories
+  const others = allItems.filter(x =>
+    x.id !== item.id &&
+    x.status !== 'pausado' && x.status !== 'esgotado' &&
+    (x.cat_key || x.cat) !== itemCat
+  ).slice(0, 8);
+  if (!others.length) { wrap.innerHTML = ''; return; }
+
+  const cards = others.map(o => `
+    <div class="xsell-card" id="xsell_${o.id}" onclick="xsellToggle(${o.id})" style="position:relative">
+      <div class="xsell-img">${o.image_url ? `<img src="${o.image_url}" >` : (o.emoji||'🍽️')}</div>
+      <div class="xsell-body">
+        <div class="xsell-name">${o.name}</div>
+        <div class="xsell-price">R$ ${fmt(o.price)}</div>
+      </div>
+      <div class="xsell-check">✓</div>
+    </div>`).join('');
+
+  wrap.innerHTML = `<div class="xsell-section">
+    <div class="xsell-title">Adicionar ao pedido</div>
+    <div class="xsell-scroll">${cards}</div>
+  </div>`;
+}
+
+// Cross-sell state
+const _xsellSelected = new Set();
+
+function xsellToggle(itemId) {
+  const card = document.getElementById(`xsell_${itemId}`);
+  if (!card) return;
+  if (_xsellSelected.has(itemId)) {
+    _xsellSelected.delete(itemId);
+    card.classList.remove('on');
+  } else {
+    _xsellSelected.add(itemId);
+    card.classList.add('on');
+  }
+}
+
+
+
+
