@@ -5595,6 +5595,7 @@ const _corteImgMap = {
   bifemedio:  _C + '/bifemedio.png',
   bifegrosso: _C + '/bifegrosso.png',
   postas:     _C + '/postas.png',
+  tirinha:    _C + '/tirinhas.png',
   default:    _C + '/bifemedio.png',
 };
 
@@ -5610,9 +5611,39 @@ const _preparoImgMap = {
   airfryer:   _C + '/airfryer.png',
 };
 
+// Mapa de fallback direto pro S3 original
+const _S3fallback = {
+  moida:      'https://onbeef.s3.amazonaws.com/imagens-cortes/moida-2x.png',
+  tiras:      'https://onbeef.s3.amazonaws.com/imagens-cortes/tiras.png',
+  tirinhas:   'https://onbeef.s3.amazonaws.com/imagens-cortes/tirinhas.png',
+  inteira:    'https://onbeef.s3.amazonaws.com/imagens-cortes/inteira.png',
+  espeto:     'https://onbeef.s3.amazonaws.com/imagens-cortes/espeto.png',
+  cubos:      'https://onbeef.s3.amazonaws.com/imagens-cortes/cubos.png',
+  grelha:     'https://onbeef.s3.amazonaws.com/imagens-cortes/grelha.png',
+  peca:       'https://onbeef.s3.amazonaws.com/imagens-cortes/peca.png',
+  bifefino:   'https://onbeef.s3.amazonaws.com/imagens-cortes/bifefino.png',
+  bifemedio:  'https://onbeef.s3.amazonaws.com/imagens-cortes/bifemedio.png',
+  bifegrosso: 'https://onbeef.s3.amazonaws.com/imagens-cortes/bifegrosso.png',
+  strogonoff: 'https://onbeef.s3.amazonaws.com/imagens-cortes/strogonoff.png',
+  postas:     'https://onbeef.s3.amazonaws.com/imagens-cortes/postas.png',
+  picado:     'https://onbeef.s3.amazonaws.com/imagens-cortes/picado.png',
+  dia_a_dia:  'https://onbeef.s3.amazonaws.com/tags/icons/dia_a_dia.png',
+  churrasco:  'https://onbeef.s3.amazonaws.com/tags/icons/churrasco.png',
+  resfriado:  'https://onbeef.s3.amazonaws.com/tags/icons/wind.png',
+  grellhar:   'https://onbeef.s3.amazonaws.com/tags/icons/grellhar.png',
+  defumado:   'https://onbeef.s3.amazonaws.com/tags/icons/smoker.png',
+  frigideira: 'https://onbeef.s3.amazonaws.com/tags/icons/frigideira.png',
+  forno:      'https://onbeef.s3.amazonaws.com/tags/icons/forno.png',
+  airfryer:   'https://onbeef.s3.amazonaws.com/tags/icons/airfryer.png',
+};
+
 function _imgTag(url, alt, size) {
   const s = size || 60;
-  return `<img src="${url}" alt="${alt}" width="${s}" height="${s}" style="object-fit:contain;display:block">`;
+  // Pega a chave do nome do arquivo sem extensão para o fallback
+  const key = url.split('/').pop().replace('.png','');
+  const fb = _S3fallback[key] || '';
+  const onerror = fb ? `onerror="if(this.src!=='${fb}')this.src='${fb}'"` : '';
+  return `<img src="${url}" alt="${alt}" width="${s}" height="${s}" style="object-fit:contain;display:block" ${onerror}>`;
 }
 
 function _getCorteIlus(nome) {
