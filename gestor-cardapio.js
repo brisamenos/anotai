@@ -2,12 +2,16 @@
 //  AÇOUGUE — Editor dinâmico de cortes e preparos
 // ══════════════════════════════════════════
 
-// Estado das listas por contexto (new / edit) e tipo (cortes / preparos)
+// Estado das listas por contexto (new / edit) e tipo (cortes / preparos / ocasiao / armazenamento)
 const _acListState = {
-  'new-cortes':    [],
-  'new-preparos':  [],
-  'edit-cortes':   [],
-  'edit-preparos': []
+  'new-cortes':          [],
+  'new-preparos':        [],
+  'new-ocasiao':         [],
+  'new-armazenamento':   [],
+  'edit-cortes':         [],
+  'edit-preparos':       [],
+  'edit-ocasiao':        [],
+  'edit-armazenamento':  []
 };
 
 // Catálogo de cortes disponíveis para seleção
@@ -45,12 +49,32 @@ const _AC_PREPAROS_CATALOG = [
   { id:'resfriado',  nome:'Resfriado',  icon:'https://onbeef.s3.amazonaws.com/tags/icons/wind.png' },
 ];
 
+// Catálogo de tipo de ocasião
+const _AC_OCASIAO_CATALOG = [
+  { id:'churrasco',       nome:'Churrasco',        icon:'https://onbeef.s3.amazonaws.com/tags/icons/churrasco.png' },
+  { id:'dia_a_dia',       nome:'Dia a dia',         icon:'https://onbeef.s3.amazonaws.com/tags/icons/dia_a_dia.png' },
+  { id:'final_semana',    nome:'Final de semana',   icon:null },
+  { id:'festas',          nome:'Festas',            icon:null },
+  { id:'especial',        nome:'Ocasião especial',  icon:null },
+  { id:'semana',          nome:'Semana',            icon:null },
+];
+
+// Catálogo de armazenamento
+const _AC_ARMAZENAMENTO_CATALOG = [
+  { id:'resfriado',        nome:'Resfriado',          icon:'https://onbeef.s3.amazonaws.com/tags/icons/wind.png' },
+  { id:'congelado',        nome:'Congelado',           icon:null },
+  { id:'refrigerado',      nome:'Refrigerado',         icon:null },
+  { id:'temp_ambiente',    nome:'Temperatura ambiente', icon:null },
+];
+
 // ── Renderiza lista dinâmica ──────────────────────────
 function renderAcList(ctx, tipo) {
   const key  = `${ctx}-${tipo}`;
   const list = _acListState[key] || [];
   const el   = document.getElementById(`${ctx}-${tipo}-list`);
   if (!el) return;
+
+  const emojis = { cortes:'🥩', preparos:'🍳', ocasiao:'🎯', armazenamento:'❄️' };
 
   if (!list.length) {
     el.innerHTML = `<div style="font-size:11.5px;color:var(--muted);padding:6px 2px;font-style:italic">Nenhum item. Clique em "+ Adicionar" para começar.</div>`;
@@ -60,7 +84,7 @@ function renderAcList(ctx, tipo) {
   el.innerHTML = list.map((item, idx) => {
     const iconEl = item.icon
       ? `<img src="${item.icon}" style="width:26px;height:26px;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'">`
-      : `<span style="font-size:16px;width:26px;text-align:center;flex-shrink:0">${tipo === 'cortes' ? '🥩' : '🍳'}</span>`;
+      : `<span style="font-size:16px;width:26px;text-align:center;flex-shrink:0">${emojis[tipo] || '📌'}</span>`;
     return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
       ${iconEl}
       <span style="flex:1;font-size:12.5px;font-weight:600">${item.nome}</span>
@@ -114,7 +138,20 @@ function acListAddCustom(ctx, tipo) {
 
 // ── Abre picker de seleção ────────────────────────────
 function acListPick(ctx, tipo) {
-  const catalog  = tipo === 'cortes' ? _AC_CORTES_CATALOG : _AC_PREPAROS_CATALOG;
+  const catalogs = {
+    cortes:        _AC_CORTES_CATALOG,
+    preparos:      _AC_PREPAROS_CATALOG,
+    ocasiao:       _AC_OCASIAO_CATALOG,
+    armazenamento: _AC_ARMAZENAMENTO_CATALOG,
+  };
+  const titulos = {
+    cortes:        '🥩 Adicionar Corte',
+    preparos:      '🍳 Adicionar Forma de Preparo',
+    ocasiao:       '🎯 Adicionar Tipo de Ocasião',
+    armazenamento: '❄️ Adicionar Armazenamento',
+  };
+  const emojis = { cortes:'🥩', preparos:'🍳', ocasiao:'🎯', armazenamento:'❄️' };
+  const catalog  = catalogs[tipo] || [];
   const key      = `${ctx}-${tipo}`;
   const existing = (_acListState[key] || []).map(i => i.id);
   const available= catalog.filter(c => !existing.includes(c.id));
@@ -126,12 +163,13 @@ function acListPick(ctx, tipo) {
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9999;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(3px)';
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 
-  const titulo = tipo === 'cortes' ? '🥩 Adicionar Corte' : '🍳 Adicionar Preparo';
+  const titulo = titulos[tipo] || '+ Adicionar';
+  const emoji  = emojis[tipo] || '📌';
   const listaHTML = available.length
     ? available.map(item => {
         const iconEl = item.icon
           ? `<img src="${item.icon}" style="width:30px;height:30px;object-fit:contain;flex-shrink:0">`
-          : `<span style="font-size:20px;width:30px;text-align:center;flex-shrink:0">${tipo==='cortes'?'🥩':'🍳'}</span>`;
+          : `<span style="font-size:20px;width:30px;text-align:center;flex-shrink:0">${emoji}</span>`;
         return `<button type="button" onclick="acListAdd('${ctx}','${tipo}','${item.id}','${item.nome.replace(/'/g,"\\'")}'${item.icon?`,'${item.icon}'`:''})" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;cursor:pointer;color:var(--text);text-align:left;font-family:inherit;font-size:13px;font-weight:500;transition:all .15s" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">${iconEl}<span>${item.nome}</span></button>`;
       }).join('')
     : `<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">Todos os itens do catálogo já foram adicionados.</div>`;
@@ -146,7 +184,7 @@ function acListPick(ctx, tipo) {
     <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;flex-shrink:0">
       <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">✏️ Personalizado</div>
       <div style="display:flex;gap:8px">
-        <input id="ac-picker-custom-name" class="form-input" placeholder="Nome personalizado (ex: Isca, Cubão...)" style="flex:1;font-size:13px">
+        <input id="ac-picker-custom-name" class="form-input" placeholder="Nome personalizado..." style="flex:1;font-size:13px">
         <button type="button" onclick="acListAddCustom('${ctx}','${tipo}')" style="padding:8px 14px;background:var(--accent);border:none;border-radius:8px;color:#000;font-weight:700;cursor:pointer;font-family:inherit;font-size:12.5px;white-space:nowrap">+ Adicionar</button>
       </div>
     </div>
@@ -555,16 +593,20 @@ function updatePorcaoPreview(ctx) {
 }
 
 function readAcougueOptions(ctx) {
-  const cortesList   = _acListState[`${ctx}-cortes`]   || [];
-  const preparosList = _acListState[`${ctx}-preparos`] || [];
-  const pesosRaw     = document.getElementById(`${ctx}-pesos`)?.value || '';
-  const pesos        = pesosRaw.split(',').map(s => parseInt(s.trim())).filter(n => n > 0);
-  const porcaoRef    = parseInt(document.getElementById(`${ctx}-porcao-ref`)?.value) || 0;
+  const cortesList        = _acListState[`${ctx}-cortes`]        || [];
+  const preparosList      = _acListState[`${ctx}-preparos`]      || [];
+  const ocasiaoList       = _acListState[`${ctx}-ocasiao`]       || [];
+  const armazenamentoList = _acListState[`${ctx}-armazenamento`] || [];
+  const pesosRaw          = document.getElementById(`${ctx}-pesos`)?.value || '';
+  const pesos             = pesosRaw.split(',').map(s => parseInt(s.trim())).filter(n => n > 0);
+  const porcaoRef         = parseInt(document.getElementById(`${ctx}-porcao-ref`)?.value) || 0;
   return {
-    cortes:        cortesList.map(i => i.id),
-    preparos:      preparosList.map(i => i.id),
-    _cortesList:   cortesList,
-    _preparosList: preparosList,
+    cortes:              cortesList.map(i => i.id),
+    preparos:            preparosList.map(i => i.id),
+    _cortesList:         cortesList,
+    _preparosList:       preparosList,
+    _ocasiaoList:        ocasiaoList,
+    _armazenamentoList:  armazenamentoList,
     pesos,
     porcaoRef
   };
@@ -572,40 +614,43 @@ function readAcougueOptions(ctx) {
 
 // ── Preenche cortes/preparos no edit ─────────────────
 function fillAcougueOptions(ctx, customGroups) {
-  // Limpa listas
-  _acListState[`${ctx}-cortes`]   = [];
-  _acListState[`${ctx}-preparos`] = [];
+  // Limpa todas as listas
+  _acListState[`${ctx}-cortes`]          = [];
+  _acListState[`${ctx}-preparos`]        = [];
+  _acListState[`${ctx}-ocasiao`]         = [];
+  _acListState[`${ctx}-armazenamento`]   = [];
 
   if (!Array.isArray(customGroups)) {
-    renderAcList(ctx, 'cortes'); renderAcList(ctx, 'preparos'); return;
+    ['cortes','preparos','ocasiao','armazenamento'].forEach(t => renderAcList(ctx, t));
+    return;
   }
   const cg = typeof customGroups[0] === 'string' ? [] : customGroups;
-  const cortesGroup   = cg.find(g => g.tipo === 'cortes');
-  const preparosGroup = cg.find(g => g.tipo === 'preparos');
-  const pesosGroup    = cg.find(g => g.tipo === 'pesos');
-  const porcaoGroup   = cg.find(g => g.tipo === 'porcao_ref');
+  const cortesGroup        = cg.find(g => g.tipo === 'cortes');
+  const preparosGroup      = cg.find(g => g.tipo === 'preparos');
+  const pesosGroup         = cg.find(g => g.tipo === 'pesos');
+  const porcaoGroup        = cg.find(g => g.tipo === 'porcao_ref');
+  const ocasiaoGroup       = cg.find(g => g.tipo === 'ocasiao');
+  const armazenamentoGroup = cg.find(g => g.tipo === 'armazenamento');
 
-  if (cortesGroup?.opcoes) {
-    _acListState[`${ctx}-cortes`] = cortesGroup.opcoes.map(o => ({
-      id:   o.id   || (o.nome||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'_'),
-      nome: o.nome || ((o.id||'').charAt(0).toUpperCase()+(o.id||'').slice(1)),
-      icon: o.icon || null
-    }));
-  }
-  if (preparosGroup?.opcoes) {
-    _acListState[`${ctx}-preparos`] = preparosGroup.opcoes.map(o => {
+  const _resolveList = (group, catalog) => {
+    if (!group?.opcoes) return [];
+    return group.opcoes.map(o => {
       const id = o.id || (o.nome||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'_');
-      const catalogItem = _AC_PREPAROS_CATALOG.find(c => c.id === id);
+      const catalogItem = catalog.find(c => c.id === id);
       return {
         id,
         nome: o.nome || catalogItem?.nome || (id.charAt(0).toUpperCase()+id.slice(1)),
         icon: o.icon || catalogItem?.icon || null
       };
     });
-  }
+  };
 
-  renderAcList(ctx, 'cortes');
-  renderAcList(ctx, 'preparos');
+  _acListState[`${ctx}-cortes`]         = _resolveList(cortesGroup,        _AC_CORTES_CATALOG);
+  _acListState[`${ctx}-preparos`]       = _resolveList(preparosGroup,      _AC_PREPAROS_CATALOG);
+  _acListState[`${ctx}-ocasiao`]        = _resolveList(ocasiaoGroup,       _AC_OCASIAO_CATALOG);
+  _acListState[`${ctx}-armazenamento`]  = _resolveList(armazenamentoGroup, _AC_ARMAZENAMENTO_CATALOG);
+
+  ['cortes','preparos','ocasiao','armazenamento'].forEach(t => renderAcList(ctx, t));
 
   if (pesosGroup?.valores) {
     const el = document.getElementById(`${ctx}-pesos`);
@@ -659,10 +704,12 @@ async function addItem() {
   const itemTypeNew = document.getElementById('new-item-type').value || 'normal';
   if (itemTypeNew === 'kg') {
     const ac = readAcougueOptions('new');
-    if (ac._cortesList.length)   customGroups.push({ tipo: 'cortes',   opcoes: ac._cortesList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
-    if (ac._preparosList.length) customGroups.push({ tipo: 'preparos', opcoes: ac._preparosList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
-    if (ac.pesos.length)    customGroups.push({ tipo: 'pesos',    valores: ac.pesos });
-    if (ac.porcaoRef > 0)   customGroups.push({ tipo: 'porcao_ref', gramas: ac.porcaoRef });
+    if (ac._cortesList.length)        customGroups.push({ tipo: 'cortes',        opcoes: ac._cortesList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
+    if (ac._preparosList.length)      customGroups.push({ tipo: 'preparos',      opcoes: ac._preparosList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
+    if (ac._ocasiaoList.length)       customGroups.push({ tipo: 'ocasiao',       opcoes: ac._ocasiaoList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
+    if (ac._armazenamentoList.length) customGroups.push({ tipo: 'armazenamento', opcoes: ac._armazenamentoList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
+    if (ac.pesos.length)              customGroups.push({ tipo: 'pesos',         valores: ac.pesos });
+    if (ac.porcaoRef > 0)             customGroups.push({ tipo: 'porcao_ref',    gramas: ac.porcaoRef });
   }
   // Kit: salva itens no custom_groups
   if (itemTypeNew === 'kit') {
@@ -731,10 +778,10 @@ async function addItem() {
   const nd = document.getElementById('new-destaque');          if(nd) nd.classList.remove('on');
   const ng = document.getElementById('new-grupos-list');       if(ng) ng.innerHTML = '';
   // Limpa listas dinâmicas de açougue
-  _acListState['new-cortes']   = [];
-  _acListState['new-preparos'] = [];
-  renderAcList('new','cortes');
-  renderAcList('new','preparos');
+  ['cortes','preparos','ocasiao','armazenamento'].forEach(t => {
+    _acListState[`new-${t}`] = [];
+    renderAcList('new', t);
+  });
   togglePizzaOptions('new');
 
   closeModal('modal-add-item');
@@ -794,10 +841,10 @@ function openEditItem(id) {
     fillAcougueOptions('edit', it.customGroups || []);
   } else {
     // Limpa listas dinâmicas
-    _acListState['edit-cortes']   = [];
-    _acListState['edit-preparos'] = [];
-    renderAcList('edit','cortes');
-    renderAcList('edit','preparos');
+    ['cortes','preparos','ocasiao','armazenamento'].forEach(t => {
+      _acListState[`edit-${t}`] = [];
+      renderAcList('edit', t);
+    });
     const ep = document.getElementById('edit-pesos'); if (ep) ep.value = '';
   }
 
@@ -849,10 +896,12 @@ async function saveEditItem() {
   // Açougue: adiciona cortes/preparos/pesos
   if (it.itemType === 'kg') {
     const ac = readAcougueOptions('edit');
-    if (ac._cortesList.length)   it.customGroups.push({ tipo: 'cortes',   opcoes: ac._cortesList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
-    if (ac._preparosList.length) it.customGroups.push({ tipo: 'preparos', opcoes: ac._preparosList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
-    if (ac.pesos.length)    it.customGroups.push({ tipo: 'pesos',    valores: ac.pesos });
-    if (ac.porcaoRef > 0)   it.customGroups.push({ tipo: 'porcao_ref', gramas: ac.porcaoRef });
+    if (ac._cortesList.length)        it.customGroups.push({ tipo: 'cortes',        opcoes: ac._cortesList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
+    if (ac._preparosList.length)      it.customGroups.push({ tipo: 'preparos',      opcoes: ac._preparosList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
+    if (ac._ocasiaoList.length)       it.customGroups.push({ tipo: 'ocasiao',       opcoes: ac._ocasiaoList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
+    if (ac._armazenamentoList.length) it.customGroups.push({ tipo: 'armazenamento', opcoes: ac._armazenamentoList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
+    if (ac.pesos.length)              it.customGroups.push({ tipo: 'pesos',         valores: ac.pesos });
+    if (ac.porcaoRef > 0)             it.customGroups.push({ tipo: 'porcao_ref',    gramas: ac.porcaoRef });
   }
   // Kit: salva itens
   if (it.itemType === 'kit') {
