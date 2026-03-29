@@ -5574,45 +5574,45 @@ let _acouguePesos   = [];   // array de pesos disponíveis para o item atual
 
 // Ilustrações SVG estilo sketch para cada tipo de corte
 // ── Imagens de cortes servidas localmente (/uploads/cortes/) ──
-const _C = 'https://cdn.jsdelivr.net/gh/brisamenos/cortes@main';
+const _C = 'https://onbeef.s3.amazonaws.com/imagens-cortes';
 
 const _corteImgMap = {
-  moido:      _C + '/moida.png',
-  moido2x:    _C + '/moida.png',
-  tiras:      _C + '/tiras.png',
-  tirinha:    _C + '/tirinhas.png',
-  tirinhas:   _C + '/tirinhas.png',
-  strogonoff: _C + '/strogonoff.png',
-  inteiro:    _C + '/inteira.png',
-  inteira:    _C + '/inteira.png',
-  espeto:     _C + '/espeto.png',
-  cubos:      _C + '/cubos.png',
-  picado:     _C + '/picado.png',
-  grelha:     _C + '/grelha.png',
-  peca:       _C + '/peca.png',
-  bife:       _C + '/bifemedio.png',
-  bifefino:   _C + '/bifefino.png',
-  bifemedio:  _C + '/bifemedio.png',
-  bifegrosso: _C + '/bifegrosso.png',
-  postas:     _C + '/postas.png',
-  tirinha:    _C + '/tirinhas.png',
-  default:    _C + '/bifemedio.png',
+  moido:      'https://onbeef.s3.amazonaws.com/imagens-cortes/moida-2x.png',
+  moido2x:    'https://onbeef.s3.amazonaws.com/imagens-cortes/moida-2x.png',
+  tiras:      'https://onbeef.s3.amazonaws.com/imagens-cortes/tiras.png',
+  tirinha:    'https://onbeef.s3.amazonaws.com/imagens-cortes/tirinhas.png',
+  tirinhas:   'https://onbeef.s3.amazonaws.com/imagens-cortes/tirinhas.png',
+  strogonoff: 'https://onbeef.s3.amazonaws.com/imagens-cortes/strogonoff.png',
+  inteiro:    'https://onbeef.s3.amazonaws.com/imagens-cortes/inteira.png',
+  inteira:    'https://onbeef.s3.amazonaws.com/imagens-cortes/inteira.png',
+  espeto:     'https://onbeef.s3.amazonaws.com/imagens-cortes/espeto.png',
+  cubos:      'https://onbeef.s3.amazonaws.com/imagens-cortes/cubos.png',
+  picado:     'https://onbeef.s3.amazonaws.com/imagens-cortes/picado.png',
+  grelha:     'https://onbeef.s3.amazonaws.com/imagens-cortes/grelha.png',
+  peca:       'https://onbeef.s3.amazonaws.com/imagens-cortes/peca.png',
+  bife:       'https://onbeef.s3.amazonaws.com/imagens-cortes/bifemedio.png',
+  bifefino:   'https://onbeef.s3.amazonaws.com/imagens-cortes/bifefino.png',
+  bifemedio:  'https://onbeef.s3.amazonaws.com/imagens-cortes/bifemedio.png',
+  bifegrosso: 'https://onbeef.s3.amazonaws.com/imagens-cortes/bifegrosso.png',
+  postas:     'https://onbeef.s3.amazonaws.com/imagens-cortes/postas.png',
+  default:    'https://onbeef.s3.amazonaws.com/imagens-cortes/bifemedio.png',
 };
 
 const _preparoImgMap = {
-  dia_a_dia:  _C + '/dia_a_dia.png',
-  churrasco:  _C + '/churrasco.png',
-  resfriado:  _C + '/resfriado.png',
-  grelhar:    _C + '/grellhar.png',
-  grelhado:   _C + '/grellhar.png',
-  defumado:   _C + '/defumado.png',
-  frigideira: _C + '/frigideira.png',
-  forno:      _C + '/forno.png',
-  airfryer:   _C + '/airfryer.png',
+  dia_a_dia:  'https://onbeef.s3.amazonaws.com/tags/icons/dia_a_dia.png',
+  churrasco:  'https://onbeef.s3.amazonaws.com/tags/icons/churrasco.png',
+  resfriado:  'https://onbeef.s3.amazonaws.com/tags/icons/wind.png',
+  grelhar:    'https://onbeef.s3.amazonaws.com/tags/icons/grellhar.png',
+  grelhado:   'https://onbeef.s3.amazonaws.com/tags/icons/grellhar.png',
+  defumado:   'https://onbeef.s3.amazonaws.com/tags/icons/smoker.png',
+  frigideira: 'https://onbeef.s3.amazonaws.com/tags/icons/frigideira.png',
+  forno:      'https://onbeef.s3.amazonaws.com/tags/icons/forno.png',
+  airfryer:   'https://onbeef.s3.amazonaws.com/tags/icons/airfryer.png',
 };
 
 // Mapa de fallback direto pro S3 original
 const _S3fallback = {
+  'moida-2x': 'https://onbeef.s3.amazonaws.com/imagens-cortes/moida-2x.png',
   moida:      'https://onbeef.s3.amazonaws.com/imagens-cortes/moida-2x.png',
   tiras:      'https://onbeef.s3.amazonaws.com/imagens-cortes/tiras.png',
   tirinhas:   'https://onbeef.s3.amazonaws.com/imagens-cortes/tirinhas.png',
