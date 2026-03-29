@@ -366,7 +366,27 @@ input,textarea{font-family:inherit}
 .im-body{padding:20px 20px 28px}
 .im-name{font-family:'Fraunces',serif;font-size:22px;font-weight:900;margin-bottom:6px;line-height:1.2}
 .im-desc{font-size:13.5px;color:var(--muted2);line-height:1.6;margin-bottom:16px}
-.im-price-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+/* Porção de referência — badge no card */
+.item-porcao-ref{
+  display:inline-flex;align-items:center;gap:3px;
+  font-size:10.5px;font-weight:700;
+  color:var(--accent);
+  background:rgba(var(--accent-rgb,249,115,22),.08);
+  border:1px solid rgba(var(--accent-rgb,249,115,22),.2);
+  border-radius:6px;padding:2px 7px;margin-top:3px;
+  white-space:nowrap;
+}
+/* Porção de referência — linha abaixo do preço no modal */
+.im-porcao-ref{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:12px;font-weight:700;
+  color:var(--accent);
+  background:rgba(var(--accent-rgb,249,115,22),.08);
+  border:1px solid rgba(var(--accent-rgb,249,115,22),.2);
+  border-radius:8px;padding:4px 11px;margin-top:6px;
+}
+
+.im-price-row{ display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px }
 .im-price{font-family:'Fraunces',serif;font-size:26px;font-weight:900;color:var(--amber)}
 .im-price-old{font-size:14px;color:var(--muted);text-decoration:line-through;margin-right:6px}
 .im-qty-row{display:flex;align-items:center;gap:16px}
@@ -1205,6 +1225,80 @@ input,textarea{font-family:inherit}
 }
 
 /* Peso variável badge */
+/* ── Seção "Não sabe qual carne escolher?" ── */
+.preparo-filter-section{
+  padding:0 0 4px;
+  overflow:hidden;
+}
+.preparo-filter-section .section-label{
+  padding:0 16px 8px;
+}
+.preparo-filter-section .section-sublabel{
+  padding:0 16px 10px;
+  font-size:12px;
+  color:var(--muted);
+  margin-top:-4px;
+}
+.preparo-filter-scroll{
+  display:flex;
+  gap:10px;
+  overflow-x:auto;
+  padding:0 16px 14px;
+  scrollbar-width:none;
+}
+.preparo-filter-scroll::-webkit-scrollbar{ display:none }
+.preparo-filter-card{
+  flex-shrink:0;
+  width:106px;
+  background:var(--accent);
+  border-radius:12px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  padding:14px 8px 12px;
+  cursor:pointer;
+  transition:opacity .18s, transform .18s, box-shadow .18s;
+  user-select:none;
+  position:relative;
+  overflow:hidden;
+}
+.preparo-filter-card:active{ transform:scale(.94) }
+.preparo-filter-card.on{
+  box-shadow:0 0 0 3px #fff, 0 0 0 5px var(--accent);
+  opacity:1;
+}
+.preparo-filter-card.dimmed{
+  opacity:.45;
+}
+.preparo-filter-card-icon{
+  width:62px;height:62px;
+  display:flex;align-items:center;justify-content:center;
+}
+.preparo-filter-card-icon img{
+  width:62px;height:62px;object-fit:contain;
+  filter:brightness(0) invert(1);
+}
+.preparo-filter-card-label{
+  font-size:12px;font-weight:700;
+  color:#fff;text-align:center;line-height:1.2;
+}
+.preparo-filter-clear{
+  flex-shrink:0;
+  width:46px;height:46px;
+  border-radius:50%;
+  background:rgba(255,255,255,.18);
+  border:2px solid rgba(255,255,255,.4);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  align-self:center;
+  margin-left:2px;
+  transition:background .18s;
+}
+.preparo-filter-clear:active{ background:rgba(255,255,255,.35) }
+/* ── Fim seção preparo filter ── */
+
 .ac-peso-var{
   display:inline-flex;align-items:center;gap:5px;
   background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);
@@ -1454,6 +1548,9 @@ input,textarea{font-family:inherit}
     <button class="cat-btn on" data-key="" onclick="filterCat(this,'')">Tudo</button>
   </div>
 </div>
+
+<!-- SEÇÃO PREPARO FILTER — só açougue -->
+<div class="preparo-filter-section" id="preparo-filter-section" style="display:none"></div>
 
 <!-- MENU -->
 <div id="menu-wrap"></div>
@@ -2153,6 +2250,8 @@ let _storeAddress = '';
 let _storeLat     = null;
 let _storeLng     = null;
 let _tiposEntrega = ['delivery','retirada','mesa'];
+let _segmento     = 'restaurante'; // 'restaurante' | 'acougue'
+let _filterPreparo = '';           // preparo selecionado para filtrar itens
 let _lojaAberta  = true;
 let _trackOrderId= null;
 let _trackChannel= null;
@@ -2478,7 +2577,7 @@ async function init() {
       _tiposEntrega = Array.isArray(c.tipos_entrega) ? c.tipos_entrega : ['delivery','retirada','mesa'];
       try {
         const segR = await fetch('/api/tenant-segmento', { headers: { 'x-tenant-id': _tenantId } });
-        if (segR.ok) { const segD = await segR.json(); if (segD.segmento === 'acougue') _tiposEntrega = _tiposEntrega.filter(t => t !== 'mesa'); }
+        if (segR.ok) { const segD = await segR.json(); if (segD.segmento === 'acougue') { _segmento = 'acougue'; _tiposEntrega = _tiposEntrega.filter(t => t !== 'mesa'); } }
       } catch(e) {}
       // Sincroniza offset de numeração com o gestor
       _orderNumOffset = parseInt(c.order_num_offset) || 0;
@@ -2514,6 +2613,7 @@ async function init() {
     }
 
     buildCats();
+    renderPreparoFilterSection();
     renderMenu();
     subscribeRealtime();
     loadCustomerSession();
@@ -2665,6 +2765,7 @@ async function reloadMenu() {
   }));
   allCats  = (catsR.data  || []);
   buildCats();
+  renderPreparoFilterSection();
   renderMenu();
 }
 
@@ -3012,11 +3113,77 @@ function filterCat(el, key) {
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('on'));
   el.classList.add('on');
   activeCat = key;
+  _filterPreparo = '';
+  renderPreparoFilterSection();
   renderMenu();
 }
 
 function onSearch(val) {
   searchQ = val.trim().toLowerCase();
+  renderMenu();
+}
+
+// ══════════════════════════════════════════
+//  SEÇÃO "NÃO SABE QUAL CARNE?" — Açougue
+// ══════════════════════════════════════════
+function _getPreparoFilterNome(id) {
+  const map = {
+    grelha: 'Grelha', espeto: 'Espeto', frigideira: 'Frigideira',
+    airfryer: 'Airfryer', churrasco: 'Churrasco', forno: 'Forno',
+    panela: 'Panela', ensopado: 'Ensopado', grelhado: 'Grelhado',
+    defumado: 'Defumado', dia_a_dia: 'Dia a dia',
+  };
+  return map[id] || (id.charAt(0).toUpperCase() + id.slice(1));
+}
+
+function renderPreparoFilterSection() {
+  const el = document.getElementById('preparo-filter-section');
+  if (!el) return;
+  if (_segmento !== 'acougue') { el.style.display = 'none'; return; }
+
+  // Coleta todos os preparos disponíveis dos itens
+  const allPreparos = new Map(); // id -> nome
+  allItems.forEach(i => {
+    const cgs = i.custom_groups || [];
+    const grp = cgs.find(g => g.tipo === 'preparos');
+    if (grp?.opcoes) {
+      grp.opcoes.forEach(o => {
+        const id = (o.id || o.nome || o).toLowerCase().replace(/\s+/g,'_');
+        if (!allPreparos.has(id)) allPreparos.set(id, o.nome || _getPreparoFilterNome(id));
+      });
+    }
+  });
+
+  if (allPreparos.size === 0) { el.style.display = 'none'; return; }
+
+  el.style.display = '';
+  let cards = '';
+  allPreparos.forEach((nome, id) => {
+    const icon = _preparoImgMap[id] ? `<img src="${_preparoImgMap[id]}" alt="${nome}">` : `<span style="font-size:28px">🍖</span>`;
+    const isOn = _filterPreparo === id;
+    cards += `<div class="preparo-filter-card${isOn ? ' on' : ''}" onclick="setFilterPreparo('${id}')">
+      <div class="preparo-filter-card-icon">${icon}</div>
+      <div class="preparo-filter-card-label">${nome}</div>
+    </div>`;
+  });
+
+  // Botão limpar filtro (aparece só quando há seleção)
+  if (_filterPreparo) {
+    cards += `<div class="preparo-filter-clear" onclick="setFilterPreparo('')" title="Limpar filtro">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+    </div>`;
+  }
+
+  el.innerHTML = `
+    <div class="section-label">Não sabe qual carne escolher?</div>
+    <div class="section-sublabel">Selecione como quer preparar e veja nossas indicações.</div>
+    <div class="preparo-filter-scroll">${cards}</div>
+  `;
+}
+
+function setFilterPreparo(id) {
+  _filterPreparo = (_filterPreparo === id) ? '' : id;
+  renderPreparoFilterSection();
   renderMenu();
 }
 
@@ -3027,6 +3194,13 @@ function getFiltered() {
   return allItems.filter(i => {
     if (activeCat && i.cat_key !== activeCat && i.cat !== activeCat) return false;
     if (searchQ && !i.name.toLowerCase().includes(searchQ) && !(i.description||'').toLowerCase().includes(searchQ)) return false;
+    if (_filterPreparo) {
+      const cgs = i.custom_groups || [];
+      const preparosGrp = cgs.find(g => g.tipo === 'preparos');
+      if (!preparosGrp) return false;
+      const opcoes = (preparosGrp.opcoes || []).map(o => (o.id || o.nome || o).toLowerCase());
+      if (!opcoes.includes(_filterPreparo.toLowerCase())) return false;
+    }
     return true;
   });
 }
@@ -3255,6 +3429,15 @@ function itemCard(i) {
   const esg  = i.status === 'esgotado';
   const click= esg ? '' : `onclick="openItemModal(${i.id})"`;
   const hasImg = i.image_url || i.emoji;
+
+  // Porção de referência calculada
+  const cgs = i.custom_groups || [];
+  const porcaoGrp = cgs.find(g => g.tipo === 'porcao_ref');
+  const porcaoRef = porcaoGrp?.gramas || 0;
+  const porcaoBadge = (porcaoRef > 0 && i.price > 0)
+    ? `<div class="item-porcao-ref">🥩 ${porcaoRef}g · R$ ${fmt(i.price * porcaoRef / 1000)}</div>`
+    : '';
+
   return `
   <div class="item-card" ${click} style="${esg?'opacity:.55;cursor:not-allowed':''}">
     <div class="item-body">
@@ -3262,9 +3445,10 @@ function itemCard(i) {
       ${i.description ? `<div class="item-desc">${i.description}</div>` : ''}
       <div class="item-foot">
         ${i.price_old ? `<span class="item-price-old">R$ ${fmt(i.price_old)}</span>` : ''}
-        <span class="item-price${i.promo||i.price_old?' item-price-promo':''}">R$ ${fmt(i.price)}</span>
+        <span class="item-price${i.promo||i.price_old?' item-price-promo':''}">R$ ${fmt(i.price)}<span style="font-size:10px;font-weight:400;color:var(--muted)">/kg</span></span>
         <button class="item-add-btn" ${esg?'disabled':''} onclick="event.stopPropagation();openItemModal(${i.id})">+</button>
       </div>
+      ${porcaoBadge}
     </div>
     <div class="item-img">
       ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" >` : `<span>${i.emoji||'🍽️'}</span>`}
@@ -3296,10 +3480,27 @@ function openItemModal(id) {
   }
   document.getElementById('im-name').textContent = i.name;
   document.getElementById('im-desc').textContent = i.description || '';
-  document.getElementById('im-price').textContent = 'R$ ' + fmt(i.price);
+  document.getElementById('im-price').textContent = 'R$ ' + fmt(i.price) + (i.item_type === 'kg' ? '/kg' : '');
   const old = document.getElementById('im-price-old');
   if (i.price_old) { old.textContent = 'R$ ' + fmt(i.price_old); old.style.display = ''; }
   else old.style.display = 'none';
+
+  // Porção de referência no modal
+  let porcaoEl = document.getElementById('im-porcao-ref');
+  if (!porcaoEl) {
+    porcaoEl = document.createElement('div');
+    porcaoEl.id = 'im-porcao-ref';
+    porcaoEl.className = 'im-porcao-ref';
+    document.getElementById('im-price').parentNode.appendChild(porcaoEl);
+  }
+  const porcaoGrpM = (i.custom_groups || []).find(g => g.tipo === 'porcao_ref');
+  const porcaoRefM = porcaoGrpM?.gramas || 0;
+  if (porcaoRefM > 0 && i.price > 0) {
+    porcaoEl.textContent = `🥩 Porção de ${porcaoRefM}g · R$ ${fmt(i.price * porcaoRefM / 1000)}`;
+    porcaoEl.style.display = 'inline-flex';
+  } else {
+    porcaoEl.style.display = 'none';
+  }
   document.getElementById('im-qty').textContent = _imQty;
   document.getElementById('im-obs').value = '';
   document.getElementById('im-add-btn').disabled = !_lojaAberta;
@@ -5608,6 +5809,8 @@ const _preparoImgMap = {
   frigideira: 'https://onbeef.s3.amazonaws.com/tags/icons/frigideira.png',
   forno:      'https://onbeef.s3.amazonaws.com/tags/icons/forno.png',
   airfryer:   'https://onbeef.s3.amazonaws.com/tags/icons/airfryer.png',
+  panela:     'https://onbeef.s3.amazonaws.com/tags/icons/panela.png',
+  ensopado:   'https://onbeef.s3.amazonaws.com/tags/icons/ensopado.png',
 };
 
 // Mapa de fallback direto pro S3 original

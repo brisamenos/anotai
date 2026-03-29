@@ -381,12 +381,29 @@ function togglePizzaOptions(ctx) {
 }
 
 // ── Lê cortes/preparos selecionados ──────────────────
+// ── Preview ao vivo do preço da porção ───────────────
+function updatePorcaoPreview(ctx) {
+  const gramas  = parseInt(document.getElementById(`${ctx}-porcao-ref`)?.value) || 0;
+  const priceEl = document.getElementById(`${ctx}-price`);
+  const preview = document.getElementById(`${ctx}-porcao-preview`);
+  if (!preview) return;
+  const priceKg = parseFloat(priceEl?.value) || 0;
+  if (gramas > 0 && priceKg > 0) {
+    const val = (priceKg * gramas / 1000).toFixed(2).replace('.', ',');
+    preview.textContent = `≈ R$ ${val} / ${gramas}g`;
+    preview.style.display = 'inline-block';
+  } else {
+    preview.style.display = 'none';
+  }
+}
+
 function readAcougueOptions(ctx) {
   const cortes   = [...document.querySelectorAll(`#${ctx}-cortes-grid input:checked`)].map(i => i.value);
   const preparos = [...document.querySelectorAll(`#${ctx}-preparos-grid input:checked`)].map(i => i.value);
   const pesosRaw = document.getElementById(`${ctx}-pesos`)?.value || '';
   const pesos    = pesosRaw.split(',').map(s => parseInt(s.trim())).filter(n => n > 0);
-  return { cortes, preparos, pesos };
+  const porcaoRef = parseInt(document.getElementById(`${ctx}-porcao-ref`)?.value) || 0;
+  return { cortes, preparos, pesos, porcaoRef };
 }
 
 // ── Preenche cortes/preparos no edit ─────────────────
@@ -396,6 +413,7 @@ function fillAcougueOptions(ctx, customGroups) {
   const cortesGroup   = cg.find(g => g.tipo === 'cortes');
   const preparosGroup = cg.find(g => g.tipo === 'preparos');
   const pesosGroup    = cg.find(g => g.tipo === 'pesos');
+  const porcaoGroup   = cg.find(g => g.tipo === 'porcao_ref');
   if (cortesGroup?.opcoes) {
     const vals = cortesGroup.opcoes.map(o => o.id || o);
     document.querySelectorAll(`#${ctx}-cortes-grid input`).forEach(i => { i.checked = vals.includes(i.value); });
@@ -407,6 +425,11 @@ function fillAcougueOptions(ctx, customGroups) {
   if (pesosGroup?.valores) {
     const el = document.getElementById(`${ctx}-pesos`);
     if (el) el.value = pesosGroup.valores.join(', ');
+  }
+  const refEl = document.getElementById(`${ctx}-porcao-ref`);
+  if (refEl) {
+    refEl.value = porcaoGroup?.gramas || '';
+    updatePorcaoPreview(ctx);
   }
 }
 
@@ -454,6 +477,7 @@ async function addItem() {
     if (ac.cortes.length)   customGroups.push({ tipo: 'cortes',   opcoes: ac.cortes.map(id => ({ id, nome: id.charAt(0).toUpperCase()+id.slice(1), icon: '🥩' })) });
     if (ac.preparos.length) customGroups.push({ tipo: 'preparos', opcoes: ac.preparos.map(id => ({ id, nome: id.charAt(0).toUpperCase()+id.slice(1), icon: '🍳' })) });
     if (ac.pesos.length)    customGroups.push({ tipo: 'pesos',    valores: ac.pesos });
+    if (ac.porcaoRef > 0)   customGroups.push({ tipo: 'porcao_ref', gramas: ac.porcaoRef });
   }
   // Kit: salva itens no custom_groups
   if (itemTypeNew === 'kit') {
@@ -635,6 +659,7 @@ async function saveEditItem() {
     if (ac.cortes.length)   it.customGroups.push({ tipo: 'cortes',   opcoes: ac.cortes.map(id => ({ id, nome: id.charAt(0).toUpperCase()+id.slice(1), icon: '🥩' })) });
     if (ac.preparos.length) it.customGroups.push({ tipo: 'preparos', opcoes: ac.preparos.map(id => ({ id, nome: id.charAt(0).toUpperCase()+id.slice(1), icon: '🍳' })) });
     if (ac.pesos.length)    it.customGroups.push({ tipo: 'pesos',    valores: ac.pesos });
+    if (ac.porcaoRef > 0)   it.customGroups.push({ tipo: 'porcao_ref', gramas: ac.porcaoRef });
   }
   // Kit: salva itens
   if (it.itemType === 'kit') {

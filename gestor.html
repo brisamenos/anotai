@@ -2560,7 +2560,7 @@ Use no seu próximo pedido 🛍️</textarea>
     <div class="form-row"><label class="form-label">Ingredientes <span style="color:var(--muted);font-size:10.5px">(separados por vírgula)</span></label><input class="form-input" id="new-ingredients" placeholder="Ex: Pão, Carne, Queijo, Alface, Tomate"></div>
 
     <div class="form-row-2">
-      <div class="form-row"><label class="form-label">Preço (R$) *</label><input class="form-input" id="new-price" placeholder="0,00" type="number" step="0.01" min="0"></div>
+      <div class="form-row"><label class="form-label">Preço (R$) *</label><input class="form-input" id="new-price" placeholder="0,00" type="number" step="0.01" min="0" oninput="updatePorcaoPreview('new')"></div>
       <div class="form-row"><label class="form-label">Preço antigo (R$)</label><input class="form-input" id="new-price-old" placeholder="Opcional" type="number" step="0.01" min="0"></div>
     </div>
 
@@ -2627,12 +2627,24 @@ Use no seu próximo pedido 🛍️</textarea>
           <label class="corte-chip"><input type="checkbox" value="airfryer"> Airfryer</label>
           <label class="corte-chip"><input type="checkbox" value="churrasco"> Churrasco</label>
           <label class="corte-chip"><input type="checkbox" value="forno"> Forno</label>
+          <label class="corte-chip"><input type="checkbox" value="panela"> Panela</label>
+          <label class="corte-chip"><input type="checkbox" value="ensopado"> Ensopado</label>
         </div>
       </div>
 
       <div class="form-row">
         <label class="form-label">Pesos pré-definidos <span style="color:var(--muted);font-size:10px">(gramas, separados por vírgula)</span></label>
         <input class="form-input" id="new-pesos" placeholder="Ex: 100, 200, 300, 400, 500" style="margin-top:4px">
+      </div>
+
+      <div class="form-row" style="margin-bottom:0">
+        <label class="form-label">Porção de referência <span style="color:var(--muted);font-size:10px">(exibida no card do cardápio)</span></label>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+          <input class="form-input" id="new-porcao-ref" type="number" min="1" max="9999" step="1" placeholder="Ex: 300" style="width:110px;flex-shrink:0" oninput="updatePorcaoPreview('new')">
+          <span style="font-size:12px;color:var(--muted);flex-shrink:0">gramas</span>
+          <div id="new-porcao-preview" style="font-size:12px;font-weight:700;color:var(--success);display:none;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:7px;padding:4px 10px;white-space:nowrap"></div>
+        </div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:5px">Calculado automaticamente pelo preço/kg. Ex: R$ 80,00/kg → <strong>R$ 24,00/300g</strong></div>
       </div>
     </div>
 
@@ -2701,7 +2713,7 @@ Use no seu próximo pedido 🛍️</textarea>
     <div class="form-row"><label class="form-label">Ingredientes <span style="color:var(--muted);font-size:10.5px">(separados por vírgula)</span></label><input class="form-input" id="edit-ingredients" placeholder="Ex: Pão, Carne, Queijo"></div>
 
     <div class="form-row-2">
-      <div class="form-row"><label class="form-label">Preço (R$) *</label><input class="form-input" id="edit-price" type="number" step="0.01" min="0"></div>
+      <div class="form-row"><label class="form-label">Preço (R$) *</label><input class="form-input" id="edit-price" type="number" step="0.01" min="0" oninput="updatePorcaoPreview('edit')"></div>
       <div class="form-row"><label class="form-label">Preço antigo (R$)</label><input class="form-input" id="edit-price-old" type="number" step="0.01" min="0" placeholder="Opcional"></div>
     </div>
 
@@ -2768,12 +2780,24 @@ Use no seu próximo pedido 🛍️</textarea>
           <label class="corte-chip"><input type="checkbox" value="airfryer"> Airfryer</label>
           <label class="corte-chip"><input type="checkbox" value="churrasco"> Churrasco</label>
           <label class="corte-chip"><input type="checkbox" value="forno"> Forno</label>
+          <label class="corte-chip"><input type="checkbox" value="panela"> Panela</label>
+          <label class="corte-chip"><input type="checkbox" value="ensopado"> Ensopado</label>
         </div>
       </div>
 
       <div class="form-row">
         <label class="form-label">Pesos pré-definidos <span style="color:var(--muted);font-size:10px">(gramas, separados por vírgula)</span></label>
         <input class="form-input" id="edit-pesos" placeholder="Ex: 100, 200, 300, 400, 500" style="margin-top:4px">
+      </div>
+
+      <div class="form-row" style="margin-bottom:0">
+        <label class="form-label">Porção de referência <span style="color:var(--muted);font-size:10px">(exibida no card do cardápio)</span></label>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+          <input class="form-input" id="edit-porcao-ref" type="number" min="1" max="9999" step="1" placeholder="Ex: 300" style="width:110px;flex-shrink:0" oninput="updatePorcaoPreview('edit')">
+          <span style="font-size:12px;color:var(--muted);flex-shrink:0">gramas</span>
+          <div id="edit-porcao-preview" style="font-size:12px;font-weight:700;color:var(--success);display:none;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:7px;padding:4px 10px;white-space:nowrap"></div>
+        </div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:5px">Calculado automaticamente pelo preço/kg. Ex: R$ 80,00/kg → <strong>R$ 24,00/300g</strong></div>
       </div>
     </div>
 
