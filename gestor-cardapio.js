@@ -814,29 +814,59 @@ async function acCatalogIconSave() {
 
 // ── Detecta segmento do tenant e mostra campos açougue ──
 let _gestorSegmento = 'restaurante';
+// ── Aplica opções de tipo corretas em ambos os selects ──
+function _applySegmentoOptions(segmento) {
+  const isAcougue = segmento === 'acougue';
+
+  // Opções por segmento
+  const opts = isAcougue
+    ? [
+        { value: 'normal', label: 'Normal' },
+        { value: 'kg',     label: 'Por Kg 🥩' },
+        { value: 'kit',    label: 'Kit / Combo 📦' },
+      ]
+    : [
+        { value: 'normal', label: 'Normal' },
+        { value: 'pizza',  label: 'Pizza (sabor)' },
+      ];
+
+  ['new-item-type', 'edit-item-type'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value; // preserva seleção atual
+    sel.innerHTML = opts.map(o =>
+      `<option value="${o.value}"${cur === o.value ? ' selected' : ''}>${o.label}</option>`
+    ).join('');
+    // Se a seleção atual não existe mais, vai para 'normal'
+    if (!opts.find(o => o.value === cur)) {
+      sel.value = 'normal';
+      togglePizzaOptions(id === 'new-item-type' ? 'new' : 'edit');
+    }
+  });
+}
+
 async function detectSegmento() {
+  // 1. Aplica imediatamente usando cache do sessionStorage (evita flash)
+  const cached = sessionStorage.getItem('_ef_segmento');
+  if (cached) {
+    _gestorSegmento = cached;
+    _applySegmentoOptions(cached);
+  }
+
+  // 2. Busca da API e atualiza
   try {
     const r = await fetch('/api/tenant-segmento', { headers: { 'x-tenant-id': window._tenantId || '' } });
     if (r.ok) {
       const d = await r.json();
       _gestorSegmento = d.segmento || 'restaurante';
+      sessionStorage.setItem('_ef_segmento', _gestorSegmento);
+      _applySegmentoOptions(_gestorSegmento);
     }
   } catch {}
 
-  const isAcougue = _gestorSegmento === 'acougue';
-
-  // Pizza: visível só no restaurante
-  document.querySelectorAll('#new-item-type option[value="pizza"], #edit-item-type option[value="pizza"]').forEach(opt => {
-    opt.style.display = isAcougue ? 'none' : '';
-  });
-  // Kg e Kit: visíveis só no açougue
-  document.querySelectorAll('#new-item-type option[value="kg"], #edit-item-type option[value="kg"], #new-item-type option[value="kit"], #edit-item-type option[value="kit"]').forEach(opt => {
-    opt.style.display = isAcougue ? '' : 'none';
-  });
-
-  // Mostra painel de atalhos de catálogos somente no modo açougue
+  // 3. Painel de catálogos açougue
   const panel = document.getElementById('acougue-catalog-panel');
-  if (panel && isAcougue) {
+  if (panel && _gestorSegmento === 'acougue') {
     panel.style.display = '';
     await _acCatalogsLoad();
     renderAcCatalogCards();
