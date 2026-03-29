@@ -82,16 +82,25 @@ function renderAcList(ctx, tipo) {
   }
 
   el.innerHTML = list.map((item, idx) => {
+    const emoji  = emojis[tipo] || '📌';
     const iconEl = item.icon
-      ? `<img src="${item.icon}" style="width:26px;height:26px;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'">`
-      : `<span style="font-size:16px;width:26px;text-align:center;flex-shrink:0">${emojis[tipo] || '📌'}</span>`;
+      ? `<img src="${item.icon}" style="width:32px;height:32px;object-fit:contain;border-radius:6px;flex-shrink:0;display:block" onerror="this.style.opacity='.2'">`
+      : `<div style="width:32px;height:32px;border-radius:6px;background:var(--surface);border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;cursor:pointer" onclick="acIconEdit('${ctx}','${tipo}',${idx})" title="Adicionar ícone">${emoji}</div>`;
     return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
-      ${iconEl}
+      <div onclick="acIconEdit('${ctx}','${tipo}',${idx})" title="Editar ícone" style="cursor:pointer;flex-shrink:0;position:relative" onmouseenter="this.querySelector('.icon-edit-hint')&&(this.querySelector('.icon-edit-hint').style.opacity='1')" onmouseleave="this.querySelector('.icon-edit-hint')&&(this.querySelector('.icon-edit-hint').style.opacity='0')">
+        ${iconEl}
+        <div class="icon-edit-hint" style="position:absolute;inset:0;background:rgba(0,0,0,.55);border-radius:6px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;pointer-events:none">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3L5 14H2v-3L11 2z" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
       <span style="flex:1;font-size:12.5px;font-weight:600">${item.nome}</span>
       <div style="display:flex;gap:1px;flex-shrink:0">
-        <button type="button" onclick="acListMove('${ctx}','${tipo}',${idx},-1)" title="Mover para cima" ${idx===0?'disabled':''} style="width:26px;height:26px;border:none;background:transparent;cursor:pointer;color:var(--muted);font-size:13px;border-radius:4px;display:flex;align-items:center;justify-content:center;opacity:${idx===0?.3:1}">↑</button>
-        <button type="button" onclick="acListMove('${ctx}','${tipo}',${idx},1)" title="Mover para baixo" ${idx===list.length-1?'disabled':''} style="width:26px;height:26px;border:none;background:transparent;cursor:pointer;color:var(--muted);font-size:13px;border-radius:4px;display:flex;align-items:center;justify-content:center;opacity:${idx===list.length-1?.3:1}">↓</button>
-        <button type="button" onclick="acListRemove('${ctx}','${tipo}',${idx})" title="Remover" style="width:26px;height:26px;border:none;background:transparent;cursor:pointer;color:#ef4444;font-size:14px;border-radius:4px;display:flex;align-items:center;justify-content:center">✕</button>
+        <button type="button" onclick="acIconEdit('${ctx}','${tipo}',${idx})" title="Editar ícone" style="width:28px;height:28px;border:none;background:transparent;cursor:pointer;color:var(--muted);font-size:13px;border-radius:4px;display:flex;align-items:center;justify-content:center">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3L5 14H2v-3L11 2z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button type="button" onclick="acListMove('${ctx}','${tipo}',${idx},-1)" title="Mover para cima" ${idx===0?'disabled':''} style="width:28px;height:28px;border:none;background:transparent;cursor:pointer;color:var(--muted);font-size:13px;border-radius:4px;display:flex;align-items:center;justify-content:center;opacity:${idx===0?.3:1}">↑</button>
+        <button type="button" onclick="acListMove('${ctx}','${tipo}',${idx},1)" title="Mover para baixo" ${idx===list.length-1?'disabled':''} style="width:28px;height:28px;border:none;background:transparent;cursor:pointer;color:var(--muted);font-size:13px;border-radius:4px;display:flex;align-items:center;justify-content:center;opacity:${idx===list.length-1?.3:1}">↓</button>
+        <button type="button" onclick="acListRemove('${ctx}','${tipo}',${idx})" title="Remover item" style="width:28px;height:28px;border:none;background:transparent;cursor:pointer;color:#ef4444;font-size:14px;border-radius:4px;display:flex;align-items:center;justify-content:center">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -134,6 +143,170 @@ function acListAddCustom(ctx, tipo) {
   const id = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'_');
   acListAdd(ctx, tipo, id, nome, null);
   if (nameEl) nameEl.value = '';
+}
+
+// ── Editor de ícone de item ───────────────────────────
+let _acIconCtx = null, _acIconTipo = null, _acIconIdx = null;
+
+function acIconEdit(ctx, tipo, idx) {
+  _acIconCtx  = ctx;
+  _acIconTipo = tipo;
+  _acIconIdx  = idx;
+
+  const item     = (_acListState[`${ctx}-${tipo}`] || [])[idx];
+  if (!item) return;
+
+  const nomes = { cortes:'Corte', preparos:'Preparo', ocasiao:'Ocasião', armazenamento:'Armazenamento' };
+  const titulo = `Ícone — ${item.nome}`;
+
+  document.getElementById('ac-icon-editor-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'ac-icon-editor-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:10000;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)';
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+  const currentIcon = item.icon || '';
+  const previewHtml = currentIcon
+    ? `<img id="ac-icon-preview-img" src="${currentIcon}" style="width:80px;height:80px;object-fit:contain;border-radius:14px;border:2px solid var(--accent)" onerror="this.src='';this.style.display='none';document.getElementById('ac-icon-preview-empty').style.display='flex'">`
+    : '';
+  const emptyStyle  = currentIcon ? 'display:none' : 'display:flex';
+
+  modal.innerHTML = `
+  <div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;max-width:480px">
+    <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 18px"></div>
+
+    <!-- Título -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <div style="font-size:15px;font-weight:800">${titulo}</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:2px">Editar ícone do item</div>
+      </div>
+      <button onclick="document.getElementById('ac-icon-editor-modal').remove()" style="border:none;background:var(--surface2);border-radius:50%;width:32px;height:32px;cursor:pointer;color:var(--text);font-size:16px;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
+
+    <!-- Preview atual -->
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:22px">
+      <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;align-self:flex-start">Ícone atual</div>
+      <div style="position:relative;width:80px;height:80px">
+        ${previewHtml}
+        <div id="ac-icon-preview-empty" style="${emptyStyle};width:80px;height:80px;border-radius:14px;border:2px dashed var(--border);align-items:center;justify-content:center;font-size:32px;color:var(--muted)">📌</div>
+      </div>
+      ${currentIcon ? `<button onclick="acIconRemove()" style="padding:5px 14px;border:1px solid #ef4444;background:rgba(239,68,68,.08);color:#ef4444;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;margin-right:4px"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        Remover ícone
+      </button>` : ''}
+    </div>
+
+    <!-- Upload de arquivo -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;margin-right:4px"><path d="M8 11V3M4 7l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Upload de imagem
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--surface2);border:1.5px dashed var(--border);border-radius:10px;cursor:pointer;transition:border-color .15s" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M8 11V3M4 7l4-4 4 4" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13h12" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">Clique para selecionar</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:1px">PNG, JPG, SVG, WEBP — recomendado fundo transparente</div>
+        </div>
+        <input type="file" accept="image/*" style="display:none" onchange="acIconUpload(this)">
+      </label>
+    </div>
+
+    <!-- Link externo -->
+    <div style="margin-bottom:22px">
+      <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;margin-right:4px"><path d="M6.5 9.5a3.5 3.5 0 0 0 5 0l2-2a3.5 3.5 0 0 0-5-5L7 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9.5 6.5a3.5 3.5 0 0 0-5 0l-2 2a3.5 3.5 0 0 0 5 5L9 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Ou cole um link de imagem
+      </div>
+      <div style="display:flex;gap:8px">
+        <input id="ac-icon-url-input" type="url" placeholder="https://..." value="${currentIcon}" style="flex:1;padding:10px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;outline:none;font-family:inherit" oninput="acIconPreviewUrl(this.value)" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+        <button onclick="acIconApplyUrl()" style="padding:10px 16px;background:var(--accent);border:none;border-radius:10px;color:#000;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">Aplicar</button>
+      </div>
+    </div>
+
+    <!-- Botão confirmar -->
+    <button onclick="acIconSave()" style="width:100%;padding:13px;background:var(--accent);border:none;border-radius:12px;color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">
+      ✓ Salvar ícone
+    </button>
+  </div>`;
+
+  document.body.appendChild(modal);
+}
+
+// Preview ao vivo ao colar URL
+function acIconPreviewUrl(url) {
+  const img   = document.getElementById('ac-icon-preview-img');
+  const empty = document.getElementById('ac-icon-preview-empty');
+  if (!url) {
+    if (img)   { img.src=''; img.style.display='none'; }
+    if (empty) empty.style.display = 'flex';
+    return;
+  }
+  if (!img) {
+    // Cria elemento de preview se não existia
+    const wrap  = document.querySelector('#ac-icon-editor-modal [style*="position:relative"]');
+    if (!wrap) return;
+    const newImg = document.createElement('img');
+    newImg.id = 'ac-icon-preview-img';
+    newImg.style.cssText = 'width:80px;height:80px;object-fit:contain;border-radius:14px;border:2px solid var(--accent)';
+    newImg.onerror = () => { newImg.style.display='none'; if(empty) empty.style.display='flex'; };
+    wrap.insertBefore(newImg, wrap.firstChild);
+  }
+  const previewImg = document.getElementById('ac-icon-preview-img');
+  if (previewImg) {
+    previewImg.src = url;
+    previewImg.style.display = 'block';
+    if (empty) empty.style.display = 'none';
+  }
+}
+
+// Aplica URL digitada como preview sem salvar
+function acIconApplyUrl() {
+  const val = (document.getElementById('ac-icon-url-input')?.value || '').trim();
+  if (!val) { sbToast('err', 'Cole um link de imagem válido'); return; }
+  acIconPreviewUrl(val);
+}
+
+// Upload de arquivo → converte para base64 ou URL objeto e faz preview
+function acIconUpload(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  const maxMB = 2;
+  if (file.size > maxMB * 1024 * 1024) { sbToast('err', `Imagem muito grande (máx ${maxMB}MB)`); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const url = e.target.result;
+    // Preenche o campo URL com base64 para poder salvar
+    const inp = document.getElementById('ac-icon-url-input');
+    if (inp) inp.value = url;
+    acIconPreviewUrl(url);
+  };
+  reader.readAsDataURL(file);
+}
+
+// Remove ícone atual
+function acIconRemove() {
+  const key  = `${_acIconCtx}-${_acIconTipo}`;
+  const item = (_acListState[key] || [])[_acIconIdx];
+  if (!item) return;
+  item.icon = null;
+  renderAcList(_acIconCtx, _acIconTipo);
+  document.getElementById('ac-icon-editor-modal')?.remove();
+  sbToast('ok', 'Ícone removido');
+}
+
+// Salva o ícone (URL do input ou preview gerado por upload)
+function acIconSave() {
+  const url  = (document.getElementById('ac-icon-url-input')?.value || '').trim();
+  const key  = `${_acIconCtx}-${_acIconTipo}`;
+  const item = (_acListState[key] || [])[_acIconIdx];
+  if (!item) return;
+  item.icon = url || null;
+  renderAcList(_acIconCtx, _acIconTipo);
+  document.getElementById('ac-icon-editor-modal')?.remove();
+  sbToast('ok', url ? 'Ícone atualizado!' : 'Ícone removido');
 }
 
 // ── Abre picker de seleção ────────────────────────────
