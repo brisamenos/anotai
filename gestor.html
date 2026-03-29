@@ -2622,6 +2622,22 @@ Use no seu próximo pedido 🛍️</textarea>
         <div id="new-preparos-list" style="display:flex;flex-direction:column;gap:4px"></div>
       </div>
 
+      <div class="form-row" style="margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label class="form-label" style="margin-bottom:0">Tipo de ocasião <span style="color:var(--muted);font-size:10px">(ex: Churrasco, Dia a dia)</span></label>
+          <button type="button" onclick="acListPick('new','ocasiao')" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#16a34a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Adicionar</button>
+        </div>
+        <div id="new-ocasiao-list" style="display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+
+      <div class="form-row" style="margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label class="form-label" style="margin-bottom:0">Armazenamento <span style="color:var(--muted);font-size:10px">(ex: Resfriado, Congelado)</span></label>
+          <button type="button" onclick="acListPick('new','armazenamento')" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#16a34a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Adicionar</button>
+        </div>
+        <div id="new-armazenamento-list" style="display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+
       <div class="form-row">
         <label class="form-label">Pesos pré-definidos <span style="color:var(--muted);font-size:10px">(gramas, separados por vírgula)</span></label>
         <input class="form-input" id="new-pesos" placeholder="Ex: 100, 200, 300, 400, 500" style="margin-top:4px">
@@ -2763,6 +2779,22 @@ Use no seu próximo pedido 🛍️</textarea>
           <button type="button" onclick="acListPick('edit','preparos')" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#16a34a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Adicionar</button>
         </div>
         <div id="edit-preparos-list" style="display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+
+      <div class="form-row" style="margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label class="form-label" style="margin-bottom:0">Tipo de ocasião <span style="color:var(--muted);font-size:10px">(ex: Churrasco, Dia a dia)</span></label>
+          <button type="button" onclick="acListPick('edit','ocasiao')" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#16a34a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Adicionar</button>
+        </div>
+        <div id="edit-ocasiao-list" style="display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+
+      <div class="form-row" style="margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label class="form-label" style="margin-bottom:0">Armazenamento <span style="color:var(--muted);font-size:10px">(ex: Resfriado, Congelado)</span></label>
+          <button type="button" onclick="acListPick('edit','armazenamento')" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#16a34a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Adicionar</button>
+        </div>
+        <div id="edit-armazenamento-list" style="display:flex;flex-direction:column;gap:4px"></div>
       </div>
 
       <div class="form-row">
