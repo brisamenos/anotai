@@ -5748,7 +5748,7 @@ function _renderAcougueGrupos(item, wrap, grupos) {
   if (cortesGrp?.opcoes?.length) {
     const cards = cortesGrp.opcoes.map(o => {
       const slug = _slug(o.nome || o.id);
-      const imgUrl = o.icon || o.image || o.img || o.image_url || null;
+      const imgUrl = [o.icon, o.image, o.img, o.image_url].find(v => v && (v.startsWith('http') || v.startsWith('/'))) || null;
       const ilustracao = imgUrl
         ? `<img src="${imgUrl}" alt="${o.nome||o.id}" style="width:68px;height:60px;object-fit:contain;display:block" >`
         : _getCorteIlus(o.nome||o.id);
