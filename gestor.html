@@ -986,7 +986,7 @@ Avalie agora: {link_avaliacao}</textarea>
           </div>
           <textarea class="form-input" id="auto-msg-retorno" rows="3" style="font-size:12.5px">😋 {nome}, sentimos sua falta aqui na Estima Food!
 Que tal pedir hoje? Temos novidades no cardápio te esperando!
-Acesse: anota.ai/estima</textarea>
+Acesse: estimafood.evocrm.sbs</textarea>
           <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <div class="sbox" style="flex:1;min-width:180px"><svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><input id="retorno-search" placeholder="Buscar cliente pelo nome..." style="background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text);width:100%" oninput="retornoBuscar()"></div>
             <button class="btn bp" style="font-size:11.5px;padding:5px 12px" onclick="evoEnviarRetornoManual()">Enviar para cliente</button>
@@ -1008,7 +1008,7 @@ Acesse: anota.ai/estima</textarea>
 🍕 [DESCREVA A PROMOÇÃO AQUI]
 
 ⏰ Válido somente hoje!
-Faça seu pedido: anota.ai/estima</textarea>
+Faça seu pedido: estimafood.evocrm.sbs</textarea>
           <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <div style="font-size:12px;color:var(--muted)">Enviar para:</div>
             <select class="form-input" id="promo-destino" style="font-size:12px;padding:5px 10px;width:auto">
@@ -2221,6 +2221,10 @@ Use no seu próximo pedido 🛍️</textarea>
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="10" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="8" r=".6" fill="currentColor"/></svg>
         Testar impressão
       </button>
+      <button class="btn bg" onclick="salvarConfigImpressao()" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#4ade80">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M13 11v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h6l3 3v6z" stroke="currentColor" stroke-width="1.4"/><path d="M10 2v3H6V2M5 9h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Salvar configurações
+      </button>
     </div>
   </div>
 
@@ -2293,7 +2297,7 @@ Use no seu próximo pedido 🛍️</textarea>
               onchange="_printFormat=this.value;localStorage.setItem('printFormat',this.value)">
               <option value="A4">A4</option>
               <option value="A5">A5</option>
-              <option value="80mm">Térmica 80mm</option>
+              <option value="80mm" selected>Térmica 80mm</option>
               <option value="58mm">Térmica 58mm</option>
             </select>
           </div>
@@ -2310,7 +2314,7 @@ Use no seu próximo pedido 🛍️</textarea>
           </div>
           <div>
             <label class="form-label">Linha extra (site, telefone...)</label>
-            <input class="form-input" id="print-sub" value="anota.ai/estima-food" oninput="renderImpressao()">
+            <input class="form-input" id="print-sub" value="estimafood.evocrm.sbs" oninput="renderImpressao()">
           </div>
           <div>
             <label class="form-label">Mensagem de rodapé</label>
@@ -2941,7 +2945,7 @@ Use no seu próximo pedido 🛍️</textarea>
     <h2><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="3.5" y="3.5" width="2" height="2" fill="currentColor" rx=".3"/><rect x="10.5" y="3.5" width="2" height="2" fill="currentColor" rx=".3"/><rect x="3.5" y="10.5" width="2" height="2" fill="currentColor" rx=".3"/><path d="M9 9h1.5v1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M11.5 11.5H14v3H9v-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Mesa <span id="modal-mesa-num"></span></h2>
     <div style="margin:14px 0;display:flex;justify-content:center"><svg width="80" height="80" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="3.5" y="3.5" width="2" height="2" fill="currentColor" rx=".3"/><rect x="10.5" y="3.5" width="2" height="2" fill="currentColor" rx=".3"/><rect x="3.5" y="10.5" width="2" height="2" fill="currentColor" rx=".3"/><path d="M9 9h1.5v1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M11.5 11.5H14v3H9v-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div style="font-size:12.5px;color:var(--muted);margin-bottom:14px">Escaneie para acessar o cardápio desta mesa</div>
-    <div style="font-size:12.5px;margin-bottom:18px">Link: <strong style="color:var(--accent)">anota.ai/estima/mesa<span id="modal-mesa-link"></span></strong></div>
+    <div style="font-size:12.5px;margin-bottom:18px">Link: <strong style="color:var(--accent)">estimafood.evocrm.sbs/mesa<span id="modal-mesa-link"></span></strong></div>
     <div style="display:flex;gap:8px">
       <button class="btn bg" style="flex:1;justify-content:center" onclick="showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><path d=&quot;M8 11V4M5 7l3-3 3 3&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M3 14h10&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>','Compartilhando QR Code...')">Compartilhar</button>
       <button class="btn bp" style="flex:1;justify-content:center" onclick="showToast('<svg width=\'14\' height=\'14\' viewBox=\'0 0 16 16\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><rect x=&quot;3&quot; y=&quot;2&quot; width=&quot;10&quot; height=&quot;4&quot; rx=&quot;1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><rect x=&quot;3&quot; y=&quot;10&quot; width=&quot;10&quot; height=&quot;4&quot; rx=&quot;1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><path d=&quot;M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.4&quot; fill=&quot;none&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/><circle cx=&quot;12&quot; cy=&quot;8&quot; r=&quot;.6&quot; fill=&quot;currentColor&quot;/></svg>','Imprimindo...')">Imprimir</button>
