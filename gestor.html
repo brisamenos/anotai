@@ -2585,7 +2585,6 @@ Use no seu próximo pedido 🛍️</textarea>
           <option value="pizza">Pizza (sabor)</option>
           <option value="kg">Por Kg 🥩</option>
           <option value="kit">Kit / Combo 📦</option>
-          <option value="kit">Kit / Combo 📦</option>
         </select></div>
       </div>
     </div>
@@ -2613,18 +2612,37 @@ Use no seu próximo pedido 🛍️</textarea>
     </div>
 
 
-    <!-- Opções extras quando tipo = kg (açougue) -->
+    <!-- Opções extras quando tipo = kg ou kit (açougue) -->
     <div id="new-acougue-options" style="display:none;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:14px 16px;margin-bottom:4px">
-      <div style="font-size:11px;font-weight:700;color:#16a34a;letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px">🥩 Opções do Açougue</div>
+      <div id="new-acougue-header" style="font-size:11px;font-weight:700;color:#16a34a;letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px">🥩 Opções do Açougue</div>
 
-      <div class="form-row" style="margin-bottom:10px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-          <label class="form-label" style="margin-bottom:0">Cortes disponíveis <span style="color:var(--muted);font-size:10px">(cliente escolhe no pedido)</span></label>
-          <button type="button" onclick="acListPick('new','cortes')" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#16a34a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Adicionar</button>
+      <!-- Campos exclusivos de kg (ocultos para kit) -->
+      <div id="new-kg-only-fields">
+        <div class="form-row" style="margin-bottom:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <label class="form-label" style="margin-bottom:0">Cortes disponíveis <span style="color:var(--muted);font-size:10px">(cliente escolhe no pedido)</span></label>
+            <button type="button" onclick="acListPick('new','cortes')" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#16a34a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Adicionar</button>
+          </div>
+          <div id="new-cortes-list" style="display:flex;flex-direction:column;gap:4px"></div>
         </div>
-        <div id="new-cortes-list" style="display:flex;flex-direction:column;gap:4px"></div>
+
+        <div class="form-row">
+          <label class="form-label">Pesos pré-definidos <span style="color:var(--muted);font-size:10px">(gramas, separados por vírgula)</span></label>
+          <input class="form-input" id="new-pesos" placeholder="Ex: 100, 200, 300, 400, 500" style="margin-top:4px">
+        </div>
+
+        <div class="form-row" style="margin-bottom:10px">
+          <label class="form-label">Porção de referência <span style="color:var(--muted);font-size:10px">(exibida no card do cardápio)</span></label>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+            <input class="form-input" id="new-porcao-ref" type="number" min="1" max="9999" step="1" placeholder="Ex: 300" style="width:110px;flex-shrink:0" oninput="updatePorcaoPreview('new')">
+            <span style="font-size:12px;color:var(--muted);flex-shrink:0">gramas</span>
+            <div id="new-porcao-preview" style="font-size:12px;font-weight:700;color:var(--success);display:none;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:7px;padding:4px 10px;white-space:nowrap"></div>
+          </div>
+          <div style="font-size:10.5px;color:var(--muted);margin-top:5px">Calculado automaticamente pelo preço/kg. Ex: R$ 80,00/kg → <strong>R$ 24,00/300g</strong></div>
+        </div>
       </div>
 
+      <!-- Campos comuns para kg e kit -->
       <div class="form-row" style="margin-bottom:10px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
           <label class="form-label" style="margin-bottom:0">Formas de preparo disponíveis</label>
@@ -2641,27 +2659,12 @@ Use no seu próximo pedido 🛍️</textarea>
         <div id="new-ocasiao-list" style="display:flex;flex-direction:column;gap:4px"></div>
       </div>
 
-      <div class="form-row" style="margin-bottom:10px">
+      <div class="form-row" style="margin-bottom:0">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
           <label class="form-label" style="margin-bottom:0">Armazenamento <span style="color:var(--muted);font-size:10px">(ex: Resfriado, Congelado)</span></label>
           <button type="button" onclick="acListPick('new','armazenamento')" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#16a34a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Adicionar</button>
         </div>
         <div id="new-armazenamento-list" style="display:flex;flex-direction:column;gap:4px"></div>
-      </div>
-
-      <div class="form-row">
-        <label class="form-label">Pesos pré-definidos <span style="color:var(--muted);font-size:10px">(gramas, separados por vírgula)</span></label>
-        <input class="form-input" id="new-pesos" placeholder="Ex: 100, 200, 300, 400, 500" style="margin-top:4px">
-      </div>
-
-      <div class="form-row" style="margin-bottom:0">
-        <label class="form-label">Porção de referência <span style="color:var(--muted);font-size:10px">(exibida no card do cardápio)</span></label>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-          <input class="form-input" id="new-porcao-ref" type="number" min="1" max="9999" step="1" placeholder="Ex: 300" style="width:110px;flex-shrink:0" oninput="updatePorcaoPreview('new')">
-          <span style="font-size:12px;color:var(--muted);flex-shrink:0">gramas</span>
-          <div id="new-porcao-preview" style="font-size:12px;font-weight:700;color:var(--success);display:none;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:7px;padding:4px 10px;white-space:nowrap"></div>
-        </div>
-        <div style="font-size:10.5px;color:var(--muted);margin-top:5px">Calculado automaticamente pelo preço/kg. Ex: R$ 80,00/kg → <strong>R$ 24,00/300g</strong></div>
       </div>
     </div>
 
@@ -2744,7 +2747,6 @@ Use no seu próximo pedido 🛍️</textarea>
           <option value="pizza">Pizza (sabor)</option>
           <option value="kg">Por Kg 🥩</option>
           <option value="kit">Kit / Combo 📦</option>
-          <option value="kit">Kit / Combo 📦</option>
         </select></div>
       </div>
     </div>
@@ -2772,18 +2774,37 @@ Use no seu próximo pedido 🛍️</textarea>
     </div>
 
     
-    <!-- Opções extras quando tipo = kg (açougue) -->
+    <!-- Opções extras quando tipo = kg ou kit (açougue) -->
     <div id="edit-acougue-options" style="display:none;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:14px 16px;margin-bottom:4px">
-      <div style="font-size:11px;font-weight:700;color:#16a34a;letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px">🥩 Opções do Açougue</div>
+      <div id="edit-acougue-header" style="font-size:11px;font-weight:700;color:#16a34a;letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px">🥩 Opções do Açougue</div>
 
-      <div class="form-row" style="margin-bottom:10px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-          <label class="form-label" style="margin-bottom:0">Cortes disponíveis</label>
-          <button type="button" onclick="acListPick('edit','cortes')" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#16a34a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Adicionar</button>
+      <!-- Campos exclusivos de kg (ocultos para kit) -->
+      <div id="edit-kg-only-fields">
+        <div class="form-row" style="margin-bottom:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <label class="form-label" style="margin-bottom:0">Cortes disponíveis</label>
+            <button type="button" onclick="acListPick('edit','cortes')" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#16a34a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Adicionar</button>
+          </div>
+          <div id="edit-cortes-list" style="display:flex;flex-direction:column;gap:4px"></div>
         </div>
-        <div id="edit-cortes-list" style="display:flex;flex-direction:column;gap:4px"></div>
+
+        <div class="form-row">
+          <label class="form-label">Pesos pré-definidos <span style="color:var(--muted);font-size:10px">(gramas, separados por vírgula)</span></label>
+          <input class="form-input" id="edit-pesos" placeholder="Ex: 100, 200, 300, 400, 500" style="margin-top:4px">
+        </div>
+
+        <div class="form-row" style="margin-bottom:10px">
+          <label class="form-label">Porção de referência <span style="color:var(--muted);font-size:10px">(exibida no card do cardápio)</span></label>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+            <input class="form-input" id="edit-porcao-ref" type="number" min="1" max="9999" step="1" placeholder="Ex: 300" style="width:110px;flex-shrink:0" oninput="updatePorcaoPreview('edit')">
+            <span style="font-size:12px;color:var(--muted);flex-shrink:0">gramas</span>
+            <div id="edit-porcao-preview" style="font-size:12px;font-weight:700;color:var(--success);display:none;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:7px;padding:4px 10px;white-space:nowrap"></div>
+          </div>
+          <div style="font-size:10.5px;color:var(--muted);margin-top:5px">Calculado automaticamente pelo preço/kg. Ex: R$ 80,00/kg → <strong>R$ 24,00/300g</strong></div>
+        </div>
       </div>
 
+      <!-- Campos comuns para kg e kit -->
       <div class="form-row" style="margin-bottom:10px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
           <label class="form-label" style="margin-bottom:0">Formas de preparo disponíveis</label>
@@ -2800,27 +2821,12 @@ Use no seu próximo pedido 🛍️</textarea>
         <div id="edit-ocasiao-list" style="display:flex;flex-direction:column;gap:4px"></div>
       </div>
 
-      <div class="form-row" style="margin-bottom:10px">
+      <div class="form-row" style="margin-bottom:0">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
           <label class="form-label" style="margin-bottom:0">Armazenamento <span style="color:var(--muted);font-size:10px">(ex: Resfriado, Congelado)</span></label>
           <button type="button" onclick="acListPick('edit','armazenamento')" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#16a34a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Adicionar</button>
         </div>
         <div id="edit-armazenamento-list" style="display:flex;flex-direction:column;gap:4px"></div>
-      </div>
-
-      <div class="form-row">
-        <label class="form-label">Pesos pré-definidos <span style="color:var(--muted);font-size:10px">(gramas, separados por vírgula)</span></label>
-        <input class="form-input" id="edit-pesos" placeholder="Ex: 100, 200, 300, 400, 500" style="margin-top:4px">
-      </div>
-
-      <div class="form-row" style="margin-bottom:0">
-        <label class="form-label">Porção de referência <span style="color:var(--muted);font-size:10px">(exibida no card do cardápio)</span></label>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-          <input class="form-input" id="edit-porcao-ref" type="number" min="1" max="9999" step="1" placeholder="Ex: 300" style="width:110px;flex-shrink:0" oninput="updatePorcaoPreview('edit')">
-          <span style="font-size:12px;color:var(--muted);flex-shrink:0">gramas</span>
-          <div id="edit-porcao-preview" style="font-size:12px;font-weight:700;color:var(--success);display:none;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:7px;padding:4px 10px;white-space:nowrap"></div>
-        </div>
-        <div style="font-size:10.5px;color:var(--muted);margin-top:5px">Calculado automaticamente pelo preço/kg. Ex: R$ 80,00/kg → <strong>R$ 24,00/300g</strong></div>
       </div>
     </div>
 
