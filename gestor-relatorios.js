@@ -1633,9 +1633,35 @@ setTimeout(() => {
 // ─────────────────────────────────────────
 let _printMode     = localStorage.getItem('printMode')     || 'auto';
 let _printFontSize = parseInt(localStorage.getItem('printFontSize') || '12');
-let _printTarget   = localStorage.getItem('printTarget')   || 'server'; // 'server' | 'browser'
-let _printPrinter  = localStorage.getItem('printPrinter')  || '';       // nome da impressora (vazio = padrão)
-let _printFormat   = localStorage.getItem('printFormat')   || 'A4';     // A4 | A5 | 80mm | 58mm
+let _printTarget   = localStorage.getItem('printTarget')   || 'server';
+let _printPrinter  = localStorage.getItem('printPrinter')  || '';
+let _printFormat   = localStorage.getItem('printFormat')   || '80mm';  // padrão 80mm
+
+// ── Salva config de impressão no servidor (sincroniza entre dispositivos) ──
+async function savePrintConfigServer(cfg) {
+  try {
+    const tid = window._tenantId || window.AppAPI?._tenantId || null
+    if (!tid) return
+    await window.AppAPI.from('store_config').update({ print_config: JSON.stringify(cfg) }).eq('tenant_id', tid)
+  } catch {}
+}
+
+// ── Carrega config de impressão do servidor ──
+async function loadPrintConfigServer() {
+  try {
+    const tid = window._tenantId || null
+    if (!tid) return
+    const { data } = await window.AppAPI.from('store_config').select('print_config').eq('tenant_id', tid).single()
+    if (!data?.print_config) return
+    const cfg = JSON.parse(data.print_config)
+    if (cfg.printMode)    { _printMode = cfg.printMode;   localStorage.setItem('printMode', cfg.printMode) }
+    if (cfg.printFormat)  { _printFormat = cfg.printFormat; localStorage.setItem('printFormat', cfg.printFormat) }
+    if (cfg.printFontSize){ _printFontSize = cfg.printFontSize; localStorage.setItem('printFontSize', cfg.printFontSize) }
+    if (cfg.printNome)    { const el = document.getElementById('print-nome');    if (el) el.value = cfg.printNome }
+    if (cfg.printSub)     { const el = document.getElementById('print-sub');     if (el) el.value = cfg.printSub }
+    if (cfg.printRodape)  { const el = document.getElementById('print-rodape');  if (el) el.value = cfg.printRodape }
+  } catch {}
+}
 
 function setPrintMode(mode) {
   _printMode = mode;
@@ -1839,13 +1865,62 @@ function renderImpressao() {
   const tgtSel = document.getElementById('print-target-select');
   if (tgtSel) tgtSel.value = _printTarget;
   const fmtSel = document.getElementById('print-format-select');
-  if (fmtSel) fmtSel.value = _printFormat;
+  if (fmtSel) fmtSel.value = _printFormat || '80mm';
   setPrintMode(_printMode);
   loadPrinters();
+  // Carrega config do servidor (sincroniza entre dispositivos)
+  loadPrintConfigServer().then(() => {
+    const cfg = _getPrintConfig();
+    const ex = { id:99, client:'João Silva', addr:'Mesa 3', mesa_num:3, pag:'PIX', taxa:0,
+      items:[{qty:1,name:'Pizza Calabreza',price:50},{qty:2,name:'Coca Cola 2L',price:14}] };
+    p.innerHTML = _buildTicketHtml(ex, cfg);
+  })
   const cfg = _getPrintConfig();
   const ex = { id:99, client:'João Silva', addr:'Mesa 3', mesa_num:3, pag:'PIX', taxa:0,
     items:[{qty:1,name:'Pizza Calabreza',price:50},{qty:2,name:'Coca Cola 2L',price:14}] };
   p.innerHTML = _buildTicketHtml(ex, cfg);
+}
+
+// ── Salva config no servidor (sincroniza entre dispositivos) ──
+async function salvarConfigImpressao() {
+  const cfg = _getPrintConfig()
+  const fmt = document.getElementById('print-format-select')?.value || _printFormat || '80mm'
+  const payload = {
+    printMode:     _printMode,
+    printFormat:   fmt,
+    printFontSize: cfg.fontSize,
+    printNome:     cfg.nome,
+    printSub:      cfg.sub,
+    printRodape:   cfg.rodape,
+  }
+  // Salva localmente
+  localStorage.setItem('printFormat', fmt)
+  _printFormat = fmt
+
+  // Salva no Electron se disponível
+  if (window.ElectronPrint) {
+    await window.ElectronPrint.savePrintConfig({
+      nome:       cfg.nome,
+      sub:        cfg.sub,
+      rodape:     cfg.rodape,
+      paperWidth: fmt === '58mm' ? 58 : 80,
+    }).catch(() => {})
+  }
+
+  // Salva no servidor para sincronizar com outros dispositivos
+  try {
+    const tid = window._tenantId || null
+    if (tid) {
+      await window.AppAPI.from('store_config')
+        .update({ print_config: JSON.stringify(payload) })
+        .eq('tenant_id', tid)
+      sbToast('ok', '✅ Configurações salvas e sincronizadas!')
+    } else {
+      sbToast('ok', '✅ Configurações salvas localmente!')
+    }
+  } catch {
+    sbToast('ok', '✅ Configurações salvas localmente!')
+  }
 }
 
 async function testPrint() {
