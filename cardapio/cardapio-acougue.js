@@ -467,10 +467,20 @@ function _updateImPrice() {
   const i = allItems.find(x => x.id === _imItemId);
   if (!i) return;
   const extra = _calcGruposExtra(i);
-  const total = (i.price + extra) * _imQty;
+
+  // Para açougue: preço proporcional ao peso selecionado
+  let basePrice = i.price + extra;
+  if (_isAcougueItem(i)) {
+    const totalPeso = Object.values(_acougueCortes).reduce((s, v) => s + (v.peso || 0), 0);
+    if (totalPeso > 0) {
+      basePrice = (i.price + extra) * (totalPeso / 1000);
+    }
+  }
+
+  const total = basePrice * _imQty;
   const btn = document.getElementById('im-add-btn');
   const priceEl = document.getElementById('im-price');
-  if (priceEl) priceEl.textContent = 'R$ ' + fmt(i.price + extra);
+  if (priceEl) priceEl.textContent = 'R$ ' + fmt(basePrice);
   if (btn && _lojaAberta) btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> Adicionar · R$ ${fmt(total)}`;
 }
 
@@ -517,7 +527,3 @@ function xsellToggle(itemId) {
     card.classList.add('on');
   }
 }
-
-
-
-
