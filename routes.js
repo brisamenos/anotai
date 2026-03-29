@@ -1399,7 +1399,29 @@ module.exports = async function handleRoutes(req, res, ctx) {
     }
   }
 
-  // ── Login do garçom (endpoint dedicado — senha nunca vai na URL) ──
+  // ── Catálogos do Açougue (cortes, preparos, ocasiao, armazenamento) ────────
+  if (upath === '/api/acougue-catalogs') {
+    const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+
+    if (req.method === 'GET') {
+      const row = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+      const ia  = row?.ia_config ? JSON.parse(row.ia_config) : {}
+      send(res, 200, { catalogs: ia.acougue_catalogs || null }); return true
+    }
+
+    if (req.method === 'POST') {
+      const body = await readBody(req)
+      if (!body || typeof body !== 'object') { send(res, 400, { error: 'Body inválido' }); return true }
+      const row = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+      const ia  = row?.ia_config ? JSON.parse(row.ia_config) : {}
+      ia.acougue_catalogs = body
+      db.prepare('INSERT INTO store_config (tenant_id,ia_config) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config')
+        .run(tid, JSON.stringify(ia))
+      marcarDirty()
+      send(res, 200, { ok: true }); return true
+    }
+  }
   if (req.method === 'POST' && upath === '/api/garcom-login') {
     const tid  = getTenantId(req, params)
     const body = await readBody(req)
