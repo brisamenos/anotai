@@ -3074,7 +3074,7 @@ function renderMenu() {
       html += `
       <div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}>
         <div class="dest-img">
-          ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy">` : `<span>${i.emoji||'🍽️'}</span>`}
+          ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" >` : `<span>${i.emoji||'🍽️'}</span>`}
           <span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span>
         </div>
         <div class="dest-body">
@@ -3267,7 +3267,7 @@ function itemCard(i) {
       </div>
     </div>
     <div class="item-img">
-      ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy">` : `<span>${i.emoji||'🍽️'}</span>`}
+      ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" >` : `<span>${i.emoji||'🍽️'}</span>`}
       ${i.promo||i.price_old ? '<span class="item-promo-badge">PROMO</span>' : ''}
       ${esg ? '<div class="item-esgotado-overlay">Esgotado</div>' : ''}
     </div>
@@ -3309,6 +3309,34 @@ function openItemModal(id) {
   _acougueCortes = {};
   _acougueAtual  = null;
   renderImGrupos(i);
+  // Pré-carrega imagens dos cortes para evitar delay no modal
+  if (_isAcougueItem(i)) {
+    const grupos = i.custom_groups || [];
+    const cortesGrp = grupos.find(g => g.tipo === 'cortes');
+    if (cortesGrp?.opcoes) {
+      cortesGrp.opcoes.forEach(o => {
+        const n = (o.nome||o.id||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+        let key = 'default';
+        if      (n.includes('strogon'))  key = 'strogonoff';
+        else if (n.includes('posta'))    key = 'postas';
+        else if (n.includes('tirinha'))  key = 'tirinha';
+        else if (n.includes('tira'))     key = 'tiras';
+        else if (n.includes('moido') && n.includes('2')) key = 'moido2x';
+        else if (n.includes('moido') || n.includes('moida')) key = 'moido';
+        else if (n.includes('cubo'))     key = 'cubos';
+        else if (n.includes('picado'))   key = 'picado';
+        else if (n.includes('grelha'))   key = 'grelha';
+        else if (n.includes('peca'))     key = 'peca';
+        else if (n.includes('fino'))     key = 'bifefino';
+        else if (n.includes('grosso'))   key = 'bifegrosso';
+        else if (n.includes('bife'))     key = 'bife';
+        else if (n.includes('espeto'))   key = 'espeto';
+        else if (n.includes('inteiro') || n.includes('inteira')) key = 'inteiro';
+        const url = (o.icon || o.image || o.img || o.image_url) || (_corteImgMap[key] || _corteImgMap.default);
+        const preload = new Image(); preload.src = url;
+      });
+    }
+  }
   renderImXsell(i);
 
   // ── Ingredientes selecionáveis ──
@@ -5584,7 +5612,7 @@ const _preparoImgMap = {
 
 function _imgTag(url, alt, size) {
   const s = size || 60;
-  return `<img src="${url}" alt="${alt}" width="${s}" height="${s}" style="object-fit:contain;display:block" loading="lazy">`;
+  return `<img src="${url}" alt="${alt}" width="${s}" height="${s}" style="object-fit:contain;display:block">`;
 }
 
 function _getCorteIlus(nome) {
@@ -5691,7 +5719,7 @@ function _renderAcougueGrupos(item, wrap, grupos) {
       const slug = _slug(o.nome || o.id);
       const imgUrl = o.icon || o.image || o.img || o.image_url || null;
       const ilustracao = imgUrl
-        ? `<img src="${imgUrl}" alt="${o.nome||o.id}" style="width:68px;height:60px;object-fit:contain;display:block" loading="lazy">`
+        ? `<img src="${imgUrl}" alt="${o.nome||o.id}" style="width:68px;height:60px;object-fit:contain;display:block" >`
         : _getCorteIlus(o.nome||o.id);
       return `<div class="corte-card" id="corte-card-${slug}" onclick="openPesoSheet('${_escape(o.nome||o.id)}')">
         <div class="corte-card-illus">${ilustracao}</div>
@@ -5984,7 +6012,7 @@ function renderImXsell(item) {
 
   const cards = others.map(o => `
     <div class="xsell-card" id="xsell_${o.id}" onclick="xsellToggle(${o.id})" style="position:relative">
-      <div class="xsell-img">${o.image_url ? `<img src="${o.image_url}" loading="lazy">` : (o.emoji||'🍽️')}</div>
+      <div class="xsell-img">${o.image_url ? `<img src="${o.image_url}" >` : (o.emoji||'🍽️')}</div>
       <div class="xsell-body">
         <div class="xsell-name">${o.name}</div>
         <div class="xsell-price">R$ ${fmt(o.price)}</div>
