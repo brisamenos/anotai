@@ -298,7 +298,7 @@ function acIconRemove() {
 }
 
 // Salva o ícone (URL do input ou preview gerado por upload)
-function acIconSave() {
+async function acIconSave() {
   const url  = (document.getElementById('ac-icon-url-input')?.value || '').trim();
   const key  = `${_acIconCtx}-${_acIconTipo}`;
   const item = (_acListState[key] || [])[_acIconIdx];
@@ -366,6 +366,452 @@ function acListPick(ctx, tipo) {
   document.body.appendChild(modal);
 }
 
+// ══════════════════════════════════════════
+//  CATÁLOGOS GLOBAIS — Atalhos do gestor
+//  Permite adicionar, renomear, editar ícone e excluir
+//  itens dos catálogos sem abrir nenhum produto
+// ══════════════════════════════════════════
+
+// Referência dinâmica aos catálogos (permite edição em tempo real)
+const _AC_CATALOGS = {
+  cortes:        _AC_CORTES_CATALOG,
+  preparos:      _AC_PREPAROS_CATALOG,
+  ocasiao:       _AC_OCASIAO_CATALOG,
+  armazenamento: _AC_ARMAZENAMENTO_CATALOG,
+};
+
+const _AC_CATALOG_META = {
+  cortes:        { label: 'Cortes',            emoji: '🥩', color: 'rgba(34,197,94,.12)',  border: 'rgba(34,197,94,.3)',  text: '#16a34a' },
+  preparos:      { label: 'Formas de Preparo', emoji: '🍳', color: 'rgba(249,115,22,.10)', border: 'rgba(249,115,22,.3)', text: 'var(--accent)' },
+  ocasiao:       { label: 'Tipo de Ocasião',   emoji: '🎯', color: 'rgba(139,92,246,.10)', border: 'rgba(139,92,246,.3)', text: '#7c3aed' },
+  armazenamento: { label: 'Armazenamento',     emoji: '❄️', color: 'rgba(14,165,233,.10)', border: 'rgba(14,165,233,.3)', text: '#0284c7' },
+};
+
+// ── Carrega catálogos do banco via API ───────────────
+async function _acCatalogsLoad() {
+  try {
+    const tid = window._tenantId || '';
+    if (!tid) return;
+    const r = await fetch('/api/acougue-catalogs', { headers: { 'x-tenant-id': tid } });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.catalogs || typeof d.catalogs !== 'object') return;
+    for (const [tipo, items] of Object.entries(d.catalogs)) {
+      if (Array.isArray(items) && _AC_CATALOGS[tipo]) {
+        _AC_CATALOGS[tipo].length = 0;
+        items.forEach(i => _AC_CATALOGS[tipo].push(i));
+      }
+    }
+  } catch(e) {}
+}
+
+// ── Salva catálogos no banco via API ─────────────────
+async function _acCatalogsSave() {
+  try {
+    const tid = window._tenantId || '';
+    if (!tid) return;
+    const data = {};
+    for (const [tipo, arr] of Object.entries(_AC_CATALOGS)) data[tipo] = arr;
+    await fetch('/api/acougue-catalogs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify(data)
+    });
+  } catch(e) {}
+}
+
+// ── Renderiza os 4 cards de atalho ──────────────────
+function renderAcCatalogCards() {
+  const wrap = document.getElementById('acougue-catalog-cards');
+  if (!wrap) return;
+  wrap.innerHTML = Object.entries(_AC_CATALOG_META).map(([tipo, meta]) => {
+    const list   = _AC_CATALOGS[tipo] || [];
+    const count  = list.length;
+    const thumbs = list.slice(0, 4).map(item => {
+      if (item.icon) return `<img src="${item.icon}" style="width:24px;height:24px;object-fit:contain;border-radius:5px;flex-shrink:0" onerror="this.style.opacity='.2'">`;
+      return `<span style="font-size:16px;width:24px;text-align:center;flex-shrink:0">${meta.emoji}</span>`;
+    }).join('');
+    const moreLabel = count > 4 ? `<span style="font-size:10px;color:var(--muted);margin-left:2px">+${count-4}</span>` : '';
+
+    return `<div style="background:${meta.color};border:1.5px solid ${meta.border};border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+      <!-- Cabeçalho -->
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:20px">${meta.emoji}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:800;color:${meta.text}">${meta.label}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:1px">${count} item${count!==1?'s':''} no catálogo</div>
+        </div>
+      </div>
+      <!-- Thumbs dos itens -->
+      <div style="display:flex;align-items:center;gap:4px;min-height:24px">
+        ${thumbs || `<span style="font-size:11px;color:var(--muted);font-style:italic">Nenhum item ainda</span>`}
+        ${moreLabel}
+      </div>
+      <!-- Ações -->
+      <div style="display:flex;gap:6px">
+        <button onclick="openAcCatalogManager('${tipo}')" style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:7px 10px;background:${meta.color};border:1.5px solid ${meta.border};border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;color:${meta.text};font-family:inherit;transition:all .15s" onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3L5 14H2v-3L11 2z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Gerenciar
+        </button>
+        <button onclick="openAcCatalogAddItem('${tipo}')" style="display:flex;align-items:center;justify-content:center;gap:4px;padding:7px 10px;background:var(--surface);border:1.5px solid ${meta.border};border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;color:${meta.text};font-family:inherit;transition:all .15s" title="Adicionar item ao catálogo" onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Abre o gerenciador completo de um catálogo ──────
+function openAcCatalogManager(tipo) {
+  const meta = _AC_CATALOG_META[tipo];
+  const list = _AC_CATALOGS[tipo] || [];
+  document.getElementById('ac-catalog-manager-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'ac-catalog-manager-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9990;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)';
+  modal.addEventListener('click', e => { if (e.target === modal) { modal.remove(); renderAcCatalogCards(); } });
+
+  modal.innerHTML = `<div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column">
+    <!-- Handle -->
+    <div style="padding:12px 20px 0;flex-shrink:0"><div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div></div>
+    <!-- Header -->
+    <div style="padding:16px 20px 14px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:12px">
+      <div style="width:40px;height:40px;border-radius:12px;background:${meta.color};border:1.5px solid ${meta.border};display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${meta.emoji}</div>
+      <div style="flex:1">
+        <div style="font-size:15px;font-weight:800">${meta.label}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">Gerencie os itens que aparecem no seletor dos produtos</div>
+      </div>
+      <button onclick="document.getElementById('ac-catalog-manager-modal').remove();renderAcCatalogCards()" style="border:none;background:var(--surface2);border-radius:50%;width:32px;height:32px;cursor:pointer;color:var(--text);font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>
+    </div>
+    <!-- Lista de itens -->
+    <div id="ac-catalog-manager-list" style="overflow-y:auto;flex:1;padding:12px 20px;display:flex;flex-direction:column;gap:6px"></div>
+    <!-- Footer: adicionar -->
+    <div style="padding:14px 20px;border-top:1px solid var(--border);flex-shrink:0">
+      <button onclick="openAcCatalogAddItem('${tipo}')" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;background:${meta.color};border:1.5px solid ${meta.border};border-radius:12px;cursor:pointer;font-size:13.5px;font-weight:700;color:${meta.text};font-family:inherit">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Adicionar novo item ao catálogo
+      </button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(modal);
+  _renderAcCatalogManagerList(tipo);
+}
+
+function _renderAcCatalogManagerList(tipo) {
+  const meta = _AC_CATALOG_META[tipo];
+  const list = _AC_CATALOGS[tipo] || [];
+  const wrap = document.getElementById('ac-catalog-manager-list');
+  if (!wrap) return;
+
+  if (!list.length) {
+    wrap.innerHTML = `<div style="text-align:center;padding:32px 0;color:var(--muted)">
+      <div style="font-size:36px;margin-bottom:10px">${meta.emoji}</div>
+      <div style="font-size:13px">Nenhum item ainda.<br>Adicione o primeiro item abaixo.</div>
+    </div>`;
+    return;
+  }
+
+  wrap.innerHTML = list.map((item, idx) => {
+    const iconEl = item.icon
+      ? `<img src="${item.icon}" style="width:36px;height:36px;object-fit:contain;border-radius:8px;display:block" onerror="this.style.opacity='.2'">`
+      : `<div style="width:36px;height:36px;border-radius:8px;background:var(--surface2);border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:20px">${meta.emoji}</div>`;
+
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+      <!-- Ícone clicável -->
+      <div onclick="openAcCatalogIconEdit('${tipo}',${idx})" title="Editar ícone" style="cursor:pointer;flex-shrink:0;position:relative;border-radius:8px;overflow:hidden">
+        ${iconEl}
+        <div style="position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;border-radius:8px" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0'">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3L5 14H2v-3L11 2z" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+      <!-- Nome editável inline -->
+      <input value="${item.nome}" style="flex:1;background:transparent;border:none;outline:none;font-size:13px;font-weight:600;color:var(--text);font-family:inherit;padding:0;min-width:0"
+        onblur="acCatalogRename('${tipo}',${idx},this.value)"
+        onkeydown="if(event.key==='Enter')this.blur()"
+        title="Clique para renomear">
+      <!-- Ações -->
+      <div style="display:flex;gap:2px;flex-shrink:0">
+        <button onclick="openAcCatalogIconEdit('${tipo}',${idx})" title="Editar ícone" style="width:30px;height:30px;border:none;background:transparent;cursor:pointer;color:var(--muted);border-radius:6px;display:flex;align-items:center;justify-content:center" onmouseenter="this.style.background='var(--surface)'" onmouseleave="this.style.background='transparent'">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3L5 14H2v-3L11 2z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button onclick="acCatalogMoveItem('${tipo}',${idx},-1)" title="Mover para cima" ${idx===0?'disabled style="opacity:.25"':''} style="width:30px;height:30px;border:none;background:transparent;cursor:pointer;color:var(--muted);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px" onmouseenter="this.style.background='var(--surface)'" onmouseleave="this.style.background='transparent'">↑</button>
+        <button onclick="acCatalogMoveItem('${tipo}',${idx},1)" title="Mover para baixo" ${idx===list.length-1?'disabled style="opacity:.25"':''} style="width:30px;height:30px;border:none;background:transparent;cursor:pointer;color:var(--muted);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px" onmouseenter="this.style.background='var(--surface)'" onmouseleave="this.style.background='transparent'">↓</button>
+        <button onclick="acCatalogDeleteItem('${tipo}',${idx})" title="Excluir" style="width:30px;height:30px;border:none;background:transparent;cursor:pointer;color:#ef4444;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:15px" onmouseenter="this.style.background='rgba(239,68,68,.08)'" onmouseleave="this.style.background='transparent'">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Renomeia item do catálogo ────────────────────────
+function acCatalogRename(tipo, idx, novoNome) {
+  const nome = (novoNome || '').trim();
+  if (!nome) return;
+  const item = (_AC_CATALOGS[tipo] || [])[idx];
+  if (!item) return;
+  item.nome = nome;
+  _acCatalogsSave();
+}
+
+// ── Move item no catálogo ────────────────────────────
+function acCatalogMoveItem(tipo, idx, dir) {
+  const list = _AC_CATALOGS[tipo];
+  if (!list) return;
+  const ni = idx + dir;
+  if (ni < 0 || ni >= list.length) return;
+  [list[idx], list[ni]] = [list[ni], list[idx]];
+  _acCatalogsSave();
+  _renderAcCatalogManagerList(tipo);
+}
+
+// ── Exclui item do catálogo ──────────────────────────
+function acCatalogDeleteItem(tipo, idx) {
+  const list = _AC_CATALOGS[tipo];
+  if (!list) return;
+  const nome = list[idx]?.nome || 'item';
+  if (!confirm(`Excluir "${nome}" do catálogo de ${_AC_CATALOG_META[tipo]?.label}?`)) return;
+  list.splice(idx, 1);
+  _acCatalogsSave().then(() => sbToast('ok', `"${nome}" excluído do catálogo`));
+  _renderAcCatalogManagerList(tipo);
+  renderAcCatalogCards();
+}
+
+// ── Abre formulário para adicionar item ao catálogo ──
+function openAcCatalogAddItem(tipo) {
+  const meta = _AC_CATALOG_META[tipo];
+  document.getElementById('ac-catalog-add-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'ac-catalog-add-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9995;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)';
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+  modal.innerHTML = `<div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:16px;padding:24px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+      <span style="font-size:22px">${meta.emoji}</span>
+      <div>
+        <div style="font-size:14px;font-weight:800">Novo item — ${meta.label}</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:2px">Será adicionado ao catálogo global</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:6px">Nome</label>
+        <input id="ac-cat-add-nome" class="form-input" placeholder="Ex: Espetinho, Defumado, Piquenique..." style="width:100%" autofocus>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:6px">Link do ícone <span style="font-weight:400;text-transform:none">(opcional)</span></label>
+        <input id="ac-cat-add-icon" class="form-input" type="url" placeholder="https://..." style="width:100%" oninput="acCatAddIconPreview(this.value)">
+        <div style="margin-top:8px;display:flex;align-items:center;gap:10px">
+          <div id="ac-cat-add-preview" style="width:40px;height:40px;border-radius:8px;border:1.5px dashed var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${meta.emoji}</div>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 12px">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 11V3M4 7l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Upload
+            <input type="file" accept="image/*" style="display:none" onchange="acCatAddIconUpload(this)">
+          </label>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:22px">
+      <button onclick="document.getElementById('ac-catalog-add-modal').remove()" style="flex:1;padding:11px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancelar</button>
+      <button onclick="acCatalogConfirmAdd('${tipo}')" style="flex:1;padding:11px;background:var(--accent);border:none;border-radius:10px;color:#000;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;margin-right:5px"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Adicionar
+      </button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(modal);
+  setTimeout(() => document.getElementById('ac-cat-add-nome')?.focus(), 80);
+}
+
+// Preview live do ícone no formulário de adição
+function acCatAddIconPreview(url) {
+  const prev = document.getElementById('ac-cat-add-preview');
+  if (!prev) return;
+  if (url) {
+    prev.innerHTML = `<img src="${url}" style="width:36px;height:36px;object-fit:contain;border-radius:6px" onerror="this.parentElement.textContent='❌'">`;
+  } else {
+    const tipo = document.getElementById('ac-catalog-add-modal')?.querySelector('button[onclick*="acCatalogConfirmAdd"]')?.getAttribute('onclick')?.match(/'(\w+)'/)?.[1] || '';
+    prev.innerHTML = (_AC_CATALOG_META[tipo]?.emoji) || '📌';
+    prev.style.fontSize = '22px';
+  }
+}
+
+// Upload no formulário de adição
+function acCatAddIconUpload(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { sbToast('err', 'Máximo 2MB'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const inp = document.getElementById('ac-cat-add-icon');
+    if (inp) inp.value = e.target.result;
+    acCatAddIconPreview(e.target.result);
+  };
+  reader.readAsDataURL(file);
+}
+
+// Confirma adição de item ao catálogo
+async function acCatalogConfirmAdd(tipo) {
+  const nome = (document.getElementById('ac-cat-add-nome')?.value || '').trim();
+  if (!nome) { sbToast('err', 'Informe o nome do item'); return; }
+  const icon = (document.getElementById('ac-cat-add-icon')?.value || '').trim() || null;
+  const id   = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'_');
+
+  const list = _AC_CATALOGS[tipo];
+  if (!list) return;
+  if (list.find(i => i.id === id)) { sbToast('err', `"${nome}" já existe no catálogo`); return; }
+  list.push({ id, nome, icon });
+
+  sbLoading(true);
+  await _acCatalogsSave();
+  sbLoading(false);
+
+  document.getElementById('ac-catalog-add-modal')?.remove();
+  _renderAcCatalogManagerList(tipo);
+  renderAcCatalogCards();
+  sbToast('ok', `"${nome}" adicionado ao catálogo!`);
+}
+
+// ── Editor de ícone direto pelo gerenciador de catálogo ──
+let _acCatalogIconTipo = null, _acCatalogIconIdx = null;
+
+function openAcCatalogIconEdit(tipo, idx) {
+  _acCatalogIconTipo = tipo;
+  _acCatalogIconIdx  = idx;
+  const item = (_AC_CATALOGS[tipo] || [])[idx];
+  if (!item) return;
+  const meta = _AC_CATALOG_META[tipo];
+
+  document.getElementById('ac-catalog-icon-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'ac-catalog-icon-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9998;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(5px)';
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+  const currentIcon = item.icon || '';
+  const previewSrc  = currentIcon ? `<img id="ac-cat-icon-prev-img" src="${currentIcon}" style="width:80px;height:80px;object-fit:contain;border-radius:14px;border:2px solid var(--accent)" onerror="this.style.opacity='.2'">` : '';
+  const emptyStyle  = currentIcon ? 'display:none' : 'display:flex';
+
+  modal.innerHTML = `<div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;max-width:480px">
+    <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 18px"></div>
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <div style="font-size:15px;font-weight:800">${meta.emoji} Editar ícone</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">
+          <span style="font-weight:600;color:${meta.text}">${item.nome}</span> — ${meta.label}
+        </div>
+      </div>
+      <button onclick="document.getElementById('ac-catalog-icon-modal').remove()" style="border:none;background:var(--surface2);border-radius:50%;width:32px;height:32px;cursor:pointer;color:var(--text);font-size:16px;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
+    <!-- Preview atual -->
+    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:20px">
+      <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;align-self:flex-start">Ícone atual</div>
+      <div style="position:relative;width:80px;height:80px">
+        ${previewSrc}
+        <div id="ac-cat-icon-prev-empty" style="${emptyStyle};width:80px;height:80px;border-radius:14px;border:2px dashed var(--border);align-items:center;justify-content:center;font-size:34px">${meta.emoji}</div>
+      </div>
+      ${currentIcon ? `<button onclick="acCatalogIconRemove()" style="padding:5px 16px;border:1px solid #ef4444;background:rgba(239,68,68,.08);color:#ef4444;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit">✕ Remover ícone</button>` : ''}
+    </div>
+    <!-- Upload -->
+    <div style="margin-bottom:14px">
+      <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Upload de imagem</div>
+      <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--surface2);border:1.5px dashed var(--border);border-radius:10px;cursor:pointer" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M8 11V3M4 7l4-4 4 4" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13h12" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <div>
+          <div style="font-size:13px;font-weight:600">Clique para selecionar</div>
+          <div style="font-size:11px;color:var(--muted)">PNG, JPG, SVG, WEBP (máx 2MB)</div>
+        </div>
+        <input type="file" accept="image/*" style="display:none" onchange="acCatalogIconUpload(this)">
+      </label>
+    </div>
+    <!-- Link -->
+    <div style="margin-bottom:20px">
+      <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Ou cole um link de imagem</div>
+      <div style="display:flex;gap:8px">
+        <input id="ac-catalog-icon-url" type="url" placeholder="https://..." value="${currentIcon}" style="flex:1;padding:10px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;outline:none;font-family:inherit" oninput="acCatalogIconPreviewUrl(this.value)" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+        <button onclick="acCatalogIconApplyUrl()" style="padding:10px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Ver</button>
+      </div>
+    </div>
+    <!-- Salvar -->
+    <button onclick="acCatalogIconSave()" style="width:100%;padding:13px;background:var(--accent);border:none;border-radius:12px;color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">✓ Salvar ícone</button>
+  </div>`;
+
+  document.body.appendChild(modal);
+}
+
+function acCatalogIconPreviewUrl(url) {
+  const img   = document.getElementById('ac-cat-icon-prev-img');
+  const empty = document.getElementById('ac-cat-icon-prev-empty');
+  if (!url) {
+    if (img) img.style.display = 'none';
+    if (empty) empty.style.display = 'flex';
+    return;
+  }
+  if (!img) {
+    const wrap = document.querySelector('#ac-catalog-icon-modal [style*="position:relative"]');
+    if (!wrap) return;
+    const newImg = document.createElement('img');
+    newImg.id = 'ac-cat-icon-prev-img';
+    newImg.style.cssText = 'width:80px;height:80px;object-fit:contain;border-radius:14px;border:2px solid var(--accent)';
+    newImg.onerror = () => { newImg.style.display='none'; if(empty) empty.style.display='flex'; };
+    wrap.insertBefore(newImg, wrap.firstChild);
+  }
+  const previewImg = document.getElementById('ac-cat-icon-prev-img');
+  if (previewImg) { previewImg.src = url; previewImg.style.display='block'; if(empty) empty.style.display='none'; }
+}
+
+function acCatalogIconApplyUrl() {
+  const val = (document.getElementById('ac-catalog-icon-url')?.value || '').trim();
+  if (!val) { sbToast('err', 'Cole um link válido'); return; }
+  acCatalogIconPreviewUrl(val);
+}
+
+function acCatalogIconUpload(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { sbToast('err', 'Máximo 2MB'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const inp = document.getElementById('ac-catalog-icon-url');
+    if (inp) inp.value = e.target.result;
+    acCatalogIconPreviewUrl(e.target.result);
+  };
+  reader.readAsDataURL(file);
+}
+
+async function acCatalogIconRemove() {
+  const list = _AC_CATALOGS[_acCatalogIconTipo];
+  const item = list?.[_acCatalogIconIdx];
+  if (!item) return;
+  item.icon = null;
+  sbLoading(true);
+  await _acCatalogsSave();
+  sbLoading(false);
+  _renderAcCatalogManagerList(_acCatalogIconTipo);
+  renderAcCatalogCards();
+  document.getElementById('ac-catalog-icon-modal')?.remove();
+  sbToast('ok', 'Ícone removido');
+}
+
+async function acCatalogIconSave() {
+  const url  = (document.getElementById('ac-catalog-icon-url')?.value || '').trim();
+  const list = _AC_CATALOGS[_acCatalogIconTipo];
+  const item = list?.[_acCatalogIconIdx];
+  if (!item) return;
+  item.icon = url || null;
+  sbLoading(true);
+  await _acCatalogsSave();
+  sbLoading(false);
+  _renderAcCatalogManagerList(_acCatalogIconTipo);
+  renderAcCatalogCards();
+  document.getElementById('ac-catalog-icon-modal')?.remove();
+  sbToast('ok', url ? 'Ícone atualizado!' : 'Ícone removido');
+}
+
 // ── Detecta segmento do tenant e mostra campos açougue ──
 let _gestorSegmento = 'restaurante';
 async function detectSegmento() {
@@ -380,6 +826,16 @@ async function detectSegmento() {
   document.querySelectorAll('#new-item-type option[value="kg"], #edit-item-type option[value="kg"], #new-item-type option[value="kit"], #edit-item-type option[value="kit"]').forEach(opt => {
     opt.style.display = _gestorSegmento === 'acougue' ? '' : 'none';
   });
+  // Mostra painel de atalhos de catálogos somente no modo açougue
+  const panel = document.getElementById('acougue-catalog-panel');
+  if (panel && _gestorSegmento === 'acougue') {
+    panel.style.display = '';
+    // Carrega catálogos do banco e depois renderiza
+    await _acCatalogsLoad();
+    renderAcCatalogCards();
+  } else if (panel) {
+    panel.style.display = 'none';
+  }
 }
 
 function renderGestor(){
