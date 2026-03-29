@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Download — Ícones Cortes Açougue</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:sans-serif;background:#f5f5f5;padding:24px}
+h2{font-size:18px;font-weight:700;margin-bottom:4px}
+p{font-size:12px;color:#6b7280;margin-bottom:20px}
+.section{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#9ca3af;margin:20px 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;max-width:700px;margin-bottom:8px}
+.item{background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 8px 8px;text-align:center}
+.item img{width:56px;height:56px;object-fit:contain;display:block;margin:0 auto 8px}
+.item .name{font-size:11px;font-weight:700;color:#111;margin-bottom:6px}
+.item a{
+  display:inline-block;font-size:10px;font-weight:700;
+  background:#111;color:#fff;padding:4px 10px;border-radius:6px;
+  text-decoration:none;
+}
+.item a:hover{background:#333}
+.btn-all{
+  display:inline-flex;align-items:center;gap:6px;
+  background:#22c55e;color:#fff;font-size:13px;font-weight:700;
+  padding:10px 20px;border-radius:10px;text-decoration:none;
+  margin-bottom:16px;border:none;cursor:pointer;
+}
+.btn-all:hover{background:#16a34a}
+</style>
+</head>
+<body>
+<h2>⬇️ Download — Ícones Açougue</h2>
+<p>Clique em "Baixar" em cada ícone, depois suba todos para o GitHub na pasta <code>public/cortes/</code></p>
+
+<div class="section">🥩 Cortes de Carne</div>
+<div class="grid" id="cortes"></div>
+
+<div class="section">🍳 Preparos / Tags</div>
+<div class="grid" id="preparos"></div>
+
+<script>
+const BASE = 'https://onbeef.s3.amazonaws.com';
+
+const cortes = [
+  ['moida.png',      '/imagens-cortes/moida-2x.png',  'Moída'],
+  ['tiras.png',      '/imagens-cortes/tiras.png',      'Tiras'],
+  ['tirinhas.png',   '/imagens-cortes/tirinhas.png',   'Tirinhas'],
+  ['inteira.png',    '/imagens-cortes/inteira.png',    'Inteira'],
+  ['espeto.png',     '/imagens-cortes/espeto.png',     'Espeto'],
+  ['cubos.png',      '/imagens-cortes/cubos.png',      'Cubos'],
+  ['grelha.png',     '/imagens-cortes/grelha.png',     'Grelha'],
+  ['peca.png',       '/imagens-cortes/peca.png',       'Peça'],
+  ['bifefino.png',   '/imagens-cortes/bifefino.png',   'Bife Fino'],
+  ['bifemedio.png',  '/imagens-cortes/bifemedio.png',  'Bife Médio'],
+  ['bifegrosso.png', '/imagens-cortes/bifegrosso.png', 'Bife Grosso'],
+  ['strogonoff.png', '/imagens-cortes/strogonoff.png', 'Strogonoff'],
+  ['postas.png',     '/imagens-cortes/postas.png',     'Postas'],
+  ['picado.png',     '/imagens-cortes/picado.png',     'Picado'],
+];
+
+const preparos = [
+  ['tag_dia.png',         '/tags/icons/dia_a_dia.png',  'Dia a dia'],
+  ['tag_churrasco.png',   '/tags/icons/churrasco.png',  'Churrasco'],
+  ['tag_resfriado.png',   '/tags/icons/wind.png',       'Resfriado'],
+  ['tag_grelhar.png',     '/tags/icons/grellhar.png',   'Grelhar'],
+  ['tag_defumado.png',    '/tags/icons/smoker.png',     'Defumado'],
+  ['tag_frigideira.png',  '/tags/icons/frigideira.png', 'Frigideira'],
+  ['tag_forno.png',       '/tags/icons/forno.png',      'Forno'],
+  ['tag_airfryer.png',    '/tags/icons/airfryer.png',   'Airfryer'],
+];
+
+function renderGrid(items, containerId) {
+  const container = document.getElementById(containerId);
+  items.forEach(([filename, path, label]) => {
+    const url = BASE + path;
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.innerHTML = `
+      <img src="${url}" alt="${label}">
+      <div class="name">${label}</div>
+      <a href="${url}" download="${filename}">⬇ Baixar</a>
+    `;
+    container.appendChild(div);
+  });
+}
+
+renderGrid(cortes,  'cortes');
+renderGrid(preparos,'preparos');
+</script>
+</body>
+</html>
