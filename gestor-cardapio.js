@@ -1199,9 +1199,25 @@ function togglePizzaOptions(ctx) {
   const kitBox    = document.getElementById(ctx+'-kit-options');
   if (!typeEl) return;
   const val = typeEl.value;
-  if (pizzaBox)   pizzaBox.style.display   = val === 'pizza' ? '' : 'none';
-  if (acougueBox) acougueBox.style.display = val === 'kg'    ? '' : 'none';
-  if (kitBox)     kitBox.style.display     = val === 'kit'   ? '' : 'none';
+
+  if (pizzaBox)   pizzaBox.style.display = val === 'pizza' ? '' : 'none';
+  if (kitBox)     kitBox.style.display   = val === 'kit'   ? '' : 'none';
+
+  // Abre o painel açougue para kg E kit
+  const isAcougue = val === 'kg' || val === 'kit';
+  if (acougueBox) acougueBox.style.display = isAcougue ? '' : 'none';
+
+  // Campos exclusivos de kg (cortes, pesos, porção)
+  const kgOnly = document.getElementById(ctx+'-kg-only-fields');
+  if (kgOnly) kgOnly.style.display = val === 'kg' ? '' : 'none';
+
+  // Header contextual
+  const header = document.getElementById(ctx+'-acougue-header');
+  if (header) {
+    header.textContent = val === 'kit'
+      ? '📦 Informações do Kit'
+      : '🥩 Opções do Açougue';
+  }
 }
 
 // ── Lê cortes/preparos selecionados ──────────────────
@@ -1330,16 +1346,18 @@ async function addItem() {
   const _AC_TIPOS_F  = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
   const customGroups = readGrupos('new').filter(g => !_AC_TIPOS_F.includes(g.tipo));
 
-  // Açougue: adiciona cortes/preparos/pesos ao custom_groups
+  // Açougue: adiciona cortes/preparos/pesos ao custom_groups (kg = tudo; kit = só info)
   const itemTypeNew = document.getElementById('new-item-type').value || 'normal';
-  if (itemTypeNew === 'kg') {
+  if (itemTypeNew === 'kg' || itemTypeNew === 'kit') {
     const ac = readAcougueOptions('new');
-    if (ac._cortesList.length)        customGroups.push({ tipo: 'cortes',        opcoes: ac._cortesList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
+    if (itemTypeNew === 'kg') {
+      if (ac._cortesList.length) customGroups.push({ tipo: 'cortes',    opcoes: ac._cortesList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
+      if (ac.pesos.length)       customGroups.push({ tipo: 'pesos',     valores: ac.pesos });
+      if (ac.porcaoRef > 0)      customGroups.push({ tipo: 'porcao_ref', gramas: ac.porcaoRef });
+    }
     if (ac._preparosList.length)      customGroups.push({ tipo: 'preparos',      opcoes: ac._preparosList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
     if (ac._ocasiaoList.length)       customGroups.push({ tipo: 'ocasiao',       opcoes: ac._ocasiaoList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
     if (ac._armazenamentoList.length) customGroups.push({ tipo: 'armazenamento', opcoes: ac._armazenamentoList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
-    if (ac.pesos.length)              customGroups.push({ tipo: 'pesos',         valores: ac.pesos });
-    if (ac.porcaoRef > 0)             customGroups.push({ tipo: 'porcao_ref',    gramas: ac.porcaoRef });
   }
   // Kit: salva itens no custom_groups
   if (itemTypeNew === 'kit') {
@@ -1470,8 +1488,8 @@ function openEditItem(id) {
   const genericGroups = (it.customGroups || []).filter(g => !_ACOUGUE_TIPOS.includes(g.tipo));
   renderGrupos('edit', genericGroups);
 
-  // Açougue: preenche cortes/preparos/pesos
-  if (it.itemType === 'kg') {
+  // Açougue: preenche cortes/preparos/pesos (também para kit)
+  if (it.itemType === 'kg' || it.itemType === 'kit') {
     fillAcougueOptions('edit', it.customGroups || []);
   } else {
     // Limpa listas dinâmicas
@@ -1529,15 +1547,17 @@ async function saveEditItem() {
   const _AC_TIPOS_FILTER = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
   it.customGroups = readGrupos('edit').filter(g => !_AC_TIPOS_FILTER.includes(g.tipo));
 
-  // Açougue: adiciona cortes/preparos/pesos
-  if (it.itemType === 'kg') {
+  // Açougue: adiciona cortes/preparos/pesos (kg = tudo; kit = só info)
+  if (it.itemType === 'kg' || it.itemType === 'kit') {
     const ac = readAcougueOptions('edit');
-    if (ac._cortesList.length)        it.customGroups.push({ tipo: 'cortes',        opcoes: ac._cortesList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
+    if (it.itemType === 'kg') {
+      if (ac._cortesList.length)   it.customGroups.push({ tipo: 'cortes',   opcoes: ac._cortesList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
+      if (ac.pesos.length)         it.customGroups.push({ tipo: 'pesos',    valores: ac.pesos });
+      if (ac.porcaoRef > 0)        it.customGroups.push({ tipo: 'porcao_ref', gramas: ac.porcaoRef });
+    }
     if (ac._preparosList.length)      it.customGroups.push({ tipo: 'preparos',      opcoes: ac._preparosList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
     if (ac._ocasiaoList.length)       it.customGroups.push({ tipo: 'ocasiao',       opcoes: ac._ocasiaoList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
     if (ac._armazenamentoList.length) it.customGroups.push({ tipo: 'armazenamento', opcoes: ac._armazenamentoList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
-    if (ac.pesos.length)              it.customGroups.push({ tipo: 'pesos',         valores: ac.pesos });
-    if (ac.porcaoRef > 0)             it.customGroups.push({ tipo: 'porcao_ref',    gramas: ac.porcaoRef });
   }
   // Kit: salva itens
   if (it.itemType === 'kit') {
