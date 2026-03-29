@@ -5573,41 +5573,41 @@ let _acougueAtual   = null; // nome do corte sendo configurado no sheet
 let _acouguePesos   = [];   // array de pesos disponíveis para o item atual
 
 // Ilustrações SVG estilo sketch para cada tipo de corte
-// ── URLs reais dos ícones de corte (onbeef S3) ──
-const _S3 = 'https://onbeef.s3.amazonaws.com';
+// ── Imagens de cortes servidas localmente (/uploads/cortes/) ──
+const _C = 'https://raw.githubusercontent.com/brisamenos/anotai/main/cortes';
 
 const _corteImgMap = {
-  moido:      _S3 + '/imagens-cortes/moida-2x.png',
-  moido2x:    _S3 + '/imagens-cortes/moida-2x.png',
-  tiras:      _S3 + '/imagens-cortes/tiras.png',
-  tirinha:    _S3 + '/imagens-cortes/tirinhas.png',
-  tirinhas:   _S3 + '/imagens-cortes/tirinhas.png',
-  strogonoff: _S3 + '/imagens-cortes/strogonoff.png',
-  inteiro:    _S3 + '/imagens-cortes/inteira.png',
-  inteira:    _S3 + '/imagens-cortes/inteira.png',
-  espeto:     _S3 + '/imagens-cortes/espeto.png',
-  cubos:      _S3 + '/imagens-cortes/cubos.png',
-  picado:     _S3 + '/imagens-cortes/picado.png',
-  grelha:     _S3 + '/imagens-cortes/grelha.png',
-  peca:       _S3 + '/imagens-cortes/peca.png',
-  bife:       _S3 + '/imagens-cortes/bifemedio.png',
-  bifefino:   _S3 + '/imagens-cortes/bifefino.png',
-  bifemedio:  _S3 + '/imagens-cortes/bifemedio.png',
-  bifegrosso: _S3 + '/imagens-cortes/bifegrosso.png',
-  postas:     _S3 + '/imagens-cortes/postas.png',
-  default:    _S3 + '/imagens-cortes/bifemedio.png',
+  moido:      _C + '/moida.png',
+  moido2x:    _C + '/moida.png',
+  tiras:      _C + '/tiras.png',
+  tirinha:    _C + '/tirinhas.png',
+  tirinhas:   _C + '/tirinhas.png',
+  strogonoff: _C + '/strogonoff.png',
+  inteiro:    _C + '/inteira.png',
+  inteira:    _C + '/inteira.png',
+  espeto:     _C + '/espeto.png',
+  cubos:      _C + '/cubos.png',
+  picado:     _C + '/picado.png',
+  grelha:     _C + '/grelha.png',
+  peca:       _C + '/peca.png',
+  bife:       _C + '/bifemedio.png',
+  bifefino:   _C + '/bifefino.png',
+  bifemedio:  _C + '/bifemedio.png',
+  bifegrosso: _C + '/bifegrosso.png',
+  postas:     _C + '/postas.png',
+  default:    _C + '/bifemedio.png',
 };
 
 const _preparoImgMap = {
-  dia_a_dia:  _S3 + '/tags/icons/dia_a_dia.png',
-  churrasco:  _S3 + '/tags/icons/churrasco.png',
-  resfriado:  _S3 + '/tags/icons/wind.png',
-  grelhar:    _S3 + '/tags/icons/grellhar.png',
-  grelhado:   _S3 + '/tags/icons/grellhar.png',
-  defumado:   _S3 + '/tags/icons/smoker.png',
-  frigideira: _S3 + '/tags/icons/frigideira.png',
-  forno:      _S3 + '/tags/icons/forno.png',
-  airfryer:   _S3 + '/tags/icons/airfryer.png',
+  dia_a_dia:  _C + '/dia_a_dia.png',
+  churrasco:  _C + '/churrasco.png',
+  resfriado:  _C + '/resfriado.png',
+  grelhar:    _C + '/grellhar.png',
+  grelhado:   _C + '/grellhar.png',
+  defumado:   _C + '/defumado.png',
+  frigideira: _C + '/frigideira.png',
+  forno:      _C + '/forno.png',
+  airfryer:   _C + '/airfryer.png',
 };
 
 function _imgTag(url, alt, size) {
