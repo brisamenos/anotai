@@ -1055,6 +1055,262 @@ async function confirmarPagamentoPix(id) {
   sbLoading(false);
 }
 
+// ══════════════════════════════════════════════════════════
+// AÇOUGUE — Ajuste de peso disponível
+// ══════════════════════════════════════════════════════════
+
+let _ajustePesoOrderId = null;
+let _ajustePesoItens   = []; // [{idx, name, obs, pesoOriginal, precoKg}]
+
+function _parsePesoObs(obs) {
+  // Extrai peso do obs. Formato: "500g Contra-filé · ..."
+  const m = (obs || '').match(/(\d+)\s*g/i);
+  return m ? parseInt(m[1]) : 0;
+}
+
+function _calcPrecoKg(price, pesoGramas) {
+  // price já é o valor total (preço/kg * peso/1000)
+  // então precoKg = price / (pesoGramas/1000)
+  if (!pesoGramas) return 0;
+  return price / (pesoGramas / 1000);
+}
+
+function abrirModalAjustePeso(orderId) {
+  const o = ordersKanban.find(x => x.id === orderId);
+  if (!o) return;
+  _ajustePesoOrderId = orderId;
+
+  // Filtra itens de kg (obs tem formato "NNNg NomeCorte")
+  const itensKg = (o.items || []).filter(i =>
+    i.item_type === 'kg' || (i.obs && /\d+g\s/.test(i.obs))
+  );
+
+  if (!itensKg.length) { sbToast('err', 'Nenhum item de peso neste pedido.'); return; }
+
+  _ajustePesoItens = itensKg.map((i, idx) => {
+    const pesoOriginal = _parsePesoObs(i.obs);
+    const precoKg      = pesoOriginal > 0 ? _calcPrecoKg(parseFloat(i.price), pesoOriginal) : parseFloat(i.price);
+    return { idx, name: i.name, obs: i.obs || '', pesoOriginal, precoKg, price: parseFloat(i.price) };
+  });
+
+  const wrap = document.getElementById('ajuste-peso-itens');
+  if (!wrap) return;
+
+  wrap.innerHTML = _ajustePesoItens.map((it, i) => `
+    <div style="background:var(--surface2);border-radius:12px;padding:14px;border:1px solid var(--border)">
+      <div style="font-weight:700;font-size:13.5px;margin-bottom:4px">${it.name}</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px">${it.obs}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end">
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Peso solicitado</div>
+          <div style="font-size:15px;font-weight:700;color:var(--accent)">${it.pesoOriginal}g</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Peso disponível (g)</div>
+          <input type="number" id="ajuste-peso-${i}" min="1" max="${it.pesoOriginal}"
+            value="${it.pesoOriginal}"
+            oninput="atualizarPreviewAjuste(${i})"
+            style="width:100%;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-size:14px;font-weight:700;font-family:inherit">
+        </div>
+      </div>
+      <div id="ajuste-preview-${i}" style="font-size:12px;color:var(--muted);margin-top:8px">
+        Valor: <strong>R$ ${it.price.toFixed(2).replace('.',',')}</strong>
+      </div>
+    </div>
+  `).join('');
+
+  const modal = document.getElementById('modal-ajuste-peso-bg');
+  if (modal) modal.style.display = 'flex';
+}
+
+function atualizarPreviewAjuste(i) {
+  const it  = _ajustePesoItens[i];
+  if (!it) return;
+  const el  = document.getElementById(`ajuste-peso-${i}`);
+  const prev = document.getElementById(`ajuste-preview-${i}`);
+  if (!el || !prev) return;
+  const novoPeso = parseInt(el.value) || 0;
+  const novoVal  = it.precoKg * (novoPeso / 1000);
+  prev.innerHTML = `Novo valor: <strong style="color:var(--success)">R$ ${novoVal.toFixed(2).replace('.',',')}</strong>`;
+}
+
+function fecharModalAjustePeso() {
+  const modal = document.getElementById('modal-ajuste-peso-bg');
+  if (modal) modal.style.display = 'none';
+  _ajustePesoOrderId = null;
+  _ajustePesoItens   = [];
+}
+
+async function enviarAjustePeso() {
+  if (!_ajustePesoOrderId) return;
+  const o = ordersKanban.find(x => x.id === _ajustePesoOrderId);
+  if (!o?.phone) { sbToast('err', 'Pedido sem telefone cadastrado.'); return; }
+
+  // Monta proposta com novos pesos/valores
+  const propostas = _ajustePesoItens.map((it, i) => {
+    const el       = document.getElementById(`ajuste-peso-${i}`);
+    const novoPeso = parseInt(el?.value) || it.pesoOriginal;
+    const novoVal  = it.precoKg * (novoPeso / 1000);
+    return { ...it, novoPeso, novoVal };
+  }).filter(p => p.novoPeso !== p.pesoOriginal); // só os que mudaram
+
+  if (!propostas.length) { sbToast('err', 'Nenhum peso foi alterado.'); return; }
+
+  // Monta mensagem WA
+  const idStr = String(_orderNum(_ajustePesoOrderId)).padStart(3,'0');
+  let msg = `⚠️ *Pedido #${idStr} — Ajuste de quantidade*\n\nOlá *${o.client}*!\n\n`;
+  msg += `Ao separar seu pedido, verificamos que não temos a quantidade solicitada:\n\n`;
+  propostas.forEach(p => {
+    msg += `🥩 *${p.name}*\n`;
+    msg += `   Solicitado: ${p.pesoOriginal}g — R$ ${p.price.toFixed(2).replace('.',',')}\n`;
+    msg += `   Disponível: *${p.novoPeso}g — R$ ${p.novoVal.toFixed(2).replace('.',',')}*\n\n`;
+  });
+  msg += `Você aceita o ajuste? Responda *SIM* para confirmar ou *NÃO* para cancelar o pedido.`;
+
+  sbLoading(true);
+  try {
+    // Usa o proxy EVO para enviar (mesmo mecanismo do robô)
+    const phone  = (o.phone || '').replace(/\D/g,'');
+    const number = phone.startsWith('55') ? phone : '55' + phone;
+    const r = await EVO.sendText(number, msg);
+    if (!r.ok) throw new Error('Erro ao enviar mensagem WA');
+
+    // Salva proposta pendente no estado do pedido
+    const idx = ordersKanban.findIndex(x => x.id === _ajustePesoOrderId);
+    if (idx !== -1) {
+      ordersKanban[idx]._ajustePendente = propostas;
+      ordersKanban[idx]._ajustePesoOrderId = _ajustePesoOrderId;
+    }
+
+    sbToast('ok', 'Proposta enviada ao cliente via WhatsApp!');
+    fecharModalAjustePeso();
+    renderKanban();
+  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
+  sbLoading(false);
+}
+
+// ── Modal de resposta WA ──────────────────────────────────
+let _respostaWAOrderId = null;
+
+function abrirRespostaWA(orderId) {
+  const o = ordersKanban.find(x => x.id === orderId);
+  if (!o) return;
+  _respostaWAOrderId = orderId;
+
+  const prev = document.getElementById('modal-wa-msg-preview');
+  if (prev) prev.textContent = o._waRespostaTxt || '(mensagem não disponível)';
+
+  const modal = document.getElementById('modal-resposta-wa-bg');
+  if (modal) modal.style.display = 'flex';
+}
+
+function fecharRespostaWA() {
+  const modal = document.getElementById('modal-resposta-wa-bg');
+  if (modal) modal.style.display = 'none';
+  _respostaWAOrderId = null;
+}
+
+async function clienteAceitouAjuste() {
+  if (!_respostaWAOrderId) return;
+  const o   = ordersKanban.find(x => x.id === _respostaWAOrderId);
+  const idx = ordersKanban.findIndex(x => x.id === _respostaWAOrderId);
+  if (!o || idx === -1) return;
+
+  const propostas = o._ajustePendente || [];
+  if (!propostas.length) {
+    // Sem proposta de peso — só limpa a notificação e avança
+    if (o) { o._waResposta = false; o._waRespostaTxt = null; }
+    fecharRespostaWA(); renderKanban(); return;
+  }
+
+  sbLoading(true);
+  try {
+    // Atualiza itens do pedido com novos pesos/valores
+    const novosItens = [...(o.items || [])];
+    propostas.forEach(p => {
+      const itemIdx = novosItens.findIndex((i, fi) => fi === p.idx);
+      if (itemIdx !== -1) {
+        const obs = novosItens[itemIdx].obs || '';
+        novosItens[itemIdx] = {
+          ...novosItens[itemIdx],
+          price: p.novoVal,
+          obs: obs.replace(/\d+g/, `${p.novoPeso}g`)
+        };
+      }
+    });
+
+    // Recalcula total
+    const novoTotal = novosItens.reduce((s, i) => s + parseFloat(i.price || 0) * (i.qty || 1), 0);
+
+    const r = await fetch(`/api/orders?id=eq.${_respostaWAOrderId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _sessao?.tenant_id },
+      body: JSON.stringify({ items: novosItens, total: novoTotal })
+    });
+    if (!r.ok) throw new Error('Erro ao atualizar pedido');
+
+    ordersKanban[idx] = { ...o, items: novosItens, total: novoTotal, _waResposta: false, _waRespostaTxt: null, _ajustePendente: null };
+    sbToast('ok', `Pedido #${_orderNum(_respostaWAOrderId)} atualizado com os novos pesos!`);
+    fecharRespostaWA(); renderKanban();
+  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
+  sbLoading(false);
+}
+
+async function clienteRecusouAjuste() {
+  if (!_respostaWAOrderId) return;
+  if (!confirm('Cancelar o pedido?')) return;
+  await cancelOrderById(_respostaWAOrderId);
+  fecharRespostaWA();
+}
+
+function waOpenFromOrder() {
+  if (!_respostaWAOrderId) return;
+  const o = ordersKanban.find(x => x.id === _respostaWAOrderId);
+  if (!o?.phone) return;
+  fecharRespostaWA();
+  // Abre o WA Chat direto na conversa do cliente
+  const phone = o.phone.replace(/\D/g,'');
+  const jid   = (phone.startsWith('55') ? phone : '55' + phone) + '@s.whatsapp.net';
+  // Navega para aba WA e abre a conversa
+  if (typeof nav === 'function') nav('robo');
+  setTimeout(() => {
+    if (typeof waOpenConv === 'function') waOpenConv(jid, o.client);
+    if (typeof WA !== 'undefined') WA.open = true;
+  }, 300);
+}
+
+// ── Hook: detecta resposta WA do cliente em pedidos pendentes ──────────
+function _verificarRespostaWACliente(msg) {
+  if (!msg?.key || msg.key.fromMe === true || msg.key.fromMe === 'true') return;
+  const jid   = msg.key.remoteJid || '';
+  const phone = jid.replace('@s.whatsapp.net','').replace(/\D/g,'');
+  if (!phone) return;
+
+  // Procura pedido no kanban com esse telefone que tem ajuste pendente
+  ordersKanban.forEach((o, idx) => {
+    const orderPhone = (o.phone || '').replace(/\D/g,'');
+    const match = phone.endsWith(orderPhone) || orderPhone.endsWith(phone);
+    if (!match) return;
+
+    // Só notifica se há ajuste pendente OU se é açougue (qualquer resposta é relevante)
+    if (!o._ajustePendente && window._segmento !== 'acougue') return;
+
+    const texto = _waExtractText(msg);
+    if (!texto) return;
+
+    ordersKanban[idx]._waResposta    = true;
+    ordersKanban[idx]._waRespostaTxt = texto;
+    renderKanban();
+    sbToast('ok', `💬 #${_orderNum(o.id)} — ${o.client} respondeu no WhatsApp!`);
+  });
+}
+
+function _waExtractText(msg) {
+  const m = msg?.message;
+  if (!m) return '';
+  return m.conversation || m.extendedTextMessage?.text || m.imageMessage?.caption || '';
+}
+
 // ── addMovimento (quick register) ────────────────────
 
 // ── addMovimentoModal ────────────────────────────────

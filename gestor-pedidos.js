@@ -155,9 +155,27 @@ function renderKanban(){
           return '';
         })();
 
-        const _cardStyle = o._pixPendente ? ' style="border-left:3px solid rgba(249,115,22,.7);background:rgba(249,115,22,.04)"' : '';
+        // Açougue: botão de indisponibilidade de peso (só para itens kg)
+        const _isAcougue = window._segmento === 'acougue';
+        const _temItemKg = _isAcougue && (o.items||[]).some(i => i.item_type === 'kg' || (i.obs && /\d+g /.test(i.obs)));
+        const _acougueBtn = _temItemKg
+          ? '<button class="oc-btn oc-btn-acougue-peso" title="Ajustar peso disponível" onclick="event.stopPropagation();abrirModalAjustePeso('+o.id+')">⚠️</button>'
+          : '';
+
+        // Notificação de resposta WA do cliente
+        const _waNotif = o._waResposta
+          ? '<div class="oc-wa-notif" onclick="event.stopPropagation();abrirRespostaWA('+o.id+')" title="Cliente respondeu no WhatsApp">💬 Cliente respondeu!</div>'
+          : '';
+
+        const _cardStyle = o._pixPendente
+          ? ' style="border-left:3px solid rgba(249,115,22,.7);background:rgba(249,115,22,.04)"'
+          : o._waResposta
+          ? ' style="border-left:3px solid rgba(34,197,94,.7);background:rgba(34,197,94,.03)"'
+          : '';
+
         return '<div class="order-card"'+_cardStyle+' onclick="openOrderDetail('+o.id+')">'+
-          '<div class="oc-top"><span class="oc-id">#'+o.num+'</span>'+_tipoBadge+'<span class="oc-time">⏱ '+o.time+'</span></div>'+
+          '<div class="oc-top"><span class="oc-id">#'+o.num+'</span>'+_tipoBadge+'<span class="oc-time">⏱ '+o.time+'</span>'+_acougueBtn+'</div>'+
+          _waNotif+
           '<div class="oc-client">'+o.client+(o.phone?' · '+o.phone:'')+'</div>'+
           '<div class="oc-items">'+itemStr+'</div>'+
           '<div class="oc-bot"><span class="oc-total">'+total+'</span>'+

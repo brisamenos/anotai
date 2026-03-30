@@ -241,6 +241,11 @@ function waOnSseMsg(msg) {
   // Badge só para mensagens RECEBIDAS e quando não está visualizando essa conversa
   if (!fromMe && (!WA.open || WA.activeJid !== jid)) waBadgeInc();
 
+  // Notifica cards do kanban (açougue: ajuste de peso pendente)
+  if (!fromMe && typeof _verificarRespostaWACliente === 'function') {
+    _verificarRespostaWACliente(msg);
+  }
+
   // Atualiza preview da lista
   waUpdatePreview(jid, normalized, fromMe);
 

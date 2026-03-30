@@ -4547,6 +4547,43 @@ Use no seu próximo pedido 🛍️</textarea>
 </script>
 <script>document.write('<script src="/wa-chat.js?v=' + Date.now() + '"><\/script>');</script>
 
+<!-- ═══ MODAL: AJUSTE DE PESO AÇOUGUE ════════════════════════════════ -->
+<div id="modal-ajuste-peso-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)fecharModalAjustePeso()">
+  <div style="background:var(--surface);border-radius:18px;padding:24px;width:min(480px,94vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <div style="font-size:16px;font-weight:800">⚠️ Ajuste de Peso Disponível</div>
+      <button onclick="fecharModalAjustePeso()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:16px">Informe o peso disponível para cada item. O valor será recalculado automaticamente e enviado ao cliente via WhatsApp para confirmação.</div>
+
+    <div id="ajuste-peso-itens" style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px"></div>
+
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button id="btn-enviar-ajuste-peso" onclick="enviarAjustePeso()" class="btn bp" style="flex:1">
+        📲 Enviar proposta ao cliente
+      </button>
+      <button onclick="fecharModalAjustePeso()" class="btn bg" style="flex:none;padding:0 16px">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: RESPOSTA WA DO CLIENTE ════════════════════════════════ -->
+<div id="modal-resposta-wa-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)fecharRespostaWA()">
+  <div style="background:var(--surface);border-radius:18px;padding:24px;width:min(480px,94vw);max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-size:16px;font-weight:800">💬 Resposta do Cliente</div>
+      <button onclick="fecharRespostaWA()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <div id="modal-wa-msg-preview" style="background:var(--surface2);border-radius:12px;padding:14px;font-size:13.5px;line-height:1.6;margin-bottom:18px;white-space:pre-wrap"></div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">O cliente respondeu ao WhatsApp. Confirme a decisão abaixo:</div>
+    <div style="display:flex;gap:10px">
+      <button id="btn-cliente-aceitou" onclick="clienteAceitouAjuste()" class="btn bp" style="flex:1">✅ Cliente aceitou — confirmar pedido</button>
+      <button id="btn-cliente-recusou" onclick="clienteRecusouAjuste()" class="btn" style="flex:1;background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.25)">❌ Cancelar pedido</button>
+    </div>
+    <button onclick="waOpenFromOrder()" class="btn bg" style="width:100%;margin-top:10px;font-size:12px">Abrir conversa completa no WhatsApp →</button>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════════════════════════
      MOBILE: Bottom Nav + WA FAB + Sheet "Mais" + JS
      Só activa em telas ≤ 900px via CSS
