@@ -264,7 +264,7 @@ async function init() {
     applyBranding(info.branding, info.nome);
 
     const [itemsR, catsR, cuponsR, cfgR, pixCfgR] = await Promise.all([
-      sb.from('menu_items').select('*').not('status','eq','pausado').order('id'),
+      sb.from('menu_items').select('*').not('status','eq','pausado').order('sort_order', { nullsFirst: false }).order('id'),
       sb.from('categories').select('*').eq('ativo', true).order('sort_order'),
       sb.from('cupons').select('*').eq('ativo', true),
       sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp,order_num_offset,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega').single(),
@@ -292,7 +292,7 @@ async function init() {
       _tiposEntrega = Array.isArray(c.tipos_entrega) ? c.tipos_entrega : ['delivery','retirada','mesa'];
       try {
         const segR = await fetch('/api/tenant-segmento', { headers: { 'x-tenant-id': _tenantId } });
-        if (segR.ok) { const segD = await segR.json(); if (segD.segmento === 'acougue') { _segmento = 'acougue'; _tiposEntrega = _tiposEntrega.filter(t => t !== 'mesa'); document.body.classList.add('seg-acougue'); } }
+        if (segR.ok) { const segD = await segR.json(); if (segD.segmento === 'acougue') { _segmento = 'acougue'; _tiposEntrega = _tiposEntrega.filter(t => t !== 'mesa'); } }
       } catch(e) {}
       // Sincroniza offset de numeração com o gestor
       _orderNumOffset = parseInt(c.order_num_offset) || 0;
@@ -468,7 +468,7 @@ function applyBrandingLive(cfg) {
 
 async function reloadMenu() {
   const [itemsR, catsR] = await Promise.all([
-    sb.from('menu_items').select('*').not('status','eq','pausado').order('id'),
+    sb.from('menu_items').select('*').not('status','eq','pausado').order('sort_order', { nullsFirst: false }).order('id'),
     sb.from('categories').select('*').eq('ativo',true).order('sort_order')
   ]);
   allItems = (itemsR.data || []).map(x => ({
