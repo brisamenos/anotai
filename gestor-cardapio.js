@@ -86,7 +86,7 @@ function renderAcList(ctx, tipo) {
     const emoji  = emojis[tipo] || '📌';
     const iconEl = item.icon
       ? `<img src="${item.icon}" style="width:32px;height:32px;object-fit:contain;border-radius:6px;flex-shrink:0;display:block" onerror="this.style.opacity='.2'">`
-      : `<div style="width:32px;height:32px;border-radius:6px;background:var(--surface);border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;cursor:pointer" onclick="acIconEdit('${ctx}','${tipo}',${idx})" title="Adicionar ícone">${emojiSvg2[emojis[tipo]] || emojiSvg2._meat}</div>`;
+      : `<div style="width:32px;height:32px;border-radius:6px;background:var(--surface);border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;cursor:pointer" onclick="acIconEdit('${ctx}','${tipo}',${idx})" title="Adicionar ícone">${emojiSvg[emojis[tipo]] || emojiSvg._meat}</div>`;
     return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
       <div onclick="acIconEdit('${ctx}','${tipo}',${idx})" title="Editar ícone" style="cursor:pointer;flex-shrink:0;position:relative" onmouseenter="this.querySelector('.icon-edit-hint')&&(this.querySelector('.icon-edit-hint').style.opacity='1')" onmouseleave="this.querySelector('.icon-edit-hint')&&(this.querySelector('.icon-edit-hint').style.opacity='0')">
         ${iconEl}
@@ -344,7 +344,7 @@ function acListPick(ctx, tipo) {
     ? available.map(item => {
         const iconEl = item.icon
           ? `<img src="${item.icon}" style="width:30px;height:30px;object-fit:contain;flex-shrink:0">`
-          : `<span style="font-size:20px;width:30px;text-align:center;flex-shrink:0">${emojiSvg2[emojis[tipo]] || emojiSvg2._meat}</span>`;
+          : `<span style="font-size:20px;width:30px;text-align:center;flex-shrink:0">${emojiSvg[emojis[tipo]] || emojiSvg._meat}</span>`;
         return `<button type="button" onclick="acListAdd('${ctx}','${tipo}','${item.id}','${item.nome.replace(/'/g,"\\'")}'${item.icon?`,'${item.icon}'`:''})" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;cursor:pointer;color:var(--text);text-align:left;font-family:inherit;font-size:13px;font-weight:500;transition:all .15s" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">${iconEl}<span>${item.nome}</span></button>`;
       }).join('')
     : `<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">Todos os itens do catálogo já foram adicionados.</div>`;
