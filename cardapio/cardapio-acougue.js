@@ -139,6 +139,10 @@ function _isAcougueItem(item) {
          cgs.some(g => g.tipo === 'cortes' || g.tipo === 'pesos');
 }
 
+function _isKitItem(item) {
+  return (item.item_type === 'kit' || item.itemType === 'kit' || item.tipo === 'kit');
+}
+
 function renderImGrupos(item) {
   const wrap = document.getElementById('im-grupos-wrap');
   if (!wrap) return;
@@ -153,8 +157,112 @@ function renderImGrupos(item) {
     return;
   }
 
+  // ── Modo kit ─────────────────────────────────────────────
+  if (_isKitItem(item)) {
+    _renderKitGrupos(item, wrap, grupos);
+    return;
+  }
+
   // ── Modo normal (pizza/restaurante) ─────────────────────
-  wrap.innerHTML = grupos.map(g => {
+  // Filtra grupos açougue/kit para não aparecerem no modo normal
+  const _ACOUGUE_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
+  const genericGrupos  = grupos.filter(g => !_ACOUGUE_TIPOS.includes(g.tipo));
+  if (!genericGrupos.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = genericGrupos.map(g => {
+    const isRequired = g.tipo === 'radio';
+    const badge = isRequired
+      ? `<span class="grp-required-badge">Obrigatório</span>`
+      : `<span class="grp-optional-badge">Opcional</span>`;
+    const optsHtml = (g.opcoes || []).map(o => {
+      const priceLabel = o.preco > 0
+        ? `<span class="grp-opt-price">+ R$ ${fmt(o.preco)}</span>`
+        : `<span class="grp-opt-price free">Grátis</span>`;
+      const indicator = g.tipo === 'checkbox'
+        ? `<div class="grp-opt-indicator multi"></div>`
+        : `<div class="grp-opt-indicator"></div>`;
+      const qtyEl = g.tipo === 'checkbox'
+        ? `<div class="grp-opt-qty" id="gqty_${_slug(g.nome)}_${_slug(o.nome)}">
+             <button class="grp-qty-btn" onclick="event.stopPropagation();grpQty('${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},-1)">−</button>
+             <span class="grp-qty-num" id="gqnum_${_slug(g.nome)}_${_slug(o.nome)}">1</span>
+             <button class="grp-qty-btn" onclick="event.stopPropagation();grpQty('${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},1)">+</button>
+           </div>` : '';
+      return `<div class="grp-opt-item" data-grupo="${_escape(g.nome)}" data-nome="${_escape(o.nome)}" data-preco="${o.preco||0}" data-tipo="${g.tipo}" onclick="grpToggle(this,'${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},'${g.tipo}',${g.max||1})">
+        <div class="grp-opt-left">${indicator}<span class="grp-opt-name">${o.nome}</span></div>
+        <div style="display:flex;align-items:center;gap:8px">${priceLabel}${qtyEl}</div>
+      </div>`;
+    }).join('');
+
+    return `<div class="grp-section">
+      <div class="grp-section-title">${g.nome} ${badge}</div>
+      <div class="grp-opts">${optsHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Renderiza modal de kit com ícones e lista de itens ──
+function _renderKitGrupos(item, wrap, grupos) {
+  const kitGrp        = grupos.find(g => g.tipo === 'kit_itens');
+  const preparosGrp   = grupos.find(g => g.tipo === 'preparos');
+  const ocasiaoGrp    = grupos.find(g => g.tipo === 'ocasiao');
+  const armazenGrp    = grupos.find(g => g.tipo === 'armazenamento');
+  let html = '';
+
+  // ── Conteúdo do kit ──────────────────────────────────────
+  if (kitGrp?.itens?.length) {
+    const rows = kitGrp.itens.map(item => {
+      // Tenta extrair quantidade e nome: "500g Bife de Patinho" → qty="500g", nome="Bife de Patinho"
+      const match = item.match(/^(\d+\s*(?:g|kg|un|pç|pc|L|ml|x)?\s*)/i);
+      const qty   = match ? match[1].trim() : '';
+      const nome  = match ? item.slice(match[1].length).trim() : item;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+        <div style="width:36px;height:36px;border-radius:9px;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.2);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🥩</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--text)">${nome}</div>
+          ${qty ? `<div style="font-size:11.5px;color:var(--accent);font-weight:700;margin-top:1px">${qty}</div>` : ''}
+        </div>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>`;
+    }).join('');
+
+    html += `<div class="ac-section">
+      <div class="ac-section-title" style="margin-bottom:6px">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;margin-right:5px"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 3V2M11 3V2M2 7h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Itens inclusos no kit
+      </div>
+      <div style="border:1px solid var(--border);border-radius:10px;padding:0 12px;overflow:hidden">${rows}</div>
+    </div>`;
+  }
+
+  // ── Informações com ícones (preparos, ocasião, armazenamento) ──
+  const _chipRow = (lista, titulo, iconeDefault) => {
+    if (!lista?.opcoes?.length) return '';
+    const chips = lista.opcoes.map(o => {
+      const icon = o.icon
+        ? `<img src="${o.icon}" style="width:28px;height:28px;object-fit:contain" onerror="this.style.display='none'">`
+        : `<span style="font-size:20px">${iconeDefault}</span>`;
+      return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 10px;background:var(--s2,#1a1a1a);border:1.5px solid var(--border);border-radius:10px;min-width:60px;text-align:center;flex-shrink:0">
+        <div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.04);border-radius:8px">${icon}</div>
+        <span style="font-size:10.5px;font-weight:600;color:var(--text);line-height:1.2">${o.nome || o.id}</span>
+      </div>`;
+    }).join('');
+    return `<div style="margin-top:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;margin-bottom:8px">${titulo}</div>
+      <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;scrollbar-width:none">${chips}</div>
+    </div>`;
+  };
+
+  const infoHtml = [
+    _chipRow(preparosGrp,  'Forma de preparo', '🍳'),
+    _chipRow(ocasiaoGrp,   'Tipo de ocasião',  '🎯'),
+    _chipRow(armazenGrp,   'Armazenamento',    '❄️'),
+  ].join('');
+
+  if (infoHtml) {
+    html += `<div class="ac-section" style="margin-top:6px">${infoHtml}</div>`;
+  }
+
+  wrap.innerHTML = html || '';
+}
     const isRequired = g.tipo === 'radio';
     const badge = isRequired
       ? `<span class="grp-required-badge">Obrigatório</span>`
@@ -645,7 +753,3 @@ function xsellToggle(itemId) {
     card.classList.add('on');
   }
 }
-
-
-
-
