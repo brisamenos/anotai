@@ -160,6 +160,154 @@
 [data-tema="minimalista"] .item-add-btn:hover { background:var(--text); color:#fff; }
 [data-tema="minimalista"] .splash { background:#fff; }
 
+/* ══════════════════════════════════════════
+   EFEITO 3D — Cards do Açougue
+   Ativo apenas quando body[data-segmento="acougue"]
+══════════════════════════════════════════ */
+
+/* Perspectiva no container para habilitar 3D */
+body[data-segmento="acougue"] .item-grid {
+  perspective: 900px;
+  perspective-origin: 50% 30%;
+}
+
+/* Card base — transição suave */
+body[data-segmento="acougue"] .item-card {
+  transition: transform 0.22s ease, box-shadow 0.22s ease, background 0.15s;
+  transform-style: preserve-3d;
+  will-change: transform;
+  border-radius: 14px !important;
+  border: none !important;
+  background: var(--s1) !important;
+  box-shadow:
+    0 2px 0px rgba(0,0,0,.18),
+    0 4px 8px rgba(0,0,0,.12),
+    0 1px 0px rgba(255,255,255,.6) inset;
+  position: relative;
+  overflow: visible !important;
+  margin-bottom: 6px;
+}
+
+/* Borda inferior "espessura" — cria ilusão de profundidade */
+body[data-segmento="acougue"] .item-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  box-shadow:
+    0 6px 0 -1px rgba(0,0,0,.22),
+    0 7px 0 -1px rgba(0,0,0,.12);
+  pointer-events: none;
+  z-index: 0;
+  transition: box-shadow 0.22s ease;
+}
+
+/* Reflexo de luz no topo */
+body[data-segmento="acougue"] .item-card::before {
+  content: '';
+  display: block !important;
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 50%;
+  border-radius: 14px 14px 0 0;
+  background: linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,0) 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Hover — levanta e inclina o card */
+body[data-segmento="acougue"] .item-card:hover {
+  transform: translateY(-5px) rotateX(3deg) scale(1.012);
+  box-shadow:
+    0 2px 0px rgba(0,0,0,.18),
+    0 12px 28px rgba(0,0,0,.18),
+    0 4px 8px rgba(0,0,0,.10),
+    0 1px 0px rgba(255,255,255,.7) inset;
+}
+
+body[data-segmento="acougue"] .item-card:hover::after {
+  box-shadow:
+    0 10px 0 -2px rgba(0,0,0,.18),
+    0 12px 0 -3px rgba(0,0,0,.08);
+}
+
+/* Active — pressiona o card para baixo */
+body[data-segmento="acougue"] .item-card:active {
+  transform: translateY(2px) rotateX(-1deg) scale(0.99) !important;
+  box-shadow:
+    0 1px 0px rgba(0,0,0,.22),
+    0 2px 6px rgba(0,0,0,.10),
+    0 1px 0px rgba(255,255,255,.5) inset !important;
+}
+
+body[data-segmento="acougue"] .item-card:active::after {
+  box-shadow:
+    0 2px 0 -1px rgba(0,0,0,.18),
+    0 3px 0 -2px rgba(0,0,0,.08) !important;
+}
+
+/* Imagem — garante que fica acima do reflexo */
+body[data-segmento="acougue"] .item-img {
+  position: relative;
+  z-index: 2;
+}
+
+/* Body do card acima do reflexo */
+body[data-segmento="acougue"] .item-body {
+  position: relative;
+  z-index: 2;
+}
+
+/* Carousel do açougue — perspectiva individual */
+body[data-segmento="acougue"] .item-grid.carousel {
+  perspective: 800px;
+}
+
+body[data-segmento="acougue"] .item-grid.carousel .item-card {
+  border-radius: 14px !important;
+  overflow: hidden !important;
+  box-shadow:
+    4px 6px 0 0 rgba(0,0,0,.20),
+    0 8px 16px rgba(0,0,0,.14),
+    0 1px 0 rgba(255,255,255,.5) inset;
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
+}
+
+body[data-segmento="acougue"] .item-grid.carousel .item-card:hover {
+  transform: translateY(-6px) rotateY(-4deg) scale(1.03);
+  box-shadow:
+    6px 10px 0 0 rgba(0,0,0,.18),
+    0 16px 32px rgba(0,0,0,.18),
+    0 1px 0 rgba(255,255,255,.6) inset;
+}
+
+body[data-segmento="acougue"] .item-grid.carousel .item-card:active {
+  transform: translateY(1px) rotateY(0deg) scale(0.98) !important;
+  box-shadow:
+    2px 2px 0 0 rgba(0,0,0,.20),
+    0 2px 6px rgba(0,0,0,.12) !important;
+}
+
+/* Destaque cards do açougue também ganham 3D */
+body[data-segmento="acougue"] .dest-card {
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
+  box-shadow:
+    3px 5px 0 0 rgba(0,0,0,.18),
+    0 6px 14px rgba(0,0,0,.12);
+}
+
+body[data-segmento="acougue"] .dest-card:hover {
+  transform: translateY(-5px) rotateY(-3deg) scale(1.03);
+  box-shadow:
+    5px 9px 0 0 rgba(0,0,0,.16),
+    0 14px 28px rgba(0,0,0,.16);
+}
+
+body[data-segmento="acougue"] .dest-card:active {
+  transform: scale(0.97) translateY(1px) !important;
+  box-shadow: 1px 2px 0 0 rgba(0,0,0,.18) !important;
+}
+
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth;-webkit-tap-highlight-color:transparent}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
