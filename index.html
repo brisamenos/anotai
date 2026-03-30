@@ -154,6 +154,31 @@ input,textarea{font-family:inherit}
 }
 .section+.section{margin-top:8px}
 .item-grid{display:flex;flex-direction:column;gap:0}
+/* Carrossel de produtos — só açougue */
+.item-grid.carousel{
+  flex-direction:row;gap:12px;
+  overflow-x:auto;padding:4px 16px 12px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;
+}
+.item-grid.carousel::-webkit-scrollbar{display:none}
+.item-grid.carousel .item-card{
+  flex-direction:column;align-items:flex-start;
+  width:152px;min-width:152px;flex-shrink:0;
+  background:var(--s2,#111);border:1px solid var(--border);
+  border-bottom:none;border-radius:14px;padding:0;overflow:hidden;gap:0;
+}
+.item-grid.carousel .item-img{
+  width:100%;height:120px;border-radius:0;flex-shrink:0;
+}
+.item-grid.carousel .item-body{
+  padding:10px 10px 12px;width:100%;box-sizing:border-box;
+}
+.item-grid.carousel .item-name{font-size:13px;margin-bottom:4px;-webkit-line-clamp:2;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
+.item-grid.carousel .item-desc{font-size:11px;-webkit-line-clamp:2;margin-bottom:8px}
+.item-grid.carousel .item-foot{flex-wrap:wrap;gap:4px}
+.item-grid.carousel .item-price{font-size:13.5px}
+.item-grid.carousel .item-porcao-ref{font-size:10px;margin-top:4px}
+.item-grid.carousel .item-add-btn{margin-left:auto}
 
 /* Destaque scroll horizontal */
 .destaques-wrap{padding:0 0 4px;overflow:hidden}
