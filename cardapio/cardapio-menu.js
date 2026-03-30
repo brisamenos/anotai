@@ -221,7 +221,8 @@ function renderMenu() {
   if (searchQ || activeCat) {
     // Em busca/filtro, mostra só cards normais
     if (normalItems.length) {
-      html += `<div class="item-grid">${normalItems.map(itemCard).join('')}</div>`;
+      const gridClass = _segmento === 'acougue' ? 'item-grid carousel' : 'item-grid';
+      html += `<div class="${gridClass}">${normalItems.map(itemCard).join('')}</div>`;
     }
     // Se o filtro for de uma categoria checklist, mostra ela expandida
     const filteredChecklistCat = checklistCats.find(c => c.name === activeCat || c.label === activeCat);
@@ -256,7 +257,8 @@ function renderMenu() {
   groups.forEach((its, key) => {
     const cat   = allCats.find(c => c.name === key);
     const label = cat ? (cat.label || cat.name) : (key === '__outros' ? 'Outros' : key.charAt(0).toUpperCase() + key.slice(1));
-    html += `<div class="section" data-cat="${key}"><div class="section-label">${label}</div><div class="item-grid">${its.map(itemCard).join('')}</div></div>`;
+    const gridClass = _segmento === 'acougue' ? 'item-grid carousel' : 'item-grid';
+    html += `<div class="section" data-cat="${key}"><div class="section-label">${label}</div><div class="${gridClass}">${its.map(itemCard).join('')}</div></div>`;
   });
 
   // Renderiza seções checklist no final
