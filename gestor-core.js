@@ -1043,7 +1043,12 @@ async function confirmarPagamentoPix(id) {
       body: JSON.stringify({ order_id: id, new_status: 'analise', tenant_id: _sessao?.tenant_id })
     });
     if (!res.ok) throw new Error('Erro');
-    if (o) o.status = 'analise';
+    if (o) {
+      o.status      = 'analise';
+      o._statusReal = 'analise';
+      o._pixPendente = false;
+      o.pag         = 'pix_mp'; // marca como pago para o badge mudar para PAGO PIX
+    }
     renderKanban();
     sbToast('ok', `Pagamento PIX do pedido #${o.num} confirmado! Cliente será notificado.`);
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
