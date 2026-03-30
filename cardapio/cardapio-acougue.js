@@ -449,23 +449,15 @@ function cancelCorte(corteNome) {
 // ── Abre seletor de gramas direto pelo badge de porção ──
 // Usado quando cliente toca em "Porção de Xg" na área do preço
 function _openPorcaoQuickPicker(item, porcaoRef) {
-  // Usa o primeiro corte disponível como corte "ativo" para o sheet
-  const cgs       = item.custom_groups || [];
-  const cortesGrp = cgs.find(g => g.tipo === 'cortes');
-  const pesosGrp  = cgs.find(g => g.tipo === 'pesos');
+  const cgs      = item.custom_groups || [];
+  const pesosGrp = cgs.find(g => g.tipo === 'pesos');
 
   // Define os pesos disponíveis globalmente para o picker
   _acouguePesos = pesosGrp?.valores || [];
   if (!_acouguePesos.length) return;
 
-  // Usa nome "Porção" como corte virtual se não houver corte selecionado
-  const primeiroCorteSelecionado = Object.keys(_acougueCortes)[0];
-  const corteVirtual = primeiroCorteSelecionado
-    || (cortesGrp?.opcoes?.[0]?.nome)
-    || 'Porção';
-
-  // Abre o sheet de peso normalmente
-  openPesoSheet(corteVirtual);
+  // Sempre abre com "Inteiro" — sem pré-selecionar corte existente
+  openPesoSheet('Inteiro');
 }
 
 function _atualizaTotalPeso() {
@@ -760,7 +752,3 @@ function xsellToggle(itemId) {
     card.classList.add('on');
   }
 }
-
-
-
-
