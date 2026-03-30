@@ -652,7 +652,7 @@ let _cpBannerUrl = '';
 
 async function loadCardapioPublico() {
   const { data } = await sb.from('store_config').select(
-    'store_name,store_descricao,store_logo_url,store_banner_url,store_cor,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega'
+    'store_name,store_descricao,store_logo_url,store_banner_url,store_cor,store_tema,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega'
   ).single();
   if (!data) return;
 
@@ -690,6 +690,9 @@ async function loadCardapioPublico() {
   const cor = data.store_cor || '#3b82f6';
   const corEl = document.getElementById('cp-cor');
   if (corEl) corEl.value = cor;
+
+  // Carrega tema
+  cpSelecionarTema(data.store_tema || 'classico');
 
   if (data.store_logo_url) {
     _cpLogoUrl = data.store_logo_url;
@@ -769,6 +772,26 @@ function cpSetCor(hex) {
   if (el) el.value = hex;
 }
 
+// ── Seleção de tema do cardápio público ──────────────────
+function cpSelecionarTema(tema) {
+  // Atualiza borda visual de cada card
+  document.querySelectorAll('.cp-tema-card').forEach(card => {
+    const isSelected = card.dataset.tema === tema;
+    card.style.borderColor = isSelected ? 'var(--accent)' : 'transparent';
+    const check = card.querySelector('.cp-tema-check');
+    if (check) check.style.display = isSelected ? 'flex' : 'none';
+  });
+  // Armazena tema selecionado no input oculto
+  let inp = document.getElementById('cp-tema-value');
+  if (!inp) {
+    inp = document.createElement('input');
+    inp.type = 'hidden';
+    inp.id = 'cp-tema-value';
+    document.body.appendChild(inp);
+  }
+  inp.value = tema;
+}
+
 // Preview agora é o iframe real — cpPreviewCor e cpAtualizarPreview não são mais necessários
 
 async function cpUploadImagem(input, tipo) {
@@ -822,6 +845,7 @@ async function salvarCardapioPublico() {
       store_tempo_entrega: document.getElementById('cp-tempo')?.value.trim()     || '30-45 min',
       store_avaliacao:     document.getElementById('cp-avaliacao')?.value.trim() || '5.0',
       store_cor:           document.getElementById('cp-cor')?.value              || '#3b82f6',
+      store_tema:          document.getElementById('cp-tema-value')?.value          || 'classico',
       horarios_config:     JSON.stringify(cpGetHorarios()),
       pedido_minimo:       parseFloat(document.getElementById('cp-pedido-minimo')?.value) || 0,
       store_address:       document.getElementById('cp-store-address')?.value.trim() || null,

@@ -3766,6 +3766,120 @@ Use no seu próximo pedido 🛍️</textarea>
     </div>
   </div>
 
+  <!-- Tema do cardápio -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:7px">
+      <span style="font-size:16px">🎨</span> Tema do cardápio
+    </div>
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:14px">Escolha o visual exibido para seus clientes</div>
+    <div id="cp-temas-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+
+      <!-- Tema: Clássico -->
+      <div class="cp-tema-card" data-tema="classico" onclick="cpSelecionarTema('classico')" title="Fundo claro, visual limpo e moderno" style="border:2px solid var(--accent);border-radius:10px;overflow:hidden;cursor:pointer;transition:all .18s;position:relative">
+        <div style="background:#f8f9fb;padding:10px 10px 8px">
+          <div style="background:#fff;border-radius:6px;padding:7px 8px;margin-bottom:5px;border:1px solid rgba(0,0,0,.07)">
+            <div style="width:60%;height:7px;background:#0f1117;border-radius:3px;margin-bottom:3px;opacity:.85"></div>
+            <div style="width:40%;height:5px;background:#6b7280;border-radius:3px;opacity:.5"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+            <div style="background:#fff;border-radius:5px;padding:5px;border:1px solid rgba(0,0,0,.07)">
+              <div style="width:100%;height:22px;background:#e4e8ef;border-radius:3px;margin-bottom:4px"></div>
+              <div style="width:70%;height:5px;background:#0f1117;border-radius:2px;margin-bottom:2px;opacity:.8"></div>
+              <div style="width:50%;height:5px;background:#f97316;border-radius:2px"></div>
+            </div>
+            <div style="background:#fff;border-radius:5px;padding:5px;border:1px solid rgba(0,0,0,.07)">
+              <div style="width:100%;height:22px;background:#e4e8ef;border-radius:3px;margin-bottom:4px"></div>
+              <div style="width:70%;height:5px;background:#0f1117;border-radius:2px;margin-bottom:2px;opacity:.8"></div>
+              <div style="width:50%;height:5px;background:#f97316;border-radius:2px"></div>
+            </div>
+          </div>
+        </div>
+        <div style="background:#fff;padding:5px 8px;font-size:10.5px;font-weight:700;color:#0f1117;border-top:1px solid rgba(0,0,0,.07)">☀️ Clássico</div>
+        <div class="cp-tema-check" style="display:none;position:absolute;top:6px;right:6px;width:18px;height:18px;background:var(--accent);border-radius:50%;align-items:center;justify-content:center">
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <!-- Tema: Dark Luxo -->
+      <div class="cp-tema-card" data-tema="dark" onclick="cpSelecionarTema('dark')" title="Fundo escuro premium, ideal para restaurantes sofisticados" style="border:2px solid transparent;border-radius:10px;overflow:hidden;cursor:pointer;transition:all .18s;position:relative">
+        <div style="background:#0f1117;padding:10px 10px 8px">
+          <div style="background:#181b24;border-radius:6px;padding:7px 8px;margin-bottom:5px;border:1px solid rgba(255,255,255,.07)">
+            <div style="width:60%;height:7px;background:#fff;border-radius:3px;margin-bottom:3px;opacity:.85"></div>
+            <div style="width:40%;height:5px;background:#9ca3af;border-radius:3px;opacity:.5"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+            <div style="background:#181b24;border-radius:5px;padding:5px;border:1px solid rgba(255,255,255,.07)">
+              <div style="width:100%;height:22px;background:#242840;border-radius:3px;margin-bottom:4px"></div>
+              <div style="width:70%;height:5px;background:#fff;border-radius:2px;margin-bottom:2px;opacity:.8"></div>
+              <div style="width:50%;height:5px;background:#3b82f6;border-radius:2px"></div>
+            </div>
+            <div style="background:#181b24;border-radius:5px;padding:5px;border:1px solid rgba(255,255,255,.07)">
+              <div style="width:100%;height:22px;background:#242840;border-radius:3px;margin-bottom:4px"></div>
+              <div style="width:70%;height:5px;background:#fff;border-radius:2px;margin-bottom:2px;opacity:.8"></div>
+              <div style="width:50%;height:5px;background:#3b82f6;border-radius:2px"></div>
+            </div>
+          </div>
+        </div>
+        <div style="background:#181b24;padding:5px 8px;font-size:10.5px;font-weight:700;color:#e5e7eb;border-top:1px solid rgba(255,255,255,.06)">🌙 Dark Luxo</div>
+        <div class="cp-tema-check" style="display:none;position:absolute;top:6px;right:6px;width:18px;height:18px;background:var(--accent);border-radius:50%;align-items:center;justify-content:center">
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <!-- Tema: Tropical -->
+      <div class="cp-tema-card" data-tema="tropical" onclick="cpSelecionarTema('tropical')" title="Cores quentes e vibrantes, perfeito para hamburguerias e lanchonetes" style="border:2px solid transparent;border-radius:10px;overflow:hidden;cursor:pointer;transition:all .18s;position:relative">
+        <div style="background:#fef9f0;padding:10px 10px 8px">
+          <div style="background:#fff7ed;border-radius:6px;padding:7px 8px;margin-bottom:5px;border:1px solid rgba(234,88,12,.15)">
+            <div style="width:60%;height:7px;background:#431407;border-radius:3px;margin-bottom:3px;opacity:.85"></div>
+            <div style="width:40%;height:5px;background:#92400e;border-radius:3px;opacity:.5"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+            <div style="background:#fff7ed;border-radius:5px;padding:5px;border:1px solid rgba(234,88,12,.12)">
+              <div style="width:100%;height:22px;background:#fed7aa;border-radius:3px;margin-bottom:4px"></div>
+              <div style="width:70%;height:5px;background:#431407;border-radius:2px;margin-bottom:2px;opacity:.8"></div>
+              <div style="width:50%;height:5px;background:#ea580c;border-radius:2px"></div>
+            </div>
+            <div style="background:#fff7ed;border-radius:5px;padding:5px;border:1px solid rgba(234,88,12,.12)">
+              <div style="width:100%;height:22px;background:#fed7aa;border-radius:3px;margin-bottom:4px"></div>
+              <div style="width:70%;height:5px;background:#431407;border-radius:2px;margin-bottom:2px;opacity:.8"></div>
+              <div style="width:50%;height:5px;background:#ea580c;border-radius:2px"></div>
+            </div>
+          </div>
+        </div>
+        <div style="background:#fff7ed;padding:5px 8px;font-size:10.5px;font-weight:700;color:#431407;border-top:1px solid rgba(234,88,12,.12)">🌴 Tropical</div>
+        <div class="cp-tema-check" style="display:none;position:absolute;top:6px;right:6px;width:18px;height:18px;background:var(--accent);border-radius:50%;align-items:center;justify-content:center">
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <!-- Tema: Minimalista -->
+      <div class="cp-tema-card" data-tema="minimalista" onclick="cpSelecionarTema('minimalista')" title="Ultra limpo, muito espaco em branco, foco nos produtos" style="border:2px solid transparent;border-radius:10px;overflow:hidden;cursor:pointer;transition:all .18s;position:relative">
+        <div style="background:#ffffff;padding:10px 10px 8px">
+          <div style="background:#fafafa;border-radius:6px;padding:7px 8px;margin-bottom:5px;border:1px solid #f0f0f0">
+            <div style="width:60%;height:7px;background:#111111;border-radius:3px;margin-bottom:3px"></div>
+            <div style="width:40%;height:5px;background:#999;border-radius:3px;opacity:.5"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="background:#fafafa;border-radius:5px;padding:5px 6px;border:1px solid #f0f0f0;display:flex;gap:5px;align-items:center">
+              <div style="width:30px;height:22px;background:#e5e5e5;border-radius:3px;flex-shrink:0"></div>
+              <div><div style="width:50px;height:5px;background:#111;border-radius:2px;margin-bottom:2px;opacity:.8"></div><div style="width:30px;height:5px;background:#111;border-radius:2px;opacity:.4"></div></div>
+            </div>
+            <div style="background:#fafafa;border-radius:5px;padding:5px 6px;border:1px solid #f0f0f0;display:flex;gap:5px;align-items:center">
+              <div style="width:30px;height:22px;background:#e5e5e5;border-radius:3px;flex-shrink:0"></div>
+              <div><div style="width:50px;height:5px;background:#111;border-radius:2px;margin-bottom:2px;opacity:.8"></div><div style="width:30px;height:5px;background:#111;border-radius:2px;opacity:.4"></div></div>
+            </div>
+          </div>
+        </div>
+        <div style="background:#fafafa;padding:5px 8px;font-size:10.5px;font-weight:700;color:#111;border-top:1px solid #f0f0f0">✦ Minimalista</div>
+        <div class="cp-tema-check" style="display:none;position:absolute;top:6px;right:6px;width:18px;height:18px;background:#111;border-radius:50%;align-items:center;justify-content:center">
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+    </div>
+    <div style="margin-top:10px;font-size:11px;color:var(--muted);text-align:center">A cor principal acima e aplicada ao tema escolhido</div>
+  </div>
+
 </div>
 
 <!-- COLUNA DIREITA -->

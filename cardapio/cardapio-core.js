@@ -21,12 +21,64 @@ async function resolveTenant() {
   return info;
 }
 
+function applyTema(tema, accentCor) {
+  const root = document.documentElement;
+  const t = tema || 'classico';
+  // Remove tema anterior
+  root.removeAttribute('data-tema');
+  root.setAttribute('data-tema', t);
+
+  // Paletas de cada tema (variáveis CSS sobrescritas)
+  const paletas = {
+    classico: {
+      '--bg':'#f8f9fb','--s1':'#ffffff','--s2':'#f1f3f7','--s3':'#e4e8ef',
+      '--border':'rgba(0,0,0,.09)','--border2':'rgba(0,0,0,.14)',
+      '--text':'#0f1117','--muted':'#6b7280','--muted2':'#9ca3af','--white':'#fff',
+      '--hero-bg':'','--hero-text':'#fff','--hero-overlay':'rgba(0,0,0,.55)',
+      '--sticky-bg':'#f8f9fb'
+    },
+    dark: {
+      '--bg':'#0f1117','--s1':'#181b24','--s2':'#1e2130','--s3':'#242840',
+      '--border':'rgba(255,255,255,.07)','--border2':'rgba(255,255,255,.13)',
+      '--text':'#e5e7eb','--muted':'#9ca3af','--muted2':'#6b7280','--white':'#fff',
+      '--hero-bg':'#0a0c13','--hero-text':'#fff','--hero-overlay':'rgba(0,0,0,.65)',
+      '--sticky-bg':'#0f1117'
+    },
+    tropical: {
+      '--bg':'#fef9f0','--s1':'#fff7ed','--s2':'#ffedd5','--s3':'#fed7aa',
+      '--border':'rgba(234,88,12,.14)','--border2':'rgba(234,88,12,.22)',
+      '--text':'#431407','--muted':'#92400e','--muted2':'#b45309','--white':'#fff',
+      '--hero-bg':'#431407','--hero-text':'#fff','--hero-overlay':'rgba(67,20,7,.6)',
+      '--sticky-bg':'#fef9f0'
+    },
+    minimalista: {
+      '--bg':'#ffffff','--s1':'#fafafa','--s2':'#f5f5f5','--s3':'#e5e5e5',
+      '--border':'rgba(0,0,0,.06)','--border2':'rgba(0,0,0,.10)',
+      '--text':'#111111','--muted':'#737373','--muted2':'#a3a3a3','--white':'#fff',
+      '--hero-bg':'#111111','--hero-text':'#fff','--hero-overlay':'rgba(0,0,0,.7)',
+      '--sticky-bg':'#ffffff'
+    }
+  };
+
+  const p = paletas[t] || paletas.classico;
+  Object.entries(p).forEach(([k,v]) => { if(v !== '') root.style.setProperty(k, v); else root.style.removeProperty(k); });
+
+  // Força meta theme-color
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  const bgMap = { classico:'#f8f9fb', dark:'#0f1117', tropical:'#fef9f0', minimalista:'#ffffff' };
+  if (metaTheme) metaTheme.content = bgMap[t] || '#f8f9fb';
+}
+
 function applyBranding(b, nome) {
   const n = b?.store_name || nome || 'Cardápio';
   document.title = n;
   document.getElementById('hero-name').textContent = n;
   if (b?.store_descricao) document.getElementById('hero-desc').textContent = b.store_descricao;
   const cor = b?.store_cor || '#f97316';
+
+  // Aplica tema ANTES da cor de accent, para a paleta correta já estar ativa
+  applyTema(b?.store_tema, cor);
+
   document.documentElement.style.setProperty('--accent', cor);
   // Define --accent-rgb para uso em rgba()
   const _rgb = cor.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
@@ -410,6 +462,11 @@ function applyBrandingLive(cfg) {
   if (cfg.store_descricao) {
     const el = document.getElementById('hero-desc');
     if (el) el.textContent = cfg.store_descricao;
+  }
+
+  // Tema visual — aplica paleta antes da cor de accent
+  if (cfg.store_tema) {
+    applyTema(cfg.store_tema, cfg.store_cor || '#f97316');
   }
 
   // Cor principal — atualiza CSS variable instantaneamente
