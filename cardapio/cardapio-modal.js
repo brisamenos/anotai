@@ -182,6 +182,8 @@ function openItemModal(id) {
   }
 
   document.getElementById('item-modal-bg').classList.add('on');
+  const closeFab = document.getElementById('im-close-fab');
+  if (closeFab) closeFab.style.display = 'flex';
 
   // ── Camada de animação (açaí / marmita) ──
   _animFillLevel = 0;
@@ -870,6 +872,8 @@ function _initPizzaCanvas() {
 
 function closeItemModal() {
   document.getElementById('item-modal-bg').classList.remove('on');
+  const closeFab = document.getElementById('im-close-fab');
+  if (closeFab) closeFab.style.display = 'none';
   _halfItem = null;
   _halfPickerOpen = false;
   const pl = document.getElementById('half-picker-list');
