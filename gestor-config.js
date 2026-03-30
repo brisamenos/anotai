@@ -161,12 +161,37 @@ function _renderPixOnlineToggle(ativo) {
   const btn    = document.getElementById('btn-pix-online-toggle');
   const status = document.getElementById('pix-online-status-txt');
   const card   = document.getElementById('card-pix-online');
+  const manual = document.getElementById('pix-manual-config-wrap');
   if (btn) {
-    btn.textContent = ativo ? 'Ativado' : 'Desativado';
+    btn.textContent = ativo ? 'Online ✓' : 'Manual';
     btn.className   = 'btn ' + (ativo ? 'bp' : 'bd');
   }
-  if (status) status.textContent = ativo ? 'Ativo — clientes podem pagar via PIX' : 'Inativo — PIX não aparece no cardápio';
-  if (card)  card.style.borderColor = ativo ? 'rgba(34,197,94,.35)' : 'var(--border)';
+  if (status) status.textContent = ativo
+    ? 'PIX Online ativo — QR Code via Mercado Pago'
+    : 'Modo manual — cliente recebe a chave PIX pelo WhatsApp';
+  if (card)  card.style.borderColor = ativo ? 'rgba(34,197,94,.35)' : 'rgba(249,115,22,.35)';
+  if (manual) manual.style.display  = ativo ? 'none' : '';
+}
+
+async function salvarPixManual() {
+  const tid  = _sessao?.tenant_id;
+  if (!tid) return;
+  const key  = document.getElementById('pix-manual-key-input')?.value.trim();
+  const tipo = document.getElementById('pix-manual-tipo-select')?.value || 'aleatoria';
+  if (!key) { sbToast('err', 'Informe a chave PIX'); return; }
+  const btn = document.getElementById('btn-salvar-pix-manual');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/pix/gestor-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify({ pix_key_manual: key, pix_key_manual_tipo: tipo })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Erro');
+    sbToast('ok', 'Chave PIX manual salva!');
+  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
+  finally { const b = document.getElementById('btn-salvar-pix-manual'); if (b) b.disabled = false; }
 }
 
 function _renderCartaoOnlineToggle(ativo, disponivel) {
@@ -197,6 +222,16 @@ async function carregarConfigPixGestor() {
     const d = await r.json();
     // PIX
     _renderPixOnlineToggle(d.pix_ativo !== false);
+    // Preenche campos da chave manual se existirem
+    const keyEl  = document.getElementById('pix-manual-key-input');
+    const tipoEl = document.getElementById('pix-manual-tipo-select');
+    if (keyEl  && d.pix_key_manual)      keyEl.value  = d.pix_key_manual;
+    if (tipoEl && d.pix_key_manual_tipo) tipoEl.value = d.pix_key_manual_tipo;
+    // Preenche campos da chave manual se existirem
+    const keyEl  = document.getElementById('pix-manual-key-input');
+    const tipoEl = document.getElementById('pix-manual-tipo-select');
+    if (keyEl  && d.pix_key_manual)      keyEl.value  = d.pix_key_manual;
+    if (tipoEl && d.pix_key_manual_tipo) tipoEl.value = d.pix_key_manual_tipo;
     // Cartão — só aparece se admin configurou a public key
     const cartaoDisponivel = !!d.cartao_disponivel;
     const cartaoAtivo      = d.cartao_online_ativo !== false && cartaoDisponivel;

@@ -674,6 +674,37 @@ async function handleREST(req, res, table, params, body) {
         else inserted = parsedForEmit
       }
       if (SSE_TABLES.has(table)) emit(tenantId||payload.tenant_id, table, parsedForEmit||payload, 'INSERT')
+
+      // ── Notificação WhatsApp para PIX manual ─────────────────────────────
+      if (table === 'orders' && rawForEmit && rawForEmit.pag === 'pix_manual') {
+        const _ord = rawForEmit
+        const _tid = _ord.tenant_id
+        setImmediate(async () => {
+          try {
+            const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, ia_config, order_num_offset FROM store_config WHERE tenant_id=?').get(_tid)
+            const inst   = cfg?.evo_instance || EVO_INST
+            const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
+            const ia     = (() => { try { return JSON.parse(cfg?.ia_config||'{}') } catch { return {} } })()
+            const pixAuto = auto['pix_cobranca'] || {}
+            if (pixAuto.on === false) { log('⏭️','Automação pix_cobranca desligada'); return }
+            const offset  = parseInt(cfg?.order_num_offset) || 0
+            const idStr   = String(Math.max(1, _ord.id - offset)).padStart(3,'0')
+            const nome    = _ord.client || 'Cliente'
+            const items   = (()=>{ try{ return (JSON.parse(_ord.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') }catch{ return '' } })()
+            const total   = (parseFloat(_ord.total||0) + parseFloat(_ord.taxa||0)).toFixed(2).replace('.',',')
+            const chavePix  = ia.pix_key_manual || ''
+            const tipoChave = ia.pix_key_manual_tipo || 'aleatoria'
+            if (!chavePix) { log('⚠️','PIX manual: chave não configurada para tenant', _tid); return }
+            const msgPadrao = `💠 Olá ${nome}! Recebemos seu pedido #${idStr}.\n\n🛒 ${items}\n💰 Total: R$ ${total}\n\nPara confirmar, realize o pagamento via PIX:\n🔑 Tipo: ${tipoChave}\n📋 Chave: ${chavePix}\n\nApós o pagamento, seu pedido será confirmado. ✅`
+            const msgFinal  = pixAuto.msg ? fillVars(pixAuto.msg, { nome, id: idStr, itens: items, total, chave_pix: chavePix, tipo_chave: tipoChave }) : msgPadrao
+            const r = await sendWA(_ord.phone, msgFinal, inst)
+            if (r.ok) log('📤', `PIX manual notificado → ${_ord.phone} pedido #${idStr}`)
+            else       log('⚠️', `PIX manual falhou envio WA → ${_ord.phone}`)
+          } catch(e) { log('❌','Erro notif PIX manual:', e.message) }
+        })
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       marcarDirty(); return send(res, 201, returnRep ? inserted : { id: info.lastInsertRowid })
     } catch(e) { return send(res, 400, { error: e.message }) }
   }
