@@ -65,13 +65,11 @@ function renderPreparoFilterSection() {
   el.style.display = '';
   let cards = '';
   allPreparos.forEach((nome, id) => {
-    const icon = _preparoImgMap[id] ? `<img src="${_preparoImgMap[id]}" alt="${nome}">` : `<span style="font-size:28px">🍖</span>`;
+    const icon = _preparoImgMap[id] ? `<img src="${_preparoImgMap[id]}" alt="${nome}">` : `<svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M10 22c-2-2-3-5-1.5-8s5-4.5 8-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M22 10c2 1 3 4 1.5 7S19 21 16 20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="16" cy="16" r="3" stroke="currentColor" stroke-width="1.4"/></svg>`;
     const isOn = _filterPreparo === id;
-    const hint = isOn ? `<div style="font-size:10px;margin-top:4px;color:var(--accent);font-weight:700;opacity:.85">Ver indicações →</div>` : '';
     cards += `<div class="preparo-filter-card${isOn ? ' on' : ''}" onclick="setFilterPreparo('${id}')">
       <div class="preparo-filter-card-icon">${icon}</div>
       <div class="preparo-filter-card-label">${nome}</div>
-      ${hint}
     </div>`;
   });
 
@@ -90,11 +88,6 @@ function renderPreparoFilterSection() {
 }
 
 function setFilterPreparo(id) {
-  // Se clicar no preparo já ativo → abre sheet de indicações de porções
-  if (_filterPreparo === id && id) {
-    openPreparoDetail(id);
-    return;
-  }
   _filterPreparo = (_filterPreparo === id) ? '' : id;
   renderPreparoFilterSection();
   renderMenu();
@@ -191,7 +184,7 @@ function renderMenu() {
       html += `
       <div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}>
         <div class="dest-img">
-          ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" >` : `<span>${i.emoji||'🍽️'}</span>`}
+          ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" >` : `<span>${''}</span>`}
           <span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span>
         </div>
         <div class="dest-body">
@@ -339,7 +332,7 @@ function _updateChecklistBadge(clId) {
 }
 
 function addChecklistToCart(clId) {
-  if (!_lojaAberta) { toast('🔴','Loja fechada'); return; }
+  if (!_lojaAberta) { toast('err','Loja fechada'); return; }
   const state = _clState[clId] || {};
   if (!Object.keys(state).length) return;
 
@@ -365,7 +358,7 @@ function addChecklistToCart(clId) {
   _updateChecklistBadge(clId);
 
   updateCartFloat();
-  toast('✅', 'Itens adicionados ao carrinho!');
+  toast('ok', 'Itens adicionados ao carrinho!');
 }
 
 function itemCard(i) {
@@ -394,7 +387,7 @@ function itemCard(i) {
       ${porcaoBadge}
     </div>
     <div class="item-img">
-      ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" >` : `<span>${i.emoji||'🍽️'}</span>`}
+      ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" >` : `<span>${''}</span>`}
       ${i.promo||i.price_old ? '<span class="item-promo-badge">PROMO</span>' : ''}
       ${esg ? '<div class="item-esgotado-overlay">Esgotado</div>' : ''}
     </div>

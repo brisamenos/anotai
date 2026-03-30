@@ -5,15 +5,48 @@
 // ══════════════════════════════════════════
 //  TOAST
 // ══════════════════════════════════════════
-function toast(icon, msg) {
+
+// Ícones SVG para toasts — sem emojis
+const _TOAST_ICONS = {
+  ok:   `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" fill="rgba(34,197,94,.18)"/><path d="M4.5 8l2.5 2.5L11.5 5" stroke="#22c55e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  err:  `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" fill="rgba(239,68,68,.18)"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="#ef4444" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+  warn: `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2L14.5 13.5H1.5L8 2z" stroke="#f59e0b" stroke-width="1.3" fill="rgba(245,158,11,.15)" stroke-linejoin="round"/><path d="M8 6v3.5M8 11v.5" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+  info: `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" fill="rgba(99,102,241,.15)"/><path d="M8 7v4.5M8 5v.5" stroke="#6366f1" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+  cart: `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="#f97316" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="#f97316"/><circle cx="12" cy="13" r="1" fill="#f97316"/></svg>`,
+  meat: `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M5 12c-1.5-1-2-3-1-5 1-2 3-3 5-2.5" stroke="#16a34a" stroke-width="1.4" stroke-linecap="round"/><path d="M10 4c2 .5 3 2.5 2 4.5S9 11 7 10" stroke="#16a34a" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="8" r="2" stroke="#16a34a" stroke-width="1.3"/></svg>`,
+};
+
+// Mapa de emoji → categoria de ícone (retrocompatibilidade)
+const _EMOJI_TO_ICON = {
+  '✅':'ok','🎉':'ok','✔':'ok','☑':'ok',
+  '❌':'err','⛔':'err','🚫':'err',
+  '⚠️':'warn','⚠':'warn',
+  '🛒':'cart','🛍':'cart',
+  '🥩':'meat','🍖':'meat','🥩':'meat',
+  '💠':'info','💳':'info','💰':'info','📦':'info',
+  '🔴':'err','🟢':'ok',
+};
+
+function toast(iconOrEmoji, msg) {
   const area = document.getElementById('toast-area');
   const el   = document.createElement('div');
   el.className = 'toast';
-  // Icon type from emoji → class
-  const cls = icon === '✅' || icon === '🎉' ? 'ok'
-            : icon === '❌' || icon === '⛔' ? 'err'
-            : 'info';
-  el.innerHTML = `<span class="toast-icon ${cls}">${icon}</span><span>${msg}</span>`;
+
+  // Detecta categoria pelo emoji ou string de tipo
+  let cls  = 'info';
+  let iconHtml = '';
+  const mapped = _EMOJI_TO_ICON[iconOrEmoji];
+  if (mapped) {
+    cls = mapped;
+  } else if (['ok','err','warn','info','cart','meat'].includes(iconOrEmoji)) {
+    cls = iconOrEmoji;
+  } else {
+    // Emoji desconhecido → tenta detectar pelo conteúdo
+    cls = 'info';
+  }
+  iconHtml = _TOAST_ICONS[cls] || _TOAST_ICONS.info;
+
+  el.innerHTML = `<span class="toast-icon ${cls}">${iconHtml}</span><span>${msg}</span>`;
   area.appendChild(el);
   setTimeout(() => {
     el.classList.add('out');

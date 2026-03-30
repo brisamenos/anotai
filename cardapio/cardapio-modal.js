@@ -20,7 +20,7 @@ function openItemModal(id) {
   if (i.image_url) {
     imgEl.innerHTML = `<button class="im-close" onclick="closeItemModal()">✕</button><img src="${i.image_url}" alt="${i.name}" style="width:100%;height:100%;object-fit:cover">`;
   } else {
-    imgEl.innerHTML = `<button class="im-close" onclick="closeItemModal()">✕</button><span style="font-size:72px">${i.emoji||'🍽️'}</span>`;
+    imgEl.innerHTML = `<button class="im-close" onclick="closeItemModal()">✕</button><div style="opacity:.35"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="16" stroke="currentColor" stroke-width="1.5" opacity=".25"/><path d="M16 24h16M24 16v16" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".25"/></svg></div>`;
   }
   document.getElementById('im-name').textContent = i.name;
   document.getElementById('im-desc').textContent = i.description || '';
@@ -41,7 +41,7 @@ function openItemModal(id) {
   const porcaoRefM = porcaoGrpM?.gramas || 0;
   const pesosGrpM  = (i.custom_groups || []).find(g => g.tipo === 'pesos');
   if (porcaoRefM > 0 && i.price > 0) {
-    porcaoEl.textContent = `🥩 Porção de ${porcaoRefM}g · R$ ${fmt(i.price * porcaoRefM / 1000)}`;
+    porcaoEl.textContent = `${porcaoRefM}g · R$ ${fmt(i.price * porcaoRefM / 1000)}`;
     porcaoEl.style.display = 'inline-flex';
     // Se tem pesos disponíveis, torna clicável para selecionar gramas
     if (pesosGrpM?.valores?.length) {
@@ -114,7 +114,7 @@ function openItemModal(id) {
           const nome = o.nome || o.id || '';
           const icon = o.icon
             ? `<img src="${o.icon}" style="width:32px;height:32px;object-fit:contain;display:block" onerror="this.style.display='none'">`
-            : `<span style="font-size:22px;display:block;line-height:1">🔹</span>`;
+            : `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" opacity=".5"/></svg>`;
           return `<div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 12px;background:var(--s2,#1a1a1a);border:1.5px solid var(--border,#2a2a2a);border-radius:12px;min-width:70px;max-width:90px;text-align:center;flex-shrink:0">
             <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.04);border-radius:10px">${icon}</div>
             <span style="font-size:11px;font-weight:600;color:var(--text);line-height:1.2">${nome}</span>
@@ -943,7 +943,7 @@ function imConfirm() {
   for (const g of grupos) {
     if (g.tipo === 'radio' && g.min !== 0) {
       const sel = _imGruposState[g.nome] || [];
-      if (!sel.length) { toast('⚠️', `Escolha: ${g.nome}`); return; }
+      if (!sel.length) { toast('warn', `Escolha: ${g.nome}`); return; }
     }
     // complementos adicionais (checkbox) são opcionais
   }
@@ -966,7 +966,7 @@ function imConfirm() {
 
   // Pizza meio a meio — precisa de 2ª metade
   if (isPizza && !_halfItem) {
-    toast('🍕', 'Escolha como quer sua pizza!');
+    toast('warn', 'Escolha como quer sua pizza!');
     document.getElementById('half-section').scrollIntoView({behavior:'smooth',block:'center'});
     return;
   }
@@ -997,7 +997,7 @@ function imConfirm() {
   if (_isAcougueItem(i) && !_isKitItem(i)) {
     const totalPesoSel = Object.values(_acougueCortes).reduce((s, v) => s + (v.peso || 0), 0);
     if (!totalPesoSel) {
-      toast('🥩', 'Selecione ao menos um corte e o peso!');
+      toast('warn', 'Selecione ao menos um corte e o peso!');
       return;
     }
     const acDesc = _buildAcougueDesc();
@@ -1013,7 +1013,7 @@ function imConfirm() {
     const totalKg = totalPesoSel >= 1000
       ? (totalPesoSel/1000).toFixed(1).replace('.',',') + ' kg'
       : totalPesoSel + 'g';
-    toast('🥩', `${i.name} — ${totalKg} adicionado!`);
+    toast('meat', `${i.name} — ${totalKg} adicionado!`);
     return;
   }
 
@@ -1049,5 +1049,6 @@ function imConfirm() {
 
   closeItemModal();
   updateCartFloat();
-  toast('🛒', `${isPizza && _halfItem && !_isWholeFlavorSelected() ? 'Pizza meio a meio' : i.name} adicionado!`);
+  toast('cart', `${isPizza && _halfItem && !_isWholeFlavorSelected() ? 'Pizza meio a meio' : i.name} adicionado!`);
 }
+

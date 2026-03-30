@@ -215,7 +215,7 @@ function _renderKitGrupos(item, wrap, grupos) {
       const qty   = match ? match[1].trim() : '';
       const nome  = match ? item.slice(match[1].length).trim() : item;
       return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
-        <div style="width:36px;height:36px;border-radius:9px;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.2);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🥩</div>
+        <div style="width:36px;height:36px;border-radius:9px;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.2);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M17 7c2 1.5 3.5 5 2 8s-5 5-8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.4"/></svg></div>
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:600;color:var(--text)">${nome}</div>
           ${qty ? `<div style="font-size:11.5px;color:var(--accent);font-weight:700;margin-top:1px">${qty}</div>` : ''}
@@ -252,9 +252,9 @@ function _renderKitGrupos(item, wrap, grupos) {
   };
 
   const infoHtml = [
-    _chipRow(preparosGrp,  'Forma de preparo', '🍳'),
-    _chipRow(ocasiaoGrp,   'Tipo de ocasião',  '🎯'),
-    _chipRow(armazenGrp,   'Armazenamento',    '❄️'),
+    _chipRow(preparosGrp,  'Forma de preparo', '<svg width=\'20\' height=\'20\' viewBox=\'0 0 24 24\' fill=\'none\'><path d=\'M3 17h14a2 2 0 0 0 0-4H3\' stroke=\'currentColor\' stroke-width=\'1.5\' stroke-linecap=\'round\'/></svg>'),
+    _chipRow(ocasiaoGrp,   'Tipo de ocasião',  '<svg width=\'20\' height=\'20\' viewBox=\'0 0 24 24\' fill=\'none\'><circle cx=\'12\' cy=\'12\' r=\'9\' stroke=\'currentColor\' stroke-width=\'1.5\'/><circle cx=\'12\' cy=\'12\' r=\'5\' stroke=\'currentColor\' stroke-width=\'1.4\'/><circle cx=\'12\' cy=\'12\' r=\'1.5\' fill=\'currentColor\'/></svg>'),
+    _chipRow(armazenGrp,   'Armazenamento',    '<svg width=\'20\' height=\'20\' viewBox=\'0 0 24 24\' fill=\'none\'><path d=\'M12 3v18M3 12h18M5.5 5.5l13 13M18.5 5.5l-13 13\' stroke=\'currentColor\' stroke-width=\'1.4\' stroke-linecap=\'round\'/></svg>'),
   ].join('');
 
   if (infoHtml) {
@@ -548,7 +548,7 @@ function openPreparoDetail(preparoId) {
 
   const itensHTML = !itensComPreparo.length
     ? `<div style="text-align:center;padding:32px 0;color:var(--muted);font-size:13px">
-        <div style="font-size:36px;margin-bottom:10px">🔍</div>
+        <div style="margin-bottom:10px;opacity:.4"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="14" cy="14" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>
         Nenhuma carne indicada para este preparo.
        </div>`
     : itensComPreparo.map(i => {
@@ -562,7 +562,7 @@ function openPreparoDetail(preparoId) {
 
         const imgEl = i.image_url
           ? `<img src="${i.image_url}" style="width:100%;height:100%;object-fit:cover;border-radius:10px">`
-          : `<span style="font-size:30px">${i.emoji || '🥩'}</span>`;
+          : `<span style="font-size:30px"><svg width='24' height='24' viewBox='0 0 24 24' fill='none'><path d='M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/><circle cx='12' cy='12' r='3' stroke='currentColor' stroke-width='1.4'/></svg></span>`;
 
         return `<div onclick="closePreparoDetail();openItemModal(${i.id})" style="display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent" onmouseenter="this.style.opacity='.8'" onmouseleave="this.style.opacity='1'">
           <div style="width:56px;height:56px;border-radius:10px;overflow:hidden;flex-shrink:0;background:var(--surface2);display:flex;align-items:center;justify-content:center">${imgEl}</div>
@@ -587,7 +587,7 @@ function openPreparoDetail(preparoId) {
     <!-- Header -->
     <div style="padding:14px 20px 12px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:14px">
       <div style="width:48px;height:48px;border-radius:12px;background:var(--surface2);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">
-        ${iconPreparo ? `<img src="${iconPreparo}" style="width:36px;height:36px;object-fit:contain" onerror="this.parentElement.innerHTML='<span style=\\'font-size:24px\\'>🍖</span>'">` : '<span style="font-size:26px">🍖</span>'}
+        ${iconPreparo ? `<img src="${iconPreparo}" style="width:36px;height:36px;object-fit:contain" onerror="this.parentElement.innerHTML='<svg width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\'><path d=\'M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5\' stroke=\'currentColor\' stroke-width=\'1.5\' stroke-linecap=\'round\'/><circle cx=\'12\' cy=\'12\' r=\'3\' stroke=\'currentColor\' stroke-width=\'1.4\'/></svg>'">` : '<svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.4"/></svg>'}
       </div>
       <div style="flex:1">
         <div style="font-weight:800;font-size:16px">${nomePreparo}</div>
@@ -635,7 +635,7 @@ function grpToggle(el, grupoNome, optNome, preco, tipo, maxSel) {
     } else {
       const totalSel = state.reduce((s,o) => s + (o.qty||1), 0);
       if (maxSel > 1 && totalSel >= maxSel) {
-        toast('⚠️', `Máximo ${maxSel} opções para ${grupoNome}`);
+        toast('warn', `Máximo ${maxSel} opções para ${grupoNome}`);
         return;
       }
       state.push({ nome: optNome, preco, qty: 1 });
@@ -732,7 +732,7 @@ function renderImXsell(item) {
 
   const cards = others.map(o => `
     <div class="xsell-card" id="xsell_${o.id}" onclick="xsellToggle(${o.id})" style="position:relative">
-      <div class="xsell-img">${o.image_url ? `<img src="${o.image_url}" >` : (o.emoji||'🍽️')}</div>
+      <div class="xsell-img">${o.image_url ? `<img src="${o.image_url}" >` : (o.emoji||'')}</div>
       <div class="xsell-body">
         <div class="xsell-name">${o.name}</div>
         <div class="xsell-price">R$ ${fmt(o.price)}</div>
@@ -760,3 +760,7 @@ function xsellToggle(itemId) {
     card.classList.add('on');
   }
 }
+
+
+
+
