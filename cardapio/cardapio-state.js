@@ -44,7 +44,6 @@ let _lojaAberta  = true;
 // ── Tracking ──
 let _trackOrderId= null;
 let _trackChannel= null;
-let _initialOrderStatus = 'analise';
 let _waOptIn     = false;  // reservado para uso futuro
 
 // ── Numeração de pedidos ──
@@ -54,9 +53,8 @@ function _orderNum(id) { return Math.max(1, id - _orderNumOffset); }
 // ── PIX ──
 let _pixPollTimer    = null;
 let _pixMpId         = null;
-let _pixAtivoGestor  = false;
+let _pixAtivoGestor  = true;
 let _pixKeyManual    = '';
-let _pixKeyManualTipo  = 'aleatoria';
 let _pixKeyManualBanco = '';
 
 // ── Cartão de Crédito MP ──

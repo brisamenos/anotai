@@ -306,10 +306,6 @@ const MIGRATIONS = [
   { version:27, description:'store_tema em store_config (tema visual do cardapio publico)', up:
     `ALTER TABLE store_config ADD COLUMN store_tema TEXT DEFAULT 'classico'`
   },
-  { version:28, description:'time e pag_momento em orders', up:[
-    `ALTER TABLE orders ADD COLUMN time TEXT`,
-    `ALTER TABLE orders ADD COLUMN pag_momento TEXT DEFAULT 'entrega'`
-  ]},
 ]
 
 function runMigrations() {
@@ -518,7 +514,7 @@ const TABLE_COLS = {
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
-  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','garcom_id','garcom_nome','customer_id','created_at'],
+  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','troco','status','mesa_num','garcom_id','garcom_nome','customer_id','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','updated_at'],
   fidelidade:   ['id','tenant_id','name','phone','birthday','pts','max_pts','orders_count','resgates','created_at'],
@@ -678,37 +674,6 @@ async function handleREST(req, res, table, params, body) {
         else inserted = parsedForEmit
       }
       if (SSE_TABLES.has(table)) emit(tenantId||payload.tenant_id, table, parsedForEmit||payload, 'INSERT')
-
-      // ── Notificação WhatsApp para PIX manual ─────────────────────────────
-      if (table === 'orders' && rawForEmit && rawForEmit.pag === 'pix_manual') {
-        const _ord = rawForEmit
-        const _tid = _ord.tenant_id
-        setImmediate(async () => {
-          try {
-            const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, ia_config, order_num_offset FROM store_config WHERE tenant_id=?').get(_tid)
-            const inst   = cfg?.evo_instance || EVO_INST
-            const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
-            const ia     = (() => { try { return JSON.parse(cfg?.ia_config||'{}') } catch { return {} } })()
-            const pixAuto = auto['pix_cobranca'] || {}
-            if (pixAuto.on === false) { log('⏭️','Automação pix_cobranca desligada'); return }
-            const offset  = parseInt(cfg?.order_num_offset) || 0
-            const idStr   = String(Math.max(1, _ord.id - offset)).padStart(3,'0')
-            const nome    = _ord.client || 'Cliente'
-            const items   = (()=>{ try{ return (JSON.parse(_ord.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') }catch{ return '' } })()
-            const total   = (parseFloat(_ord.total||0) + parseFloat(_ord.taxa||0)).toFixed(2).replace('.',',')
-            const chavePix  = ia.pix_key_manual || ''
-            const tipoChave = ia.pix_key_manual_tipo || 'aleatoria'
-            if (!chavePix) { log('⚠️','PIX manual: chave não configurada para tenant', _tid); return }
-            const msgPadrao = `💠 Olá ${nome}! Recebemos seu pedido #${idStr}.\n\n🛒 ${items}\n💰 Total: R$ ${total}\n\nPara confirmar, realize o pagamento via PIX:\n🔑 Tipo: ${tipoChave}\n📋 Chave: ${chavePix}\n\nApós o pagamento, seu pedido será confirmado. ✅`
-            const msgFinal  = pixAuto.msg ? fillVars(pixAuto.msg, { nome, id: idStr, itens: items, total, chave_pix: chavePix, tipo_chave: tipoChave }) : msgPadrao
-            const r = await sendWA(_ord.phone, msgFinal, inst)
-            if (r.ok) log('📤', `PIX manual notificado → ${_ord.phone} pedido #${idStr}`)
-            else       log('⚠️', `PIX manual falhou envio WA → ${_ord.phone}`)
-          } catch(e) { log('❌','Erro notif PIX manual:', e.message) }
-        })
-      }
-      // ─────────────────────────────────────────────────────────────────────
-
       marcarDirty(); return send(res, 201, returnRep ? inserted : { id: info.lastInsertRowid })
     } catch(e) { return send(res, 400, { error: e.message }) }
   }
@@ -860,29 +825,6 @@ async function handleOrderStatus(req, res) {
     const updated = db.prepare("SELECT * FROM orders WHERE id=?").get(order_id)
     emit(tid,'orders',parseRow('orders',updated),'UPDATE')
     send(res,200,{ok:true,order:parseRow('orders',updated)})
-
-    // ── PIX manual confirmado pelo gestor ─────────────────────────────────
-    if (new_status === 'analise' && oldStatus === 'aguardando_pix' && order.pag === 'pix_manual') {
-      setImmediate(async () => {
-        try {
-          const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset FROM store_config WHERE tenant_id=?').get(tid)
-          const inst   = cfg?.evo_instance || EVO_INST
-          const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
-          const pixConf = auto['pix_confirmado'] || {}
-          if (pixConf.on === false) { log('⏭️','Automação pix_confirmado desligada'); return }
-          const offset = parseInt(cfg?.order_num_offset) || 0
-          const idStr  = String(Math.max(1, order.id - offset)).padStart(3,'0')
-          const nome   = order.client || 'Cliente'
-          const items  = (()=>{ try{ return (JSON.parse(order.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') }catch{ return '' } })()
-          const total  = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
-          const msgPad = `✅ *Pagamento confirmado!*\n\nOlá *${nome}*, recebemos seu pagamento PIX do pedido *#${idStr}* com sucesso!\n\n🛒 ${items}\n💰 Total: R$ ${total}\n\nSeu pedido está sendo preparado. Obrigado! 🎉`
-          const msgFin = pixConf.msg ? fillVars(pixConf.msg, { nome, id: idStr, itens: items, total }) : msgPad
-          const r = await sendWA(order.phone, msgFin, inst)
-          if (r.ok) log('📤', `PIX manual confirmado notificado → ${order.phone} #${idStr}`)
-        } catch(e) { log('❌','Erro notif pix_confirmado manual:', e.message) }
-      })
-    }
-    // ─────────────────────────────────────────────────────────────────────
 
     // ── Cashback automático ─────────────────────────────
     if (['finalizado','entregue'].includes(new_status) && !['finalizado','entregue'].includes(oldStatus)) {

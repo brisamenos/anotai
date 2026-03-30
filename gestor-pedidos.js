@@ -86,7 +86,7 @@ function filterKanban(type) {
 // KANBAN
 // ─────────────────────────────────────────
 function renderKanban(){
-  const statuses=['aguardando_pix','analise','producao','pronto'];
+  const statuses=['analise','producao','pronto'];
   statuses.forEach(st=>{
     const col=document.getElementById('col-'+st);
     const cnt=document.getElementById('cnt-'+st);
@@ -169,7 +169,7 @@ function renderKanban(){
       renderKanban();
     });
   });
-  document.getElementById('pedidos-badge').textContent=ordersKanban.filter(o=>o.status==='analise'||o.status==='aguardando_pix').length||'';
+  document.getElementById('pedidos-badge').textContent=ordersKanban.filter(o=>o.status==='analise').length||'';
 }
 
 function openOrderDetail(id) {
@@ -180,7 +180,6 @@ function openOrderDetail(id) {
   // Número e status
   document.getElementById('od-id').textContent = 'Pedido #' + o.num;
   const statusMap = {
-    aguardando_pix: ['badge-aguardando-pix', '💠 Aguardando PIX'],
     analise:   ['badge-analise',   'Em análise'],
     producao:  ['badge-producao',  'Em produção'],
     pronto:    ['badge-pronto',    'Pronto para entrega'],

@@ -1311,12 +1311,6 @@ input,textarea{font-family:inherit}
   transition:all .18s;font-family:'DM Sans',sans-serif;
 }
 .troco-confirm:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(249,115,22,.4)}
-.troco-cancel{
-  width:100%;padding:11px;border-radius:14px;border:1.5px solid var(--border);
-  background:transparent;color:var(--muted);font-size:13px;font-weight:600;
-  cursor:pointer;margin-top:8px;transition:all .18s;font-family:'DM Sans',sans-serif;
-}
-.troco-cancel:hover{color:var(--text);border-color:var(--muted)}
 /* ═══════════════════════════════════════
    MODAL: PAGAR AGORA ou NA ENTREGA
 ═══════════════════════════════════════ */
@@ -2519,9 +2513,6 @@ input,textarea{font-family:inherit}
     <button class="troco-confirm" onclick="trocoConfirmar()">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar Pedido
     </button>
-    <button class="troco-cancel" onclick="trocoModalCancelar()">
-      Cancelar — escolher outro pagamento
-    </button>
   </div>
 </div>
 
@@ -2553,9 +2544,6 @@ input,textarea{font-family:inherit}
     <button class="pag-confirm" onclick="pagConfirmar()">
       <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;margin-right:6px"><path d="M3 8l3.5 3.5L13 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Confirmar
-    </button>
-    <button class="troco-cancel" onclick="pagModalCancelar()">
-      Cancelar — escolher outro pagamento
     </button>
   </div>
 </div>
