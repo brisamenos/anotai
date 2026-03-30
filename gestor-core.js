@@ -525,8 +525,8 @@ function subscribeOrders() {
     })
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, p => {
       const idx = ordersKanban.findIndex(x => x.id === p.new.id);
-      // Pedido PIX confirmado — entra no kanban agora (online pix_mp ou manual pix_manual)
-      if (idx === -1 && p.new.status === 'analise' && (p.new.pag === 'pix_mp' || p.new.pag === 'pix_manual')) {
+      // Pedido PIX confirmado — entra no kanban agora (online pix_mp/pix ou manual pix_manual)
+      if (idx === -1 && p.new.status === 'analise' && (p.new.pag === 'pix_mp' || p.new.pag === 'pix_manual' || p.new.pag === 'pix')) {
         ordersKanban.unshift(mapOrder(p.new));
         renderKanban();
         playOrderSound();

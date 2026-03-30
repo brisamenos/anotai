@@ -348,9 +348,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
             const idStr  = String(Math.max(1, (body.order_id || 0) - offset)).padStart(3,'0')
             const nome   = client || 'Cliente'
             const fmtVal = parseFloat(valor).toFixed(2).replace('.',',')
-            const msgPad = `💠 *PIX — Pedido #${idStr}*\n\nOlá *${nome}*! Aqui está seu código PIX Copia e Cola:\n\n\`${qr}\`\n\n💰 Valor: *R$ ${fmtVal}*\n\nCopie o código acima e cole no seu app de pagamentos. ✅`
-            const msgFin = pixCop.msg ? fillVars(pixCop.msg, { nome, id: idStr, total: fmtVal, codigo_pix: qr }) : msgPad
-            await sendWA(body.phone, msgFin, inst)
+            // Mensagem 1: texto com instruções (customizável pelo gestor, sem o código)
+            const msgPadTxt = `💠 *PIX — Pedido #${idStr}*\n\nOlá *${nome}*! Para confirmar seu pedido, pague via PIX Copia e Cola.\n\n💰 Valor: *R$ ${fmtVal}*\n\nO código PIX será enviado na próxima mensagem — é só copiar e colar no seu app de pagamentos. 👇`
+            const msgTxt = pixCop.msg ? fillVars(pixCop.msg.replace('{codigo_pix}', '').trim(), { nome, id: idStr, total: fmtVal, codigo_pix: '' }).trim() : msgPadTxt
+            await sendWA(body.phone, msgTxt, inst)
+            // Mensagem 2: só o código (separado para facilitar cópia)
+            await new Promise(r => setTimeout(r, 1000))
+            await sendWA(body.phone, qr, inst)
             log('📤', `PIX copia e cola enviado WA → ${body.phone}`)
           } catch(e) { log('⚠️', 'Erro WA PIX copia e cola:', e.message) }
         })
