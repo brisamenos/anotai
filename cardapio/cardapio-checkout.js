@@ -178,6 +178,12 @@ function closeTrocoModal() {
   document.getElementById('troco-overlay').classList.remove('on');
 }
 
+function trocoModalCancelar() {
+  closeTrocoModal();
+  selectedPay = '';
+  document.querySelectorAll('.pay-opt').forEach(b => b.classList.remove('on'));
+}
+
 function trocoEscolha(el, tipo) {
   _trocoEscolha = tipo;
   document.getElementById('troco-opt-nao').classList.toggle('on', tipo === 'nao');
@@ -255,7 +261,7 @@ async function _doSubmitOrder(addr, troco) {
     const { data: order, error } = await sb.from('orders').insert({
       client: name, phone, addr,
       items, total: grandTotal(), taxa: getTaxa(),
-      status: selectedPay === 'pix' && _pixAtivoGestor ? 'aguardando_pix'
+      status: selectedPay === 'pix' ? 'aguardando_pix'
             : selectedPay === 'cartao_mp' ? 'aguardando_cartao'
             : 'analise',
       time,
@@ -314,7 +320,7 @@ async function _doSubmitOrder(addr, troco) {
     const inv = document.getElementById('invite-signup');
     if (inv && !_customer) inv.style.display = 'flex';
 
-    startTracking(order.id, items, name, addr);
+    startTracking(order.id, items, name, addr, order.status);
 
     // ── PIX: gera QR Code MP ou exibe chave manual ──
     if (selectedPay === 'pix') {
@@ -421,7 +427,7 @@ async function _iniciarFluxoPix(order) {
     const pr = await fetch('/api/pix/criar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
-      body: JSON.stringify({ valor: order.total, order_id: order.id, client: order.client })
+      body: JSON.stringify({ valor: order.total, order_id: order.id, client: order.client, phone: order.phone })
     });
     const pd = pr.ok ? await pr.json() : null;
     if (pr.ok && pd?.qr_code) {
@@ -490,6 +496,12 @@ function openPagModal(tipo) {
 
 function closePagModal() {
   document.getElementById('pag-overlay').classList.remove('on');
+}
+
+function pagModalCancelar() {
+  closePagModal();
+  selectedPay = '';
+  document.querySelectorAll('.pay-opt').forEach(b => b.classList.remove('on'));
 }
 
 function pagEscolha(tipo) {

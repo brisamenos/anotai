@@ -13,6 +13,28 @@ const path   = require('path')
 const zlib   = require('zlib')
 const crypto = require('crypto')
 
+// ── Helper: notifica cliente quando PIX é confirmado (online ou manual) ──────
+function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
+  if (!order?.phone) return
+  setImmediate(async () => {
+    try {
+      const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset FROM store_config WHERE tenant_id=?').get(tid)
+      const inst   = cfg?.evo_instance || EVO_INST
+      const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
+      const pixConf = auto['pix_confirmado'] || {}
+      if (pixConf.on === false) return
+      const offset = parseInt(cfg?.order_num_offset) || 0
+      const idStr  = String(Math.max(1, order.id - offset)).padStart(3,'0')
+      const nome   = order.client || 'Cliente'
+      const items  = (()=>{ try{ return (JSON.parse(order.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') }catch{ return '' } })()
+      const total  = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
+      const msgPad = `✅ *Pagamento confirmado!*\n\nOlá *${nome}*, recebemos seu pagamento PIX do pedido *#${idStr}* com sucesso!\n\n🛒 ${items}\n💰 Total: R$ ${total}\n\nSeu pedido está sendo preparado. Obrigado! 🎉`
+      const msgFin = pixConf.msg ? fillVars(pixConf.msg, { nome, id: idStr, itens: items, total }) : msgPad
+      await sendWA(order.phone, msgFin, inst)
+    } catch(e) { /* silencia erros de notificação */ }
+  })
+}
+
 module.exports = async function handleRoutes(req, res, ctx) {
   const { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
           validarSessaoAdmin, criarSessaoAdmin, fazerBackup, restaurarBackup, getTenantId,
@@ -312,6 +334,28 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
       log('💳', `PIX criado: R$${valor} tenant=${tid} mp_id=${mpData.id}`)
       send(res, 200, { ok: true, mp_payment_id: mpData.id, qr_code: qr, qr_code_base64: qrB64, valor, taxa, valor_liquido: valorLiq, status: mpData.status })
+
+      // ── Envia copia e cola via WhatsApp ────────────────────────────────────
+      if (qr && body.phone) {
+        setImmediate(async () => {
+          try {
+            const cfgWa  = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset FROM store_config WHERE tenant_id=?').get(tid)
+            const inst   = cfgWa?.evo_instance || EVO_INST
+            const auto   = (() => { try { return JSON.parse(cfgWa?.evo_automacoes||'{}') } catch { return {} } })()
+            const pixCop = auto['pix_copia_cola'] || {}
+            if (pixCop.on === false) return
+            const offset = parseInt(cfgWa?.order_num_offset) || 0
+            const idStr  = String(Math.max(1, (body.order_id || 0) - offset)).padStart(3,'0')
+            const nome   = client || 'Cliente'
+            const fmtVal = parseFloat(valor).toFixed(2).replace('.',',')
+            const msgPad = `💠 *PIX — Pedido #${idStr}*\n\nOlá *${nome}*! Aqui está seu código PIX Copia e Cola:\n\n\`${qr}\`\n\n💰 Valor: *R$ ${fmtVal}*\n\nCopie o código acima e cole no seu app de pagamentos. ✅`
+            const msgFin = pixCop.msg ? fillVars(pixCop.msg, { nome, id: idStr, total: fmtVal, codigo_pix: qr }) : msgPad
+            await sendWA(body.phone, msgFin, inst)
+            log('📤', `PIX copia e cola enviado WA → ${body.phone}`)
+          } catch(e) { log('⚠️', 'Erro WA PIX copia e cola:', e.message) }
+        })
+      }
+      // ──────────────────────────────────────────────────────────────────────
     } catch (e) { log('❌', 'MP fetch erro:', { error: e.message }); send(res, 500, { error: 'Erro ao criar PIX: ' + e.message }) }
     return true
   }
@@ -342,6 +386,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
               const _fo1 = db.prepare("SELECT * FROM orders WHERE id=?").get(rowAtual.order_id)
               const _it1 = _fo1 && typeof _fo1.items==='string' ? (() => { try{return JSON.parse(_fo1.items)}catch{return []} })() : (_fo1?.items||[])
               sseBroadcast(`orders-rt:${rowAtual.tenant_id}`, `orders:UPDATE`, _fo1 ? {..._fo1, items:_it1, status:'analise', pag:'pix_mp'} : { id: rowAtual.order_id, status: 'analise', pag: 'pix_mp' })
+              // Notifica cliente: pagamento PIX confirmado
+              _notificarPixConfirmado(rowAtual.tenant_id, _fo1, sendWA, fillVars, EVO_INST, db)
             }
           }
         }
@@ -374,7 +420,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const gCfg = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
       const gIa  = safeJson(gCfg?.ia_config)
       const mpConfigurado  = !!(gIa.mp_token || MP_TOKEN)
-      const pixAtivo       = ia.pix_ativo !== false
+      const pixAtivo       = ia.pix_ativo === true
       const pagOnlineAtivo = ia.pag_online_ativo !== false
       const cartaoDisponivel   = !!(gIa.mp_public_key)           // só disponível se admin configurou a public key
       const cartaoOnlineAtivo  = ia.cartao_online_ativo !== false && cartaoDisponivel
@@ -437,15 +483,18 @@ module.exports = async function handleRoutes(req, res, ctx) {
           log('✅', `Webhook MP APROVADO: R$${row.valor} tenant=${row.tenant_id}`)
           if (row.order_id) {
             const pedAtual = db.prepare("SELECT status FROM orders WHERE id=?").get(row.order_id)
-            if (pedAtual?.status === 'aguardando_pix') {
+            const eraAguardando = pedAtual?.status === 'aguardando_pix'
+            if (eraAguardando) {
               db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=?").run(row.order_id)
             } else {
               db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=?").run(row.order_id)
             }
-            const _ns4 = pedAtual?.status === 'aguardando_pix' ? 'analise' : pedAtual?.status
+            const _ns4 = eraAguardando ? 'analise' : pedAtual?.status
             const _fo4 = db.prepare("SELECT * FROM orders WHERE id=?").get(row.order_id)
             const _it4 = _fo4 && typeof _fo4.items==='string' ? (() => { try{return JSON.parse(_fo4.items)}catch{return []} })() : (_fo4?.items||[])
             sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, _fo4 ? {..._fo4, items:_it4, status:_ns4, pag:'pix_mp'} : { id: row.order_id, status: _ns4, pag: 'pix_mp' })
+            // Notifica cliente: pagamento PIX confirmado
+            if (eraAguardando) _notificarPixConfirmado(row.tenant_id, _fo4, sendWA, fillVars, EVO_INST, db)
           }
         }
       }

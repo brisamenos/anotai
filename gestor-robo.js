@@ -337,7 +337,7 @@ function _iniciarSchedulerAniversario() {
 }
 
 async function evoSalvarAutomacoes() {
-  const tipos = ['recebido','confirmado','pronto','entrega','cancelado','aniversario','boasvindas','avaliacao','retorno','promocao','pontos','cashback','conta'];
+  const tipos = ['pix_cobranca','pix_copia_cola','pix_confirmado','recebido','confirmado','pronto','entrega','cancelado','aniversario','boasvindas','avaliacao','retorno','promocao','pontos','cashback','conta'];
   const data = {};
   tipos.forEach(tipo => {
     data[tipo] = {

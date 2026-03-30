@@ -262,6 +262,13 @@ if(window.visualViewport){window.visualViewport.addEventListener('resize',setVH)
     </div>
   </div>
   <div class="kanban" id="kanban-board">
+    <!-- Aguardando PIX Manual -->
+    <div class="kol kol-aguardando_pix" style="border-top:3px solid rgba(249,115,22,.6)">
+      <div class="kol-head">
+        <div class="kol-title">💠 Aguardando PIX <div class="kol-cnt" id="cnt-aguardando_pix">0</div></div>
+      </div>
+      <div class="kol-body" id="col-aguardando_pix"></div>
+    </div>
     <!-- Em análise -->
     <div class="kol kol-analise">
       <div class="kol-head">
@@ -841,6 +848,66 @@ if(window.visualViewport){window.visualViewport.addEventListener('resize',setVH)
       </div>
 
       <div style="display:flex;flex-direction:column;gap:12px">
+
+        <!-- Cobrança PIX Manual -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(249,115,22,.15);display:flex;align-items:center;justify-content:center;font-size:18px">💠</div>
+              <div><div style="font-weight:600;font-size:13.5px">Cobrança PIX Manual</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando o cliente faz pedido com PIX manual. Use {chave_pix} e {tipo_chave}.</div></div>
+            </div>
+            <div class="toggle on" id="auto-toggle-pix_cobranca" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-pix_cobranca" rows="6" style="font-size:12.5px">💠 Olá {nome}! Recebemos seu pedido #{id}.
+
+🛒 {itens}
+💰 Total: R$ {total}
+
+Para confirmar, realize o pagamento via PIX:
+🔑 Tipo: {tipo_chave}
+📋 Chave: {chave_pix}
+
+Após o pagamento, seu pedido será confirmado automaticamente. ✅</textarea>
+        </div>
+
+        <!-- PIX Copia e Cola (PIX online) -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(99,102,241,.15);display:flex;align-items:center;justify-content:center;font-size:18px">📋</div>
+              <div><div style="font-weight:600;font-size:13.5px">PIX Copia e Cola</div><div style="font-size:11.5px;color:var(--muted)">Enviado após gerar o QR Code. Use {codigo_pix} para o código e {total} para o valor.</div></div>
+            </div>
+            <div class="toggle on" id="auto-toggle-pix_copia_cola" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-pix_copia_cola" rows="5" style="font-size:12.5px">💠 *PIX — Pedido #{id}*
+
+Olá *{nome}*! Aqui está seu código PIX Copia e Cola:
+
+`{codigo_pix}`
+
+💰 Valor: *R$ {total}*
+
+Copie o código acima e cole no seu app de pagamentos. ✅</textarea>
+        </div>
+
+        <!-- PIX Confirmado -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(34,197,94,.15);display:flex;align-items:center;justify-content:center;font-size:18px">✅</div>
+              <div><div style="font-weight:600;font-size:13.5px">Pagamento PIX Confirmado</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando o pagamento PIX é confirmado (online ou manual).</div></div>
+            </div>
+            <div class="toggle on" id="auto-toggle-pix_confirmado" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-pix_confirmado" rows="5" style="font-size:12.5px">✅ *Pagamento confirmado!*
+
+Olá *{nome}*, recebemos seu pagamento PIX do pedido *#{id}* com sucesso!
+
+🛒 {itens}
+💰 Total: R$ {total}
+
+Seu pedido está sendo preparado. Obrigado! 🎉</textarea>
+        </div>
 
         <!-- Pedido recebido (analise) -->
         <div class="card" style="padding:18px">
@@ -3348,6 +3415,28 @@ Use no seu próximo pedido 🛍️</textarea>
         </div>
       </div>
       <button id="btn-pix-online-toggle" class="btn bp" onclick="togglePixOnline()" style="min-width:90px;flex-shrink:0">…</button>
+    </div>
+    <!-- Seção chave PIX manual (aparece quando PIX Online está desligado) -->
+    <div id="pix-manual-config-wrap" style="display:none;margin-top:12px;padding:14px 16px;background:rgba(249,115,22,.05);border:1.5px dashed rgba(249,115,22,.35);border-radius:12px">
+      <div style="font-size:12.5px;font-weight:700;margin-bottom:10px;color:var(--accent)">🔑 Chave PIX para recebimento manual</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;line-height:1.5">Esta chave será enviada automaticamente ao cliente pelo WhatsApp quando ele pagar via PIX. O pedido fica como <strong>pendente</strong> até você confirmar o recebimento.</div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end">
+        <div>
+          <label class="form-label" style="font-size:11.5px">Chave PIX</label>
+          <input class="form-input" id="pix-manual-key-input" placeholder="CPF, e-mail, telefone ou chave aleatória" style="font-size:13px">
+        </div>
+        <div>
+          <label class="form-label" style="font-size:11.5px">Tipo</label>
+          <div class="sw"><select class="form-input" id="pix-manual-tipo-select" style="font-size:13px">
+            <option value="cpf">CPF</option>
+            <option value="cnpj">CNPJ</option>
+            <option value="email">E-mail</option>
+            <option value="telefone">Telefone</option>
+            <option value="aleatoria" selected>Aleatória</option>
+          </select></div>
+        </div>
+      </div>
+      <button id="btn-salvar-pix-manual" class="btn bp" onclick="salvarPixManual()" style="margin-top:12px;width:100%">Salvar chave PIX</button>
     </div>
 
     <!-- Cartão Online -->

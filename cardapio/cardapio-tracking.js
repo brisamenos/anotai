@@ -7,6 +7,12 @@
 // ══════════════════════════════════════════
 const STEPS = [
   {
+    key:   ['aguardando_pix'],
+    icon:  '💠',
+    title: 'Aguardando pagamento',
+    desc:  'Faça o PIX para a chave enviada no WhatsApp. Assim que confirmarmos, seu pedido entra na fila!'
+  },
+  {
     key:   ['analise'],
     icon:  '✓',
     title: 'Pedido recebido!',
@@ -25,14 +31,15 @@ const STEPS = [
     desc:  'Seu pedido está a caminho. Logo chegará!'
   },
 ];
-const STATUS_ORDER = ['analise','producao','pronto','saiu','entregue','finalizado'];
+const STATUS_ORDER = ['aguardando_pix','analise','producao','pronto','saiu','entregue','finalizado'];
 
 function stepIndexFor(status) {
   return STEPS.findIndex(s => s.key.includes(status));
 }
 
-function startTracking(orderId, items, client, addr) {
+function startTracking(orderId, items, client, addr, initialStatus) {
   _trackOrderId = orderId;
+  _initialOrderStatus = initialStatus || 'analise';
   const fab = document.getElementById('track-fab');
   fab.classList.add('show');
   document.getElementById('track-num').textContent = '#' + String(_orderNum(orderId)).padStart(3,'0');
@@ -46,7 +53,7 @@ function startTracking(orderId, items, client, addr) {
       }
     })
     .subscribe();
-  updateTracker('analise', addr);
+  updateTracker(_initialOrderStatus || 'analise', addr);
   renderTrackItems(items, client);
   document.getElementById('track-order-num').textContent = 'Pedido #' + String(_orderNum(orderId)).padStart(3,'0');
 }
@@ -168,7 +175,7 @@ window.addEventListener('load', () => {
       const items = Array.isArray(o.items) ? o.items
         : (typeof o.items === 'string' ? JSON.parse(o.items||'[]') : []);
 
-      startTracking(o.id, items, o.client || '', o.addr || '');
+      startTracking(o.id, items, o.client || '', o.addr || '', o.status);
 
       // Sincroniza URL
       try {
