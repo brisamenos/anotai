@@ -2609,17 +2609,9 @@ input,textarea{font-family:inherit}
 </div>
 
 
-<script src="cardapio/cardapio-state.js"></script>
-<script src="cardapio/cardapio-utils.js"></script>
-<script src="cardapio/cardapio-auth.js"></script>
-<script src="cardapio/cardapio-cart.js"></script>
-<script src="cardapio/cardapio-menu.js"></script>
-<script src="cardapio/cardapio-modal.js"></script>
-<script src="cardapio/cardapio-checkout.js"></script>
-<script src="cardapio/cardapio-tracking.js"></script>
-<script src="cardapio/cardapio-acougue.js"></script>
-<script src="cardapio/cardapio-burger.js"></script>
-<script src="cardapio/cardapio-core.js"></script>
+<script>
+(function(){var _cv=Date.now();['cardapio-state','cardapio-utils','cardapio-auth','cardapio-cart','cardapio-menu','cardapio-modal','cardapio-checkout','cardapio-tracking','cardapio-acougue','cardapio-burger','cardapio-core'].forEach(function(m){document.write('<script src="cardapio/'+m+'.js?v='+_cv+'"><\/script>');});})();
+</script>
 <canvas id="anim-particle-canvas"></canvas>
 <button id="im-close-fab" onclick="closeItemModal()" style="position:fixed;top:14px;right:14px;width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.65);border:none;color:#fff;display:none;align-items:center;justify-content:center;z-index:600;cursor:pointer;backdrop-filter:blur(6px);box-shadow:0 2px 12px rgba(0,0,0,.4)">
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
