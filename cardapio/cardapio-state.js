@@ -54,7 +54,7 @@ function _orderNum(id) { return Math.max(1, id - _orderNumOffset); }
 // ── PIX ──
 let _pixPollTimer    = null;
 let _pixMpId         = null;
-let _pixAtivoGestor  = true;
+let _pixAtivoGestor  = false;
 let _pixKeyManual    = '';
 let _pixKeyManualTipo  = 'aleatoria';
 let _pixKeyManualBanco = '';
