@@ -152,6 +152,8 @@ async function evoCriarInstancia() {
 async function evoCheckStatus() {
   if (!EVO.instance) return;
   _evoSetStatus('loading','Verificando...');
+  // Salva o nome da instância no banco sempre que verificar (permite vincular instância existente)
+  try { await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: EVO.instance }); } catch(e) {}
   const r = await EVO.req('GET', `/instance/connectionState/${EVO.instance}`);
   if (!r.ok) { _evoSetStatus('disconnected','Desconectado'); return; }
   const state = r.data?.instance?.state || r.data?.state || 'close';
@@ -1154,4 +1156,3 @@ async function iaRegistrarWebhook(webhookUrl) {
     console.warn('iaRegistrarWebhook:', e);
   }
 }
-
