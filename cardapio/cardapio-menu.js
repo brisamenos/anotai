@@ -248,18 +248,29 @@ function renderMenu() {
       html += `</div></div>`;
     }
   }
-  const groups = new Map();
+  // Agrupa itens por categoria, respeitando a ordem de allCats (sort_order do banco)
+  const grouped = new Map();
   normalItems.forEach(i => {
     const key = i.cat_key || i.cat || '__outros';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(i);
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(i);
   });
-  groups.forEach((its, key) => {
-    const cat   = allCats.find(c => c.name === key);
-    const label = cat ? (cat.label || cat.name) : (key === '__outros' ? 'Outros' : key.charAt(0).toUpperCase() + key.slice(1));
+
+  // Itera na ordem das categorias (já ordenadas por sort_order)
+  allCats.filter(c => c.type !== 'checklist').forEach(cat => {
+    const its = grouped.get(cat.name) || [];
+    if (!its.length) return;
+    const label = cat.label || cat.name;
     const gridClass = _segmento === 'acougue' ? 'item-grid carousel' : 'item-grid';
-    html += `<div class="section" data-cat="${key}"><div class="section-label">${label}</div><div class="${gridClass}">${its.map(itemCard).join('')}</div></div>`;
+    html += `<div class="section" data-cat="${cat.name}"><div class="section-label">${label}</div><div class="${gridClass}">${its.map(itemCard).join('')}</div></div>`;
   });
+
+  // Itens sem categoria conhecida
+  const unknownItems = grouped.get('__outros') || [];
+  if (unknownItems.length) {
+    const gridClass = _segmento === 'acougue' ? 'item-grid carousel' : 'item-grid';
+    html += `<div class="section" data-cat="__outros"><div class="section-label">Outros</div><div class="${gridClass}">${unknownItems.map(itemCard).join('')}</div></div>`;
+  }
 
   // Renderiza seções checklist no final
   checklistCats.forEach(cat => {
@@ -420,7 +431,7 @@ function itemCard(i) {
   const porcaoGrp = cgs.find(g => g.tipo === 'porcao_ref');
   const porcaoRef = porcaoGrp?.gramas || 0;
   const porcaoBadge = (porcaoRef > 0 && i.price > 0)
-    ? `<div class="item-porcao-ref">🥩 ${porcaoRef}g · R$ ${fmt(i.price * porcaoRef / 1000)}</div>`
+    ? `<div class="item-porcao-ref">${porcaoRef}g · R$ ${fmt(i.price * porcaoRef / 1000)}</div>`
     : '';
 
   return `
