@@ -424,12 +424,48 @@ function confirmPesoSheet() {
     hint.innerHTML = `<span class="corte-card-badge">
       <svg width="9" height="9" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       ${peso}g ${corte}
+      <span onclick="event.stopPropagation();cancelCorte('${_escape(corte)}')" title="Cancelar seleção"
+        style="margin-left:5px;opacity:.7;font-size:11px;font-weight:900;line-height:1;cursor:pointer;padding:1px 3px;border-radius:3px"
+        onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='.7'">✕</span>
     </span>`;
   }
 
   // Atualiza total
   _atualizaTotalPeso();
   closePesoSheet();
+}
+
+// ── Cancela seleção de um corte ───────────────────────
+function cancelCorte(corteNome) {
+  delete _acougueCortes[corteNome];
+  const slug = _slug(corteNome);
+  const card = document.getElementById(`corte-card-${slug}`);
+  const hint = document.getElementById(`corte-hint-${slug}`);
+  if (card) card.classList.remove('on');
+  if (hint) hint.innerHTML = 'Clique para adicionar';
+  _atualizaTotalPeso();
+}
+
+// ── Abre seletor de gramas direto pelo badge de porção ──
+// Usado quando cliente toca em "Porção de Xg" na área do preço
+function _openPorcaoQuickPicker(item, porcaoRef) {
+  // Usa o primeiro corte disponível como corte "ativo" para o sheet
+  const cgs       = item.custom_groups || [];
+  const cortesGrp = cgs.find(g => g.tipo === 'cortes');
+  const pesosGrp  = cgs.find(g => g.tipo === 'pesos');
+
+  // Define os pesos disponíveis globalmente para o picker
+  _acouguePesos = pesosGrp?.valores || [];
+  if (!_acouguePesos.length) return;
+
+  // Usa nome "Porção" como corte virtual se não houver corte selecionado
+  const primeiroCorteSelecionado = Object.keys(_acougueCortes)[0];
+  const corteVirtual = primeiroCorteSelecionado
+    || (cortesGrp?.opcoes?.[0]?.nome)
+    || 'Porção';
+
+  // Abre o sheet de peso normalmente
+  openPesoSheet(corteVirtual);
 }
 
 function _atualizaTotalPeso() {
