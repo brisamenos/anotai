@@ -146,6 +146,35 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const maxOrderId = db.prepare('SELECT COALESCE(MAX(id),0) as m FROM orders').get()?.m || 0
       db.prepare('UPDATE store_config SET order_num_offset=? WHERE tenant_id=?').run(maxOrderId, t.id)
       db.prepare('INSERT INTO sys_users (nome,email,senha_hash,role,tenant_id) VALUES (?,?,?,?,?)').run(nomeGestor || nome, email, hash, role || 'gestor', t.id)
+
+      // ── Seed de categorias padrão por segmento ──────────────────────────
+      if (seg === 'acougue') {
+        const catInsert = db.prepare("INSERT INTO categories (tenant_id,name,label,type,emoji,sort_order,ativo) VALUES (?,?,?,?,?,?,1)")
+        const catsAcougue = [
+          { name: 'bovinos',  label: 'Bovinos',         emoji: '🐄', sort: 1 },
+          { name: 'suinos',   label: 'Suínos',           emoji: '🐷', sort: 2 },
+          { name: 'aves',     label: 'Aves',             emoji: '🐔', sort: 3 },
+          { name: 'ovinos',   label: 'Ovinos',           emoji: '🐑', sort: 4 },
+          { name: 'embutidos',label: 'Embutidos',        emoji: '🌭', sort: 5 },
+          { name: 'kits',     label: 'Kits & Combos',    emoji: '📦', sort: 6 },
+          { name: 'temperos', label: 'Temperos & Acompanhamentos', emoji: '🧄', sort: 7 },
+        ]
+        catsAcougue.forEach(c => catInsert.run(t.id, c.name, c.label, 'Itens principais', c.emoji, c.sort))
+        // Tema e cor padrão do açougue
+        db.prepare('UPDATE store_config SET store_tema=?, store_cor=? WHERE tenant_id=?').run('tropical', '#b45309', t.id)
+        log('🥩', `Categorias padrão açougue criadas para tenant=${t.id}`)
+      } else {
+        const catInsert = db.prepare("INSERT INTO categories (tenant_id,name,label,type,emoji,sort_order,ativo) VALUES (?,?,?,?,?,?,1)")
+        const catsRest = [
+          { name: 'entradas',  label: 'Entradas',    emoji: '🥗', sort: 1 },
+          { name: 'pratos',    label: 'Pratos',       emoji: '🍽️', sort: 2 },
+          { name: 'bebidas',   label: 'Bebidas',      emoji: '🥤', sort: 3 },
+          { name: 'sobremesas',label: 'Sobremesas',   emoji: '🍰', sort: 4 },
+        ]
+        catsRest.forEach(c => catInsert.run(t.id, c.name, c.label, 'Itens principais', c.emoji, c.sort))
+      }
+      // ────────────────────────────────────────────────────────────────────
+
       marcarDirty()
       setTimeout(() => fazerBackup(true), 2000)
       send(res, 201, { ok: true, tenant_id: t.id, slug: slugFinal, segmento: seg })
