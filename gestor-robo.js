@@ -171,10 +171,23 @@ async function evoCheckStatus() {
 
 async function evoConectar() {
   const qrArea = document.getElementById('evo-qr-area');
-  if (qrArea) qrArea.innerHTML='<div style="margin-bottom:10px"><div style="font-size:13px;color:var(--muted)">Gerando QR Code...</div>';
-  const r = await EVO.req('GET', `/instance/connect/${EVO.instance}`);
-  if (!r.ok || !r.data?.code) {
-    if (qrArea) qrArea.innerHTML=`<div style="font-size:13px;color:var(--danger);margin-bottom:12px">${r.data?.message||'Erro ao gerar QR. Crie a instância primeiro.'}</div><button class="btn bp" onclick="evoCriarInstancia()">Criar instância</button>`;
+  if (qrArea) qrArea.innerHTML='<div style="margin-bottom:10px"><div style="font-size:13px;color:var(--muted)">Gerando QR Code... aguarde</div></div>';
+
+  // Evolution API v2 pode demorar para gerar o QR — tenta até 10x com intervalo de 3s
+  let r = null;
+  for (let tentativa = 1; tentativa <= 10; tentativa++) {
+    r = await EVO.req('GET', `/instance/connect/${EVO.instance}`);
+    // QR disponível quando code ou base64 estiverem presentes e count > 0
+    const temQR = r.ok && (r.data?.base64 || r.data?.code) && (r.data?.count > 0 || r.data?.base64);
+    if (temQR) break;
+    if (tentativa < 10) {
+      if (qrArea) qrArea.innerHTML=`<div style="font-size:13px;color:var(--muted)">Gerando QR Code... (${tentativa}/10)</div>`;
+      await new Promise(res => setTimeout(res, 3000));
+    }
+  }
+
+  if (!r?.ok || (!r.data?.code && !r.data?.base64)) {
+    if (qrArea) qrArea.innerHTML=`<div style="font-size:13px;color:var(--danger);margin-bottom:12px">${r?.data?.message||'Erro ao gerar QR. Verifique se a instância existe.'}</div><button class="btn bp" onclick="evoCriarInstancia()">Criar instância</button>`;
     return;
   }
   if (qrArea) {
