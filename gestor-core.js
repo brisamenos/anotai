@@ -496,7 +496,7 @@ function subscribeOrders() {
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
         showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${_orderNum(p.new.id)} — ${p.new.client}`);
-        sendBrowserNotif(`🛎️ Novo pedido #${_orderNum(p.new.id)}`, `${p.new.client} — ${items}`);
+        sendBrowserNotif(`Novo pedido #${_orderNum(p.new.id)}`, `${p.new.client} — ${items}`);
         // Automação: mensagem de pedido recebido
         // Auto-aceitar se ativado e pedido em análise
         if (_autoAcceptOn && p.new.status === 'analise') {
@@ -526,7 +526,7 @@ function subscribeOrders() {
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
         showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg>', `PIX confirmado! Pedido #${_orderNum(p.new.id)} — ${p.new.client}`);
-        sendBrowserNotif(`💳 PIX confirmado! #${_orderNum(p.new.id)}`, `${p.new.client} — ${items}`);
+        sendBrowserNotif(`PIX confirmado! #${_orderNum(p.new.id)}`, `${p.new.client} — ${items}`);
         if (_autoAcceptOn) setTimeout(() => advanceOrderById(p.new.id), 800);
         if (_printMode === 'auto') printOrder(mapOrder(p.new));
         return;
@@ -535,7 +535,7 @@ function subscribeOrders() {
         if (['entregue','cancelado'].includes(p.new.status)) {
           if (p.new.status === 'cancelado') {
             showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>', `Pedido #${_orderNum(p.new.id)} cancelado pelo cliente — ${p.new.client}`);
-            sendBrowserNotif(`❌ Pedido cancelado pelo cliente`, `#${_orderNum(p.new.id)} — ${p.new.client}`);
+            sendBrowserNotif(`Pedido cancelado pelo cliente`, `#${_orderNum(p.new.id)} — ${p.new.client}`);
           }
           ordersKanban.splice(idx, 1);
         } else {
@@ -640,7 +640,7 @@ setInterval(async () => {
             if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
             const items = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
             showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${o.num} — ${o.client}`);
-            sendBrowserNotif(`🛎️ Novo pedido #${o.num}`, `${o.client} — ${items}`);
+            sendBrowserNotif(`Novo pedido #${o.num}`, `${o.client} — ${items}`);
             if (_autoAcceptOn && o.status === 'analise') setTimeout(() => advanceOrderById(o.id), 800);
             if (_printMode === 'auto') printOrder(mapOrder(o));
             // Atualiza cache mesa se for pedido de mesa
@@ -747,7 +747,7 @@ function _toastUpgradePlano() {
         display:flex;align-items:center;justify-content:center;
         font-size:34px;margin:0 auto 20px;
         box-shadow:0 8px 28px rgba(124,58,237,.45);
-      ">⭐</div>
+      "><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 5h5l-4 3 1.5 5L8 11l-4.5 3L5 9 1 6h5z"/></svg></div>
 
       <!-- Título -->
       <div style="font-family:'Playfair Display',sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;letter-spacing:-.3px;">

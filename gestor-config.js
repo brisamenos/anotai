@@ -162,7 +162,7 @@ function _renderPixOnlineToggle(ativo) {
   const status = document.getElementById('pix-online-status-txt');
   const card   = document.getElementById('card-pix-online');
   if (btn) {
-    btn.textContent = ativo ? '✅ Ativado' : '🔴 Desativado';
+    btn.textContent = ativo ? 'Ativado' : 'Desativado';
     btn.className   = 'btn ' + (ativo ? 'bp' : 'bd');
   }
   if (status) status.textContent = ativo ? 'Ativo — clientes podem pagar via PIX' : 'Inativo — PIX não aparece no cardápio';
@@ -180,7 +180,7 @@ function _renderCartaoOnlineToggle(ativo, disponivel) {
     return;
   }
   if (btn) {
-    btn.textContent = ativo ? '✅ Ativado' : '🔴 Desativado';
+    btn.textContent = ativo ? 'Ativado' : 'Desativado';
     btn.className   = 'btn ' + (ativo ? 'bp' : 'bd');
     btn.disabled    = false;
   }
@@ -221,7 +221,7 @@ async function togglePixOnline() {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Erro');
     _renderPixOnlineToggle(d.pix_ativo !== false);
-    sbToast('ok', novoEstado ? '💠 PIX Online ativado!' : '🔴 PIX Online desativado!');
+    sbToast('ok', novoEstado ? 'PIX Online ativado!' : 'PIX Online desativado!');
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
   finally { const b = document.getElementById('btn-pix-online-toggle'); if (b) b.disabled = false; }
 }
@@ -241,7 +241,7 @@ async function toggleCartaoOnline() {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Erro');
     _renderCartaoOnlineToggle(d.cartao_online_ativo !== false, true);
-    sbToast('ok', novoEstado ? '💳 Cartão Online ativado!' : '🔴 Cartão Online desativado!');
+    sbToast('ok', novoEstado ? 'Cartão Online ativado!' : 'Cartão Online desativado!');
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
   finally { const b = document.getElementById('btn-cartao-online-toggle'); if (b) b.disabled = false; }
 }
@@ -330,7 +330,7 @@ function _renderSaqueHistorico(saques) {
   if (!el) return;
   if (!saques.length) { el.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Nenhum saque solicitado ainda.</div>'; return; }
   const badge = { pendente:'background:rgba(249,115,22,.15);color:var(--orange)', aprovado:'background:rgba(59,130,246,.15);color:var(--accent)', pago:'background:rgba(34,197,94,.15);color:var(--success)', cancelado:'background:rgba(239,68,68,.15);color:var(--danger)' };
-  const label = { pendente:'⏳ Pendente', aprovado:'✅ Aprovado', pago:'✅ Pago', cancelado:'❌ Cancelado' };
+  const label = { pendente:'Pendente', aprovado:'Aprovado', pago:'Pago', cancelado:'Cancelado' };
   el.innerHTML = saques.map(s => `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px">
       <div>
@@ -608,7 +608,7 @@ function renderClientes() {
     const list = document.getElementById('cli-aniv-hoje-list');
     if (list) list.innerHTML = anivHoje.map(c =>
       `<div style="background:rgba(139,92,246,.2);border:1px solid rgba(139,92,246,.3);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600">
-        🎂 ${c.name || '?'} ${c.phone ? `<span style="color:var(--muted);font-weight:400">${c.phone}</span>` : ''}
+        ${c.name || '?'} ${c.phone ? `<span style="color:var(--muted);font-weight:400">${c.phone}</span>` : ''}
       </div>`
     ).join('');
   }
@@ -704,7 +704,7 @@ async function openClienteModal(id) {
   if (!c) return;
   _cliModalId = id;
 
-  _cliSet('modal-cli-title', `👤 ${c.name || 'Cliente'}`);
+  _cliSet('modal-cli-title', `${c.name || 'Cliente'}`);
   document.getElementById('edit-cli-id').value          = c.id;
   document.getElementById('edit-cli-nome').value        = c.name     || '';
   document.getElementById('edit-cli-phone').value       = c.phone    || '';
@@ -766,7 +766,7 @@ async function cliCarregarPedidos(id) {
     return;
   }
 
-  const stLabel = { analise:'⏳ Aguardando', producao:'👨‍🍳 Preparo', pronto:'✅ Pronto', saiu:'🛵 Saiu', entregue:'🎉 Entregue', cancelado:'❌ Cancelado', finalizado:'✅ Finalizado', aguardando_pix:'⏳ Aguard. PIX', aguardando_cartao:'💳 Aguard. Cartão' };
+  const stLabel = { analise:'Aguardando', producao:'Preparo', pronto:'Pronto', saiu:'Saiu', entregue:'Entregue', cancelado:'Cancelado', finalizado:'✅ Finalizado', aguardando_pix:'⏳ Aguard. PIX', aguardando_cartao:'💳 Aguard. Cartão' };
   const stCor   = { analise:'var(--accent3)', producao:'var(--accent)', pronto:'var(--success)', saiu:'var(--accent2)', entregue:'var(--success)', cancelado:'var(--danger)', finalizado:'var(--success)', aguardando_pix:'var(--muted)', aguardando_cartao:'var(--muted)' };
 
   listEl.innerHTML = orders.map(o => {

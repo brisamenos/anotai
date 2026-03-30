@@ -46,7 +46,7 @@ function renderKDS() {
     const isWarn  = elapsed > 480 && !isLate;
     const cardCls = isNew ? 'st-new' : isLate ? 'st-late' : isWarn ? 'st-ok' : '';
     const timerCls= isLate ? 't-late' : isWarn ? 't-warn' : 't-ok';
-    const typeLabel = type === 'mesa' ? `🍽️ ${o.addr||('Mesa '+(o.mesa_num||''))}` : type === 'balcao' ? '🏠 Balcão' : '🛵 Delivery';
+    const typeLabel = type === 'mesa' ? `\${o.addr||('Mesa '+(o.mesa_num||''))}` : type === 'balcao' ? '🏠 Balcão' : 'Delivery';
     const typeCls   = 'kds-type-'+type;
     const items = Array.isArray(o.items) ? o.items : [];
 
@@ -55,8 +55,8 @@ function renderKDS() {
       return `<div class="kds-item2">
         <span class="kds-item2-qty">${i.qty}×</span>
         <div>
-          <div class="kds-item2-name ${isDrink ? 'kds-item2-drink' : ''}">${isDrink ? '🥤 ' : ''}${i.name.toUpperCase()}</div>
-          ${i.obs ? `<div class="kds-item2-obs">⚠️ ${i.obs}</div>` : ''}
+          <div class="kds-item2-name ${isDrink ? 'kds-item2-drink' : ''}">${isDrink ? '' : ''}${i.name.toUpperCase()}</div>
+          ${i.obs ? `<div class="kds-item2-obs">${i.obs}</div>` : ''}
         </div>
       </div>`;
     }).join('');
@@ -417,12 +417,12 @@ async function renderDesempenho() {
     }, 0);
 
     const metrics = [
-      { label:'Faturamento', val: 'R$ ' + faturamento.toFixed(2).replace('.',','), icon:'💰', color:'var(--accent3)' },
-      { label:'Total de pedidos', val: totalPedidos, icon:'🛎️', color:'var(--accent)' },
-      { label:'Ticket médio', val: 'R$ ' + ticketMedio.toFixed(2).replace('.',','), icon:'🎯', color:'var(--purple)' },
-      { label:'Mesas atendidas', val: mesasSet.size, icon:'🍽️', color:'var(--success)' },
-      { label:'Itens vendidos', val: itensQtd, icon:'📦', color:'var(--accent2)' },
-      { label:'Cancelamentos', val: cancelados + (taxaCancelamento > 0 ? ` (${taxaCancelamento.toFixed(1)}%)` : ''), icon:'❌', color: cancelados > 0 ? 'var(--danger)' : 'var(--muted)' },
+      { label:'Faturamento', val: 'R$ ' + faturamento.toFixed(2).replace('.',','), icon:'currency', color:'var(--accent3)' },
+      { label:'Total de pedidos', val: totalPedidos, icon:'bell', color:'var(--accent)' },
+      { label:'Ticket médio', val: 'R$ ' + ticketMedio.toFixed(2).replace('.',','), icon:'target', color:'var(--purple)' },
+      { label:'Mesas atendidas', val: mesasSet.size, icon:'plate', color:'var(--success)' },
+      { label:'Itens vendidos', val: itensQtd, icon:'box', color:'var(--accent2)' },
+      { label:'Cancelamentos', val: cancelados + (taxaCancelamento > 0 ? ` (${taxaCancelamento.toFixed(1)}%)` : ''), icon:'cancel', color: cancelados > 0 ? 'var(--danger)' : 'var(--muted)' },
     ];
 
     if (dg) dg.innerHTML = metrics.map(m => `
@@ -488,7 +488,7 @@ async function renderDesempenho() {
         // Find emoji from items list if available
         top.innerHTML = sorted.map(([name, {qty, rev}], idx) => {
           const menuItem = items.find(i => i.name === name);
-          const emoji = menuItem?.emoji || '🍽️';
+          const emoji = menuItem?.emoji || '';
           return `<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--border)">
             <span style="font-size:12px;font-weight:700;color:var(--accent);width:18px">${idx+1}</span>
             <span style="font-size:18px">${emoji}</span>
@@ -775,7 +775,7 @@ async function renderRelatorios() {
       pagMap[k].count++; pagMap[k].fat += parseFloat(o.total||0)+parseFloat(o.taxa||0);
     });
     const pagCols = { PIX:'var(--purple)', Cartão:'var(--accent)', Dinheiro:'var(--success)', Mesa:'var(--accent3)' };
-    const pagEmojis = { PIX:'💠', Cartão:'💳', Dinheiro:'💵', Mesa:'🪑' };
+    const pagEmojis = { PIX:'PIX', Cartão:'Cartão', Dinheiro:'Dinheiro', Mesa:'Mesa' };
     const pagEl = document.getElementById('rel-gauges');
     if (pagEl) {
       const ents = Object.entries(pagMap).sort((a,b)=>b[1].count-a[1].count);
@@ -821,9 +821,9 @@ async function renderRelatorios() {
     // ─── Origem (plataforma) ─────────────────────────────
     const originMap = {};
     mesValidos.forEach(o=>{
-      const ori = o.mesa_num || (o.addr||'').startsWith('Mesa') ? '🪑 Mesa (Garçom)'
-                : (o.addr||'').toLowerCase().includes('balc')   ? '🏪 Balcão / Retirada'
-                :                                                  '🛵 Delivery';
+      const ori = o.mesa_num || (o.addr||'').startsWith('Mesa') ? 'Mesa (Garçom)'
+                : (o.addr||'').toLowerCase().includes('balc')   ? 'Balcão / Retirada'
+                :                                                  'Delivery';
       if(!originMap[ori]) originMap[ori]={count:0,fat:0};
       originMap[ori].count++; originMap[ori].fat+=parseFloat(o.total||0)+parseFloat(o.taxa||0);
     });
@@ -889,7 +889,7 @@ async function renderRelatorios() {
       const mi = items.find(i=>i.name===name);
       return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
         <span style="width:18px;font-size:11.5px;font-weight:700;color:var(--muted)">${idx+1}</span>
-        <span style="font-size:17px">${mi?.emoji||'🍽️'}</span>
+        <span style="font-size:17px">${mi?.emoji||''}</span>
         <div style="flex:1;min-width:0">
           <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
           <div style="height:4px;background:var(--border);border-radius:99px;margin-top:4px;overflow:hidden">

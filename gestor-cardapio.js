@@ -74,7 +74,8 @@ function renderAcList(ctx, tipo) {
   const el   = document.getElementById(`${ctx}-${tipo}-list`);
   if (!el) return;
 
-  const emojis = { cortes:'🥩', preparos:'🍳', ocasiao:'🎯', armazenamento:'❄️' };
+  const emojis = { cortes:'_meat', preparos:'_pan', ocasiao:'_target', armazenamento:'_snow' };
+  const emojiSvg = { _meat:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.4"/></svg>`, _pan:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 15h12a2 2 0 0 0 0-4H3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M15 11V8M19 10h-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`, _target:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.3"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>`, _snow:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>` };
 
   if (!list.length) {
     el.innerHTML = `<div style="font-size:11.5px;color:var(--muted);padding:6px 2px;font-style:italic">Nenhum item. Clique em "+ Adicionar" para começar.</div>`;
@@ -85,7 +86,7 @@ function renderAcList(ctx, tipo) {
     const emoji  = emojis[tipo] || '📌';
     const iconEl = item.icon
       ? `<img src="${item.icon}" style="width:32px;height:32px;object-fit:contain;border-radius:6px;flex-shrink:0;display:block" onerror="this.style.opacity='.2'">`
-      : `<div style="width:32px;height:32px;border-radius:6px;background:var(--surface);border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;cursor:pointer" onclick="acIconEdit('${ctx}','${tipo}',${idx})" title="Adicionar ícone">${emoji}</div>`;
+      : `<div style="width:32px;height:32px;border-radius:6px;background:var(--surface);border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;cursor:pointer" onclick="acIconEdit('${ctx}','${tipo}',${idx})" title="Adicionar ícone">${emojiSvg2[emojis[tipo]] || emojiSvg2._meat}</div>`;
     return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
       <div onclick="acIconEdit('${ctx}','${tipo}',${idx})" title="Editar ícone" style="cursor:pointer;flex-shrink:0;position:relative" onmouseenter="this.querySelector('.icon-edit-hint')&&(this.querySelector('.icon-edit-hint').style.opacity='1')" onmouseleave="this.querySelector('.icon-edit-hint')&&(this.querySelector('.icon-edit-hint').style.opacity='0')">
         ${iconEl}
@@ -318,12 +319,13 @@ function acListPick(ctx, tipo) {
     armazenamento: _AC_ARMAZENAMENTO_CATALOG,
   };
   const titulos = {
-    cortes:        '🥩 Adicionar Corte',
-    preparos:      '🍳 Adicionar Forma de Preparo',
-    ocasiao:       '🎯 Adicionar Tipo de Ocasião',
-    armazenamento: '❄️ Adicionar Armazenamento',
+    cortes:        'Adicionar Corte',
+    preparos:      'Adicionar Forma de Preparo',
+    ocasiao:       'Adicionar Tipo de Ocasião',
+    armazenamento: 'Adicionar Armazenamento',
   };
-  const emojis = { cortes:'🥩', preparos:'🍳', ocasiao:'🎯', armazenamento:'❄️' };
+  const emojis = { cortes:'_meat', preparos:'_pan', ocasiao:'_target', armazenamento:'_snow' };
+  const emojiSvg = { _meat:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.4"/></svg>`, _pan:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 15h12a2 2 0 0 0 0-4H3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M15 11V8M19 10h-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`, _target:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.3"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>`, _snow:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>` };
   const catalog  = catalogs[tipo] || [];
   const key      = `${ctx}-${tipo}`;
   const existing = (_acListState[key] || []).map(i => i.id);
@@ -342,7 +344,7 @@ function acListPick(ctx, tipo) {
     ? available.map(item => {
         const iconEl = item.icon
           ? `<img src="${item.icon}" style="width:30px;height:30px;object-fit:contain;flex-shrink:0">`
-          : `<span style="font-size:20px;width:30px;text-align:center;flex-shrink:0">${emoji}</span>`;
+          : `<span style="font-size:20px;width:30px;text-align:center;flex-shrink:0">${emojiSvg2[emojis[tipo]] || emojiSvg2._meat}</span>`;
         return `<button type="button" onclick="acListAdd('${ctx}','${tipo}','${item.id}','${item.nome.replace(/'/g,"\\'")}'${item.icon?`,'${item.icon}'`:''})" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;cursor:pointer;color:var(--text);text-align:left;font-family:inherit;font-size:13px;font-weight:500;transition:all .15s" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">${iconEl}<span>${item.nome}</span></button>`;
       }).join('')
     : `<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">Todos os itens do catálogo já foram adicionados.</div>`;
@@ -355,7 +357,7 @@ function acListPick(ctx, tipo) {
     </div>
     <div style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:6px">${listaHTML}</div>
     <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;flex-shrink:0">
-      <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">✏️ Personalizado</div>
+      <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">Personalizado</div>
       <div style="display:flex;gap:8px">
         <input id="ac-picker-custom-name" class="form-input" placeholder="Nome personalizado..." style="flex:1;font-size:13px">
         <button type="button" onclick="acListAddCustom('${ctx}','${tipo}')" style="padding:8px 14px;background:var(--accent);border:none;border-radius:8px;color:#000;font-weight:700;cursor:pointer;font-family:inherit;font-size:12.5px;white-space:nowrap">+ Adicionar</button>
@@ -381,10 +383,10 @@ const _AC_CATALOGS = {
 };
 
 const _AC_CATALOG_META = {
-  cortes:        { label: 'Cortes',            emoji: '🥩', color: 'rgba(34,197,94,.12)',  border: 'rgba(34,197,94,.3)',  text: '#16a34a' },
-  preparos:      { label: 'Formas de Preparo', emoji: '🍳', color: 'rgba(249,115,22,.10)', border: 'rgba(249,115,22,.3)', text: 'var(--accent)' },
-  ocasiao:       { label: 'Tipo de Ocasião',   emoji: '🎯', color: 'rgba(139,92,246,.10)', border: 'rgba(139,92,246,.3)', text: '#7c3aed' },
-  armazenamento: { label: 'Armazenamento',     emoji: '❄️', color: 'rgba(14,165,233,.10)', border: 'rgba(14,165,233,.3)', text: '#0284c7' },
+  cortes:        { label: 'Cortes',            svgIcon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.4"/></svg>`, color: 'rgba(34,197,94,.12)',  border: 'rgba(34,197,94,.3)',  text: '#16a34a' },
+  preparos:      { label: 'Formas de Preparo', svgIcon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 15h12a2 2 0 0 0 0-4H3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M15 11V8M19 10h-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,  color: 'rgba(249,115,22,.10)', border: 'rgba(249,115,22,.3)', text: 'var(--accent)' },
+  ocasiao:       { label: 'Tipo de Ocasião',   svgIcon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.3"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>`,  color: 'rgba(139,92,246,.10)', border: 'rgba(139,92,246,.3)', text: '#7c3aed' },
+  armazenamento: { label: 'Armazenamento',     svgIcon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`, color: 'rgba(14,165,233,.10)', border: 'rgba(14,165,233,.3)', text: '#0284c7' },
 };
 
 // ── Carrega catálogos do banco via API ───────────────
@@ -429,14 +431,14 @@ function renderAcCatalogCards() {
     const count  = list.length;
     const thumbs = list.slice(0, 4).map(item => {
       if (item.icon) return `<img src="${item.icon}" style="width:24px;height:24px;object-fit:contain;border-radius:5px;flex-shrink:0" onerror="this.style.opacity='.2'">`;
-      return `<span style="font-size:16px;width:24px;text-align:center;flex-shrink:0">${meta.emoji}</span>`;
+      return `<span style="font-size:16px;width:24px;text-align:center;flex-shrink:0">${meta.svgIcon||''}</span>`;
     }).join('');
     const moreLabel = count > 4 ? `<span style="font-size:10px;color:var(--muted);margin-left:2px">+${count-4}</span>` : '';
 
     return `<div style="background:${meta.color};border:1.5px solid ${meta.border};border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
       <!-- Cabeçalho -->
       <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:20px">${meta.emoji}</span>
+        <span style="font-size:20px">${meta.svgIcon||''}</span>
         <div style="flex:1;min-width:0">
           <div style="font-size:12.5px;font-weight:800;color:${meta.text}">${meta.label}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:1px">${count} item${count!==1?'s':''} no catálogo</div>
@@ -477,7 +479,7 @@ function openAcCatalogManager(tipo) {
     <div style="padding:12px 20px 0;flex-shrink:0"><div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div></div>
     <!-- Header -->
     <div style="padding:16px 20px 14px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:12px">
-      <div style="width:40px;height:40px;border-radius:12px;background:${meta.color};border:1.5px solid ${meta.border};display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${meta.emoji}</div>
+      <div style="width:40px;height:40px;border-radius:12px;background:${meta.color};border:1.5px solid ${meta.border};display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${meta.svgIcon||''}</div>
       <div style="flex:1">
         <div style="font-size:15px;font-weight:800">${meta.label}</div>
         <div style="font-size:12px;color:var(--muted);margin-top:2px">Gerencie os itens que aparecem no seletor dos produtos</div>
@@ -507,7 +509,7 @@ function _renderAcCatalogManagerList(tipo) {
 
   if (!list.length) {
     wrap.innerHTML = `<div style="text-align:center;padding:32px 0;color:var(--muted)">
-      <div style="font-size:36px;margin-bottom:10px">${meta.emoji}</div>
+      <div style="font-size:36px;margin-bottom:10px">${meta.svgIcon||''}</div>
       <div style="font-size:13px">Nenhum item ainda.<br>Adicione o primeiro item abaixo.</div>
     </div>`;
     return;
@@ -516,7 +518,7 @@ function _renderAcCatalogManagerList(tipo) {
   wrap.innerHTML = list.map((item, idx) => {
     const iconEl = item.icon
       ? `<img src="${item.icon}" style="width:36px;height:36px;object-fit:contain;border-radius:8px;display:block" onerror="this.style.opacity='.2'">`
-      : `<div style="width:36px;height:36px;border-radius:8px;background:var(--surface2);border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:20px">${meta.emoji}</div>`;
+      : `<div style="width:36px;height:36px;border-radius:8px;background:var(--surface2);border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:20px">${meta.svgIcon||''}</div>`;
 
     return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
       <!-- Ícone clicável -->
@@ -589,7 +591,7 @@ function openAcCatalogAddItem(tipo) {
 
   modal.innerHTML = `<div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:16px;padding:24px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
-      <span style="font-size:22px">${meta.emoji}</span>
+      <span style="font-size:22px">${meta.svgIcon||''}</span>
       <div>
         <div style="font-size:14px;font-weight:800">Novo item — ${meta.label}</div>
         <div style="font-size:11.5px;color:var(--muted);margin-top:2px">Será adicionado ao catálogo global</div>
@@ -604,7 +606,7 @@ function openAcCatalogAddItem(tipo) {
         <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:6px">Link do ícone <span style="font-weight:400;text-transform:none">(opcional)</span></label>
         <input id="ac-cat-add-icon" class="form-input" type="url" placeholder="https://..." style="width:100%" oninput="acCatAddIconPreview(this.value)">
         <div style="margin-top:8px;display:flex;align-items:center;gap:10px">
-          <div id="ac-cat-add-preview" style="width:40px;height:40px;border-radius:8px;border:1.5px dashed var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${meta.emoji}</div>
+          <div id="ac-cat-add-preview" style="width:40px;height:40px;border-radius:8px;border:1.5px dashed var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${meta.svgIcon||''}</div>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 12px">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 11V3M4 7l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
             Upload
@@ -700,7 +702,7 @@ function openAcCatalogIconEdit(tipo, idx) {
     <!-- Header -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
       <div>
-        <div style="font-size:15px;font-weight:800">${meta.emoji} Editar ícone</div>
+        <div style="font-size:15px;font-weight:800">${meta.svgIcon||''} Editar ícone</div>
         <div style="font-size:12px;color:var(--muted);margin-top:3px">
           <span style="font-weight:600;color:${meta.text}">${item.nome}</span> — ${meta.label}
         </div>
@@ -712,7 +714,7 @@ function openAcCatalogIconEdit(tipo, idx) {
       <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;align-self:flex-start">Ícone atual</div>
       <div style="position:relative;width:80px;height:80px">
         ${previewSrc}
-        <div id="ac-cat-icon-prev-empty" style="${emptyStyle};width:80px;height:80px;border-radius:14px;border:2px dashed var(--border);align-items:center;justify-content:center;font-size:34px">${meta.emoji}</div>
+        <div id="ac-cat-icon-prev-empty" style="${emptyStyle};width:80px;height:80px;border-radius:14px;border:2px dashed var(--border);align-items:center;justify-content:center;font-size:34px">${meta.svgIcon||''}</div>
       </div>
       ${currentIcon ? `<button onclick="acCatalogIconRemove()" style="padding:5px 16px;border:1px solid #ef4444;background:rgba(239,68,68,.08);color:#ef4444;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit">✕ Remover ícone</button>` : ''}
     </div>

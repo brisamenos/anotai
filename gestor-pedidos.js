@@ -108,10 +108,10 @@ function renderKanban(){
         const isRetirada = !isMesa && !!(o.addr&&(o.addr.toLowerCase().includes('retirada')||o.addr.toLowerCase().includes('balcão')||o.addr.toLowerCase().includes('balcao')));
         const isDelivery = !isMesa && !isRetirada;
         const _tipoBadge = isMesa
-          ? `<span class="oc-tipo-badge oc-tipo-mesa">🍽️ Mesa ${o.mesa_num||''}</span>`
+          ? `<span class="oc-tipo-badge oc-tipo-mesa"><svg width='11' height='11' viewBox='0 0 16 16' fill='none'><rect x='2' y='5' width='12' height='2' rx='1' fill='currentColor'/><line x1='4' y1='7' x2='4' y2='13' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/><line x1='12' y1='7' x2='12' y2='13' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/></svg> Mesa ${o.mesa_num||''}</span>`
           : isRetirada
-          ? `<span class="oc-tipo-badge oc-tipo-retirada">🏪 Retirada</span>`
-          : `<span class="oc-tipo-badge oc-tipo-delivery">🛵 Delivery</span>`;
+          ? `<span class="oc-tipo-badge oc-tipo-retirada"><svg width='11' height='11' viewBox='0 0 16 16' fill='none'><rect x='2' y='6' width='12' height='8' rx='1' stroke='currentColor' stroke-width='1.4'/><path d='M5 6V4a3 3 0 0 1 6 0v2' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/></svg> Retirada</span>`
+          : `<span class="oc-tipo-badge oc-tipo-delivery"><svg width='11' height='11' viewBox='0 0 16 16' fill='none'><circle cx='4' cy='12' r='2' stroke='currentColor' stroke-width='1.3'/><circle cx='13' cy='12' r='2' stroke='currentColor' stroke-width='1.3'/><path d='M2 12V9l3-4h5l2 3h2v3' stroke='currentColor' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'/></svg> Delivery</span>`;
 
         // ── Botões de ação por tipo ──────────────────────
         let actionBtn='';
@@ -122,10 +122,10 @@ function renderKanban(){
             '<button class="oc-btn oc-btn-no" onclick="event.stopPropagation();cancelOrderById('+o.id+')">✕ Cancelar</button>'+
             (_printMode==='manual'?'<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById('+o.id+')">🖨️</button>':'');
         } else if(st==='producao'){
-          const prontoLabel = isMesa ? '🍽️ Pronto p/ servir!' : isRetirada ? '✅ Pronto no balcão!' : '🚀 Pronto!';
+          const prontoLabel = isMesa ? 'Pronto p/ servir!' : isRetirada ? 'Pronto no balcão!' : '🚀 Pronto!';
           actionBtn='<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById('+o.id+')">'+prontoLabel+'</button>'+(_printMode==='manual'?'<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById('+o.id+')">🖨️</button>':'');
         } else {
-          const finLabel = isMesa ? '✔ Servido!' : isRetirada ? '✔ Retirado!' : '✔ Finalizar';
+          const finLabel = isMesa ? 'Servido!' : isRetirada ? 'Retirado!' : 'Finalizar';
           actionBtn='<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById('+o.id+')">'+finLabel+'</button>';
         }
 
@@ -136,8 +136,8 @@ function renderKanban(){
           const _pendenteTag  = '<span style="font-size:10px;background:rgba(245,158,11,.2);color:#b45309;padding:1px 5px;border-radius:99px;font-weight:700;margin-left:4px">PENDENTE</span>';
           if (p === 'pix_mp' || p === 'pix') return '<div class="oc-pag-badge oc-pag-pix">&#9889; PAGO PIX</div>';
           if (p === 'pix_manual') return '<div class="oc-pag-badge oc-pag-pix-pendente">&#9203; PIX PENDENTE</div>';
-          if (p === 'cartao' || p === 'credito')   return '<div class="oc-pag-badge oc-pag-cartao">💳 CRÉDITO' + _naEntregaTag + '</div>';
-          if (p === 'debito')                        return '<div class="oc-pag-badge oc-pag-cartao">🏧 DÉBITO' + _naEntregaTag + '</div>';
+          if (p === 'cartao' || p === 'credito')   return '<div class="oc-pag-badge oc-pag-cartao"> CRÉDITO' + _naEntregaTag + '</div>';
+          if (p === 'debito')                        return '<div class="oc-pag-badge oc-pag-cartao"> DÉBITO' + _naEntregaTag + '</div>';
           if (p === 'cartao_mp')                     return '<div class="oc-pag-badge oc-pag-cartao" style="background:rgba(34,197,94,.12);color:var(--success)">💳 CRÉD. ONLINE</div>';
           if (p === 'dinheiro') {
             var tr = '';
@@ -150,10 +150,10 @@ function renderKanban(){
 
         return '<div class="order-card" onclick="openOrderDetail('+o.id+')">'+
           '<div class="oc-top"><span class="oc-id">#'+o.num+'</span>'+_tipoBadge+'<span class="oc-time">⏱ '+o.time+'</span></div>'+
-          '<div class="oc-client">👤 '+o.client+(o.phone?' · '+o.phone:'')+'</div>'+
+          '<div class="oc-client">'+o.client+(o.phone?' · '+o.phone:'')+'</div>'+
           '<div class="oc-items">'+itemStr+'</div>'+
           '<div class="oc-bot"><span class="oc-total">'+total+'</span>'+
-            (o.addr&&!isMesa?'<span class="oc-addr">📍 '+o.addr+'</span>':'')+
+            (o.addr&&!isMesa?'<span class="oc-addr">'+o.addr+'</span>':'')+
           '</div>'+
           _pagBadge+
           '<div class="oc-actions">'+actionBtn+'</div>'+
@@ -243,15 +243,15 @@ function openOrderDetail(id) {
   // Tipo de entrega
   const isMesa     = !!(o.mesa_num || (o.addr || '').startsWith('Mesa'));
   const isBalcao   = !isMesa && (o.addr || '').toLowerCase().includes('balc');
-  const tipoLabel  = isMesa ? '🪑 Mesa ' + (o.mesa_num || '') : isBalcao ? '🏪 Balcão / Retirada' : '🛵 Delivery';
+  const tipoLabel  = isMesa ? 'Mesa ' + (o.mesa_num || '') : isBalcao ? 'Balcão / Retirada' : '🛵 Delivery';
   setEl('od-tipo',  tipoLabel);
   setEl('od-addr',  !isMesa && !isBalcao ? (o.addr || '') : o.garcom_nome ? 'Garçom: ' + o.garcom_nome : '');
 
   // Pagamento
   const pagLabel = {
-    dinheiro:'💵 Dinheiro', pix:'💠 PIX Online', pix_manual:'💠 PIX', pix_mp:'💠 PIX Online',
-    cartao:'💳 Cartão', credito:'💳 Crédito', debito:'💳 Débito',
-    cartao_mp:'💳 Crédito Online', mesa:'🪑 Fechamento Mesa'
+    dinheiro:'Dinheiro', pix:'PIX Online', pix_manual:'PIX', pix_mp:'PIX Online',
+    cartao:'Cartão', credito:'Crédito', debito:'Débito',
+    cartao_mp:'Crédito Online', mesa:'Fechamento Mesa'
   }[(o.pag||'').toLowerCase()] || o.pag || '—';
   // Adiciona indicador de quando foi/será pago
   const momento = o.pag_momento || (
