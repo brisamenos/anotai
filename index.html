@@ -132,15 +132,15 @@ input,textarea{font-family:inherit}
   color:var(--muted2);transition:all .18s;white-space:nowrap;cursor:pointer;
 }
 .cat-btn.on{color:var(--accent);border-bottom-color:var(--accent)}
-/* Carrossel — só açougue */
-body.seg-acougue .cats-scroll{gap:8px;padding:0 16px 4px}
-body.seg-acougue .cat-btn{
-  display:flex;flex-direction:column;align-items:center;gap:5px;
+/* Carrossel — modo açougue */
+.cats-scroll.carousel{gap:8px;padding:4px 16px 8px}
+.cats-scroll.carousel .cat-btn{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
   background:var(--s2,#1a1a1a);border:1.5px solid var(--border,#222);border-radius:14px;
-  padding:10px 14px 9px;font-size:11.5px;border-bottom-width:1.5px;
+  padding:10px 14px 9px;font-size:11.5px;font-weight:600;border-bottom-width:1.5px;
   min-width:64px;text-align:center;
 }
-body.seg-acougue .cat-btn.on{color:var(--accent);border-color:var(--accent);background:rgba(249,115,22,.08)}
+.cats-scroll.carousel .cat-btn.on{color:var(--accent);border-color:var(--accent);background:rgba(249,115,22,.08)}
 .cat-btn-icon{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:rgba(255,255,255,.06);flex-shrink:0;overflow:hidden}
 .cat-btn-icon img{width:24px;height:24px;object-fit:contain}
 
