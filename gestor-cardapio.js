@@ -87,6 +87,21 @@ function renderAcList(ctx, tipo) {
     const iconEl = item.icon
       ? `<img src="${item.icon}" style="width:32px;height:32px;object-fit:contain;border-radius:6px;flex-shrink:0;display:block" onerror="this.style.opacity='.2'">`
       : `<div style="width:32px;height:32px;border-radius:6px;background:var(--surface);border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;cursor:pointer" onclick="acIconEdit('${ctx}','${tipo}',${idx})" title="Adicionar ícone">${emojiSvg[emojis[tipo]] || emojiSvg._meat}</div>`;
+
+    // Campo de porções — exclusivo para cortes
+    const porcaoEl = tipo === 'cortes'
+      ? `<div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+           <label style="font-size:10px;color:var(--muted);white-space:nowrap">Porções:</label>
+           <input type="number" min="1" max="99" step="1" placeholder="—"
+             value="${item.porcoes || ''}"
+             onchange="acPorcaoUpdate('${ctx}',${idx},this.value)"
+             onclick="event.stopPropagation()"
+             title="Nº de porções para este corte"
+             style="width:46px;padding:3px 6px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;font-family:inherit;text-align:center;outline:none"
+             onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+         </div>`
+      : '';
+
     return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
       <div onclick="acIconEdit('${ctx}','${tipo}',${idx})" title="Editar ícone" style="cursor:pointer;flex-shrink:0;position:relative" onmouseenter="this.querySelector('.icon-edit-hint')&&(this.querySelector('.icon-edit-hint').style.opacity='1')" onmouseleave="this.querySelector('.icon-edit-hint')&&(this.querySelector('.icon-edit-hint').style.opacity='0')">
         ${iconEl}
@@ -95,6 +110,7 @@ function renderAcList(ctx, tipo) {
         </div>
       </div>
       <span style="flex:1;font-size:12.5px;font-weight:600">${item.nome}</span>
+      ${porcaoEl}
       <div style="display:flex;gap:1px;flex-shrink:0">
         <button type="button" onclick="acIconEdit('${ctx}','${tipo}',${idx})" title="Editar ícone" style="width:28px;height:28px;border:none;background:transparent;cursor:pointer;color:var(--muted);font-size:13px;border-radius:4px;display:flex;align-items:center;justify-content:center">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3L5 14H2v-3L11 2z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -122,6 +138,14 @@ function acListMove(ctx, tipo, idx, dir) {
   if (ni < 0 || ni >= list.length) return;
   [list[idx], list[ni]] = [list[ni], list[idx]];
   renderAcList(ctx, tipo);
+}
+
+// ── Atualiza porções de um corte ─────────────────────
+function acPorcaoUpdate(ctx, idx, val) {
+  const list = _acListState[`${ctx}-cortes`];
+  if (!list || !list[idx]) return;
+  const n = parseInt(val);
+  list[idx].porcoes = (n > 0) ? n : null;
 }
 
 // ── Adiciona item à lista ─────────────────────────────
@@ -1316,23 +1340,25 @@ function fillAcougueOptions(ctx, customGroups) {
   const ocasiaoGroup       = cg.find(g => g.tipo === 'ocasiao');
   const armazenamentoGroup = cg.find(g => g.tipo === 'armazenamento');
 
-  const _resolveList = (group, catalog) => {
+  const _resolveList = (group, catalog, isCortes) => {
     if (!group?.opcoes) return [];
     return group.opcoes.map(o => {
       const id = o.id || (o.nome||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'_');
       const catalogItem = catalog.find(c => c.id === id);
-      return {
+      const entry = {
         id,
         nome: o.nome || catalogItem?.nome || (id.charAt(0).toUpperCase()+id.slice(1)),
         icon: o.icon || catalogItem?.icon || null
       };
+      if (isCortes && o.porcoes) entry.porcoes = o.porcoes;
+      return entry;
     });
   };
 
-  _acListState[`${ctx}-cortes`]         = _resolveList(cortesGroup,        _AC_CORTES_CATALOG);
-  _acListState[`${ctx}-preparos`]       = _resolveList(preparosGroup,      _AC_PREPAROS_CATALOG);
-  _acListState[`${ctx}-ocasiao`]        = _resolveList(ocasiaoGroup,       _AC_OCASIAO_CATALOG);
-  _acListState[`${ctx}-armazenamento`]  = _resolveList(armazenamentoGroup, _AC_ARMAZENAMENTO_CATALOG);
+  _acListState[`${ctx}-cortes`]         = _resolveList(cortesGroup,        _AC_CORTES_CATALOG,   true);
+  _acListState[`${ctx}-preparos`]       = _resolveList(preparosGroup,      _AC_PREPAROS_CATALOG, false);
+  _acListState[`${ctx}-ocasiao`]        = _resolveList(ocasiaoGroup,       _AC_OCASIAO_CATALOG,  false);
+  _acListState[`${ctx}-armazenamento`]  = _resolveList(armazenamentoGroup, _AC_ARMAZENAMENTO_CATALOG, false);
 
   ['cortes','preparos','ocasiao','armazenamento'].forEach(t => renderAcList(ctx, t));
 
@@ -1390,7 +1416,7 @@ async function addItem() {
   if (itemTypeNew === 'kg' || itemTypeNew === 'kit') {
     const ac = readAcougueOptions('new');
     if (itemTypeNew === 'kg') {
-      if (ac._cortesList.length) customGroups.push({ tipo: 'cortes',    opcoes: ac._cortesList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
+      if (ac._cortesList.length) customGroups.push({ tipo: 'cortes',    opcoes: ac._cortesList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null, ...(i.porcoes ? { porcoes: i.porcoes } : {}) })) });
       if (ac.pesos.length)       customGroups.push({ tipo: 'pesos',     valores: ac.pesos });
       if (ac.porcaoRef > 0)      customGroups.push({ tipo: 'porcao_ref', gramas: ac.porcaoRef });
     }
@@ -1590,7 +1616,7 @@ async function saveEditItem() {
   if (it.itemType === 'kg' || it.itemType === 'kit') {
     const ac = readAcougueOptions('edit');
     if (it.itemType === 'kg') {
-      if (ac._cortesList.length)   it.customGroups.push({ tipo: 'cortes',   opcoes: ac._cortesList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null })) });
+      if (ac._cortesList.length)   it.customGroups.push({ tipo: 'cortes',   opcoes: ac._cortesList.map(i => ({ id: i.id, nome: i.nome, icon: i.icon || null, ...(i.porcoes ? { porcoes: i.porcoes } : {}) })) });
       if (ac.pesos.length)         it.customGroups.push({ tipo: 'pesos',    valores: ac.pesos });
       if (ac.porcaoRef > 0)        it.customGroups.push({ tipo: 'porcao_ref', gramas: ac.porcaoRef });
     }
