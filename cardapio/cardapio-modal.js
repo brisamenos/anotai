@@ -39,11 +39,22 @@ function openItemModal(id) {
   }
   const porcaoGrpM = (i.custom_groups || []).find(g => g.tipo === 'porcao_ref');
   const porcaoRefM = porcaoGrpM?.gramas || 0;
+  const pesosGrpM  = (i.custom_groups || []).find(g => g.tipo === 'pesos');
   if (porcaoRefM > 0 && i.price > 0) {
     porcaoEl.textContent = `🥩 Porção de ${porcaoRefM}g · R$ ${fmt(i.price * porcaoRefM / 1000)}`;
     porcaoEl.style.display = 'inline-flex';
+    // Se tem pesos disponíveis, torna clicável para selecionar gramas
+    if (pesosGrpM?.valores?.length) {
+      porcaoEl.style.cursor = 'pointer';
+      porcaoEl.title = 'Toque para escolher a quantidade';
+      porcaoEl.onclick = () => _openPorcaoQuickPicker(i, porcaoRefM);
+    } else {
+      porcaoEl.style.cursor = '';
+      porcaoEl.onclick = null;
+    }
   } else {
     porcaoEl.style.display = 'none';
+    porcaoEl.onclick = null;
   }
   document.getElementById('im-qty').textContent = _imQty;
   document.getElementById('im-obs').value = '';
