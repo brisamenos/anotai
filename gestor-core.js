@@ -671,13 +671,22 @@ setInterval(async () => {
         let houveMudanca = false;
         for (const a of atuais) {
           const idx = ordersKanban.findIndex(x => x.id === a.id);
-          if (idx !== -1 && ordersKanban[idx].status !== a.status) {
-            if (['entregue','cancelado'].includes(a.status)) {
-              ordersKanban.splice(idx, 1);
-            } else {
-              ordersKanban[idx].status = a.status;
+          if (idx !== -1) {
+            // Usa _statusReal para comparar — pedidos pix_manual têm status='analise' no kanban
+            // mas 'aguardando_pix' no banco, então não devem ser removidos por isso
+            const statusNoCanban = ordersKanban[idx]._statusReal || ordersKanban[idx].status;
+            if (statusNoCanban !== a.status) {
+              if (['entregue','cancelado'].includes(a.status)) {
+                ordersKanban.splice(idx, 1);
+              } else if (a.status === 'aguardando_pix') {
+                // continua como analise no kanban — é pix_manual pendente
+              } else {
+                ordersKanban[idx].status   = a.status;
+                ordersKanban[idx]._statusReal = a.status;
+                ordersKanban[idx]._pixPendente = false;
+              }
+              houveMudanca = true;
             }
-            houveMudanca = true;
           }
         }
         if (houveMudanca) renderKanban();
