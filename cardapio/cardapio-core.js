@@ -358,7 +358,7 @@ async function init() {
       }
     }
 
-    _pixAtivoGestor    = pixCfgR.pix_ativo_gestor !== false;
+    _pixAtivoGestor    = pixCfgR.pix_ativo_gestor === true;
     _pixKeyManual      = pixCfgR.pix_key_manual      || '';
     _pixKeyManualTipo  = pixCfgR.pix_key_manual_tipo  || 'aleatoria';
     _pixKeyManualBanco = pixCfgR.pix_key_manual_banco || '';
