@@ -54,8 +54,8 @@ function openItemModal(id) {
   _acougueCortes = {};
   _acougueAtual  = null;
   renderImGrupos(i);
-  // Pré-carrega imagens dos cortes para evitar delay no modal
-  if (_isAcougueItem(i)) {
+  // Pré-carrega imagens dos cortes para evitar delay no modal (só kg)
+  if (_isAcougueItem(i) && !_isKitItem(i)) {
     const grupos = i.custom_groups || [];
     const cortesGrp = grupos.find(g => g.tipo === 'cortes');
     if (cortesGrp?.opcoes) {
@@ -89,7 +89,7 @@ function openItemModal(id) {
   const existingTabs = document.getElementById('im-info-tabs-wrap');
   if (existingTabs) existingTabs.remove();
 
-  if (_isAcougueItem(i)) {
+  if (_isAcougueItem(i) && !_isKitItem(i)) {
     const cgs            = i.custom_groups || [];
     const ocasiaoGrp     = cgs.find(g => g.tipo === 'ocasiao');
     const armazenGrp     = cgs.find(g => g.tipo === 'armazenamento');
@@ -982,8 +982,8 @@ function imConfirm() {
     }
   }
 
-  // ── Açougue: valida e monta descrição ──
-  if (_isAcougueItem(i)) {
+  // ── Açougue: valida e monta descrição (só para kg, não kit) ──
+  if (_isAcougueItem(i) && !_isKitItem(i)) {
     const totalPesoSel = Object.values(_acougueCortes).reduce((s, v) => s + (v.peso || 0), 0);
     if (!totalPesoSel) {
       toast('🥩', 'Selecione ao menos um corte e o peso!');
