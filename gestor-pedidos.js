@@ -86,7 +86,7 @@ function filterKanban(type) {
 // KANBAN
 // ─────────────────────────────────────────
 function renderKanban(){
-  const statuses=['aguardando_pix','analise','producao','pronto'];
+  const statuses=['analise','producao','pronto'];
   statuses.forEach(st=>{
     const col=document.getElementById('col-'+st);
     const cnt=document.getElementById('cnt-'+st);
@@ -116,11 +116,16 @@ function renderKanban(){
         // ── Botões de ação por tipo ──────────────────────
         let actionBtn='';
         if(st==='analise'){
-          const _pixManualBtn = o.pag === 'pix_manual' ? '<button class="oc-btn oc-btn-pix-confirmar" onclick="event.stopPropagation();confirmarPagamentoPix('+o.id+')">&#9989; Confirmar Pago PIX</button>' : '';
-          actionBtn= _pixManualBtn+
-            '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById('+o.id+')">✔ Confirmar</button>'+
-            '<button class="oc-btn oc-btn-no" onclick="event.stopPropagation();cancelOrderById('+o.id+')">✕ Cancelar</button>'+
-            (_printMode==='manual'?'<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById('+o.id+')">🖨️</button>':'');
+          if(o._pixPendente){
+            // PIX manual aguardando confirmação — só mostra botão de confirmar pagamento e cancelar
+            actionBtn='<button class="oc-btn oc-btn-pix-confirmar" onclick="event.stopPropagation();confirmarPagamentoPix('+o.id+')">💠 Confirmar Pagamento PIX</button>'+
+              '<button class="oc-btn oc-btn-no" onclick="event.stopPropagation();cancelOrderById('+o.id+')">✕ Cancelar</button>';
+          } else {
+            actionBtn=
+              '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById('+o.id+')">✔ Confirmar</button>'+
+              '<button class="oc-btn oc-btn-no" onclick="event.stopPropagation();cancelOrderById('+o.id+')">✕ Cancelar</button>'+
+              (_printMode==='manual'?'<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById('+o.id+')">🖨️</button>':'');
+          }
         } else if(st==='producao'){
           const prontoLabel = isMesa ? 'Pronto p/ servir!' : isRetirada ? 'Pronto no balcão!' : '🚀 Pronto!';
           actionBtn='<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById('+o.id+')">'+prontoLabel+'</button>'+(_printMode==='manual'?'<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById('+o.id+')">🖨️</button>':'');
@@ -148,7 +153,8 @@ function renderKanban(){
           return '';
         })();
 
-        return '<div class="order-card" onclick="openOrderDetail('+o.id+')">'+
+        const _cardStyle = o._pixPendente ? ' style="border-left:3px solid rgba(249,115,22,.7);background:rgba(249,115,22,.04)"' : '';
+        return '<div class="order-card"'+_cardStyle+' onclick="openOrderDetail('+o.id+')">'+
           '<div class="oc-top"><span class="oc-id">#'+o.num+'</span>'+_tipoBadge+'<span class="oc-time">⏱ '+o.time+'</span></div>'+
           '<div class="oc-client">'+o.client+(o.phone?' · '+o.phone:'')+'</div>'+
           '<div class="oc-items">'+itemStr+'</div>'+
@@ -180,7 +186,6 @@ function openOrderDetail(id) {
   // Número e status
   document.getElementById('od-id').textContent = 'Pedido #' + o.num;
   const statusMap = {
-    aguardando_pix: ['badge-aguardando-pix', '💠 Aguardando PIX'],
     analise:   ['badge-analise',   'Em análise'],
     producao:  ['badge-producao',  'Em produção'],
     pronto:    ['badge-pronto',    'Pronto para entrega'],

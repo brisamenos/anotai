@@ -156,6 +156,7 @@ function mapItem(i) {
 }
 
 function mapOrder(o) {
+  const pixPendente = o.status === 'aguardando_pix' && o.pag === 'pix_manual';
   return {
     id: o.id,
     num: _orderNum(o.id),
@@ -164,7 +165,9 @@ function mapOrder(o) {
     items: Array.isArray(o.items) ? o.items : [],
     total: parseFloat(o.total) || 0,
     taxa: parseFloat(o.taxa) || 0,
-    status: o.status || 'analise',
+    status: pixPendente ? 'analise' : (o.status || 'analise'),
+    _pixPendente: pixPendente,
+    _statusReal: o.status || 'analise',
     time: o.created_at || o.time || '',
     created_at: o.created_at || '',
     addr: o.addr || '',
@@ -486,11 +489,14 @@ function subscribeOrders() {
   const chOrders = sb.channel('orders-rt')
     .on('postgres_changes', {event:'INSERT', schema:'public', table:'orders'}, p => {
       // Pedido aguardando cartão não entra no kanban — só após pagamento online confirmado
-      // PIX manual entra no kanban para o gestor confirmar o recebimento
+      // PIX manual entra no kanban na coluna "analise" para o gestor confirmar o recebimento
       if (p.new.status === 'aguardando_cartao') return;
       if (p.new.status === 'aguardando_pix' && p.new.pag !== 'pix_manual') return;
       if (!ordersKanban.find(x => x.id === p.new.id)) {
-        ordersKanban.unshift(mapOrder(p.new));
+        // PIX manual aparece na coluna analise com badge próprio
+        const _mapped = mapOrder(p.new);
+        if (_mapped.status === 'aguardando_pix') _mapped._pixPendente = true;
+        ordersKanban.unshift(_mapped);
         if (p.new.id > _maxKnownOrderId) _maxKnownOrderId = p.new.id;
         renderKanban();
         playOrderSound();
