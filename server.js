@@ -306,6 +306,10 @@ const MIGRATIONS = [
   { version:27, description:'store_tema em store_config (tema visual do cardapio publico)', up:
     `ALTER TABLE store_config ADD COLUMN store_tema TEXT DEFAULT 'classico'`
   },
+  { version:28, description:'time e pag_momento em orders', up:[
+    `ALTER TABLE orders ADD COLUMN time TEXT`,
+    `ALTER TABLE orders ADD COLUMN pag_momento TEXT DEFAULT 'entrega'`
+  ]},
 ]
 
 function runMigrations() {
@@ -514,7 +518,7 @@ const TABLE_COLS = {
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
-  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','troco','status','mesa_num','garcom_id','garcom_nome','customer_id','created_at'],
+  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','garcom_id','garcom_nome','customer_id','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','updated_at'],
   fidelidade:   ['id','tenant_id','name','phone','birthday','pts','max_pts','orders_count','resgates','created_at'],
