@@ -132,20 +132,49 @@ async function evoCriarInstancia() {
   const instName = EVO.instance;
   if (!instName) { sbToast('err', 'Informe o nome da instância antes de criar.'); return; }
   sbLoading(true);
-  const r = await EVO.req('POST', '/instance/create', {
+
+  // v2: tenta criar — se já existir (409/500), usa a instância existente
+  let r = await EVO.req('POST', '/instance/create', {
     instanceName: instName,
     qrcode: true,
     integration: 'WHATSAPP-BAILEYS'
   });
+
+  // Se retornou 500, pode ser duplicata — tenta usar a instância existente
+  if (!r.ok) {
+    const msg = r.data?.message || '';
+    const isDuplicate = r.status === 409 || (r.status === 500 && (
+      msg.toLowerCase().includes('already') ||
+      msg.toLowerCase().includes('exist') ||
+      msg.toLowerCase().includes('duplicate')
+    ));
+    if (isDuplicate || r.status === 500) {
+      sbToast('ok', `Instância "${instName}" já existe. Usando existente...`);
+      sbLoading(false);
+      await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: instName });
+      evoConectar();
+      return;
+    }
+    sbLoading(false);
+    const m = r.data?.message || r.data?.error || `Erro ${r.status}`;
+    sbToast('err', 'Erro: ' + (typeof m === 'string' ? m : JSON.stringify(m)));
+    return;
+  }
+
   sbLoading(false);
-  if (r.ok) {
-    // Salva evo_instance no store_config do tenant
-    await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: instName });
-    sbToast('ok', `Instância "${instName}" criada!`);
-    evoCheckStatus();
+  await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: instName });
+  sbToast('ok', `Instância "${instName}" criada!`);
+
+  // v2: QR pode vir direto na resposta de criação
+  const qrBase64 = r.data?.qrcode?.base64 || r.data?.base64;
+  if (qrBase64) {
+    const qrArea = document.getElementById('evo-qr-area');
+    if (qrArea) {
+      qrArea.innerHTML = `<div style="font-size:13px;font-weight:600;margin-bottom:12px">Escaneie com seu WhatsApp</div><img src="${qrBase64}" style="width:220px;height:220px;border-radius:12px;border:3px solid var(--accent);margin-bottom:12px"><div style="font-size:11px;color:var(--muted);margin-bottom:12px">QR Code expira em 60 segundos</div><button class="btn bg" style="font-size:11.5px" onclick="evoConectar()">Gerar novo QR Code</button>`;
+    }
+    _iniciarPollingConexao();
   } else {
-    const m = r.data?.message||r.data?.error||`Erro ${r.status}`;
-    sbToast('err','Erro: '+(typeof m==='string'?m:JSON.stringify(m)));
+    evoConectar();
   }
 }
 
@@ -186,17 +215,25 @@ async function evoConectar() {
     }
   }
 
-  if (!r?.ok || (!r.data?.code && !r.data?.base64)) {
+  // v2: QR pode estar em r.data.base64, r.data.qrcode.base64, ou r.data.code
+  const qrB64 = r?.data?.base64 || r?.data?.qrcode?.base64;
+  const qrCode = r?.data?.code || r?.data?.qrcode?.code;
+
+  if (!r?.ok || (!qrCode && !qrB64)) {
     if (qrArea) qrArea.innerHTML=`<div style="font-size:13px;color:var(--danger);margin-bottom:12px">${r?.data?.message||'Erro ao gerar QR. Verifique se a instância existe.'}</div><button class="btn bp" onclick="evoCriarInstancia()">Criar instância</button>`;
     return;
   }
   if (qrArea) {
-    if (r.data.base64) {
-      qrArea.innerHTML=`<div style="font-size:13px;font-weight:600;margin-bottom:12px">Escaneie com seu WhatsApp</div><img src="${r.data.base64}" style="width:220px;height:220px;border-radius:12px;border:3px solid var(--accent);margin-bottom:12px"><div style="font-size:11px;color:var(--muted);margin-bottom:12px">QR Code expira em 60 segundos</div><button class="btn bg" style="font-size:11.5px" onclick="evoConectar()">Gerar novo QR Code</button>`;
+    if (qrB64) {
+      qrArea.innerHTML=`<div style="font-size:13px;font-weight:600;margin-bottom:12px">Escaneie com seu WhatsApp</div><img src="${qrB64}" style="width:220px;height:220px;border-radius:12px;border:3px solid var(--accent);margin-bottom:12px"><div style="font-size:11px;color:var(--muted);margin-bottom:12px">QR Code expira em 60 segundos</div><button class="btn bg" style="font-size:11.5px" onclick="evoConectar()">Gerar novo QR Code</button>`;
     } else {
-      qrArea.innerHTML=`<div style="font-size:12px;word-break:break-all;padding:10px;background:var(--surface2);border-radius:8px;margin-bottom:12px;color:var(--muted)">${(r.data.code||'').slice(0,80)}...</div><button class="btn bg" onclick="evoConectar()">Gerar novo QR</button>`;
+      qrArea.innerHTML=`<div style="font-size:12px;word-break:break-all;padding:10px;background:var(--surface2);border-radius:8px;margin-bottom:12px;color:var(--muted)">${(qrCode||'').slice(0,80)}...</div><button class="btn bg" onclick="evoConectar()">Gerar novo QR</button>`;
     }
   }
+  _iniciarPollingConexao();
+}
+
+function _iniciarPollingConexao() {
   if (evoQrInterval) clearInterval(evoQrInterval);
   let tries=0;
   evoQrInterval = setInterval(async()=>{
