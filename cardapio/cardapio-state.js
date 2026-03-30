@@ -55,6 +55,7 @@ let _pixPollTimer    = null;
 let _pixMpId         = null;
 let _pixAtivoGestor  = true;
 let _pixKeyManual    = '';
+let _pixKeyManualTipo  = 'aleatoria';
 let _pixKeyManualBanco = '';
 
 // ── Cartão de Crédito MP ──

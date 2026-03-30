@@ -360,10 +360,11 @@ async function init() {
 
     _pixAtivoGestor    = pixCfgR.pix_ativo_gestor !== false;
     _pixKeyManual      = pixCfgR.pix_key_manual      || '';
+    _pixKeyManualTipo  = pixCfgR.pix_key_manual_tipo  || 'aleatoria';
     _pixKeyManualBanco = pixCfgR.pix_key_manual_banco || '';
 
-    // Oculta PIX se gestor desativou pagamentos online ou PIX especificamente
-    if (!pixCfgR.pix_ativo) {
+    // Oculta PIX somente se desativado E não há chave manual configurada
+    if (!pixCfgR.pix_ativo && !_pixKeyManual) {
       const pixBtn = document.querySelector('[data-pay="pix"]');
       if (pixBtn) pixBtn.style.display = 'none';
     }
