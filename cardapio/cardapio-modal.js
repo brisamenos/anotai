@@ -18,9 +18,9 @@ function openItemModal(id) {
 
   const imgEl = document.getElementById('im-img');
   if (i.image_url) {
-    imgEl.innerHTML = `<button class="im-close" onclick="closeItemModal()">✕</button><img src="${i.image_url}" alt="${i.name}" style="width:100%;height:100%;object-fit:cover">`;
+    imgEl.innerHTML = `<img src="${i.image_url}" alt="${i.name}" style="width:100%;height:100%;object-fit:cover">`;
   } else {
-    imgEl.innerHTML = `<button class="im-close" onclick="closeItemModal()">✕</button><div style="opacity:.35"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="16" stroke="currentColor" stroke-width="1.5" opacity=".25"/><path d="M16 24h16M24 16v16" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".25"/></svg></div>`;
+    imgEl.innerHTML = `<div style="opacity:.25"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="16" stroke="currentColor" stroke-width="1.5" opacity=".3"/><path d="M16 24h16M24 16v16" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".3"/></svg></div>`;
   }
   document.getElementById('im-name').textContent = i.name;
   document.getElementById('im-desc').textContent = i.description || '';
@@ -244,7 +244,7 @@ function renderHalfPicker(baseItem) {
   const wholeCheck = _isWholeFlavorSelected() ? '✓' : '';
   const wholeOpt = `
     <div class="half-opt${wholeOn}" onclick="selectHalfWhole()" style="border-left:3px solid var(--green)">
-      <div class="half-opt-emoji">🍕</div>
+      <div class="half-opt-emoji"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l9 18H3L12 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 14h8M10 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></div>
       <span class="half-opt-name">Inteira — mesmo sabor</span>
       <span class="half-opt-price" style="color:var(--green)">Sem acréscimo</span>
       <div class="half-opt-check">${wholeCheck}</div>
@@ -257,7 +257,7 @@ function renderHalfPicker(baseItem) {
     const on = (_halfItem && _halfItem.id === s.id && !_isWholeFlavorSelected()) ? ' on' : '';
     const thumbInner = s.image_url
       ? `<img src="${s.image_url}" alt="${s.name}" style="width:100%;height:100%;object-fit:cover;border-radius:7px">`
-      : `<span>${s.emoji || '🍕'}</span>`;
+      : `<span>$<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l9 18H3L12 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 14h8M10 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>`;
     const check = (_halfItem && _halfItem.id === s.id && !_isWholeFlavorSelected()) ? '✓' : '';
     return `
     <div class="half-opt${on}" onclick="selectHalf(${s.id})">
@@ -300,7 +300,7 @@ function updateHalfUI() {
     if (base && base.image_url) {
       emoEl.innerHTML = `<img src="${base.image_url}" alt="${base.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`;
     } else {
-      emoEl.textContent = (base && base.emoji) || '🍕';
+      emoEl.innerHTML = (base && base.image_url ? '' : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l9 18H3L12 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 14h8M10 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`);
     }
     document.getElementById('half-sel-name').textContent = 'Inteira — mesmo sabor';
     document.getElementById('half-sel-hint').textContent  = 'Pizza inteira com um único sabor';
@@ -314,7 +314,7 @@ function updateHalfUI() {
   if (_halfItem.image_url) {
     emoEl.innerHTML = `<img src="${_halfItem.image_url}" alt="${_halfItem.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`;
   } else {
-    emoEl.textContent = _halfItem.emoji || '🍕';
+    emoEl.innerHTML = (_halfItem.image_url ? '' : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l9 18H3L12 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 14h8M10 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`);
   }
   document.getElementById('half-sel-name').textContent = _halfItem.name;
   document.getElementById('half-sel-hint').textContent = 'Toque para trocar';
@@ -342,7 +342,7 @@ function updateImAddBtn() {
   const disabled = !_lojaAberta || (isPizza && !_halfItem);
   document.getElementById('im-add-btn').disabled = disabled;
   const label = isPizza && !_halfItem
-    ? '🍕 Escolha como quer sua pizza acima'
+    ? 'Escolha como quer sua pizza acima'
     : `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> Adicionar · R$ ${fmt(price * _imQty)}`;
   document.getElementById('im-add-btn').innerHTML = label;
 }
@@ -1051,4 +1051,3 @@ function imConfirm() {
   updateCartFloat();
   toast('cart', `${isPizza && _halfItem && !_isWholeFlavorSelected() ? 'Pizza meio a meio' : i.name} adicionado!`);
 }
-
