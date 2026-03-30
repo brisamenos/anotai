@@ -178,6 +178,12 @@ function closeTrocoModal() {
   document.getElementById('troco-overlay').classList.remove('on');
 }
 
+function trocoModalCancelar() {
+  closeTrocoModal();
+  selectedPay = '';
+  document.querySelectorAll('.pay-opt').forEach(b => b.classList.remove('on'));
+}
+
 function trocoEscolha(el, tipo) {
   _trocoEscolha = tipo;
   document.getElementById('troco-opt-nao').classList.toggle('on', tipo === 'nao');
@@ -492,6 +498,12 @@ function closePagModal() {
   document.getElementById('pag-overlay').classList.remove('on');
 }
 
+function pagModalCancelar() {
+  closePagModal();
+  selectedPay = '';
+  document.querySelectorAll('.pay-opt').forEach(b => b.classList.remove('on'));
+}
+
 function pagEscolha(tipo) {
   _pagEscolha = tipo;
   document.getElementById('pag-opt-entrega').classList.toggle('on', tipo === 'entrega');
@@ -783,4 +795,3 @@ function resetCart() {
   renderTotals();
   closeCart();
 }
-
