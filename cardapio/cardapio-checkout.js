@@ -261,7 +261,7 @@ async function _doSubmitOrder(addr, troco) {
     const { data: order, error } = await sb.from('orders').insert({
       client: name, phone, addr,
       items, total: grandTotal(), taxa: getTaxa(),
-      status: selectedPay === 'pix' && _pixAtivoGestor ? 'aguardando_pix'
+      status: selectedPay === 'pix' ? 'aguardando_pix'
             : selectedPay === 'cartao_mp' ? 'aguardando_cartao'
             : 'analise',
       time,
@@ -427,7 +427,7 @@ async function _iniciarFluxoPix(order) {
     const pr = await fetch('/api/pix/criar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
-      body: JSON.stringify({ valor: order.total, order_id: order.id, client: order.client })
+      body: JSON.stringify({ valor: order.total, order_id: order.id, client: order.client, phone: order.phone })
     });
     const pd = pr.ok ? await pr.json() : null;
     if (pr.ok && pd?.qr_code) {
@@ -795,3 +795,4 @@ function resetCart() {
   renderTotals();
   closeCart();
 }
+
