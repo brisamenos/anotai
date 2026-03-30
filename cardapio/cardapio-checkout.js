@@ -320,7 +320,7 @@ async function _doSubmitOrder(addr, troco) {
     const inv = document.getElementById('invite-signup');
     if (inv && !_customer) inv.style.display = 'flex';
 
-    startTracking(order.id, items, name, addr);
+    startTracking(order.id, items, name, addr, order.status);
 
     // ── PIX: gera QR Code MP ou exibe chave manual ──
     if (selectedPay === 'pix') {
