@@ -510,7 +510,7 @@ function emit(tenantId, table, record, type) {
 // REST ENGINE
 // ════════════════════════════════════════════════════════
 const TABLE_COLS = {
-  tenants:      ['id','nome','plano','ativo','slug','expires_at','created_at'],
+  tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','created_at'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
   store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_tema','store_tempo_entrega','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
