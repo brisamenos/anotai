@@ -420,7 +420,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const gCfg = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
       const gIa  = safeJson(gCfg?.ia_config)
       const mpConfigurado  = !!(gIa.mp_token || MP_TOKEN)
-      const pixAtivo       = ia.pix_ativo !== false
+      const pixAtivo       = ia.pix_ativo === true
       const pagOnlineAtivo = ia.pag_online_ativo !== false
       const cartaoDisponivel   = !!(gIa.mp_public_key)           // só disponível se admin configurou a public key
       const cartaoOnlineAtivo  = ia.cartao_online_ativo !== false && cartaoDisponivel

@@ -153,7 +153,7 @@ function conectarSaquesSSE() {
 // PAGAMENTOS ONLINE — PIX e Cartão
 // ════════════════════════════════════════════════════
 
-let _pixOnlineAtivo    = true;
+let _pixOnlineAtivo    = false;
 let _cartaoOnlineAtivo = false; // false até o admin configurar a public key
 
 function _renderPixOnlineToggle(ativo) {
@@ -222,11 +222,6 @@ async function carregarConfigPixGestor() {
     const d = await r.json();
     // PIX
     _renderPixOnlineToggle(d.pix_ativo !== false);
-    // Preenche campos da chave manual se existirem
-    const keyEl  = document.getElementById('pix-manual-key-input');
-    const tipoEl = document.getElementById('pix-manual-tipo-select');
-    if (keyEl  && d.pix_key_manual)      keyEl.value  = d.pix_key_manual;
-    if (tipoEl && d.pix_key_manual_tipo) tipoEl.value = d.pix_key_manual_tipo;
     // Preenche campos da chave manual se existirem
     const keyEl  = document.getElementById('pix-manual-key-input');
     const tipoEl = document.getElementById('pix-manual-tipo-select');
