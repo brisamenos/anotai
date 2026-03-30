@@ -191,7 +191,7 @@ async function loadAllData(silent = false) {
     ] = await Promise.all([
       safe(sb.from('menu_items').select('*').order('sort_order').order('id')),
       safe(sb.from('categories').select('*').order('sort_order')),
-      safe(sb.from('orders').select('*').in('status',['analise','producao','pronto']).order('id',{ascending:false})),
+      safe(sb.from('orders').select('*').in('status',['aguardando_pix','analise','producao','pronto']).order('id',{ascending:false})),
       safe(sb.from('movimentos').select('*').gte('created_at', (() => {
         // Usa data local BR (UTC-3) para não perder movimentos do início do dia
         const d = new Date(); d.setHours(d.getHours() - 3);
@@ -485,8 +485,10 @@ function subscribeOrders() {
 
   const chOrders = sb.channel('orders-rt')
     .on('postgres_changes', {event:'INSERT', schema:'public', table:'orders'}, p => {
-      // Pedidos aguardando PIX não entram no kanban — só aparecem após pagamento confirmado
-      if (p.new.status === 'aguardando_pix' || p.new.status === 'aguardando_cartao') return;
+      // Pedido aguardando cartão não entra no kanban — só após pagamento online confirmado
+      // PIX manual entra no kanban para o gestor confirmar o recebimento
+      if (p.new.status === 'aguardando_cartao') return;
+      if (p.new.status === 'aguardando_pix' && p.new.pag !== 'pix_manual') return;
       if (!ordersKanban.find(x => x.id === p.new.id)) {
         ordersKanban.unshift(mapOrder(p.new));
         if (p.new.id > _maxKnownOrderId) _maxKnownOrderId = p.new.id;
@@ -517,8 +519,8 @@ function subscribeOrders() {
     })
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, p => {
       const idx = ordersKanban.findIndex(x => x.id === p.new.id);
-      // Pedido PIX confirmado — entra no kanban agora
-      if (idx === -1 && p.new.status === 'analise' && p.new.pag === 'pix_mp') {
+      // Pedido PIX confirmado — entra no kanban agora (online pix_mp ou manual pix_manual)
+      if (idx === -1 && p.new.status === 'analise' && (p.new.pag === 'pix_mp' || p.new.pag === 'pix_manual')) {
         ordersKanban.unshift(mapOrder(p.new));
         renderKanban();
         playOrderSound();
@@ -622,7 +624,7 @@ setInterval(async () => {
     {
       const q = sb.from('orders')
         .select('*')
-        .in('status', ['analise','producao','pronto'])
+        .in('status', ['aguardando_pix','analise','producao','pronto'])
         .order('id', {ascending:false});
       // Quando _maxKnownOrderId > 0 usa filtro eficiente; quando 0 varre todos os ativos
       if (_maxKnownOrderId > 0) q.gt('id', _maxKnownOrderId);
@@ -939,6 +941,10 @@ function triggerImageUpload(itemId, itemName) {
 async function advanceOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
   if (!o) return;
+  if (o.status === 'aguardando_pix') {
+    sbToast('err', 'Use o botão "Confirmar Pago PIX" para este pedido.');
+    return;
+  }
   const newStatus = o.status === 'analise' ? 'producao' : 'pronto';
   try {
     const res = await fetch('/api/order-status', {
@@ -1015,15 +1021,16 @@ async function confirmarPagamentoPix(id) {
   if (!confirm(`Confirmar que o pagamento PIX do pedido #${o.num} foi recebido?`)) return;
   sbLoading(true);
   try {
-    const res = await fetch(`/api/orders?id=eq.${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _sessao?.tenant_id },
-      body: JSON.stringify({ pag: 'pix_mp' })
+    // Usa /api/order-status para mover para analise — isso dispara WA de confirmação ao cliente
+    const res = await fetch('/api/order-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: id, new_status: 'analise', tenant_id: _sessao?.tenant_id })
     });
     if (!res.ok) throw new Error('Erro');
-    if (o) o.pag = 'pix_mp';
-    sbToast('ok', `Pagamento PIX do pedido #${o.num} confirmado!`);
+    if (o) o.status = 'analise';
     renderKanban();
+    sbToast('ok', `Pagamento PIX do pedido #${o.num} confirmado! Cliente será notificado.`);
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
   sbLoading(false);
 }
