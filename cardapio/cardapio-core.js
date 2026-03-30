@@ -28,6 +28,9 @@ function applyBranding(b, nome) {
   if (b?.store_descricao) document.getElementById('hero-desc').textContent = b.store_descricao;
   const cor = b?.store_cor || '#f97316';
   document.documentElement.style.setProperty('--accent', cor);
+  // Define --accent-rgb para uso em rgba()
+  const _rgb = cor.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if (_rgb) document.documentElement.style.setProperty('--accent-rgb', `${parseInt(_rgb[1],16)},${parseInt(_rgb[2],16)},${parseInt(_rgb[3],16)}`);
 
   // Logo circular
   const logoWrap = document.getElementById('hero-logo-wrap');
@@ -412,6 +415,8 @@ function applyBrandingLive(cfg) {
   // Cor principal — atualiza CSS variable instantaneamente
   if (cfg.store_cor) {
     document.documentElement.style.setProperty('--accent', cfg.store_cor);
+    const _rgb2 = cfg.store_cor.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+    if (_rgb2) document.documentElement.style.setProperty('--accent-rgb', `${parseInt(_rgb2[1],16)},${parseInt(_rgb2[2],16)},${parseInt(_rgb2[3],16)}`);
   }
 
   // Logo circular
