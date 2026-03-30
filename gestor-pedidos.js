@@ -121,6 +121,7 @@ function renderKanban(){
             actionBtn='<button class="oc-btn oc-btn-pix-confirmar" onclick="event.stopPropagation();confirmarPagamentoPix('+o.id+')">💠 Confirmar Pagamento PIX</button>'+
               '<button class="oc-btn oc-btn-no" onclick="event.stopPropagation();cancelOrderById('+o.id+')">✕ Cancelar</button>';
           } else {
+            // PIX confirmado ou outros pagamentos — botões normais de analise
             actionBtn=
               '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById('+o.id+')">✔ Confirmar</button>'+
               '<button class="oc-btn oc-btn-no" onclick="event.stopPropagation();cancelOrderById('+o.id+')">✕ Cancelar</button>'+
@@ -140,6 +141,7 @@ function renderKanban(){
           const _naEntregaTag = '<span style="font-size:10px;background:rgba(245,158,11,.2);color:#b45309;padding:1px 5px;border-radius:99px;font-weight:700;margin-left:4px">NA ENTREGA</span>';
           const _pendenteTag  = '<span style="font-size:10px;background:rgba(245,158,11,.2);color:#b45309;padding:1px 5px;border-radius:99px;font-weight:700;margin-left:4px">PENDENTE</span>';
           if (p === 'pix_mp' || p === 'pix') return '<div class="oc-pag-badge oc-pag-pix">&#9889; PAGO PIX</div>';
+          if (p === 'pix_manual' && !o._pixPendente) return '<div class="oc-pag-badge oc-pag-pix">&#9889; PAGO PIX</div>';
           if (p === 'pix_manual') return '<div class="oc-pag-badge oc-pag-pix-pendente">&#9203; PIX PENDENTE</div>';
           if (p === 'cartao' || p === 'credito')   return '<div class="oc-pag-badge oc-pag-cartao"> CRÉDITO' + _naEntregaTag + '</div>';
           if (p === 'debito')                        return '<div class="oc-pag-badge oc-pag-cartao"> DÉBITO' + _naEntregaTag + '</div>';
