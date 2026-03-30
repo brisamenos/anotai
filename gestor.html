@@ -863,6 +863,45 @@ Para confirmar, realize o pagamento via PIX:
 Após o pagamento, seu pedido será confirmado automaticamente. ✅</textarea>
         </div>
 
+        <!-- PIX Copia e Cola (PIX online) -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(99,102,241,.15);display:flex;align-items:center;justify-content:center;font-size:18px">📋</div>
+              <div><div style="font-weight:600;font-size:13.5px">PIX Copia e Cola</div><div style="font-size:11.5px;color:var(--muted)">Enviado após gerar o QR Code. Use {codigo_pix} para o código e {total} para o valor.</div></div>
+            </div>
+            <div class="toggle on" id="auto-toggle-pix_copia_cola" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-pix_copia_cola" rows="5" style="font-size:12.5px">💠 *PIX — Pedido #{id}*
+
+Olá *{nome}*! Aqui está seu código PIX Copia e Cola:
+
+`{codigo_pix}`
+
+💰 Valor: *R$ {total}*
+
+Copie o código acima e cole no seu app de pagamentos. ✅</textarea>
+        </div>
+
+        <!-- PIX Confirmado -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:9px;background:rgba(34,197,94,.15);display:flex;align-items:center;justify-content:center;font-size:18px">✅</div>
+              <div><div style="font-weight:600;font-size:13.5px">Pagamento PIX Confirmado</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando o pagamento PIX é confirmado (online ou manual).</div></div>
+            </div>
+            <div class="toggle on" id="auto-toggle-pix_confirmado" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <textarea class="form-input" id="auto-msg-pix_confirmado" rows="5" style="font-size:12.5px">✅ *Pagamento confirmado!*
+
+Olá *{nome}*, recebemos seu pagamento PIX do pedido *#{id}* com sucesso!
+
+🛒 {itens}
+💰 Total: R$ {total}
+
+Seu pedido está sendo preparado. Obrigado! 🎉</textarea>
+        </div>
+
         <!-- Pedido recebido (analise) -->
         <div class="card" style="padding:18px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">

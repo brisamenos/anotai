@@ -857,6 +857,29 @@ async function handleOrderStatus(req, res) {
     emit(tid,'orders',parseRow('orders',updated),'UPDATE')
     send(res,200,{ok:true,order:parseRow('orders',updated)})
 
+    // ── PIX manual confirmado pelo gestor ─────────────────────────────────
+    if (new_status === 'analise' && oldStatus === 'aguardando_pix' && order.pag === 'pix_manual') {
+      setImmediate(async () => {
+        try {
+          const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset FROM store_config WHERE tenant_id=?').get(tid)
+          const inst   = cfg?.evo_instance || EVO_INST
+          const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
+          const pixConf = auto['pix_confirmado'] || {}
+          if (pixConf.on === false) { log('⏭️','Automação pix_confirmado desligada'); return }
+          const offset = parseInt(cfg?.order_num_offset) || 0
+          const idStr  = String(Math.max(1, order.id - offset)).padStart(3,'0')
+          const nome   = order.client || 'Cliente'
+          const items  = (()=>{ try{ return (JSON.parse(order.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') }catch{ return '' } })()
+          const total  = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
+          const msgPad = `✅ *Pagamento confirmado!*\n\nOlá *${nome}*, recebemos seu pagamento PIX do pedido *#${idStr}* com sucesso!\n\n🛒 ${items}\n💰 Total: R$ ${total}\n\nSeu pedido está sendo preparado. Obrigado! 🎉`
+          const msgFin = pixConf.msg ? fillVars(pixConf.msg, { nome, id: idStr, itens: items, total }) : msgPad
+          const r = await sendWA(order.phone, msgFin, inst)
+          if (r.ok) log('📤', `PIX manual confirmado notificado → ${order.phone} #${idStr}`)
+        } catch(e) { log('❌','Erro notif pix_confirmado manual:', e.message) }
+      })
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
     // ── Cashback automático ─────────────────────────────
     if (['finalizado','entregue'].includes(new_status) && !['finalizado','entregue'].includes(oldStatus)) {
       try {
