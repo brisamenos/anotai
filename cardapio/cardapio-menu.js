@@ -4,15 +4,48 @@
 // ══════════════════════════════════════════
 function buildCats() {
   const scroll = document.getElementById('cats-scroll');
-  scroll.innerHTML = `<button class="cat-btn on" data-key="" onclick="filterCat(this,'')">Tudo</button>`;
-  allCats.forEach(c => {
-    const b = document.createElement('button');
-    b.className = 'cat-btn';
-    b.dataset.key = c.name;
-    b.onclick = () => filterCat(b, c.name);
-    b.textContent = (c.emoji ? c.emoji + ' ' : '') + (c.label || c.name);
-    scroll.appendChild(b);
-  });
+  const isAcougue = _segmento === 'acougue';
+
+  scroll.classList.toggle('carousel', isAcougue);
+  scroll.innerHTML = '';
+
+  const _catSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="13" y="3" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="13" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="13" y="13" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/></svg>`;
+  const _allSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.4"/><path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
+
+  if (isAcougue) {
+    const all = document.createElement('button');
+    all.className = 'cat-btn on';
+    all.dataset.key = '';
+    all.onclick = () => filterCat(all, '');
+    all.innerHTML = `<div class="cat-btn-icon">${_allSvg}</div>Tudo`;
+    scroll.appendChild(all);
+    allCats.forEach(c => {
+      const b = document.createElement('button');
+      b.className = 'cat-btn';
+      b.dataset.key = c.name;
+      b.onclick = () => filterCat(b, c.name);
+      const iconHtml = c.image_url
+        ? `<img src="${c.image_url}" alt="${c.label||c.name}">`
+        : (c.emoji ? `<span style="font-size:16px;line-height:1">${c.emoji}</span>` : _catSvg);
+      b.innerHTML = `<div class="cat-btn-icon">${iconHtml}</div>${c.label || c.name}`;
+      scroll.appendChild(b);
+    });
+  } else {
+    const all = document.createElement('button');
+    all.className = 'cat-btn on';
+    all.dataset.key = '';
+    all.onclick = () => filterCat(all, '');
+    all.textContent = 'Tudo';
+    scroll.appendChild(all);
+    allCats.forEach(c => {
+      const b = document.createElement('button');
+      b.className = 'cat-btn';
+      b.dataset.key = c.name;
+      b.onclick = () => filterCat(b, c.name);
+      b.textContent = (c.emoji ? c.emoji + ' ' : '') + (c.label || c.name);
+      scroll.appendChild(b);
+    });
+  }
 }
 
 function filterCat(el, key) {
@@ -135,6 +168,33 @@ function renderMenu() {
 
   let html = '<div>';
 
+  // ── Seção Destaques — açougue: acima das indicações; restaurante: posição normal ──
+  if (_segmento === 'acougue' && !searchQ && !activeCat && !_filterPreparo) {
+    const destItems = normalItems.filter(i => i.destaque || i.promo || i.price_old);
+    if (destItems.length >= 2) {
+      html += `<div class="destaques-wrap"><div class="section-label">Destaques</div>`;
+      html += `<div class="destaques-scroll">`;
+      destItems.forEach(i => {
+        const esg = i.status === 'esgotado';
+        html += `
+        <div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}>
+          <div class="dest-img">
+            ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" >` : `<span>${''}</span>`}
+            <span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span>
+          </div>
+          <div class="dest-body">
+            <div class="dest-name">${i.name}</div>
+            <div class="dest-prices">
+              ${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}
+              <span class="dest-price">R$ ${fmt(i.price)}</span>
+            </div>
+          </div>
+        </div>`;
+      });
+      html += `</div></div>`;
+    }
+  }
+
   // ── Banner de filtro de preparo ativo ──
   if (_filterPreparo) {
     const nomePrep = _getPreparoFilterNome(_filterPreparo);
@@ -174,32 +234,19 @@ function renderMenu() {
     return;
   }
 
-  // ── Seção Destaques (promos e price_old) ──
-  const destItems = normalItems.filter(i => i.destaque || i.promo || i.price_old);
-  if (destItems.length >= 2) {
-    html += `<div class="destaques-wrap"><div class="section-label">Destaques</div>`;
-    html += `<div class="destaques-scroll">`;
-    destItems.forEach(i => {
-      const esg = i.status === 'esgotado';
-      html += `
-      <div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}>
-        <div class="dest-img">
-          ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" >` : `<span>${''}</span>`}
-          <span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span>
-        </div>
-        <div class="dest-body">
-          <div class="dest-name">${i.name}</div>
-          <div class="dest-prices">
-            ${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}
-            <span class="dest-price">R$ ${fmt(i.price)}</span>
-          </div>
-        </div>
-      </div>`;
-    });
-    html += `</div></div>`;
-  }
-
   // Renderiza grupos normais
+  // ── Destaques para restaurante (posição original, entre filtro e grupos) ──
+  if (_segmento !== 'acougue' && !searchQ && !activeCat) {
+    const destItems = normalItems.filter(i => i.destaque || i.promo || i.price_old);
+    if (destItems.length >= 2) {
+      html += `<div class="destaques-wrap"><div class="section-label">Destaques</div><div class="destaques-scroll">`;
+      destItems.forEach(i => {
+        const esg = i.status === 'esgotado';
+        html += `<div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}><div class="dest-img">${i.image_url?`<img src="${i.image_url}" alt="${i.name}">`:''}<span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span></div><div class="dest-body"><div class="dest-name">${i.name}</div><div class="dest-prices">${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}<span class="dest-price">R$ ${fmt(i.price)}</span></div></div></div>`;
+      });
+      html += `</div></div>`;
+    }
+  }
   const groups = new Map();
   normalItems.forEach(i => {
     const key = i.cat_key || i.cat || '__outros';
@@ -393,4 +440,3 @@ function itemCard(i) {
     </div>
   </div>`;
 }
-
