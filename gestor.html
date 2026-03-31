@@ -3874,7 +3874,7 @@ Use no seu próximo pedido 🛍️</textarea>
       <span style="font-size:16px">🎨</span> Tema do cardápio
     </div>
     <div style="font-size:11.5px;color:var(--muted);margin-bottom:14px">Escolha o visual exibido para seus clientes</div>
-    <div id="cp-temas-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div id="cp-temas-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
 
       <!-- Tema: Clássico -->
       <div class="cp-tema-card" data-tema="classico" onclick="cpSelecionarTema('classico')" title="Fundo claro, visual limpo e moderno" style="border:2px solid var(--accent);border-radius:10px;overflow:hidden;cursor:pointer;transition:all .18s;position:relative">
@@ -3979,6 +3979,87 @@ Use no seu próximo pedido 🛍️</textarea>
       </div>
 
     </div>
+
+      <!-- Açougue -->
+      <div class="cp-tema-card" data-tema="acougue" onclick="cpSelecionarTema('acougue')" title="Vermelho escuro, ideal para açougues e churrascarias" style="border:2px solid transparent;border-radius:10px;overflow:hidden;cursor:pointer;transition:all .18s;position:relative">
+        <div style="background:#1a0a05;padding:10px 10px 8px">
+          <div style="background:#2a100a;border-radius:6px;padding:7px 8px;margin-bottom:5px;border:1px solid rgba(220,80,30,.3)">
+            <div style="width:60%;height:7px;background:#f5e6e0;border-radius:3px;margin-bottom:3px"></div>
+            <div style="width:40%;height:5px;background:#c9a090;border-radius:3px;opacity:.6"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="background:#2a100a;border-radius:5px;padding:5px 6px;border:1px solid rgba(220,80,30,.2);display:flex;gap:5px;align-items:center">
+              <div style="width:30px;height:22px;background:#3a1810;border-radius:3px;flex-shrink:0"></div>
+              <div><div style="width:50px;height:5px;background:#f5e6e0;border-radius:2px;margin-bottom:2px;opacity:.9"></div><div style="width:30px;height:5px;background:#c9a090;border-radius:2px;opacity:.5"></div></div>
+            </div>
+          </div>
+        </div>
+        <div style="background:#2a100a;padding:5px 8px;font-size:10.5px;font-weight:700;color:#f5e6e0;border-top:1px solid rgba(220,80,30,.2)">🥩 Açougue</div>
+        <div class="cp-tema-check" style="display:none;position:absolute;top:6px;right:6px;width:18px;height:18px;background:var(--accent);border-radius:50%;align-items:center;justify-content:center">
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <!-- Verde -->
+      <div class="cp-tema-card" data-tema="verde" onclick="cpSelecionarTema('verde')" title="Verde natural, ideal para comida saudável e natureba" style="border:2px solid transparent;border-radius:10px;overflow:hidden;cursor:pointer;transition:all .18s;position:relative">
+        <div style="background:#f0faf2;padding:10px 10px 8px">
+          <div style="background:#e8f5eb;border-radius:6px;padding:7px 8px;margin-bottom:5px;border:1px solid rgba(34,120,60,.12)">
+            <div style="width:60%;height:7px;background:#0d2b18;border-radius:3px;margin-bottom:3px"></div>
+            <div style="width:40%;height:5px;background:#3a7a52;border-radius:3px;opacity:.6"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="background:#fff;border-radius:5px;padding:5px 6px;border:1px solid rgba(34,120,60,.1);display:flex;gap:5px;align-items:center">
+              <div style="width:30px;height:22px;background:#d1ecda;border-radius:3px;flex-shrink:0"></div>
+              <div><div style="width:50px;height:5px;background:#0d2b18;border-radius:2px;margin-bottom:2px;opacity:.8"></div><div style="width:30px;height:5px;background:#3a7a52;border-radius:2px;opacity:.5"></div></div>
+            </div>
+          </div>
+        </div>
+        <div style="background:#0d3320;padding:5px 8px;font-size:10.5px;font-weight:700;color:#d1ecda;border-top:1px solid rgba(34,120,60,.2)">🌿 Verde Natural</div>
+        <div class="cp-tema-check" style="display:none;position:absolute;top:6px;right:6px;width:18px;height:18px;background:var(--accent);border-radius:50%;align-items:center;justify-content:center">
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <!-- Noturno -->
+      <div class="cp-tema-card" data-tema="noturno" onclick="cpSelecionarTema('noturno')" title="Roxo escuro elegante, ideal para bares e lounges" style="border:2px solid transparent;border-radius:10px;overflow:hidden;cursor:pointer;transition:all .18s;position:relative">
+        <div style="background:#0d0d1a;padding:10px 10px 8px">
+          <div style="background:#14142a;border-radius:6px;padding:7px 8px;margin-bottom:5px;border:1px solid rgba(120,100,200,.2)">
+            <div style="width:60%;height:7px;background:#e8e5ff;border-radius:3px;margin-bottom:3px"></div>
+            <div style="width:40%;height:5px;background:#9090c0;border-radius:3px;opacity:.6"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="background:#14142a;border-radius:5px;padding:5px 6px;border:1px solid rgba(120,100,200,.15);display:flex;gap:5px;align-items:center">
+              <div style="width:30px;height:22px;background:#1c1c35;border-radius:3px;flex-shrink:0"></div>
+              <div><div style="width:50px;height:5px;background:#e8e5ff;border-radius:2px;margin-bottom:2px;opacity:.8"></div><div style="width:30px;height:5px;background:#9090c0;border-radius:2px;opacity:.5"></div></div>
+            </div>
+          </div>
+        </div>
+        <div style="background:#07071a;padding:5px 8px;font-size:10.5px;font-weight:700;color:#e8e5ff;border-top:1px solid rgba(120,100,200,.2)">🌙 Noturno</div>
+        <div class="cp-tema-check" style="display:none;position:absolute;top:6px;right:6px;width:18px;height:18px;background:var(--accent);border-radius:50%;align-items:center;justify-content:center">
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <!-- Rosê -->
+      <div class="cp-tema-card" data-tema="rose" onclick="cpSelecionarTema('rose')" title="Rosê delicado, ideal para confeitarias e cafés" style="border:2px solid transparent;border-radius:10px;overflow:hidden;cursor:pointer;transition:all .18s;position:relative">
+        <div style="background:#fff5f7;padding:10px 10px 8px">
+          <div style="background:#ffe4ea;border-radius:6px;padding:7px 8px;margin-bottom:5px;border:1px solid rgba(220,60,90,.12)">
+            <div style="width:60%;height:7px;background:#3d0a14;border-radius:3px;margin-bottom:3px"></div>
+            <div style="width:40%;height:5px;background:#a03050;border-radius:3px;opacity:.6"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="background:#fff;border-radius:5px;padding:5px 6px;border:1px solid rgba(220,60,90,.1);display:flex;gap:5px;align-items:center">
+              <div style="width:30px;height:22px;background:#ffc9d5;border-radius:3px;flex-shrink:0"></div>
+              <div><div style="width:50px;height:5px;background:#3d0a14;border-radius:2px;margin-bottom:2px;opacity:.8"></div><div style="width:30px;height:5px;background:#a03050;border-radius:2px;opacity:.5"></div></div>
+            </div>
+          </div>
+        </div>
+        <div style="background:#5c0a1e;padding:5px 8px;font-size:10.5px;font-weight:700;color:#ffc9d5;border-top:1px solid rgba(220,60,90,.2)">🌸 Rosê</div>
+        <div class="cp-tema-check" style="display:none;position:absolute;top:6px;right:6px;width:18px;height:18px;background:var(--accent);border-radius:50%;align-items:center;justify-content:center">
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
     <div style="margin-top:10px;font-size:11px;color:var(--muted);text-align:center">A cor principal acima e aplicada ao tema escolhido</div>
   </div>
 
