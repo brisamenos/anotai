@@ -1991,26 +1991,36 @@ async function printOrder(order) {
     } catch (e) { sbToast('err', '🖨️ ' + e.message); return; }
   }
 
-  // Injeta o ticket numa div oculta e chama window.print() na própria página
-  // Com --kiosk-printing: imprime direto na POS58 sem diálogo
-  let div = document.getElementById('_print_area');
-  if (!div) {
-    div = document.createElement('div');
-    div.id = '_print_area';
-    document.body.appendChild(div);
-  }
-  div.innerHTML = html;
+  // Escreve HTML no iframe e imprime só ele
+  // --kiosk-printing no Chrome imprime sem diálogo
+  const frame = document.getElementById('print-frame');
+  if (!frame) { sbToast('err', '❌ print-frame não encontrado'); return; }
 
-  // CSS de impressão já no gestor.css oculta tudo exceto _print_area
-  const style = document.getElementById('_print_style') || document.createElement('style');
-  style.id = '_print_style';
-  style.innerHTML = `@media print { body > *:not(#_print_area) { display:none !important; } #_print_area { display:block !important; font-family:'Courier New',monospace; font-size:12px; } @page { margin:2mm; size:80mm auto; } }`;
-  document.head.appendChild(style);
+  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box }
+  body { font-family:'Courier New',monospace; font-size:12px; color:#000; background:#fff; padding:4px }
+  hr { border:none; border-top:1px dashed #000; margin:4px 0 }
+  .pt-center { text-align:center }
+  .pt-large  { font-size:15px; font-weight:bold }
+  .pt-hr     { border:none; border-top:1px dashed #000; margin:4px 0 }
+  .print-ticket { width:100% }
+  @media print { @page { margin:0; size:${_printFormat || '58mm'} auto } body { margin:4px; } * { -webkit-print-color-adjust:exact } }
+</style></head><body>${html}</body></html>`;
 
-  window.print();
+  const doc = frame.contentDocument || frame.contentWindow.document;
+  doc.open();
+  doc.write(fullHtml);
+  doc.close();
 
-  // Limpa após imprimir
-  setTimeout(() => { div.innerHTML = ''; }, 1000);
+  frame.style.display = 'block';
+  frame.style.height = '2000px'; // garante que todo conteúdo seja renderizado
+  setTimeout(() => {
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+    setTimeout(() => { frame.style.display = 'none'; frame.style.height = '100%'; }, 1000);
+  }, 300);
+
   sbToast('ok', '🖨️ Imprimindo...');
 }
 
