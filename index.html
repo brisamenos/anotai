@@ -1938,10 +1938,13 @@ input,textarea{font-family:inherit}
       </button>
     </div>
     <!-- Logo posicionada absolutamente, metade dentro metade fora da cover -->
-    <div class="hero-logo" id="hero-logo-wrap" onclick="openStoreInfoModal()" title="Ver informações da loja">
+    <div class="hero-logo" id="hero-logo-wrap" onclick="dinoAction()" title="Clique para jogar! 🦕">
       <span id="hero-emoji">🍽️</span>
     </div>
   </div>
+
+  <!-- DINO GAME CANVAS -->
+  <canvas id="dino-canvas" style="display:none;position:absolute;inset:0;width:100%;height:100%;z-index:7;pointer-events:none"></canvas>
 
   <!-- Conteúdo abaixo da cover — padding-top acomoda a logo -->
   <div class="hero-inner">
@@ -2713,5 +2716,234 @@ input,textarea{font-family:inherit}
 <button id="im-close-fab" onclick="closeItemModal()" style="position:fixed;top:14px;right:14px;width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.65);border:none;color:#fff;display:none;align-items:center;justify-content:center;z-index:600;cursor:pointer;backdrop-filter:blur(6px);box-shadow:0 2px 12px rgba(0,0,0,.4)">
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
 </button>
+
+<!-- ══════════════ DINO RUNNER ══════════════ -->
+<script>
+(function() {
+  const DINO_H = 40, DINO_W = 28;
+  const GROUND = 10; // distância do fundo
+  const GRAVITY = 0.6, JUMP_FORCE = -11;
+  const OBS_W = 18, OBS_MIN_H = 20, OBS_MAX_H = 44;
+  const OBS_GAP_MIN = 220, OBS_GAP_MAX = 420;
+  const SPEED_START = 4, SPEED_INC = 0.0008;
+
+  let canvas, ctx, W, H;
+  let running = false, gameOver = false, started = false;
+  let dino, obstacles, score, speed, frame, animId;
+  let bestScore = 0;
+
+  function init() {
+    canvas = document.getElementById('dino-canvas');
+    if (!canvas) return;
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+  }
+
+  function resizeCanvas() {
+    if (!canvas) return;
+    const cover = document.getElementById('hero-cover');
+    if (!cover) return;
+    W = cover.clientWidth;
+    H = cover.clientHeight;
+    canvas.width  = W;
+    canvas.height = H;
+  }
+
+  function resetGame() {
+    const groundY = H - GROUND - DINO_H;
+    dino = { x: 60, y: groundY, vy: 0, onGround: true };
+    obstacles = [];
+    score = 0;
+    speed = SPEED_START;
+    frame = 0;
+    gameOver = false;
+    scheduleObs();
+  }
+
+  let nextObsAt = 0;
+  function scheduleObs() {
+    nextObsAt = frame + Math.floor(OBS_GAP_MIN + Math.random() * (OBS_GAP_MAX - OBS_GAP_MIN));
+  }
+
+  function spawnObs() {
+    const h = OBS_MIN_H + Math.random() * (OBS_MAX_H - OBS_MIN_H);
+    // Sometimes double cactus
+    const double = Math.random() > 0.6;
+    obstacles.push({ x: W + 10, w: double ? OBS_W + 14 : OBS_W, h });
+  }
+
+  function jump() {
+    if (!started) {
+      // First click: start
+      started = true;
+      running = true;
+      resetGame();
+      canvas.style.display = 'block';
+      // Dim store info temporarily
+      document.getElementById('hero-logo-wrap').title = 'Pular 🦕';
+      loop();
+      return;
+    }
+    if (gameOver) {
+      resetGame();
+      running = true;
+      gameOver = false;
+      loop();
+      return;
+    }
+    if (dino && dino.onGround) {
+      dino.vy = JUMP_FORCE;
+      dino.onGround = false;
+    }
+  }
+
+  function loop() {
+    if (!running) return;
+    animId = requestAnimationFrame(loop);
+    update();
+    draw();
+  }
+
+  function update() {
+    frame++;
+    speed += SPEED_INC;
+    score = Math.floor(frame / 6);
+
+    // Dino physics
+    dino.vy += GRAVITY;
+    dino.y  += dino.vy;
+    const groundY = H - GROUND - DINO_H;
+    if (dino.y >= groundY) {
+      dino.y = groundY;
+      dino.vy = 0;
+      dino.onGround = true;
+    }
+
+    // Spawn obstacles
+    if (frame >= nextObsAt) { spawnObs(); scheduleObs(); }
+
+    // Move obstacles & collision
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+      obstacles[i].x -= speed;
+      if (obstacles[i].x + obstacles[i].w < 0) {
+        obstacles.splice(i, 1); continue;
+      }
+      // Collision (with a little forgiveness)
+      const o = obstacles[i];
+      const obsTop = H - GROUND - o.h;
+      if (
+        dino.x + DINO_W - 6 > o.x + 4 &&
+        dino.x + 6         < o.x + o.w - 4 &&
+        dino.y + DINO_H - 4 > obsTop
+      ) {
+        endGame(); return;
+      }
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Ground line
+    ctx.strokeStyle = 'rgba(255,255,255,.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, H - GROUND);
+    ctx.lineTo(W, H - GROUND);
+    ctx.stroke();
+
+    // Dino (pixel dino shape)
+    drawDino(dino.x, dino.y, frame);
+
+    // Obstacles (cacti)
+    ctx.fillStyle = 'rgba(255,255,255,.9)';
+    obstacles.forEach(o => {
+      const top = H - GROUND - o.h;
+      // Main trunk
+      ctx.fillRect(o.x + 5, top, o.w - 10, o.h);
+      // Arms
+      if (o.w > OBS_W) {
+        ctx.fillRect(o.x, top + 8, o.w, 10);
+        ctx.fillRect(o.x, top + 4, 6, 14);
+        ctx.fillRect(o.x + o.w - 6, top + 4, 6, 14);
+      } else {
+        ctx.fillRect(o.x, top + 10, o.w, 8);
+        ctx.fillRect(o.x, top + 6, 5, 12);
+        ctx.fillRect(o.x + o.w - 5, top + 6, 5, 12);
+      }
+    });
+
+    // Score
+    ctx.fillStyle = 'rgba(255,255,255,.9)';
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${score}`, W - 12, 20);
+    if (bestScore > 0) {
+      ctx.fillStyle = 'rgba(255,255,255,.5)';
+      ctx.fillText(`REC ${bestScore}`, W - 12, 36);
+    }
+    ctx.textAlign = 'left';
+
+    // Game over message
+    if (gameOver) {
+      ctx.fillStyle = 'rgba(0,0,0,.45)';
+      ctx.fillRect(W/2 - 90, H/2 - 22, 180, 40);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 13px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('💀 GAME OVER — clique p/ reiniciar', W/2, H/2 + 4);
+      ctx.textAlign = 'left';
+    }
+  }
+
+  function drawDino(x, y, f) {
+    // Simple pixel dino
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    // Body
+    ctx.fillRect(x + 4, y + 8,  DINO_W - 8, DINO_H - 16);
+    // Head
+    ctx.fillRect(x + 8, y,      DINO_W - 8, 16);
+    // Eye
+    ctx.fillStyle = 'rgba(0,0,0,.7)';
+    ctx.fillRect(x + DINO_W - 8, y + 4, 5, 5);
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    // Tail
+    ctx.fillRect(x, y + 12, 8, 8);
+    // Legs — animate
+    const leg = Math.floor(f / 6) % 2;
+    if (dino && !dino.onGround) {
+      ctx.fillRect(x + 8,  y + DINO_H - 12, 7, 12);
+      ctx.fillRect(x + 16, y + DINO_H - 12, 7, 12);
+    } else if (leg === 0) {
+      ctx.fillRect(x + 6,  y + DINO_H - 16, 7, 16);
+      ctx.fillRect(x + 16, y + DINO_H - 10, 7, 10);
+    } else {
+      ctx.fillRect(x + 6,  y + DINO_H - 10, 7, 10);
+      ctx.fillRect(x + 16, y + DINO_H - 16, 7, 16);
+    }
+  }
+
+  function endGame() {
+    running = false;
+    gameOver = true;
+    if (score > bestScore) bestScore = score;
+    cancelAnimationFrame(animId);
+    draw();
+  }
+
+  // Public: called by logo click
+  window.dinoAction = function() {
+    if (!canvas) { init(); }
+    if (!ctx && canvas) ctx = canvas.getContext('2d');
+    jump();
+  };
+
+  // Init on load
+  document.addEventListener('DOMContentLoaded', init);
+  // Also init after a short delay (in case DOM already ready)
+  setTimeout(init, 500);
+})();
+</script>
+
 </body>
 </html>
