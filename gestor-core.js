@@ -1156,16 +1156,20 @@ async function enviarAjustePeso() {
 
   if (!propostas.length) { sbToast('err', 'Nenhum peso foi alterado.'); return; }
 
-  // Monta mensagem WA
+  // Monta mensagem WA com nome da loja
   const idStr = String(_orderNum(_ajustePesoOrderId)).padStart(3,'0');
-  let msg = `⚠️ *Pedido #${idStr} — Ajuste de quantidade*\n\nOlá *${o.client}*!\n\n`;
-  msg += `Ao separar seu pedido, verificamos que não temos a quantidade solicitada:\n\n`;
+  let nomeLoja = 'Açougue';
+  try {
+    const cfgR = await fetch('/api/tenant-info-gestor', { headers: { 'Content-Type':'application/json', 'x-tenant-id': _sessao?.tenant_id } });
+    if (cfgR.ok) { const d = await cfgR.json(); nomeLoja = d.nome || nomeLoja; }
+  } catch(e) {}
+  let msg = `🏪 *${nomeLoja}*\n${'─'.repeat(20)}\n\n⚖️ *Ajuste de peso — Pedido #${idStr}*\n\nOlá, *${o.client}*!\n\nAo separar seu pedido, verificamos que não temos a quantidade solicitada:\n\n`;
   propostas.forEach(p => {
     msg += `🥩 *${p.name}*\n`;
-    msg += `   Solicitado: ${p.pesoOriginal}g — R$ ${p.price.toFixed(2).replace('.',',')}\n`;
-    msg += `   Disponível: *${p.novoPeso}g — R$ ${p.novoVal.toFixed(2).replace('.',',')}*\n\n`;
+    msg += `   • Solicitado: ${p.pesoOriginal}g — R$ ${p.price.toFixed(2).replace('.',',')}\n`;
+    msg += `   • Disponível: *${p.novoPeso}g — R$ ${p.novoVal.toFixed(2).replace('.',',')}*\n\n`;
   });
-  msg += `Você aceita o ajuste? Responda *SIM* para confirmar ou *NÃO* para cancelar o pedido.`;
+  msg += `Você aceita o ajuste?\n\n✅ Responda *SIM* para confirmar\n❌ Responda *NÃO* para cancelar o pedido\n\n_Dúvidas? É só responder esta mensagem!_ 😊`;
 
   sbLoading(true);
   try {
@@ -1226,20 +1230,18 @@ async function clienteAceitouAjuste() {
   sbLoading(true);
   try {
     // Atualiza itens do pedido com novos pesos/valores
-    const novosItens = [...(o.items || [])];
-    propostas.forEach(p => {
-      const itemIdx = novosItens.findIndex((i, fi) => fi === p.idx);
-      if (itemIdx !== -1) {
-        const obs = novosItens[itemIdx].obs || '';
-        novosItens[itemIdx] = {
-          ...novosItens[itemIdx],
-          price: p.novoVal,
-          obs: obs.replace(/\d+g/, `${p.novoPeso}g`)
-        };
-      }
+    // Usa name + obs para encontrar o item correto (idx era do array filtrado, não do completo)
+    const novosItens = (o.items || []).map(item => {
+      const proposta = propostas.find(p =>
+        p.name === item.name &&
+        (item.obs || '').includes(String(p.pesoOriginal) + 'g')
+      );
+      if (!proposta) return item;
+      const novaObs = (item.obs || '').replace(/\d+g/, `${proposta.novoPeso}g`);
+      return { ...item, price: proposta.novoVal, obs: novaObs };
     });
 
-    // Recalcula total
+    // Recalcula total corretamente (price já é o valor total do item, qty geralmente 1 para kg)
     const novoTotal = novosItens.reduce((s, i) => s + parseFloat(i.price || 0) * (i.qty || 1), 0);
 
     const r = await fetch(`/api/orders?id=eq.${_respostaWAOrderId}`, {
@@ -1250,7 +1252,7 @@ async function clienteAceitouAjuste() {
     if (!r.ok) throw new Error('Erro ao atualizar pedido');
 
     ordersKanban[idx] = { ...o, items: novosItens, total: novoTotal, _waResposta: false, _waRespostaTxt: null, _ajustePendente: null };
-    sbToast('ok', `Pedido #${_orderNum(_respostaWAOrderId)} atualizado com os novos pesos!`);
+    sbToast('ok', `Pedido #${_orderNum(_respostaWAOrderId)} atualizado! Novo total: R$ ${novoTotal.toFixed(2).replace('.',',')}`);
     fecharRespostaWA(); renderKanban();
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
   sbLoading(false);
