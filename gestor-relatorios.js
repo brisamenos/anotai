@@ -1991,25 +1991,26 @@ async function printOrder(order) {
     } catch (e) { sbToast('err', '🖨️ ' + e.message); return; }
   }
 
-  // Abre janela com o HTML do ticket e imprime
-  // Com --kiosk-printing no Chrome: sem diálogo, imprime direto na POS58
-  const win = window.open('', '_blank', 'width=400,height=600');
-  if (!win) { sbToast('err', '⚠️ Popup bloqueado'); return; }
+  // Injeta o ticket numa div oculta e chama window.print() na própria página
+  // Com --kiosk-printing: imprime direto na POS58 sem diálogo
+  let div = document.getElementById('_print_area');
+  if (!div) {
+    div = document.createElement('div');
+    div.id = '_print_area';
+    document.body.appendChild(div);
+  }
+  div.innerHTML = html;
 
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>
-  * { margin:0; padding:0; box-sizing:border-box }
-  body { font-family:'Courier New',monospace; font-size:12px; color:#000; background:#fff; padding:4px }
-  hr { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .pt-center { text-align:center }
-  .pt-large  { font-size:15px; font-weight:bold }
-  .pt-hr     { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .print-ticket { width:100% }
-  @media print { @page { margin:2mm; size: 80mm auto } body { margin:0 } }
-</style></head><body>${html}
-<script>window.onload = function(){ window.print(); setTimeout(function(){ window.close(); }, 500); }<\/script>
-</body></html>`);
-  win.document.close();
+  // CSS de impressão já no gestor.css oculta tudo exceto _print_area
+  const style = document.getElementById('_print_style') || document.createElement('style');
+  style.id = '_print_style';
+  style.innerHTML = `@media print { body > *:not(#_print_area) { display:none !important; } #_print_area { display:block !important; font-family:'Courier New',monospace; font-size:12px; } @page { margin:2mm; size:80mm auto; } }`;
+  document.head.appendChild(style);
+
+  window.print();
+
+  // Limpa após imprimir
+  setTimeout(() => { div.innerHTML = ''; }, 1000);
   sbToast('ok', '🖨️ Imprimindo...');
 }
 
