@@ -52,7 +52,11 @@ function nav(id){
   if(id==='cardapio-publico') {
     const cpPg = document.getElementById('page-cardapio-publico');
     if(cpPg) cpPg.style.display = 'flex';
-    loadCardapioPublico();
+    loadCardapioPublico().then(() => {
+      // Aplica visibilidade do carrossel após carregar (garante que _segmento já foi definido)
+      const catsWrap = document.getElementById('cp-cats-modo-wrap');
+      if (catsWrap) catsWrap.style.display = window._segmento === 'acougue' ? 'none' : 'block';
+    });
   }
   if(id==='tema') {
     const tPg = document.getElementById('page-tema');
