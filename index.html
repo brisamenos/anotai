@@ -369,19 +369,28 @@ input,textarea{font-family:inherit}
 
 /* Logo — margin-top negativo sobe metade para dentro da cover */
 .hero-logo{
-  width:90px;height:90px;border-radius:22px;flex-shrink:0;overflow:hidden;
+  width:100px;height:100px;border-radius:24px;flex-shrink:0;overflow:hidden;
   background:var(--s1);border:4px solid var(--s1);
-  display:flex;align-items:center;justify-content:center;font-size:38px;
+  display:flex;align-items:center;justify-content:center;font-size:44px;
   box-shadow:0 8px 28px rgba(0,0,0,.25);
   position:relative;z-index:10;cursor:pointer;
-  margin-top:-45px;
+  margin-top:-50px;
+  transition:margin-top .35s cubic-bezier(.34,1.56,.64,1), box-shadow .35s;
+}
+.hero-logo.dino-playing{
+  margin-top:10px;
+  box-shadow:0 4px 16px rgba(0,0,0,.15);
 }
 .hero-logo img,.hero-logo-img{ width:100%;height:100%;object-fit:cover;border-radius:18px;display:block }
 
 /* Área de conteúdo — padding-top acomoda metade da logo que desce */
 .hero-inner{
   display:flex;flex-direction:column;align-items:center;
-  padding:55px 20px 16px;text-align:center;gap:0;
+  padding:60px 20px 16px;text-align:center;gap:0;
+  transition:padding-top .35s cubic-bezier(.34,1.56,.64,1);
+}
+.hero-inner.dino-playing{
+  padding-top:0;
 }
 .hero-info{ width:100% }
 .hero-name{
@@ -2773,14 +2782,28 @@ input,textarea{font-family:inherit}
     obstacles.push({ x: W + 10, w: double ? OBS_W + 14 : OBS_W, h });
   }
 
+  function slideLogoDown() {
+    const logo  = document.getElementById('hero-logo-wrap');
+    const inner = document.querySelector('.hero-inner');
+    if (logo)  logo.classList.add('dino-playing');
+    if (inner) inner.classList.add('dino-playing');
+  }
+
+  function slideLogoUp() {
+    const logo  = document.getElementById('hero-logo-wrap');
+    const inner = document.querySelector('.hero-inner');
+    if (logo)  logo.classList.remove('dino-playing');
+    if (inner) inner.classList.remove('dino-playing');
+  }
+
   function jump() {
     if (!started) {
-      // First click: start
+      // Primeiro clique: inicia jogo
       started = true;
       running = true;
       resetGame();
       canvas.style.display = 'block';
-      // Dim store info temporarily
+      slideLogoDown();
       document.getElementById('hero-logo-wrap').title = 'Pular 🦕';
       loop();
       return;
@@ -2930,6 +2953,19 @@ input,textarea{font-family:inherit}
     if (score > bestScore) bestScore = score;
     cancelAnimationFrame(animId);
     draw();
+    // Slide logo back up after 2s if no restart
+    setTimeout(() => {
+      if (gameOver && !running) {
+        slideLogoUp();
+        setTimeout(() => {
+          if (gameOver && !running) {
+            canvas.style.display = 'none';
+            started = false;
+            document.getElementById('hero-logo-wrap').title = 'Clique para jogar! 🦕';
+          }
+        }, 400);
+      }
+    }, 3000);
   }
 
   // Public: called by logo click
