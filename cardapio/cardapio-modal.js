@@ -60,6 +60,13 @@ function openItemModal(id) {
   document.getElementById('im-obs').value = '';
   document.getElementById('im-add-btn').disabled = !_lojaAberta;
 
+  // Açougue: oculta botões - 1 + (peso é selecionado pelo seletor de gramas)
+  const qtyRow = document.getElementById('im-qty-row');
+  if (qtyRow) {
+    const isKg = i.item_type === 'kg' || (i.custom_groups||[]).some(g => g.tipo === 'pesos' || g.tipo === 'cortes');
+    qtyRow.style.display = (_segmento === 'acougue' && isKg) ? 'none' : '';
+  }
+
   // ── Grupos de customização ──
   _imGruposState = {};
   _acougueCortes = {};
