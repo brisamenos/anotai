@@ -2048,12 +2048,27 @@ input,textarea{font-family:inherit}
       </svg>
       <span>Produtos por kg podem variar na pesagem. Faremos o possível para chegar ao mais próximo do seu pedido.</span>
     </div>
-    <div class="peso-picker-wrap" id="ac-peso-wrap">
-      <div class="peso-picker-fade top"></div>
-      <div class="peso-picker-track" id="ac-peso-list"></div>
-      <div class="peso-picker-selector"></div>
-      <div class="peso-picker-fade bot"></div>
-      <div class="peso-picker-unit">g</div>
+    <!-- Abas Gramas / Quilos -->
+    <div style="display:flex;gap:8px;margin:0 16px 14px;background:var(--s2);border-radius:12px;padding:4px">
+      <button id="tab-gramas" onclick="switchPesoTab('gramas')" style="flex:1;padding:8px;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;transition:all .18s;background:var(--accent);color:#fff;font-family:inherit">Gramas</button>
+      <button id="tab-quilos" onclick="switchPesoTab('quilos')" style="flex:1;padding:8px;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;transition:all .18s;background:transparent;color:var(--muted);font-family:inherit">Quilos</button>
+    </div>
+
+    <!-- Seletor de Gramas (drum) -->
+    <div id="ac-peso-tab-gramas">
+      <div class="peso-picker-wrap" id="ac-peso-wrap">
+        <div class="peso-picker-fade top"></div>
+        <div class="peso-picker-track" id="ac-peso-list"></div>
+        <div class="peso-picker-selector"></div>
+        <div class="peso-picker-fade bot"></div>
+        <div class="peso-picker-unit">g</div>
+      </div>
+    </div>
+
+    <!-- Seletor de Quilos (botões rápidos) -->
+    <div id="ac-peso-tab-quilos" style="display:none;padding:0 16px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:8px" id="ac-kg-grid"></div>
+      <div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:4px">Toque para selecionar a quantidade em kg</div>
     </div>
     <div class="ac-peso-extras">
       <div class="ac-peso-sep-row">
