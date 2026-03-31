@@ -134,7 +134,7 @@ function applyBranding(b, nome) {
     logoWrap.appendChild(img);
   }
 
-  // Banner — agora aparece abaixo das categorias
+  // Banner — aparece abaixo das categorias com animação de boneco puxando
   if (b?.store_banner_url) {
     const url = b.store_banner_url.startsWith('http') ? b.store_banner_url : location.origin + b.store_banner_url;
     const bannerBelow = document.getElementById('store-banner-below');
@@ -143,6 +143,12 @@ function applyBranding(b, nome) {
       bannerImg.src = url;
       bannerImg.onerror = () => { bannerBelow.classList.remove('show'); };
       bannerBelow.classList.add('show');
+      // Após a revelação completa (1.8s), remove a máscara permanentemente
+      // e deixa o boneco continuar entrando/saindo como decoração
+      setTimeout(() => {
+        const mask = document.getElementById('banner-reveal-mask');
+        if (mask) { mask.style.display = 'none'; }
+      }, 2000);
     }
   }
 
