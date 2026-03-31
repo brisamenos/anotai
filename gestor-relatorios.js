@@ -1781,27 +1781,25 @@ async function _printViaServer(html) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Erro no servidor');
 
-  // Servidor gerou o PDF — navegador imprime localmente na POS58 / impressora configurada
+  // Servidor gerou o PDF — abre popup e imprime localmente
   if (data.pdf) {
     const bytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
     const blob  = new Blob([bytes], { type: 'application/pdf' });
     const url   = URL.createObjectURL(blob);
-    const frame = document.getElementById('print-frame');
-    if (frame) {
-      frame.style.display = 'block';
-      frame.src = url;
-      frame.onload = () => {
-        try { frame.contentWindow.print(); } catch (_) {}
-        setTimeout(() => {
-          frame.src   = 'about:blank';
-          frame.onload = null;
-          frame.style.display = 'none';
-          URL.revokeObjectURL(url);
-        }, 3000);
+    const popup = window.open(url, '_blank', 'width=1,height=1,left=-100,top=-100');
+    if (popup) {
+      popup.onload = () => {
+        try { popup.print(); } catch (_) {}
+        setTimeout(() => { popup.close(); URL.revokeObjectURL(url); }, 3000);
       };
+      // fallback caso onload não dispare
+      setTimeout(() => {
+        try { popup.print(); } catch (_) {}
+        setTimeout(() => { try { popup.close(); } catch(_){} URL.revokeObjectURL(url); }, 3000);
+      }, 1500);
     } else {
-      const w = window.open(url, '_blank');
-      if (w) setTimeout(() => { try { w.print(); } catch(_){} setTimeout(() => w.close(), 1500); }, 600);
+      sbToast('warn', '⚠️ Popup bloqueado — permita popups para este site');
+      URL.revokeObjectURL(url);
     }
   }
   return data;
