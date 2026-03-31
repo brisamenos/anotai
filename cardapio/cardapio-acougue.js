@@ -395,6 +395,69 @@ function _drumUpdateBtn(peso) {
 function closePesoSheet() {
   document.getElementById('ac-peso-overlay').classList.remove('on');
   document.body.style.overflow = '';
+  // Volta sempre para aba gramas ao fechar
+  switchPesoTab('gramas');
+}
+
+// ── Abas Gramas / Quilos ─────────────────────────────
+function switchPesoTab(tab) {
+  const tabG  = document.getElementById('ac-peso-tab-gramas');
+  const tabQ  = document.getElementById('ac-peso-tab-quilos');
+  const btnG  = document.getElementById('tab-gramas');
+  const btnQ  = document.getElementById('tab-quilos');
+  const isG   = tab === 'gramas';
+
+  if (tabG) tabG.style.display = isG ? '' : 'none';
+  if (tabQ) tabQ.style.display = isG ? 'none' : '';
+
+  if (btnG) { btnG.style.background = isG ? 'var(--accent)' : 'transparent'; btnG.style.color = isG ? '#fff' : 'var(--muted)'; }
+  if (btnQ) { btnQ.style.background = isG ? 'transparent' : 'var(--accent)'; btnQ.style.color = isG ? 'var(--muted)' : '#fff'; }
+
+  if (!isG) _renderKgGrid();
+}
+
+function _renderKgGrid() {
+  const grid = document.getElementById('ac-kg-grid');
+  if (!grid) return;
+
+  // Opções de kg: 0.5, 1, 1.5, 2, 2.5, 3, 4, 5 — filtra até o máximo dos pesos em g
+  const maxGramas = Math.max(...(_acouguePesos || [0]));
+  const kgOpts = [500, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 8000, 10000]
+    .filter(g => !maxGramas || g <= maxGramas * 2); // permite até 2x o max de gramas
+
+  // Pega o peso atual selecionado para destacar
+  const btn       = document.getElementById('ac-peso-confirm');
+  const pesoAtual = parseInt(btn?.dataset?.peso) || 0;
+
+  grid.innerHTML = kgOpts.map(g => {
+    const label = g >= 1000 ? (g / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' kg' : g + 'g';
+    const ativo = g === pesoAtual;
+    return `<button onclick="_selectKg(${g})" style="
+      padding:14px 8px;border-radius:12px;border:2px solid ${ativo ? 'var(--accent)' : 'var(--border)'};
+      background:${ativo ? 'rgba(var(--accent-rgb,249,115,22),.1)' : 'var(--s2)'};
+      color:${ativo ? 'var(--accent)' : 'var(--text)'};
+      font-size:14px;font-weight:700;cursor:pointer;transition:all .15s;font-family:inherit
+    ">${label}</button>`;
+  }).join('');
+}
+
+function _selectKg(gramas) {
+  // Confirma direto sem precisar do drum
+  const corte = _acougueAtual;
+  if (!corte) return;
+
+  const separar = document.getElementById('ac-peso-sep')?.value || '';
+  const extra   = document.getElementById('ac-extra-textarea')?.value.trim() || '';
+
+  _acougueCortes[corte] = { peso: gramas, separar, extra };
+
+  // Atualiza botão e fecha
+  _drumUpdateBtn(gramas);
+  closePesoSheet();
+
+  // Rerenderiza o card do corte e o preview de preço
+  renderImCortesGrupo();
+  updateImPrice();
 }
 
 function selectPesoOpt(peso) {
