@@ -756,7 +756,7 @@ function handleTenantInfo(params) {
     : id ? db.prepare('SELECT id,nome,slug FROM tenants WHERE id=? AND ativo=1').get(id)
     : db.prepare('SELECT id,nome,slug FROM tenants WHERE ativo=1 ORDER BY id ASC LIMIT 1').get()
   if (!t) return { error: 'Restaurante não encontrado' }
-  const cfg = db.prepare('SELECT store_name,store_descricao,store_logo_url,store_banner_url,store_cor,store_tema,store_tempo_entrega,store_avaliacao,store_whatsapp FROM store_config WHERE tenant_id=?').get(t.id)
+  const cfg = db.prepare('SELECT store_name,store_descricao,store_logo_url,store_banner_url,store_cor,store_cor_texto,store_tema,cats_carrossel,store_tempo_entrega,store_avaliacao,store_whatsapp FROM store_config WHERE tenant_id=?').get(t.id)
   return { ...t, branding: cfg || {} }
 }
 
