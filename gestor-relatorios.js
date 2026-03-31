@@ -1979,53 +1979,6 @@ async function _printViaUsb(order, cfg) {
   await dev.transferOut(_usbDevice._epOut, data);
 }
 
-// ── Função principal — tenta: Electron → USB → agente → servidor → navegador ──
-async function printOrder(order) {
-  const cfg  = _getPrintConfig();
-  const html = _buildTicketHtml(order, cfg);
-
-  // Electron — app desktop
-  if (window.ElectronPrint) {
-    try {
-      const r = await window.ElectronPrint.printOrder(order);
-      if (r.ok) { sbToast('ok', '🖨️ Impresso!'); return; }
-      throw new Error(r.error || 'Erro');
-    } catch (e) { sbToast('err', '🖨️ ' + e.message); return; }
-  }
-
-  // Escreve HTML no iframe e imprime só ele
-  // --kiosk-printing no Chrome imprime sem diálogo
-  const frame = document.getElementById('print-frame');
-  if (!frame) { sbToast('err', '❌ print-frame não encontrado'); return; }
-
-  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>
-  * { margin:0; padding:0; box-sizing:border-box }
-  body { font-family:'Courier New',monospace; font-size:12px; color:#000; background:#fff; padding:4px }
-  hr { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .pt-center { text-align:center }
-  .pt-large  { font-size:15px; font-weight:bold }
-  .pt-hr     { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .print-ticket { width:100% }
-  @media print { @page { margin:0; size:${_printFormat || '58mm'} auto } body { margin:4px; } * { -webkit-print-color-adjust:exact } }
-</style></head><body>${html}</body></html>`;
-
-  const doc = frame.contentDocument || frame.contentWindow.document;
-  doc.open();
-  doc.write(fullHtml);
-  doc.close();
-
-  frame.style.display = 'block';
-  frame.style.height = '2000px'; // garante que todo conteúdo seja renderizado
-  setTimeout(() => {
-    frame.contentWindow.focus();
-    frame.contentWindow.print();
-    setTimeout(() => { frame.style.display = 'none'; frame.style.height = '100%'; }, 1000);
-  }, 300);
-
-  sbToast('ok', '🖨️ Imprimindo...');
-}
-
 function printOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
   if (o) printOrder(o); else sbToast('err', 'Pedido não encontrado');
