@@ -428,79 +428,95 @@ input,textarea{font-family:inherit}
 /* Banner abaixo das categorias */
 .store-banner-below{
   width:100%;display:none;
-  position:relative;overflow:hidden;
+  position:relative;
   margin-bottom:4px;
 }
 .store-banner-below.show{ display:block }
 
-/* Banner image container — começa com clip revelando da esquerda */
 .banner-img-wrap{
   position:relative;overflow:hidden;
   width:100%;
 }
 .banner-img-wrap img{
   width:100%;display:block;object-fit:cover;max-height:180px;
-  transform-origin:right center;
 }
 
-/* Máscara de revelação — inicia fechada, anima para aberta */
+/* Máscara — cobre banner inteiro, boneco arrasta ela da direita p/ esquerda em sincronia */
 .banner-reveal-mask{
-  position:absolute;inset:0;
+  position:absolute;
+  top:0;right:0;bottom:0;
+  width:100%;
   background:var(--bg);
-  transform-origin:right center;
-  animation:none;
-  right:0;left:auto;width:100%;
+  z-index:5;
 }
 .store-banner-below.show .banner-reveal-mask{
-  animation:bannerReveal 1.2s cubic-bezier(.4,0,.2,1) forwards;
-  animation-delay:.6s;
+  animation:bannerReveal 5s linear forwards;
+  animation-delay:.2s;
 }
 @keyframes bannerReveal{
-  0%  { width:100% }
-  100%{ width:0% }
+  0%   { width:100% }
+  85%  { width:0%   }
+  100% { width:0%   }
 }
 
-/* Boneco container */
+/* Boneco — começa à direita e caminha para a esquerda arrastando o banner */
 .banner-dude{
   position:absolute;
-  bottom:0;right:-60px;
-  width:54px;height:54px;
+  bottom:0;
+  right:-58px;
+  width:54px;height:60px;
   z-index:10;
-  animation:none;
 }
 .store-banner-below.show .banner-dude{
-  animation:dudeAnim 3.6s ease-in-out infinite;
+  animation:dudeWalk 5s linear forwards;
+  animation-delay:.2s;
 }
 
-/* Animação do boneco:
-   0-15%: entra da direita
-   15-45%: puxa o banner (fica na posição)
-   45-50%: sai rapidinho para a direita
-   50-70%: pausa fora da tela
-   70-85%: entra de novo
-   85-100%: puxa de novo (banner já aberto, só faz gesto) */
-@keyframes dudeAnim{
-  0%   { right:-60px; transform:scaleX(-1) }
-  12%  { right:4px;   transform:scaleX(-1) }
-  40%  { right:4px;   transform:scaleX(-1) }
-  50%  { right:-60px; transform:scaleX(-1) }
-  100% { right:-60px; transform:scaleX(-1) }
+/* Boneco entra pela direita e percorre toda a largura até sumir à esquerda */
+@keyframes dudeWalk{
+  0%   { right:-58px }
+  8%   { right: calc(100% - 54px) }  /* começa na borda direita da mask */
+  85%  { right: calc(100% + 4px)  }  /* chega na borda esquerda */
+  100% { right: calc(100% + 4px)  }
 }
 
-/* Braço puxando — anima só durante a fase de puxar */
-.banner-dude-arm{
+/* Pernas — passos enquanto caminha */
+.banner-dude-leg-l{
   animation:none;
+  transform-origin:22px 38px;
+}
+.banner-dude-leg-r{
+  animation:none;
+  transform-origin:32px 38px;
+}
+.store-banner-below.show .banner-dude-leg-l{
+  animation:legL 0.5s linear infinite;
+  animation-delay:.2s;
+}
+.store-banner-below.show .banner-dude-leg-r{
+  animation:legR 0.5s linear infinite;
+  animation-delay:.2s;
+}
+@keyframes legL{
+  0%,100%{ transform:rotate(-18deg) }
+  50%    { transform:rotate( 18deg) }
+}
+@keyframes legR{
+  0%,100%{ transform:rotate( 18deg) }
+  50%    { transform:rotate(-18deg) }
+}
+
+/* Braço — puxando para frente (esquerda) enquanto caminha */
+.banner-dude-arm{
+  transform-origin:14px 22px;
 }
 .store-banner-below.show .banner-dude-arm{
-  animation:armPull 3.6s ease-in-out infinite;
-  transform-origin:14px 16px;
+  animation:armPull 0.7s ease-in-out infinite;
+  animation-delay:.2s;
 }
 @keyframes armPull{
-  0%,12% { transform:rotate(0deg)   }
-  20%    { transform:rotate(-30deg) }
-  30%    { transform:rotate(-10deg) }
-  40%    { transform:rotate(-30deg) }
-  50%,100%{ transform:rotate(0deg)  }
+  0%,100%{ transform:rotate(-35deg) }
+  50%    { transform:rotate(-15deg) }
 }
 
 /* legado */
@@ -2060,35 +2076,51 @@ input,textarea{font-family:inherit}
     <div class="banner-reveal-mask" id="banner-reveal-mask"></div>
   </div>
 
-  <!-- Bonequinho que puxa o banner -->
-  <svg class="banner-dude" id="banner-dude" viewBox="0 0 54 54" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <!-- Sombra -->
-    <ellipse cx="27" cy="52" rx="12" ry="3" fill="rgba(0,0,0,.15)"/>
-    <!-- Pernas -->
-    <rect x="19" y="36" width="6" height="14" rx="3" fill="#f97316"/>
-    <rect x="29" y="36" width="6" height="14" rx="3" fill="#f97316"/>
+  <!-- Bonequinho que arrasta o banner -->
+  <svg class="banner-dude" id="banner-dude" viewBox="0 0 54 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- Sombra chão -->
+    <ellipse cx="27" cy="58" rx="13" ry="2.5" fill="rgba(0,0,0,.12)"/>
+    <!-- Perna esquerda (animada) -->
+    <rect class="banner-dude-leg-l" x="18" y="38" width="7" height="16" rx="3.5" fill="#ea580c"/>
+    <!-- Perna direita (animada) -->
+    <rect class="banner-dude-leg-r" x="29" y="38" width="7" height="16" rx="3.5" fill="#ea580c"/>
+    <!-- Tênis esquerdo -->
+    <ellipse cx="21" cy="54" rx="5" ry="3" fill="#1f2937"/>
+    <!-- Tênis direito -->
+    <ellipse cx="32" cy="54" rx="5" ry="3" fill="#1f2937"/>
     <!-- Corpo -->
-    <rect x="16" y="20" width="22" height="20" rx="6" fill="#f97316"/>
-    <!-- Braço esquerdo (puxando) -->
+    <rect x="14" y="21" width="26" height="21" rx="7" fill="#f97316"/>
+    <!-- Detalhe camiseta -->
+    <rect x="14" y="28" width="26" height="2" fill="rgba(255,255,255,.2)" rx="1"/>
+    <!-- Braço esquerdo — puxando para frente -->
     <g class="banner-dude-arm">
-      <rect x="4" y="22" width="13" height="5" rx="2.5" fill="#f97316"/>
-      <!-- Mão -->
-      <circle cx="4" cy="24.5" r="4" fill="#fcd9b6"/>
+      <rect x="2" y="24" width="14" height="6" rx="3" fill="#f97316"/>
+      <!-- Mão agarrando -->
+      <circle cx="3" cy="27" r="4.5" fill="#fcd9b6"/>
+      <path d="M1 25 Q3 23 5 25" stroke="#c4934a" stroke-width="1" fill="none"/>
     </g>
     <!-- Braço direito -->
-    <rect x="38" y="22" width="10" height="5" rx="2.5" fill="#f97316"/>
+    <rect x="40" y="24" width="10" height="6" rx="3" fill="#f97316"/>
     <!-- Cabeça -->
-    <circle cx="27" cy="14" r="10" fill="#fcd9b6"/>
-    <!-- Olhos -->
-    <circle cx="23" cy="13" r="1.8" fill="#1f2937"/>
-    <circle cx="31" cy="13" r="1.8" fill="#1f2937"/>
-    <!-- Brilho nos olhos -->
-    <circle cx="24" cy="12" r=".7" fill="white"/>
-    <circle cx="32" cy="12" r=".7" fill="white"/>
-    <!-- Sorriso -->
-    <path d="M23 17 Q27 20 31 17" stroke="#1f2937" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    <circle cx="27" cy="13" r="11" fill="#fcd9b6"/>
+    <!-- Orelhas -->
+    <circle cx="16" cy="14" r="4" fill="#fcd9b6"/>
+    <circle cx="38" cy="14" r="4" fill="#fcd9b6"/>
     <!-- Cabelo -->
-    <path d="M18 10 Q27 2 36 10" stroke="#1f2937" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+    <path d="M17 7 Q27 0 37 7 Q35 4 27 3 Q19 4 17 7Z" fill="#1f2937"/>
+    <!-- Olhos — esforço de puxar (semicerrados) -->
+    <ellipse cx="23" cy="13" rx="2" ry="1.5" fill="#1f2937"/>
+    <ellipse cx="31" cy="13" rx="2" ry="1.5" fill="#1f2937"/>
+    <!-- Brilho olhos -->
+    <circle cx="24" cy="12.5" r=".8" fill="white"/>
+    <circle cx="32" cy="12.5" r=".8" fill="white"/>
+    <!-- Sobrancelhas esforçadas -->
+    <path d="M20 10 Q23 8.5 26 10" stroke="#1f2937" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    <path d="M28 10 Q31 8.5 34 10" stroke="#1f2937" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    <!-- Boca esforçando -->
+    <path d="M23 17.5 Q27 16 31 17.5" stroke="#c4934a" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+    <!-- Suor -->
+    <path d="M36 6 L35 2 L38 5" fill="#60a5fa" opacity=".8"/>
   </svg>
 </div>
 
