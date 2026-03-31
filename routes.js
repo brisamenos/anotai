@@ -1598,6 +1598,90 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // O agente roda no computador da loja e consulta esta fila
   // ═══════════════════════════════════════════════════════
 
+  // ── Impressão silenciosa via servidor (Puppeteer → lp/lpr/print) ──
+  if (req.method === 'POST' && upath === '/api/print') {
+    const tid  = req.headers['x-tenant-id']
+    const body = await readBody(req)
+    if (!tid)       { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    if (!body.html) { send(res, 400, { error: 'html obrigatório' }); return true }
+
+    try {
+      let puppeteer
+      try { puppeteer = require('puppeteer') } catch {
+        send(res, 500, { error: 'Puppeteer não instalado no servidor' }); return true
+      }
+
+      const os   = require('os')
+      const path = require('path')
+      const { exec } = require('child_process')
+      const fs   = require('fs')
+
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu']
+      })
+
+      const pdfPath = path.join(os.tmpdir(), `anotai-${Date.now()}.pdf`)
+
+      try {
+        const page = await browser.newPage()
+        const fmt  = body.format || '80mm'
+        const fullHtml = body.html.includes('<html') ? body.html
+          : `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box }
+  body { font-family:'Courier New',monospace; font-size:12px; color:#000; background:#fff }
+  hr { border:none; border-top:1px dashed #000; margin:4px 0 }
+  .pt-center { text-align:center } .pt-large { font-size:15px; font-weight:bold }
+  .pt-hr { border:none; border-top:1px dashed #000; margin:4px 0 }
+  .print-ticket { padding:4px; width:100% }
+</style></head><body>${body.html}</body></html>`
+
+        await page.setContent(fullHtml, { waitUntil: 'networkidle0' })
+
+        const pdfOpts = {
+          path: pdfPath,
+          printBackground: true,
+          margin: { top:'2mm', bottom:'2mm', left:'2mm', right:'2mm' }
+        }
+        if (fmt === '80mm' || fmt === '58mm') {
+          pdfOpts.width  = fmt
+          pdfOpts.height = (await page.evaluate(() => document.body.scrollHeight + 24)) + 'px'
+        } else {
+          pdfOpts.format = fmt
+        }
+        await page.pdf(pdfOpts)
+      } finally {
+        await browser.close()
+      }
+
+      // Envia para a impressora do sistema
+      const printer = body.printer || ''
+      const plat    = process.platform
+      let cmd
+      if (plat === 'win32') {
+        cmd = printer
+          ? `powershell -Command "Start-Process -FilePath '${pdfPath}' -Verb PrintTo -ArgumentList '${printer}' -Wait"`
+          : `powershell -Command "Start-Process -FilePath '${pdfPath}' -Verb Print -Wait"`
+      } else {
+        cmd = printer ? `lp -d "${printer}" "${pdfPath}"` : `lp "${pdfPath}"`
+      }
+
+      await new Promise((resolve) => {
+        exec(cmd, () => {
+          try { fs.unlinkSync(pdfPath) } catch {}
+          resolve()
+        })
+      })
+
+      send(res, 200, { ok: true })
+    } catch (e) {
+      log('❌', '/api/print erro:', e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
   // Mapa em memória: tenant_id → { last_seen, printer, format }
   if (!handleRoutes._agents) handleRoutes._agents = new Map()
   const _agents = handleRoutes._agents
