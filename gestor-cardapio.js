@@ -1,3 +1,16 @@
+// ── Adiciona valor de kg ao campo de pesos ─────────────
+function addKgPeso(ctx, gramas) {
+  const el = document.getElementById(`${ctx}-pesos`);
+  if (!el) return;
+  const atual = el.value.trim();
+  const valores = atual ? atual.split(',').map(s => parseInt(s.trim())).filter(n => n > 0) : [];
+  if (!valores.includes(gramas)) {
+    valores.push(gramas);
+    valores.sort((a, b) => a - b);
+    el.value = valores.join(', ');
+  }
+}
+
 // ══════════════════════════════════════════
 //  AÇOUGUE — Editor dinâmico de cortes e preparos
 // ══════════════════════════════════════════
