@@ -1974,9 +1974,13 @@ async function _usbConnect() {
 
 async function _printViaUsb(order, cfg) {
   if (!navigator.usb) throw new Error('WebUSB não suportado neste navegador');
+  console.log('[USB] Conectando dispositivo...');
   const dev  = await _usbConnect();
+  console.log('[USB] Dispositivo conectado | endpoint:', _usbDevice._epOut);
   const data = _buildEscPos(order, cfg);
-  await dev.transferOut(_usbDevice._epOut, data);
+  console.log('[USB] Dados ESC/POS gerados | bytes:', data.length);
+  const result = await dev.transferOut(_usbDevice._epOut, data);
+  console.log('[USB] transferOut resultado:', result.status, '| bytes enviados:', result.bytesWritten);
 }
 
 function printOrderById(id) {
