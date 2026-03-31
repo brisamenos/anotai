@@ -350,47 +350,19 @@ input,textarea{font-family:inherit}
 }
 
 /* Faixa superior colorida com gradiente do tema */
-.hero-cover{
-  width:100%;height:110px;
-  background:linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 60%, #000) 100%);
-  position:relative;overflow:hidden;
-}
-.hero-cover::after{
-  content:'';position:absolute;inset:0;
-  background:rgba(0,0,0,.15);pointer-events:none;
-}
-
-/* Botão entrar no topo direito — sobre a cover */
-.hero-cover-row{
-  position:absolute;top:0;left:0;right:0;
-  display:flex;align-items:flex-start;justify-content:flex-end;
-  padding:12px 14px;z-index:5;
-}
-
-/* Logo — margin-top negativo sobe metade para dentro da cover */
 .hero-logo{
-  width:100px;height:100px;border-radius:24px;flex-shrink:0;overflow:hidden;
-  background:var(--s1);border:4px solid var(--s1);
-  display:flex;align-items:center;justify-content:center;font-size:44px;
-  box-shadow:0 8px 28px rgba(0,0,0,.25);
-  position:relative;z-index:10;cursor:pointer;
-  margin-top:-50px;
-  transition:margin-top .35s cubic-bezier(.34,1.56,.64,1), box-shadow .35s;
-}
-.hero-logo.dino-playing{
-  margin-top:10px;
-  box-shadow:0 4px 16px rgba(0,0,0,.15);
+  width:84px;height:84px;border-radius:20px;flex-shrink:0;overflow:hidden;
+  background:var(--s2);border:3px solid var(--border);
+  display:flex;align-items:center;justify-content:center;font-size:38px;
+  box-shadow:0 4px 16px rgba(0,0,0,.12);
+  cursor:pointer;margin-bottom:12px;
 }
 .hero-logo img,.hero-logo-img{ width:100%;height:100%;object-fit:cover;border-radius:18px;display:block }
 
 /* Área de conteúdo — padding-top acomoda metade da logo que desce */
 .hero-inner{
   display:flex;flex-direction:column;align-items:center;
-  padding:60px 20px 16px;text-align:center;gap:0;
-  transition:padding-top .35s cubic-bezier(.34,1.56,.64,1);
-}
-.hero-inner.dino-playing{
-  padding-top:0;
+  padding:20px 20px 14px;text-align:center;gap:0;
 }
 .hero-info{ width:100% }
 .hero-name{
@@ -1934,26 +1906,13 @@ input,textarea{font-family:inherit}
   </div>
 </div>
 
-<!-- HERO PREMIUM -->
+<!-- HERO -->
 <div class="hero" id="hero">
 
-  <!-- Faixa superior colorida — jogo dino acontece aqui dentro -->
-  <div class="hero-cover" id="hero-cover">
-    <!-- Botão entrar no topo direito -->
-    <div class="hero-cover-row">
-      <button class="profile-fab" id="profile-fab" onclick="onProfileFabClick()" title="Minha conta">
-        <span id="profile-fab-av" class="icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 13.5c0-2.76 2.46-5 5.5-5s5.5 2.24 5.5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
-        <span id="profile-fab-name">Entrar</span>
-      </button>
-    </div>
-    <!-- Canvas do jogo — cobre a faixa inteira -->
-    <canvas id="dino-canvas" style="display:none;position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none"></canvas>
-  </div>
-
-  <!-- Conteúdo abaixo da cover — logo com margin-top negativo sobe para cover -->
+  <!-- Conteúdo centralizado -->
   <div class="hero-inner">
-    <!-- Logo centralizada, metade dentro da cover -->
-    <div class="hero-logo" id="hero-logo-wrap" onclick="dinoAction()" title="Clique para jogar! 🦕" style="z-index:10">
+    <!-- Logo -->
+    <div class="hero-logo" id="hero-logo-wrap" onclick="openStoreInfoModal()" title="Ver informações da loja">
       <span id="hero-emoji">🍽️</span>
     </div>
     <div class="hero-info">
@@ -2725,262 +2684,7 @@ input,textarea{font-family:inherit}
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
 </button>
 
-<!-- ══════════════ DINO RUNNER ══════════════ -->
-<script>
-(function() {
-  // Tamanhos reduzidos para caber na faixa de 110px
-  const DINO_H = 22, DINO_W = 16;
-  const GROUND = 6; // distância do fundo da cover
-  const GRAVITY = 0.45, JUMP_FORCE = -8;
-  const OBS_W = 10, OBS_MIN_H = 12, OBS_MAX_H = 26;
-  const OBS_GAP_MIN = 180, OBS_GAP_MAX = 360;
-  const SPEED_START = 3.5, SPEED_INC = 0.0006;
 
-  let canvas, ctx, W, H;
-  let running = false, gameOver = false, started = false;
-  let dino, obstacles, score, speed, frame, animId;
-  let bestScore = 0;
-
-  function init() {
-    canvas = document.getElementById('dino-canvas');
-    if (!canvas) return;
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
-  }
-
-  function resizeCanvas() {
-    if (!canvas) return;
-    const cover = document.getElementById('hero-cover');
-    if (!cover) return;
-    const rect = cover.getBoundingClientRect();
-    W = rect.width  || cover.clientWidth;
-    H = rect.height || cover.clientHeight;
-    canvas.width  = W;
-    canvas.height = H;
-  }
-
-  function resetGame() {
-    const groundY = H - GROUND - DINO_H;
-    dino = { x: 60, y: groundY, vy: 0, onGround: true };
-    obstacles = [];
-    score = 0;
-    speed = SPEED_START;
-    frame = 0;
-    gameOver = false;
-    scheduleObs();
-  }
-
-  let nextObsAt = 0;
-  function scheduleObs() {
-    nextObsAt = frame + Math.floor(OBS_GAP_MIN + Math.random() * (OBS_GAP_MAX - OBS_GAP_MIN));
-  }
-
-  function spawnObs() {
-    const h = OBS_MIN_H + Math.random() * (OBS_MAX_H - OBS_MIN_H);
-    // Sometimes double cactus
-    const double = Math.random() > 0.6;
-    obstacles.push({ x: W + 10, w: double ? OBS_W + 14 : OBS_W, h });
-  }
-
-  function slideLogoDown() {
-    const logo  = document.getElementById('hero-logo-wrap');
-    const inner = document.querySelector('.hero-inner');
-    if (logo)  logo.classList.add('dino-playing');
-    if (inner) inner.classList.add('dino-playing');
-  }
-
-  function slideLogoUp() {
-    const logo  = document.getElementById('hero-logo-wrap');
-    const inner = document.querySelector('.hero-inner');
-    if (logo)  logo.classList.remove('dino-playing');
-    if (inner) inner.classList.remove('dino-playing');
-  }
-
-  function jump() {
-    if (!started) {
-      // Primeiro clique: inicia jogo
-      started = true;
-      running = true;
-      resetGame();
-      canvas.style.display = 'block';
-      slideLogoDown();
-      document.getElementById('hero-logo-wrap').title = 'Pular 🦕';
-      loop();
-      return;
-    }
-    if (gameOver) {
-      resetGame();
-      running = true;
-      gameOver = false;
-      loop();
-      return;
-    }
-    if (dino && dino.onGround) {
-      dino.vy = JUMP_FORCE;
-      dino.onGround = false;
-    }
-  }
-
-  function loop() {
-    if (!running) return;
-    animId = requestAnimationFrame(loop);
-    update();
-    draw();
-  }
-
-  function update() {
-    frame++;
-    speed += SPEED_INC;
-    score = Math.floor(frame / 6);
-
-    // Dino physics
-    dino.vy += GRAVITY;
-    dino.y  += dino.vy;
-    const groundY = H - GROUND - DINO_H;
-    if (dino.y >= groundY) {
-      dino.y = groundY;
-      dino.vy = 0;
-      dino.onGround = true;
-    }
-
-    // Spawn obstacles
-    if (frame >= nextObsAt) { spawnObs(); scheduleObs(); }
-
-    // Move obstacles & collision
-    for (let i = obstacles.length - 1; i >= 0; i--) {
-      obstacles[i].x -= speed;
-      if (obstacles[i].x + obstacles[i].w < 0) {
-        obstacles.splice(i, 1); continue;
-      }
-      // Collision (with a little forgiveness)
-      const o = obstacles[i];
-      const obsTop = H - GROUND - o.h;
-      if (
-        dino.x + DINO_W - 6 > o.x + 4 &&
-        dino.x + 6         < o.x + o.w - 4 &&
-        dino.y + DINO_H - 4 > obsTop
-      ) {
-        endGame(); return;
-      }
-    }
-  }
-
-  function draw() {
-    ctx.clearRect(0, 0, W, H);
-
-    // Ground line
-    ctx.strokeStyle = 'rgba(255,255,255,.35)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(0, H - GROUND);
-    ctx.lineTo(W, H - GROUND);
-    ctx.stroke();
-
-    // Dino (pixel dino shape)
-    drawDino(dino.x, dino.y, frame);
-
-    // Obstacles (cacti)
-    ctx.fillStyle = 'rgba(255,255,255,.9)';
-    obstacles.forEach(o => {
-      const top = H - GROUND - o.h;
-      // Main trunk
-      ctx.fillRect(o.x + 5, top, o.w - 10, o.h);
-      // Arms
-      if (o.w > OBS_W) {
-        ctx.fillRect(o.x, top + 8, o.w, 10);
-        ctx.fillRect(o.x, top + 4, 6, 14);
-        ctx.fillRect(o.x + o.w - 6, top + 4, 6, 14);
-      } else {
-        ctx.fillRect(o.x, top + 10, o.w, 8);
-        ctx.fillRect(o.x, top + 6, 5, 12);
-        ctx.fillRect(o.x + o.w - 5, top + 6, 5, 12);
-      }
-    });
-
-    // Score — direita, pequeno para caber na faixa
-    ctx.fillStyle = 'rgba(255,255,255,.9)';
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'right';
-    ctx.fillText(`${score}`, W - 10, 15);
-    if (bestScore > 0) {
-      ctx.fillStyle = 'rgba(255,255,255,.45)';
-      ctx.font = '9px monospace';
-      ctx.fillText(`REC ${bestScore}`, W - 10, 27);
-    }
-    ctx.textAlign = 'left';
-
-    // Game over message
-    if (gameOver) {
-      ctx.fillStyle = 'rgba(0,0,0,.5)';
-      ctx.fillRect(W/2 - 70, H/2 - 12, 140, 24);
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 10px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('💀 GAME OVER  •  clique p/ reiniciar', W/2, H/2 + 4);
-      ctx.textAlign = 'left';
-    }
-  }
-
-  function drawDino(x, y, f) {
-    ctx.fillStyle = 'rgba(255,255,255,.95)';
-    // Body
-    ctx.fillRect(x + 2, y + 5,  DINO_W - 4, DINO_H - 10);
-    // Head
-    ctx.fillRect(x + 4, y,      DINO_W - 3, 8);
-    // Eye
-    ctx.fillStyle = 'rgba(0,0,0,.75)';
-    ctx.fillRect(x + DINO_W - 5, y + 2, 3, 3);
-    ctx.fillStyle = 'rgba(255,255,255,.95)';
-    // Tail
-    ctx.fillRect(x, y + 7, 4, 5);
-    // Legs — animate
-    const leg = Math.floor(f / 5) % 2;
-    if (dino && !dino.onGround) {
-      ctx.fillRect(x + 4,  y + DINO_H - 7, 4, 7);
-      ctx.fillRect(x + 9, y + DINO_H - 7, 4, 7);
-    } else if (leg === 0) {
-      ctx.fillRect(x + 3,  y + DINO_H - 9, 4, 9);
-      ctx.fillRect(x + 9, y + DINO_H - 5, 4, 5);
-    } else {
-      ctx.fillRect(x + 3,  y + DINO_H - 5, 4, 5);
-      ctx.fillRect(x + 9, y + DINO_H - 9, 4, 9);
-    }
-  }
-
-  function endGame() {
-    running = false;
-    gameOver = true;
-    if (score > bestScore) bestScore = score;
-    cancelAnimationFrame(animId);
-    draw();
-    // Slide logo back up after 2s if no restart
-    setTimeout(() => {
-      if (gameOver && !running) {
-        slideLogoUp();
-        setTimeout(() => {
-          if (gameOver && !running) {
-            canvas.style.display = 'none';
-            started = false;
-            document.getElementById('hero-logo-wrap').title = 'Clique para jogar! 🦕';
-          }
-        }, 400);
-      }
-    }, 3000);
-  }
-
-  // Public: called by logo click
-  window.dinoAction = function() {
-    if (!canvas) { init(); }
-    if (!ctx && canvas) ctx = canvas.getContext('2d');
-    jump();
-  };
-
-  // Init on load
-  document.addEventListener('DOMContentLoaded', init);
-  // Also init after a short delay (in case DOM already ready)
-  setTimeout(init, 500);
-})();
-</script>
 
 </body>
 </html>
