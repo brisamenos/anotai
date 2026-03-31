@@ -124,13 +124,15 @@ function applyBranding(b, nome) {
     logoWrap.appendChild(img);
   }
 
-  // Banner
+  // Banner — agora aparece abaixo das categorias
   if (b?.store_banner_url) {
-    const bannerEl = document.getElementById('hero-banner');
-    if (bannerEl) {
-      const url = b.store_banner_url.startsWith('http') ? b.store_banner_url : location.origin + b.store_banner_url;
-      bannerEl.innerHTML = `<img src="${url}" alt="banner" onerror="this.parentElement.classList.remove('show')">`;
-      bannerEl.classList.add('show');
+    const url = b.store_banner_url.startsWith('http') ? b.store_banner_url : location.origin + b.store_banner_url;
+    const bannerBelow = document.getElementById('store-banner-below');
+    const bannerImg   = document.getElementById('store-banner-img');
+    if (bannerBelow && bannerImg) {
+      bannerImg.src = url;
+      bannerImg.onerror = () => { bannerBelow.classList.remove('show'); };
+      bannerBelow.classList.add('show');
     }
   }
 
@@ -307,7 +309,19 @@ function applyStatus(store_open, horarios) {
     txt.textContent = _lojaAberta ? 'Aberto' : 'Fechado';
     txt.className = 'hero-meta-status ' + (_lojaAberta ? 'open' : 'closed');
   }
-  if (ban)  ban.classList.toggle('on', !_lojaAberta);
+  if (ban) ban.style.display = _lojaAberta ? 'none' : 'flex';
+  // Atualiza botão de status do novo layout
+  const statusBtn = document.getElementById('hero-status-btn');
+  const statusBtnTxt = document.getElementById('hero-status-btn-txt');
+  if (statusBtn && statusBtnTxt) {
+    if (_lojaAberta) {
+      statusBtn.className = 'hero-status-btn';
+      statusBtnTxt.textContent = 'Loja aberta — faça seu pedido!';
+    } else {
+      statusBtn.className = 'hero-status-btn closed-btn';
+      statusBtnTxt.textContent = 'Loja fechada, deixe seu pedido agendado';
+    }
+  }
   if (btn) {
     btn.disabled = !_lojaAberta || cart.length === 0;
     if (!_lojaAberta) btn.innerHTML = '<span style="color:var(--red);font-size:10px">●</span> Loja fechada';
