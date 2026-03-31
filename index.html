@@ -344,10 +344,22 @@ input,textarea{font-family:inherit}
 
 /* ══ HERO PREMIUM ══════════════════════════════════ */
 .hero{
-  background:var(--s1);
+  background:linear-gradient(160deg, rgba(var(--accent-rgb,249,115,22),.12) 0%, rgba(var(--accent-rgb,249,115,22),.04) 50%, var(--bg) 100%);
   position:relative;
-  border-bottom:1px solid var(--border);
+  overflow:hidden;
 }
+/* Oval arredondado no fundo do hero */
+.hero::after{
+  content:'';
+  position:absolute;
+  bottom:-40px;left:50%;
+  transform:translateX(-50%);
+  width:130%;height:80px;
+  background:var(--bg);
+  border-radius:50% 50% 0 0 / 100% 100% 0 0;
+  z-index:1;
+}
+.hero > *{ position:relative;z-index:2 }
 
 /* Faixa superior colorida com gradiente do tema */
 .hero-logo{
