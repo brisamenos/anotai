@@ -442,7 +442,7 @@ function _renderKgGrid() {
 }
 
 function _selectKg(gramas) {
-  // Confirma direto sem precisar do drum
+  // Mesmo fluxo do confirmPesoSheet — só usa gramas fixo
   const corte = _acougueAtual;
   if (!corte) return;
 
@@ -451,13 +451,27 @@ function _selectKg(gramas) {
 
   _acougueCortes[corte] = { peso: gramas, separar, extra };
 
-  // Atualiza botão e fecha
-  _drumUpdateBtn(gramas);
-  closePesoSheet();
+  // Atualiza o card visual do corte
+  const slug = _slug(corte);
+  const card = document.getElementById(`corte-card-${slug}`);
+  const hint = document.getElementById(`corte-hint-${slug}`);
+  if (card && hint) {
+    card.classList.add('on');
+    const label = gramas >= 1000
+      ? (gramas / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 'kg'
+      : gramas + 'g';
+    hint.innerHTML = `<span class="corte-card-badge">
+      <svg width="9" height="9" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ${label} ${corte}
+      <span onclick="event.stopPropagation();cancelCorte('${_escape(corte)}')" title="Cancelar seleção"
+        style="margin-left:5px;opacity:.7;font-size:11px;font-weight:900;line-height:1;cursor:pointer;padding:1px 3px;border-radius:3px"
+        onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='.7'">✕</span>
+    </span>`;
+  }
 
-  // Rerenderiza o card do corte e o preview de preço
-  renderImCortesGrupo();
-  updateImPrice();
+  // Recalcula preço total
+  _atualizaTotalPeso();
+  closePesoSheet();
 }
 
 function selectPesoOpt(peso) {
