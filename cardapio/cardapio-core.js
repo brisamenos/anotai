@@ -143,12 +143,13 @@ function applyBranding(b, nome) {
       bannerImg.src = url;
       bannerImg.onerror = () => { bannerBelow.classList.remove('show'); };
       bannerBelow.classList.add('show');
-      // Após a revelação completa (1.8s), remove a máscara permanentemente
-      // e deixa o boneco continuar entrando/saindo como decoração
+      // Após 5.5s (animação completa), remove máscara e boneco
       setTimeout(() => {
         const mask = document.getElementById('banner-reveal-mask');
-        if (mask) { mask.style.display = 'none'; }
-      }, 2000);
+        const dude = document.getElementById('banner-dude');
+        if (mask) mask.style.display = 'none';
+        if (dude) dude.style.display = 'none';
+      }, 5500);
     }
   }
 
