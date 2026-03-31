@@ -1772,9 +1772,10 @@ async function _printViaServer(html) {
   const format  = document.getElementById('print-format-select')?.value  || _printFormat  || 'A4';
   _printPrinter = printer; localStorage.setItem('printPrinter', printer);
   _printFormat  = format;  localStorage.setItem('printFormat',  format);
+  const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
   const res = await fetch('/api/print', {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
     body:    JSON.stringify({ html, printer: printer || undefined, format }),
   });
   const data = await res.json();
@@ -1870,7 +1871,8 @@ async function printOrder(order) {
 
   // 2. Agente local ativo? (computador da loja com agente rodando)
   try {
-    const r = await fetch('/api/print-queue/status');
+    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+    const r = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } });
     const d = await r.json();
     if (d.active) {
       await _printViaAgent(html);
