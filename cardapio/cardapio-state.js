@@ -36,6 +36,7 @@ let _tiposEntrega = ['delivery','retirada','mesa'];
 
 // ── Segmento ──
 let _segmento      = 'restaurante'; // 'restaurante' | 'acougue'
+let _catsCarrossel = false;           // carrossel de categorias (gestor pode ativar)
 let _filterPreparo = '';            // preparo selecionado para filtrar itens
 
 // ── Estado da loja ──

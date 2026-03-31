@@ -112,6 +112,16 @@ function applyBranding(b, nome) {
   const _rgb = cor.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
   if (_rgb) document.documentElement.style.setProperty('--accent-rgb', `${parseInt(_rgb[1],16)},${parseInt(_rgb[2],16)},${parseInt(_rgb[3],16)}`);
 
+  // Cor dos textos personalizada
+  if (b?.store_cor_texto) {
+    document.documentElement.style.setProperty('--text', b.store_cor_texto);
+  }
+
+  // Carrossel de categorias (restaurante pode ativar igual açougue)
+  if (b?.cats_carrossel && _segmento !== 'acougue') {
+    _catsCarrossel = true;
+  }
+
   // Logo circular
   const logoWrap = document.getElementById('hero-logo-wrap');
   if (b?.store_logo_url && logoWrap) {

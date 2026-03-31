@@ -5,8 +5,9 @@
 function buildCats() {
   const scroll = document.getElementById('cats-scroll');
   const isAcougue = _segmento === 'acougue';
+  const useCarrossel = isAcougue || _catsCarrossel;
 
-  scroll.classList.toggle('carousel', isAcougue);
+  scroll.classList.toggle('carousel', useCarrossel);
   scroll.innerHTML = '';
 
   const _catSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="13" y="3" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="13" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="13" y="13" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/></svg>`;
@@ -27,6 +28,25 @@ function buildCats() {
       const iconHtml = c.image_url
         ? `<img src="${c.image_url}" alt="${c.label||c.name}">`
         : (c.emoji ? `<span style="font-size:16px;line-height:1">${c.emoji}</span>` : _catSvg);
+      b.innerHTML = `<div class="cat-btn-icon">${iconHtml}</div>${c.label || c.name}`;
+      scroll.appendChild(b);
+    });
+  } else if (_catsCarrossel) {
+    // Restaurante com carrossel ativado — igual açougue mas sem ícone SVG
+    const all = document.createElement('button');
+    all.className = 'cat-btn on';
+    all.dataset.key = '';
+    all.onclick = () => filterCat(all, '');
+    all.innerHTML = `<div class="cat-btn-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.4"/><path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></div>Tudo`;
+    scroll.appendChild(all);
+    allCats.forEach(c => {
+      const b = document.createElement('button');
+      b.className = 'cat-btn';
+      b.dataset.key = c.name;
+      b.onclick = () => filterCat(b, c.name);
+      const iconHtml = c.image_url
+        ? `<img src="${c.image_url}" alt="${c.label||c.name}">`
+        : (c.emoji ? `<span style="font-size:16px;line-height:1">${c.emoji}</span>` : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="13" y="3" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="13" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="13" y="13" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/></svg>`);
       b.innerHTML = `<div class="cat-btn-icon">${iconHtml}</div>${c.label || c.name}`;
       scroll.appendChild(b);
     });
