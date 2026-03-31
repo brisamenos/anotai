@@ -3845,26 +3845,72 @@ Use no seu próximo pedido 🛍️</textarea>
     <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Preenche a latitude/longitude automaticamente via GPS do navegador</div>
   </div>
 
-  <!-- Cor principal -->
+  <!-- Cores -->
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
-    <div style="font-size:13px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:7px">
-      <span style="font-size:16px">Cor principal
+    <div style="font-size:13px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:7px">
+      <span style="font-size:16px">🎨</span> Cores do cardápio
     </div>
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <input type="color" id="cp-cor" value="#3b82f6" style="width:48px;height:48px;border:none;border-radius:10px;cursor:pointer;background:none;padding:0" >
-      <div style="flex:1">
-        <div style="font-size:12.5px;margin-bottom:4px">Cor usada no botão de pedido, destaques e links do cardápio</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap" id="cp-cor-presets">
-          <div onclick="cpSetCor('#3b82f6')" style="width:28px;height:28px;border-radius:7px;background:#3b82f6;cursor:pointer;border:2px solid transparent" title="Azul"></div>
-          <div onclick="cpSetCor('#22c55e')" style="width:28px;height:28px;border-radius:7px;background:#22c55e;cursor:pointer;border:2px solid transparent" title="Verde"></div>
-          <div onclick="cpSetCor('#f97316')" style="width:28px;height:28px;border-radius:7px;background:#f97316;cursor:pointer;border:2px solid transparent" title="Laranja"></div>
-          <div onclick="cpSetCor('#ef4444')" style="width:28px;height:28px;border-radius:7px;background:#ef4444;cursor:pointer;border:2px solid transparent" title="Vermelho"></div>
-          <div onclick="cpSetCor('#8b5cf6')" style="width:28px;height:28px;border-radius:7px;background:#8b5cf6;cursor:pointer;border:2px solid transparent" title="Roxo"></div>
-          <div onclick="cpSetCor('#ec4899')" style="width:28px;height:28px;border-radius:7px;background:#ec4899;cursor:pointer;border:2px solid transparent" title="Rosa"></div>
-          <div onclick="cpSetCor('#14b8a6')" style="width:28px;height:28px;border-radius:7px;background:#14b8a6;cursor:pointer;border:2px solid transparent" title="Teal"></div>
-          <div onclick="cpSetCor('#f59e0b')" style="width:28px;height:28px;border-radius:7px;background:#f59e0b;cursor:pointer;border:2px solid transparent" title="Âmbar"></div>
+
+    <!-- Cor de destaque -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:11.5px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Cor de destaque</div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <input type="color" id="cp-cor" value="#3b82f6" style="width:44px;height:44px;border:none;border-radius:10px;cursor:pointer;background:none;padding:0;flex-shrink:0">
+        <div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Botões, links e destaques</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <div onclick="cpSetCor('#3b82f6')" style="width:26px;height:26px;border-radius:6px;background:#3b82f6;cursor:pointer;border:2px solid transparent" title="Azul"></div>
+            <div onclick="cpSetCor('#22c55e')" style="width:26px;height:26px;border-radius:6px;background:#22c55e;cursor:pointer;border:2px solid transparent" title="Verde"></div>
+            <div onclick="cpSetCor('#f97316')" style="width:26px;height:26px;border-radius:6px;background:#f97316;cursor:pointer;border:2px solid transparent" title="Laranja"></div>
+            <div onclick="cpSetCor('#ef4444')" style="width:26px;height:26px;border-radius:6px;background:#ef4444;cursor:pointer;border:2px solid transparent" title="Vermelho"></div>
+            <div onclick="cpSetCor('#8b5cf6')" style="width:26px;height:26px;border-radius:6px;background:#8b5cf6;cursor:pointer;border:2px solid transparent" title="Roxo"></div>
+            <div onclick="cpSetCor('#ec4899')" style="width:26px;height:26px;border-radius:6px;background:#ec4899;cursor:pointer;border:2px solid transparent" title="Rosa"></div>
+            <div onclick="cpSetCor('#14b8a6')" style="width:26px;height:26px;border-radius:6px;background:#14b8a6;cursor:pointer;border:2px solid transparent" title="Teal"></div>
+            <div onclick="cpSetCor('#f59e0b')" style="width:26px;height:26px;border-radius:6px;background:#f59e0b;cursor:pointer;border:2px solid transparent" title="Âmbar"></div>
+            <div onclick="cpSetCor('#b45309')" style="width:26px;height:26px;border-radius:6px;background:#b45309;cursor:pointer;border:2px solid transparent" title="Marrom"></div>
+            <div onclick="cpSetCor('#0ea5e9')" style="width:26px;height:26px;border-radius:6px;background:#0ea5e9;cursor:pointer;border:2px solid transparent" title="Céu"></div>
+          </div>
         </div>
       </div>
+    </div>
+
+    <!-- Divisor -->
+    <div style="height:1px;background:var(--border);margin:4px 0 16px"></div>
+
+    <!-- Cor do texto -->
+    <div style="margin-bottom:4px">
+      <div style="font-size:11.5px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Cor dos textos</div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <input type="color" id="cp-cor-texto" value="#111111" style="width:44px;height:44px;border:none;border-radius:10px;cursor:pointer;background:none;padding:0;flex-shrink:0">
+        <div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Nome, preços e descrições (deixe vazio para automático)</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <div onclick="cpSetCorTexto('#111111')" style="width:26px;height:26px;border-radius:6px;background:#111111;cursor:pointer;border:2px solid transparent" title="Preto"></div>
+            <div onclick="cpSetCorTexto('#ffffff')" style="width:26px;height:26px;border-radius:6px;background:#ffffff;cursor:pointer;border:2px solid rgba(0,0,0,.15)" title="Branco"></div>
+            <div onclick="cpSetCorTexto('#1a1a2e')" style="width:26px;height:26px;border-radius:6px;background:#1a1a2e;cursor:pointer;border:2px solid transparent" title="Azul escuro"></div>
+            <div onclick="cpSetCorTexto('#431407')" style="width:26px;height:26px;border-radius:6px;background:#431407;cursor:pointer;border:2px solid transparent" title="Marrom escuro"></div>
+            <div onclick="cpSetCorTexto('#0d2b18')" style="width:26px;height:26px;border-radius:6px;background:#0d2b18;cursor:pointer;border:2px solid transparent" title="Verde escuro"></div>
+            <div onclick="cpSetCorTexto('#3d0a14')" style="width:26px;height:26px;border-radius:6px;background:#3d0a14;cursor:pointer;border:2px solid transparent" title="Vinho"></div>
+            <button onclick="cpSetCorTexto('')" style="font-size:10px;font-weight:700;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--muted);font-family:inherit">Auto</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modo de categorias -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px" id="cp-cats-modo-wrap">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:13px;font-weight:700">📂 Categorias em carrossel</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">Exibe as categorias com ícone e imagem, igual ao modo açougue</div>
+      </div>
+      <label style="position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0">
+        <input type="checkbox" id="cp-cats-carrossel" onchange="cpToggleCatsCarrossel(this.checked)" style="opacity:0;width:0;height:0">
+        <span style="position:absolute;cursor:pointer;inset:0;background:var(--surface2);border:1px solid var(--border);border-radius:99px;transition:.2s" id="cp-cats-carrossel-track">
+          <span style="position:absolute;width:18px;height:18px;left:2px;bottom:2px;background:var(--muted);border-radius:50%;transition:.2s" id="cp-cats-carrossel-thumb"></span>
+        </span>
+      </label>
     </div>
   </div>
 

@@ -132,20 +132,49 @@ async function evoCriarInstancia() {
   const instName = EVO.instance;
   if (!instName) { sbToast('err', 'Informe o nome da instância antes de criar.'); return; }
   sbLoading(true);
-  const r = await EVO.req('POST', '/instance/create', {
+
+  // v2: tenta criar — se já existir (409/500), usa a instância existente
+  let r = await EVO.req('POST', '/instance/create', {
     instanceName: instName,
     qrcode: true,
     integration: 'WHATSAPP-BAILEYS'
   });
+
+  // Se retornou 500, pode ser duplicata — tenta usar a instância existente
+  if (!r.ok) {
+    const msg = r.data?.message || '';
+    const isDuplicate = r.status === 409 || (r.status === 500 && (
+      msg.toLowerCase().includes('already') ||
+      msg.toLowerCase().includes('exist') ||
+      msg.toLowerCase().includes('duplicate')
+    ));
+    if (isDuplicate || r.status === 500) {
+      sbToast('ok', `Instância "${instName}" já existe. Usando existente...`);
+      sbLoading(false);
+      await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: instName });
+      evoConectar();
+      return;
+    }
+    sbLoading(false);
+    const m = r.data?.message || r.data?.error || `Erro ${r.status}`;
+    sbToast('err', 'Erro: ' + (typeof m === 'string' ? m : JSON.stringify(m)));
+    return;
+  }
+
   sbLoading(false);
-  if (r.ok) {
-    // Salva evo_instance no store_config do tenant
-    await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: instName });
-    sbToast('ok', `Instância "${instName}" criada!`);
-    evoCheckStatus();
+  await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: instName });
+  sbToast('ok', `Instância "${instName}" criada!`);
+
+  // v2: QR pode vir direto na resposta de criação
+  const qrBase64 = r.data?.qrcode?.base64 || r.data?.base64;
+  if (qrBase64) {
+    const qrArea = document.getElementById('evo-qr-area');
+    if (qrArea) {
+      qrArea.innerHTML = `<div style="font-size:13px;font-weight:600;margin-bottom:12px">Escaneie com seu WhatsApp</div><img src="${qrBase64}" style="width:220px;height:220px;border-radius:12px;border:3px solid var(--accent);margin-bottom:12px"><div style="font-size:11px;color:var(--muted);margin-bottom:12px">QR Code expira em 60 segundos</div><button class="btn bg" style="font-size:11.5px" onclick="evoConectar()">Gerar novo QR Code</button>`;
+    }
+    _iniciarPollingConexao();
   } else {
-    const m = r.data?.message||r.data?.error||`Erro ${r.status}`;
-    sbToast('err','Erro: '+(typeof m==='string'?m:JSON.stringify(m)));
+    evoConectar();
   }
 }
 
@@ -171,19 +200,40 @@ async function evoCheckStatus() {
 
 async function evoConectar() {
   const qrArea = document.getElementById('evo-qr-area');
-  if (qrArea) qrArea.innerHTML='<div style="margin-bottom:10px"><div style="font-size:13px;color:var(--muted)">Gerando QR Code...</div>';
-  const r = await EVO.req('GET', `/instance/connect/${EVO.instance}`);
-  if (!r.ok || !r.data?.code) {
-    if (qrArea) qrArea.innerHTML=`<div style="font-size:13px;color:var(--danger);margin-bottom:12px">${r.data?.message||'Erro ao gerar QR. Crie a instância primeiro.'}</div><button class="btn bp" onclick="evoCriarInstancia()">Criar instância</button>`;
+  if (qrArea) qrArea.innerHTML='<div style="margin-bottom:10px"><div style="font-size:13px;color:var(--muted)">Gerando QR Code... aguarde</div></div>';
+
+  // Evolution API v2 pode demorar para gerar o QR — tenta até 10x com intervalo de 3s
+  let r = null;
+  for (let tentativa = 1; tentativa <= 10; tentativa++) {
+    r = await EVO.req('GET', `/instance/connect/${EVO.instance}`);
+    // QR disponível quando code ou base64 estiverem presentes e count > 0
+    const temQR = r.ok && (r.data?.base64 || r.data?.code) && (r.data?.count > 0 || r.data?.base64);
+    if (temQR) break;
+    if (tentativa < 10) {
+      if (qrArea) qrArea.innerHTML=`<div style="font-size:13px;color:var(--muted)">Gerando QR Code... (${tentativa}/10)</div>`;
+      await new Promise(res => setTimeout(res, 3000));
+    }
+  }
+
+  // v2: QR pode estar em r.data.base64, r.data.qrcode.base64, ou r.data.code
+  const qrB64 = r?.data?.base64 || r?.data?.qrcode?.base64;
+  const qrCode = r?.data?.code || r?.data?.qrcode?.code;
+
+  if (!r?.ok || (!qrCode && !qrB64)) {
+    if (qrArea) qrArea.innerHTML=`<div style="font-size:13px;color:var(--danger);margin-bottom:12px">${r?.data?.message||'Erro ao gerar QR. Verifique se a instância existe.'}</div><button class="btn bp" onclick="evoCriarInstancia()">Criar instância</button>`;
     return;
   }
   if (qrArea) {
-    if (r.data.base64) {
-      qrArea.innerHTML=`<div style="font-size:13px;font-weight:600;margin-bottom:12px">Escaneie com seu WhatsApp</div><img src="${r.data.base64}" style="width:220px;height:220px;border-radius:12px;border:3px solid var(--accent);margin-bottom:12px"><div style="font-size:11px;color:var(--muted);margin-bottom:12px">QR Code expira em 60 segundos</div><button class="btn bg" style="font-size:11.5px" onclick="evoConectar()">Gerar novo QR Code</button>`;
+    if (qrB64) {
+      qrArea.innerHTML=`<div style="font-size:13px;font-weight:600;margin-bottom:12px">Escaneie com seu WhatsApp</div><img src="${qrB64}" style="width:220px;height:220px;border-radius:12px;border:3px solid var(--accent);margin-bottom:12px"><div style="font-size:11px;color:var(--muted);margin-bottom:12px">QR Code expira em 60 segundos</div><button class="btn bg" style="font-size:11.5px" onclick="evoConectar()">Gerar novo QR Code</button>`;
     } else {
-      qrArea.innerHTML=`<div style="font-size:12px;word-break:break-all;padding:10px;background:var(--surface2);border-radius:8px;margin-bottom:12px;color:var(--muted)">${(r.data.code||'').slice(0,80)}...</div><button class="btn bg" onclick="evoConectar()">Gerar novo QR</button>`;
+      qrArea.innerHTML=`<div style="font-size:12px;word-break:break-all;padding:10px;background:var(--surface2);border-radius:8px;margin-bottom:12px;color:var(--muted)">${(qrCode||'').slice(0,80)}...</div><button class="btn bg" onclick="evoConectar()">Gerar novo QR</button>`;
     }
   }
+  _iniciarPollingConexao();
+}
+
+function _iniciarPollingConexao() {
   if (evoQrInterval) clearInterval(evoQrInterval);
   let tries=0;
   evoQrInterval = setInterval(async()=>{
@@ -691,6 +741,16 @@ async function loadCardapioPublico() {
 
   const cor = data.store_cor || '#3b82f6';
   const corEl = document.getElementById('cp-cor');
+  // Cor do texto
+  const corTextoEl = document.getElementById('cp-cor-texto');
+  if (corTextoEl) corTextoEl.value = data.store_cor_texto || '#111111';
+  // Carrossel de categorias
+  const catsCarrossel = !!data.cats_carrossel;
+  const catsEl = document.getElementById('cp-cats-carrossel');
+  if (catsEl) { catsEl.checked = catsCarrossel; cpToggleCatsCarrossel(catsCarrossel); }
+  // Oculta opção de carrossel se for açougue (já usa por padrão)
+  const catsWrap = document.getElementById('cp-cats-modo-wrap');
+  if (catsWrap) catsWrap.style.display = window._segmento === 'acougue' ? 'none' : '';
   if (corEl) corEl.value = cor;
 
   // Carrega tema
@@ -775,6 +835,20 @@ function cpSetCor(hex) {
 }
 
 // ── Seleção de tema do cardápio público ──────────────────
+function cpSetCorTexto(cor) {
+  const el = document.getElementById('cp-cor-texto');
+  if (el && cor) el.value = cor;
+  // Se cor vazia = automático (limpa campo)
+  if (!cor && el) el.value = '#111111';
+}
+
+function cpToggleCatsCarrossel(on) {
+  const track = document.getElementById('cp-cats-carrossel-track');
+  const thumb  = document.getElementById('cp-cats-carrossel-thumb');
+  if (track) track.style.background = on ? 'var(--accent)' : 'var(--surface2)';
+  if (thumb) { thumb.style.background = on ? '#fff' : 'var(--muted)'; thumb.style.left = on ? '22px' : '2px'; }
+}
+
 function cpSelecionarTema(tema) {
   // Atualiza borda visual de cada card
   document.querySelectorAll('.cp-tema-card').forEach(card => {
@@ -847,7 +921,9 @@ async function salvarCardapioPublico() {
       store_tempo_entrega: document.getElementById('cp-tempo')?.value.trim()     || '30-45 min',
       store_avaliacao:     document.getElementById('cp-avaliacao')?.value.trim() || '5.0',
       store_cor:           document.getElementById('cp-cor')?.value              || '#3b82f6',
+      store_cor_texto:     document.getElementById('cp-cor-texto')?.value           || null,
       store_tema:          document.getElementById('cp-tema-value')?.value          || 'classico',
+      cats_carrossel:      document.getElementById('cp-cats-carrossel')?.checked ? 1 : 0,
       horarios_config:     JSON.stringify(cpGetHorarios()),
       pedido_minimo:       parseFloat(document.getElementById('cp-pedido-minimo')?.value) || 0,
       store_address:       document.getElementById('cp-store-address')?.value.trim() || null,
@@ -1156,3 +1232,4 @@ async function iaRegistrarWebhook(webhookUrl) {
     console.warn('iaRegistrarWebhook:', e);
   }
 }
+
