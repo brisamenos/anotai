@@ -1786,9 +1786,53 @@ async function _printViaServer(html) {
 function _printViaBrowser(html) {
   const frame = document.getElementById('print-frame');
   if (!frame) return;
-  frame.innerHTML = html;
+
+  // Monta HTML completo dentro do iframe
+  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box }
+  body { font-family:'Courier New',monospace; font-size:12px; color:#000; background:#fff }
+  hr { border:none; border-top:1px dashed #000; margin:4px 0 }
+  .pt-center { text-align:center } .pt-large { font-size:15px; font-weight:bold }
+  .pt-hr { border:none; border-top:1px dashed #000; margin:4px 0 }
+  .print-ticket { padding:4px; width:100% }
+  @media print { @page { margin:2mm } body { margin:0 } }
+</style></head><body>${html}
+<script>
+  window.onload = function() {
+    window.print();
+    // Avisa o pai para esconder o frame após imprimir
+    setTimeout(function() {
+      try { window.parent.document.getElementById('print-frame').style.display='none'; } catch(_) {}
+    }, 1500);
+  };
+<\/script></body></html>`;
+
   frame.style.display = 'block';
-  setTimeout(() => { window.print(); setTimeout(() => { frame.style.display = 'none'; }, 1500); }, 150);
+  const doc = frame.contentDocument || frame.contentWindow?.document;
+  if (doc) {
+    doc.open();
+    doc.write(fullHtml);
+    doc.close();
+  } else {
+    // Fallback absoluto: blob URL
+    const blob = new Blob([fullHtml], { type: 'text/html' });
+    const url  = URL.createObjectURL(blob);
+    frame.src  = url;
+    frame.onload = () => {
+      try { frame.contentWindow.print(); } catch (_) {}
+      setTimeout(() => { frame.style.display = 'none'; URL.revokeObjectURL(url); }, 2000);
+    };
+  }
+}
+
+// ── Aviso quando nenhum método silencioso está disponível ────────
+function _showPrintAgentToast() {
+  const msg =
+    '🖨️ Nenhum agente ativo. Para imprimir sem confirmação, ' +
+    'inicie o print-agent.js no computador da loja.';
+  if (typeof sbToast === 'function') sbToast('warn', msg);
+  else console.warn(msg);
 }
 
 // ── Função principal — tenta: Electron → agente → servidor → navegador ──
@@ -1842,7 +1886,8 @@ async function printOrder(order) {
     return;
   } catch {}
 
-  // 4. Fallback: diálogo do navegador
+  // 4. Fallback: diálogo do navegador (abre confirm do sistema)
+  _showPrintAgentToast();
   _printViaBrowser(html);
 }
 

@@ -64,8 +64,8 @@ if(window.visualViewport){window.visualViewport.addEventListener('resize',setVH)
 </head>
 <body>
 
-<!-- Frame de impressão (invisível, só aparece no print) -->
-<div id="print-frame" style="display:none"></div>
+<!-- Frame de impressão (invisível, usado pelo fallback do navegador) -->
+<iframe id="print-frame" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;border:none;z-index:9999" sandbox="allow-scripts allow-same-origin allow-modals"></iframe>
 
 <!-- TOP NAV -->
 <nav class="topnav">
