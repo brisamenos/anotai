@@ -689,7 +689,7 @@ async function handleREST(req, res, table, params, body) {
         const _tid = _ord.tenant_id
         setImmediate(async () => {
           try {
-            const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, ia_config, order_num_offset FROM store_config WHERE tenant_id=?').get(_tid)
+            const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, ia_config, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(_tid)
             const inst   = cfg?.evo_instance || EVO_INST
             const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
             const ia     = (() => { try { return JSON.parse(cfg?.ia_config||'{}') } catch { return {} } })()
@@ -703,7 +703,8 @@ async function handleREST(req, res, table, params, body) {
             const chavePix  = ia.pix_key_manual || ''
             const tipoChave = ia.pix_key_manual_tipo || 'aleatoria'
             if (!chavePix) { log('⚠️','PIX manual: chave não configurada para tenant', _tid); return }
-            const msgPadrao = `💠 Olá ${nome}! Recebemos seu pedido #${idStr}.\n\n🛒 ${items}\n💰 Total: R$ ${total}\n\nPara confirmar, realize o pagamento via PIX:\n🔑 Tipo: ${tipoChave}\n📋 Chave: ${chavePix}\n\nApós o pagamento, seu pedido será confirmado. ✅`
+            const lojaP   = cfg?.store_name || 'Restaurante'
+            const msgPadrao = `🏪 *${lojaP}*\n${'-'.repeat(20)}\n\n💠 *PIX — Pedido #${idStr}*\n\nOlá, *${nome}*! Recebemos seu pedido.\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\nPara confirmar, pague via PIX:\n🔑 *Tipo:* ${tipoChave}\n📋 *Chave:* ${chavePix}\n\nApós o pagamento confirmaremos seu pedido. ✅\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
             const msgFinal  = pixAuto.msg ? fillVars(pixAuto.msg, { nome, id: idStr, itens: items, total, chave_pix: chavePix, tipo_chave: tipoChave }) : msgPadrao
             const r = await sendWA(_ord.phone, msgFinal, inst)
             if (r.ok) log('📤', `PIX manual notificado → ${_ord.phone} pedido #${idStr}`)
@@ -869,7 +870,7 @@ async function handleOrderStatus(req, res) {
     if (new_status === 'analise' && oldStatus === 'aguardando_pix' && order.pag === 'pix_manual') {
       setImmediate(async () => {
         try {
-          const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset FROM store_config WHERE tenant_id=?').get(tid)
+          const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(tid)
           const inst   = cfg?.evo_instance || EVO_INST
           const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
           const pixConf = auto['pix_confirmado'] || {}
@@ -879,7 +880,8 @@ async function handleOrderStatus(req, res) {
           const nome   = order.client || 'Cliente'
           const items  = (()=>{ try{ return (JSON.parse(order.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') }catch{ return '' } })()
           const total  = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
-          const msgPad = `✅ *Pagamento confirmado!*\n\nOlá *${nome}*, recebemos seu pagamento PIX do pedido *#${idStr}* com sucesso!\n\n🛒 ${items}\n💰 Total: R$ ${total}\n\nSeu pedido está sendo preparado. Obrigado! 🎉`
+          const lojaC = cfg?.store_name || 'Restaurante'
+          const msgPad = `🏪 *${lojaC}*\n${'-'.repeat(20)}\n\n✅ *Pagamento PIX confirmado!*\n\nOlá, *${nome}*! Recebemos seu pagamento do pedido *#${idStr}* com sucesso.\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\n📦 Seu pedido está sendo preparado! Obrigado. 🎉\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
           const msgFin = pixConf.msg ? fillVars(pixConf.msg, { nome, id: idStr, itens: items, total }) : msgPad
           const r = await sendWA(order.phone, msgFin, inst)
           if (r.ok) log('📤', `PIX manual confirmado notificado → ${order.phone} #${idStr}`)
@@ -910,8 +912,8 @@ async function handleOrderStatus(req, res) {
               // WA cashback
               const cbAuto = auto['cashback'] || {}
               if (cbAuto.on !== false) {
-                const nome = order.client || 'Cliente'
-                const msgPadrao = `💰 *${nome}*, você ganhou *R$ ${credito.toFixed(2).replace('.',',')}* de cashback com seu pedido!\n\nSeu saldo total: *R$ ${novoSaldo.toFixed(2).replace('.',',')}*\nUse no seu próximo pedido! 🛍️`
+                const lojaB   = cfg?.store_name || 'Restaurante'
+                const msgPadrao = `🏪 *${lojaB}*\n${'-'.repeat(20)}\n\n💰 *Cashback creditado!*\n\nOlá, *${nome}*! Você ganhou *R$ ${credito.toFixed(2).replace('.',',')}* de cashback.\n\n💳 Saldo atual: *R$ ${novoSaldo.toFixed(2).replace('.',',')}*\n\nUse no seu próximo pedido! 🛍️\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
                 const msgFinal  = cbAuto.on && cbAuto.msg ? fillVars(cbAuto.msg, { nome, credito: credito.toFixed(2).replace('.',','), saldo: novoSaldo.toFixed(2).replace('.',',') }) : msgPadrao
                 setImmediate(async () => { try { await sendWA(order.phone, msgFinal, inst) } catch(e) {} })
               }
@@ -919,7 +921,7 @@ async function handleOrderStatus(req, res) {
               db.prepare('INSERT OR IGNORE INTO customers (tenant_id,name,phone,cashback_saldo) VALUES (?,?,?,?)').run(tid, order.client||order.phone, order.phone, credito)
               const cbAuto = auto['cashback'] || {}
               if (cbAuto.on !== false) {
-                const nome = order.client || 'Cliente'
+                const lojaB2  = cfg?.store_name || 'Restaurante'
                 const msgPadrao = `💰 *${nome}*, você ganhou *R$ ${credito.toFixed(2).replace('.',',')}* de cashback com seu pedido!\n\nSeu saldo total: *R$ ${credito.toFixed(2).replace('.',',')}*\nUse no seu próximo pedido! 🛍️`
                 const msgFinal  = cbAuto.on && cbAuto.msg ? fillVars(cbAuto.msg, { nome, credito: credito.toFixed(2).replace('.',','), saldo: credito.toFixed(2).replace('.',',') }) : msgPadrao
                 setImmediate(async () => { try { await sendWA(order.phone, msgFinal, inst) } catch(e) {} })
@@ -947,9 +949,9 @@ async function handleOrderStatus(req, res) {
               // WA pontos
               const ptAuto = auto['pontos'] || {}
               if (ptAuto.on !== false) {
-                const nome       = fid.name || order.client || 'Cliente'
+                const lojaP2  = cfg?.store_name || 'Restaurante'
                 const faltam     = Math.max(0, meta - novosPts)
-                const msgPadrao  = `🏆 *${nome}*, você ganhou *${ptosGanhos} pontos* com seu pedido!\nSeu saldo: *${novosPts} pontos* 🎯\n${faltam > 0 ? `Faltam apenas *${faltam} pontos* para sua recompensa!` : '🎁 Você atingiu sua recompensa! Resgate no próximo pedido.'}`
+                const msgPadrao  = `🏪 *${lojaP2}*\n${'-'.repeat(20)}\n\n🏆 *Pontos de fidelidade!*\n\nOlá, *${nome}*! Você ganhou *${ptosGanhos} pontos* com seu pedido.\n\n🎯 Saldo atual: *${novosPts} pontos*\n${faltam > 0 ? `⏳ Faltam apenas *${faltam} pontos* para sua recompensa!` : '🎁 Você atingiu sua recompensa! Resgate no próximo pedido.'}\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
                 const msgFinal   = ptAuto.on && ptAuto.msg ? fillVars(ptAuto.msg, { nome, pontos_ganhos: String(ptosGanhos), pontos_total: String(novosPts), pontos_faltam: String(faltam) }) : msgPadrao
                 setImmediate(async () => { try { await sendWA(order.phone, msgFinal, inst) } catch(e) {} })
               }
@@ -965,21 +967,24 @@ async function handleOrderStatus(req, res) {
           const inst  = cfg?.evo_instance||EVO_INST
           const auto  = jsonParse(cfg?.evo_automacoes)||{}
           const offset= parseInt(cfg?.order_num_offset)||0
+          const loja  = cfg?.store_name || 'Restaurante'
           const nome  = order.client||'Cliente', idStr=String(Math.max(1,order.id-offset)).padStart(3,'0')
-          const items = (()=>{try{return(JSON.parse(order.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}catch{return''}})()
-          const isDelivery = (order.addr||'').includes('Mesa')?'🪑 Mesa':(order.addr||'').toLowerCase().includes('balc')?'🏪 Balcão':'🛵 Entrega'
+          const items = (()=>{try{return(JSON.parse(order.items)||[]).map(i=>`• ${i.qty}x ${i.name}`).join('\n')}catch{return ''}})()
+          const isDelivery = (order.addr||'').includes('Mesa')?'🪴 Mesa':(order.addr||'').toLowerCase().includes('balc')?'🏪 Balcão':'🛵 Entrega'
           const total = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
-          const vars  = {nome,id:idStr,itens:items,total,endereco:order.addr||'',mesa:String(order.mesa_num||''),tipo_entrega:isDelivery}
+          const vars  = {nome,id:idStr,itens:items,total,endereco:order.addr||'',mesa:String(order.mesa_num||''),tipo_entrega:isDelivery,loja}
           const tipoAuto = {analise:'recebido',producao:'confirmado',pronto:'pronto',saiu:'entrega',entregue:'entrega',cancelado:'cancelado',finalizado:'avaliacao'}[new_status]
           const ct = tipoAuto?(auto[tipoAuto]||{}):{} 
+          const cab = `🏪 *${loja}*\n${'-'.repeat(20)}`
+          const rod = '\n\n_Dúvidas? É só responder esta mensagem!_ 😊'
           const msgPadrao = {
-            analise:   `📥 Olá, *${nome}*! Recebemos seu pedido *#${idStr}* com sucesso! 🎉\n\n🛒 ${items}\n💰 Total: R$${total}\n\nEm breve confirmaremos. Aguarde! ⏱️`,
-            producao:  `👨‍🍳 *#${idStr}* confirmado!\n\nOlá *${nome}*, seu pedido está sendo preparado agora. Aguarde! 😊`,
-            pronto:    `✅ *#${idStr}* pronto!\n\n*${nome}*, seu pedido está pronto! ${isDelivery==='🛵 Entrega'?'Em instantes sairá para entrega.':isDelivery==='🪑 Mesa'?'Já pode chamar o garçom.':'Pode retirar no balcão.'}`,
-            saiu:      `🛵 *#${idStr}* a caminho!\n\n*${nome}*, seu pedido saiu para entrega! 🎉`,
-            entregue:  `🎉 Entregue!\n\n*${nome}*, seu pedido *#${idStr}* foi entregue. Bom apetite! ⭐`,
-            cancelado: `😔 *#${idStr}* cancelado.\n\n*${nome}*, seu pedido foi cancelado.`,
-            finalizado:`🎉 *${nome}*, obrigado pelo pedido *#${idStr}*! Bom apetite! ⭐`,
+            analise:   `${cab}\n\n📥 *Pedido #${idStr} recebido!*\n\nOlá, *${nome}*! Seu pedido foi recebido com sucesso.\n\n*Itens:*\n${items}\n\n💰 *Total: R$ ${total}*\n\n⏱️ Aguarde a confirmação em breve!${rod}`,
+            producao:  `${cab}\n\n👨‍🍳 *Pedido #${idStr} confirmado!*\n\nOlá, *${nome}*! Seu pedido foi confirmado e está sendo preparado agora.\n\n*Itens:*\n${items}\n\n💰 *Total: R$ ${total}*${rod}`,
+            pronto:    `${cab}\n\n✅ *Pedido #${idStr} pronto!*\n\nOlá, *${nome}*! Seu pedido está pronto.\n\n${isDelivery==='🛵 Entrega'?'🛵 Em instantes sairá para entrega!':isDelivery==='🪴 Mesa'?'🪴 Pode chamar o garçom!':'🏪 Pode retirar no balcão!'}${rod}`,
+            saiu:      `${cab}\n\n🛵 *Pedido #${idStr} a caminho!*\n\nOlá, *${nome}*! Seu pedido saiu para entrega e chegará em breve.\n\n📍 *Endereço:* ${order.addr||''} ${rod}`,
+            entregue:  `${cab}\n\n🎉 *Pedido #${idStr} entregue!*\n\n*${nome}*, seu pedido foi entregue. Bom proveito! 🍽️\n\n⭐ Sua avaliação é muito importante para nós!${rod}`,
+            cancelado: `${cab}\n\n😔 *Pedido #${idStr} cancelado.*\n\nOlá, *${nome}*. Infelizmente seu pedido foi cancelado.\n\nSe tiver dúvidas, entre em contato.${rod}`,
+            finalizado:`${cab}\n\n🎉 *Obrigado pela preferência, ${nome}!*\n\nSeu pedido *#${idStr}* foi finalizado com sucesso. Foi um prazer atendê-lo!\n\n⭐ Que tal nos avaliar? Sua opinião nos ajuda a melhorar!${rod}`,
           }
           let msgFinal = null
           if (ct.on===false) { log('⏭️',`Automação "${tipoAuto}" desligada`) }
