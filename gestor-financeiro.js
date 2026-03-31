@@ -505,11 +505,34 @@ function abrirComprovantesMesa(num, totalVal, forma, time) {
 function imprimirComprovanteMesa() {
   const conteudo = document.getElementById('comp-mesa-content')?.innerHTML;
   if (!conteudo) return;
-  const w = window.open('', '_blank', 'width=400,height=600');
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comprovante</title>
-    <style>body{margin:0;padding:16px;font-family:monospace} @media print{body{margin:0}}</style>
-    </head><body>${conteudo}<script>window.onload=()=>{window.print();window.close()}<\/script></body></html>`);
-  w.document.close();
+  const html = conteudo;
+  const fmt  = localStorage.getItem('printFormat') || _printFormat || '80mm';
+
+  // Tenta via agente (silencioso)
+  (async () => {
+    try {
+      const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+      if (tid) {
+        const statusRes = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } });
+        const statusData = await statusRes.json();
+        if (statusData.active) {
+          await fetch('/api/print-queue/job', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+            body: JSON.stringify({ html, format: fmt }),
+          });
+          if (typeof sbToast === 'function') sbToast('ok', '🖨️ Comprovante enviado ao agente!');
+          return;
+        }
+      }
+    } catch {}
+    // Fallback: popup com window.print()
+    const w = window.open('', '_blank', 'width=400,height=600');
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comprovante</title>
+      <style>body{margin:0;padding:16px;font-family:monospace} @media print{@page{margin:2mm;size:${fmt} auto} body{margin:0}}</style>
+      </head><body>${conteudo}<script>window.onload=()=>{window.print();window.close()}<\/script></body></html>`);
+    w.document.close();
+  })();
 }
 
 // ─────────────────────────────────────────

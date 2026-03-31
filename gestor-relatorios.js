@@ -1867,23 +1867,24 @@ function _showPrintAgentToast() {
 let _usbDevice = null; // guarda o device pareado entre impressões
 
 // Converte o pedido em bytes ESC/POS puros
-function _buildEscPos(order, cfg) {
+function _buildEscPos(order, cfg, cols = 32) {
   const enc  = new TextEncoder();
   const buf  = [];
   const push = (str) => enc.encode(str).forEach(b => buf.push(b));
   const bytes= (...b) => b.forEach(b => buf.push(b));
 
   const money = v => 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ',');
-  const center = (str, cols = 32) => {
+  const center = (str) => {
     const pad = Math.max(0, Math.floor((cols - str.length) / 2));
     return ' '.repeat(pad) + str;
   };
-  const cols2 = (left, right, cols = 32) => {
+  const cols2 = (left, right) => {
     const space = cols - left.length - right.length;
     return left + (space > 0 ? ' '.repeat(space) : ' ') + right;
   };
 
   // Init
+  const sep = '-'.repeat(cols) + '\n';
   bytes(0x1B, 0x40);                         // ESC @ — reset
   bytes(0x1B, 0x61, 0x01);                   // centralizar
   bytes(0x1D, 0x21, 0x10);                   // fonte dupla altura
@@ -1891,7 +1892,7 @@ function _buildEscPos(order, cfg) {
   bytes(0x1D, 0x21, 0x00);                   // fonte normal
   if (cfg.sub) push(cfg.sub + '\n');
   bytes(0x1B, 0x61, 0x00);                   // alinhar esquerda
-  push('--------------------------------\n');
+  push(sep);
 
   const now = new Date().toLocaleString('pt-BR', {
     day:'2-digit', month:'2-digit', year:'numeric',
@@ -1902,11 +1903,12 @@ function _buildEscPos(order, cfg) {
   push('Cliente: ' + (order.client || '—') + '\n');
   if (cfg.addr && order.addr) push('Local: ' + order.addr + '\n');
   if (order.pag) push('Pagto: ' + order.pag + '\n');
-  push('--------------------------------\n');
+  push(sep);
 
   const items = Array.isArray(order.items) ? order.items : [];
+  const maxNameLen = cols - 14; // reserva espaço para preço "R$ 9.999,99"
   items.forEach(i => {
-    const name  = (i.qty + 'x ' + i.name).toUpperCase().substring(0, 24);
+    const name  = (i.qty + 'x ' + i.name).toUpperCase().substring(0, maxNameLen);
     const price = money((i.price || 0) * (i.qty || 1));
     push(cols2(name, price) + '\n');
     if (i.obs) push('  * ' + i.obs + '\n');
@@ -1916,7 +1918,7 @@ function _buildEscPos(order, cfg) {
   const taxa  = parseFloat(order.taxa || 0);
   const total = subtotal + taxa;
 
-  push('--------------------------------\n');
+  push(sep);
   if (taxa > 0) {
     push(cols2('Subtotal', money(subtotal)) + '\n');
     push(cols2('Taxa entrega', money(taxa)) + '\n');
@@ -1924,7 +1926,7 @@ function _buildEscPos(order, cfg) {
   bytes(0x1B, 0x45, 0x01);                   // negrito
   push(cols2('TOTAL', money(total)) + '\n');
   bytes(0x1B, 0x45, 0x00);
-  push('--------------------------------\n');
+  push(sep);
 
   bytes(0x1B, 0x61, 0x01);                   // centralizar
   push((cfg.rodape || 'Obrigado!') + '\n');
@@ -1977,35 +1979,160 @@ async function _printViaUsb(order, cfg) {
   console.log('[USB] Conectando dispositivo...');
   const dev  = await _usbConnect();
   console.log('[USB] Dispositivo conectado | endpoint:', _usbDevice._epOut);
-  const data = _buildEscPos(order, cfg);
-  console.log('[USB] Dados ESC/POS gerados | bytes:', data.length);
-  const result = await dev.transferOut(_usbDevice._epOut, data);
-  console.log('[USB] transferOut resultado:', result.status, '| bytes enviados:', result.bytesWritten);
+  const fmt  = localStorage.getItem('printFormat') || _printFormat || '80mm';
+  const cols = fmt === '58mm' ? 32 : 48;
+  const data = _buildEscPos(order, cfg, cols);
+  console.log('[USB] Dados ESC/POS gerados | bytes:', data.length, '| colunas:', cols);
+  // Envia em chunks de 64 bytes para evitar overflow em impressoras lentas
+  const CHUNK = 64;
+  for (let i = 0; i < data.length; i += CHUNK) {
+    const chunk = data.slice(i, Math.min(i + CHUNK, data.length));
+    await dev.transferOut(_usbDevice._epOut, chunk);
+  }
+  console.log('[USB] Impressão concluída!');
+}
+
+// Pareia a impressora USB (chamado pelo botão na tela de configuração)
+async function pairUsbPrinter() {
+  if (!navigator.usb) {
+    sbToast('err', 'WebUSB não suportado. Use Chrome ou Edge.');
+    return;
+  }
+  try {
+    const dev = await navigator.usb.requestDevice({ filters: [] });
+    localStorage.setItem('escpos_usb_name', (dev.productName || '') + (dev.manufacturerName || ''));
+    _usbDevice = null; // força reconexão na próxima impressão
+    sbToast('ok', '✅ Impressora "' + (dev.productName || 'USB') + '" pareada! Impressão será 100% silenciosa.');
+  } catch (e) {
+    if (e.name === 'NotFoundError') sbToast('warn', 'Nenhuma impressora selecionada.');
+    else sbToast('err', 'Erro ao parear: ' + e.message);
+  }
+}
+
+// Desconecta e remove pareamento
+async function unpairUsbPrinter() {
+  if (_usbDevice) {
+    try { await _usbDevice.close(); } catch {}
+    _usbDevice = null;
+  }
+  localStorage.removeItem('escpos_usb_name');
+  sbToast('ok', 'Impressora USB removida.');
 }
 
 async function printOrder(order) {
   const cfg  = _getPrintConfig();
   const html = _buildTicketHtml(order, cfg);
-  const fmt  = localStorage.getItem('printFormat') || '58mm';
+  const fmt  = localStorage.getItem('printFormat') || _printFormat || '80mm';
 
+  // ═══ CASCATA DE IMPRESSÃO SILENCIOSA ═══
+  // Tenta cada método na ordem — só vai ao próximo se falhar
+
+  // 1️⃣ Electron (app desktop)
   if (window.ElectronPrint) {
     try {
       const r = await window.ElectronPrint.printOrder(order);
-      if (r.ok) { sbToast('ok', '🖨️ Impresso!'); return; }
-    } catch (e) { sbToast('err', '🖨️ ' + e.message); return; }
+      if (r.ok) { sbToast('ok', '🖨️ Impresso (Electron)!'); return; }
+    } catch (e) { console.warn('[PRINT] Electron falhou:', e.message); }
   }
 
+  // 2️⃣ WebUSB ESC/POS — impressão DIRETA na térmica, 100% silenciosa
+  if (navigator.usb && _usbDevice) {
+    try {
+      await _printViaUsb(order, cfg);
+      sbToast('ok', '🖨️ Impresso (USB direto)!');
+      return;
+    } catch (e) { console.warn('[PRINT] USB falhou:', e.message); }
+  }
+
+  // 3️⃣ Print Agent — verifica se o agente local está ativo e envia pra fila
+  try {
+    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+    if (tid) {
+      const statusRes = await fetch('/api/print-queue/status', {
+        headers: { 'x-tenant-id': tid }
+      });
+      const statusData = await statusRes.json();
+      if (statusData.active) {
+        await fetch('/api/print-queue/job', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+          body: JSON.stringify({ html, format: fmt, printer: _printPrinter || undefined }),
+        });
+        sbToast('ok', '🖨️ Enviado ao agente de impressão!');
+        return;
+      }
+    }
+  } catch (e) { console.warn('[PRINT] Agent falhou:', e.message); }
+
+  // 4️⃣ WebUSB ESC/POS — se ainda não pareou, tenta conectar (pede permissão 1x)
+  if (navigator.usb && !_usbDevice) {
+    try {
+      // Verifica se já tem device autorizado sem pedir permissão
+      const devices = await navigator.usb.getDevices();
+      if (devices.length > 0) {
+        await _printViaUsb(order, cfg);
+        sbToast('ok', '🖨️ Impresso (USB direto)!');
+        return;
+      }
+    } catch (e) { console.warn('[PRINT] USB auto-connect falhou:', e.message); }
+  }
+
+  // 5️⃣ Servidor PDF + impressão via iframe oculto (semi-silencioso)
+  //    Usa @media print CSS para tentar acionar kiosk-printing do Chrome
+  try {
+    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+    if (tid) {
+      const r = await fetch('/api/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+        body: JSON.stringify({ html, format: fmt, printer: _printPrinter || undefined }),
+      });
+      const data = await r.json();
+      if (data.pdf) {
+        const bytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
+        const blob  = new Blob([bytes], { type: 'application/pdf' });
+        const url   = URL.createObjectURL(blob);
+
+        // Tenta imprimir via iframe oculto (silencioso com --kiosk-printing)
+        let frame = document.getElementById('print-frame-pdf');
+        if (!frame) {
+          frame = document.createElement('iframe');
+          frame.id = 'print-frame-pdf';
+          frame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;visibility:hidden';
+          document.body.appendChild(frame);
+        }
+        frame.src = url;
+        await new Promise((resolve) => {
+          frame.onload = () => {
+            try { frame.contentWindow.print(); } catch(_) {}
+            resolve();
+          };
+          setTimeout(resolve, 3000);
+        });
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        sbToast('ok', '🖨️ Imprimindo...');
+        return;
+      }
+    }
+  } catch (e) { console.warn('[PRINT] Server PDF falhou:', e.message); }
+
+  // 6️⃣ FALLBACK FINAL — window.print() com área de impressão dedicada
+  console.warn('[PRINT] Usando fallback window.print() — diálogo será exibido');
   let area = document.getElementById('_print_area');
   if (!area) { area = document.createElement('div'); area.id = '_print_area'; document.body.appendChild(area); }
   area.innerHTML = html;
 
   let st = document.getElementById('_print_style');
   if (!st) { st = document.createElement('style'); st.id = '_print_style'; document.head.appendChild(st); }
-  st.innerHTML = `@media print { @page { margin: 2mm; size: ${fmt} auto; } }`;
+  st.innerHTML = `@media print {
+    @page { margin: 2mm; size: ${fmt} auto; }
+    body > *:not(#_print_area):not(#_print_style) { display: none !important; }
+    #_print_area { display: block !important; position: static !important; }
+  }`;
 
   window.print();
   setTimeout(() => { area.innerHTML = ''; }, 2000);
-  sbToast('ok', '🖨️ Imprimindo...');
+  sbToast('warn', '🖨️ Imprimindo (com diálogo)... Use o Agente ou USB para silenciar.');
 }
 
 function printOrderById(id) {
@@ -2030,6 +2157,7 @@ function renderImpressao() {
   if (fmtSel) fmtSel.value = _printFormat || '80mm';
   setPrintMode(_printMode);
   loadPrinters();
+  _updateUsbStatus();
   // Carrega config do servidor (sincroniza entre dispositivos)
   loadPrintConfigServer().then(() => {
     const cfg = _getPrintConfig();
@@ -2041,6 +2169,28 @@ function renderImpressao() {
   const ex = { id:99, client:'João Silva', addr:'Mesa 3', mesa_num:3, pag:'PIX', taxa:0,
     items:[{qty:1,name:'Pizza Calabreza',price:50},{qty:2,name:'Coca Cola 2L',price:14}] };
   p.innerHTML = _buildTicketHtml(ex, cfg);
+}
+
+// Atualiza indicador visual do status USB na tela de config
+function _updateUsbStatus() {
+  const statusEl = document.getElementById('usb-status');
+  const pairedEl = document.getElementById('usb-paired-info');
+  const savedUsb = localStorage.getItem('escpos_usb_name');
+  if (statusEl) {
+    if (!navigator.usb) {
+      statusEl.textContent = '⚠️ WebUSB não suportado — use Chrome ou Edge';
+      statusEl.style.color = '#f87171';
+    } else if (savedUsb) {
+      statusEl.textContent = '🖨️ ' + savedUsb;
+      statusEl.style.color = '#10b981';
+    } else {
+      statusEl.textContent = 'Nenhuma impressora pareada';
+      statusEl.style.color = 'var(--muted)';
+    }
+  }
+  if (pairedEl) {
+    pairedEl.style.display = savedUsb ? 'block' : 'none';
+  }
 }
 
 // ── Salva config no servidor (sincroniza entre dispositivos) ──
