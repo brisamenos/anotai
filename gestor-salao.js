@@ -34,47 +34,188 @@ function renderPDV(){
 }
 
 function addToCart(id){
-  const it=items.find(i=>i.id===id);
-  if(!it) return;
-  if(it.itemType==='pizza'){ openPDVPizza(id); return; }
-  if(window._segmento==='acougue' && it.itemType==='kg'){ _abrirPesoModal(it); return; }
-  const ci=cartItems.find(c=>c.id===id);
-  if(ci) ci.qty++;
-  else cartItems.push({...it,qty:1});
+  const it = items.find(i => i.id === id);
+  if (!it) return;
+  if (it.itemType === 'pizza') { openPDVPizza(id); return; }
+
+  // Verifica grupos de adicionais (igual ao cardápio público)
+  const grupos = (()=>{ try{ return Array.isArray(it.custom_groups)?it.custom_groups:JSON.parse(it.custom_groups||'[]') }catch{ return [] } })()
+    .filter(g => !['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'].includes(g.tipo));
+  const isKg = it.itemType === 'kg' || it.item_type === 'kg';
+
+  if (grupos.length > 0 || isKg) {
+    _pdvAbrirModalItem(it, grupos, isKg);
+    return;
+  }
+  // Sem adicionais — adiciona direto
+  const ci = cartItems.find(c => c.id === id && !c.obs);
+  if (ci) ci.qty++;
+  else cartItems.push({...it, qty:1, obs:'', _grupos:[]});
   renderCart();
-  showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>',`${it.name} adicionado!`);
+  showToast('🛒', `${it.name} adicionado!`);
 }
 
-function _abrirPesoModal(it){
-  document.getElementById('modal-peso-kg')?.remove();
-  const m=document.createElement('div');
-  m.id='modal-peso-kg';
-  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
-  m.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;width:320px;max-width:94vw;box-shadow:0 24px 64px rgba(0,0,0,.5)">
-    <div style="font-weight:700;font-size:15px;margin-bottom:4px">🥩 ${it.name}</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">R$ ${it.price.toFixed(2).replace('.',',')} / kg</div>
-    <label style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;display:block;margin-bottom:6px">Peso (kg)</label>
-    <input id="peso-input" type="number" min="0.001" step="0.001" value="1.000" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;color:var(--text);font-size:20px;font-weight:700;text-align:center;outline:none;margin-bottom:8px">
-    <div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:16px">Total: <strong id="peso-total">R$ ${it.price.toFixed(2).replace('.',',')}</strong></div>
-    <div style="display:flex;gap:8px">
-      <button onclick="document.getElementById('modal-peso-kg').remove()" style="flex:1;padding:10px;border-radius:9px;background:var(--surface2);border:1px solid var(--border);color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">Cancelar</button>
-      <button id="btn-add-kg" style="flex:2;padding:10px;border-radius:9px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">Adicionar</button>
+function _pdvAbrirModalItem(it, grupos, isKg) {
+  document.getElementById('pdv-modal-item-bg')?.remove();
+  const priceStr = parseFloat(it.price||0).toFixed(2).replace('.',',');
+
+  const gruposHtml = grupos.map((g, gi) => {
+    const opcoes = g.opcoes || g.valores || [];
+    const isMulti = g.tipo === 'opcional' || g.tipo === 'adicionais';
+    const isReq   = g.tipo === 'obrigatorio' || g.tipo === 'sabor';
+    return `<div style="margin-bottom:16px">
+      <div style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px">
+        ${g.nome||g.name||'Adicional'}${isReq?' <span style="color:var(--danger);font-size:10px">*obrigatório</span>':''}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${opcoes.map((op,oi)=>{
+          const nome  = op.nome||op.name||op;
+          const preco = parseFloat(op.preco||op.price||0);
+          const pLabel = preco>0?` <span style="color:var(--success);font-size:11px">+R$ ${preco.toFixed(2).replace('.',',')}</span>`:'';
+          return `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:9px;cursor:pointer" onclick="pdvToggleOpc(this)">
+            <input type="${isMulti?'checkbox':'radio'}" name="pdv-grp-${gi}" data-grp="${gi}" data-nome="${(nome+'').replace(/"/g,'&quot;')}" data-preco="${preco}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
+            <span style="font-size:13px;font-weight:500;flex:1">${nome}${pLabel}</span>
+          </label>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  const kgHtml = isKg ? `<div style="margin-bottom:16px">
+    <div style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px">Quantidade</div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      ${[0.25,0.5,1,1.5,2,2.5,3].map(v=>`<button onclick="pdvSetKg(${v})" style="padding:7px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:13px;font-weight:700;font-family:inherit">${v>=1?(v+'kg'):(v*1000+'g')}</button>`).join('')}
+      <input type="number" id="pdv-kg-input" min="0.1" step="0.1" value="1"
+        style="width:90px;padding:8px;border:1.5px solid var(--accent);border-radius:8px;background:var(--surface2);color:var(--text);font-size:16px;font-weight:700;text-align:center;outline:none;font-family:inherit"
+        oninput="pdvAtualizarTotal()">
+      <span style="font-size:13px;color:var(--muted)">kg</span>
     </div>
-  </div>`;
-  document.body.appendChild(m);
-  const inp=document.getElementById('peso-input');
-  const totEl=document.getElementById('peso-total');
-  inp.addEventListener('input',()=>{ totEl.textContent='R$ '+((parseFloat(inp.value)||0)*it.price).toFixed(2).replace('.',','); });
-  inp.focus(); inp.select();
-  document.getElementById('btn-add-kg').onclick=()=>{
-    const peso=parseFloat(inp.value.replace(',','.'));
-    if(isNaN(peso)||peso<=0){ sbToast('err','Informe um peso válido'); return; }
-    cartItems.push({...it,qty:peso,isKg:true,_pesoLabel:peso.toFixed(3).replace('.',',')+'kg'});
-    renderCart();
-    document.getElementById('modal-peso-kg').remove();
-    showToast('🥩',`${peso.toFixed(3).replace('.',',')}kg de ${it.name}`);
-  };
-  m.addEventListener('click',e=>{ if(e.target===m) m.remove(); });
+  </div>` : '';
+
+  const modal = document.createElement('div');
+  modal.id = 'pdv-modal-item-bg';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  modal.onclick = e => { if(e.target===modal) modal.remove(); };
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:520px;max-height:88vh;overflow-y:auto;padding:20px 20px 32px;box-shadow:0 -8px 40px rgba(0,0,0,.3)">
+      <div style="width:40px;height:4px;background:var(--border);border-radius:99px;margin:0 auto 18px"></div>
+      <!-- Header do produto -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        ${it.image_url
+          ? `<img src="${it.image_url}" style="width:60px;height:60px;border-radius:12px;object-fit:cover;flex-shrink:0">`
+          : `<div style="width:60px;height:60px;border-radius:12px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">${it.emoji||'🍽️'}</div>`}
+        <div>
+          <div style="font-size:16px;font-weight:800">${it.name}</div>
+          <div style="font-size:13px;color:var(--success);font-weight:700;margin-top:2px">R$ ${priceStr}${isKg?' /kg':''}</div>
+          ${it.desc||it.description?`<div style="font-size:11.5px;color:var(--muted);margin-top:2px">${it.desc||it.description}</div>`:''}
+        </div>
+      </div>
+      ${kgHtml}
+      ${gruposHtml}
+      <!-- Observação -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Observação</div>
+        <textarea id="pdv-obs-input" placeholder="Ex: sem cebola, bem passado..." rows="2"
+          style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:9px;background:var(--surface2);color:var(--text);font-size:13px;outline:none;resize:none;font-family:inherit;box-sizing:border-box"></textarea>
+      </div>
+      <!-- Qtd + total -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <button onclick="pdvModalQty(-1)" style="width:36px;height:36px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;font-size:18px;font-weight:700">−</button>
+        <span id="pdv-modal-qty" style="font-size:18px;font-weight:800;min-width:32px;text-align:center">1</span>
+        <button onclick="pdvModalQty(1)"  style="width:36px;height:36px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;font-size:18px;font-weight:700">+</button>
+        <span id="pdv-modal-total" style="font-size:15px;font-weight:800;color:var(--success);margin-left:auto"></span>
+      </div>
+      <button onclick="_pdvConfirmar(${it.id})"
+        style="width:100%;padding:14px;border-radius:14px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">
+        Adicionar ao carrinho
+      </button>
+    </div>`;
+  document.body.appendChild(modal);
+  modal._item   = it;
+  modal._isKg   = isKg;
+  modal._grupos = grupos;
+  window._pdvQty = 1;
+  pdvAtualizarTotal();
+}
+
+function pdvToggleOpc(label) {
+  const inp = label.querySelector('input');
+  if (!inp) return;
+  if (inp.type === 'radio') {
+    document.querySelectorAll(`input[name="${inp.name}"]`).forEach(r => {
+      r.closest('label').style.borderColor = 'var(--border)';
+      r.closest('label').style.background  = 'var(--surface2)';
+    });
+    label.style.borderColor = 'var(--accent)';
+    label.style.background  = 'rgba(var(--accent-rgb,249,115,22),.08)';
+  } else {
+    label.style.borderColor = inp.checked ? 'var(--accent)' : 'var(--border)';
+    label.style.background  = inp.checked ? 'rgba(var(--accent-rgb,249,115,22),.08)' : 'var(--surface2)';
+  }
+  pdvAtualizarTotal();
+}
+
+function pdvSetKg(v) {
+  const inp = document.getElementById('pdv-kg-input');
+  if (inp) { inp.value = v; pdvAtualizarTotal(); }
+}
+
+function pdvModalQty(d) {
+  window._pdvQty = Math.max(1, (window._pdvQty||1) + d);
+  const el = document.getElementById('pdv-modal-qty');
+  if (el) el.textContent = window._pdvQty;
+  pdvAtualizarTotal();
+}
+
+function pdvAtualizarTotal() {
+  const modal = document.getElementById('pdv-modal-item-bg');
+  if (!modal?._item) return;
+  const it    = modal._item;
+  const isKg  = modal._isKg;
+  const qty   = window._pdvQty || 1;
+  let extra   = 0;
+  document.querySelectorAll('#pdv-modal-item-bg input:checked').forEach(inp => {
+    extra += parseFloat(inp.dataset.preco||0);
+  });
+  let price = parseFloat(it.price||0) + extra;
+  if (isKg) {
+    const kg = parseFloat(document.getElementById('pdv-kg-input')?.value||1);
+    price    = price * kg;
+  }
+  const total = price * qty;
+  const el = document.getElementById('pdv-modal-total');
+  if (el) el.textContent = 'R$ ' + total.toFixed(2).replace('.',',');
+}
+
+function _pdvConfirmar(itemId) {
+  const modal = document.getElementById('pdv-modal-item-bg');
+  if (!modal) return;
+  const it    = modal._item;
+  const isKg  = modal._isKg;
+  const qty   = window._pdvQty || 1;
+  let extra   = 0;
+  const opcs  = [];
+  document.querySelectorAll('#pdv-modal-item-bg input:checked').forEach(inp => {
+    extra += parseFloat(inp.dataset.preco||0);
+    opcs.push(inp.dataset.nome);
+  });
+  const obs  = [opcs.join(', '), document.getElementById('pdv-obs-input')?.value.trim()].filter(Boolean).join(' | ');
+  let price  = parseFloat(it.price||0) + extra;
+  let name   = it.name;
+  if (isKg) {
+    const kg  = parseFloat(document.getElementById('pdv-kg-input')?.value||1);
+    price     = price * kg;
+    const lbl = kg >= 1 ? kg.toFixed(1).replace('.',',')+'kg' : (kg*1000).toFixed(0)+'g';
+    name      = `${it.name} (${lbl})`;
+    cartItems.push({...it, name, qty:1, price, obs, isKg:true, _pesoLabel:lbl, _grupos:opcs});
+  } else {
+    const ci = cartItems.find(c => c.id === it.id && c.obs === obs);
+    if (ci) ci.qty += qty;
+    else cartItems.push({...it, name, qty, price, obs, _grupos:opcs});
+  }
+  renderCart();
+  modal.remove();
+  showToast('🛒', `${name} adicionado!`);
 }
 
 function renderCart(){
@@ -86,14 +227,15 @@ function renderCart(){
   if(cartItems.length===0){c.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:12.5px">Carrinho vazio<br>Clique nos itens para adicionar</div>';return;}
   c.innerHTML=cartItems.map((i,idx)=>`
     <div class="cart-item">
-      <div class="ci-emoji">${i.emoji||'🥩'}</div>
+      <div class="ci-emoji">${i.emoji||'🍽️'}</div>
       <div class="ci-info">
-        <div class="ci-name">${i.name}${i.isKg?` <span style="font-size:10px;background:rgba(249,115,22,.12);color:var(--accent3);border-radius:4px;padding:1px 4px;font-weight:700">${i._pesoLabel}</span>`:''}</div>
+        <div class="ci-name">${i.name}</div>
+        ${i.obs ? `<div style="font-size:10.5px;color:var(--muted);margin-top:1px">${i.obs}</div>` : ''}
         <div class="ci-price">R$ ${(i.price*i.qty).toFixed(2).replace('.',',')}</div>
       </div>
       <div class="qty-ctrl">
         ${i.isKg
-          ?`<div class="qb" onclick="_editarPesoCart(${idx})">✏️</div><div class="qn" style="font-size:11px">${i._pesoLabel}</div><div class="qb" onclick="changeQty(${idx},-1)">🗑</div>`
+          ?`<div class="qb" onclick="changeQty(${idx},-1)" title="Remover">🗑</div>`
           :`<div class="qb" onclick="changeQty(${idx},-1)">−</div><div class="qn">${i.qty}</div><div class="qb" onclick="changeQty(${idx},1)">+</div>`}
       </div>
     </div>`).join('');
