@@ -1631,7 +1631,8 @@ setTimeout(() => {
 // ─────────────────────────────────────────
 // IMPRESSÃO SILENCIOSA (server-side)
 // ─────────────────────────────────────────
-let _printMode     = localStorage.getItem('printMode')     || 'auto';
+window._printMode  = localStorage.getItem('printMode')     || 'auto';
+let _printMode     = window._printMode;
 let _printFontSize = parseInt(localStorage.getItem('printFontSize') || '12');
 let _printTarget   = localStorage.getItem('printTarget')   || 'server';
 let _printPrinter  = localStorage.getItem('printPrinter')  || '';
@@ -1665,6 +1666,7 @@ async function loadPrintConfigServer() {
 
 function setPrintMode(mode) {
   _printMode = mode;
+  window._printMode = mode;
   localStorage.setItem('printMode', mode);
   const isAuto = mode === 'auto';
   const la = document.getElementById('lbl-print-auto');
