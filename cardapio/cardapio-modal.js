@@ -63,8 +63,9 @@ function openItemModal(id) {
   // Açougue: oculta botões - 1 + (peso é selecionado pelo seletor de gramas)
   const qtyRow = document.getElementById('im-qty-row');
   if (qtyRow) {
+    const isAcougue = document.body.dataset.segmento === 'acougue' || (typeof _segmento !== 'undefined' && _segmento === 'acougue');
     const isKg = i.item_type === 'kg' || (i.custom_groups||[]).some(g => g.tipo === 'pesos' || g.tipo === 'cortes');
-    qtyRow.style.display = (_segmento === 'acougue' && isKg) ? 'none' : '';
+    qtyRow.style.display = (isAcougue && isKg) ? 'none' : '';
   }
 
   // ── Grupos de customização ──
