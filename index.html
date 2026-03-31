@@ -351,37 +351,37 @@ input,textarea{font-family:inherit}
 
 /* Faixa superior colorida com gradiente do tema */
 .hero-cover{
-  width:100%;height:100px;
+  width:100%;height:110px;
   background:linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 60%, #000) 100%);
-  position:relative;overflow:hidden;
+  position:relative;
 }
 .hero-cover::after{
   content:'';position:absolute;inset:0;
-  background:rgba(0,0,0,.18);
+  background:rgba(0,0,0,.15);pointer-events:none;
 }
 
-/* Linha com logo + botão entrar sobre a cover */
+/* Botão entrar no topo direito — sobre a cover */
 .hero-cover-row{
   position:absolute;top:0;left:0;right:0;
   display:flex;align-items:flex-start;justify-content:flex-end;
-  padding:12px 14px;z-index:2;
+  padding:12px 14px;z-index:5;
 }
 
-/* Logo saindo da cover */
+/* Logo — absoluta, centralizada, metade dentro e metade fora da cover */
 .hero-logo{
-  width:88px;height:88px;border-radius:22px;flex-shrink:0;overflow:hidden;
-  background:var(--s1);border:3px solid var(--s1);
-  display:flex;align-items:center;justify-content:center;font-size:36px;
-  box-shadow:0 6px 24px rgba(0,0,0,.18);
+  width:90px;height:90px;border-radius:22px;flex-shrink:0;overflow:hidden;
+  background:var(--s1);border:4px solid var(--s1);
+  display:flex;align-items:center;justify-content:center;font-size:38px;
+  box-shadow:0 8px 28px rgba(0,0,0,.25);
   position:absolute;left:50%;transform:translateX(-50%);
-  bottom:-32px;z-index:3;cursor:pointer;
+  bottom:-45px;z-index:6;cursor:pointer;
 }
-.hero-logo img,.hero-logo-img{ width:100%;height:100%;object-fit:cover;border-radius:19px;display:block }
+.hero-logo img,.hero-logo-img{ width:100%;height:100%;object-fit:cover;border-radius:18px;display:block }
 
-/* Área de conteúdo após cover */
+/* Área de conteúdo — padding-top acomoda metade da logo que desce */
 .hero-inner{
   display:flex;flex-direction:column;align-items:center;
-  padding:44px 20px 16px;text-align:center;gap:0;
+  padding:55px 20px 16px;text-align:center;gap:0;
 }
 .hero-info{ width:100% }
 .hero-name{
@@ -1937,13 +1937,13 @@ input,textarea{font-family:inherit}
         <span id="profile-fab-name">Entrar</span>
       </button>
     </div>
-    <!-- Logo flutuante centralizada -->
+    <!-- Logo posicionada absolutamente, metade dentro metade fora da cover -->
     <div class="hero-logo" id="hero-logo-wrap" onclick="openStoreInfoModal()" title="Ver informações da loja">
       <span id="hero-emoji">🍽️</span>
     </div>
   </div>
 
-  <!-- Conteúdo abaixo da cover -->
+  <!-- Conteúdo abaixo da cover — padding-top acomoda a logo -->
   <div class="hero-inner">
     <div class="hero-info">
       <div class="hero-name" id="hero-name">Carregando…</div>
