@@ -749,8 +749,19 @@ async function loadCardapioPublico() {
   const catsEl = document.getElementById('cp-cats-carrossel');
   if (catsEl) { catsEl.checked = catsCarrossel; cpToggleCatsCarrossel(catsCarrossel); }
   // Oculta opção de carrossel se for açougue (já usa por padrão)
+  // Busca segmento direto para não depender de window._segmento que pode não ter carregado
   const catsWrap = document.getElementById('cp-cats-modo-wrap');
-  if (catsWrap) catsWrap.style.display = window._segmento === 'acougue' ? 'none' : '';
+  if (catsWrap) {
+    const _tid = _sessao?.tenant_id;
+    if (_tid) {
+      fetch('/api/tenant-segmento', { headers: { 'x-tenant-id': _tid } })
+        .then(r => r.json())
+        .then(d => { catsWrap.style.display = d.segmento === 'acougue' ? 'none' : 'block'; })
+        .catch(() => { catsWrap.style.display = 'block'; });
+    } else {
+      catsWrap.style.display = 'block';
+    }
+  }
   if (corEl) corEl.value = cor;
 
   // Carrega tema
@@ -1232,4 +1243,3 @@ async function iaRegistrarWebhook(webhookUrl) {
     console.warn('iaRegistrarWebhook:', e);
   }
 }
-
