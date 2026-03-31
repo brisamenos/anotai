@@ -34,29 +34,57 @@ function applyTema(tema, accentCor) {
       '--bg':'#f8f9fb','--s1':'#ffffff','--s2':'#f1f3f7','--s3':'#e4e8ef',
       '--border':'rgba(0,0,0,.09)','--border2':'rgba(0,0,0,.14)',
       '--text':'#0f1117','--muted':'#6b7280','--muted2':'#9ca3af','--white':'#fff',
-      '--hero-bg':'','--hero-text':'#fff','--hero-overlay':'rgba(0,0,0,.55)',
-      '--sticky-bg':'#f8f9fb'
+      '--hero-bg':'','--hero-text':'#fff','--hero-desc-color':'rgba(255,255,255,.85)',
+      '--hero-overlay':'rgba(0,0,0,.55)','--sticky-bg':'#f8f9fb'
     },
     dark: {
       '--bg':'#0f1117','--s1':'#181b24','--s2':'#1e2130','--s3':'#242840',
       '--border':'rgba(255,255,255,.07)','--border2':'rgba(255,255,255,.13)',
       '--text':'#e5e7eb','--muted':'#9ca3af','--muted2':'#6b7280','--white':'#fff',
-      '--hero-bg':'#0a0c13','--hero-text':'#fff','--hero-overlay':'rgba(0,0,0,.65)',
-      '--sticky-bg':'#0f1117'
+      '--hero-bg':'#0a0c13','--hero-text':'#fff','--hero-desc-color':'rgba(255,255,255,.7)',
+      '--hero-overlay':'rgba(0,0,0,.65)','--sticky-bg':'#0f1117'
     },
     tropical: {
       '--bg':'#fef9f0','--s1':'#fff7ed','--s2':'#ffedd5','--s3':'#fed7aa',
       '--border':'rgba(234,88,12,.14)','--border2':'rgba(234,88,12,.22)',
       '--text':'#431407','--muted':'#92400e','--muted2':'#b45309','--white':'#fff',
-      '--hero-bg':'#431407','--hero-text':'#fff','--hero-overlay':'rgba(67,20,7,.6)',
-      '--sticky-bg':'#fef9f0'
+      '--hero-bg':'#431407','--hero-text':'#fff','--hero-desc-color':'rgba(255,220,180,.9)',
+      '--hero-overlay':'rgba(67,20,7,.65)','--sticky-bg':'#fef9f0'
     },
     minimalista: {
       '--bg':'#ffffff','--s1':'#fafafa','--s2':'#f5f5f5','--s3':'#e5e5e5',
       '--border':'rgba(0,0,0,.06)','--border2':'rgba(0,0,0,.10)',
       '--text':'#111111','--muted':'#737373','--muted2':'#a3a3a3','--white':'#fff',
-      '--hero-bg':'#111111','--hero-text':'#fff','--hero-overlay':'rgba(0,0,0,.7)',
-      '--sticky-bg':'#ffffff'
+      '--hero-bg':'#111111','--hero-text':'#fff','--hero-desc-color':'rgba(255,255,255,.75)',
+      '--hero-overlay':'rgba(0,0,0,.7)','--sticky-bg':'#ffffff'
+    },
+    acougue: {
+      '--bg':'#1a0a05','--s1':'#2a100a','--s2':'#3a1810','--s3':'#4a2018',
+      '--border':'rgba(220,80,30,.2)','--border2':'rgba(220,80,30,.35)',
+      '--text':'#f5e6e0','--muted':'#c9a090','--muted2':'#a07060','--white':'#fff',
+      '--hero-bg':'#0f0503','--hero-text':'#fff','--hero-desc-color':'rgba(255,210,190,.9)',
+      '--hero-overlay':'rgba(15,5,3,.7)','--sticky-bg':'#1a0a05'
+    },
+    verde: {
+      '--bg':'#f0faf2','--s1':'#ffffff','--s2':'#e8f5eb','--s3':'#d1ecda',
+      '--border':'rgba(34,120,60,.12)','--border2':'rgba(34,120,60,.2)',
+      '--text':'#0d2b18','--muted':'#3a7a52','--muted2':'#5a9a72','--white':'#fff',
+      '--hero-bg':'#0d3320','--hero-text':'#fff','--hero-desc-color':'rgba(210,255,225,.9)',
+      '--hero-overlay':'rgba(13,50,32,.65)','--sticky-bg':'#f0faf2'
+    },
+    noturno: {
+      '--bg':'#0d0d1a','--s1':'#14142a','--s2':'#1c1c35','--s3':'#242445',
+      '--border':'rgba(120,100,200,.15)','--border2':'rgba(120,100,200,.25)',
+      '--text':'#e8e5ff','--muted':'#9090c0','--muted2':'#6060a0','--white':'#fff',
+      '--hero-bg':'#07071a','--hero-text':'#fff','--hero-desc-color':'rgba(200,190,255,.85)',
+      '--hero-overlay':'rgba(7,7,26,.7)','--sticky-bg':'#0d0d1a'
+    },
+    rose: {
+      '--bg':'#fff5f7','--s1':'#ffffff','--s2':'#ffe4ea','--s3':'#ffc9d5',
+      '--border':'rgba(220,60,90,.12)','--border2':'rgba(220,60,90,.2)',
+      '--text':'#3d0a14','--muted':'#a03050','--muted2':'#c06070','--white':'#fff',
+      '--hero-bg':'#5c0a1e','--hero-text':'#fff','--hero-desc-color':'rgba(255,210,220,.9)',
+      '--hero-overlay':'rgba(92,10,30,.65)','--sticky-bg':'#fff5f7'
     }
   };
 
@@ -65,7 +93,7 @@ function applyTema(tema, accentCor) {
 
   // Força meta theme-color
   const metaTheme = document.querySelector('meta[name="theme-color"]');
-  const bgMap = { classico:'#f8f9fb', dark:'#0f1117', tropical:'#fef9f0', minimalista:'#ffffff' };
+  const bgMap = { classico:'#f8f9fb', dark:'#0f1117', tropical:'#fef9f0', minimalista:'#ffffff', acougue:'#1a0a05', verde:'#f0faf2', noturno:'#0d0d1a', rose:'#fff5f7' };
   if (metaTheme) metaTheme.content = bgMap[t] || '#f8f9fb';
 }
 
