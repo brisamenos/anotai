@@ -1769,7 +1769,7 @@ async function _printViaAgent(html) {
 // ── Impressão via servidor (silenciosa, Puppeteer) ───
 async function _printViaServer(html) {
   const printer = document.getElementById('print-printer-select')?.value || _printPrinter || '';
-  const format  = document.getElementById('print-format-select')?.value  || _printFormat  || 'A4';
+  const format  = document.getElementById('print-format-select')?.value  || _printFormat  || '80mm';
   _printPrinter = printer; localStorage.setItem('printPrinter', printer);
   _printFormat  = format;  localStorage.setItem('printFormat',  format);
   const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
@@ -1780,6 +1780,30 @@ async function _printViaServer(html) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Erro no servidor');
+
+  // Servidor gerou o PDF — navegador imprime localmente na POS58 / impressora configurada
+  if (data.pdf) {
+    const bytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
+    const blob  = new Blob([bytes], { type: 'application/pdf' });
+    const url   = URL.createObjectURL(blob);
+    const frame = document.getElementById('print-frame');
+    if (frame) {
+      frame.style.display = 'block';
+      frame.src = url;
+      frame.onload = () => {
+        try { frame.contentWindow.print(); } catch (_) {}
+        setTimeout(() => {
+          frame.src   = 'about:blank';
+          frame.onload = null;
+          frame.style.display = 'none';
+          URL.revokeObjectURL(url);
+        }, 3000);
+      };
+    } else {
+      const w = window.open(url, '_blank');
+      if (w) setTimeout(() => { try { w.print(); } catch(_){} setTimeout(() => w.close(), 1500); }, 600);
+    }
+  }
   return data;
 }
 
@@ -1836,7 +1860,125 @@ function _showPrintAgentToast() {
   else console.warn(msg);
 }
 
-// ── Função principal — tenta: Electron → agente → servidor → navegador ──
+// ══════════════════════════════════════════════════════════════
+// ESC/POS via WebUSB — imprime direto na térmica sem diálogo
+// ══════════════════════════════════════════════════════════════
+let _usbDevice = null; // guarda o device pareado entre impressões
+
+// Converte o pedido em bytes ESC/POS puros
+function _buildEscPos(order, cfg) {
+  const enc  = new TextEncoder();
+  const buf  = [];
+  const push = (str) => enc.encode(str).forEach(b => buf.push(b));
+  const bytes= (...b) => b.forEach(b => buf.push(b));
+
+  const money = v => 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ',');
+  const center = (str, cols = 32) => {
+    const pad = Math.max(0, Math.floor((cols - str.length) / 2));
+    return ' '.repeat(pad) + str;
+  };
+  const cols2 = (left, right, cols = 32) => {
+    const space = cols - left.length - right.length;
+    return left + (space > 0 ? ' '.repeat(space) : ' ') + right;
+  };
+
+  // Init
+  bytes(0x1B, 0x40);                         // ESC @ — reset
+  bytes(0x1B, 0x61, 0x01);                   // centralizar
+  bytes(0x1D, 0x21, 0x10);                   // fonte dupla altura
+  push(cfg.nome + '\n');
+  bytes(0x1D, 0x21, 0x00);                   // fonte normal
+  if (cfg.sub) push(cfg.sub + '\n');
+  bytes(0x1B, 0x61, 0x00);                   // alinhar esquerda
+  push('--------------------------------\n');
+
+  const now = new Date().toLocaleString('pt-BR', {
+    day:'2-digit', month:'2-digit', year:'numeric',
+    hour:'2-digit', minute:'2-digit'
+  });
+  push('Pedido: #' + order.id + '\n');
+  push('Data: ' + now + '\n');
+  push('Cliente: ' + (order.client || '—') + '\n');
+  if (cfg.addr && order.addr) push('Local: ' + order.addr + '\n');
+  if (order.pag) push('Pagto: ' + order.pag + '\n');
+  push('--------------------------------\n');
+
+  const items = Array.isArray(order.items) ? order.items : [];
+  items.forEach(i => {
+    const name  = (i.qty + 'x ' + i.name).toUpperCase().substring(0, 24);
+    const price = money((i.price || 0) * (i.qty || 1));
+    push(cols2(name, price) + '\n');
+    if (i.obs) push('  * ' + i.obs + '\n');
+  });
+
+  const subtotal = items.reduce((s, i) => s + (parseFloat(i.price || 0) * (i.qty || 1)), 0);
+  const taxa  = parseFloat(order.taxa || 0);
+  const total = subtotal + taxa;
+
+  push('--------------------------------\n');
+  if (taxa > 0) {
+    push(cols2('Subtotal', money(subtotal)) + '\n');
+    push(cols2('Taxa entrega', money(taxa)) + '\n');
+  }
+  bytes(0x1B, 0x45, 0x01);                   // negrito
+  push(cols2('TOTAL', money(total)) + '\n');
+  bytes(0x1B, 0x45, 0x00);
+  push('--------------------------------\n');
+
+  bytes(0x1B, 0x61, 0x01);                   // centralizar
+  push((cfg.rodape || 'Obrigado!') + '\n');
+  bytes(0x1B, 0x61, 0x00);
+
+  // Avança papel e corta
+  bytes(0x0A, 0x0A, 0x0A);                   // 3 linhas
+  bytes(0x1D, 0x56, 0x42, 0x00);             // GS V — corte parcial
+
+  return new Uint8Array(buf);
+}
+
+// Conecta (ou reutiliza) o dispositivo USB pareado
+async function _usbConnect() {
+  if (_usbDevice && _usbDevice.opened) return _usbDevice;
+
+  // Tenta reutilizar dispositivo já autorizado
+  const devices = await navigator.usb.getDevices();
+  const saved   = localStorage.getItem('escpos_usb_name');
+  let dev = devices.find(d =>
+    saved ? (d.productName + d.manufacturerName).includes(saved) : true
+  ) || devices[0];
+
+  if (!dev) {
+    // Pede permissão ao usuário (só na primeira vez)
+    dev = await navigator.usb.requestDevice({ filters: [] });
+    localStorage.setItem('escpos_usb_name', (dev.productName || '') + (dev.manufacturerName || ''));
+  }
+
+  await dev.open();
+  if (dev.configuration === null) await dev.selectConfiguration(1);
+  // Acha a interface com endpoint bulk-out
+  for (const iface of dev.configuration.interfaces) {
+    try {
+      await dev.claimInterface(iface.interfaceNumber);
+      _usbDevice = dev;
+      _usbDevice._epOut = iface.alternates[0]?.endpoints
+        .find(e => e.direction === 'out')?.endpointNumber;
+      if (_usbDevice._epOut !== undefined) break;
+      await dev.releaseInterface(iface.interfaceNumber);
+    } catch {}
+  }
+
+  if (!_usbDevice) throw new Error('Nenhuma interface de saída encontrada na impressora');
+  return _usbDevice;
+}
+
+async function _printViaUsb(order, cfg) {
+  if (!navigator.usb) throw new Error('WebUSB não suportado neste navegador');
+  const dev  = await _usbConnect();
+  const data = _buildEscPos(order, cfg);
+  await dev.transferOut(_usbDevice._epOut, data);
+}
+
+// ── Função principal — tenta: Electron → USB → agente → servidor → navegador ──
 async function printOrder(order) {
   const cfg = _getPrintConfig();
 
@@ -1869,7 +2011,22 @@ async function printOrder(order) {
 
   const html = _buildTicketHtml(order, cfg);
 
-  // 2. Agente local ativo? (computador da loja com agente rodando)
+  // 2. WebUSB — ESC/POS direto na impressora térmica (sem diálogo, sem software extra)
+  if (navigator.usb && localStorage.getItem('escpos_usb_name')) {
+    try {
+      await _printViaUsb(order, cfg);
+      sbToast('ok', '🖨️ Impresso!');
+      return;
+    } catch (e) {
+      // device desconectado ou erro — limpa cache e tenta próximo método
+      _usbDevice = null;
+      if (e.message && e.message.includes('requestDevice')) {
+        // usuário cancelou — não tenta mais
+      }
+    }
+  }
+
+  // 3. Agente local ativo? (computador da loja com agente rodando)
   try {
     const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
     const r = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } });
