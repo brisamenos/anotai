@@ -427,11 +427,81 @@ input,textarea{font-family:inherit}
 
 /* Banner abaixo das categorias */
 .store-banner-below{
-  width:100%;overflow:hidden;display:none;
-  border-radius:0;
+  width:100%;display:none;
+  position:relative;overflow:hidden;
+  margin-bottom:4px;
 }
 .store-banner-below.show{ display:block }
-.store-banner-below img{ width:100%;display:block;object-fit:cover;max-height:180px }
+
+/* Banner image container — começa com clip revelando da esquerda */
+.banner-img-wrap{
+  position:relative;overflow:hidden;
+  width:100%;
+}
+.banner-img-wrap img{
+  width:100%;display:block;object-fit:cover;max-height:180px;
+  transform-origin:right center;
+}
+
+/* Máscara de revelação — inicia fechada, anima para aberta */
+.banner-reveal-mask{
+  position:absolute;inset:0;
+  background:var(--bg);
+  transform-origin:right center;
+  animation:none;
+  right:0;left:auto;width:100%;
+}
+.store-banner-below.show .banner-reveal-mask{
+  animation:bannerReveal 1.2s cubic-bezier(.4,0,.2,1) forwards;
+  animation-delay:.6s;
+}
+@keyframes bannerReveal{
+  0%  { width:100% }
+  100%{ width:0% }
+}
+
+/* Boneco container */
+.banner-dude{
+  position:absolute;
+  bottom:0;right:-60px;
+  width:54px;height:54px;
+  z-index:10;
+  animation:none;
+}
+.store-banner-below.show .banner-dude{
+  animation:dudeAnim 3.6s ease-in-out infinite;
+}
+
+/* Animação do boneco:
+   0-15%: entra da direita
+   15-45%: puxa o banner (fica na posição)
+   45-50%: sai rapidinho para a direita
+   50-70%: pausa fora da tela
+   70-85%: entra de novo
+   85-100%: puxa de novo (banner já aberto, só faz gesto) */
+@keyframes dudeAnim{
+  0%   { right:-60px; transform:scaleX(-1) }
+  12%  { right:4px;   transform:scaleX(-1) }
+  40%  { right:4px;   transform:scaleX(-1) }
+  50%  { right:-60px; transform:scaleX(-1) }
+  100% { right:-60px; transform:scaleX(-1) }
+}
+
+/* Braço puxando — anima só durante a fase de puxar */
+.banner-dude-arm{
+  animation:none;
+}
+.store-banner-below.show .banner-dude-arm{
+  animation:armPull 3.6s ease-in-out infinite;
+  transform-origin:14px 16px;
+}
+@keyframes armPull{
+  0%,12% { transform:rotate(0deg)   }
+  20%    { transform:rotate(-30deg) }
+  30%    { transform:rotate(-10deg) }
+  40%    { transform:rotate(-30deg) }
+  50%,100%{ transform:rotate(0deg)  }
+}
 
 /* legado */
 .hero-emoji,.hero-close-btn,.hero-badges,.hero-badge{ display:none!important }
@@ -1984,7 +2054,42 @@ input,textarea{font-family:inherit}
 
 <!-- BANNER DA LOJA — acima da seção de preparo -->
 <div class="store-banner-below" id="store-banner-below">
-  <img id="store-banner-img" src="" alt="Banner">
+  <div class="banner-img-wrap">
+    <img id="store-banner-img" src="" alt="Banner">
+    <!-- Máscara que revela da esquerda para direita -->
+    <div class="banner-reveal-mask" id="banner-reveal-mask"></div>
+  </div>
+
+  <!-- Bonequinho que puxa o banner -->
+  <svg class="banner-dude" id="banner-dude" viewBox="0 0 54 54" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- Sombra -->
+    <ellipse cx="27" cy="52" rx="12" ry="3" fill="rgba(0,0,0,.15)"/>
+    <!-- Pernas -->
+    <rect x="19" y="36" width="6" height="14" rx="3" fill="#f97316"/>
+    <rect x="29" y="36" width="6" height="14" rx="3" fill="#f97316"/>
+    <!-- Corpo -->
+    <rect x="16" y="20" width="22" height="20" rx="6" fill="#f97316"/>
+    <!-- Braço esquerdo (puxando) -->
+    <g class="banner-dude-arm">
+      <rect x="4" y="22" width="13" height="5" rx="2.5" fill="#f97316"/>
+      <!-- Mão -->
+      <circle cx="4" cy="24.5" r="4" fill="#fcd9b6"/>
+    </g>
+    <!-- Braço direito -->
+    <rect x="38" y="22" width="10" height="5" rx="2.5" fill="#f97316"/>
+    <!-- Cabeça -->
+    <circle cx="27" cy="14" r="10" fill="#fcd9b6"/>
+    <!-- Olhos -->
+    <circle cx="23" cy="13" r="1.8" fill="#1f2937"/>
+    <circle cx="31" cy="13" r="1.8" fill="#1f2937"/>
+    <!-- Brilho nos olhos -->
+    <circle cx="24" cy="12" r=".7" fill="white"/>
+    <circle cx="32" cy="12" r=".7" fill="white"/>
+    <!-- Sorriso -->
+    <path d="M23 17 Q27 20 31 17" stroke="#1f2937" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    <!-- Cabelo -->
+    <path d="M18 10 Q27 2 36 10" stroke="#1f2937" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+  </svg>
 </div>
 
 <!-- SEÇÃO PREPARO FILTER — só açougue -->
