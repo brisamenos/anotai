@@ -18,18 +18,19 @@ function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
   if (!order?.phone) return
   setImmediate(async () => {
     try {
-      const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset FROM store_config WHERE tenant_id=?').get(tid)
+      const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(tid)
       const inst   = cfg?.evo_instance || EVO_INST
+      const loja   = cfg?.store_name || 'Restaurante'
       const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
       const pixConf = auto['pix_confirmado'] || {}
       if (pixConf.on === false) return
       const offset = parseInt(cfg?.order_num_offset) || 0
       const idStr  = String(Math.max(1, order.id - offset)).padStart(3,'0')
       const nome   = order.client || 'Cliente'
-      const items  = (()=>{ try{ return (JSON.parse(order.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') }catch{ return '' } })()
+      const items  = (()=>{ try{ return (JSON.parse(order.items)||[]).map(i=>`• ${i.qty}x ${i.name}`).join('\n') }catch{ return '' } })()
       const total  = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
-      const msgPad = `✅ *Pagamento confirmado!*\n\nOlá *${nome}*, recebemos seu pagamento PIX do pedido *#${idStr}* com sucesso!\n\n🛒 ${items}\n💰 Total: R$ ${total}\n\nSeu pedido está sendo preparado. Obrigado! 🎉`
-      const msgFin = pixConf.msg ? fillVars(pixConf.msg, { nome, id: idStr, itens: items, total }) : msgPad
+      const msgPad = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento PIX confirmado!*\n\nOlá, *${nome}*! Recebemos seu pagamento do pedido *#${idStr}* com sucesso.\n\n*Itens:*\n${items}\n\n💰 *Total: R$ ${total}*\n\n📦 Seu pedido está sendo preparado. Obrigado! 🎉\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
+      const msgFin = pixConf.msg ? fillVars(pixConf.msg, { nome, id: idStr, itens: items, total, loja }) : msgPad
       await sendWA(order.phone, msgFin, inst)
     } catch(e) { /* silencia erros de notificação */ }
   })
@@ -378,7 +379,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
             const nome   = client || 'Cliente'
             const fmtVal = parseFloat(valor).toFixed(2).replace('.',',')
             // Mensagem 1: texto com instruções (customizável pelo gestor, sem o código)
-            const msgPadTxt = `💠 *PIX — Pedido #${idStr}*\n\nOlá *${nome}*! Para confirmar seu pedido, pague via PIX Copia e Cola.\n\n💰 Valor: *R$ ${fmtVal}*\n\nO código PIX será enviado na próxima mensagem — é só copiar e colar no seu app de pagamentos. 👇`
+            const nomeLoja  = cfgWa?.store_name || 'Restaurante'
+            const msgPadTxt = `🏪 *${nomeLoja}*\n${'─'.repeat(20)}\n\n💠 *PIX — Pedido #${idStr}*\n\nOlá, *${nome}*! Para confirmar seu pedido, realize o pagamento via PIX Copia e Cola.\n\n💰 *Valor: R$ ${fmtVal}*\n\nO código PIX chegará na próxima mensagem — só copiar e colar no app! 👇`
             const msgTxt = pixCop.msg ? fillVars(pixCop.msg.replace('{codigo_pix}', '').trim(), { nome, id: idStr, total: fmtVal, codigo_pix: '' }).trim() : msgPadTxt
             await sendWA(body.phone, msgTxt, inst)
             // Mensagem 2: só o código (separado para facilitar cópia)
