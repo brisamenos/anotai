@@ -353,30 +353,238 @@ function noFilterItems(q) {
     list.innerHTML = '<div style="padding:12px;text-align:center;color:var(--muted);font-size:12.5px">Nenhum produto encontrado</div>';
     return;
   }
-  list.innerHTML = filtered.map(item => {
-    const priceStr = 'R$ ' + parseFloat(item.price||0).toFixed(2).replace('.',',');
-    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''" onclick="noAddItem(${item.id})">
-      <span style="font-size:20px;flex-shrink:0">${item.emoji||'🍽️'}</span>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.name}</div>
-        ${item.desc ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.desc}</div>` : ''}
-      </div>
-      <span style="font-size:12.5px;font-weight:700;color:var(--success);flex-shrink:0">${priceStr}</span>
-      <button style="background:var(--accent);color:#fff;border:none;border-radius:7px;width:26px;height:26px;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center">+</button>
-    </div>`;
-  }).join('');
+  const catMap = {};
+  filtered.forEach(item => {
+    const cat = item.cat || item.cat_key || 'Outros';
+    if (!catMap[cat]) catMap[cat] = [];
+    catMap[cat].push(item);
+  });
+
+  list.innerHTML = Object.entries(catMap).map(([cat, its]) => `
+    <div style="padding:8px 12px 4px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);background:var(--surface2);border-bottom:1px solid var(--border)">${cat}</div>
+    ${its.map(item => {
+      const price = parseFloat(item.price||0);
+      const priceStr = 'R$ ' + price.toFixed(2).replace('.',',') + (item.item_type==='kg'||item.itemType==='kg'?' <span style="font-size:10px;opacity:.7">/kg</span>':'');
+      const grupos = (() => { try { return Array.isArray(item.custom_groups) ? item.custom_groups : JSON.parse(item.custom_groups||'[]') } catch { return [] } })()
+        .filter(g => !['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'].includes(g.tipo));
+      const temAdicionais = grupos.length > 0 || item.item_type==='kg' || item.itemType==='kg';
+      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;active:background:var(--surface2)" onclick="noAddItem(${item.id})">
+        ${item.image_url
+          ? `<img src="${item.image_url}" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0">`
+          : `<div style="width:44px;height:44px;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${item.emoji||'🍽️'}</div>`}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.name}</div>
+          ${item.desc ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">${item.desc}</div>` : ''}
+          ${temAdicionais ? `<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600">+ adicionais</div>` : ''}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:13px;font-weight:700;color:var(--success)">${priceStr}</div>
+          <div style="width:28px;height:28px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;margin-top:4px;margin-left:auto">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+          </div>
+        </div>
+      </div>`;
+    }).join('')}`
+  ).join('');
 }
 
 function noAddItem(itemId) {
   const item = items.find(i => i.id === itemId);
   if (!item) return;
-  const existing = _noCart.find(c => c.id === itemId);
+
+  // Se tem grupos de adicionais, abre modal de seleção
+  const grupos = (() => { try { return Array.isArray(item.custom_groups) ? item.custom_groups : JSON.parse(item.custom_groups||'[]') } catch { return [] } })()
+    .filter(g => !['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'].includes(g.tipo));
+
+  const isKg = item.item_type === 'kg' || item.itemType === 'kg';
+
+  if (grupos.length > 0 || isKg) {
+    noAbrirModalAdicionais(item, grupos, isKg);
+    return;
+  }
+  // Sem adicionais — adiciona direto
+  noAddToCartDireto(item, item.name, parseFloat(item.price||0), '', []);
+}
+
+function noAddToCartDireto(item, name, price, obs, grupos) {
+  const existing = _noCart.find(c => c.id === item.id && c.obs === obs && c.name === name);
   if (existing) {
     existing.qty++;
   } else {
-    _noCart.push({ id: item.id, name: item.name, qty: 1, price: parseFloat(item.price||0), emoji: item.emoji||'🍽️' });
+    _noCart.push({ id: item.id, name, qty: 1, price, emoji: item.emoji||'🍽️', obs, _grupos: grupos });
   }
   noRenderCart();
+  sbToast('ok', name + ' adicionado!');
+}
+
+function noAbrirModalAdicionais(item, grupos, isKg) {
+  document.getElementById('modal-no-adicionais-bg')?.remove();
+
+  const priceStr = parseFloat(item.price||0).toFixed(2).replace('.',',');
+  const gruposHtml = grupos.map((g, gi) => {
+    const opcoes = g.opcoes || g.valores || [];
+    const tipo = g.tipo || 'opcional';
+    const isMulti = tipo === 'opcional' || tipo === 'adicionais';
+    const isRequired = tipo === 'obrigatorio' || tipo === 'sabor';
+    return `
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px">
+        ${g.nome || g.name || 'Adicional'}
+        ${isRequired ? '<span style="color:var(--danger);font-size:10px;margin-left:4px">*obrigatório</span>' : ''}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${opcoes.map((op, oi) => {
+          const nome = op.nome || op.name || op;
+          const preco = parseFloat(op.preco || op.price || 0);
+          const precoLabel = preco > 0 ? ` <span style="color:var(--success);font-size:11px">+R$ ${preco.toFixed(2).replace('.',',')}</span>` : '';
+          const inputType = isMulti ? 'checkbox' : 'radio';
+          return `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;cursor:pointer" onclick="noToggleOpc(this)">
+            <input type="${inputType}" name="no-grp-${gi}" value="${oi}" data-grp="${gi}" data-idx="${oi}" data-nome="${nome.replace(/"/g,'&quot;')}" data-preco="${preco}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
+            <span style="font-size:13px;font-weight:500;flex:1">${nome}${precoLabel}</span>
+          </label>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  const kgHtml = isKg ? `
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px">Quantidade (kg)</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <input type="number" id="no-kg-input" min="0.1" step="0.1" value="0.5"
+          style="flex:1;padding:10px;border:1px solid var(--border);border-radius:9px;background:var(--surface2);color:var(--text);font-size:18px;font-weight:700;text-align:center;outline:none;font-family:inherit"
+          oninput="document.getElementById('no-kg-total').textContent='R$ '+((parseFloat(this.value)||0)*${parseFloat(item.price||0)}).toFixed(2).replace('.',',')">
+        <span style="font-size:12px;color:var(--muted)">kg</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px">Total: <strong id="no-kg-total">R$ ${(0.5*parseFloat(item.price||0)).toFixed(2).replace('.',',')}</strong></div>
+    </div>` : '';
+
+  const modal = document.createElement('div');
+  modal.id = 'modal-no-adicionais-bg';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:flex-end;justify-content:center';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:520px;max-height:85vh;overflow-y:auto;padding:20px 20px 32px;box-shadow:0 -8px 40px rgba(0,0,0,.3)">
+      <div style="width:40px;height:4px;background:var(--border);border-radius:99px;margin:0 auto 18px"></div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <div style="font-size:32px">${item.emoji||'🍽️'}</div>
+        <div>
+          <div style="font-size:16px;font-weight:800">${item.name}</div>
+          <div style="font-size:13px;color:var(--success);font-weight:700">R$ ${priceStr}${isKg?' /kg':''}</div>
+        </div>
+      </div>
+      ${item.desc ? `<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px;padding:10px;background:var(--surface2);border-radius:8px">${item.desc}</div>` : ''}
+      ${kgHtml}
+      ${gruposHtml}
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Observação</div>
+        <textarea id="no-obs-input" placeholder="Ex: sem cebola, ponto da carne..." rows="2"
+          style="width:100%;padding:10px;border:1px solid var(--border);border-radius:9px;background:var(--surface2);color:var(--text);font-size:13px;outline:none;resize:none;font-family:inherit;box-sizing:border-box"></textarea>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <button onclick="noModalQty(-1)" style="width:36px;height:36px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-size:18px;font-weight:700;color:var(--text)">−</button>
+        <span id="no-modal-qty" style="font-size:18px;font-weight:800;min-width:32px;text-align:center">1</span>
+        <button onclick="noModalQty(1)"  style="width:36px;height:36px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-size:18px;font-weight:700;color:var(--text)">+</button>
+        <span id="no-modal-total-label" style="font-size:14px;font-weight:700;color:var(--success);margin-left:auto"></span>
+      </div>
+      <button onclick="noConfirmarAdicionais(${item.id})" style="width:100%;padding:14px;border-radius:14px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">
+        Adicionar ao pedido
+      </button>
+    </div>`;
+  document.body.appendChild(modal);
+
+  // Store item ref for confirm
+  modal._item = item;
+  modal._grupos = grupos;
+  modal._isKg = isKg;
+  window._noModalQtyVal = 1;
+  noAtualizarTotalModal(item, isKg);
+}
+
+function noToggleOpc(label) {
+  // Visual feedback
+  const inp = label.querySelector('input');
+  if (!inp) return;
+  if (inp.type === 'radio') {
+    const name = inp.name;
+    document.querySelectorAll(`input[name="${name}"]`).forEach(r => {
+      r.closest('label').style.borderColor = 'var(--border)';
+      r.closest('label').style.background = 'var(--surface2)';
+    });
+    inp.closest('label').style.borderColor = 'var(--accent)';
+    inp.closest('label').style.background = 'rgba(var(--accent-rgb,249,115,22),.08)';
+  } else {
+    if (inp.checked) {
+      label.style.borderColor = 'var(--accent)';
+      label.style.background = 'rgba(var(--accent-rgb,249,115,22),.08)';
+    } else {
+      label.style.borderColor = 'var(--border)';
+      label.style.background = 'var(--surface2)';
+    }
+  }
+  const modal = document.getElementById('modal-no-adicionais-bg');
+  if (modal?._item) noAtualizarTotalModal(modal._item, modal._isKg);
+}
+
+function noModalQty(d) {
+  window._noModalQtyVal = Math.max(1, (window._noModalQtyVal||1) + d);
+  const el = document.getElementById('no-modal-qty');
+  if (el) el.textContent = window._noModalQtyVal;
+  const modal = document.getElementById('modal-no-adicionais-bg');
+  if (modal?._item) noAtualizarTotalModal(modal._item, modal._isKg);
+}
+
+function noAtualizarTotalModal(item, isKg) {
+  const qty = window._noModalQtyVal || 1;
+  let extra = 0;
+  document.querySelectorAll('#modal-no-adicionais-bg input:checked').forEach(inp => {
+    extra += parseFloat(inp.dataset.preco || 0);
+  });
+  let basePrice = parseFloat(item.price||0) + extra;
+  if (isKg) {
+    const kg = parseFloat(document.getElementById('no-kg-input')?.value || 1);
+    basePrice = basePrice * kg;
+  }
+  const total = basePrice * qty;
+  const el = document.getElementById('no-modal-total-label');
+  if (el) el.textContent = 'R$ ' + total.toFixed(2).replace('.',',');
+}
+
+function noConfirmarAdicionais(itemId) {
+  const modal = document.getElementById('modal-no-adicionais-bg');
+  if (!modal) return;
+  const item = modal._item;
+  const isKg = modal._isKg;
+  const qty  = window._noModalQtyVal || 1;
+
+  let extra = 0;
+  const opcsDesc = [];
+  document.querySelectorAll('#modal-no-adicionais-bg input:checked').forEach(inp => {
+    extra += parseFloat(inp.dataset.preco || 0);
+    opcsDesc.push(inp.dataset.nome);
+  });
+
+  let price = parseFloat(item.price||0) + extra;
+  let name  = item.name;
+  let obs   = document.getElementById('no-obs-input')?.value.trim() || '';
+
+  if (opcsDesc.length) obs = [opcsDesc.join(', '), obs].filter(Boolean).join(' | ');
+
+  if (isKg) {
+    const kg = parseFloat(document.getElementById('no-kg-input')?.value || 1);
+    price = price * kg;
+    name  = item.name + ' ' + kg.toFixed(3).replace('.',',') + 'kg';
+    // Add once (qty=1 for kg items)
+    _noCart.push({ id: item.id, name, qty: 1, price, emoji: item.emoji||'🍽️', obs });
+  } else {
+    const existing = _noCart.find(c => c.id === item.id && c.obs === obs && c.name === item.name);
+    if (existing) existing.qty += qty;
+    else _noCart.push({ id: item.id, name, qty, price, emoji: item.emoji||'🍽️', obs });
+  }
+
+  noRenderCart();
+  modal.remove();
+  sbToast('ok', name + ' adicionado!');
 }
 
 function noChangeQty(itemId, delta) {
