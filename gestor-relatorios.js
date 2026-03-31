@@ -1984,41 +1984,27 @@ async function _printViaUsb(order, cfg) {
 }
 
 async function printOrder(order) {
-  const cfg = _getPrintConfig();
+  const cfg  = _getPrintConfig();
+  const html = _buildTicketHtml(order, cfg);
+  const fmt  = localStorage.getItem('printFormat') || '58mm';
 
-  // 1. Electron
   if (window.ElectronPrint) {
     try {
       const r = await window.ElectronPrint.printOrder(order);
       if (r.ok) { sbToast('ok', '🖨️ Impresso!'); return; }
-      throw new Error(r.error || 'Erro');
     } catch (e) { sbToast('err', '🖨️ ' + e.message); return; }
   }
 
-  // 2. WebUSB — ESC/POS direto na térmica, SEM diálogo
-  if (navigator.usb && localStorage.getItem('escpos_usb_name')) {
-    try {
-      await _printViaUsb(order, cfg);
-      sbToast('ok', '🖨️ Impresso!');
-      return;
-    } catch (e) {
-      console.error('[USB] Erro:', e.message);
-      _usbDevice = null;
-      localStorage.removeItem('escpos_usb_name');
-      sbToast('warn', '⚠️ Erro USB: ' + e.message);
-    }
-  }
+  let area = document.getElementById('_print_area');
+  if (!area) { area = document.createElement('div'); area.id = '_print_area'; document.body.appendChild(area); }
+  area.innerHTML = html;
 
-  // 3. Fallback — window.print
-  const html = _buildTicketHtml(order, cfg);
-  let div = document.getElementById('_print_area');
-  if (!div) { div = document.createElement('div'); div.id = '_print_area'; document.body.appendChild(div); }
-  div.innerHTML = html;
-  let style = document.getElementById('_print_style');
-  if (!style) { style = document.createElement('style'); style.id = '_print_style'; document.head.appendChild(style); }
-  style.innerHTML = `@media print { body > *:not(#_print_area){display:none!important} #_print_area{display:block!important;font-family:'Courier New',monospace;font-size:12px} @page{margin:2mm;size:${_printFormat||'58mm'} auto} }`;
+  let st = document.getElementById('_print_style');
+  if (!st) { st = document.createElement('style'); st.id = '_print_style'; document.head.appendChild(st); }
+  st.innerHTML = `@media print { @page { margin: 2mm; size: ${fmt} auto; } }`;
+
   window.print();
-  setTimeout(() => { div.innerHTML = ''; }, 1500);
+  setTimeout(() => { area.innerHTML = ''; }, 2000);
   sbToast('ok', '🖨️ Imprimindo...');
 }
 
