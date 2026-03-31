@@ -183,11 +183,11 @@ function applyDeliveryInfo() {
     if (minimoVal) minimoVal.textContent = 'R$ ' + fmt(_pedidoMinimo);
   }
 
-  // Endereço do estabelecimento — barra no hero
+  // Endereço do estabelecimento — inline elegante
   if (_storeAddress) {
     const bar = document.getElementById('hero-address-bar');
     const txt = document.getElementById('hero-address-txt');
-    if (bar) bar.style.display = 'flex';
+    if (bar) bar.classList.add('show');
     if (txt) txt.textContent = _storeAddress;
   }
 }
