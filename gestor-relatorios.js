@@ -1781,24 +1781,25 @@ async function _printViaServer(html) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Erro no servidor');
 
-  // Servidor gerou o PDF — abre popup e imprime localmente
+  // Servidor gerou o PDF — abre nova aba e imprime
+  // (Chrome não suporta print() em PDF dentro de iframe)
   if (data.pdf) {
     const bytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
     const blob  = new Blob([bytes], { type: 'application/pdf' });
     const url   = URL.createObjectURL(blob);
-    const popup = window.open(url, '_blank', 'width=1,height=1,left=-100,top=-100');
-    if (popup) {
-      popup.onload = () => {
-        try { popup.print(); } catch (_) {}
-        setTimeout(() => { popup.close(); URL.revokeObjectURL(url); }, 3000);
+    const win   = window.open(url, '_blank');
+    if (win) {
+      win.onload = () => {
+        win.print();
+        setTimeout(() => { win.close(); URL.revokeObjectURL(url); }, 2000);
       };
-      // fallback caso onload não dispare
+      // fallback: onload nem sempre dispara em PDFs
       setTimeout(() => {
-        try { popup.print(); } catch (_) {}
-        setTimeout(() => { try { popup.close(); } catch(_){} URL.revokeObjectURL(url); }, 3000);
+        try { win.print(); } catch(_) {}
+        setTimeout(() => { try { win.close(); } catch(_){} URL.revokeObjectURL(url); }, 2000);
       }, 1500);
     } else {
-      sbToast('warn', '⚠️ Popup bloqueado — permita popups para este site');
+      sbToast('warn', '⚠️ Popup bloqueado — abra o Chrome com --kiosk-printing');
       URL.revokeObjectURL(url);
     }
   }
@@ -1978,74 +1979,38 @@ async function _printViaUsb(order, cfg) {
 
 // ── Função principal — tenta: Electron → USB → agente → servidor → navegador ──
 async function printOrder(order) {
-  const cfg = _getPrintConfig();
-
-  // 1. App desktop (Electron) — ESC/POS direto, mais rápido e profissional
-  if (window.ElectronPrint) {
-    try {
-      // Salva config + impressora selecionada no Electron
-      const printerSel = document.getElementById('print-printer-select')?.value || _printPrinter || '';
-      const formatSel  = document.getElementById('print-format-select')?.value  || _printFormat  || '80mm';
-      await window.ElectronPrint.savePrintConfig({
-        nome:    cfg.nome,
-        sub:     cfg.sub,
-        rodape:  cfg.rodape,
-        cols:    parseInt(document.getElementById('print-cols')?.value || 32),
-        printer: printerSel,
-        format:  formatSel,
-      });
-      const r = await window.ElectronPrint.printOrder(order);
-      if (r.ok) {
-        sbToast('ok', '🖨️ Impresso!');
-        return;
-      }
-      if (r.reason === 'paused') { sbToast('err', '🖨️ Impressão pausada'); return; }
-      throw new Error(r.error || 'Erro desconhecido');
-    } catch (e) {
-      sbToast('err', '🖨️ ' + e.message);
-      return;
-    }
-  }
-
+  const cfg  = _getPrintConfig();
   const html = _buildTicketHtml(order, cfg);
 
-  // 2. WebUSB — ESC/POS direto na impressora térmica (sem diálogo, sem software extra)
-  if (navigator.usb && localStorage.getItem('escpos_usb_name')) {
+  // Electron — app desktop
+  if (window.ElectronPrint) {
     try {
-      await _printViaUsb(order, cfg);
-      sbToast('ok', '🖨️ Impresso!');
-      return;
-    } catch (e) {
-      // device desconectado ou erro — limpa cache e tenta próximo método
-      _usbDevice = null;
-      if (e.message && e.message.includes('requestDevice')) {
-        // usuário cancelou — não tenta mais
-      }
-    }
+      const r = await window.ElectronPrint.printOrder(order);
+      if (r.ok) { sbToast('ok', '🖨️ Impresso!'); return; }
+      throw new Error(r.error || 'Erro');
+    } catch (e) { sbToast('err', '🖨️ ' + e.message); return; }
   }
 
-  // 3. Agente local ativo? (computador da loja com agente rodando)
-  try {
-    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
-    const r = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } });
-    const d = await r.json();
-    if (d.active) {
-      await _printViaAgent(html);
-      sbToast('ok', '🖨️ Enviado para a impressora!');
-      return;
-    }
-  } catch {}
+  // Abre janela com o HTML do ticket e imprime
+  // Com --kiosk-printing no Chrome: sem diálogo, imprime direto na POS58
+  const win = window.open('', '_blank', 'width=400,height=600');
+  if (!win) { sbToast('err', '⚠️ Popup bloqueado'); return; }
 
-  // 3. Impressão via servidor (Puppeteer no EasyPanel)
-  try {
-    await _printViaServer(html);
-    sbToast('ok', '🖨️ Enviado para a impressora!');
-    return;
-  } catch {}
-
-  // 4. Fallback: diálogo do navegador (abre confirm do sistema)
-  _showPrintAgentToast();
-  _printViaBrowser(html);
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box }
+  body { font-family:'Courier New',monospace; font-size:12px; color:#000; background:#fff; padding:4px }
+  hr { border:none; border-top:1px dashed #000; margin:4px 0 }
+  .pt-center { text-align:center }
+  .pt-large  { font-size:15px; font-weight:bold }
+  .pt-hr     { border:none; border-top:1px dashed #000; margin:4px 0 }
+  .print-ticket { width:100% }
+  @media print { @page { margin:2mm; size: 80mm auto } body { margin:0 } }
+</style></head><body>${html}
+<script>window.onload = function(){ window.print(); setTimeout(function(){ window.close(); }, 500); }<\/script>
+</body></html>`);
+  win.document.close();
+  sbToast('ok', '🖨️ Imprimindo...');
 }
 
 function printOrderById(id) {
