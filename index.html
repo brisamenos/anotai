@@ -342,23 +342,47 @@ input,textarea{font-family:inherit}
 .hero-banner.show{ display:block }
 .hero-banner img{ width:100%;height:100%;object-fit:cover;display:block }
 
-/* ── Novo layout centralizado ── */
+/* ══ HERO PREMIUM ══════════════════════════════════ */
+.hero{
+  background:var(--s1);
+  position:relative;
+  border-bottom:1px solid var(--border);
+}
+
+/* Faixa superior colorida com gradiente do tema */
+.hero-cover{
+  width:100%;height:100px;
+  background:linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 60%, #000) 100%);
+  position:relative;overflow:hidden;
+}
+.hero-cover::after{
+  content:'';position:absolute;inset:0;
+  background:rgba(0,0,0,.18);
+}
+
+/* Linha com logo + botão entrar sobre a cover */
+.hero-cover-row{
+  position:absolute;top:0;left:0;right:0;
+  display:flex;align-items:flex-start;justify-content:flex-end;
+  padding:12px 14px;z-index:2;
+}
+
+/* Logo saindo da cover */
+.hero-logo{
+  width:88px;height:88px;border-radius:22px;flex-shrink:0;overflow:hidden;
+  background:var(--s1);border:3px solid var(--s1);
+  display:flex;align-items:center;justify-content:center;font-size:36px;
+  box-shadow:0 6px 24px rgba(0,0,0,.18);
+  position:absolute;left:50%;transform:translateX(-50%);
+  bottom:-32px;z-index:3;cursor:pointer;
+}
+.hero-logo img,.hero-logo-img{ width:100%;height:100%;object-fit:cover;border-radius:19px;display:block }
+
+/* Área de conteúdo após cover */
 .hero-inner{
   display:flex;flex-direction:column;align-items:center;
-  padding:22px 16px 14px;text-align:center;gap:0;
-  background:var(--s1);
+  padding:44px 20px 16px;text-align:center;gap:0;
 }
-.hero-top-row{
-  width:100%;display:flex;align-items:center;justify-content:flex-end;
-  margin-bottom:14px;
-}
-.hero-logo{
-  width:80px;height:80px;border-radius:20px;flex-shrink:0;overflow:hidden;
-  background:var(--s2);border:2.5px solid var(--border2);
-  display:flex;align-items:center;justify-content:center;font-size:36px;
-  box-shadow:0 4px 20px rgba(0,0,0,.15);margin-bottom:12px;cursor:pointer;
-}
-.hero-logo img,.hero-logo-img{ width:100%;height:100%;object-fit:cover;border-radius:17px;display:block }
 .hero-info{ width:100% }
 .hero-name{
   font-family:'Fraunces',serif;font-size:22px;font-weight:900;
@@ -366,58 +390,60 @@ input,textarea{font-family:inherit}
   overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
 }
 .hero-desc{
-  font-size:12.5px;color:var(--muted);line-height:1.4;margin-top:4px;
+  font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:5px;
   overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
 }
-.hero-actions{ position:absolute;top:16px;right:16px }
-.hero-icon-btn{
-  width:36px;height:36px;border-radius:50%;
-  background:var(--s2);border:1px solid var(--border);
-  display:flex;align-items:center;justify-content:center;
-  color:var(--muted);font-size:15px;cursor:pointer;transition:all .15s;
+
+/* Endereço inline no hero */
+.hero-address-inline{
+  display:none;align-items:center;justify-content:center;gap:5px;
+  font-size:11.5px;color:var(--muted2);margin-top:6px;
 }
-.hero-icon-btn:hover{ background:var(--s3);color:var(--text) }
+.hero-address-inline.show{ display:flex }
+.hero-address-inline svg{ flex-shrink:0;opacity:.6 }
 
 /* meta row: status · tempo · avaliação */
 .hero-meta{
   display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:0;
-  padding:8px 16px 0;font-size:12px;color:var(--muted);
-  background:var(--s1);
+  padding:6px 16px 0;font-size:12px;color:var(--muted);
 }
 .hero-meta-item{ display:flex;align-items:center;gap:4px;white-space:nowrap }
-.hero-meta-sep{ margin:0 7px;color:var(--border2) }
-.hero-meta-dot{ width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;animation:hblink 2s infinite }
-@keyframes hblink{0%,100%{opacity:1}50%{opacity:.4}}
+.hero-meta-sep{ margin:0 8px;color:var(--border2);font-size:14px }
+.hero-meta-dot{ width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;animation:hblink 2s infinite }
+@keyframes hblink{0%,100%{opacity:1}50%{opacity:.35}}
 .hero-meta-dot.closed{ background:var(--red);animation:none }
-.hero-meta-status{ font-weight:700 }
+.hero-meta-status{ font-weight:700;font-size:12.5px }
 .hero-meta-status.open{ color:var(--green) }
 .hero-meta-status.closed{ color:var(--red) }
-.hero-meta-link{ color:var(--accent);font-weight:600;cursor:pointer;text-decoration:none }
 
-/* Botão de status/ação principal */
+/* Botão CTA principal */
 .hero-status-btn{
   display:flex;align-items:center;justify-content:center;gap:8px;
-  margin:12px 16px 0;padding:13px 20px;border-radius:14px;
+  margin:14px 0 2px;padding:14px 24px;border-radius:16px;
   background:var(--accent);color:#fff;font-size:14px;font-weight:700;
-  border:none;cursor:pointer;width:calc(100% - 32px);
-  font-family:inherit;transition:all .18s;box-shadow:0 4px 16px rgba(var(--accent-rgb,249,115,22),.35);
+  border:none;cursor:pointer;width:100%;
+  font-family:inherit;transition:all .18s;
+  box-shadow:0 4px 20px rgba(var(--accent-rgb,249,115,22),.35);
+  letter-spacing:.2px;
 }
 .hero-status-btn.closed-btn{
   background:var(--s2);color:var(--muted);box-shadow:none;
   border:1.5px solid var(--border);
 }
-.hero-status-btn:active{ opacity:.85;transform:scale(.98) }
+.hero-status-btn:active{ opacity:.88;transform:scale(.985) }
 
-/* Banner da loja — agora abaixo das categorias */
+/* Banner abaixo das categorias */
 .store-banner-below{
-  width:100%;overflow:hidden;
-  display:none;
+  width:100%;overflow:hidden;display:none;
+  border-radius:0;
 }
 .store-banner-below.show{ display:block }
-.store-banner-below img{ width:100%;display:block;object-fit:cover }
+.store-banner-below img{ width:100%;display:block;object-fit:cover;max-height:180px }
 
 /* legado */
 .hero-emoji,.hero-close-btn,.hero-badges,.hero-badge{ display:none!important }
+.hero-actions{ display:none!important }
+.hero-icon-btn{ display:none!important }
 
 /* ═══════════════════════════════════════
    SEARCH + CATS
@@ -1207,13 +1233,13 @@ input,textarea{font-family:inherit}
    PROFILE HEADER (hero quando logado)
 ═══════════════════════════════════════ */
 .profile-fab{
-  display:flex;align-items:center;gap:7px;
-  background:var(--s2);border:1.5px solid var(--border);
-  border-radius:99px;padding:6px 12px 6px 8px;font-size:12.5px;font-weight:600;
-  cursor:pointer;transition:all .18s;color:var(--muted);
-  position:absolute;top:16px;right:16px;z-index:2;
+  display:flex;align-items:center;gap:6px;
+  background:rgba(0,0,0,.25);border:1.5px solid rgba(255,255,255,.2);
+  border-radius:99px;padding:6px 14px 6px 8px;font-size:12px;font-weight:700;
+  cursor:pointer;transition:all .18s;color:#fff;
+  backdrop-filter:blur(8px);
 }
-.profile-fab:hover{background:var(--s3);color:var(--text)}
+.profile-fab:hover{background:rgba(0,0,0,.4)}
 .profile-fab-av{
   width:24px;height:24px;border-radius:50%;
   background:var(--accent-g);
@@ -1899,59 +1925,68 @@ input,textarea{font-family:inherit}
   </div>
 </div>
 
-<!-- HERO — novo layout centralizado -->
-<div class="hero" id="hero" style="background:var(--s1);position:relative">
-  <div class="hero-inner">
-    <!-- Botão perfil topo direito -->
-    <div class="hero-actions">
+<!-- HERO PREMIUM -->
+<div class="hero" id="hero">
+
+  <!-- Faixa superior colorida -->
+  <div class="hero-cover" id="hero-cover">
+    <!-- Botão entrar no topo direito -->
+    <div class="hero-cover-row">
       <button class="profile-fab" id="profile-fab" onclick="onProfileFabClick()" title="Minha conta">
-        <span id="profile-fab-av" class="icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 13.5c0-2.76 2.46-5 5.5-5s5.5 2.24 5.5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+        <span id="profile-fab-av" class="icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 13.5c0-2.76 2.46-5 5.5-5s5.5 2.24 5.5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
         <span id="profile-fab-name">Entrar</span>
       </button>
     </div>
-    <!-- Logo centralizada -->
+    <!-- Logo flutuante centralizada -->
     <div class="hero-logo" id="hero-logo-wrap" onclick="openStoreInfoModal()" title="Ver informações da loja">
       <span id="hero-emoji">🍽️</span>
     </div>
-    <!-- Nome + slogan centralizados -->
+  </div>
+
+  <!-- Conteúdo abaixo da cover -->
+  <div class="hero-inner">
     <div class="hero-info">
       <div class="hero-name" id="hero-name">Carregando…</div>
       <div class="hero-desc" id="hero-desc"></div>
+      <!-- Endereço inline elegante -->
+      <div class="hero-address-inline" id="hero-address-bar">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 1.5C5.51 1.5 3.5 3.51 3.5 6c0 3.75 4.5 8.5 4.5 8.5S12.5 9.75 12.5 6c0-2.49-2.01-4.5-4.5-4.5z" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="6" r="1.5" fill="currentColor" opacity=".5"/></svg>
+        <span id="hero-address-txt"></span>
+      </div>
     </div>
-  </div>
 
-  <!-- Meta: status · tempo · avaliação · mínimo -->
-  <div class="hero-meta">
-    <div class="hero-meta-item">
-      <div class="hero-meta-dot" id="status-dot"></div>
-      <span class="hero-meta-status open" id="status-txt">Verificando…</span>
+    <!-- Meta: status · tempo · avaliação · mínimo -->
+    <div class="hero-meta">
+      <div class="hero-meta-item">
+        <div class="hero-meta-dot" id="status-dot"></div>
+        <span class="hero-meta-status open" id="status-txt">Verificando…</span>
+      </div>
+      <span class="hero-meta-sep">·</span>
+      <div class="hero-meta-item" id="badge-tempo" style="display:none">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3l2 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        <span id="hero-tempo"></span>
+      </div>
+      <span class="hero-meta-sep" id="sep-tempo" style="display:none">·</span>
+      <div class="hero-meta-item" id="badge-aval" style="display:none">⭐ <span id="hero-aval"></span></div>
+      <span class="hero-meta-sep" id="sep-aval" style="display:none">·</span>
+      <div class="hero-meta-item" id="badge-minimo" style="display:none">Mín. R$ <span id="hero-minimo"></span></div>
     </div>
-    <span class="hero-meta-sep">·</span>
-    <div class="hero-meta-item" id="badge-tempo" style="display:none"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3l2 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg> <span id="hero-tempo"></span></div>
-    <span class="hero-meta-sep" id="sep-tempo" style="display:none">·</span>
-    <div class="hero-meta-item" id="badge-aval" style="display:none">⭐ <span id="hero-aval"></span></div>
-    <span class="hero-meta-sep" id="sep-aval" style="display:none">·</span>
-    <div class="hero-meta-item" id="badge-minimo" style="display:none">Pedido mínimo R$ <span id="hero-minimo"></span></div>
-  </div>
 
-  <!-- Botão de ação principal (status) -->
-  <button class="hero-status-btn" id="hero-status-btn" onclick="openStoreInfoModal()">
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3l2 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-    <span id="hero-status-btn-txt">Verificando…</span>
-  </button>
+    <!-- CTA principal -->
+    <button class="hero-status-btn" id="hero-status-btn" onclick="openStoreInfoModal()">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v3l2 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <span id="hero-status-btn-txt">Verificando…</span>
+    </button>
+  </div>
 
   <!-- legado -->
   <div id="status-badge" style="display:none"><div class="dot" id="status-dot-legacy"></div></div>
-  <div id="hero-address-bar" style="display:none">
-    <span id="hero-address-txt"></span>
-  </div>
-  <!-- banner opcional mantido por compatibilidade -->
   <div class="hero-banner" id="hero-banner" style="display:none"></div>
 </div>
 
 <!-- BANNER LOJA FECHADA -->
-<div class="closed-banner" id="closed-banner" style="display:none;margin:0 16px 8px;border-radius:10px">
-  <span style="color:var(--red);font-size:10px">●</span> <span>Esta loja está fechada. Você pode ver o cardápio, mas pedidos não são aceitos.</span>
+<div class="closed-banner" id="closed-banner" style="display:none;margin:0 16px 8px;border-radius:12px">
+  <span style="color:var(--red);font-size:10px">●</span> Esta loja está fechada. Você pode ver o cardápio, mas pedidos não são aceitos.
 </div>
 
 <!-- STICKY: BUSCA + CATEGORIAS -->
@@ -1965,13 +2000,13 @@ input,textarea{font-family:inherit}
   </div>
 </div>
 
-<!-- SEÇÃO PREPARO FILTER — só açougue -->
-<div class="preparo-filter-section" id="preparo-filter-section" style="display:none"></div>
-
-<!-- BANNER DA LOJA — abaixo das categorias -->
+<!-- BANNER DA LOJA — acima da seção de preparo -->
 <div class="store-banner-below" id="store-banner-below">
   <img id="store-banner-img" src="" alt="Banner">
 </div>
+
+<!-- SEÇÃO PREPARO FILTER — só açougue -->
+<div class="preparo-filter-section" id="preparo-filter-section" style="display:none"></div>
 
 <!-- MENU -->
 <div id="menu-wrap"></div>
