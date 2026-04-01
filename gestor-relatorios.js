@@ -1705,11 +1705,12 @@ function _buildTicketHtml(order, cfg) {
   const subtotal = items.reduce((s,i) => s + (parseFloat(i.price||0) * (i.qty||1)), 0);
   const taxa = parseFloat(order.taxa || 0);
   const total = subtotal + taxa;
+  const orderNum = order.num || order.id;
   return `<div class="print-ticket" style="font-size:${cfg.fontSize}px">
     <div class="pt-center pt-large">${cfg.nome}</div>
-    ${cfg.sub ? `<div class="pt-center" style="font-size:11px">${cfg.sub}</div>` : ''}
+    ${cfg.sub ? `<div class="pt-center" style="font-size:0.85em">${cfg.sub}</div>` : ''}
     <hr class="pt-hr">
-    <div>Pedido: <b>#${order.id}</b></div>
+    <div>Pedido: <b>#${orderNum}</b></div>
     <div>Data: ${now}</div>
     <div>Cliente: ${order.client || '—'}</div>
     ${cfg.addr && order.addr ? `<div>Local: ${order.addr}</div>` : ''}
@@ -1720,7 +1721,7 @@ function _buildTicketHtml(order, cfg) {
     <div style="display:flex;justify-content:space-between;font-weight:bold"><span>TOTAL</span><span>${money(total)}</span></div>
     ${cfg.pag && order.pag ? `<div>Pagamento: ${order.pag}</div>` : ''}
     <hr class="pt-hr">
-    <div class="pt-center" style="font-size:11px">${cfg.rodape}</div>
+    <div class="pt-center" style="font-size:0.85em">${cfg.rodape}</div>
   </div>`;
 }
 
@@ -1898,7 +1899,7 @@ function _buildEscPos(order, cfg, cols = 32) {
     day:'2-digit', month:'2-digit', year:'numeric',
     hour:'2-digit', minute:'2-digit'
   });
-  push('Pedido: #' + order.id + '\n');
+  push('Pedido: #' + (order.num || order.id) + '\n');
   push('Data: ' + now + '\n');
   push('Cliente: ' + (order.client || '—') + '\n');
   if (cfg.addr && order.addr) push('Local: ' + order.addr + '\n');
