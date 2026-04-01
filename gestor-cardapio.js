@@ -985,6 +985,7 @@ function handleCatAction(id, action) {
     if (!cat) return;
     document.getElementById('edit-cat-id').value   = id;
     document.getElementById('edit-cat-name').value = cat.label;
+    document.getElementById('edit-cat-type').value = cat.type || 'Itens principais';
     openModal('modal-edit-cat');
   } else if (action === 'duplicate') {
     duplicateCategory(id);
