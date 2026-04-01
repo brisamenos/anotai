@@ -2141,31 +2141,37 @@ function printOrderById(id) {
   if (o) printOrder(o); else sbToast('err', 'Pedido não encontrado');
 }
 
-function renderImpressao() {
+let _renderImpressaoLoaded = false;
+function renderImpressao(skipServerLoad) {
   const p = document.getElementById('print-preview');
   if (!p) return;
-  // Restaura tamanho de fonte salvo no slider
   const slider = document.getElementById('print-font-size');
   const valEl  = document.getElementById('print-font-size-val');
-  if (slider && slider.value === slider.defaultValue) {
-    slider.value = _printFontSize;
-    if (valEl) valEl.textContent = _printFontSize;
+
+  if (!skipServerLoad && !_renderImpressaoLoaded) {
+    // Primeira abertura: restaura selects e carrega do servidor
+    const tgtSel = document.getElementById('print-target-select');
+    if (tgtSel) tgtSel.value = _printTarget;
+    const fmtSel = document.getElementById('print-format-select');
+    if (fmtSel) fmtSel.value = _printFormat || '80mm';
+    setPrintMode(_printMode);
+    loadPrinters();
+    _updateUsbStatus();
+    loadPrintConfigServer().then(() => {
+      _renderImpressaoLoaded = true;
+      if (slider) { slider.value = _printFontSize; }
+      if (valEl)  { valEl.textContent = _printFontSize; }
+      const fmtSel2 = document.getElementById('print-format-select');
+      if (fmtSel2) fmtSel2.value = _printFormat || '80mm';
+      const cfg = _getPrintConfig();
+      const ex = { id:99, client:'João Silva', addr:'Mesa 3', mesa_num:3, pag:'PIX', taxa:0,
+        items:[{qty:1,name:'Pizza Calabreza',price:50},{qty:2,name:'Coca Cola 2L',price:14}] };
+      p.innerHTML = _buildTicketHtml(ex, cfg);
+    });
+    return;
   }
-  // Restaura seleções salvas
-  const tgtSel = document.getElementById('print-target-select');
-  if (tgtSel) tgtSel.value = _printTarget;
-  const fmtSel = document.getElementById('print-format-select');
-  if (fmtSel) fmtSel.value = _printFormat || '80mm';
-  setPrintMode(_printMode);
-  loadPrinters();
-  _updateUsbStatus();
-  // Carrega config do servidor (sincroniza entre dispositivos)
-  loadPrintConfigServer().then(() => {
-    const cfg = _getPrintConfig();
-    const ex = { id:99, client:'João Silva', addr:'Mesa 3', mesa_num:3, pag:'PIX', taxa:0,
-      items:[{qty:1,name:'Pizza Calabreza',price:50},{qty:2,name:'Coca Cola 2L',price:14}] };
-    p.innerHTML = _buildTicketHtml(ex, cfg);
-  })
+
+  // Chamado via oninput do slider: apenas atualiza preview sem sobrescrever o slider
   const cfg = _getPrintConfig();
   const ex = { id:99, client:'João Silva', addr:'Mesa 3', mesa_num:3, pag:'PIX', taxa:0,
     items:[{qty:1,name:'Pizza Calabreza',price:50},{qty:2,name:'Coca Cola 2L',price:14}] };
