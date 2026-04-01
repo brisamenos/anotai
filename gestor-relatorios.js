@@ -1709,7 +1709,7 @@ function _buildTicketHtml(order, cfg) {
     <div class="pt-center pt-large">${cfg.nome}</div>
     ${cfg.sub ? `<div class="pt-center" style="font-size:11px">${cfg.sub}</div>` : ''}
     <hr class="pt-hr">
-    <div>Pedido: <b>#${String(order.num !== undefined ? order.num : _orderNum(order.id)).padStart(3,'0')}</b></div>
+    <div>Pedido: <b>#${order.id}</b></div>
     <div>Data: ${now}</div>
     <div>Cliente: ${order.client || '—'}</div>
     ${cfg.addr && order.addr ? `<div>Local: ${order.addr}</div>` : ''}
@@ -1898,7 +1898,7 @@ function _buildEscPos(order, cfg, cols = 32) {
     day:'2-digit', month:'2-digit', year:'numeric',
     hour:'2-digit', minute:'2-digit'
   });
-  push('Pedido: #' + String(order.num !== undefined ? order.num : _orderNum(order.id)).padStart(3,'0') + '\n');
+  push('Pedido: #' + order.id + '\n');
   push('Data: ' + now + '\n');
   push('Cliente: ' + (order.client || '—') + '\n');
   if (cfg.addr && order.addr) push('Local: ' + order.addr + '\n');
@@ -2215,6 +2215,7 @@ async function salvarConfigImpressao() {
       nome:       cfg.nome,
       sub:        cfg.sub,
       rodape:     cfg.rodape,
+      fontSize:   cfg.fontSize,
       paperWidth: fmt === '58mm' ? 58 : 80,
     }).catch(() => {})
   }
