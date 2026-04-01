@@ -498,6 +498,8 @@ function subscribeOrders() {
         if (_mapped.status === 'aguardando_pix') _mapped._pixPendente = true;
         ordersKanban.unshift(_mapped);
         if (p.new.id > _maxKnownOrderId) _maxKnownOrderId = p.new.id;
+        // Se foi criado pelo PDV local, não re-renderiza nem toca som
+        if (window._pdvCreatedIds && window._pdvCreatedIds.has(p.new.id)) { window._pdvCreatedIds.delete(p.new.id); return; }
         renderKanban();
         playOrderSound();
         const nc = document.getElementById('notif-count');
@@ -641,6 +643,8 @@ setInterval(async () => {
         for (const o of novos) {
           if (!ordersKanban.find(x => x.id === o.id)) {
             ordersKanban.unshift(mapOrder(o));
+            // Se foi criado pelo PDV local, não notifica
+            if (window._pdvCreatedIds && window._pdvCreatedIds.has(o.id)) { window._pdvCreatedIds.delete(o.id); if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id; continue; }
             houveMudanca = true;
             // Notifica como novo pedido
             playOrderSound();
