@@ -769,12 +769,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const inst        = cfg?.evo_instance || EVO_INST
     const ia          = cfg?.ia_config ? JSON.parse(cfg.ia_config) : {}
     if (!ia.ativo && !ia.resp_rastreio_manual) { send(res, 200, { ok: false, msg: 'IA inativa' }); return true }
-    const pedido      = db.prepare('SELECT id,status,items,total FROM orders WHERE id=? AND tenant_id=?').get(order_id, tenant_id)
+    const pedido      = db.prepare('SELECT id,status,items,total,taxa FROM orders WHERE id=? AND tenant_id=?').get(order_id, tenant_id)
     if (!pedido) { send(res, 400, { ok: false }); return true }
     const sl          = { analise: '⏳ aguardando confirmação', producao: '👨‍🍳 em preparo', pronto: '🛵 saindo para entrega', entregue: '✅ entregue', cancelado: '❌ cancelado' }
     const offset      = parseInt(cfg?.order_num_offset || 0) || 0
     const numPedido   = String(Math.max(1, pedido.id - offset)).padStart(3, '0')
-    const msg         = `🍽️ *${cfg?.store_name || 'Restaurante'}*\n\nOlá! Seu pedido *#${numPedido}* está:\n\n${sl[pedido.status] || pedido.status}\n\nTotal: R$ ${parseFloat(pedido.total).toFixed(2).replace('.', ',')}\n\nQualquer dúvida é só responder! 😊`
+    const totalComTaxa = (parseFloat(pedido.total||0) + parseFloat(pedido.taxa||0)).toFixed(2).replace('.', ',')
+    const msg         = `🍽️ *${cfg?.store_name || 'Restaurante'}*\n\nOlá! Seu pedido *#${numPedido}* está:\n\n${sl[pedido.status] || pedido.status}\n\nTotal: R$ ${totalComTaxa}\n\nQualquer dúvida é só responder! 😊`
     const r           = await sendWA(phone, msg, inst)
     send(res, r.ok ? 200 : 500, r)
     return true
