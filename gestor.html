@@ -2389,15 +2389,15 @@ Use no seu próximo pedido 🛍️</textarea>
         <div style="display:flex;flex-direction:column;gap:10px">
           <div>
             <label class="form-label">Nome do estabelecimento</label>
-            <input class="form-input" id="print-nome" value="ESTIMA FOOD" oninput="renderImpressao()">
+            <input class="form-input" id="print-nome" value="ESTIMA FOOD" oninput="renderImpressao(true)">
           </div>
           <div>
             <label class="form-label">Linha extra (site, telefone...)</label>
-            <input class="form-input" id="print-sub" value="estimafood.evocrm.sbs" oninput="renderImpressao()">
+            <input class="form-input" id="print-sub" value="estimafood.evocrm.sbs" oninput="renderImpressao(true)">
           </div>
           <div>
             <label class="form-label">Mensagem de rodapé</label>
-            <input class="form-input" id="print-rodape" value="Obrigado pela preferência! 🙏" oninput="renderImpressao()">
+            <input class="form-input" id="print-rodape" value="Obrigado pela preferência! 🙏" oninput="renderImpressao(true)">
           </div>
           <div>
             <label class="form-label" style="display:flex;align-items:center;justify-content:space-between">
@@ -2406,7 +2406,7 @@ Use no seu próximo pedido 🛍️</textarea>
             </label>
             <input type="range" id="print-font-size" min="10" max="22" step="1" value="12"
               style="width:100%;accent-color:var(--accent);margin-top:6px;cursor:pointer"
-              oninput="document.getElementById('print-font-size-val').textContent=this.value;renderImpressao()">
+              oninput="document.getElementById('print-font-size-val').textContent=this.value;renderImpressao(true)">
             <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-top:3px">
               <span>Menor</span><span>Maior</span>
             </div>
