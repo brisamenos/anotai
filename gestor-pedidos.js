@@ -364,13 +364,13 @@ function noFilterItems(q) {
     <div style="padding:8px 12px 4px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);background:var(--surface2);border-bottom:1px solid var(--border)">${cat}</div>
     ${its.map(item => {
       const price = parseFloat(item.price||0);
-      const priceStr = 'R$ ' + price.toFixed(2).replace('.',',') + (item.item_type==='kg'||item.itemType==='kg'?' <span style="font-size:10px;opacity:.7">/kg</span>':'');
-      const _allGrupos = (() => { try { return Array.isArray(item.custom_groups) ? item.custom_groups : JSON.parse(item.custom_groups||'[]') } catch { return [] } })();
+      const priceStr = 'R$ ' + price.toFixed(2).replace('.',',') + (item.itemType==='kg'?' <span style="font-size:10px;opacity:.7">/kg</span>':'');
+      const _allGrupos = (() => { try { return Array.isArray(item.customGroups) ? item.customGroups : JSON.parse(item.customGroups||'[]') } catch { return [] } })();
       const grupos = _allGrupos.filter(g => !['porcao_ref','kit_itens'].includes(g.tipo));
-      const temAdicionais = grupos.length > 0 || item.item_type==='kg' || item.itemType==='kg';
+      const temAdicionais = grupos.length > 0 || item.itemType==='kg';
       return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;active:background:var(--surface2)" onclick="noAddItem(${item.id})">
-        ${item.image_url
-          ? `<img src="${item.image_url}" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0">`
+        ${item.imageUrl
+          ? `<img src="${item.imageUrl}" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0">`
           : `<div style="width:44px;height:44px;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${item.emoji||'🍽️'}</div>`}
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.name}</div>
@@ -393,10 +393,10 @@ function noAddItem(itemId) {
   if (!item) return;
 
   // Se tem grupos de adicionais, abre modal de seleção
-  const grupos = (() => { try { return Array.isArray(item.custom_groups) ? item.custom_groups : JSON.parse(item.custom_groups||'[]') } catch { return [] } })()
+  const grupos = (() => { try { return Array.isArray(item.customGroups) ? item.customGroups : JSON.parse(item.customGroups||'[]') } catch { return [] } })()
     .filter(g => !['porcao_ref','kit_itens'].includes(g.tipo));
 
-  const isKg = item.item_type === 'kg' || item.itemType === 'kg';
+  const isKg = item.itemType === 'kg';
 
   if (grupos.length > 0 || isKg) {
     noAbrirModalAdicionais(item, grupos, isKg);
