@@ -709,13 +709,13 @@ async function createOrder() {
 
   if (oErr) { sbLoading(false); sbToast('err','Erro ao criar pedido'); console.error(oErr); return; }
 
-  // Marca o ID como criado pelo PDV para realtime e polling ignorarem
+  // Marca ID como criado pelo PDV — realtime e polling ignoram
   if (!window._pdvCreatedIds) window._pdvCreatedIds = new Set();
-  window._pdvCreatedIds.add(orderData.id);
-
-  // Atualiza _maxKnownOrderId e injeta no kanban ANTES do próximo await
-  if (orderData.id > (_maxKnownOrderId || 0)) _maxKnownOrderId = orderData.id;
+  window._pdvCreatedIds.add(Number(orderData.id));
+  // Atualiza _maxKnownOrderId e injeta no kanban
+  if (Number(orderData.id) > (_maxKnownOrderId || 0)) _maxKnownOrderId = Number(orderData.id);
   if (!ordersKanban.find(x => x.id === orderData.id)) ordersKanban.unshift(mapOrder(orderData));
+  renderKanban();
 
   try { await sb.from('movimentos').insert({
     description: `Pedido #${_orderNum(orderData.id)} – ${client}`,
