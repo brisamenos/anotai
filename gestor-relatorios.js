@@ -1709,7 +1709,7 @@ function _buildTicketHtml(order, cfg) {
     <div class="pt-center pt-large">${cfg.nome}</div>
     ${cfg.sub ? `<div class="pt-center" style="font-size:11px">${cfg.sub}</div>` : ''}
     <hr class="pt-hr">
-    <div>Pedido: <b>#${order.id}</b></div>
+    <div>Pedido: <b>#${String(order.num !== undefined ? order.num : _orderNum(order.id)).padStart(3,'0')}</b></div>
     <div>Data: ${now}</div>
     <div>Cliente: ${order.client || '—'}</div>
     ${cfg.addr && order.addr ? `<div>Local: ${order.addr}</div>` : ''}
