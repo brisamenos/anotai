@@ -53,6 +53,75 @@ function switchAuthTab(tab) {
   document.getElementById('auth-err').classList.remove('on');
 }
 
+// ── Busca CEP via ViaCEP ────────────────────────────
+function formatCEP(el) {
+  let v = el.value.replace(/\D/g, '').slice(0, 8);
+  if (v.length > 5) v = v.slice(0, 5) + '-' + v.slice(5);
+  el.value = v;
+}
+
+async function buscarCEP() {
+  const cepRaw = (document.getElementById('f-cep')?.value || '').replace(/\D/g, '');
+  const status = document.getElementById('cep-status');
+  const btn    = document.getElementById('cep-btn');
+  if (cepRaw.length !== 8) {
+    if (status) { status.textContent = '⚠️ CEP deve ter 8 dígitos'; status.style.color = 'var(--danger,#ef4444)'; }
+    return;
+  }
+  if (status) { status.textContent = '🔍 Buscando...'; status.style.color = 'var(--muted)'; }
+  if (btn) { btn.disabled = true; btn.style.opacity = '.5'; }
+  try {
+    const res = await fetch(`https://viacep.com.br/ws/${cepRaw}/json/`);
+    const data = await res.json();
+    if (data.erro) {
+      if (status) { status.textContent = '❌ CEP não encontrado'; status.style.color = 'var(--danger,#ef4444)'; }
+      return;
+    }
+    const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+    set('f-rua',    data.logradouro);
+    set('f-bairro', data.bairro);
+    set('f-compl',  data.complemento);
+    // Foca no campo número
+    const numEl = document.getElementById('f-num');
+    if (numEl) { numEl.value = ''; numEl.focus(); }
+    if (status) {
+      status.innerHTML = '✅ <strong>' + [data.logradouro, data.bairro, data.localidade + '-' + data.uf].filter(Boolean).join(', ') + '</strong>';
+      status.style.color = 'var(--success,#22c55e)';
+    }
+    // Recalcula taxa por bairro se aplicável
+    if (typeof feeConfig !== 'undefined' && feeConfig?.tipo === 'por_bairro' && typeof renderTotals === 'function') renderTotals();
+  } catch(e) {
+    if (status) { status.textContent = '❌ Erro na busca. Tente novamente.'; status.style.color = 'var(--danger,#ef4444)'; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+  }
+}
+
+async function buscarCEPRegistro() {
+  const cepRaw = (document.getElementById('reg-cep')?.value || '').replace(/\D/g, '');
+  const status = document.getElementById('reg-cep-status');
+  const addrEl = document.getElementById('reg-addr');
+  if (cepRaw.length !== 8) {
+    if (status) { status.textContent = '⚠️ CEP deve ter 8 dígitos'; status.style.color = 'var(--danger,#ef4444)'; }
+    return;
+  }
+  if (status) { status.textContent = '🔍 Buscando...'; status.style.color = 'var(--muted)'; }
+  try {
+    const res = await fetch(`https://viacep.com.br/ws/${cepRaw}/json/`);
+    const data = await res.json();
+    if (data.erro) {
+      if (status) { status.textContent = '❌ CEP não encontrado'; status.style.color = 'var(--danger,#ef4444)'; }
+      if (addrEl) addrEl.value = '';
+      return;
+    }
+    const addrStr = [data.logradouro, data.bairro, data.localidade + '-' + data.uf].filter(Boolean).join(', ');
+    if (addrEl) { addrEl.value = addrStr; addrEl.readOnly = false; }
+    if (status) { status.textContent = '✅ Endereço encontrado!'; status.style.color = 'var(--success,#22c55e)'; }
+  } catch(e) {
+    if (status) { status.textContent = '❌ Erro na busca'; status.style.color = 'var(--danger,#ef4444)'; }
+  }
+}
+
 async function doLogin() {
   const phone = document.getElementById('login-phone').value.trim();
   const senha = document.getElementById('login-senha').value;
@@ -95,6 +164,7 @@ async function doRegister() {
   const senha    = document.getElementById('reg-senha').value;
   const senha2   = document.getElementById('reg-senha2').value;
   const birthday = document.getElementById('reg-birthday').value;
+  const addr     = (document.getElementById('reg-addr')?.value || '').trim();
   const btn      = document.getElementById('register-btn');
   document.getElementById('auth-err').classList.remove('on');
   if (!name)           { showAuthErr('Informe seu nome'); return; }
@@ -108,7 +178,7 @@ async function doRegister() {
     const res = await fetch('/api/customer-register', {
       method:'POST',
       headers:{'Content-Type':'application/json','x-tenant-id':_tenantId},
-      body: JSON.stringify({ name, phone, email, senha, birthday })
+      body: JSON.stringify({ name, phone, email, senha, birthday, addr })
     });
     const data = await res.json();
     if (!res.ok) { showAuthErr(data.error||'Erro ao criar conta'); return; }
@@ -190,6 +260,7 @@ function loadSavedAddr() {
     const raw = localStorage.getItem(_addrStorageKey());
     if (raw) {
       const a = JSON.parse(raw);
+      set('f-cep',    a.cep);
       set('f-rua',    a.rua);
       set('f-num',    a.num);
       set('f-bairro', a.bairro);
@@ -222,7 +293,7 @@ function saveDeliveryAddr() {
     const g = id => (document.getElementById(id)?.value || '').trim();
     const rua = g('f-rua'); const num = g('f-num');
     if (!rua || !num) return;
-    const a = { rua, num, bairro: g('f-bairro'), compl: g('f-compl') };
+    const a = { rua, num, bairro: g('f-bairro'), compl: g('f-compl'), cep: g('f-cep') };
     // Salva estruturado no localStorage (chave por cliente se logado)
     localStorage.setItem(_addrStorageKey(), JSON.stringify(a));
     // Atualiza cache do cliente logado para cross-device via banco
