@@ -1898,7 +1898,7 @@ function _buildEscPos(order, cfg, cols = 32) {
     day:'2-digit', month:'2-digit', year:'numeric',
     hour:'2-digit', minute:'2-digit'
   });
-  push('Pedido: #' + order.id + '\n');
+  push('Pedido: #' + String(order.num !== undefined ? order.num : _orderNum(order.id)).padStart(3,'0') + '\n');
   push('Data: ' + now + '\n');
   push('Cliente: ' + (order.client || '—') + '\n');
   if (cfg.addr && order.addr) push('Local: ' + order.addr + '\n');
