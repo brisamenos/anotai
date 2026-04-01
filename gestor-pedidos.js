@@ -105,7 +105,7 @@ function renderKanban(){
     } else {
       col.innerHTML=filtered.map(o=>{
         const itemStr=o.items.map(i=>i.qty+'x '+i.name).join(', ');
-        const total='R$ '+(o.total+o.taxa).toFixed(2).replace('.',',');
+        const total='R$ '+parseFloat(o.total||0).toFixed(2).replace('.',',');
 
         // ── Tipo de entrega ──────────────────────────────
         const isMesa     = !!(o.mesa_num||(o.addr&&o.addr.includes('Mesa')));
@@ -241,7 +241,7 @@ function openOrderDetail(id) {
   // Totais
   const fmt = v => 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ',');
   document.getElementById('od-subtotal').textContent = fmt(o.total);
-  document.getElementById('od-total').textContent    = fmt(o.total + o.taxa);
+  document.getElementById('od-total').textContent    = fmt(o.total);
 
   const taxaRow = document.getElementById('od-taxa-row');
   if (taxaRow) {
