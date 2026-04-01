@@ -352,21 +352,73 @@ async function deleteIngrediente() {
 // DESEMPENHO
 // ─────────────────────────────────────────
 let _desempPrd = 'mensal';
+let _desempCustomStart = null;
+let _desempCustomEnd = null;
 
 function setDesempPrd(prd) {
   _desempPrd = prd;
-  ['diario','semanal','mensal','anual'].forEach(id => {
+  _desempCustomStart = null;
+  _desempCustomEnd = null;
+  // Hide custom range panel
+  const panel = document.getElementById('desemp-custom-range');
+  if (panel) panel.style.display = 'none';
+  _updateDesempButtons();
+  renderDesempenho();
+}
+
+function _updateDesempButtons() {
+  ['diario','semanal','mensal','anual','custom'].forEach(id => {
     const btn = document.getElementById('dpb-' + id);
     if (!btn) return;
-    const active = id === prd;
-    btn.style.background  = active ? 'var(--accent)' : '';
-    btn.style.color       = active ? '#fff' : '';
-    btn.style.borderColor = active ? 'var(--accent)' : '';
+    const active = id === _desempPrd || (id === 'custom' && _desempPrd === 'custom');
+    btn.classList.remove('bp', 'bg');
+    btn.classList.add(active ? 'bp' : 'bg');
   });
+}
+
+function toggleDesempCustom() {
+  const panel = document.getElementById('desemp-custom-range');
+  if (!panel) return;
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) {
+    // Pre-fill with current month if empty
+    const startEl = document.getElementById('desemp-date-start');
+    const endEl   = document.getElementById('desemp-date-end');
+    if (startEl && !startEl.value) {
+      const now = new Date();
+      startEl.value = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      endEl.value   = now.toISOString().split('T')[0];
+    }
+  }
+}
+
+function applyDesempCustomRange() {
+  const startEl = document.getElementById('desemp-date-start');
+  const endEl   = document.getElementById('desemp-date-end');
+  if (!startEl?.value || !endEl?.value) {
+    if (typeof sbToast === 'function') sbToast('err', 'Selecione as datas de início e fim');
+    return;
+  }
+  _desempCustomStart = new Date(startEl.value + 'T00:00:00');
+  _desempCustomEnd   = new Date(endEl.value + 'T23:59:59.999');
+  if (_desempCustomEnd < _desempCustomStart) {
+    if (typeof sbToast === 'function') sbToast('err', 'A data final deve ser maior que a inicial');
+    return;
+  }
+  _desempPrd = 'custom';
+  _updateDesempButtons();
   renderDesempenho();
 }
 
 function _desempGetRange() {
+  if (_desempPrd === 'custom' && _desempCustomStart && _desempCustomEnd) {
+    const inicio = _desempCustomStart;
+    const fim    = new Date(_desempCustomEnd.getTime() + 1);
+    const label  = inicio.toLocaleDateString('pt-BR', { day:'2-digit', month:'short' })
+                 + ' – ' + _desempCustomEnd.toLocaleDateString('pt-BR', { day:'2-digit', month:'short', year:'numeric' });
+    return { inicio, fim, label };
+  }
   // Reutiliza a mesma logica de _relGetRange mas com _desempPrd
   const saved = _relPeriodo;
   _relPeriodo = _desempPrd;
@@ -416,20 +468,58 @@ async function renderDesempenho() {
       return s + o.items.reduce((si,i) => si + (i.qty||1), 0);
     }, 0);
 
+    const _svgIcons = {
+      faturamento: `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 4v8M5.5 6.5A2 1.5 0 0 1 8 5a2 1.5 0 0 1 0 3 2 1.5 0 0 0 0 3 2 1.5 0 0 0 2.5-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+      pedidos: `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M5 2h6v6a3 3 0 0 1-6 0V2z" stroke="currentColor" stroke-width="1.4"/><path d="M2 2h3M11 2h3M2 5H5M11 5h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 8v4M5.5 14h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+      ticket: `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M8 2v3M8 11v3M2 8h3M11 8h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M4.5 4.5l2 2M9.5 9.5l2 2M4.5 11.5l2-2M9.5 6.5l2-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+      mesas: `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="2" rx="1" fill="currentColor"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+      itens: `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M2 5l6-3 6 3v6l-6 3-6-3V5z" stroke="currentColor" stroke-width="1.4"/><path d="M8 2v12M2 5l6 3 6-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+      cancelamentos: `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`
+    };
+
+    const _gradients = {
+      faturamento: 'linear-gradient(135deg,rgba(245,158,11,.18),rgba(245,158,11,.06))',
+      pedidos: 'linear-gradient(135deg,rgba(59,130,246,.18),rgba(59,130,246,.06))',
+      ticket: 'linear-gradient(135deg,rgba(139,92,246,.18),rgba(139,92,246,.06))',
+      mesas: 'linear-gradient(135deg,rgba(34,197,94,.18),rgba(34,197,94,.06))',
+      itens: 'linear-gradient(135deg,rgba(249,115,22,.18),rgba(249,115,22,.06))',
+      cancelamentos: 'linear-gradient(135deg,rgba(239,68,68,.18),rgba(239,68,68,.06))'
+    };
+
+    const _iconBgs = {
+      faturamento: 'rgba(245,158,11,.2)',
+      pedidos: 'rgba(59,130,246,.2)',
+      ticket: 'rgba(139,92,246,.2)',
+      mesas: 'rgba(34,197,94,.2)',
+      itens: 'rgba(249,115,22,.2)',
+      cancelamentos: 'rgba(239,68,68,.2)'
+    };
+
+    const _borders = {
+      faturamento: 'rgba(245,158,11,.25)',
+      pedidos: 'rgba(59,130,246,.25)',
+      ticket: 'rgba(139,92,246,.25)',
+      mesas: 'rgba(34,197,94,.25)',
+      itens: 'rgba(249,115,22,.25)',
+      cancelamentos: 'rgba(239,68,68,.25)'
+    };
+
     const metrics = [
-      { label:'Faturamento', val: 'R$ ' + faturamento.toFixed(2).replace('.',','), icon:'currency', color:'var(--accent3)' },
-      { label:'Total de pedidos', val: totalPedidos, icon:'bell', color:'var(--accent)' },
-      { label:'Ticket médio', val: 'R$ ' + ticketMedio.toFixed(2).replace('.',','), icon:'target', color:'var(--purple)' },
-      { label:'Mesas atendidas', val: mesasSet.size, icon:'plate', color:'var(--success)' },
-      { label:'Itens vendidos', val: itensQtd, icon:'box', color:'var(--accent2)' },
-      { label:'Cancelamentos', val: cancelados + (taxaCancelamento > 0 ? ` (${taxaCancelamento.toFixed(1)}%)` : ''), icon:'cancel', color: cancelados > 0 ? 'var(--danger)' : 'var(--muted)' },
+      { key:'faturamento', label:'Faturamento', val: 'R$ ' + faturamento.toFixed(2).replace('.',','), color:'var(--accent3)' },
+      { key:'pedidos', label:'Total de pedidos', val: totalPedidos, color:'var(--accent)' },
+      { key:'ticket', label:'Ticket médio', val: 'R$ ' + ticketMedio.toFixed(2).replace('.',','), color:'var(--purple)' },
+      { key:'mesas', label:'Mesas atendidas', val: mesasSet.size, color:'var(--success)' },
+      { key:'itens', label:'Itens vendidos', val: itensQtd, color:'var(--accent2,var(--accent))' },
+      { key:'cancelamentos', label:'Cancelamentos', val: cancelados + (taxaCancelamento > 0 ? ` (${taxaCancelamento.toFixed(1)}%)` : ''), color: cancelados > 0 ? 'var(--danger)' : 'var(--muted)' },
     ];
 
     if (dg) dg.innerHTML = metrics.map(m => `
-      <div class="desemp-card">
-        <div style="font-size:24px;margin-bottom:4px">${m.icon}</div>
-        <div class="desemp-label">${m.label}</div>
-        <div class="desemp-val" style="font-size:22px;color:${m.color}">${m.val}</div>
+      <div class="desemp-card" style="background:${_gradients[m.key]};border-color:${_borders[m.key]};--dc:${m.color}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
+          <div class="desemp-label">${m.label}</div>
+          <div style="width:36px;height:36px;border-radius:10px;background:${_iconBgs[m.key]};display:flex;align-items:center;justify-content:center;color:${m.color};flex-shrink:0">${_svgIcons[m.key]}</div>
+        </div>
+        <div class="desemp-val" style="font-size:24px;color:${m.color}">${m.val}</div>
       </div>`).join('');
 
     // ── Grafico dinamico por periodo ────────
@@ -449,6 +539,10 @@ async function renderDesempenho() {
           barData[w]++;
         });
       } else if (_desempPrd === 'semanal') {
+        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por dia da semana');
+        barData = [0,0,0,0,0,0,0]; barLabels = DAYS_FULL;
+        orders.forEach(o => { barData[new Date(o.created_at).getDay()]++; });
+      } else if (_desempPrd === 'custom') {
         if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por dia da semana');
         barData = [0,0,0,0,0,0,0]; barLabels = DAYS_FULL;
         orders.forEach(o => { barData[new Date(o.created_at).getDay()]++; });
