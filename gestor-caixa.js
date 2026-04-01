@@ -567,8 +567,8 @@ function _pdvbAbrirModalItem(it, grupos, isKg) {
     <div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:520px;max-height:88vh;overflow-y:auto;padding:20px 20px 32px;box-shadow:0 -8px 40px rgba(0,0,0,.3)">
       <div style="width:40px;height:4px;background:var(--border);border-radius:99px;margin:0 auto 18px"></div>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-        ${it.image_url
-          ? `<img src="${it.image_url}" style="width:60px;height:60px;border-radius:12px;object-fit:cover;flex-shrink:0">`
+        ${it.imageUrl
+          ? `<img src="${it.imageUrl}" style="width:60px;height:60px;border-radius:12px;object-fit:cover;flex-shrink:0">`
           : `<div style="width:60px;height:60px;border-radius:12px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">${it.emoji||'🍽️'}</div>`}
         <div>
           <div style="font-size:16px;font-weight:800">${it.name}</div>
