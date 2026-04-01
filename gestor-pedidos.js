@@ -706,14 +706,17 @@ async function createOrder() {
 
   if (oErr) { sbLoading(false); sbToast('err','Erro ao criar pedido'); console.error(oErr); return; }
 
+  // Atualiza _maxKnownOrderId e injeta no kanban ANTES do próximo await
+  // para fechar a janela de race condition com o polling de 5s
+  if (orderData.id > (_maxKnownOrderId || 0)) _maxKnownOrderId = orderData.id;
+  if (!ordersKanban.find(x => x.id === orderData.id)) ordersKanban.unshift(mapOrder(orderData));
+
   await sb.from('movimentos').insert({
     description: `Pedido #${_orderNum(orderData.id)} – ${client}`,
     tipo: 'entrada', val: tot, pag, time
   }).catch(() => {});
 
   sbLoading(false);
-  ordersKanban.unshift(mapOrder(orderData));
-  if (orderData.id > (_maxKnownOrderId || 0)) _maxKnownOrderId = orderData.id;
   movimentos.push({ id: Date.now(), desc: `Pedido #${orderData.id} – ${client}`, tipo:'entrada', val:tot, pag, time });
 
   playOrderSound();
