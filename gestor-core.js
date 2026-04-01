@@ -651,8 +651,8 @@ setInterval(async () => {
             const nc = document.getElementById('notif-count');
             if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
             const items = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
-            showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${o.num} — ${o.client}`);
-            sendBrowserNotif(`Novo pedido #${o.num}`, `${o.client} — ${items}`);
+            showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${_orderNum(o.id)} — ${o.client}`);
+            sendBrowserNotif(`Novo pedido #${_orderNum(o.id)}`, `${o.client} — ${items}`);
             if (_autoAcceptOn && o.status === 'analise') setTimeout(() => advanceOrderById(o.id), 800);
             if ((window._printMode || _printMode) === 'auto') printOrder(mapOrder(o));
             // Atualiza cache mesa se for pedido de mesa
