@@ -375,8 +375,10 @@ function changeQty(idx,delta){
 function clearCart(){cartItems=[];renderCart();const c=document.getElementById('pdv-client'),p=document.getElementById('pdv-phone');if(c)c.value='';if(p)p.value='';}
 
 async function finalizeSale() {
+  if (window._pdvFinalizando) return;
+  window._pdvFinalizando = true;
   const _ICON_WRN = _ICON_ERR;
-  if (cartItems.length === 0) { sbToast('err','Carrinho vazio!'); return; }
+  if (cartItems.length === 0) { window._pdvFinalizando = false; sbToast('err','Carrinho vazio!'); return; }
   const tot  = cartItems.reduce((s,i) => s+parseFloat((i.price*i.qty).toFixed(2)), 0);
   const pay  = document.getElementById('pay-method').value;
   const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -387,15 +389,19 @@ async function finalizeSale() {
     const resumo = cartItems.map(i=>i.isKg?`${i._pesoLabel} ${i.name}`:`${i.qty}x ${i.name}`).join(', ');
     descricao = `Atendimento – ${resumo.slice(0,80)}${resumo.length>80?'…':''}`;
   }
-  const { data, error } = await sb.from('movimentos').insert({
-    description: descricao, tipo:'entrada', val:parseFloat(tot.toFixed(2)), pag:pay, time
-  }).select().single();
-  if (!error && data) movimentos.push({
-    id:data.id, desc:descricao, tipo:'entrada', val:parseFloat(tot.toFixed(2)), pag:pay, time
-  });
-  playOrderSound();
-  sbToast('ok',`Venda R$${tot.toFixed(2).replace('.',',')} finalizada!`);
-  cartItems = []; renderCart();
+  try {
+    const { data, error } = await sb.from('movimentos').insert({
+      description: descricao, tipo:'entrada', val:parseFloat(tot.toFixed(2)), pag:pay, time
+    }).select().single();
+    if (!error && data) movimentos.push({
+      id:data.id, desc:descricao, tipo:'entrada', val:parseFloat(tot.toFixed(2)), pag:pay, time
+    });
+    playOrderSound();
+    sbToast('ok',`Venda R$${tot.toFixed(2).replace('.',',')} finalizada!`);
+    cartItems = []; renderCart();
+  } finally {
+    window._pdvFinalizando = false;
+  }
 }
 
 // ─────────────────────────────────────────
