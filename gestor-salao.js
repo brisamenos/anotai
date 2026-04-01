@@ -40,7 +40,7 @@ function addToCart(id){
 
   // Verifica grupos de adicionais (igual ao cardápio público)
   const grupos = (()=>{ try{ return Array.isArray(it.custom_groups)?it.custom_groups:JSON.parse(it.custom_groups||'[]') }catch{ return [] } })()
-    .filter(g => !['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'].includes(g.tipo));
+    .filter(g => !['porcao_ref','kit_itens'].includes(g.tipo));
   const isKg = it.itemType === 'kg' || it.item_type === 'kg';
 
   if (grupos.length > 0 || isKg) {
@@ -61,20 +61,34 @@ function _pdvAbrirModalItem(it, grupos, isKg) {
 
   const gruposHtml = grupos.map((g, gi) => {
     const opcoes = g.opcoes || g.valores || [];
-    const isMulti = g.tipo === 'opcional' || g.tipo === 'adicionais';
-    const isReq   = g.tipo === 'obrigatorio' || g.tipo === 'sabor';
+    if (!opcoes.length) return '';
+    const tipo = g.tipo || 'opcional';
+    const isSingle = ['radio','cortes','preparos','ocasiao','armazenamento','pesos','obrigatorio','sabor'].includes(tipo);
+    const isMulti  = !isSingle; // checkbox, opcional, adicionais, checklist
+    const isReq   = ['obrigatorio','sabor','cortes'].includes(tipo);
+
+    const _TIPO_LABEL = {
+      cortes:'Corte', preparos:'Preparo', ocasiao:'Ocasião',
+      armazenamento:'Armazenamento', pesos:'Porção / Peso',
+      checklist:'Complementos', radio:'Escolha', checkbox:'Adicional',
+      opcional:'Adicional', adicionais:'Adicional',
+      obrigatorio:'Escolha obrigatória', sabor:'Sabor',
+    };
+    const label = g.nome || g.name || _TIPO_LABEL[tipo] || 'Adicional';
+
     return `<div style="margin-bottom:16px">
       <div style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px">
-        ${g.nome||g.name||'Adicional'}${isReq?' <span style="color:var(--danger);font-size:10px">*obrigatório</span>':''}
+        ${label}${isReq?' <span style="color:var(--danger);font-size:10px">*obrigatório</span>':''}
       </div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${opcoes.map((op,oi)=>{
-          const nome  = op.nome||op.name||op;
+          const nome  = op.nome||op.name||(typeof op==='string'?op:'');
           const preco = parseFloat(op.preco||op.price||0);
+          const icon  = op.icon?`<span style="font-size:16px">${op.icon}</span>`:'';
           const pLabel = preco>0?` <span style="color:var(--success);font-size:11px">+R$ ${preco.toFixed(2).replace('.',',')}</span>`:'';
           return `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:9px;cursor:pointer" onclick="pdvToggleOpc(this)">
             <input type="${isMulti?'checkbox':'radio'}" name="pdv-grp-${gi}" data-grp="${gi}" data-nome="${(nome+'').replace(/"/g,'&quot;')}" data-preco="${preco}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
-            <span style="font-size:13px;font-weight:500;flex:1">${nome}${pLabel}</span>
+            ${icon}<span style="font-size:13px;font-weight:500;flex:1">${nome}${pLabel}</span>
           </label>`;
         }).join('')}
       </div>
