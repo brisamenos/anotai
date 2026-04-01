@@ -163,8 +163,19 @@ function mapItem(i) {
   };
 }
 
+// Converte timestamp UTC (do Supabase) para horário de Brasília formatado (HH:MM)
+function _formatTimeBR(ts) {
+  if (!ts) return '';
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return ts;
+    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+  } catch(e) { return ts; }
+}
+
 function mapOrder(o) {
   const pixPendente = o.status === 'aguardando_pix' && o.pag === 'pix_manual';
+  const rawTime = o.created_at || o.time || '';
   return {
     id: o.id,
     num: _orderNum(o.id),
@@ -176,7 +187,7 @@ function mapOrder(o) {
     status: pixPendente ? 'analise' : (o.status || 'analise'),
     _pixPendente: pixPendente,
     _statusReal: o.status || 'analise',
-    time: o.created_at || o.time || '',
+    time: _formatTimeBR(rawTime),
     created_at: o.created_at || '',
     addr: o.addr || '',
     pag: o.pag || '',
