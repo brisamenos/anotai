@@ -713,6 +713,7 @@ async function createOrder() {
 
   sbLoading(false);
   ordersKanban.unshift(mapOrder(orderData));
+  if (orderData.id > (_maxKnownOrderId || 0)) _maxKnownOrderId = orderData.id;
   movimentos.push({ id: Date.now(), desc: `Pedido #${orderData.id} – ${client}`, tipo:'entrada', val:tot, pag, time });
 
   playOrderSound();
