@@ -141,7 +141,7 @@ function addToCart(id){
   if (it.itemType === 'pizza') { window._pdvPizzaSource = 'pdv'; openPDVPizza(id); return; }
 
   // Verifica grupos de adicionais (igual ao cardápio público)
-  const grupos = (()=>{ try{ return Array.isArray(it.custom_groups)?it.custom_groups:JSON.parse(it.custom_groups||'[]') }catch{ return [] } })()
+  const grupos = (()=>{ try{ return Array.isArray(it.customGroups)?it.customGroups:JSON.parse(it.customGroups||'[]') }catch{ return [] } })()
     .filter(g => !['porcao_ref','kit_itens'].includes(g.tipo));
   const isKg = it.itemType === 'kg' || it.item_type === 'kg';
 
@@ -217,8 +217,8 @@ function _pdvAbrirModalItem(it, grupos, isKg) {
       <div style="width:40px;height:4px;background:var(--border);border-radius:99px;margin:0 auto 18px"></div>
       <!-- Header do produto -->
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-        ${it.image_url
-          ? `<img src="${it.image_url}" style="width:60px;height:60px;border-radius:12px;object-fit:cover;flex-shrink:0">`
+        ${it.imageUrl
+          ? `<img src="${it.imageUrl}" style="width:60px;height:60px;border-radius:12px;object-fit:cover;flex-shrink:0">`
           : `<div style="width:60px;height:60px;border-radius:12px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">${it.emoji||'🍽️'}</div>`}
         <div>
           <div style="font-size:16px;font-weight:800">${it.name}</div>
