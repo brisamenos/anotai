@@ -105,7 +105,7 @@ function renderKanban(){
     } else {
       col.innerHTML=filtered.map(o=>{
         const itemStr=o.items.map(i=>i.qty+'x '+i.name).join(', ');
-        const total='R$ '+(o.total).toFixed(2).replace('.',',');
+        const total='R$ '+(o.total+o.taxa).toFixed(2).replace('.',',');
 
         // ── Tipo de entrega ──────────────────────────────
         const isMesa     = !!(o.mesa_num||(o.addr&&o.addr.includes('Mesa')));
@@ -240,8 +240,8 @@ function openOrderDetail(id) {
 
   // Totais
   const fmt = v => 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ',');
-  document.getElementById('od-subtotal').textContent = fmt(o.total - (o.taxa || 0));
-  document.getElementById('od-total').textContent    = fmt(o.total);
+  document.getElementById('od-subtotal').textContent = fmt(o.total);
+  document.getElementById('od-total').textContent    = fmt(o.total + o.taxa);
 
   const taxaRow = document.getElementById('od-taxa-row');
   if (taxaRow) {
@@ -365,8 +365,8 @@ function noFilterItems(q) {
     ${its.map(item => {
       const price = parseFloat(item.price||0);
       const priceStr = 'R$ ' + price.toFixed(2).replace('.',',') + (item.item_type==='kg'||item.itemType==='kg'?' <span style="font-size:10px;opacity:.7">/kg</span>':'');
-      const grupos = (() => { try { return Array.isArray(item.custom_groups) ? item.custom_groups : JSON.parse(item.custom_groups||'[]') } catch { return [] } })()
-        .filter(g => !['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'].includes(g.tipo));
+      const _allGrupos = (() => { try { return Array.isArray(item.custom_groups) ? item.custom_groups : JSON.parse(item.custom_groups||'[]') } catch { return [] } })();
+      const grupos = _allGrupos.filter(g => !['porcao_ref','kit_itens'].includes(g.tipo));
       const temAdicionais = grupos.length > 0 || item.item_type==='kg' || item.itemType==='kg';
       return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;active:background:var(--surface2)" onclick="noAddItem(${item.id})">
         ${item.image_url
@@ -394,7 +394,7 @@ function noAddItem(itemId) {
 
   // Se tem grupos de adicionais, abre modal de seleção
   const grupos = (() => { try { return Array.isArray(item.custom_groups) ? item.custom_groups : JSON.parse(item.custom_groups||'[]') } catch { return [] } })()
-    .filter(g => !['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'].includes(g.tipo));
+    .filter(g => !['porcao_ref','kit_itens'].includes(g.tipo));
 
   const isKg = item.item_type === 'kg' || item.itemType === 'kg';
 
@@ -421,26 +421,41 @@ function noAbrirModalAdicionais(item, grupos, isKg) {
   document.getElementById('modal-no-adicionais-bg')?.remove();
 
   const priceStr = parseFloat(item.price||0).toFixed(2).replace('.',',');
+
+  // Rótulos amigáveis para grupos especiais do açougue/açaí
+  const _TIPO_LABEL = {
+    cortes: 'Corte', preparos: 'Preparo', ocasiao: 'Ocasião',
+    armazenamento: 'Armazenamento', pesos: 'Porção / Peso',
+    checklist: 'Complementos', radio: 'Escolha', checkbox: 'Adicional',
+    opcional: 'Adicional', adicionais: 'Adicional',
+    obrigatorio: 'Escolha obrigatória', sabor: 'Sabor',
+  };
+
   const gruposHtml = grupos.map((g, gi) => {
     const opcoes = g.opcoes || g.valores || [];
+    if (!opcoes.length) return '';
     const tipo = g.tipo || 'opcional';
-    const isMulti = tipo === 'opcional' || tipo === 'adicionais';
-    const isRequired = tipo === 'obrigatorio' || tipo === 'sabor';
+    // Grupos de seleção única: radio, cortes, preparos, ocasiao, armazenamento, pesos, obrigatorio, sabor
+    const isSingle = ['radio','cortes','preparos','ocasiao','armazenamento','pesos','obrigatorio','sabor'].includes(tipo);
+    const isMulti  = !isSingle; // checkbox, opcional, adicionais, checklist
+    const isRequired = ['obrigatorio','sabor','cortes'].includes(tipo);
+    const inputType = isSingle ? 'radio' : 'checkbox';
+    const label = g.nome || g.name || _TIPO_LABEL[tipo] || 'Adicional';
     return `
     <div style="margin-bottom:16px">
       <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px">
-        ${g.nome || g.name || 'Adicional'}
+        ${label}
         ${isRequired ? '<span style="color:var(--danger);font-size:10px;margin-left:4px">*obrigatório</span>' : ''}
       </div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${opcoes.map((op, oi) => {
-          const nome = op.nome || op.name || op;
+          const nome = op.nome || op.name || (typeof op === 'string' ? op : '');
           const preco = parseFloat(op.preco || op.price || 0);
+          const icon = op.icon ? `<span style="font-size:16px">${op.icon}</span>` : '';
           const precoLabel = preco > 0 ? ` <span style="color:var(--success);font-size:11px">+R$ ${preco.toFixed(2).replace('.',',')}</span>` : '';
-          const inputType = isMulti ? 'checkbox' : 'radio';
           return `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;cursor:pointer" onclick="noToggleOpc(this)">
             <input type="${inputType}" name="no-grp-${gi}" value="${oi}" data-grp="${gi}" data-idx="${oi}" data-nome="${nome.replace(/"/g,'&quot;')}" data-preco="${preco}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
-            <span style="font-size:13px;font-weight:500;flex:1">${nome}${precoLabel}</span>
+            ${icon}<span style="font-size:13px;font-weight:500;flex:1">${nome}${precoLabel}</span>
           </label>`;
         }).join('')}
       </div>
@@ -672,7 +687,7 @@ async function createOrder() {
     client, phone, addr,
     items: itemsArr,
     total: tot,
-    taxa: 0,
+    taxa: _noDelivery === 'delivery' ? 5 : 0,
     mesa_num: mesaNum,
     status: 'analise',
     time, pag
