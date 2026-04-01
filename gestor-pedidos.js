@@ -670,6 +670,8 @@ function noOpenModal() {
 }
 
 async function createOrder() {
+  if (window._createOrderEnviando) return;
+  window._createOrderEnviando = true;
   const client = document.getElementById('order-client').value.trim() || 'Cliente';
   const phone  = document.getElementById('order-phone').value.trim()  || '';
   const obs    = document.getElementById('order-obs').value.trim()    || '';
@@ -687,12 +689,13 @@ async function createOrder() {
     addr = 'Retirada no balcão';
   }
 
-  if (!_noCart.length) { sbToast('err','Adicione pelo menos um produto'); return; }
+  if (!_noCart.length) { window._createOrderEnviando = false; sbToast('err','Adicione pelo menos um produto'); return; }
 
   const itemsArr = _noCart.map(c => ({ qty: c.qty, name: c.name, price: c.price, obs: '' }));
   if (obs) itemsArr[itemsArr.length - 1].obs = obs;
   const tot = _noCart.reduce((s,c) => s + c.price * c.qty, 0);
 
+  try {
   sbLoading(true);
   const { data: orderData, error: oErr } = await sb.from('orders').insert({
     client, phone, addr,
@@ -725,6 +728,9 @@ async function createOrder() {
   closeModal('modal-new-order');
   nav('pedidos');
   sbToast('ok', `Pedido #${_orderNum(orderData.id)} criado`);
+  } finally {
+    window._createOrderEnviando = false;
+  }
 }
 
 function printOrderDetail() {

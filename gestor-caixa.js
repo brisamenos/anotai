@@ -169,6 +169,7 @@ let pdvPz = { item: null, slices: 1, selected: [], activeSlot: -1 };
 function openPDVPizza(itemId) {
   const it = items.find(i => i.id === itemId);
   if (!it) return;
+  if (!window._pdvPizzaSource) window._pdvPizzaSource = 'pdv';
   pdvPz = { item: it, slices: 1, selected: [null], activeSlot: -1 };
   document.getElementById('pdv-pz-name').textContent = it.name;
   document.querySelectorAll('#pdv-pz-size-tabs .pz-size-tab').forEach((b,i) => b.classList.toggle('on', i===0));
@@ -275,8 +276,15 @@ function pdvConfirmPizza() {
   if (!pdvPz.selected.every(Boolean)) return;
   const maxP  = Math.max(...pdvPz.selected.map(f => f.price));
   const names = pdvPz.selected.map(f => f.name).join(' + ');
-  cartItems.push({ id: Date.now(), name: '🍕 '+names, price: maxP, qty: 1, emoji: '🍕', _isPizza: true });
-  renderCart();
+  const pizzaItem = { id: Date.now(), name: '🍕 '+names, price: maxP, qty: 1, emoji: '🍕', _isPizza: true };
+  if (window._pdvPizzaSource === 'balcao') {
+    pdvbCart.push(pizzaItem);
+    pdvbRenderOrder();
+  } else {
+    cartItems.push(pizzaItem);
+    renderCart();
+  }
+  window._pdvPizzaSource = null;
   showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>', 'Pizza adicionada!');
   closePDVPizza();
 }
@@ -484,7 +492,7 @@ function pdvbRenderGrid(){
 }
 function pdvbAddItem(id){
   const it=items.find(i=>i.id===id);if(!it)return;
-  if(it.itemType==='pizza'){openPDVPizza(id);return;}
+  if(it.itemType==='pizza'){window._pdvPizzaSource='balcao';openPDVPizza(id);return;}
 
   // Verifica grupos de adicionais (açougue, açaí, etc.)
   const grupos = (()=>{ try{ return Array.isArray(it.custom_groups)?it.custom_groups:JSON.parse(it.custom_groups||'[]') }catch{ return [] } })()

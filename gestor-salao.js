@@ -138,7 +138,7 @@ function renderPDV(){
 function addToCart(id){
   const it = items.find(i => i.id === id);
   if (!it) return;
-  if (it.itemType === 'pizza') { openPDVPizza(id); return; }
+  if (it.itemType === 'pizza') { window._pdvPizzaSource = 'pdv'; openPDVPizza(id); return; }
 
   // Verifica grupos de adicionais (igual ao cardápio público)
   const grupos = (()=>{ try{ return Array.isArray(it.custom_groups)?it.custom_groups:JSON.parse(it.custom_groups||'[]') }catch{ return [] } })()
