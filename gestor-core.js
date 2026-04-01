@@ -498,7 +498,6 @@ function subscribeOrders() {
         if (_mapped.status === 'aguardando_pix') _mapped._pixPendente = true;
         ordersKanban.unshift(_mapped);
         if (p.new.id > _maxKnownOrderId) _maxKnownOrderId = p.new.id;
-        // Pedido criado pelo próprio PDV — não duplica
         if (window._pdvCreatedIds && window._pdvCreatedIds.has(Number(p.new.id))) { window._pdvCreatedIds.delete(Number(p.new.id)); renderKanban(); return; }
         renderKanban();
         playOrderSound();
@@ -642,7 +641,6 @@ setInterval(async () => {
         let houveMudanca = false;
         for (const o of novos) {
           if (!ordersKanban.find(x => x.id === o.id)) {
-            // Pedido criado pelo próprio PDV — não duplica nem notifica
             if (window._pdvCreatedIds && window._pdvCreatedIds.has(Number(o.id))) { window._pdvCreatedIds.delete(Number(o.id)); ordersKanban.unshift(mapOrder(o)); if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id; continue; }
             ordersKanban.unshift(mapOrder(o));
             houveMudanca = true;
@@ -1245,17 +1243,19 @@ async function clienteAceitouAjuste() {
       return { ...item, price: proposta.novoVal, obs: novaObs };
     });
 
-    // Recalcula total corretamente (price já é o valor total do item, qty geralmente 1 para kg)
-    const novoTotal = novosItens.reduce((s, i) => s + parseFloat(i.price || 0) * (i.qty || 1), 0);
+    // Recalcula total dos itens + mantém taxa de entrega original
+    const totalItens = novosItens.reduce((s, i) => s + parseFloat(i.price || 0) * (i.qty || 1), 0);
+    const taxaOriginal = parseFloat(o.taxa || 0);
+    const novoTotal = totalItens + taxaOriginal;
 
     const r = await fetch(`/api/orders?id=eq.${_respostaWAOrderId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': _sessao?.tenant_id },
-      body: JSON.stringify({ items: novosItens, total: novoTotal })
+      body: JSON.stringify({ items: novosItens, total: totalItens })
     });
     if (!r.ok) throw new Error('Erro ao atualizar pedido');
 
-    ordersKanban[idx] = { ...o, items: novosItens, total: novoTotal, _waResposta: false, _waRespostaTxt: null, _ajustePendente: null };
+    ordersKanban[idx] = { ...o, items: novosItens, total: totalItens, _waResposta: false, _waRespostaTxt: null, _ajustePendente: null };
     sbToast('ok', `Pedido #${_orderNum(_respostaWAOrderId)} atualizado! Novo total: R$ ${novoTotal.toFixed(2).replace('.',',')}`);
     fecharRespostaWA(); renderKanban();
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
