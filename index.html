@@ -2516,6 +2516,19 @@ input,textarea{font-family:inherit}
             <button onclick="clearSavedAddr()" style="background:none;border:none;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;white-space:nowrap;padding:2px 0">Alterar</button>
           </div>
 
+          <div style="display:flex;gap:8px;margin-bottom:0;align-items:flex-end">
+            <div style="flex:1;position:relative">
+              <input class="form-input" id="f-cep" placeholder="CEP" maxlength="9" inputmode="numeric"
+                oninput="formatCEP(this);if(this.value.length>=9)buscarCEP()"
+                style="margin-bottom:0">
+            </div>
+            <button onclick="buscarCEP()" id="cep-btn" style="height:42px;padding:0 14px;border:1.5px solid var(--accent);background:rgba(var(--accent-rgb,249,115,22),.08);color:var(--accent);border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;display:flex;align-items:center;gap:5px;flex-shrink:0">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              Buscar
+            </button>
+          </div>
+          <div id="cep-status" style="font-size:11px;margin-bottom:6px;min-height:16px;padding-left:2px"></div>
+
           <input class="form-input" id="f-rua"    placeholder="Rua / Avenida">
           <div class="form-row2">
             <input class="form-input" id="f-num"  placeholder="Nº">
@@ -2651,6 +2664,16 @@ input,textarea{font-family:inherit}
       <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">
         <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">🎂 Data de aniversário <span style="font-weight:400;text-transform:none;letter-spacing:0">(opcional — para receber parabéns!)</span></label>
         <input class="auth-input" id="reg-birthday" type="date" style="margin-bottom:0">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">📍 CEP <span style="font-weight:400;text-transform:none;letter-spacing:0">(opcional — para preencher endereço automaticamente)</span></label>
+        <div style="display:flex;gap:8px">
+          <input class="auth-input" id="reg-cep" type="text" placeholder="00000-000" maxlength="9" inputmode="numeric"
+            oninput="formatCEP(this);if(this.value.length>=9)buscarCEPRegistro()" style="margin-bottom:0;flex:1">
+          <button type="button" onclick="buscarCEPRegistro()" style="height:42px;padding:0 12px;border:1.5px solid var(--accent);background:rgba(var(--accent-rgb,249,115,22),.08);color:var(--accent);border-radius:10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;flex-shrink:0">Buscar</button>
+        </div>
+        <div id="reg-cep-status" style="font-size:11px;min-height:14px"></div>
+        <input class="auth-input" id="reg-addr" type="text" placeholder="Endereço (preenchido automaticamente pelo CEP)" style="margin-bottom:0" readonly>
       </div>
       <button class="auth-btn" id="register-btn" onclick="doRegister()">
         Criar minha conta
