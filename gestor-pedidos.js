@@ -656,6 +656,17 @@ function noOpenModal() {
   noFilterItems('');
   noRenderCart();
   openModal('modal-new-order');
+  // Inicializa autocomplete de clientes no Novo Pedido
+  initClienteAutocomplete('order-client', {
+    nameId: 'order-client',
+    phoneId: 'order-phone',
+    addrId: 'order-addr'
+  });
+  initClienteAutocomplete('order-phone', {
+    nameId: 'order-client',
+    phoneId: 'order-phone',
+    addrId: 'order-addr'
+  });
 }
 
 async function createOrder() {

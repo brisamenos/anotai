@@ -13,11 +13,113 @@ function renderPotencializador(){
 }
 
 // ─────────────────────────────────────────
+// BUSCA DE CLIENTES CADASTRADOS (compartilhada por PDV, PDV Balcão, Novo Pedido)
+// ─────────────────────────────────────────
+let _clientesCache = [];
+let _clientesCacheTs = 0;
+
+async function _carregarClientesCache() {
+  // Recarrega no máximo a cada 60s
+  if (_clientesCache.length && Date.now() - _clientesCacheTs < 60000) return _clientesCache;
+  try {
+    const { data, error } = await sb.from('customers')
+      .select('id,name,phone,email,addr')
+      .order('name');
+    if (!error && data) {
+      _clientesCache = data;
+      _clientesCacheTs = Date.now();
+    }
+  } catch(e) { console.error('[clientes-cache]', e); }
+  return _clientesCache;
+}
+
+// Cria/atualiza dropdown de sugestões de clientes
+function _criarDropdownClientes(inputEl, onSelect) {
+  let dropdown = inputEl._cliDropdown;
+  if (!dropdown) {
+    dropdown = document.createElement('div');
+    dropdown.className = 'cli-autocomplete-dropdown';
+    dropdown.style.cssText = 'position:absolute;left:0;right:0;top:100%;background:var(--surface);border:1.5px solid var(--accent);border-radius:10px;max-height:220px;overflow-y:auto;z-index:99999;box-shadow:0 8px 32px rgba(0,0,0,.25);display:none';
+    // Posiciona relativo ao input
+    const wrap = inputEl.parentElement;
+    if (wrap && getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
+    (wrap || inputEl.parentElement).appendChild(dropdown);
+    inputEl._cliDropdown = dropdown;
+
+    // Fecha ao clicar fora
+    document.addEventListener('click', e => {
+      if (!dropdown.contains(e.target) && e.target !== inputEl) dropdown.style.display = 'none';
+    });
+  }
+  dropdown._onSelect = onSelect;
+  return dropdown;
+}
+
+async function _filtrarClientes(inputEl, dropdown, query) {
+  if (!query || query.length < 2) { dropdown.style.display = 'none'; return; }
+  const clientes = await _carregarClientesCache();
+  const q = query.toLowerCase();
+  const filtrados = clientes.filter(c =>
+    (c.name && c.name.toLowerCase().includes(q)) ||
+    (c.phone && c.phone.replace(/\D/g,'').includes(q.replace(/\D/g,'')))
+  ).slice(0, 8);
+
+  if (!filtrados.length) { dropdown.style.display = 'none'; return; }
+
+  dropdown.innerHTML = filtrados.map(c => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .12s"
+         onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''"
+         data-id="${c.id}" data-name="${(c.name||'').replace(/"/g,'&quot;')}" data-phone="${(c.phone||'').replace(/"/g,'&quot;')}" data-addr="${(c.addr||'').replace(/"/g,'&quot;')}"
+         onclick="(function(el){
+           var dd=el.closest('.cli-autocomplete-dropdown');
+           if(dd._onSelect) dd._onSelect({id:el.dataset.id,name:el.dataset.name,phone:el.dataset.phone,addr:el.dataset.addr});
+           dd.style.display='none';
+         })(this)">
+      <div style="width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0">${(c.name||'?').charAt(0).toUpperCase()}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name||'Sem nome'}</div>
+        <div style="font-size:11px;color:var(--muted)">${c.phone||''}${c.addr?' · '+c.addr.substring(0,40):''}</div>
+      </div>
+    </div>`).join('');
+  dropdown.style.display = 'block';
+}
+
+// Inicializa autocomplete num input. Passa os IDs dos campos a preencher.
+function initClienteAutocomplete(inputId, opts) {
+  const inp = document.getElementById(inputId);
+  if (!inp) return;
+  const dropdown = _criarDropdownClientes(inp, (cliente) => {
+    if (opts.nameId)  { const el = document.getElementById(opts.nameId);  if (el) el.value = cliente.name || ''; }
+    if (opts.phoneId) { const el = document.getElementById(opts.phoneId); if (el) el.value = cliente.phone || ''; }
+    if (opts.addrId && cliente.addr) { const el = document.getElementById(opts.addrId); if (el) el.value = cliente.addr || ''; }
+    // Callback extra
+    if (opts.onSelect) opts.onSelect(cliente);
+  });
+  let _debounce;
+  inp.addEventListener('input', () => {
+    clearTimeout(_debounce);
+    _debounce = setTimeout(() => _filtrarClientes(inp, dropdown, inp.value.trim()), 250);
+  });
+  inp.addEventListener('focus', () => {
+    if (inp.value.trim().length >= 2) _filtrarClientes(inp, dropdown, inp.value.trim());
+  });
+}
+
+// ─────────────────────────────────────────
 // PDV
 // ─────────────────────────────────────────
 function renderPDV(){
   const g=document.getElementById('pdv-grid');
   if(!g) return;
+  // Inicializa autocomplete de clientes no PDV
+  initClienteAutocomplete('pdv-client', {
+    nameId: 'pdv-client',
+    phoneId: 'pdv-phone'
+  });
+  initClienteAutocomplete('pdv-phone', {
+    nameId: 'pdv-client',
+    phoneId: 'pdv-phone'
+  });
   const q=(document.getElementById('pdv-search-input')||{}).value||'';
   const fil=items.filter(i=>i.status==='active'&&i.name.toLowerCase().includes(q.toLowerCase()));
   g.innerHTML=fil.map(i=>{
@@ -270,7 +372,7 @@ function changeQty(idx,delta){
   renderCart();
 }
 
-function clearCart(){cartItems=[];renderCart();}
+function clearCart(){cartItems=[];renderCart();const c=document.getElementById('pdv-client'),p=document.getElementById('pdv-phone');if(c)c.value='';if(p)p.value='';}
 
 async function finalizeSale() {
   const _ICON_WRN = _ICON_ERR;
@@ -278,7 +380,9 @@ async function finalizeSale() {
   const tot  = cartItems.reduce((s,i) => s+parseFloat((i.price*i.qty).toFixed(2)), 0);
   const pay  = document.getElementById('pay-method').value;
   const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-  let descricao = 'PDV – Balcão';
+  const pdvClient = (document.getElementById('pdv-client')?.value||'').trim();
+  const pdvPhone  = (document.getElementById('pdv-phone')?.value||'').trim();
+  let descricao = pdvClient ? `PDV – ${pdvClient}` : 'PDV – Balcão';
   if (window._segmento === 'acougue') {
     const resumo = cartItems.map(i=>i.isKg?`${i._pesoLabel} ${i.name}`:`${i.qty}x ${i.name}`).join(', ');
     descricao = `Atendimento – ${resumo.slice(0,80)}${resumo.length>80?'…':''}`;

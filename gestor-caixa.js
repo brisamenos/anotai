@@ -438,7 +438,18 @@ let pdvbEntregaTipo='balcao',pdvbEntregaTaxa=0,pdvbEntregaAddr='',pdvbMesaNum=nu
 let pdvbPagamento='Dinheiro',pdvbDesconto=0,pdvbFocusIdx=-1,pdvbObsIdx=-1;
 let pdvbMesaSubtab='mesas',pdvbMesaSelecionada=null;
 
-function renderPDVBalcao(){pdvbRenderCats();pdvbRenderGrid();pdvbRenderOrder();pdvbSetupKeyboard();}
+function renderPDVBalcao(){
+  pdvbRenderCats();pdvbRenderGrid();pdvbRenderOrder();pdvbSetupKeyboard();
+  // Inicializa autocomplete de clientes no PDV Balcão
+  initClienteAutocomplete('pdvb-client', {
+    nameId: 'pdvb-client',
+    phoneId: 'pdvb-phone'
+  });
+  initClienteAutocomplete('pdvb-phone', {
+    nameId: 'pdvb-client',
+    phoneId: 'pdvb-phone'
+  });
+}
 
 function pdvbRenderCats(){
   const el=document.getElementById('pdvb-cats');if(!el)return;
