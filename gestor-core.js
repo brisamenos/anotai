@@ -132,6 +132,14 @@ function sbLoading(show) {
 }
 
 // ── Mapper helpers ───────────────────────────────────
+function _safeParseArray(v) {
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string' && v.trim()) {
+    try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
+  }
+  return [];
+}
+
 function mapItem(i) {
   return {
     id: i.id,
@@ -143,14 +151,14 @@ function mapItem(i) {
     priceOld: i.price_old ? parseFloat(i.price_old) : undefined,
     promo: !!i.promo,
     status: i.status || 'active',
-    days: i.days || [1,1,1,1,1,1,1],
+    days: _safeParseArray(i.days).length ? _safeParseArray(i.days) : [1,1,1,1,1,1,1],
     desc: i.description || '',
     imageUrl: i.image_url || null,
-    ingredients: Array.isArray(i.ingredients) ? i.ingredients : [],
+    ingredients: _safeParseArray(i.ingredients),
     itemType: i.item_type || 'normal',
     allowHalf: !!i.allow_half,
     maxFlavors: i.max_flavors || 1,
-    customGroups: Array.isArray(i.custom_groups) ? i.custom_groups : [],
+    customGroups: _safeParseArray(i.custom_groups),
     destaque: !!i.destaque
   };
 }
