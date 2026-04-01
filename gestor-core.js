@@ -498,8 +498,8 @@ function subscribeOrders() {
         if (_mapped.status === 'aguardando_pix') _mapped._pixPendente = true;
         ordersKanban.unshift(_mapped);
         if (p.new.id > _maxKnownOrderId) _maxKnownOrderId = p.new.id;
-        // Se foi criado pelo PDV local, não re-renderiza nem toca som
-        if (window._pdvCreatedIds && window._pdvCreatedIds.has(p.new.id)) { window._pdvCreatedIds.delete(p.new.id); return; }
+        // Pedido criado pelo próprio PDV — não duplica
+        if (window._pdvCreatedIds && window._pdvCreatedIds.has(Number(p.new.id))) { window._pdvCreatedIds.delete(Number(p.new.id)); renderKanban(); return; }
         renderKanban();
         playOrderSound();
         const nc = document.getElementById('notif-count');
@@ -642,9 +642,9 @@ setInterval(async () => {
         let houveMudanca = false;
         for (const o of novos) {
           if (!ordersKanban.find(x => x.id === o.id)) {
+            // Pedido criado pelo próprio PDV — não duplica nem notifica
+            if (window._pdvCreatedIds && window._pdvCreatedIds.has(Number(o.id))) { window._pdvCreatedIds.delete(Number(o.id)); ordersKanban.unshift(mapOrder(o)); if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id; continue; }
             ordersKanban.unshift(mapOrder(o));
-            // Se foi criado pelo PDV local, não notifica
-            if (window._pdvCreatedIds && window._pdvCreatedIds.has(o.id)) { window._pdvCreatedIds.delete(o.id); if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id; continue; }
             houveMudanca = true;
             // Notifica como novo pedido
             playOrderSound();
@@ -1374,7 +1374,7 @@ let items        = [];
 let categories   = [];
 let ordersKanban = [];
 let _orderNumOffset = 0;   // offset salvo em store_config; #exibido = id - offset
-function _orderNum(id) { return Math.max(1, id - _orderNumOffset); }
+function _orderNum(id) { return Math.max(1, Number(id) - Number(_orderNumOffset)); }
 let orderIdSeq   = 1;
 let tables       = [];
 let fidClients   = [];
