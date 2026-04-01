@@ -278,7 +278,7 @@ function openOrderDetail(id) {
   setEl('od-addr',  !isMesa && !isBalcao ? (o.addr || '') : o.garcom_nome ? 'Garçom: ' + o.garcom_nome : '');
 
   // Pagamento
-  const pagLabel = {
+  let pagLabel = {
     dinheiro:'Dinheiro', pix:'PIX Online', pix_manual:'PIX', pix_mp:'PIX Online',
     cartao:'Cartão', credito:'Crédito', debito:'Débito',
     cartao_mp:'Crédito Online', mesa:'Fechamento Mesa'
