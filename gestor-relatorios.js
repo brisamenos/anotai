@@ -454,6 +454,7 @@ async function renderDesempenho() {
       .order('created_at', { ascending: true });
 
     const orders = allOrders || [];
+    console.log('[DESEMPENHO]', _desempPrd, '| desde:', since, '| ate:', ate, '| pedidos:', orders.length);
     const entregues = orders.filter(o => !['cancelado'].includes(o.status));
 
     // ── KPIs ─────────────────────────────
@@ -650,7 +651,7 @@ async function renderRelatorios() {
   const elv    = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
   const loading = id  => { const e=document.getElementById(id); if(e) e.innerHTML='<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center">Carregando...</div>'; };
 
-  ['rel-line-chart','rel-hour-bar','rel-day-bar','rel-gauges','rel-platforms',
+  ['rel-line-chart','rel-hour-bar','rel-day-bar','rel-gauges','rel-platforms','rel-tipo-venda',
    'rel-areas','rel-heatmap','rel-month-bar','rel-produtos-list','rel-produtos-fat',
    'rel-cats-bar','rel-top-clients','rel-top-gastos','rel-novos-clientes',
    'rel-entradas-list','rel-fat-pag','rel-sat-list','rel-sat-resumo'].forEach(loading);
@@ -921,24 +922,116 @@ async function renderRelatorios() {
       if(!originMap[ori]) originMap[ori]={count:0,fat:0};
       originMap[ori].count++; originMap[ori].fat+=parseFloat(o.total||0)+parseFloat(o.taxa||0);
     });
+    const _oriColors = { 'Mesa (Garçom)':'#22c55e', 'Delivery':'#3b82f6', 'Balcão / Retirada':'#f59e0b' };
+    const _oriIcons = {
+      'Mesa (Garçom)': `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="2" rx="1" fill="currentColor"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+      'Delivery': `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/></svg>`,
+      'Balcão / Retirada': `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 7l6-5 6 5v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7z" stroke="currentColor" stroke-width="1.4"/><path d="M6 14V9h4v5" stroke="currentColor" stroke-width="1.4"/></svg>`
+    };
     const peEl = document.getElementById('rel-platforms');
     if (peEl) {
       const ents = Object.entries(originMap).sort((a,b)=>b[1].fat-a[1].fat);
       const maxOF = Math.max(...ents.map(([,v])=>v.fat),1);
-      peEl.innerHTML = ents.length ? ents.map(([k,v])=>`
-        <div style="margin-bottom:12px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-            <span style="font-size:13px;font-weight:600">${k}</span>
+      peEl.innerHTML = ents.length ? ents.map(([k,v])=>{
+        const col = _oriColors[k] || 'var(--accent)';
+        return `
+        <div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="width:26px;height:26px;border-radius:7px;background:${col}18;display:flex;align-items:center;justify-content:center;color:${col}">${_oriIcons[k]||''}</div>
+              <span style="font-size:13px;font-weight:600">${k}</span>
+            </div>
             <div style="text-align:right">
-              <span style="font-size:13px;font-weight:700;color:var(--accent)">${money(v.fat)}</span>
+              <span style="font-size:13px;font-weight:700;color:${col}">${money(v.fat)}</span>
               <span style="font-size:11px;color:var(--muted);margin-left:5px">${v.count} ped.</span>
             </div>
           </div>
-          <div style="height:7px;background:var(--border);border-radius:99px;overflow:hidden">
-            <div style="height:100%;width:${Math.round(v.fat/maxOF*100)}%;background:var(--accent);border-radius:99px"></div>
+          <div style="height:8px;background:var(--border);border-radius:99px;overflow:hidden">
+            <div style="height:100%;width:${Math.round(v.fat/maxOF*100)}%;background:${col};border-radius:99px;transition:width .6s ease"></div>
           </div>
-        </div>`).join('')
+        </div>`;
+      }).join('')
         : '<div style="color:var(--muted);font-size:12px;padding:8px">Sem pedidos no período</div>';
+    }
+
+    // ─── Tipo de Venda — Donut Chart Premium ────────────────
+    const tipoVendaMap = {};
+    mesValidos.forEach(o => {
+      let tipo;
+      if (o.mesa_num || (o.addr||'').startsWith('Mesa')) tipo = 'Mesa';
+      else if ((o.addr||'').toLowerCase().includes('balc'))  tipo = 'Balcão';
+      else tipo = 'Delivery';
+      if (!tipoVendaMap[tipo]) tipoVendaMap[tipo] = { count: 0, fat: 0 };
+      tipoVendaMap[tipo].count++;
+      tipoVendaMap[tipo].fat += parseFloat(o.total||0) + parseFloat(o.taxa||0);
+    });
+    const tvEl = document.getElementById('rel-tipo-venda');
+    if (tvEl) {
+      const isAcougue = window._segmento === 'acougue';
+      // Filter out Mesa for açougue
+      const tvEntries = Object.entries(tipoVendaMap)
+        .filter(([k]) => !(isAcougue && k === 'Mesa'))
+        .sort((a,b) => b[1].count - a[1].count);
+      const totalTV = tvEntries.reduce((s,[,v]) => s + v.count, 0) || 1;
+
+      if (!tvEntries.length) {
+        tvEl.innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:20px;text-align:center;width:100%">Sem vendas no período</div>';
+      } else {
+        const tvColors = { Mesa:'#22c55e', Delivery:'#3b82f6', 'Balcão':'#f59e0b' };
+        const tvIcons  = {
+          Mesa: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="2" rx="1" fill="currentColor"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+          Delivery: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/></svg>`,
+          'Balcão': `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 7l6-5 6 5v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7z" stroke="currentColor" stroke-width="1.4"/><path d="M6 14V9h4v5" stroke="currentColor" stroke-width="1.4"/></svg>`
+        };
+
+        // SVG Donut chart
+        const R = 60, strokeW = 14, C = 2 * Math.PI * R;
+        let offset = 0;
+        const arcs = tvEntries.map(([k,v]) => {
+          const pct = v.count / totalTV;
+          const dash = pct * C;
+          const gap  = C - dash;
+          const arc = `<circle cx="80" cy="80" r="${R}" fill="none" stroke="${tvColors[k]||'#888'}" stroke-width="${strokeW}" stroke-dasharray="${dash.toFixed(2)} ${gap.toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" stroke-linecap="round" style="transition:stroke-dasharray .6s ease,stroke-dashoffset .6s ease;filter:drop-shadow(0 0 4px ${tvColors[k]||'#888'}40)"/>`;
+          offset += dash;
+          return arc;
+        }).join('');
+
+        const donutSVG = `<svg viewBox="0 0 160 160" width="160" height="160" style="flex-shrink:0;transform:rotate(-90deg)">
+          <circle cx="80" cy="80" r="${R}" fill="none" stroke="rgba(255,255,255,.04)" stroke-width="${strokeW}"/>
+          ${arcs}
+        </svg>`;
+
+        // Center label
+        const centerLabel = `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center">
+          <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:800;color:var(--text)">${totalTV}</div>
+          <div style="font-size:9.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px">pedidos</div>
+        </div>`;
+
+        // Legend
+        const legend = tvEntries.map(([k,v]) => {
+          const pctVal = ((v.count/totalTV)*100).toFixed(1);
+          const col = tvColors[k]||'#888';
+          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:${col}0d;border:1px solid ${col}25;border-radius:10px;transition:all .2s" onmouseenter="this.style.borderColor='${col}55';this.style.transform='translateX(4px)'" onmouseleave="this.style.borderColor='${col}25';this.style.transform='none'">
+            <div style="width:30px;height:30px;border-radius:8px;background:${col}20;display:flex;align-items:center;justify-content:center;color:${col}">${tvIcons[k]||''}</div>
+            <div style="flex:1">
+              <div style="font-size:12.5px;font-weight:700;color:var(--text)">${k}</div>
+              <div style="font-size:11px;color:var(--muted)">${v.count} pedido${v.count!==1?'s':''} · ${money(v.fat)}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:18px;font-weight:800;color:${col};font-family:'Playfair Display',serif">${pctVal}%</div>
+            </div>
+          </div>`;
+        }).join('');
+
+        tvEl.innerHTML = `
+          <div style="position:relative;flex-shrink:0">
+            ${donutSVG}
+            ${centerLabel}
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+            ${legend}
+          </div>`;
+      }
     }
 
     // ─── Top bairros ─────────────────────────────────────
