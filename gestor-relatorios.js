@@ -605,9 +605,14 @@ async function renderDesempenho() {
 // RELATÓRIOS
 // ─────────────────────────────────────────
 let _relPeriodo = 'mensal';
+let _relCustomMonth = '';
 
-function setRelPeriodo(p) {
+function setRelPeriodo(p, val = '') {
   _relPeriodo = p;
+  if (p === 'custom-month') {
+    _relCustomMonth = val; // formato 'YYYY-MM'
+  }
+  
   ['diario','semanal','mensal','anual'].forEach(id => {
     const btn = document.getElementById('rpb-' + id);
     if (!btn) return;
@@ -616,6 +621,21 @@ function setRelPeriodo(p) {
     btn.style.color       = active ? '#fff' : '';
     btn.style.borderColor = active ? 'var(--accent)' : '';
   });
+
+  const cmBtn = document.getElementById('rel-custom-month');
+  if (cmBtn) {
+    if (p === 'custom-month') {
+      cmBtn.style.color = 'var(--text)';
+      cmBtn.style.borderColor = 'var(--accent)';
+      cmBtn.style.background = 'rgba(59,130,246,.1)';
+    } else {
+      cmBtn.style.color = 'var(--muted)';
+      cmBtn.style.borderColor = 'var(--border)';
+      cmBtn.style.background = 'transparent';
+      cmBtn.value = ''; // limpa se clicar em outro
+    }
+  }
+
   renderRelatorios();
 }
 
@@ -632,6 +652,11 @@ function _relGetRange() {
     fim    = new Date(inicio.getTime() + 7 * 86400000);
     label  = inicio.toLocaleDateString('pt-BR', { day:'2-digit', month:'short' })
              + ' – ' + new Date(fim - 1).toLocaleDateString('pt-BR', { day:'2-digit', month:'short' });
+  } else if (_relPeriodo === 'custom-month' && _relCustomMonth) {
+    const [y, m] = _relCustomMonth.split('-');
+    inicio = new Date(parseInt(y), parseInt(m) - 1, 1);
+    fim    = new Date(parseInt(y), parseInt(m), 1);
+    label  = inicio.toLocaleDateString('pt-BR', { month:'long', year:'numeric' });
   } else if (_relPeriodo === 'mensal') {
     inicio = new Date(now.getFullYear(), now.getMonth(), 1);
     fim    = new Date(now.getFullYear(), now.getMonth() + 1, 1);
