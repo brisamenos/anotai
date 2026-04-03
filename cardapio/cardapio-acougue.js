@@ -154,6 +154,39 @@ function renderImGrupos(item) {
     _acougueCortes = {};
     _acouguePesos  = (grupos.find(g => g.tipo === 'pesos')?.valores) || [];
     _renderAcougueGrupos(item, wrap, grupos);
+    // Renderiza grupos genéricos (radio/checkbox) após os grupos de açougue
+    const _ACOUGUE_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
+    const genericGrupos  = grupos.filter(g => !_ACOUGUE_TIPOS.includes(g.tipo));
+    if (genericGrupos.length) {
+      wrap.innerHTML += genericGrupos.map(g => {
+        const isRequired = g.tipo === 'radio';
+        const badge = isRequired
+          ? `<span class="grp-required-badge">Obrigatório</span>`
+          : `<span class="grp-optional-badge">Opcional</span>`;
+        const optsHtml = (g.opcoes || []).map(o => {
+          const priceLabel = o.preco > 0
+            ? `<span class="grp-opt-price">+ R$ ${fmt(o.preco)}</span>`
+            : `<span class="grp-opt-price free">Grátis</span>`;
+          const indicator = g.tipo === 'checkbox'
+            ? `<div class="grp-opt-indicator multi"></div>`
+            : `<div class="grp-opt-indicator"></div>`;
+          const qtyEl = g.tipo === 'checkbox'
+            ? `<div class="grp-opt-qty" id="gqty_${_slug(g.nome)}_${_slug(o.nome)}">
+                 <button class="grp-qty-btn" onclick="event.stopPropagation();grpQty('${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},-1)">−</button>
+                 <span class="grp-qty-num" id="gqnum_${_slug(g.nome)}_${_slug(o.nome)}">1</span>
+                 <button class="grp-qty-btn" onclick="event.stopPropagation();grpQty('${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},1)">+</button>
+               </div>` : '';
+          return `<div class="grp-opt-item" data-grupo="${_escape(g.nome)}" data-nome="${_escape(o.nome)}" data-preco="${o.preco||0}" data-tipo="${g.tipo}" onclick="grpToggle(this,'${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},'${g.tipo}',${g.max||1})">
+            <div class="grp-opt-left">${indicator}<span class="grp-opt-name">${o.nome}</span></div>
+            <div style="display:flex;align-items:center;gap:8px">${priceLabel}${qtyEl}</div>
+          </div>`;
+        }).join('');
+        return `<div class="grp-section">
+          <div class="grp-section-title">${g.nome} ${badge}</div>
+          <div class="grp-opts">${optsHtml}</div>
+        </div>`;
+      }).join('');
+    }
     return;
   }
 

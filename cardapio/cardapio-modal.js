@@ -1012,10 +1012,21 @@ function imConfirm() {
       toast('warn', 'Selecione ao menos um corte e o peso!');
       return;
     }
+    // Valida grupos genéricos obrigatórios (radio)
+    const _ACOUGUE_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
+    for (const g of (i.custom_groups || [])) {
+      if (_ACOUGUE_TIPOS.includes(g.tipo)) continue;
+      if (g.tipo === 'radio' && g.min !== 0) {
+        const sel = _imGruposState[g.nome] || [];
+        if (!sel.length) { toast('warn', `Escolha: ${g.nome}`); return; }
+      }
+    }
     const acDesc = _buildAcougueDesc();
-    if (acDesc) cartObs = [acDesc, obsComIngr].filter(Boolean).join(' · ');
-    // Preço proporcional ao peso total (em kg)
-    cartPrice = cartPrice * (totalPesoSel / 1000) * _imQty;
+    const gruposDesc  = _buildGruposDesc(i);
+    const gruposExtra = _calcGruposExtra(i);
+    const fullDesc = [acDesc, gruposDesc, obsComIngr].filter(Boolean).join(' · ');
+    if (fullDesc) cartObs = fullDesc;
+    cartPrice = (cartPrice + gruposExtra) * (totalPesoSel / 1000) * _imQty;
     const existing2 = cart.find(c => c.name === cartName && (c.obs||'') === (cartObs||''));
     if (existing2) existing2.qty += 1;
     else cart.push({ ...i, name: cartName, price: cartPrice, obs: cartObs, emoji: cartEmoji, image_url: cartImg, qty: 1 });
