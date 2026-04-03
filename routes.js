@@ -399,6 +399,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'GET' && upath === '/api/pix/status') {
     const mpId = params.get('mp_payment_id') || ''
     if (!mpId) { send(res, 400, { error: 'mp_payment_id obrigatório' }); return true }
+    const tid = req.headers['x-tenant-id'] || ''
+    if (tid) {
+      const own = db.prepare('SELECT tenant_id FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
+      if (own && own.tenant_id !== tid) { send(res, 403, { error: 'Acesso negado' }); return true }
+    }
     let mpToken = MP_TOKEN
     try { const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get(); const g = c?.ia_config ? JSON.parse(c.ia_config) : {}; if (g.mp_token) mpToken = g.mp_token } catch {}
     if (!mpToken) { send(res, 400, { error: 'Token MP não configurado' }); return true }
@@ -434,9 +439,18 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
   // ── Vincula PIX ao pedido ────────────────────────────
   if (req.method === 'POST' && upath === '/api/pix/vincular') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
     const body = await readBody(req)
     const mpId = String(body.mp_payment_id || ''), ordId = parseInt(body.order_id) || 0
     if (!mpId || !ordId) { send(res, 400, { error: 'obrigatórios' }); return true }
+    // Verifica ownership: o pagamento deve pertencer ao tenant
+    const pixRow = db.prepare('SELECT tenant_id FROM pagamentos_pix WHERE mp_payment_id=?').get(mpId)
+    if (!pixRow) { send(res, 404, { error: 'Pagamento não encontrado' }); return true }
+    if (pixRow.tenant_id !== tid) { send(res, 403, { error: 'Acesso negado' }); return true }
+    // Verifica ownership do pedido
+    const orderRow = db.prepare('SELECT tenant_id FROM orders WHERE id=?').get(ordId)
+    if (!orderRow || orderRow.tenant_id !== tid) { send(res, 403, { error: 'Pedido não pertence ao tenant' }); return true }
     db.prepare('UPDATE pagamentos_pix SET order_id=? WHERE mp_payment_id=?').run(ordId, mpId)
     db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=?").run(ordId)
     marcarDirty()
@@ -1154,6 +1168,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'GET' && upath === '/api/cartao/status') {
     const mpId = params.get('mp_payment_id') || ''
     if (!mpId) { send(res, 400, { error: 'mp_payment_id obrigatório' }); return true }
+    const tid3 = req.headers['x-tenant-id'] || ''
+    if (tid3) {
+      const own3 = db.prepare('SELECT tenant_id FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpId))
+      if (own3 && own3.tenant_id !== tid3) { send(res, 403, { error: 'Acesso negado' }); return true }
+    }
     let mpToken = MP_TOKEN
     try {
       const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()

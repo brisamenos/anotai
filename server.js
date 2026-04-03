@@ -1263,7 +1263,12 @@ const server = http.createServer(async (req,res) => {
     await handleREST(req,res,table,params,body);return
   }
 
-  if(req.method==='POST'&&upath.startsWith('/storage/v1/object/')){await handleUpload(req,res);return}
+  if(req.method==='POST'&&upath.startsWith('/storage/v1/object/')){
+    // Upload requer x-tenant-id ou sessão admin válida
+    const uploadTid = req.headers['x-tenant-id']
+    if (!uploadTid && !validarSessaoAdmin(req)) { send(res,401,{error:'Não autorizado'}); return }
+    await handleUpload(req,res); return
+  }
 
   if(req.method==='GET'&&(upath.startsWith('/uploads/')||upath.startsWith('/storage/v1/object/public/'))){
     const fname=path.basename(upath),fpath=path.join(UPLOADS_DIR,fname)
