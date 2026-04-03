@@ -1909,16 +1909,39 @@ function _buildTicketHtml(order, cfg) {
   const items = Array.isArray(order.items) ? order.items : [];
   const now = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
   const money = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
-  const itemLines = items.map(i => {
-    const name = (i.qty + 'x ' + i.name).toUpperCase();
+
+  // Categorias que vão para a cozinha (pratos, porções — exclui bebidas e similares)
+  const _isCozinha = (item) => {
+    const cat = (item.cat || item.cat_key || '').toLowerCase();
+    const name = (item.name || '').toLowerCase();
+    const skip = ['bebida','drink','suco','agua','refrigerante','cerveja','chopp','vinho','dose','tanque','long'];
+    if (skip.some(s => cat.includes(s) || name.includes(s))) return false;
+    return true;
+  };
+
+  const itensCozinha = items.filter(_isCozinha);
+
+  const renderItem = (i) => {
+    const nameRaw = (i.qty + 'x ' + i.name).toUpperCase();
     const price = money((i.price||0) * (i.qty||1));
-    return `<div style="display:flex;justify-content:space-between"><span>${name}</span><span style="white-space:nowrap;margin-left:8px">${price}</span></div>`;
-  }).join('');
+    const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em;color:#333">↳ ${i.obs}</div>` : '';
+    return `<div style="margin-bottom:3px">
+      <div style="display:flex;justify-content:space-between;gap:4px">
+        <span style="word-break:break-word;flex:1">${nameRaw}</span>
+        <span style="white-space:nowrap;flex-shrink:0">${price}</span>
+      </div>${obs}
+    </div>`;
+  };
+
+  const itemLines = items.map(renderItem).join('');
+
   const subtotal = items.reduce((s,i) => s + (parseFloat(i.price||0) * (i.qty||1)), 0);
   const taxa = parseFloat(order.taxa || 0);
   const total = subtotal + taxa;
   const orderNum = order.num || order.id;
-  return `<div class="print-ticket" style="font-size:${cfg.fontSize}px">
+
+  // ── Via Principal ──────────────────────────────────────────────
+  const viaPrincipal = `<div class="print-ticket" style="font-size:${cfg.fontSize}px">
     <div class="pt-center pt-large">${cfg.nome}</div>
     ${cfg.sub ? `<div class="pt-center" style="font-size:0.85em">${cfg.sub}</div>` : ''}
     <hr class="pt-hr">
@@ -1935,6 +1958,33 @@ function _buildTicketHtml(order, cfg) {
     <hr class="pt-hr">
     <div class="pt-center" style="font-size:0.85em">${cfg.rodape}</div>
   </div>`;
+
+  // ── Via da Cozinha (só se tiver itens de cozinha) ──────────────
+  let viaCozinha = '';
+  if (itensCozinha.length > 0) {
+    const itensHtmlCoz = itensCozinha.map(i => {
+      const nameRaw = (i.qty + 'x ' + i.name).toUpperCase();
+      const obs = i.obs ? `<div style="padding-left:12px;font-size:0.9em">↳ ${i.obs}</div>` : '';
+      return `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${nameRaw}</div>${obs}</div>`;
+    }).join('');
+
+    viaCozinha = `
+    <div style="page-break-before:always"></div>
+    <div class="print-ticket" style="font-size:${cfg.fontSize}px">
+      <div class="pt-center pt-large">*** VIA DA COZINHA ***</div>
+      <hr class="pt-hr">
+      <div>Pedido: <b>#${orderNum}</b></div>
+      <div>Data: ${now}</div>
+      <div>Cliente: ${order.client || '—'}</div>
+      ${order.addr ? `<div>Local: ${order.addr}</div>` : ''}
+      <hr class="pt-hr">
+      ${itensHtmlCoz}
+      <hr class="pt-hr">
+      <div class="pt-center" style="font-size:0.85em">— cozinha —</div>
+    </div>`;
+  }
+
+  return viaPrincipal + viaCozinha;
 }
 
 // ── Carrega lista de impressoras do servidor ──────────
