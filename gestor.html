@@ -4386,6 +4386,22 @@ Use no seu próximo pedido 🛍️</textarea>
   </div>
 </div>
 
+<!-- MODAL BIBLIOTECA DE IMAGENS -->
+<div class="modal-bg" id="modal-img-biblioteca">
+  <div class="modal" style="max-width:560px;width:95vw">
+    <button class="modal-close" onclick="closeModal('modal-img-biblioteca')"></button>
+    <div class="modal-title" style="margin-bottom:4px">Biblioteca de Imagens</div>
+    <p style="font-size:12.5px;color:var(--muted);margin:0 0 14px">Clique em uma imagem para reutilizá-la, ou envie uma nova.</p>
+    <button class="btn bp" style="width:100%;justify-content:center;margin-bottom:14px" onclick="triggerLibraryUpload()">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 2v8M5 5l3-3 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      Enviar nova foto
+    </button>
+    <div id="img-lib-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;max-height:52vh;overflow-y:auto;padding-right:2px">
+      <div style="color:var(--muted);font-size:13px;text-align:center;padding:30px;grid-column:1/-1">Carregando...</div>
+    </div>
+  </div>
+</div>
+
 <style>
 /* ── Grupos de customização ── */
 .grp-wrap{background:rgba(59,130,246,.05);border:1px solid rgba(59,130,246,.2);border-radius:12px;padding:14px;margin-bottom:8px}
