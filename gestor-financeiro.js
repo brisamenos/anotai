@@ -82,6 +82,46 @@ function playOrderSound() {
   } catch(e) {}
 }
 
+// ── Alerta persistente — insiste até aceitar ──────────
+let _alertInterval  = null;
+let _alertCount     = 0;   // quantas vezes já tocou neste ciclo
+const _ALERT_GAP    = 8000; // ms entre repetições (8s)
+const _ALERT_MAX    = 60;   // para após 60 repetições (~8 min) como failsafe
+
+function _startPersistentAlert() {
+  if (_soundPref === 'desligado') return;
+  if (_alertInterval) return; // já rodando
+  _alertCount = 0;
+  _alertInterval = setInterval(() => {
+    // Para se não houver mais pedidos em analise ou atingiu o limite
+    const hasAnalise = ordersKanban.some(o => o.status === 'analise');
+    if (!hasAnalise || _alertCount >= _ALERT_MAX) {
+      _stopPersistentAlert();
+      return;
+    }
+    _alertCount++;
+    // Alterna: som normal + vibração visual do badge de notificação
+    playOrderSound();
+    const nc = document.getElementById('notif-count');
+    if (nc) {
+      nc.style.transform = 'scale(1.4)';
+      setTimeout(() => { if (nc) nc.style.transform = ''; }, 300);
+    }
+  }, _ALERT_GAP);
+}
+
+function _stopPersistentAlert() {
+  if (_alertInterval) { clearInterval(_alertInterval); _alertInterval = null; }
+  _alertCount = 0;
+}
+
+// Para o alerta quando não há mais pedidos em analise
+function _checkStopAlert() {
+  if (_alertInterval && !ordersKanban.some(o => o.status === 'analise')) {
+    _stopPersistentAlert();
+  }
+}
+
 function previewSound(id) {
   if (id === 'desligado') return;
   try {
@@ -642,3 +682,4 @@ function initSidebarState() {
 setInterval(() => {
   if (EVO.instance) evoCheckStatus();
 }, 30000);
+

@@ -520,6 +520,7 @@ function subscribeOrders() {
         if (window._pdvCreatedIds && window._pdvCreatedIds.has(Number(p.new.id))) { window._pdvCreatedIds.delete(Number(p.new.id)); renderKanban(); return; }
         renderKanban();
         playOrderSound();
+        _startPersistentAlert();
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
@@ -550,6 +551,7 @@ function subscribeOrders() {
         ordersKanban.unshift(mapOrder(p.new));
         renderKanban();
         playOrderSound();
+        _startPersistentAlert();
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
@@ -665,6 +667,7 @@ setInterval(async () => {
             houveMudanca = true;
             // Notifica como novo pedido
             playOrderSound();
+            _startPersistentAlert();
             const nc = document.getElementById('notif-count');
             if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
             const items = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
@@ -1042,6 +1045,8 @@ async function advanceOrderById(id) {
     return;
   }
   const newStatus = o.status === 'analise' ? 'producao' : 'pronto';
+  // Se estava em analise e vai para producao, verifica se para o alerta
+  if (o.status === 'analise') setTimeout(_checkStopAlert, 200);
   try {
     const res = await fetch('/api/order-status', {
       method: 'POST',
