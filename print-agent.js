@@ -118,13 +118,17 @@ function wrapHtml(html, fontSize = 12) {
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
   * { margin:0; padding:0; box-sizing:border-box }
-  body { font-family:'Courier New',monospace; font-size:${fontSize}px; color:#000; background:#fff }
+  body { font-family:'Courier New',monospace; font-size:${fontSize}px; color:#000; background:#fff; width:100% }
   hr { border:none; border-top:1px dashed #000; margin:4px 0 }
   .pt-center { text-align:center }
   .pt-large  { font-size:${fontSize + 3}px; font-weight:bold }
   .pt-hr     { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .print-ticket { padding:4px; width:100% }
-  @media print { @page { margin:2mm } }
+  .print-ticket { padding:4px; width:100%; word-wrap:break-word; overflow-wrap:break-word }
+  span, div { word-break:break-word }
+  @media print {
+    @page { margin:2mm }
+    .print-ticket + div { page-break-before: always }
+  }
 </style>
 </head><body>${html}</body></html>`;
 }
@@ -152,7 +156,9 @@ async function printHtml(html, format, printerName) {
     const fmt = format || FORMAT;
     if (fmt === '80mm' || fmt === '58mm') {
       pdfOpts.width  = fmt;
-      pdfOpts.height = (await page.evaluate(() => document.body.scrollHeight + 24)) + 'px';
+      // Usa scrollHeight para capturar toda a altura incluindo via de cozinha
+      const totalH = await page.evaluate(() => Math.max(document.body.scrollHeight, document.documentElement.scrollHeight) + 32);
+      pdfOpts.height = totalH + 'px';
     } else {
       pdfOpts.format = fmt || 'A4';
     }
