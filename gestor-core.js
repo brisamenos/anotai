@@ -890,13 +890,69 @@ function _toastUpgradePlano() {
 // ── Image upload (Supabase Storage) ──────────────────
 // ── New item image preview ────────────────────
 let _newItemImageFile = null;
-function triggerNewItemImage() {
-  document.getElementById('new-img-input').click();
+// ── Image Library ──────────────────────────────
+let _imgLibMode = null; // 'new' | 'edit'
+let _newItemImageUrl  = null;
+let _editItemImageUrl = null;
+
+function triggerNewItemImage()  { openImageLibrary('new');  }
+function triggerEditItemImage() { openImageLibrary('edit'); }
+
+async function openImageLibrary(mode) {
+  _imgLibMode = mode;
+  const grid  = document.getElementById('img-lib-grid');
+  document.getElementById('modal-img-biblioteca').style.display = 'flex';
+  grid.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:30px;grid-column:1/-1">Carregando...</div>';
+  try {
+    const tenantFolder = String(_sessao?.tenant_id || 'shared');
+    const { data, error } = await sb.storage.from('menu-images').list(tenantFolder, { limit: 300, sortBy: { column: 'created_at', order: 'desc' } });
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      grid.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:30px;grid-column:1/-1">Nenhuma imagem ainda. Envie a primeira!</div>';
+      return;
+    }
+    grid.innerHTML = data.map(file => {
+      const { data: { publicUrl } } = sb.storage.from('menu-images').getPublicUrl(`${tenantFolder}/${file.name}`);
+      return `<div onclick="selectFromLibrary('${publicUrl}')" title="${file.name}"
+        style="cursor:pointer;border:2px solid var(--border);border-radius:10px;overflow:hidden;aspect-ratio:1;transition:border-color .15s;background:var(--surface2)"
+        onmouseenter="this.style.borderColor='var(--accent)'"
+        onmouseleave="this.style.borderColor='var(--border)'">
+        <img src="${publicUrl}" style="width:100%;height:100%;object-fit:cover;display:block" loading="lazy">
+      </div>`;
+    }).join('');
+  } catch(e) {
+    grid.innerHTML = '<div style="color:var(--danger);font-size:13px;text-align:center;padding:30px;grid-column:1/-1">Erro ao carregar imagens</div>';
+  }
 }
+
+function selectFromLibrary(url) {
+  const prefix = _imgLibMode === 'new' ? 'new' : 'edit';
+  const thumb   = document.getElementById(`${prefix}-img-thumb`);
+  const ph      = document.getElementById(`${prefix}-img-placeholder`);
+  const chg     = document.getElementById(`${prefix}-img-change`);
+  const preview = document.getElementById(`${prefix}-img-preview`);
+  thumb.src = url; thumb.style.display = 'block';
+  if (ph)  ph.style.display  = 'none';
+  if (chg) chg.style.display = 'block';
+  if (preview) preview.style.border = '2px solid var(--accent)';
+  if (_imgLibMode === 'new') { _newItemImageFile = null;  _newItemImageUrl  = url; }
+  else                       { _editItemImageFile = null; _editItemImageUrl = url; }
+  closeModal('modal-img-biblioteca');
+}
+
+function triggerLibraryUpload() {
+  closeModal('modal-img-biblioteca');
+  setTimeout(() => {
+    document.getElementById(_imgLibMode === 'new' ? 'new-img-input' : 'edit-img-input').click();
+  }, 120);
+}
+// ───────────────────────────────────────────────
+
 function previewNewItemImage(inp) {
   const file = inp.files[0];
   if (!file) return;
   _newItemImageFile = file;
+  _newItemImageUrl  = null;
   const url = URL.createObjectURL(file);
   const thumb = document.getElementById('new-img-thumb');
   thumb.src = url; thumb.style.display = 'block';
@@ -907,13 +963,11 @@ function previewNewItemImage(inp) {
 
 // ── Edit item image preview ────────────────────
 let _editItemImageFile = null;
-function triggerEditItemImage() {
-  document.getElementById('edit-img-input').click();
-}
 function previewEditItemImage(inp) {
   const file = inp.files[0];
   if (!file) return;
   _editItemImageFile = file;
+  _editItemImageUrl  = null;
   const url = URL.createObjectURL(file);
   const thumb = document.getElementById('edit-img-thumb');
   thumb.src = url; thumb.style.display = 'block';
@@ -924,8 +978,9 @@ function previewEditItemImage(inp) {
 
 // ── Upload image to Supabase Storage ─────────
 async function uploadItemImage(file, itemId) {
-  const ext  = file.name.split('.').pop();
-  const path = `item-${itemId || Date.now()}-${Date.now()}.${ext}`;
+  const ext    = file.name.split('.').pop();
+  const folder = String(_sessao?.tenant_id || 'shared');
+  const path   = `${folder}/item-${itemId || Date.now()}-${Date.now()}.${ext}`;
   const { error } = await sb.storage.from('menu-images').upload(path, file, { upsert: true });
   if (error) throw error;
   const { data: { publicUrl } } = sb.storage.from('menu-images').getPublicUrl(path);
