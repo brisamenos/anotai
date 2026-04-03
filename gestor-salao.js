@@ -1412,11 +1412,16 @@ async function submitGarcomOrder() {
   if (garcomCart.length === 0) { sbToast('err', 'Selecione itens'); return; }
 
   // Separa itens: cozinha (vão ao kanban) vs imediatos (bebidas, etc — só billing)
+  // Só pula kanban para bebidas industrializadas prontas.
+  // Sucos, vitaminas, smoothies e tudo preparado manualmente vai ao kanban.
   const _skipKanban = (c) => {
-    const cat  = (c.cat || c.catKey || c.cat_key || '').toLowerCase();
-    const name = (c.name || '').toLowerCase();
-    const skip = ['bebida','drink','suco','agua','refrigerante','cerveja','chopp','vinho','dose','tanque','long','garrafa'];
-    return skip.some(s => cat.includes(s) || name.includes(s));
+    const txt = (c.name + ' ' + (c.cat || c.catKey || c.cat_key || '')).toLowerCase();
+    // Itens preparados manualmente — sempre kanban
+    const preparados = /suco|vitamina|smoothie|milkshake|limonada|caipir|caldo|açaí|acai|tigela|bowl|pizza|hamburguer|hambúrguer|burger|lanche|sanduiche|sanduíche|wrap|tapioca|crepe|waffle|panqueca|prato|marmita|salada|massa|macarrão|fettuc|risoto|sushi|temaki|espeto|grelhado|assado|frito|porção|porcao|frango|carne|peixe|camarão|bife|churrasco/;
+    if (preparados.test(txt)) return false;
+    // Bebidas industrializadas prontas — pula kanban
+    const industrial = /refrigerante|coca|pepsi|guarana|guaraná|fanta|sprite|soda|tônica|tonica|agua\s|água\s|^agua|^água|agua com|água com|agua sem|mineral|cerveja|chopp|brahma|skol|heineken|budweiser|corona|stella|amstel|itaipava|vinho|espumante|champagne|dose|tanque|long.neck|long neck|energetico|energético|red.bull|monster|gatorade|powerade|isot/;
+    return industrial.test(txt);
   };
 
   const itensCozinha   = garcomCart.filter(c => !_skipKanban(c));
