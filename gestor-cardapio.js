@@ -958,6 +958,7 @@ function renderGestor(){
               </div>
               <div style="display:flex;gap:4px;flex-shrink:0">
                 <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();duplicateItem(+this.dataset.id)" title="Duplicar item">⎘</button>
+                <button class="stbadge-mini ${scClass(item.status)}" data-id="${item.id}" onclick="event.stopPropagation();quickToggleStatus(+this.dataset.id,this)" title="Alterar disponibilidade">${item.status==='active'?'<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M6 5.5l5 2.5-5 2.5V5.5z" fill="currentColor"/></svg>':item.status==='esgotado'?'<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>':'<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M6 5h1.5v6H6zM8.5 5H10v6H8.5z" fill="currentColor"/></svg>'}</button>
                 <button class="btn bg" style="font-size:10.5px;padding:3px 8px" data-id="${item.id}" onclick="event.stopPropagation();openEditItem(+this.dataset.id)">Editar</button>
               </div>
             </div>
@@ -1251,15 +1252,57 @@ function toggleDay(id,dayIdx,el){
   if(it) it.days[dayIdx]=el.classList.contains('on')?1:0;
 }
 
-function cycleStatus(id,el){
-  const it=items.find(i=>i.id===id);
-  if(!it) return;
-  const cur=STATUS_CYCLE.findIndex(s=>s[0]===scClass(it.status));
-  const next=STATUS_CYCLE[(cur+1)%STATUS_CYCLE.length];
-  it.status=next[0]==='sta'?'active':next[0]==='ste'?'esgotado':'pausado';
-  STATUS_CYCLE.forEach(s=>el.classList.remove(s[0]));
-  el.classList.add(next[0]);
-  el.innerHTML=`<div class="stdot"></div>&nbsp;${next[1]}`;
+const STATUS_CYCLE_LIST = [
+  { key: 'active',   cls: 'sta', label: 'Disponível', icon: '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M6 5.5l5 2.5-5 2.5V5.5z" fill="currentColor"/></svg>' },
+  { key: 'esgotado', cls: 'ste', label: 'Esgotado',   icon: '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>' },
+  { key: 'pausado',  cls: 'stp', label: 'Pausado',    icon: '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M6 5h1.5v6H6zM8.5 5H10v6H8.5z" fill="currentColor"/></svg>' },
+];
+
+async function quickToggleStatus(id, el) {
+  const it = items.find(i => i.id === id);
+  if (!it) return;
+  const cur  = STATUS_CYCLE_LIST.findIndex(s => s.key === it.status);
+  const next = STATUS_CYCLE_LIST[(cur + 1) % STATUS_CYCLE_LIST.length];
+  it.status  = next.key;
+  // Atualiza visual do botão no card
+  STATUS_CYCLE_LIST.forEach(s => el.classList.remove(s.cls));
+  el.classList.add(next.cls);
+  el.innerHTML = next.icon;
+  el.title = next.label;
+  // Atualiza texto de status no card
+  const row = el.closest('.cat-item-row');
+  if (row) {
+    const priceEl = row.querySelector('.cat-item-price');
+    if (priceEl) {
+      priceEl.innerHTML = priceEl.innerHTML.replace(
+        /<span style="color:var\(--(?:success|danger|accent3)\)">[^<]+<\/span>/,
+        next.key === 'active'   ? '<span style="color:var(--success)">Disponível</span>' :
+        next.key === 'esgotado' ? '<span style="color:var(--danger)">Esgotado</span>'   :
+                                  '<span style="color:var(--accent3)">Pausado</span>'
+      );
+    }
+  }
+  // Salva no banco
+  try {
+    await sb.from('menu_items').update({ status: next.key }).eq('id', id);
+    sbToast('ok', `"${it.name}" → ${next.label}`);
+  } catch(e) {
+    sbToast('err', 'Erro ao salvar status');
+    it.status = STATUS_CYCLE_LIST[cur].key; // rollback
+  }
+  renderTable();
+}
+
+function cycleStatus(id, el) {
+  const it = items.find(i => i.id === id);
+  if (!it) return;
+  const cur  = STATUS_CYCLE_LIST.findIndex(s => s.key === it.status);
+  const next = STATUS_CYCLE_LIST[(cur + 1) % STATUS_CYCLE_LIST.length];
+  it.status  = next.key;
+  STATUS_CYCLE_LIST.forEach(s => el.classList.remove(s.cls));
+  el.classList.add(next.cls);
+  el.innerHTML = `<div class="stdot"></div>&nbsp;${next.label}`;
+  sb.from('menu_items').update({ status: next.key }).eq('id', id);
 }
 
 function setPizzaMax(ctx, val, el) {
