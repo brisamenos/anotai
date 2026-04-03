@@ -645,7 +645,15 @@ async function renderMesasPage() {
     .in('status', ['analise', 'producao', 'pronto'])
     .order('id', { ascending: true });
 
-  const allOrders = orders || [];
+  // Busca também pedidos entregue recentes (itens imediatos do garçom) para billing
+  const { data: entregues } = await sb.from('orders')
+    .select('*')
+    .not('mesa_num', 'is', null)
+    .eq('status', 'entregue')
+    .gte('created_at', new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString()) // últimas 12h
+    .order('id', { ascending: true });
+
+  const allOrders = [...(orders || []), ...(entregues || [])];
 
   // Filtra por sessão usando opened_at (campo dedicado — nunca muda durante a sessão)
   const sessionOrders = allOrders.filter(o => {
@@ -663,7 +671,18 @@ async function renderMesasPage() {
 
 function renderMesaCard(t, orders) {
   const isWaiting = t.status === 'waiting';
-  const total = orders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
+
+  // Total ativo (analise/producao/pronto) — do cache
+  const totalAtivo = orders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
+
+  // Total de itens imediatos entregues nesta sessão (bebidas etc) — do cache billing
+  const sessionStart = t.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
+  const totalEntregue = mesaOrdersCache
+    .filter(o => parseInt(o.mesa_num) === t.num && o.status === 'entregue')
+    .filter(o => !sessionStart || new Date(o.created_at || 0).getTime() >= sessionStart)
+    .reduce((s, o) => s + parseFloat(o.total || 0), 0);
+
+  const total = totalAtivo + totalEntregue;
 
   const bordColor = isWaiting ? 'rgba(245,158,11,.4)' : 'rgba(59,130,246,.25)';
   const statusLabel = isWaiting
@@ -1391,36 +1410,72 @@ function _garcomUpdatePreview() {
 
 async function submitGarcomOrder() {
   if (garcomCart.length === 0) { sbToast('err', 'Selecione itens'); return; }
-  const tot = garcomCart.reduce((s, c) => s + c.price * c.qty, 0);
-  const t = tables.find(x => x.num === garcomMesa);
-  const itemsArr = garcomCart.map(c => ({ qty: c.qty, name: c.name, price: c.price, obs: c.obs || '' }));
+
+  // Separa itens: cozinha (vão ao kanban) vs imediatos (bebidas, etc — só billing)
+  const _skipKanban = (c) => {
+    const cat  = (c.cat || c.catKey || c.cat_key || '').toLowerCase();
+    const name = (c.name || '').toLowerCase();
+    const skip = ['bebida','drink','suco','agua','refrigerante','cerveja','chopp','vinho','dose','tanque','long','garrafa'];
+    return skip.some(s => cat.includes(s) || name.includes(s));
+  };
+
+  const itensCozinha   = garcomCart.filter(c => !_skipKanban(c));
+  const itensImediatos = garcomCart.filter(c =>  _skipKanban(c));
+  const totCozinha     = itensCozinha.reduce((s, c) => s + c.price * c.qty, 0);
+  const totImediato    = itensImediatos.reduce((s, c) => s + c.price * c.qty, 0);
+  const totTotal       = totCozinha + totImediato;
+
+  const t    = tables.find(x => x.num === garcomMesa);
   const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
   sbLoading(true);
   try {
-    // Verifica e grava opened_at ANTES de inserir o pedido
-    const _mesaBeforeInsert = tables.find(t => t.num === garcomMesa);
-    if (_mesaBeforeInsert && _mesaBeforeInsert.status !== 'busy') {
+    // Garante opened_at na mesa
+    const _mesa = tables.find(t => t.num === garcomMesa);
+    if (_mesa && _mesa.status !== 'busy') {
       const _ot = new Date().toISOString();
       await sb.from('mesas').update({ status: 'busy', opened_at: _ot, updated_at: _ot }).eq('num', garcomMesa);
-      _mesaBeforeInsert.status = 'busy'; _mesaBeforeInsert.opened_at = _ot; _mesaBeforeInsert.updated_at = _ot;
+      _mesa.status = 'busy'; _mesa.opened_at = _ot; _mesa.updated_at = _ot;
     }
-    const { data: orderData, error: oErr } = await sb.from('orders').insert({
-      client: `Mesa ${garcomMesa}`, phone: '', addr: `Mesa ${garcomMesa}`,
-      mesa_num: garcomMesa, items: itemsArr, total: tot, taxa: 0,
-      status: mesaAutoAccept ? 'producao' : 'analise', time, pag: 'Mesa'
-    }).select().single();
-    if (oErr) throw oErr;
-    // Adiciona ao mesaOrdersCache imediatamente para evitar race condition com Realtime
-    if (!mesaOrdersCache.find(o => o.id === orderData.id)) {
-      mesaOrdersCache.unshift(orderData);
+
+    // 1. Itens de cozinha → kanban (analise/producao)
+    if (itensCozinha.length > 0) {
+      const itemsArr = itensCozinha.map(c => ({ qty: c.qty, name: c.name, price: c.price, obs: c.obs || '' }));
+      const { data: orderData, error: oErr } = await sb.from('orders').insert({
+        client: `Mesa ${garcomMesa}`, phone: '', addr: `Mesa ${garcomMesa}`,
+        mesa_num: garcomMesa, items: itemsArr, total: totCozinha, taxa: 0,
+        status: mesaAutoAccept ? 'producao' : 'analise', time, pag: 'Mesa'
+      }).select().single();
+      if (oErr) throw oErr;
+      if (!mesaOrdersCache.find(o => o.id === orderData.id)) mesaOrdersCache.unshift(orderData);
+      ordersKanban.push(mapOrder(orderData));
     }
+
+    // 2. Itens imediatos (bebidas, etc) → direto como entregue (só billing, não vão ao kanban)
+    if (itensImediatos.length > 0) {
+      const itemsArrImediato = itensImediatos.map(c => ({ qty: c.qty, name: c.name, price: c.price, obs: c.obs || '' }));
+      const { data: billingData, error: bErr } = await sb.from('orders').insert({
+        client: `Mesa ${garcomMesa}`, phone: '', addr: `Mesa ${garcomMesa}`,
+        mesa_num: garcomMesa, items: itemsArrImediato, total: totImediato, taxa: 0,
+        status: 'entregue', time, pag: 'Mesa'
+      }).select().single();
+      if (bErr) throw bErr;
+      // Adiciona ao cache para billing mas não ao kanban
+      if (billingData && !mesaOrdersCache.find(o => o.id === billingData.id)) {
+        mesaOrdersCache.unshift(billingData);
+      }
+    }
+
     if (t) { t.status = 'busy'; t.guests = t.guests || 2; }
-    ordersKanban.push(mapOrder(orderData));
     closeModal('modal-garcom-mesa');
     renderGarcom();
-    _renderMesaPageFromCache();  // usa cache local — não rebusca do banco
+    _renderMesaPageFromCache();
     playOrderSound();
-    sbToast('ok', `Pedido Mesa ${garcomMesa} enviado para cozinha!`);
+
+    const partes = [];
+    if (itensCozinha.length)   partes.push(`${itensCozinha.length} item(s) → cozinha`);
+    if (itensImediatos.length) partes.push(`${itensImediatos.length} item(s) → direto`);
+    sbToast('ok', `Mesa ${garcomMesa} — ${partes.join(' | ')} — Total R$ ${totTotal.toFixed(2).replace('.', ',')}`);
   } catch (e) {
     sbToast('err', 'Erro ao enviar pedido');
     console.error(e);
