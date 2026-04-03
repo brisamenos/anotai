@@ -1482,7 +1482,13 @@ async function addItem() {
 
   console.log('[ADD-ITEM] ✅ item criado id:', data.id);
 
-  if (_newItemImageFile) {
+  if (_newItemImageUrl) {
+    try {
+      await sb.from('menu_items').update({ image_url: _newItemImageUrl }).eq('id', data.id);
+      data.image_url = _newItemImageUrl;
+    } catch(e) { sbToast('err', 'Item criado, mas erro ao salvar foto'); }
+    _newItemImageUrl = null;
+  } else if (_newItemImageFile) {
     try {
       const url = await uploadItemImage(_newItemImageFile, data.id);
       await sb.from('menu_items').update({ image_url: url }).eq('id', data.id);
@@ -1497,6 +1503,7 @@ async function addItem() {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const t  = document.getElementById('new-img-thumb');        if(t)  { t.src = ''; t.style.display = 'none'; }
+  _newItemImageUrl = null;
   const p2 = document.getElementById('new-img-placeholder');  if(p2) p2.style.display = 'flex';
   const c2 = document.getElementById('new-img-change');        if(c2) c2.style.display = 'none';
   const pr = document.getElementById('new-img-preview');       if(pr) pr.style.border  = '2px dashed var(--border)';
@@ -1543,6 +1550,7 @@ function openEditItem(id) {
 
   // Reset image file state and show existing image
   _editItemImageFile = null;
+  _editItemImageUrl  = null;
   const thumb = document.getElementById('edit-img-thumb');
   const placeholder = document.getElementById('edit-img-placeholder');
   const change = document.getElementById('edit-img-change');
@@ -1676,8 +1684,14 @@ async function saveEditItem() {
     return;
   }
 
-  // Upload de nova imagem se selecionada
-  if (_editItemImageFile) {
+  // Upload / reutilização de imagem
+  if (_editItemImageUrl) {
+    try {
+      await sb.from('menu_items').update({ image_url: _editItemImageUrl }).eq('id', editingId);
+      it.imageUrl = _editItemImageUrl;
+    } catch(e) { sbToast('err', 'Item salvo, mas erro ao salvar foto'); }
+    _editItemImageUrl = null;
+  } else if (_editItemImageFile) {
     try {
       const url = await uploadItemImage(_editItemImageFile, editingId);
       await sb.from('menu_items').update({ image_url: url }).eq('id', editingId);
