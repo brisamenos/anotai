@@ -1598,7 +1598,7 @@ function openEditItem(id) {
   }
 
   openModal('modal-edit-item');
-}
+  loadImgGallery('edit');
 
 function selectEditEmoji(el, emoji) {
   document.querySelectorAll('#edit-emoji-grid .emo-btn').forEach(b => b.classList.remove('on'));

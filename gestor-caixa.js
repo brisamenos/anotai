@@ -336,7 +336,9 @@ function openAddItemModal(catKeyDefault) {
   try { document.querySelectorAll('#emoji-grid .emo-btn').forEach(b=>b.classList.remove('on')); } catch(e){}
   togglePizzaOptions('new');
   _newItemImageFile = null;
+  _newItemImageUrl  = null;
   openModal('modal-add-item');
+  loadImgGallery('new');
 }
 
 // ─────────────────────────────────────────

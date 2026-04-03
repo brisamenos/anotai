@@ -890,43 +890,50 @@ function _toastUpgradePlano() {
 // ── Image upload (Supabase Storage) ──────────────────
 // ── New item image preview ────────────────────
 let _newItemImageFile = null;
-// ── Image Library ──────────────────────────────
-let _imgLibMode = null; // 'new' | 'edit'
+// ── Image Gallery inline ───────────────────────────────
 let _newItemImageUrl  = null;
 let _editItemImageUrl = null;
+let _imgGalleryCache  = null; // cache da sessão
 
-function triggerNewItemImage()  { openImageLibrary('new');  }
-function triggerEditItemImage() { openImageLibrary('edit'); }
+async function loadImgGallery(prefix) {
+  const el = document.getElementById(`${prefix}-img-gallery`);
+  if (!el) return;
 
-async function openImageLibrary(mode) {
-  _imgLibMode = mode;
-  const grid  = document.getElementById('img-lib-grid');
-  document.getElementById('modal-img-biblioteca').style.display = 'flex';
-  grid.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:30px;grid-column:1/-1">Carregando...</div>';
+  // Usa cache se já carregou nessa sessão
+  if (_imgGalleryCache) { _renderImgGallery(el, prefix, _imgGalleryCache); return; }
+
+  el.innerHTML = '<span style="font-size:11.5px;color:var(--muted)">Carregando...</span>';
   try {
-    const tenantFolder = String(_sessao?.tenant_id || 'shared');
-    const { data, error } = await sb.storage.from('menu-images').list(tenantFolder, { limit: 300, sortBy: { column: 'created_at', order: 'desc' } });
+    const { data, error } = await sb.from('menu_items')
+      .select('image_url')
+      .not('image_url', 'is', null);
     if (error) throw error;
-    if (!data || data.length === 0) {
-      grid.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:30px;grid-column:1/-1">Nenhuma imagem ainda. Envie a primeira!</div>';
-      return;
-    }
-    grid.innerHTML = data.map(file => {
-      const { data: { publicUrl } } = sb.storage.from('menu-images').getPublicUrl(`${tenantFolder}/${file.name}`);
-      return `<div onclick="selectFromLibrary('${publicUrl}')" title="${file.name}"
-        style="cursor:pointer;border:2px solid var(--border);border-radius:10px;overflow:hidden;aspect-ratio:1;transition:border-color .15s;background:var(--surface2)"
-        onmouseenter="this.style.borderColor='var(--accent)'"
-        onmouseleave="this.style.borderColor='var(--border)'">
-        <img src="${publicUrl}" style="width:100%;height:100%;object-fit:cover;display:block" loading="lazy">
-      </div>`;
-    }).join('');
+    const urls = [...new Set((data || []).map(r => r.image_url).filter(Boolean))];
+    _imgGalleryCache = urls;
+    _renderImgGallery(el, prefix, urls);
   } catch(e) {
-    grid.innerHTML = '<div style="color:var(--danger);font-size:13px;text-align:center;padding:30px;grid-column:1/-1">Erro ao carregar imagens</div>';
+    el.innerHTML = '<span style="font-size:11.5px;color:var(--muted)">Nenhuma imagem ainda.</span>';
   }
 }
 
-function selectFromLibrary(url) {
-  const prefix = _imgLibMode === 'new' ? 'new' : 'edit';
+function _renderImgGallery(el, prefix, urls) {
+  if (!urls.length) {
+    el.innerHTML = '<span style="font-size:11.5px;color:var(--muted)">Nenhuma imagem ainda.</span>';
+    return;
+  }
+  el.innerHTML = urls.map(url =>
+    `<div onclick="selectGalleryImg('${prefix}','${url.replace(/'/g,'%27')}')"
+      style="flex-shrink:0;width:52px;height:52px;border-radius:8px;overflow:hidden;border:2px solid var(--border);cursor:pointer;transition:border-color .15s"
+      onmouseenter="this.style.borderColor='var(--accent)'"
+      onmouseleave="this.style.borderColor='var(--border)'"
+      title="Reutilizar esta imagem">
+      <img src="${url}" style="width:100%;height:100%;object-fit:cover;display:block" loading="lazy"
+           onerror="this.closest('div').style.display='none'">
+    </div>`
+  ).join('');
+}
+
+function selectGalleryImg(prefix, url) {
   const thumb   = document.getElementById(`${prefix}-img-thumb`);
   const ph      = document.getElementById(`${prefix}-img-placeholder`);
   const chg     = document.getElementById(`${prefix}-img-change`);
@@ -935,18 +942,16 @@ function selectFromLibrary(url) {
   if (ph)  ph.style.display  = 'none';
   if (chg) chg.style.display = 'block';
   if (preview) preview.style.border = '2px solid var(--accent)';
-  if (_imgLibMode === 'new') { _newItemImageFile = null;  _newItemImageUrl  = url; }
-  else                       { _editItemImageFile = null; _editItemImageUrl = url; }
-  closeModal('modal-img-biblioteca');
+  if (prefix === 'new') { _newItemImageFile = null;  _newItemImageUrl  = url; }
+  else                  { _editItemImageFile = null; _editItemImageUrl = url; }
 }
 
-function triggerLibraryUpload() {
-  closeModal('modal-img-biblioteca');
-  setTimeout(() => {
-    document.getElementById(_imgLibMode === 'new' ? 'new-img-input' : 'edit-img-input').click();
-  }, 120);
-}
-// ───────────────────────────────────────────────
+// Invalida cache após upload para incluir a nova imagem
+function _invalidateImgGalleryCache() { _imgGalleryCache = null; }
+// ───────────────────────────────────────────────────────
+
+function triggerNewItemImage()  { document.getElementById('new-img-input').click();  }
+function triggerEditItemImage() { document.getElementById('edit-img-input').click(); }
 
 function previewNewItemImage(inp) {
   const file = inp.files[0];
@@ -978,12 +983,12 @@ function previewEditItemImage(inp) {
 
 // ── Upload image to Supabase Storage ─────────
 async function uploadItemImage(file, itemId) {
-  const ext    = file.name.split('.').pop();
-  const folder = String(_sessao?.tenant_id || 'shared');
-  const path   = `${folder}/item-${itemId || Date.now()}-${Date.now()}.${ext}`;
+  const ext  = file.name.split('.').pop();
+  const path = `item-${itemId || Date.now()}-${Date.now()}.${ext}`;
   const { error } = await sb.storage.from('menu-images').upload(path, file, { upsert: true });
   if (error) throw error;
   const { data: { publicUrl } } = sb.storage.from('menu-images').getPublicUrl(path);
+  _invalidateImgGalleryCache(); // nova imagem disponível na galeria
   return publicUrl;
 }
 
