@@ -1410,12 +1410,15 @@ async function submitGarcomOrder() {
       status: mesaAutoAccept ? 'producao' : 'analise', time, pag: 'Mesa'
     }).select().single();
     if (oErr) throw oErr;
-    // opened_at já tratado antes do insert
+    // Adiciona ao mesaOrdersCache imediatamente para evitar race condition com Realtime
+    if (!mesaOrdersCache.find(o => o.id === orderData.id)) {
+      mesaOrdersCache.unshift(orderData);
+    }
     if (t) { t.status = 'busy'; t.guests = t.guests || 2; }
     ordersKanban.push(mapOrder(orderData));
     closeModal('modal-garcom-mesa');
     renderGarcom();
-    renderMesasPage();
+    _renderMesaPageFromCache();  // usa cache local — não rebusca do banco
     playOrderSound();
     sbToast('ok', `Pedido Mesa ${garcomMesa} enviado para cozinha!`);
   } catch (e) {
