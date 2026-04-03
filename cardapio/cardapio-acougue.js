@@ -350,6 +350,40 @@ function _renderAcougueGrupos(item, wrap, grupos) {
   wrap.innerHTML = html;
 }
 
+// ── Input manual de gramas ───────────────────────────
+function _manualGramasInput(val) {
+  const g = parseInt(val);
+  const wrap = document.getElementById('ac-manual-g-wrap');
+  if (g > 0) {
+    if (wrap) wrap.style.borderColor = 'var(--accent)';
+    _drumUpdateBtn(g);
+    // Deseleciona o drum visualmente
+    document.querySelectorAll('#ac-peso-list .peso-picker-item').forEach(el => el.classList.remove('selected'));
+  } else {
+    if (wrap) wrap.style.borderColor = 'var(--border)';
+    _drumUpdateBtn(0);
+  }
+}
+
+function _manualKgInput(val) {
+  const kg = parseFloat(val.replace(',', '.'));
+  const g  = Math.round(kg * 1000);
+  const wrap = document.getElementById('ac-manual-kg-wrap');
+  if (g > 0) {
+    if (wrap) wrap.style.borderColor = 'var(--accent)';
+    _drumUpdateBtn(g);
+    // Deseleciona os botões de kg visualmente
+    document.querySelectorAll('#ac-kg-grid button').forEach(el => {
+      el.style.borderColor = 'var(--border)';
+      el.style.background  = 'var(--s2)';
+      el.style.color       = 'var(--text)';
+    });
+  } else {
+    if (wrap) wrap.style.borderColor = 'var(--border)';
+    _drumUpdateBtn(0);
+  }
+}
+
 // ── Abre o bottom sheet de peso para um corte ──
 const _PICKER_ITEM_H = 42; // altura de cada item em px
 
@@ -389,6 +423,16 @@ function openPesoSheet(corteNome) {
   // Botão confirmar já parte com o peso atual
   _drumUpdateBtn(pesoAtual);
 
+  // Limpa inputs manuais
+  const inpG  = document.getElementById('ac-manual-g');
+  const inpKg = document.getElementById('ac-manual-kg');
+  const wrapG  = document.getElementById('ac-manual-g-wrap');
+  const wrapKg = document.getElementById('ac-manual-kg-wrap');
+  if (inpG)  inpG.value  = '';
+  if (inpKg) inpKg.value = '';
+  if (wrapG)  wrapG.style.borderColor  = 'var(--border)';
+  if (wrapKg) wrapKg.style.borderColor = 'var(--border)';
+
   document.getElementById('ac-peso-overlay').classList.add('on');
   document.body.style.overflow = 'hidden';
 }
@@ -416,6 +460,11 @@ function _drumClick(idx) {
     el.classList.toggle('selected', i === idx)
   );
   _drumUpdateBtn(_acouguePesos[idx]);
+  // Limpa input manual de gramas
+  const inpG = document.getElementById('ac-manual-g');
+  const wrapG = document.getElementById('ac-manual-g-wrap');
+  if (inpG)  inpG.value = '';
+  if (wrapG) wrapG.style.borderColor = 'var(--border)';
 }
 
 function _drumUpdateBtn(peso) {
@@ -475,9 +524,13 @@ function _renderKgGrid() {
 }
 
 function _selectKg(gramas) {
-  // Mesmo fluxo do confirmPesoSheet — só usa gramas fixo
   const corte = _acougueAtual;
   if (!corte) return;
+  // Limpa input manual de kg
+  const inpKg  = document.getElementById('ac-manual-kg');
+  const wrapKg = document.getElementById('ac-manual-kg-wrap');
+  if (inpKg)  inpKg.value = '';
+  if (wrapKg) wrapKg.style.borderColor = 'var(--border)';
 
   const separar = document.getElementById('ac-peso-sep')?.value || '';
   const extra   = document.getElementById('ac-extra-textarea')?.value.trim() || '';
