@@ -2264,12 +2264,32 @@ input,textarea{font-family:inherit}
         <div class="peso-picker-fade bot"></div>
         <div class="peso-picker-unit">g</div>
       </div>
+      <!-- Input manual gramas -->
+      <div style="display:flex;align-items:center;gap:10px;margin:8px 16px 0;padding:10px 14px;background:var(--s2);border-radius:12px;border:1.5px solid var(--border)" id="ac-manual-g-wrap">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:.5"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <span style="font-size:12.5px;color:var(--muted);white-space:nowrap">Digitar quantidade:</span>
+        <input id="ac-manual-g" type="number" min="1" max="99999" placeholder="Ex: 350"
+          style="flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--text);font-size:15px;font-weight:700;font-family:inherit;text-align:right"
+          oninput="_manualGramasInput(this.value)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();if(document.getElementById('ac-peso-confirm').dataset.peso>0)confirmPesoSheet();}">
+        <span style="font-size:13px;font-weight:700;color:var(--muted)">g</span>
+      </div>
     </div>
 
     <!-- Seletor de Quilos (botões rápidos) -->
     <div id="ac-peso-tab-quilos" style="display:none;padding:0 16px">
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:8px" id="ac-kg-grid"></div>
-      <div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:4px">Toque para selecionar a quantidade em kg</div>
+      <!-- Input manual kg -->
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--s2);border-radius:12px;border:1.5px solid var(--border)" id="ac-manual-kg-wrap">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;opacity:.5"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <span style="font-size:12.5px;color:var(--muted);white-space:nowrap">Digitar quantidade:</span>
+        <input id="ac-manual-kg" type="number" min="0.1" max="99" step="0.1" placeholder="Ex: 1,5"
+          style="flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--text);font-size:15px;font-weight:700;font-family:inherit;text-align:right"
+          oninput="_manualKgInput(this.value)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();if(document.getElementById('ac-peso-confirm').dataset.peso>0)confirmPesoSheet();}">
+        <span style="font-size:13px;font-weight:700;color:var(--muted)">kg</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:8px">Toque para selecionar ou digite a quantidade</div>
     </div>
     <div class="ac-peso-extras">
       <div class="ac-peso-sep-row">
