@@ -321,9 +321,11 @@ async function fecharMesa(num) {
   if (!t) return;
   sbLoading(true);
   try {
-    // Calcula total da sessão do cache ANTES de limpar (cache já está filtrado por sessão)
+    // Calcula total da sessão do cache, filtrando por opened_at para não pegar sessões anteriores
+    const sessionStart = t?.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
     const sessionTotal = mesaOrdersCache
       .filter(o => parseInt(o.mesa_num) === numInt)
+      .filter(o => !sessionStart || new Date(o.created_at || 0).getTime() >= sessionStart)
       .reduce((s, o) => s + parseFloat(o.total || 0), 0);
 
     // 1. Finaliza todos os pedidos ativos da mesa
@@ -637,4 +639,3 @@ function initSidebarState() {
 setInterval(() => {
   if (EVO.instance) evoCheckStatus();
 }, 30000);
-
