@@ -321,12 +321,15 @@ async function fecharMesa(num) {
   if (!t) return;
   sbLoading(true);
   try {
-    // Calcula total da sessão do cache, filtrando por opened_at para não pegar sessões anteriores
+    // Busca TODOS os pedidos da sessão (incluindo entregue = bebidas/imediatos) para calcular total correto
     const sessionStart = t?.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
-    const sessionTotal = mesaOrdersCache
-      .filter(o => parseInt(o.mesa_num) === numInt)
-      .filter(o => !sessionStart || new Date(o.created_at || 0).getTime() >= sessionStart)
-      .reduce((s, o) => s + parseFloat(o.total || 0), 0);
+    const { data: allSessionOrders } = await sb.from('orders')
+      .select('total,taxa')
+      .eq('mesa_num', numInt)
+      .gte('created_at', sessionStart ? new Date(sessionStart).toISOString() : '2000-01-01')
+      .not('status', 'eq', 'cancelado');
+
+    const sessionTotal = (allSessionOrders || []).reduce((s, o) => s + parseFloat(o.total || 0) + parseFloat(o.taxa || 0), 0);
 
     // 1. Finaliza todos os pedidos ativos da mesa
     const { error: ordErr } = await sb.from('orders')
