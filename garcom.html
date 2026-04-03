@@ -686,9 +686,13 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="2" rx="1"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
       Mesas
     </button>
+    <button class="tab-btn" id="tab-novo-pedido" onclick="switchTab('novo-pedido')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v6M5 8h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      Delivery/Retirada
+    </button>
     <button class="tab-btn" id="tab-pedidos" onclick="switchTab('pedidos')">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-      Meus pedidos
+      Pedidos
     </button>
   </div>
 
@@ -730,6 +734,79 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
     <div id="mesa-filter-bar" style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:10px;margin-bottom:4px"></div>
     <div id="pedidos-list">
       <div class="empty"><div class="empty-icon">📋</div>Nenhum pedido lançado ainda</div>
+    </div>
+  </div>
+
+  <!-- PAGE NOVO PEDIDO (DELIVERY / RETIRADA) -->
+  <div class="page" id="page-novo-pedido" style="padding:16px">
+
+    <!-- Tipo de entrega -->
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button id="np-btn-delivery" onclick="npSetTipo('delivery')"
+        style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 8px;border-radius:12px;border:2px solid var(--accent);background:rgba(59,130,246,.1);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">
+        <svg width="20" height="20" viewBox="0 0 16 16" fill="none"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/></svg>
+        Delivery
+      </button>
+      <button id="np-btn-retirada" onclick="npSetTipo('retirada')"
+        style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 8px;border-radius:12px;border:2px solid var(--border);background:var(--surface2);color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">
+        <svg width="20" height="20" viewBox="0 0 16 16" fill="none"><path d="M2 7l6-5 6 5v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7z" stroke="currentColor" stroke-width="1.4"/><path d="M6 14V9h4v5" stroke="currentColor" stroke-width="1.4"/></svg>
+        Retirada
+      </button>
+    </div>
+
+    <!-- Dados do cliente -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Cliente</div>
+      <div style="margin-bottom:8px">
+        <label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:4px">Nome</label>
+        <input id="np-nome" type="text" placeholder="Nome do cliente" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13.5px;font-family:inherit;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:4px">WhatsApp</label>
+        <input id="np-phone" type="tel" placeholder="(00) 00000-0000" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13.5px;font-family:inherit;outline:none;box-sizing:border-box">
+      </div>
+    </div>
+
+    <!-- Endereço (só delivery) -->
+    <div id="np-addr-block" style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Endereço de entrega</div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:8px">
+        <input id="np-rua" type="text" placeholder="Rua / Avenida" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none">
+        <input id="np-num" type="text" placeholder="Nº" style="width:60px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--text);font-size:13px;font-family:inherit;outline:none;text-align:center">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <input id="np-bairro" type="text" placeholder="Bairro" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none">
+        <input id="np-compl" type="text" placeholder="Complemento" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none">
+      </div>
+    </div>
+
+    <!-- Forma de pagamento -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Pagamento</div>
+      <select id="np-pag" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13.5px;font-family:inherit;outline:none">
+        <option value="dinheiro">Dinheiro</option>
+        <option value="pix">PIX</option>
+        <option value="credito">Cartão de Crédito</option>
+        <option value="debito">Cartão de Débito</option>
+      </select>
+    </div>
+
+    <!-- Observação -->
+    <div style="margin-bottom:12px">
+      <textarea id="np-obs" rows="2" placeholder="Observação geral do pedido (opcional)" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;resize:none;box-sizing:border-box"></textarea>
+    </div>
+
+    <!-- Botão abrir cardápio -->
+    <button onclick="npAbrirCardapio()" style="width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 3h10l-1 8H4L3 3z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="13.5" r="1" fill="currentColor"/><circle cx="11" cy="13.5" r="1" fill="currentColor"/></svg>
+      Selecionar itens do cardápio
+    </button>
+    <div id="np-cart-preview" style="margin-top:10px;display:none">
+      <div id="np-cart-items" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12.5px"></div>
+      <button onclick="npEnviarPedido()" id="np-submit-btn" style="width:100%;padding:14px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Confirmar pedido
+      </button>
     </div>
   </div>
 
@@ -1408,6 +1485,17 @@ async function openPedido(num) {
 
 function closeSheet() {
   document.getElementById('sheet-pedido').classList.remove('on');
+  document.body.style.overflow = '';
+  // Se veio do modo delivery/retirada, salva o cart e atualiza preview
+  if (window._npMode) {
+    window._npMode = false;
+    _npCart = [...cart];
+    cart = [];
+    npAtualizarPreview();
+    // Restaura label do botão
+    const submitBtn = document.getElementById('submit-btn');
+    if (submitBtn) submitBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Enviar para cozinha';
+  }
 }
 
 function switchSheetTab(tab) {
@@ -1909,6 +1997,8 @@ function isDrink(item) {
 
 async function submitPedido() {
   if (!cart.length) return;
+  // Se vier do modo delivery/retirada, fecha sheet e deixa npEnviarPedido cuidar do envio
+  if (window._npMode) { closeSheet(); return; }
   const btn = document.getElementById('submit-btn');
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px"></div> Enviando...';
@@ -1972,14 +2062,149 @@ function closeSuccess() {
 // ══ MEUS PEDIDOS — por mesa ═══════════════
 let activeMesaFilter = 'todas';
 
+// ══ NOVO PEDIDO DELIVERY / RETIRADA ═══════
+let _npTipo = 'delivery';
+let _npCart = [];
+
+function npSetTipo(tipo) {
+  _npTipo = tipo;
+  const isD = tipo === 'delivery';
+  const btnD = document.getElementById('np-btn-delivery');
+  const btnR = document.getElementById('np-btn-retirada');
+  const addr = document.getElementById('np-addr-block');
+  if (btnD) {
+    btnD.style.borderColor = isD ? 'var(--accent)' : 'var(--border)';
+    btnD.style.background  = isD ? 'rgba(59,130,246,.1)' : 'var(--surface2)';
+    btnD.style.color       = isD ? 'var(--accent)' : 'var(--muted)';
+  }
+  if (btnR) {
+    btnR.style.borderColor = !isD ? 'var(--accent)' : 'var(--border)';
+    btnR.style.background  = !isD ? 'rgba(59,130,246,.1)' : 'var(--surface2)';
+    btnR.style.color       = !isD ? 'var(--accent)' : 'var(--muted)';
+  }
+  if (addr) addr.style.display = isD ? '' : 'none';
+}
+
+function npAbrirCardapio() {
+  // Reutiliza o sheet de pedido de mesa mas com flag de delivery
+  _npCart = [];
+  window._npMode = true;
+  activeMesa = null;
+  cart = [];
+  const titleEl = document.getElementById('sheet-title');
+  if (titleEl) titleEl.textContent = _npTipo === 'delivery' ? 'Delivery — Selecionar itens' : 'Retirada — Selecionar itens';
+  // Muda label do botão de confirmação
+  const submitBtn = document.getElementById('submit-btn');
+  if (submitBtn) submitBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar seleção';
+  document.getElementById('sheet-pedido').classList.add('on');
+  document.body.style.overflow = 'hidden';
+  switchSheetTab('itens');
+  renderCardapio();
+}
+
+function npAtualizarPreview() {
+  const preview = document.getElementById('np-cart-preview');
+  const itemsEl = document.getElementById('np-cart-items');
+  if (!preview || !itemsEl) return;
+  if (!_npCart.length) { preview.style.display = 'none'; return; }
+  const tot = _npCart.reduce((s, i) => s + i.price * i.qty, 0);
+  itemsEl.innerHTML = _npCart.map(i =>
+    `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.06)">
+      <span>${i.qty}× ${i.name}${i.obs ? ` <span style="color:var(--muted);font-size:11px">(${i.obs})</span>` : ''}</span>
+      <span style="font-weight:700;color:var(--accent)">R$ ${(i.price*i.qty).toFixed(2).replace('.',',')}</span>
+    </div>`
+  ).join('') + `<div style="display:flex;justify-content:space-between;padding-top:8px;font-weight:800;font-size:14px">
+    <span>Total</span><span style="color:var(--success)">R$ ${tot.toFixed(2).replace('.',',')}</span>
+  </div>`;
+  preview.style.display = '';
+}
+
+async function npEnviarPedido() {
+  const nome  = (document.getElementById('np-nome')?.value || '').trim();
+  const phone = (document.getElementById('np-phone')?.value || '').trim();
+  const pag   = document.getElementById('np-pag')?.value || 'dinheiro';
+  const obs   = (document.getElementById('np-obs')?.value || '').trim();
+  if (!nome)  { showToast('⚠️ Informe o nome do cliente'); return; }
+  if (!phone) { showToast('⚠️ Informe o WhatsApp'); return; }
+  if (!_npCart.length) { showToast('⚠️ Selecione ao menos um item'); return; }
+
+  let addr = '';
+  if (_npTipo === 'delivery') {
+    const rua    = (document.getElementById('np-rua')?.value || '').trim();
+    const num    = (document.getElementById('np-num')?.value || '').trim();
+    const bairro = (document.getElementById('np-bairro')?.value || '').trim();
+    const compl  = (document.getElementById('np-compl')?.value || '').trim();
+    if (!rua) { showToast('⚠️ Informe a rua'); return; }
+    if (!num) { showToast('⚠️ Informe o número'); return; }
+    addr = [rua, num, bairro, compl].filter(Boolean).join(', ');
+  } else {
+    addr = 'Retirada no balcão';
+  }
+
+  const btn = document.getElementById('np-submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px"></div> Enviando...';
+
+  const allItemsArr = _npCart.map(i => ({ qty: i.qty, name: i.name, price: i.price, obs: i.obs || '' }));
+  const tot  = _npCart.reduce((s, i) => s + i.price * i.qty, 0);
+  const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const obsExtra = obs ? ` | ${obs}` : '';
+
+  try {
+    const { data, error } = await sb.from('orders').insert({
+      tenant_id: _garcomTenantId,
+      client: nome,
+      phone: phone.replace(/\D/g, ''),
+      addr,
+      items: allItemsArr,
+      total: tot,
+      taxa: _npTipo === 'delivery' ? 0 : 0,
+      status: 'analise',
+      time,
+      pag,
+      mesa_num: null,
+      garcom_id: currentGarcom?.id,
+      garcom_nome: currentGarcom?.nome
+    }).select().single();
+    if (error) throw error;
+
+    myOrders.unshift({ ...data });
+    // Limpa formulário
+    _npCart = [];
+    document.getElementById('np-nome').value  = '';
+    document.getElementById('np-phone').value = '';
+    document.getElementById('np-obs').value   = '';
+    if (_npTipo === 'delivery') {
+      ['np-rua','np-num','np-bairro','np-compl'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+      });
+    }
+    npAtualizarPreview();
+    document.getElementById('success-num').textContent = '#' + String(data.id).padStart(3,'0');
+    document.getElementById('success-overlay').classList.add('on');
+  } catch(e) {
+    showToast('❌ Erro ao enviar pedido');
+    console.error(e);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar pedido';
+  }
+}
+// ════════════════════════════════════════════
+
 function switchTab(tab) {
-  ['mesas','pedidos'].forEach(t => {
-    document.getElementById('tab-'+t).classList.toggle('on', t===tab);
-    document.getElementById('page-'+t).classList.toggle('on', t===tab);
+  ['mesas','pedidos','novo-pedido'].forEach(t => {
+    const tabEl  = document.getElementById('tab-'+t);
+    const pageEl = document.getElementById('page-'+t);
+    if (tabEl)  tabEl.classList.toggle('on',  t===tab);
+    if (pageEl) pageEl.classList.toggle('on', t===tab);
   });
   if (tab === 'pedidos') {
     activeMesaFilter = 'todas';
     loadPedidosDaMesa();
+  }
+  if (tab === 'novo-pedido') {
+    npSetTipo(_npTipo); // garante estado visual correto
   }
 }
 
