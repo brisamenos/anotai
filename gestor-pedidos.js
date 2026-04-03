@@ -717,15 +717,7 @@ async function createOrder() {
     if (!ordersKanban.find(x => x.id === orderData.id)) ordersKanban.unshift(mapOrder(orderData));
     renderKanban();
 
-    try {
-      await sb.from('movimentos').insert({
-        description: `Pedido #${_orderNum(orderData.id)} – ${client}`,
-        tipo: 'entrada', val: tot, pag, time
-      });
-    } catch (e) { }
-
     sbLoading(false);
-    movimentos.push({ id: Date.now(), desc: `Pedido #${orderData.id} – ${client}`, tipo: 'entrada', val: tot, pag, time });
 
     playOrderSound();
     const nc = document.getElementById('notif-count');

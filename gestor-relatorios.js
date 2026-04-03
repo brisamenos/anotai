@@ -455,10 +455,10 @@ async function renderDesempenho() {
 
     const orders = allOrders || [];
     console.log('[DESEMPENHO]', _desempPrd, '| desde:', since, '| ate:', ate, '| pedidos:', orders.length);
-    const entregues = orders.filter(o => !['cancelado'].includes(o.status));
+    const entregues = orders.filter(o => ['entregue','finalizado'].includes(o.status));
 
     // ── KPIs ─────────────────────────────
-    const totalPedidos   = orders.length;
+    const totalPedidos   = entregues.length; // só pedidos concluídos contam
     const faturamento    = entregues.reduce((s,o) => s + parseFloat(o.total||0), 0);
     const ticketMedio    = totalPedidos > 0 ? faturamento / totalPedidos : 0;
     const cancelados     = orders.filter(o => o.status === 'cancelado').length;
@@ -719,7 +719,7 @@ async function renderRelatorios() {
     ]);
 
     const mesPedidos = periodOrdersRaw || [];
-    const mesValidos = mesPedidos.filter(o => o.status !== 'cancelado' && o.status !== 'aguardando_pix' && o.status !== 'aguardando_cartao');
+    const mesValidos = mesPedidos.filter(o => ['entregue','finalizado'].includes(o.status));
     const allYear    = anoOrdersRaw || [];
 
     // ─── KPIs ───────────────────────────────────────────
@@ -756,7 +756,7 @@ async function renderRelatorios() {
         granLabel = 'Faturamento mensal';
         points = new Array(12).fill(0);
         labels = ['J','F','M','A','M','J','J','A','S','O','N','D'];
-        allYear.filter(o=>o.status!=='cancelado').forEach(o=>{
+        allYear.filter(o=>['entregue','finalizado'].includes(o.status)).forEach(o=>{
           points[new Date(o.created_at).getMonth()] += parseFloat(o.total||0);
         });
       } else if (_relPeriodo === 'mensal') {
@@ -869,7 +869,7 @@ async function renderRelatorios() {
     const mTitle = document.getElementById('rel-month-title');
     if (mbEl) {
       const monthData = new Array(12).fill(0);
-      allYear.filter(o=>o.status!=='cancelado').forEach(o=>{
+      allYear.filter(o=>['entregue','finalizado'].includes(o.status)).forEach(o=>{
         monthData[new Date(o.created_at).getMonth()] += parseFloat(o.total||0);
       });
       const maxMB = Math.max(...monthData, 1);

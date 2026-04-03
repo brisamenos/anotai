@@ -1061,6 +1061,8 @@ async function advanceOrderById(id) {
 
 // ── cancelOrderById ──────────────────────────────────
 async function cancelOrderById(id) {
+  const o = ordersKanban.find(x => x.id === id);
+  const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   try {
     const res = await fetch('/api/order-status', {
       method: 'POST',
@@ -1070,6 +1072,23 @@ async function cancelOrderById(id) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erro');
     ordersKanban = ordersKanban.filter(x => x.id !== id);
+    // Estorno: se existir movimento financeiro deste pedido, cria saída para anular
+    if (o) {
+      try {
+        const { data: movs } = await sb.from('movimentos')
+          .select('id,val,pag')
+          .ilike('description', `%#${o.num}%`)
+          .eq('tipo', 'entrada')
+          .limit(1);
+        if (movs?.length) {
+          await sb.from('movimentos').insert({
+            description: `Estorno — Pedido #${o.num} cancelado`,
+            tipo: 'saida', val: movs[0].val,
+            pag: o.pag || 'Estorno', time
+          });
+        }
+      } catch(e) { console.warn('[cancelOrder] estorno falhou (não-fatal):', e.message); }
+    }
   } catch(e) {
     sbToast('err', 'Erro ao cancelar pedido: ' + e.message); return;
   }
