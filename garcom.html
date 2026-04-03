@@ -998,7 +998,45 @@ let _garcomNomeLoja = null;
   }
 })();
 
-// ══ STATE ═════════════════════════════════
+// ── Auto-login: tenta restaurar sessão salva ─────────
+(async function autoLoginGarcom() {
+  try {
+    const saved = localStorage.getItem('garcom_session');
+    if (!saved) return;
+    const sess = JSON.parse(saved);
+    // Sessão expira após 30 dias
+    if (!sess.usuario || !sess.senha || !sess.tenant_id) return;
+    if (Date.now() - (sess.ts || 0) > 30 * 24 * 60 * 60 * 1000) {
+      localStorage.removeItem('garcom_session'); return;
+    }
+    // Aguarda tenant ser resolvido
+    await new Promise(r => setTimeout(r, 600));
+    if (!_garcomTenantId) _garcomTenantId = sess.tenant_id;
+    const res = await fetch('/api/garcom-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _garcomTenantId },
+      body: JSON.stringify({ usuario: sess.usuario, senha: sess.senha })
+    });
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.id) {
+      currentGarcom = { id: data.id, nome: data.nome, usuario: data.usuario };
+      // Salva sessão para auto-login em recarregamentos
+      localStorage.setItem('garcom_session', JSON.stringify({
+        usuario: user.toLowerCase(), senha: pass,
+        tenant_id: _garcomTenantId, ts: Date.now()
+      }));
+      document.getElementById('topbar-garcom-name').textContent = '👤 ' + data.nome;
+      document.getElementById('screen-login').style.display = 'none';
+      document.getElementById('screen-app').classList.add('show');
+      await loadData();
+      subscribeRealtime();
+      await requestNotifPermission();
+      initSW();
+    } else {
+      localStorage.removeItem('garcom_session');
+    }
+  } catch(e) { /* falhou silenciosamente — mostra tela de login normalmente */ }
+})();
 let currentGarcom = null;  // { id, nome, usuario }
 let tables        = [];
 let allItems      = [];
@@ -1054,6 +1092,7 @@ function doLogout() {
   unsubscribeAll();
   currentGarcom = null;
   cart = []; myOrders = [];
+  localStorage.removeItem('garcom_session');
   document.getElementById('screen-app').classList.remove('show');
   document.getElementById('screen-login').style.display = 'flex';
   document.getElementById('login-user').value = '';
