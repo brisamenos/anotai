@@ -1019,6 +1019,26 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   </div>
 </div>
 
+<!-- MODAL CONFIRMAR OCUPAR MESA -->
+<div id="confirmar-mesa-bg" onclick="if(event.target===this)fecharConfirmarMesa()"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:24px;max-width:320px;width:100%;text-align:center">
+    <div style="font-size:40px;margin-bottom:12px">🪑</div>
+    <div style="font-size:17px;font-weight:800;margin-bottom:6px" id="confirmar-mesa-titulo">Mesa 1</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:20px">Deseja abrir esta mesa e lançar um pedido?</div>
+    <div style="display:flex;gap:10px">
+      <button onclick="fecharConfirmarMesa()"
+        style="flex:1;padding:12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--muted);font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit">
+        Cancelar
+      </button>
+      <button id="confirmar-mesa-btn" onclick="confirmarAbrirMesa()"
+        style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit">
+        Abrir mesa
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"><span id="toast-msg"></span></div>
 
@@ -1177,15 +1197,23 @@ function doLogout() {
 }
 
 // ══ LOAD DATA ════════════════════════════
+let _garcomOffset = 0;
+
+function ordNum(id) {
+  return String(Math.max(1, id - _garcomOffset)).padStart(3, '0');
+}
+
 async function loadData() {
-  const [mesasRes, itemsRes, catsRes] = await Promise.all([
+  const [mesasRes, itemsRes, catsRes, cfgRes] = await Promise.all([
     sb.from('mesas').select('*').order('num'),
     sb.from('menu_items').select('*').neq('status','pausado').order('id'),
-    sb.from('categories').select('*').order('sort_order')
+    sb.from('categories').select('*').order('sort_order'),
+    sb.from('store_config').select('order_num_offset').single()
   ]);
   tables   = (mesasRes.data || []);
   allItems = (itemsRes.data || []);
   allCats  = (catsRes.data  || []);
+  _garcomOffset = parseInt(cfgRes.data?.order_num_offset) || 0;
   renderMesas();
   buildCatPills();
 }
@@ -1422,13 +1450,26 @@ async function openMesaDetail(num) {
         const items = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}× ${i.name}`).join(' · ') : '';
         const lbl   = statusLabel[o.status] || o.status;
         const cls   = statusCls[o.status]   || 'analise';
+        // Botão cancelar: analise sempre; producao/entregue se for só bebidas
+        const isSoBebidas = Array.isArray(o.items) && o.items.length > 0 && o.items.every(i => isDrink(i));
+        const podeCancel  = o.status === 'analise' || ((o.status === 'producao' || o.status === 'entregue') && isSoBebidas);
+        const cancelBtn = podeCancel
+          ? `<button onclick="garcomCancelarPedido(${o.id},${num})"
+              style="margin-top:8px;width:100%;padding:7px;border-radius:8px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.07);color:#f87171;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              Cancelar pedido
+            </button>`
+          : o.status === 'producao'
+          ? `<div style="margin-top:6px;font-size:11px;color:var(--muted);text-align:center">Em produção — somente o gestor pode cancelar</div>`
+          : '';
         return `<div class="mds-order-card">
           <div class="mds-order-header">
             <span class="mds-order-status ${cls}">${lbl}</span>
-            <span style="font-size:11px;color:var(--muted)">${o.time||''}</span>
+            <span style="font-size:11px;color:var(--muted)">#${ordNum(o.id)} · ${o.time||''}</span>
           </div>
           <div class="mds-order-items">${items}</div>
           <div class="mds-order-total">R$ ${(parseFloat(o.total)||0).toFixed(2).replace('.',',')}</div>
+          ${cancelBtn}
         </div>`;
       }).join('') +
       `<div class="mds-total-row">
@@ -1442,7 +1483,14 @@ async function openMesaDetail(num) {
   if (waiting) {
     foot.innerHTML = `<div class="mds-waiting-banner" style="margin-bottom:0">⏳ Aguardando confirmação de pagamento no caixa</div>`;
   } else {
+    const cancelarBtn = !orders.length
+      ? `<button onclick="cancelarOcupacaoMesa(${num})"
+          style="width:100%;padding:11px;border-radius:10px;border:1.5px solid var(--danger);background:rgba(239,68,68,.08);color:#f87171;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:7px">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Cancelar ocupação da mesa
+        </button>` : '';
     foot.innerHTML = `
+      ${cancelarBtn}
       <button class="mds-btn add" onclick="closeMesaDetail();openPedido(${num})">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="2" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         Lançar mais itens
@@ -1461,8 +1509,62 @@ function closeMesaDetail() {
   _detailMesaNum = null;
 }
 
+async function garcomCancelarPedido(orderId, mesaNum) {
+  if (!confirm('Cancelar este pedido?')) return;
+  try {
+    const res = await fetch('/api/order-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _garcomTenantId },
+      body: JSON.stringify({ order_id: orderId, new_status: 'cancelado', tenant_id: _garcomTenantId })
+    });
+    if (!res.ok) throw new Error((await res.json()).error || 'Erro');
+    // Remove do myOrders local
+    myOrders = myOrders.filter(o => o.id !== orderId);
+    showToast('Pedido #' + ordNum(orderId) + ' cancelado');
+    // Reabre o detalhe da mesa atualizado
+    openMesaDetail(mesaNum);
+  } catch(e) {
+    showToast('❌ Erro ao cancelar: ' + e.message);
+  }
+}
+
+async function cancelarOcupacaoMesa(num) {
+  if (!confirm(`Cancelar a ocupação da Mesa ${num}?\n\nEla voltará para o status livre.`)) return;
+  try {
+    await sb.from('mesas').update({
+      status: 'free', opened_at: null, total: null,
+      guests: null, updated_at: new Date().toISOString()
+    }).eq('num', num);
+    const mesa = tables.find(t => t.num === num);
+    if (mesa) { mesa.status = 'free'; mesa.opened_at = null; mesa.total = null; }
+    closeMesaDetail();
+    renderMesas();
+    showToast(`Mesa ${num} liberada`);
+  } catch(e) {
+    showToast('❌ Erro ao liberar mesa');
+    console.error(e);
+  }
+}
+
 // ══ SHEET PEDIDO ═════════════════════════
-async function openPedido(num) {
+let _confirmarMesaNum = null;
+
+function openPedido(num) {
+  _confirmarMesaNum = num;
+  document.getElementById('confirmar-mesa-titulo').textContent = `Mesa ${num}`;
+  const bg = document.getElementById('confirmar-mesa-bg');
+  bg.style.display = 'flex';
+}
+
+function fecharConfirmarMesa() {
+  document.getElementById('confirmar-mesa-bg').style.display = 'none';
+  _confirmarMesaNum = null;
+}
+
+async function confirmarAbrirMesa() {
+  const num = _confirmarMesaNum;
+  if (!num) return;
+  fecharConfirmarMesa();
   activeMesa = num;
   cart = [];
   document.getElementById('sheet-title').textContent = `Lançar Pedido — Mesa ${num}`;
@@ -1472,8 +1574,6 @@ async function openPedido(num) {
   switchSheetTab('itens');
   const mesa = tables.find(t => t.num === num);
   const now = new Date().toISOString();
-  // opened_at = marco zero da sessão, só grava ao abrir mesa livre
-  // updated_at sempre atualiza para manter sincronismo
   const updatePayload = mesa?.status === 'free'
     ? { status: 'busy', opened_at: now, updated_at: now }
     : { status: 'busy', updated_at: now };
@@ -1990,9 +2090,18 @@ function renderCartSheet() {
 
 // ══ SUBMIT PEDIDO ════════════════════════
 // Detecta se item é bebida (já pronto, não vai para cozinha)
+// Retorna true APENAS para bebidas industrializadas prontas (não precisam ser preparadas).
+// Tudo que é feito/montado manualmente (suco, vitamina, açaí, pizza, hambúrguer, etc.) → false → vai ao kanban.
 function isDrink(item) {
-  const n = (item.name + ' ' + (item.description||'')).toLowerCase();
-  return n.match(/suco|juice|refrigerante|coca|pepsi|guaraná|soda|agua|água|cerveja|beer|chopp|vinho|wine|milk|leite|chá|cha|smoothie|vitamina|limonada|bebida|drink|água|agua/);
+  const n = (item.name + ' ' + (item.description || '') + ' ' + (item.cat || '') + ' ' + (item.cat_key || '')).toLowerCase();
+
+  // Itens preparados manualmente — SEMPRE vão ao kanban independente de ser bebida
+  const preparados = /suco|vitamina|smoothie|milkshake|milk.shake|limonada|caipir|drinks|caldo|cozido|açaí|acai|tigela|bowl|pizza|hamburguer|hambúrguer|burger|smash|lanche|sanduiche|sanduíche|wrap|tapioca|crepe|waffle|panqueca|prato|marmita|quentinha|salada|massa|macarrao|macarrão|fettuc|risoto|paella|sushi|temaki|temakeria|espeto|grelhado|assado|frito|porcao|porção|frango|carne|peixe|camarão|camarao|bife|churrasco|açougue|acougue/;
+  if (preparados.test(n)) return false;
+
+  // Bebidas industrializadas prontas — só registro, não vão ao kanban
+  const industrializadas = /refrigerante|coca.cola|pepsi|guarana|guaraná|fanta|sprite|soda|schweppes|tônica|tonica|agua\s|água\s|agua$|água$|agua com|água com|agua sem|água sem|mineral|cerveja|chopp|brahma|skol|heineken|budweiser|corona|stella|amstel|itaipava|eisenbahn|vinho|wine|espumante|prosecco|champagne|sake|dose|tanque|long.neck|long neck|energetico|energético|red.bull|redbull|monster|gatorade|powerade|isotônico|isotonico|ice.tea|nescau|leite.caixinha|leite longa/;
+  return industrializadas.test(n);
 }
 
 async function submitPedido() {
@@ -2005,13 +2114,11 @@ async function submitPedido() {
 
   const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 
+  // Separa: comida → kanban (producao); bebidas industrializadas → só billing (entregue)
   const foodItems  = cart.filter(i => !isDrink(i));
-  // Tudo num pedido só — bebidas ficam marcadas com flag drink:true
-  const allItemsArr = cart.map(i=>({qty:i.qty, name:i.name, price:i.price, obs: i.obs||'', drink: !!isDrink(i)}));
-  const tot = cart.reduce((s,i)=>s+i.price*i.qty,0);
-
-  // Status: se tem comida → producao (vai pra cozinha); só bebidas → pronto (já na mesa)
-  const orderStatus = foodItems.length > 0 ? 'producao' : 'pronto';
+  const drinkItems = cart.filter(i =>  isDrink(i));
+  const totFood    = foodItems.reduce((s,i)=>s+i.price*i.qty,0);
+  const totDrink   = drinkItems.reduce((s,i)=>s+i.price*i.qty,0);
 
   try {
     const mesaAtual = tables.find(t => t.num === activeMesa);
@@ -2021,26 +2128,33 @@ async function submitPedido() {
       if (mesaAtual) { mesaAtual.status = 'busy'; mesaAtual.opened_at = _now; mesaAtual.updated_at = _now; }
     }
 
-    const { data, error } = await sb.from('orders').insert({
-      tenant_id: _garcomTenantId,
-      client: `Mesa ${activeMesa}`,
-      phone: '',
-      addr: `Mesa ${activeMesa}`,
-      items: allItemsArr,
-      total: tot,
-      taxa: 0,
-      status: orderStatus,
-      time,
-      pag: 'Mesa',
-      mesa_num: activeMesa,
-      garcom_id: currentGarcom?.id,
-      garcom_nome: currentGarcom?.nome
-    }).select().single();
-    if (error) throw error;
+    // 1. Comida → producao (vai ao kanban)
+    if (foodItems.length > 0) {
+      const { data, error } = await sb.from('orders').insert({
+        tenant_id: _garcomTenantId,
+        client: `Mesa ${activeMesa}`, phone: '', addr: `Mesa ${activeMesa}`,
+        items: foodItems.map(i=>({qty:i.qty, name:i.name, price:i.price, obs:i.obs||''})),
+        total: totFood, taxa: 0, status: 'producao', time, pag: 'Mesa',
+        mesa_num: activeMesa, garcom_id: currentGarcom?.id, garcom_nome: currentGarcom?.nome
+      }).select().single();
+      if (error) throw error;
+      myOrders.unshift({ ...data, _mesaNum: activeMesa });
+    }
 
-    myOrders.unshift({ ...data, _mesaNum: activeMesa });
+    // 2. Bebidas industrializadas → pronto (aparece no kanban para servir, sem precisar preparar)
+    if (drinkItems.length > 0) {
+      const { data: dData, error: dErr } = await sb.from('orders').insert({
+        tenant_id: _garcomTenantId,
+        client: `Mesa ${activeMesa}`, phone: '', addr: `Mesa ${activeMesa}`,
+        items: drinkItems.map(i=>({qty:i.qty, name:i.name, price:i.price, obs:i.obs||'', drink:true})),
+        total: totDrink, taxa: 0, status: 'pronto', time, pag: 'Mesa',
+        mesa_num: activeMesa, garcom_id: currentGarcom?.id, garcom_nome: currentGarcom?.nome
+      }).select().single();
+      if (dErr) throw dErr;
+      if (dData) myOrders.unshift({ ...dData, _mesaNum: activeMesa });
+    }
+
     closeSheet();
-    document.getElementById('success-num').textContent = '#' + String(data.id).padStart(3,'0');
     document.getElementById('success-overlay').classList.add('on');
     cart = [];
     const { data: mesas } = await sb.from('mesas').select('*').order('num');
@@ -2180,7 +2294,7 @@ async function npEnviarPedido() {
       });
     }
     npAtualizarPreview();
-    document.getElementById('success-num').textContent = '#' + String(data.id).padStart(3,'0');
+    document.getElementById('success-num').textContent = '#' + ordNum(data.id);
     document.getElementById('success-overlay').classList.add('on');
   } catch(e) {
     showToast('❌ Erro ao enviar pedido');
