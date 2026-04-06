@@ -2187,13 +2187,13 @@ async function submitPedido() {
       myOrders.unshift({ ...data, _mesaNum: activeMesa });
     }
 
-    // 2. Bebidas industrializadas → pronto (aparece no kanban para servir, sem precisar preparar)
+    // 2. Bebidas → entregue diretamente (garçom serve na hora, não vai para cozinha/kanban)
     if (drinkItems.length > 0) {
       const { data: dData, error: dErr } = await sb.from('orders').insert({
         tenant_id: _garcomTenantId,
         client: `Mesa ${activeMesa}`, phone: '', addr: `Mesa ${activeMesa}`,
         items: drinkItems.map(i=>({qty:i.qty, name:i.name, price:i.price, obs:i.obs||'', drink:true})),
-        total: totDrink, taxa: 0, status: 'pronto', time, pag: 'Mesa',
+        total: totDrink, taxa: 0, status: 'entregue', time, pag: 'Mesa',
         mesa_num: activeMesa, garcom_id: currentGarcom?.id, garcom_nome: currentGarcom?.nome
       }).select().single();
       if (dErr) throw dErr;
@@ -2201,6 +2201,11 @@ async function submitPedido() {
     }
 
     closeSheet();
+    // Exibe número do último pedido inserido (comida tem prioridade, senão bebida)
+    const _lastInsertedOrder = myOrders[0];
+    if (_lastInsertedOrder?.id) {
+      document.getElementById('success-num').textContent = '#' + ordNum(_lastInsertedOrder.id);
+    }
     document.getElementById('success-overlay').classList.add('on');
     cart = [];
     const { data: mesas } = await sb.from('mesas').select('*').order('num');
@@ -2548,9 +2553,26 @@ function selectFinalizarPay(el) {
 
 async function confirmarFinalizarMesa() {
   if (!finalizarMesaNum) return;
-  // myOrders já está filtrado por sessão (loadPedidosDaMesa aplica o filtro)
-  const orders = myOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === finalizarMesaNum);
-  const total  = orders.reduce((s,o)=>s+parseFloat(o.total||0),0);
+  // Busca total direto do banco para incluir todos os pedidos da sessão
+  // (myOrders só tem status ativos — pedidos já entregues ficariam de fora)
+  const mesaObj = tables.find(t => t.num === finalizarMesaNum);
+  const sessionStart = mesaObj?.opened_at
+    ? new Date(new Date(mesaObj.opened_at).getTime() - 5000).toISOString()
+    : '2000-01-01';
+  let total = 0;
+  try {
+    const { data: sessionOrders } = await sb.from('orders')
+      .select('total,taxa')
+      .eq('mesa_num', finalizarMesaNum)
+      .gte('created_at', sessionStart)
+      .not('status', 'eq', 'cancelado');
+    total = (sessionOrders || []).reduce((s, o) => s + parseFloat(o.total || 0) + parseFloat(o.taxa || 0), 0);
+  } catch(e) {
+    // fallback: usa myOrders se a query falhar
+    total = myOrders
+      .filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === finalizarMesaNum)
+      .reduce((s, o) => s + parseFloat(o.total || 0), 0);
+  }
   try {
     // 1. Finaliza os pedidos ativos da mesa
     await sb.from('orders')
