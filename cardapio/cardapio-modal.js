@@ -74,15 +74,17 @@ function openItemModal(id) {
   _acougueAtual  = null;
   _pesoConfirmadoPeloUsuario = false;
   renderImGrupos(i);
-  // Açougue: pré-seleciona automaticamente o primeiro peso disponível (kg principal)
+  // Açougue: pré-seleciona peso somente se NÃO tem cortes (cliente escolhe o corte)
   if (_isAcougueItem(i) && !_isKitItem(i)) {
-    const pesosGrp  = (i.custom_groups || []).find(g => g.tipo === 'pesos');
-    const pesoPadrao = pesosGrp?.valores?.[0] || 0;  // primeiro peso da lista (ex: 1000g)
-    if (pesoPadrao > 0) {
-      const cortesGrp = (i.custom_groups || []).find(g => g.tipo === 'cortes');
-      const corteNome = cortesGrp?.opcoes?.[0]?.nome || cortesGrp?.opcoes?.[0]?.id || 'Inteiro';
-      _autoSelecionarPorcaoRef(corteNome, pesoPadrao, !!cortesGrp?.opcoes?.length);
+    const cortesGrp = (i.custom_groups || []).find(g => g.tipo === 'cortes');
+    const temCortes  = !!cortesGrp?.opcoes?.length;
+    if (!temCortes) {
+      // Sem cortes: mostra peso padrão na pill de porção mas não pré-confirma
+      const pesosGrp   = (i.custom_groups || []).find(g => g.tipo === 'pesos');
+      const pesoPadrao = pesosGrp?.valores?.[0] || 0;
+      if (pesoPadrao > 0) _autoSelecionarPorcaoRef('Inteiro', pesoPadrao, false);
     }
+    // Com cortes: nada é pré-selecionado — cliente escolhe corte e peso
   }
   // Pré-carrega imagens dos cortes para evitar delay no modal (só kg)
   if (_isAcougueItem(i) && !_isKitItem(i)) {
