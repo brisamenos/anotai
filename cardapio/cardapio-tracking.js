@@ -13,6 +13,12 @@ const STEPS = [
     desc:  'Faça o PIX para a chave enviada no WhatsApp. Assim que confirmarmos, seu pedido entra na fila!'
   },
   {
+    key:   ['aguardando_cartao'],
+    icon:  '💳',
+    title: 'Aguardando pagamento',
+    desc:  'Conclua o pagamento com cartão para seu pedido entrar na fila!'
+  },
+  {
     key:   ['analise'],
     icon:  '✓',
     title: 'Pedido recebido!',
@@ -31,7 +37,7 @@ const STEPS = [
     desc:  'Seu pedido está a caminho. Logo chegará!'
   },
 ];
-const STATUS_ORDER = ['aguardando_pix','analise','producao','pronto','saiu','entregue','finalizado'];
+const STATUS_ORDER = ['aguardando_pix','aguardando_cartao','analise','producao','pronto','saiu','entregue','finalizado'];
 
 function stepIndexFor(status) {
   return STEPS.findIndex(s => s.key.includes(status));
@@ -92,7 +98,7 @@ function updateTracker(status, addr) {
     </div>`;
   }).join('');
   const cancelWrap = document.getElementById('track-cancel-wrap');
-  if (cancelWrap) cancelWrap.style.display = ['analise','aguardando_pix'].includes(status) ? '' : 'none';
+  if (cancelWrap) cancelWrap.style.display = ['analise','aguardando_pix','aguardando_cartao'].includes(status) ? '' : 'none';
 }
 
 function renderTrackItems(items, client) {
