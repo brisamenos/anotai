@@ -671,6 +671,7 @@ async function renderMesasPage() {
 
 function renderMesaCard(t, orders) {
   const isWaiting = t.status === 'waiting';
+  const bordColor = isWaiting ? 'var(--accent3)' : t.status === 'busy' ? 'var(--accent)' : 'var(--border)';
 
   // Com o novo modelo, o total vem da comanda única (mesa_aberta) no cache
   const comanda = mesaOrdersCache.find(o =>
