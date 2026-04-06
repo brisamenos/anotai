@@ -11,9 +11,9 @@ let _imGruposState = {}; // { [grupoNome]: [{nome,preco,qty}] }
 //  AÇOUGUE — Estado e helpers
 // ══════════════════════════════════════════
 let _acougueCortes  = {}; // { [corteNome]: { peso: 0, separar: '', extra: '' } }
-let _acougueAtual   = null; // nome do corte sendo configurado no sheet
-let _acouguePesos   = [];   // array de pesos disponíveis para o item atual
-let _pesoConfirmadoPeloUsuario = false; // true somente após o cliente confirmar peso no sheet
+let _acougueAtual   = null;
+let _acouguePesos   = [];
+let _pesoConfirmadoPeloUsuario = false;
 
 // Ilustrações SVG estilo sketch para cada tipo de corte
 // ── Imagens de cortes servidas localmente (/uploads/cortes/) ──
