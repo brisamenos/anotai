@@ -1249,17 +1249,131 @@ function ordNum(id) {
   return String(Math.max(1, id - _garcomOffset)).padStart(3, '0');
 }
 
+let _garcomPrintCfg = null; // cache de print_config do tenant
+
+// ── Impressão automática do garçom ─────────────────────
+async function garcomPrint(order, newItems) {
+  try {
+    const cfg  = _garcomPrintCfg || {};
+    const nome = (_garcomNomeLoja || cfg.nome || 'RESTAURANTE').toUpperCase();
+    const fontSize = parseInt(cfg.fontSize) || 12;
+    const rodape   = cfg.rodape || 'Bom apetite!';
+    const fmt      = cfg.format || localStorage.getItem('printFormat') || '80mm';
+    const printer  = cfg.printer || localStorage.getItem('printPrinter') || '';
+    const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const orderNum = ordNum(order.id || order);
+
+    // Monta os itens a imprimir — usa só os novos itens desta rodada (sem os já enviados antes)
+    const items = Array.isArray(newItems) && newItems.length ? newItems : (Array.isArray(order.items) ? order.items : []);
+
+    const isCozinha = i => {
+      const skip = ['bebida','drink','suco','agua','refrigerante','cerveja','chopp','vinho','dose','tanque','long'];
+      const cat  = (i.cat || i.cat_key || '').toLowerCase();
+      const name = (i.name || '').toLowerCase();
+      return !skip.some(s => cat.includes(s) || name.includes(s));
+    };
+
+    const renderItem = i => {
+      const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em">↳ ${i.obs}</div>` : '';
+      return `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${(i.name||'').toUpperCase()}</div>${obs}</div>`;
+    };
+
+    const itensCozinha = items.filter(isCozinha);
+    const itensBebida  = items.filter(i => !isCozinha(i));
+
+    const secao = (titulo, lista) => lista.length === 0 ? '' : `
+      <div class="print-ticket" style="font-size:${fontSize}px">
+        <div style="text-align:center;font-size:1.1em;font-weight:900">${nome}</div>
+        <div style="text-align:center;font-weight:bold;margin:4px 0">*** ${titulo} ***</div>
+        <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+        <div>Pedido: <b>#${orderNum}</b></div>
+        <div>Mesa: <b>${order.mesa_num || activeMesa}</b></div>
+        ${currentGarcom?.nome ? `<div>Garçom: ${currentGarcom.nome}</div>` : ''}
+        <div>Data: ${now}</div>
+        <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+        ${lista.map(renderItem).join('')}
+        <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+        <div style="text-align:center;font-size:0.85em">${rodape}</div>
+      </div>`;
+
+    let html = '';
+    if (itensCozinha.length) html += secao('VIA DA COZINHA', itensCozinha);
+    if (itensBebida.length)  html += (html ? '<div style="page-break-before:always"></div>' : '') + secao('VIA DO BAR', itensBebida);
+    if (!html) return;
+
+    const tid = _garcomTenantId;
+
+    // 1️⃣ Electron
+    if (window.ElectronPrint) {
+      try { const r = await window.ElectronPrint.printOrder({ ...order, items, _html: html }); if (r.ok) return; } catch(e) {}
+    }
+
+    // 2️⃣ Print Agent (agente local)
+    try {
+      const st = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } }).then(r=>r.json());
+      if (st.active) {
+        await fetch('/api/print-queue/job', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+          body: JSON.stringify({ html, format: fmt, printer: printer || undefined }),
+        });
+        return;
+      }
+    } catch(e) {}
+
+    // 3️⃣ Servidor /api/print → PDF via iframe oculto
+    try {
+      const r = await fetch('/api/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+        body: JSON.stringify({ html, format: fmt, printer: printer || undefined }),
+      });
+      const data = await r.json();
+      if (data.pdf) {
+        const bytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
+        const blob  = new Blob([bytes], { type: 'application/pdf' });
+        const url   = URL.createObjectURL(blob);
+        let frame = document.getElementById('_garcom_print_frame');
+        if (!frame) {
+          frame = document.createElement('iframe');
+          frame.id = '_garcom_print_frame';
+          frame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;visibility:hidden';
+          document.body.appendChild(frame);
+        }
+        frame.src = url;
+        frame.onload = () => { try { frame.contentWindow.print(); } catch(_) {} };
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        return;
+      }
+    } catch(e) {}
+
+    // 4️⃣ Fallback window.print()
+    let area = document.getElementById('_garcom_print_area');
+    if (!area) { area = document.createElement('div'); area.id = '_garcom_print_area'; document.body.appendChild(area); }
+    area.innerHTML = html;
+    let st2 = document.getElementById('_garcom_print_style');
+    if (!st2) { st2 = document.createElement('style'); st2.id = '_garcom_print_style'; document.head.appendChild(st2); }
+    st2.innerHTML = `@media print { @page{margin:2mm;size:${fmt} auto} body>*:not(#_garcom_print_area){display:none!important} #_garcom_print_area{display:block!important;position:static!important} }`;
+    window.print();
+    setTimeout(() => { area.innerHTML = ''; }, 2000);
+  } catch(e) {
+    console.warn('[GARCOM PRINT] Erro ao imprimir:', e.message);
+  }
+}
+
 async function loadData() {
   const [mesasRes, itemsRes, catsRes, cfgRes] = await Promise.all([
     sb.from('mesas').select('*').order('num'),
     sb.from('menu_items').select('*').neq('status','pausado').order('id'),
     sb.from('categories').select('*').order('sort_order'),
-    sb.from('store_config').select('order_num_offset').eq('tenant_id', _garcomTenantId).single()
+    sb.from('store_config').select('order_num_offset,print_config,store_name').eq('tenant_id', _garcomTenantId).single()
   ]);
   tables   = (mesasRes.data || []);
   allItems = (itemsRes.data || []);
   allCats  = (catsRes.data  || []);
   _garcomOffset = parseInt(cfgRes.data?.order_num_offset) || 0;
+  try { _garcomPrintCfg = cfgRes.data?.print_config ? JSON.parse(cfgRes.data.print_config) : {}; } catch { _garcomPrintCfg = {}; }
+  if (!_garcomNomeLoja && cfgRes.data?.store_name) _garcomNomeLoja = cfgRes.data.store_name;
   renderMesas();
   buildCatPills();
 }
@@ -2320,6 +2434,8 @@ async function submitPedido() {
     const { data: mesas } = await sb.from('mesas').select('*').order('num');
     if (mesas) { tables = mesas; renderMesas(); }
     await loadPedidosDaMesa();
+    // Impressão automática — só os itens desta rodada
+    garcomPrint({ id: _orderId, mesa_num: activeMesa }, newItems);
   } catch(e) {
     showToast('❌ Erro ao enviar pedido');
     console.error(e);
@@ -2457,6 +2573,8 @@ async function npEnviarPedido() {
     npAtualizarPreview();
     document.getElementById('success-num').textContent = '#' + ordNum(data.id);
     document.getElementById('success-overlay').classList.add('on');
+    // Impressão automática pedido avulso
+    garcomPrint({ id: data.id, mesa_num: null }, data.items || []);
   } catch(e) {
     showToast('❌ Erro ao enviar pedido');
     console.error(e);
