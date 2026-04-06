@@ -2532,7 +2532,10 @@ function renderMyOrders() {
   // Atualiza badge na bottom nav
   const badge = document.getElementById('pedidos-bnav-badge');
   if (badge) {
-    const count = myOrders.filter(o => ['producao','analise'].includes(o.status)).length;
+    const count = myOrders.filter(o =>
+      ['producao','analise'].includes(o.status) ||
+      (o.status === 'mesa_aberta' && Array.isArray(o.items) && o.items.some(i => i.item_status === 'producao'))
+    ).length;
     if (count > 0 && document.getElementById('page-pedidos') && !document.getElementById('page-pedidos').classList.contains('on')) {
       badge.textContent = count > 9 ? '9+' : count;
       badge.classList.add('show');
@@ -2578,9 +2581,43 @@ function renderMyOrders() {
     const isWaiting = mesa?.status === 'waiting';
     const total = orders.reduce((s,o)=>s+parseFloat(o.total||0),0);
     const ordersHtml = orders.map(o => {
+      const isMesaAberta = o.status === 'mesa_aberta';
+      if (isMesaAberta) {
+        // Modelo novo: comanda única com item_status por item
+        const allItens = Array.isArray(o.items) ? o.items.filter(i => i.item_status !== 'cancelado') : [];
+        const grupos = {
+          producao: allItens.filter(i => i.item_status === 'producao'),
+          pronto:   allItens.filter(i => i.item_status === 'pronto'),
+          entregue: allItens.filter(i => i.item_status === 'entregue'),
+        };
+        const renderGrupo = (key, itens) => {
+          if (!itens.length) return '';
+          const icon = { producao:'🍳', pronto:'✅', entregue:'🟢' }[key];
+          const lbl  = { producao:'Em preparo', pronto:'Pronto p/ servir', entregue:'Entregue' }[key];
+          const cor  = { producao:'var(--accent)', pronto:'var(--green)', entregue:'var(--muted)' }[key];
+          return `<div style="margin-bottom:6px">
+            <div style="font-size:10px;font-weight:700;color:${cor};margin-bottom:3px">${icon} ${lbl.toUpperCase()}</div>
+            ${itens.map(i=>`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:2px 0">
+              <span>${i.qty}× ${i.name}${i.obs?` <span style="font-size:11px;color:var(--muted)">· ${i.obs}</span>`:''}</span>
+              <span style="color:var(--amber);font-weight:600">R$ ${((i.price||0)*(i.qty||1)).toFixed(2).replace('.',',')}</span>
+            </div>`).join('')}
+          </div>`;
+        };
+        const itensHtml = renderGrupo('producao', grupos.producao)
+          + renderGrupo('pronto', grupos.pronto)
+          + renderGrupo('entregue', grupos.entregue);
+        return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:7px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:11px;font-weight:700;color:var(--accent);background:rgba(59,130,246,.1);padding:2px 7px;border-radius:99px">📋 Comanda aberta</span>
+            <span style="font-size:11px;color:var(--muted)">${o.time||''}</span>
+          </div>
+          ${itensHtml || '<div style="font-size:12px;color:var(--muted)">Sem itens ativos</div>'}
+          <div style="font-size:12px;font-weight:700;color:var(--amber);margin-top:4px;text-align:right">R$ ${(parseFloat(o.total)||0).toFixed(2).replace('.',',')}</div>
+        </div>`;
+      }
+      // Modelo legado: pedido simples (analise/producao/pronto)
       const items = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
       const isFood  = o.status === 'producao' || o.status === 'analise';
-      const isDrinkOrder = o.status === 'pronto';
       const statusColor = isFood ? 'var(--accent)' : 'var(--green)';
       const statusLabel = isFood ? '🍳 Em produção' : '🥤 Pronto';
       return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:7px">
