@@ -1369,10 +1369,10 @@ function subscribeRealtime() {
       } else if (p.eventType === 'UPDATE') {
         const idx = myOrders.findIndex(o => o.id === p.new.id);
         if (idx !== -1) {
-          if (['entregue','cancelado'].includes(p.new.status)) {
-            myOrders.splice(idx, 1);
+          if (p.new.status === 'cancelado') {
+            myOrders.splice(idx, 1); // cancelado sai de myOrders
           } else {
-            myOrders[idx] = p.new;
+            myOrders[idx] = p.new;   // entregue permanece para manter o total correto
           }
           renderMyOrders();
         }
@@ -1502,19 +1502,31 @@ async function openMesaDetail(num) {
     const statusCls   = { producao:'producao', pronto:'pronto', analise:'analise' };
     body.innerHTML = (waiting ? `<div class="mds-waiting-banner">⏳ Mesa aguardando pagamento no caixa</div>` : '') +
       orders.map(o => {
-        const items = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}× ${i.name}`).join(' · ') : '';
-        const lbl   = statusLabel[o.status] || o.status;
-        const cls   = statusCls[o.status]   || 'analise';
-        // Botão cancelar: analise sempre; producao/entregue se for só bebidas
+        const lbl = statusLabel[o.status] || o.status;
+        const cls = statusCls[o.status]   || 'analise';
         const isSoBebidas = Array.isArray(o.items) && o.items.length > 0 && o.items.every(i => isDrink(i));
-        const podeCancel  = o.status === 'analise' || ((o.status === 'producao' || o.status === 'entregue') && isSoBebidas);
-        const cancelBtn = podeCancel
+        const podeEditarItens = o.status === 'analise' || ((o.status === 'producao' || o.status === 'entregue') && isSoBebidas);
+
+        // Itens individuais com botão ✕ por item
+        const itemsHtml = (Array.isArray(o.items) ? o.items : []).map((item, idx) => {
+          const btnItem = podeEditarItens
+            ? `<button onclick="garcomCancelarItem(${o.id},${idx},${num})"
+                style="padding:2px 7px;border-radius:6px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.07);color:#f87171;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0">✕</button>`
+            : '';
+          return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+            <span style="font-size:13px;flex:1">${item.qty}× ${item.name}${item.obs ? ` <span style="font-size:11px;color:var(--muted)">· ${item.obs}</span>` : ''}</span>
+            <span style="font-size:12px;color:var(--accent3);font-weight:600;white-space:nowrap">R$ ${((item.price||0)*(item.qty||1)).toFixed(2).replace('.',',')}</span>
+            ${btnItem}
+          </div>`;
+        }).join('');
+
+        const cancelPedidoBtn = o.status === 'analise'
           ? `<button onclick="garcomCancelarPedido(${o.id},${num})"
               style="margin-top:8px;width:100%;padding:7px;border-radius:8px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.07);color:#f87171;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-              Cancelar pedido
+              Cancelar pedido inteiro
             </button>`
-          : o.status === 'producao'
+          : o.status === 'producao' && !isSoBebidas
           ? `<div style="margin-top:6px;font-size:11px;color:var(--muted);text-align:center">Em produção — somente o gestor pode cancelar</div>`
           : '';
         return `<div class="mds-order-card">
@@ -1522,9 +1534,9 @@ async function openMesaDetail(num) {
             <span class="mds-order-status ${cls}">${lbl}</span>
             <span style="font-size:11px;color:var(--muted)">#${ordNum(o.id)} · ${o.time||''}</span>
           </div>
-          <div class="mds-order-items">${items}</div>
+          <div class="mds-order-items" style="padding-top:4px">${itemsHtml}</div>
           <div class="mds-order-total">R$ ${(parseFloat(o.total)||0).toFixed(2).replace('.',',')}</div>
-          ${cancelBtn}
+          ${cancelPedidoBtn}
         </div>`;
       }).join('') +
       `<div class="mds-total-row">
@@ -1573,13 +1585,49 @@ async function garcomCancelarPedido(orderId, mesaNum) {
       body: JSON.stringify({ order_id: orderId, new_status: 'cancelado', tenant_id: _garcomTenantId })
     });
     if (!res.ok) throw new Error((await res.json()).error || 'Erro');
-    // Remove do myOrders local
     myOrders = myOrders.filter(o => o.id !== orderId);
     showToast('Pedido #' + ordNum(orderId) + ' cancelado');
-    // Reabre o detalhe da mesa atualizado
     openMesaDetail(mesaNum);
   } catch(e) {
     showToast('❌ Erro ao cancelar: ' + e.message);
+  }
+}
+
+async function garcomCancelarItem(orderId, itemIdx, mesaNum) {
+  const order = myOrders.find(o => o.id === orderId);
+  if (!order) return;
+  const items = Array.isArray(order.items) ? [...order.items] : [];
+  const item  = items[itemIdx];
+  if (!item) return;
+  if (!confirm(`Remover "${item.qty}× ${item.name}" deste pedido?`)) return;
+
+  // Diminui qty em 1; se chegar a 0, remove o item
+  if ((item.qty || 1) > 1) {
+    items[itemIdx] = { ...item, qty: item.qty - 1 };
+  } else {
+    items.splice(itemIdx, 1);
+  }
+
+  // Se não sobrou nenhum item, cancela o pedido inteiro
+  if (!items.length) {
+    await garcomCancelarPedido(orderId, mesaNum);
+    return;
+  }
+
+  // Recalcula total e atualiza no banco
+  const novoTotal = items.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0);
+  try {
+    const { error } = await sb.from('orders')
+      .update({ items, total: novoTotal })
+      .eq('id', orderId);
+    if (error) throw error;
+    // Atualiza myOrders local
+    const idx = myOrders.findIndex(o => o.id === orderId);
+    if (idx !== -1) myOrders[idx] = { ...myOrders[idx], items, total: novoTotal };
+    showToast('✅ Item removido do pedido');
+    openMesaDetail(mesaNum);
+  } catch(e) {
+    showToast('❌ Erro ao remover item: ' + (e.message || e));
   }
 }
 
@@ -2183,7 +2231,9 @@ async function submitPedido() {
       if (mesaAtual) { mesaAtual.status = 'busy'; mesaAtual.opened_at = _now; mesaAtual.updated_at = _now; }
     }
 
-    // 1. Comida → producao (vai ao kanban)
+    let _lastOrderId = null;
+
+    // 1. Comida → producao (vai ao kanban, imprime na cozinha)
     if (foodItems.length > 0) {
       const { data, error } = await sb.from('orders').insert({
         tenant_id: _garcomTenantId,
@@ -2193,10 +2243,10 @@ async function submitPedido() {
         mesa_num: activeMesa, garcom_id: currentGarcom?.id, garcom_nome: currentGarcom?.nome
       }).select().single();
       if (error) throw error;
-      myOrders.unshift({ ...data, _mesaNum: activeMesa });
+      _lastOrderId = data.id;
     }
 
-    // 2. Bebidas → entregue diretamente (garçom serve na hora, não vai para cozinha/kanban)
+    // 2. Bebidas → entregue diretamente (garçom serve na hora, não vai para cozinha)
     if (drinkItems.length > 0) {
       const { data: dData, error: dErr } = await sb.from('orders').insert({
         tenant_id: _garcomTenantId,
@@ -2206,19 +2256,19 @@ async function submitPedido() {
         mesa_num: activeMesa, garcom_id: currentGarcom?.id, garcom_nome: currentGarcom?.nome
       }).select().single();
       if (dErr) throw dErr;
-      if (dData) myOrders.unshift({ ...dData, _mesaNum: activeMesa });
+      if (!_lastOrderId && dData) _lastOrderId = dData.id;
     }
 
     closeSheet();
-    // Exibe número do último pedido inserido (comida tem prioridade, senão bebida)
-    const _lastInsertedOrder = myOrders[0];
-    if (_lastInsertedOrder?.id) {
-      document.getElementById('success-num').textContent = '#' + ordNum(_lastInsertedOrder.id);
+    if (_lastOrderId) {
+      document.getElementById('success-num').textContent = '#' + ordNum(_lastOrderId);
     }
     document.getElementById('success-overlay').classList.add('on');
     cart = [];
+    // Recarrega mesas e pedidos do banco — fonte única de verdade, sem unshift manual
     const { data: mesas } = await sb.from('mesas').select('*').order('num');
     if (mesas) { tables = mesas; renderMesas(); }
+    await loadPedidosDaMesa();
   } catch(e) {
     showToast('❌ Erro ao enviar pedido');
     console.error(e);
@@ -2402,13 +2452,12 @@ async function loadPedidosDaMesa() {
 
     const { data } = await sb.from('orders')
       .select('*')
-      .eq('garcom_id', currentGarcom.id)
-      .in('status', ['producao','pronto','analise'])
+      .in('status', ['producao','pronto','analise','entregue'])
       .in('mesa_num', activeMesaNums)
       .order('id', { ascending: false });
 
-    // Filtro de sessão: só pedidos criados APÓS a última abertura da mesa.
-    // Isso garante que ao reabrir uma mesa o histórico anterior não acumula.
+    // Filtro de sessão: só pedidos da sessão atual (após opened_at da mesa).
+    // Inclui entregue para manter total correto quando items são servidos.
     myOrders = (data || []).filter(o => {
       const mesa = activeMesas.find(t => t.num === o.mesa_num);
       if (!mesa || !mesa.opened_at) return true;
