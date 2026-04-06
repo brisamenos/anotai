@@ -2274,19 +2274,20 @@ async function submitPedido() {
     ];
 
     // Busca comanda ativa desta sessão (mesa_aberta)
+    // Usa limit(1) + array para evitar problemas com maybeSingle em versões antigas do Supabase
     const sessionStart = mesaAtual?.opened_at
       ? new Date(new Date(mesaAtual.opened_at).getTime() - 5000).toISOString()
       : new Date(Date.now() - 24*3600*1000).toISOString();
 
-    const { data: existing } = await sb.from('orders')
+    const { data: existingArr } = await sb.from('orders')
       .select('*')
       .eq('mesa_num', activeMesa)
       .eq('status', 'mesa_aberta')
-      .eq('tenant_id', _garcomTenantId)
       .gte('created_at', sessionStart)
       .order('id', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+
+    const existing = Array.isArray(existingArr) && existingArr.length > 0 ? existingArr[0] : null;
 
     let _orderId;
     if (existing) {
