@@ -214,7 +214,6 @@ async function loadAllData(silent = false) {
       safe(sb.from('menu_items').select('*').order('sort_order').order('id')),
       safe(sb.from('categories').select('*').order('sort_order')),
       safe(sb.from('orders').select('*').in('status',['aguardando_pix','analise','producao','pronto']).order('id',{ascending:false})),
-      safe(sb.from('orders').select('*').eq('status','mesa_aberta').order('id',{ascending:false})),
       safe(sb.from('movimentos').select('*').gte('created_at', (() => {
         // Usa data local BR (UTC-3) para não perder movimentos do início do dia
         const d = new Date(); d.setHours(d.getHours() - 3);
@@ -224,7 +223,8 @@ async function loadAllData(silent = false) {
       safe(sb.from('mesas').select('*').order('num')),
       safe(sb.from('estoque').select('*').order('id')),
       safe(sb.from('fidelidade').select('*').order('pts',{ascending:false})),
-      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema,order_num_offset').single())
+      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema,order_num_offset').single()),
+      safe(sb.from('orders').select('*').eq('status','mesa_aberta').order('id',{ascending:false}))
     ]);
 
     if (itemsRes.data?.length)    items         = itemsRes.data.map(mapItem);
