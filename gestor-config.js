@@ -442,12 +442,13 @@ function addGrupo(ctx) {
   if (!list) return;
   var div = document.createElement('div');
   div.className = 'grp-wrap';
-  div.innerHTML = _grupoHtml({nome:'', tipo:'radio', min:1, max:1, opcoes:[]});
+  div.innerHTML = _grupoHtml({nome:'', tipo:'radio', min:0, max:1, required:false, opcoes:[]});
   list.appendChild(div);
 }
 
 function _grupoHtml(g) {
   var isCheck = g.tipo === 'checkbox';
+  var isReq   = g.required === true;
   var optsHtml = (g.opcoes||[]).map(_optHtml).join('');
   var html = '<div class="grp-header">';
   html += '<input class="grp-title-input" placeholder="Nome do grupo" value="' + (g.nome||'').replace(/"/g,'&quot;') + '">';
@@ -456,6 +457,11 @@ function _grupoHtml(g) {
   html += '<div class="grp-type-row">';
   html += '<button type="button" class="grp-type-btn ' + (!isCheck?'on':'') + '" onclick="setGrupoTipo(this,\'radio\')">● Escolha 1</button>';
   html += '<button type="button" class="grp-type-btn ' + (isCheck?'on':'') + '" onclick="setGrupoTipo(this,\'checkbox\')">☑ Múltipla</button>';
+  html += '</div>';
+  html += '<div style="display:flex;align-items:center;gap:8px;margin:6px 0 2px">';
+  html += '<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer">';
+  html += '<input type="checkbox" class="grp-required" ' + (isReq?'checked':'') + ' style="accent-color:var(--accent);width:14px;height:14px">';
+  html += 'Obrigatório</label>';
   html += '</div>';
   html += '<div class="grp-min-max" style="display:' + (isCheck?'flex':'none') + '">';
   html += '<label style="font-size:11px;color:var(--muted);align-self:center">Mín</label>';
@@ -521,12 +527,14 @@ function readGrupos(ctx) {
       var p = parseFloat((row.querySelector('.grp-opt-price') || {}).value) || 0;
       return { nome: n.trim(), preco: p };
     }).filter(function(o){ return o.nome; });
+    var reqEl = wrap.querySelector('.grp-required');
     return {
-      nome:   (nameEl ? nameEl.value : '').trim(),
-      tipo:   tipo,
-      min:    parseInt(minEl ? minEl.value : 0) || 0,
-      max:    parseInt(maxEl ? maxEl.value : 1) || 1,
-      opcoes: opcoes
+      nome:     (nameEl ? nameEl.value : '').trim(),
+      tipo:     tipo,
+      required: reqEl ? reqEl.checked : false,
+      min:      tipo === 'radio' ? 0 : (parseInt(minEl ? minEl.value : 0) || 0),
+      max:      parseInt(maxEl ? maxEl.value : 1) || 1,
+      opcoes:   opcoes
     };
   }).filter(function(g){ return g.nome || g.opcoes.length; });
 }

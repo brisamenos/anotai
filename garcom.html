@@ -1826,7 +1826,7 @@ function renderImGrupos(item) {
   const grupos = item.custom_groups || [];
   if (!grupos.length) { wrap.innerHTML = ''; return; }
   wrap.innerHTML = grupos.map(g => {
-    const isRequired = g.tipo === 'radio' || (g.tipo === 'checkbox' && g.min > 0);
+    const isRequired = g.required === true;
     const badge = isRequired
       ? `<span class="grp-required-badge">Obrigatório</span>`
       : `<span class="grp-optional-badge">Opcional</span>`;
@@ -2022,10 +2022,10 @@ function imConfirmGarcom() {
 
   // Valida grupos obrigatórios
   for (const g of (i.custom_groups || [])) {
-    if (g.tipo === 'radio' && g.min > 0) {
+    if (g.required === true && g.tipo === 'radio') {
       if (!(_imGruposState[g.nome]||[]).length) { showToast(`⚠️ Escolha: ${g.nome}`); return; }
     }
-    if (g.tipo === 'checkbox' && g.min > 0) {
+    if (g.required === true && g.tipo === 'checkbox') {
       const total = (_imGruposState[g.nome]||[]).reduce((s,o)=>s+(o.qty||1),0);
       if (total < g.min) { showToast(`⚠️ ${g.nome}: mínimo ${g.min} opção(ões)`); return; }
     }
