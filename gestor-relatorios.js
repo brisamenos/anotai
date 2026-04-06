@@ -2020,10 +2020,11 @@ async function loadPrinters() {
 // ── Impressão via agente local (computador da loja) ──
 async function _printViaAgent(html) {
   const printer = document.getElementById('print-printer-select')?.value || _printPrinter || '';
-  const format  = document.getElementById('print-format-select')?.value  || _printFormat  || 'A4';
+  const format  = document.getElementById('print-format-select')?.value  || _printFormat  || '80mm';
+  const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
   const res = await fetch('/api/print-queue/job', {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
     body:    JSON.stringify({ html, format, printer: printer || undefined }),
   });
   const data = await res.json();
