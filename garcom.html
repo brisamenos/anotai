@@ -2022,7 +2022,7 @@ function imConfirmGarcom() {
 
   // Valida grupos obrigatórios
   for (const g of (i.custom_groups || [])) {
-    if (g.tipo === 'radio' && g.min !== 0) {
+    if (g.tipo === 'radio' && g.min > 0) {
       if (!(_imGruposState[g.nome]||[]).length) { showToast(`⚠️ Escolha: ${g.nome}`); return; }
     }
     if (g.tipo === 'checkbox' && g.min > 0) {
