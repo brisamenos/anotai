@@ -72,10 +72,11 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   background: var(--surface2);
   border: 1.5px solid var(--border);
   border-radius: 10px;
-  padding: 12px 16px;
+  padding: 13px 16px;
+  min-height: 48px;
   color: var(--text);
   font-family: 'DM Sans', sans-serif;
-  font-size: 14px;
+  font-size: 16px; /* 16px evita zoom no iOS */
   outline: none;
   transition: border-color .18s;
 }
@@ -135,31 +136,70 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 }
 .topbar-btn:hover { border-color:rgba(239,68,68,.3); color:var(--red); }
 
-/* Tabs */
-.tabs-bar {
+/* Bottom Nav */
+.tabs-bar { display: none; }
+.bottom-nav {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 200;
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
   display: flex;
-  padding: 0 16px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-shadow: 0 -4px 24px rgba(0,0,0,.3);
+}
+.bnav-btn {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
   gap: 4px;
-  flex-shrink: 0;
+  padding: 10px 4px;
+  min-height: 56px;
+  border: none; background: none;
+  color: var(--muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: .2px;
+  cursor: pointer;
+  transition: color .15s;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
 }
-.tab-btn {
-  padding: 12px 18px;
-  font-family:'DM Sans',sans-serif;
-  font-size:13px; font-weight:600;
-  color:var(--muted); cursor:pointer;
-  border:none; background:none;
-  border-bottom: 2px solid transparent;
-  transition: all .15s;
-  display:flex; align-items:center; gap:6px;
+.bnav-btn svg { transition: transform .15s; }
+.bnav-btn.on { color: var(--accent); }
+.bnav-btn.on svg { transform: scale(1.12); }
+.bnav-btn.on::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 20%; right: 20%;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 0 0 3px 3px;
 }
-.tab-btn:hover { color:var(--text); }
-.tab-btn.on { color:var(--accent); border-bottom-color:var(--accent); }
+.bnav-btn:active { opacity: .7; }
+.bnav-badge {
+  position: absolute;
+  top: 6px; right: calc(50% - 18px);
+  min-width: 16px; height: 16px;
+  background: var(--red); color: #fff;
+  font-size: 9px; font-weight: 800;
+  border-radius: 99px; padding: 0 4px;
+  display: none; align-items: center; justify-content: center;
+  line-height: 1;
+}
+.bnav-badge.show { display: flex; }
+.tab-btn { display: none; }
 
-/* Pages */
-.page { display:none; flex:1; padding:16px; }
+/* Pages — espaço para bottom nav */
+.page { display:none; flex:1; padding: 14px 14px calc(72px + env(safe-area-inset-bottom, 0px)) 14px; }
 .page.on { display:block; }
+
+/* Topbar compacta mobile */
+@media(max-width:400px) {
+  .topbar-garcom { display: none; }
+  .topbar-sep    { display: none; }
+  .topbar-status span { display: none; }
+}
 
 /* ── MESAS ─────────────────────────────── */
 .mesas-bar {
@@ -265,7 +305,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .mesa-detail-bg.on { display: flex; }
 .mesa-detail-sheet {
   background: var(--surface); border-radius: 24px 24px 0 0;
-  width: 100%; max-width: 600px; max-height: 88vh;
+  width: 100%; max-width: 600px; max-height: calc(88vh - env(safe-area-inset-bottom, 0px));
   display: flex; flex-direction: column;
   animation: slideUp .3s cubic-bezier(.34,1.56,.64,1);
 }
@@ -350,7 +390,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   background:var(--surface);
   border-radius:24px 24px 0 0;
   width:100%; max-width:600px;
-  max-height:92vh;
+  max-height: calc(92vh - env(safe-area-inset-bottom, 0px));
   display:flex; flex-direction:column;
   animation:slideUp .3s cubic-bezier(.34,1.56,.64,1);
 }
@@ -681,20 +721,22 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
     </div>
   </div>
 
-  <div class="tabs-bar">
-    <button class="tab-btn on" id="tab-mesas" onclick="switchTab('mesas')">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="2" rx="1"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <button class="bnav-btn on" id="tab-mesas" onclick="switchTab('mesas')">
+      <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="2" rx="1" fill="currentColor"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
       Mesas
     </button>
-    <button class="tab-btn" id="tab-novo-pedido" onclick="switchTab('novo-pedido')">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v6M5 8h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      Delivery/Retirada
+    <button class="bnav-btn" id="tab-novo-pedido" onclick="switchTab('novo-pedido')">
+      <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v6M5 8h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      Delivery
     </button>
-    <button class="tab-btn" id="tab-pedidos" onclick="switchTab('pedidos')">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    <button class="bnav-btn" id="tab-pedidos" onclick="switchTab('pedidos')">
+      <span class="bnav-badge" id="pedidos-bnav-badge"></span>
+      <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
       Pedidos
     </button>
-  </div>
+  </nav>
 
   <!-- PAGE MESAS -->
   <div class="page on" id="page-mesas">
@@ -810,7 +852,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
     </div>
   </div>
 
-  <div class="safe-bottom"></div>
+
 </div>
 
 <!-- ══ SHEET LANÇAR PEDIDO ════════════════ -->
@@ -1112,14 +1154,14 @@ let _garcomNomeLoja = null;
     const res = await fetch('/api/garcom-login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': _garcomTenantId },
-      body: JSON.stringify({ usuario: sess.usuario, senha: sess.senha })
+      body: JSON.stringify({ usuario: sess.usuario, senha: (() => { try { return atob(sess.senha); } catch(e) { return sess.senha; } })() })
     });
     const data = await res.json().catch(() => null);
     if (res.ok && data?.id) {
       currentGarcom = { id: data.id, nome: data.nome, usuario: data.usuario };
       // Salva sessão para auto-login em recarregamentos
       localStorage.setItem('garcom_session', JSON.stringify({
-        usuario: user.toLowerCase(), senha: pass,
+        usuario: user.toLowerCase(), senha: btoa(pass),
         tenant_id: _garcomTenantId, ts: Date.now()
       }));
       document.getElementById('topbar-garcom-name').textContent = '👤 ' + data.nome;
@@ -1167,6 +1209,10 @@ async function doLogin() {
       err.style.display = 'block';
     } else {
       currentGarcom = { id: data.id, nome: data.nome, usuario: data.usuario };
+      localStorage.setItem('garcom_session', JSON.stringify({
+        usuario: user.toLowerCase(), senha: btoa(pass),
+        tenant_id: _garcomTenantId, ts: Date.now()
+      }));
       document.getElementById('topbar-garcom-name').textContent = '👤 ' + data.nome;
       document.getElementById('screen-login').style.display = 'none';
       document.getElementById('screen-app').classList.add('show');
@@ -2316,9 +2362,12 @@ function switchTab(tab) {
   if (tab === 'pedidos') {
     activeMesaFilter = 'todas';
     loadPedidosDaMesa();
+    // Atualiza badge de pedidos
+    const badge = document.getElementById('pedidos-bnav-badge');
+    if (badge) { badge.classList.remove('show'); }
   }
   if (tab === 'novo-pedido') {
-    npSetTipo(_npTipo); // garante estado visual correto
+    npSetTipo(_npTipo);
   }
 }
 
@@ -2362,6 +2411,16 @@ async function loadPedidosDaMesa() {
 }
 
 function renderMyOrders() {
+  // Atualiza badge na bottom nav
+  const badge = document.getElementById('pedidos-bnav-badge');
+  if (badge) {
+    const count = myOrders.filter(o => ['producao','analise'].includes(o.status)).length;
+    if (count > 0 && document.getElementById('page-pedidos') && !document.getElementById('page-pedidos').classList.contains('on')) {
+      badge.textContent = count > 9 ? '9+' : count;
+      badge.classList.add('show');
+    } else { badge.classList.remove('show'); }
+  }
+
   // Se o modal de detalhe está aberto, atualiza ele também
   if (_detailMesaNum !== null && document.getElementById('mesa-detail-bg')?.classList.contains('on')) {
     openMesaDetail(_detailMesaNum);
@@ -2458,7 +2517,7 @@ async function abrirFinalizarMesa(num) {
 
   // Load orders for this mesa
   const orders = myOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
-  const total  = orders.reduce((s,o)=>s+parseFloat(o.total||0),0);
+  const total  = orders.reduce((s,o)=>s+parseFloat(o.total||0)+parseFloat(o.taxa||0),0);
   document.getElementById('finalizar-total').textContent = 'R$ ' + total.toFixed(2).replace('.',',');
 
   const listEl = document.getElementById('finalizar-pedidos-list');
