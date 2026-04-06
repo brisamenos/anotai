@@ -2273,17 +2273,13 @@ async function submitPedido() {
       }))
     ];
 
-    // Busca comanda ativa desta sessão (mesa_aberta)
-    // Usa limit(1) + array para evitar problemas com maybeSingle em versões antigas do Supabase
-    const sessionStart = mesaAtual?.opened_at
-      ? new Date(new Date(mesaAtual.opened_at).getTime() - 5000).toISOString()
-      : new Date(Date.now() - 24*3600*1000).toISOString();
-
+    // Busca comanda ativa desta mesa (mesa_aberta)
+    // Filtra apenas por mesa_num + status — sem filtro de data, evita falso-negativo
+    // que causava novo INSERT (e novo número de pedido) a cada envio na mesma mesa
     const { data: existingArr } = await sb.from('orders')
       .select('*')
       .eq('mesa_num', activeMesa)
       .eq('status', 'mesa_aberta')
-      .gte('created_at', sessionStart)
       .order('id', { ascending: false })
       .limit(1);
 
