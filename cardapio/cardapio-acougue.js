@@ -13,6 +13,7 @@ let _imGruposState = {}; // { [grupoNome]: [{nome,preco,qty}] }
 let _acougueCortes  = {}; // { [corteNome]: { peso: 0, separar: '', extra: '' } }
 let _acougueAtual   = null; // nome do corte sendo configurado no sheet
 let _acouguePesos   = [];   // array de pesos disponíveis para o item atual
+let _pesoConfirmadoPeloUsuario = false; // true somente após o cliente confirmar peso no sheet
 
 // Ilustrações SVG estilo sketch para cada tipo de corte
 // ── Imagens de cortes servidas localmente (/uploads/cortes/) ──
@@ -438,11 +439,10 @@ function openPesoSheet(corteNome) {
   if (wrapG)  wrapG.style.borderColor  = 'var(--border)';
   if (wrapKg) wrapKg.style.borderColor = 'var(--border)';
 
-  // Aba padrão: quilos — item é vendido por kg no encarte; gramas/quilos são opções de ajuste do cliente
-  switchPesoTab('quilos');
-
   document.getElementById('ac-peso-overlay').classList.add('on');
   document.body.style.overflow = 'hidden';
+  // Aba padrão: quilos — item vendido por kg; gramas é opção de ajuste do cliente
+  switchPesoTab('quilos');
 }
 
 function _drumOnScroll(track) {
@@ -563,6 +563,7 @@ function _selectKg(gramas) {
 
   // Recalcula preço total
   _atualizaTotalPeso();
+  _pesoConfirmadoPeloUsuario = true;
   closePesoSheet();
 }
 
@@ -601,6 +602,7 @@ function confirmPesoSheet() {
 
   // Atualiza total
   _atualizaTotalPeso();
+  _pesoConfirmadoPeloUsuario = true;
   closePesoSheet();
 }
 
