@@ -597,7 +597,25 @@ function subscribeOrders() {
     });
 
   const chMesas = sb.channel('mesas-rt')
-    .on('postgres_changes', {event:'*', schema:'public', table:'mesas'}, () => {
+    .on('postgres_changes', {event:'*', schema:'public', table:'mesas'}, p => {
+      // Notifica o gestor quando garçom envia mesa para pagamento
+      if (p.eventType === 'UPDATE' && p.new?.status === 'waiting' && p.old?.status !== 'waiting') {
+        const mesaNum = p.new.num;
+        const total   = parseFloat(p.new.total || 0).toFixed(2).replace('.', ',');
+        const pagForma = p.new.pag_forma ? ` · ${p.new.pag_forma}` : '';
+        showToast(
+          '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="2" y="5" width="12" height="2" rx="1" fill="currentColor"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+          `Mesa ${mesaNum} aguardando pagamento — R$ ${total}${pagForma}`
+        );
+        sendBrowserNotif(`💰 Mesa ${mesaNum} pronta para fechar`, `Total: R$ ${total}${pagForma}`);
+        playOrderSound();
+        // Muda para a aba de mesas automaticamente se não estiver nela
+        const pageMesas = document.getElementById('page-pedidos-mesa');
+        if (pageMesas && !pageMesas.classList.contains('on')) {
+          const navBtn = document.querySelector('[onclick*="pedidos-mesa"]');
+          if (navBtn) navBtn.style.animation = 'pulse 1s ease 3';
+        }
+      }
       sb.from('mesas').select('*').order('num').then(({ data }) => {
         if (data) {
           tables = data.map(t => ({
