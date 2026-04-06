@@ -72,6 +72,7 @@ function openItemModal(id) {
   _imGruposState = {};
   _acougueCortes = {};
   _acougueAtual  = null;
+  _pesoConfirmadoPeloUsuario = false;
   renderImGrupos(i);
   // Açougue: pré-seleciona automaticamente o primeiro peso disponível (kg principal)
   if (_isAcougueItem(i) && !_isKitItem(i)) {
@@ -1017,11 +1018,14 @@ function imConfirm() {
 
   // ── Açougue: valida e monta descrição (só para kg, não kit) ──
   if (_isAcougueItem(i) && !_isKitItem(i)) {
-    // Se ainda não tem peso selecionado, usa o primeiro peso disponível como fallback
-    if (!Object.values(_acougueCortes).some(v => v.peso > 0)) {
-      const pesosGrpFb = (i.custom_groups || []).find(g => g.tipo === 'pesos');
-      const pesoPadraoFb = pesosGrpFb?.valores?.[0] || 0;
-      if (pesoPadraoFb > 0) _autoSelecionarPorcaoRef('Inteiro', pesoPadraoFb, false);
+    // Se o cliente não escolheu o peso explicitamente, abre o sheet em quilos
+    if (!_pesoConfirmadoPeloUsuario) {
+      const cgs = i.custom_groups || [];
+      _acouguePesos = (cgs.find(g => g.tipo === 'pesos')?.valores) || [];
+      const cortesGrp = cgs.find(g => g.tipo === 'cortes');
+      const corteParaSheet = cortesGrp?.opcoes?.[0]?.nome || cortesGrp?.opcoes?.[0]?.id || 'Inteiro';
+      openPesoSheet(corteParaSheet);
+      return;
     }
     const totalPesoSel = Object.values(_acougueCortes).reduce((s, v) => s + (v.peso || 0), 0);
     if (!totalPesoSel) {
