@@ -1668,6 +1668,20 @@ async function cancelarOcupacaoMesa(num) {
 let _confirmarMesaNum = null;
 
 function openPedido(num) {
+  const mesa = tables.find(t => t.num === num);
+  // Mesa já ocupada → abre direto, sem pedir confirmação
+  if (mesa && mesa.status !== 'free') {
+    activeMesa = num;
+    cart = [];
+    document.getElementById('sheet-title').textContent = `Lançar Pedido — Mesa ${num}`;
+    activeCatFilter = '';
+    renderItemGrid();
+    updateCartUI();
+    switchSheetTab('itens');
+    document.getElementById('sheet-pedido').classList.add('on');
+    return;
+  }
+  // Mesa livre → confirmar abertura normalmente
   _confirmarMesaNum = num;
   document.getElementById('confirmar-mesa-titulo').textContent = `Mesa ${num}`;
   const bg = document.getElementById('confirmar-mesa-bg');
