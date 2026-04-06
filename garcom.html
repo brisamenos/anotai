@@ -1254,7 +1254,7 @@ async function loadData() {
     sb.from('mesas').select('*').order('num'),
     sb.from('menu_items').select('*').neq('status','pausado').order('id'),
     sb.from('categories').select('*').order('sort_order'),
-    sb.from('store_config').select('order_num_offset').single()
+    sb.from('store_config').select('order_num_offset').eq('tenant_id', _garcomTenantId).single()
   ]);
   tables   = (mesasRes.data || []);
   allItems = (itemsRes.data || []);
@@ -1384,7 +1384,16 @@ function subscribeRealtime() {
     })
     .subscribe();
 
-  // Heartbeat: envia ping a cada 25s para manter o WS vivo mesmo em background
+  // Escuta mudanças no offset de numeração — mantém garçom sincronizado com o gestor
+  const chCfg = sb.channel('garcom-cfg-' + gid)
+    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'store_config',
+        filter: `tenant_id=eq.${_garcomTenantId}` }, p => {
+      if (p.new?.order_num_offset != null) {
+        _garcomOffset = parseInt(p.new.order_num_offset) || 0;
+      }
+    })
+    .subscribe();
+  _rtChannels.push(chCfg);
   _heartbeat = setInterval(() => {
     try { sb.channel('garcom-mesas-' + gid).send({ type:'broadcast', event:'ping', payload:{} }); }
     catch(e){}
