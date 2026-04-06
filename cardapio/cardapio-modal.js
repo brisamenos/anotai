@@ -73,6 +73,16 @@ function openItemModal(id) {
   _acougueCortes = {};
   _acougueAtual  = null;
   renderImGrupos(i);
+  // Açougue: pré-seleciona automaticamente o primeiro corte com peso do encarte
+  if (_isAcougueItem(i) && !_isKitItem(i)) {
+    const porcaoGrp = (i.custom_groups || []).find(g => g.tipo === 'porcao_ref');
+    const porcaoRef = porcaoGrp?.gramas || 0;
+    const cortesGrp = (i.custom_groups || []).find(g => g.tipo === 'cortes');
+    const primeiroCorte = cortesGrp?.opcoes?.[0]?.nome || cortesGrp?.opcoes?.[0]?.id || null;
+    if (porcaoRef > 0 && primeiroCorte) {
+      _autoSelecionarPorcaoRef(primeiroCorte, porcaoRef);
+    }
+  }
   // Pré-carrega imagens dos cortes para evitar delay no modal (só kg)
   if (_isAcougueItem(i) && !_isKitItem(i)) {
     const grupos = i.custom_groups || [];
