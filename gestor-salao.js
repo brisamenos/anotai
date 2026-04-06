@@ -689,16 +689,51 @@ function renderMesaCard(t, orders) {
     ? '<span style="font-size:11px;font-weight:700;color:var(--accent3)">⏳ Aguardando pagamento</span>'
     : '<span style="font-size:11px;font-weight:700;color:var(--accent)">🔵 Ocupada</span>';
 
-  const ordersHtml = orders.length
+  // Lê a comanda única (mesa_aberta) para o card do salão
+  const comanda = mesaOrdersCache.find(o =>
+    o.status === 'mesa_aberta' && parseInt(o.mesa_num) === parseInt(t.num)
+  );
+
+  const ordersHtml = comanda
+    ? (() => {
+        const allItens = Array.isArray(comanda.items) ? comanda.items : [];
+        const grupos = {
+          producao: allItens.filter(i => i.item_status === 'producao'),
+          pronto:   allItens.filter(i => i.item_status === 'pronto'),
+          entregue: allItens.filter(i => i.item_status === 'entregue'),
+        };
+        const renderGrupoSalao = (key, itens) => {
+          if (!itens.length) return '';
+          const icon = { producao:'🍳', pronto:'✅', entregue:'🟢' }[key];
+          const lbl  = { producao:'Em preparo', pronto:'Pronto', entregue:'Entregue' }[key];
+          const rows = itens.map(i =>
+            `<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0">
+              <span>${i.drink?'🥤':'🍴'} ${i.qty}× ${i.name}</span>
+              <span style="color:var(--accent3)">R$ ${((i.price||0)*(i.qty||1)).toFixed(2).replace('.',',')}</span>
+            </div>`
+          ).join('');
+          return `<div style="margin-bottom:6px">
+            <div style="font-size:10px;font-weight:700;color:var(--muted);margin-bottom:3px">${icon} ${lbl.toUpperCase()}</div>
+            ${rows}
+          </div>`;
+        };
+        const html = renderGrupoSalao('producao', grupos.producao)
+          + renderGrupoSalao('pronto', grupos.pronto)
+          + renderGrupoSalao('entregue', grupos.entregue);
+        return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:7px">
+          <div style="font-size:10.5px;color:var(--muted);margin-bottom:6px">📋 Comanda #${_orderNum(comanda.id)}</div>
+          ${html || '<div style="font-size:12px;color:var(--muted)">Sem itens ativos</div>'}
+        </div>`;
+      })()
+    : orders.length
     ? orders.map(o => {
       const items = Array.isArray(o.items) ? o.items : [];
-      const itemStr = items.map(i => `${i.drink ? '🥤' : '🍴'} ${i.qty}× ${i.name}`).join('  ');
+      const itemStr = items.filter(i => i.item_status !== 'cancelado').map(i => `${i.drink ? '🥤' : '🍴'} ${i.qty}× ${i.name}`).join('  ');
       const isNew = o.status === 'analise';
       const isProd = o.status === 'producao';
       const isRdy = o.status === 'pronto';
       const stColor = isNew ? 'var(--orange)' : isProd ? 'var(--accent)' : 'var(--success)';
       const stLabel = isNew ? '🆕 Novo' : isProd ? '🍳 Preparando' : '✅ Pronto';
-
       let btns = '';
       if (isNew) {
         btns = `<div style="display:flex;gap:5px;margin-top:7px">
@@ -710,7 +745,6 @@ function renderMesaCard(t, orders) {
             <button class="oc-btn oc-btn-ok" style="width:100%" onclick="mesaServOrder(${o.id})">✓ Entregue</button>
           </div>`;
       }
-
       return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:7px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
             <span style="font-size:10.5px;font-weight:700;color:${stColor};background:${stColor}1a;padding:2px 8px;border-radius:99px">${stLabel}</span>
@@ -784,11 +818,97 @@ function renderMesaCard(t, orders) {
         ${statusLabel}
         <button onclick="event.stopPropagation();openEditMesa(${t.num})" style="margin-left:4px;background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--muted);cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif" title="Editar mesa"></button>
       </div>
-      <div style="font-family:'Playfair Display',sans-serif;font-size:20px;font-weight:900;color:var(--accent3)">R$ ${displayTotal.toFixed(2).replace('.', ',')}</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button onclick="event.stopPropagation();abrirHistoricoMesa(${t.num})" style="background:none;border:1px solid var(--border);border-radius:7px;padding:3px 9px;color:var(--muted);cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif" title="Histórico de sessões">📋 Histórico</button>
+        <div style="font-family:'Playfair Display',sans-serif;font-size:20px;font-weight:900;color:var(--accent3)">R$ ${displayTotal.toFixed(2).replace('.', ',')}</div>
+      </div>
     </div>
     ${ordersHtml}
     ${actionBtn}
   </div>`;
+}
+
+async function abrirHistoricoMesa(num) {
+  // Remove modal anterior se existir
+  document.getElementById('modal-historico-mesa')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'modal-historico-mesa';
+  modal.className = 'modal-bg on';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = `
+    <div class="modal" style="max-width:480px">
+      <div class="modal-head">
+        <div class="modal-title">📋 Histórico — Mesa ${num}</div>
+        <button class="modal-close" onclick="document.getElementById('modal-historico-mesa').remove()"></button>
+      </div>
+      <div style="padding:16px 20px 20px">
+        <div id="historico-mesa-body" style="max-height:60vh;overflow-y:auto">
+          <div style="text-align:center;padding:30px;color:var(--muted)">Carregando...</div>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  try {
+    // Busca todos os pedidos entregues desta mesa (sessões anteriores e atual)
+    const { data: hist } = await sb.from('orders')
+      .select('id,items,total,taxa,created_at,status')
+      .eq('mesa_num', parseInt(num))
+      .eq('status', 'entregue')
+      .order('created_at', { ascending: false });
+
+    if (!hist || !hist.length) {
+      document.getElementById('historico-mesa-body').innerHTML =
+        '<div style="text-align:center;padding:30px;color:var(--muted)">Nenhum histórico encontrado para esta mesa.</div>';
+      return;
+    }
+
+    // Agrupa por sessão (gap > 4h entre pedidos = sessão diferente)
+    const GAP_MS = 4 * 60 * 60 * 1000;
+    const sessions = [];
+    let current = [];
+    for (const o of hist) {
+      if (!current.length) { current.push(o); continue; }
+      const prev = new Date(current[current.length - 1].created_at).getTime();
+      const curr = new Date(o.created_at).getTime();
+      if (Math.abs(prev - curr) > GAP_MS) { sessions.push([...current]); current = [o]; }
+      else current.push(o);
+    }
+    if (current.length) sessions.push(current);
+
+    const html = sessions.map((sess, si) => {
+      const itemMap = {};
+      sess.forEach(o => {
+        (Array.isArray(o.items) ? o.items : []).forEach(i => {
+          if (!itemMap[i.name]) itemMap[i.name] = { name: i.name, qty: 0, subtotal: 0 };
+          itemMap[i.name].qty += (i.qty || 1);
+          itemMap[i.name].subtotal += (i.price || 0) * (i.qty || 1);
+        });
+      });
+      const sessTotal = sess.reduce((s, o) => s + parseFloat(o.total || 0), 0);
+      const sessDate  = new Date(sess[0].created_at).toLocaleDateString('pt-BR');
+      const sessHora  = new Date(sess[sess.length - 1].created_at).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+      const itensHtml = Object.values(itemMap).map(i =>
+        `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)">
+          <span>${i.qty}× ${i.name}</span>
+          <span style="color:var(--accent3);font-weight:600">R$ ${i.subtotal.toFixed(2).replace('.',',')}</span>
+        </div>`
+      ).join('');
+      return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:12px;font-weight:700;color:var(--muted)">Sessão ${sessDate} · até ${sessHora}</div>
+          <div style="font-size:13px;font-weight:700;color:var(--accent3)">R$ ${sessTotal.toFixed(2).replace('.',',')}</div>
+        </div>
+        ${itensHtml}
+      </div>`;
+    }).join('');
+
+    document.getElementById('historico-mesa-body').innerHTML = html;
+  } catch(e) {
+    document.getElementById('historico-mesa-body').innerHTML =
+      `<div style="text-align:center;padding:20px;color:var(--danger)">Erro ao carregar histórico: ${e.message}</div>`;
+  }
 }
 
 async function mesaAdvanceOrder(id) {
@@ -1530,7 +1650,10 @@ function _kdsOrderType(o) {
 function _kdsElapsed(o) {
   const t = kdsTimers[o.id];
   const extra = t?.extra || 0;
-  const startMs = t?.startTs || Date.now();
+  // Usa created_at do pedido para tempo real desde criação; fallback no startTs local
+  const startMs = o.created_at
+    ? new Date(o.created_at).getTime()
+    : (t?.startTs || Date.now());
   return Math.floor((Date.now() - startMs) / 1000) + extra;
 }
 

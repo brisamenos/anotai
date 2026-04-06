@@ -375,7 +375,7 @@ async function fecharMesa(num) {
     const { error: ordErr } = await sb.from('orders')
       .update({ status: 'entregue' })
       .eq('mesa_num', numInt)
-      .in('status', ['analise', 'producao', 'pronto']);
+      .in('status', ['analise', 'producao', 'pronto', 'mesa_aberta']);
     if (ordErr) throw ordErr;
 
     // 2. Marca a mesa como aguardando pagamento, gravando o total da sessão
@@ -446,6 +446,8 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
       const itemMap = {};
       (sessionOrders || []).forEach(o => {
         (Array.isArray(o.items) ? o.items : []).forEach(i => {
+          // Ignora itens cancelados (novo modelo mesa_aberta)
+          if (i.item_status === 'cancelado') return;
           const key = i.name;
           if (!itemMap[key]) itemMap[key] = { name: i.name, qty: 0, subtotal: 0 };
           itemMap[key].qty      += (i.qty || 1);
@@ -544,7 +546,7 @@ async function confirmarPagamentoMesa() {
     const { error: ordErr } = await sb.from('orders')
       .update({ status: 'entregue' })
       .eq('mesa_num', num)
-      .in('status', ['analise', 'producao', 'pronto']);
+      .in('status', ['analise', 'producao', 'pronto', 'mesa_aberta']);
     if (ordErr) { console.error('orders update error:', ordErr); throw ordErr; }
 
     // 2. Liberar mesa
@@ -600,6 +602,7 @@ function abrirComprovantesMesa(num, totalVal, forma, time, ordensPreSalvas) {
   const itemMap = {};
   sessionOrders.forEach(o => {
     (Array.isArray(o.items) ? o.items : []).forEach(i => {
+      if (i.item_status === 'cancelado') return; // ignora cancelados
       const key = i.name;
       if (!itemMap[key]) itemMap[key] = { name:i.name, qty:0, total:0, drink:!!i.drink };
       itemMap[key].qty += (i.qty||1);
@@ -775,3 +778,4 @@ function initSidebarState() {
 setInterval(() => {
   if (EVO.instance) evoCheckStatus();
 }, 30000);
+

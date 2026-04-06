@@ -209,11 +209,12 @@ async function loadAllData(silent = false) {
 
     const [
       itemsRes, catsRes, ordersRes, movsRes,
-      cuponsRes, mesasRes, estoqueRes, fidRes, cfgRes
+      cuponsRes, mesasRes, estoqueRes, fidRes, cfgRes, mesaAbertaRes
     ] = await Promise.all([
       safe(sb.from('menu_items').select('*').order('sort_order').order('id')),
       safe(sb.from('categories').select('*').order('sort_order')),
       safe(sb.from('orders').select('*').in('status',['aguardando_pix','analise','producao','pronto']).order('id',{ascending:false})),
+      safe(sb.from('orders').select('*').eq('status','mesa_aberta').order('id',{ascending:false})),
       safe(sb.from('movimentos').select('*').gte('created_at', (() => {
         // Usa data local BR (UTC-3) para não perder movimentos do início do dia
         const d = new Date(); d.setHours(d.getHours() - 3);
@@ -232,6 +233,10 @@ async function loadAllData(silent = false) {
       type: c.type||'Itens principais', promo:!!c.promo, open:false
     }));
     if (ordersRes.data?.length)   ordersKanban  = ordersRes.data.map(mapOrder);
+    // Comandas mesa_aberta: entram no cache do salão, não no kanban
+    (mesaAbertaRes?.data || []).forEach(o => {
+      if (!mesaOrdersCache.find(x => x.id === o.id)) mesaOrdersCache.unshift(o);
+    });
     if (movsRes.data?.length)     movimentos    = movsRes.data.map(m => ({
       id: m.id, desc: m.description||'', tipo: m.tipo,
       val: parseFloat(m.val)||0, pag: m.pag||'', time: m.time||''
@@ -425,12 +430,15 @@ let mesaOrdersCache = [];
 function _updateMesaOrdersCache(newOrder) {
   const idx = mesaOrdersCache.findIndex(o => o.id === newOrder.id);
   if (idx !== -1) {
-    if (['entregue','cancelado'].includes(newOrder.status)) {
+    if (newOrder.status === 'cancelado') {
+      mesaOrdersCache.splice(idx, 1);
+    } else if (newOrder.status === 'entregue' && newOrder.mesa_num) {
+      // Comanda finalizada pelo garçom: remove do cache ativo
       mesaOrdersCache.splice(idx, 1);
     } else {
-      mesaOrdersCache[idx] = newOrder;
+      mesaOrdersCache[idx] = newOrder; // mesa_aberta UPDATE (novos itens)
     }
-  } else if (!['entregue','cancelado'].includes(newOrder.status) && newOrder.mesa_num) {
+  } else if (!['cancelado'].includes(newOrder.status) && newOrder.mesa_num) {
     // Só adiciona ao cache se pertence à sessão atual (opened_at filter)
     const mesa = tables.find(t => t.num === parseInt(newOrder.mesa_num));
     const sessionStart = mesa?.opened_at ? new Date(mesa.opened_at).getTime() - 5000 : 0;
@@ -512,6 +520,14 @@ function subscribeOrders() {
       if (p.new.status === 'aguardando_cartao') return;
       if (p.new.status === 'aguardando_pix' && p.new.pag !== 'pix_manual') return;
       if (p.new.status === 'entregue') return; // bebidas de mesa já entregues não entram no kanban
+      if (p.new.status === 'mesa_aberta') {
+        // Comanda única de mesa — vai ao cache do salão, não ao kanban
+        _updateMesaOrdersCache(p.new);
+        _renderMesaPageFromCache();
+        const kpg = document.getElementById('page-kds');
+        if (kpg && kpg.classList.contains('on')) renderKDS();
+        return;
+      }
       if (!ordersKanban.find(x => x.id === p.new.id)) {
         // PIX manual aparece na coluna analise com badge próprio
         const _mapped = mapOrder(p.new);

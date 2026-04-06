@@ -6,8 +6,14 @@ function renderKDS() {
   if (_kdsInterval) clearInterval(_kdsInterval);
   _kdsInterval = setInterval(() => _kdsUpdateTimers(), 1000);
 
-  // Filtra pedidos
+  // Pedidos normais (delivery/balcão) em produção
   let orders = ordersKanban.filter(o => o.status === 'producao' || o.status === 'analise');
+  // Comandas de mesa com itens em produção (mesa_aberta com item_status=producao)
+  const mesaOrders = mesaOrdersCache.filter(o =>
+    o.status === 'mesa_aberta' &&
+    Array.isArray(o.items) &&
+    o.items.some(i => i.item_status === 'producao')
+  );
   if (kdsFilter === 'mesa')     orders = orders.filter(o => _kdsOrderType(o) === 'mesa');
   if (kdsFilter === 'delivery') orders = orders.filter(o => _kdsOrderType(o) === 'delivery');
   if (kdsFilter === 'balcao')   orders = orders.filter(o => _kdsOrderType(o) === 'balcao');
@@ -89,6 +95,46 @@ function renderKDS() {
     const avg = Math.round(orders.reduce((s,o) => s + _kdsElapsed(o), 0) / orders.length);
     se('kds-avg-time', _kdsFormatTime(avg));
   }
+
+  // Append mesa cards (item-level production) after regular orders
+  if (mesaOrders.length > 0 && (kdsFilter === 'todos' || kdsFilter === 'mesa')) {
+    g.innerHTML += mesaOrders.map(o => {
+      if (!kdsTimers[o.id]) kdsTimers[o.id] = { startTs: Date.now(), extra: 0 };
+      const elapsed  = _kdsElapsed(o);
+      const isLate   = elapsed > 900;
+      const isWarn   = elapsed > 480 && !isLate;
+      const cardCls  = isLate ? 'st-late' : isWarn ? 'st-ok' : '';
+      const timerCls = isLate ? 't-late' : isWarn ? 't-warn' : 't-ok';
+      const prodItems = o.items.filter(i => i.item_status === 'producao');
+      const itemsHtml = prodItems.map(item => {
+        const itemId = item.item_id || o.items.indexOf(item);
+        return `<div class="kds-item2" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="display:flex;align-items:center;gap:6px;flex:1">
+            <span class="kds-item2-qty">${item.qty}×</span>
+            <div>
+              <div class="kds-item2-name">${item.name.toUpperCase()}</div>
+              ${item.obs ? `<div class="kds-item2-obs">${item.obs}</div>` : ''}
+            </div>
+          </div>
+          <button onclick="kdsItemPronto(${o.id},'${itemId}')"
+            style="padding:4px 10px;border-radius:7px;border:none;background:rgba(34,197,94,.15);color:var(--success);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
+            ✅ Pronto
+          </button>
+        </div>`;
+      }).join('');
+      return `<div class="kds-card2 ${cardCls}" id="kds-card-${o.id}">
+        <div class="kds-card2-head">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="kds-card2-id">#${_orderNum(o.id)}</div>
+            <span class="kds-card2-type kds-type-mesa">${o.addr || 'Mesa ' + o.mesa_num}</span>
+          </div>
+          <div class="kds-timer ${timerCls}" id="kds-timer-${o.id}">${_kdsFormatTime(elapsed)}</div>
+        </div>
+        <div class="kds-card2-body">${itemsHtml}</div>
+      </div>`;
+    }).join('');
+    se('kds-cnt-total', orders.length + mesaOrders.length);
+  }
 }
 
 function _kdsUpdateTimers() {
@@ -162,6 +208,40 @@ async function kdsCancelOrder(id) {
     delete kdsTimers[id];
     renderKDS(); renderKanban();
     sbToast('ok', `Pedido #${id} cancelado`);
+  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
+}
+
+async function kdsItemPronto(orderId, itemId) {
+  // Marca item individual da comanda de mesa como pronto
+  const order = mesaOrdersCache.find(o => o.id === orderId);
+  if (!order) return;
+  const items = Array.isArray(order.items) ? [...order.items] : [];
+  const idx = typeof itemId === 'string'
+    ? items.findIndex(i => i.item_id === itemId)
+    : parseInt(itemId);
+  if (idx < 0) return;
+  items[idx] = { ...items[idx], item_status: 'pronto' };
+  try {
+    const { error } = await sb.from('orders')
+      .update({ items, updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+    if (error) throw error;
+    // Atualiza cache local
+    const ci = mesaOrdersCache.findIndex(o => o.id === orderId);
+    if (ci !== -1) mesaOrdersCache[ci] = { ...mesaOrdersCache[ci], items };
+    // Toca som de pronto
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [[660,0],[880,.1],[1100,.2]].forEach(([f,t]) => {
+        const osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = f; gain.gain.setValueAtTime(.3, ctx.currentTime+t);
+        gain.gain.exponentialRampToValueAtTime(.001, ctx.currentTime+t+.15);
+        osc.start(ctx.currentTime+t); osc.stop(ctx.currentTime+t+.2);
+      });
+    } catch(e){}
+    renderKDS();
+    sbToast('ok', `${items[idx].name} pronto!`);
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
 }
 
