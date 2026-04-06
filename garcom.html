@@ -2666,9 +2666,9 @@ function selectFinalizarPay(el) {
 
 async function confirmarFinalizarMesa() {
   if (!finalizarMesaNum) return;
-  // Com o novo modelo, a comanda é única — total vem direto dela
-  const comanda = myOrders.find(o => o.mesa_num === finalizarMesaNum);
-  const total   = comanda ? parseFloat(comanda.total || 0) : 0;
+  // Soma todos os pedidos da mesa (comanda + bebidas imediatas) igual ao abrirFinalizarMesa
+  const mesaOrders = myOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === finalizarMesaNum);
+  const total = mesaOrders.reduce((s,o)=>s+parseFloat(o.total||0)+parseFloat(o.taxa||0),0);
   try {
     // Marca comanda como entregue (finaliza a sessão)
     await sb.from('orders')

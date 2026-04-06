@@ -638,11 +638,11 @@ async function renderMesasPage() {
     return;
   }
 
-  // Busca pedidos ativos de todas as mesas ocupadas
+  // Busca pedidos ativos de todas as mesas ocupadas (inclui mesa_aberta = comanda única do garçom)
   const { data: orders } = await sb.from('orders')
     .select('*')
     .not('mesa_num', 'is', null)
-    .in('status', ['analise', 'producao', 'pronto'])
+    .in('status', ['analise', 'producao', 'pronto', 'mesa_aberta'])
     .order('id', { ascending: true });
 
   // Busca também pedidos entregue recentes (itens imediatos do garçom) para billing

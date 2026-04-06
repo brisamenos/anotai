@@ -432,11 +432,10 @@ function _updateMesaOrdersCache(newOrder) {
   if (idx !== -1) {
     if (newOrder.status === 'cancelado') {
       mesaOrdersCache.splice(idx, 1);
-    } else if (newOrder.status === 'entregue' && newOrder.mesa_num) {
-      // Comanda finalizada pelo garçom: remove do cache ativo
-      mesaOrdersCache.splice(idx, 1);
     } else {
-      mesaOrdersCache[idx] = newOrder; // mesa_aberta UPDATE (novos itens)
+      // Mantém no cache (atualiza status) — inclui mesa_aberta→entregue ao finalizar,
+      // necessário para o resumo de consumo e cálculo do total na mesa waiting
+      mesaOrdersCache[idx] = newOrder;
     }
   } else if (!['cancelado'].includes(newOrder.status) && newOrder.mesa_num) {
     // Só adiciona ao cache se pertence à sessão atual (opened_at filter)
@@ -759,7 +758,7 @@ setInterval(async () => {
       const { data } = await sb.from('orders')
         .select('id,status,mesa_num')
         .not('mesa_num', 'is', null)
-        .in('status', ['analise','producao','pronto'])
+        .in('status', ['analise','producao','pronto','mesa_aberta'])
         .order('id');
       const hash = JSON.stringify((data||[]).map(o => o.id + o.status));
       if (hash !== _lastPollHash) {
