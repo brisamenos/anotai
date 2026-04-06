@@ -317,7 +317,12 @@ function _renderAcougueGrupos(item, wrap, grupos) {
       </div>`;
     }).join('');
     html += `<div class="ac-section">
-      <div class="ac-section-title">Selecione um dos cortes abaixo</div>
+      <div class="ac-section-title">Selecione o corte desejado</div>
+      <div id="ac-encarte-banner" style="display:none;margin-bottom:10px;padding:10px 13px;background:rgba(34,197,94,.08);border:1.5px solid rgba(34,197,94,.25);border-radius:12px;font-size:12.5px;color:#4ade80;align-items:center;gap:8px">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span id="ac-encarte-txt">Peso do encarte já selecionado</span>
+        <span style="margin-left:auto;font-size:11px;opacity:.7">Toque no corte para alterar</span>
+      </div>
       <div class="corte-grid">${cards}</div>
       <div style="margin-top:10px;display:flex;flex-wrap:wrap;align-items:center;gap:4px">
         <span class="ac-peso-var">
@@ -621,6 +626,36 @@ function _openPorcaoQuickPicker(item, porcaoRef) {
 
   // Sempre abre com "Inteiro" — sem pré-selecionar corte existente
   openPesoSheet('Inteiro');
+}
+
+// ── Pré-seleciona corte com peso do encarte ao abrir o modal ──
+function _autoSelecionarPorcaoRef(corteNome, pesoGramas) {
+  _acougueCortes[corteNome] = { peso: pesoGramas, separar: '', extra: '' };
+
+  // Atualiza visual do card
+  const slug = _slug(corteNome);
+  const card = document.getElementById(`corte-card-${slug}`);
+  const hint = document.getElementById(`corte-hint-${slug}`);
+  if (card) card.classList.add('on');
+  if (hint) {
+    const label = pesoGramas >= 1000
+      ? (pesoGramas / 1000).toFixed(1).replace('.', ',') + ' kg'
+      : pesoGramas + 'g';
+    hint.innerHTML = `<span class="corte-card-badge">${label}</span>`;
+  }
+
+  // Mostra banner informativo
+  const banner = document.getElementById('ac-encarte-banner');
+  const bannerTxt = document.getElementById('ac-encarte-txt');
+  if (banner) {
+    banner.style.display = 'flex';
+    const label = pesoGramas >= 1000
+      ? (pesoGramas / 1000).toFixed(1).replace('.', ',') + ' kg'
+      : pesoGramas + 'g';
+    if (bannerTxt) bannerTxt.textContent = `Peso do encarte (${label}) já selecionado ✓`;
+  }
+
+  _atualizaTotalPeso();
 }
 
 function _atualizaTotalPeso() {
