@@ -438,6 +438,9 @@ function openPesoSheet(corteNome) {
   if (wrapG)  wrapG.style.borderColor  = 'var(--border)';
   if (wrapKg) wrapKg.style.borderColor = 'var(--border)';
 
+  // Aba padrão: quilos — item é vendido por kg no encarte; gramas/quilos são opções de ajuste do cliente
+  switchPesoTab('quilos');
+
   document.getElementById('ac-peso-overlay').classList.add('on');
   document.body.style.overflow = 'hidden';
 }
@@ -482,8 +485,6 @@ function _drumUpdateBtn(peso) {
 function closePesoSheet() {
   document.getElementById('ac-peso-overlay').classList.remove('on');
   document.body.style.overflow = '';
-  // Volta sempre para aba gramas ao fechar
-  switchPesoTab('gramas');
 }
 
 // ── Abas Gramas / Quilos ─────────────────────────────
