@@ -511,6 +511,7 @@ function subscribeOrders() {
       // PIX manual entra no kanban na coluna "analise" para o gestor confirmar o recebimento
       if (p.new.status === 'aguardando_cartao') return;
       if (p.new.status === 'aguardando_pix' && p.new.pag !== 'pix_manual') return;
+      if (p.new.status === 'entregue') return; // bebidas de mesa já entregues não entram no kanban
       if (!ordersKanban.find(x => x.id === p.new.id)) {
         // PIX manual aparece na coluna analise com badge próprio
         const _mapped = mapOrder(p.new);
