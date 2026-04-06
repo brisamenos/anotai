@@ -953,7 +953,7 @@ function imConfirm() {
   // Validate required grupos
   const grupos = i.custom_groups || [];
   for (const g of grupos) {
-    if (g.tipo === 'radio' && g.min > 0) {
+    if (g.required === true) {
       const sel = _imGruposState[g.nome] || [];
       if (!sel.length) { toast('warn', `Escolha: ${g.nome}`); return; }
     }
@@ -1016,7 +1016,7 @@ function imConfirm() {
     const _ACOUGUE_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
     for (const g of (i.custom_groups || [])) {
       if (_ACOUGUE_TIPOS.includes(g.tipo)) continue;
-      if (g.tipo === 'radio' && g.min > 0) {
+      if (g.required === true) {
         const sel = _imGruposState[g.nome] || [];
         if (!sel.length) { toast('warn', `Escolha: ${g.nome}`); return; }
       }

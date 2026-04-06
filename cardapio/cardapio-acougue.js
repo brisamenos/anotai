@@ -159,7 +159,7 @@ function renderImGrupos(item) {
     const genericGrupos  = grupos.filter(g => !_ACOUGUE_TIPOS.includes(g.tipo));
     if (genericGrupos.length) {
       wrap.innerHTML += genericGrupos.map(g => {
-        const isRequired = g.tipo === 'radio';
+        const isRequired = g.required === true;
         const badge = isRequired
           ? `<span class="grp-required-badge">Obrigatório</span>`
           : `<span class="grp-optional-badge">Opcional</span>`;
@@ -202,7 +202,7 @@ function renderImGrupos(item) {
   const genericGrupos  = grupos.filter(g => !_ACOUGUE_TIPOS.includes(g.tipo));
   if (!genericGrupos.length) { wrap.innerHTML = ''; return; }
   wrap.innerHTML = genericGrupos.map(g => {
-    const isRequired = g.tipo === 'radio';
+    const isRequired = g.required === true;
     const badge = isRequired
       ? `<span class="grp-required-badge">Obrigatório</span>`
       : `<span class="grp-optional-badge">Opcional</span>`;
