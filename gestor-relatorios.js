@@ -9,12 +9,12 @@ function renderKDS() {
   // Pedidos normais (delivery/balcão) em produção
   let orders = ordersKanban.filter(o => o.status === 'producao' || o.status === 'analise');
   // Comandas de mesa com itens em produção (mesa_aberta com item_status=producao)
-  const mesaOrders = mesaOrdersCache.filter(o =>
-    o.status === 'mesa_aberta' &&
-    Array.isArray(o.items) &&
-    o.items.some(i => i.item_status === 'producao')
-  );
-  if (kdsFilter === 'mesa')     orders = orders.filter(o => _kdsOrderType(o) === 'mesa');
+  const mesaOrders = mesaOrdersCache
+    .filter(o => o.status === 'mesa_aberta' && Array.isArray(o.items) && o.items.some(i => i.item_status === 'producao'))
+    .map(o => ({ ...o, status: 'producao', _isMesa: true, items: o.items.filter(i => i.item_status === 'producao') }));
+  // Mescla comandas de mesa ao array principal para exibição no KDS
+  orders = [...orders, ...mesaOrders];
+  if (kdsFilter === 'mesa')     orders = orders.filter(o => _kdsOrderType(o) === 'mesa' || o._isMesa);
   if (kdsFilter === 'delivery') orders = orders.filter(o => _kdsOrderType(o) === 'delivery');
   if (kdsFilter === 'balcao')   orders = orders.filter(o => _kdsOrderType(o) === 'balcao');
 
@@ -67,11 +67,14 @@ function renderKDS() {
       </div>`;
     }).join('');
 
-    const actionBtns = isNew
-      ? `<button class="kds-btn-pronto" style="background:var(--orange)" onclick="kdsConfirm(${o.id})">✔ Confirmar</button>
-         <button class="kds-btn-mais" onclick="kdsCancelOrder(${o.id})" style="color:var(--danger)">✕</button>`
-      : `<button class="kds-btn-pronto" onclick="kdsMarkPronto(${o.id})">✅ Pronto</button>
-         <button class="kds-btn-mais" onclick="kdsAddTime(${o.id})" title="+5 min">+5min</button>`;
+    const actionBtns = o._isMesa
+      ? `<button class="kds-btn-pronto" onclick="kdsMarkMesaPronto(${o.id})">✅ Pronto</button>
+         <button class="kds-btn-mais" onclick="kdsAddTime(${o.id})" title="+5 min">+5min</button>`
+      : isNew
+        ? `<button class="kds-btn-pronto" style="background:var(--orange)" onclick="kdsConfirm(${o.id})">✔ Confirmar</button>
+           <button class="kds-btn-mais" onclick="kdsCancelOrder(${o.id})" style="color:var(--danger)">✕</button>`
+        : `<button class="kds-btn-pronto" onclick="kdsMarkPronto(${o.id})">✅ Pronto</button>
+           <button class="kds-btn-mais" onclick="kdsAddTime(${o.id})" title="+5 min">+5min</button>`;
 
     return `<div class="kds-card2 ${cardCls}" id="kds-card-${o.id}">
       <div class="kds-card2-head">
@@ -167,6 +170,26 @@ async function kdsConfirm(id) {
     renderKDS();
     sbToast('ok', `Pedido #${_orderNum(id)} em preparo`);
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
+}
+
+async function kdsMarkMesaPronto(orderId) {
+  const order = mesaOrdersCache.find(o => o.id === orderId);
+  if (!order) return;
+  const updatedItems = (order.items || []).map(i =>
+    i.item_status === 'producao' ? { ...i, item_status: 'pronto' } : i
+  );
+  try {
+    const { error } = await sb.from('orders')
+      .update({ items: updatedItems, updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+    if (error) throw error;
+    const idx = mesaOrdersCache.findIndex(o => o.id === orderId);
+    if (idx !== -1) mesaOrdersCache[idx] = { ...mesaOrdersCache[idx], items: updatedItems };
+    delete kdsTimers[orderId];
+    renderKDS();
+    _renderMesaPageFromCache();
+    sbToast('ok', 'Mesa ' + order.mesa_num + ' — itens prontos');
+  } catch(e) { sbToast('err', 'Erro ao marcar pronto: ' + (e?.message || e)); }
 }
 
 async function kdsMarkPronto(id) {

@@ -89,15 +89,39 @@ function filterKanban(type) {
 // ─────────────────────────────────────────
 // KANBAN
 // ─────────────────────────────────────────
+function _buildMesaKanbanOrders() {
+  // Gera objetos sintéticos a partir do cache de mesas para exibição no kanban
+  const result = [];
+  (mesaOrdersCache || []).forEach(o => {
+    if (o.status !== 'mesa_aberta') return;
+    const items = Array.isArray(o.items) ? o.items : [];
+    const prodItems  = items.filter(i => i.item_status === 'producao');
+    const prontoItems= items.filter(i => i.item_status === 'pronto');
+    if (prodItems.length) {
+      result.push({ ...o, status: 'producao', _isMesa: true,
+        items: prodItems.map(i => ({ qty: i.qty, name: i.name })) });
+    }
+    if (prontoItems.length && !prodItems.length) {
+      result.push({ ...o, status: 'pronto', _isMesa: true,
+        items: prontoItems.map(i => ({ qty: i.qty, name: i.name })) });
+    }
+  });
+  return result;
+}
+
 function renderKanban() {
   const statuses = ['analise', 'producao', 'pronto'];
+  const mesaKanban = _buildMesaKanbanOrders();
   statuses.forEach(st => {
     const col = document.getElementById('col-' + st);
     const cnt = document.getElementById('cnt-' + st);
-    let filtered = ordersKanban.filter(o => o.status === st);
-    if (_kanbanFilter === 'delivery') filtered = filtered.filter(o => o.addr && !o.addr.includes('Mesa') && !o.addr.toLowerCase().includes('retirada') && !o.addr.toLowerCase().includes('balcão') && !o.addr.toLowerCase().includes('balcao'));
-    if (_kanbanFilter === 'balcao') filtered = filtered.filter(o => !o.addr || o.addr.toLowerCase().includes('retirada') || o.addr.toLowerCase().includes('balcão') || o.addr.toLowerCase().includes('balcao'));
-    if (_kanbanFilter === 'mesa') filtered = filtered.filter(o => o.mesa_num || (o.addr && o.addr.includes('Mesa')));
+    let filtered = [
+      ...ordersKanban.filter(o => o.status === st),
+      ...mesaKanban.filter(o => o.status === st)
+    ];
+    if (_kanbanFilter === 'delivery') filtered = filtered.filter(o => !o._isMesa && o.addr && !o.addr.includes('Mesa') && !o.addr.toLowerCase().includes('retirada') && !o.addr.toLowerCase().includes('balcão') && !o.addr.toLowerCase().includes('balcao'));
+    if (_kanbanFilter === 'balcao') filtered = filtered.filter(o => !o._isMesa && (!o.addr || o.addr.toLowerCase().includes('retirada') || o.addr.toLowerCase().includes('balcão') || o.addr.toLowerCase().includes('balcao')));
+    if (_kanbanFilter === 'mesa') filtered = filtered.filter(o => o._isMesa || o.mesa_num || (o.addr && o.addr.includes('Mesa')));
     if (cnt) cnt.textContent = filtered.length;
     if (!col) return;
     if (filtered.length === 0) {
@@ -119,7 +143,14 @@ function renderKanban() {
 
         // ── Botões de ação por tipo ──────────────────────
         let actionBtn = '';
-        if (st === 'analise') {
+        if (o._isMesa) {
+          // Comanda de mesa — ações por item_status
+          if (st === 'producao') {
+            actionBtn = '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();kdsMarkMesaPronto(' + o.id + ')">✅ Pronto p/ servir!</button>';
+          } else if (st === 'pronto') {
+            actionBtn = '<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();kanbanMesaServido(' + o.id + ')">🍽️ Servido!</button>';
+          }
+        } else if (st === 'analise') {
           if (o._pixPendente) {
             // PIX manual aguardando confirmação — só mostra botão de confirmar pagamento e cancelar
             actionBtn = '<button class="oc-btn oc-btn-pix-confirmar" onclick="event.stopPropagation();confirmarPagamentoPix(' + o.id + ')">💠 Confirmar Pagamento PIX</button>' +
@@ -1526,3 +1557,23 @@ async function importarCardapio(inputEl) {
 }
 
 // ─────────────────────────────────────────
+
+async function kanbanMesaServido(orderId) {
+  const order = mesaOrdersCache.find(o => o.id === orderId);
+  if (!order) return;
+  // Marca itens 'pronto' como 'entregue' na comanda
+  const updatedItems = (order.items || []).map(i =>
+    i.item_status === 'pronto' ? { ...i, item_status: 'entregue' } : i
+  );
+  try {
+    const { error } = await sb.from('orders')
+      .update({ items: updatedItems, updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+    if (error) throw error;
+    const idx = mesaOrdersCache.findIndex(o => o.id === orderId);
+    if (idx !== -1) mesaOrdersCache[idx] = { ...mesaOrdersCache[idx], items: updatedItems };
+    renderKanban();
+    _renderMesaPageFromCache();
+    sbToast('ok', 'Mesa ' + order.mesa_num + ' — itens servidos!');
+  } catch(e) { sbToast('err', 'Erro: ' + (e?.message || e)); }
+}

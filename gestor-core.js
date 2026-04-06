@@ -521,8 +521,17 @@ function subscribeOrders() {
       if (p.new.status === 'entregue') return; // bebidas de mesa já entregues não entram no kanban
       if (p.new.status === 'mesa_aberta') {
         // Comanda única de mesa — vai ao cache do salão, não ao kanban
+        const hasFoodItems = Array.isArray(p.new.items) && p.new.items.some(i => i.item_status === 'producao');
         _updateMesaOrdersCache(p.new);
         _renderMesaPageFromCache();
+        if (hasFoodItems) {
+          playOrderSound();
+          const foodList = p.new.items.filter(i => i.item_status === 'producao').map(i => i.qty + 'x ' + i.name).join(', ');
+          showToast('\uD83C\uDF74', 'Mesa ' + p.new.mesa_num + ' — ' + foodList);
+          sendBrowserNotif('\uD83C\uDF74 Pedido Mesa ' + p.new.mesa_num, foodList);
+          const nc = document.getElementById('notif-count');
+          if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
+        }
         const kpg = document.getElementById('page-kds');
         if (kpg && kpg.classList.contains('on')) renderKDS();
         return;
@@ -591,6 +600,18 @@ function subscribeOrders() {
         renderKanban();
       }
       if (p.new.mesa_num) {
+        // Detecta novos itens de cozinha adicionados ao UPDATE da comanda
+        if (p.new.status === 'mesa_aberta') {
+          const prev = mesaOrdersCache.find(o => o.id === p.new.id);
+          const prevProducao = prev ? (prev.items || []).filter(i => i.item_status === 'producao').length : 0;
+          const newProducao  = (p.new.items || []).filter(i => i.item_status === 'producao').length;
+          if (newProducao > prevProducao) {
+            playOrderSound();
+            const newFoods = p.new.items.filter(i => i.item_status === 'producao').slice(-(newProducao - prevProducao)).map(i => i.qty + 'x ' + i.name).join(', ');
+            showToast('\uD83C\uDF74', 'Mesa ' + p.new.mesa_num + ' — ' + newFoods);
+            sendBrowserNotif('\uD83C\uDF74 Mesa ' + p.new.mesa_num, newFoods);
+          }
+        }
         _updateMesaOrdersCache(p.new);
         _renderMesaPageFromCache();
       }
