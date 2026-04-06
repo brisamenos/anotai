@@ -471,6 +471,8 @@ async function confirmarPagamentoMesa() {
     // Atualizar estado local e cache
     t.status = 'free'; t.total = null; t.guests = null;
     ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== num);
+    // Salva os pedidos da mesa ANTES de limpar o cache (comprovante precisa deles)
+    const _ordensComprovante = mesaOrdersCache.filter(o => parseInt(o.mesa_num) === num);
     mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== num);
     tables.sort((a,b) => parseInt(a.num) - parseInt(b.num));
     closeModal('modal-pag-mesa');
@@ -481,7 +483,7 @@ async function confirmarPagamentoMesa() {
 
     // Monta e exibe comprovante
     const caixaMsg = movErr ? ' (caixa não registrado)' : '';
-    abrirComprovantesMesa(num, totalVal, forma, time);
+    abrirComprovantesMesa(num, totalVal, forma, time, _ordensComprovante);
     sbToast('ok', `Mesa ${num} liberada — R$ ${totalVal.toFixed(2).replace('.',',')}${caixaMsg}`);
   } catch(e) {
     console.error('confirmarPagamentoMesa error:', e);
@@ -492,16 +494,14 @@ async function confirmarPagamentoMesa() {
   }
 }
 
-function abrirComprovantesMesa(num, totalVal, forma, time) {
+function abrirComprovantesMesa(num, totalVal, forma, time, ordensPreSalvas) {
   const modal = document.getElementById('modal-comprovante-mesa');
   if (!modal) return;
 
-  // Busca itens do consumo do cache
-  const t = tables.find(x => parseInt(x.num) === parseInt(num));
-  const sessionStart = t?.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
-  const sessionOrders = mesaOrdersCache.filter(o =>
-    parseInt(o.mesa_num) === parseInt(num)
-  );
+  // Usa os pedidos pré-salvos (passados antes de limpar o cache) ou fallback no cache
+  const sessionOrders = ordensPreSalvas && ordensPreSalvas.length > 0
+    ? ordensPreSalvas
+    : mesaOrdersCache.filter(o => parseInt(o.mesa_num) === parseInt(num));
 
   // Consolida itens
   const itemMap = {};
@@ -682,4 +682,3 @@ function initSidebarState() {
 setInterval(() => {
   if (EVO.instance) evoCheckStatus();
 }, 30000);
-
