@@ -672,27 +672,25 @@ async function renderMesasPage() {
 function renderMesaCard(t, orders) {
   const isWaiting = t.status === 'waiting';
 
-  // Total ativo (analise/producao/pronto) — do cache
-  const totalAtivo = orders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
+  // Com o novo modelo, o total vem da comanda única (mesa_aberta) no cache
+  const comanda = mesaOrdersCache.find(o =>
+    o.status === 'mesa_aberta' && parseInt(o.mesa_num) === parseInt(t.num)
+  );
 
-  // Total de itens imediatos entregues nesta sessão (bebidas etc) — do cache billing
+  // Fallback para modelo antigo (pedidos separados no kanban)
+  const totalAtivo = orders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
   const sessionStart = t.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
   const totalEntregue = mesaOrdersCache
     .filter(o => parseInt(o.mesa_num) === t.num && o.status === 'entregue')
     .filter(o => !sessionStart || new Date(o.created_at || 0).getTime() >= sessionStart)
     .reduce((s, o) => s + parseFloat(o.total || 0), 0);
 
-  const total = totalAtivo + totalEntregue;
-
-  const bordColor = isWaiting ? 'rgba(245,158,11,.4)' : 'rgba(59,130,246,.25)';
+  const total = comanda
+    ? parseFloat(comanda.total || 0)
+    : (totalAtivo + totalEntregue);
   const statusLabel = isWaiting
     ? '<span style="font-size:11px;font-weight:700;color:var(--accent3)">⏳ Aguardando pagamento</span>'
     : '<span style="font-size:11px;font-weight:700;color:var(--accent)">🔵 Ocupada</span>';
-
-  // Lê a comanda única (mesa_aberta) para o card do salão
-  const comanda = mesaOrdersCache.find(o =>
-    o.status === 'mesa_aberta' && parseInt(o.mesa_num) === parseInt(t.num)
-  );
 
   const ordersHtml = comanda
     ? (() => {
