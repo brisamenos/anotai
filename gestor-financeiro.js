@@ -402,18 +402,13 @@ async function fecharMesa(num) {
   }
 }
 
-function openRegistrarPagamento(num, totalJaCalculado) {
+async function openRegistrarPagamento(num, totalJaCalculado) {
   const t = tables.find(x => parseInt(x.num) === parseInt(num));
   if (!t) return;
 
-  // Usa o total passado pelo card (já calculado do mesaOrdersCache filtrado por sessão).
-  // Evita re-query ao banco que puxaria histórico de sessões anteriores.
   let totalVal = parseFloat(totalJaCalculado) || 0;
-
-  // Fallback: se não foi passado, calcula do cache local
   if (!totalJaCalculado) {
-    const mesa = tables.find(x => parseInt(x.num) === parseInt(num));
-    const sessionStart = mesa?.opened_at ? new Date(mesa.opened_at).getTime() - 5000 : 0;
+    const sessionStart = t?.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
     totalVal = mesaOrdersCache
       .filter(o => parseInt(o.mesa_num) === parseInt(num))
       .filter(o => new Date(o.created_at || 0).getTime() >= sessionStart)
@@ -423,15 +418,113 @@ function openRegistrarPagamento(num, totalJaCalculado) {
   document.getElementById('modal-pag-mesa-title').textContent = `Registrar Pagamento — Mesa ${num}`;
   document.getElementById('modal-pag-total').textContent = 'R$ ' + totalVal.toFixed(2).replace('.',',');
   document.getElementById('modal-pag-mesa-num').value = num;
-  // Pré-seleciona forma de pagamento se garçom já informou
-  const pagForma = t.pag_forma || t.pag_forma;
+  const pagForma = t.pag_forma;
   if (pagForma) {
     const sel = document.getElementById('modal-pag-forma');
     if (sel) for (let i=0;i<sel.options.length;i++) {
       if (sel.options[i].value === pagForma) { sel.selectedIndex=i; break; }
     }
   }
+
+  // Carrega resumo de itens — busca do banco para garantir dados completos
+  const itensEl  = document.getElementById('modal-pag-itens');
+  const listEl   = document.getElementById('modal-pag-itens-list');
+  if (itensEl && listEl) {
+    itensEl.style.display = 'none';
+    listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">Carregando...</div>';
+    itensEl.style.display = 'block';
+    try {
+      const sessionStart = t?.opened_at
+        ? new Date(new Date(t.opened_at).getTime() - 5000).toISOString()
+        : '2000-01-01';
+      const { data: sessionOrders } = await sb.from('orders')
+        .select('items,total,taxa,status')
+        .eq('mesa_num', parseInt(num))
+        .gte('created_at', sessionStart)
+        .not('status', 'eq', 'cancelado');
+
+      const itemMap = {};
+      (sessionOrders || []).forEach(o => {
+        (Array.isArray(o.items) ? o.items : []).forEach(i => {
+          const key = i.name;
+          if (!itemMap[key]) itemMap[key] = { name: i.name, qty: 0, subtotal: 0 };
+          itemMap[key].qty      += (i.qty || 1);
+          itemMap[key].subtotal += (i.price || 0) * (i.qty || 1);
+        });
+      });
+      const itens = Object.values(itemMap);
+      if (itens.length) {
+        listEl.innerHTML = itens.map(i =>
+          `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
+            <span>${i.qty}× ${i.name}</span>
+            <span style="color:var(--accent3);font-weight:600">R$ ${i.subtotal.toFixed(2).replace('.',',')}</span>
+          </div>`
+        ).join('');
+        // Guarda os itens no modal para usar na impressão
+        itensEl.dataset.ordersJson = JSON.stringify(itens);
+      } else {
+        listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">Nenhum item encontrado</div>';
+      }
+    } catch(e) {
+      listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">Erro ao carregar itens</div>';
+    }
+  }
+
   openModal('modal-pag-mesa');
+}
+
+function imprimirViaCliente() {
+  const num      = parseInt(document.getElementById('modal-pag-mesa-num').value);
+  const totalStr = document.getElementById('modal-pag-total').textContent || 'R$ 0,00';
+  const forma    = document.getElementById('modal-pag-forma')?.value || '';
+  const itensEl  = document.getElementById('modal-pag-itens');
+  const itens    = itensEl?.dataset.ordersJson ? JSON.parse(itensEl.dataset.ordersJson) : [];
+  const nome     = _sessao?.nome || 'Estabelecimento';
+  const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' });
+  const formaLabel = { PIX: '💠 PIX', Cartão: '💳 Cartão', Dinheiro: '💵 Dinheiro' }[forma] || forma;
+
+  const itensHtml = itens.length
+    ? itens.map(i =>
+        `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px dashed #ddd">
+          <span>${i.qty}× ${i.name}</span>
+          <span>R$ ${i.subtotal.toFixed(2).replace('.',',')}</span>
+        </div>`
+      ).join('')
+    : '<div style="font-size:12px;color:#999;text-align:center;padding:8px">Sem itens</div>';
+
+  const html = `
+    <div style="font-family:monospace;background:#fff;color:#111;padding:20px;max-width:300px;margin:0 auto">
+      <div style="text-align:center;margin-bottom:12px">
+        <div style="font-size:18px;font-weight:900">${nome}</div>
+        <div style="font-size:11px;color:#666">${dataHora}</div>
+        <div style="font-size:13px;font-weight:700;margin-top:4px">Mesa ${num}</div>
+        <hr style="border:none;border-top:1px dashed #ccc;margin:8px 0">
+      </div>
+      <div style="margin-bottom:10px">${itensHtml}</div>
+      <hr style="border:none;border-top:1px dashed #ccc;margin:8px 0">
+      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;margin-bottom:4px">
+        <span>TOTAL</span><span>${totalStr}</span>
+      </div>
+      <div style="text-align:center;font-size:12px;color:#555;margin-top:6px">${formaLabel}</div>
+      <div style="text-align:center;font-size:11px;color:#aaa;margin-top:10px">Obrigado pela preferência!</div>
+    </div>`;
+
+  // Tenta Electron primeiro, senão abre janela de impressão do browser
+  if (window.ElectronPrint) {
+    const fakeOrder = { id: num, client: `Mesa ${num}`, items: itens, total: parseFloat(totalStr.replace('R$ ','').replace(',','.')), pag: forma, mesa_num: num };
+    window.ElectronPrint.printOrder(fakeOrder).catch(() => _printViaWindow(html));
+  } else {
+    _printViaWindow(html);
+  }
+}
+
+function _printViaWindow(html) {
+  const w = window.open('', '_blank', 'width=400,height=600');
+  if (!w) { sbToast('err', 'Permita popups para imprimir'); return; }
+  w.document.write(`<!DOCTYPE html><html><head><title>Via do cliente</title>
+    <style>body{margin:0;background:#fff}@media print{body{margin:0}}</style></head>
+    <body>${html}<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}<\/script></body></html>`);
+  w.document.close();
 }
 
 async function confirmarPagamentoMesa() {
