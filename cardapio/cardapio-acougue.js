@@ -628,31 +628,39 @@ function _openPorcaoQuickPicker(item, porcaoRef) {
   openPesoSheet('Inteiro');
 }
 
-// ── Pré-seleciona corte com peso do encarte ao abrir o modal ──
-function _autoSelecionarPorcaoRef(corteNome, pesoGramas) {
+// ── Pré-seleciona corte/peso do encarte ao abrir o modal ──
+function _autoSelecionarPorcaoRef(corteNome, pesoGramas, temCortes) {
   _acougueCortes[corteNome] = { peso: pesoGramas, separar: '', extra: '' };
 
-  // Atualiza visual do card
-  const slug = _slug(corteNome);
-  const card = document.getElementById(`corte-card-${slug}`);
-  const hint = document.getElementById(`corte-hint-${slug}`);
-  if (card) card.classList.add('on');
-  if (hint) {
-    const label = pesoGramas >= 1000
-      ? (pesoGramas / 1000).toFixed(1).replace('.', ',') + ' kg'
-      : pesoGramas + 'g';
-    hint.innerHTML = `<span class="corte-card-badge">${label}</span>`;
+  const label = pesoGramas >= 1000
+    ? (pesoGramas / 1000).toFixed(1).replace('.', ',') + ' kg'
+    : pesoGramas + 'g';
+
+  if (temCortes) {
+    // Atualiza visual do card de corte
+    const slug = _slug(corteNome);
+    const card = document.getElementById(`corte-card-${slug}`);
+    const hint = document.getElementById(`corte-hint-${slug}`);
+    if (card) card.classList.add('on');
+    if (hint) hint.innerHTML = `<span class="corte-card-badge">${label}</span>`;
+  } else {
+    // Sem cortes: atualiza a pill de porção de referência para indicar seleção
+    const porcaoEl = document.getElementById('im-porcao-ref');
+    if (porcaoEl) {
+      porcaoEl.style.background = 'rgba(34,197,94,.12)';
+      porcaoEl.style.borderColor = 'rgba(34,197,94,.35)';
+      porcaoEl.style.color = '#4ade80';
+    }
   }
 
-  // Mostra banner informativo
-  const banner = document.getElementById('ac-encarte-banner');
-  const bannerTxt = document.getElementById('ac-encarte-txt');
-  if (banner) {
-    banner.style.display = 'flex';
-    const label = pesoGramas >= 1000
-      ? (pesoGramas / 1000).toFixed(1).replace('.', ',') + ' kg'
-      : pesoGramas + 'g';
-    if (bannerTxt) bannerTxt.textContent = `Peso do encarte (${label}) já selecionado ✓`;
+  // Banner informativo (só para items com cortes, para não poluir modal simples)
+  if (temCortes) {
+    const banner = document.getElementById('ac-encarte-banner');
+    const bannerTxt = document.getElementById('ac-encarte-txt');
+    if (banner) {
+      banner.style.display = 'flex';
+      if (bannerTxt) bannerTxt.textContent = `Peso do encarte (${label}) já selecionado ✓`;
+    }
   }
 
   _atualizaTotalPeso();
