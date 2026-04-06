@@ -73,14 +73,16 @@ function openItemModal(id) {
   _acougueCortes = {};
   _acougueAtual  = null;
   renderImGrupos(i);
-  // Açougue: pré-seleciona automaticamente o primeiro corte com peso do encarte
+  // Açougue: pré-seleciona automaticamente o peso do encarte
   if (_isAcougueItem(i) && !_isKitItem(i)) {
     const porcaoGrp = (i.custom_groups || []).find(g => g.tipo === 'porcao_ref');
     const porcaoRef = porcaoGrp?.gramas || 0;
-    const cortesGrp = (i.custom_groups || []).find(g => g.tipo === 'cortes');
-    const primeiroCorte = cortesGrp?.opcoes?.[0]?.nome || cortesGrp?.opcoes?.[0]?.id || null;
-    if (porcaoRef > 0 && primeiroCorte) {
-      _autoSelecionarPorcaoRef(primeiroCorte, porcaoRef);
+    if (porcaoRef > 0) {
+      const cortesGrp = (i.custom_groups || []).find(g => g.tipo === 'cortes');
+      // Com cortes: pré-seleciona o primeiro corte
+      // Sem cortes: usa 'Inteiro' como chave (mesmo que openPesoSheet usa)
+      const corteNome = cortesGrp?.opcoes?.[0]?.nome || cortesGrp?.opcoes?.[0]?.id || 'Inteiro';
+      _autoSelecionarPorcaoRef(corteNome, porcaoRef, !!cortesGrp?.opcoes?.length);
     }
   }
   // Pré-carrega imagens dos cortes para evitar delay no modal (só kg)
@@ -1017,6 +1019,12 @@ function imConfirm() {
 
   // ── Açougue: valida e monta descrição (só para kg, não kit) ──
   if (_isAcougueItem(i) && !_isKitItem(i)) {
+    // Se ainda não tem peso selecionado, tenta usar a porcao_ref como fallback
+    const porcaoGrpFb = (i.custom_groups || []).find(g => g.tipo === 'porcao_ref');
+    const porcaoRefFb = porcaoGrpFb?.gramas || 0;
+    if (!Object.values(_acougueCortes).some(v => v.peso > 0) && porcaoRefFb > 0) {
+      _autoSelecionarPorcaoRef('Inteiro', porcaoRefFb, false);
+    }
     const totalPesoSel = Object.values(_acougueCortes).reduce((s, v) => s + (v.peso || 0), 0);
     if (!totalPesoSel) {
       toast('warn', 'Selecione ao menos um corte e o peso!');
