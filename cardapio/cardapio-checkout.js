@@ -285,12 +285,15 @@ async function _doSubmitOrder(addr, troco) {
           headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
           body: JSON.stringify({ phone: phone.replace(/\D/g,''), valor: _cbDesconto })
         });
-      } catch(e) {}
+      } catch(e) {
+        toast('⚠️','Cashback não pôde ser debitado. Fale com o restaurante.');
+      }
       _resetCashbackUI();
     }
 
     cart = [];
     appliedCupom = null;
+    _pendingOrderAddr = '';
     updateCartFloat();
     document.getElementById('cupom-input').value = '';
     document.getElementById('cupom-msg').innerHTML = '';
@@ -795,4 +798,3 @@ function resetCart() {
   renderTotals();
   closeCart();
 }
-
