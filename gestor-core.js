@@ -1480,6 +1480,14 @@ let categories   = [];
 let ordersKanban = [];
 let _orderNumOffset = 0;   // offset salvo em store_config; #exibido = id - offset
 function _orderNum(id) { return Math.max(1, Number(id) - Number(_orderNumOffset)); }
+
+// Retorna true se o pedido contém APENAS bebidas industrializadas (não imprime na cozinha)
+const _BEBIDAS_RE = /refrigerante|coca.cola|pepsi|guarana|guaraná|fanta|sprite|soda|schweppes|tônica|tonica|agua\s|água\s|agua$|água$|agua com|água com|agua sem|água sem|mineral|cerveja|chopp|brahma|skol|heineken|budweiser|corona|stella|amstel|itaipava|eisenbahn|vinho|wine|espumante|prosecco|champagne|sake|dose|tanque|long.neck|long neck|energetico|energético|red.bull|redbull|monster|gatorade|powerade|isotônico|isotonico|ice.tea|nescau|leite.caixinha|leite longa/i;
+function _isSoBebidas(order) {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  if (!items.length) return false;
+  return items.every(i => _BEBIDAS_RE.test((i.name || '').toLowerCase()));
+}
 let orderIdSeq   = 1;
 let tables       = [];
 let fidClients   = [];
