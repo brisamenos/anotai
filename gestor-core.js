@@ -521,7 +521,8 @@ function subscribeOrders() {
         if (window._pdvCreatedIds && window._pdvCreatedIds.has(Number(p.new.id))) { window._pdvCreatedIds.delete(Number(p.new.id)); renderKanban(); return; }
         renderKanban();
         playOrderSound();
-        _startPersistentAlert();
+        // Mesa: só um toque — garçom já sabe o que pediu. Delivery/retirada: alerta persistente.
+        if (!p.new.mesa_num) _startPersistentAlert();
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
@@ -552,7 +553,7 @@ function subscribeOrders() {
         ordersKanban.unshift(mapOrder(p.new));
         renderKanban();
         playOrderSound();
-        _startPersistentAlert();
+        if (!p.new.mesa_num) _startPersistentAlert();
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
@@ -668,7 +669,7 @@ setInterval(async () => {
             houveMudanca = true;
             // Notifica como novo pedido
             playOrderSound();
-            _startPersistentAlert();
+            if (!o.mesa_num) _startPersistentAlert();
             const nc = document.getElementById('notif-count');
             if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
             const items = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
