@@ -73,16 +73,14 @@ function openItemModal(id) {
   _acougueCortes = {};
   _acougueAtual  = null;
   renderImGrupos(i);
-  // Açougue: pré-seleciona automaticamente o peso do encarte
+  // Açougue: pré-seleciona automaticamente o primeiro peso disponível (kg principal)
   if (_isAcougueItem(i) && !_isKitItem(i)) {
-    const porcaoGrp = (i.custom_groups || []).find(g => g.tipo === 'porcao_ref');
-    const porcaoRef = porcaoGrp?.gramas || 0;
-    if (porcaoRef > 0) {
+    const pesosGrp  = (i.custom_groups || []).find(g => g.tipo === 'pesos');
+    const pesoPadrao = pesosGrp?.valores?.[0] || 0;  // primeiro peso da lista (ex: 1000g)
+    if (pesoPadrao > 0) {
       const cortesGrp = (i.custom_groups || []).find(g => g.tipo === 'cortes');
-      // Com cortes: pré-seleciona o primeiro corte
-      // Sem cortes: usa 'Inteiro' como chave (mesmo que openPesoSheet usa)
       const corteNome = cortesGrp?.opcoes?.[0]?.nome || cortesGrp?.opcoes?.[0]?.id || 'Inteiro';
-      _autoSelecionarPorcaoRef(corteNome, porcaoRef, !!cortesGrp?.opcoes?.length);
+      _autoSelecionarPorcaoRef(corteNome, pesoPadrao, !!cortesGrp?.opcoes?.length);
     }
   }
   // Pré-carrega imagens dos cortes para evitar delay no modal (só kg)
@@ -1019,11 +1017,11 @@ function imConfirm() {
 
   // ── Açougue: valida e monta descrição (só para kg, não kit) ──
   if (_isAcougueItem(i) && !_isKitItem(i)) {
-    // Se ainda não tem peso selecionado, tenta usar a porcao_ref como fallback
-    const porcaoGrpFb = (i.custom_groups || []).find(g => g.tipo === 'porcao_ref');
-    const porcaoRefFb = porcaoGrpFb?.gramas || 0;
-    if (!Object.values(_acougueCortes).some(v => v.peso > 0) && porcaoRefFb > 0) {
-      _autoSelecionarPorcaoRef('Inteiro', porcaoRefFb, false);
+    // Se ainda não tem peso selecionado, usa o primeiro peso disponível como fallback
+    if (!Object.values(_acougueCortes).some(v => v.peso > 0)) {
+      const pesosGrpFb = (i.custom_groups || []).find(g => g.tipo === 'pesos');
+      const pesoPadraoFb = pesosGrpFb?.valores?.[0] || 0;
+      if (pesoPadraoFb > 0) _autoSelecionarPorcaoRef('Inteiro', pesoPadraoFb, false);
     }
     const totalPesoSel = Object.values(_acougueCortes).reduce((s, v) => s + (v.peso || 0), 0);
     if (!totalPesoSel) {
