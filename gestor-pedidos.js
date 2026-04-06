@@ -241,7 +241,7 @@ function openOrderDetail(id) {
   // Totais
   const fmt = v => 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ',');
   document.getElementById('od-subtotal').textContent = fmt(o.total);
-  document.getElementById('od-total').textContent = fmt(o.total);
+  document.getElementById('od-total').textContent = fmt(o.total + o.taxa);
 
   const taxaRow = document.getElementById('od-taxa-row');
   if (taxaRow) {
