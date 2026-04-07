@@ -1811,5 +1811,14 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ── Max global ID para cálculo de offset por tenant ──
+  if (method === 'GET' && pathname === '/api/orders/global-max-id') {
+    try {
+      const row = db.prepare('SELECT COALESCE(MAX(id),0) as max_id FROM orders').get()
+      send(res, 200, { max_id: row?.max_id || 0 })
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
   return false // nenhuma rota tratada aqui — passa para o REST engine
 }

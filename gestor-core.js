@@ -285,9 +285,11 @@ async function loadAllData(silent = false) {
       // define offset = MAX(id) global para que o 1º pedido seja #1
       if (_orderNumOffset === 0 && ordersKanban.length === 0) {
         try {
-          const { data: lastAny } = await sb.from('orders').select('id').order('id', {ascending:false}).limit(1);
-          const globalMax = lastAny?.[0]?.id ? Number(lastAny[0].id) : 0;
-          // Verifica se este tenant tem algum pedido histórico
+          // Busca MAX(id) global (sem filtro de tenant) via endpoint dedicado
+          const resp = await fetch('/api/orders/global-max-id', { headers: { 'x-tenant-id': _sessao.tenant_id } });
+          const { max_id } = await resp.json();
+          const globalMax = Number(max_id) || 0;
+          // Verifica se este tenant tem algum pedido histórico (filtrado por tenant via API)
           const { data: tenantHist } = await sb.from('orders').select('id').limit(1);
           const temHistorico = tenantHist && tenantHist.length > 0;
           if (!temHistorico && globalMax > 0) {
