@@ -4818,6 +4818,31 @@ Use no seu próximo pedido 🛍️</textarea>
   /* Botão fechar fixo sempre visível no topo da conversa (quando lista oculta) */
   .wa-conv-col::before{display:none}
 }
+
+/* ══ ORDER DETAIL MODAL ══════════════════════════════════════ */
+.od-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid var(--border);margin-bottom:14px}
+.od-id{font-family:'Playfair Display',sans-serif;font-size:20px;font-weight:900;letter-spacing:-.3px}
+.od-status-badge{font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:99px;letter-spacing:.4px}
+.badge-analise{background:rgba(249,115,22,.15);color:#fb923c;border:1px solid rgba(249,115,22,.3)}
+.badge-producao{background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.3)}
+.badge-pronto{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3)}
+.od-timer{font-size:11px;color:var(--muted);margin-left:auto;background:var(--surface2);padding:3px 9px;border-radius:99px;border:1px solid var(--border)}
+.od-actions{display:flex;gap:6px;margin-left:4px}
+.od-action-btn{width:32px;height:32px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;font-size:15px}
+.od-action-btn:hover{transform:scale(1.08)}
+.od-item-row{display:flex;align-items:flex-start;gap:10px;padding:9px 12px;background:var(--surface2);border-radius:9px;margin-bottom:5px;border:1px solid var(--border)}
+.od-item-qty{font-size:11px;font-weight:700;color:var(--accent);background:rgba(231,111,81,.12);border:1px solid rgba(231,111,81,.2);border-radius:6px;padding:2px 7px;min-width:28px;text-align:center;flex-shrink:0;margin-top:1px}
+.od-item-name{font-size:13px;font-weight:600;color:var(--text)}
+.od-item-obs{font-size:11px;color:var(--muted);margin-top:2px;font-style:italic}
+.od-item-price{font-size:12.5px;font-weight:700;color:var(--accent3);margin-left:auto;flex-shrink:0;padding-top:2px}
+.od-subtotal-row{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--muted);padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.od-total-row{display:flex;justify-content:space-between;align-items:center;font-size:15px;font-weight:800;padding:8px 0 0;color:var(--text)}
+.od-info-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:14px}
+.od-info-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.od-info-card-title{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:5px}
+.od-info-card-val{font-size:12.5px;font-weight:700;color:var(--text);line-height:1.3}
+.od-info-card-sub{font-size:11px;color:var(--muted);margin-top:2px}
+@media(max-width:520px){.od-info-row{grid-template-columns:1fr 1fr}.od-header{gap:7px}}
 </style>
 
 <script>
