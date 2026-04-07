@@ -235,7 +235,7 @@ async function loadAllData(silent = false) {
     if (ordersRes.data?.length)   ordersKanban  = ordersRes.data.map(mapOrder);
     // Comandas mesa_aberta: entram no cache do salão, não no kanban
     (mesaAbertaRes?.data || []).forEach(o => {
-      if (!mesaOrdersCache.find(x => x.id === o.id)) mesaOrdersCache.unshift(o);
+      if (!mesaOrdersCache.find(x => x.id === o.id)) mesaOrdersCache.unshift({ ...o, num: _orderNum(o.id) });
     });
     if (movsRes.data?.length)     movimentos    = movsRes.data.map(m => ({
       id: m.id, desc: m.description||'', tipo: m.tipo,
@@ -435,7 +435,7 @@ function _updateMesaOrdersCache(newOrder) {
     } else {
       // Mantém no cache (atualiza status) — inclui mesa_aberta→entregue ao finalizar,
       // necessário para o resumo de consumo e cálculo do total na mesa waiting
-      mesaOrdersCache[idx] = newOrder;
+      mesaOrdersCache[idx] = { ...newOrder, num: _orderNum(newOrder.id) };
     }
   } else if (!['cancelado'].includes(newOrder.status) && newOrder.mesa_num) {
     // Só adiciona ao cache se pertence à sessão atual (opened_at filter)
@@ -443,7 +443,7 @@ function _updateMesaOrdersCache(newOrder) {
     const sessionStart = mesa?.opened_at ? new Date(mesa.opened_at).getTime() - 5000 : 0;
     const orderTime = new Date(newOrder.created_at || Date.now()).getTime();
     if (orderTime >= sessionStart) {
-      mesaOrdersCache.unshift(newOrder);
+      mesaOrdersCache.unshift({ ...newOrder, num: _orderNum(newOrder.id) });
     }
   }
 }
