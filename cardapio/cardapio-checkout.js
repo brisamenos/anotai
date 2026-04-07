@@ -423,14 +423,14 @@ async function _iniciarFluxoPix(order) {
         document.getElementById('pix-manual-success-wrap').style.display = '';
         document.getElementById('pix-manual-key-show').value             = _pixKeyManual;
         document.getElementById('pix-manual-banco-lbl').textContent      = _pixKeyManualBanco ? `🏦 ${_pixKeyManualBanco}` : '';
-        document.getElementById('pix-manual-valor-show').textContent     = 'R$ ' + fmt(order.total);
+        document.getElementById('pix-manual-valor-show').textContent     = 'R$ ' + fmt(parseFloat(order.total) + parseFloat(order.taxa || 0));
       } else { sec.style.display = 'none'; }
       return;
     }
     const pr = await fetch('/api/pix/criar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
-      body: JSON.stringify({ valor: order.total, order_id: order.id, client: order.client, phone: order.phone })
+      body: JSON.stringify({ valor: parseFloat(order.total) + parseFloat(order.taxa || 0), order_id: order.id, client: order.client, phone: order.phone })
     });
     const pd = pr.ok ? await pr.json() : null;
     if (pr.ok && pd?.qr_code) {
@@ -448,7 +448,7 @@ async function _iniciarFluxoPix(order) {
       document.getElementById('pix-manual-success-wrap').style.display = '';
       document.getElementById('pix-manual-key-show').value             = _pixKeyManual;
       document.getElementById('pix-manual-banco-lbl').textContent      = _pixKeyManualBanco ? `🏦 ${_pixKeyManualBanco}` : '';
-      document.getElementById('pix-manual-valor-show').textContent     = 'R$ ' + fmt(order.total);
+      document.getElementById('pix-manual-valor-show').textContent     = 'R$ ' + fmt(parseFloat(order.total) + parseFloat(order.taxa || 0));
       return;
     }
     sec.style.display = 'none';
@@ -768,7 +768,7 @@ async function _iniciarFluxoCartao(order) {
   if (form) form.style.display = '';
   if (res)  res.style.display  = 'none';
   if (erro) { erro.style.display = 'none'; erro.textContent = ''; }
-  await _initMpCardForm(order.total);
+  await _initMpCardForm(parseFloat(order.total) + parseFloat(order.taxa || 0));
 }
 
 function resetCart() {
