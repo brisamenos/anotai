@@ -162,20 +162,25 @@ async function refreshMesasState() {
     .in('status', ['analise', 'producao', 'pronto', 'mesa_aberta'])
     .order('id', { ascending: true });
 
-  // 3. Pedidos entregues recentes (últimas 12h) — necessários para billing
+  // 3. Pedidos entregues recentes (3h) — billing da sessão actual.
+  // Janela reduzida para minimizar risco de pedidos de sessões anteriores vazarem.
   const { data: entregueOrders } = await sb.from('orders')
     .select('*')
     .not('mesa_num', 'is', null)
     .eq('status', 'entregue')
-    .gte('created_at', new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString())
+    .gte('created_at', new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString())
     .order('id', { ascending: true });
 
-  // 4. Filtra por sessão e popula o cache
+  // 4. Filtra por sessão — só inclui pedidos da sessão ACTUAL (opened_at).
+  // Impede que histórico de sessões anteriores apareça numa nova abertura.
   const allOrders = [...(activeOrders || []), ...(entregueOrders || [])];
   mesaOrdersCache = allOrders
     .filter(o => {
       const mesa = activeTables.find(t => t.num === parseInt(o.mesa_num));
-      return mesa ? _sessionFilter([o], mesa).length > 0 : false;
+      if (!mesa) return false;
+      if (!mesa.opened_at) return o.status !== 'entregue';
+      const sessionStart = new Date(mesa.opened_at).getTime() - 5000;
+      return new Date(o.created_at || 0).getTime() >= sessionStart;
     })
     .map(o => ({ ...o, num: _orderNum(o.id) }));
 }
