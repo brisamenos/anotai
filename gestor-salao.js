@@ -692,6 +692,39 @@ function renderMesaCard(t, orders) {
           ${html || '<div style="font-size:12px;color:var(--muted)">Sem itens ativos</div>'}
         </div>`;
       })()
+    : isWaiting
+      // Mesa aguardando pagamento: sempre mostra resumo consolidado,
+      // nunca os cards individuais de pedidos anteriores
+      ? (function () {
+        const sessionStart = t.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
+        const allSessionOrders = mesaOrdersCache.filter(o =>
+          parseInt(o.mesa_num) === parseInt(t.num) &&
+          new Date(o.created_at || 0).getTime() >= sessionStart
+        );
+        if (!allSessionOrders.length) {
+          return `<div style="color:var(--muted);font-size:12.5px;text-align:center;padding:10px 0">Consumo registrado</div>`;
+        }
+        const itemMap = {};
+        allSessionOrders.forEach(o => {
+          (Array.isArray(o.items) ? o.items : []).forEach(i => {
+            if (i.item_status === 'cancelado') return;
+            const key = i.name;
+            if (!itemMap[key]) itemMap[key] = { name: i.name, qty: 0, total: 0, drink: !!i.drink };
+            itemMap[key].qty += (i.qty || 1);
+            itemMap[key].total += (i.price || 0) * (i.qty || 1);
+          });
+        });
+        const rows = Object.values(itemMap).map(i =>
+          `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+              <span>${i.drink ? '🥤' : '🍴'} ${i.qty}× ${i.name}</span>
+              <span style="color:var(--accent3);font-weight:600">R$ ${i.total.toFixed(2).replace('.', ',')}</span>
+            </div>`
+        ).join('');
+        return `<div style="background:var(--surface2);border:1px solid rgba(245,158,11,.2);border-radius:9px;padding:10px 12px;margin-bottom:4px">
+            <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">🧾 Resumo do consumo</div>
+            ${rows}
+          </div>`;
+      })()
     : orders.length
     ? orders.map(o => {
       const items = Array.isArray(o.items) ? o.items : [];
@@ -722,40 +755,7 @@ function renderMesaCard(t, orders) {
           ${btns}
         </div>`;
     }).join('')
-    : isWaiting
-      // Mesa aguardando pagamento: busca resumo do consumo do cache ou banco
-      ? (function () {
-        // Tenta montar resumo dos pedidos entregues desta sessão
-        const sessionStart = t.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
-        const allSessionOrders = mesaOrdersCache.filter(o =>
-          parseInt(o.mesa_num) === parseInt(t.num) &&
-          new Date(o.created_at || 0).getTime() >= sessionStart
-        );
-        if (!allSessionOrders.length) {
-          return `<div style="color:var(--muted);font-size:12.5px;text-align:center;padding:10px 0">Consumo registrado — clique em registrar para detalhes</div>`;
-        }
-        // Monta lista consolidada de todos os itens
-        const itemMap = {};
-        allSessionOrders.forEach(o => {
-          (Array.isArray(o.items) ? o.items : []).forEach(i => {
-            const key = i.name;
-            if (!itemMap[key]) itemMap[key] = { name: i.name, qty: 0, total: 0, drink: !!i.drink };
-            itemMap[key].qty += (i.qty || 1);
-            itemMap[key].total += (i.price || 0) * (i.qty || 1);
-          });
-        });
-        const rows = Object.values(itemMap).map(i =>
-          `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)">
-              <span>${i.drink ? '🥤' : '🍴'} ${i.qty}× ${i.name}</span>
-              <span style="color:var(--accent3);font-weight:600">R$ ${i.total.toFixed(2).replace('.', ',')}</span>
-            </div>`
-        ).join('');
-        return `<div style="background:var(--surface2);border:1px solid rgba(245,158,11,.2);border-radius:9px;padding:10px 12px;margin-bottom:4px">
-            <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">📋 Resumo do consumo</div>
-            ${rows}
-          </div>`;
-      })()
-      : `<div style="color:var(--muted);font-size:12.5px;text-align:center;padding:14px 0">Nenhum pedido ativo</div>`;
+    : `<div style="color:var(--muted);font-size:12.5px;text-align:center;padding:14px 0">Nenhum pedido ativo</div>`;
 
   // Se mesa está waiting, usa t.total gravado pelo garçom/fecharMesa
   // Se mesa está busy, usa total do cache atual
