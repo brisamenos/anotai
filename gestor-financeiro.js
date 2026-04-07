@@ -361,19 +361,37 @@ async function fecharMesa(num) {
   if (!t) return;
   sbLoading(true);
   try {
-    // Busca pedidos da sessão ATUAL (somente pedidos não-entregues de sessões anteriores)
-    const sessionStart = t?.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
-    let ordersQuery = sb.from('orders')
+    // PASSO 1: Busca apenas pedidos com status ATIVOS da mesa.
+    // Pedidos ativos (analise/producao/pronto/mesa_aberta) são SEMPRE da sessão corrente —
+    // históricos de sessões anteriores são sempre 'entregue' ou 'cancelado', nunca ativos.
+    // Isso garante que NENHUM histórico de sessões anteriores seja cobrado,
+    // independente do valor de opened_at.
+    const { data: activeOrders } = await sb.from('orders')
       .select('total,taxa,items,status,created_at')
       .eq('mesa_num', numInt)
-      .not('status', 'eq', 'cancelado');
-    if (sessionStart) {
-      ordersQuery = ordersQuery.gte('created_at', new Date(sessionStart).toISOString());
-    } else {
-      console.warn('fecharMesa: mesa sem opened_at — cobrando apenas pedidos ativos para evitar histórico');
-      ordersQuery = ordersQuery.in('status', ['analise', 'producao', 'pronto', 'mesa_aberta']);
+      .in('status', ['analise', 'producao', 'pronto', 'mesa_aberta']);
+
+    // PASSO 2: Verifica se há comanda do garçom (mesa_aberta).
+    // No fluxo garcom.html, TODOS os itens (comida + bebidas) estão dentro da comanda.
+    // Não há pedidos 'entregue' separados para essa sessão nesse fluxo.
+    const hasComanda = (activeOrders || []).some(o => o.status === 'mesa_aberta');
+
+    // PASSO 3: Pedidos imediatos do gestor PDV (bebidas salvas diretamente como 'entregue').
+    // Só incluir quando NÃO há comanda (fluxo gestor PDV puro) e opened_at é conhecido.
+    // Ao usar opened_at aqui, o risco é mínimo pois no fluxo gestor o opened_at é
+    // definido imediatamente antes do primeiro lançamento da sessão atual.
+    let immediateEntregues = [];
+    if (!hasComanda && t?.opened_at) {
+      const sessionStart = new Date(t.opened_at).getTime() - 5000;
+      const { data: entregueData } = await sb.from('orders')
+        .select('total,taxa,items,status,created_at')
+        .eq('mesa_num', numInt)
+        .eq('status', 'entregue')
+        .gte('created_at', new Date(sessionStart).toISOString());
+      immediateEntregues = entregueData || [];
     }
-    const { data: allSessionOrders } = await ordersQuery;
+
+    const allSessionOrders = [...(activeOrders || []), ...immediateEntregues];
 
     // Recalcula total a partir dos itens para garantir precisão
     let sessionTotal = 0;
@@ -802,4 +820,3 @@ function initSidebarState() {
 setInterval(() => {
   if (EVO.instance) evoCheckStatus();
 }, 30000);
-
