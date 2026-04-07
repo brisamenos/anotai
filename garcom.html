@@ -6,22 +6,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Estima Food — Garçom</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800;900&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg:       #08090d;
-  --surface:  #10131a;
-  --surface2: #161a24;
-  --surface3: #1c2130;
+  --bg:       #111113;
+  --surface:  #19191d;
+  --surface2: #222226;
+  --surface3: #2c2c32;
   --border:   rgba(255,255,255,.06);
-  --accent:   #6366f1;
-  --amber:    #f59e0b;
-  --green:    #10b981;
-  --red:      #ef4444;
-  --text:     #f8fafc;
-  --muted:    #94a3b8;
-  --radius:   16px;
-  --glow:     0 0 40px rgba(99,102,241,.12);
+  --accent:   #818cf8;
+  --amber:    #c4956a;
+  --green:    #34d399;
+  --red:      #fb7185;
+  --text:     #e4e4e7;
+  --muted:    #71717a;
+  --radius:   14px;
+  --glow:     0 0 40px rgba(129,140,248,.08);
 }
 *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
 html { height:100%; }
@@ -35,8 +35,8 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   justify-content: center;
   padding: 20px;
   background:
-    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(59,130,246,.12) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 80% at 80% 90%, rgba(245,158,11,.08) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(129,140,248,.07) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 80% at 80% 90%, rgba(196,149,106,.05) 0%, transparent 60%),
     var(--bg);
 }
 .login-card {
@@ -44,7 +44,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   max-width: 380px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 24px;
+  border-radius: 20px;
   padding: 40px 32px 36px;
   animation: fadeUp .4s cubic-bezier(.34,1.56,.64,1);
 }
@@ -55,14 +55,14 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 }
 .login-logo-icon {
   width: 60px; height: 60px;
-  background: linear-gradient(135deg, var(--accent), #818cf8);
+  background: var(--accent);
   border-radius: 18px;
   display: flex; align-items: center; justify-content: center;
   font-size: 28px; margin: 0 auto 14px;
-  box-shadow: 0 16px 40px rgba(99,102,241,.35);
+  box-shadow: 0 8px 24px rgba(129,140,248,.2);
 }
 .login-logo-name {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 22px; font-weight: 800;
   color: var(--text);
   letter-spacing: -.4px;
@@ -83,22 +83,22 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   outline: none;
   transition: border-color .18s;
 }
-.login-field input:focus { border-color: rgba(59,130,246,.5); }
+.login-field input:focus { border-color: rgba(129,140,248,.5); }
 .login-field input::placeholder { color: var(--muted); }
 .login-btn {
   width: 100%; padding: 14px;
-  background: linear-gradient(135deg, var(--accent), #818cf8);
+  background: var(--accent);
   color: #fff; border: none; border-radius: 12px;
   font-family: 'DM Sans', sans-serif;
   font-size: 15px; font-weight: 700;
   cursor: pointer; margin-top: 6px;
   transition: all .18s;
-  box-shadow: 0 8px 24px rgba(99,102,241,.3);
+  box-shadow: 0 4px 12px rgba(129,140,248,.2);
   display: flex; align-items: center; justify-content: center; gap: 8px;
 }
 .login-btn:hover { filter:brightness(1.08); transform:translateY(-1px); }
 .login-err {
-  background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.2);
+  background: rgba(251,113,133,.1); border: 1px solid rgba(251,113,133,.2);
   border-radius: 8px; padding: 8px 12px;
   font-size: 12.5px; color: var(--red);
   margin-bottom: 12px; display: none;
@@ -112,8 +112,8 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .mds-btn { transition: all .18s cubic-bezier(.4,0,.2,1) !important; }
 .mds-btn:active { transform: scale(.97); }
 .bnav-btn::before { content:''; position:absolute; inset:0; background:transparent; transition: background .15s; }
-.bnav-btn.on::before { background: radial-gradient(ellipse at 50% 0%, rgba(99,102,241,.08) 0%, transparent 70%); }
-.topbar-logo { color: var(--accent); text-shadow: 0 0 20px rgba(99,102,241,.3); }
+.bnav-btn.on::before { background: radial-gradient(ellipse at 50% 0%, rgba(129,140,248,.08) 0%, transparent 70%); }
+.topbar-logo { color: var(--accent); text-shadow: 0 0 20px rgba(129,140,248,.3); }
 .page { scroll-behavior: smooth; }
 @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
 .mesa-block-num { text-shadow: 0 2px 12px rgba(0,0,0,.3); }
@@ -124,34 +124,33 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 
 /* TopBar */
 .topbar {
-  background: linear-gradient(180deg, var(--surface) 0%, rgba(16,19,26,.95) 100%);
-  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   padding: 0 20px;
-  height: 60px;
+  height: 56px;
   display: flex; align-items: center; gap: 12px;
   flex-shrink: 0;
   position: sticky; top: 0; z-index: 100;
 }
-.topbar-logo { font-family:'Syne',sans-serif; font-size:17px; font-weight:800; color:var(--accent); }
+.topbar-logo { font-family:'Plus Jakarta Sans',sans-serif; font-size:17px; font-weight:800; color:var(--accent); }
 .topbar-sep { width:1px; height:20px; background:var(--border); }
 .topbar-garcom { font-size:13px; font-weight:600; color:var(--text); }
 .topbar-mesa-badge {
-  background: rgba(245,158,11,.15); border:1px solid rgba(245,158,11,.25);
+  background: rgba(196,149,106,.12); border:1px solid rgba(196,149,106,.2);
   color:var(--amber); font-size:11.5px; font-weight:700;
   padding:3px 10px; border-radius:99px;
 }
 .topbar-right { margin-left:auto; display:flex; align-items:center; gap:8px; }
 .topbar-status { display:flex; align-items:center; gap:5px; font-size:12px; color:var(--muted); }
 .topbar-status .dot { width:7px; height:7px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
-@keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.5)} 50%{box-shadow:0 0 0 5px rgba(34,197,94,0)} }
+@keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(52,211,153,.5)} 50%{box-shadow:0 0 0 5px rgba(52,211,153,0)} }
 .topbar-btn {
   padding:6px 12px; border-radius:8px; border:1px solid var(--border);
   background:var(--surface2); color:var(--muted); font-family:'DM Sans',sans-serif;
   font-size:12px; font-weight:600; cursor:pointer; transition:all .15s;
   display:flex; align-items:center; gap:5px;
 }
-.topbar-btn:hover { border-color:rgba(239,68,68,.3); color:var(--red); }
+.topbar-btn:hover { border-color:rgba(251,113,133,.3); color:var(--red); }
 
 /* Bottom Nav */
 .tabs-bar { display: none; }
@@ -159,12 +158,10 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   position: fixed;
   bottom: 0; left: 0; right: 0;
   z-index: 200;
-  background: linear-gradient(180deg, rgba(16,19,26,.92) 0%, var(--surface) 100%);
-  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
-  border-top: 1px solid rgba(255,255,255,.05);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
   display: flex;
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  box-shadow: 0 -8px 32px rgba(0,0,0,.4);
 }
 .bnav-btn {
   flex: 1;
@@ -223,7 +220,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .mesas-bar {
   display: flex; align-items: center; gap: 8px;
   margin-bottom: 16px; padding: 14px 18px;
-  background: linear-gradient(135deg, var(--surface), var(--surface2));
+  background: var(--surface);
   border: 1px solid var(--border); border-radius: 18px;
   box-shadow: 0 4px 16px rgba(0,0,0,.15);
 }
@@ -232,7 +229,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .mesas-bar-dot.green { background: var(--green); }
 .mesas-bar-dot.red   { background: var(--red); }
 .mesas-bar-dot.total { background: var(--accent); }
-.mesas-bar-val { font-family:'Syne',sans-serif; font-size:22px; font-weight:900; line-height:1; }
+.mesas-bar-val { font-family:'Plus Jakarta Sans',sans-serif; font-size:22px; font-weight:900; line-height:1; }
 .mesas-bar-lbl { font-size:11px; color:var(--muted); font-weight:600; }
 .mesas-bar-sep { width:1px; height:28px; background:var(--border); }
 
@@ -246,72 +243,70 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 
 .mesa-block {
   aspect-ratio: 1 / 1;
-  border-radius: 20px; cursor: pointer;
+  border-radius: 16px; cursor: pointer;
   position: relative; overflow: hidden;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   transition: transform .18s cubic-bezier(.4,0,.2,1), box-shadow .18s;
   animation: fadeUp .35s cubic-bezier(.34,1.56,.64,1) both;
-  border: 2px solid transparent;
+  border: 1.5px solid transparent;
   user-select: none; -webkit-tap-highlight-color: transparent;
-  backdrop-filter: blur(8px);
 }
 .mesa-block:active { transform: scale(.93) !important; }
 .mesa-block.free {
-  background: linear-gradient(145deg, #071a0c, #0a1f12); border-color: #166534;
+  background: var(--surface2); border-color: rgba(52,211,153,.2);
 }
 .mesa-block.free:hover {
-  border-color: var(--green);
-  box-shadow: 0 6px 24px rgba(34,197,94,.22);
+  border-color: rgba(52,211,153,.4);
+  box-shadow: 0 4px 16px rgba(52,211,153,.1);
   transform: translateY(-2px);
 }
 .mesa-block.busy {
-  background: linear-gradient(145deg, #1a0505, #200808); border-color: #7f1d1d;
-  box-shadow: 0 4px 20px rgba(239,68,68,.12);
+  background: var(--surface2); border-color: rgba(129,140,248,.25);
+  box-shadow: 0 2px 12px rgba(129,140,248,.06);
 }
 .mesa-block.busy:hover {
-  border-color: var(--red);
-  box-shadow: 0 6px 28px rgba(239,68,68,.28);
+  border-color: rgba(129,140,248,.45);
+  box-shadow: 0 4px 20px rgba(129,140,248,.12);
   transform: translateY(-2px);
 }
 .mesa-block.waiting {
-  background: #1a1100; border-color: #92400e;
-  box-shadow: 0 3px 16px rgba(245,158,11,.1);
+  background: var(--surface2); border-color: rgba(196,149,106,.25);
 }
 .mesa-block.waiting:hover {
-  border-color: var(--amber);
-  box-shadow: 0 6px 28px rgba(245,158,11,.28);
+  border-color: rgba(196,149,106,.45);
+  box-shadow: 0 4px 20px rgba(196,149,106,.12);
   transform: translateY(-2px);
 }
 .mesa-block-num {
-  font-family: 'Syne', sans-serif;
-  font-size: clamp(26px, 7vw, 46px);
-  font-weight: 900; line-height: 1; letter-spacing: -1px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: clamp(26px, 7vw, 42px);
+  font-weight: 800; line-height: 1; letter-spacing: -.5px;
 }
-.mesa-block.free    .mesa-block-num { color: #4ade80; }
-.mesa-block.busy    .mesa-block-num { color: #f87171; }
+.mesa-block.free    .mesa-block-num { color: #6ee7b7; }
+.mesa-block.busy    .mesa-block-num { color: #a5b4fc; }
 .mesa-block.waiting .mesa-block-num { color: var(--amber); }
 .mesa-block-label {
-  font-size: 9px; font-weight: 800;
-  letter-spacing: 1.2px; text-transform: uppercase; margin-top: 5px;
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase; margin-top: 5px;
 }
-.mesa-block.free    .mesa-block-label { color: rgba(74,222,128,.5); }
-.mesa-block.busy    .mesa-block-label { color: rgba(248,113,113,.5); }
-.mesa-block.waiting .mesa-block-label { color: rgba(245,158,11,.5); }
+.mesa-block.free    .mesa-block-label { color: rgba(110,231,183,.4); }
+.mesa-block.busy    .mesa-block-label { color: rgba(165,180,252,.4); }
+.mesa-block.waiting .mesa-block-label { color: rgba(196,149,106,.4); }
 .mesa-block-total {
   font-size: 10.5px; font-weight: 700; color: var(--amber);
-  margin-top: 5px; background: rgba(245,158,11,.12);
+  margin-top: 5px; background: rgba(196,149,106,.1);
   padding: 2px 7px; border-radius: 5px; max-width: 90%; text-align: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .mesa-block.busy::before {
-  content: ''; position: absolute; inset: -2px; border-radius: 17px;
-  background: transparent; border: 2px solid rgba(239,68,68,.0);
+  content: ''; position: absolute; inset: -1px; border-radius: 15px;
+  background: transparent; border: 1.5px solid rgba(129,140,248,.0);
   animation: mesa-pulse 3s ease-in-out infinite; pointer-events: none;
 }
 @keyframes mesa-pulse {
-  0%,100% { border-color: rgba(239,68,68,.0); inset: -2px; }
-  50%      { border-color: rgba(239,68,68,.2); inset: -5px; }
+  0%,100% { border-color: rgba(129,140,248,.0); inset: -1px; }
+  50%      { border-color: rgba(129,140,248,.15); inset: -3px; }
 }
 .mesa-block-icon {
   position: absolute; top: 7px; right: 8px; font-size: 10px; opacity: .45;
@@ -338,12 +333,12 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .mds-num-badge {
   width: 44px; height: 44px; border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
-  font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 900; flex-shrink: 0;
+  font-family: 'Plus Jakarta Sans', sans-serif; font-size: 22px; font-weight: 900; flex-shrink: 0;
 }
-.mds-num-badge.busy    { background: #1a0505; color: #f87171; border: 2px solid #7f1d1d; }
-.mds-num-badge.waiting { background: #1a1100; color: var(--amber); border: 2px solid #92400e; }
+.mds-num-badge.busy    { background: rgba(129,140,248,.1); color: #a5b4fc; border: 1.5px solid rgba(129,140,248,.25); }
+.mds-num-badge.waiting { background: rgba(196,149,106,.1); color: var(--amber); border: 1.5px solid rgba(196,149,106,.25); }
 .mds-head-info { flex: 1; min-width: 0; }
-.mds-head-title { font-family: 'Syne', sans-serif; font-size: 17px; font-weight: 800; }
+.mds-head-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 17px; font-weight: 800; }
 .mds-head-sub   { font-size: 12px; color: var(--muted); margin-top: 1px; }
 .mds-close {
   width: 30px; height: 30px; border-radius: 50%;
@@ -357,9 +352,9 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 }
 .mds-order-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .mds-order-status { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
-.mds-order-status.producao { background: rgba(59,130,246,.15); color: var(--accent); }
-.mds-order-status.pronto   { background: rgba(34,197,94,.12); color: var(--green); }
-.mds-order-status.analise  { background: rgba(245,158,11,.12); color: var(--amber); }
+.mds-order-status.producao { background: rgba(129,140,248,.12); color: var(--accent); }
+.mds-order-status.pronto   { background: rgba(52,211,153,.1); color: var(--green); }
+.mds-order-status.analise  { background: rgba(196,149,106,.1); color: var(--amber); }
 .mds-order-items { font-size: 13px; color: var(--text); line-height: 1.6; }
 .mds-order-total { font-size: 13px; font-weight: 700; color: var(--amber); text-align: right; margin-top: 5px; }
 .mds-total-row {
@@ -367,9 +362,9 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   padding: 12px 0 4px; border-top: 1px solid var(--border); margin-top: 4px;
 }
 .mds-total-lbl { font-size: 13px; color: var(--muted); font-weight: 600; }
-.mds-total-val { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 900; color: var(--amber); }
+.mds-total-val { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 24px; font-weight: 900; color: var(--amber); }
 .mds-waiting-banner {
-  background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.2);
+  background: rgba(196,149,106,.06); border: 1px solid rgba(196,149,106,.15);
   border-radius: 10px; padding: 10px 14px;
   font-size: 13px; font-weight: 600; color: var(--amber); text-align: center; margin-bottom: 10px;
 }
@@ -384,9 +379,9 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   cursor: pointer; transition: all .15s;
   display: flex; align-items: center; justify-content: center; gap: 7px;
 }
-.mds-btn.add    { background: linear-gradient(135deg, var(--accent), #818cf8); color: #fff; box-shadow: 0 4px 16px rgba(59,130,246,.3); }
+.mds-btn.add    { background: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(129,140,248,.2); }
 .mds-btn.add:hover { filter: brightness(1.08); }
-.mds-btn.finish { background: linear-gradient(135deg, var(--amber), #d97706); color: #000; box-shadow: 0 4px 16px rgba(245,158,11,.25); }
+.mds-btn.finish { background: var(--amber); color: #1a1a2e; box-shadow: 0 4px 12px rgba(196,149,106,.15); }
 .mds-btn.finish:hover { filter: brightness(1.05); }
 .mds-empty { text-align: center; padding: 20px 0; color: var(--muted); font-size: 13px; }
 
@@ -397,8 +392,8 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   cursor:pointer; transition:all .15s;
 }
 .mesa-action-btn.pedido { background:var(--accent); color:#fff; }
-.mesa-action-btn.pedido:hover { background:#2563eb; }
-.mesa-action-btn.livre { background:rgba(34,197,94,.1); color:var(--green); border:1px solid rgba(34,197,94,.2); }
+.mesa-action-btn.pedido:hover { background:#818cf8; }
+.mesa-action-btn.livre { background:rgba(52,211,153,.1); color:var(--green); border:1px solid rgba(52,211,153,.2); }
 
 /* ── SHEET PEDIDO ──────────────────────── */
 .sheet-bg {
@@ -423,7 +418,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   flex-shrink:0;
   display:flex; align-items:center; justify-content:space-between;
 }
-.sheet-title { font-family:'Syne',sans-serif; font-size:17px; font-weight:800; }
+.sheet-title { font-family:'Plus Jakarta Sans',sans-serif; font-size:17px; font-weight:800; }
 .sheet-close { width:30px; height:30px; border-radius:50%; background:var(--surface2); border:none; color:var(--muted); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .15s; }
 .sheet-close:hover { color:var(--text); }
 .sheet-body { flex:1; overflow-y:auto; padding:14px 16px; min-height:0; }
@@ -447,8 +442,8 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   cursor:pointer; transition:all .15s;
   text-align:center; position:relative;
 }
-.item-tile:hover { border-color:rgba(59,130,246,.4); }
-.item-tile.selected { border-color:var(--accent); background:rgba(59,130,246,.08); }
+.item-tile:hover { border-color:rgba(129,140,248,.4); }
+.item-tile.selected { border-color:var(--accent); background:rgba(129,140,248,.08); }
 .item-tile-img { font-size:32px; margin-bottom:6px; height:40px; display:flex; align-items:center; justify-content:center; overflow:hidden; border-radius:8px; }
 .item-tile-img img { width:100%; height:100%; object-fit:cover; }
 .item-tile-name { font-size:11.5px; font-weight:600; line-height:1.3; margin-bottom:4px; }
@@ -480,12 +475,12 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .total-row.big { font-size:16px; font-weight:700; color:var(--text); border-top:1px solid var(--border); padding-top:10px; margin-top:4px; }
 .confirm-btn {
   width:100%; padding:14px;
-  background:linear-gradient(135deg,var(--green),#16a34a);
+  background:var(--green);
   color:#fff; border:none; border-radius:12px;
   font-family:'DM Sans',sans-serif; font-size:15px; font-weight:700;
   cursor:pointer; margin-top:12px;
   display:flex; align-items:center; justify-content:center; gap:8px;
-  transition:all .18s; box-shadow:0 6px 20px rgba(34,197,94,.25);
+  transition:all .18s; box-shadow:0 4px 12px rgba(52,211,153,.15);
 }
 .confirm-btn:hover { filter:brightness(1.08); transform:translateY(-1px); }
 .confirm-btn:disabled { opacity:.5; cursor:not-allowed; transform:none; }
@@ -500,14 +495,14 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .success-overlay.on { display:flex; animation:fadeUp .3s ease; }
 .success-icon { font-size:64px; margin-bottom:16px; animation:pop .4s cubic-bezier(.34,1.56,.64,1); }
 @keyframes pop { from{transform:scale(0)} to{transform:scale(1)} }
-.success-title { font-family:'Syne',sans-serif; font-size:26px; font-weight:900; color:var(--green); margin-bottom:8px; }
+.success-title { font-family:'Plus Jakarta Sans',sans-serif; font-size:26px; font-weight:900; color:var(--green); margin-bottom:8px; }
 .success-sub { font-size:14px; color:var(--muted); line-height:1.6; }
-.success-num { margin-top:20px; background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.2); border-radius:14px; padding:14px 32px; font-family:'Syne',sans-serif; font-size:28px; font-weight:900; color:var(--green); letter-spacing:2px; }
+.success-num { margin-top:20px; background:rgba(52,211,153,.1); border:1px solid rgba(52,211,153,.2); border-radius:14px; padding:14px 32px; font-family:'Plus Jakarta Sans',sans-serif; font-size:28px; font-weight:900; color:var(--green); letter-spacing:2px; }
 .success-btn { margin-top:24px; background:var(--accent); color:#fff; border:none; border-radius:12px; padding:13px 32px; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:700; cursor:pointer; transition:all .18s; }
-.success-btn:hover { background:#2563eb; }
+.success-btn:hover { background:#818cf8; }
 
 /* ── SPINNER ───────────────────────────── */
-.spinner { width:32px; height:32px; border:3px solid rgba(59,130,246,.2); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; }
+.spinner { width:32px; height:32px; border:3px solid rgba(129,140,248,.2); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; }
 @keyframes spin { to{transform:rotate(360deg)} }
 
 /* ── TOAST ─────────────────────────────── */
@@ -547,17 +542,17 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 }
 .pz-handle { width:40px;height:4px;background:rgba(255,255,255,.1);border-radius:99px;margin:12px auto 0; }
 .pz-head { padding:14px 20px 12px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
-.pz-head-title { font-family:'Syne',sans-serif; font-size:16px; font-weight:800; }
+.pz-head-title { font-family:'Plus Jakarta Sans',sans-serif; font-size:16px; font-weight:800; }
 .pz-close { width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.08);border:none;color:var(--muted);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center; }
 .pz-body { padding:14px 16px; }
 .pz-lbl { font-size:10.5px;font-weight:700;color:var(--muted);letter-spacing:.6px;text-transform:uppercase;margin-bottom:8px; }
 .pz-tabs { display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px; }
 .pz-tab { padding:6px 14px;border-radius:99px;font-size:12.5px;font-weight:600;border:1.5px solid var(--border);background:none;color:var(--muted);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s; }
-.pz-tab.on { border-color:var(--amber);color:var(--amber);background:rgba(245,158,11,.1); }
+.pz-tab.on { border-color:var(--amber);color:var(--amber);background:rgba(196,149,106,.1); }
 .pz-slot { display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.08);border-radius:11px;padding:10px 12px;cursor:pointer;transition:all .15s;margin-bottom:7px; }
-.pz-slot:hover { border-color:rgba(245,158,11,.35); }
-.pz-slot.active { border-color:var(--amber);background:rgba(245,158,11,.08); }
-.pz-slot.filled { border-color:rgba(245,158,11,.22); }
+.pz-slot:hover { border-color:rgba(196,149,106,.35); }
+.pz-slot.active { border-color:var(--amber);background:rgba(196,149,106,.08); }
+.pz-slot.filled { border-color:rgba(196,149,106,.22); }
 .pz-slot-num { width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0; }
 .pz-slot.active .pz-slot-num { background:var(--amber);color:#000; }
 .pz-slot-img { width:38px;height:38px;border-radius:8px;background:rgba(255,255,255,.06);flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:20px; }
@@ -572,14 +567,14 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .pz-flavor-grid::-webkit-scrollbar { width:3px; }
 .pz-flavor-grid::-webkit-scrollbar-thumb { background:rgba(255,255,255,.1);border-radius:99px; }
 .pz-flavor-btn { display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.08);border-radius:10px;padding:9px 11px;cursor:pointer;transition:all .15s;text-align:left; }
-.pz-flavor-btn:hover { border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.06); }
-.pz-flavor-btn.on { border-color:var(--amber);background:rgba(245,158,11,.12); }
+.pz-flavor-btn:hover { border-color:rgba(196,149,106,.4);background:rgba(196,149,106,.06); }
+.pz-flavor-btn.on { border-color:var(--amber);background:rgba(196,149,106,.12); }
 .pz-flavor-icon { width:34px;height:34px;border-radius:7px;background:rgba(255,255,255,.06);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0; }
 .pz-flavor-icon img { width:100%;height:100%;object-fit:cover; }
 .pz-flavor-name { font-size:12px;font-weight:600; }
 .pz-flavor-price { font-size:11px;color:var(--muted);margin-top:1px; }
 .pz-footer { padding:14px 16px 0; }
-.pz-confirm { width:100%;background:linear-gradient(135deg,var(--amber),#d97706);color:#000;border:none;border-radius:12px;padding:13px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:all .18s;display:flex;align-items:center;justify-content:center;gap:8px; }
+.pz-confirm { width:100%;background:var(--amber);color:#000;border:none;border-radius:12px;padding:13px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:all .18s;display:flex;align-items:center;justify-content:center;gap:8px; }
 .pz-confirm:hover { filter:brightness(1.08); }
 .pz-confirm:disabled { opacity:.4;cursor:not-allowed; }
 
@@ -602,26 +597,26 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .im-img img{width:100%;height:100%;object-fit:cover}
 .im-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,.5);border:none;color:#fff;font-size:14px;display:flex;align-items:center;justify-content:center;z-index:2;cursor:pointer}
 .im-body{padding:20px 20px 28px}
-.im-name{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:6px;line-height:1.2}
+.im-name{font-family:'Plus Jakarta Sans',sans-serif;font-size:20px;font-weight:800;margin-bottom:6px;line-height:1.2}
 .im-desc{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:16px}
 .im-price-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
-.im-price{font-family:'Syne',sans-serif;font-size:24px;font-weight:900;color:var(--amber)}
+.im-price{font-family:'Plus Jakarta Sans',sans-serif;font-size:24px;font-weight:900;color:var(--amber)}
 .im-price-old{font-size:14px;color:var(--muted);text-decoration:line-through;margin-right:6px}
 .im-qty-row{display:flex;align-items:center;gap:14px}
 .im-qty-btn{width:36px;height:36px;border-radius:50%;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-size:20px;display:flex;align-items:center;justify-content:center;transition:all .15s;cursor:pointer}
-.im-qty-btn:hover{border-color:var(--amber);background:rgba(245,158,11,.1)}
-.im-qty-num{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;min-width:24px;text-align:center}
+.im-qty-btn:hover{border-color:var(--amber);background:rgba(196,149,106,.1)}
+.im-qty-num{font-family:'Plus Jakarta Sans',sans-serif;font-size:20px;font-weight:700;min-width:24px;text-align:center}
 .im-obs{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:11px 14px;color:var(--text);font-size:13px;outline:none;resize:none;margin-top:16px;transition:border-color .18s;font-family:'DM Sans',sans-serif;box-sizing:border-box}
-.im-obs:focus{border-color:rgba(245,158,11,.4)}
+.im-obs:focus{border-color:rgba(196,149,106,.4)}
 .im-obs::placeholder{color:var(--muted)}
 .im-add-btn{
   width:100%;padding:15px;border-radius:14px;border:none;margin-top:18px;
-  background:linear-gradient(135deg,var(--amber),#d97706);color:#000;font-size:15px;font-weight:700;
+  background:var(--amber);color:#000;font-size:15px;font-weight:700;
   display:flex;align-items:center;justify-content:center;gap:8px;
-  transition:all .18s;box-shadow:0 6px 20px rgba(245,158,11,.3);cursor:pointer;
+  transition:all .18s;box-shadow:0 6px 20px rgba(196,149,106,.3);cursor:pointer;
   font-family:'DM Sans',sans-serif;
 }
-.im-add-btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(245,158,11,.4)}
+.im-add-btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(196,149,106,.4)}
 .im-add-btn:disabled{background:var(--surface2);color:var(--muted);cursor:not-allowed;transform:none;box-shadow:none}
 
 /* ingredientes */
@@ -631,18 +626,18 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .im-ingr-count.show{display:inline-block}
 .im-ingr-grid{display:flex;flex-wrap:wrap;gap:6px}
 .im-ingr-chip{display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:99px;background:var(--surface);border:1.5px solid var(--border);font-size:12.5px;color:var(--muted);cursor:pointer;transition:all .15s;user-select:none;font-family:'DM Sans',sans-serif}
-.im-ingr-chip.on{background:rgba(245,158,11,.12);border-color:var(--amber);color:var(--amber);font-weight:700}
+.im-ingr-chip.on{background:rgba(196,149,106,.12);border-color:var(--amber);color:var(--amber);font-weight:700}
 .im-ingr-chip .chip-dot{width:7px;height:7px;border-radius:50%;background:var(--border);flex-shrink:0;transition:background .15s}
 .im-ingr-chip.on .chip-dot{background:var(--amber)}
 
 /* grupos de customização */
 .grp-section{margin:16px 0 0}
 .grp-section-title{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
-.grp-required-badge{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#fca5a5;font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;letter-spacing:.3px;text-transform:uppercase}
+.grp-required-badge{background:rgba(251,113,133,.1);border:1px solid rgba(251,113,133,.25);color:#fca5a5;font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;letter-spacing:.3px;text-transform:uppercase}
 .grp-optional-badge{background:rgba(100,116,139,.08);border:1px solid var(--border);color:var(--muted);font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;letter-spacing:.3px;text-transform:uppercase}
 .grp-opts{display:flex;flex-direction:column;gap:6px}
 .grp-opt-item{display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1.5px solid var(--border);border-radius:12px;padding:12px 14px;cursor:pointer;transition:all .18s}
-.grp-opt-item.on{background:rgba(245,158,11,.08);border-color:var(--amber)}
+.grp-opt-item.on{background:rgba(196,149,106,.08);border-color:var(--amber)}
 .grp-opt-left{display:flex;align-items:center;gap:10px}
 .grp-opt-indicator{width:20px;height:20px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;font-size:11px}
 .grp-opt-item.on .grp-opt-indicator{background:var(--amber);border-color:var(--amber);color:#000}
@@ -663,7 +658,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .xsell-scroll{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
 .xsell-scroll::-webkit-scrollbar{display:none}
 .xsell-card{flex-shrink:0;width:110px;background:var(--surface2);border:1.5px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;transition:all .18s;position:relative}
-.xsell-card.on{border-color:var(--amber);background:rgba(245,158,11,.07)}
+.xsell-card.on{border-color:var(--amber);background:rgba(196,149,106,.07)}
 .xsell-img{width:100%;height:65px;background:var(--surface);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:24px}
 .xsell-img img{width:100%;height:100%;object-fit:cover}
 .xsell-body{padding:6px 8px 8px}
@@ -677,7 +672,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .half-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px}
 .half-title .half-badge{background:var(--amber);color:#000;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.3px}
 .half-selected{display:flex;align-items:center;gap:10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:12px;padding:10px 14px;cursor:pointer;transition:all .18s;margin-bottom:6px}
-.half-selected:hover{border-color:var(--amber);background:rgba(245,158,11,.1)}
+.half-selected:hover{border-color:var(--amber);background:rgba(196,149,106,.1)}
 .half-selected-emoji{width:32px;height:32px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;overflow:hidden}
 .half-selected-emoji img{width:100%;height:100%;object-fit:cover}
 .half-selected-info{flex:1;min-width:0}
@@ -688,7 +683,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .half-opt{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
 .half-opt:last-child{border-bottom:none}
 .half-opt:hover{background:rgba(255,255,255,.04)}
-.half-opt.on{background:rgba(245,158,11,.1)}
+.half-opt.on{background:rgba(196,149,106,.1)}
 .half-opt-emoji{width:28px;height:28px;border-radius:7px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;overflow:hidden}
 .half-opt-emoji img{width:100%;height:100%;object-fit:cover}
 .half-opt-name{flex:1;font-size:13px;font-weight:600;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -707,8 +702,8 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   animation: pronto-pulse 1.4s ease-in-out infinite;
 }
 @keyframes pronto-pulse {
-  0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,.6); }
-  50%      { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+  0%,100% { box-shadow: 0 0 0 0 rgba(52,211,153,.6); }
+  50%      { box-shadow: 0 0 0 6px rgba(52,211,153,0); }
 }
 </style>
   <script src="/api-client.js"></script>
@@ -820,7 +815,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
     <!-- Tipo de entrega -->
     <div style="display:flex;gap:8px;margin-bottom:16px">
       <button id="np-btn-delivery" onclick="npSetTipo('delivery')"
-        style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 8px;border-radius:12px;border:2px solid var(--accent);background:rgba(59,130,246,.1);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">
+        style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 8px;border-radius:12px;border:2px solid var(--accent);background:rgba(129,140,248,.1);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">
         <svg width="20" height="20" viewBox="0 0 16 16" fill="none"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/></svg>
         Delivery
       </button>
@@ -880,7 +875,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
     </button>
     <div id="np-cart-preview" style="margin-top:10px;display:none">
       <div id="np-cart-items" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12.5px"></div>
-      <button onclick="npEnviarPedido()" id="np-submit-btn" style="width:100%;padding:14px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px">
+      <button onclick="npEnviarPedido()" id="np-submit-btn" style="width:100%;padding:14px;background:linear-gradient(135deg,#22c55e,#059669);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Confirmar pedido
       </button>
@@ -928,7 +923,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 
     <div class="sheet-foot">
       <div id="sheet-foot-itens">
-        <button class="confirm-btn" onclick="switchSheetTab('cart')" id="ver-carrinho-btn" style="background:linear-gradient(135deg,var(--accent),#2563eb);box-shadow:0 6px 20px rgba(59,130,246,.25)" disabled>
+        <button class="confirm-btn" onclick="switchSheetTab('cart')" id="ver-carrinho-btn" style="background:linear-gradient(135deg,var(--accent),#818cf8);box-shadow:0 6px 20px rgba(129,140,248,.25)" disabled>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
           Ver carrinho
         </button>
@@ -961,9 +956,9 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
       <button class="sheet-close" onclick="closeFinalizarMesa()">✕</button>
     </div>
     <div class="sheet-body">
-      <div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.15);border-radius:12px;padding:14px 16px;margin-bottom:14px">
+      <div style="background:rgba(196,149,106,.06);border:1px solid rgba(196,149,106,.15);border-radius:12px;padding:14px 16px;margin-bottom:14px">
         <div style="font-size:11.5px;color:var(--muted);margin-bottom:4px">Total consumido</div>
-        <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:900;color:var(--amber)" id="finalizar-total">R$ 0,00</div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:28px;font-weight:900;color:var(--amber)" id="finalizar-total">R$ 0,00</div>
       </div>
       <div id="finalizar-pedidos-list" style="margin-bottom:14px"></div>
       <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:6px">Forma de pagamento</label>
@@ -974,7 +969,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
       </div>
     </div>
     <div class="sheet-foot">
-      <button class="confirm-btn" onclick="confirmarFinalizarMesa()" style="background:linear-gradient(135deg,var(--amber),#d97706);color:#000;box-shadow:0 6px 20px rgba(245,158,11,.25)">
+      <button class="confirm-btn" onclick="confirmarFinalizarMesa()" style="background:var(--amber);color:#000;box-shadow:0 6px 20px rgba(196,149,106,.25)">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Finalizar e enviar para pagamento
       </button>
@@ -1123,7 +1118,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 <div id="gc-confirm-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9500;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)">
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:26px 22px;max-width:320px;width:100%;text-align:center;animation:fadeUp .25s ease">
     <div style="font-size:36px;margin-bottom:12px" id="gc-confirm-icon">⚠️</div>
-    <div style="font-size:16px;font-weight:800;margin-bottom:8px;font-family:'Syne',sans-serif" id="gc-confirm-title">Confirmar</div>
+    <div style="font-size:16px;font-weight:800;margin-bottom:8px;font-family:'Plus Jakarta Sans',sans-serif" id="gc-confirm-title">Confirmar</div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:22px;line-height:1.6" id="gc-confirm-msg"></div>
     <div style="display:flex;gap:10px">
       <button id="gc-confirm-cancel" style="flex:1;padding:12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--muted);font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit">Cancelar</button>
@@ -1137,7 +1132,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   <div style="background:var(--surface);border-radius:24px 24px 0 0;width:100%;max-width:600px;padding:0 0 24px;animation:slideUp .3s cubic-bezier(.34,1.56,.64,1)">
     <div style="width:36px;height:4px;background:var(--surface3);border-radius:99px;margin:12px auto 0"></div>
     <div style="padding:14px 20px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-      <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800">Transferir Mesa <span id="transfer-from-label"></span></div>
+      <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800">Transferir Mesa <span id="transfer-from-label"></span></div>
       <button onclick="closeTransfer()" style="width:30px;height:30px;border-radius:50%;background:var(--surface2);border:none;color:var(--muted);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">x</button>
     </div>
     <div style="padding:14px 16px">
@@ -1152,23 +1147,23 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   <div style="background:var(--surface);border-radius:24px 24px 0 0;width:100%;max-width:600px;padding:0 0 28px;animation:slideUp .3s cubic-bezier(.34,1.56,.64,1)">
     <div style="width:36px;height:4px;background:var(--surface3);border-radius:99px;margin:12px auto 0"></div>
     <div style="padding:14px 20px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-      <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800">Dividir Conta</div>
+      <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800">Dividir Conta</div>
       <button onclick="closeSplit()" style="width:30px;height:30px;border-radius:50%;background:var(--surface2);border:none;color:var(--muted);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">x</button>
     </div>
     <div style="padding:16px 18px">
-      <div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.18);border-radius:12px;padding:12px 16px;margin-bottom:16px;text-align:center">
+      <div style="background:rgba(196,149,106,.07);border:1px solid rgba(196,149,106,.18);border-radius:12px;padding:12px 16px;margin-bottom:16px;text-align:center">
         <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Total da mesa</div>
-        <div style="font-family:'Syne',sans-serif;font-size:26px;font-weight:900;color:var(--amber)" id="split-total-lbl">R$ 0,00</div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:26px;font-weight:900;color:var(--amber)" id="split-total-lbl">R$ 0,00</div>
       </div>
       <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Dividir entre</div>
       <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:16px">
         <button onclick="splitAdj(-1)" style="width:40px;height:40px;border-radius:50%;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center">-</button>
-        <div style="font-family:'Syne',sans-serif;font-size:36px;font-weight:900" id="split-n">2</div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:36px;font-weight:900" id="split-n">2</div>
         <button onclick="splitAdj(1)" style="width:40px;height:40px;border-radius:50%;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center">+</button>
       </div>
       <div style="text-align:center;margin-bottom:20px">
         <div style="font-size:13px;color:var(--muted);margin-bottom:4px">Cada pessoa paga</div>
-        <div style="font-family:'Syne',sans-serif;font-size:32px;font-weight:900;color:var(--green)" id="split-each">R$ 0,00</div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:32px;font-weight:900;color:var(--green)" id="split-each">R$ 0,00</div>
       </div>
       <button onclick="closeSplit()" style="width:100%;padding:14px;border-radius:12px;border:none;background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer">Fechar</button>
     </div>
@@ -1225,7 +1220,7 @@ let _garcomNomeLoja = null;
     if (topbar && _garcomNomeLoja) topbar.textContent = _garcomNomeLoja;
   } else if (tid || slug) {
     const errEl = document.getElementById('login-store-name');
-    if (errEl) { errEl.textContent = 'Restaurante não encontrado'; errEl.style.color='#ef4444'; }
+    if (errEl) { errEl.textContent = 'Restaurante não encontrado'; errEl.style.color='#fb7185'; }
   }
 })();
 
@@ -1796,7 +1791,7 @@ async function openMesaDetail(num) {
             const podeCanc = item.item_status !== 'entregue';
             const btnCanc  = podeCanc
               ? `<button onclick="garcomCancelarItem(${o.id},'${itemId}',${num})"
-                  style="padding:2px 7px;border-radius:6px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.07);color:#f87171;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">✕</button>`
+                  style="padding:2px 7px;border-radius:6px;border:1px solid rgba(251,113,133,.35);background:rgba(251,113,133,.07);color:#a5b4fc;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">✕</button>`
               : '';
             return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)">
               <span style="font-size:13px;flex:1">${item.qty}× ${item.name}${item.obs ? ` <span style="font-size:11px;color:var(--muted)">· ${item.obs}</span>` : ''}</span>
@@ -1838,7 +1833,7 @@ async function openMesaDetail(num) {
   } else {
     const cancelarBtn = !orders.length
       ? `<button onclick="cancelarOcupacaoMesa(${num})"
-          style="width:100%;padding:11px;border-radius:10px;border:1.5px solid var(--danger);background:rgba(239,68,68,.08);color:#f87171;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:7px">
+          style="width:100%;padding:11px;border-radius:10px;border:1.5px solid var(--danger);background:rgba(251,113,133,.08);color:#a5b4fc;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:7px">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
           Cancelar ocupação da mesa
         </button>` : '';
@@ -2070,7 +2065,7 @@ function renderItemGrid() {
       : i.emoji || '🍽️';
     return `<div class="item-tile ${qty>0?'selected':''}" onclick="addItem(${i.id})" id="tile-${i.id}">
       ${qty > 0 ? `<div class="item-tile-badge">${qty}</div>` : ''}
-      ${isPizza ? `<div style="position:absolute;top:6px;left:6px;background:linear-gradient(135deg,#b45309,#92400e);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px">PIZZA</div>` : ''}
+      ${isPizza ? `<div style="position:absolute;top:6px;left:6px;background:linear-gradient(135deg,#c4956a,rgba(196,149,106,.25));color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px">PIZZA</div>` : ''}
       <div class="item-tile-img">${imgHtml}</div>
       <div class="item-tile-name">${i.name}</div>
       <div class="item-tile-price">R$ ${(parseFloat(i.price)||0).toFixed(2).replace('.',',')}</div>
@@ -2648,12 +2643,12 @@ function npSetTipo(tipo) {
   const addr = document.getElementById('np-addr-block');
   if (btnD) {
     btnD.style.borderColor = isD ? 'var(--accent)' : 'var(--border)';
-    btnD.style.background  = isD ? 'rgba(59,130,246,.1)' : 'var(--surface2)';
+    btnD.style.background  = isD ? 'rgba(129,140,248,.1)' : 'var(--surface2)';
     btnD.style.color       = isD ? 'var(--accent)' : 'var(--muted)';
   }
   if (btnR) {
     btnR.style.borderColor = !isD ? 'var(--accent)' : 'var(--border)';
-    btnR.style.background  = !isD ? 'rgba(59,130,246,.1)' : 'var(--surface2)';
+    btnR.style.background  = !isD ? 'rgba(129,140,248,.1)' : 'var(--surface2)';
     btnR.style.color       = !isD ? 'var(--accent)' : 'var(--muted)';
   }
   if (addr) addr.style.display = isD ? '' : 'none';
@@ -2910,7 +2905,7 @@ function renderMyOrders() {
           + renderGrupo('entregue', grupos.entregue);
         return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:7px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <span style="font-size:11px;font-weight:700;color:var(--accent);background:rgba(59,130,246,.1);padding:2px 7px;border-radius:99px">📋 Comanda aberta</span>
+            <span style="font-size:11px;font-weight:700;color:var(--accent);background:rgba(129,140,248,.1);padding:2px 7px;border-radius:99px">📋 Comanda aberta</span>
             <span style="font-size:11px;color:var(--muted)">${o.time||''}</span>
           </div>
           ${itensHtml || '<div style="font-size:12px;color:var(--muted)">Sem itens ativos</div>'}
@@ -2933,17 +2928,17 @@ function renderMyOrders() {
     }).join('');
 
     const finalizarBtn = !isWaiting
-      ? `<button onclick="abrirFinalizarMesa(${num})" style="width:100%;padding:10px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--amber),#d97706);color:#000;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;margin-top:4px">
+      ? `<button onclick="abrirFinalizarMesa(${num})" style="width:100%;padding:10px;border-radius:9px;border:none;background:var(--amber);color:#000;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;margin-top:4px">
           ✓ Finalizar Mesa ${num}
         </button>`
-      : `<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);border-radius:9px;padding:10px;text-align:center;font-size:12.5px;color:var(--amber);font-weight:600;margin-top:4px">
+      : `<div style="background:rgba(196,149,106,.1);border:1px solid rgba(196,149,106,.25);border-radius:9px;padding:10px;text-align:center;font-size:12.5px;color:var(--amber);font-weight:600;margin-top:4px">
           ⏳ Aguardando pagamento no caixa
         </div>`;
 
-    return `<div style="background:var(--surface);border:1.5px solid ${isWaiting?'rgba(245,158,11,.3)':'var(--border)'};border-radius:14px;padding:14px;margin-bottom:14px">
+    return `<div style="background:var(--surface);border:1.5px solid ${isWaiting?'rgba(196,149,106,.3)':'var(--border)'};border-radius:14px;padding:14px;margin-bottom:14px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800">Mesa ${num}</div>
-        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:900;color:var(--amber)">R$ ${total.toFixed(2).replace('.',',')}</div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800">Mesa ${num}</div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:900;color:var(--amber)">R$ ${total.toFixed(2).replace('.',',')}</div>
       </div>
       ${ordersHtml}
       ${finalizarBtn}
@@ -3114,12 +3109,12 @@ function openTransfer(num) {
   } else {
     grid.innerHTML = freeTables.map(t => `
       <div onclick="confirmarTransfer(${t.num})"
-        style="aspect-ratio:1;border-radius:12px;background:#071a0c;border:2px solid #166534;
+        style="aspect-ratio:1;border-radius:12px;background:var(--surface2);border:2px solid rgba(52,211,153,.2);
                display:flex;flex-direction:column;align-items:center;justify-content:center;
                cursor:pointer;transition:all .15s;gap:4px"
         onmouseover="this.style.borderColor='var(--green)'"
-        onmouseout="this.style.borderColor='#166534'">
-        <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:900;color:#4ade80">${t.num}</div>
+        onmouseout="this.style.borderColor='rgba(52,211,153,.2)'">
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:22px;font-weight:900;color:#6ee7b7">${t.num}</div>
         <div style="font-size:9px;font-weight:800;letter-spacing:1px;color:rgba(74,222,128,.5)">LIVRE</div>
       </div>`).join('');
   }
