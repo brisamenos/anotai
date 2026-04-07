@@ -595,11 +595,26 @@ async function confirmarPagamentoMesa() {
     });
     if (movErr) console.warn('movimentos insert warning (não-fatal):', movErr);
 
-    // Atualizar estado local e cache
-    t.status = 'free'; t.total = null; t.guests = null;
+    // Busca pedidos da sessão atual no banco para o comprovante.
+    // NÃO usa o cache — fecharMesa já o limpou. Filtra pelo opened_at da sessão
+    // para garantir que apenas itens desta sessão apareçam no comprovante.
+    const _sessionStartComp = t?.opened_at
+      ? new Date(new Date(t.opened_at).getTime() - 5000).toISOString()
+      : null;
+    let _compQuery = sb.from('orders')
+      .select('*').eq('mesa_num', num).not('status', 'eq', 'cancelado');
+    if (_sessionStartComp) {
+      _compQuery = _compQuery.gte('created_at', _sessionStartComp);
+    } else {
+      // sem opened_at: pega apenas pedidos não-entregues (sessão recém-iniciada)
+      _compQuery = _compQuery.in('status', ['analise', 'producao', 'pronto', 'mesa_aberta', 'entregue']);
+    }
+    const { data: _fetchedComp } = await _compQuery;
+    const _ordensComprovante = _fetchedComp || [];
+
+    // Atualizar estado local e cache — zera tudo desta mesa
+    t.status = 'free'; t.total = null; t.guests = null; t.opened_at = null; t.pag_forma = null;
     ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== num);
-    // Salva os pedidos da mesa ANTES de limpar o cache (comprovante precisa deles)
-    const _ordensComprovante = mesaOrdersCache.filter(o => parseInt(o.mesa_num) === num);
     mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== num);
     tables.sort((a,b) => parseInt(a.num) - parseInt(b.num));
     closeModal('modal-pag-mesa');
