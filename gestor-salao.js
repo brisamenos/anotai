@@ -797,6 +797,14 @@ function renderMesaCard(t, orders) {
 
 
 async function mesaAdvanceOrder(id) {
+  // UI otimista: atualiza imediatamente
+  const o = ordersKanban.find(x => x.id === id);
+  const co = mesaOrdersCache.find(x => x.id === id);
+  const oldStatus = o?.status || co?.status;
+  if (o) o.status = 'producao';
+  if (co) co.status = 'producao';
+  _renderMesaPageFromCache();
+  renderKanban();
   try {
     const res = await fetch('/api/order-status', {
       method: 'POST',
@@ -804,15 +812,26 @@ async function mesaAdvanceOrder(id) {
       body: JSON.stringify({ order_id: id, new_status: 'producao', tenant_id: _sessao?.tenant_id })
     });
     if (!res.ok) throw new Error((await res.json()).error || 'Erro');
-    const o = ordersKanban.find(x => x.id === id);
-    const co = mesaOrdersCache.find(x => x.id === id);
-    if (o) o.status = 'producao';
-    if (co) co.status = 'producao';
+  } catch (e) {
+    // Reverte
+    if (o) o.status = oldStatus;
+    if (co) co.status = oldStatus;
     _renderMesaPageFromCache();
-  } catch (e) { sbToast('err', 'Erro ao atualizar pedido: ' + e.message); }
+    renderKanban();
+    sbToast('err', 'Erro ao atualizar pedido: ' + e.message);
+  }
 }
 
 async function mesaServOrder(id) {
+  // UI otimista: remove dos caches e renderiza imediatamente
+  const o = ordersKanban.find(x => x.id === id) || mesaOrdersCache.find(x => x.id === id);
+  const savedOrder = o ? { ...o } : null;
+  if (o?.phone) _autoAddFidPoints(o.phone, o.total + (o.taxa || 0));
+  ordersKanban = ordersKanban.filter(x => x.id !== id);
+  mesaOrdersCache = mesaOrdersCache.filter(x => x.id !== id);
+  renderKanban();
+  _renderMesaPageFromCache();
+  sbToast('ok', 'Pedido entregue');
   try {
     const res = await fetch('/api/order-status', {
       method: 'POST',
@@ -820,15 +839,16 @@ async function mesaServOrder(id) {
       body: JSON.stringify({ order_id: id, new_status: 'entregue', tenant_id: _sessao?.tenant_id })
     });
     if (!res.ok) throw new Error((await res.json()).error || 'Erro');
-    // BUG 1 fix: adiciona pontos de fidelidade ao entregar mesa
-    const o = ordersKanban.find(x => x.id === id) || mesaOrdersCache.find(x => x.id === id);
-    if (o?.phone) _autoAddFidPoints(o.phone, o.total + (o.taxa || 0));
-    ordersKanban = ordersKanban.filter(x => x.id !== id);
-    mesaOrdersCache = mesaOrdersCache.filter(x => x.id !== id);
-    renderKanban();
-    _renderMesaPageFromCache();
-    sbToast('ok', 'Pedido entregue');
-  } catch (e) { sbToast('err', 'Erro ao atualizar pedido: ' + e.message); }
+  } catch (e) {
+    // Reverte
+    if (savedOrder) {
+      ordersKanban.unshift(savedOrder);
+      mesaOrdersCache.unshift(savedOrder);
+      renderKanban();
+      _renderMesaPageFromCache();
+    }
+    sbToast('err', 'Erro ao atualizar pedido: ' + e.message);
+  }
 }
 
 async function mesaCancelOrder(id) {

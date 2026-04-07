@@ -572,6 +572,20 @@ async function confirmarPagamentoMesa() {
   const totalVal = parseFloat(totalStr.replace('R$ ','').replace(',','.')) || 0;
   const time     = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 
+  // ── IMPORTANTE: captura opened_at ANTES de qualquer await ──────────────
+  // O SSE da atualização da mesa (step 2) pode disparar refreshMesa()
+  // durante os awaits seguintes, nullificando t.opened_at via race condition.
+  const _savedOpenedAt = t.opened_at || null;
+
+  // ── Captura itens do modal de pagamento como fallback ──────────────────
+  // openRegistrarPagamento já carregou os itens do banco e guardou aqui.
+  // Se a query do comprovante falhar ou vier vazia, usamos esses itens.
+  let _fallbackItens = [];
+  try {
+    const _modalItensJson = document.getElementById('modal-pag-itens')?.dataset?.ordersJson;
+    if (_modalItensJson) _fallbackItens = JSON.parse(_modalItensJson);
+  } catch(e) { console.warn('[confirmarPag] fallback itens parse:', e.message); }
+
   sbLoading(true);
   try {
     // 1. Finaliza todos os pedidos ativos da mesa
@@ -597,20 +611,30 @@ async function confirmarPagamentoMesa() {
 
     // Busca pedidos da sessão atual no banco para o comprovante.
     // NÃO usa o cache — fecharMesa já o limpou. Filtra pelo opened_at da sessão
-    // para garantir que apenas itens desta sessão apareçam no comprovante.
-    const _sessionStartComp = t?.opened_at
-      ? new Date(new Date(t.opened_at).getTime() - 5000).toISOString()
+    // (capturado ANTES dos awaits) para garantir que apenas itens desta sessão apareçam.
+    const _sessionStartComp = _savedOpenedAt
+      ? new Date(new Date(_savedOpenedAt).getTime() - 5000).toISOString()
       : null;
     let _compQuery = sb.from('orders')
-      .select('*').eq('mesa_num', num).not('status', 'eq', 'cancelado');
+      .select('*').eq('mesa_num', num);
     if (_sessionStartComp) {
-      _compQuery = _compQuery.gte('created_at', _sessionStartComp);
+      _compQuery = _compQuery.neq('status', 'cancelado').gte('created_at', _sessionStartComp);
     } else {
-      // sem opened_at: pega apenas pedidos não-entregues (sessão recém-iniciada)
+      // sem opened_at: pega todos não-cancelados desta mesa (entregues recentes)
       _compQuery = _compQuery.in('status', ['analise', 'producao', 'pronto', 'mesa_aberta', 'entregue']);
     }
     const { data: _fetchedComp } = await _compQuery;
-    const _ordensComprovante = _fetchedComp || [];
+    let _ordensComprovante = _fetchedComp || [];
+
+    // ── Fallback: se a query não retornou pedidos com itens, usa os itens do modal ──
+    const _temItens = _ordensComprovante.some(o => {
+      const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? (() => { try { return JSON.parse(o.items) } catch { return [] } })() : []);
+      return items.length > 0;
+    });
+    if (!_temItens && _fallbackItens.length > 0) {
+      console.warn('[confirmarPag] Query retornou sem itens, usando fallback do modal');
+      _ordensComprovante = [{ items: _fallbackItens.map(i => ({ name: i.name, qty: i.qty, price: i.subtotal / (i.qty || 1) })), status: 'entregue' }];
+    }
 
     // Atualizar estado local e cache — zera tudo desta mesa
     t.status = 'free'; t.total = null; t.guests = null; t.opened_at = null; t.pag_forma = null;
@@ -648,7 +672,11 @@ function abrirComprovantesMesa(num, totalVal, forma, time, ordensPreSalvas) {
   // Consolida itens
   const itemMap = {};
   sessionOrders.forEach(o => {
-    (Array.isArray(o.items) ? o.items : []).forEach(i => {
+    // Garante que items é um array — pode vir como string JSON do servidor
+    let rawItems = o.items;
+    if (typeof rawItems === 'string') { try { rawItems = JSON.parse(rawItems); } catch { rawItems = []; } }
+    if (!Array.isArray(rawItems)) rawItems = [];
+    rawItems.forEach(i => {
       if (i.item_status === 'cancelado') return; // ignora cancelados
       const key = i.name;
       if (!itemMap[key]) itemMap[key] = { name:i.name, qty:0, total:0, drink:!!i.drink };

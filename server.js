@@ -733,8 +733,22 @@ async function handleREST(req, res, table, params, body) {
         const row = db.prepare('SELECT * FROM store_config WHERE tenant_id=?').get(pTid)
         const parsed = parseRow(table, row); emit(pTid, table, parsed, 'UPDATE'); marcarDirty(); return send(res, 200, parsed)
       }
+      // Coleta IDs antes do UPDATE para poder re-SELECT depois (o WHERE original pode não casar após o UPDATE)
+      const _idsAntes = SSE_TABLES.has(table) && cols.includes('id')
+        ? db.prepare(`SELECT "id" FROM "${table}" ${WHERE}`).all(...vals).map(r => r.id)
+        : [];
       db.prepare(`UPDATE "${table}" SET ${keys.map(k=>`"${k}"=?`).join(', ')} ${WHERE}`).run(...keys.map(k=>sanitize(payload[k])),...vals)
-      if (SSE_TABLES.has(table)) { const updatedRow=db.prepare(`SELECT * FROM "${table}" ${WHERE} LIMIT 1`).get(...vals); emit(tenantId||payload.tenant_id, table, updatedRow?parseRow(table,updatedRow):payload, 'UPDATE') }
+      if (SSE_TABLES.has(table) && _idsAntes.length) {
+        // Emite SSE para cada row atualizada com dados completos
+        for (const _rid of _idsAntes) {
+          const updatedRow = db.prepare(`SELECT * FROM "${table}" WHERE "id"=?`).get(_rid);
+          if (updatedRow) emit(tenantId||payload.tenant_id, table, parseRow(table, updatedRow), 'UPDATE');
+        }
+      } else if (SSE_TABLES.has(table)) {
+        // Fallback: tenta re-SELECT com WHERE original
+        const updatedRow = db.prepare(`SELECT * FROM "${table}" ${WHERE} LIMIT 1`).get(...vals);
+        emit(tenantId||payload.tenant_id, table, updatedRow?parseRow(table,updatedRow):payload, 'UPDATE');
+      }
 
       marcarDirty(); return send(res, 200, { updated: 1 })
     } catch(e) { return send(res, 400, { error: e.message }) }

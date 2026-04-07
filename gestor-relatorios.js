@@ -178,17 +178,26 @@ async function kdsMarkMesaPronto(orderId) {
   const updatedItems = (order.items || []).map(i =>
     i.item_status === 'producao' ? { ...i, item_status: 'pronto' } : i
   );
+  // Atualiza cache local IMEDIATAMENTE (UI otimista — responsividade instantânea)
+  const cacheIdx = mesaOrdersCache.findIndex(o => o.id === orderId);
+  if (cacheIdx !== -1) mesaOrdersCache[cacheIdx] = { ...mesaOrdersCache[cacheIdx], items: updatedItems };
+  delete kdsTimers[orderId];
+  renderKDS();
+  _renderMesaPageFromCache();
+  sbToast('ok', 'Mesa ' + order.mesa_num + ' — itens prontos');
   try {
+    // Marca flag para pular re-render duplicado do SSE (já renderizamos acima)
+    window._kdsSkipSseRender = Date.now();
     const { error } = await sb.from('orders')
       .update({ items: updatedItems, updated_at: new Date().toISOString() })
       .eq('id', orderId);
-    if (error) throw error;
-    const idx = mesaOrdersCache.findIndex(o => o.id === orderId);
-    if (idx !== -1) mesaOrdersCache[idx] = { ...mesaOrdersCache[idx], items: updatedItems };
-    delete kdsTimers[orderId];
-    renderKDS();
-    _renderMesaPageFromCache();
-    sbToast('ok', 'Mesa ' + order.mesa_num + ' — itens prontos');
+    if (error) {
+      // Reverte cache se falhou
+      if (cacheIdx !== -1) mesaOrdersCache[cacheIdx] = { ...mesaOrdersCache[cacheIdx], items: order.items };
+      renderKDS();
+      _renderMesaPageFromCache();
+      throw error;
+    }
   } catch(e) { sbToast('err', 'Erro ao marcar pronto: ' + (e?.message || e)); }
 }
 
@@ -245,6 +254,7 @@ async function kdsItemPronto(orderId, itemId) {
   if (idx < 0) return;
   items[idx] = { ...items[idx], item_status: 'pronto' };
   try {
+    window._kdsSkipSseRender = Date.now();
     const { error } = await sb.from('orders')
       .update({ items, updated_at: new Date().toISOString() })
       .eq('id', orderId);
@@ -264,6 +274,7 @@ async function kdsItemPronto(orderId, itemId) {
       });
     } catch(e){}
     renderKDS();
+    _renderMesaPageFromCache();
     sbToast('ok', `${items[idx].name} pronto!`);
   } catch(e) { sbToast('err', 'Erro: ' + e.message); }
 }

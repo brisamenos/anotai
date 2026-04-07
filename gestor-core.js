@@ -620,8 +620,12 @@ function subscribeOrders() {
         _renderMesaPageFromCache();
       }
       _syncSwState();
-      // Atualiza KDS se aberto
-      { const kpg = document.getElementById('page-kds'); if (kpg && kpg.classList.contains('on')) renderKDS(); }
+      // Atualiza KDS se aberto — pula se acabamos de renderizar manualmente (kdsMarkMesaPronto)
+      if (window._kdsSkipSseRender && Date.now() - window._kdsSkipSseRender < 800) {
+        window._kdsSkipSseRender = 0; // consome o flag
+      } else {
+        const kpg = document.getElementById('page-kds'); if (kpg && kpg.classList.contains('on')) renderKDS();
+      }
     })
     .on('postgres_changes', {event:'DELETE', schema:'public', table:'orders'}, p => {
       ordersKanban = ordersKanban.filter(o => o.id !== p.old.id);
@@ -1113,9 +1117,15 @@ async function advanceOrderById(id) {
     sbToast('err', 'Use o botão "Confirmar Pago PIX" para este pedido.');
     return;
   }
+  const oldStatus = o.status;
   const newStatus = o.status === 'analise' ? 'producao' : 'pronto';
   // Se estava em analise e vai para producao, verifica se para o alerta
   if (o.status === 'analise') setTimeout(_checkStopAlert, 200);
+  // UI otimista: atualiza imediatamente para resposta instantânea
+  o.status = newStatus;
+  playOrderSound();
+  renderKanban();
+  sbToast('ok', `Pedido #${_orderNum(id)} avançado!`);
   try {
     const res = await fetch('/api/order-status', {
       method: 'POST',
@@ -1124,13 +1134,12 @@ async function advanceOrderById(id) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erro');
-    o.status = newStatus;
   } catch(e) {
-    sbToast('err', 'Erro ao avançar pedido: ' + e.message); return;
+    // Reverte se falhou
+    o.status = oldStatus;
+    renderKanban();
+    sbToast('err', 'Erro ao avançar pedido: ' + e.message);
   }
-  playOrderSound();
-  renderKanban();
-  sbToast('ok', `Pedido #${_orderNum(id)} avançado!`);
 }
 
 // ── cancelOrderById ──────────────────────────────────
