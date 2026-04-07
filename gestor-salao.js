@@ -787,7 +787,6 @@ function renderMesaCard(t, orders) {
         <button onclick="event.stopPropagation();openEditMesa(${t.num})" style="margin-left:4px;background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--muted);cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif" title="Editar mesa"></button>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
-        <button onclick="event.stopPropagation();abrirHistoricoMesa(${t.num})" style="background:none;border:1px solid var(--border);border-radius:7px;padding:3px 9px;color:var(--muted);cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif" title="Histórico de sessões">📋 Histórico</button>
         <div style="font-family:'Playfair Display',sans-serif;font-size:20px;font-weight:900;color:var(--accent3)">R$ ${displayTotal.toFixed(2).replace('.', ',')}</div>
       </div>
     </div>
