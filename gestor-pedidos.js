@@ -245,7 +245,7 @@ function openOrderDetail(id) {
       const total = activeItems.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
       o = {
         id: mesaOrder.id,
-        num: mesaOrder.num || (typeof _orderNum === 'function' ? _orderNum(mesaOrder.id) : mesaOrder.id),
+        num: mesaOrder.num || (typeof _orderNum === 'function' ? _orderNum(mesaOrder.id, mesaOrder.order_num) : mesaOrder.id),
         status: mesaOrder.status === 'mesa_aberta' ? 'producao' : mesaOrder.status,
         items: activeItems.map(i => ({
           qty: i.qty || 1,
@@ -789,7 +789,7 @@ async function createOrder() {
     if (nc) { nc.style.display = 'flex'; nc.textContent = parseInt(nc.textContent || 0) + 1; }
     closeModal('modal-new-order');
     nav('pedidos');
-    sbToast('ok', `Pedido #${_orderNum(orderData.id)} criado`);
+    sbToast('ok', `Pedido #${_orderNum(orderData.id, orderData.order_num)} criado`);
   } finally {
     window._pdvCriandoPedido = false;
   }

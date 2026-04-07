@@ -1263,6 +1263,7 @@ let tables        = [];
 let allItems      = [];
 let allCats       = [];
 let myOrders      = [];
+let allMesaOrders = []; // todas as comandas (todos os garçons) — para visualização de mesa
 let cart          = [];
 let activeMesa    = null;
 let activeCatFilter = '';
@@ -1366,7 +1367,7 @@ function doLogout() {
   stopSW();
   unsubscribeAll();
   currentGarcom = null;
-  cart = []; myOrders = [];
+  cart = []; myOrders = []; allMesaOrders = [];
   localStorage.removeItem('garcom_session');
   document.getElementById('screen-app').classList.remove('show');
   document.getElementById('screen-login').style.display = 'flex';
@@ -1384,8 +1385,11 @@ function mesaLabel(order) {
 }
 
 let _garcomPrintCfg = null; // cache de print_config do tenant
-let _garcomOrderNumOffset = 0; // offset de numeração por tenant
-function _garcomOrderNum(id) { return Math.max(1, Number(id) - Number(_garcomOrderNumOffset)); }
+let _garcomOrderNumOffset = 0; // offset de numeração por tenant (fallback)
+function _garcomOrderNum(id, orderNum) {
+  if (orderNum) return Number(orderNum);
+  return Math.max(1, Number(id) - Number(_garcomOrderNumOffset));
+}
 
 // ── Impressão automática do garçom ─────────────────────
 async function garcomPrint(order, newItems) {
@@ -1397,7 +1401,7 @@ async function garcomPrint(order, newItems) {
     const fmt      = cfg.format || localStorage.getItem('printFormat') || '80mm';
     const printer  = cfg.printer || localStorage.getItem('printPrinter') || '';
     const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-    const orderNum = order.mesa_num ? `Mesa ${order.mesa_num}` : (order.id ? `#${_garcomOrderNum(order.id)}` : '?');
+    const orderNum = order.mesa_num ? `Mesa ${order.mesa_num}` : (order.id ? `#${_garcomOrderNum(order.id, order.order_num)}` : '?');
 
     // Monta os itens a imprimir — usa só os novos itens desta rodada (sem os já enviados antes)
     const items = Array.isArray(newItems) && newItems.length ? newItems : (Array.isArray(order.items) ? order.items : []);
@@ -1616,34 +1620,61 @@ function subscribeRealtime() {
 
   const chOrders = sb.channel('garcom-orders-' + gid)
     .on('postgres_changes', { event:'*', schema:'public', table:'orders' }, p => {
+      const _gid = currentGarcom?.id;
+      const _hasMyItems = (order) => {
+        if (order.garcom_id === _gid) return true;
+        const items = Array.isArray(order.items) ? order.items : [];
+        return items.some(i => i.garcom_id === _gid && i.item_status !== 'cancelado');
+      };
+
       if (p.eventType === 'INSERT') {
-        if (p.new.garcom_id === currentGarcom?.id && !myOrders.find(o => o.id === p.new.id)) {
-          myOrders.unshift(p.new);
-          renderMyOrders();
+        // Sempre adiciona em allMesaOrders (se mesa)
+        if (p.new.mesa_num && !allMesaOrders.find(o => o.id === p.new.id)) {
+          allMesaOrders.unshift(p.new);
         }
+        // Só adiciona em myOrders se este garçom tem itens
+        if (_hasMyItems(p.new) && !myOrders.find(o => o.id === p.new.id)) {
+          myOrders.unshift(p.new);
+        }
+        renderMyOrders();
       } else if (p.eventType === 'UPDATE') {
+        // Atualiza allMesaOrders
+        const allIdx = allMesaOrders.findIndex(o => o.id === p.new.id);
+        if (allIdx !== -1) {
+          if (p.new.status === 'cancelado') allMesaOrders.splice(allIdx, 1);
+          else allMesaOrders[allIdx] = p.new;
+        } else if (p.new.mesa_num && p.new.status === 'mesa_aberta') {
+          allMesaOrders.unshift(p.new);
+        }
+
+        // Atualiza myOrders
         const idx = myOrders.findIndex(o => o.id === p.new.id);
         if (idx !== -1) {
           if (p.new.status === 'cancelado') {
-            myOrders.splice(idx, 1); // cancelado sai de myOrders
+            myOrders.splice(idx, 1);
           } else if (p.new.status === 'mesa_aberta' || p.new.mesa_num) {
-            myOrders[idx] = p.new;   // comanda de mesa sempre atualiza no lugar
+            myOrders[idx] = p.new;
           } else if (['entregue'].includes(p.new.status) && !p.new.mesa_num) {
-            myOrders.splice(idx, 1); // delivery/retirada entregue sai
+            myOrders.splice(idx, 1);
           } else {
             myOrders[idx] = p.new;
           }
-          renderMyOrders();
-          // Se o detalhe da mesa está aberto, atualiza
-          if (p.new.mesa_num && _detailMesaNum === p.new.mesa_num) {
-            openMesaDetail(p.new.mesa_num);
-          }
+        } else if (_hasMyItems(p.new) && p.new.status !== 'cancelado') {
+          // Outro garçom pode ter adicionado itens deste garçom à comanda
+          myOrders.unshift(p.new);
+        }
+        renderMyOrders();
+        // Se o detalhe da mesa está aberto, atualiza
+        if (p.new.mesa_num && _detailMesaNum === parseInt(p.new.mesa_num)) {
+          openMesaDetail(parseInt(p.new.mesa_num));
         }
       } else if (p.eventType === 'DELETE') {
+        allMesaOrders = allMesaOrders.filter(o => o.id !== p.old.id);
         myOrders = myOrders.filter(o => o.id !== p.old.id);
         renderMyOrders();
       }
-      sendSwState(); // sincroniza SW após qualquer mudança
+      renderMesas();
+      sendSwState();
     })
     .subscribe();
 
@@ -1711,8 +1742,8 @@ function renderMesas() {
     const lbl     = free ? 'LIVRE' : (waiting ? 'PAGANDO' : 'OCUPADA');
     const icon    = free ? '🟢' : (waiting ? '⏳' : '🔴');
 
-    // Total da mesa se ocupada
-    const mesaOrders = myOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === t.num);
+    // Total da mesa se ocupada (mostra total de TODOS os garçons)
+    const mesaOrders = allMesaOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === t.num);
     const mesaTotal  = mesaOrders.reduce((s,o)=>s+parseFloat(o.total||0),0);
     const totalHtml  = !free && mesaTotal > 0
       ? `<div class="mesa-block-total">R$ ${mesaTotal.toFixed(2).replace('.',',')}</div>`
@@ -1758,8 +1789,8 @@ async function openMesaDetail(num) {
   document.getElementById('mds-head-title').textContent = 'Mesa ' + num;
   document.getElementById('mds-head-sub').textContent   = waiting ? '⏳ Aguardando pagamento' : '🔴 Mesa ocupada';
 
-  // Busca pedidos desta mesa (usa myOrders já carregados)
-  const orders  = myOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
+  // Busca pedidos desta mesa (usa allMesaOrders — todos os garçons)
+  const orders  = allMesaOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
   const total   = orders.reduce((s,o)=>s+parseFloat(o.total||0),0);
 
   const body = document.getElementById('mds-body');
@@ -1787,15 +1818,20 @@ async function openMesaDetail(num) {
           if (!itens.length) return '';
           const rows = itens.map(item => {
             const itemId = item.item_id || allItens.indexOf(item);
-            // Pode cancelar itens que ainda não foram entregues
-            const podeCanc = item.item_status !== 'entregue';
+            // Pode cancelar somente itens NÃO entregues E que pertencem a ESTE garçom
+            const isMyItem = !item.garcom_id || item.garcom_id === currentGarcom?.id;
+            const podeCanc = item.item_status !== 'entregue' && isMyItem;
             const btnCanc  = podeCanc
               ? `<button onclick="garcomCancelarItem(${o.id},'${itemId}',${num})"
-                  style="padding:2px 7px;border-radius:6px;border:1px solid rgba(251,113,133,.35);background:rgba(251,113,133,.07);color:#a5b4fc;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">✕</button>`
+                  style="padding:2px 7px;border-radius:6px;border:1px solid rgba(251,113,133,.35);background:rgba(251,113,133,.07);color:var(--red);font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">✕</button>`
+              : '';
+            // Badge com nome do garçom (se item de outro garçom)
+            const garcomBadge = (item.garcom_nome && item.garcom_id !== currentGarcom?.id)
+              ? ` <span style="font-size:9px;background:rgba(129,140,248,.1);color:var(--accent);padding:1px 5px;border-radius:4px;font-weight:600">${item.garcom_nome}</span>`
               : '';
             return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)">
-              <span style="font-size:13px;flex:1">${item.qty}× ${item.name}${item.obs ? ` <span style="font-size:11px;color:var(--muted)">· ${item.obs}</span>` : ''}</span>
-              <span style="font-size:12px;color:var(--accent3);font-weight:600;white-space:nowrap">R$ ${((item.price||0)*(item.qty||1)).toFixed(2).replace('.',',')}</span>
+              <span style="font-size:13px;flex:1">${item.qty}× ${item.name}${garcomBadge}${item.obs ? ` <span style="font-size:11px;color:var(--muted)">· ${item.obs}</span>` : ''}</span>
+              <span style="font-size:12px;color:var(--amber);font-weight:600;white-space:nowrap">R$ ${((item.price||0)*(item.qty||1)).toFixed(2).replace('.',',')}</span>
               ${btnCanc}
             </div>`;
           }).join('');
@@ -1878,7 +1914,8 @@ async function garcomCancelarPedido(orderId, mesaNum) {
     });
     if (!res.ok) throw new Error((await res.json()).error || 'Erro');
     myOrders = myOrders.filter(o => o.id !== orderId);
-    showToast('Pedido ' + mesaLabel(myOrders.find(o=>o.id===orderId)||{id:orderId}) + ' cancelado');
+    allMesaOrders = allMesaOrders.filter(o => o.id !== orderId);
+    showToast('Pedido cancelado');
     openMesaDetail(mesaNum);
   } catch(e) {
     showToast('❌ Erro ao cancelar: ' + e.message);
@@ -1886,7 +1923,7 @@ async function garcomCancelarPedido(orderId, mesaNum) {
 }
 
 async function garcomCancelarItem(orderId, itemId, mesaNum) {
-  const order = myOrders.find(o => o.id === orderId);
+  const order = allMesaOrders.find(o => o.id === orderId);
   if (!order) return;
   const items = Array.isArray(order.items) ? [...order.items] : [];
   // Suporta item_id (novo modelo) ou posição numérica (compatibilidade)
@@ -1895,6 +1932,13 @@ async function garcomCancelarItem(orderId, itemId, mesaNum) {
     : parseInt(itemId);
   if (idx < 0 || idx >= items.length) return;
   const item = items[idx];
+
+  // Só pode cancelar itens que este garçom adicionou
+  if (item.garcom_id && item.garcom_id !== currentGarcom?.id) {
+    showToast('❌ Só é possível remover itens que você adicionou');
+    return;
+  }
+
   if (!await garcomConfirm({ icon:'🗑️', title:'Remover item?', msg:`Remover "${item.qty}× ${item.name}" da comanda?`, okLabel:'Remover' })) return;
 
   // Novo modelo: marca como cancelado (preserva histórico)
@@ -1908,6 +1952,9 @@ async function garcomCancelarItem(orderId, itemId, mesaNum) {
       .update({ items, total: novoTotal })
       .eq('id', orderId);
     if (error) throw error;
+    // Atualiza ambos os caches
+    const ai = allMesaOrders.findIndex(o => o.id === orderId);
+    if (ai !== -1) allMesaOrders[ai] = { ...allMesaOrders[ai], items, total: novoTotal };
     const mi = myOrders.findIndex(o => o.id === orderId);
     if (mi !== -1) myOrders[mi] = { ...myOrders[mi], items, total: novoTotal };
     showToast('✅ Item removido');
@@ -2550,11 +2597,13 @@ async function submitPedido() {
     const newItems = [
       ...foodItems.map((i, idx) => ({
         qty: i.qty, name: i.name, price: i.price, obs: i.obs||'',
-        item_status: 'producao', item_id: `${_ts}_f${idx}`, added_at: new Date().toISOString()
+        item_status: 'producao', item_id: `${_ts}_f${idx}`, added_at: new Date().toISOString(),
+        garcom_id: currentGarcom?.id || null, garcom_nome: currentGarcom?.nome || ''
       })),
       ...drinkItems.map((i, idx) => ({
         qty: i.qty, name: i.name, price: i.price, obs: i.obs||'', drink: true,
-        item_status: 'entregue', item_id: `${_ts}_d${idx}`, added_at: new Date().toISOString()
+        item_status: 'entregue', item_id: `${_ts}_d${idx}`, added_at: new Date().toISOString(),
+        garcom_id: currentGarcom?.id || null, garcom_nome: currentGarcom?.nome || ''
       }))
     ];
 
@@ -2794,6 +2843,7 @@ async function loadPedidosDaMesa() {
 
     if (!activeMesas.length) {
       myOrders = [];
+      allMesaOrders = [];
       renderMyOrders();
       return;
     }
@@ -2809,18 +2859,29 @@ async function loadPedidosDaMesa() {
 
     // Filtra apenas comandas de mesas que ainda estão abertas (busy/waiting)
     // e que foram abertas APÓS a mesa abrir (evita comandas de sessões anteriores)
-    myOrders = (data || []).filter(o => {
+    allMesaOrders = (data || []).filter(o => {
       const mesa = activeMesas.find(t => t.num === o.mesa_num);
-      if (!mesa) return false; // mesa não encontrada ou já fechada
+      if (!mesa) return false;
       if (!mesa.opened_at) return true;
       const orderTime    = new Date(o.created_at || 0).getTime();
       const mesaOpenTime = new Date(mesa.opened_at).getTime();
       return orderTime >= mesaOpenTime - 5000;
     });
 
+    // "Meus Pedidos": apenas comandas onde ESTE garçom tem itens
+    const gid = currentGarcom?.id;
+    myOrders = allMesaOrders.filter(o => {
+      // Comanda criada por este garçom
+      if (o.garcom_id === gid) return true;
+      // Ou comanda que contém itens deste garçom
+      const items = Array.isArray(o.items) ? o.items : [];
+      return items.some(i => i.garcom_id === gid && i.item_status !== 'cancelado');
+    });
+
     renderMyOrders();
   } catch(e) {
     myOrders = [];
+    allMesaOrders = [];
     renderMyOrders();
   }
 }
@@ -2894,10 +2955,12 @@ function renderMyOrders() {
           const cor  = { producao:'var(--accent)', pronto:'var(--green)', entregue:'var(--muted)' }[key];
           return `<div style="margin-bottom:6px">
             <div style="font-size:10px;font-weight:700;color:${cor};margin-bottom:3px">${icon} ${lbl.toUpperCase()}</div>
-            ${itens.map(i=>`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:2px 0">
-              <span>${i.qty}× ${i.name}${i.obs?` <span style="font-size:11px;color:var(--muted)">· ${i.obs}</span>`:''}</span>
+            ${itens.map(i=>{
+              const _gb = (i.garcom_nome && i.garcom_id !== currentGarcom?.id) ? ` <span style="font-size:9px;background:rgba(129,140,248,.1);color:var(--accent);padding:1px 5px;border-radius:4px;font-weight:600">${i.garcom_nome}</span>` : '';
+              return `<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:2px 0">
+              <span>${i.qty}× ${i.name}${_gb}${i.obs?` <span style="font-size:11px;color:var(--muted)">· ${i.obs}</span>`:''}</span>
               <span style="color:var(--amber);font-weight:600">R$ ${((i.price||0)*(i.qty||1)).toFixed(2).replace('.',',')}</span>
-            </div>`).join('')}
+            </div>`;}).join('')}
           </div>`;
         };
         const itensHtml = renderGrupo('producao', grupos.producao)
@@ -3006,11 +3069,21 @@ async function refreshMesa(num) {
 
   const { data: orders } = await (sessionStart ? q.gte('created_at', sessionStart) : q);
 
-  // Substitui apenas as entradas desta mesa em myOrders
-  myOrders = [
-    ...myOrders.filter(o => (o.mesa_num || parseInt((o.addr || '').replace('Mesa ', '') || '0')) !== numInt),
-    ...(orders || [])
-  ];
+  // Substitui entradas desta mesa em ambos os caches
+  const _otherAll = allMesaOrders.filter(o => (o.mesa_num || parseInt((o.addr || '').replace('Mesa ', '') || '0')) !== numInt);
+  const _otherMy  = myOrders.filter(o => (o.mesa_num || parseInt((o.addr || '').replace('Mesa ', '') || '0')) !== numInt);
+  const _fetched   = orders || [];
+
+  allMesaOrders = [..._otherAll, ..._fetched];
+
+  // myOrders: só inclui se este garçom tem itens
+  const _gid = currentGarcom?.id;
+  const _myFetched = _fetched.filter(o => {
+    if (o.garcom_id === _gid) return true;
+    const items = Array.isArray(o.items) ? o.items : [];
+    return items.some(i => i.garcom_id === _gid && i.item_status !== 'cancelado');
+  });
+  myOrders = [..._otherMy, ..._myFetched];
 
   renderMesas();
   renderMyOrders();
@@ -3033,8 +3106,8 @@ async function abrirFinalizarMesa(num) {
   });
   document.getElementById('finalizar-title').textContent = `Finalizar Mesa ${num}`;
 
-  // Load orders for this mesa
-  const orders = myOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
+  // Load orders for this mesa (todos os garçons)
+  const orders = allMesaOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
   const total  = calcularTotalMesa(orders);
   document.getElementById('finalizar-total').textContent = 'R$ ' + total.toFixed(2).replace('.',',');
 
@@ -3067,7 +3140,7 @@ function selectFinalizarPay(el) {
 async function confirmarFinalizarMesa() {
   if (!finalizarMesaNum) return;
   // Soma todos os pedidos da mesa (comanda + bebidas imediatas) igual ao abrirFinalizarMesa
-  const mesaOrders = myOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === finalizarMesaNum);
+  const mesaOrders = allMesaOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === finalizarMesaNum);
   const total = calcularTotalMesa(mesaOrders);
   try {
     // Marca comanda como entregue (finaliza a sessão)

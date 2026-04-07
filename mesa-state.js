@@ -52,7 +52,7 @@ function _patchOrderInCache(order) {
     return;
   }
 
-  const enriched = { ...order, num: _orderNum(order.id) };
+  const enriched = { ...order, num: _orderNum(order.id, order.order_num) };
 
   if (idx !== -1) {
     // Mantém no cache mesmo após entregue — necessário para resumo de consumo
@@ -135,7 +135,7 @@ async function refreshMesa(num) {
   // 3. Substitui apenas as entradas desta mesa no cache
   mesaOrdersCache = [
     ...mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== numInt),
-    ...(orders || []).map(o => ({ ...o, num: _orderNum(o.id) }))
+    ...(orders || []).map(o => ({ ...o, num: _orderNum(o.id, o.order_num) }))
   ];
 }
 
@@ -182,5 +182,5 @@ async function refreshMesasState() {
       const sessionStart = new Date(mesa.opened_at).getTime() - 5000;
       return new Date(o.created_at || 0).getTime() >= sessionStart;
     })
-    .map(o => ({ ...o, num: _orderNum(o.id) }));
+    .map(o => ({ ...o, num: _orderNum(o.id, o.order_num) }));
 }

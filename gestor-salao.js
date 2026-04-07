@@ -688,7 +688,7 @@ function renderMesaCard(t, orders) {
           + renderGrupoSalao('pronto', grupos.pronto)
           + renderGrupoSalao('entregue', grupos.entregue);
         return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:7px">
-          <div style="font-size:10.5px;color:var(--muted);margin-bottom:6px">📋 Comanda #${_orderNum(comanda.id)}</div>
+          <div style="font-size:10.5px;color:var(--muted);margin-bottom:6px">📋 Comanda #${_orderNum(comanda.id, comanda.order_num)}</div>
           ${html || '<div style="font-size:12px;color:var(--muted)">Sem itens ativos</div>'}
         </div>`;
       })()

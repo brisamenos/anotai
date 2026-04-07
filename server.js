@@ -314,6 +314,9 @@ const MIGRATIONS = [
     `ALTER TABLE store_config ADD COLUMN store_cor_texto TEXT`,
     `ALTER TABLE store_config ADD COLUMN cats_carrossel INTEGER DEFAULT 0`
   ]},
+  { version:30, description:'order_num sequencial por tenant', up:[
+    `ALTER TABLE orders ADD COLUMN order_num INTEGER`
+  ]},
 ]
 
 function runMigrations() {
@@ -337,6 +340,24 @@ function runMigrations() {
   }
 }
 runMigrations()
+
+// ── Backfill order_num para pedidos existentes ────────────────────────────
+try {
+  const _needsBackfill = db.prepare('SELECT COUNT(*) as cnt FROM orders WHERE order_num IS NULL').get()
+  if (_needsBackfill?.cnt > 0) {
+    log('🔄', `Backfill order_num: ${_needsBackfill.cnt} pedidos sem número sequencial`)
+    const _tenants = db.prepare('SELECT DISTINCT tenant_id FROM orders WHERE order_num IS NULL').all()
+    for (const { tenant_id } of _tenants) {
+      const _nullOrders = db.prepare('SELECT id FROM orders WHERE tenant_id=? AND order_num IS NULL ORDER BY id ASC').all(tenant_id)
+      const _existingMax = db.prepare('SELECT COALESCE(MAX(order_num),0) as mx FROM orders WHERE tenant_id=? AND order_num IS NOT NULL').get(tenant_id)
+      let _seq = _existingMax?.mx || 0
+      const _upd = db.prepare('UPDATE orders SET order_num=? WHERE id=?')
+      db.transaction(() => { for (const r of _nullOrders) _upd.run(++_seq, r.id) })()
+      log('✅', `  Tenant ${tenant_id}: ${_nullOrders.length} pedidos numerados (1..${_seq})`)
+    }
+  }
+} catch(e) { log('⚠️', 'Backfill order_num erro (não-fatal):', e.message) }
+// ──────────────────────────────────────────────────────────────────────────
 
 // ════════════════════════════════════════════════════════
 // BACKUP / RESTORE
@@ -522,7 +543,7 @@ const TABLE_COLS = {
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
-  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','garcom_id','garcom_nome','customer_id','created_at'],
+  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','garcom_id','garcom_nome','customer_id','order_num','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','updated_at'],
   fidelidade:   ['id','tenant_id','name','phone','birthday','pts','max_pts','orders_count','resgates','created_at'],
@@ -674,6 +695,18 @@ async function handleREST(req, res, table, params, body) {
         stmt = db.prepare(`INSERT INTO "${table}" (${keys.map(k=>`"${k}"`).join(',')}) VALUES (${keys.map(()=>'?').join(',')})`)
       }
       const info = stmt.run(...keys.map(k=>sanitize(payload[k])))
+
+      // ── Auto-assign order_num sequencial por tenant ─────────────────────
+      if (table === 'orders' && info.lastInsertRowid) {
+        const _tid = tenantId || payload.tenant_id
+        if (_tid) {
+          const _maxRow = db.prepare('SELECT COALESCE(MAX(order_num),0) as mx FROM orders WHERE tenant_id=?').get(_tid)
+          const _nextNum = (_maxRow?.mx || 0) + 1
+          db.prepare('UPDATE orders SET order_num=? WHERE rowid=?').run(_nextNum, info.lastInsertRowid)
+        }
+      }
+      // ────────────────────────────────────────────────────────────────────
+
       const rawForEmit = db.prepare(`SELECT * FROM "${table}" WHERE rowid=?`).get(info.lastInsertRowid)
       const parsedForEmit = rawForEmit ? parseRow(table, rawForEmit) : null
       let inserted = null
@@ -696,7 +729,7 @@ async function handleREST(req, res, table, params, body) {
             const pixAuto = auto['pix_cobranca'] || {}
             if (pixAuto.on === false) { log('⏭️','Automação pix_cobranca desligada'); return }
             const offset  = parseInt(cfg?.order_num_offset) || 0
-            const idStr   = String(Math.max(1, _ord.id - offset)).padStart(3,'0')
+            const idStr   = String(_ord.order_num || Math.max(1, _ord.id - offset)).padStart(3,'0')
             const nome    = _ord.client || 'Cliente'
             const items   = (()=>{ try{ return (JSON.parse(_ord.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') }catch{ return '' } })()
             const total   = (parseFloat(_ord.total||0) + parseFloat(_ord.taxa||0)).toFixed(2).replace('.',',')
@@ -890,7 +923,7 @@ async function handleOrderStatus(req, res) {
           const pixConf = auto['pix_confirmado'] || {}
           if (pixConf.on === false) { log('⏭️','Automação pix_confirmado desligada'); return }
           const offset = parseInt(cfg?.order_num_offset) || 0
-          const idStr  = String(Math.max(1, order.id - offset)).padStart(3,'0')
+          const idStr  = String(order.order_num || Math.max(1, order.id - offset)).padStart(3,'0')
           const nome   = order.client || 'Cliente'
           const items  = (()=>{ try{ return (JSON.parse(order.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') }catch{ return '' } })()
           const total  = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
@@ -982,7 +1015,7 @@ async function handleOrderStatus(req, res) {
           const auto  = jsonParse(cfg?.evo_automacoes)||{}
           const offset= parseInt(cfg?.order_num_offset)||0
           const loja  = cfg?.store_name || 'Restaurante'
-          const nome  = order.client||'Cliente', idStr=String(Math.max(1,order.id-offset)).padStart(3,'0')
+          const nome  = order.client||'Cliente', idStr=String(order.order_num||Math.max(1,order.id-offset)).padStart(3,'0')
           const items = (()=>{try{return(JSON.parse(order.items)||[]).map(i=>`• ${i.qty}x ${i.name}`).join('\n')}catch{return ''}})()
           const isDelivery = (order.addr||'').includes('Mesa')?'🪴 Mesa':(order.addr||'').toLowerCase().includes('balc')?'🏪 Balcão':'🛵 Entrega'
           const total = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')

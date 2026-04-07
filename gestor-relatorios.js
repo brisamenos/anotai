@@ -128,7 +128,7 @@ function renderKDS() {
       return `<div class="kds-card2 ${cardCls}" id="kds-card-${o.id}">
         <div class="kds-card2-head">
           <div style="display:flex;align-items:center;gap:8px">
-            <div class="kds-card2-id">#${_orderNum(o.id)}</div>
+            <div class="kds-card2-id">#${_orderNum(o.id, o.order_num)}</div>
             <span class="kds-card2-type kds-type-mesa">${o.addr || 'Mesa ' + o.mesa_num}</span>
           </div>
           <div class="kds-timer ${timerCls}" id="kds-timer-${o.id}">${_kdsFormatTime(elapsed)}</div>

@@ -178,7 +178,8 @@ function mapOrder(o) {
   const rawTime = o.created_at || o.time || '';
   return {
     id: o.id,
-    num: _orderNum(o.id),
+    num: _orderNum(o.id, o.order_num),
+    order_num: o.order_num || null,
     client: o.client || '',
     phone: o.phone || '',
     items: Array.isArray(o.items) ? o.items : [],
@@ -235,7 +236,7 @@ async function loadAllData(silent = false) {
     if (ordersRes.data?.length)   ordersKanban  = ordersRes.data.map(mapOrder);
     // Comandas mesa_aberta: entram no cache do salão, não no kanban
     (mesaAbertaRes?.data || []).forEach(o => {
-      if (!mesaOrdersCache.find(x => x.id === o.id)) mesaOrdersCache.unshift({ ...o, num: _orderNum(o.id) });
+      if (!mesaOrdersCache.find(x => x.id === o.id)) mesaOrdersCache.unshift({ ...o, num: _orderNum(o.id, o.order_num) });
     });
     if (movsRes.data?.length)     movimentos    = movsRes.data.map(m => ({
       id: m.id, desc: m.description||'', tipo: m.tipo,
@@ -301,7 +302,7 @@ async function loadAllData(silent = false) {
       // ────────────────────────────────────────────────────────
 
       // Re-mapeia pedidos já carregados com o offset correto
-      ordersKanban = ordersKanban.map(o => ({ ...o, num: _orderNum(o.id) }));
+      ordersKanban = ordersKanban.map(o => ({ ...o, num: _orderNum(o.id, o.order_num) }));
       setCaixaState(cfgRes.data.caixa_open !== false);
       const stOpen = cfgRes.data.store_open !== false;
       const st   = document.getElementById('status-txt');
@@ -548,8 +549,8 @@ function subscribeOrders() {
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
-        showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${_orderNum(p.new.id)} — ${p.new.client}`);
-        sendBrowserNotif(`Novo pedido #${_orderNum(p.new.id)}`, `${p.new.client} — ${items}`);
+        showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${_orderNum(p.new.id, p.new.order_num)} — ${p.new.client}`);
+        sendBrowserNotif(`Novo pedido #${_orderNum(p.new.id, p.new.order_num)}`, `${p.new.client} — ${items}`);
         // Automação: mensagem de pedido recebido
         // Auto-aceitar se ativado e pedido em análise
         if (_autoAcceptOn && p.new.status === 'analise') {
@@ -579,8 +580,8 @@ function subscribeOrders() {
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
-        showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg>', `PIX confirmado! Pedido #${_orderNum(p.new.id)} — ${p.new.client}`);
-        sendBrowserNotif(`PIX confirmado! #${_orderNum(p.new.id)}`, `${p.new.client} — ${items}`);
+        showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg>', `PIX confirmado! Pedido #${_orderNum(p.new.id, p.new.order_num)} — ${p.new.client}`);
+        sendBrowserNotif(`PIX confirmado! #${_orderNum(p.new.id, p.new.order_num)}`, `${p.new.client} — ${items}`);
         if (_autoAcceptOn) setTimeout(() => advanceOrderById(p.new.id), 800);
         if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(p.new)) printOrder(mapOrder(p.new));
         return;
@@ -588,8 +589,8 @@ function subscribeOrders() {
       if (idx !== -1) {
         if (['entregue','cancelado'].includes(p.new.status)) {
           if (p.new.status === 'cancelado') {
-            showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>', `Pedido #${_orderNum(p.new.id)} cancelado pelo cliente — ${p.new.client}`);
-            sendBrowserNotif(`Pedido cancelado pelo cliente`, `#${_orderNum(p.new.id)} — ${p.new.client}`);
+            showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>', `Pedido #${_orderNum(p.new.id, p.new.order_num)} cancelado pelo cliente — ${p.new.client}`);
+            sendBrowserNotif(`Pedido cancelado pelo cliente`, `#${_orderNum(p.new.id, p.new.order_num)} — ${p.new.client}`);
           }
           ordersKanban.splice(idx, 1);
         } else {
@@ -744,8 +745,8 @@ setInterval(async () => {
             const nc = document.getElementById('notif-count');
             if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
             const items = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
-            showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${_orderNum(o.id)} — ${o.client}`);
-            sendBrowserNotif(`Novo pedido #${_orderNum(o.id)}`, `${o.client} — ${items}`);
+            showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${_orderNum(o.id, o.order_num)} — ${o.client}`);
+            sendBrowserNotif(`Novo pedido #${_orderNum(o.id, o.order_num)}`, `${o.client} — ${items}`);
             if (_autoAcceptOn && o.status === 'analise') setTimeout(() => advanceOrderById(o.id), 800);
             if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(o)) printOrder(mapOrder(o));
             // Atualiza cache mesa se for pedido de mesa
@@ -1125,7 +1126,7 @@ async function advanceOrderById(id) {
   o.status = newStatus;
   playOrderSound();
   renderKanban();
-  sbToast('ok', `Pedido #${_orderNum(id)} avançado!`);
+  sbToast('ok', `Pedido #${_orderNum(id, o?.order_num)} avançado!`);
   try {
     const res = await fetch('/api/order-status', {
       method: 'POST',
@@ -1176,7 +1177,7 @@ async function cancelOrderById(id) {
     sbToast('err', 'Erro ao cancelar pedido: ' + e.message); return;
   }
   renderKanban();
-  showToast(_ICON_TRS, `Pedido #${_orderNum(id)} cancelado`);
+  showToast(_ICON_TRS, `Pedido #${_orderNum(id, o?.order_num)} cancelado`);
 }
 
 // ── finishOrderById ──────────────────────────────────
@@ -1209,7 +1210,7 @@ async function finishOrderById(id) {
   }
   sbLoading(false);
   renderKanban();
-  sbToast('ok', `Pedido #${_orderNum(id)} finalizado!`);
+  sbToast('ok', `Pedido #${_orderNum(id, o?.order_num)} finalizado!`);
 }
 
 // ── confirmarPagamentoPix (PIX manual) ──────────────
@@ -1488,7 +1489,7 @@ function _verificarRespostaWACliente(msg) {
     ordersKanban[idx]._waResposta    = true;
     ordersKanban[idx]._waRespostaTxt = texto;
     renderKanban();
-    sbToast('ok', `💬 #${_orderNum(o.id)} — ${o.client} respondeu no WhatsApp!`);
+    sbToast('ok', `💬 #${_orderNum(o.id, o.order_num)} — ${o.client} respondeu no WhatsApp!`);
   });
 }
 
@@ -1554,8 +1555,12 @@ let editingId=null, garcomCart=[], garcomMesa='';
 let items        = [];
 let categories   = [];
 let ordersKanban = [];
-let _orderNumOffset = 0;   // offset salvo em store_config; #exibido = id - offset
-function _orderNum(id) { return Math.max(1, Number(id) - Number(_orderNumOffset)); }
+let _orderNumOffset = 0;   // offset salvo em store_config (fallback para pedidos antigos sem order_num)
+function _orderNum(id, orderNum) {
+  // Prefere order_num do servidor (sequencial por tenant), fallback para id - offset
+  if (orderNum) return Number(orderNum);
+  return Math.max(1, Number(id) - Number(_orderNumOffset));
+}
 
 // Retorna true se o pedido contém APENAS bebidas industrializadas (não imprime na cozinha)
 const _BEBIDAS_RE = /refrigerante|coca.cola|pepsi|guarana|guaraná|fanta|sprite|soda|schweppes|tônica|tonica|agua\s|água\s|agua$|água$|agua com|água com|agua sem|água sem|mineral|cerveja|chopp|brahma|skol|heineken|budweiser|corona|stella|amstel|itaipava|eisenbahn|vinho|wine|espumante|prosecco|champagne|sake|dose|tanque|long.neck|long neck|energetico|energético|red.bull|redbull|monster|gatorade|powerade|isotônico|isotonico|ice.tea|nescau|leite.caixinha|leite longa/i;
