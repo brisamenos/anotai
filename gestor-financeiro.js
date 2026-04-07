@@ -369,7 +369,20 @@ async function fecharMesa(num) {
       .gte('created_at', sessionStart ? new Date(sessionStart).toISOString() : '2000-01-01')
       .not('status', 'eq', 'cancelado');
 
-    const sessionTotal = (allSessionOrders || []).reduce((s, o) => s + parseFloat(o.total || 0) + parseFloat(o.taxa || 0), 0);
+    // Recalcula total a partir dos itens para garantir precisão (evita totais stale/duplicados)
+    let sessionTotal = 0;
+    (allSessionOrders || []).forEach(o => {
+      const items = Array.isArray(o.items) ? o.items : [];
+      if (o.status === 'mesa_aberta' && items.length) {
+        // Para comanda mesa_aberta, recalcula excluindo itens cancelados
+        sessionTotal += items
+          .filter(i => (i.item_status || 'active') !== 'cancelado')
+          .reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+      } else {
+        sessionTotal += parseFloat(o.total || 0);
+      }
+      sessionTotal += parseFloat(o.taxa || 0);
+    });
 
     // 1. Finaliza todos os pedidos ativos da mesa
     const { error: ordErr } = await sb.from('orders')

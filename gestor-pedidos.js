@@ -234,7 +234,41 @@ function renderKanban() {
 }
 
 function openOrderDetail(id) {
-  const o = ordersKanban.find(x => x.id === id);
+  let o = ordersKanban.find(x => x.id === id);
+  // Se não encontrou no kanban, busca no cache de mesas (pedidos mesa_aberta)
+  if (!o) {
+    const mesaOrder = mesaOrdersCache.find(x => x.id === id);
+    if (mesaOrder) {
+      // Mapeia o pedido de mesa para o formato esperado pelo detalhe
+      const allItems = Array.isArray(mesaOrder.items) ? mesaOrder.items : [];
+      const activeItems = allItems.filter(i => (i.item_status || 'active') !== 'cancelado');
+      const total = activeItems.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+      o = {
+        id: mesaOrder.id,
+        num: mesaOrder.num || (typeof _orderNum === 'function' ? _orderNum(mesaOrder.id) : mesaOrder.id),
+        status: mesaOrder.status === 'mesa_aberta' ? 'producao' : mesaOrder.status,
+        items: activeItems.map(i => ({
+          qty: i.qty || 1,
+          name: i.name || '',
+          price: parseFloat(i.price) || 0,
+          obs: i.obs || '',
+          extras: i.extras || [],
+          item_status: i.item_status
+        })),
+        total: total,
+        taxa: parseFloat(mesaOrder.taxa) || 0,
+        time: mesaOrder.time || '',
+        client: mesaOrder.client || 'Mesa ' + (mesaOrder.mesa_num || ''),
+        phone: mesaOrder.phone || '',
+        addr: mesaOrder.addr || '',
+        mesa_num: mesaOrder.mesa_num,
+        garcom_nome: mesaOrder.garcom_nome || '',
+        pag: mesaOrder.pag || 'Mesa',
+        troco: 0,
+        _isMesa: true
+      };
+    }
+  }
   if (!o) return;
   window._currentDetailId = id;
 

@@ -703,8 +703,9 @@ function renderMesaCard(t, orders) {
     .filter(o => !sessionStart || new Date(o.created_at || 0).getTime() >= sessionStart)
     .reduce((s, o) => s + parseFloat(o.total || 0), 0);
 
+  // Total inclui comanda + pedidos separados (se gestor também lançou)
   const total = comanda
-    ? parseFloat(comanda.total || 0)
+    ? parseFloat(comanda.total || 0) + totalAtivo + totalEntregue
     : (totalAtivo + totalEntregue);
   const statusLabel = isWaiting
     ? '<span style="font-size:11px;font-weight:700;color:var(--accent3)">⏳ Aguardando pagamento</span>'
