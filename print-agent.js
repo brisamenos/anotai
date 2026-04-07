@@ -118,15 +118,15 @@ function wrapHtml(html, fontSize = 12) {
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
   * { margin:0; padding:0; box-sizing:border-box }
-  body { font-family:'Courier New',monospace; font-size:${fontSize}px; color:#000; background:#fff; width:100% }
+  body { font-family:'Courier New',monospace; font-size:${fontSize}px; color:#000; background:#fff; width:100%; overflow-wrap:break-word; word-break:break-word }
   hr { border:none; border-top:1px dashed #000; margin:4px 0 }
   .pt-center { text-align:center }
   .pt-large  { font-size:${fontSize + 3}px; font-weight:bold }
   .pt-hr     { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .print-ticket { padding:4px; width:100%; word-wrap:break-word; overflow-wrap:break-word }
-  span, div { word-break:break-word }
+  .print-ticket { padding:2px; width:100%; word-wrap:break-word; overflow-wrap:break-word; overflow:hidden }
+  span, div { word-break:break-word; overflow-wrap:break-word }
   @media print {
-    @page { margin:2mm }
+    @page { margin:1mm }
     .print-ticket + div { page-break-before: always }
   }
 </style>
