@@ -531,6 +531,8 @@ function subscribeOrders() {
           sendBrowserNotif('\uD83C\uDF74 Pedido Mesa ' + p.new.mesa_num, foodList);
           const nc = document.getElementById('notif-count');
           if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
+          // Auto-impressão para pedidos de mesa
+          if ((window._printMode || _printMode) === "auto" && !_isSoBebidas(p.new)) printOrder(mapOrder(p.new));
         }
         const kpg = document.getElementById('page-kds');
         if (kpg && kpg.classList.contains('on')) renderKDS();
@@ -611,6 +613,8 @@ function subscribeOrders() {
             showToast('\uD83C\uDF74', 'Mesa ' + p.new.mesa_num + ' — ' + newFoods);
             sendBrowserNotif('\uD83C\uDF74 Mesa ' + p.new.mesa_num, newFoods);
           }
+            // Auto-impressão dos novos itens da mesa
+            if ((window._printMode || _printMode) === "auto") printOrder(mapOrder(p.new));
         }
         _updateMesaOrdersCache(p.new);
         _renderMesaPageFromCache();

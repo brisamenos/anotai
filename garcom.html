@@ -1368,6 +1368,8 @@ function mesaLabel(order) {
 }
 
 let _garcomPrintCfg = null; // cache de print_config do tenant
+let _garcomOrderNumOffset = 0; // offset de numeração por tenant
+function _garcomOrderNum(id) { return Math.max(1, Number(id) - Number(_garcomOrderNumOffset)); }
 
 // ── Impressão automática do garçom ─────────────────────
 async function garcomPrint(order, newItems) {
@@ -1379,7 +1381,7 @@ async function garcomPrint(order, newItems) {
     const fmt      = cfg.format || localStorage.getItem('printFormat') || '80mm';
     const printer  = cfg.printer || localStorage.getItem('printPrinter') || '';
     const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-    const orderNum = order.mesa_num ? `Mesa ${order.mesa_num}` : (order.id ? `#${order.id}` : '?');
+    const orderNum = order.mesa_num ? `Mesa ${order.mesa_num}` : (order.id ? `#${_garcomOrderNum(order.id)}` : '?');
 
     // Monta os itens a imprimir — usa só os novos itens desta rodada (sem os já enviados antes)
     const items = Array.isArray(newItems) && newItems.length ? newItems : (Array.isArray(order.items) ? order.items : []);
@@ -1486,12 +1488,13 @@ async function loadData() {
     sb.from('mesas').select('*').order('num'),
     sb.from('menu_items').select('*').neq('status','pausado').order('id'),
     sb.from('categories').select('*').order('sort_order'),
-    sb.from('store_config').select('print_config,store_name').eq('tenant_id', _garcomTenantId).single()
+    sb.from('store_config').select('print_config,store_name,order_num_offset').eq('tenant_id', _garcomTenantId).single()
   ]);
   tables   = (mesasRes.data || []);
   allItems = (itemsRes.data || []);
   allCats  = (catsRes.data  || []);
   try { _garcomPrintCfg = cfgRes.data?.print_config ? JSON.parse(cfgRes.data.print_config) : {}; } catch { _garcomPrintCfg = {}; }
+  _garcomOrderNumOffset = parseInt(cfgRes.data?.order_num_offset) || 0;
   if (!_garcomNomeLoja && cfgRes.data?.store_name) _garcomNomeLoja = cfgRes.data.store_name;
   renderMesas();
   buildCatPills();

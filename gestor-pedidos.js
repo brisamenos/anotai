@@ -146,9 +146,9 @@ function renderKanban() {
         if (o._isMesa) {
           // Comanda de mesa — ações por item_status
           if (st === 'producao') {
-            actionBtn = '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();kdsMarkMesaPronto(' + o.id + ')">✅ Pronto p/ servir!</button>';
+            actionBtn = '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();kdsMarkMesaPronto(' + o.id + ')">✅ Pronto p/ servir!</button>' + '<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById(' + o.id + ')">🖨️</button>';
           } else if (st === 'pronto') {
-            actionBtn = '<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();kanbanMesaServido(' + o.id + ')">🍽️ Servido!</button>';
+            actionBtn = '<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();kanbanMesaServido(' + o.id + ')">🍽️ Servido!</button>' + '<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById(' + o.id + ')">🖨️</button>';
           }
         } else if (st === 'analise') {
           if (o._pixPendente) {
