@@ -129,7 +129,7 @@ function renderKanban() {
     } else {
       col.innerHTML = filtered.map(o => {
         const itemStr = o.items.map(i => i.qty + 'x ' + i.name).join(', ');
-        const total = 'R$ ' + parseFloat(o.total || 0).toFixed(2).replace('.', ',');
+        const total = 'R$ ' + (parseFloat(o.total || 0) + parseFloat(o.taxa || 0)).toFixed(2).replace('.', ',');
 
         // ── Tipo de entrega ──────────────────────────────
         const isMesa = !!(o.mesa_num || (o.addr && o.addr.includes('Mesa')));
