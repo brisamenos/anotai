@@ -442,8 +442,15 @@ function _updateMesaOrdersCache(newOrder) {
   } else if (!['cancelado'].includes(newOrder.status) && newOrder.mesa_num) {
     // Só adiciona ao cache se pertence à sessão atual (opened_at filter)
     const mesa = tables.find(t => t.num === parseInt(newOrder.mesa_num));
-    const sessionStart = mesa?.opened_at ? new Date(mesa.opened_at).getTime() - 5000 : 0;
     const orderTime = new Date(newOrder.created_at || Date.now()).getTime();
+    if (!mesa) return;
+    if (!mesa.opened_at) {
+      if (newOrder.status !== 'entregue') {
+        mesaOrdersCache.unshift({ ...newOrder, num: _orderNum(newOrder.id) });
+      }
+      return;
+    }
+    const sessionStart = new Date(mesa.opened_at).getTime() - 5000;
     if (orderTime >= sessionStart) {
       mesaOrdersCache.unshift({ ...newOrder, num: _orderNum(newOrder.id) });
     }
@@ -472,7 +479,8 @@ function _renderMesaPageFromCache() {
 
   const sessionOrders = mesaOrdersCache.filter(o => {
     const mesa = activeTables.find(t => t.num === parseInt(o.mesa_num));
-    if (!mesa || !mesa.opened_at) return true;
+    if (!mesa) return false;
+    if (!mesa.opened_at) return o.status !== 'entregue';
     return new Date(o.created_at || 0).getTime() >= new Date(mesa.opened_at).getTime() - 5000;
   });
 

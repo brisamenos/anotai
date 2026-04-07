@@ -827,7 +827,13 @@ async function pdvbGerarPedido(){
     if(pdvbMesaNum)payload.mesa_num=pdvbMesaNum;
     const{data:ord,error:ordErr}=await sb.from('orders').insert(payload).select().single();
     if(ordErr)throw ordErr;
-    if(pdvbMesaNum){await sb.from('mesas').update({status:'busy'}).eq('num',pdvbMesaNum);const t=tables.find(x=>x.num===pdvbMesaNum);if(t)t.status='busy';}
+    if(pdvbMesaNum){
+      const t=tables.find(x=>x.num===pdvbMesaNum);
+      const now=new Date().toISOString();
+      const mesaPayload=t?.opened_at?{status:'busy',updated_at:now}:{status:'busy',opened_at:now,updated_at:now};
+      await sb.from('mesas').update(mesaPayload).eq('num',pdvbMesaNum);
+      if(t){t.status='busy';t.updated_at=now;if(!t.opened_at)t.opened_at=now;}
+    }
     await sb.from('movimentos').insert({description:`PDV — ${client}`,tipo:'entrada',val:total,pag:pdvbPagamento,time});
     if(ord)ordersKanban.unshift({id:ord.id,client:ord.client,phone:ord.phone,items:itemsData,total,taxa:pdvbEntregaTaxa,status:'analise',time,addr,pag:pdvbPagamento});
     playOrderSound();sbToast('ok',`Pedido #${ord?.id||'?'} gerado — R$ ${total.toFixed(2).replace('.',',')}`);pdvbClearCart();

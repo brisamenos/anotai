@@ -658,7 +658,8 @@ async function renderMesasPage() {
   // Filtra por sessão usando opened_at (campo dedicado — nunca muda durante a sessão)
   const sessionOrders = allOrders.filter(o => {
     const mesa = activeTables.find(t => t.num === parseInt(o.mesa_num));
-    if (!mesa || !mesa.opened_at) return true;
+    if (!mesa) return false;
+    if (!mesa.opened_at) return o.status !== 'entregue';
     return new Date(o.created_at || 0).getTime() >= new Date(mesa.opened_at).getTime() - 5000;
   });
 
@@ -695,18 +696,11 @@ function renderMesaCard(t, orders) {
     o.status === 'mesa_aberta' && parseInt(o.mesa_num) === parseInt(t.num)
   );
 
-  // Fallback para modelo antigo (pedidos separados no kanban)
-  const totalAtivo = orders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
-  const sessionStart = t.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
-  const totalEntregue = mesaOrdersCache
-    .filter(o => parseInt(o.mesa_num) === t.num && o.status === 'entregue')
-    .filter(o => !sessionStart || new Date(o.created_at || 0).getTime() >= sessionStart)
-    .reduce((s, o) => s + parseFloat(o.total || 0), 0);
+  const otherSessionOrders = orders.filter(o => !comanda || o.id !== comanda.id);
+  const totalOutrosPedidos = otherSessionOrders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
 
-  // Total inclui comanda + pedidos separados (se gestor também lançou)
-  const total = comanda
-    ? parseFloat(comanda.total || 0) + totalAtivo + totalEntregue
-    : (totalAtivo + totalEntregue);
+  // Total da sessão atual sem duplicar comanda nem pedidos entregues
+  const total = (comanda ? parseFloat(comanda.total || 0) : 0) + totalOutrosPedidos;
   const statusLabel = isWaiting
     ? '<span style="font-size:11px;font-weight:700;color:var(--accent3)">⏳ Aguardando pagamento</span>'
     : '<span style="font-size:11px;font-weight:700;color:var(--accent)">🔵 Ocupada</span>';
@@ -1575,10 +1569,12 @@ async function submitGarcomOrder() {
   try {
     // Garante opened_at na mesa
     const _mesa = tables.find(t => t.num === garcomMesa);
-    if (_mesa && _mesa.status !== 'busy') {
+    if (_mesa && (_mesa.status !== 'busy' || !_mesa.opened_at)) {
       const _ot = new Date().toISOString();
-      await sb.from('mesas').update({ status: 'busy', opened_at: _ot, updated_at: _ot }).eq('num', garcomMesa);
-      _mesa.status = 'busy'; _mesa.opened_at = _ot; _mesa.updated_at = _ot;
+      const _payload = { status: 'busy', updated_at: _ot };
+      if (!_mesa.opened_at || _mesa.status === 'free') _payload.opened_at = _ot;
+      await sb.from('mesas').update(_payload).eq('num', garcomMesa);
+      _mesa.status = 'busy'; if (_payload.opened_at) _mesa.opened_at = _ot; _mesa.updated_at = _ot;
     }
 
     // 1. Itens de cozinha → kanban (analise/producao)

@@ -361,15 +361,21 @@ async function fecharMesa(num) {
   if (!t) return;
   sbLoading(true);
   try {
-    // Busca TODOS os pedidos da sessão (incluindo entregue = bebidas/imediatos) para calcular total correto
+    // Busca pedidos da sessão ATUAL (somente pedidos não-entregues de sessões anteriores)
     const sessionStart = t?.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
-    const { data: allSessionOrders } = await sb.from('orders')
-      .select('total,taxa')
+    let ordersQuery = sb.from('orders')
+      .select('total,taxa,items,status,created_at')
       .eq('mesa_num', numInt)
-      .gte('created_at', sessionStart ? new Date(sessionStart).toISOString() : '2000-01-01')
       .not('status', 'eq', 'cancelado');
+    if (sessionStart) {
+      ordersQuery = ordersQuery.gte('created_at', new Date(sessionStart).toISOString());
+    } else {
+      console.warn('fecharMesa: mesa sem opened_at — cobrando apenas pedidos ativos para evitar histórico');
+      ordersQuery = ordersQuery.in('status', ['analise', 'producao', 'pronto', 'mesa_aberta']);
+    }
+    const { data: allSessionOrders } = await ordersQuery;
 
-    // Recalcula total a partir dos itens para garantir precisão (evita totais stale/duplicados)
+    // Recalcula total a partir dos itens para garantir precisão
     let sessionTotal = 0;
     (allSessionOrders || []).forEach(o => {
       const items = Array.isArray(o.items) ? o.items : [];
@@ -424,7 +430,7 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
     const sessionStart = t?.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
     totalVal = mesaOrdersCache
       .filter(o => parseInt(o.mesa_num) === parseInt(num))
-      .filter(o => new Date(o.created_at || 0).getTime() >= sessionStart)
+      .filter(o => sessionStart ? new Date(o.created_at || 0).getTime() >= sessionStart : o.status !== 'entregue')
       .reduce((s, o) => s + parseFloat(o.total || 0), 0);
   }
 
@@ -449,12 +455,17 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
     try {
       const sessionStart = t?.opened_at
         ? new Date(new Date(t.opened_at).getTime() - 5000).toISOString()
-        : '2000-01-01';
-      const { data: sessionOrders } = await sb.from('orders')
-        .select('items,total,taxa,status')
+        : null;
+      let sessionQuery = await sb.from('orders')
+        .select('items,total,taxa,status,created_at')
         .eq('mesa_num', parseInt(num))
-        .gte('created_at', sessionStart)
         .not('status', 'eq', 'cancelado');
+      if (sessionStart) {
+        sessionQuery = sessionQuery.gte('created_at', sessionStart);
+      } else {
+        sessionQuery = sessionQuery.in('status', ['analise', 'producao', 'pronto', 'mesa_aberta']);
+      }
+      const { data: sessionOrders } = await sessionQuery;
 
       const itemMap = {};
       (sessionOrders || []).forEach(o => {

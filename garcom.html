@@ -1979,11 +1979,12 @@ async function confirmarAbrirMesa() {
   switchSheetTab('itens');
   const mesa = tables.find(t => t.num === num);
   const now = new Date().toISOString();
-  const updatePayload = mesa?.status === 'free'
+  const shouldSetOpenedAt = mesa?.status === 'free' || !mesa?.opened_at;
+  const updatePayload = shouldSetOpenedAt
     ? { status: 'busy', opened_at: now, updated_at: now }
     : { status: 'busy', updated_at: now };
   await sb.from('mesas').update(updatePayload).eq('num', num);
-  if (mesa) { const wasFree = mesa.status === 'free'; mesa.status = 'busy'; mesa.updated_at = now; if (wasFree) mesa.opened_at = now; }
+  if (mesa) { mesa.status = 'busy'; mesa.updated_at = now; if (shouldSetOpenedAt) mesa.opened_at = now; }
   renderMesas();
   document.getElementById('sheet-pedido').classList.add('on');
 }
@@ -2561,14 +2562,20 @@ async function submitPedido() {
     // Busca comanda ativa desta mesa (mesa_aberta)
     // Filtra apenas por mesa_num + status — sem filtro de data, evita falso-negativo
     // que causava novo INSERT (e novo número de pedido) a cada envio na mesma mesa
+    const mesaSessionStart = mesaAtual?.opened_at
+      ? new Date(new Date(mesaAtual.opened_at).getTime() - 5000).getTime()
+      : null;
     const { data: existingArr } = await sb.from('orders')
       .select('*')
       .eq('mesa_num', activeMesa)
       .eq('status', 'mesa_aberta')
       .order('id', { ascending: false })
-      .limit(1);
+      .limit(5);
 
-    const existing = Array.isArray(existingArr) && existingArr.length > 0 ? existingArr[0] : null;
+    const existing = (Array.isArray(existingArr) ? existingArr : []).find(o => {
+      if (!mesaSessionStart) return true;
+      return new Date(o.created_at || 0).getTime() >= mesaSessionStart;
+    }) || null;
 
     let _orderId;
     if (existing) {
