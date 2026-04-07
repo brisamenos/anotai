@@ -338,9 +338,22 @@ function openOrderDetail(id) {
   // Tipo de entrega
   const isMesa = !!(o.mesa_num || (o.addr || '').startsWith('Mesa'));
   const isBalcao = !isMesa && (o.addr || '').toLowerCase().includes('balc');
+  const isDelivery = !isMesa && !isBalcao;
   const tipoLabel = isMesa ? 'Mesa ' + (o.mesa_num || '') : isBalcao ? 'Balcão / Retirada' : '🛵 Delivery';
   setEl('od-tipo', tipoLabel);
-  setEl('od-addr', !isMesa && !isBalcao ? (o.addr || '') : o.garcom_nome ? 'Garçom: ' + o.garcom_nome : '');
+  setEl('od-addr', isMesa && o.garcom_nome ? 'Garçom: ' + o.garcom_nome : '');
+
+  // Bloco de endereço delivery (destacado)
+  const addrBlock = document.getElementById('od-delivery-addr-block');
+  const addrText  = document.getElementById('od-delivery-addr-text');
+  if (addrBlock && addrText) {
+    if (isDelivery && o.addr) {
+      addrText.textContent = o.addr;
+      addrBlock.style.display = '';
+    } else {
+      addrBlock.style.display = 'none';
+    }
+  }
 
   // Pagamento
   let pagLabel = {
