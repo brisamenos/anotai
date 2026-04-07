@@ -65,17 +65,23 @@ function getTaxa() {
 function grandTotal() {
   const sub  = cartSubtotal();
   const disc = getDiscount();
-  const taxa = getTaxa();
-  const net  = Math.max(0, sub - disc + taxa);
+  // NOTA: taxa NÃO entra aqui — é salva separadamente no campo 'taxa' do pedido.
+  // O total do pedido = subtotal - desconto (- cashback se aplicável).
+  const net  = Math.max(0, sub - disc);
   if (_cbUsar && _cbSaldo > 0) return Math.max(0, net - Math.min(_cbSaldo, net));
   return net;
+}
+
+// Total para exibição ao cliente (inclui taxa de entrega)
+function displayTotal() {
+  return grandTotal() + getTaxa();
 }
 
 function updateCartFloat() {
   const qty = cart.reduce((s,i) => s+i.qty, 0);
   document.getElementById('cart-float').classList.toggle('show', cart.length > 0);
   document.getElementById('cart-badge').textContent = qty;
-  document.getElementById('cart-total-float').textContent = fmt(grandTotal());
+  document.getElementById('cart-total-float').textContent = fmt(displayTotal());
   const btn = document.getElementById('confirm-btn');
   if (btn) btn.disabled = cart.length === 0 || !_lojaAberta;
 }
@@ -337,4 +343,3 @@ function toggleUsarCashback() {
   }
   renderTotals();
 }
-
