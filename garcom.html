@@ -1254,17 +1254,33 @@ let sheetTab      = 'itens';
 let _submitting   = false; // guard contra duplo envio
 
 // ── SOM DE NOTIFICAÇÃO ───────────────────────
+let _audioCtx = null;
+let _audioUnlocked = false;
+
+// Desbloqueia AudioContext no primeiro toque/clique do usuário
+function _unlockAudio() {
+  if (_audioUnlocked) return;
+  try {
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    _audioUnlocked = true;
+  } catch(e) {}
+}
+document.addEventListener('touchstart', _unlockAudio, { once: true });
+document.addEventListener('click',      _unlockAudio, { once: true });
+
 function playProntoSound() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.connect(g); g.connect(ctx.destination);
-    o.frequency.setValueAtTime(880, ctx.currentTime);
-    o.frequency.setValueAtTime(1100, ctx.currentTime + 0.12);
-    g.gain.setValueAtTime(0.35, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-    o.start(ctx.currentTime); o.stop(ctx.currentTime + 0.5);
+    if (!_audioUnlocked || !_audioCtx) return; // só toca após primeiro gesto
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    const o = _audioCtx.createOscillator();
+    const g = _audioCtx.createGain();
+    o.connect(g); g.connect(_audioCtx.destination);
+    o.frequency.setValueAtTime(880, _audioCtx.currentTime);
+    o.frequency.setValueAtTime(1100, _audioCtx.currentTime + 0.12);
+    g.gain.setValueAtTime(0.35, _audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + 0.5);
+    o.start(_audioCtx.currentTime); o.stop(_audioCtx.currentTime + 0.5);
   } catch(e) {}
 }
 
@@ -1407,7 +1423,7 @@ async function garcomPrint(order, newItems) {
 
     // 1️⃣ Electron
     if (window.ElectronPrint) {
-      try { const r = await window.ElectronPrint.printOrder({ ...order, items, _html: html }); if (r.ok) return; } catch(e) {}
+      try { const r = await window.ElectronPrint.printOrder({ ...order, items, _html: html }); if (r.ok) { console.log('[PRINT] ✅ Electron OK'); return; } } catch(e) { console.warn('[PRINT] Electron falhou:', e.message); }
     }
 
     // 2️⃣ Print Agent (agente local)
@@ -1419,9 +1435,13 @@ async function garcomPrint(order, newItems) {
           headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
           body: JSON.stringify({ html, format: fmt, printer: printer || undefined }),
         });
+        console.log('[PRINT] ✅ Print Agent OK');
+        showToast('🖨️ Enviado para impressora');
         return;
+      } else {
+        console.log('[PRINT] Print Agent inativo');
       }
-    } catch(e) {}
+    } catch(e) { console.warn('[PRINT] Print Agent falhou:', e.message); }
 
     // 3️⃣ Servidor /api/print → PDF via iframe oculto
     try {
@@ -1445,19 +1465,17 @@ async function garcomPrint(order, newItems) {
         frame.src = url;
         frame.onload = () => { try { frame.contentWindow.print(); } catch(_) {} };
         setTimeout(() => URL.revokeObjectURL(url), 5000);
+        console.log('[PRINT] ✅ Server PDF OK');
+        showToast('🖨️ Abrindo impressão...');
         return;
+      } else {
+        console.warn('[PRINT] Server retornou sem PDF:', data.error || 'sem motivo');
       }
-    } catch(e) {}
+    } catch(e) { console.warn('[PRINT] Server /api/print falhou:', e.message); }
 
-    // 4️⃣ Fallback window.print()
-    let area = document.getElementById('_garcom_print_area');
-    if (!area) { area = document.createElement('div'); area.id = '_garcom_print_area'; document.body.appendChild(area); }
-    area.innerHTML = html;
-    let st2 = document.getElementById('_garcom_print_style');
-    if (!st2) { st2 = document.createElement('style'); st2.id = '_garcom_print_style'; document.head.appendChild(st2); }
-    st2.innerHTML = `@media print { @page{margin:2mm;size:${fmt} auto} body>*:not(#_garcom_print_area){display:none!important} #_garcom_print_area{display:block!important;position:static!important} }`;
-    window.print();
-    setTimeout(() => { area.innerHTML = ''; }, 2000);
+    // 4️⃣ Sem impressora configurada — avisa o garçom
+    console.warn('[PRINT] Nenhum método de impressão disponível. Configure o Print Agent.');
+    // Nenhum método disponível — sem ação, garçom já foi notificado via console
   } catch(e) {
     console.warn('[GARCOM PRINT] Erro ao imprimir:', e.message);
   }
