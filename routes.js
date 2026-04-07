@@ -1812,7 +1812,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   }
 
   // ── Max global ID para cálculo de offset por tenant ──
-  if (method === 'GET' && pathname === '/api/orders/global-max-id') {
+  if (req.method === 'GET' && upath === '/api/orders/global-max-id') {
     try {
       const row = db.prepare('SELECT COALESCE(MAX(id),0) as max_id FROM orders').get()
       send(res, 200, { max_id: row?.max_id || 0 })

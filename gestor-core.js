@@ -533,8 +533,12 @@ function subscribeOrders() {
           sendBrowserNotif('\uD83C\uDF74 Pedido Mesa ' + p.new.mesa_num, foodList);
           const nc = document.getElementById('notif-count');
           if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
-          // Auto-impressão para pedidos de mesa
-          if ((window._printMode || _printMode) === "auto" && !_isSoBebidas(p.new)) printOrder(mapOrder(p.new));
+          // Auto-impressão para pedidos de mesa — só imprime itens NOVOS (producao)
+          if ((window._printMode || _printMode) === "auto" && !_isSoBebidas(p.new)) {
+            const _mapped = mapOrder(p.new);
+            const _onlyNew = (Array.isArray(p.new.items) ? p.new.items : []).filter(i => i.item_status === 'producao');
+            if (_onlyNew.length) { const _clone = Object.assign({}, _mapped, { items: _onlyNew }); printOrder(_clone); }
+          }
         }
         const kpg = document.getElementById('page-kds');
         if (kpg && kpg.classList.contains('on')) renderKDS();
@@ -611,12 +615,16 @@ function subscribeOrders() {
           const newProducao  = (p.new.items || []).filter(i => i.item_status === 'producao').length;
           if (newProducao > prevProducao) {
             playOrderSound();
-            const newFoods = p.new.items.filter(i => i.item_status === 'producao').slice(-(newProducao - prevProducao)).map(i => i.qty + 'x ' + i.name).join(', ');
+            const _newFoodItems = p.new.items.filter(i => i.item_status === 'producao').slice(-(newProducao - prevProducao));
+            const newFoods = _newFoodItems.map(i => i.qty + 'x ' + i.name).join(', ');
             showToast('\uD83C\uDF74', 'Mesa ' + p.new.mesa_num + ' — ' + newFoods);
             sendBrowserNotif('\uD83C\uDF74 Mesa ' + p.new.mesa_num, newFoods);
+            // Auto-impressão — só os itens NOVOS desta rodada
+            if ((window._printMode || _printMode) === "auto" && _newFoodItems.length) {
+              const _clone = Object.assign({}, mapOrder(p.new), { items: _newFoodItems });
+              printOrder(_clone);
+            }
           }
-            // Auto-impressão dos novos itens da mesa
-            if ((window._printMode || _printMode) === "auto") printOrder(mapOrder(p.new));
         }
         _updateMesaOrdersCache(p.new);
         _renderMesaPageFromCache();

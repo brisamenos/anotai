@@ -1465,10 +1465,11 @@ async function garcomPrint(order, newItems) {
           document.body.appendChild(frame);
         }
         frame.src = url;
-        frame.onload = () => { try { frame.contentWindow.print(); } catch(_) {} };
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        // PDF gerado — abrir em nova aba para o garçom imprimir manualmente se quiser
+        frame.onload = () => { console.log('[PRINT] PDF carregado no iframe (sem popup de impressão)'); };
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
         console.log('[PRINT] ✅ Server PDF OK');
-        showToast('🖨️ Abrindo impressão...');
+        showToast('✅ Pedido enviado!');
         return;
       } else {
         console.warn('[PRINT] Server retornou sem PDF:', data.error || 'sem motivo');
