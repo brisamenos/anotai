@@ -355,6 +355,8 @@ async function saveTaxaConfig() {
   }
 }
 
+// calcularTotalMesa() está definida em mesa-state.js (carregado antes deste arquivo).
+
 async function fecharMesa(num) {
   const numInt = parseInt(num);
   const t = tables.find(x => parseInt(x.num) === numInt);
@@ -394,19 +396,7 @@ async function fecharMesa(num) {
     const allSessionOrders = [...(activeOrders || []), ...immediateEntregues];
 
     // Recalcula total a partir dos itens para garantir precisão
-    let sessionTotal = 0;
-    (allSessionOrders || []).forEach(o => {
-      const items = Array.isArray(o.items) ? o.items : [];
-      if (o.status === 'mesa_aberta' && items.length) {
-        // Para comanda mesa_aberta, recalcula excluindo itens cancelados
-        sessionTotal += items
-          .filter(i => (i.item_status || 'active') !== 'cancelado')
-          .reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
-      } else {
-        sessionTotal += parseFloat(o.total || 0);
-      }
-      sessionTotal += parseFloat(o.taxa || 0);
-    });
+    const sessionTotal = calcularTotalMesa(allSessionOrders);
 
     // 1. Finaliza todos os pedidos ativos da mesa
     const { error: ordErr } = await sb.from('orders')
@@ -446,10 +436,10 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
   let totalVal = parseFloat(totalJaCalculado) || 0;
   if (!totalJaCalculado) {
     const sessionStart = t?.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
-    totalVal = mesaOrdersCache
+    const sessionOrders = mesaOrdersCache
       .filter(o => parseInt(o.mesa_num) === parseInt(num))
-      .filter(o => sessionStart ? new Date(o.created_at || 0).getTime() >= sessionStart : o.status !== 'entregue')
-      .reduce((s, o) => s + parseFloat(o.total || 0), 0);
+      .filter(o => sessionStart ? new Date(o.created_at || 0).getTime() >= sessionStart : o.status !== 'entregue');
+    totalVal = calcularTotalMesa(sessionOrders);
   }
 
   document.getElementById('modal-pag-mesa-title').textContent = `Registrar Pagamento — Mesa ${num}`;

@@ -1599,14 +1599,16 @@ function subscribeRealtime() {
   const gid = currentGarcom?.id || 'g';
 
   const chMesas = sb.channel('garcom-mesas-' + gid)
-    .on('postgres_changes', { event:'*', schema:'public', table:'mesas' }, () => {
-      sb.from('mesas').select('*').order('num').then(({ data }) => {
-        if (!data) return;
-        tables = data;
-        renderMesas();
-        loadPedidosDaMesa();
-        sendSwState(); // sincroniza SW com o novo estado
-      });
+    .on('postgres_changes', { event:'*', schema:'public', table:'mesas' }, async p => {
+      if (p.eventType === 'UPDATE' && p.new?.num) {
+        // Atualiza apenas a mesa que mudou (cirúrgico)
+        await refreshMesa(p.new.num);
+      } else {
+        // INSERT ou DELETE → refetch completo (criação/remoção de mesa — raro)
+        const { data } = await sb.from('mesas').select('*').order('num');
+        if (data) { tables = data; renderMesas(); await loadPedidosDaMesa(); }
+        sendSwState();
+      }
     })
     .subscribe(status => {
       setRtStatus(status === 'SUBSCRIBED');
@@ -2952,6 +2954,72 @@ function setMesaFilter(val) {
   renderMyOrders();
 }
 
+// ══ CÁLCULO DE TOTAL DE MESA ══════════════════════════════════════════════
+// Fonte única da verdade para o total de uma mesa.
+// Regras:
+//   • Pedido mesa_aberta com itens → recalcula item a item, excluindo cancelados
+//   • Demais pedidos                → usa o.total gravado
+//   • Taxa de entrega               → sempre somada via o.taxa
+function calcularTotalMesa(orders) {
+  let total = 0;
+  (orders || []).forEach(o => {
+    const items = Array.isArray(o.items) ? o.items : [];
+    if (o.status === 'mesa_aberta' && items.length) {
+      total += items
+        .filter(i => (i.item_status || 'active') !== 'cancelado')
+        .reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+    } else {
+      total += parseFloat(o.total || 0);
+    }
+    total += parseFloat(o.taxa || 0);
+  });
+  return total;
+}
+
+// ══ REFRESH CIRÚRGICO DE MESA ══════════════════════════════════════════════
+// Atualiza UMA mesa e suas comandas sem re-buscar todo o estado.
+// Chamado pelo handler chMesas em eventos UPDATE e pelo chOrders quando
+// o garçom recebe confirmação de um pedido de uma mesa específica.
+async function refreshMesa(num) {
+  const numInt = parseInt(num);
+
+  // 1. Atualiza o registro da mesa
+  const { data: mesaData } = await sb.from('mesas')
+    .select('*')
+    .eq('num', numInt)
+    .single();
+  if (mesaData) {
+    const idx = tables.findIndex(t => t.num === numInt);
+    if (idx !== -1) tables[idx] = mesaData;
+    else tables.push(mesaData);
+  }
+
+  // 2. Atualiza as comandas desta mesa em myOrders
+  const mesa = tables.find(t => t.num === numInt);
+  if (!mesa) return;
+
+  const sessionStart = mesa.opened_at
+    ? new Date(new Date(mesa.opened_at).getTime() - 5000).toISOString()
+    : null;
+
+  const q = sb.from('orders')
+    .select('*')
+    .eq('status', 'mesa_aberta')
+    .eq('mesa_num', numInt);
+
+  const { data: orders } = await (sessionStart ? q.gte('created_at', sessionStart) : q);
+
+  // Substitui apenas as entradas desta mesa em myOrders
+  myOrders = [
+    ...myOrders.filter(o => (o.mesa_num || parseInt((o.addr || '').replace('Mesa ', '') || '0')) !== numInt),
+    ...(orders || [])
+  ];
+
+  renderMesas();
+  renderMyOrders();
+  sendSwState();
+}
+
 // ══ FINALIZAR MESA ════════════════════════
 let finalizarMesaNum = null;
 let finalizarPay = 'PIX';
@@ -2970,7 +3038,7 @@ async function abrirFinalizarMesa(num) {
 
   // Load orders for this mesa
   const orders = myOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
-  const total  = orders.reduce((s,o)=>s+parseFloat(o.total||0)+parseFloat(o.taxa||0),0);
+  const total  = calcularTotalMesa(orders);
   document.getElementById('finalizar-total').textContent = 'R$ ' + total.toFixed(2).replace('.',',');
 
   const listEl = document.getElementById('finalizar-pedidos-list');
@@ -3003,7 +3071,7 @@ async function confirmarFinalizarMesa() {
   if (!finalizarMesaNum) return;
   // Soma todos os pedidos da mesa (comanda + bebidas imediatas) igual ao abrirFinalizarMesa
   const mesaOrders = myOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === finalizarMesaNum);
-  const total = mesaOrders.reduce((s,o)=>s+parseFloat(o.total||0)+parseFloat(o.taxa||0),0);
+  const total = calcularTotalMesa(mesaOrders);
   try {
     // Marca comanda como entregue (finaliza a sessão)
     await sb.from('orders')

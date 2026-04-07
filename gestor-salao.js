@@ -620,53 +620,9 @@ function toggleMesaAutoAccept(el) {
 }
 
 async function renderMesasPage() {
-  // Stats
-  const livres = tables.filter(t => t.status === 'free').length;
-  const ocupadas = tables.filter(t => t.status === 'busy').length;
-  const aguardando = tables.filter(t => t.status === 'waiting').length;
-  const elv = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-  elv('pm-stat-livres', livres);
-  elv('pm-stat-ocupadas', ocupadas);
-  elv('pm-stat-aguardando', aguardando);
-
-  const grid = document.getElementById('pm-mesas-grid');
-  if (!grid) return;
-
-  const activeTables = tables.filter(t => t.status !== 'free');
-  if (!activeTables.length) {
-    grid.innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted);font-size:13px"><div><div style="margin:0 auto 10px;text-align:center"><svg width="40" height="40" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;opacity:.25"><path d="M5 2h6v6a3 3 0 0 1-6 0V2z" stroke="currentColor" stroke-width="1.2"/><path d="M2 2h3M11 2h3M2 5H5M11 5h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M8 8v4M5.5 14h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></div><div style="display:none"></div>Nenhuma mesa ocupada no momento</div>';
-    return;
-  }
-
-  // Busca pedidos ativos de todas as mesas ocupadas (inclui mesa_aberta = comanda única do garçom)
-  const { data: orders } = await sb.from('orders')
-    .select('*')
-    .not('mesa_num', 'is', null)
-    .in('status', ['analise', 'producao', 'pronto', 'mesa_aberta'])
-    .order('id', { ascending: true });
-
-  // Busca também pedidos entregue recentes (itens imediatos do garçom) para billing
-  const { data: entregues } = await sb.from('orders')
-    .select('*')
-    .not('mesa_num', 'is', null)
-    .eq('status', 'entregue')
-    .gte('created_at', new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString()) // últimas 12h
-    .order('id', { ascending: true });
-
-  const allOrders = [...(orders || []), ...(entregues || [])];
-
-  // Filtra por sessão usando opened_at (campo dedicado — nunca muda durante a sessão)
-  const sessionOrders = allOrders.filter(o => {
-    const mesa = activeTables.find(t => t.num === parseInt(o.mesa_num));
-    if (!mesa) return false;
-    if (!mesa.opened_at) return o.status !== 'entregue';
-    return new Date(o.created_at || 0).getTime() >= new Date(mesa.opened_at).getTime() - 5000;
-  });
-
-  // Popula o cache local com os dados da sessão atual (já filtrados)
-  mesaOrdersCache = sessionOrders;
-
-  // Usa renderização inteligente (sem piscar)
+  // refreshMesasState() (mesa-state.js) faz todas as queries necessárias
+  // e actualiza tables + mesaOrdersCache atomicamente.
+  await refreshMesasState();
   _renderMesaPageFromCache();
 }
 

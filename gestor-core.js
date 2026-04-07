@@ -426,36 +426,10 @@ function unsubscribeAll() {
   if (_heartbeat) { clearInterval(_heartbeat); _heartbeat = null; }
 }
 
-// Cache local dos pedidos de mesa (separado do ordersKanban principal)
-let mesaOrdersCache = [];
+// mesaOrdersCache e tables são declarados em mesa-state.js (carregado antes)
+// e permanecem como globais acessíveis a todos os módulos gestor-*.js.
 
-function _updateMesaOrdersCache(newOrder) {
-  const idx = mesaOrdersCache.findIndex(o => o.id === newOrder.id);
-  if (idx !== -1) {
-    if (newOrder.status === 'cancelado') {
-      mesaOrdersCache.splice(idx, 1);
-    } else {
-      // Mantém no cache (atualiza status) — inclui mesa_aberta→entregue ao finalizar,
-      // necessário para o resumo de consumo e cálculo do total na mesa waiting
-      mesaOrdersCache[idx] = { ...newOrder, num: _orderNum(newOrder.id) };
-    }
-  } else if (!['cancelado'].includes(newOrder.status) && newOrder.mesa_num) {
-    // Só adiciona ao cache se pertence à sessão atual (opened_at filter)
-    const mesa = tables.find(t => t.num === parseInt(newOrder.mesa_num));
-    const orderTime = new Date(newOrder.created_at || Date.now()).getTime();
-    if (!mesa) return;
-    if (!mesa.opened_at) {
-      if (newOrder.status !== 'entregue') {
-        mesaOrdersCache.unshift({ ...newOrder, num: _orderNum(newOrder.id) });
-      }
-      return;
-    }
-    const sessionStart = new Date(mesa.opened_at).getTime() - 5000;
-    if (orderTime >= sessionStart) {
-      mesaOrdersCache.unshift({ ...newOrder, num: _orderNum(newOrder.id) });
-    }
-  }
-}
+// _updateMesaOrdersCache removida — use _patchOrderInCache() de mesa-state.js
 
 function _renderMesaPageFromCache() {
   const pg = document.getElementById('page-pedidos-mesa');
@@ -532,7 +506,7 @@ function subscribeOrders() {
       if (p.new.status === 'mesa_aberta') {
         // Comanda única de mesa — vai ao cache do salão, não ao kanban
         const hasFoodItems = Array.isArray(p.new.items) && p.new.items.some(i => i.item_status === 'producao');
-        _updateMesaOrdersCache(p.new);
+        _patchOrderInCache(p.new);
         _renderMesaPageFromCache();
         if (hasFoodItems) {
           playOrderSound();
@@ -581,7 +555,7 @@ function subscribeOrders() {
       }
       // Atualiza cache de mesa e rerenderiza SEM nova query ao banco
       if (p.new.mesa_num) {
-        _updateMesaOrdersCache(p.new);
+        _patchOrderInCache(p.new);
         _renderMesaPageFromCache();
       }
       _syncSwState();
@@ -634,7 +608,7 @@ function subscribeOrders() {
             }
           }
         }
-        _updateMesaOrdersCache(p.new);
+        _patchOrderInCache(p.new);
         _renderMesaPageFromCache();
       }
       _syncSwState();
@@ -655,7 +629,7 @@ function subscribeOrders() {
     });
 
   const chMesas = sb.channel('mesas-rt')
-    .on('postgres_changes', {event:'*', schema:'public', table:'mesas'}, p => {
+    .on('postgres_changes', {event:'*', schema:'public', table:'mesas'}, async p => {
       // Notifica o gestor quando garçom envia mesa para pagamento
       if (p.eventType === 'UPDATE' && p.new?.status === 'waiting' && p.old?.status !== 'waiting') {
         const mesaNum = p.new.num;
@@ -674,16 +648,16 @@ function subscribeOrders() {
           if (navBtn) navBtn.style.animation = 'pulse 1s ease 3';
         }
       }
-      sb.from('mesas').select('*').order('num').then(({ data }) => {
-        if (data) {
-          tables = data.map(t => ({
-            id: t.id, num: t.num, status: t.status, guests: t.guests||0,
-            total: parseFloat(t.total)||0, pag_forma: t.pag_forma||null,
-            opened_at: t.opened_at||null, updated_at: t.updated_at||null
-          }));
-          _renderMesaPageFromCache(); renderQR();
-        }
-      });
+
+      // UPDATE → refresh cirúrgico de apenas a mesa afectada.
+      // INSERT / DELETE → refresh completo (acontece raramente — criação/remoção de mesa).
+      if (p.eventType === 'UPDATE' && p.new?.num) {
+        await refreshMesa(p.new.num);
+      } else {
+        await refreshMesasState();
+      }
+      _renderMesaPageFromCache();
+      renderQR();
     }).subscribe();
 
   const chConfig = sb.channel('store-config-rt')
@@ -763,7 +737,7 @@ setInterval(async () => {
             if (_autoAcceptOn && o.status === 'analise') setTimeout(() => advanceOrderById(o.id), 800);
             if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(o)) printOrder(mapOrder(o));
             // Atualiza cache mesa se for pedido de mesa
-            if (o.mesa_num) { _updateMesaOrdersCache(o); _renderMesaPageFromCache(); }
+            if (o.mesa_num) { _patchOrderInCache(o); _renderMesaPageFromCache(); }
           }
           if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id;
         }
@@ -1574,7 +1548,7 @@ function _isSoBebidas(order) {
   return items.every(i => _BEBIDAS_RE.test((i.name || '').toLowerCase()));
 }
 let orderIdSeq   = 1;
-let tables       = [];
+// tables declarado em mesa-state.js
 let fidClients   = [];
 let cliData      = [];  // customers carregados
 let _cliTab      = 'todos';
