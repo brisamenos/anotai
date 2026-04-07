@@ -129,6 +129,7 @@ function renderKanban() {
     } else {
       col.innerHTML = filtered.map(o => {
         const itemStr = o.items.map(i => i.qty + 'x ' + i.name).join(', ');
+        const obsStr = o.items.filter(i => i.obs).map(i => '📝 ' + i.obs).join(' · ');
         const total = 'R$ ' + (parseFloat(o.total || 0) + parseFloat(o.taxa || 0)).toFixed(2).replace('.', ',');
 
         // ── Tipo de entrega ──────────────────────────────
@@ -213,6 +214,7 @@ function renderKanban() {
           _waNotif +
           '<div class="oc-client">' + o.client + (o.phone ? ' · ' + o.phone : '') + '</div>' +
           '<div class="oc-items">' + itemStr + '</div>' +
+          (obsStr ? '<div style="font-size:11px;color:#c4956a;font-weight:600;margin-top:3px;padding:3px 7px;background:rgba(196,149,106,.08);border-radius:5px;border:1px solid rgba(196,149,106,.12)">' + obsStr + '</div>' : '') +
           '<div class="oc-bot"><span class="oc-total">' + total + '</span>' +
           (o.addr && !isMesa ? '<span class="oc-addr">' + o.addr + '</span>' : '') +
           '</div>' +
@@ -297,8 +299,8 @@ function openOrderDetail(id) {
       <div class="od-item-qty">${item.qty}x</div>
       <div style="flex:1">
         <div class="od-item-name">${item.name}</div>
-        ${item.obs ? `<div class="od-item-obs">Obs: ${item.obs}</div>` : ''}
-        ${Array.isArray(item.extras) && item.extras.length ? `<div class="od-item-obs">+ ${item.extras.join(', ')}</div>` : ''}
+        ${item.obs ? `<div class="od-item-obs">📝 ${item.obs}</div>` : ''}
+        ${Array.isArray(item.extras) && item.extras.length ? `<div class="od-item-obs">➕ ${item.extras.join(', ')}</div>` : ''}
       </div>
       <div class="od-item-price">R$&nbsp;${(item.price).toFixed(2).replace('.', ',')}</div>
     </div>`).join('');
