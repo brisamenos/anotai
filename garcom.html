@@ -675,6 +675,20 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .half-opt-check{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px}
 .half-opt.on .half-opt-check{background:var(--amber);border-color:var(--amber);color:#000}
 
+
+/* ── PRONTO BADGE NA MESA ────────────────── */
+.mesa-pronto-badge {
+  position: absolute; top: 7px; left: 8px;
+  background: var(--green); color: #000;
+  font-size: 9px; font-weight: 800;
+  padding: 2px 7px; border-radius: 99px;
+  letter-spacing: .4px; text-transform: uppercase;
+  animation: pronto-pulse 1.4s ease-in-out infinite;
+}
+@keyframes pronto-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,.6); }
+  50%      { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+}
 </style>
   <script src="/api-client.js"></script>
 </head>
@@ -913,7 +927,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   <div class="success-icon">✅</div>
   <div class="success-title">Pedido enviado!</div>
   <div class="success-sub">Pedido encaminhado para<br>a cozinha com sucesso.</div>
-  <div class="success-num" id="success-num">#001</div>
+  <div class="success-num" id="success-num">Mesa ?</div>
   <button class="success-btn" onclick="closeSuccess()">Voltar às mesas</button>
 </div>
 
@@ -1084,6 +1098,63 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 <!-- TOAST -->
 <div class="toast" id="toast"><span id="toast-msg"></span></div>
 
+<!-- ══ MODAL CONFIRMAR GENÉRICO ══════════════ -->
+<div id="gc-confirm-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9500;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:26px 22px;max-width:320px;width:100%;text-align:center;animation:fadeUp .25s ease">
+    <div style="font-size:36px;margin-bottom:12px" id="gc-confirm-icon">⚠️</div>
+    <div style="font-size:16px;font-weight:800;margin-bottom:8px;font-family:'Syne',sans-serif" id="gc-confirm-title">Confirmar</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:22px;line-height:1.6" id="gc-confirm-msg"></div>
+    <div style="display:flex;gap:10px">
+      <button id="gc-confirm-cancel" style="flex:1;padding:12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--muted);font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit">Cancelar</button>
+      <button id="gc-confirm-ok" style="flex:1;padding:12px;border-radius:10px;border:none;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL TRANSFERIR MESA ═════════════════ -->
+<div id="transfer-bg" onclick="if(event.target===this)closeTransfer()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9200;align-items:flex-end;justify-content:center;backdrop-filter:blur(5px)">
+  <div style="background:var(--surface);border-radius:24px 24px 0 0;width:100%;max-width:600px;padding:0 0 24px;animation:slideUp .3s cubic-bezier(.34,1.56,.64,1)">
+    <div style="width:36px;height:4px;background:var(--surface3);border-radius:99px;margin:12px auto 0"></div>
+    <div style="padding:14px 20px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800">Transferir Mesa <span id="transfer-from-label"></span></div>
+      <button onclick="closeTransfer()" style="width:30px;height:30px;border-radius:50%;background:var(--surface2);border:none;color:var(--muted);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">x</button>
+    </div>
+    <div style="padding:14px 16px">
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px">Escolha a mesa de destino (deve estar <b style="color:var(--green)">livre</b>):</div>
+      <div id="transfer-mesa-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL DIVIDIR CONTA ════════════════════ -->
+<div id="split-bg" onclick="if(event.target===this)closeSplit()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9200;align-items:flex-end;justify-content:center;backdrop-filter:blur(5px)">
+  <div style="background:var(--surface);border-radius:24px 24px 0 0;width:100%;max-width:600px;padding:0 0 28px;animation:slideUp .3s cubic-bezier(.34,1.56,.64,1)">
+    <div style="width:36px;height:4px;background:var(--surface3);border-radius:99px;margin:12px auto 0"></div>
+    <div style="padding:14px 20px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800">Dividir Conta</div>
+      <button onclick="closeSplit()" style="width:30px;height:30px;border-radius:50%;background:var(--surface2);border:none;color:var(--muted);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">x</button>
+    </div>
+    <div style="padding:16px 18px">
+      <div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.18);border-radius:12px;padding:12px 16px;margin-bottom:16px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Total da mesa</div>
+        <div style="font-family:'Syne',sans-serif;font-size:26px;font-weight:900;color:var(--amber)" id="split-total-lbl">R$ 0,00</div>
+      </div>
+      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Dividir entre</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:16px">
+        <button onclick="splitAdj(-1)" style="width:40px;height:40px;border-radius:50%;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center">-</button>
+        <div style="font-family:'Syne',sans-serif;font-size:36px;font-weight:900" id="split-n">2</div>
+        <button onclick="splitAdj(1)" style="width:40px;height:40px;border-radius:50%;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center">+</button>
+      </div>
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:4px">Cada pessoa paga</div>
+        <div style="font-family:'Syne',sans-serif;font-size:32px;font-weight:900;color:var(--green)" id="split-each">R$ 0,00</div>
+      </div>
+      <button onclick="closeSplit()" style="width:100%;padding:14px;border-radius:12px;border:none;background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer">Fechar</button>
+    </div>
+  </div>
+</div>
+
+
 <script>
 // ══ SUPABASE ══════════════════════════════
 const sb = window.AppAPI;
@@ -1159,11 +1230,6 @@ let _garcomNomeLoja = null;
     const data = await res.json().catch(() => null);
     if (res.ok && data?.id) {
       currentGarcom = { id: data.id, nome: data.nome, usuario: data.usuario };
-      // Salva sessão para auto-login em recarregamentos
-      localStorage.setItem('garcom_session', JSON.stringify({
-        usuario: user.toLowerCase(), senha: btoa(pass),
-        tenant_id: _garcomTenantId, ts: Date.now()
-      }));
       document.getElementById('topbar-garcom-name').textContent = '👤 ' + data.nome;
       document.getElementById('screen-login').style.display = 'none';
       document.getElementById('screen-app').classList.add('show');
@@ -1185,6 +1251,40 @@ let cart          = [];
 let activeMesa    = null;
 let activeCatFilter = '';
 let sheetTab      = 'itens';
+let _submitting   = false; // guard contra duplo envio
+
+// ── SOM DE NOTIFICAÇÃO ───────────────────────
+function playProntoSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.setValueAtTime(880, ctx.currentTime);
+    o.frequency.setValueAtTime(1100, ctx.currentTime + 0.12);
+    g.gain.setValueAtTime(0.35, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    o.start(ctx.currentTime); o.stop(ctx.currentTime + 0.5);
+  } catch(e) {}
+}
+
+// ── MODAL CONFIRMAR GENÉRICO (substitui confirm()) ──
+function garcomConfirm({ icon = '⚠️', title, msg, okLabel = 'Confirmar', okColor = 'var(--red)', okTextColor = '#fff' } = {}) {
+  return new Promise(resolve => {
+    const bg = document.getElementById('gc-confirm-bg');
+    document.getElementById('gc-confirm-icon').textContent  = icon;
+    document.getElementById('gc-confirm-title').textContent = title || 'Confirmar';
+    document.getElementById('gc-confirm-msg').textContent   = msg   || '';
+    const okBtn = document.getElementById('gc-confirm-ok');
+    okBtn.textContent         = okLabel;
+    okBtn.style.background    = okColor;
+    okBtn.style.color         = okTextColor;
+    bg.style.display = 'flex';
+    const cleanup = (val) => { bg.style.display = 'none'; resolve(val); };
+    okBtn.onclick     = () => cleanup(true);
+    document.getElementById('gc-confirm-cancel').onclick = () => cleanup(false);
+  });
+}
 
 // ══ LOGIN ═════════════════════════════════
 async function doLogin() {
@@ -1243,10 +1343,12 @@ function doLogout() {
 }
 
 // ══ LOAD DATA ════════════════════════════
-let _garcomOffset = 0;
-
-function ordNum(id) {
-  return String(Math.max(1, id - _garcomOffset)).padStart(3, '0');
+// Identificação por mesa — sem offset
+function mesaLabel(order) {
+  if (order.mesa_num) return 'Mesa ' + order.mesa_num;
+  const fromAddr = parseInt((order.addr || '').replace('Mesa ', '') || '0');
+  if (fromAddr) return 'Mesa ' + fromAddr;
+  return order.client || '#' + order.id;
 }
 
 let _garcomPrintCfg = null; // cache de print_config do tenant
@@ -1261,7 +1363,7 @@ async function garcomPrint(order, newItems) {
     const fmt      = cfg.format || localStorage.getItem('printFormat') || '80mm';
     const printer  = cfg.printer || localStorage.getItem('printPrinter') || '';
     const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-    const orderNum = ordNum(order.id || order);
+    const orderNum = order.mesa_num ? `Mesa ${order.mesa_num}` : (order.id ? `#${order.id}` : '?');
 
     // Monta os itens a imprimir — usa só os novos itens desta rodada (sem os já enviados antes)
     const items = Array.isArray(newItems) && newItems.length ? newItems : (Array.isArray(order.items) ? order.items : []);
@@ -1366,12 +1468,11 @@ async function loadData() {
     sb.from('mesas').select('*').order('num'),
     sb.from('menu_items').select('*').neq('status','pausado').order('id'),
     sb.from('categories').select('*').order('sort_order'),
-    sb.from('store_config').select('order_num_offset,print_config,store_name').eq('tenant_id', _garcomTenantId).single()
+    sb.from('store_config').select('print_config,store_name').eq('tenant_id', _garcomTenantId).single()
   ]);
   tables   = (mesasRes.data || []);
   allItems = (itemsRes.data || []);
   allCats  = (catsRes.data  || []);
-  _garcomOffset = parseInt(cfgRes.data?.order_num_offset) || 0;
   try { _garcomPrintCfg = cfgRes.data?.print_config ? JSON.parse(cfgRes.data.print_config) : {}; } catch { _garcomPrintCfg = {}; }
   if (!_garcomNomeLoja && cfgRes.data?.store_name) _garcomNomeLoja = cfgRes.data.store_name;
   renderMesas();
@@ -1506,22 +1607,12 @@ function subscribeRealtime() {
     })
     .subscribe();
 
-  // Escuta mudanças no offset de numeração — mantém garçom sincronizado com o gestor
-  const chCfg = sb.channel('garcom-cfg-' + gid)
-    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'store_config',
-        filter: `tenant_id=eq.${_garcomTenantId}` }, p => {
-      if (p.new?.order_num_offset != null) {
-        _garcomOffset = parseInt(p.new.order_num_offset) || 0;
-      }
-    })
-    .subscribe();
-  _rtChannels.push(chCfg);
+  _rtChannels = [chMesas, chOrders];
+
   _heartbeat = setInterval(() => {
     try { sb.channel('garcom-mesas-' + gid).send({ type:'broadcast', event:'ping', payload:{} }); }
     catch(e){}
   }, 25000);
-
-  _rtChannels = [chMesas, chOrders];
 }
 
 // Sync ao voltar para a aba
@@ -1570,6 +1661,9 @@ function renderMesas() {
     g.innerHTML = '<div class="empty" style="grid-column:span 3"><div class="empty-icon">🍽️</div>Nenhuma mesa cadastrada</div>';
     return;
   }
+  // Detecta mesas com itens prontos p/ notificação sonora
+  let hasProntoNow = false;
+
   g.innerHTML = tables.map((t,i) => {
     const free    = t.status === 'free';
     const waiting = t.status === 'waiting';
@@ -1584,17 +1678,29 @@ function renderMesas() {
       ? `<div class="mesa-block-total">R$ ${mesaTotal.toFixed(2).replace('.',',')}</div>`
       : '';
 
+    // Badge "PRONTO" se há item pronto para servir
+    const hasPronto = mesaOrders.some(o =>
+      Array.isArray(o.items) && o.items.some(it => it.item_status === 'pronto')
+    );
+    if (hasPronto) hasProntoNow = true;
+    const prontoBadge = hasPronto ? `<div class="mesa-pronto-badge">✅ PRONTO</div>` : '';
+
     const onclick = free
       ? `openPedido(${t.num})`
       : `openMesaDetail(${t.num})`;
 
     return `<div class="mesa-block ${cls}" style="animation-delay:${i*.04}s" onclick="${onclick}">
+      ${prontoBadge}
       <div class="mesa-block-icon">${icon}</div>
       <div class="mesa-block-num">${t.num}</div>
       <div class="mesa-block-label">${lbl}</div>
       ${totalHtml}
     </div>`;
   }).join('');
+
+  // Toca som se havia item pronto e não estava antes
+  if (hasProntoNow && !window._hadProntoItems) playProntoSound();
+  window._hadProntoItems = hasProntoNow;
 }
 
 // ══ MODAL DETALHE DA MESA ═══════════════
@@ -1668,7 +1774,7 @@ async function openMesaDetail(num) {
         return `<div class="mds-order-card">
           <div class="mds-order-header">
             <span class="mds-order-status ${cls}">${lbl}</span>
-            <span style="font-size:11px;color:var(--muted)">#${ordNum(o.id)} · ${o.time||''}</span>
+            <span style="font-size:11px;color:var(--muted)">${mesaLabel(o)} · ${o.time||''}</span>
           </div>
           <div class="mds-order-items" style="padding-top:4px">${itemsHtml || '<span style="font-size:12px;color:var(--muted)">Sem itens ativos</span>'}</div>
           <div class="mds-order-total">R$ ${(parseFloat(o.total)||0).toFixed(2).replace('.',',')}</div>
@@ -1691,8 +1797,19 @@ async function openMesaDetail(num) {
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
           Cancelar ocupação da mesa
         </button>` : '';
+    const mesaTotalParaSplit = orders.reduce((s,o)=>s+parseFloat(o.total||0),0);
     foot.innerHTML = `
       ${cancelarBtn}
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button class="mds-btn" onclick="openTransfer(${num})" style="flex:1;background:var(--surface2);color:var(--muted);border:1.5px solid var(--border)">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M10 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Transferir
+        </button>
+        <button class="mds-btn" onclick="openSplit(${mesaTotalParaSplit})" style="flex:1;background:var(--surface2);color:var(--muted);border:1.5px solid var(--border)">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M4 6H2m10 0h2M4 10H2m10 0h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Dividir
+        </button>
+      </div>
       <button class="mds-btn add" onclick="closeMesaDetail();openPedido(${num})">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="2" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         Lançar mais itens
@@ -1712,7 +1829,7 @@ function closeMesaDetail() {
 }
 
 async function garcomCancelarPedido(orderId, mesaNum) {
-  if (!confirm('Cancelar este pedido?')) return;
+  if (!await garcomConfirm({ icon:'🗑️', title:'Cancelar pedido?', msg:'Este pedido será removido.', okLabel:'Sim, cancelar' })) return;
   try {
     const res = await fetch('/api/order-status', {
       method: 'POST',
@@ -1721,7 +1838,7 @@ async function garcomCancelarPedido(orderId, mesaNum) {
     });
     if (!res.ok) throw new Error((await res.json()).error || 'Erro');
     myOrders = myOrders.filter(o => o.id !== orderId);
-    showToast('Pedido #' + ordNum(orderId) + ' cancelado');
+    showToast('Pedido ' + mesaLabel(myOrders.find(o=>o.id===orderId)||{id:orderId}) + ' cancelado');
     openMesaDetail(mesaNum);
   } catch(e) {
     showToast('❌ Erro ao cancelar: ' + e.message);
@@ -1738,7 +1855,7 @@ async function garcomCancelarItem(orderId, itemId, mesaNum) {
     : parseInt(itemId);
   if (idx < 0 || idx >= items.length) return;
   const item = items[idx];
-  if (!confirm(`Remover "${item.qty}× ${item.name}"?`)) return;
+  if (!await garcomConfirm({ icon:'🗑️', title:'Remover item?', msg:`Remover "${item.qty}× ${item.name}" da comanda?`, okLabel:'Remover' })) return;
 
   // Novo modelo: marca como cancelado (preserva histórico)
   items[idx] = { ...item, item_status: 'cancelado' };
@@ -1756,12 +1873,13 @@ async function garcomCancelarItem(orderId, itemId, mesaNum) {
     showToast('✅ Item removido');
     openMesaDetail(mesaNum);
   } catch(e) {
+    console.error('[garcomCancelarItem]', e);
     showToast('❌ Erro ao remover item: ' + (e.message || e));
   }
 }
 
 async function cancelarOcupacaoMesa(num) {
-  if (!confirm(`Cancelar a ocupação da Mesa ${num}?\n\nEla voltará para o status livre.`)) return;
+  if (!await garcomConfirm({ icon:'🪑', title:`Cancelar Mesa ${num}?`, msg:'A mesa voltará para o status livre.', okLabel:'Liberar mesa', okColor:'var(--muted)' })) return;
   try {
     await sb.from('mesas').update({
       status: 'free', opened_at: null, total: null,
@@ -1773,8 +1891,8 @@ async function cancelarOcupacaoMesa(num) {
     renderMesas();
     showToast(`Mesa ${num} liberada`);
   } catch(e) {
-    showToast('❌ Erro ao liberar mesa');
-    console.error(e);
+    console.error('[cancelarOcupacaoMesa]', e);
+    showToast('❌ Erro ao liberar mesa: ' + (e.message || e));
   }
 }
 
@@ -1829,7 +1947,17 @@ async function confirmarAbrirMesa() {
   document.getElementById('sheet-pedido').classList.add('on');
 }
 
-function closeSheet() {
+async function closeSheet() {
+  // Confirma se há itens no carrinho (exceto modo delivery que salva o cart)
+  if (cart.length && !window._npMode) {
+    const ok = await garcomConfirm({
+      icon: '🛒', title: 'Descartar itens?',
+      msg: `Há ${cart.length} item(ns) no carrinho. Deseja fechar sem enviar?`,
+      okLabel: 'Fechar mesmo assim', okColor: 'var(--muted)'
+    });
+    if (!ok) return;
+    cart = [];
+  }
   document.getElementById('sheet-pedido').classList.remove('on');
   document.body.style.overflow = '';
   // Se veio do modo delivery/retirada, salva o cart e atualiza preview
@@ -2352,8 +2480,10 @@ function isDrink(item) {
 
 async function submitPedido() {
   if (!cart.length) return;
+  if (_submitting) return;
   // Se vier do modo delivery/retirada, fecha sheet e deixa npEnviarPedido cuidar do envio
   if (window._npMode) { closeSheet(); return; }
+  _submitting = true;
   const btn = document.getElementById('submit-btn');
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px"></div> Enviando...';
@@ -2428,7 +2558,7 @@ async function submitPedido() {
     }
 
     closeSheet();
-    document.getElementById('success-num').textContent = '#' + ordNum(_orderId);
+    document.getElementById('success-num').textContent = 'Mesa ' + activeMesa;
     document.getElementById('success-overlay').classList.add('on');
     cart = [];
     const { data: mesas } = await sb.from('mesas').select('*').order('num');
@@ -2437,9 +2567,10 @@ async function submitPedido() {
     // Impressão automática — só os itens desta rodada
     garcomPrint({ id: _orderId, mesa_num: activeMesa }, newItems);
   } catch(e) {
-    showToast('❌ Erro ao enviar pedido');
-    console.error(e);
+    console.error('[submitPedido]', e);
+    showToast('❌ Erro ao enviar pedido: ' + (e.message || e));
   } finally {
+    _submitting = false;
     btn.disabled = false;
     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Enviar para cozinha';
   }
@@ -2511,6 +2642,7 @@ function npAtualizarPreview() {
 }
 
 async function npEnviarPedido() {
+  if (_submitting) return;
   const nome  = (document.getElementById('np-nome')?.value || '').trim();
   const phone = (document.getElementById('np-phone')?.value || '').trim();
   const pag   = document.getElementById('np-pag')?.value || 'dinheiro';
@@ -2532,6 +2664,7 @@ async function npEnviarPedido() {
     addr = 'Retirada no balcão';
   }
 
+  _submitting = true;
   const btn = document.getElementById('np-submit-btn');
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px"></div> Enviando...';
@@ -2571,7 +2704,7 @@ async function npEnviarPedido() {
       });
     }
     npAtualizarPreview();
-    document.getElementById('success-num').textContent = '#' + ordNum(data.id);
+    document.getElementById('success-num').textContent = nome || 'Pedido enviado';
     document.getElementById('success-overlay').classList.add('on');
     // Impressão automática pedido avulso
     garcomPrint({ id: data.id, mesa_num: null }, data.items || []);
@@ -2579,6 +2712,7 @@ async function npEnviarPedido() {
     showToast('❌ Erro ao enviar pedido');
     console.error(e);
   } finally {
+    _submitting = false;
     btn.disabled = false;
     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar pedido';
   }
@@ -2626,10 +2760,12 @@ async function loadPedidosDaMesa() {
       .in('mesa_num', activeMesaNums)
       .order('id', { ascending: false });
 
-    // Filtro de sessão: apenas a comanda da sessão atual
+    // Filtra apenas comandas de mesas que ainda estão abertas (busy/waiting)
+    // e que foram abertas APÓS a mesa abrir (evita comandas de sessões anteriores)
     myOrders = (data || []).filter(o => {
       const mesa = activeMesas.find(t => t.num === o.mesa_num);
-      if (!mesa || !mesa.opened_at) return true;
+      if (!mesa) return false; // mesa não encontrada ou já fechada
+      if (!mesa.opened_at) return true;
       const orderTime    = new Date(o.created_at || 0).getTime();
       const mesaOpenTime = new Date(mesa.opened_at).getTime();
       return orderTime >= mesaOpenTime - 5000;
@@ -2841,9 +2977,118 @@ async function confirmarFinalizarMesa() {
     if (mesas) { tables = mesas; renderMesas(); }
     await loadPedidosDaMesa();
   } catch(e) {
-    showToast('❌ Erro ao finalizar mesa');
-    console.error(e);
+    console.error('[confirmarFinalizarMesa]', e);
+    showToast('❌ Erro ao finalizar mesa: ' + (e.message || e));
   }
+}
+
+
+// ══ TRANSFERIR MESA ══════════════════════
+let _transferFromNum = null;
+
+function openTransfer(num) {
+  _transferFromNum = num;
+  document.getElementById('transfer-from-label').textContent = num;
+  const grid = document.getElementById('transfer-mesa-grid');
+  const freeTables = tables.filter(t => t.status === 'free' && t.num !== num);
+  if (!freeTables.length) {
+    grid.innerHTML = '<div style="grid-column:span 4;text-align:center;padding:20px;font-size:13px;color:var(--muted)">Nenhuma mesa livre disponível para transferência.</div>';
+  } else {
+    grid.innerHTML = freeTables.map(t => `
+      <div onclick="confirmarTransfer(${t.num})"
+        style="aspect-ratio:1;border-radius:12px;background:#071a0c;border:2px solid #166534;
+               display:flex;flex-direction:column;align-items:center;justify-content:center;
+               cursor:pointer;transition:all .15s;gap:4px"
+        onmouseover="this.style.borderColor='var(--green)'"
+        onmouseout="this.style.borderColor='#166534'">
+        <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:900;color:#4ade80">${t.num}</div>
+        <div style="font-size:9px;font-weight:800;letter-spacing:1px;color:rgba(74,222,128,.5)">LIVRE</div>
+      </div>`).join('');
+  }
+  document.getElementById('transfer-bg').style.display = 'flex';
+}
+
+function closeTransfer() {
+  document.getElementById('transfer-bg').style.display = 'none';
+  _transferFromNum = null;
+}
+
+async function confirmarTransfer(toNum) {
+  const fromNum = _transferFromNum;
+  if (!fromNum || fromNum === toNum) return;
+
+  const ok = await garcomConfirm({
+    icon: '🔄',
+    title: `Transferir Mesa ${fromNum} → Mesa ${toNum}?`,
+    msg: 'Todos os pedidos e a comanda serão movidos para a mesa de destino.',
+    okLabel: 'Transferir',
+    okColor: 'var(--accent)'
+  });
+  if (!ok) return;
+
+  closeTransfer();
+  closeMesaDetail();
+
+  try {
+    const now = new Date().toISOString();
+    // Move todos os pedidos (mesa_aberta) para a nova mesa
+    const { error: errOrders } = await sb.from('orders')
+      .update({ mesa_num: toNum, addr: `Mesa ${toNum}`, client: `Mesa ${toNum}`, updated_at: now })
+      .eq('mesa_num', fromNum)
+      .eq('status', 'mesa_aberta');
+    if (errOrders) throw errOrders;
+
+    // Marca mesa origem como livre
+    const { error: errFrom } = await sb.from('mesas')
+      .update({ status: 'free', opened_at: null, total: null, updated_at: now })
+      .eq('num', fromNum);
+    if (errFrom) throw errFrom;
+
+    // Marca mesa destino como ocupada (herda opened_at da origem)
+    const mesaOrigem = tables.find(t => t.num === fromNum);
+    const { error: errTo } = await sb.from('mesas')
+      .update({ status: 'busy', opened_at: mesaOrigem?.opened_at || now, updated_at: now })
+      .eq('num', toNum);
+    if (errTo) throw errTo;
+
+    showToast(`✅ Mesa ${fromNum} transferida para Mesa ${toNum}`);
+
+    // Recarrega dados
+    const { data: mesas } = await sb.from('mesas').select('*').order('num');
+    if (mesas) { tables = mesas; renderMesas(); }
+    await loadPedidosDaMesa();
+  } catch(e) {
+    console.error('[confirmarTransfer]', e);
+    showToast('❌ Erro ao transferir mesa: ' + (e.message || e));
+  }
+}
+
+// ══ DIVIDIR CONTA ════════════════════════
+let _splitTotal = 0;
+let _splitN = 2;
+
+function openSplit(total) {
+  _splitTotal = total;
+  _splitN = 2;
+  document.getElementById('split-n').textContent = _splitN;
+  document.getElementById('split-total-lbl').textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+  updateSplitCalc();
+  document.getElementById('split-bg').style.display = 'flex';
+}
+
+function closeSplit() {
+  document.getElementById('split-bg').style.display = 'none';
+}
+
+function splitAdj(delta) {
+  _splitN = Math.max(2, Math.min(20, _splitN + delta));
+  document.getElementById('split-n').textContent = _splitN;
+  updateSplitCalc();
+}
+
+function updateSplitCalc() {
+  const each = _splitTotal / _splitN;
+  document.getElementById('split-each').textContent = 'R$ ' + each.toFixed(2).replace('.', ',');
 }
 
 // ══ PIZZA SELECTOR ═══════════════════════

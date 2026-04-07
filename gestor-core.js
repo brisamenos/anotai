@@ -27,14 +27,14 @@ async function _carregarPlano() {
       const sess = JSON.parse(sessionStorage.getItem('sys_session') || '{}');
       sess.plano = _planoAtual;
       sessionStorage.setItem('sys_session', JSON.stringify(sess));
-    } catch(e) {}
+    } catch(e) { console.warn('[gestor-core] silent error:', e?.message || e); }
 
     // Atualiza badge do botão Robô na sidebar
     const roboBadge = document.getElementById('sn-robo-badge');
     if (roboBadge) {
       roboBadge.style.display = _planoAtual !== 'premium' ? 'inline-block' : 'none';
     }
-  } catch(e) {}
+  } catch(e) { console.warn('[gestor-core] silent error:', e?.message || e); }
 }
 
 function _verificarSessao() {
@@ -91,7 +91,7 @@ async function _carregarSegmento() {
     _segmento = d.segmento || 'restaurante';
     window._segmento = _segmento;
     _adaptarParaSegmento();
-  } catch(e) {}
+  } catch(e) { console.warn('[gestor-core] silent error:', e?.message || e); }
 }
 
 function _adaptarParaSegmento() {
@@ -273,7 +273,7 @@ async function loadAllData(silent = false) {
       try {
         const { data: lastOrder } = await sb.from('orders').select('id').order('id', {ascending:false}).limit(1);
         if (lastOrder?.[0]?.id) _maxKnownOrderId = Number(lastOrder[0].id);
-      } catch(e) {}
+      } catch(e) { console.warn('[gestor-core] silent error:', e?.message || e); }
     }
 
     // Aplica estado do caixa e loja
@@ -294,7 +294,7 @@ async function loadAllData(silent = false) {
             await sb.from('store_config').update({ order_num_offset: globalMax }).eq('tenant_id', _sessao.tenant_id);
             _orderNumOffset = globalMax;
           }
-        } catch(e) {}
+        } catch(e) { console.warn('[gestor-core] silent error:', e?.message || e); }
       }
       // ────────────────────────────────────────────────────────
 
@@ -682,6 +682,15 @@ function subscribeOrders() {
 
   _rtChannels = [chOrders, chMesas, chConfig];
 }
+
+// ── Timer de atualização do tempo decorrido por mesa (a cada 60s) ──────
+setInterval(() => {
+  // Só atualiza se a aba de mesas estiver visível
+  const pg = document.getElementById('page-pedidos-mesa');
+  if (pg && pg.classList.contains('on') && tables.some(t => t.status !== 'free')) {
+    _renderMesaPageFromCache();
+  }
+}, 60000);
 
 // Sync ao voltar para a aba
 document.addEventListener('visibilitychange', () => {
@@ -1323,7 +1332,7 @@ async function enviarAjustePeso() {
   try {
     const cfgR = await fetch('/api/tenant-info-gestor', { headers: { 'Content-Type':'application/json', 'x-tenant-id': _sessao?.tenant_id } });
     if (cfgR.ok) { const d = await cfgR.json(); nomeLoja = d.nome || nomeLoja; }
-  } catch(e) {}
+  } catch(e) { console.warn('[gestor-core] silent error:', e?.message || e); }
   let msg = `🏪 *${nomeLoja}*\n${'─'.repeat(20)}\n\n⚖️ *Ajuste de peso — Pedido #${idStr}*\n\nOlá, *${o.client}*!\n\nAo separar seu pedido, verificamos que não temos a quantidade solicitada:\n\n`;
   propostas.forEach(p => {
     msg += `🥩 *${p.name}*\n`;

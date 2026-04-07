@@ -1388,6 +1388,50 @@ async function renderRelatorios() {
         </div>`).join('')
       : '<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center">Nenhuma avaliação com comentário</div>';
 
+
+    // ─── Relatório por Garçom ─────────────────────────────
+    const garcomMap = {};
+    mesValidos
+      .filter(o => o.mesa_num || (o.addr||'').startsWith('Mesa'))
+      .forEach(o => {
+        const nome = o.garcom_nome || 'Sem garçom';
+        if (!garcomMap[nome]) garcomMap[nome] = { pedidos: 0, fat: 0, mesas: new Set() };
+        garcomMap[nome].pedidos++;
+        garcomMap[nome].fat += parseFloat(o.total||0) + parseFloat(o.taxa||0);
+        if (o.mesa_num) garcomMap[nome].mesas.add(o.mesa_num);
+      });
+
+    const garcomEl = document.getElementById('rel-garcom-section');
+    if (garcomEl) {
+      const entries = Object.entries(garcomMap).sort((a,b) => b[1].fat - a[1].fat);
+      if (!entries.length) {
+        garcomEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">Nenhum dado de garçom no período</div>';
+      } else {
+        const maxFat = Math.max(...entries.map(([,v]) => v.fat), 1);
+        garcomEl.innerHTML = entries.map(([nome, v]) => {
+          const ticket = v.pedidos > 0 ? v.fat / v.pedidos : 0;
+          const pct = Math.round(v.fat / maxFat * 100);
+          return `<div style="padding:12px 0;border-bottom:1px solid var(--border)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:32px;height:32px;border-radius:50%;background:rgba(59,130,246,.15);border:1.5px solid rgba(59,130,246,.3);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--accent)">${nome.charAt(0).toUpperCase()}</div>
+                <div>
+                  <div style="font-size:13px;font-weight:700">${nome}</div>
+                  <div style="font-size:11px;color:var(--muted)">${v.pedidos} pedido(s) · ${v.mesas.size} mesa(s) atendida(s)</div>
+                </div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:14px;font-weight:800;color:var(--success)">R$ ${v.fat.toFixed(2).replace('.',',')}</div>
+                <div style="font-size:11px;color:var(--muted)">ticket R$ ${ticket.toFixed(2).replace('.',',')}</div>
+              </div>
+            </div>
+            <div style="height:5px;background:var(--border);border-radius:99px;overflow:hidden">
+              <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--accent),var(--success));border-radius:99px"></div>
+            </div>
+          </div>`;
+        }).join('');
+      }
+    }
   } catch(e) {
     console.error('renderRelatorios error:', e);
     sbToast('err', 'Erro ao carregar relatórios: ' + e.message);

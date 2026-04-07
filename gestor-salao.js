@@ -669,6 +669,23 @@ async function renderMesasPage() {
   _renderMesaPageFromCache();
 }
 
+function _elapsedLabel(openedAt) {
+  if (!openedAt) return '';
+  const mins = Math.floor((Date.now() - new Date(openedAt).getTime()) / 60000);
+  if (mins < 1) return '< 1 min';
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return m > 0 ? `${h}h ${m}min` : `${h}h`;
+}
+
+function _elapsedColor(openedAt, isWaiting) {
+  if (isWaiting || !openedAt) return 'var(--muted)';
+  const mins = Math.floor((Date.now() - new Date(openedAt).getTime()) / 60000);
+  if (mins > 90) return 'var(--red)';
+  if (mins > 45) return 'var(--amber)';
+  return 'var(--green)';
+}
+
 function renderMesaCard(t, orders) {
   const isWaiting = t.status === 'waiting';
   const bordColor = isWaiting ? 'var(--accent3)' : t.status === 'busy' ? 'var(--accent)' : 'var(--border)';
@@ -815,6 +832,7 @@ function renderMesaCard(t, orders) {
         <div style="font-family:'Playfair Display',sans-serif;font-size:20px;font-weight:900">Mesa ${t.num}</div>
         ${t.guests ? `<span style="font-size:11.5px;color:var(--muted)">${t.guests} pessoas</span>` : ''}
         ${statusLabel}
+        ${t.opened_at && t.status !== 'free' ? `<span style="font-size:11px;font-weight:700;color:${_elapsedColor(t.opened_at, isWaiting)};background:${_elapsedColor(t.opened_at, isWaiting)}1a;padding:2px 8px;border-radius:99px">⏱ ${_elapsedLabel(t.opened_at)}</span>` : ''}
         <button onclick="event.stopPropagation();openEditMesa(${t.num})" style="margin-left:4px;background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--muted);cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif" title="Editar mesa"></button>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
