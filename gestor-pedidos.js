@@ -173,14 +173,14 @@ function renderKanban() {
         // Badge de pagamento
         const _pagBadge = (() => {
           const p = o.pag || '';
-          const _naEntregaTag = '<span style="font-size:10px;background:rgba(245,158,11,.2);color:#b45309;padding:1px 5px;border-radius:99px;font-weight:700;margin-left:4px">NA ENTREGA</span>';
-          const _pendenteTag = '<span style="font-size:10px;background:rgba(245,158,11,.2);color:#b45309;padding:1px 5px;border-radius:99px;font-weight:700;margin-left:4px">PENDENTE</span>';
+          const _naEntregaTag = '<span style="font-size:10px;background:rgba(196,149,106,.15);color:#c4956a;padding:1px 5px;border-radius:99px;font-weight:700;margin-left:4px">NA ENTREGA</span>';
+          const _pendenteTag = '<span style="font-size:10px;background:rgba(196,149,106,.15);color:#c4956a;padding:1px 5px;border-radius:99px;font-weight:700;margin-left:4px">PENDENTE</span>';
           if (p === 'pix_mp' || p === 'pix') return '<div class="oc-pag-badge oc-pag-pix">&#9889; PAGO PIX</div>';
           if (p === 'pix_manual' && !o._pixPendente) return '<div class="oc-pag-badge oc-pag-pix">&#9889; PAGO PIX</div>';
           if (p === 'pix_manual') return '<div class="oc-pag-badge oc-pag-pix-pendente">&#9203; PIX PENDENTE</div>';
           if (p === 'cartao' || p === 'credito') return '<div class="oc-pag-badge oc-pag-cartao"> CRÉDITO' + _naEntregaTag + '</div>';
           if (p === 'debito') return '<div class="oc-pag-badge oc-pag-cartao"> DÉBITO' + _naEntregaTag + '</div>';
-          if (p === 'cartao_mp') return '<div class="oc-pag-badge oc-pag-cartao" style="background:rgba(34,197,94,.12);color:var(--success)">💳 CRÉD. ONLINE</div>';
+          if (p === 'cartao_mp') return '<div class="oc-pag-badge oc-pag-cartao" style="background:rgba(52,211,153,.12);color:var(--success)">💳 CRÉD. ONLINE</div>';
           if (p === 'dinheiro') {
             var tr = '';
             if (o.troco > 0) tr = ' &middot; Troco p/ R$' + parseFloat(o.troco).toFixed(2).replace('.', ',');
@@ -352,9 +352,9 @@ function openOrderDetail(id) {
   const momento = o.pag_momento || (
     (o.pag || '').includes('mp') || (o.pag || '').includes('pix') ? 'online' : 'entrega'
   );
-  if (momento === 'online') pagLabel += ' <span style="font-size:10px;background:rgba(34,197,94,.15);color:#16a34a;padding:1px 6px;border-radius:99px;font-weight:700">✓ PAGO</span>';
-  else if (o.pag !== 'dinheiro' && o.pag !== 'mesa') pagLabel += ' <span style="font-size:10px;background:rgba(245,158,11,.15);color:#b45309;padding:1px 6px;border-radius:99px;font-weight:700">NA ENTREGA</span>';
-  setEl('od-pag', pagLabel);
+  if (momento === 'online') pagLabel += ' <span style="font-size:10px;background:rgba(52,211,153,.15);color:#059669;padding:1px 6px;border-radius:99px;font-weight:700">✓ PAGO</span>';
+  else if (o.pag !== 'dinheiro' && o.pag !== 'mesa') pagLabel += ' <span style="font-size:10px;background:rgba(196,149,106,.12);color:#c4956a;padding:1px 6px;border-radius:99px;font-weight:700">PENDENTE</span>';
+  { const e = document.getElementById('od-pag'); if (e) e.innerHTML = pagLabel; }
   setEl('od-pag-sub', o.pag === 'dinheiro' || o.pag === 'Dinheiro'
     ? (o.troco > 0 ? 'Troco: ' + fmt(o.troco) : 'Valor exato') : '');
 
