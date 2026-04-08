@@ -1716,15 +1716,17 @@ module.exports = async function handleRoutes(req, res, ctx) {
         const tmpPath = require('path').join(require('os').tmpdir(), `anotai-print-${Date.now()}.pdf`)
         require('fs').writeFileSync(tmpPath, Buffer.from(pdfBase64, 'base64'))
         const plat = require('os').platform()
+        const fmt = body.format || '80mm'
+        const widthMm = fmt === '58mm' ? 58 : 80
         let cmd
         if (plat === 'win32') {
           cmd = `powershell -Command "Start-Process -FilePath '${tmpPath}' -Verb PrintTo -ArgumentList '${body.printer}'"`
         } else if (plat === 'darwin') {
-          cmd = `lpr -P "${body.printer}" "${tmpPath}"`
+          cmd = `lpr -P "${body.printer}" -o media=Custom.${widthMm}x297mm -o fit-to-page "${tmpPath}"`
         } else {
-          cmd = `lp -d "${body.printer}" "${tmpPath}"`
+          cmd = `lp -d "${body.printer}" -o media=Custom.${widthMm}x297mm -o fit-to-page -o orientation-requested=3 "${tmpPath}"`
         }
-        log('🖨️', '[PRINT] Imprimindo direto na impressora:', body.printer, '| cmd:', cmd)
+        log('🖨️', '[PRINT] Imprimindo direto na impressora:', body.printer, '| formato:', fmt, '| cmd:', cmd)
         try {
           require('child_process').execSync(cmd, { timeout: 15000 })
           log('✅', '[PRINT] Impresso direto na impressora:', body.printer)
