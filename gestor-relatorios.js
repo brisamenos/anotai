@@ -2259,12 +2259,6 @@ async function _printViaServer(html) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Erro no servidor');
 
-  // Servidor imprimiu direto na impressora
-  if (data.printed) {
-    sbToast('ok', '🖨️ Impresso na ' + (data.printer || 'impressora') + '!');
-    return data;
-  }
-
   // Servidor gerou o PDF — abre nova aba e imprime
   // (Chrome não suporta print() em PDF dentro de iframe)
   if (data.pdf) {
@@ -2528,14 +2522,13 @@ async function printOrder(order) {
 
 // ── Cascata de impressão silenciosa (1 job) ──────────────
 async function _printJobCascade(html, fmt, printer, order, cfg) {
-  // 1️⃣ Electron
+  // 1️⃣ Electron — usa printHtml para enviar HTML + impressora específica do job
   if (window.ElectronPrint) {
     try {
-      // Usa printHtml se disponível (passa html e impressora específica do job)
+      const pw = fmt === '58mm' ? 58 : 80;
       if (window.ElectronPrint.printHtml) {
-        const pw = fmt === '58mm' ? 58 : 80;
         const r = await window.ElectronPrint.printHtml(html, { printer: printer || '', paperWidth: pw });
-        if (r.ok) { sbToast('ok', '🖨️ Impresso (Electron)!' + (printer ? ' → ' + printer : '')); return; }
+        if (r.ok) { sbToast('ok', '🖨️ Impresso!' + (printer ? ' → ' + printer : '')); return; }
       } else {
         const r = await window.ElectronPrint.printOrder(order);
         if (r.ok) { sbToast('ok', '🖨️ Impresso (Electron)!'); return; }
@@ -2582,7 +2575,7 @@ async function _printJobCascade(html, fmt, printer, order, cfg) {
     } catch (e) { console.warn('[PRINT] USB auto-connect falhou:', e.message); }
   }
 
-  // 5️⃣ Servidor PDF + iframe (com iframe único por job para não sobrescrever)
+  // 5️⃣ Servidor PDF + iframe (iframe único por job, espera afterprint)
   try {
     const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
     if (tid) {
@@ -2592,34 +2585,24 @@ async function _printJobCascade(html, fmt, printer, order, cfg) {
         body: JSON.stringify({ html, format: fmt, printer: printer || undefined }),
       });
       const data = await r.json();
-      // Servidor imprimiu direto na impressora (sem precisar do navegador)
-      if (data.printed) {
-        sbToast('ok', '🖨️ Impresso na ' + (data.printer || 'impressora') + '!');
-        return;
-      }
       if (data.pdf) {
         const bytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
         const blob  = new Blob([bytes], { type: 'application/pdf' });
         const url   = URL.createObjectURL(blob);
-        // Cria iframe único por job para não sobrescrever impressão anterior
-        const frameId = 'print-frame-pdf-' + Date.now();
         const frame = document.createElement('iframe');
-        frame.id = frameId;
         frame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;visibility:hidden';
         document.body.appendChild(frame);
-        if (printer) sbToast('info', '🖨️ Selecione a impressora: ' + printer);
+        if (printer) sbToast('info', '🖨️ Selecione: ' + printer);
+        frame.src = url;
         await new Promise((resolve) => {
           frame.onload = () => {
             try {
-              // Espera o afterprint para só então resolver a promise
-              frame.contentWindow.addEventListener('afterprint', () => { resolve(); }, { once: true });
+              frame.contentWindow.addEventListener('afterprint', () => resolve(), { once: true });
               frame.contentWindow.print();
             } catch(_) { resolve(); }
           };
-          // Timeout de segurança caso afterprint não dispare
           setTimeout(resolve, 30000);
         });
-        // Limpa iframe e blob após impressão
         setTimeout(() => { try { frame.remove(); } catch(_){} URL.revokeObjectURL(url); }, 2000);
         sbToast('ok', '🖨️ Imprimindo...');
         return;
@@ -2627,9 +2610,9 @@ async function _printJobCascade(html, fmt, printer, order, cfg) {
     }
   } catch (e) { console.warn('[PRINT] Server PDF falhou:', e.message); }
 
-  // 6️⃣ Fallback: window.print() (espera afterprint antes de liberar próximo job)
+  // 6️⃣ Fallback: window.print() (espera afterprint)
   console.warn('[PRINT] Usando fallback window.print()');
-  if (printer) sbToast('info', '🖨️ Selecione a impressora: ' + printer);
+  if (printer) sbToast('info', '🖨️ Selecione: ' + printer);
   let area = document.getElementById('_print_area');
   if (!area) { area = document.createElement('div'); area.id = '_print_area'; document.body.appendChild(area); }
   area.innerHTML = html;
@@ -2641,9 +2624,8 @@ async function _printJobCascade(html, fmt, printer, order, cfg) {
     #_print_area { display: block !important; position: static !important; }
   }`;
   await new Promise((resolve) => {
-    window.addEventListener('afterprint', () => { resolve(); }, { once: true });
+    window.addEventListener('afterprint', () => resolve(), { once: true });
     window.print();
-    // Timeout de segurança caso afterprint não dispare
     setTimeout(resolve, 30000);
   });
   setTimeout(() => { area.innerHTML = ''; }, 2000);
