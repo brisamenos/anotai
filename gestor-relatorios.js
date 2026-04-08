@@ -2259,6 +2259,12 @@ async function _printViaServer(html) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Erro no servidor');
 
+  // Servidor imprimiu direto na impressora
+  if (data.printed) {
+    sbToast('ok', '🖨️ Impresso na ' + (data.printer || 'impressora') + '!');
+    return data;
+  }
+
   // Servidor gerou o PDF — abre nova aba e imprime
   // (Chrome não suporta print() em PDF dentro de iframe)
   if (data.pdf) {
@@ -2525,8 +2531,15 @@ async function _printJobCascade(html, fmt, printer, order, cfg) {
   // 1️⃣ Electron
   if (window.ElectronPrint) {
     try {
-      const r = await window.ElectronPrint.printOrder(order);
-      if (r.ok) { sbToast('ok', '🖨️ Impresso (Electron)!'); return; }
+      // Usa printHtml se disponível (passa html e impressora específica do job)
+      if (window.ElectronPrint.printHtml) {
+        const pw = fmt === '58mm' ? 58 : 80;
+        const r = await window.ElectronPrint.printHtml(html, { printer: printer || '', paperWidth: pw });
+        if (r.ok) { sbToast('ok', '🖨️ Impresso (Electron)!' + (printer ? ' → ' + printer : '')); return; }
+      } else {
+        const r = await window.ElectronPrint.printOrder(order);
+        if (r.ok) { sbToast('ok', '🖨️ Impresso (Electron)!'); return; }
+      }
     } catch (e) { console.warn('[PRINT] Electron falhou:', e.message); }
   }
 
@@ -2579,6 +2592,11 @@ async function _printJobCascade(html, fmt, printer, order, cfg) {
         body: JSON.stringify({ html, format: fmt, printer: printer || undefined }),
       });
       const data = await r.json();
+      // Servidor imprimiu direto na impressora (sem precisar do navegador)
+      if (data.printed) {
+        sbToast('ok', '🖨️ Impresso na ' + (data.printer || 'impressora') + '!');
+        return;
+      }
       if (data.pdf) {
         const bytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
         const blob  = new Blob([bytes], { type: 'application/pdf' });
