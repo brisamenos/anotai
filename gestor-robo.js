@@ -884,31 +884,42 @@ function cpSelecionarTema(tema) {
 async function cpUploadImagem(input, tipo) {
   const file = input.files[0];
   if (!file) return;
+
+  // Valida tamanho máximo de 2MB para evitar banco muito pesado
+  if (file.size > 2 * 1024 * 1024) {
+    sbToast('err', 'Imagem muito grande. Use uma imagem de até 2MB.');
+    return;
+  }
+
   sbLoading(true);
   try {
-    const ext      = file.name.split('.').pop().toLowerCase();
-    const filename = `${_sessao?.tenant_id || 'default'}-${tipo}.${ext}`;
-    const filepath = `branding/${filename}`;
-    await sb.storage.from('menu-images').upload(filepath, file, { upsert: true });
-    const { data: { publicUrl } } = sb.storage.from('menu-images').getPublicUrl(filepath);
+    // Converte a imagem para base64 data URL e salva direto no banco,
+    // evitando dependência do filesystem do container (que se perde ao reiniciar).
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+      reader.readAsDataURL(file);
+    });
 
     if (tipo === 'logo') {
-      _cpLogoUrl = publicUrl;
+      _cpLogoUrl = dataUrl;
       const prev = document.getElementById('cp-logo-preview');
-      if (prev) { prev.innerHTML = ''; prev.style.backgroundImage = `url(${publicUrl})`; prev.style.backgroundSize = 'cover'; prev.style.backgroundPosition = 'center'; }
+      if (prev) { prev.innerHTML = ''; prev.style.backgroundImage = `url(${dataUrl})`; prev.style.backgroundSize = 'cover'; prev.style.backgroundPosition = 'center'; }
       const pp = document.getElementById('cp-prev-logo');
-      if (pp) { pp.innerHTML = ''; pp.style.backgroundImage = `url(${publicUrl})`; pp.style.backgroundSize = 'cover'; pp.style.backgroundPosition = 'center'; }
+      if (pp) { pp.innerHTML = ''; pp.style.backgroundImage = `url(${dataUrl})`; pp.style.backgroundSize = 'cover'; pp.style.backgroundPosition = 'center'; }
     } else {
-      _cpBannerUrl = publicUrl;
+      _cpBannerUrl = dataUrl;
       const prev = document.getElementById('cp-banner-preview');
-      if (prev) { prev.innerHTML = ''; prev.style.backgroundImage = `url(${publicUrl})`; }
+      if (prev) { prev.innerHTML = ''; prev.style.backgroundImage = `url(${dataUrl})`; }
       const hero = document.getElementById('cp-preview-hero');
-      if (hero) hero.style.backgroundImage = `url(${publicUrl})`;
+      if (hero) hero.style.backgroundImage = `url(${dataUrl})`;
     }
 
-    // Salva URL no banco imediatamente, sem precisar clicar em "Salvar"
+    // Salva data URL no banco imediatamente — persiste mesmo após reinício do container
     const field = tipo === 'logo' ? 'store_logo_url' : 'store_banner_url';
-    await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, [field]: publicUrl });
+    const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, [field]: dataUrl });
+    if (error) throw new Error(error.message || JSON.stringify(error));
 
     sbToast('ok', `${tipo === 'logo' ? 'Logo' : 'Banner'} enviado e salvo!`);
     // Recarrega iframe para refletir a nova imagem no cardápio

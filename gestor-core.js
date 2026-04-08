@@ -1060,13 +1060,16 @@ function previewEditItemImage(inp) {
 
 // ── Upload image to Supabase Storage ─────────
 async function uploadItemImage(file, itemId) {
-  const ext  = file.name.split('.').pop();
-  const path = `item-${itemId || Date.now()}-${Date.now()}.${ext}`;
-  const { error } = await sb.storage.from('menu-images').upload(path, file, { upsert: true });
-  if (error) throw error;
-  const { data: { publicUrl } } = sb.storage.from('menu-images').getPublicUrl(path);
+  // Converte para base64 data URL — salva direto no banco, sem depender do filesystem do container
+  if (file.size > 2 * 1024 * 1024) throw new Error('Imagem muito grande. Use uma imagem de até 2MB.');
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+    reader.readAsDataURL(file);
+  });
   _invalidateImgGalleryCache(); // nova imagem disponível na galeria
-  return publicUrl;
+  return dataUrl;
 }
 
 function triggerImageUpload(itemId, itemName) {

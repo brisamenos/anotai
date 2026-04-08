@@ -2831,15 +2831,18 @@ async function carregarImagens() {
 async function uploadImgItem(id, input) {
   const file = input.files[0];
   if (!file) return;
-  const ext = file.name.split('.').pop();
-  const path = `items/${_tid}/${id}.${ext}`;
+  if (file.size > 2 * 1024 * 1024) { toast('Imagem muito grande (máx 2MB)', 'err'); return; }
   toast('Enviando imagem...', 'info');
-  const { data, error } = await sb.storage.from('cardapio').upload(path, file, { upsert: true });
-  if (error) { toast('Erro ao enviar: ' + error.message, 'err'); return; }
-  const { data: { publicUrl } } = sb.storage.from('cardapio').getPublicUrl(path);
-  await sb.from('menu_items').update({ image_url: publicUrl }).eq('id', id);
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+    reader.readAsDataURL(file);
+  });
+  const { error } = await sb.from('menu_items').update({ image_url: dataUrl }).eq('id', id);
+  if (error) { toast('Erro ao salvar: ' + error.message, 'err'); return; }
   const item = _items.find(i => i.id === id);
-  if (item) item.imageUrl = publicUrl;
+  if (item) item.imageUrl = dataUrl;
   toast('✅ Imagem atualizada!');
   carregarImagens();
 }
