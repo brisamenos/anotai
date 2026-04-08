@@ -1711,8 +1711,33 @@ module.exports = async function handleRoutes(req, res, ctx) {
         log('🖨️', '[PRINT] Browser fechado')
       }
 
-      send(res, 200, { ok: true, pdf: pdfBase64 })
-      log('✅', '[PRINT] PDF enviado ao navegador com sucesso')
+      // Se uma impressora foi especificada, imprime direto no servidor via lp/lpr
+      if (body.printer) {
+        const tmpPath = require('path').join(require('os').tmpdir(), `anotai-print-${Date.now()}.pdf`)
+        require('fs').writeFileSync(tmpPath, Buffer.from(pdfBase64, 'base64'))
+        const plat = require('os').platform()
+        let cmd
+        if (plat === 'win32') {
+          cmd = `powershell -Command "Start-Process -FilePath '${tmpPath}' -Verb PrintTo -ArgumentList '${body.printer}'"`
+        } else if (plat === 'darwin') {
+          cmd = `lpr -P "${body.printer}" "${tmpPath}"`
+        } else {
+          cmd = `lp -d "${body.printer}" "${tmpPath}"`
+        }
+        log('🖨️', '[PRINT] Imprimindo direto na impressora:', body.printer, '| cmd:', cmd)
+        try {
+          require('child_process').execSync(cmd, { timeout: 15000 })
+          log('✅', '[PRINT] Impresso direto na impressora:', body.printer)
+        } catch (cmdErr) {
+          log('⚠️', '[PRINT] Aviso ao imprimir:', cmdErr.message)
+        }
+        try { require('fs').unlinkSync(tmpPath) } catch {}
+        send(res, 200, { ok: true, printed: true, printer: body.printer })
+        log('✅', '[PRINT] Job enviado direto para impressora:', body.printer)
+      } else {
+        send(res, 200, { ok: true, pdf: pdfBase64 })
+        log('✅', '[PRINT] PDF enviado ao navegador com sucesso')
+      }
     } catch (e) {
       log('❌', '[PRINT] /api/print erro:', e.message)
       log('❌', '[PRINT] Stack:', e.stack?.split('\n')[1] || '')
