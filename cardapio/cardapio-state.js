@@ -49,8 +49,12 @@ let _initialOrderStatus = 'analise';
 let _waOptIn     = false;  // reservado para uso futuro
 
 // ── Numeração de pedidos ──
-let _orderNumOffset = 0;  // lido de store_config.order_num_offset
-function _orderNum(id) { return Math.max(1, id - _orderNumOffset); }
+let _orderNumOffset = 0;  // lido de store_config.order_num_offset (fallback)
+function _orderNum(id, orderNum) {
+  // Prefere order_num do servidor (sequencial por tenant)
+  if (orderNum) return Number(orderNum);
+  return Math.max(1, id - _orderNumOffset);
+}
 
 // ── PIX ──
 let _pixPollTimer    = null;

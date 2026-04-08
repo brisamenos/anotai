@@ -91,7 +91,7 @@ function openRatingModal(orderId) {
   if (fw) fw.style.display = '';
   if (sw) sw.style.display = 'none';
   const sub = document.getElementById('rating-sub');
-  if (sub && orderId) sub.textContent = `Pedido #${String(_orderNum(orderId)).padStart(3,'0')} — sua opinião é muito importante!`;
+  if (sub && orderId) sub.textContent = `Pedido #${String(_orderNum(orderId, window._lastOrderNum)).padStart(3,'0')} — sua opinião é muito importante!`;
   document.getElementById('rating-overlay')?.classList.add('on');
 }
 

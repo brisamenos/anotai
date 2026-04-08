@@ -5,19 +5,19 @@
 // ══════════════════════════════════════════
 //  WHATSAPP — gera link com mensagem pré-pronta
 // ══════════════════════════════════════════
-function buildWaLink(orderId) {
-  const num = String(_orderNum(orderId)).padStart(3, '0');
+function buildWaLink(orderId, orderNum) {
+  const num = String(_orderNum(orderId, orderNum)).padStart(3, '0');
   const msg = `Olá! Quero acompanhar meu pedido *#${num}* 🍽️`;
   const numero = _waNumero || '';
   if (!numero) return null;
   return `https://wa.me/${numero}?text=${encodeURIComponent(msg)}`;
 }
 
-function showWaToast(orderId) {
+function showWaToast(orderId, orderNum) {
   if (!_waNumero) return;
-  const link = buildWaLink(orderId);
+  const link = buildWaLink(orderId, orderNum);
   if (!link) return;
-  const num  = String(_orderNum(orderId)).padStart(3,'0');
+  const num  = String(_orderNum(orderId, orderNum)).padStart(3,'0');
 
   // Remove toast anterior se existir
   const prev = document.getElementById('wa-track-toast');
@@ -301,11 +301,12 @@ async function _doSubmitOrder(addr, troco) {
     // ── Tela de sucesso ──
     document.getElementById('cart-content').style.display = 'none';
     document.getElementById('success-screen').classList.add('on');
-    const numFormatado = '#' + String(_orderNum(order.id)).padStart(3,'0');
+    const numFormatado = '#' + String(_orderNum(order.id, order.order_num)).padStart(3,'0');
+    window._lastOrderNum = order.order_num; // para o modal de avaliação
     document.getElementById('success-num').textContent = numFormatado;
 
     // Botão WhatsApp — aparece sempre que houver número configurado
-    const waLink   = buildWaLink(order.id);
+    const waLink   = buildWaLink(order.id, order.order_num);
     const waBtnEl  = document.getElementById('success-wa-btn');
     const waLblEl  = document.getElementById('success-wa-label');
     if (waBtnEl) {
@@ -323,7 +324,7 @@ async function _doSubmitOrder(addr, troco) {
     const inv = document.getElementById('invite-signup');
     if (inv && !_customer) inv.style.display = 'flex';
 
-    startTracking(order.id, items, name, addr, order.status);
+    startTracking(order.id, items, name, addr, order.status, order.order_num);
 
     // ── PIX: gera QR Code MP ou exibe chave manual ──
     if (selectedPay === 'pix') {
@@ -338,7 +339,7 @@ async function _doSubmitOrder(addr, troco) {
     // 1. Salva no localStorage (celular próprio)
     try {
       localStorage.setItem('ef_order_' + (_tenantId||''), JSON.stringify({
-        orderId: order.id, items, client: name, ts: Date.now()
+        orderId: order.id, orderNum: order.order_num, items, client: name, ts: Date.now()
       }));
     } catch(e) {}
     // 2. Coloca ?acompanhar=ID na URL (compartilhável)
@@ -350,7 +351,7 @@ async function _doSubmitOrder(addr, troco) {
 
     // Toast WhatsApp (apenas premium) — aparece 1.5s após confirmação
     if (_tenantPlano === 'premium') {
-      setTimeout(() => showWaToast(order.id), 1500);
+      setTimeout(() => showWaToast(order.id, order.order_num), 1500);
     }
 
   } catch(e) {

@@ -356,9 +356,9 @@ async function loadMyOrders() {
       const dateStr = isNaN(d) ? '' : d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
       const isActive = ['analise','producao','pronto','saiu'].includes(o.status);
       return `
-      <div class="order-card" onclick="${isActive?`openOrderTracker(${o.id})`:'void(0)'}">
+      <div class="order-card" onclick="${isActive?`openOrderTracker(${o.id},${o.order_num||0})`:'void(0)'}">
         <div class="order-card-head">
-          <span class="order-card-num">#${String(_orderNum(o.id)).padStart(3,'0')}</span>
+          <span class="order-card-num">#${String(_orderNum(o.id, o.order_num)).padStart(3,'0')}</span>
           <span class="order-card-status ${o.status}">${SL[o.status]||o.status}</span>
         </div>
         <div class="order-card-items">${itemsTxt}</div>
@@ -374,14 +374,17 @@ async function loadMyOrders() {
   }
 }
 
-function openOrderTracker(orderId) {
+function openOrderTracker(orderId, orderNum) {
   closeAccount();
   _trackOrderId = orderId;
-  document.getElementById('track-order-num').textContent = 'Pedido #' + String(_orderNum(orderId)).padStart(3,'0');
-  sb.from('orders').select('id,status,items,client,addr').eq('id', orderId).single().then(({data})=>{
+  document.getElementById('track-order-num').textContent = 'Pedido #' + String(_orderNum(orderId, orderNum)).padStart(3,'0');
+  sb.from('orders').select('id,order_num,status,items,client,addr').eq('id', orderId).single().then(({data})=>{
     if (data) {
       updateTracker(data.status, data.addr);
       renderTrackItems(Array.isArray(data.items)?data.items:[], data.client);
+      // Atualiza número com order_num do banco
+      document.getElementById('track-order-num').textContent = 'Pedido #' + String(_orderNum(data.id, data.order_num)).padStart(3,'0');
+      document.getElementById('track-num').textContent = '#' + String(_orderNum(data.id, data.order_num)).padStart(3,'0');
     }
   });
   if (_trackChannel) try{ sb.removeChannel(_trackChannel); }catch(e){}
@@ -390,7 +393,7 @@ function openOrderTracker(orderId) {
       if (Number(p.new.id) === orderId) updateTracker(p.new.status, p.new.addr);
     }).subscribe();
   document.getElementById('track-fab').classList.add('show');
-  document.getElementById('track-num').textContent = '#' + String(_orderNum(orderId)).padStart(3,'0');
+  document.getElementById('track-num').textContent = '#' + String(_orderNum(orderId, orderNum)).padStart(3,'0');
   openTracker();
 }
 

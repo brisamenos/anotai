@@ -43,12 +43,12 @@ function stepIndexFor(status) {
   return STEPS.findIndex(s => s.key.includes(status));
 }
 
-function startTracking(orderId, items, client, addr, initialStatus) {
+function startTracking(orderId, items, client, addr, initialStatus, orderNum) {
   _trackOrderId = orderId;
   _initialOrderStatus = initialStatus || 'analise';
   const fab = document.getElementById('track-fab');
   fab.classList.add('show');
-  document.getElementById('track-num').textContent = '#' + String(_orderNum(orderId)).padStart(3,'0');
+  document.getElementById('track-num').textContent = '#' + String(_orderNum(orderId, orderNum)).padStart(3,'0');
   if (_trackChannel) { try { sb.removeChannel(_trackChannel); } catch(e){} }
   _trackChannel = sb.channel('orders-rt')
     .on('postgres_changes',{event:'UPDATE',table:'orders'}, p => {
@@ -61,7 +61,7 @@ function startTracking(orderId, items, client, addr, initialStatus) {
     .subscribe();
   updateTracker(_initialOrderStatus || 'analise', addr);
   renderTrackItems(items, client);
-  document.getElementById('track-order-num').textContent = 'Pedido #' + String(_orderNum(orderId)).padStart(3,'0');
+  document.getElementById('track-order-num').textContent = 'Pedido #' + String(_orderNum(orderId, orderNum)).padStart(3,'0');
 }
 
 function updateTracker(status, addr) {
@@ -164,7 +164,7 @@ window.addEventListener('load', () => {
       if (!orderId) return;
 
       // Busca pedido no servidor
-      const r = await fetch('/api/orders?id=eq.' + orderId + '&select=id,client,items,status,addr', {
+      const r = await fetch('/api/orders?id=eq.' + orderId + '&select=id,order_num,client,items,status,addr', {
         headers: { 'x-tenant-id': tid }
       });
       if (!r.ok) return;
@@ -181,7 +181,7 @@ window.addEventListener('load', () => {
       const items = Array.isArray(o.items) ? o.items
         : (typeof o.items === 'string' ? JSON.parse(o.items||'[]') : []);
 
-      startTracking(o.id, items, o.client || '', o.addr || '', o.status);
+      startTracking(o.id, items, o.client || '', o.addr || '', o.status, o.order_num);
 
       // Sincroniza URL
       try {
