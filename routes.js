@@ -1676,6 +1676,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
       log('🖨️', '[PRINT] Browser iniciado')
 
       let pdfBase64
+      let widthMm = 80
+      let heightMm = 297
       try {
         const page = await browser.newPage()
         const fmt  = body.format || '80mm'
@@ -1697,15 +1699,20 @@ module.exports = async function handleRoutes(req, res, ctx) {
           printBackground: true,
           margin: { top:'2mm', bottom:'2mm', left:'2mm', right:'2mm' }
         }
+        let heightMmLocal = 297
         if (fmt === '80mm' || fmt === '58mm') {
           pdfOpts.width  = fmt
-          pdfOpts.height = (await page.evaluate(() => document.body.scrollHeight + 24)) + 'px'
+          const heightPx = await page.evaluate(() => document.body.scrollHeight + 24)
+          pdfOpts.height = heightPx + 'px'
+          heightMmLocal = Math.ceil(heightPx * 0.265) + 10
         } else {
           pdfOpts.format = fmt
         }
         const pdfBuf = await page.pdf(pdfOpts)
         pdfBase64 = pdfBuf.toString('base64')
-        log('✅', '[PRINT] PDF gerado | tamanho:', Math.round(pdfBuf.length / 1024) + 'KB')
+        widthMm = fmt === '58mm' ? 58 : 80
+        heightMm = heightMmLocal
+        log('✅', '[PRINT] PDF gerado | tamanho:', Math.round(pdfBuf.length / 1024) + 'KB | dimensões:', widthMm + 'x' + heightMm + 'mm')
       } finally {
         await browser.close()
         log('🖨️', '[PRINT] Browser fechado')
@@ -1716,17 +1723,15 @@ module.exports = async function handleRoutes(req, res, ctx) {
         const tmpPath = require('path').join(require('os').tmpdir(), `anotai-print-${Date.now()}.pdf`)
         require('fs').writeFileSync(tmpPath, Buffer.from(pdfBase64, 'base64'))
         const plat = require('os').platform()
-        const fmt = body.format || '80mm'
-        const widthMm = fmt === '58mm' ? 58 : 80
         let cmd
         if (plat === 'win32') {
           cmd = `powershell -Command "Start-Process -FilePath '${tmpPath}' -Verb PrintTo -ArgumentList '${body.printer}'"`
         } else if (plat === 'darwin') {
-          cmd = `lpr -P "${body.printer}" -o media=Custom.${widthMm}x297mm -o fit-to-page "${tmpPath}"`
+          cmd = `lpr -P "${body.printer}" -o media=Custom.${widthMm}x${heightMm}mm -o fit-to-page "${tmpPath}"`
         } else {
-          cmd = `lp -d "${body.printer}" -o media=Custom.${widthMm}x297mm -o fit-to-page -o orientation-requested=3 "${tmpPath}"`
+          cmd = `lp -d "${body.printer}" -o media=Custom.${widthMm}x${heightMm}mm -o fit-to-page -o orientation-requested=3 "${tmpPath}"`
         }
-        log('🖨️', '[PRINT] Imprimindo direto na impressora:', body.printer, '| formato:', fmt, '| cmd:', cmd)
+        log('🖨️', '[PRINT] Imprimindo direto na impressora:', body.printer, '| formato:', widthMm + 'mm', '| cmd:', cmd)
         try {
           require('child_process').execSync(cmd, { timeout: 15000 })
           log('✅', '[PRINT] Impresso direto na impressora:', body.printer)
