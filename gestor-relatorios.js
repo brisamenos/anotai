@@ -2569,7 +2569,7 @@ async function _printJobCascade(html, fmt, printer, order, cfg) {
     } catch (e) { console.warn('[PRINT] USB auto-connect falhou:', e.message); }
   }
 
-  // 5️⃣ Servidor PDF + iframe
+  // 5️⃣ Servidor PDF + iframe (com iframe único por job para não sobrescrever)
   try {
     const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
     if (tid) {
@@ -2583,27 +2583,35 @@ async function _printJobCascade(html, fmt, printer, order, cfg) {
         const bytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
         const blob  = new Blob([bytes], { type: 'application/pdf' });
         const url   = URL.createObjectURL(blob);
-        let frame = document.getElementById('print-frame-pdf');
-        if (!frame) {
-          frame = document.createElement('iframe');
-          frame.id = 'print-frame-pdf';
-          frame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;visibility:hidden';
-          document.body.appendChild(frame);
-        }
-        frame.src = url;
+        // Cria iframe único por job para não sobrescrever impressão anterior
+        const frameId = 'print-frame-pdf-' + Date.now();
+        const frame = document.createElement('iframe');
+        frame.id = frameId;
+        frame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;visibility:hidden';
+        document.body.appendChild(frame);
+        if (printer) sbToast('info', '🖨️ Selecione a impressora: ' + printer);
         await new Promise((resolve) => {
-          frame.onload = () => { try { frame.contentWindow.print(); } catch(_) {} resolve(); };
-          setTimeout(resolve, 3000);
+          frame.onload = () => {
+            try {
+              // Espera o afterprint para só então resolver a promise
+              frame.contentWindow.addEventListener('afterprint', () => { resolve(); }, { once: true });
+              frame.contentWindow.print();
+            } catch(_) { resolve(); }
+          };
+          // Timeout de segurança caso afterprint não dispare
+          setTimeout(resolve, 30000);
         });
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        // Limpa iframe e blob após impressão
+        setTimeout(() => { try { frame.remove(); } catch(_){} URL.revokeObjectURL(url); }, 2000);
         sbToast('ok', '🖨️ Imprimindo...');
         return;
       }
     }
   } catch (e) { console.warn('[PRINT] Server PDF falhou:', e.message); }
 
-  // 6️⃣ Fallback: window.print()
+  // 6️⃣ Fallback: window.print() (espera afterprint antes de liberar próximo job)
   console.warn('[PRINT] Usando fallback window.print()');
+  if (printer) sbToast('info', '🖨️ Selecione a impressora: ' + printer);
   let area = document.getElementById('_print_area');
   if (!area) { area = document.createElement('div'); area.id = '_print_area'; document.body.appendChild(area); }
   area.innerHTML = html;
@@ -2614,7 +2622,12 @@ async function _printJobCascade(html, fmt, printer, order, cfg) {
     body > *:not(#_print_area):not(#_print_style) { display: none !important; }
     #_print_area { display: block !important; position: static !important; }
   }`;
-  window.print();
+  await new Promise((resolve) => {
+    window.addEventListener('afterprint', () => { resolve(); }, { once: true });
+    window.print();
+    // Timeout de segurança caso afterprint não dispare
+    setTimeout(resolve, 30000);
+  });
   setTimeout(() => { area.innerHTML = ''; }, 2000);
   sbToast('warn', '🖨️ Imprimindo (com diálogo)...');
 }
