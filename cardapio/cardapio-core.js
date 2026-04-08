@@ -126,7 +126,7 @@ function applyBranding(b, nome) {
   const logoWrap = document.getElementById('hero-logo-wrap');
   if (b?.store_logo_url && logoWrap) {
     const img = document.createElement('img');
-    img.src = b.store_logo_url.startsWith('http') ? b.store_logo_url : location.origin + b.store_logo_url;
+    img.src = b.store_logo_url;
     img.alt = n;
     img.className = 'hero-logo-img';
     img.onerror = () => { logoWrap.innerHTML = '<span id="hero-emoji">🍽️</span>'; };
@@ -540,12 +540,11 @@ function applyBrandingLive(cfg) {
   if (cfg.store_logo_url) {
     const logoWrap = document.getElementById('hero-logo-wrap');
     if (logoWrap) {
-      const logoUrl = cfg.store_logo_url.startsWith('http') ? cfg.store_logo_url : location.origin + cfg.store_logo_url;
       const existing = logoWrap.querySelector('img');
-      if (existing) { existing.src = logoUrl; }
+      if (existing) { existing.src = cfg.store_logo_url; }
       else {
         const img = document.createElement('img');
-        img.src = logoUrl;
+        img.src = cfg.store_logo_url;
         img.className = 'hero-logo-img';
         img.onerror = () => { logoWrap.innerHTML = '<span id="hero-emoji">🍽️</span>'; };
         logoWrap.innerHTML = '';

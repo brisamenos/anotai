@@ -63,10 +63,9 @@
     upload(filePath, file, opts = {}) {
       return new Promise(async resolve => {
         try {
-          const fname = filePath.split('/').pop();
           const formData = new FormData();
-          formData.append('file', file, fname);
-          const res = await fetch(`${BASE}/api/upload/${encodeURIComponent(fname)}`, {
+          formData.append('file', file, filePath);
+          const res = await fetch(`${BASE}/storage/v1/object/${this.bucket}/${filePath}`, {
             method: 'POST', body: formData
           });
           const data = await res.json();
