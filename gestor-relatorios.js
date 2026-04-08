@@ -2067,6 +2067,29 @@ function _getPrintConfig() {
   };
 }
 
+// Envolve fragmento HTML do ticket com CSS completo para impressão (usado no Electron e fallbacks)
+function _wrapTicketHtml(html, fontSize) {
+  if (html && html.includes('<html')) return html;
+  const fs = fontSize || 12;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important }
+  body { font-family:'Courier New',monospace; font-size:${fs}px; color:#000 !important; background:#fff; width:100%; overflow-wrap:break-word; word-break:break-word }
+  hr { border:none; border-top:1px dashed #000; margin:4px 0 }
+  .pt-center { text-align:center }
+  .pt-large  { font-size:${fs + 3}px; font-weight:bold }
+  .pt-hr     { border:none; border-top:1px dashed #000; margin:4px 0 }
+  .print-ticket { padding:2px; width:100%; word-wrap:break-word; overflow-wrap:break-word; overflow:hidden }
+  span, div { word-break:break-word; overflow-wrap:break-word }
+  @media print {
+    @page { margin:1mm; size: portrait }
+    body > *:not(.print-ticket) { display:none !important }
+    .print-ticket { display:block !important }
+  }
+</style>
+</head><body>${html}</body></html>`;
+}
+
 function _buildTicketHtml(order, cfg) {
   const items = Array.isArray(order.items) ? order.items : [];
   const now = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
@@ -2526,8 +2549,9 @@ async function _printJobCascade(html, fmt, printer, order, cfg) {
   if (window.ElectronPrint) {
     try {
       const pw = fmt === '58mm' ? 58 : 80;
+      const wrappedHtml = _wrapTicketHtml(html, cfg ? cfg.fontSize : 12);
       if (window.ElectronPrint.printHtml) {
-        const r = await window.ElectronPrint.printHtml(html, { printer: printer || '', paperWidth: pw });
+        const r = await window.ElectronPrint.printHtml(wrappedHtml, { printer: printer || '', paperWidth: pw, landscape: false, scaleFactor: 100 });
         if (r.ok) { sbToast('ok', '🖨️ Impresso!' + (printer ? ' → ' + printer : '')); return; }
       } else {
         const r = await window.ElectronPrint.printOrder(order);
