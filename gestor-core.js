@@ -502,6 +502,46 @@ function _renderMesaPageFromCache() {
   });
 }
 
+// Agrega e imprime comanda completa da mesa quando garçom finaliza
+function _printComandaMesa(mesaNum, mesaData) {
+  // Filtra todos os pedidos da sessão atual da mesa no cache
+  const sessionRef = mesaData.opened_at || null;
+  const pedidos = mesaOrdersCache.filter(o => {
+    if (parseInt(o.mesa_num) !== parseInt(mesaNum)) return false;
+    if (sessionRef && o.session_ref !== undefined && o.session_ref !== null) {
+      return o.session_ref === sessionRef;
+    }
+    return true;
+  });
+
+  if (!pedidos.length) return;
+
+  // Agrega todos os itens dos pedidos da mesa em um único objeto para impressão
+  const allItems = [];
+  pedidos.forEach(o => {
+    if (Array.isArray(o.items)) o.items.forEach(i => allItems.push(i));
+  });
+
+  const subtotal = allItems.reduce((s, i) => s + (parseFloat(i.price || 0) * (i.qty || 1)), 0);
+  const pagForma = mesaData.pag_forma || '';
+
+  const comandaOrder = {
+    id:     pedidos[0].id,
+    num:    `Mesa ${mesaNum}`,
+    client: pedidos[0].client || `Mesa ${mesaNum}`,
+    addr:   '',
+    items:  allItems,
+    total:  parseFloat(mesaData.total || subtotal),
+    taxa:   0,
+    pag:    pagForma,
+    troco:  null,
+  };
+
+  if (typeof printOrder === 'function') {
+    printOrder(comandaOrder);
+  }
+}
+
 function subscribeOrders() {
   unsubscribeAll();
 
@@ -660,6 +700,8 @@ function subscribeOrders() {
           const navBtn = document.querySelector('[onclick*="pedidos-mesa"]');
           if (navBtn) navBtn.style.animation = 'pulse 1s ease 3';
         }
+        // Imprime comanda da mesa automaticamente ao finalizar
+        try { _printComandaMesa(mesaNum, p.new); } catch(e) { console.warn('[PRINT MESA]', e); }
       }
 
       // UPDATE → refresh cirúrgico de apenas a mesa afectada.
