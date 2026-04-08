@@ -424,6 +424,13 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .sheet-body { flex:1; overflow-y:auto; padding:14px 16px; min-height:0; }
 .sheet-foot { padding:12px 16px 20px; border-top:1px solid var(--border); flex-shrink:0; background:var(--surface); }
 
+/* Busca de produto no cardápio */
+.cardapio-search-wrap { position:relative; margin-bottom:10px; }
+.cardapio-search-wrap svg { position:absolute; left:11px; top:50%; transform:translateY(-50%); pointer-events:none; color:var(--muted); }
+.cardapio-search { width:100%; box-sizing:border-box; height:38px; padding:0 36px 0 34px; border-radius:10px; border:1.5px solid var(--border); background:var(--surface2); color:var(--text); font-size:14px; font-family:'DM Sans',sans-serif; outline:none; transition:border-color .15s; }
+.cardapio-search:focus { border-color:var(--accent); }
+.cardapio-search-clear { position:absolute; right:8px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--muted); font-size:16px; cursor:pointer; padding:2px 4px; display:none; line-height:1; }
+
 /* Categorias filtro */
 .cat-pills { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px; margin-bottom:12px; }
 .cat-pills::-webkit-scrollbar { display:none; }
@@ -907,6 +914,11 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 
     <!-- Sub-page: Cardápio -->
     <div id="stab-page-itens" class="sheet-body">
+      <div class="cardapio-search-wrap">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M10 10l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <input class="cardapio-search" id="cardapio-search" type="text" placeholder="Buscar produto..." oninput="onCardapioSearch(this.value)" autocomplete="off" autocorrect="off" spellcheck="false">
+        <button class="cardapio-search-clear" id="cardapio-search-clear" onclick="clearCardapioSearch()">✕</button>
+      </div>
       <div class="cat-pills" id="cat-pills">
         <button class="cat-pill on" data-cat="" onclick="filterItems(this,'')">Todos</button>
       </div>
@@ -972,6 +984,25 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
       <button class="confirm-btn" onclick="confirmarFinalizarMesa()" style="background:var(--amber);color:#000;box-shadow:0 6px 20px rgba(196,149,106,.25)">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Finalizar e enviar para pagamento
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL IMPRIMIR COMANDA (ao finalizar mesa) ══ -->
+<div id="print-comanda-bg" onclick="if(event.target===this)closePrintComandaModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9300;align-items:center;justify-content:center;backdrop-filter:blur(5px)">
+  <div style="background:var(--surface);border-radius:20px;width:calc(100% - 40px);max-width:360px;padding:0 0 20px;animation:slideUp .3s cubic-bezier(.34,1.56,.64,1)">
+    <div style="width:36px;height:4px;background:var(--surface3);border-radius:99px;margin:12px auto 0"></div>
+    <div style="padding:18px 20px 4px;text-align:center">
+      <div style="font-size:32px;margin-bottom:8px">🖨️</div>
+      <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800;margin-bottom:6px">Imprimir comanda?</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:0">Mesa <span id="print-comanda-mesa-num" style="color:var(--amber);font-weight:700"></span> finalizada com sucesso.</div>
+    </div>
+    <div style="padding:18px 16px 0;display:flex;gap:10px">
+      <button onclick="closePrintComandaModal()" style="flex:1;height:46px;border-radius:12px;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-size:14px;font-weight:700;cursor:pointer">Não</button>
+      <button onclick="confirmarImprimirComanda()" style="flex:2;height:46px;border-radius:12px;background:var(--amber);border:none;color:#000;font-size:14px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="8" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5 5V3.5A1.5 1.5 0 0 1 6.5 2h3A1.5 1.5 0 0 1 11 3.5V5" stroke="currentColor" stroke-width="1.5"/><path d="M5 10h6M5 12.5h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        Sim, imprimir
       </button>
     </div>
   </div>
@@ -1994,6 +2025,10 @@ function openPedido(num) {
     cart = [];
     document.getElementById('sheet-title').textContent = `Lançar Pedido — Mesa ${num}`;
     activeCatFilter = '';
+    activeSearchFilter = '';
+    const si = document.getElementById('cardapio-search'); if (si) si.value = '';
+    const sc = document.getElementById('cardapio-search-clear'); if (sc) sc.style.display = 'none';
+    const cp = document.getElementById('cat-pills'); if (cp) cp.style.display = '';
     renderItemGrid();
     updateCartUI();
     switchSheetTab('itens');
@@ -2020,6 +2055,10 @@ async function confirmarAbrirMesa() {
   cart = [];
   document.getElementById('sheet-title').textContent = `Lançar Pedido — Mesa ${num}`;
   activeCatFilter = '';
+  activeSearchFilter = '';
+  const _si = document.getElementById('cardapio-search'); if (_si) _si.value = '';
+  const _sc = document.getElementById('cardapio-search-clear'); if (_sc) _sc.style.display = 'none';
+  const _cp = document.getElementById('cat-pills'); if (_cp) _cp.style.display = '';
   renderItemGrid();
   updateCartUI();
   switchSheetTab('itens');
@@ -2072,6 +2111,29 @@ function switchSheetTab(tab) {
 }
 
 // ══ CARDÁPIO ═════════════════════════════
+let activeSearchFilter = '';
+
+function onCardapioSearch(val) {
+  activeSearchFilter = val;
+  const clearBtn = document.getElementById('cardapio-search-clear');
+  if (clearBtn) clearBtn.style.display = val ? 'block' : 'none';
+  // Oculta pills de categoria durante a busca para não confundir
+  const pills = document.getElementById('cat-pills');
+  if (pills) pills.style.display = val ? 'none' : '';
+  renderItemGrid();
+}
+
+function clearCardapioSearch() {
+  activeSearchFilter = '';
+  const inp = document.getElementById('cardapio-search');
+  if (inp) inp.value = '';
+  const clearBtn = document.getElementById('cardapio-search-clear');
+  if (clearBtn) clearBtn.style.display = 'none';
+  const pills = document.getElementById('cat-pills');
+  if (pills) pills.style.display = '';
+  renderItemGrid();
+}
+
 function buildCatPills() {
   const el = document.getElementById('cat-pills');
   el.innerHTML = `<button class="cat-pill on" data-cat="" onclick="filterItems(this,'')">Todos</button>`;
@@ -2093,8 +2155,15 @@ function filterItems(el, cat) {
 }
 
 function renderItemGrid() {
+  const q = (activeSearchFilter || '').toLowerCase().trim();
   const filtered = allItems.filter(i => {
     if (i.status === 'esgotado') return false;
+    if (q) {
+      // quando há texto, ignora filtro de categoria e busca por nome
+      return (i.name || '').toLowerCase().includes(q) ||
+             (i.cat || '').toLowerCase().includes(q) ||
+             (i.cat_key || '').toLowerCase().includes(q);
+    }
     if (activeCatFilter && i.cat_key !== activeCatFilter && i.cat !== activeCatFilter) return false;
     return true;
   });
@@ -2717,7 +2786,13 @@ function npAbrirCardapio() {
   document.getElementById('sheet-pedido').classList.add('on');
   document.body.style.overflow = 'hidden';
   switchSheetTab('itens');
-  renderCardapio();
+  // Limpa busca ao abrir cardápio delivery
+  activeSearchFilter = '';
+  activeCatFilter = '';
+  const _si = document.getElementById('cardapio-search'); if (_si) _si.value = '';
+  const _sc = document.getElementById('cardapio-search-clear'); if (_sc) _sc.style.display = 'none';
+  const _cp = document.getElementById('cat-pills'); if (_cp) _cp.style.display = '';
+  buildCatPills();
 }
 
 function npAtualizarPreview() {
@@ -3162,9 +3237,131 @@ async function confirmarFinalizarMesa() {
     const { data: mesas } = await sb.from('mesas').select('*').order('num');
     if (mesas) { tables = mesas; renderMesas(); }
     await loadPedidosDaMesa();
+
+    // Pergunta se deseja imprimir a comanda
+    _printComandaMesaNum = finalizarMesaNum;
+    _printComandaOrders  = mesaOrders;
+    _printComandaTotal   = total;
+    _printComandaPagForma = finalizarPay;
+    document.getElementById('print-comanda-mesa-num').textContent = finalizarMesaNum;
+    document.getElementById('print-comanda-bg').style.display = 'flex';
   } catch(e) {
     console.error('[confirmarFinalizarMesa]', e);
     showToast('❌ Erro ao finalizar mesa: ' + (e.message || e));
+  }
+}
+
+// ── Variáveis para o modal de impressão da comanda ──
+let _printComandaMesaNum  = null;
+let _printComandaOrders   = [];
+let _printComandaTotal    = 0;
+let _printComandaPagForma = '';
+
+function closePrintComandaModal() {
+  document.getElementById('print-comanda-bg').style.display = 'none';
+  _printComandaMesaNum = null;
+  _printComandaOrders  = [];
+}
+
+async function confirmarImprimirComanda() {
+  closePrintComandaModal();
+  try {
+    const cfg      = _garcomPrintCfg || {};
+    const nome     = (_garcomNomeLoja || cfg.nome || 'RESTAURANTE').toUpperCase();
+    const fontSize = parseInt(cfg.fontSize) || 12;
+    const rodape   = cfg.rodape || 'Bom apetite!';
+    const fmt      = cfg.format || localStorage.getItem('printFormat') || '80mm';
+    // Usa SEMPRE a primeira impressora (balcão) — nunca a de cozinha
+    const printer  = cfg.printer || localStorage.getItem('printPrinter') || '';
+    const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const mesaNum  = _printComandaMesaNum;
+    const pagForma = _printComandaPagForma;
+    const total    = _printComandaTotal;
+
+    // Monta todos os itens de todos os pedidos da mesa
+    const todosItens = _printComandaOrders.flatMap(o => Array.isArray(o.items) ? o.items : []);
+
+    if (!todosItens.length) { showToast('⚠️ Sem itens para imprimir'); return; }
+
+    const renderItem = i => {
+      const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em">↳ ${i.obs}</div>` : '';
+      const priceStr = (i.price && i.qty) ? `<span style="float:right">R$ ${(i.price * i.qty).toFixed(2).replace('.',',')}</span>` : '';
+      return `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${(i.name||'').toUpperCase()}${priceStr}</div>${obs}</div>`;
+    };
+
+    const html = `
+      <div class="print-ticket" style="font-size:${fontSize}px">
+        <div style="text-align:center;font-size:1.1em;font-weight:900">${nome}</div>
+        <div style="text-align:center;font-weight:bold;margin:4px 0">*** COMANDA ***</div>
+        <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+        <div>Mesa: <b>${mesaNum}</b></div>
+        ${currentGarcom?.nome ? `<div>Garçom: ${currentGarcom.nome}</div>` : ''}
+        <div>Data: ${now}</div>
+        <div>Pagamento: <b>${pagForma}</b></div>
+        <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+        ${todosItens.map(renderItem).join('')}
+        <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+        <div style="display:flex;justify-content:space-between;font-weight:900;font-size:1.05em">
+          <span>TOTAL</span><span>R$ ${total.toFixed(2).replace('.',',')}</span>
+        </div>
+        <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+        <div style="text-align:center;font-size:0.85em">${rodape}</div>
+      </div>`;
+
+    const tid = _garcomTenantId;
+
+    // 1️⃣ Electron
+    if (window.ElectronPrint) {
+      try {
+        const r = await window.ElectronPrint.printOrder({ mesa_num: mesaNum, _html: html });
+        if (r.ok) { showToast('🖨️ Comanda impressa!'); return; }
+      } catch(e) { console.warn('[PRINT COMANDA] Electron falhou:', e.message); }
+    }
+
+    // 2️⃣ Print Agent
+    try {
+      const st = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } }).then(r=>r.json());
+      if (st.active) {
+        await fetch('/api/print-queue/job', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+          body: JSON.stringify({ html, format: fmt, printer: printer || undefined }),
+        });
+        showToast('🖨️ Comanda enviada para impressora!');
+        return;
+      }
+    } catch(e) { console.warn('[PRINT COMANDA] Print Agent falhou:', e.message); }
+
+    // 3️⃣ Servidor /api/print
+    try {
+      const r = await fetch('/api/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+        body: JSON.stringify({ html, format: fmt, printer: printer || undefined }),
+      });
+      const data = await r.json();
+      if (data.pdf) {
+        const bytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
+        const blob  = new Blob([bytes], { type: 'application/pdf' });
+        const url   = URL.createObjectURL(blob);
+        let frame = document.getElementById('_garcom_print_frame');
+        if (!frame) {
+          frame = document.createElement('iframe');
+          frame.id = '_garcom_print_frame';
+          frame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;visibility:hidden';
+          document.body.appendChild(frame);
+        }
+        frame.src = url;
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        showToast('🖨️ Comanda gerada!');
+        return;
+      }
+    } catch(e) { console.warn('[PRINT COMANDA] Server falhou:', e.message); }
+
+    showToast('⚠️ Não foi possível imprimir. Verifique a impressora.');
+  } catch(e) {
+    console.warn('[PRINT COMANDA] Erro:', e.message);
+    showToast('❌ Erro ao imprimir comanda.');
   }
 }
 
