@@ -95,7 +95,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const cid = params.get('customer_id')
     if (!tid || !cid) { send(res, 400, { error: 'Parâmetros faltando' }); return true }
     try {
-      const rows = db.prepare('SELECT id,client,phone,addr,items,total,taxa,pag,status,created_at FROM orders WHERE tenant_id=? AND customer_id=? ORDER BY id DESC LIMIT 30').all(tid, cid)
+      const rows = db.prepare('SELECT id,order_num,client,phone,addr,items,total,taxa,pag,status,created_at FROM orders WHERE tenant_id=? AND customer_id=? ORDER BY id DESC LIMIT 30').all(tid, cid)
       send(res, 200, rows.map(r => ({ ...r, items: (() => { try { return JSON.parse(r.items) } catch { return [] } })() })))
     } catch (e) { send(res, 400, { error: e.message }) }
     return true

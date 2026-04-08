@@ -2006,6 +2006,8 @@ let _printMode     = window._printMode;
 let _printFontSize = parseInt(localStorage.getItem('printFontSize') || '12');
 let _printTarget   = localStorage.getItem('printTarget')   || 'server';
 let _printPrinter  = localStorage.getItem('printPrinter')  || '';
+let _printPrinterCozinha = localStorage.getItem('printPrinterCozinha') || '';
+let _printViaMode = localStorage.getItem('printViaMode') || 'combinado';
 let _printFormat   = localStorage.getItem('printFormat')   || '80mm';  // padrão 80mm
 
 // ── Salva config de impressão no servidor (sincroniza entre dispositivos) ──
@@ -2028,6 +2030,8 @@ async function loadPrintConfigServer() {
     if (cfg.printMode)    { _printMode = cfg.printMode;   localStorage.setItem('printMode', cfg.printMode) }
     if (cfg.printFormat)  { _printFormat = cfg.printFormat; localStorage.setItem('printFormat', cfg.printFormat) }
     if (cfg.printFontSize){ _printFontSize = cfg.printFontSize; localStorage.setItem('printFontSize', cfg.printFontSize) }
+    if (cfg.printViaMode) { _printViaMode = cfg.printViaMode; localStorage.setItem('printViaMode', cfg.printViaMode) }
+    if (cfg.printPrinterCozinha) { _printPrinterCozinha = cfg.printPrinterCozinha; localStorage.setItem('printPrinterCozinha', cfg.printPrinterCozinha) }
     if (cfg.printNome)    { const el = document.getElementById('print-nome');    if (el) el.value = cfg.printNome }
     if (cfg.printSub)     { const el = document.getElementById('print-sub');     if (el) el.value = cfg.printSub }
     if (cfg.printRodape)  { const el = document.getElementById('print-rodape');  if (el) el.value = cfg.printRodape }
@@ -2169,12 +2173,21 @@ function _buildTicketHtml(order, cfg) {
     </div>`;
   }
 
-  return viaPrincipal + viaCozinha;
+  // Via combinada (mesma folha): principal + linha de corte + cozinha
+  const cutLine = `<div style="text-align:center;margin:8px 0;font-size:0.8em;color:#999">
+    ✂ · · · · · · · · · · · · · · · · · · · · · · · ✂
+  </div>`;
+  const singleSheet = viaCozinha
+    ? viaPrincipal + cutLine + viaCozinha.replace('<div style="page-break-before:always"></div>', '')
+    : viaPrincipal;
+
+  return { principal: viaPrincipal, cozinha: viaCozinha, combined: viaPrincipal + viaCozinha, singleSheet };
 }
 
 // ── Carrega lista de impressoras do servidor ──────────
 async function loadPrinters() {
   const sel = document.getElementById('print-printer-select');
+  const selCoz = document.getElementById('print-printer-cozinha-select');
   if (!sel) return;
   try {
     let printers = [];
@@ -2194,12 +2207,26 @@ async function loadPrinters() {
       defaultPrinter = d.default  || '';
     }
 
-    sel.innerHTML = '<option value="">Impressora padrão do sistema</option>' +
+    const optsBalcao = '<option value="">Impressora padrão do sistema</option>' +
       printers.map(p =>
         `<option value="${p}" ${p === _printPrinter ? 'selected' : ''}>${p}${p === defaultPrinter ? ' ★' : ''}</option>`
       ).join('');
+    sel.innerHTML = optsBalcao;
     if (_printPrinter) sel.value = _printPrinter;
-  } catch { sel.innerHTML = '<option value="">Impressora padrão do sistema</option>'; }
+
+    // Impressora cozinha
+    if (selCoz) {
+      const optsCoz = '<option value="">Mesma do balcão (impressora única)</option>' +
+        printers.map(p =>
+          `<option value="${p}" ${p === _printPrinterCozinha ? 'selected' : ''}>${p}${p === defaultPrinter ? ' ★' : ''}</option>`
+        ).join('');
+      selCoz.innerHTML = optsCoz;
+      if (_printPrinterCozinha) selCoz.value = _printPrinterCozinha;
+    }
+  } catch {
+    sel.innerHTML = '<option value="">Impressora padrão do sistema</option>';
+    if (selCoz) selCoz.innerHTML = '<option value="">Mesma do balcão (impressora única)</option>';
+  }
 }
 
 // ── Impressão via agente local (computador da loja) ──
@@ -2470,14 +2497,32 @@ async function unpairUsbPrinter() {
 }
 
 async function printOrder(order) {
-  const cfg  = _getPrintConfig();
-  const html = _buildTicketHtml(order, cfg);
-  const fmt  = localStorage.getItem('printFormat') || _printFormat || '80mm';
+  const cfg    = _getPrintConfig();
+  const ticket = _buildTicketHtml(order, cfg);
+  const fmt    = localStorage.getItem('printFormat') || _printFormat || '80mm';
 
-  // ═══ CASCATA DE IMPRESSÃO SILENCIOSA ═══
-  // Tenta cada método na ordem — só vai ao próximo se falhar
+  // ── Monta jobs de impressão ────────────────────────────
+  const jobs = [];
+  if (_printViaMode === 'separado' && _printPrinterCozinha && ticket.cozinha) {
+    // Modo separado: cada via para sua impressora
+    if (ticket.principal) jobs.push({ html: ticket.principal, printer: _printPrinter || '' });
+    jobs.push({ html: ticket.cozinha, printer: _printPrinterCozinha });
+  } else if (_printViaMode === 'somente_principal') {
+    // Só via do cliente, sem cozinha
+    jobs.push({ html: ticket.principal, printer: _printPrinter || '' });
+  } else {
+    // Modo combinado (padrão): tudo na mesma folha com linha de corte
+    jobs.push({ html: ticket.singleSheet, printer: _printPrinter || '' });
+  }
 
-  // 1️⃣ Electron (app desktop)
+  for (const job of jobs) {
+    await _printJobCascade(job.html, fmt, job.printer, order, cfg);
+  }
+}
+
+// ── Cascata de impressão silenciosa (1 job) ──────────────
+async function _printJobCascade(html, fmt, printer, order, cfg) {
+  // 1️⃣ Electron
   if (window.ElectronPrint) {
     try {
       const r = await window.ElectronPrint.printOrder(order);
@@ -2485,7 +2530,7 @@ async function printOrder(order) {
     } catch (e) { console.warn('[PRINT] Electron falhou:', e.message); }
   }
 
-  // 2️⃣ WebUSB ESC/POS — impressão DIRETA na térmica, 100% silenciosa
+  // 2️⃣ WebUSB ESC/POS
   if (navigator.usb && _usbDevice) {
     try {
       await _printViaUsb(order, cfg);
@@ -2494,30 +2539,27 @@ async function printOrder(order) {
     } catch (e) { console.warn('[PRINT] USB falhou:', e.message); }
   }
 
-  // 3️⃣ Print Agent — verifica se o agente local está ativo e envia pra fila
+  // 3️⃣ Print Agent
   try {
     const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
     if (tid) {
-      const statusRes = await fetch('/api/print-queue/status', {
-        headers: { 'x-tenant-id': tid }
-      });
+      const statusRes = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } });
       const statusData = await statusRes.json();
       if (statusData.active) {
         await fetch('/api/print-queue/job', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-          body: JSON.stringify({ html, format: fmt, printer: _printPrinter || undefined }),
+          body: JSON.stringify({ html, format: fmt, printer: printer || undefined }),
         });
-        sbToast('ok', '🖨️ Enviado ao agente de impressão!');
+        sbToast('ok', '🖨️ Enviado ao agente!');
         return;
       }
     }
   } catch (e) { console.warn('[PRINT] Agent falhou:', e.message); }
 
-  // 4️⃣ WebUSB ESC/POS — se ainda não pareou, tenta conectar (pede permissão 1x)
+  // 4️⃣ WebUSB auto-connect
   if (navigator.usb && !_usbDevice) {
     try {
-      // Verifica se já tem device autorizado sem pedir permissão
       const devices = await navigator.usb.getDevices();
       if (devices.length > 0) {
         await _printViaUsb(order, cfg);
@@ -2527,23 +2569,20 @@ async function printOrder(order) {
     } catch (e) { console.warn('[PRINT] USB auto-connect falhou:', e.message); }
   }
 
-  // 5️⃣ Servidor PDF + impressão via iframe oculto (semi-silencioso)
-  //    Usa @media print CSS para tentar acionar kiosk-printing do Chrome
+  // 5️⃣ Servidor PDF + iframe
   try {
     const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
     if (tid) {
       const r = await fetch('/api/print', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-        body: JSON.stringify({ html, format: fmt, printer: _printPrinter || undefined }),
+        body: JSON.stringify({ html, format: fmt, printer: printer || undefined }),
       });
       const data = await r.json();
       if (data.pdf) {
         const bytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
         const blob  = new Blob([bytes], { type: 'application/pdf' });
         const url   = URL.createObjectURL(blob);
-
-        // Tenta imprimir via iframe oculto (silencioso com --kiosk-printing)
         let frame = document.getElementById('print-frame-pdf');
         if (!frame) {
           frame = document.createElement('iframe');
@@ -2553,10 +2592,7 @@ async function printOrder(order) {
         }
         frame.src = url;
         await new Promise((resolve) => {
-          frame.onload = () => {
-            try { frame.contentWindow.print(); } catch(_) {}
-            resolve();
-          };
+          frame.onload = () => { try { frame.contentWindow.print(); } catch(_) {} resolve(); };
           setTimeout(resolve, 3000);
         });
         setTimeout(() => URL.revokeObjectURL(url), 5000);
@@ -2566,12 +2602,11 @@ async function printOrder(order) {
     }
   } catch (e) { console.warn('[PRINT] Server PDF falhou:', e.message); }
 
-  // 6️⃣ FALLBACK FINAL — window.print() com área de impressão dedicada
-  console.warn('[PRINT] Usando fallback window.print() — diálogo será exibido');
+  // 6️⃣ Fallback: window.print()
+  console.warn('[PRINT] Usando fallback window.print()');
   let area = document.getElementById('_print_area');
   if (!area) { area = document.createElement('div'); area.id = '_print_area'; document.body.appendChild(area); }
   area.innerHTML = html;
-
   let st = document.getElementById('_print_style');
   if (!st) { st = document.createElement('style'); st.id = '_print_style'; document.head.appendChild(st); }
   st.innerHTML = `@media print {
@@ -2579,10 +2614,9 @@ async function printOrder(order) {
     body > *:not(#_print_area):not(#_print_style) { display: none !important; }
     #_print_area { display: block !important; position: static !important; }
   }`;
-
   window.print();
   setTimeout(() => { area.innerHTML = ''; }, 2000);
-  sbToast('warn', '🖨️ Imprimindo (com diálogo)... Use o Agente ou USB para silenciar.');
+  sbToast('warn', '🖨️ Imprimindo (com diálogo)...');
 }
 
 function printOrderById(id) {
@@ -2603,6 +2637,10 @@ function renderImpressao(skipServerLoad) {
     if (tgtSel) tgtSel.value = _printTarget;
     const fmtSel = document.getElementById('print-format-select');
     if (fmtSel) fmtSel.value = _printFormat || '80mm';
+    const viaSel = document.getElementById('print-via-mode-select');
+    if (viaSel) viaSel.value = _printViaMode || 'combinado';
+    const cozWrap = document.getElementById('print-cozinha-wrap');
+    if (cozWrap) cozWrap.style.display = _printViaMode === 'separado' ? '' : 'none';
     setPrintMode(_printMode);
     loadPrinters();
     _updateUsbStatus();
@@ -2615,7 +2653,7 @@ function renderImpressao(skipServerLoad) {
       const cfg = _getPrintConfig();
       const ex = { id:99, client:'João Silva', addr:'Mesa 3', mesa_num:3, pag:'PIX', taxa:0,
         items:[{qty:1,name:'Pizza Calabreza',price:50},{qty:2,name:'Coca Cola 2L',price:14}] };
-      p.innerHTML = _buildTicketHtml(ex, cfg);
+      const _ticket = _buildTicketHtml(ex, cfg); p.innerHTML = _printViaMode === 'somente_principal' ? _ticket.principal : _printViaMode === 'separado' ? _ticket.combined : _ticket.singleSheet;
     });
     return;
   }
@@ -2624,7 +2662,7 @@ function renderImpressao(skipServerLoad) {
   const cfg = _getPrintConfig();
   const ex = { id:99, client:'João Silva', addr:'Mesa 3', mesa_num:3, pag:'PIX', taxa:0,
     items:[{qty:1,name:'Pizza Calabreza',price:50},{qty:2,name:'Coca Cola 2L',price:14}] };
-  p.innerHTML = _buildTicketHtml(ex, cfg);
+  const _ticket = _buildTicketHtml(ex, cfg); p.innerHTML = _printViaMode === 'somente_principal' ? _ticket.principal : _printViaMode === 'separado' ? _ticket.combined : _ticket.singleSheet;
 }
 
 // Atualiza indicador visual do status USB na tela de config
@@ -2660,6 +2698,8 @@ async function salvarConfigImpressao() {
     printNome:     cfg.nome,
     printSub:      cfg.sub,
     printRodape:   cfg.rodape,
+    printViaMode:  _printViaMode,
+    printPrinterCozinha: _printPrinterCozinha,
   }
   // Salva localmente
   localStorage.setItem('printFormat', fmt)

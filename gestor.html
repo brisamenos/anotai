@@ -2479,11 +2479,36 @@ Use no seu próximo pedido 🛍️</textarea>
             </div>
           </div>
           <div>
-            <label class="form-label">Impressora</label>
+            <label class="form-label">Modo das vias</label>
+            <select class="form-input" id="print-via-mode-select"
+              onchange="_printViaMode=this.value;localStorage.setItem('printViaMode',this.value);document.getElementById('print-cozinha-wrap').style.display=this.value==='separado'?'':'none'">
+              <option value="combinado">Via única combinada (pedido + cozinha na mesma folha)</option>
+              <option value="separado">Duas vias separadas (balcão e cozinha em impressoras diferentes)</option>
+              <option value="somente_principal">Somente via do cliente (sem via de cozinha)</option>
+            </select>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">
+              "Combinada" imprime tudo em 1 folha: pedido completo em cima, via da cozinha embaixo com linha de corte
+            </div>
+          </div>
+          <div>
+            <label class="form-label">Impressora — Balcão / Caixa</label>
             <select class="form-input" id="print-printer-select"
               onchange="_printPrinter=this.value;localStorage.setItem('printPrinter',this.value)">
               <option value="">Impressora padrão do sistema</option>
             </select>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">
+              Recebe a via do cliente (com valores) e bebidas
+            </div>
+          </div>
+          <div id="print-cozinha-wrap" style="display:none">
+            <label class="form-label">Impressora — Cozinha</label>
+            <select class="form-input" id="print-printer-cozinha-select"
+              onchange="_printPrinterCozinha=this.value;localStorage.setItem('printPrinterCozinha',this.value)">
+              <option value="">Mesma do balcão (impressora única)</option>
+            </select>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">
+              Recebe a via da cozinha (sem valores, só itens). Deixe em branco se usa só 1 impressora.
+            </div>
           </div>
           <div>
             <label class="form-label">Formato do papel</label>
