@@ -576,9 +576,14 @@ function imprimirViaCliente() {
     </div>`;
 
   // Tenta Electron primeiro, senão abre janela de impressão do browser
+  const _caixaPrinter = localStorage.getItem('printPrinter') || '';
   if (window.ElectronPrint) {
-    const fakeOrder = { id: num, client: `Mesa ${num}`, items: itens, total: parseFloat(totalStr.replace('R$ ','').replace(',','.')), pag: forma, mesa_num: num, _html: html };
-    window.ElectronPrint.printOrder(fakeOrder).catch(() => _printViaWindow(html));
+    if (window.ElectronPrint.printHtml) {
+      window.ElectronPrint.printHtml(html, { printer: _caixaPrinter, paperWidth: 80, landscape: false, scaleFactor: 100 }).catch(() => _printViaWindow(html));
+    } else {
+      const fakeOrder = { id: num, client: `Mesa ${num}`, items: itens, total: parseFloat(totalStr.replace('R$ ','').replace(',','.')), pag: forma, mesa_num: num, _html: html };
+      window.ElectronPrint.printOrder(fakeOrder).catch(() => _printViaWindow(html));
+    }
   } else {
     _printViaWindow(html);
   }

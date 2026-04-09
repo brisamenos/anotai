@@ -3243,7 +3243,15 @@ async function imprimirContaMesa(num) {
   const tid = _garcomTenantId;
 
   if (window.ElectronPrint) {
-    try { const r = await window.ElectronPrint.printOrder({ mesa_num: num, _html: html }); if (r.ok) { showToast('🖨️ Conta impressa!'); return; } } catch(e) {}
+    try {
+      if (window.ElectronPrint.printHtml) {
+        const r = await window.ElectronPrint.printHtml(html, { printer: printer || '', paperWidth: 80, landscape: false, scaleFactor: 100 });
+        if (r.ok) { showToast('🖨️ Conta impressa!'); return; }
+      } else {
+        const r = await window.ElectronPrint.printOrder({ mesa_num: num, _html: html, _printer: printer });
+        if (r.ok) { showToast('🖨️ Conta impressa!'); return; }
+      }
+    } catch(e) {}
   }
   try {
     const st = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } }).then(r=>r.json());
