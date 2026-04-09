@@ -175,7 +175,8 @@ function renderMenu() {
   const filtered = getFiltered();
 
   // Separa categorias checklist das normais
-  const checklistCats = allCats.filter(c => c.type === 'checklist');
+  // No açougue, checklist não existe — tudo é carrossel
+  const checklistCats = _segmento === 'acougue' ? [] : allCats.filter(c => c.type === 'checklist');
   const checklistKeys = new Set(checklistCats.map(c => c.name));
 
   const normalItems = filtered.filter(i => !checklistKeys.has(i.cat_key) && !checklistKeys.has(i.cat));
