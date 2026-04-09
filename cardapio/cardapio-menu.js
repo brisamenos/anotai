@@ -175,8 +175,7 @@ function renderMenu() {
   const filtered = getFiltered();
 
   // Separa categorias checklist das normais
-  // No açougue, checklist não existe — tudo é carrossel
-  const checklistCats = _segmento === 'acougue' ? [] : allCats.filter(c => c.type === 'checklist');
+  const checklistCats = allCats.filter(c => c.type === 'checklist');
   const checklistKeys = new Set(checklistCats.map(c => c.name));
 
   const normalItems = filtered.filter(i => !checklistKeys.has(i.cat_key) && !checklistKeys.has(i.cat));
@@ -294,9 +293,14 @@ function renderMenu() {
   }
 
   // Renderiza seções checklist no final
+  // No açougue, checklist vira carrossel normal
   checklistCats.forEach(cat => {
     const catItems = allItems.filter(i => (i.cat_key === cat.name || i.cat === cat.label) && i.status !== 'pausado');
-    if (catItems.length) {
+    if (!catItems.length) return;
+    if (_segmento === 'acougue') {
+      const label = cat.label || cat.name;
+      html += `<div class="section" data-cat="${cat.name}"><div class="section-label">${label}</div><div class="item-grid carousel">${catItems.map(itemCard).join('')}</div></div>`;
+    } else {
       html += renderChecklistSection(cat, catItems, false);
     }
   });
