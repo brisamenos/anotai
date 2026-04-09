@@ -46,7 +46,7 @@ function getDiscount() {
 
 function getTaxa() {
   if (deliveryType !== 'delivery') return 0;
-  if (appliedCupom?.tipo === 'frete') return 0;
+  if (appliedCupom?.tipo === 'frete' || appliedCupom?.type === 'frete') return 0;
   if (feeConfig.tipo === 'por_km') {
     const faixas = feeConfig.faixas || [];
     return parseFloat(faixas[Math.min(selectedFaixa, faixas.length-1)]?.taxa) || 0;
