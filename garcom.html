@@ -3238,6 +3238,13 @@ async function imprimirContaMesa(num) {
   const subtotal = calcularTotalMesa(orders);
   if (!subtotal) { showToast('⚠️ Nenhum item na mesa'); return; }
 
+  // Verifica se há itens válidos (não cancelados) antes de abrir o modal
+  const _itemCheck = {};
+  orders.forEach(o => (Array.isArray(o.items) ? o.items : []).forEach(i => {
+    if (i.item_status !== 'cancelado') _itemCheck[i.name] = true;
+  }));
+  if (!Object.keys(_itemCheck).length) { showToast('⚠️ Sem itens para imprimir'); return; }
+
   // Guarda estado para o confirmar
   _printContaMesaNum = num;
   _printContaOrders  = orders;
@@ -3459,6 +3466,11 @@ async function confirmarFinalizarMesa() {
     _printComandaOrders  = mesaOrders;
     _printComandaTotal   = total;
     _printComandaPagForma = finalizarPay;
+
+    // Só abre o modal se houver itens para imprimir
+    const _itensCheck = (mesaOrders || []).flatMap(o => Array.isArray(o.items) ? o.items : []);
+    if (!_itensCheck.length) { showToast('ℹ️ Mesa finalizada sem itens para imprimir'); return; }
+
     document.getElementById('print-comanda-mesa-num').textContent = finalizarMesaNum;
     document.getElementById('print-comanda-bg').style.display = 'flex';
 
