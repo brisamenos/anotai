@@ -1832,7 +1832,7 @@ function renderMesas() {
     const icon    = free ? '🟢' : (waiting ? '⏳' : '🔴');
 
     // Total da mesa se ocupada (mostra total de TODOS os garçons)
-    const mesaOrders = allMesaOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === t.num);
+    const mesaOrders = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === t.num);
     const mesaTotal  = mesaOrders.reduce((s,o)=>s+parseFloat(o.total||0),0);
     const totalHtml  = !free && mesaTotal > 0
       ? `<div class="mesa-block-total">R$ ${mesaTotal.toFixed(2).replace('.',',')}</div>`
@@ -1879,7 +1879,7 @@ async function openMesaDetail(num) {
   document.getElementById('mds-head-sub').textContent   = waiting ? '⏳ Aguardando pagamento' : '🔴 Mesa ocupada';
 
   // Busca pedidos desta mesa (usa allMesaOrders — todos os garçons)
-  const orders  = allMesaOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
+  const orders  = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
   const total   = orders.reduce((s,o)=>s+parseFloat(o.total||0),0);
 
   const body = document.getElementById('mds-body');
@@ -2997,7 +2997,7 @@ async function loadPedidosDaMesa() {
     // Filtra apenas comandas de mesas que ainda estão abertas (busy/waiting)
     // e que foram abertas APÓS a mesa abrir (evita comandas de sessões anteriores)
     allMesaOrders = (data || []).filter(o => {
-      const mesa = activeMesas.find(t => t.num === o.mesa_num);
+      const mesa = activeMesas.find(t => Number(t.num) === Number(o.mesa_num));
       if (!mesa) return false;
       if (!mesa.opened_at) return true;
       const orderTime    = new Date(o.created_at || 0).getTime();
@@ -3055,7 +3055,7 @@ function renderMyOrders() {
 
   const filtered = activeMesaFilter === 'todas'
     ? myOrders
-    : myOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === activeMesaFilter);
+    : myOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === activeMesaFilter);
 
   const el = document.getElementById('pedidos-list');
   if (!filtered.length) {
@@ -3212,8 +3212,8 @@ async function refreshMesa(num) {
   const { data: orders } = await (sessionStart ? q.gte('created_at', sessionStart) : q);
 
   // Substitui entradas desta mesa em ambos os caches
-  const _otherAll = allMesaOrders.filter(o => (o.mesa_num || parseInt((o.addr || '').replace('Mesa ', '') || '0')) !== numInt);
-  const _otherMy  = myOrders.filter(o => (o.mesa_num || parseInt((o.addr || '').replace('Mesa ', '') || '0')) !== numInt);
+  const _otherAll = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr || '').replace('Mesa ', '') || '0')) !== numInt);
+  const _otherMy  = myOrders.filter(o => Number(o.mesa_num || parseInt((o.addr || '').replace('Mesa ', '') || '0')) !== numInt);
   const _fetched   = orders || [];
 
   allMesaOrders = [..._otherAll, ..._fetched];
@@ -3247,7 +3247,7 @@ function fecharModalConta() {
 }
 
 async function imprimirContaMesa(num) {
-  const orders = allMesaOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
+  const orders = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
   const subtotal = calcularTotalMesa(orders);
   if (!subtotal) { showToast('⚠️ Nenhum item na mesa'); return; }
 
@@ -3418,7 +3418,7 @@ async function abrirFinalizarMesa(num) {
   document.getElementById('finalizar-title').textContent = `Finalizar Mesa ${num}`;
 
   // Load orders for this mesa (todos os garçons)
-  const orders = allMesaOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
+  const orders = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
   const total  = calcularTotalMesa(orders);
   _finalizarSubtotal = total;
   document.getElementById('finalizar-total').textContent = 'R$ ' + total.toFixed(2).replace('.',',');
@@ -3481,7 +3481,7 @@ function selectFinalizarPay(el) {
 async function confirmarFinalizarMesa() {
   if (!finalizarMesaNum) return;
   // Soma todos os pedidos da mesa (comanda + bebidas imediatas) igual ao abrirFinalizarMesa
-  const mesaOrders = allMesaOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === finalizarMesaNum);
+  const mesaOrders = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === finalizarMesaNum);
   const subtotal = calcularTotalMesa(mesaOrders);
   const taxaCheck = document.getElementById('finalizar-taxa-check');
   const taxaIncluida = _garcomTaxaServicoPct > 0 && taxaCheck?.checked;
