@@ -1015,6 +1015,42 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   </div>
 </div>
 
+<!-- ══ MODAL IMPRIMIR CONTA DA MESA ══ -->
+<div id="print-conta-bg" onclick="if(event.target===this)fecharModalConta()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9300;align-items:center;justify-content:center;backdrop-filter:blur(5px)">
+  <div style="background:var(--surface);border-radius:20px;width:calc(100% - 40px);max-width:360px;padding:0 0 20px;animation:slideUp .3s cubic-bezier(.34,1.56,.64,1)">
+    <div style="width:36px;height:4px;background:var(--surface3);border-radius:99px;margin:12px auto 0"></div>
+    <div style="padding:18px 20px 4px;text-align:center">
+      <div style="font-size:32px;margin-bottom:8px">🧾</div>
+      <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800;margin-bottom:4px">Imprimir conta</div>
+      <div style="font-size:13px;color:var(--muted)">Mesa <span id="print-conta-mesa-num" style="color:var(--amber);font-weight:700"></span></div>
+    </div>
+    <!-- Taxa de serviço (visível apenas se configurada) -->
+    <div id="print-conta-taxa-row" style="display:none;padding:14px 16px 0">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;background:var(--surface2);border:1.5px solid var(--border);border-radius:12px;padding:12px 14px">
+        <input type="checkbox" id="print-conta-taxa-check" checked style="width:18px;height:18px;accent-color:var(--amber);cursor:pointer">
+        <div>
+          <div style="font-size:13px;font-weight:700">Incluir taxa de serviço</div>
+          <div id="print-conta-taxa-label" style="font-size:12px;color:var(--muted)"></div>
+        </div>
+      </label>
+    </div>
+    <!-- Seletor de impressora (visível apenas no Electron) -->
+    <div id="print-conta-printer-row" style="display:none;padding:12px 16px 0">
+      <label style="font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:6px">🖨️ Impressora</label>
+      <select id="print-conta-printer-select" style="width:100%;height:40px;border-radius:10px;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-size:13px;font-weight:600;padding:0 10px;cursor:pointer;outline:none">
+        <option value="">Carregando...</option>
+      </select>
+    </div>
+    <div style="padding:18px 16px 0;display:flex;gap:10px">
+      <button onclick="fecharModalConta()" style="flex:1;height:46px;border-radius:12px;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-size:14px;font-weight:700;cursor:pointer">Cancelar</button>
+      <button onclick="confirmarImprimirConta()" style="flex:2;height:46px;border-radius:12px;background:var(--amber);border:none;color:#000;font-size:14px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="8" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5 5V3.5A1.5 1.5 0 0 1 6.5 2h3A1.5 1.5 0 0 1 11 3.5V5" stroke="currentColor" stroke-width="1.5"/><path d="M5 10h6M5 12.5h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        Imprimir
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ MODAL DE ITEM (adicionais, ingredientes, pizza) ══ -->
 <div class="modal-overlay" id="item-modal-bg" onclick="if(event.target===this)closeItemModal()">
   <div class="item-modal" id="item-modal">
@@ -3187,15 +3223,76 @@ async function refreshMesa(num) {
 let finalizarMesaNum = null;
 let finalizarPay = 'PIX';
 
+// ── Variáveis para o modal de impressão da conta ──
+let _printContaMesaNum = null;
+let _printContaOrders  = [];
+
+function fecharModalConta() {
+  document.getElementById('print-conta-bg').style.display = 'none';
+  _printContaMesaNum = null;
+  _printContaOrders  = [];
+}
+
 async function imprimirContaMesa(num) {
   const orders = allMesaOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
   const subtotal = calcularTotalMesa(orders);
   if (!subtotal) { showToast('⚠️ Nenhum item na mesa'); return; }
 
-  let taxaVal = 0;
+  // Guarda estado para o confirmar
+  _printContaMesaNum = num;
+  _printContaOrders  = orders;
+
+  // Configura taxa de serviço no modal
+  const taxaRow   = document.getElementById('print-conta-taxa-row');
+  const taxaCheck = document.getElementById('print-conta-taxa-check');
+  const taxaLabel = document.getElementById('print-conta-taxa-label');
   if (_garcomTaxaServicoPct > 0) {
-    const cobrar = confirm(`Incluir taxa de serviço de ${_garcomTaxaServicoPct}% (R$ ${(subtotal * _garcomTaxaServicoPct / 100).toFixed(2).replace('.',',')})?`);
-    if (cobrar) taxaVal = subtotal * _garcomTaxaServicoPct / 100;
+    taxaRow.style.display  = 'block';
+    taxaCheck.checked      = true;
+    const taxaVal = subtotal * _garcomTaxaServicoPct / 100;
+    taxaLabel.textContent  = `${_garcomTaxaServicoPct}% = R$ ${taxaVal.toFixed(2).replace('.',',')}`;
+  } else {
+    taxaRow.style.display = 'none';
+  }
+
+  // Número da mesa no título
+  document.getElementById('print-conta-mesa-num').textContent = num;
+
+  // Carrega impressoras do Electron (se disponível)
+  const printerRow = document.getElementById('print-conta-printer-row');
+  const printerSel = document.getElementById('print-conta-printer-select');
+  if (window.ElectronPrint && window.ElectronPrint.getPrinters) {
+    printerRow.style.display = 'block';
+    printerSel.innerHTML = '<option value="">Carregando...</option>';
+    try {
+      const list = await window.ElectronPrint.getPrinters();
+      const saved = localStorage.getItem('printPrinter') || '';
+      printerSel.innerHTML = '<option value="">(Impressora padrão)</option>' +
+        list.map(p => '<option value="' + p + '"' + (p === saved ? ' selected' : '') + '>' + p + '</option>').join('');
+    } catch(ep) { printerRow.style.display = 'none'; }
+  } else {
+    printerRow.style.display = 'none';
+  }
+
+  // Abre modal
+  document.getElementById('print-conta-bg').style.display = 'flex';
+}
+
+async function confirmarImprimirConta() {
+  // Captura seleções antes de fechar
+  const taxaCheck  = document.getElementById('print-conta-taxa-check');
+  const printerSel = document.getElementById('print-conta-printer-select');
+  const selPrinter = (printerSel?.value || '').trim();
+  if (selPrinter) localStorage.setItem('printPrinter', selPrinter);
+  fecharModalConta();
+
+  const num    = _printContaMesaNum;
+  const orders = _printContaOrders;
+  const subtotal = calcularTotalMesa(orders);
+
+  let taxaVal = 0;
+  if (_garcomTaxaServicoPct > 0 && taxaCheck?.checked) {
+    taxaVal = subtotal * _garcomTaxaServicoPct / 100;
   }
   const total = subtotal + taxaVal;
 
@@ -3204,7 +3301,7 @@ async function imprimirContaMesa(num) {
   const fontSize = parseInt(cfg.fontSize) || 12;
   const rodape   = cfg.rodape || 'Bom apetite!';
   const fmt      = cfg.format || localStorage.getItem('printFormat') || '80mm';
-  const printer  = cfg.printer || localStorage.getItem('printPrinter') || '';
+  const printer  = selPrinter || cfg.printer || localStorage.getItem('printPrinter') || '';
   const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 
   const itemMap = {};
@@ -3249,24 +3346,29 @@ async function imprimirContaMesa(num) {
 
   const tid = _garcomTenantId;
 
+  // 1️⃣ Electron
   if (window.ElectronPrint) {
     try {
+      let r;
       if (window.ElectronPrint.printHtml) {
-        const r = await window.ElectronPrint.printHtml(html, { printer: printer || '', paperWidth: 80, landscape: false, scaleFactor: 100 });
-        if (r.ok) { showToast('🖨️ Conta impressa!'); return; }
+        r = await window.ElectronPrint.printHtml(html, { printer: printer || '', paperWidth: parseInt(fmt) || 80, landscape: false, scaleFactor: 100 });
       } else {
-        const r = await window.ElectronPrint.printOrder({ mesa_num: num, _html: html, _printer: printer });
-        if (r.ok) { showToast('🖨️ Conta impressa!'); return; }
+        r = await window.ElectronPrint.printOrder({ mesa_num: num, _html: html, _printer: printer });
       }
-    } catch(e) {}
+      if (r && r.ok) { showToast('🖨️ Conta impressa' + (printer ? ' em ' + printer : '') + '!'); return; }
+    } catch(e) { console.warn('[PRINT CONTA] Electron falhou:', e.message); }
   }
+
+  // 2️⃣ Print Agent
   try {
     const st = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } }).then(r=>r.json());
     if (st.active) {
       await fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html, format: fmt, printer: printer || undefined }) });
       showToast('🖨️ Conta enviada para impressora!'); return;
     }
-  } catch(e) {}
+  } catch(e) { console.warn('[PRINT CONTA] Print Agent falhou:', e.message); }
+
+  // 3️⃣ Servidor /api/print
   try {
     const r = await fetch('/api/print', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html, format: fmt, printer: printer || undefined }) });
     const data = await r.json();
@@ -3278,7 +3380,8 @@ async function imprimirContaMesa(num) {
       frame.src = URL.createObjectURL(blob);
       showToast('🖨️ Conta gerada!'); return;
     }
-  } catch(e) {}
+  } catch(e) { console.warn('[PRINT CONTA] Server falhou:', e.message); }
+
   showToast('⚠️ Impressora não disponível');
 }
 
