@@ -357,6 +357,50 @@ async function saveTaxaConfig() {
 
 // calcularTotalMesa() está definida em mesa-state.js (carregado antes deste arquivo).
 
+async function cobrarMesaDireta(num) {
+  const numInt = parseInt(num);
+  const t = tables.find(x => parseInt(x.num) === numInt);
+  if (!t) return;
+  sbLoading(true);
+  try {
+    const { data: activeOrders } = await sb.from('orders')
+      .select('total,taxa,items,status,created_at')
+      .eq('mesa_num', numInt)
+      .in('status', ['analise', 'producao', 'pronto', 'mesa_aberta']);
+
+    const hasComanda = (activeOrders || []).some(o => o.status === 'mesa_aberta');
+    let immediateEntregues = [];
+    if (!hasComanda && t?.opened_at) {
+      const sessionStart = new Date(t.opened_at).getTime() - 5000;
+      const { data: entregueData } = await sb.from('orders')
+        .select('total,taxa,items,status,created_at')
+        .eq('mesa_num', numInt).eq('status', 'entregue')
+        .gte('created_at', new Date(sessionStart).toISOString());
+      immediateEntregues = entregueData || [];
+    }
+    const sessionTotal = calcularTotalMesa([...(activeOrders || []), ...immediateEntregues]);
+
+    // Finaliza pedidos ativos e marca mesa como waiting
+    await sb.from('orders').update({ status: 'entregue' }).eq('mesa_num', numInt)
+      .in('status', ['analise', 'producao', 'pronto', 'mesa_aberta']);
+    await sb.from('mesas').update({ status: 'waiting', total: sessionTotal, updated_at: new Date().toISOString() }).eq('num', numInt);
+
+    t.status = 'waiting';
+    t.total = sessionTotal;
+    ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== numInt);
+    mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== numInt);
+    renderKanban();
+    _renderMesaPageFromCache();
+
+    // Abre modal de pagamento direto
+    openRegistrarPagamento(numInt, sessionTotal);
+  } catch(e) {
+    sbToast('err', 'Erro: ' + (e?.message || e));
+  } finally {
+    sbLoading(false);
+  }
+}
+
 async function fecharMesa(num) {
   const numInt = parseInt(num);
   const t = tables.find(x => parseInt(x.num) === numInt);
