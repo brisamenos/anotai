@@ -241,7 +241,7 @@ function renderMenu() {
   if (searchQ || activeCat) {
     // Em busca/filtro, mostra só cards normais
     if (normalItems.length) {
-      const gridClass = _segmento === 'acougue' ? 'item-grid carousel' : 'item-grid';
+      const gridClass = (_segmento === 'acougue' || _catsCarrossel) ? 'item-grid carousel' : 'item-grid';
       html += `<div class="${gridClass}">${normalItems.map(itemCard).join('')}</div>`;
     }
     // Se o filtro for de uma categoria checklist, mostra ela expandida
@@ -292,7 +292,7 @@ function renderMenu() {
       const its = grouped.get(cat.name) || [];
       if (!its.length) return;
       const label = cat.label || cat.name;
-      const gridClass = _segmento === 'acougue' ? 'item-grid carousel' : 'item-grid';
+      const gridClass = (_segmento === 'acougue' || _catsCarrossel) ? 'item-grid carousel' : 'item-grid';
       html += `<div class="section" data-cat="${cat.name}"><div class="section-label">${label}</div><div class="${gridClass}">${its.map(itemCard).join('')}</div></div>`;
     }
   });
@@ -300,7 +300,7 @@ function renderMenu() {
   // Itens sem categoria conhecida
   const unknownItems = grouped.get('__outros') || [];
   if (unknownItems.length) {
-    const gridClass = _segmento === 'acougue' ? 'item-grid carousel' : 'item-grid';
+    const gridClass = (_segmento === 'acougue' || _catsCarrossel) ? 'item-grid carousel' : 'item-grid';
     html += `<div class="section" data-cat="__outros"><div class="section-label">Outros</div><div class="${gridClass}">${unknownItems.map(itemCard).join('')}</div></div>`;
   }
 
