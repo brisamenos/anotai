@@ -276,13 +276,25 @@ function renderMenu() {
     grouped.get(key).push(i);
   });
 
-  // Itera na ordem das categorias (já ordenadas por sort_order)
-  allCats.filter(c => c.type !== 'checklist').forEach(cat => {
-    const its = grouped.get(cat.name) || [];
-    if (!its.length) return;
-    const label = cat.label || cat.name;
-    const gridClass = _segmento === 'acougue' ? 'item-grid carousel' : 'item-grid';
-    html += `<div class="section" data-cat="${cat.name}"><div class="section-label">${label}</div><div class="${gridClass}">${its.map(itemCard).join('')}</div></div>`;
+  // Itera TODAS as categorias na ordem do sort_order, respeitando posicao de checklist
+  allCats.forEach(cat => {
+    const isChecklist = cat.type === 'checklist';
+    if (isChecklist) {
+      const catItems = allItems.filter(i => (i.cat_key === cat.name || i.cat === cat.label) && i.status !== 'pausado');
+      if (!catItems.length) return;
+      if (_segmento === 'acougue') {
+        const label = cat.label || cat.name;
+        html += `<div class="section" data-cat="${cat.name}"><div class="section-label">${label}</div><div class="item-grid carousel">${catItems.map(itemCard).join('')}</div></div>`;
+      } else {
+        html += renderChecklistSection(cat, catItems, false);
+      }
+    } else {
+      const its = grouped.get(cat.name) || [];
+      if (!its.length) return;
+      const label = cat.label || cat.name;
+      const gridClass = _segmento === 'acougue' ? 'item-grid carousel' : 'item-grid';
+      html += `<div class="section" data-cat="${cat.name}"><div class="section-label">${label}</div><div class="${gridClass}">${its.map(itemCard).join('')}</div></div>`;
+    }
   });
 
   // Itens sem categoria conhecida
@@ -291,19 +303,6 @@ function renderMenu() {
     const gridClass = _segmento === 'acougue' ? 'item-grid carousel' : 'item-grid';
     html += `<div class="section" data-cat="__outros"><div class="section-label">Outros</div><div class="${gridClass}">${unknownItems.map(itemCard).join('')}</div></div>`;
   }
-
-  // Renderiza seções checklist no final
-  // No açougue, checklist vira carrossel normal
-  checklistCats.forEach(cat => {
-    const catItems = allItems.filter(i => (i.cat_key === cat.name || i.cat === cat.label) && i.status !== 'pausado');
-    if (!catItems.length) return;
-    if (_segmento === 'acougue') {
-      const label = cat.label || cat.name;
-      html += `<div class="section" data-cat="${cat.name}"><div class="section-label">${label}</div><div class="item-grid carousel">${catItems.map(itemCard).join('')}</div></div>`;
-    } else {
-      html += renderChecklistSection(cat, catItems, false);
-    }
-  });
 
   html += '</div>';
   document.getElementById('menu-wrap').innerHTML = html;
