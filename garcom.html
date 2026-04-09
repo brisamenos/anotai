@@ -968,9 +968,22 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
       <button class="sheet-close" onclick="closeFinalizarMesa()">✕</button>
     </div>
     <div class="sheet-body">
-      <div style="background:rgba(196,149,106,.06);border:1px solid rgba(196,149,106,.15);border-radius:12px;padding:14px 16px;margin-bottom:14px">
-        <div style="font-size:11.5px;color:var(--muted);margin-bottom:4px">Total consumido</div>
+      <div style="background:rgba(196,149,106,.06);border:1px solid rgba(196,149,106,.15);border-radius:12px;padding:14px 16px;margin-bottom:10px">
+        <div style="font-size:11.5px;color:var(--muted);margin-bottom:2px">Subtotal consumido</div>
         <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:28px;font-weight:900;color:var(--amber)" id="finalizar-total">R$ 0,00</div>
+        <div id="finalizar-taxa-total-row" style="display:none;margin-top:6px;padding-top:6px;border-top:1px solid rgba(196,149,106,.2);font-size:13px;font-weight:800;color:var(--amber)">
+          Total com taxa: <span id="finalizar-total-com-taxa">R$ 0,00</span>
+        </div>
+      </div>
+      <!-- Taxa de serviço opcional -->
+      <div id="finalizar-taxa-row" style="display:none;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="finalizar-taxa-check" checked style="width:18px;height:18px;accent-color:var(--amber);cursor:pointer;flex-shrink:0" onchange="atualizarTotalFinalizar()">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--text)" id="finalizar-taxa-label">Taxa de serviço (10%)</div>
+            <div style="font-size:11.5px;color:var(--muted)" id="finalizar-taxa-val-label"></div>
+          </div>
+        </label>
       </div>
       <div id="finalizar-pedidos-list" style="margin-bottom:14px"></div>
       <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:6px">Forma de pagamento</label>
@@ -3308,7 +3321,7 @@ async function confirmarImprimirConta() {
   const fontSize = parseInt(cfg.fontSize) || 12;
   const rodape   = cfg.rodape || 'Bom apetite!';
   const fmt      = cfg.format || localStorage.getItem('printFormat') || '80mm';
-  const printer  = selPrinter || cfg.printer || localStorage.getItem('printPrinter') || '';
+  const printer  = selPrinter || cfg.printer_caixa || cfg.printer || localStorage.getItem('printPrinter') || '';
   const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 
   const itemMap = {};
@@ -3370,7 +3383,7 @@ async function confirmarImprimirConta() {
   try {
     const st = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } }).then(r=>r.json());
     if (st.active) {
-      await fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html, format: fmt, printer: printer || undefined }) });
+      await fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html, format: fmt, printer: printer || undefined, tipo: 'caixa' }) });
       showToast('🖨️ Conta enviada para impressora!'); return;
     }
   } catch(e) { console.warn('[PRINT CONTA] Print Agent falhou:', e.message); }
@@ -3407,7 +3420,23 @@ async function abrirFinalizarMesa(num) {
   // Load orders for this mesa (todos os garçons)
   const orders = allMesaOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
   const total  = calcularTotalMesa(orders);
+  _finalizarSubtotal = total;
   document.getElementById('finalizar-total').textContent = 'R$ ' + total.toFixed(2).replace('.',',');
+
+  // Taxa de serviço opcional
+  const taxaRow   = document.getElementById('finalizar-taxa-row');
+  const taxaCheck = document.getElementById('finalizar-taxa-check');
+  const taxaLbl   = document.getElementById('finalizar-taxa-val-label');
+  if (taxaRow && _garcomTaxaServicoPct > 0) {
+    taxaRow.style.display = 'block';
+    taxaCheck.checked = true;
+    document.getElementById('finalizar-taxa-label').textContent = `Taxa de serviço (${_garcomTaxaServicoPct}%) — opcional`;
+    const taxaVal = total * _garcomTaxaServicoPct / 100;
+    taxaLbl.textContent = `+ R$ ${taxaVal.toFixed(2).replace('.',',')}`;
+    atualizarTotalFinalizar();
+  } else if (taxaRow) {
+    taxaRow.style.display = 'none';
+  }
 
   const listEl = document.getElementById('finalizar-pedidos-list');
   listEl.innerHTML = orders.map(o => {
@@ -3425,6 +3454,20 @@ function closeFinalizarMesa() {
   document.getElementById('sheet-finalizar').classList.remove('on');
 }
 
+function atualizarTotalFinalizar() {
+  const check    = document.getElementById('finalizar-taxa-check');
+  const taxaRow  = document.getElementById('finalizar-taxa-total-row');
+  const taxaLbl  = document.getElementById('finalizar-taxa-val-label');
+  const totalEl  = document.getElementById('finalizar-total');
+  const sub      = _finalizarSubtotal;
+  const pct      = _garcomTaxaServicoPct || 0;
+  const taxaVal  = check?.checked ? sub * pct / 100 : 0;
+  const total    = sub + taxaVal;
+  if (taxaLbl) taxaLbl.textContent = taxaVal > 0 ? `+ R$ ${taxaVal.toFixed(2).replace('.',',')}` : 'Não incluir';
+  if (taxaRow) taxaRow.style.display = taxaVal > 0 ? 'block' : 'none';
+  if (taxaRow) document.getElementById('finalizar-total-com-taxa').textContent = `R$ ${total.toFixed(2).replace('.',',')}`;
+}
+
 function selectFinalizarPay(el) {
   finalizarPay = el.dataset.pay;
   document.querySelectorAll('#finalizar-pay-opts button').forEach(b => {
@@ -3439,7 +3482,11 @@ async function confirmarFinalizarMesa() {
   if (!finalizarMesaNum) return;
   // Soma todos os pedidos da mesa (comanda + bebidas imediatas) igual ao abrirFinalizarMesa
   const mesaOrders = allMesaOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === finalizarMesaNum);
-  const total = calcularTotalMesa(mesaOrders);
+  const subtotal = calcularTotalMesa(mesaOrders);
+  const taxaCheck = document.getElementById('finalizar-taxa-check');
+  const taxaIncluida = _garcomTaxaServicoPct > 0 && taxaCheck?.checked;
+  const taxaVal = taxaIncluida ? subtotal * _garcomTaxaServicoPct / 100 : 0;
+  const total = subtotal + taxaVal;
   try {
     // Marca comanda como entregue (finaliza a sessão)
     await sb.from('orders')
@@ -3451,6 +3498,7 @@ async function confirmarFinalizarMesa() {
     await sb.from('mesas').update({
       status: 'waiting',
       total: total,
+      taxa_servico: taxaVal,
       pag_forma: finalizarPay,
       updated_at: new Date().toISOString()
     }).eq('num', finalizarMesaNum);
@@ -3462,9 +3510,10 @@ async function confirmarFinalizarMesa() {
     await loadPedidosDaMesa();
 
     // Pergunta se deseja imprimir a comanda
-    _printComandaMesaNum = finalizarMesaNum;
-    _printComandaOrders  = mesaOrders;
-    _printComandaTotal   = total;
+    _printComandaMesaNum  = finalizarMesaNum;
+    _printComandaOrders   = mesaOrders;
+    _printComandaTotal    = total;
+    _printComandaTaxaVal  = taxaVal;
     _printComandaPagForma = finalizarPay;
 
     // Só abre o modal se houver itens para imprimir
@@ -3496,8 +3545,10 @@ async function confirmarFinalizarMesa() {
 }
 
 // ── Variáveis para o modal de impressão da comanda ──
+let _finalizarSubtotal    = 0;
 let _printComandaMesaNum  = null;
 let _printComandaOrders   = [];
+let _printComandaTaxaVal  = 0;
 let _printComandaTotal    = 0;
 let _printComandaPagForma = '';
 
@@ -3519,7 +3570,7 @@ async function confirmarImprimirComanda() {
     const rodape   = cfg.rodape || 'Bom apetite!';
     const fmt      = cfg.format || localStorage.getItem('printFormat') || '80mm';
     // Impressora: usa seleção do garçom > config do gestor > localStorage
-    const printer  = _selPrinter || cfg.printer || localStorage.getItem('printPrinter') || '';
+    const printer  = _selPrinter || cfg.printer_caixa || cfg.printer || localStorage.getItem('printPrinter') || '';
     const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
     const mesaNum  = _printComandaMesaNum;
     const pagForma = _printComandaPagForma;
@@ -3536,6 +3587,13 @@ async function confirmarImprimirComanda() {
       return `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${(i.name||'').toUpperCase()}${priceStr}</div>${obs}</div>`;
     };
 
+    const taxaComanda = _printComandaTaxaVal || 0;
+    const subtotalComanda = total - taxaComanda;
+    const taxaLinhaComanda = taxaComanda > 0
+      ? `<div style="display:flex;justify-content:space-between;font-size:0.9em"><span>Subtotal</span><span>R$ ${subtotalComanda.toFixed(2).replace('.',',')}</span></div>
+         <div style="display:flex;justify-content:space-between;font-size:0.9em"><span>Taxa serviço</span><span>R$ ${taxaComanda.toFixed(2).replace('.',',')}</span></div>`
+      : '';
+
     const html = `
       <div class="print-ticket" style="font-size:${fontSize}px">
         <div style="text-align:center;font-size:1.1em;font-weight:900">${nome}</div>
@@ -3548,6 +3606,7 @@ async function confirmarImprimirComanda() {
         <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
         ${todosItens.map(renderItem).join('')}
         <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+        ${taxaLinhaComanda}
         <div style="display:flex;justify-content:space-between;font-weight:900;font-size:1.05em">
           <span>TOTAL</span><span>R$ ${total.toFixed(2).replace('.',',')}</span>
         </div>
@@ -3577,7 +3636,7 @@ async function confirmarImprimirComanda() {
         await fetch('/api/print-queue/job', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-          body: JSON.stringify({ html, format: fmt, printer: printer || undefined }),
+          body: JSON.stringify({ html, format: fmt, printer: printer || undefined, tipo: 'caixa' }),
         });
         showToast('🖨️ Comanda enviada para impressora!');
         return;

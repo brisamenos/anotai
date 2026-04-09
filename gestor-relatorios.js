@@ -2735,8 +2735,10 @@ async function salvarConfigImpressao() {
     printNome:     cfg.nome,
     printSub:      cfg.sub,
     printRodape:   cfg.rodape,
-    printViaMode:  _printViaMode,
+    printViaMode:        _printViaMode,
     printPrinterCozinha: _printPrinterCozinha,
+    printer_caixa:       _printPrinter,
+    printer_cozinha:     _printPrinterCozinha,
   }
   // Salva localmente
   localStorage.setItem('printFormat', fmt)
