@@ -1416,6 +1416,7 @@ function mesaLabel(order) {
 }
 
 let _garcomPrintCfg = null; // cache de print_config do tenant
+let _garcomTaxaServicoPct = 0; // % taxa de serviço (carregado do store_config)
 let _garcomOrderNumOffset = 0; // offset de numeração por tenant (fallback)
 function _garcomOrderNum(id, orderNum) {
   if (orderNum) return Number(orderNum);
@@ -1540,13 +1541,14 @@ async function loadData() {
     sb.from('mesas').select('*').order('num'),
     sb.from('menu_items').select('*').neq('status','pausado').order('id'),
     sb.from('categories').select('*').order('sort_order'),
-    sb.from('store_config').select('print_config,store_name,order_num_offset').eq('tenant_id', _garcomTenantId).single()
+    sb.from('store_config').select('print_config,store_name,order_num_offset,taxa_servico_pct').eq('tenant_id', _garcomTenantId).single()
   ]);
   tables   = (mesasRes.data || []);
   allItems = (itemsRes.data || []);
   allCats  = (catsRes.data  || []);
   try { _garcomPrintCfg = cfgRes.data?.print_config ? JSON.parse(cfgRes.data.print_config) : {}; } catch { _garcomPrintCfg = {}; }
   _garcomOrderNumOffset = parseInt(cfgRes.data?.order_num_offset) || 0;
+  _garcomTaxaServicoPct = parseFloat(cfgRes.data?.taxa_servico_pct) || 0;
   if (!_garcomNomeLoja && cfgRes.data?.store_name) _garcomNomeLoja = cfgRes.data.store_name;
   renderMesas();
   buildCatPills();
@@ -1924,6 +1926,10 @@ async function openMesaDetail(num) {
       <button class="mds-btn finish" onclick="closeMesaDetail();abrirFinalizarMesa(${num})">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Finalizar Mesa ${num}
+      </button>
+      <button class="mds-btn" onclick="closeMesaDetail();imprimirContaMesa(${num})" style="background:transparent;border:1.5px solid rgba(196,149,106,.4);color:var(--amber)">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="7" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M5 5V3h6v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M5 10h6M5 12h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Imprimir conta
       </button>`;
   }
 
@@ -3066,9 +3072,14 @@ function renderMyOrders() {
     }).join('');
 
     const finalizarBtn = !isWaiting
-      ? `<button onclick="abrirFinalizarMesa(${num})" style="width:100%;padding:10px;border-radius:9px;border:none;background:var(--amber);color:#000;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;margin-top:4px">
-          ✓ Finalizar Mesa ${num}
-        </button>`
+      ? `<div style="display:flex;gap:8px;margin-top:4px">
+          <button onclick="imprimirContaMesa(${num})" style="flex:1;padding:10px;border-radius:9px;border:1.5px solid rgba(196,149,106,.4);background:transparent;color:var(--amber);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">
+            🖨️ Imprimir conta
+          </button>
+          <button onclick="abrirFinalizarMesa(${num})" style="flex:2;padding:10px;border-radius:9px;border:none;background:var(--amber);color:#000;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">
+            ✓ Finalizar Mesa ${num}
+          </button>
+        </div>`
       : `<div style="background:rgba(196,149,106,.1);border:1px solid rgba(196,149,106,.25);border-radius:9px;padding:10px;text-align:center;font-size:12.5px;color:var(--amber);font-weight:600;margin-top:4px">
           ⏳ Aguardando pagamento no caixa
         </div>`;
@@ -3168,6 +3179,93 @@ async function refreshMesa(num) {
 // ══ FINALIZAR MESA ════════════════════════
 let finalizarMesaNum = null;
 let finalizarPay = 'PIX';
+
+async function imprimirContaMesa(num) {
+  const orders = allMesaOrders.filter(o => (o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
+  const subtotal = calcularTotalMesa(orders);
+  if (!subtotal) { showToast('⚠️ Nenhum item na mesa'); return; }
+
+  let taxaVal = 0;
+  if (_garcomTaxaServicoPct > 0) {
+    const cobrar = confirm(`Incluir taxa de serviço de ${_garcomTaxaServicoPct}% (R$ ${(subtotal * _garcomTaxaServicoPct / 100).toFixed(2).replace('.',',')})?`);
+    if (cobrar) taxaVal = subtotal * _garcomTaxaServicoPct / 100;
+  }
+  const total = subtotal + taxaVal;
+
+  const cfg      = _garcomPrintCfg || {};
+  const nome     = (_garcomNomeLoja || cfg.nome || 'RESTAURANTE').toUpperCase();
+  const fontSize = parseInt(cfg.fontSize) || 12;
+  const rodape   = cfg.rodape || 'Bom apetite!';
+  const fmt      = cfg.format || localStorage.getItem('printFormat') || '80mm';
+  const printer  = cfg.printer || localStorage.getItem('printPrinter') || '';
+  const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+  const itemMap = {};
+  orders.forEach(o => {
+    (Array.isArray(o.items) ? o.items : []).forEach(i => {
+      if (i.item_status === 'cancelado') return;
+      const k = i.name;
+      if (!itemMap[k]) itemMap[k] = { name: i.name, qty: 0, total: 0 };
+      itemMap[k].qty   += (i.qty || 1);
+      itemMap[k].total += (i.price || 0) * (i.qty || 1);
+    });
+  });
+  const itens = Object.values(itemMap);
+  if (!itens.length) { showToast('⚠️ Sem itens para imprimir'); return; }
+
+  const renderItem = i =>
+    `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${i.name.toUpperCase()}<span style="float:right">R$ ${i.total.toFixed(2).replace('.',',')}</span></div></div>`;
+
+  const taxaLinha = taxaVal > 0
+    ? `<div style="display:flex;justify-content:space-between;font-size:0.9em"><span>Subtotal</span><span>R$ ${subtotal.toFixed(2).replace('.',',')}</span></div>
+       <div style="display:flex;justify-content:space-between;font-size:0.9em"><span>Taxa serviço (${_garcomTaxaServicoPct}%)</span><span>R$ ${taxaVal.toFixed(2).replace('.',',')}</span></div>`
+    : '';
+
+  const html = `
+    <div class="print-ticket" style="font-size:${fontSize}px">
+      <div style="text-align:center;font-size:1.1em;font-weight:900">${nome}</div>
+      <div style="text-align:center;font-weight:bold;margin:4px 0">*** CONTA ***</div>
+      <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+      <div>Mesa: <b>${num}</b></div>
+      ${currentGarcom?.nome ? `<div>Garçom: ${currentGarcom.nome}</div>` : ''}
+      <div>Data: ${now}</div>
+      <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+      ${itens.map(renderItem).join('')}
+      <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+      ${taxaLinha}
+      <div style="display:flex;justify-content:space-between;font-weight:900;font-size:1.05em">
+        <span>TOTAL</span><span>R$ ${total.toFixed(2).replace('.',',')}</span>
+      </div>
+      <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+      <div style="text-align:center;font-size:0.85em">${rodape}</div>
+    </div>`;
+
+  const tid = _garcomTenantId;
+
+  if (window.ElectronPrint) {
+    try { const r = await window.ElectronPrint.printOrder({ mesa_num: num, _html: html }); if (r.ok) { showToast('🖨️ Conta impressa!'); return; } } catch(e) {}
+  }
+  try {
+    const st = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } }).then(r=>r.json());
+    if (st.active) {
+      await fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html, format: fmt, printer: printer || undefined }) });
+      showToast('🖨️ Conta enviada para impressora!'); return;
+    }
+  } catch(e) {}
+  try {
+    const r = await fetch('/api/print', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html, format: fmt, printer: printer || undefined }) });
+    const data = await r.json();
+    if (data.pdf) {
+      const bytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
+      const blob  = new Blob([bytes], { type:'application/pdf' });
+      let frame = document.getElementById('_garcom_print_frame');
+      if (!frame) { frame = document.createElement('iframe'); frame.id='_garcom_print_frame'; frame.style.cssText='position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;visibility:hidden'; document.body.appendChild(frame); }
+      frame.src = URL.createObjectURL(blob);
+      showToast('🖨️ Conta gerada!'); return;
+    }
+  } catch(e) {}
+  showToast('⚠️ Impressora não disponível');
+}
 
 async function abrirFinalizarMesa(num) {
   finalizarMesaNum = num;

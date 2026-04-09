@@ -577,7 +577,7 @@ function imprimirViaCliente() {
 
   // Tenta Electron primeiro, senão abre janela de impressão do browser
   if (window.ElectronPrint) {
-    const fakeOrder = { id: num, client: `Mesa ${num}`, items: itens, total: parseFloat(totalStr.replace('R$ ','').replace(',','.')), pag: forma, mesa_num: num };
+    const fakeOrder = { id: num, client: `Mesa ${num}`, items: itens, total: parseFloat(totalStr.replace('R$ ','').replace(',','.')), pag: forma, mesa_num: num, _html: html };
     window.ElectronPrint.printOrder(fakeOrder).catch(() => _printViaWindow(html));
   } else {
     _printViaWindow(html);
