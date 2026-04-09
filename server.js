@@ -317,6 +317,9 @@ const MIGRATIONS = [
   { version:30, description:'order_num sequencial por tenant', up:[
     `ALTER TABLE orders ADD COLUMN order_num INTEGER`
   ]},
+  { version:31, description:'taxa_servico_pct em store_config', up:
+    `ALTER TABLE store_config ADD COLUMN taxa_servico_pct REAL DEFAULT 0`
+  },
 ]
 
 function runMigrations() {
