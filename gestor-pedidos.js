@@ -307,12 +307,33 @@ function openOrderDetail(id) {
 
   // Totais
   const fmt = v => 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ',');
-  document.getElementById('od-subtotal').textContent = fmt(o.total);
-  document.getElementById('od-total').textContent = fmt(o.total + o.taxa);
+
+  // Subtotal real = soma dos itens (o.total já vem com descontos/cashback aplicados)
+  const itemsSubtotal = (o.items || []).reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+  const desconto = Math.max(0, itemsSubtotal - parseFloat(o.total || 0));
+
+  document.getElementById('od-subtotal').textContent = fmt(itemsSubtotal);
+  document.getElementById('od-total').textContent = fmt(parseFloat(o.total || 0) + parseFloat(o.taxa || 0));
+
+  // Linha de desconto (cupom / cashback) — criada dinamicamente
+  let descontoRow = document.getElementById('od-desconto-row');
+  if (!descontoRow) {
+    descontoRow = document.createElement('div');
+    descontoRow.id = 'od-desconto-row';
+    descontoRow.className = 'od-subtotal-row';
+    const taxaRowRef = document.getElementById('od-taxa-row');
+    if (taxaRowRef) taxaRowRef.parentNode.insertBefore(descontoRow, taxaRowRef);
+  }
+  if (desconto > 0.009) {
+    descontoRow.style.display = '';
+    descontoRow.innerHTML = '<span style="color:var(--success)">Desconto / Cashback</span><span style="color:var(--success)">− ' + fmt(desconto) + '</span>';
+  } else {
+    descontoRow.style.display = 'none';
+  }
 
   const taxaRow = document.getElementById('od-taxa-row');
   if (taxaRow) {
-    taxaRow.style.display = o.taxa > 0 ? '' : 'none';
+    taxaRow.style.display = parseFloat(o.taxa || 0) > 0 ? '' : 'none';
     const taxaEl = document.getElementById('od-taxa-val');
     if (taxaEl) taxaEl.textContent = fmt(o.taxa);
   }
