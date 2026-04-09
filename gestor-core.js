@@ -224,7 +224,7 @@ async function loadAllData(silent = false) {
       safe(sb.from('mesas').select('*').order('num')),
       safe(sb.from('estoque').select('*').order('id')),
       safe(sb.from('fidelidade').select('*').order('pts',{ascending:false})),
-      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema,order_num_offset').single()),
+      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema,order_num_offset,taxa_servico_pct').single()),
       safe(sb.from('orders').select('*').eq('status','mesa_aberta').order('id',{ascending:false}))
     ]);
 
@@ -280,6 +280,7 @@ async function loadAllData(silent = false) {
     // Aplica estado do caixa e loja
     if (cfgRes.data) {
       _orderNumOffset = parseInt(cfgRes.data.order_num_offset) || 0;
+      _taxaServicoPct = parseFloat(cfgRes.data.taxa_servico_pct) || 0;
 
       // ── Auto-corrige offset para tenants novos ──────────────
       // Se offset = 0 e este tenant ainda não tem pedido nenhum,
@@ -1601,6 +1602,7 @@ let items        = [];
 let categories   = [];
 let ordersKanban = [];
 let _orderNumOffset = 0;   // offset salvo em store_config (fallback para pedidos antigos sem order_num)
+let _taxaServicoPct = 0;   // % taxa de serviço do garçom (opcional no fechamento de mesa)
 function _orderNum(id, orderNum) {
   // Prefere order_num do servidor (sequencial por tenant), fallback para id - offset
   if (orderNum) return Number(orderNum);

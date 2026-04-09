@@ -445,6 +445,21 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
   document.getElementById('modal-pag-mesa-title').textContent = `Registrar Pagamento — Mesa ${num}`;
   document.getElementById('modal-pag-total').textContent = 'R$ ' + totalVal.toFixed(2).replace('.',',');
   document.getElementById('modal-pag-mesa-num').value = num;
+  // Taxa de serviço
+  document.getElementById('modal-pag-subtotal').value = totalVal.toFixed(2);
+  const taxaBloco = document.getElementById('modal-taxa-bloco');
+  const taxaCheck = document.getElementById('modal-taxa-check');
+  if (taxaBloco && taxaCheck) {
+    taxaCheck.checked = false;
+    document.getElementById('modal-taxa-breakdown').style.display = 'none';
+    if (_taxaServicoPct > 0) {
+      taxaBloco.style.display = 'block';
+      document.getElementById('modal-taxa-label').textContent = `Taxa de serviço (${_taxaServicoPct}%)`;
+      document.getElementById('modal-taxa-linha').textContent = `Taxa (${_taxaServicoPct}%)`;
+    } else {
+      taxaBloco.style.display = 'none';
+    }
+  }
   const pagForma = t.pag_forma;
   if (pagForma) {
     const sel = document.getElementById('modal-pag-forma');
@@ -505,6 +520,23 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
   }
 
   openModal('modal-pag-mesa');
+}
+
+function _toggleTaxaServico() {
+  const check    = document.getElementById('modal-taxa-check');
+  const subtotal = parseFloat(document.getElementById('modal-pag-subtotal').value) || 0;
+  const pct      = _taxaServicoPct || 0;
+  const taxa     = subtotal * pct / 100;
+  const total    = check.checked ? subtotal + taxa : subtotal;
+  document.getElementById('modal-pag-total').textContent = 'R$ ' + total.toFixed(2).replace('.',',');
+  const breakdown = document.getElementById('modal-taxa-breakdown');
+  if (check.checked) {
+    breakdown.style.display = 'block';
+    document.getElementById('modal-taxa-sub').textContent = 'R$ ' + subtotal.toFixed(2).replace('.',',');
+    document.getElementById('modal-taxa-val').textContent = 'R$ ' + taxa.toFixed(2).replace('.',',');
+  } else {
+    breakdown.style.display = 'none';
+  }
 }
 
 function imprimirViaCliente() {
@@ -570,6 +602,9 @@ async function confirmarPagamentoMesa() {
 
   const totalStr = document.getElementById('modal-pag-total').textContent || 'R$ 0,00';
   const totalVal = parseFloat(totalStr.replace('R$ ','').replace(',','.')) || 0;
+  const _taxaCheck = document.getElementById('modal-taxa-check');
+  const _subtotalVal = parseFloat(document.getElementById('modal-pag-subtotal')?.value) || 0;
+  const _taxaVal = (_taxaCheck?.checked && _subtotalVal > 0) ? (totalVal - _subtotalVal) : 0;
   const time     = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 
   // ── IMPORTANTE: captura opened_at ANTES de qualquer await ──────────────
@@ -649,7 +684,7 @@ async function confirmarPagamentoMesa() {
 
     // Monta e exibe comprovante
     const caixaMsg = movErr ? ' (caixa não registrado)' : '';
-    abrirComprovantesMesa(num, totalVal, forma, time, _ordensComprovante);
+    abrirComprovantesMesa(num, totalVal, forma, time, _ordensComprovante, _taxaVal);
     sbToast('ok', `Mesa ${num} liberada — R$ ${totalVal.toFixed(2).replace('.',',')}${caixaMsg}`);
   } catch(e) {
     console.error('confirmarPagamentoMesa error:', e);
@@ -660,7 +695,7 @@ async function confirmarPagamentoMesa() {
   }
 }
 
-function abrirComprovantesMesa(num, totalVal, forma, time, ordensPreSalvas) {
+function abrirComprovantesMesa(num, totalVal, forma, time, ordensPreSalvas, taxaServicoVal) {
   const modal = document.getElementById('modal-comprovante-mesa');
   if (!modal) return;
 
@@ -707,6 +742,13 @@ function abrirComprovantesMesa(num, totalVal, forma, time, ordensPreSalvas) {
       </div>
       <div style="margin-bottom:10px">${itensHtml}</div>
       <hr style="border:none;border-top:1px dashed #ccc;margin:8px 0">
+      ${taxaServicoVal > 0 ? `
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:2px">
+        <span>Subtotal</span><span>R$ ${(totalVal - taxaServicoVal).toFixed(2).replace('.',',')}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+        <span>Taxa de serviço (${_taxaServicoPct}%)</span><span>R$ ${taxaServicoVal.toFixed(2).replace('.',',')}</span>
+      </div>` : ''}
       <div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;margin-bottom:4px">
         <span>TOTAL</span><span>R$ ${totalVal.toFixed(2).replace('.',',')}</span>
       </div>

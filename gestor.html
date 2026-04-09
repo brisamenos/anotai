@@ -381,6 +381,18 @@ if(window.visualViewport){window.visualViewport.addEventListener('resize',setVH)
         <div style="font-size:11.5px;color:var(--muted);margin-bottom:4px">Total a receber</div>
         <div style="font-family:'Playfair Display',serif;font-size:30px;font-weight:900;color:var(--accent3)" id="modal-pag-total">R$ 0,00</div>
       </div>
+      <!-- Taxa de serviço (visível apenas se _taxaServicoPct > 0) -->
+      <div id="modal-taxa-bloco" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none">
+          <input type="checkbox" id="modal-taxa-check" onchange="_toggleTaxaServico()" style="width:16px;height:16px;accent-color:var(--accent3);cursor:pointer">
+          <span style="font-size:13px;font-weight:600;color:var(--text)" id="modal-taxa-label">Taxa de serviço (10%)</span>
+        </label>
+        <div id="modal-taxa-breakdown" style="display:none;margin-top:10px;font-size:12px;color:var(--muted)">
+          <div style="display:flex;justify-content:space-between;padding:3px 0"><span>Subtotal</span><span id="modal-taxa-sub">R$ 0,00</span></div>
+          <div style="display:flex;justify-content:space-between;padding:3px 0"><span id="modal-taxa-linha">Taxa (10%)</span><span id="modal-taxa-val">R$ 0,00</span></div>
+        </div>
+      </div>
+      <input type="hidden" id="modal-pag-subtotal">
       <div>
         <label class="form-label">Forma de pagamento</label>
         <div class="sw" style="width:100%">
@@ -3773,6 +3785,17 @@ Use no seu próximo pedido 🛍️</textarea>
       <button class="btn bp" id="btn-backup-completo" onclick="baixarBackupCompleto()">
         ⬇️ Baixar backup completo
       </button>
+    </div>
+  </div>
+
+  <div class="card" style="padding:20px;margin-bottom:16px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:4px">Taxa de serviço do garçom</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Percentual opcional exibido no fechamento de mesa. O operador decide se cobra ou não a cada pagamento.</div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <input type="number" id="cfg-taxa-servico-input" min="0" max="100" step="0.5" placeholder="0" class="form-input" style="width:100px"
+        oninput="this.value=Math.max(0,Math.min(100,parseFloat(this.value)||0))">
+      <span style="font-size:13px;color:var(--muted)">% &nbsp;(0 = desativado)</span>
+      <button class="btn bp" style="margin-left:auto;padding:8px 16px;font-size:13px" onclick="salvarTaxaServico()">Salvar</button>
     </div>
   </div>
 

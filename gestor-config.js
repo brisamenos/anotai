@@ -76,6 +76,23 @@ async function _renderConfiguracoes() {
       ? `Próximo pedido: <strong>#${proxNum}</strong> &nbsp;·&nbsp; Offset atual: ${_orderNumOffset}`
       : 'Nenhum pedido registrado ainda.';
   } catch(e) { el.textContent = '—'; }
+  // Carrega taxa de serviço atual
+  try {
+    const inp = document.getElementById('cfg-taxa-servico-input');
+    if (inp) inp.value = _taxaServicoPct > 0 ? _taxaServicoPct : '';
+  } catch(e) {}
+}
+
+async function salvarTaxaServico() {
+  const val = parseFloat(document.getElementById('cfg-taxa-servico-input')?.value) || 0;
+  try {
+    const { error } = await sb.from('store_config').update({ taxa_servico_pct: val }).eq('tenant_id', _sessao.tenant_id);
+    if (error) throw error;
+    _taxaServicoPct = val;
+    sbToast('ok', val > 0 ? `Taxa de serviço salva: ${val}%` : 'Taxa de serviço desativada');
+  } catch(e) {
+    sbToast('err', 'Erro ao salvar: ' + (e?.message || e));
+  }
 }
 
 // ── Backup completo (dados + imagens) ────────────────
