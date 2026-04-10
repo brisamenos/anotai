@@ -388,7 +388,12 @@ async function cobrarMesaDireta(num) {
     t.status = 'waiting';
     t.total = sessionTotal;
     ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== numInt);
-    mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== numInt);
+    // Preserva pedidos no cache (necessário para exibir itens no modal de pagamento)
+    mesaOrdersCache.forEach(o => {
+      if (parseInt(o.mesa_num) === numInt && ['analise', 'producao', 'pronto', 'mesa_aberta'].includes(o.status)) {
+        o.status = 'entregue';
+      }
+    });
     renderKanban();
     _renderMesaPageFromCache();
 
@@ -461,10 +466,17 @@ async function fecharMesa(num) {
     t.status = 'waiting';
     t.total = sessionTotal;
     ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== numInt);
-    // Mantém os pedidos no cache para exibição do resumo - serão atualizados via Realtime
-    // mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== numInt);
+    // Preserva pedidos no cache (necessário para exibir itens na mesa waiting)
+    // Atualiza status para 'entregue' no cache local
+    mesaOrdersCache.forEach(o => {
+      if (parseInt(o.mesa_num) === numInt && ['analise', 'producao', 'pronto', 'mesa_aberta'].includes(o.status)) {
+        o.status = 'entregue';
+      }
+    });
     renderKanban();
     _renderMesaPageFromCache();
+    // Refresh do banco em background para dados definitivos
+    refreshMesa(numInt).then(() => _renderMesaPageFromCache()).catch(() => {});
     sbToast('ok', `Mesa ${numInt} aguardando pagamento — R$ ${sessionTotal.toFixed(2).replace('.', ',')} `);
   } catch(e) {
     console.error('fecharMesa error:', e);
