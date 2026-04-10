@@ -243,7 +243,7 @@ async function loadAllData(silent = false) {
     if (ordersRes.data?.length)   ordersKanban  = ordersRes.data.map(mapOrder);
     // Comandas mesa_aberta: entram no cache do salão, não no kanban
     (mesaAbertaRes?.data || []).forEach(o => {
-      if (!mesaOrdersCache.find(x => x.id === o.id)) mesaOrdersCache.unshift({ ...o, num: _orderNum(o.id, o.order_num) });
+      if (!mesaOrdersCache.find(x => x.id === o.id)) mesaOrdersCache.unshift({ ...o, items: _parseItems(o.items), num: _orderNum(o.id, o.order_num) });
     });
     if (movsRes.data?.length)     movimentos    = movsRes.data.map(m => ({
       id: m.id, desc: m.description||'', tipo: m.tipo,
@@ -510,43 +510,61 @@ function _renderMesaPageFromCache() {
   });
 }
 
-// Agrega e imprime comanda completa da mesa quando garçom finaliza
-function _printComandaMesa(mesaNum, mesaData) {
-  // Filtra todos os pedidos da sessão atual da mesa no cache
-  const sessionRef = mesaData.opened_at || null;
-  const pedidos = mesaOrdersCache.filter(o => {
-    if (parseInt(o.mesa_num) !== parseInt(mesaNum)) return false;
-    if (sessionRef && o.session_ref !== undefined && o.session_ref !== null) {
-      return o.session_ref === sessionRef;
-    }
-    return true;
-  });
-
+// Imprime pedido de conta no caixa quando garçom solicita fechamento
+// SOMENTE impressora do caixa — sem via de cozinha
+async function _printComandaMesa(mesaNum, mesaData) {
+  const pedidos = mesaOrdersCache.filter(o => parseInt(o.mesa_num) === parseInt(mesaNum));
   if (!pedidos.length) return;
 
-  // Agrega todos os itens dos pedidos da mesa em um único objeto para impressão
-  const allItems = [];
-  pedidos.forEach(o => {
-    if (Array.isArray(o.items)) o.items.forEach(i => allItems.push(i));
+  const allItems = pedidos.flatMap(o => _parseItems(o.items))
+    .filter(i => i.item_status !== 'cancelado');
+  if (!allItems.length) return;
+
+  // Consolida itens iguais
+  const itemMap = {};
+  allItems.forEach(i => {
+    const k = i.name + (i.obs || '');
+    if (!itemMap[k]) itemMap[k] = { name: i.name, qty: 0, price: i.price || 0, obs: i.obs || '' };
+    itemMap[k].qty += (i.qty || 1);
   });
+  const itens = Object.values(itemMap);
 
-  const subtotal = allItems.reduce((s, i) => s + (parseFloat(i.price || 0) * (i.qty || 1)), 0);
+  const cfg      = typeof _getPrintConfig === 'function' ? _getPrintConfig() : {};
+  const nome     = (_sessao?.nome || cfg.nome || 'RESTAURANTE').toUpperCase();
+  const fontSize = parseInt(cfg.fontSize) || 12;
+  const rodape   = cfg.rodape || 'Obrigado pela preferência!';
+  const fmt      = localStorage.getItem('printFormat') || cfg.format || '80mm';
+  const printer  = cfg.printer_caixa || cfg.printer || localStorage.getItem('printPrinter') || '';
   const pagForma = mesaData.pag_forma || '';
+  const total    = parseFloat(mesaData.total || 0);
+  const now      = new Date().toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
 
-  const comandaOrder = {
-    id:     pedidos[0].id,
-    num:    `Mesa ${mesaNum}`,
-    client: pedidos[0].client || `Mesa ${mesaNum}`,
-    addr:   '',
-    items:  allItems,
-    total:  parseFloat(mesaData.total || subtotal),
-    taxa:   0,
-    pag:    pagForma,
-    troco:  null,
-  };
+  const html = `
+    <div class="print-ticket" style="font-size:${fontSize}px">
+      <div style="text-align:center;font-size:1.1em;font-weight:900">${nome}</div>
+      <div style="text-align:center;font-weight:bold;margin:4px 0">*** PEDIDO DE CONTA ***</div>
+      <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+      <div>Mesa: <b>${mesaNum}</b></div>
+      <div>Data: ${now}</div>
+      ${pagForma ? `<div>Pagamento: <b>${pagForma}</b></div>` : ''}
+      <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+      ${itens.map(i => `<div style="margin-bottom:4px">
+        <div style="font-weight:bold;word-break:break-word">${i.qty}x ${i.name.toUpperCase()}
+          <span style="float:right">R$ ${(i.price * i.qty).toFixed(2).replace('.',',')}</span>
+        </div>
+        ${i.obs ? `<div style="padding-left:12px;font-size:0.88em">↳ ${i.obs}</div>` : ''}
+      </div>`).join('')}
+      <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+      <div style="display:flex;justify-content:space-between;font-weight:900;font-size:1.05em">
+        <span>TOTAL</span><span>R$ ${total.toFixed(2).replace('.',',')}</span>
+      </div>
+      <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+      <div style="text-align:center;font-size:0.85em">${rodape}</div>
+    </div>`;
 
-  if (typeof printOrder === 'function') {
-    printOrder(comandaOrder);
+  // Envia SOMENTE para impressora do caixa — sem via de cozinha
+  if (typeof _printJobCascade === 'function') {
+    await _printJobCascade(html, fmt, printer, {}, cfg, 'caixa');
   }
 }
 
