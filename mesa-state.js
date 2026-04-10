@@ -18,6 +18,15 @@
 var tables          = [];
 var mesaOrdersCache = [];
 
+// ── Helper local — parse seguro de items ─────────────────────────────────────
+// Definido aqui (e não em gestor-core.js) porque mesa-state.js carrega primeiro.
+function _pi(items) {
+  if (Array.isArray(items)) return items;
+  if (typeof items === 'string') { try { return JSON.parse(items); } catch { return []; } }
+  return [];
+}
+
+
 // ── Cálculo de total ─────────────────────────────────────────────────────────
 // Fonte canônica. gestor-financeiro.js e garcom.html delegam para cá.
 // Regras:
@@ -52,19 +61,14 @@ function _patchOrderInCache(order) {
     return;
   }
 
-  // Parse seguro: Supabase Realtime pode devolver items como string JSON
-  const parsedItems = Array.isArray(order.items)
-    ? order.items
-    : (typeof order.items === 'string' ? (() => { try { return JSON.parse(order.items); } catch { return null; } })() : null);
-
-  const enriched = { ...order, num: _orderNum(order.id, order.order_num), ...(parsedItems ? { items: parsedItems } : {}) };
+  const enriched = { ...order, items: _pi(order.items), num: _orderNum(order.id, order.order_num) };
 
   if (idx !== -1) {
     const existing = mesaOrdersCache[idx];
     mesaOrdersCache[idx] = { ...existing, ...enriched };
-    // Garante que items nunca seja perdido: se o SSE não enviou items,
-    // mantém o array do cache anterior.
-    if (!Array.isArray(mesaOrdersCache[idx].items) && Array.isArray(existing.items)) {
+    // Garante que items nunca seja perdido: se o payload não trouxe items (array vazio),
+    // preserva os do cache anterior.
+    if (!mesaOrdersCache[idx].items?.length && existing.items?.length) {
       mesaOrdersCache[idx].items = existing.items;
     }
     return;
@@ -144,7 +148,7 @@ async function refreshMesa(num) {
   // 3. Substitui apenas as entradas desta mesa no cache
   mesaOrdersCache = [
     ...mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== numInt),
-    ...(orders || []).map(o => ({ ...o, num: _orderNum(o.id, o.order_num) }))
+    ...(orders || []).map(o => ({ ...o, items: _pi(o.items), num: _orderNum(o.id, o.order_num) }))
   ];
 }
 
@@ -191,5 +195,5 @@ async function refreshMesasState() {
       const sessionStart = new Date(mesa.opened_at).getTime() - 5000;
       return new Date(o.created_at || 0).getTime() >= sessionStart;
     })
-    .map(o => ({ ...o, num: _orderNum(o.id, o.order_num) }));
+    .map(o => ({ ...o, items: _pi(o.items), num: _orderNum(o.id, o.order_num) }));
 }
