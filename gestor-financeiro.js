@@ -826,7 +826,7 @@ function imprimirComprovanteMesa() {
           await fetch('/api/print-queue/job', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-            body: JSON.stringify({ html, format: fmt }),
+            body: JSON.stringify({ html, format: fmt, tipo: 'caixa' }),
           });
           if (typeof sbToast === 'function') sbToast('ok', '🖨️ Comprovante enviado ao agente!');
           return;

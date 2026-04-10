@@ -2528,23 +2528,23 @@ async function printOrder(order) {
   const jobs = [];
   if (_printViaMode === 'separado' && _printPrinterCozinha && ticket.cozinha) {
     // Modo separado: cada via para sua impressora
-    if (ticket.principal) jobs.push({ html: ticket.principal, printer: _printPrinter || '' });
-    jobs.push({ html: ticket.cozinha, printer: _printPrinterCozinha });
+    if (ticket.principal) jobs.push({ html: ticket.principal, printer: _printPrinter || '', tipo: 'caixa' });
+    jobs.push({ html: ticket.cozinha, printer: _printPrinterCozinha, tipo: 'cozinha' });
   } else if (_printViaMode === 'somente_principal') {
     // Só via do cliente, sem cozinha
-    jobs.push({ html: ticket.principal, printer: _printPrinter || '' });
+    jobs.push({ html: ticket.principal, printer: _printPrinter || '', tipo: 'caixa' });
   } else {
     // Modo combinado (padrão): tudo na mesma folha com linha de corte
     jobs.push({ html: ticket.singleSheet, printer: _printPrinter || '' });
   }
 
   for (const job of jobs) {
-    await _printJobCascade(job.html, fmt, job.printer, order, cfg);
+    await _printJobCascade(job.html, fmt, job.printer, order, cfg, job.tipo);
   }
 }
 
 // ── Cascata de impressão silenciosa (1 job) ──────────────
-async function _printJobCascade(html, fmt, printer, order, cfg) {
+async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
   // 1️⃣ Electron — usa printHtml para enviar HTML + impressora específica do job
   if (window.ElectronPrint) {
     try {
@@ -2579,7 +2579,7 @@ async function _printJobCascade(html, fmt, printer, order, cfg) {
         await fetch('/api/print-queue/job', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-          body: JSON.stringify({ html, format: fmt, printer: printer || undefined }),
+          body: JSON.stringify({ html, format: fmt, printer: printer || undefined, tipo: tipo || undefined }),
         });
         sbToast('ok', '🖨️ Enviado ao agente!');
         return;

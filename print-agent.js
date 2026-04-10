@@ -11,12 +11,15 @@
  * Parâmetros opcionais:
  *   --printer "Nome da Impressora"   (padrão: impressora do sistema)
  *   --format  80mm | 58mm | A4       (padrão: 80mm)
+ *   --tipo    caixa | cozinha         (filtra jobs por tipo — omitir = todos)
  *   --interval 4                     (segundos entre verificações, padrão: 4)
  *   --debug                          (mostra logs extras)
  *
  * Exemplos:
  *   node print-agent.js --url http://localhost:3000 --tenant abc123
  *   node print-agent.js --url https://minha-loja.fly.dev --tenant abc123 --printer "EPSON TM-T20"
+ *   node print-agent.js --url https://minha-loja.fly.dev --tenant abc123 --printer "CAIXA" --tipo caixa
+ *   node print-agent.js --url https://minha-loja.fly.dev --tenant abc123 --printer "COZINHA" --tipo cozinha
  */
 
 const https   = require('https');
@@ -39,6 +42,7 @@ const TENANT_ID  = getArg('tenant',   '');
 const PRINTER    = getArg('printer',  '');
 const FORMAT     = getArg('format',   '80mm');
 const INTERVAL   = parseInt(getArg('interval', '4')) * 1000;
+const TIPO       = getArg('tipo',     '');  // 'caixa' ou 'cozinha' — filtra jobs por tipo
 const DEBUG      = hasFlag('debug');
 
 if (!BASE_URL || !TENANT_ID) {
@@ -234,7 +238,9 @@ function findSumatra() {
 async function processPendingJobs() {
   let res;
   try {
-    res = await request('GET', '/api/print-queue/pending');
+    // Se --tipo foi passado, filtra jobs apenas desse tipo
+    const tipoQuery = TIPO ? `?tipo=${TIPO}` : '';
+    res = await request('GET', '/api/print-queue/pending' + tipoQuery);
   } catch (e) {
     log('❌  Erro ao buscar fila:', e.message);
     return;
@@ -273,6 +279,7 @@ async function main() {
   log('URL:', BASE_URL);
   log('Tenant:', TENANT_ID);
   log('Impressora:', PRINTER || '(padrão do sistema)');
+  log('Tipo:', TIPO || '(todos — sem filtro)');
   log('Formato:', FORMAT);
   log('Intervalo:', INTERVAL / 1000 + 's');
   if (os.platform() === 'win32' && !findSumatra()) {

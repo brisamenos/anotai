@@ -1752,17 +1752,20 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!tid)       { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
     if (!body.html) { send(res, 400, { error: 'html obrigatório' }); return true }
     try {
-      // Garante que a tabela existe
+      // Garante que a tabela existe (com coluna tipo para roteamento caixa/cozinha)
       db.exec(`CREATE TABLE IF NOT EXISTS print_jobs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tenant_id TEXT NOT NULL, html TEXT NOT NULL,
         format TEXT DEFAULT 'A4', printer TEXT,
+        tipo TEXT DEFAULT NULL,
         status TEXT DEFAULT 'pending', error TEXT,
         created_at TEXT DEFAULT (datetime('now')), done_at TEXT
       )`)
+      // Migration: adiciona coluna tipo se não existir (para DBs já criados)
+      try { db.exec(`ALTER TABLE print_jobs ADD COLUMN tipo TEXT DEFAULT NULL`) } catch (_) {}
       const info = db.prepare(
-        `INSERT INTO print_jobs (tenant_id, html, format, printer) VALUES (?, ?, ?, ?)`
-      ).run(tid, body.html, body.format || 'A4', body.printer || null)
+        `INSERT INTO print_jobs (tenant_id, html, format, printer, tipo) VALUES (?, ?, ?, ?, ?)`
+      ).run(tid, body.html, body.format || 'A4', body.printer || null, body.tipo || null)
       send(res, 201, { ok: true, id: info.lastInsertRowid })
     } catch (e) { send(res, 500, { error: e.message }) }
     return true
@@ -1772,17 +1775,29 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'GET' && upath === '/api/print-queue/pending') {
     const tid = req.headers['x-tenant-id']
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    // Filtro opcional por tipo (caixa, cozinha) via query string ?tipo=caixa
+    const parsedUrl = new URL(req.url, 'http://localhost')
+    const tipoFilter = parsedUrl.searchParams.get('tipo') || null
     try {
       db.exec(`CREATE TABLE IF NOT EXISTS print_jobs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tenant_id TEXT NOT NULL, html TEXT NOT NULL,
         format TEXT DEFAULT 'A4', printer TEXT,
+        tipo TEXT DEFAULT NULL,
         status TEXT DEFAULT 'pending', error TEXT,
         created_at TEXT DEFAULT (datetime('now')), done_at TEXT
       )`)
-      const jobs = db.prepare(
-        `SELECT id, html, format, printer FROM print_jobs WHERE tenant_id=? AND status='pending' ORDER BY id ASC LIMIT 5`
-      ).all(tid)
+      try { db.exec(`ALTER TABLE print_jobs ADD COLUMN tipo TEXT DEFAULT NULL`) } catch (_) {}
+      let jobs
+      if (tipoFilter) {
+        jobs = db.prepare(
+          `SELECT id, html, format, printer, tipo FROM print_jobs WHERE tenant_id=? AND status='pending' AND tipo=? ORDER BY id ASC LIMIT 5`
+        ).all(tid, tipoFilter)
+      } else {
+        jobs = db.prepare(
+          `SELECT id, html, format, printer, tipo FROM print_jobs WHERE tenant_id=? AND status='pending' ORDER BY id ASC LIMIT 5`
+        ).all(tid)
+      }
       // Marca como 'processing' para não duplicar
       if (jobs.length) {
         const ids = jobs.map(j => j.id).join(',')

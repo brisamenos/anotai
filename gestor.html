@@ -416,6 +416,52 @@ if(window.visualViewport){window.visualViewport.addEventListener('resize',setVH)
   </div>
 </div>
 
+<!-- MODAL DETALHE MESA (gestor — ver itens, cancelar, editar, imprimir conta) -->
+<div class="modal-bg" id="modal-mesa-detalhe">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-head">
+      <div class="modal-title" id="mesa-detalhe-title">Mesa ?</div>
+      <button class="modal-close" onclick="closeModal('modal-mesa-detalhe')"></button>
+    </div>
+    <div style="padding:16px 20px 20px;display:flex;flex-direction:column;gap:12px">
+      <!-- Lista de itens da comanda -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px;max-height:340px;overflow-y:auto">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📋 Itens da comanda</div>
+        <div id="mesa-detalhe-itens-list"></div>
+      </div>
+      <!-- Subtotal -->
+      <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:13px;font-weight:600;color:var(--muted)">Subtotal</span>
+          <span style="font-family:'Playfair Display',serif;font-size:24px;font-weight:900;color:var(--accent3)" id="mesa-detalhe-subtotal">R$ 0,00</span>
+        </div>
+        <!-- Taxa de serviço opcional -->
+        <div id="mesa-detalhe-taxa-row" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid rgba(245,158,11,.2)">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none">
+            <input type="checkbox" id="mesa-detalhe-taxa-check" checked onchange="_toggleTaxaDetalhe()" style="width:16px;height:16px;accent-color:var(--accent3);cursor:pointer">
+            <span style="font-size:13px;font-weight:600;color:var(--text)" id="mesa-detalhe-taxa-label">Taxa de serviço (10%) — opcional</span>
+          </label>
+          <div id="mesa-detalhe-taxa-info" style="margin-top:6px;font-size:12px;color:var(--muted)">
+            <div style="display:flex;justify-content:space-between;padding:3px 0"><span id="mesa-detalhe-taxa-linha">Taxa (10%)</span><span id="mesa-detalhe-taxa-val">R$ 0,00</span></div>
+            <div style="display:flex;justify-content:space-between;padding:3px 0;font-weight:700;color:var(--accent3);font-size:14px"><span>Total</span><span id="mesa-detalhe-total-com-taxa">R$ 0,00</span></div>
+          </div>
+        </div>
+      </div>
+      <!-- Ações -->
+      <div style="display:flex;gap:8px">
+        <button class="btn" style="flex:1;justify-content:center;padding:10px;font-size:12.5px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);color:#93c5fd" onclick="gestorImprimirContaMesa()">
+          🖨️ Imprimir conta
+        </button>
+        <button class="btn" style="flex:1;justify-content:center;padding:10px;font-size:12.5px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:#86efac" onclick="gestorAddItemMesa()">
+          ➕ Adicionar item
+        </button>
+      </div>
+      <input type="hidden" id="mesa-detalhe-num">
+      <input type="hidden" id="mesa-detalhe-order-id">
+    </div>
+  </div>
+</div>
+
 <!-- MODAL NOVA MESA -->
 <div class="modal-bg" id="modal-nova-mesa">
   <div class="modal" style="max-width:360px">

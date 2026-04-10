@@ -769,11 +769,17 @@ function renderMesaCard(t, orders) {
   }
 
   const actionBtn = isWaiting
-    ? `<button onclick="openRegistrarPagamento(${t.num}, ${displayTotal.toFixed(2)})" style="width:100%;margin-top:4px;padding:11px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">
+    ? `<div style="display:flex;gap:8px;margin-top:4px">
+        <button onclick="gestorAbrirDetalheMesa(${t.num})" style="flex:1;padding:11px;border-radius:9px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer">📋 Detalhes</button>
+        <button onclick="openRegistrarPagamento(${t.num}, ${displayTotal.toFixed(2)})" style="flex:2;padding:11px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">
         💰 Registrar pagamento — R$ ${displayTotal.toFixed(2).replace('.', ',')}
-      </button>`
+      </button>
+      </div>`
     : `<div style="display:flex;gap:8px;margin-top:8px">
         <button onclick="openGarcomMesa(${t.num})" class="btn bp" style="flex:1;justify-content:center;font-size:12px">➕ Lançar pedido</button>
+        <button onclick="gestorAbrirDetalheMesa(${t.num})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">📋 Detalhes</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:6px">
         <button onclick="cobrarMesaDireta(${t.num})" style="flex:1;padding:7px;border-radius:8px;border:none;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">💳 Cobrar agora</button>
         <button onclick="fecharMesa(${t.num})" style="flex:1;padding:7px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">💰 Fechar mesa</button>
       </div>`;
@@ -1575,4 +1581,285 @@ function kdsAddTime(id, extra = 300) {
   if (!kdsTimers[id]) kdsTimers[id] = { startTs: Date.now(), extra: 0 };
   kdsTimers[id].extra -= extra; // subtrai para "ganhar" mais tempo
   renderKDS();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODAL DETALHE DA MESA — Ver itens, cancelar, adicionar, imprimir conta
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _detalheMesaNum = null;
+let _detalheMesaOrders = [];
+let _detalheMesaSubtotal = 0;
+
+async function gestorAbrirDetalheMesa(num) {
+  _detalheMesaNum = parseInt(num);
+  document.getElementById('mesa-detalhe-title').textContent = `Mesa ${num} — Detalhes`;
+  document.getElementById('mesa-detalhe-num').value = num;
+  document.getElementById('mesa-detalhe-itens-list').innerHTML =
+    '<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px">Carregando...</div>';
+
+  openModal('modal-mesa-detalhe');
+
+  // Busca pedidos da mesa direto do banco
+  try {
+    const t = tables.find(x => parseInt(x.num) === _detalheMesaNum);
+    const sessionStart = t?.opened_at
+      ? new Date(new Date(t.opened_at).getTime() - 5000).toISOString()
+      : null;
+
+    let query = sb.from('orders')
+      .select('*')
+      .eq('mesa_num', _detalheMesaNum)
+      .neq('status', 'cancelado')
+      .order('id', { ascending: false });
+
+    if (sessionStart) {
+      query = query.gte('created_at', sessionStart);
+    } else {
+      query = query.in('status', ['mesa_aberta', 'analise', 'producao', 'pronto']);
+    }
+
+    const { data } = await query;
+    _detalheMesaOrders = data || [];
+
+    // Guarda o ID da comanda principal (mesa_aberta)
+    const comanda = _detalheMesaOrders.find(o => o.status === 'mesa_aberta');
+    document.getElementById('mesa-detalhe-order-id').value = comanda ? comanda.id : '';
+
+    _renderDetalheMesaItens();
+  } catch(e) {
+    document.getElementById('mesa-detalhe-itens-list').innerHTML =
+      '<div style="font-size:12px;color:var(--red);text-align:center;padding:8px">Erro ao carregar: ' + (e.message||e) + '</div>';
+  }
+}
+
+function _renderDetalheMesaItens() {
+  const listEl = document.getElementById('mesa-detalhe-itens-list');
+  const itemMap = [];
+
+  _detalheMesaOrders.forEach(o => {
+    (Array.isArray(o.items) ? o.items : []).forEach(i => {
+      itemMap.push({
+        orderId: o.id,
+        orderStatus: o.status,
+        itemId: i.item_id || null,
+        name: i.name,
+        qty: i.qty || 1,
+        price: i.price || 0,
+        obs: i.obs || '',
+        status: i.item_status || 'active',
+        drink: !!i.drink,
+        garcomNome: i.garcom_nome || ''
+      });
+    });
+  });
+
+  if (!itemMap.length) {
+    listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px">Nenhum item na mesa</div>';
+    _detalheMesaSubtotal = 0;
+    document.getElementById('mesa-detalhe-subtotal').textContent = 'R$ 0,00';
+    _toggleTaxaDetalhe();
+    return;
+  }
+
+  let subtotal = 0;
+  listEl.innerHTML = itemMap.map((i, idx) => {
+    const isCanceled = i.status === 'cancelado';
+    const lineTotal = i.price * i.qty;
+    if (!isCanceled) subtotal += lineTotal;
+    const cancelStyle = isCanceled ? 'opacity:.4;text-decoration:line-through;' : '';
+    const garcomTag = i.garcomNome ? ` <span style="font-size:9px;background:rgba(129,140,248,.15);color:#818cf8;padding:1px 5px;border-radius:4px">${i.garcomNome}</span>` : '';
+    const statusIcon = { producao:'🍳', pronto:'✅', entregue:'🟢', cancelado:'❌' }[i.status] || '🔵';
+    const btns = isCanceled
+      ? ''
+      : `<div style="display:flex;gap:4px;margin-top:4px">
+          <button onclick="gestorCancelarItem(${idx})" style="padding:3px 8px;border-radius:6px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#f87171;font-size:10px;font-weight:600;cursor:pointer">✕ Cancelar</button>
+        </div>`;
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--border);${cancelStyle}">
+      <div style="display:flex;justify-content:space-between;align-items:start">
+        <div>
+          <span style="font-size:10px">${statusIcon}</span>
+          <span style="font-size:13px;font-weight:600">${i.qty}× ${i.name}</span>
+          ${garcomTag}
+          ${i.obs ? `<div style="font-size:11px;color:var(--muted);padding-left:16px">↳ ${i.obs}</div>` : ''}
+        </div>
+        <span style="font-size:13px;font-weight:700;color:var(--accent3);white-space:nowrap">R$ ${lineTotal.toFixed(2).replace('.',',')}</span>
+      </div>
+      ${btns}
+    </div>`;
+  }).join('');
+
+  _detalheMesaSubtotal = subtotal;
+  document.getElementById('mesa-detalhe-subtotal').textContent = 'R$ ' + subtotal.toFixed(2).replace('.',',');
+
+  // Configura taxa
+  const taxaRow = document.getElementById('mesa-detalhe-taxa-row');
+  if (_taxaServicoPct > 0) {
+    taxaRow.style.display = 'block';
+    document.getElementById('mesa-detalhe-taxa-label').textContent = `Taxa de serviço (${_taxaServicoPct}%) — opcional`;
+    document.getElementById('mesa-detalhe-taxa-linha').textContent = `Taxa (${_taxaServicoPct}%)`;
+    _toggleTaxaDetalhe();
+  } else {
+    taxaRow.style.display = 'none';
+  }
+}
+
+function _toggleTaxaDetalhe() {
+  const check = document.getElementById('mesa-detalhe-taxa-check');
+  const sub = _detalheMesaSubtotal;
+  const pct = _taxaServicoPct || 0;
+  const taxa = check?.checked ? sub * pct / 100 : 0;
+  const total = sub + taxa;
+  const info = document.getElementById('mesa-detalhe-taxa-info');
+  if (info) info.style.display = check?.checked ? 'block' : 'none';
+  document.getElementById('mesa-detalhe-taxa-val').textContent = 'R$ ' + taxa.toFixed(2).replace('.',',');
+  document.getElementById('mesa-detalhe-total-com-taxa').textContent = 'R$ ' + total.toFixed(2).replace('.',',');
+}
+
+// ── Cancelar item individual ──────────────────────────────────────────────
+async function gestorCancelarItem(itemIdx) {
+  if (!confirm('Cancelar este item?')) return;
+
+  // Encontra o item na lista flat
+  let count = 0;
+  let targetOrder = null;
+  let targetItemIdx = -1;
+  for (const o of _detalheMesaOrders) {
+    const items = Array.isArray(o.items) ? o.items : [];
+    for (let ii = 0; ii < items.length; ii++) {
+      if (count === itemIdx) {
+        targetOrder = o;
+        targetItemIdx = ii;
+        break;
+      }
+      count++;
+    }
+    if (targetOrder) break;
+  }
+
+  if (!targetOrder || targetItemIdx < 0) { sbToast('err', 'Item não encontrado'); return; }
+
+  sbLoading(true);
+  try {
+    const updatedItems = [...targetOrder.items];
+    updatedItems[targetItemIdx] = { ...updatedItems[targetItemIdx], item_status: 'cancelado' };
+    const newTotal = updatedItems
+      .filter(i => (i.item_status || 'active') !== 'cancelado')
+      .reduce((s, i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
+
+    await sb.from('orders')
+      .update({ items: updatedItems, total: newTotal, updated_at: new Date().toISOString() })
+      .eq('id', targetOrder.id);
+
+    // Atualiza local
+    targetOrder.items = updatedItems;
+    targetOrder.total = newTotal;
+    _renderDetalheMesaItens();
+    // Atualiza cache do salão
+    _patchOrderInCache(targetOrder);
+    _renderMesaPageFromCache();
+    sbToast('ok', 'Item cancelado');
+  } catch(e) {
+    sbToast('err', 'Erro: ' + (e.message||e));
+  } finally {
+    sbLoading(false);
+  }
+}
+
+// ── Adicionar item (abre o PDV do garçom no gestor) ──────────────────────
+function gestorAddItemMesa() {
+  closeModal('modal-mesa-detalhe');
+  openGarcomMesa(_detalheMesaNum);
+}
+
+// ── Imprimir conta da mesa (gestor) ──────────────────────────────────────
+async function gestorImprimirContaMesa() {
+  const num = _detalheMesaNum;
+  if (!num) return;
+
+  const taxaCheck = document.getElementById('mesa-detalhe-taxa-check');
+  const sub = _detalheMesaSubtotal;
+  const pct = _taxaServicoPct || 0;
+  const taxa = taxaCheck?.checked ? sub * pct / 100 : 0;
+  const total = sub + taxa;
+
+  // Monta itens consolidados
+  const itemMap = {};
+  _detalheMesaOrders.forEach(o => {
+    (Array.isArray(o.items) ? o.items : []).forEach(i => {
+      if (i.item_status === 'cancelado') return;
+      const k = i.name;
+      if (!itemMap[k]) itemMap[k] = { name: i.name, qty: 0, total: 0 };
+      itemMap[k].qty += (i.qty || 1);
+      itemMap[k].total += (i.price || 0) * (i.qty || 1);
+    });
+  });
+  const itens = Object.values(itemMap);
+  if (!itens.length) { sbToast('err', 'Sem itens para imprimir'); return; }
+
+  const nome = _sessao?.nome || 'RESTAURANTE';
+  const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' });
+
+  const renderItem = i =>
+    `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${i.name.toUpperCase()}<span style="float:right">R$ ${i.total.toFixed(2).replace('.',',')}</span></div></div>`;
+
+  const taxaLinha = taxa > 0
+    ? `<div style="display:flex;justify-content:space-between;font-size:0.9em"><span>Subtotal</span><span>R$ ${sub.toFixed(2).replace('.',',')}</span></div>
+       <div style="display:flex;justify-content:space-between;font-size:0.9em"><span>Taxa serviço (${pct}%)</span><span>R$ ${taxa.toFixed(2).replace('.',',')}</span></div>`
+    : '';
+
+  const html = `
+    <div class="print-ticket" style="font-size:12px">
+      <div style="text-align:center;font-size:1.1em;font-weight:900">${nome.toUpperCase()}</div>
+      <div style="text-align:center;font-weight:bold;margin:4px 0">*** CONTA ***</div>
+      <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+      <div>Mesa: <b>${num}</b></div>
+      <div>Data: ${dataHora}</div>
+      <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+      ${itens.map(renderItem).join('')}
+      <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+      ${taxaLinha}
+      <div style="display:flex;justify-content:space-between;font-weight:900;font-size:1.05em">
+        <span>TOTAL</span><span>R$ ${total.toFixed(2).replace('.',',')}</span>
+      </div>
+      <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+      <div style="text-align:center;font-size:0.85em">Obrigado pela preferência!</div>
+    </div>`;
+
+  const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+  const fmt = localStorage.getItem('printFormat') || '80mm';
+
+  // 1. Tenta Print Agent com tipo 'caixa'
+  try {
+    if (tid) {
+      const st = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } }).then(r=>r.json());
+      if (st.active) {
+        await fetch('/api/print-queue/job', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+          body: JSON.stringify({ html, format: fmt, tipo: 'caixa' }),
+        });
+        sbToast('ok', '🖨️ Conta enviada para impressora!');
+        return;
+      }
+    }
+  } catch(e) { console.warn('[GESTOR PRINT CONTA] Agent falhou:', e.message); }
+
+  // 2. Electron
+  if (window.ElectronPrint && window.ElectronPrint.printHtml) {
+    try {
+      await window.ElectronPrint.printHtml(html, { printer: localStorage.getItem('printPrinter') || '', paperWidth: 80 });
+      sbToast('ok', '🖨️ Conta impressa!');
+      return;
+    } catch(e) { console.warn('[GESTOR PRINT CONTA] Electron falhou:', e.message); }
+  }
+
+  // 3. Fallback: popup
+  const w = window.open('', '_blank', 'width=400,height=600');
+  if (!w) { sbToast('err', 'Permita popups para imprimir'); return; }
+  w.document.write(`<!DOCTYPE html><html><head><title>Conta Mesa ${num}</title>
+    <style>body{margin:0;padding:16px;font-family:monospace;background:#fff;color:#000} @media print{@page{margin:2mm;size:${fmt} auto} body{margin:0}}</style>
+    </head><body>${html}<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}<\/script></body></html>`);
+  w.document.close();
+  sbToast('ok', '🖨️ Conta gerada!');
 }
