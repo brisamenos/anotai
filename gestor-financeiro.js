@@ -502,21 +502,30 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
   document.getElementById('modal-pag-mesa-title').textContent = `Registrar Pagamento — Mesa ${num}`;
   document.getElementById('modal-pag-total').textContent = 'R$ ' + totalVal.toFixed(2).replace('.',',');
   document.getElementById('modal-pag-mesa-num').value = num;
-  // Taxa de serviço
-  document.getElementById('modal-pag-subtotal').value = totalVal.toFixed(2);
+  // Taxa de serviço — respeita o que o garçom já escolheu ao finalizar a mesa
+  const taxaJaAplicada = parseFloat(t.taxa_servico || 0) > 0;
+  const taxaJaVal      = taxaJaAplicada ? parseFloat(t.taxa_servico) : 0;
+  // modal-pag-subtotal deve guardar SEMPRE o subtotal sem taxa para _toggleTaxaServico calcular certo
+  const subtotalSemTaxa = taxaJaAplicada ? Math.max(0, totalVal - taxaJaVal) : totalVal;
+  document.getElementById('modal-pag-subtotal').value = subtotalSemTaxa.toFixed(2);
   const taxaBloco = document.getElementById('modal-taxa-bloco');
   const taxaCheck = document.getElementById('modal-taxa-check');
   if (taxaBloco && taxaCheck) {
-    taxaCheck.checked = false;
-    document.getElementById('modal-taxa-breakdown').style.display = 'none';
+    taxaCheck.checked = taxaJaAplicada;
+    taxaCheck.disabled = taxaJaAplicada; // impede dupla cobrança
+    document.getElementById('modal-taxa-breakdown').style.display = taxaJaAplicada ? 'block' : 'none';
     if (_taxaServicoPct > 0) {
       taxaBloco.style.display = 'block';
-      document.getElementById('modal-taxa-label').textContent = `Taxa de serviço (${_taxaServicoPct}%)`;
+      document.getElementById('modal-taxa-label').textContent = taxaJaAplicada
+        ? `Taxa de serviço (${_taxaServicoPct}%) — incluída pelo garçom`
+        : `Taxa de serviço (${_taxaServicoPct}%)`;
       document.getElementById('modal-taxa-linha').textContent = `Taxa (${_taxaServicoPct}%)`;
     } else {
       taxaBloco.style.display = 'none';
     }
   }
+  // Atualiza total exibido já com estado correto da taxa
+  _toggleTaxaServico();
   const pagForma = t.pag_forma;
   if (pagForma) {
     const sel = document.getElementById('modal-pag-forma');
