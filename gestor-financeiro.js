@@ -523,16 +523,25 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
       const sessionStart = t?.opened_at
         ? new Date(new Date(t.opened_at).getTime() - 5000).toISOString()
         : null;
-      let sessionQuery = await sb.from('orders')
+
+      // Busca TODOS os pedidos da mesa (incluindo 'entregue'), exceto cancelados
+      // Quando o garçom finaliza, os pedidos mudam pra 'entregue' mas ainda pertencem à sessão
+      let query = sb.from('orders')
         .select('items,total,taxa,status,created_at')
         .eq('mesa_num', parseInt(num))
-        .not('status', 'eq', 'cancelado');
+        .neq('status', 'cancelado');
+
       if (sessionStart) {
-        sessionQuery = sessionQuery.gte('created_at', sessionStart);
+        // Filtra pela sessão (todos os status, incluindo entregue)
+        query = query.gte('created_at', sessionStart);
       } else {
-        sessionQuery = sessionQuery.in('status', ['analise', 'producao', 'pronto', 'mesa_aberta']);
+        // Sem opened_at: busca entregues recentes (últimas 3h) + ativos
+        const recentCutoff = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+        query = query.gte('created_at', recentCutoff);
       }
-      const { data: sessionOrders } = await sessionQuery;
+
+      const { data: sessionOrders, error: sessErr } = await query;
+      if (sessErr) throw sessErr;
 
       const itemMap = {};
       (sessionOrders || []).forEach(o => {
