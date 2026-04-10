@@ -3638,14 +3638,24 @@ async function confirmarImprimirComanda() {
     const pagForma = _printComandaPagForma;
     const total    = _printComandaTotal;
 
-    // Monta todos os itens de todos os pedidos da mesa
-    const todosItens = _printComandaOrders.flatMap(o => _parseItems(o.items));
+    // Consolida itens de todos os pedidos — exclui cancelados, agrupa por nome
+    const todosItens = _printComandaOrders.flatMap(o => _parseItems(o.items))
+      .filter(i => i.item_status !== 'cancelado');
 
     if (!todosItens.length) { showToast('⚠️ Sem itens para imprimir'); return; }
 
+    // Agrupa itens iguais numa linha só (sem duplicar)
+    const itemMap = {};
+    todosItens.forEach(i => {
+      const key = i.name + (i.obs || '');
+      if (!itemMap[key]) itemMap[key] = { name: i.name, qty: 0, price: i.price || 0, obs: i.obs || '' };
+      itemMap[key].qty += (i.qty || 1);
+    });
+    const itensAgrupados = Object.values(itemMap);
+
     const renderItem = i => {
       const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em">↳ ${i.obs}</div>` : '';
-      const priceStr = (i.price && i.qty) ? `<span style="float:right">R$ ${(i.price * i.qty).toFixed(2).replace('.',',')}</span>` : '';
+      const priceStr = `<span style="float:right">R$ ${(i.price * i.qty).toFixed(2).replace('.',',')}</span>`;
       return `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${(i.name||'').toUpperCase()}${priceStr}</div>${obs}</div>`;
     };
 
@@ -3659,14 +3669,14 @@ async function confirmarImprimirComanda() {
     const html = `
       <div class="print-ticket" style="font-size:${fontSize}px">
         <div style="text-align:center;font-size:1.1em;font-weight:900">${nome}</div>
-        <div style="text-align:center;font-weight:bold;margin:4px 0">*** COMANDA ***</div>
+        <div style="text-align:center;font-weight:bold;margin:4px 0">*** PEDIDO DE CONTA ***</div>
         <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
         <div>Mesa: <b>${mesaNum}</b></div>
         ${currentGarcom?.nome ? `<div>Garçom: ${currentGarcom.nome}</div>` : ''}
         <div>Data: ${now}</div>
         <div>Pagamento: <b>${pagForma}</b></div>
         <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
-        ${todosItens.map(renderItem).join('')}
+        ${itensAgrupados.map(renderItem).join('')}
         <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
         ${taxaLinhaComanda}
         <div style="display:flex;justify-content:space-between;font-weight:900;font-size:1.05em">
