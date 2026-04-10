@@ -489,12 +489,12 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
   const taxaCheck = document.getElementById('modal-taxa-check');
   if (taxaBloco && taxaCheck) {
     taxaCheck.checked = taxaJaAplicada;
-    taxaCheck.disabled = taxaJaAplicada; // impede dupla cobrança
+    taxaCheck.disabled = false; // gestor pode cancelar a taxa a pedido do cliente
     document.getElementById('modal-taxa-breakdown').style.display = taxaJaAplicada ? 'block' : 'none';
     if (_taxaServicoPct > 0) {
       taxaBloco.style.display = 'block';
       document.getElementById('modal-taxa-label').textContent = taxaJaAplicada
-        ? `Taxa de serviço (${_taxaServicoPct}%) — incluída pelo garçom`
+        ? `Taxa de serviço (${_taxaServicoPct}%) — solicitada pelo garçom`
         : `Taxa de serviço (${_taxaServicoPct}%)`;
       document.getElementById('modal-taxa-linha').textContent = `Taxa (${_taxaServicoPct}%)`;
     } else {
@@ -537,12 +537,27 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
       });
       const itens = Object.values(itemMap);
       if (itens.length) {
-        listEl.innerHTML = itens.map(i =>
+        // Linha de itens
+        let html = itens.map(i =>
           `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
             <span>${i.qty}× ${i.name}</span>
             <span style="color:var(--accent3);font-weight:600">R$ ${i.subtotal.toFixed(2).replace('.',',')}</span>
           </div>`
         ).join('');
+
+        // Linha da taxa — visível e cancelável pelo gestor
+        if (taxaJaAplicada && taxaJaVal > 0) {
+          html += `<div id="modal-taxa-item-row" style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
+            <span style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:10px;background:rgba(196,149,106,.15);color:var(--amber);padding:1px 6px;border-radius:99px;font-weight:700">10%</span>
+              Taxa de serviço
+              <span style="font-size:10px;color:var(--muted)">(solicitada pelo garçom)</span>
+            </span>
+            <span style="color:var(--accent3);font-weight:600">R$ ${taxaJaVal.toFixed(2).replace('.',',')}</span>
+          </div>`;
+        }
+
+        listEl.innerHTML = html;
         itensEl.dataset.ordersJson = JSON.stringify(itens);
       } else {
         listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">Nenhum item encontrado</div>';
@@ -562,6 +577,9 @@ function _toggleTaxaServico() {
   const taxa     = subtotal * pct / 100;
   const total    = check.checked ? subtotal + taxa : subtotal;
   document.getElementById('modal-pag-total').textContent = 'R$ ' + total.toFixed(2).replace('.',',');
+  // Sincroniza linha de taxa no consumo
+  const taxaItemRow = document.getElementById('modal-taxa-item-row');
+  if (taxaItemRow) taxaItemRow.style.display = check.checked ? 'flex' : 'none';
   const breakdown = document.getElementById('modal-taxa-breakdown');
   if (check.checked) {
     breakdown.style.display = 'block';
