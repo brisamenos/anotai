@@ -1698,11 +1698,20 @@ function _renderDetalheMesaItens() {
   _detalheMesaSubtotal = subtotal;
   document.getElementById('mesa-detalhe-subtotal').textContent = 'R$ ' + subtotal.toFixed(2).replace('.',',');
 
-  // Configura taxa
+  // Configura taxa — respeita o que o garçom já escolheu ao finalizar a mesa
+  const mesaT = tables.find(x => parseInt(x.num) === _detalheMesaNum);
+  const taxaJaAplicadaDetalhe = parseFloat(mesaT?.taxa_servico || 0) > 0;
   const taxaRow = document.getElementById('mesa-detalhe-taxa-row');
   if (_taxaServicoPct > 0) {
     taxaRow.style.display = 'block';
-    document.getElementById('mesa-detalhe-taxa-label').textContent = `Taxa de serviço (${_taxaServicoPct}%) — opcional`;
+    const checkDetalhe = document.getElementById('mesa-detalhe-taxa-check');
+    if (checkDetalhe) {
+      checkDetalhe.checked = taxaJaAplicadaDetalhe;
+      checkDetalhe.disabled = taxaJaAplicadaDetalhe; // impede dupla cobrança
+    }
+    document.getElementById('mesa-detalhe-taxa-label').textContent = taxaJaAplicadaDetalhe
+      ? `Taxa de serviço (${_taxaServicoPct}%) — incluída pelo garçom`
+      : `Taxa de serviço (${_taxaServicoPct}%) — opcional`;
     document.getElementById('mesa-detalhe-taxa-linha').textContent = `Taxa (${_taxaServicoPct}%)`;
     _toggleTaxaDetalhe();
   } else {
@@ -1714,7 +1723,10 @@ function _toggleTaxaDetalhe() {
   const check = document.getElementById('mesa-detalhe-taxa-check');
   const sub = _detalheMesaSubtotal;
   const pct = _taxaServicoPct || 0;
-  const taxa = check?.checked ? sub * pct / 100 : 0;
+  // Se taxa já foi aplicada pelo garçom, usa o valor gravado em mesas.taxa_servico
+  const mesaTd = tables.find(x => parseInt(x.num) === _detalheMesaNum);
+  const taxaPreAplic = parseFloat(mesaTd?.taxa_servico || 0);
+  const taxa = check?.checked ? (taxaPreAplic > 0 ? taxaPreAplic : sub * pct / 100) : 0;
   const total = sub + taxa;
   const info = document.getElementById('mesa-detalhe-taxa-info');
   if (info) info.style.display = check?.checked ? 'block' : 'none';
