@@ -461,7 +461,8 @@ async function fecharMesa(num) {
     t.status = 'waiting';
     t.total = sessionTotal;
     ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== numInt);
-    mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== numInt);
+    // Mantém os pedidos no cache para exibição do resumo - serão atualizados via Realtime
+    // mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== numInt);
     renderKanban();
     _renderMesaPageFromCache();
     sbToast('ok', `Mesa ${numInt} aguardando pagamento — R$ ${sessionTotal.toFixed(2).replace('.', ',')} `);
