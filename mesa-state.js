@@ -141,9 +141,9 @@ async function refreshMesa(num) {
     .neq('status', 'cancelado')
     .order('id', { ascending: true });
 
-  const { data: orders } = await (sessionStart
-    ? baseQuery.gte('created_at', sessionStart)
-    : baseQuery.not('status', 'eq', 'entregue'));
+  // Sem opened_at: usa janela de 6h para pegar entregue do garçom também
+  const fallbackCutoff = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+  const { data: orders } = await baseQuery.gte('created_at', sessionStart || fallbackCutoff);
 
   // 3. Substitui apenas as entradas desta mesa no cache
   mesaOrdersCache = [
@@ -184,15 +184,18 @@ async function refreshMesasState() {
     .gte('created_at', new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString())
     .order('id', { ascending: true });
 
-  // 4. Filtra por sessão — só inclui pedidos da sessão ACTUAL (opened_at).
-  // Impede que histórico de sessões anteriores apareça numa nova abertura.
+  // 4. Monta cache: todos os pedidos ativos + entregues recentes de mesas não-livres.
+  // Regra simples: se a mesa existe e não está free, o pedido entra no cache.
+  // opened_at é usado apenas como filtro de sessão quando disponível.
   const allOrders = [...(activeOrders || []), ...(entregueOrders || [])];
+  const seen = new Set();
   mesaOrdersCache = allOrders
     .filter(o => {
+      if (seen.has(o.id)) return false;
+      seen.add(o.id);
       const mesa = activeTables.find(t => t.num === parseInt(o.mesa_num));
       if (!mesa) return false;
-      // Mesa waiting sem opened_at: inclui entregue (garçom acabou de finalizar)
-      if (!mesa.opened_at) return mesa.status === 'waiting' ? true : o.status !== 'entregue';
+      if (!mesa.opened_at) return true; // sem sessão definida: inclui tudo
       const sessionStart = new Date(mesa.opened_at).getTime() - 5000;
       return new Date(o.created_at || 0).getTime() >= sessionStart;
     })
