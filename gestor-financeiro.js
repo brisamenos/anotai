@@ -534,35 +534,49 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
     }
   }
 
-  // Carrega itens do cache (já normalizado por refreshMesasState)
+  // Carrega itens — query direta usando opened_at como cutoff preciso da sessão
   const itensEl = document.getElementById('modal-pag-itens');
   const listEl  = document.getElementById('modal-pag-itens-list');
   if (itensEl && listEl) {
     itensEl.style.display = 'block';
-    const cacheOrders = mesaOrdersCache.filter(o =>
-      parseInt(o.mesa_num) === parseInt(num) && o.status !== 'cancelado'
-    );
-    const itemMap = {};
-    cacheOrders.forEach(o => {
-      _parseItems(o.items).forEach(i => {
-        if (i.item_status === 'cancelado') return;
-        const key = i.name;
-        if (!itemMap[key]) itemMap[key] = { name: i.name, qty: 0, subtotal: 0 };
-        itemMap[key].qty      += (i.qty || 1);
-        itemMap[key].subtotal += (i.price || 0) * (i.qty || 1);
+    listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">Carregando...</div>';
+    try {
+      // opened_at é sempre gravado ao abrir a mesa — garante que só pega itens desta sessão
+      const cutoff = t?.opened_at
+        ? new Date(new Date(t.opened_at).getTime() - 5000).toISOString()
+        : new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
+
+      const { data: sessionOrders } = await sb.from('orders')
+        .select('items,status,created_at')
+        .eq('mesa_num', parseInt(num))
+        .neq('status', 'cancelado')
+        .gte('created_at', cutoff)
+        .order('id', { ascending: true });
+
+      const itemMap = {};
+      (sessionOrders || []).forEach(o => {
+        _parseItems(o.items).forEach(i => {
+          if (i.item_status === 'cancelado') return;
+          const key = i.name;
+          if (!itemMap[key]) itemMap[key] = { name: i.name, qty: 0, subtotal: 0 };
+          itemMap[key].qty      += (i.qty || 1);
+          itemMap[key].subtotal += (i.price || 0) * (i.qty || 1);
+        });
       });
-    });
-    const itens = Object.values(itemMap);
-    if (itens.length) {
-      listEl.innerHTML = itens.map(i =>
-        `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
-          <span>${i.qty}× ${i.name}</span>
-          <span style="color:var(--accent3);font-weight:600">R$ ${i.subtotal.toFixed(2).replace('.',',')}</span>
-        </div>`
-      ).join('');
-      itensEl.dataset.ordersJson = JSON.stringify(itens);
-    } else {
-      listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">Nenhum item encontrado</div>';
+      const itens = Object.values(itemMap);
+      if (itens.length) {
+        listEl.innerHTML = itens.map(i =>
+          `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
+            <span>${i.qty}× ${i.name}</span>
+            <span style="color:var(--accent3);font-weight:600">R$ ${i.subtotal.toFixed(2).replace('.',',')}</span>
+          </div>`
+        ).join('');
+        itensEl.dataset.ordersJson = JSON.stringify(itens);
+      } else {
+        listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">Nenhum item encontrado</div>';
+      }
+    } catch(e) {
+      listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">Erro ao carregar itens</div>';
     }
   }
 
