@@ -663,7 +663,7 @@ function renderMesaCard(t, orders) {
 
   const ordersHtml = comanda
     ? (() => {
-        const allItens = Array.isArray(comanda.items) ? comanda.items : [];
+        const allItens = _parseItems(comanda.items);
         const grupos = {
           producao: allItens.filter(i => i.item_status === 'producao'),
           pronto:   allItens.filter(i => i.item_status === 'pronto'),
@@ -706,7 +706,7 @@ function renderMesaCard(t, orders) {
         }
         const itemMap = {};
         allSessionOrders.forEach(o => {
-          (Array.isArray(o.items) ? o.items : []).forEach(i => {
+          (_parseItems(o.items)).forEach(i => {
             if (i.item_status === 'cancelado') return;
             const key = i.name;
             if (!itemMap[key]) itemMap[key] = { name: i.name, qty: 0, total: 0, drink: !!i.drink };
@@ -733,7 +733,7 @@ function renderMesaCard(t, orders) {
       })()
     : orders.length
     ? orders.map(o => {
-      const items = Array.isArray(o.items) ? o.items : [];
+      const items = _parseItems(o.items);
       const itemStr = items.filter(i => i.item_status !== 'cancelado').map(i => `${i.drink ? '🥤' : '🍴'} ${i.qty}× ${i.name}`).join('  ');
       const isNew = o.status === 'analise';
       const isProd = o.status === 'producao';
@@ -1644,7 +1644,7 @@ function _renderDetalheMesaItens() {
   const itemMap = [];
 
   _detalheMesaOrders.forEach(o => {
-    (Array.isArray(o.items) ? o.items : []).forEach(i => {
+    (_parseItems(o.items)).forEach(i => {
       itemMap.push({
         orderId: o.id,
         orderStatus: o.status,
@@ -1743,7 +1743,7 @@ async function gestorCancelarItem(itemIdx) {
   let targetOrder = null;
   let targetItemIdx = -1;
   for (const o of _detalheMesaOrders) {
-    const items = Array.isArray(o.items) ? o.items : [];
+    const items = _parseItems(o.items);
     for (let ii = 0; ii < items.length; ii++) {
       if (count === itemIdx) {
         targetOrder = o;
@@ -1804,7 +1804,7 @@ async function gestorImprimirContaMesa() {
   // Monta itens consolidados
   const itemMap = {};
   _detalheMesaOrders.forEach(o => {
-    (Array.isArray(o.items) ? o.items : []).forEach(i => {
+    (_parseItems(o.items)).forEach(i => {
       if (i.item_status === 'cancelado') return;
       const k = i.name;
       if (!itemMap[k]) itemMap[k] = { name: i.name, qty: 0, total: 0 };
