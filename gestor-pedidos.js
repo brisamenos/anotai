@@ -245,17 +245,21 @@ function openOrderDetail(id) {
       const allItems = Array.isArray(mesaOrder.items) ? mesaOrder.items : (typeof mesaOrder.items === 'string' ? (() => { try { return JSON.parse(mesaOrder.items); } catch { return []; } })() : []);
       const activeItems = allItems.filter(i => (i.item_status || 'active') !== 'cancelado');
       const total = activeItems.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+      // Guarda índices originais para cancelamento por item
+      window._detailMesaOrderId = mesaOrder.id;
+      window._detailMesaAllItems = allItems;
       o = {
         id: mesaOrder.id,
         num: mesaOrder.num || (typeof _orderNum === 'function' ? _orderNum(mesaOrder.id, mesaOrder.order_num) : mesaOrder.id),
         status: mesaOrder.status === 'mesa_aberta' ? 'producao' : mesaOrder.status,
-        items: activeItems.map(i => ({
+        items: activeItems.map((i, _idx) => ({
           qty: i.qty || 1,
           name: i.name || '',
           price: parseFloat(i.price) || 0,
           obs: i.obs || '',
           extras: i.extras || [],
-          item_status: i.item_status
+          item_status: i.item_status,
+          _origIndex: allItems.indexOf(i)  // índice original no array completo
         })),
         total: total,
         taxa: parseFloat(mesaOrder.taxa) || 0,
@@ -295,15 +299,19 @@ function openOrderDetail(id) {
 
   // Itens
   const _oItems = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? (() => { try { return JSON.parse(o.items); } catch { return []; } })() : []);
-  document.getElementById('od-items-list').innerHTML = _oItems.map(item => `
-    <div class="od-item-row">
+  const _isMesaDetalhe = !!o._isMesa;
+  document.getElementById('od-items-list').innerHTML = _oItems.map((item, _i) => `
+    <div class="od-item-row" style="align-items:center">
       <div class="od-item-qty">${item.qty}x</div>
       <div style="flex:1">
         <div class="od-item-name">${item.name}</div>
         ${item.obs ? `<div class="od-item-obs">📝 ${item.obs}</div>` : ''}
         ${Array.isArray(item.extras) && item.extras.length ? `<div class="od-item-obs">➕ ${item.extras.join(', ')}</div>` : ''}
       </div>
-      <div class="od-item-price">R$&nbsp;${(item.price).toFixed(2).replace('.', ',')}</div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <div class="od-item-price">R$&nbsp;${(item.price).toFixed(2).replace('.', ',')}</div>
+        ${_isMesaDetalhe ? `<button onclick="cancelarItemComanda(${item._origIndex ?? _i})" title="Cancelar item" style="width:22px;height:22px;border-radius:6px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.1);color:#f87171;font-size:13px;line-height:1;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0">✕</button>` : ''}
+      </div>
     </div>`).join('');
 
   // Totais
@@ -404,6 +412,45 @@ function openOrderDetail(id) {
   }
 
   openModal('modal-order-detail');
+}
+
+async function cancelarItemComanda(origIndex) {
+  const orderId = window._detailMesaOrderId;
+  const allItems = window._detailMesaAllItems;
+  if (!orderId || !allItems || origIndex == null) return;
+  const item = allItems[origIndex];
+  if (!item || item.item_status === 'cancelado') return;
+  if (!confirm(`Cancelar ${item.qty}x ${item.name}?`)) return;
+
+  // Marca o item como cancelado no array
+  const updatedItems = allItems.map((i, idx) =>
+    idx === origIndex ? { ...i, item_status: 'cancelado' } : i
+  );
+  const newTotal = updatedItems
+    .filter(i => i.item_status !== 'cancelado')
+    .reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+
+  try {
+    const { error } = await sb.from('orders')
+      .update({ items: updatedItems, total: newTotal, updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+    if (error) throw error;
+
+    // Atualiza cache local imediatamente
+    const idx = mesaOrdersCache.findIndex(o => o.id === orderId);
+    if (idx !== -1) {
+      mesaOrdersCache[idx] = { ...mesaOrdersCache[idx], items: updatedItems, total: newTotal };
+      window._detailMesaAllItems = updatedItems;
+    }
+    // Reabre o modal com dados atualizados
+    closeModal('modal-order-detail');
+    setTimeout(() => openOrderDetail(orderId), 80);
+    renderKanban();
+    _renderMesaPageFromCache();
+  } catch(e) {
+    console.error('[cancelarItemComanda]', e);
+    alert('Erro ao cancelar item: ' + (e.message || e));
+  }
 }
 
 function advanceOrder() {
