@@ -1597,15 +1597,34 @@ let _detalheMesaNum = null;
 let _detalheMesaOrders = [];
 let _detalheMesaSubtotal = 0;
 
-function gestorAbrirDetalheMesa(num) {
+async function gestorAbrirDetalheMesa(num) {
   _detalheMesaNum = parseInt(num);
   document.getElementById('mesa-detalhe-title').textContent = `Mesa ${num} — Detalhes`;
   document.getElementById('mesa-detalhe-num').value = num;
+  document.getElementById('mesa-detalhe-itens-list').innerHTML =
+    '<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px">Carregando...</div>';
   openModal('modal-mesa-detalhe');
 
-  _detalheMesaOrders = mesaOrdersCache
-    .filter(o => parseInt(o.mesa_num) === _detalheMesaNum && o.status !== 'cancelado')
-    .map(o => ({ ...o, items: _parseItems(o.items) }));
+  try {
+    const t = tables.find(x => parseInt(x.num) === _detalheMesaNum);
+    // opened_at é sempre gravado ao abrir a mesa — usado como cutoff preciso da sessão
+    const cutoff = t?.opened_at
+      ? new Date(new Date(t.opened_at).getTime() - 5000).toISOString()
+      : new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
+
+    const { data } = await sb.from('orders')
+      .select('*')
+      .eq('mesa_num', _detalheMesaNum)
+      .neq('status', 'cancelado')
+      .gte('created_at', cutoff)
+      .order('id', { ascending: true });
+
+    _detalheMesaOrders = (data || []).map(o => ({ ...o, items: _parseItems(o.items) }));
+  } catch(e) {
+    document.getElementById('mesa-detalhe-itens-list').innerHTML =
+      '<div style="font-size:12px;color:var(--red);text-align:center;padding:8px">Erro ao carregar</div>';
+    return;
+  }
 
   const comanda = _detalheMesaOrders.find(o => o.status === 'mesa_aberta');
   document.getElementById('mesa-detalhe-order-id').value = comanda ? comanda.id : '';
