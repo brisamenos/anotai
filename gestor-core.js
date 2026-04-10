@@ -563,9 +563,56 @@ async function _printComandaMesa(mesaNum, mesaData) {
     </div>`;
 
   // Envia SOMENTE para impressora do caixa — sem via de cozinha
-  if (typeof _printJobCascade === 'function') {
-    await _printJobCascade(html, fmt, printer, {}, cfg, 'caixa');
+  // Usa cascata direta sem passar por _printJobCascade (que tem USB path que reconstrói ticket)
+  const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+
+  // 1. Electron
+  if (window.ElectronPrint) {
+    try {
+      const pw = fmt === '58mm' ? 58 : 80;
+      if (window.ElectronPrint.printHtml) {
+        const r = await window.ElectronPrint.printHtml(html, { printer: printer || '', paperWidth: pw, landscape: false, scaleFactor: 100 });
+        if (r && r.ok) return;
+      }
+    } catch(e) { console.warn('[PRINT CONTA] Electron falhou:', e.message); }
   }
+
+  // 2. Print Agent
+  try {
+    if (tid) {
+      const st = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } }).then(r => r.json());
+      if (st.active) {
+        await fetch('/api/print-queue/job', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+          body: JSON.stringify({ html, format: fmt, printer: printer || undefined, tipo: 'caixa' }),
+        });
+        return;
+      }
+    }
+  } catch(e) { console.warn('[PRINT CONTA] Agent falhou:', e.message); }
+
+  // 3. Servidor PDF
+  try {
+    if (tid) {
+      const r = await fetch('/api/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+        body: JSON.stringify({ html, format: fmt, printer: printer || undefined }),
+      });
+      const data = await r.json();
+      if (data.pdf) {
+        const bytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
+        const blob  = new Blob([bytes], { type: 'application/pdf' });
+        const url   = URL.createObjectURL(blob);
+        const frame = document.createElement('iframe');
+        frame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;visibility:hidden';
+        document.body.appendChild(frame);
+        frame.src = url;
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+      }
+    }
+  } catch(e) { console.warn('[PRINT CONTA] Servidor falhou:', e.message); }
 }
 
 function subscribeOrders() {
