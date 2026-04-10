@@ -1597,46 +1597,29 @@ let _detalheMesaNum = null;
 let _detalheMesaOrders = [];
 let _detalheMesaSubtotal = 0;
 
-async function gestorAbrirDetalheMesa(num) {
+function gestorAbrirDetalheMesa(num) {
   _detalheMesaNum = parseInt(num);
   document.getElementById('mesa-detalhe-title').textContent = `Mesa ${num} — Detalhes`;
   document.getElementById('mesa-detalhe-num').value = num;
-  document.getElementById('mesa-detalhe-itens-list').innerHTML =
-    '<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px">Carregando...</div>';
 
   openModal('modal-mesa-detalhe');
 
-  // Busca pedidos da mesa direto do banco
-  try {
-    const t = tables.find(x => parseInt(x.num) === _detalheMesaNum);
-    const sessionStart = t?.opened_at
-      ? new Date(new Date(t.opened_at).getTime() - 5000).toISOString()
-      : null;
+  // Usa o cache local (mesaOrdersCache) que já está normalizado e inclui
+  // pedidos entregues — evita re-fetch com filtros errados de status.
+  const t = tables.find(x => parseInt(x.num) === _detalheMesaNum);
+  const sessionStart = t?.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
 
-    let query = sb.from('orders')
-      .select('*')
-      .eq('mesa_num', _detalheMesaNum)
-      .neq('status', 'cancelado')
-      .order('id', { ascending: false });
+  _detalheMesaOrders = mesaOrdersCache
+    .filter(o => parseInt(o.mesa_num) === _detalheMesaNum)
+    .filter(o => o.status !== 'cancelado')
+    .filter(o => sessionStart ? new Date(o.created_at || 0).getTime() >= sessionStart : true)
+    .map(o => ({ ...o, items: _parseItems(o.items) }));
 
-    if (sessionStart) {
-      query = query.gte('created_at', sessionStart);
-    } else {
-      query = query.in('status', ['mesa_aberta', 'analise', 'producao', 'pronto']);
-    }
+  // Guarda o ID da comanda principal (mesa_aberta)
+  const comanda = _detalheMesaOrders.find(o => o.status === 'mesa_aberta');
+  document.getElementById('mesa-detalhe-order-id').value = comanda ? comanda.id : '';
 
-    const { data } = await query;
-    _detalheMesaOrders = data || [];
-
-    // Guarda o ID da comanda principal (mesa_aberta)
-    const comanda = _detalheMesaOrders.find(o => o.status === 'mesa_aberta');
-    document.getElementById('mesa-detalhe-order-id').value = comanda ? comanda.id : '';
-
-    _renderDetalheMesaItens();
-  } catch(e) {
-    document.getElementById('mesa-detalhe-itens-list').innerHTML =
-      '<div style="font-size:12px;color:var(--red);text-align:center;padding:8px">Erro ao carregar: ' + (e.message||e) + '</div>';
-  }
+  _renderDetalheMesaItens();
 }
 
 function _renderDetalheMesaItens() {

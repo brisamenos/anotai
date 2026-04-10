@@ -534,63 +534,38 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
     }
   }
 
-  // Carrega resumo de itens — busca do banco para garantir dados completos
+  // Carrega itens do cache local (já normalizado, inclui status entregue)
   const itensEl  = document.getElementById('modal-pag-itens');
   const listEl   = document.getElementById('modal-pag-itens-list');
   if (itensEl && listEl) {
-    itensEl.style.display = 'none';
-    listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">Carregando...</div>';
     itensEl.style.display = 'block';
-    try {
-      const sessionStart = t?.opened_at
-        ? new Date(new Date(t.opened_at).getTime() - 5000).toISOString()
-        : null;
+    const sessionStart = t?.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
+    const sessionOrders = mesaOrdersCache
+      .filter(o => parseInt(o.mesa_num) === parseInt(num))
+      .filter(o => o.status !== 'cancelado')
+      .filter(o => sessionStart ? new Date(o.created_at || 0).getTime() >= sessionStart : true);
 
-      // Busca TODOS os pedidos da mesa (incluindo 'entregue'), exceto cancelados
-      // Quando o garçom finaliza, os pedidos mudam pra 'entregue' mas ainda pertencem à sessão
-      let query = sb.from('orders')
-        .select('items,total,taxa,status,created_at')
-        .eq('mesa_num', parseInt(num))
-        .neq('status', 'cancelado');
-
-      if (sessionStart) {
-        // Filtra pela sessão (todos os status, incluindo entregue)
-        query = query.gte('created_at', sessionStart);
-      } else {
-        // Sem opened_at: busca entregues recentes (últimas 3h) + ativos
-        const recentCutoff = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
-        query = query.gte('created_at', recentCutoff);
-      }
-
-      const { data: sessionOrders, error: sessErr } = await query;
-      if (sessErr) throw sessErr;
-
-      const itemMap = {};
-      (sessionOrders || []).forEach(o => {
-        (_parseItems(o.items)).forEach(i => {
-          // Ignora itens cancelados (novo modelo mesa_aberta)
-          if (i.item_status === 'cancelado') return;
-          const key = i.name;
-          if (!itemMap[key]) itemMap[key] = { name: i.name, qty: 0, subtotal: 0 };
-          itemMap[key].qty      += (i.qty || 1);
-          itemMap[key].subtotal += (i.price || 0) * (i.qty || 1);
-        });
+    const itemMap = {};
+    sessionOrders.forEach(o => {
+      _parseItems(o.items).forEach(i => {
+        if (i.item_status === 'cancelado') return;
+        const key = i.name;
+        if (!itemMap[key]) itemMap[key] = { name: i.name, qty: 0, subtotal: 0 };
+        itemMap[key].qty      += (i.qty || 1);
+        itemMap[key].subtotal += (i.price || 0) * (i.qty || 1);
       });
-      const itens = Object.values(itemMap);
-      if (itens.length) {
-        listEl.innerHTML = itens.map(i =>
-          `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
-            <span>${i.qty}× ${i.name}</span>
-            <span style="color:var(--accent3);font-weight:600">R$ ${i.subtotal.toFixed(2).replace('.',',')}</span>
-          </div>`
-        ).join('');
-        // Guarda os itens no modal para usar na impressão
-        itensEl.dataset.ordersJson = JSON.stringify(itens);
-      } else {
-        listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">Nenhum item encontrado</div>';
-      }
-    } catch(e) {
-      listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">Erro ao carregar itens</div>';
+    });
+    const itens = Object.values(itemMap);
+    if (itens.length) {
+      listEl.innerHTML = itens.map(i =>
+        `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
+          <span>${i.qty}× ${i.name}</span>
+          <span style="color:var(--accent3);font-weight:600">R$ ${i.subtotal.toFixed(2).replace('.',',')}</span>
+        </div>`
+      ).join('');
+      itensEl.dataset.ordersJson = JSON.stringify(itens);
+    } else {
+      listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">Nenhum item encontrado</div>';
     }
   }
 
