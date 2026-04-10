@@ -56,8 +56,16 @@ function _patchOrderInCache(order) {
 
   if (idx !== -1) {
     // Mantém no cache mesmo após entregue — necessário para resumo de consumo
-    // e cálculo do total quando a mesa passa a waiting
-    mesaOrdersCache[idx] = enriched;
+    // e cálculo do total quando a mesa passa a waiting.
+    // MERGE: o payload SSE pode não conter todas as colunas (ex: items).
+    // Preserva os campos existentes no cache e só sobrescreve o que veio no SSE.
+    const existing = mesaOrdersCache[idx];
+    mesaOrdersCache[idx] = { ...existing, ...enriched };
+    // Garante que items nunca seja perdido: se o SSE não enviou items,
+    // mantém o array do cache anterior.
+    if (!Array.isArray(mesaOrdersCache[idx].items) && Array.isArray(existing.items)) {
+      mesaOrdersCache[idx].items = existing.items;
+    }
     return;
   }
 
