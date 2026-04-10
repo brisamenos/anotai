@@ -191,7 +191,8 @@ async function refreshMesasState() {
     .filter(o => {
       const mesa = activeTables.find(t => t.num === parseInt(o.mesa_num));
       if (!mesa) return false;
-      if (!mesa.opened_at) return o.status !== 'entregue';
+      // Mesa waiting sem opened_at: inclui entregue (garçom acabou de finalizar)
+      if (!mesa.opened_at) return mesa.status === 'waiting' ? true : o.status !== 'entregue';
       const sessionStart = new Date(mesa.opened_at).getTime() - 5000;
       return new Date(o.created_at || 0).getTime() >= sessionStart;
     })
