@@ -720,6 +720,12 @@ function renderMesaCard(t, orders) {
               <span style="color:var(--accent3);font-weight:600">R$ ${i.total.toFixed(2).replace('.', ',')}</span>
             </div>`
         ).join('');
+        // Se pedidos existem mas nenhum item foi encontrado (dados incompletos no cache),
+        // dispara refresh em background e mostra mensagem temporária
+        if (!rows) {
+          if (typeof refreshMesa === 'function') setTimeout(() => refreshMesa(t.num).then(() => _renderMesaPageFromCache()), 100);
+          return `<div style="color:var(--muted);font-size:12.5px;text-align:center;padding:10px 0">Consumo registrado</div>`;
+        }
         return `<div style="background:var(--surface2);border:1px solid rgba(245,158,11,.2);border-radius:9px;padding:10px 12px;margin-bottom:4px">
             <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">🧾 Resumo do consumo</div>
             ${rows}
