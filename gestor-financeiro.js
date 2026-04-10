@@ -417,44 +417,21 @@ async function fecharMesa(num) {
     // históricos de sessões anteriores são sempre 'entregue' ou 'cancelado', nunca ativos.
     // Isso garante que NENHUM histórico de sessões anteriores seja cobrado,
     // independente do valor de opened_at.
+    // Pedidos ficam como mesa_aberta até aqui — query simples e direta
     const { data: activeOrders } = await sb.from('orders')
       .select('total,taxa,items,status,created_at')
       .eq('mesa_num', numInt)
       .in('status', ['analise', 'producao', 'pronto', 'mesa_aberta']);
 
-    // PASSO 2: Verifica se há comanda do garçom (mesa_aberta).
-    // No fluxo garcom.html, TODOS os itens (comida + bebidas) estão dentro da comanda.
-    // Não há pedidos 'entregue' separados para essa sessão nesse fluxo.
-    const hasComanda = (activeOrders || []).some(o => o.status === 'mesa_aberta');
+    const sessionTotal = calcularTotalMesa(activeOrders || []);
 
-    // PASSO 3: Pedidos imediatos do gestor PDV (bebidas salvas diretamente como 'entregue').
-    // Só incluir quando NÃO há comanda (fluxo gestor PDV puro) e opened_at é conhecido.
-    // Ao usar opened_at aqui, o risco é mínimo pois no fluxo gestor o opened_at é
-    // definido imediatamente antes do primeiro lançamento da sessão atual.
-    let immediateEntregues = [];
-    if (!hasComanda && t?.opened_at) {
-      const sessionStart = new Date(t.opened_at).getTime() - 5000;
-      const { data: entregueData } = await sb.from('orders')
-        .select('total,taxa,items,status,created_at')
-        .eq('mesa_num', numInt)
-        .eq('status', 'entregue')
-        .gte('created_at', new Date(sessionStart).toISOString());
-      immediateEntregues = entregueData || [];
-    }
-
-    const allSessionOrders = [...(activeOrders || []), ...immediateEntregues];
-
-    // Recalcula total a partir dos itens para garantir precisão
-    const sessionTotal = calcularTotalMesa(allSessionOrders);
-
-    // 1. Finaliza todos os pedidos ativos da mesa
+    // Gestor confirma pagamento: agora sim finaliza os pedidos e libera a mesa
     const { error: ordErr } = await sb.from('orders')
       .update({ status: 'entregue' })
       .eq('mesa_num', numInt)
       .in('status', ['analise', 'producao', 'pronto', 'mesa_aberta']);
     if (ordErr) throw ordErr;
 
-    // 2. Marca a mesa como aguardando pagamento, gravando o total da sessão
     const { error: mesaErr } = await sb.from('mesas').update({
       status: 'waiting',
       total: sessionTotal,
@@ -541,16 +518,11 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
     itensEl.style.display = 'block';
     listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">Carregando...</div>';
     try {
-      // opened_at é sempre gravado ao abrir a mesa — garante que só pega itens desta sessão
-      const cutoff = t?.opened_at
-        ? new Date(new Date(t.opened_at).getTime() - 5000).toISOString()
-        : new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
-
+      // Pedidos ficam como mesa_aberta até o gestor confirmar pagamento
       const { data: sessionOrders } = await sb.from('orders')
         .select('items,status,created_at')
         .eq('mesa_num', parseInt(num))
-        .neq('status', 'cancelado')
-        .gte('created_at', cutoff)
+        .in('status', ['mesa_aberta', 'analise', 'producao', 'pronto'])
         .order('id', { ascending: true });
 
       const itemMap = {};

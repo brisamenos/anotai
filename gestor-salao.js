@@ -1606,17 +1606,12 @@ async function gestorAbrirDetalheMesa(num) {
   openModal('modal-mesa-detalhe');
 
   try {
-    const t = tables.find(x => parseInt(x.num) === _detalheMesaNum);
-    // opened_at é sempre gravado ao abrir a mesa — usado como cutoff preciso da sessão
-    const cutoff = t?.opened_at
-      ? new Date(new Date(t.opened_at).getTime() - 5000).toISOString()
-      : new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
-
+    // Pedidos ficam como mesa_aberta até o gestor confirmar pagamento
+    // Query simples e direta — sem filtro de sessão necessário
     const { data } = await sb.from('orders')
       .select('*')
       .eq('mesa_num', _detalheMesaNum)
-      .neq('status', 'cancelado')
-      .gte('created_at', cutoff)
+      .in('status', ['mesa_aberta', 'analise', 'producao', 'pronto'])
       .order('id', { ascending: true });
 
     _detalheMesaOrders = (data || []).map(o => ({ ...o, items: _parseItems(o.items) }));

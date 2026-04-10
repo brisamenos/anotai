@@ -3554,12 +3554,8 @@ async function confirmarFinalizarMesa() {
   const taxaVal = taxaIncluida ? subtotal * _garcomTaxaServicoPct / 100 : 0;
   const total = subtotal + taxaVal;
   try {
-    // Marca comanda como entregue (finaliza a sessão)
-    await sb.from('orders')
-      .update({ status: 'entregue' })
-      .eq('mesa_num', finalizarMesaNum)
-      .eq('status', 'mesa_aberta');
-
+    // Garçom apenas avisa o caixa — NÃO altera status dos pedidos
+    // Os pedidos continuam 'mesa_aberta' para o gestor encontrá-los facilmente
     // Mesa → aguardando pagamento
     await sb.from('mesas').update({
       status: 'waiting',
