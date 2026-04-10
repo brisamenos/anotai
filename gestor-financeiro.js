@@ -567,7 +567,7 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
 
       const itemMap = {};
       (sessionOrders || []).forEach(o => {
-        (Array.isArray(o.items) ? o.items : []).forEach(i => {
+        (_parseItems(o.items)).forEach(i => {
           // Ignora itens cancelados (novo modelo mesa_aberta)
           if (i.item_status === 'cancelado') return;
           const key = i.name;
@@ -743,7 +743,7 @@ async function confirmarPagamentoMesa() {
 
     // ── Fallback: se a query não retornou pedidos com itens, usa os itens do modal ──
     const _temItens = _ordensComprovante.some(o => {
-      const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? (() => { try { return JSON.parse(o.items) } catch { return [] } })() : []);
+      const items = _parseItems(o.items);
       return items.length > 0;
     });
     if (!_temItens && _fallbackItens.length > 0) {
