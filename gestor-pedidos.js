@@ -94,7 +94,7 @@ function _buildMesaKanbanOrders() {
   const result = [];
   (mesaOrdersCache || []).forEach(o => {
     if (o.status !== 'mesa_aberta') return;
-    const items = Array.isArray(o.items) ? o.items : [];
+    const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? (() => { try { return JSON.parse(o.items); } catch { return []; } })() : []);
     const prodItems  = items.filter(i => i.item_status === 'producao');
     const prontoItems= items.filter(i => i.item_status === 'pronto');
     if (prodItems.length) {
@@ -242,7 +242,7 @@ function openOrderDetail(id) {
     const mesaOrder = mesaOrdersCache.find(x => x.id === id);
     if (mesaOrder) {
       // Mapeia o pedido de mesa para o formato esperado pelo detalhe
-      const allItems = Array.isArray(mesaOrder.items) ? mesaOrder.items : [];
+      const allItems = Array.isArray(mesaOrder.items) ? mesaOrder.items : (typeof mesaOrder.items === 'string' ? (() => { try { return JSON.parse(mesaOrder.items); } catch { return []; } })() : []);
       const activeItems = allItems.filter(i => (i.item_status || 'active') !== 'cancelado');
       const total = activeItems.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
       o = {
@@ -294,7 +294,8 @@ function openOrderDetail(id) {
   document.getElementById('od-timer').textContent = o.time || '';
 
   // Itens
-  document.getElementById('od-items-list').innerHTML = (o.items || []).map(item => `
+  const _oItems = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? (() => { try { return JSON.parse(o.items); } catch { return []; } })() : []);
+  document.getElementById('od-items-list').innerHTML = _oItems.map(item => `
     <div class="od-item-row">
       <div class="od-item-qty">${item.qty}x</div>
       <div style="flex:1">
@@ -309,7 +310,7 @@ function openOrderDetail(id) {
   const fmt = v => 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ',');
 
   // Subtotal real = soma dos itens (o.total já vem com descontos/cashback aplicados)
-  const itemsSubtotal = (o.items || []).reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+  const itemsSubtotal = _oItems.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
   const desconto = Math.max(0, itemsSubtotal - parseFloat(o.total || 0));
 
   document.getElementById('od-subtotal').textContent = fmt(itemsSubtotal);

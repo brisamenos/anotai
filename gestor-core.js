@@ -173,6 +173,13 @@ function _formatTimeBR(ts) {
   } catch(e) { return ts; }
 }
 
+// Parse seguro de items — Supabase Realtime pode devolver JSONB como string
+function _parseItems(items) {
+  if (Array.isArray(items)) return items;
+  if (typeof items === 'string') { try { return JSON.parse(items); } catch { return []; } }
+  return [];
+}
+
 function mapOrder(o) {
   const pixPendente = o.status === 'aguardando_pix' && o.pag === 'pix_manual';
   const rawTime = o.created_at || o.time || '';
@@ -182,7 +189,7 @@ function mapOrder(o) {
     order_num: o.order_num || null,
     client: o.client || '',
     phone: o.phone || '',
-    items: Array.isArray(o.items) ? o.items : [],
+    items: _parseItems(o.items),
     total: parseFloat(o.total) || 0,
     taxa: parseFloat(o.taxa) || 0,
     status: pixPendente ? 'analise' : (o.status || 'analise'),
@@ -642,12 +649,13 @@ function subscribeOrders() {
       if (p.new.mesa_num) {
         // Detecta novos itens de cozinha adicionados ao UPDATE da comanda
         if (p.new.status === 'mesa_aberta') {
+          const _pNewItems = _parseItems(p.new.items);
           const prev = mesaOrdersCache.find(o => o.id === p.new.id);
-          const prevProducao = prev ? (prev.items || []).filter(i => i.item_status === 'producao').length : 0;
-          const newProducao  = (p.new.items || []).filter(i => i.item_status === 'producao').length;
+          const prevProducao = prev ? _parseItems(prev.items).filter(i => i.item_status === 'producao').length : 0;
+          const newProducao  = _pNewItems.filter(i => i.item_status === 'producao').length;
           if (newProducao > prevProducao) {
             playOrderSound();
-            const _newFoodItems = p.new.items.filter(i => i.item_status === 'producao').slice(-(newProducao - prevProducao));
+            const _newFoodItems = _pNewItems.filter(i => i.item_status === 'producao').slice(-(newProducao - prevProducao));
             const newFoods = _newFoodItems.map(i => i.qty + 'x ' + i.name).join(', ');
             showToast('\uD83C\uDF74', 'Mesa ' + p.new.mesa_num + ' — ' + newFoods);
             sendBrowserNotif('\uD83C\uDF74 Mesa ' + p.new.mesa_num, newFoods);

@@ -52,13 +52,14 @@ function _patchOrderInCache(order) {
     return;
   }
 
-  const enriched = { ...order, num: _orderNum(order.id, order.order_num) };
+  // Parse seguro: Supabase Realtime pode devolver items como string JSON
+  const parsedItems = Array.isArray(order.items)
+    ? order.items
+    : (typeof order.items === 'string' ? (() => { try { return JSON.parse(order.items); } catch { return null; } })() : null);
+
+  const enriched = { ...order, num: _orderNum(order.id, order.order_num), ...(parsedItems ? { items: parsedItems } : {}) };
 
   if (idx !== -1) {
-    // Mantém no cache mesmo após entregue — necessário para resumo de consumo
-    // e cálculo do total quando a mesa passa a waiting.
-    // MERGE: o payload SSE pode não conter todas as colunas (ex: items).
-    // Preserva os campos existentes no cache e só sobrescreve o que veio no SSE.
     const existing = mesaOrdersCache[idx];
     mesaOrdersCache[idx] = { ...existing, ...enriched };
     // Garante que items nunca seja perdido: se o SSE não enviou items,
