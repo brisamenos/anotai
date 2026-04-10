@@ -1494,7 +1494,7 @@ async function garcomPrint(order, newItems) {
     const orderNum = order.mesa_num ? `Mesa ${order.mesa_num}` : (order.id ? `#${_garcomOrderNum(order.id, order.order_num)}` : '?');
 
     // Monta os itens a imprimir — usa só os novos itens desta rodada (sem os já enviados antes)
-    const items = Array.isArray(newItems) && newItems.length ? newItems : (Array.isArray(order.items) ? order.items : []);
+    const items = Array.isArray(newItems) && newItems.length ? newItems : (_parseItems(order.items));
 
     const isCozinha = i => {
       const skip = ['bebida','drink','suco','agua','refrigerante','cerveja','chopp','vinho','dose','tanque','long'];
@@ -1731,7 +1731,7 @@ function subscribeRealtime() {
       const _gid = currentGarcom?.id;
       const _hasMyItems = (order) => {
         if (order.garcom_id === _gid) return true;
-        const items = Array.isArray(order.items) ? order.items : [];
+        const items = _parseItems(order.items);
         return items.some(i => i.garcom_id === _gid && i.item_status !== 'cancelado');
       };
 
@@ -1859,7 +1859,7 @@ function renderMesas() {
 
     // Badge "PRONTO" se há item pronto para servir
     const hasPronto = mesaOrders.some(o =>
-      Array.isArray(o.items) && o.items.some(it => it.item_status === 'pronto')
+      _parseItems(o.items).some(it => it.item_status === 'pronto')
     );
     if (hasPronto) hasProntoNow = true;
     const prontoBadge = hasPronto ? `<div class="mesa-pronto-badge">✅ PRONTO</div>` : '';
@@ -1911,7 +1911,7 @@ async function openMesaDetail(num) {
       orders.map(o => {
         // Novo modelo: comanda única com item_status por item
         const isMesaAberta = o.status === 'mesa_aberta';
-        const allItens = Array.isArray(o.items) ? o.items : [];
+        const allItens = _parseItems(o.items);
 
         // Agrupa itens por item_status (ignora cancelados)
         const grupos = {
@@ -2037,7 +2037,7 @@ async function garcomCancelarPedido(orderId, mesaNum) {
 async function garcomCancelarItem(orderId, itemId, mesaNum) {
   const order = allMesaOrders.find(o => o.id === orderId);
   if (!order) return;
-  const items = Array.isArray(order.items) ? [...order.items] : [];
+  const items = [..._parseItems(order.items)];
   // Suporta item_id (novo modelo) ou posição numérica (compatibilidade)
   const idx = typeof itemId === 'string'
     ? items.findIndex(i => i.item_id === itemId)
@@ -3030,7 +3030,7 @@ async function loadPedidosDaMesa() {
       // Comanda criada por este garçom
       if (o.garcom_id === gid) return true;
       // Ou comanda que contém itens deste garçom
-      const items = Array.isArray(o.items) ? o.items : [];
+      const items = _parseItems(o.items);
       return items.some(i => i.garcom_id === gid && i.item_status !== 'cancelado');
     });
 
@@ -3048,7 +3048,7 @@ function renderMyOrders() {
   if (badge) {
     const count = myOrders.filter(o =>
       ['producao','analise'].includes(o.status) ||
-      (o.status === 'mesa_aberta' && Array.isArray(o.items) && o.items.some(i => i.item_status === 'producao'))
+      (o.status === 'mesa_aberta' && _parseItems(o.items).some(i => i.item_status === 'producao'))
     ).length;
     if (count > 0 && document.getElementById('page-pedidos') && !document.getElementById('page-pedidos').classList.contains('on')) {
       badge.textContent = count > 9 ? '9+' : count;
@@ -3098,7 +3098,7 @@ function renderMyOrders() {
       const isMesaAberta = o.status === 'mesa_aberta';
       if (isMesaAberta) {
         // Modelo novo: comanda única com item_status por item
-        const allItens = Array.isArray(o.items) ? o.items.filter(i => i.item_status !== 'cancelado') : [];
+        const allItens = _parseItems(o.items).filter(i => i.item_status !== 'cancelado');
         const grupos = {
           producao: allItens.filter(i => i.item_status === 'producao'),
           pronto:   allItens.filter(i => i.item_status === 'pronto'),
@@ -3132,7 +3132,7 @@ function renderMyOrders() {
         </div>`;
       }
       // Modelo legado: pedido simples (analise/producao/pronto)
-      const items = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
+      const items = (_parseItems(o.items)).map(i=>`${i.qty}x ${i.name}`).join(', ');
       const isFood  = o.status === 'producao' || o.status === 'analise';
       const statusColor = isFood ? 'var(--accent)' : 'var(--green)';
       const statusLabel = isFood ? '🍳 Em produção' : '🥤 Pronto';
@@ -3181,10 +3181,17 @@ function setMesaFilter(val) {
 //   • Pedido mesa_aberta com itens → recalcula item a item, excluindo cancelados
 //   • Demais pedidos                → usa o.total gravado
 //   • Taxa de entrega               → sempre somada via o.taxa
+// Parse seguro de items — Supabase pode retornar JSONB como string
+function _parseItems(items) {
+  if (Array.isArray(items)) return items;
+  if (typeof items === 'string') { try { return JSON.parse(items); } catch { return []; } }
+  return [];
+}
+
 function calcularTotalMesa(orders) {
   let total = 0;
   (orders || []).forEach(o => {
-    const items = Array.isArray(o.items) ? o.items : [];
+    const items = _parseItems(o.items);
     if (o.status === 'mesa_aberta' && items.length) {
       total += items
         .filter(i => (i.item_status || 'active') !== 'cancelado')
@@ -3241,7 +3248,7 @@ async function refreshMesa(num) {
   const _gid = currentGarcom?.id;
   const _myFetched = _fetched.filter(o => {
     if (o.garcom_id === _gid) return true;
-    const items = Array.isArray(o.items) ? o.items : [];
+    const items = _parseItems(o.items);
     return items.some(i => i.garcom_id === _gid && i.item_status !== 'cancelado');
   });
   myOrders = [..._otherMy, ..._myFetched];
@@ -3286,7 +3293,7 @@ async function imprimirContaMesa(num) {
 
   // Verifica se há itens válidos (não cancelados) antes de abrir o modal
   const _itemCheck = {};
-  orders.forEach(o => (Array.isArray(o.items) ? o.items : []).forEach(i => {
+  orders.forEach(o => (_parseItems(o.items)).forEach(i => {
     if (i.item_status !== 'cancelado') _itemCheck[i.name] = true;
   }));
   if (!Object.keys(_itemCheck).length) { showToast('⚠️ Sem itens para imprimir'); return; }
@@ -3359,7 +3366,7 @@ async function confirmarImprimirConta() {
 
   const itemMap = {};
   orders.forEach(o => {
-    (Array.isArray(o.items) ? o.items : []).forEach(i => {
+    (_parseItems(o.items)).forEach(i => {
       if (i.item_status === 'cancelado') return;
       const k = i.name;
       if (!itemMap[k]) itemMap[k] = { name: i.name, qty: 0, total: 0 };
@@ -3486,7 +3493,7 @@ async function abrirFinalizarMesa(num) {
 
   const listEl = document.getElementById('finalizar-pedidos-list');
   listEl.innerHTML = orders.map(o => {
-    const items = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
+    const items = (_parseItems(o.items)).map(i=>`${i.qty}x ${i.name}`).join(', ');
     return `<div style="padding:7px 0;border-bottom:1px solid var(--border);font-size:12.5px">
       <span style="color:var(--muted)">${items}</span>
       <span style="float:right;font-weight:700;color:var(--amber)">R$ ${(parseFloat(o.total)||0).toFixed(2).replace('.',',')}</span>
@@ -3576,7 +3583,7 @@ async function confirmarFinalizarMesa() {
     _printComandaPagForma = finalizarPay;
 
     // Só abre o modal se houver itens para imprimir
-    const _itensCheck = (mesaOrders || []).flatMap(o => Array.isArray(o.items) ? o.items : []);
+    const _itensCheck = (mesaOrders || []).flatMap(o => _parseItems(o.items));
     if (!_itensCheck.length) { showToast('ℹ️ Mesa finalizada sem itens para imprimir'); return; }
 
     document.getElementById('print-comanda-mesa-num').textContent = finalizarMesaNum;
@@ -3636,7 +3643,7 @@ async function confirmarImprimirComanda() {
     const total    = _printComandaTotal;
 
     // Monta todos os itens de todos os pedidos da mesa
-    const todosItens = _printComandaOrders.flatMap(o => Array.isArray(o.items) ? o.items : []);
+    const todosItens = _printComandaOrders.flatMap(o => _parseItems(o.items));
 
     if (!todosItens.length) { showToast('⚠️ Sem itens para imprimir'); return; }
 
