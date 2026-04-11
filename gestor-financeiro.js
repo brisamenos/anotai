@@ -645,13 +645,17 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
       });
       const itens = Object.values(itemMap);
       if (itens.length) {
-        listEl.innerHTML = itens.map(i => {
+        listEl.innerHTML = itens.map((i, idx) => {
           const badge = i.isTaxa
             ? `<span style="font-size:10px;background:rgba(196,149,106,.15);color:var(--amber);padding:1px 6px;border-radius:99px;font-weight:700;margin-right:4px">%</span>`
             : '';
           return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
             <span>${badge}${i.qty}× ${i.name}</span>
-            <span style="color:var(--accent3);font-weight:600">R$ ${i.subtotal.toFixed(2).replace('.',',')}</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="color:var(--accent3);font-weight:600">R$ ${i.subtotal.toFixed(2).replace('.',',')}</span>
+              <button onclick="_cancelarItemPagamento('${(i.key||i.name).replace(/'/g,'\'')}', ${num})"
+                style="padding:2px 7px;border-radius:6px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#f87171;font-size:10px;cursor:pointer">✕</button>
+            </div>
           </div>`;
         }).join('');
         itensEl.dataset.ordersJson = JSON.stringify(itens);
@@ -664,7 +668,9 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
   }
 
   // Inicializa lista de formas de pagamento
-  _initFormasList(totalVal, t.pag_forma || '');
+  // Se modo split, já foi inicializado com valor por pessoa acima
+  const _pagFormaParaInit = (t.pag_forma || '').startsWith('split:') ? '' : (t.pag_forma || '');
+  if (!_isSplit) _initFormasList(totalVal, _pagFormaParaInit);
 
   openModal('modal-pag-mesa');
 }
@@ -746,6 +752,39 @@ function _printViaWindow(html) {
     <style>body{margin:0;background:#fff}@media print{body{margin:0}}</style></head>
     <body>${html}<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}<\/script></body></html>`);
   w.document.close();
+}
+
+// ── Cancelar item direto no modal de pagamento ───────────────────────────────
+async function _cancelarItemPagamento(itemName, mesaNum) {
+  if (!confirm(`Remover "${itemName}" da comanda?`)) return;
+
+  try {
+    const { data: orders } = await sb.from('orders')
+      .select('id, items, total')
+      .eq('mesa_num', parseInt(mesaNum))
+      .in('status', ['mesa_aberta','analise','producao','pronto']);
+
+    for (const o of orders || []) {
+      const items = _parseItems(o.items);
+      const idx = items.findIndex(i => i.name === itemName && i.item_status !== 'cancelado');
+      if (idx === -1) continue;
+
+      items[idx] = { ...items[idx], item_status: 'cancelado' };
+      const novoTotal = items
+        .filter(i => i.item_status !== 'cancelado')
+        .reduce((s, i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
+
+      await sb.from('orders').update({ items, total: novoTotal }).eq('id', o.id);
+      break;
+    }
+
+    // Recalcula total e reabre o modal com dados atualizados
+    await refreshMesa(mesaNum);
+    openRegistrarPagamento(mesaNum, null);
+    sbToast('ok', `"${itemName}" removido da comanda`);
+  } catch(e) {
+    sbToast('err', 'Erro ao remover item: ' + (e?.message || e));
+  }
 }
 
 async function confirmarPagamentoMesa() {
