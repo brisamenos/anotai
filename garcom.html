@@ -3410,43 +3410,33 @@ async function confirmarImprimirConta() {
 
   const tid = _garcomTenantId;
 
-  // 1️⃣ Electron
-  if (window.ElectronPrint) {
-    try {
-      let r;
-      if (window.ElectronPrint.printHtml) {
-        r = await window.ElectronPrint.printHtml(html, { printer: printer || '', paperWidth: parseInt(fmt) || 80, landscape: false, scaleFactor: 100 });
-      } else {
-        r = await window.ElectronPrint.printOrder({ mesa_num: num, _html: html, _printer: printer });
-      }
-      if (r && r.ok) { showToast('🖨️ Conta impressa' + (printer ? ' em ' + printer : '') + '!'); return; }
-    } catch(e) { console.warn('[PRINT CONTA] Electron falhou:', e.message); }
-  }
-
-  // 2️⃣ Print Agent
+  // Envia para o Print Agent — igual ao envio de pedido de cozinha
+  // O agente no desktop do gestor busca e imprime na impressora térmica
   try {
-    const st = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } }).then(r=>r.json());
+    const st = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } }).then(r=>r.json()).catch(()=>({}));
     if (st.active) {
-      await fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html, format: fmt, printer: printer || undefined, tipo: 'caixa' }) });
-      showToast('🖨️ Conta enviada para impressora!'); return;
+      await fetch('/api/print-queue/job', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+        body: JSON.stringify({ html, format: fmt, printer: printer || undefined, tipo: 'caixa' }),
+      });
+      showToast('🖨️ Conta enviada para impressão!');
+      return;
     }
-  } catch(e) { console.warn('[PRINT CONTA] Print Agent falhou:', e.message); }
+  } catch(e) { console.warn('[PRINT CONTA]', e.message); }
 
-  // 3️⃣ Servidor /api/print
+  // Fallback: /api/print direto
   try {
-    const r = await fetch('/api/print', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html, format: fmt, printer: printer || undefined }) });
+    const r = await fetch('/api/print', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify({ html, format: fmt }),
+    });
     const data = await r.json();
-    if (data.pdf) {
-      const bytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
-      const blob  = new Blob([bytes], { type:'application/pdf' });
-      let frame = document.getElementById('_garcom_print_frame');
-      if (!frame) { frame = document.createElement('iframe'); frame.id='_garcom_print_frame'; frame.style.cssText='position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;visibility:hidden'; document.body.appendChild(frame); }
-      frame.src = URL.createObjectURL(blob);
-      showToast('🖨️ Conta gerada!'); return;
-    }
-  } catch(e) { console.warn('[PRINT CONTA] Server falhou:', e.message); }
+    if (data.pdf) { showToast('🖨️ Conta enviada!'); return; }
+  } catch(e) { console.warn('[PRINT CONTA fallback]', e.message); }
 
-  showToast('⚠️ Impressora não disponível');
+  showToast('⚠️ Print Agent inativo. Verifique o agente no computador do caixa.');
 }
 
 async function abrirFinalizarMesa(num) {
@@ -3741,7 +3731,7 @@ async function confirmarImprimirComanda() {
       }
     } catch(e) { console.warn('[PRINT COMANDA] Print Agent falhou:', e.message); }
 
-    // 3️⃣ Servidor /api/print
+    // 3️⃣ Servidor /api/print — abre PDF em nova aba
     try {
       const r = await fetch('/api/print', {
         method: 'POST',
@@ -3753,16 +3743,8 @@ async function confirmarImprimirComanda() {
         const bytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
         const blob  = new Blob([bytes], { type: 'application/pdf' });
         const url   = URL.createObjectURL(blob);
-        let frame = document.getElementById('_garcom_print_frame');
-        if (!frame) {
-          frame = document.createElement('iframe');
-          frame.id = '_garcom_print_frame';
-          frame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;visibility:hidden';
-          document.body.appendChild(frame);
-        }
-        frame.src = url;
-        setTimeout(() => URL.revokeObjectURL(url), 30000);
-        showToast('🖨️ Comanda gerada!');
+        window.open(url, '_blank');
+        showToast('🖨️ Abrindo para imprimir...');
         return;
       }
     } catch(e) { console.warn('[PRINT COMANDA] Server falhou:', e.message); }
