@@ -750,32 +750,15 @@ async function confirmarPagamentoMesa() {
     });
     if (movErr) console.warn('movimentos insert warning (não-fatal):', movErr);
 
-    // Busca pedidos da sessão atual no banco para o comprovante.
-    // NÃO usa o cache — fecharMesa já o limpou. Filtra pelo opened_at da sessão
-    // (capturado ANTES dos awaits) para garantir que apenas itens desta sessão apareçam.
-    const _sessionStartComp = _savedOpenedAt
-      ? new Date(new Date(_savedOpenedAt).getTime() - 5000).toISOString()
-      : null;
-    let _compQuery = sb.from('orders')
-      .select('*').eq('mesa_num', num);
-    if (_sessionStartComp) {
-      _compQuery = _compQuery.neq('status', 'cancelado').gte('created_at', _sessionStartComp);
-    } else {
-      // sem opened_at: pega todos não-cancelados desta mesa (entregues recentes)
-      _compQuery = _compQuery.in('status', ['analise', 'producao', 'pronto', 'mesa_aberta', 'entregue']);
-    }
-    const { data: _fetchedComp } = await _compQuery;
-    let _ordensComprovante = _fetchedComp || [];
+    // Usa cache local para o comprovante — já tem os dados corretos antes do update
+    // O cache é limpo logo abaixo, então capturamos aqui
+    const _cacheComp = mesaOrdersCache
+      .filter(o => parseInt(o.mesa_num) === num && o.status !== 'cancelado')
+      .map(o => ({ ...o, items: _parseItems(o.items) }));
 
-    // ── Fallback: se a query não retornou pedidos com itens, usa os itens do modal ──
-    const _temItens = _ordensComprovante.some(o => {
-      const items = _parseItems(o.items);
-      return items.length > 0;
-    });
-    if (!_temItens && _fallbackItens.length > 0) {
-      console.warn('[confirmarPag] Query retornou sem itens, usando fallback do modal');
-      _ordensComprovante = [{ items: _fallbackItens.map(i => ({ name: i.name, qty: i.qty, price: i.subtotal / (i.qty || 1) })), status: 'entregue' }];
-    }
+    let _ordensComprovante = _cacheComp.length ? _cacheComp : (_fallbackItens.length
+      ? [{ items: _fallbackItens.map(i => ({ name: i.name, qty: i.qty, price: i.subtotal / (i.qty || 1) })), status: 'entregue' }]
+      : []);
 
     // Atualizar estado local e cache — zera tudo desta mesa
     t.status = 'free'; t.total = null; t.guests = null; t.opened_at = null; t.pag_forma = null; t.taxa_servico = 0;
