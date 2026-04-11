@@ -2017,7 +2017,7 @@ let _printRodape = localStorage.getItem('printRodape') || '';
 // ── Salva config de impressão no servidor (sincroniza entre dispositivos) ──
 async function savePrintConfigServer(cfg) {
   try {
-    const tid = window._tenantId || window.AppAPI?._tenantId || null
+    const tid = (typeof _sessao !== 'undefined' && _sessao?.tenant_id) || window._tenantId || null
     if (!tid) return
     await window.AppAPI.from('store_config').update({ print_config: JSON.stringify(cfg) }).eq('tenant_id', tid)
   } catch {}
@@ -2026,7 +2026,7 @@ async function savePrintConfigServer(cfg) {
 // ── Carrega config de impressão do servidor ──
 async function loadPrintConfigServer() {
   try {
-    const tid = window._tenantId || null
+    const tid = (typeof _sessao !== 'undefined' && _sessao?.tenant_id) || window._tenantId || null
     if (!tid) return
     const { data } = await window.AppAPI.from('store_config').select('print_config').eq('tenant_id', tid).single()
     if (!data?.print_config) return
@@ -2798,7 +2798,7 @@ async function salvarConfigImpressao() {
 
   // Salva no servidor para sincronizar com outros dispositivos
   try {
-    const tid = window._tenantId || null
+    const tid = (typeof _sessao !== 'undefined' && _sessao?.tenant_id) || window._tenantId || null
     if (tid) {
       await window.AppAPI.from('store_config')
         .update({ print_config: JSON.stringify(payload) })
