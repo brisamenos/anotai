@@ -557,11 +557,61 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
       taxaBloco.style.display = 'none';
     }
   }
-  const pagForma = t.pag_forma;
-  if (pagForma) {
-    const sel = document.getElementById('modal-pag-forma');
-    if (sel) for (let i=0;i<sel.options.length;i++) {
-      if (sel.options[i].value === pagForma) { sel.selectedIndex=i; break; }
+  // ── Modo split (divisão de conta) ──────────────────────────────────────────
+  const pagForma = t.pag_forma || '';
+  const _isSplit = pagForma.startsWith('split:');
+  const _splitInfo = _isSplit ? pagForma.split(':') : null;
+  const _splitTotal_n  = _splitInfo ? parseInt(_splitInfo[1]) : 0;
+  const _splitCada     = _splitInfo ? parseFloat(_splitInfo[2]) : 0;
+  const _splitPago_key = `split_pago_mesa_${num}`;
+  const _splitJaPago   = _isSplit ? (parseInt(localStorage.getItem(_splitPago_key) || '0')) : 0;
+  const _splitRestante = _isSplit ? (_splitTotal_n - _splitJaPago) : 0;
+
+  // Bloco de split — mostra ou oculta
+  let splitBloco = document.getElementById('modal-split-bloco');
+  if (!splitBloco) {
+    splitBloco = document.createElement('div');
+    splitBloco.id = 'modal-split-bloco';
+    const taxaBlocoEl = document.getElementById('modal-taxa-bloco');
+    if (taxaBlocoEl) taxaBlocoEl.parentNode.insertBefore(splitBloco, taxaBlocoEl);
+  }
+  if (_isSplit && _splitRestante > 0) {
+    splitBloco.style.display = 'block';
+    splitBloco.innerHTML = `
+      <div style="background:rgba(129,140,248,.08);border:1.5px solid rgba(129,140,248,.2);border-radius:10px;padding:12px 14px;margin-bottom:12px">
+        <div style="font-size:12px;font-weight:700;color:#818cf8;margin-bottom:6px">🧮 Conta dividida</div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+          <span style="color:var(--muted)">Total dividido por</span>
+          <span style="font-weight:700">${_splitTotal_n} pessoas</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+          <span style="color:var(--muted)">Valor por pessoa</span>
+          <span style="font-weight:700;color:var(--accent3)">R$ ${_splitCada.toFixed(2).replace('.',',')}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+          <span style="color:var(--muted)">Já pagaram</span>
+          <span style="font-weight:700;color:var(--success)">${_splitJaPago} de ${_splitTotal_n}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px">
+          <span style="color:var(--muted)">Faltam pagar</span>
+          <span style="font-weight:700;color:var(--amber)">${_splitRestante} pessoa(s)</span>
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(129,140,248,.2);font-size:11px;color:#818cf8">
+          ℹ️ Registre o pagamento de <b>1 pessoa por vez</b> (R$ ${_splitCada.toFixed(2).replace('.',',')}). A mesa fecha automaticamente quando todos pagarem.
+        </div>
+      </div>`;
+
+    // Pré-preencher forma de pagamento com o valor desta pessoa
+    document.getElementById('modal-pag-total').textContent = 'R$ ' + _splitCada.toFixed(2).replace('.',',');
+    document.getElementById('modal-pag-subtotal').value = _splitCada.toFixed(2);
+    _initFormasList(_splitCada, '');
+  } else {
+    if (splitBloco) splitBloco.style.display = 'none';
+    if (!_isSplit && pagForma) {
+      const sel = document.getElementById('modal-pag-forma');
+      if (sel) for (let i=0;i<sel.options.length;i++) {
+        if (sel.options[i].value === pagForma) { sel.selectedIndex=i; break; }
+      }
     }
   }
 
@@ -714,6 +764,52 @@ async function confirmarPagamentoMesa() {
   const _subtotalVal = parseFloat(document.getElementById('modal-pag-subtotal')?.value) || 0;
   const _taxaVal = (_taxaCheck?.checked && _subtotalVal > 0) ? (totalVal - _subtotalVal) : 0;
   const time     = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+
+  // ── Modo split: pagamento parcial ────────────────────────────────────────
+  const _pagFormaAtual = t.pag_forma || '';
+  const _isSplitPag = _pagFormaAtual.startsWith('split:');
+  if (_isSplitPag) {
+    const _splitParts  = _pagFormaAtual.split(':');
+    const _splitN_pag  = parseInt(_splitParts[1]);
+    const _splitCada_p = parseFloat(_splitParts[2]);
+    const _splitKey    = `split_pago_mesa_${num}`;
+    const _jaPagei     = parseInt(localStorage.getItem(_splitKey) || '0');
+    const _novoCount   = _jaPagei + 1;
+
+    // Registra movimento parcial
+    await sb.from('movimentos').insert({
+      description: `Mesa ${num} — Pagamento ${_novoCount}/${_splitN_pag}`,
+      tipo: 'entrada', val: _splitCada_p, pag: forma, time
+    }).catch(() => {});
+
+    sbLoading(true);
+    if (_novoCount >= _splitN_pag) {
+      // Último pagamento — fecha a mesa
+      localStorage.removeItem(_splitKey);
+      await sb.from('orders').update({ status: 'entregue' })
+        .eq('mesa_num', num).in('status', ['analise','producao','pronto','mesa_aberta']);
+      await sb.from('mesas').update({
+        status: 'free', total: null, pag_forma: null,
+        guests: null, opened_at: null, updated_at: new Date().toISOString()
+      }).eq('num', num);
+      t.status = 'free'; t.total = null; t.guests = null; t.opened_at = null; t.pag_forma = null;
+      mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== num);
+      ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== num);
+      closeModal('modal-pag-mesa');
+      renderKanban(); _renderMesaPageFromCache(); renderQR();
+      sbToast('ok', `✅ Mesa ${num} — Todos pagaram! Mesa liberada.`);
+    } else {
+      // Pagamento parcial — mantém mesa aberta
+      localStorage.setItem(_splitKey, String(_novoCount));
+      closeModal('modal-pag-mesa');
+      renderKanban(); _renderMesaPageFromCache();
+      sbToast('ok', `✅ Mesa ${num} — ${_novoCount}/${_splitN_pag} pagou! Faltam ${_splitN_pag - _novoCount}.`);
+      // Reabre modal para próxima pessoa
+      setTimeout(() => openRegistrarPagamento(num, null), 500);
+    }
+    sbLoading(false);
+    return; // sai — não executa fluxo normal
+  }
 
   // ── IMPORTANTE: captura opened_at ANTES de qualquer await ──────────────
   // O SSE da atualização da mesa (step 2) pode disparar refreshMesa()
