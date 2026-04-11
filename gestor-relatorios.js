@@ -2536,14 +2536,11 @@ async function printOrder(order) {
   // ── Monta jobs de impressão ────────────────────────────
   const jobs = [];
   if (_printViaMode === 'separado' && _printPrinterCozinha && ticket.cozinha) {
-    // Modo separado: cada via para sua impressora
     if (ticket.principal) jobs.push({ html: ticket.principal, printer: _printPrinter || '', tipo: 'caixa' });
     jobs.push({ html: ticket.cozinha, printer: _printPrinterCozinha, tipo: 'cozinha' });
   } else if (_printViaMode === 'somente_principal') {
-    // Só via do cliente, sem cozinha
     jobs.push({ html: ticket.principal, printer: _printPrinter || '', tipo: 'caixa' });
   } else {
-    // Modo combinado (padrão): tudo na mesma folha com linha de corte
     jobs.push({ html: ticket.singleSheet, printer: _printPrinter || '' });
   }
 
@@ -2559,9 +2556,21 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
     try {
       const pw = fmt === '58mm' ? 58 : 80;
       const wrappedHtml = _wrapTicketHtml(html, cfg ? cfg.fontSize : 12);
+
+      // Respeita o tipo do job para escolher a impressora correta
+      // 'caixa' → printer_caixa | 'cozinha' → printer_cozinha | 'manual' → pergunta
+      let targetPrinter = printer || '';
+      if (tipo === 'caixa')   targetPrinter = _printPrinter || printer || '';
+      if (tipo === 'cozinha') targetPrinter = _printPrinterCozinha || _printPrinter || printer || '';
+      if (tipo === 'manual' && window.ElectronPrint.showPrinterDialog) {
+        const sel = await window.ElectronPrint.showPrinterDialog(targetPrinter);
+        if (sel.cancelled) return;
+        targetPrinter = sel.printer;
+      }
+
       if (window.ElectronPrint.printHtml) {
-        const r = await window.ElectronPrint.printHtml(wrappedHtml, { printer: printer || '', paperWidth: pw, landscape: false, scaleFactor: 100 });
-        if (r.ok) { sbToast('ok', '🖨️ Impresso!' + (printer ? ' → ' + printer : '')); return; }
+        const r = await window.ElectronPrint.printHtml(wrappedHtml, { printer: targetPrinter, paperWidth: pw, landscape: false, scaleFactor: 100 });
+        if (r.ok) { sbToast('ok', '🖨️ Impresso!' + (targetPrinter ? ' → ' + targetPrinter : '')); return; }
       } else {
         const r = await window.ElectronPrint.printOrder(order);
         if (r.ok) { sbToast('ok', '🖨️ Impresso (Electron)!'); return; }
