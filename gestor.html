@@ -395,13 +395,22 @@ if(window.visualViewport){window.visualViewport.addEventListener('resize',setVH)
       <input type="hidden" id="modal-pag-subtotal">
       <div>
         <label class="form-label">Forma de pagamento</label>
-        <div class="sw" style="width:100%">
-          <select class="form-input" id="modal-pag-forma">
+        <div id="modal-pag-formas-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px"></div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select class="form-input" id="modal-pag-forma-add" style="flex:1">
             <option value="PIX">PIX</option>
             <option value="Cartão">Cartão</option>
             <option value="Dinheiro">Dinheiro</option>
+            <option value="Crédito">Crédito</option>
+            <option value="Débito">Débito</option>
           </select>
+          <input type="number" id="modal-pag-valor-add" placeholder="Valor (R$)" min="0" step="0.01"
+            class="form-input" style="width:110px"
+            onkeydown="if(event.key==='Enter')_addFormaPag()">
+          <button class="btn" style="padding:8px 12px;white-space:nowrap" onclick="_addFormaPag()">+ Adicionar</button>
         </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px" id="modal-pag-troco-hint"></div>
+        <input type="hidden" id="modal-pag-forma">
       </div>
       <input type="hidden" id="modal-pag-mesa-num">
       <button class="btn" style="justify-content:center;padding:11px;font-size:13px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);color:#93c5fd" onclick="imprimirViaCliente()">
