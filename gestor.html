@@ -5024,11 +5024,16 @@ Use no seu próximo pedido 🛍️</textarea>
 
     <div id="ajuste-peso-itens" style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px"></div>
 
-    <div style="display:flex;gap:10px;margin-top:4px">
-      <button id="btn-enviar-ajuste-peso" onclick="enviarAjustePeso()" class="btn bp" style="flex:1">
-        📲 Enviar proposta ao cliente
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+      <div style="display:flex;gap:8px">
+        <button id="btn-enviar-ajuste-peso" onclick="enviarAjustePeso()" class="btn bp" style="flex:1">
+          📲 Enviar proposta ao cliente
+        </button>
+        <button onclick="fecharModalAjustePeso()" class="btn bg" style="flex:none;padding:0 16px">Cancelar</button>
+      </div>
+      <button onclick="aplicarAjusteManual()" style="width:100%;padding:10px;border-radius:8px;border:1.5px solid rgba(34,197,94,.3);background:rgba(34,197,94,.08);color:#86efac;font-size:13px;font-weight:700;cursor:pointer">
+        ✅ Cliente confirmou — aplicar ajuste direto
       </button>
-      <button onclick="fecharModalAjustePeso()" class="btn bg" style="flex:none;padding:0 16px">Cancelar</button>
     </div>
   </div>
 </div>
