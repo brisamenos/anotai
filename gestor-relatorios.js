@@ -2009,6 +2009,10 @@ let _printPrinter  = localStorage.getItem('printPrinter')  || '';
 let _printPrinterCozinha = localStorage.getItem('printPrinterCozinha') || '';
 let _printViaMode = localStorage.getItem('printViaMode') || 'combinado';
 let _printFormat   = localStorage.getItem('printFormat')   || '80mm';  // padrão 80mm
+// Dados do estabelecimento carregados do servidor — evita usar fallback genérico
+let _printNome   = localStorage.getItem('printNome')   || '';
+let _printSub    = localStorage.getItem('printSub')    || '';
+let _printRodape = localStorage.getItem('printRodape') || '';
 
 // ── Salva config de impressão no servidor (sincroniza entre dispositivos) ──
 async function savePrintConfigServer(cfg) {
@@ -2037,9 +2041,18 @@ async function loadPrintConfigServer() {
     // Impressora cozinha
     const _savedCoz = cfg.printer_cozinha || cfg.printPrinterCozinha || ''
     if (_savedCoz) { _printPrinterCozinha = _savedCoz; localStorage.setItem('printPrinterCozinha', _savedCoz) }
-    if (cfg.printNome)    { const el = document.getElementById('print-nome');    if (el) el.value = cfg.printNome }
-    if (cfg.printSub)     { const el = document.getElementById('print-sub');     if (el) el.value = cfg.printSub }
-    if (cfg.printRodape)  { const el = document.getElementById('print-rodape');  if (el) el.value = cfg.printRodape }
+    if (cfg.printNome)   {
+      _printNome = cfg.printNome; localStorage.setItem('printNome', cfg.printNome);
+      const el = document.getElementById('print-nome'); if (el) el.value = cfg.printNome;
+    }
+    if (cfg.printSub)    {
+      _printSub = cfg.printSub; localStorage.setItem('printSub', cfg.printSub);
+      const el = document.getElementById('print-sub'); if (el) el.value = cfg.printSub;
+    }
+    if (cfg.printRodape) {
+      _printRodape = cfg.printRodape; localStorage.setItem('printRodape', cfg.printRodape);
+      const el = document.getElementById('print-rodape'); if (el) el.value = cfg.printRodape;
+    }
   } catch {}
 }
 
@@ -2062,10 +2075,12 @@ function setPrintMode(mode) {
 function _getPrintConfig() {
   const fs = parseInt(document.getElementById('print-font-size')?.value || _printFontSize);
   if (!isNaN(fs)) { _printFontSize = fs; localStorage.setItem('printFontSize', fs); }
+  // Usa campo DOM se preenchido, senão usa variável carregada do servidor
+  const nome   = (document.getElementById('print-nome')?.value   || _printNome   || 'RESTAURANTE').toUpperCase();
+  const sub    =  document.getElementById('print-sub')?.value    || _printSub    || '';
+  const rodape =  document.getElementById('print-rodape')?.value || _printRodape || 'Obrigado!';
   return {
-    nome:     ((document.getElementById('print-nome')?.value)   || 'ESTIMA FOOD').toUpperCase(),
-    sub:       (document.getElementById('print-sub')?.value)    || '',
-    rodape:    (document.getElementById('print-rodape')?.value) || 'Obrigado!',
+    nome, sub, rodape,
     addr:      document.getElementById('toggle-print-addr')?.classList.contains('on') ?? true,
     pag:       document.getElementById('toggle-print-pag')?.classList.contains('on')  ?? true,
     fontSize:  fs || 12,
@@ -2759,8 +2774,10 @@ async function salvarConfigImpressao() {
     printer_cozinha:     _printPrinterCozinha,
   }
   // Salva localmente
-  localStorage.setItem('printFormat', fmt)
-  _printFormat = fmt
+  localStorage.setItem('printFormat', fmt); _printFormat = fmt;
+  localStorage.setItem('printNome', cfg.nome);   _printNome   = cfg.nome;
+  localStorage.setItem('printSub', cfg.sub);     _printSub    = cfg.sub;
+  localStorage.setItem('printRodape', cfg.rodape); _printRodape = cfg.rodape;
 
   // Salva no Electron se disponível — inclui impressoras para persistência local
   if (window.ElectronPrint) {
