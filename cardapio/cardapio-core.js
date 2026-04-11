@@ -560,8 +560,9 @@ function applyBrandingLive(cfg) {
       const url = cfg.store_banner_url.startsWith('http')
         ? cfg.store_banner_url
         : location.origin + cfg.store_banner_url;
-      bannerEl.innerHTML = `<img src="${url}" alt="banner" onerror="this.parentElement.classList.remove('show')">`;
+      bannerEl.innerHTML = `<img src="${url}" alt="banner" onerror="this.parentElement.classList.remove('show');this.parentElement.style.display='none'">`;
       bannerEl.classList.add('show');
+      bannerEl.style.display = 'block';
     }
   }
 
