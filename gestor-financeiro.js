@@ -551,10 +551,32 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
   document.getElementById('modal-pag-total').textContent = 'R$ ' + totalVal.toFixed(2).replace('.',',');
   document.getElementById('modal-pag-subtotal').value = totalVal.toFixed(2);
 
-  // Taxa agora é um item da comanda — o bloco de checkbox fica oculto
-  // O gestor cancela a taxa pelo ✕ nos itens do consumo, como qualquer outro item
+  // Taxa — mostra checkbox se configurado, pré-marca se garçom já incluiu como item
   const taxaBloco = document.getElementById('modal-taxa-bloco');
-  if (taxaBloco) taxaBloco.style.display = 'none';
+  const taxaCheck = document.getElementById('modal-taxa-check');
+  if (taxaBloco && taxaCheck) {
+    if (_taxaServicoPct > 0) {
+      taxaBloco.style.display = 'block';
+      // Verifica se taxa já foi adicionada como item pelo garçom
+      const _cacheOrdersTaxa = mesaOrdersCache.filter(o =>
+        parseInt(o.mesa_num) === parseInt(num) && o.status !== 'cancelado'
+      );
+      const _taxaJaItem = _cacheOrdersTaxa.some(o =>
+        _parseItems(o.items).some(i => i.item_type === 'taxa' && i.item_status !== 'cancelado')
+      );
+      taxaCheck.checked = _taxaJaItem;
+      taxaCheck.disabled = _taxaJaItem; // se garçom já incluiu, não deixa marcar de novo
+      document.getElementById('modal-taxa-label').textContent = _taxaJaItem
+        ? `Taxa de serviço (${_taxaServicoPct}%) — incluída pelo garçom`
+        : `Taxa de serviço (${_taxaServicoPct}%)`;
+      document.getElementById('modal-taxa-linha').textContent = `Taxa (${_taxaServicoPct}%)`;
+      document.getElementById('modal-taxa-breakdown').style.display = 'none';
+    } else {
+      taxaBloco.style.display = 'none';
+    }
+    // Atualiza total com estado correto da taxa
+    setTimeout(() => _toggleTaxaServico(), 0);
+  }
   const pagForma = t.pag_forma;
   if (pagForma) {
     const sel = document.getElementById('modal-pag-forma');
