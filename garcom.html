@@ -986,12 +986,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
         </label>
       </div>
       <div id="finalizar-pedidos-list" style="margin-bottom:14px"></div>
-      <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:6px">Forma de pagamento</label>
-      <div style="display:flex;gap:7px;flex-wrap:wrap" id="finalizar-pay-opts">
-        <button class="mesa-action-btn pedido on" data-pay="PIX" onclick="selectFinalizarPay(this)" style="flex:1;min-width:80px;padding:9px;font-size:12.5px">📱 PIX</button>
-        <button class="mesa-action-btn" data-pay="Cartão" onclick="selectFinalizarPay(this)" style="flex:1;min-width:80px;padding:9px;font-size:12.5px;background:var(--surface2);color:var(--muted);border:1.5px solid var(--border)">💳 Cartão</button>
-        <button class="mesa-action-btn" data-pay="Dinheiro" onclick="selectFinalizarPay(this)" style="flex:1;min-width:80px;padding:9px;font-size:12.5px;background:var(--surface2);color:var(--muted);border:1.5px solid var(--border)">💵 Dinheiro</button>
-      </div>
+      <!-- Forma de pagamento é responsabilidade do gestor/caixa -->
     </div>
     <div class="sheet-foot">
       <button class="confirm-btn" onclick="confirmarFinalizarMesa()" style="background:var(--amber);color:#000;box-shadow:0 6px 20px rgba(196,149,106,.25)">
@@ -3231,7 +3226,7 @@ async function refreshMesa(num) {
 
 // ══ FINALIZAR MESA ════════════════════════
 let finalizarMesaNum = null;
-let finalizarPay = 'PIX';
+let finalizarPay = ''; // definido pelo gestor/caixa
 
 // ── Variáveis para o modal de impressão da conta ──
 let _printContaMesaNum = null;
@@ -3400,14 +3395,7 @@ async function confirmarImprimirConta() {
 
 async function abrirFinalizarMesa(num) {
   finalizarMesaNum = num;
-  finalizarPay = 'PIX';
-  // Reset pay selection
-  document.querySelectorAll('#finalizar-pay-opts button').forEach(b => {
-    const isPix = b.dataset.pay === 'PIX';
-    b.style.background = isPix ? 'var(--accent)' : 'var(--surface2)';
-    b.style.color = isPix ? '#fff' : 'var(--muted)';
-    b.style.border = isPix ? 'none' : '1.5px solid var(--border)';
-  });
+  finalizarPay = '';
   document.getElementById('finalizar-title').textContent = `Finalizar Mesa ${num}`;
 
   // Load orders for this mesa (todos os garçons)
@@ -3474,15 +3462,6 @@ function atualizarTotalFinalizar() {
   if (taxaRow) document.getElementById('finalizar-total-com-taxa').textContent = `R$ ${total.toFixed(2).replace('.',',')}`;
 }
 
-function selectFinalizarPay(el) {
-  finalizarPay = el.dataset.pay;
-  document.querySelectorAll('#finalizar-pay-opts button').forEach(b => {
-    const on = b.dataset.pay === finalizarPay;
-    b.style.background = on ? 'var(--accent)' : 'var(--surface2)';
-    b.style.color = on ? '#fff' : 'var(--muted)';
-    b.style.border = on ? 'none' : '1.5px solid var(--border)';
-  });
-}
 
 async function confirmarFinalizarMesa() {
   if (!finalizarMesaNum) return;
