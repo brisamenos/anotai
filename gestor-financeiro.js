@@ -463,6 +463,76 @@ async function fecharMesa(num) {
   }
 }
 
+// ── Pagamento misto — múltiplas formas ──────────────────────
+let _pagFormasList = []; // [{forma, valor}]
+
+function _renderFormasList(totalVal) {
+  const list = document.getElementById('modal-pag-formas-list');
+  if (!list) return;
+  const pago = _pagFormasList.reduce((s, f) => s + f.valor, 0);
+  const restante = Math.max(0, totalVal - pago);
+  list.innerHTML = _pagFormasList.map((f, i) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+      <span style="font-size:13px;font-weight:600">${f.forma}</span>
+      <span style="font-size:13px;color:var(--accent3);font-weight:700">R$ ${f.valor.toFixed(2).replace('.',',')}</span>
+      <button onclick="_removeFormaPag(${i})" style="padding:2px 8px;border-radius:6px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#f87171;font-size:11px;cursor:pointer">✕</button>
+    </div>`).join('');
+
+  // Hint de troco ou restante
+  const hint = document.getElementById('modal-pag-troco-hint');
+  if (hint) {
+    if (pago > totalVal + 0.005) {
+      const troco = pago - totalVal;
+      hint.textContent = `💵 Troco: R$ ${troco.toFixed(2).replace('.',',')}`;
+      hint.style.color = 'var(--success)';
+    } else if (restante > 0.005 && _pagFormasList.length > 0) {
+      hint.textContent = `⚠️ Falta: R$ ${restante.toFixed(2).replace('.',',')}`;
+      hint.style.color = 'var(--danger)';
+    } else {
+      hint.textContent = '';
+    }
+  }
+
+  // Preenche hidden para compatibilidade
+  const formaHidden = document.getElementById('modal-pag-forma');
+  if (formaHidden) formaHidden.value = _pagFormasList.map(f => f.forma).join('+') || '';
+}
+
+function _addFormaPag() {
+  const totalStr = document.getElementById('modal-pag-total')?.textContent || '0';
+  const totalVal = parseFloat(totalStr.replace('R$ ','').replace(',','.')) || 0;
+  const sel = document.getElementById('modal-pag-forma-add');
+  const inp = document.getElementById('modal-pag-valor-add');
+  const forma = sel?.value || 'PIX';
+
+  const pago = _pagFormasList.reduce((s, f) => s + f.valor, 0);
+  const restante = Math.max(0, totalVal - pago);
+
+  let valor = parseFloat(inp?.value) || 0;
+  if (!valor || valor <= 0) valor = Math.round(restante * 100) / 100; // preenche com restante
+  if (valor <= 0) return;
+
+  _pagFormasList.push({ forma, valor });
+  if (inp) inp.value = '';
+  _renderFormasList(totalVal);
+}
+
+function _removeFormaPag(idx) {
+  const totalStr = document.getElementById('modal-pag-total')?.textContent || '0';
+  const totalVal = parseFloat(totalStr.replace('R$ ','').replace(',','.')) || 0;
+  _pagFormasList.splice(idx, 1);
+  _renderFormasList(totalVal);
+}
+
+function _initFormasList(totalVal, pagForma) {
+  _pagFormasList = [];
+  // Se veio forma do garçom, pré-preenche com total
+  if (pagForma && pagForma !== '') {
+    _pagFormasList = [{ forma: pagForma, valor: totalVal }];
+  }
+  _renderFormasList(totalVal);
+}
+
 async function openRegistrarPagamento(num, totalJaCalculado) {
   const t = tables.find(x => parseInt(x.num) === parseInt(num));
   if (!t) return;
@@ -540,6 +610,9 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
       listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">Erro ao carregar itens</div>';
     }
   }
+
+  // Inicializa lista de formas de pagamento
+  _initFormasList(totalVal, t.pag_forma || '');
 
   openModal('modal-pag-mesa');
 }
@@ -625,7 +698,10 @@ function _printViaWindow(html) {
 
 async function confirmarPagamentoMesa() {
   const num   = parseInt(document.getElementById('modal-pag-mesa-num').value);
-  const forma = document.getElementById('modal-pag-forma').value;
+  // Usa a lista de formas mistas ou fallback para o select
+  const forma = _pagFormasList.length
+    ? _pagFormasList.map(f => `${f.forma}${_pagFormasList.length > 1 ? ' R$'+f.valor.toFixed(2).replace('.',',') : ''}`).join(' + ')
+    : (document.getElementById('modal-pag-forma').value || 'PIX');
   // parseInt nos dois lados para evitar falha de comparação string vs number
   const t = tables.find(x => parseInt(x.num) === num);
   if (!t) { sbToast('err', 'Mesa não encontrada'); return; }
