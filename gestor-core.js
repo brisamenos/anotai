@@ -342,8 +342,8 @@ async function loadAllData(silent = false) {
     // Restaura config de impressão do Supabase (sincroniza web e Electron)
     if (typeof loadPrintConfigServer === 'function') loadPrintConfigServer().catch(()=>{});
     if (!_rtConnected) subscribeOrders();
-    renderKanban();
-    renderCaixa();
+    if (typeof renderKanban === 'function') renderKanban();
+    if (typeof renderCaixa === 'function') renderCaixa();
     // Sincroniza SW com os dados carregados
     setTimeout(() => _initSwState(), 500);
   } catch(e) {
