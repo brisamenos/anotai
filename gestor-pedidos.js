@@ -356,17 +356,11 @@ function _ajustePesoGerarMensagem(o) {
   if (!linhas.length) {
     msgEl.value = `Olá ${nome}! Seu pedido #${o.num} está pronto com o peso exato solicitado. 🥩`;
   } else {
-    msgEl.value =
-`Olá ${nome}! 👋
-
-Sobre seu pedido #${o.num}:
-
-${linhas.join('
-')}
-
-*Novo total: R$ ${novoTotal.toFixed(2).replace('.',',')}*
-
-Deseja confirmar com essa quantidade ou prefere cancelar?`;
+    const _msgBody = "Olá " + nome + "! 👋\n\nSobre seu pedido #" + o.num + ":\n\n"
+      + linhas.join("\n")
+      + "\n\n*Novo total: R$ " + novoTotal.toFixed(2).replace(".",",") + "*"
+      + "\n\nDeseja confirmar com essa quantidade ou prefere cancelar?";
+    msgEl.value = _msgBody;
   }
 }
 
@@ -413,6 +407,7 @@ async function _ajustePesoSalvar() {
 
     closeModal('modal-ajuste-peso');
     await loadAllData(true);
+    renderKanban && renderKanban();
   } catch(e) {
     sbToast('err', 'Erro ao salvar: ' + (e?.message || e));
   } finally {
