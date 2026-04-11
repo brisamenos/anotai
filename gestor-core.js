@@ -1503,6 +1503,49 @@ async function enviarAjustePeso() {
   sbLoading(false);
 }
 
+// ── Aplicar ajuste manual (cliente confirmou presencialmente ou por WA) ─────
+async function aplicarAjusteManual() {
+  if (!_ajustePesoOrderId) return;
+  const o   = ordersKanban.find(x => x.id === _ajustePesoOrderId);
+  const idx = ordersKanban.findIndex(x => x.id === _ajustePesoOrderId);
+  if (!o || idx === -1) return;
+
+  // Lê pesos dos inputs do modal (mesmos campos de abrirModalAjustePeso)
+  const propostas = _ajustePesoItens.map((it, i) => {
+    const el       = document.getElementById('ajuste-peso-' + i);
+    const novoPeso = parseInt(el?.value) || it.pesoOriginal;
+    const novoVal  = it.precoKg * (novoPeso / 1000);
+    return { ...it, novoPeso, novoVal };
+  }); // inclui todos, mesmo sem mudança
+
+  sbLoading(true);
+  try {
+    const novosItens = (o.items || []).map(item => {
+      const p = propostas.find(p => p.name === item.name);
+      if (!p) return item;
+      const novaObs = (item.obs || '').replace(/\d+g/, p.novoPeso + 'g');
+      return { ...item, price: parseFloat(p.novoVal.toFixed(2)), obs: novaObs };
+    });
+
+    const totalItens = novosItens.reduce((s, i) => s + parseFloat(i.price || 0) * (i.qty || 1), 0);
+
+    const r = await fetch('/api/orders?id=eq.' + _ajustePesoOrderId, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _sessao?.tenant_id },
+      body: JSON.stringify({ items: novosItens, total: totalItens })
+    });
+    if (!r.ok) throw new Error('Erro ao atualizar pedido');
+
+    ordersKanban[idx] = { ...o, items: novosItens, total: totalItens, _ajustePendente: null };
+    fecharModalAjustePeso();
+    if (typeof renderKanban === 'function') renderKanban();
+    sbToast('ok', 'Pedido atualizado! Novo total: R$ ' + totalItens.toFixed(2).replace('.',','));
+  } catch(e) {
+    sbToast('err', 'Erro ao aplicar: ' + (e?.message || e));
+  }
+  sbLoading(false);
+}
+
 // ── Modal de resposta WA ──────────────────────────────────
 let _respostaWAOrderId = null;
 
