@@ -587,18 +587,15 @@ async function _printComandaMesa(mesaNum, mesaData) {
     } catch(e) { console.warn('[PRINT CONTA] Electron falhou:', e.message); }
   }
 
-  // 2. Print Agent
+  // 2. Print Agent — envia direto sem verificar status
   try {
     if (tid) {
-      const st = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } }).then(r => r.json());
-      if (st.active) {
-        await fetch('/api/print-queue/job', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-          body: JSON.stringify({ html, format: fmt, printer: printer || undefined, tipo: 'caixa' }),
-        });
-        return;
-      }
+      const res = await fetch('/api/print-queue/job', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+        body: JSON.stringify({ html, format: fmt, printer: printer || undefined, tipo: 'caixa' }),
+      });
+      if (res.ok) return;
     }
   } catch(e) { console.warn('[PRINT CONTA] Agent falhou:', e.message); }
 
