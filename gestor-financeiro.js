@@ -477,14 +477,24 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
   }
 
   document.getElementById('modal-pag-mesa-title').textContent = `Registrar Pagamento — Mesa ${num}`;
-  document.getElementById('modal-pag-total').textContent = 'R$ ' + totalVal.toFixed(2).replace('.',',');
   document.getElementById('modal-pag-mesa-num').value = num;
-  // Taxa de serviço — respeita o que o garçom já escolheu ao finalizar a mesa
-  const taxaJaAplicada = parseFloat(t.taxa_servico || 0) > 0;
-  const taxaJaVal      = taxaJaAplicada ? parseFloat(t.taxa_servico) : 0;
-  // modal-pag-subtotal deve guardar SEMPRE o subtotal sem taxa para _toggleTaxaServico calcular certo
-  const subtotalSemTaxa = taxaJaAplicada ? Math.max(0, totalVal - taxaJaVal) : totalVal;
+
+  // Calcula subtotal real direto dos itens do cache (não depende de t.taxa_servico)
+  const _cacheOrders = mesaOrdersCache.filter(o =>
+    parseInt(o.mesa_num) === parseInt(num) && o.status !== 'cancelado'
+  );
+  const _subtotalItens = calcularTotalMesa(_cacheOrders);
+
+  // Se total gravado > subtotal dos itens, a diferença é a taxa do garçom
+  const _taxaDiff = Math.round((totalVal - _subtotalItens) * 100) / 100;
+  const taxaJaAplicada = _taxaDiff > 0.005 && _taxaServicoPct > 0;
+  const taxaJaVal = taxaJaAplicada ? _taxaDiff : 0;
+  // subtotal sem taxa é sempre a soma dos itens
+  const subtotalSemTaxa = _subtotalItens > 0 ? _subtotalItens : Math.max(0, totalVal - taxaJaVal);
+
   document.getElementById('modal-pag-subtotal').value = subtotalSemTaxa.toFixed(2);
+  document.getElementById('modal-pag-total').textContent = 'R$ ' + totalVal.toFixed(2).replace('.',',');
+
   const taxaBloco = document.getElementById('modal-taxa-bloco');
   const taxaCheck = document.getElementById('modal-taxa-check');
   if (taxaBloco && taxaCheck) {
@@ -501,7 +511,7 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
       taxaBloco.style.display = 'none';
     }
   }
-  // Atualiza total exibido já com estado correto da taxa
+  // Atualiza total exibido com estado correto da taxa
   _toggleTaxaServico();
   const pagForma = t.pag_forma;
   if (pagForma) {
