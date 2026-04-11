@@ -63,6 +63,15 @@ if(window.visualViewport){window.visualViewport.addEventListener('resize',setVH)
   }
 })();
 </script>
+
+<script>
+// Stub de navegação — evita "nav is not defined" se clicado antes dos scripts carregarem
+function nav(id) {
+  document.addEventListener('DOMContentLoaded', function() {
+    if (typeof window._navReady === 'function') window._navReady(id);
+  });
+}
+</script>
 </head>
 <body>
 
@@ -2787,31 +2796,6 @@ Use no seu próximo pedido 🛍️</textarea>
 </div>
 
 <!-- Detalhe Pedido -->
-<!-- ══ MODAL AJUSTE PESO AÇOUGUE ══════════════════════════════════════════ -->
-<div class="modal-bg" id="modal-ajuste-peso">
-  <div class="modal" style="max-width:480px">
-    <button class="modal-close" onclick="closeModal('modal-ajuste-peso')"></button>
-    <h2 style="display:flex;align-items:center;gap:8px">
-      <span style="font-size:20px">🥩</span> Ajustar Peso do Pedido
-    </h2>
-    <div id="ajuste-peso-items" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"></div>
-
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Mensagem para o cliente</div>
-      <textarea id="ajuste-peso-msg" rows="4"
-        style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;resize:vertical;box-sizing:border-box;font-family:'DM Sans',sans-serif"
-        placeholder="A mensagem será gerada automaticamente..."></textarea>
-    </div>
-
-    <div style="display:flex;gap:8px">
-      <button class="btn bd" style="flex:1;justify-content:center" onclick="closeModal('modal-ajuste-peso')">Cancelar</button>
-      <button class="btn bg" style="flex:1;justify-content:center" onclick="_ajustePesoSalvar()" id="ajuste-peso-btn-salvar">
-        💾 Salvar e notificar
-      </button>
-    </div>
-  </div>
-</div>
-
 <div class="modal-bg" id="modal-order-detail">
   <div class="modal order-detail">
     <button class="modal-close" onclick="closeModal('modal-order-detail')"></button>
