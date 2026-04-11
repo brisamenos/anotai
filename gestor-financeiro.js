@@ -528,31 +528,34 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
   document.getElementById('modal-pag-total').textContent = 'R$ ' + totalVal.toFixed(2).replace('.',',');
   document.getElementById('modal-pag-subtotal').value = totalVal.toFixed(2);
 
-  // Taxa — mostra checkbox se configurado, pré-marca se garçom já incluiu como item
+  // Taxa — verifica se já está como item na comanda
   const taxaBloco = document.getElementById('modal-taxa-bloco');
   const taxaCheck = document.getElementById('modal-taxa-check');
+  const _cacheOrdersTaxa = mesaOrdersCache.filter(o =>
+    parseInt(o.mesa_num) === parseInt(num) && o.status !== 'cancelado'
+  );
+  const _taxaJaItem = _taxaServicoPct > 0 && _cacheOrdersTaxa.some(o =>
+    _parseItems(o.items).some(i => i.item_type === 'taxa' && i.item_status !== 'cancelado')
+  );
+
   if (taxaBloco && taxaCheck) {
-    if (_taxaServicoPct > 0) {
+    if (_taxaJaItem) {
+      // Taxa já está nos itens — ocultar checkbox para não somar duas vezes
+      // O gestor cancela pelo ✕ no item da lista
+      taxaBloco.style.display = 'none';
+      taxaCheck.checked = false;
+      // Total = soma dos itens já incluindo a taxa
+    } else if (_taxaServicoPct > 0) {
+      // Taxa não incluída — gestor pode adicionar
       taxaBloco.style.display = 'block';
-      // Verifica se taxa já foi adicionada como item pelo garçom
-      const _cacheOrdersTaxa = mesaOrdersCache.filter(o =>
-        parseInt(o.mesa_num) === parseInt(num) && o.status !== 'cancelado'
-      );
-      const _taxaJaItem = _cacheOrdersTaxa.some(o =>
-        _parseItems(o.items).some(i => i.item_type === 'taxa' && i.item_status !== 'cancelado')
-      );
-      taxaCheck.checked = _taxaJaItem;
-      taxaCheck.disabled = _taxaJaItem; // se garçom já incluiu, não deixa marcar de novo
-      document.getElementById('modal-taxa-label').textContent = _taxaJaItem
-        ? `Taxa de serviço (${_taxaServicoPct}%) — incluída pelo garçom`
-        : `Taxa de serviço (${_taxaServicoPct}%)`;
+      taxaCheck.checked = false;
+      taxaCheck.disabled = false;
+      document.getElementById('modal-taxa-label').textContent = `Taxa de serviço (${_taxaServicoPct}%)`;
       document.getElementById('modal-taxa-linha').textContent = `Taxa (${_taxaServicoPct}%)`;
       document.getElementById('modal-taxa-breakdown').style.display = 'none';
     } else {
       taxaBloco.style.display = 'none';
     }
-    // Atualiza total com estado correto da taxa
-    setTimeout(() => _toggleTaxaServico(), 0);
   }
   const pagForma = t.pag_forma;
   if (pagForma) {
