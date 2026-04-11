@@ -430,7 +430,7 @@ async function fecharMesa(num) {
     t.total = sessionTotal;
     renderKanban();
     _renderMesaPageFromCache();
-    refreshMesa(numInt).then(() => _renderMesaPageFromCache()).catch(() => {});
+    refreshMesa(numInt).then(() => _renderMesaPageFromCache());
     sbToast('ok', `Mesa ${numInt} aguardando pagamento — R$ ${sessionTotal.toFixed(2).replace('.', ',')} `);
   } catch(e) {
     console.error('fecharMesa error:', e);
@@ -816,10 +816,12 @@ async function confirmarPagamentoMesa() {
     const _novoCount   = _jaPagei + 1;
 
     // Registra movimento parcial
-    await sb.from('movimentos').insert({
-      description: `Mesa ${num} — Pagamento ${_novoCount}/${_splitN_pag}`,
-      tipo: 'entrada', val: _splitCada_p, pag: forma, time
-    }).catch(() => {});
+    try {
+      await sb.from('movimentos').insert({
+        description: `Mesa ${num} — Pagamento ${_novoCount}/${_splitN_pag}`,
+        tipo: 'entrada', val: _splitCada_p, pag: forma, time
+      });
+    } catch(e) { console.warn('[SPLIT] movimentos insert:', e?.message); }
 
     sbLoading(true);
     if (_novoCount >= _splitN_pag) {
