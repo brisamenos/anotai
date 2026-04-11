@@ -36,8 +36,9 @@ function _pi(items) {
 function calcularTotalMesa(orders) {
   let total = 0;
   (orders || []).forEach(o => {
-    const items = Array.isArray(o.items) ? o.items : [];
-    if (o.status === 'mesa_aberta' && items.length) {
+    const items = _pi(o.items);
+    // Para qualquer pedido de mesa ativo com itens, recalcula item a item
+    if (['mesa_aberta','analise','producao','pronto'].includes(o.status) && items.length) {
       total += items
         .filter(i => (i.item_status || 'active') !== 'cancelado')
         .reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);

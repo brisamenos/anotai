@@ -380,20 +380,11 @@ async function cobrarMesaDireta(num) {
     }
     const sessionTotal = calcularTotalMesa([...(activeOrders || []), ...immediateEntregues]);
 
-    // Finaliza pedidos ativos e marca mesa como waiting
-    await sb.from('orders').update({ status: 'entregue' }).eq('mesa_num', numInt)
-      .in('status', ['analise', 'producao', 'pronto', 'mesa_aberta']);
+    // Apenas marca mesa como waiting — pedidos ficam ativos até confirmar pagamento
     await sb.from('mesas').update({ status: 'waiting', total: sessionTotal, updated_at: new Date().toISOString() }).eq('num', numInt);
 
     t.status = 'waiting';
     t.total = sessionTotal;
-    ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== numInt);
-    // Preserva pedidos no cache (necessário para exibir itens no modal de pagamento)
-    mesaOrdersCache.forEach(o => {
-      if (parseInt(o.mesa_num) === numInt && ['analise', 'producao', 'pronto', 'mesa_aberta'].includes(o.status)) {
-        o.status = 'entregue';
-      }
-    });
     renderKanban();
     _renderMesaPageFromCache();
 
