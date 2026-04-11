@@ -235,6 +235,191 @@ function renderKanban() {
   document.getElementById('pedidos-badge').textContent = ordersKanban.filter(o => o.status === 'analise' || o.status === 'aguardando_pix').length || '';
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AÇOUGUE — Ajuste de peso por pedido
+// Abre ao clicar no ⚠️ no card do kanban
+// ══════════════════════════════════════════════════════════════════════════════
+let _ajustePesoOrderId = null;
+let _ajustePesoItens = [];
+
+async function abrirModalAjustePeso(orderId) {
+  const o = ordersKanban.find(x => x.id === orderId);
+  if (!o) return;
+
+  _ajustePesoOrderId = orderId;
+
+  // Filtra itens por kg
+  const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? (() => { try { return JSON.parse(o.items); } catch { return []; } })() : []);
+  const itensKg = items.filter(i => i.item_type === 'kg' || (i.obs && /\d+g\s/.test(i.obs)));
+
+  if (!itensKg.length) {
+    sbToast('warn', 'Nenhum item por kg neste pedido');
+    return;
+  }
+
+  // Monta estado de edição
+  _ajustePesoItens = itensKg.map(i => {
+    // Tenta extrair peso solicitado da obs ex: "300g corte mignon"
+    const matchGramas = (i.obs || '').match(/(\d+)g\s/);
+    const pesoSolicitado = matchGramas ? parseInt(matchGramas[1]) : (i.peso_g || 0);
+    const pesoKg = pesoSolicitado / 1000;
+    const precoKg = pesoKg > 0 ? parseFloat(i.price) / pesoKg : parseFloat(i.price);
+    return {
+      name:           i.name,
+      obs:            i.obs || '',
+      pesoSolicitado, // gramas
+      pesoReal:       pesoSolicitado, // começa igual, gestor edita
+      precoKg,        // R$ por kg
+      precoOriginal:  parseFloat(i.price),
+      qty:            i.qty || 1
+    };
+  });
+
+  // Renderiza itens editáveis
+  const container = document.getElementById('ajuste-peso-items');
+  if (container) {
+    container.innerHTML = _ajustePesoItens.map((it, idx) => `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px">🥩 ${it.qty}x ${it.name}</div>
+        ${it.obs ? `<div style="font-size:11px;color:var(--muted);margin-bottom:8px">📝 ${it.obs}</div>` : ''}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Solicitado</div>
+            <div style="font-size:14px;font-weight:700;color:var(--amber)">${it.pesoSolicitado}g (${(it.pesoSolicitado/1000).toFixed(3)}kg)</div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Peso real disponível</div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="number" id="peso-real-${idx}" value="${it.pesoReal}" min="1" step="1"
+                style="width:80px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--amber);background:var(--surface);color:var(--text);font-size:14px;font-weight:700"
+                oninput="_ajustePesoAtualizar(${idx})">
+              <span style="font-size:12px;color:var(--muted)">g</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px">
+          <span style="color:var(--muted)">Preço por kg: R$ ${it.precoKg.toFixed(2).replace('.',',')}</span>
+          <span style="font-weight:700;color:var(--success)" id="preco-ajustado-${idx}">
+            R$ ${it.precoOriginal.toFixed(2).replace('.',',')}
+          </span>
+        </div>
+      </div>`).join('');
+  }
+
+  _ajustePesoGerarMensagem(o);
+  openModal('modal-ajuste-peso');
+}
+
+function _ajustePesoAtualizar(idx) {
+  const inp = document.getElementById(`peso-real-${idx}`);
+  if (!inp) return;
+  const pesoReal = parseInt(inp.value) || 0;
+  _ajustePesoItens[idx].pesoReal = pesoReal;
+
+  // Recalcula preço
+  const it = _ajustePesoItens[idx];
+  const novoPreco = (pesoReal / 1000) * it.precoKg;
+  _ajustePesoItens[idx].precoAjustado = novoPreco;
+
+  const precoEl = document.getElementById(`preco-ajustado-${idx}`);
+  if (precoEl) {
+    const diff = novoPreco - it.precoOriginal;
+    const cor = diff > 0.01 ? 'var(--danger)' : diff < -0.01 ? 'var(--success)' : 'var(--text)';
+    precoEl.style.color = cor;
+    precoEl.textContent = 'R$ ' + novoPreco.toFixed(2).replace('.',',');
+  }
+
+  // Atualiza mensagem
+  const o = ordersKanban.find(x => x.id === _ajustePesoOrderId);
+  if (o) _ajustePesoGerarMensagem(o);
+}
+
+function _ajustePesoGerarMensagem(o) {
+  const nome = (o.client || 'Cliente').split(' ')[0];
+  const linhas = _ajustePesoItens.map(it => {
+    const pesoReal = it.pesoReal;
+    const preco = it.precoAjustado ?? it.precoOriginal;
+    const diff = pesoReal - it.pesoSolicitado;
+    if (Math.abs(diff) < 10) return null; // sem diferença relevante
+    const tipo = diff > 0 ? '⬆️ um pouco mais' : '⬇️ um pouco menos';
+    return `• *${it.name}*: ${tipo} — ${pesoReal}g disponível (R$ ${preco.toFixed(2).replace('.',',')})`
+  }).filter(Boolean);
+
+  const novoTotal = _ajustePesoItens.reduce((s, it) => {
+    return s + (it.precoAjustado ?? it.precoOriginal) * (it.qty || 1);
+  }, 0);
+
+  const msgEl = document.getElementById('ajuste-peso-msg');
+  if (!msgEl) return;
+
+  if (!linhas.length) {
+    msgEl.value = `Olá ${nome}! Seu pedido #${o.num} está pronto com o peso exato solicitado. 🥩`;
+  } else {
+    msgEl.value =
+`Olá ${nome}! 👋
+
+Sobre seu pedido #${o.num}:
+
+${linhas.join('
+')}
+
+*Novo total: R$ ${novoTotal.toFixed(2).replace('.',',')}*
+
+Deseja confirmar com essa quantidade ou prefere cancelar?`;
+  }
+}
+
+async function _ajustePesoSalvar() {
+  if (!_ajustePesoOrderId) return;
+  const o = ordersKanban.find(x => x.id === _ajustePesoOrderId);
+  if (!o) return;
+
+  const btn = document.getElementById('ajuste-peso-btn-salvar');
+  if (btn) btn.disabled = true;
+
+  try {
+    // Atualiza preços dos itens no pedido
+    const items = Array.isArray(o.items) ? [...o.items] : [];
+    let mudou = false;
+    _ajustePesoItens.forEach(it => {
+      if (it.precoAjustado == null) return;
+      const idx = items.findIndex(i => i.name === it.name);
+      if (idx !== -1) {
+        items[idx] = { ...items[idx], price: parseFloat(it.precoAjustado.toFixed(2)), peso_g: it.pesoReal };
+        mudou = true;
+      }
+    });
+
+    if (mudou) {
+      const novoTotal = items.reduce((s, i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
+      await sb.from('orders').update({ items, total: novoTotal }).eq('id', _ajustePesoOrderId);
+    }
+
+    // Envia WhatsApp se houver telefone
+    const phone = (o.phone || '').replace(/\D/g, '');
+    const msg   = document.getElementById('ajuste-peso-msg')?.value || '';
+    if (phone && msg && typeof EVO !== 'undefined' && EVO.instance) {
+      try {
+        await EVO.sendText(phone, msg);
+        sbToast('ok', '✅ Peso atualizado e mensagem enviada!');
+      } catch(e) {
+        sbToast('warn', '✅ Peso atualizado. WhatsApp não enviado: ' + (e?.message || e));
+      }
+    } else {
+      sbToast('ok', '✅ Peso atualizado!');
+      if (!phone) sbToast('warn', '⚠️ Telefone não informado — mensagem não enviada');
+    }
+
+    closeModal('modal-ajuste-peso');
+    await loadAllData(true);
+  } catch(e) {
+    sbToast('err', 'Erro ao salvar: ' + (e?.message || e));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function openOrderDetail(id) {
   let o = ordersKanban.find(x => x.id === id);
   // Se não encontrou no kanban, busca no cache de mesas (pedidos mesa_aberta)
