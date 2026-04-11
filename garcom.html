@@ -1247,7 +1247,10 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
         <div style="font-size:13px;color:var(--muted);margin-bottom:4px">Cada pessoa paga</div>
         <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:32px;font-weight:900;color:var(--green)" id="split-each">R$ 0,00</div>
       </div>
-      <button onclick="closeSplit()" style="width:100%;padding:14px;border-radius:12px;border:none;background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer">Fechar</button>
+      <div style="display:flex;gap:10px">
+        <button onclick="closeSplit()" style="flex:1;padding:14px;border-radius:12px;border:none;background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer">Fechar</button>
+        <button onclick="imprimirDivisao()" style="flex:2;padding:14px;border-radius:12px;border:none;background:var(--amber);color:#000;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:800;cursor:pointer">🖨️ Imprimir divisão</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1568,6 +1571,80 @@ async function garcomPrint(order, newItems) {
 }
 
 
+
+// ── Som de notificação quando item fica pronto ───────────────────────────────
+function _tocarSomPronto() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Dois bipes curtos
+    [0, 0.2].forEach(delay => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.3, ctx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.15);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + 0.15);
+    });
+  } catch(e) {}
+}
+
+
+// ── Modo offline — fila de pedidos pendentes ─────────────────────────────────
+const _OFFLINE_KEY = 'garcom_offline_queue';
+
+function _salvarPedidoOffline(pedido) {
+  try {
+    const fila = JSON.parse(localStorage.getItem(_OFFLINE_KEY) || '[]');
+    fila.push({ ...pedido, _ts: Date.now() });
+    localStorage.setItem(_OFFLINE_KEY, JSON.stringify(fila));
+    showToast('📴 Offline — pedido salvo localmente');
+  } catch(e) {}
+}
+
+async function _sincronizarPedidosOffline() {
+  try {
+    const fila = JSON.parse(localStorage.getItem(_OFFLINE_KEY) || '[]');
+    if (!fila.length) return;
+
+    let enviados = 0;
+    const falhas = [];
+    for (const pedido of fila) {
+      try {
+        const { error } = await sb.from('orders').insert(pedido);
+        if (!error) enviados++;
+        else falhas.push(pedido);
+      } catch(e) {
+        falhas.push(pedido);
+      }
+    }
+
+    localStorage.setItem(_OFFLINE_KEY, JSON.stringify(falhas));
+    if (enviados > 0) {
+      showToast(`✅ ${enviados} pedido(s) offline sincronizados!`);
+      await loadPedidosDaMesa();
+    }
+  } catch(e) {}
+}
+
+// Verifica conectividade e sincroniza ao voltar online
+window.addEventListener('online', () => {
+  showToast('🌐 Conexão restaurada!');
+  _sincronizarPedidosOffline();
+});
+
+window.addEventListener('offline', () => {
+  showToast('📴 Sem conexão — pedidos serão salvos localmente');
+});
+
+// Tenta sincronizar ao carregar
+setTimeout(_sincronizarPedidosOffline, 3000);
+
+function _estaOffline() { return !navigator.onLine; }
+
 async function loadData() {
   const [mesasRes, itemsRes, catsRes, cfgRes] = await Promise.all([
     sb.from('mesas').select('*').order('num'),
@@ -1732,6 +1809,19 @@ function subscribeRealtime() {
         // Se o detalhe da mesa está aberto, atualiza
         if (p.new.mesa_num && _detailMesaNum === parseInt(p.new.mesa_num)) {
           openMesaDetail(parseInt(p.new.mesa_num));
+        }
+
+        // Notifica garçom quando item fica pronto para servir
+        if (p.new.status === 'mesa_aberta' && p.eventType === 'UPDATE') {
+          const prevOrder = myOrders.find(o => o.id === p.new.id) || allMesaOrders.find(o => o.id === p.new.id);
+          const prevProntos = prevOrder ? _parseItems(prevOrder.items).filter(i => i.item_status === 'pronto').length : 0;
+          const newProntos  = _parseItems(p.new.items).filter(i => i.item_status === 'pronto').length;
+          if (newProntos > prevProntos) {
+            const novos = _parseItems(p.new.items).filter(i => i.item_status === 'pronto').slice(-(newProntos - prevProntos));
+            const nomes = novos.map(i => i.name).join(', ');
+            _tocarSomPronto();
+            showToast('✅', `Mesa ${p.new.mesa_num} — ${nomes} pronto(s) p/ servir!`);
+          }
         }
       } else if (p.eventType === 'DELETE') {
         allMesaOrders = allMesaOrders.filter(o => o.id !== p.old.id);
@@ -1946,7 +2036,7 @@ async function openMesaDetail(num) {
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M10 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Transferir
         </button>
-        <button class="mds-btn" onclick="openSplit(${mesaTotalParaSplit})" style="flex:1;background:var(--surface2);color:var(--muted);border:1.5px solid var(--border)">
+        <button class="mds-btn" onclick="openSplit(${mesaTotalParaSplit}, ${num})" style="flex:1;background:var(--surface2);color:var(--muted);border:1.5px solid var(--border)">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M4 6H2m10 0h2M4 10H2m10 0h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
           Dividir
         </button>
@@ -2771,7 +2861,21 @@ async function submitPedido() {
     garcomPrint({ id: _orderId, mesa_num: activeMesa }, newItems);
   } catch(e) {
     console.error('[submitPedido]', e);
-    showToast('❌ Erro ao enviar pedido: ' + (e.message || e));
+    // Se offline, salva o pedido localmente para sincronizar depois
+    if (!navigator.onLine) {
+      const pedidoOffline = {
+        tenant_id: _garcomTenantId,
+        client: `Mesa ${activeMesa}`, phone: '', addr: `Mesa ${activeMesa}`,
+        items: newItems, total: newItems.reduce((s,i)=>s+(i.price||0)*(i.qty||1),0),
+        status: 'mesa_aberta', time,
+        mesa_num: activeMesa, garcom_id: currentGarcom?.id, garcom_nome: currentGarcom?.nome
+      };
+      _salvarPedidoOffline(pedidoOffline);
+      closeSheet();
+      cart = [];
+    } else {
+      showToast('❌ Erro ao enviar pedido: ' + (e.message || e));
+    }
   } finally {
     _submitting = false;
     btn.disabled = false;
@@ -3746,9 +3850,10 @@ async function confirmarTransfer(toNum) {
 let _splitTotal = 0;
 let _splitN = 2;
 
-function openSplit(total) {
+function openSplit(total, mesaNum) {
   _splitTotal = total;
   _splitN = 2;
+  _splitMesaNum = mesaNum || null;
   document.getElementById('split-n').textContent = _splitN;
   document.getElementById('split-total-lbl').textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
   updateSplitCalc();
@@ -3765,9 +3870,48 @@ function splitAdj(delta) {
   updateSplitCalc();
 }
 
+let _splitMesaNum = null;
+
 function updateSplitCalc() {
   const each = _splitTotal / _splitN;
   document.getElementById('split-each').textContent = 'R$ ' + each.toFixed(2).replace('.', ',');
+}
+
+async function imprimirDivisao() {
+  const each = _splitTotal / _splitN;
+  const cfg  = _garcomPrintCfg || {};
+  const nome = (_garcomNomeLoja || cfg.nome || 'RESTAURANTE').toUpperCase();
+  const fmt  = cfg.format || localStorage.getItem('printFormat') || '80mm';
+  const now  = new Date().toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+  const html = `
+    <div class="print-ticket" style="font-size:${parseInt(cfg.fontSize)||12}px">
+      <div style="text-align:center;font-size:1.1em;font-weight:900">${nome}</div>
+      <div style="text-align:center;font-weight:bold;margin:4px 0">*** DIVISÃO DE CONTA ***</div>
+      <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+      ${_splitMesaNum ? `<div>Mesa: <b>${_splitMesaNum}</b></div>` : ''}
+      <div>Data: ${now}</div>
+      <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+      <div style="display:flex;justify-content:space-between"><span>Total da mesa</span><span>R$ ${_splitTotal.toFixed(2).replace('.',',')}</span></div>
+      <div style="display:flex;justify-content:space-between"><span>Dividido por</span><span>${_splitN} pessoas</span></div>
+      <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+      <div style="display:flex;justify-content:space-between;font-weight:900;font-size:1.1em">
+        <span>CADA UM PAGA</span><span>R$ ${each.toFixed(2).replace('.',',')}</span>
+      </div>
+      <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+      <div style="text-align:center;font-size:0.85em">${cfg.rodape || 'Obrigado pela preferência!'}</div>
+    </div>`;
+
+  const tid = _garcomTenantId;
+  try {
+    const res = await fetch('/api/print-queue/job', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','x-tenant-id':tid},
+      body: JSON.stringify({ html, format: fmt, tipo: 'caixa' })
+    });
+    if (res.ok) { showToast('🖨️ Divisão enviada para impressão!'); closeSplit(); return; }
+  } catch(e) {}
+  showToast('⚠️ Impressora não disponível');
 }
 
 // ══ PIZZA SELECTOR ═══════════════════════

@@ -943,3 +943,76 @@ async function toggleStatus(){
     await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, store_open: newOpen });
   } catch(e) { console.warn('store_config sync:', e); }
 }
+
+// ── Histórico de mesas do dia ─────────────────────────────────────────────────
+async function carregarHistoricoMesas() {
+  const el = document.getElementById('cx-historico-mesas');
+  const elGarcom = document.getElementById('cx-relatorio-garcom');
+  if (!el) return;
+
+  el.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px">Carregando...</div>';
+
+  try {
+    const hoje = new Date();
+    hoje.setHours(hoje.getHours() - 3); // UTC-3 BR
+    const dataHoje = hoje.toISOString().split('T')[0];
+
+    // Busca movimentos de mesa do dia
+    const { data: movs } = await sb.from('movimentos')
+      .select('*')
+      .like('description', 'Mesa %— Pagamento%')
+      .gte('created_at', dataHoje)
+      .order('created_at', { ascending: false });
+
+    if (!movs?.length) {
+      el.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px">Nenhuma mesa fechada hoje</div>';
+      if (elGarcom) elGarcom.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px">Sem dados</div>';
+      return;
+    }
+
+    // Renderiza histórico de mesas
+    el.innerHTML = movs.map(m => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+        <div>
+          <div style="font-size:12.5px;font-weight:600">${m.description}</div>
+          <div style="font-size:11px;color:var(--muted)">${m.pag} · ${m.time}</div>
+        </div>
+        <div style="font-size:13px;font-weight:700;color:var(--success)">R$ ${parseFloat(m.val||0).toFixed(2).replace('.',',')}</div>
+      </div>`).join('');
+
+    // Relatório por garçom
+    if (elGarcom) {
+      // Busca pedidos de mesa do dia para agrupar por garçom
+      const { data: orders } = await sb.from('orders')
+        .select('garcom_nome, items, total, status, created_at')
+        .not('mesa_num', 'is', null)
+        .eq('status', 'entregue')
+        .gte('created_at', dataHoje);
+
+      const garcomMap = {};
+      (orders || []).forEach(o => {
+        const nome = o.garcom_nome || 'Sem garçom';
+        if (!garcomMap[nome]) garcomMap[nome] = { total: 0, mesas: 0 };
+        garcomMap[nome].total += parseFloat(o.total || 0);
+        garcomMap[nome].mesas += 1;
+      });
+
+      const garcons = Object.entries(garcomMap).sort((a, b) => b[1].total - a[1].total);
+
+      if (!garcons.length) {
+        elGarcom.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px">Sem dados</div>';
+      } else {
+        elGarcom.innerHTML = garcons.map(([nome, d]) => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+            <div>
+              <div style="font-size:12.5px;font-weight:600">👨‍💼 ${nome}</div>
+              <div style="font-size:11px;color:var(--muted)">${d.mesas} pedido(s)</div>
+            </div>
+            <div style="font-size:13px;font-weight:700;color:var(--accent3)">R$ ${d.total.toFixed(2).replace('.',',')}</div>
+          </div>`).join('');
+      }
+    }
+  } catch(e) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--red);text-align:center;padding:8px">Erro ao carregar</div>';
+  }
+}

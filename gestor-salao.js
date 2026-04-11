@@ -643,6 +643,25 @@ function _elapsedColor(openedAt, isWaiting) {
   return 'var(--green)';
 }
 
+// ── Alerta de mesa ociosa ─────────────────────────────────────────────────────
+let _mesasAlertadas = new Set();
+function _verificarMesasOciosas() {
+  const LIMITE_ALERTA = 90; // minutos
+  tables.filter(t => t.status === 'busy' && t.opened_at).forEach(t => {
+    const mins = Math.floor((Date.now() - new Date(t.opened_at).getTime()) / 60000);
+    const key  = `mesa-${t.num}-${Math.floor(mins / 30)}`; // alerta a cada 30min após limite
+    if (mins >= LIMITE_ALERTA && !_mesasAlertadas.has(key)) {
+      _mesasAlertadas.add(key);
+      sbToast('warn', `⏰ Mesa ${t.num} está ocupada há ${mins >= 60 ? Math.floor(mins/60)+'h '+( mins%60)+'min' : mins+'min'} sem fechar!`);
+      if (typeof sendBrowserNotif === 'function') {
+        sendBrowserNotif(`⏰ Mesa ${t.num} ociosa`, `Ocupada há ${mins} minutos`);
+      }
+    }
+  });
+}
+// Verifica a cada 5 minutos
+setInterval(_verificarMesasOciosas, 5 * 60 * 1000);
+
 function renderMesaCard(t, orders) {
   const isWaiting = t.status === 'waiting';
   const bordColor = isWaiting ? 'var(--accent3)' : t.status === 'busy' ? 'var(--accent)' : 'var(--border)';
@@ -780,6 +799,10 @@ function renderMesaCard(t, orders) {
         <button onclick="openRegistrarPagamento(${t.num}, ${displayTotal.toFixed(2)})" style="flex:2;padding:11px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">
         💰 Registrar pagamento — R$ ${displayTotal.toFixed(2).replace('.', ',')}
       </button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button onclick="reabrirMesa(${t.num})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid rgba(59,130,246,.4);background:rgba(59,130,246,.08);color:#93c5fd;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">↩️ Reabrir mesa</button>
+        <button onclick="cancelarMesaCompleta(${t.num})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#f87171;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">🗑️ Cancelar mesa</button>
       </div>`
     : `<div style="display:flex;gap:8px;margin-top:8px">
         <button onclick="openGarcomMesa(${t.num})" class="btn bp" style="flex:1;justify-content:center;font-size:12px">➕ Lançar pedido</button>
@@ -788,6 +811,9 @@ function renderMesaCard(t, orders) {
       <div style="display:flex;gap:8px;margin-top:6px">
         <button onclick="cobrarMesaDireta(${t.num})" style="flex:1;padding:7px;border-radius:8px;border:none;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">💳 Cobrar agora</button>
         <button onclick="fecharMesa(${t.num})" style="flex:1;padding:7px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">💰 Fechar mesa</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button onclick="cancelarMesaCompleta(${t.num})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#f87171;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">🗑️ Cancelar mesa</button>
       </div>`;
 
   return `<div style="background:var(--surface);border:1.5px solid ${bordColor};border-radius:14px;padding:16px;margin-bottom:14px">
@@ -1597,6 +1623,70 @@ let _detalheMesaNum = null;
 let _detalheMesaOrders = [];
 let _detalheMesaSubtotal = 0;
 
+// ── Cancelar mesa completa ────────────────────────────────────────────────────
+async function cancelarMesaCompleta(num) {
+  const numInt = parseInt(num);
+  if (!confirm(`Cancelar TODOS os pedidos da Mesa ${numInt} e liberar a mesa?\nEsta ação não pode ser desfeita.`)) return;
+
+  sbLoading(true);
+  try {
+    // Cancela todos os pedidos ativos
+    await sb.from('orders')
+      .update({ status: 'cancelado', updated_at: new Date().toISOString() })
+      .eq('mesa_num', numInt)
+      .in('status', ['mesa_aberta', 'analise', 'producao', 'pronto', 'waiting']);
+
+    // Libera a mesa
+    await sb.from('mesas').update({
+      status: 'free', total: null, pag_forma: null,
+      guests: null, opened_at: null, taxa_servico: null,
+      updated_at: new Date().toISOString()
+    }).eq('num', numInt);
+
+    // Limpa cache local
+    mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== numInt);
+    ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== numInt);
+    const t = tables.find(x => parseInt(x.num) === numInt);
+    if (t) { t.status = 'free'; t.total = null; t.opened_at = null; t.taxa_servico = 0; }
+
+    renderKanban();
+    _renderMesaPageFromCache();
+    renderQR();
+    sbToast('ok', `Mesa ${numInt} cancelada e liberada`);
+  } catch(e) {
+    sbToast('err', 'Erro ao cancelar mesa: ' + (e?.message || e));
+  } finally {
+    sbLoading(false);
+  }
+}
+
+// ── Reabrir mesa (desfaz fechar/cobrar antes do pagamento) ────────────────────
+async function reabrirMesa(num) {
+  const numInt = parseInt(num);
+  if (!confirm(`Reabrir Mesa ${numInt}?\nA mesa voltará para o estado ocupada, aguardando novos lançamentos.`)) return;
+
+  sbLoading(true);
+  try {
+    // Volta mesa para busy
+    await sb.from('mesas').update({
+      status: 'busy', total: null, pag_forma: null,
+      updated_at: new Date().toISOString()
+    }).eq('num', numInt);
+
+    const t = tables.find(x => parseInt(x.num) === numInt);
+    if (t) { t.status = 'busy'; t.total = null; t.pag_forma = null; }
+
+    await refreshMesa(numInt);
+    _renderMesaPageFromCache();
+    renderQR();
+    sbToast('ok', `Mesa ${numInt} reaberta`);
+  } catch(e) {
+    sbToast('err', 'Erro ao reabrir mesa: ' + (e?.message || e));
+  } finally {
+    sbLoading(false);
+  }
+}
+
 async function gestorAbrirDetalheMesa(num) {
   _detalheMesaNum = parseInt(num);
   document.getElementById('mesa-detalhe-title').textContent = `Mesa ${num} — Detalhes`;
@@ -1669,6 +1759,7 @@ function _renderDetalheMesaItens() {
       ? ''
       : `<div style="display:flex;gap:4px;margin-top:4px">
           <button onclick="gestorCancelarItem(${idx})" style="padding:3px 8px;border-radius:6px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#f87171;font-size:10px;font-weight:600;cursor:pointer">✕ ${i.isTaxa ? 'Remover taxa' : 'Cancelar'}</button>
+          ${!i.isTaxa ? `<button onclick="gestorTransferirItem(${idx})" style="padding:3px 8px;border-radius:6px;border:1px solid rgba(129,140,248,.3);background:rgba(129,140,248,.08);color:#818cf8;font-size:10px;font-weight:600;cursor:pointer">↗ Transferir</button>` : ''}
         </div>`;
     return `<div style="padding:8px 0;border-bottom:1px solid var(--border);${cancelStyle}">
       <div style="display:flex;justify-content:space-between;align-items:start">
@@ -1706,6 +1797,85 @@ function _toggleTaxaDetalhe() {
   if (info) info.style.display = check?.checked ? 'block' : 'none';
   document.getElementById('mesa-detalhe-taxa-val').textContent = 'R$ ' + taxa.toFixed(2).replace('.',',');
   document.getElementById('mesa-detalhe-total-com-taxa').textContent = 'R$ ' + total.toFixed(2).replace('.',',');
+}
+
+// ── Transferir item para outra mesa ──────────────────────────────────────────
+async function gestorTransferirItem(itemIdx) {
+  const mesasDisp = tables.filter(t => t.status === 'busy' && parseInt(t.num) !== _detalheMesaNum);
+  if (!mesasDisp.length) { sbToast('warn', 'Nenhuma outra mesa ocupada disponível'); return; }
+
+  // Picker de mesa destino
+  const opcoes = mesasDisp.map(t => `<button onclick="_confirmarTransferirItem(${itemIdx}, ${t.num}); document.getElementById('modal-transferir-item').remove()"
+    style="padding:10px 18px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;font-weight:700;cursor:pointer">
+    Mesa ${t.num}</button>`).join('');
+
+  const modal = document.createElement('div');
+  modal.id = 'modal-transferir-item';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:16px;padding:24px;width:90%;max-width:360px;border:1px solid var(--border)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:16px">Transferir item para qual mesa?</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">${opcoes}</div>
+      <button onclick="document.getElementById('modal-transferir-item').remove()"
+        style="width:100%;padding:10px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--muted);font-size:13px;font-weight:700;cursor:pointer">Cancelar</button>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function _confirmarTransferirItem(itemIdx, mesaDestino) {
+  const orderId = _detalheMesaOrders[0]?.id;
+  if (!orderId) return;
+
+  // Pega o item da comanda origem
+  const item = _detalheMesaOrders.flatMap(o => _parseItems(o.items))[itemIdx];
+  if (!item) return;
+
+  try {
+    // Remove da comanda origem
+    const ordemOrigem = _detalheMesaOrders.find(o =>
+      _parseItems(o.items).some(i => i.name === item.name && i.item_status !== 'cancelado')
+    );
+    if (ordemOrigem) {
+      const itensAtualizados = _parseItems(ordemOrigem.items).map((i, idx) => {
+        if (idx === itemIdx) return { ...i, item_status: 'cancelado' };
+        return i;
+      });
+      const novoTotal = itensAtualizados
+        .filter(i => i.item_status !== 'cancelado')
+        .reduce((s, i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
+      await sb.from('orders').update({ items: itensAtualizados, total: novoTotal }).eq('id', ordemOrigem.id);
+    }
+
+    // Adiciona na comanda destino
+    const { data: comandaDestino } = await sb.from('orders')
+      .select('*').eq('mesa_num', mesaDestino).eq('status', 'mesa_aberta').single();
+
+    if (comandaDestino) {
+      const itensDestino = [..._parseItems(comandaDestino.items), { ...item, item_status: 'pronto' }];
+      const totalDestino = itensDestino
+        .filter(i => i.item_status !== 'cancelado')
+        .reduce((s, i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
+      await sb.from('orders').update({ items: itensDestino, total: totalDestino }).eq('id', comandaDestino.id);
+    } else {
+      // Cria nova comanda na mesa destino
+      await sb.from('orders').insert({
+        tenant_id: _sessao?.tenant_id,
+        client: `Mesa ${mesaDestino}`, addr: `Mesa ${mesaDestino}`,
+        mesa_num: mesaDestino, items: [{ ...item, item_status: 'pronto' }],
+        total: (parseFloat(item.price)||0) * (parseInt(item.qty)||1),
+        status: 'mesa_aberta', pag: 'Mesa',
+        time: new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})
+      });
+    }
+
+    closeModal('modal-mesa-detalhe');
+    await refreshMesa(_detalheMesaNum);
+    await refreshMesa(mesaDestino);
+    _renderMesaPageFromCache();
+    sbToast('ok', `Item transferido para Mesa ${mesaDestino}!`);
+  } catch(e) {
+    sbToast('err', 'Erro ao transferir: ' + (e?.message || e));
+  }
 }
 
 // ── Cancelar item individual ──────────────────────────────────────────────
