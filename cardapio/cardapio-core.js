@@ -136,7 +136,7 @@ function applyBranding(b, nome) {
 
   // Banner — aparece abaixo das categorias com animação de boneco puxando
   if (b?.store_banner_url) {
-    const url = b.store_banner_url.startsWith('http') ? b.store_banner_url : location.origin + b.store_banner_url;
+    const url = (b.store_banner_url.startsWith('http') || b.store_banner_url.startsWith('data:')) ? b.store_banner_url : location.origin + b.store_banner_url;
     const bannerBelow = document.getElementById('store-banner-below');
     const bannerImg   = document.getElementById('store-banner-img');
     if (bannerBelow && bannerImg) {
@@ -557,7 +557,7 @@ function applyBrandingLive(cfg) {
   if (cfg.store_banner_url) {
     const bannerEl = document.getElementById('hero-banner');
     if (bannerEl) {
-      const url = cfg.store_banner_url.startsWith('http')
+      const url = (cfg.store_banner_url.startsWith('http') || cfg.store_banner_url.startsWith('data:'))
         ? cfg.store_banner_url
         : location.origin + cfg.store_banner_url;
       bannerEl.innerHTML = `<img src="${url}" alt="banner" onerror="this.parentElement.classList.remove('show');this.parentElement.style.display='none'">`;
