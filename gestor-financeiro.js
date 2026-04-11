@@ -425,13 +425,8 @@ async function fecharMesa(num) {
 
     const sessionTotal = calcularTotalMesa(activeOrders || []);
 
-    // Gestor confirma pagamento: agora sim finaliza os pedidos e libera a mesa
-    const { error: ordErr } = await sb.from('orders')
-      .update({ status: 'entregue' })
-      .eq('mesa_num', numInt)
-      .in('status', ['analise', 'producao', 'pronto', 'mesa_aberta']);
-    if (ordErr) throw ordErr;
-
+    // Apenas marca a mesa como waiting — pedidos ficam mesa_aberta
+    // igual ao fluxo do garçom. Pedidos só viram entregue ao confirmar pagamento.
     const { error: mesaErr } = await sb.from('mesas').update({
       status: 'waiting',
       total: sessionTotal,
@@ -442,17 +437,8 @@ async function fecharMesa(num) {
     // Atualiza estado local
     t.status = 'waiting';
     t.total = sessionTotal;
-    ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== numInt);
-    // Preserva pedidos no cache (necessário para exibir itens na mesa waiting)
-    // Atualiza status para 'entregue' no cache local
-    mesaOrdersCache.forEach(o => {
-      if (parseInt(o.mesa_num) === numInt && ['analise', 'producao', 'pronto', 'mesa_aberta'].includes(o.status)) {
-        o.status = 'entregue';
-      }
-    });
     renderKanban();
     _renderMesaPageFromCache();
-    // Refresh do banco em background para dados definitivos
     refreshMesa(numInt).then(() => _renderMesaPageFromCache()).catch(() => {});
     sbToast('ok', `Mesa ${numInt} aguardando pagamento — R$ ${sessionTotal.toFixed(2).replace('.', ',')} `);
   } catch(e) {
