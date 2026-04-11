@@ -2031,7 +2031,12 @@ async function loadPrintConfigServer() {
     if (cfg.printFormat)  { _printFormat = cfg.printFormat; localStorage.setItem('printFormat', cfg.printFormat) }
     if (cfg.printFontSize){ _printFontSize = cfg.printFontSize; localStorage.setItem('printFontSize', cfg.printFontSize) }
     if (cfg.printViaMode) { _printViaMode = cfg.printViaMode; localStorage.setItem('printViaMode', cfg.printViaMode) }
-    if (cfg.printPrinterCozinha) { _printPrinterCozinha = cfg.printPrinterCozinha; localStorage.setItem('printPrinterCozinha', cfg.printPrinterCozinha) }
+    // Impressora caixa (salva em ambos os campos que o sistema usa)
+    const _savedCaixa = cfg.printer_caixa || cfg.printer || cfg.printPrinter || ''
+    if (_savedCaixa) { _printPrinter = _savedCaixa; localStorage.setItem('printPrinter', _savedCaixa) }
+    // Impressora cozinha
+    const _savedCoz = cfg.printer_cozinha || cfg.printPrinterCozinha || ''
+    if (_savedCoz) { _printPrinterCozinha = _savedCoz; localStorage.setItem('printPrinterCozinha', _savedCoz) }
     if (cfg.printNome)    { const el = document.getElementById('print-nome');    if (el) el.value = cfg.printNome }
     if (cfg.printSub)     { const el = document.getElementById('print-sub');     if (el) el.value = cfg.printSub }
     if (cfg.printRodape)  { const el = document.getElementById('print-rodape');  if (el) el.value = cfg.printRodape }
@@ -2219,9 +2224,13 @@ async function loadPrinters() {
     // Electron: busca impressoras do Windows diretamente
     if (window.ElectronPrint) {
       const cfg = await window.ElectronPrint.getPrintConfig();
-      printers      = cfg.printers || [];
+      printers       = cfg.printers || [];
       defaultPrinter = cfg.printer || '';
-      _printPrinter  = cfg.printer || _printPrinter;
+      // Restaura impressoras salvas no Electron
+      const _eCaixa = cfg.printer_caixa || cfg.printer || '';
+      const _eCoz   = cfg.printer_cozinha || '';
+      if (_eCaixa) { _printPrinter = _eCaixa; localStorage.setItem('printPrinter', _eCaixa); }
+      if (_eCoz)   { _printPrinterCozinha = _eCoz; localStorage.setItem('printPrinterCozinha', _eCoz); }
     } else {
       // Web: busca do servidor
       const r = await fetch('/api/printers');
@@ -2744,14 +2753,20 @@ async function salvarConfigImpressao() {
   localStorage.setItem('printFormat', fmt)
   _printFormat = fmt
 
-  // Salva no Electron se disponível
+  // Salva no Electron se disponível — inclui impressoras para persistência local
   if (window.ElectronPrint) {
     await window.ElectronPrint.savePrintConfig({
-      nome:       cfg.nome,
-      sub:        cfg.sub,
-      rodape:     cfg.rodape,
-      fontSize:   cfg.fontSize,
-      paperWidth: fmt === '58mm' ? 58 : 80,
+      nome:            cfg.nome,
+      sub:             cfg.sub,
+      rodape:          cfg.rodape,
+      fontSize:        cfg.fontSize,
+      paperWidth:      fmt === '58mm' ? 58 : 80,
+      printer:         _printPrinter,
+      printer_caixa:   _printPrinter,
+      printer_cozinha: _printPrinterCozinha,
+      printViaMode:    _printViaMode,
+      printFormat:     fmt,
+      printMode:       _printMode,
     }).catch(() => {})
   }
 
