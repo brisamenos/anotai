@@ -3273,30 +3273,34 @@ function fecharModalConta() {
 }
 
 async function imprimirContaMesa(num) {
-  // Busca sempre direto do Supabase para garantir dados atualizados com items parseados
-  let orders = [];
-  try {
-    const { data } = await sb.from('orders')
-      .select('*')
-      .eq('mesa_num', num)
-      .in('status', ['mesa_aberta', 'analise', 'producao', 'pronto'])
-      .order('id', { ascending: true });
-    orders = (data || []).map(o => ({ ...o, items: _parseItems(o.items) }));
-  } catch(e) {
-    // fallback: usa cache local com parse
-    orders = allMesaOrders
-      .filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num)
-      .map(o => ({ ...o, items: _parseItems(o.items) }));
+  // 1. Tenta cache local (allMesaOrders) — items já vêm como array do Realtime
+  let orders = allMesaOrders
+    .filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num)
+    .map(o => ({ ...o, items: _parseItems(o.items) }));
+
+  // 2. Se cache vazio, busca direto do Supabase
+  if (!orders.length) {
+    try {
+      const { data } = await sb.from('orders')
+        .select('*')
+        .eq('mesa_num', num)
+        .in('status', ['mesa_aberta', 'analise', 'producao', 'pronto'])
+        .order('id', { ascending: true });
+      orders = (data || []).map(o => ({ ...o, items: _parseItems(o.items) }));
+    } catch(e) { console.warn('[imprimirContaMesa] erro:', e.message); }
   }
+
+  const subtotal = calcularTotalMesa(orders);
+  if (!subtotal) { showToast('⚠️ Nenhum item na mesa'); return; }
 
   // Verifica se há itens válidos (não cancelados)
   const _itemCheck = {};
   orders.forEach(o => o.items.forEach(i => {
     if (i.item_status !== 'cancelado') _itemCheck[i.name] = true;
   }));
-  if (!Object.keys(_itemCheck).length) { showToast('⚠️ Sem itens na mesa'); return; }
+  if (!Object.keys(_itemCheck).length) { showToast('⚠️ Sem itens para imprimir'); return; }
 
-  const subtotal = calcularTotalMesa(orders);
+
 
   // Guarda estado para o confirmar
   _printContaMesaNum = num;
