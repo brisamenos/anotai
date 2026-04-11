@@ -728,7 +728,7 @@ async function confirmarPagamentoMesa() {
     }
 
     // Atualizar estado local e cache — zera tudo desta mesa
-    t.status = 'free'; t.total = null; t.guests = null; t.opened_at = null; t.pag_forma = null;
+    t.status = 'free'; t.total = null; t.guests = null; t.opened_at = null; t.pag_forma = null; t.taxa_servico = 0;
     ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== num);
     mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== num);
     tables.sort((a,b) => parseInt(a.num) - parseInt(b.num));
