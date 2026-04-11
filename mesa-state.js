@@ -94,6 +94,7 @@ function _normalizeMesa(t) {
     id: t.id, num: t.num, status: t.status,
     guests: t.guests || 0,
     total: parseFloat(t.total) || 0,
+    taxa_servico: parseFloat(t.taxa_servico) || 0,
     pag_forma: t.pag_forma || null,
     opened_at: t.opened_at || null,
     updated_at: t.updated_at || null
