@@ -478,41 +478,13 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
 
   document.getElementById('modal-pag-mesa-title').textContent = `Registrar Pagamento — Mesa ${num}`;
   document.getElementById('modal-pag-mesa-num').value = num;
-
-  // Calcula subtotal real direto dos itens do cache (não depende de t.taxa_servico)
-  const _cacheOrders = mesaOrdersCache.filter(o =>
-    parseInt(o.mesa_num) === parseInt(num) && o.status !== 'cancelado'
-  );
-  const _subtotalItens = calcularTotalMesa(_cacheOrders);
-
-  // Se total gravado > subtotal dos itens, a diferença é a taxa do garçom
-  const _taxaDiff = Math.round((totalVal - _subtotalItens) * 100) / 100;
-  const taxaJaAplicada = _taxaDiff > 0.005 && _taxaServicoPct > 0;
-  const taxaJaVal = taxaJaAplicada ? _taxaDiff : 0;
-  // subtotal sem taxa é sempre a soma dos itens
-  const subtotalSemTaxa = _subtotalItens > 0 ? _subtotalItens : Math.max(0, totalVal - taxaJaVal);
-
-  document.getElementById('modal-pag-subtotal').value = subtotalSemTaxa.toFixed(2);
   document.getElementById('modal-pag-total').textContent = 'R$ ' + totalVal.toFixed(2).replace('.',',');
+  document.getElementById('modal-pag-subtotal').value = totalVal.toFixed(2);
 
+  // Taxa agora é um item da comanda — o bloco de checkbox fica oculto
+  // O gestor cancela a taxa pelo ✕ nos itens do consumo, como qualquer outro item
   const taxaBloco = document.getElementById('modal-taxa-bloco');
-  const taxaCheck = document.getElementById('modal-taxa-check');
-  if (taxaBloco && taxaCheck) {
-    taxaCheck.checked = taxaJaAplicada;
-    taxaCheck.disabled = false; // gestor pode cancelar a taxa a pedido do cliente
-    document.getElementById('modal-taxa-breakdown').style.display = taxaJaAplicada ? 'block' : 'none';
-    if (_taxaServicoPct > 0) {
-      taxaBloco.style.display = 'block';
-      document.getElementById('modal-taxa-label').textContent = taxaJaAplicada
-        ? `Taxa de serviço (${_taxaServicoPct}%) — solicitada pelo garçom`
-        : `Taxa de serviço (${_taxaServicoPct}%)`;
-      document.getElementById('modal-taxa-linha').textContent = `Taxa (${_taxaServicoPct}%)`;
-    } else {
-      taxaBloco.style.display = 'none';
-    }
-  }
-  // Atualiza total exibido com estado correto da taxa
-  _toggleTaxaServico();
+  if (taxaBloco) taxaBloco.style.display = 'none';
   const pagForma = t.pag_forma;
   if (pagForma) {
     const sel = document.getElementById('modal-pag-forma');
@@ -535,39 +507,31 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
         .in('status', ['mesa_aberta', 'analise', 'producao', 'pronto'])
         .order('id', { ascending: true });
 
+      // Taxa agora é um item da comanda — aparece naturalmente na lista
       const itemMap = {};
       (sessionOrders || []).forEach(o => {
         _parseItems(o.items).forEach(i => {
           if (i.item_status === 'cancelado') return;
-          const key = i.name;
-          if (!itemMap[key]) itemMap[key] = { name: i.name, qty: 0, subtotal: 0 };
-          itemMap[key].qty      += (i.qty || 1);
+          const key = i.item_id || i.name;
+          if (!itemMap[key]) itemMap[key] = {
+            name: i.name, qty: 0, subtotal: 0,
+            isTaxa: i.item_type === 'taxa'
+          };
+          itemMap[key].qty     += (i.qty || 1);
           itemMap[key].subtotal += (i.price || 0) * (i.qty || 1);
         });
       });
       const itens = Object.values(itemMap);
       if (itens.length) {
-        // Linha de itens
-        let html = itens.map(i =>
-          `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
-            <span>${i.qty}× ${i.name}</span>
+        listEl.innerHTML = itens.map(i => {
+          const badge = i.isTaxa
+            ? `<span style="font-size:10px;background:rgba(196,149,106,.15);color:var(--amber);padding:1px 6px;border-radius:99px;font-weight:700;margin-right:4px">%</span>`
+            : '';
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
+            <span>${badge}${i.qty}× ${i.name}</span>
             <span style="color:var(--accent3);font-weight:600">R$ ${i.subtotal.toFixed(2).replace('.',',')}</span>
-          </div>`
-        ).join('');
-
-        // Linha da taxa — visível e cancelável pelo gestor
-        if (taxaJaAplicada && taxaJaVal > 0) {
-          html += `<div id="modal-taxa-item-row" style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
-            <span style="display:flex;align-items:center;gap:6px">
-              <span style="font-size:10px;background:rgba(196,149,106,.15);color:var(--amber);padding:1px 6px;border-radius:99px;font-weight:700">10%</span>
-              Taxa de serviço
-              <span style="font-size:10px;color:var(--muted)">(solicitada pelo garçom)</span>
-            </span>
-            <span style="color:var(--accent3);font-weight:600">R$ ${taxaJaVal.toFixed(2).replace('.',',')}</span>
           </div>`;
-        }
-
-        listEl.innerHTML = html;
+        }).join('');
         itensEl.dataset.ordersJson = JSON.stringify(itens);
       } else {
         listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">Nenhum item encontrado</div>';

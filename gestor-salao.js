@@ -1642,7 +1642,8 @@ function _renderDetalheMesaItens() {
         obs: i.obs || '',
         status: i.item_status || 'active',
         drink: !!i.drink,
-        garcomNome: i.garcom_nome || ''
+        garcomNome: i.garcom_nome || '',
+        isTaxa: i.item_type === 'taxa'
       });
     });
   });
@@ -1662,18 +1663,19 @@ function _renderDetalheMesaItens() {
     if (!isCanceled) subtotal += lineTotal;
     const cancelStyle = isCanceled ? 'opacity:.4;text-decoration:line-through;' : '';
     const garcomTag = i.garcomNome ? ` <span style="font-size:9px;background:rgba(129,140,248,.15);color:#818cf8;padding:1px 5px;border-radius:4px">${i.garcomNome}</span>` : '';
-    const statusIcon = { producao:'🍳', pronto:'✅', entregue:'🟢', cancelado:'❌' }[i.status] || '🔵';
+    const taxaBadge = i.isTaxa ? ` <span style="font-size:9px;background:rgba(196,149,106,.15);color:var(--amber);padding:1px 6px;border-radius:99px;font-weight:700">%</span>` : '';
+    const statusIcon = i.isTaxa ? '💰' : ({ producao:'🍳', pronto:'✅', entregue:'🟢', cancelado:'❌' }[i.status] || '🔵');
     const btns = isCanceled
       ? ''
       : `<div style="display:flex;gap:4px;margin-top:4px">
-          <button onclick="gestorCancelarItem(${idx})" style="padding:3px 8px;border-radius:6px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#f87171;font-size:10px;font-weight:600;cursor:pointer">✕ Cancelar</button>
+          <button onclick="gestorCancelarItem(${idx})" style="padding:3px 8px;border-radius:6px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#f87171;font-size:10px;font-weight:600;cursor:pointer">✕ ${i.isTaxa ? 'Remover taxa' : 'Cancelar'}</button>
         </div>`;
     return `<div style="padding:8px 0;border-bottom:1px solid var(--border);${cancelStyle}">
       <div style="display:flex;justify-content:space-between;align-items:start">
         <div>
           <span style="font-size:10px">${statusIcon}</span>
           <span style="font-size:13px;font-weight:600">${i.qty}× ${i.name}</span>
-          ${garcomTag}
+          ${taxaBadge}${garcomTag}
           ${i.obs ? `<div style="font-size:11px;color:var(--muted);padding-left:16px">↳ ${i.obs}</div>` : ''}
         </div>
         <span style="font-size:13px;font-weight:700;color:var(--accent3);white-space:nowrap">R$ ${lineTotal.toFixed(2).replace('.',',')}</span>
@@ -1685,25 +1687,10 @@ function _renderDetalheMesaItens() {
   _detalheMesaSubtotal = subtotal;
   document.getElementById('mesa-detalhe-subtotal').textContent = 'R$ ' + subtotal.toFixed(2).replace('.',',');
 
-  // Configura taxa — respeita o que o garçom já escolheu ao finalizar a mesa
-  const mesaT = tables.find(x => parseInt(x.num) === _detalheMesaNum);
-  const taxaJaAplicadaDetalhe = parseFloat(mesaT?.taxa_servico || 0) > 0;
+  // Taxa agora é item da comanda — sem necessidade de checkbox separado
   const taxaRow = document.getElementById('mesa-detalhe-taxa-row');
-  if (_taxaServicoPct > 0) {
-    taxaRow.style.display = 'block';
-    const checkDetalhe = document.getElementById('mesa-detalhe-taxa-check');
-    if (checkDetalhe) {
-      checkDetalhe.checked = taxaJaAplicadaDetalhe;
-      checkDetalhe.disabled = taxaJaAplicadaDetalhe; // impede dupla cobrança
-    }
-    document.getElementById('mesa-detalhe-taxa-label').textContent = taxaJaAplicadaDetalhe
-      ? `Taxa de serviço (${_taxaServicoPct}%) — incluída pelo garçom`
-      : `Taxa de serviço (${_taxaServicoPct}%) — opcional`;
-    document.getElementById('mesa-detalhe-taxa-linha').textContent = `Taxa (${_taxaServicoPct}%)`;
-    _toggleTaxaDetalhe();
-  } else {
-    taxaRow.style.display = 'none';
-  }
+  if (taxaRow) taxaRow.style.display = 'none';
+  _toggleTaxaDetalhe();
 }
 
 function _toggleTaxaDetalhe() {

@@ -3555,11 +3555,33 @@ async function confirmarFinalizarMesa() {
   const subtotal = calcularTotalMesa(mesaOrders);
   const taxaCheck = document.getElementById('finalizar-taxa-check');
   const taxaIncluida = _garcomTaxaServicoPct > 0 && taxaCheck?.checked;
-  const taxaVal = taxaIncluida ? subtotal * _garcomTaxaServicoPct / 100 : 0;
+  const taxaVal = taxaIncluida ? Math.round(subtotal * _garcomTaxaServicoPct) / 100 : 0;
   const total = subtotal + taxaVal;
   try {
-    // Garçom apenas avisa o caixa — NÃO altera status dos pedidos
-    // Os pedidos continuam 'mesa_aberta' para o gestor encontrá-los facilmente
+    // Se taxa foi selecionada, adiciona como item na comanda da mesa
+    if (taxaIncluida && taxaVal > 0) {
+      const comanda = mesaOrders.find(o => o.status === 'mesa_aberta');
+      if (comanda) {
+        const itensAtuais = _parseItems(comanda.items);
+        // Remove taxa anterior se já existir (evita duplicar)
+        const itensSemTaxa = itensAtuais.filter(i => i.item_type !== 'taxa');
+        const itemTaxa = {
+          name: `Taxa de Serviço (${_garcomTaxaServicoPct}%)`,
+          qty: 1,
+          price: taxaVal,
+          obs: '',
+          extras: [],
+          item_status: 'active',
+          item_type: 'taxa',
+          item_id: 'taxa_servico'
+        };
+        const novosItens = [...itensSemTaxa, itemTaxa];
+        await sb.from('orders')
+          .update({ items: novosItens, total: total, updated_at: new Date().toISOString() })
+          .eq('id', comanda.id);
+      }
+    }
+
     // Mesa → aguardando pagamento
     await sb.from('mesas').update({
       status: 'waiting',
