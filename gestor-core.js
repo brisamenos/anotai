@@ -44,11 +44,17 @@ function _verificarSessao() {
     _sessao = JSON.parse(raw);
     if (Date.now() - _sessao.ts > 8 * 60 * 60 * 1000) {
       sessionStorage.removeItem('sys_session');
-      window.location.href = 'login.html';
-      return false;
+      // No Electron a sessão é renovada automaticamente — não expirar aqui
+      if (!window.ElectronPrint) { window.location.href = 'login.html'; return false; }
+      // Se Electron: renova o ts para mais 30 dias e continua
+      _sessao.ts = Date.now();
+      sessionStorage.setItem('sys_session', JSON.stringify(_sessao));
+      if (window.ElectronPrint?.saveSession) window.ElectronPrint.saveSession(_sessao).catch(()=>{});
     }
     const nome = _sessao.nome || 'Usuário';
     const role = _sessao.role || 'gestor';
+    // Salva sessão no Electron para auto-login na próxima abertura
+    if (window.ElectronPrint?.saveSession) window.ElectronPrint.saveSession(_sessao).catch(()=>{});
     const el_av   = document.getElementById('sidebar-av');
     const el_nome = document.getElementById('sidebar-nome');
     const el_role = document.getElementById('sidebar-role');
@@ -66,6 +72,8 @@ function _verificarSessao() {
 function confirmarLogout() {
   if (confirm('Sair do sistema?')) {
     sessionStorage.removeItem('sys_session');
+    // Remove sessão salva no Electron (sem auto-login na próxima abertura)
+    if (window.ElectronPrint?.clearSession) window.ElectronPrint.clearSession().catch(()=>{});
     window.location.href = 'login.html';
   }
 }
@@ -331,6 +339,8 @@ async function loadAllData(silent = false) {
     }
 
     await loadFidConfig();
+    // Restaura config de impressão do Supabase (sincroniza web e Electron)
+    if (typeof loadPrintConfigServer === 'function') loadPrintConfigServer().catch(()=>{});
     if (!_rtConnected) subscribeOrders();
     renderKanban();
     renderCaixa();
