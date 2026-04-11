@@ -3610,11 +3610,17 @@ async function confirmarFinalizarMesa() {
     }
 
     // Mesa → aguardando pagamento
+    // Se split foi definido, inclui info na pag_forma: "split:N:valorCada"
+    let _pagFormaFinal = finalizarPay;
+    if (_splitN > 1 && _splitTotal > 0) {
+      const _cada = (_splitTotal + taxaVal) / _splitN;
+      _pagFormaFinal = `split:${_splitN}:${_cada.toFixed(2)}`;
+    }
     await sb.from('mesas').update({
       status: 'waiting',
       total: total,
       taxa_servico: taxaVal,
-      pag_forma: finalizarPay,
+      pag_forma: _pagFormaFinal,
       updated_at: new Date().toISOString()
     }).eq('num', finalizarMesaNum);
 
