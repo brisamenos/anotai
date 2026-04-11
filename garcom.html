@@ -3323,13 +3323,8 @@ async function confirmarImprimirConta() {
 
   const num    = _printContaMesaNum;
   const orders = _printContaOrders;
-  const subtotal = calcularTotalMesa(orders);
-
-  let taxaVal = 0;
-  if (_garcomTaxaServicoPct > 0 && taxaCheck?.checked) {
-    taxaVal = subtotal * _garcomTaxaServicoPct / 100;
-  }
-  const total = subtotal + taxaVal;
+  // Taxa já é item da comanda — total = soma dos itens diretamente
+  const total = calcularTotalMesa(orders);
 
   const cfg      = _garcomPrintCfg || {};
   const nome     = (_garcomNomeLoja || cfg.nome || 'RESTAURANTE').toUpperCase();
@@ -3355,10 +3350,8 @@ async function confirmarImprimirConta() {
   const renderItem = i =>
     `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${i.name.toUpperCase()}<span style="float:right">R$ ${i.total.toFixed(2).replace('.',',')}</span></div></div>`;
 
-  const taxaLinha = taxaVal > 0
-    ? `<div style="display:flex;justify-content:space-between;font-size:0.9em"><span>Subtotal</span><span>R$ ${subtotal.toFixed(2).replace('.',',')}</span></div>
-       <div style="display:flex;justify-content:space-between;font-size:0.9em"><span>Taxa serviço (${_garcomTaxaServicoPct}%)</span><span>R$ ${taxaVal.toFixed(2).replace('.',',')}</span></div>`
-    : '';
+  // Sem linha de taxa separada — a taxa já aparece como item na lista acima
+  const taxaLinha = '';
 
   const html = `
     <div class="print-ticket" style="font-size:${fontSize}px">
@@ -3641,12 +3634,8 @@ async function confirmarImprimirComanda() {
       return `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${(i.name||'').toUpperCase()}${priceStr}</div>${obs}</div>`;
     };
 
-    const taxaComanda = _printComandaTaxaVal || 0;
-    const subtotalComanda = total - taxaComanda;
-    const taxaLinhaComanda = taxaComanda > 0
-      ? `<div style="display:flex;justify-content:space-between;font-size:0.9em"><span>Subtotal</span><span>R$ ${subtotalComanda.toFixed(2).replace('.',',')}</span></div>
-         <div style="display:flex;justify-content:space-between;font-size:0.9em"><span>Taxa serviço</span><span>R$ ${taxaComanda.toFixed(2).replace('.',',')}</span></div>`
-      : '';
+    // Taxa já é item da comanda — sem linha separada de taxa
+    const taxaLinhaComanda = '';
 
     const html = `
       <div class="print-ticket" style="font-size:${fontSize}px">
