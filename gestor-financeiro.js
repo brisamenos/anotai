@@ -728,16 +728,25 @@ function imprimirViaCliente() {
   const itens    = itensEl?.dataset.ordersJson ? JSON.parse(itensEl.dataset.ordersJson) : [];
   const nome     = _sessao?.nome || 'Estabelecimento';
   const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' });
+  const _formaAddSel = document.getElementById('modal-pag-forma-add')?.value || '';
   const formaLabel = ((_pagFormasList||[]).length > 0)
     ? _pagFormasList.map(f => `${f.forma} R$${f.valor.toFixed(2).replace('.',',')}`).join(' + ')
-    : ({ PIX: 'PIX', Cartão: 'Cartão', Dinheiro: 'Dinheiro', Crédito: 'Crédito', Débito: 'Débito' }[forma] || forma || 'Não informado');
+    : ({ PIX: 'PIX', Cartão: 'Cartão', Dinheiro: 'Dinheiro', Crédito: 'Crédito', Débito: 'Débito' }[forma || _formaAddSel] || forma || _formaAddSel || '—');
 
   // Separa itens normais da taxa de serviço
   const itensSemTaxa = itens.filter(i => !i.isTaxa);
-  const taxaItem     = itens.find(i => i.isTaxa);
+  const taxaItemJson = itens.find(i => i.isTaxa);
   const subtotal     = itensSemTaxa.reduce((s, i) => s + (i.subtotal || 0), 0);
-  const taxaVal      = taxaItem ? (taxaItem.subtotal || 0) : 0;
-  const totalVal     = parseFloat(totalStr.replace('R$','').replace(/\s/g,'').replace(',','.')) || (subtotal + taxaVal);
+
+  // Taxa pode vir: (1) como item do garçom no JSON, (2) via checkbox do gestor
+  const taxaCheckGestor = document.getElementById('modal-taxa-check');
+  const taxaGestorAtiva = taxaCheckGestor?.checked && (_taxaServicoPct > 0);
+  const taxaVal = taxaItemJson
+    ? (taxaItemJson.subtotal || 0)
+    : (taxaGestorAtiva ? Math.round(subtotal * (_taxaServicoPct / 100) * 100) / 100 : 0);
+  const taxaPct = _taxaServicoPct || 10;
+
+  const totalVal = parseFloat(totalStr.replace('R$','').replace(/\s/g,'').replace(',','.')) || (subtotal + taxaVal);
 
   // Busca garçom do cache da mesa
   const mesaTd    = tables ? tables.find(x => parseInt(x.num) === num) : null;
@@ -767,7 +776,7 @@ function imprimirViaCliente() {
         <span>Subtotal</span><span>R$ ${subtotal.toFixed(2).replace('.',',')}</span>
        </div>
        <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px dashed #ddd">
-        <span>Taxa de serviço (${_taxaServicoPct||10}%)</span><span>R$ ${taxaVal.toFixed(2).replace('.',',')}</span>
+        <span>Taxa de serviço (${taxaPct}%)</span><span>R$ ${taxaVal.toFixed(2).replace('.',',')}</span>
        </div>`
     : '';
 
