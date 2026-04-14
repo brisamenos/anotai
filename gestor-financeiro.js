@@ -538,13 +538,38 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
     _parseItems(o.items).some(i => i.item_type === 'taxa' && i.item_status !== 'cancelado')
   );
 
+  // Bloco de aviso de taxa já incluída pelo garçom
+  let _taxaAvisoBloco = document.getElementById('modal-taxa-aviso-garcom');
+  if (!_taxaAvisoBloco) {
+    _taxaAvisoBloco = document.createElement('div');
+    _taxaAvisoBloco.id = 'modal-taxa-aviso-garcom';
+    if (taxaBloco) taxaBloco.parentNode.insertBefore(_taxaAvisoBloco, taxaBloco);
+  }
+  _taxaAvisoBloco.style.display = 'none';
+
   if (taxaBloco && taxaCheck) {
     if (_taxaJaItem) {
-      // Taxa já está nos itens — ocultar checkbox para não somar duas vezes
-      // O gestor cancela pelo ✕ no item da lista
+      // Taxa já está nos itens adicionada pelo garçom — mostra aviso com botão de remoção
       taxaBloco.style.display = 'none';
       taxaCheck.checked = false;
-      // Total = soma dos itens já incluindo a taxa
+      // Calcula valor da taxa a partir do cache
+      const _taxaItemObj = _cacheOrdersTaxa.flatMap(o => _parseItems(o.items))
+        .find(i => i.item_type === 'taxa' && i.item_status !== 'cancelado');
+      const _taxaItemVal = _taxaItemObj ? parseFloat(_taxaItemObj.price) * (parseInt(_taxaItemObj.qty)||1) : 0;
+      const _taxaItemName = _taxaItemObj?.name || `Taxa de Serviço (${_taxaServicoPct}%)`;
+      _taxaAvisoBloco.style.display = 'block';
+      _taxaAvisoBloco.innerHTML = `
+        <div style="background:rgba(245,158,11,.08);border:1.5px solid rgba(245,158,11,.3);border-radius:12px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <div>
+            <div style="font-size:12px;font-weight:700;color:var(--accent3);margin-bottom:2px">⚠️ Taxa do garçom incluída</div>
+            <div style="font-size:13px;color:var(--text);font-weight:600">${_taxaItemName}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:1px">R$ ${_taxaItemVal.toFixed(2).replace('.',',')}</div>
+          </div>
+          <button onclick="_removerTaxaGarcom('${_taxaItemName.replace(/'/g,"\\'")}', ${num})"
+            style="flex-shrink:0;padding:7px 13px;border-radius:9px;border:1.5px solid rgba(239,68,68,.35);background:rgba(239,68,68,.08);color:#f87171;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">
+            ✕ Remover taxa
+          </button>
+        </div>`;
     } else if (_taxaServicoPct > 0) {
       // Taxa não incluída — gestor pode adicionar
       taxaBloco.style.display = 'block';
@@ -784,6 +809,43 @@ async function _cancelarItemPagamento(itemName, mesaNum) {
     sbToast('ok', `"${itemName}" removido da comanda`);
   } catch(e) {
     sbToast('err', 'Erro ao remover item: ' + (e?.message || e));
+  }
+}
+
+// ── Remover taxa do garçom no modal de pagamento ────────────────────────────
+async function _removerTaxaGarcom(taxaName, mesaNum) {
+  if (!confirm(`Remover a "${taxaName}" da comanda?`)) return;
+  sbLoading(true);
+  try {
+    const { data: orders } = await sb.from('orders')
+      .select('id, items, total')
+      .eq('mesa_num', parseInt(mesaNum))
+      .in('status', ['mesa_aberta','analise','producao','pronto']);
+
+    for (const o of orders || []) {
+      const items = _parseItems(o.items);
+      const idx = items.findIndex(i => i.item_type === 'taxa' && i.item_status !== 'cancelado');
+      if (idx === -1) continue;
+
+      items[idx] = { ...items[idx], item_status: 'cancelado' };
+      const novoTotal = items
+        .filter(i => i.item_status !== 'cancelado')
+        .reduce((s, i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
+
+      await sb.from('orders').update({ items, total: novoTotal }).eq('id', o.id);
+
+      // Zera taxa_servico na mesa também
+      await sb.from('mesas').update({ taxa_servico: 0 }).eq('num', parseInt(mesaNum));
+      break;
+    }
+
+    await refreshMesa(mesaNum);
+    openRegistrarPagamento(mesaNum, null);
+    sbToast('ok', 'Taxa de serviço removida!');
+  } catch(e) {
+    sbToast('err', 'Erro ao remover taxa: ' + (e?.message || e));
+  } finally {
+    sbLoading(false);
   }
 }
 
