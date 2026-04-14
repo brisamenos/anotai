@@ -1565,6 +1565,7 @@ function exportarCardapio() {
             allow_half: i.allowHalf || false,
             max_flavors: i.maxFlavors || 1,
             ingredients: i.ingredients || [],
+            custom_groups: i.customGroups || [],
             days: i.days || [1, 1, 1, 1, 1, 1, 1],
           }))
       }))
@@ -1666,7 +1667,29 @@ async function importarCardapio(inputEl) {
           custom_groups: itemDef.custom_groups || []
         }).select().single();
 
-        if (itemErr || !itemData) { console.error('[importar] item:', itemErr); erros++; continue; }
+        if (itemErr || !itemData) {
+          console.error('[importar] item:', itemDef.name, itemErr);
+          // Tenta sem custom_groups se falhou (compatibilidade com DB mais antigo)
+          const { data: itemData2, error: itemErr2 } = await sb.from('menu_items').insert({
+            emoji: itemDef.emoji || '🍽️',
+            name: itemDef.name,
+            description: itemDef.description || '',
+            price: parseFloat(itemDef.price) || 0,
+            price_old: itemDef.price_old || null,
+            cat: catData.label, cat_key: catData.name,
+            item_type: itemDef.item_type || 'normal',
+            allow_half: itemDef.allow_half || false,
+            max_flavors: itemDef.max_flavors || 1,
+            promo: false, destaque: false,
+            status: itemDef.status || 'active',
+            days: itemDef.days || [1,1,1,1,1,1,1],
+            ingredients: itemDef.ingredients || []
+          }).select().single();
+          if (itemErr2 || !itemData2) { erros++; continue; }
+          itensCriados++;
+          items.push(mapItem(itemData2));
+          continue;
+        }
         itensCriados++;
         items.push(mapItem(itemData));
       }
