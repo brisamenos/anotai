@@ -1835,5 +1835,92 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+
+  // ── Import cardápio em lote (transação única) ─────────────────────────
+  if (req.method === 'POST' && upath === '/api/importar-cardapio') {
+    const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
+    if (!tid) { send(res, 401, { error: 'Não autorizado' }); return true }
+    try {
+      const body = await readBody(req)
+      const categorias = body?.categorias
+      if (!Array.isArray(categorias)) { send(res, 400, { error: 'categorias[] obrigatório' }); return true }
+
+      const JSON_FIELDS_MI = new Set(['days','ingredients','custom_groups'])
+      const COLS_MI = ['tenant_id','name','description','price','price_old','cat','cat_key','emoji',
+                       'item_type','allow_half','max_flavors','promo','destaque','status',
+                       'days','ingredients','custom_groups','sort_order']
+      const COLS_CAT = ['tenant_id','name','label','type','promo','sort_order']
+
+      let catsCriadas = 0, itensCriados = 0, erros = 0
+      const catIds = {}  // name → id
+
+      const doImport = db.transaction(() => {
+        let catOrder = db.prepare('SELECT COALESCE(MAX(sort_order),0) as mx FROM categories WHERE tenant_id=?').get(tid)?.mx || 0
+
+        for (const catDef of categorias) {
+          if (!catDef.name || !catDef.label) { erros++; continue }
+          try {
+            const catRow = {
+              tenant_id: tid, name: catDef.name, label: catDef.label,
+              type: catDef.type || 'Itens principais',
+              promo: catDef.promo ? 1 : 0,
+              sort_order: ++catOrder
+            }
+            const catKeys = Object.keys(catRow).filter(k => COLS_CAT.includes(k))
+            const catInfo = db.prepare(
+              `INSERT INTO categories (${catKeys.map(k=>`"${k}"`).join(',')}) VALUES (${catKeys.map(()=>'?').join(',')})`
+            ).run(...catKeys.map(k => catRow[k]))
+            catIds[catDef.name] = catInfo.lastInsertRowid
+            catsCriadas++
+
+            let itemOrder = 0
+            for (const itemDef of (catDef.itens || [])) {
+              if (!itemDef.name) { erros++; continue }
+              try {
+                const serialize = v => {
+                  if (v === undefined || v === null) return null
+                  if (v === true) return 1; if (v === false) return 0
+                  if (Array.isArray(v) || (typeof v === 'object')) return JSON.stringify(v)
+                  return v
+                }
+                const itemRow = {
+                  tenant_id: tid,
+                  name: itemDef.name,
+                  description: itemDef.description || '',
+                  price: parseFloat(itemDef.price) || 0,
+                  price_old: itemDef.price_old || null,
+                  cat: catDef.label,
+                  cat_key: catDef.name,
+                  emoji: itemDef.emoji || '🍽️',
+                  item_type: itemDef.item_type || 'normal',
+                  allow_half: itemDef.allow_half ? 1 : 0,
+                  max_flavors: itemDef.max_flavors || 1,
+                  promo: 0, destaque: 0,
+                  status: itemDef.status || 'active',
+                  days: JSON.stringify(itemDef.days || [1,1,1,1,1,1,1]),
+                  ingredients: JSON.stringify(itemDef.ingredients || []),
+                  custom_groups: JSON.stringify(itemDef.custom_groups || []),
+                  sort_order: ++itemOrder
+                }
+                const itemKeys = Object.keys(itemRow).filter(k => COLS_MI.includes(k))
+                db.prepare(
+                  `INSERT INTO menu_items (${itemKeys.map(k=>`"${k}"`).join(',')}) VALUES (${itemKeys.map(()=>'?').join(',')})`
+                ).run(...itemKeys.map(k => itemRow[k]))
+                itensCriados++
+              } catch(e) { erros++ }
+            }
+          } catch(e) { erros++ }
+        }
+      })
+
+      doImport()
+      marcarDirty()
+      send(res, 200, { ok: true, catsCriadas, itensCriados, erros })
+    } catch(e) {
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
   return false // nenhuma rota tratada aqui — passa para o REST engine
 }
