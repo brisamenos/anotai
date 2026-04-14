@@ -200,27 +200,27 @@
   class Query {
     constructor(table) {
       this._table = table;
-      this._params = {};
+      this._params = new URLSearchParams(); // URLSearchParams suporta múltiplos valores por chave (ex: gte+lt no mesmo campo)
       this._method = 'GET';
       this._body = null;
       this._headers = {};
       this._single = false;
     }
 
-    select(cols = '*')     { this._params.select = cols;               return this; }
-    eq(col, val)           { this._params[col] = `eq.${val === null ? 'null' : val}`; return this; }
-    neq(col, val)          { this._params[col] = `neq.${val}`;         return this; }
-    in(col, vals)          { this._params[col] = `in.(${vals.join(',')})`;  return this; }
-    gte(col, val)          { this._params[col] = `gte.${val}`;         return this; }
-    lte(col, val)          { this._params[col] = `lte.${val}`;         return this; }
-    gt(col, val)           { this._params[col] = `gt.${val}`;          return this; }
-    lt(col, val)           { this._params[col] = `lt.${val}`;          return this; }
-    not(col, op, val)      { this._params[col] = op === 'is' && (val === null || val === 'null') ? 'not.is.null' : `neq.${val}`; return this; }
-    is(col, val)           { this._params[col] = val === null ? 'is.null' : `eq.${val}`; return this; }
-    or(cond)               { this._params['or'] = `(${cond})`;         return this; }
-    order(col, opts = {})  { const d = opts.ascending === false ? 'desc' : 'asc'; this._params.order = (this._params.order ? this._params.order + ',' : '') + `${col}.${d}`; return this; }
-    limit(n)               { this._params.limit = n;                   return this; }
-    range(from, to)        { this._params.offset = from; this._params.limit = to - from + 1; return this; }
+    select(cols = '*')     { this._params.set('select', cols);                                    return this; }
+    eq(col, val)           { this._params.set(col, `eq.${val === null ? 'null' : val}`);          return this; }
+    neq(col, val)          { this._params.set(col, `neq.${val}`);                                 return this; }
+    in(col, vals)          { this._params.set(col, `in.(${vals.join(',')})`);                     return this; }
+    gte(col, val)          { this._params.append(col, `gte.${val}`);                              return this; } // append = permite coexistir com lt no mesmo campo
+    lte(col, val)          { this._params.append(col, `lte.${val}`);                              return this; }
+    gt(col, val)           { this._params.append(col, `gt.${val}`);                               return this; }
+    lt(col, val)           { this._params.append(col, `lt.${val}`);                               return this; } // append = permite coexistir com gte no mesmo campo
+    not(col, op, val)      { this._params.set(col, op === 'is' && (val === null || val === 'null') ? 'not.is.null' : `neq.${val}`); return this; }
+    is(col, val)           { this._params.set(col, val === null ? 'is.null' : `eq.${val}`);       return this; }
+    or(cond)               { this._params.set('or', `(${cond})`);                                 return this; }
+    order(col, opts = {})  { const d = opts.ascending === false ? 'desc' : 'asc'; const prev = this._params.get('order'); this._params.set('order', (prev ? prev + ',' : '') + `${col}.${d}`); return this; }
+    limit(n)               { this._params.set('limit', n);                                        return this; }
+    range(from, to)        { this._params.set('offset', from); this._params.set('limit', to - from + 1); return this; }
 
     single()      { this._single = true; this._headers['Prefer'] = 'return=representation'; return this._run(); }
     maybeSingle() { this._single = true; return this._run(); }
@@ -233,7 +233,7 @@
     then(resolve, reject) { return this._run().then(resolve, reject); }
 
   async _run() {
-    const url = `${API_BASE}/${this._table}${toQS(this._params)}`;
+    const url = `${API_BASE}/${this._table}${this._params.toString() ? "?" + this._params.toString() : ""}`;
     const hdrs = defaultHeaders(this._headers);
     if (this._single) hdrs['Prefer'] = (hdrs['Prefer'] ? hdrs['Prefer'] + ',' : '') + 'single';
     const opts = { method: this._method, headers: hdrs };
