@@ -232,7 +232,7 @@ async function loadAllData(silent = false) {
     ] = await Promise.all([
       safe(sb.from('menu_items').select('*').order('sort_order').order('id')),
       safe(sb.from('categories').select('*').order('sort_order')),
-      safe(sb.from('orders').select('*').in('status',['aguardando_pix','analise','producao','pronto']).order('id',{ascending:false})),
+      safe(sb.from('orders').select('*').in('status',['aguardando_pix','analise','producao','pronto','entregue']).order('id',{ascending:false})),
       safe(sb.from('movimentos').select('*').gte('created_at', (() => {
         // Usa data local BR (UTC-3) para não perder movimentos do início do dia
         const d = new Date(); d.setHours(d.getHours() - 3);
@@ -715,7 +715,11 @@ function subscribeOrders() {
             showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>', `Pedido #${_orderNum(p.new.id, p.new.order_num)} cancelado pelo cliente — ${p.new.client}`);
             sendBrowserNotif(`Pedido cancelado pelo cliente`, `#${_orderNum(p.new.id, p.new.order_num)} — ${p.new.client}`);
           }
-          ordersKanban.splice(idx, 1);
+          if (p.new.status === 'entregue' && window._segmento === 'acougue') {
+            ordersKanban[idx] = mapOrder(p.new);
+          } else {
+            ordersKanban.splice(idx, 1);
+          }
         } else {
           ordersKanban[idx] = mapOrder(p.new);
         }
@@ -852,7 +856,7 @@ setInterval(async () => {
     {
       const q = sb.from('orders')
         .select('*')
-        .in('status', ['aguardando_pix','analise','producao','pronto'])
+        .in('status', ['aguardando_pix','analise','producao','pronto','entregue'])
         .order('id', {ascending:false});
       // Quando _maxKnownOrderId > 0 usa filtro eficiente; quando 0 varre todos os ativos
       if (_maxKnownOrderId > 0) q.gt('id', _maxKnownOrderId);
@@ -901,7 +905,12 @@ setInterval(async () => {
             const statusNoCanban = ordersKanban[idx]._statusReal || ordersKanban[idx].status;
             if (statusNoCanban !== a.status) {
               if (['entregue','cancelado'].includes(a.status)) {
-                ordersKanban.splice(idx, 1);
+                if (a.status === 'entregue' && window._segmento === 'acougue') {
+                  ordersKanban[idx].status = a.status;
+                  ordersKanban[idx]._statusReal = a.status;
+                } else {
+                  ordersKanban.splice(idx, 1);
+                }
               } else if (a.status === 'aguardando_pix') {
                 // continua como analise no kanban — é pix_manual pendente
               } else {
