@@ -85,6 +85,20 @@ function applyTema(tema, accentCor) {
       '--text':'#3d0a14','--muted':'#a03050','--muted2':'#c06070','--white':'#fff',
       '--hero-bg':'#5c0a1e','--hero-text':'#fff','--hero-desc-color':'rgba(255,210,220,.9)',
       '--hero-overlay':'rgba(92,10,30,.65)','--sticky-bg':'#fff5f7'
+    },
+    oceano: {
+      '--bg':'#0a1628','--s1':'#0f1f38','--s2':'#152a48','--s3':'#1c3558',
+      '--border':'rgba(56,189,248,.1)','--border2':'rgba(56,189,248,.18)',
+      '--text':'#e0ecf8','--muted':'#6890b0','--muted2':'#4a7090','--white':'#fff',
+      '--hero-bg':'#040c18','--hero-text':'#fff','--hero-desc-color':'rgba(200,230,255,.85)',
+      '--hero-overlay':'rgba(4,12,24,.7)','--sticky-bg':'#0a1628'
+    },
+    dourado: {
+      '--bg':'#0f0d08','--s1':'#1a1610','--s2':'#242018','--s3':'#2e2820',
+      '--border':'rgba(212,165,116,.12)','--border2':'rgba(212,165,116,.2)',
+      '--text':'#f0e8d8','--muted':'#a09070','--muted2':'#807060','--white':'#fff',
+      '--hero-bg':'#0a0806','--hero-text':'#fff','--hero-desc-color':'rgba(240,232,216,.85)',
+      '--hero-overlay':'rgba(10,8,6,.7)','--sticky-bg':'#0f0d08'
     }
   };
 
@@ -93,7 +107,7 @@ function applyTema(tema, accentCor) {
 
   // Força meta theme-color
   const metaTheme = document.querySelector('meta[name="theme-color"]');
-  const bgMap = { classico:'#f8f9fb', dark:'#0f1117', tropical:'#fef9f0', minimalista:'#ffffff', acougue:'#1a0a05', verde:'#f0faf2', noturno:'#0d0d1a', rose:'#fff5f7' };
+  const bgMap = { classico:'#f8f9fb', dark:'#0f1117', tropical:'#fef9f0', minimalista:'#ffffff', acougue:'#1a0a05', verde:'#f0faf2', noturno:'#0d0d1a', rose:'#fff5f7', oceano:'#0a1628', dourado:'#0f0d08' };
   if (metaTheme) metaTheme.content = bgMap[t] || '#f8f9fb';
 }
 
