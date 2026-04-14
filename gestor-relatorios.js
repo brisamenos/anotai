@@ -1460,6 +1460,242 @@ function relExportar() {
   sbToast('ok', 'CSV exportado!');
 }
 
+// ─────────────────────────────────────────
+// IMPRIMIR RELATÓRIO NA IMPRESSORA DO CAIXA
+// ─────────────────────────────────────────
+async function relImprimirCaixa() {
+  sbLoading(true);
+  try {
+    const money   = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.', ',');
+    const range   = _relGetRange();
+    const iniISO  = range.inicio.toISOString();
+    const fimISO  = range.fim.toISOString();
+    const nomeLoja = _sessao?.nome || 'Estabelecimento';
+    const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' });
+
+    // ── Busca dados ──────────────────────────────────────
+    const [
+      { data: ordersRaw },
+      { data: movsRaw }
+    ] = await Promise.all([
+      sb.from('orders')
+        .select('id,status,total,taxa,items,mesa_num,addr,pag,garcom_nome,created_at,order_num')
+        .gte('created_at', iniISO).lt('created_at', fimISO)
+        .order('created_at', { ascending: true }),
+      sb.from('movimentos')
+        .select('*').order('id', { ascending: false }).limit(500)
+    ]);
+
+    const orders   = ordersRaw || [];
+    const validos  = orders.filter(o => ['entregue','finalizado'].includes(o.status));
+
+    // ── KPIs gerais ──────────────────────────────────────
+    const fatTotal  = validos.reduce((s,o) => s + parseFloat(o.total||0) + parseFloat(o.taxa||0), 0);
+    const qtdTotal  = validos.length;
+    const ticket    = qtdTotal > 0 ? fatTotal / qtdTotal : 0;
+    const cancelados = orders.filter(o => o.status === 'cancelado').length;
+
+    // ── Vendas por forma de pagamento ────────────────────
+    const pagMap = {};
+    validos.forEach(o => {
+      const k = o.pag || 'Não informado';
+      if (!pagMap[k]) pagMap[k] = 0;
+      pagMap[k] += parseFloat(o.total||0) + parseFloat(o.taxa||0);
+    });
+
+    // ── Entradas e saídas (movimentos) ───────────────────
+    const normDate = s => s ? new Date(s.replace(' ', 'T')) : null;
+    const movsFiltrados = (movsRaw||[]).filter(m => {
+      const t = normDate(m.created_at||m.time);
+      return t && t >= range.inicio && t < range.fim;
+    });
+    const totEntradas = movsFiltrados.filter(m=>m.tipo==='entrada').reduce((s,m)=>s+parseFloat(m.val||0),0);
+    const totSaidas   = movsFiltrados.filter(m=>m.tipo==='saida').reduce((s,m)=>s+parseFloat(m.val||0),0);
+    const saldo       = totEntradas - totSaidas;
+
+    // ── Mesas: horários e totais ──────────────────────────
+    const mesaOrders = validos.filter(o => o.mesa_num);
+    const mesaMap = {};
+    mesaOrders.forEach(o => {
+      const m = `Mesa ${o.mesa_num}`;
+      if (!mesaMap[m]) mesaMap[m] = { total: 0, pedidos: 0, ultimo: '' };
+      mesaMap[m].total   += parseFloat(o.total||0) + parseFloat(o.taxa||0);
+      mesaMap[m].pedidos++;
+      const d = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR',{timeZone:'America/Fortaleza',hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}) : '';
+      if (!mesaMap[m].ultimo || o.created_at > mesaMap[m].ultimo) mesaMap[m].ultimo = d;
+    });
+
+    // ── Itens vendidos e garçom que lançou ──────────────
+    const itemMap = {};
+    validos.forEach(o => {
+      const garcom = o.garcom_nome || '—';
+      const itens  = (() => { try { return Array.isArray(o.items) ? o.items : JSON.parse(o.items||'[]'); } catch { return []; } })();
+      itens.forEach(i => {
+        if ((i.item_status||'active') === 'cancelado') return;
+        if (i.item_type === 'taxa') return;
+        const k = i.name || '?';
+        if (!itemMap[k]) itemMap[k] = { qty: 0, total: 0, garcons: new Set() };
+        itemMap[k].qty   += (parseInt(i.qty)||1);
+        itemMap[k].total += (parseFloat(i.price)||0) * (parseInt(i.qty)||1);
+        itemMap[k].garcons.add(garcom);
+      });
+    });
+    const topItens = Object.entries(itemMap)
+      .sort((a,b) => b[1].total - a[1].total)
+      .slice(0, 30);
+
+    // ── Relatório por garçom ──────────────────────────────
+    const garcomMap = {};
+    validos.filter(o => o.mesa_num || (o.addr||'').startsWith('Mesa')).forEach(o => {
+      const nome = o.garcom_nome || 'Sem garçom';
+      if (!garcomMap[nome]) garcomMap[nome] = { pedidos: 0, fat: 0, mesas: new Set(), taxa: 0 };
+      garcomMap[nome].pedidos++;
+      garcomMap[nome].fat += parseFloat(o.total||0);
+      // Taxa de comissão: itens com item_type=taxa lançados por este garçom
+      const itens = (() => { try { return Array.isArray(o.items) ? o.items : JSON.parse(o.items||'[]'); } catch { return []; } })();
+      const taxaItem = itens.find(i => i.item_type === 'taxa' && (i.item_status||'active') !== 'cancelado');
+      if (taxaItem) garcomMap[nome].taxa += parseFloat(taxaItem.price)||0;
+      if (o.mesa_num) garcomMap[nome].mesas.add(o.mesa_num);
+    });
+
+    // ─── Monta HTML para impressão 80mm ──────────────────
+    const hr  = `<hr style="border:none;border-top:1px dashed #000;margin:5px 0">`;
+    const row = (l, r, bold) => `<div style="display:flex;justify-content:space-between;${bold?'font-weight:700':''}"><span>${l}</span><span>${r}</span></div>`;
+    const title = t => `<div style="font-weight:900;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px">${t}</div>`;
+
+    let html = `<div style="font-family:monospace;font-size:11px;color:#111;background:#fff;padding:12px 8px;max-width:280px;margin:0 auto">`;
+
+    // Cabeçalho
+    html += `<div style="text-align:center;margin-bottom:6px">
+      <div style="font-size:14px;font-weight:900">${nomeLoja.toUpperCase()}</div>
+      <div style="font-size:10px">RELATÓRIO GERENCIAL</div>
+      <div style="font-size:10px">${range.label}</div>
+      <div style="font-size:9px;color:#666">Gerado: ${dataHora}</div>
+    </div>${hr}`;
+
+    // Resumo geral
+    html += title('📊 Resumo Geral');
+    html += row('Faturamento total', money(fatTotal), true);
+    html += row('Pedidos confirmados', qtdTotal);
+    html += row('Ticket médio', money(ticket));
+    html += row('Pedidos cancelados', cancelados);
+
+    // Formas de pagamento
+    html += hr + title('💳 Formas de Pagamento');
+    Object.entries(pagMap).sort((a,b)=>b[1]-a[1]).forEach(([f,v]) => {
+      html += row(f, money(v));
+    });
+
+    // Entradas e saídas
+    html += hr + title('💰 Caixa — Movimentos');
+    html += row('Entradas', money(totEntradas), true);
+    html += row('Saídas', money(totSaidas), true);
+    html += row('Saldo', money(saldo), true);
+    if (movsFiltrados.length) {
+      html += `<div style="margin-top:4px">`;
+      movsFiltrados.slice(0, 20).forEach(m => {
+        const data = m.created_at||m.time ? new Date((m.created_at||m.time).replace(' ','T')).toLocaleDateString('pt-BR') : '';
+        const sinal = m.tipo === 'entrada' ? '+' : '-';
+        html += row(`${sinal} ${(m.description||'').substring(0,18)}`, money(m.val));
+      });
+      html += `</div>`;
+    }
+
+    // Mesas: horários e totais
+    html += hr + title('🍽️ Mesas');
+    const mesaEntries = Object.entries(mesaMap).sort((a,b) => parseInt(a[0].split(' ')[1]) - parseInt(b[0].split(' ')[1]));
+    if (mesaEntries.length) {
+      mesaEntries.forEach(([mesa, v]) => {
+        html += `<div style="margin-bottom:3px">`;
+        html += row(mesa, money(v.total), true);
+        html += `<div style="font-size:10px;color:#555">${v.pedidos} comanda(s) · último: ${v.ultimo}</div>`;
+        html += `</div>`;
+      });
+    } else {
+      html += `<div style="font-size:10px;color:#888;text-align:center;padding:4px">Nenhuma mesa no período</div>`;
+    }
+
+    // Itens vendidos + garçom
+    html += hr + title('🛒 Itens Vendidos');
+    if (topItens.length) {
+      topItens.forEach(([nome, v]) => {
+        const garcons = [...v.garcons].join(', ');
+        html += `<div style="margin-bottom:4px">`;
+        html += row(`${v.qty}x ${nome.substring(0,22)}`, money(v.total), true);
+        html += `<div style="font-size:9px;color:#555">Garçom: ${garcons.substring(0,30)}</div>`;
+        html += `</div>`;
+      });
+    } else {
+      html += `<div style="font-size:10px;color:#888;text-align:center;padding:4px">Sem itens no período</div>`;
+    }
+
+    // Relatório de garçons / comissão
+    html += hr + title('👨‍💼 Garçons — Comissão');
+    const garcomEntries = Object.entries(garcomMap).sort((a,b)=>b[1].fat-a[1].fat);
+    if (garcomEntries.length) {
+      garcomEntries.forEach(([nome, v]) => {
+        const comissao = v.fat > 0 ? v.fat * 0.1 : 0;
+        html += `<div style="margin-bottom:5px">`;
+        html += row(nome, money(v.fat), true);
+        html += row(`  ${v.pedidos} pedido(s) · ${v.mesas.size} mesa(s)`, '');
+        html += row('  Comissão (10%)', money(comissao));
+        if (v.taxa > 0) html += row('  Taxa serviço cobrada', money(v.taxa));
+        html += `</div>`;
+      });
+    } else {
+      html += `<div style="font-size:10px;color:#888;text-align:center;padding:4px">Nenhum garçom no período</div>`;
+    }
+
+    html += hr;
+    html += `<div style="text-align:center;font-size:10px;color:#888;margin-top:6px">*** FIM DO RELATÓRIO ***</div>`;
+    html += `</div>`;
+
+    // ── Envia para impressora ─────────────────────────────
+    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||''; } catch { return ''; } })();
+    const fmt = localStorage.getItem('printFormat') || '80mm';
+
+    // 1. Print Agent
+    try {
+      if (tid) {
+        const st = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } }).then(r=>r.json());
+        if (st.active) {
+          await fetch('/api/print-queue/job', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+            body: JSON.stringify({ html, format: fmt, tipo: 'caixa' }),
+          });
+          sbToast('ok', '🖨️ Relatório enviado para impressora!');
+          return;
+        }
+      }
+    } catch(e) { console.warn('[REL PRINT] Agent falhou:', e.message); }
+
+    // 2. Electron
+    const _caixaPrinter = localStorage.getItem('printPrinter') || '';
+    if (window.ElectronPrint?.printHtml) {
+      try {
+        await window.ElectronPrint.printHtml(html, { printer: _caixaPrinter, paperWidth: 80 });
+        sbToast('ok', '🖨️ Relatório impresso!');
+        return;
+      } catch(e) { console.warn('[REL PRINT] Electron falhou:', e.message); }
+    }
+
+    // 3. Popup de impressão
+    const w = window.open('', '_blank', 'width=420,height=700');
+    if (!w) { sbToast('err', 'Permita popups para imprimir'); return; }
+    w.document.write(`<!DOCTYPE html><html><head><title>Relatório ${range.label}</title>
+      <style>body{margin:0;background:#fff}@media print{body{margin:0}}</style></head>
+      <body>${html}<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}<\/script></body></html>`);
+    w.document.close();
+    sbToast('ok', '🖨️ Abrindo impressão...');
+  } catch(e) {
+    console.error('[REL PRINT]', e);
+    sbToast('err', 'Erro ao gerar relatório: ' + (e?.message||e));
+  } finally {
+    sbLoading(false);
+  }
+}
+
 
 // ─────────────────────────────────────────
 // SATISFAÇÃO
