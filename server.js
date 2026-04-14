@@ -1115,6 +1115,7 @@ async function handleOrderStatus(req, res) {
 // ════════════════════════════════════════════════════════
 const _msgBuffer   = new Map()
 const _pausaHumano = new Map()
+const _lastDayMsg  = new Map() // rastreia primeira msg do dia: "tenant:phone" → "YYYY-MM-DD"
 
 async function handleIAWebhook(req, res) {
   const body = req._parsedBody !== undefined ? req._parsedBody : await readBody(req)
@@ -1174,6 +1175,15 @@ async function handleIAWebhook(req, res) {
       if (pausaNow&&(Date.now()-pausaNow)<pausaMin*60*1000) { log('🔇',`IA bloqueada no timer (humano assumiu durante buffer) — ${phone} [${tenantId}]`); return }
       log('🔍', `[PAUSA-DEBUG] Timer — pausaKey: "${pausaKey}" | pausaNow: ${pausaNow || 'NÃO ENCONTRADO'} — IA vai responder`)
       const msgFull=msgs.join('\n'), inst=cfg.evo_instance||EVO_INST, nomeLoja=cfg.store_name||'Restaurante'
+      // ── Detecção: primeira msg do dia e saudação avulsa ──
+      const _hoje = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Fortaleza'})).toISOString().split('T')[0]
+      const _dayKey = `${tenantId}:${phone}`
+      const _isPrimeiraMsgDia = _lastDayMsg.get(_dayKey) !== _hoje
+      _lastDayMsg.set(_dayKey, _hoje)
+      const _saudacaoRegex = /^\s*(oi|olá|ola|hey|hi|hello|bom\s*dia|boa\s*(tarde|noite)|e\s*a[ií]|eai|opa|salve|fala|alo|alô|tudo\s*bem|td\s*bem|blz|beleza)\s*[!.,?☺😊🙂👋🤗]*\s*$/i
+      const _isSoSaudacao = _saudacaoRegex.test(msgFull.trim())
+      const _horaAtual = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Fortaleza'})).getHours()
+      const _saudacaoHora = _horaAtual >= 5 && _horaAtual < 12 ? 'Bom dia' : _horaAtual >= 12 && _horaAtual < 18 ? 'Boa tarde' : 'Boa noite'
       const contexto=[]
       const tenantRow=db.prepare("SELECT slug FROM tenants WHERE id=?").get(tenantId)
       const proto=req.headers['x-forwarded-proto']||'https', host=req.headers['host']||''
@@ -1204,7 +1214,40 @@ async function handleIAWebhook(req, res) {
       if(pedCli.length){const sl={analise:'⏳',producao:'👨‍🍳',pronto:'✅',saiu:'🛵',entregue:'🎉',cancelado:'❌',finalizado:'✅'};contexto.push('PEDIDOS DESTE CLIENTE:\n'+pedCli.map(p=>`  #${p.id}: ${sl[p.status]||p.status} R$${parseFloat(p.total).toFixed(2).replace('.',',')}`) .join('\n'))}
       const numMatch=msgFull.match(/#\*?(\d{1,6})\*?/)||msgFull.match(/pedido\s*[*#]?\s*(\d{1,6})/i)
       if(numMatch){const n=parseInt(numMatch[1]);let ped=db.prepare("SELECT id,status,total,items,client,addr,pag FROM orders WHERE tenant_id=? AND id=?").get(tenantId,n)||db.prepare("SELECT id,status,total,items,client,addr,pag FROM orders WHERE tenant_id=? AND phone LIKE ? ORDER BY id DESC LIMIT 1").get(tenantId,`%${phone.slice(-8)}%`);const sl={analise:'⏳ aguardando',producao:'👨‍🍳 em preparo',pronto:'✅ pronto',saiu:'🛵 saiu',entregue:'🎉 entregue',cancelado:'❌ cancelado',finalizado:'✅ finalizado'};if(ped){const its=(()=>{try{return(JSON.parse(ped.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}catch{return''}})();contexto.push(`PEDIDO #${ped.id}:\n  Status: ${sl[ped.status]||ped.status}\n  Total: R$${parseFloat(ped.total).toFixed(2).replace('.',',')}\n  Itens: ${its}`)}else{contexto.push(`PEDIDO #${n}: não encontrado.`)}}
-      const systemPrompt=`${iaG.prompt_base||`Você é o assistente virtual do ${nomeLoja}. Seja simpático, objetivo e use emojis com moderação. Responda sempre em português.`}\n\n${contexto.join('\n\n')}\n\nREGRAS:\n- Nunca liste todos os itens. Envie o link: ${linkCardapio}\n- Para novos pedidos direcione para: ${linkCardapio}`
+      const _promptPadrao = `Você é o atendente virtual do *${nomeLoja}* — simpático, acolhedor e com personalidade! Você representa a loja com orgulho e faz o cliente se sentir especial. Responda sempre em português brasileiro, com tom humano e caloroso.
+
+PERSONALIDADE:
+- Seja caloroso e genuíno, como um atendente que ama o que faz
+- Use emojis com naturalidade (2-4 por mensagem) para dar vida à conversa
+- Chame o cliente de "você" e seja próximo, nunca robótico
+- Demonstre entusiasmo pelos produtos da loja
+- Seja proativo: sugira itens, conte novidades, destaque promoções
+- Respostas devem ter conteúdo rico — nunca respostas secas de 1 linha
+
+FORMATO DAS RESPOSTAS:
+- Use *negrito* para destacar nomes de produtos, preços e informações importantes
+- Organize visualmente com quebras de linha quando listar algo
+- Sempre finalize convidando o cliente a continuar a conversa ou fazer um pedido
+- Quando mencionar o cardápio, SEMPRE inclua o link: ${linkCardapio}`
+
+      const _instrucoesSituacao = []
+      if (_isPrimeiraMsgDia) {
+        _instrucoesSituacao.push(`SITUAÇÃO ESPECIAL — PRIMEIRA MENSAGEM DO DIA:
+Esta é a primeira mensagem deste cliente hoje! Comece com uma saudação calorosa em nome do ${nomeLoja}. Use "${_saudacaoHora}" adequado ao horário.
+Modelo: "${_saudacaoHora}! 😊 Seja muito bem-vindo(a) ao *${nomeLoja}*! Que bom ter você aqui com a gente hoje! [continue naturalmente com o que o cliente perguntou ou convide a ver o cardápio com o link: ${linkCardapio}]"`)
+      }
+      if (_isSoSaudacao) {
+        _instrucoesSituacao.push(`SITUAÇÃO ESPECIAL — CLIENTE ENVIOU APENAS SAUDAÇÃO:
+O cliente mandou só uma saudação sem perguntar nada específico. NÃO responda apenas com saudação de volta! Responda com calor humano e conduza a conversa:
+- Cumprimente de volta com entusiasmo
+- Apresente-se como atendente do ${nomeLoja}
+- Pergunte como pode ajudar de forma envolvente
+- Mencione algo atrativo (promoção, item popular, novidade) para despertar interesse
+- Compartilhe o link do cardápio: ${linkCardapio}
+Exemplo: "${_saudacaoHora}! 😄 Que prazer ter você aqui no *${nomeLoja}*! Eu sou o assistente virtual e estou aqui pra te ajudar com tudo! 🤗 Quer dar uma olhada no nosso cardápio? Tem coisa deliciosa esperando por você: ${linkCardapio} — Me conta, posso te ajudar com alguma coisa? 😋"`)
+      }
+
+      const systemPrompt = `${iaG.prompt_base || _promptPadrao}\n\n${_instrucoesSituacao.length ? _instrucoesSituacao.join('\n\n') + '\n\n' : ''}${contexto.join('\n\n')}\n\nREGRAS OBRIGATÓRIAS:\n- Nunca liste o cardápio inteiro. Cite no máximo 3-4 itens como sugestão e envie o link: ${linkCardapio}\n- Para fazer pedidos, SEMPRE direcione para o cardápio online: ${linkCardapio}\n- Se a loja estiver FECHADA, informe o horário de funcionamento e convide o cliente a ver o cardápio para quando abrir\n- Se o cliente perguntar sobre um pedido, dê informações detalhadas com status e itens\n- Nunca invente informações que não estão no contexto\n- Se houver promoções ou cupons, mencione-os naturalmente quando fizer sentido\n- Mantenha respostas entre 3-8 linhas — ricas em conteúdo mas sem ser prolixo`
       try {
         const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${openaiKey}`},body:JSON.stringify({model:modelo,max_tokens:maxTokens,messages:[{role:'system',content:systemPrompt},...convHist.slice(-10),{role:'user',content:msgFull}]})})
         const d=await r.json().catch(()=>({}))
