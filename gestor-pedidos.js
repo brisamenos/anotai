@@ -1616,88 +1616,28 @@ async function importarCardapio(inputEl) {
 
   closeModal('modal-modelos');
   sbLoading(true);
-
-  let catsCriadas = 0, itensCriados = 0, erros = 0;
+  sbToast('ok', `⏳ Importando ${total} itens…`);
 
   try {
     if (substituir) await limparCardapioAtual();
 
-    let catSortOrder = categories.length;
+    // ── Usa endpoint de import em lote (uma única transação no servidor) ──
+    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+    const res = await fetch('/api/importar-cardapio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify({ categorias: parsed.categorias })
+    });
+    const resultado = await res.json();
 
-    for (let ci = 0; ci < parsed.categorias.length; ci++) {
-      const catDef = parsed.categorias[ci];
-      if (!catDef.name || !catDef.label) { erros++; continue; }
+    if (!res.ok) throw new Error(resultado?.error || 'Erro no servidor');
 
-      // ── Insere categoria ──────────────────────────────
-      let catData = null;
-      try {
-        const { data, error } = await sb.from('categories').insert({
-          name: catDef.name, label: catDef.label,
-          type: catDef.type || 'Itens principais',
-          promo: catDef.promo || false,
-          sort_order: ++catSortOrder
-        }).select().single();
-        if (error || !data) throw new Error(error?.message || 'sem retorno');
-        catData = data;
-        catsCriadas++;
-        categories.push({ id: data.id, name: data.name, label: data.label, type: data.type, promo: !!data.promo, open: false });
-      } catch (e) {
-        console.error('[importar] cat:', catDef.name, e.message);
-        erros++;
-        continue;
-      }
-
-      // ── Insere itens da categoria ─────────────────────
-      for (let ii = 0; ii < (catDef.itens || []).length; ii++) {
-        const itemDef = catDef.itens[ii];
-        if (!itemDef.name) { erros++; continue; }
-
-        const payload = {
-          emoji: itemDef.emoji || '🍽️',
-          name: itemDef.name,
-          description: itemDef.description || '',
-          price: parseFloat(itemDef.price) || 0,
-          price_old: itemDef.price_old || null,
-          cat: catData.label, cat_key: catData.name,
-          item_type: itemDef.item_type || 'normal',
-          allow_half: itemDef.allow_half || false,
-          max_flavors: itemDef.max_flavors || 1,
-          promo: false, destaque: false,
-          status: itemDef.status || 'active',
-          days: itemDef.days || [1,1,1,1,1,1,1],
-          ingredients: itemDef.ingredients || [],
-          custom_groups: itemDef.custom_groups || []
-        };
-
-        try {
-          const { data, error } = await sb.from('menu_items').insert(payload).select().single();
-          if (error || !data) throw new Error(error?.message || 'sem retorno');
-          itensCriados++;
-          items.push(mapItem(data));
-        } catch (e) {
-          // Fallback: tenta sem custom_groups (DB mais antigo)
-          try {
-            const { custom_groups, ...payloadSemGrupos } = payload;
-            const { data: d2, error: e2 } = await sb.from('menu_items').insert(payloadSemGrupos).select().single();
-            if (e2 || !d2) throw new Error(e2?.message || 'sem retorno');
-            itensCriados++;
-            items.push(mapItem(d2));
-          } catch (e2) {
-            console.error('[importar] item falhou:', itemDef.name, e2.message);
-            erros++;
-          }
-        }
-      }
-
-      // Atualiza toast de progresso a cada categoria
-      sbToast('ok', `⏳ Importando… ${ci+1}/${parsed.categorias.length} categorias · ${itensCriados} itens`);
-    }
-
-    // Recarrega tudo do banco para garantir consistência
+    // Recarrega tudo do banco
     await loadAllData(true);
     renderGestor();
     renderTable();
     populateCatSelects();
+    const { catsCriadas = 0, itensCriados = 0, erros = 0 } = resultado;
     const msg = `✅ Importado: ${catsCriadas} categoria(s) · ${itensCriados} item(s)` + (erros ? ` · ⚠️ ${erros} erro(s)` : '');
     sbToast(erros ? 'warn' : 'ok', msg);
 
