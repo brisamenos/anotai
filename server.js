@@ -1078,9 +1078,9 @@ async function handleOrderStatus(req, res) {
               `${cab}\n\n🏃 *A caminho, ${_primeiroNome}!*\n\nPedido *#${idStr}* saiu pra entrega. O nosso entregador está indo até você agora! 🛵\n\n📍 ${order.addr||''}${rod}`,
             ]),
             entregue: _v([
-              `${cab}\n\n🎉 *Entregue, ${_primeiroNome}!*\n\nSeu pedido *#${idStr}* chegou! Bom proveito! 🍽️✨\n\n⭐ Se tiver um minutinho, nos conta como foi! Sua opinião faz toda diferença.${rod}`,
-              `${cab}\n\n🍽️ *Chegou, ${_primeiroNome}!*\n\nPedido *#${idStr}* entregue. Esperamos que aproveite muito! 😋\n\n⭐ Que tal avaliar nosso atendimento? É rápido!${rod}`,
-              `${cab}\n\n✅ *Bom apetite, ${_primeiroNome}!*\n\nSeu pedido *#${idStr}* foi entregue com sucesso. Foi um prazer! 🙏\n\n⭐ Sua avaliação nos ajuda a melhorar sempre!${rod}`,
+              `${cab}\n\n😊 *${_primeiroNome}, muito obrigado pela preferência!*\n\nFoi um prazer atender você no pedido *#${idStr}*. Esperamos que tudo esteja do jeitinho que você gosta! ❤️\n\nVolte sempre, viu? Estamos aqui pra você! 🤗${rod}`,
+              `${cab}\n\n🙏 *Obrigado por escolher a gente, ${_primeiroNome}!*\n\nSeu pedido *#${idStr}* foi entregue com todo o carinho. Nada melhor do que saber que você confia no nosso trabalho! 💛\n\nQualquer coisa, pode contar com a gente. Volte sempre! 😊${rod}`,
+              `${cab}\n\n❤️ *${_primeiroNome}, que bom ter você como cliente!*\n\nPedido *#${idStr}* entregue! Preparamos tudo com muito cuidado especialmente pra você. 😊\n\nA gente fica feliz demais com a sua confiança. Até a próxima! 🤝${rod}`,
             ]),
             cancelado: _v([
               `${cab}\n\n😔 *Pedido #${idStr} cancelado*\n\n*${_primeiroNome}*, sentimos muito pelo inconveniente. Infelizmente seu pedido precisou ser cancelado.\n\nEstamos à disposição se quiser fazer um novo pedido ou esclarecer qualquer dúvida.${rod}`,
