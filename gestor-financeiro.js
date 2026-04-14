@@ -728,32 +728,67 @@ function imprimirViaCliente() {
   const itens    = itensEl?.dataset.ordersJson ? JSON.parse(itensEl.dataset.ordersJson) : [];
   const nome     = _sessao?.nome || 'Estabelecimento';
   const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' });
-  const formaLabel = { PIX: '💠 PIX', Cartão: '💳 Cartão', Dinheiro: '💵 Dinheiro' }[forma] || forma;
+  const formaLabel = ((_pagFormasList||[]).length > 0)
+    ? _pagFormasList.map(f => `${f.forma} R$${f.valor.toFixed(2).replace('.',',')}`).join(' + ')
+    : ({ PIX: 'PIX', Cartão: 'Cartão', Dinheiro: 'Dinheiro', Crédito: 'Crédito', Débito: 'Débito' }[forma] || forma || 'Não informado');
 
-  const itensHtml = itens.length
-    ? itens.map(i =>
-        `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px dashed #ddd">
-          <span>${i.qty}× ${i.name}</span>
-          <span>R$ ${i.subtotal.toFixed(2).replace('.',',')}</span>
-        </div>`
-      ).join('')
-    : '<div style="font-size:12px;color:#999;text-align:center;padding:8px">Sem itens</div>';
+  // Separa itens normais da taxa de serviço
+  const itensSemTaxa = itens.filter(i => !i.isTaxa);
+  const taxaItem     = itens.find(i => i.isTaxa);
+  const subtotal     = itensSemTaxa.reduce((s, i) => s + (i.subtotal || 0), 0);
+  const taxaVal      = taxaItem ? (taxaItem.subtotal || 0) : 0;
+  const totalVal     = parseFloat(totalStr.replace('R$','').replace(/\s/g,'').replace(',','.')) || (subtotal + taxaVal);
+
+  // Busca garçom do cache da mesa
+  const mesaTd    = tables ? tables.find(x => parseInt(x.num) === num) : null;
+  const garcomNome = (() => {
+    const ordens = (mesaOrdersCache || []).filter(o => parseInt(o.mesa_num) === num);
+    for (const o of ordens) {
+      if (o.garcom_nome) return o.garcom_nome;
+    }
+    return '';
+  })();
+
+  const itensHtml = itensSemTaxa.length
+    ? itensSemTaxa.map(i => {
+        const unitario = i.qty > 0 ? (i.subtotal / i.qty) : i.subtotal;
+        return `<div style="padding:5px 0;border-bottom:1px dashed #ddd;font-size:12px">
+          <div style="display:flex;justify-content:space-between;font-weight:700">
+            <span>${i.qty}× ${i.name}</span>
+            <span>R$ ${i.subtotal.toFixed(2).replace('.',',')}</span>
+          </div>
+          ${i.qty > 1 ? `<div style="font-size:10px;color:#888;margin-top:1px">Unitário: R$ ${unitario.toFixed(2).replace('.',',')}</div>` : ''}
+        </div>`;
+      }).join('')
+    : '<div style="font-size:11px;color:#999;text-align:center;padding:8px">Sem itens</div>';
+
+  const taxaHtml = taxaVal > 0
+    ? `<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px dashed #ddd">
+        <span>Subtotal</span><span>R$ ${subtotal.toFixed(2).replace('.',',')}</span>
+       </div>
+       <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px dashed #ddd">
+        <span>Taxa de serviço (${_taxaServicoPct||10}%)</span><span>R$ ${taxaVal.toFixed(2).replace('.',',')}</span>
+       </div>`
+    : '';
 
   const html = `
-    <div style="font-family:monospace;background:#fff;color:#111;padding:20px;max-width:300px;margin:0 auto">
-      <div style="text-align:center;margin-bottom:12px">
-        <div style="font-size:18px;font-weight:900">${nome}</div>
-        <div style="font-size:11px;color:#666">${dataHora}</div>
-        <div style="font-size:13px;font-weight:700;margin-top:4px">Mesa ${num}</div>
-        <hr style="border:none;border-top:1px dashed #ccc;margin:8px 0">
+    <div style="font-family:monospace;background:#fff;color:#111;padding:16px 12px;max-width:280px;margin:0 auto">
+      <div style="text-align:center;margin-bottom:10px">
+        <div style="font-size:16px;font-weight:900">${nome.toUpperCase()}</div>
+        <div style="font-size:10px;color:#666">${dataHora}</div>
+        <div style="font-size:13px;font-weight:700;margin-top:3px">Mesa ${num}</div>
+        ${garcomNome ? `<div style="font-size:11px;color:#555;margin-top:2px">Garçom: ${garcomNome}</div>` : ''}
+        <hr style="border:none;border-top:1px dashed #aaa;margin:7px 0">
       </div>
-      <div style="margin-bottom:10px">${itensHtml}</div>
-      <hr style="border:none;border-top:1px dashed #ccc;margin:8px 0">
-      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;margin-bottom:4px">
-        <span>TOTAL</span><span>${totalStr}</span>
+      <div style="margin-bottom:8px">${itensHtml}</div>
+      <hr style="border:none;border-top:1px dashed #aaa;margin:7px 0">
+      ${taxaHtml}
+      <div style="display:flex;justify-content:space-between;font-weight:900;font-size:14px;padding:6px 0;margin-top:2px">
+        <span>TOTAL</span><span>R$ ${totalVal.toFixed(2).replace('.',',')}</span>
       </div>
-      <div style="text-align:center;font-size:12px;color:#555;margin-top:6px">${formaLabel}</div>
-      <div style="text-align:center;font-size:11px;color:#aaa;margin-top:10px">Obrigado pela preferência!</div>
+      <hr style="border:none;border-top:1px dashed #aaa;margin:7px 0">
+      <div style="text-align:center;font-size:11px;color:#555;margin-top:4px">Pagamento: ${formaLabel}</div>
+      <div style="text-align:center;font-size:11px;color:#aaa;margin-top:8px">Obrigado pela preferência!</div>
     </div>`;
 
   // Tenta Electron primeiro, senão abre janela de impressão do browser
