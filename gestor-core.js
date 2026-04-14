@@ -332,12 +332,16 @@ async function loadAllData(silent = false) {
       if (pill) { pill.style.background = stOpen ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'; pill.style.borderColor = stOpen ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'; pill.style.color = stOpen ? 'var(--success)' : 'var(--danger)'; }
       // Aplica tema salvo no banco
       const modoSalvo = cfgRes.data.gestor_tema || 'escuro';
-      _aplicarVars(modoSalvo === 'claro' ? MODO_CLARO : MODO_ESCURO);
-      if (modoSalvo === 'claro') {
-        _aplicarOverrideClaro(MODO_CLARO);
+      if (typeof temaAplicarCompleto === 'function') {
+        temaAplicarCompleto(modoSalvo);
       } else {
-        const el = document.getElementById('tema-light-override');
-        if (el) el.remove();
+        _aplicarVars(modoSalvo === 'claro' ? MODO_CLARO : MODO_ESCURO);
+        if (modoSalvo === 'claro') {
+          _aplicarOverrideClaro(MODO_CLARO);
+        } else {
+          const el = document.getElementById('tema-light-override');
+          if (el) el.remove();
+        }
       }
     }
 
