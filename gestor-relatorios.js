@@ -1401,14 +1401,20 @@ async function renderRelatorios() {
 
 
     // ─── Relatório por Garçom ─────────────────────────────
+    // Apenas pedidos finalizados de mesa com garçom — exclui cancelados e mesas abertas
     const garcomMap = {};
     mesValidos
-      .filter(o => o.mesa_num || (o.addr||'').startsWith('Mesa'))
+      .filter(o => (o.mesa_num || (o.addr||'').startsWith('Mesa')) && o.garcom_nome)
       .forEach(o => {
-        const nome = o.garcom_nome || 'Sem garçom';
+        const nome = o.garcom_nome;
         if (!garcomMap[nome]) garcomMap[nome] = { pedidos: 0, fat: 0, mesas: new Set() };
         garcomMap[nome].pedidos++;
-        garcomMap[nome].fat += parseFloat(o.total||0) + parseFloat(o.taxa||0);
+        // Recalcula pelo itens ativos, excluindo cancelados e a própria taxa de serviço
+        const itens = (() => { try { return Array.isArray(o.items) ? o.items : JSON.parse(o.items||'[]'); } catch { return []; } })();
+        const fatSemTaxa = itens
+          .filter(i => (i.item_status||'active') !== 'cancelado' && i.item_type !== 'taxa')
+          .reduce((s, i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
+        garcomMap[nome].fat += fatSemTaxa;
         if (o.mesa_num) garcomMap[nome].mesas.add(o.mesa_num);
       });
 
@@ -1421,6 +1427,7 @@ async function renderRelatorios() {
         const maxFat = Math.max(...entries.map(([,v]) => v.fat), 1);
         garcomEl.innerHTML = entries.map(([nome, v]) => {
           const ticket = v.pedidos > 0 ? v.fat / v.pedidos : 0;
+          const comissao = v.fat * 0.1;
           const pct = Math.round(v.fat / maxFat * 100);
           return `<div style="padding:12px 0;border-bottom:1px solid var(--border)">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -1429,11 +1436,12 @@ async function renderRelatorios() {
                 <div>
                   <div style="font-size:13px;font-weight:700">${nome}</div>
                   <div style="font-size:11px;color:var(--muted)">${v.pedidos} pedido(s) · ${v.mesas.size} mesa(s) atendida(s)</div>
+                  <div style="font-size:11px;color:var(--accent3);font-weight:600">Comissão (10%): R$ ${comissao.toFixed(2).replace('.',',')}</div>
                 </div>
               </div>
               <div style="text-align:right">
-                <div style="font-size:14px;font-weight:800;color:var(--success)">R$ ${v.fat.toFixed(2).replace('.',',')}</div>
-                <div style="font-size:11px;color:var(--muted)">ticket R$ ${ticket.toFixed(2).replace('.',',')}</div>
+                <div style="font-size:14px;font-weight:800;color:var(--success)">R$ ${v.fat.toFixed(2).replace('.',',')}</div>
+                <div style="font-size:11px;color:var(--muted)">ticket R$ ${ticket.toFixed(2).replace('.',',')}</div>
               </div>
             </div>
             <div style="height:5px;background:var(--border);border-radius:99px;overflow:hidden">
@@ -1487,10 +1495,19 @@ async function relImprimirCaixa() {
     ]);
 
     const orders   = ordersRaw || [];
+    // Apenas pedidos efetivamente concluídos — exclui cancelados, mesas abertas e mesas em espera
     const validos  = orders.filter(o => ['entregue','finalizado'].includes(o.status));
 
+    // Recalcula total de cada pedido pelos itens ativos (exclui item_status=cancelado e item_type=taxa)
+    const _calcTotalItens = o => {
+      const its = (() => { try { return Array.isArray(o.items) ? o.items : JSON.parse(o.items||'[]'); } catch { return []; } })();
+      return its
+        .filter(i => (i.item_status||'active') !== 'cancelado')
+        .reduce((s, i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
+    };
+
     // ── KPIs gerais ──────────────────────────────────────
-    const fatTotal  = validos.reduce((s,o) => s + parseFloat(o.total||0) + parseFloat(o.taxa||0), 0);
+    const fatTotal  = validos.reduce((s,o) => s + _calcTotalItens(o), 0);
     const qtdTotal  = validos.length;
     const ticket    = qtdTotal > 0 ? fatTotal / qtdTotal : 0;
     const cancelados = orders.filter(o => o.status === 'cancelado').length;
@@ -1500,7 +1517,7 @@ async function relImprimirCaixa() {
     validos.forEach(o => {
       const k = o.pag || 'Não informado';
       if (!pagMap[k]) pagMap[k] = 0;
-      pagMap[k] += parseFloat(o.total||0) + parseFloat(o.taxa||0);
+      pagMap[k] += _calcTotalItens(o);
     });
 
     // ── Entradas e saídas (movimentos) ───────────────────
@@ -1545,18 +1562,26 @@ async function relImprimirCaixa() {
       .slice(0, 30);
 
     // ── Relatório por garçom ──────────────────────────────
+    // Apenas pedidos finalizados de mesa (exclui cancelados e mesas ainda abertas)
     const garcomMap = {};
-    validos.filter(o => o.mesa_num || (o.addr||'').startsWith('Mesa')).forEach(o => {
-      const nome = o.garcom_nome || 'Sem garçom';
-      if (!garcomMap[nome]) garcomMap[nome] = { pedidos: 0, fat: 0, mesas: new Set(), taxa: 0 };
-      garcomMap[nome].pedidos++;
-      garcomMap[nome].fat += parseFloat(o.total||0);
-      // Taxa de comissão: itens com item_type=taxa lançados por este garçom
-      const itens = (() => { try { return Array.isArray(o.items) ? o.items : JSON.parse(o.items||'[]'); } catch { return []; } })();
-      const taxaItem = itens.find(i => i.item_type === 'taxa' && (i.item_status||'active') !== 'cancelado');
-      if (taxaItem) garcomMap[nome].taxa += parseFloat(taxaItem.price)||0;
-      if (o.mesa_num) garcomMap[nome].mesas.add(o.mesa_num);
-    });
+    validos
+      .filter(o => (o.mesa_num || (o.addr||'').startsWith('Mesa')) && o.garcom_nome)
+      .forEach(o => {
+        const nome = o.garcom_nome;
+        if (!garcomMap[nome]) garcomMap[nome] = { pedidos: 0, fat: 0, mesas: new Set(), taxa: 0 };
+        garcomMap[nome].pedidos++;
+        const itens = (() => { try { return Array.isArray(o.items) ? o.items : JSON.parse(o.items||'[]'); } catch { return []; } })();
+        const itensAtivos = itens.filter(i => (i.item_status||'active') !== 'cancelado');
+        // fat = soma dos itens ativos SEM a taxa (base para cálculo de comissão)
+        const fatSemTaxa = itensAtivos
+          .filter(i => i.item_type !== 'taxa')
+          .reduce((s, i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
+        garcomMap[nome].fat += fatSemTaxa;
+        // Valor da taxa cobrada pelo garçom neste pedido
+        const taxaItem = itensAtivos.find(i => i.item_type === 'taxa');
+        if (taxaItem) garcomMap[nome].taxa += parseFloat(taxaItem.price)||0;
+        if (o.mesa_num) garcomMap[nome].mesas.add(o.mesa_num);
+      });
 
     // ─── Monta HTML para impressão 80mm ──────────────────
     const hr  = `<hr style="border:none;border-top:1px dashed #000;margin:5px 0">`;
