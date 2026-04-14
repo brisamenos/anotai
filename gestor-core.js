@@ -106,6 +106,9 @@ function _adaptarParaSegmento() {
   if (_segmento !== 'acougue') return;
   // Adiciona classe no body — CSS oculta tudo com data-hide-acougue
   document.body.classList.add('modo-acougue');
+  // Kanban: exibe coluna "Entregue"
+  const _kb = document.getElementById('kanban-board');
+  if (_kb) _kb.classList.add('acougue-kanban');
   // Troca labels marcados com data-label-acougue
   document.querySelectorAll('[data-label-acougue]').forEach(el => {
     el.textContent = el.getAttribute('data-label-acougue');
@@ -1245,7 +1248,11 @@ async function advanceOrderById(id) {
     return;
   }
   const oldStatus = o.status;
-  const newStatus = o.status === 'analise' ? 'producao' : 'pronto';
+  let newStatus;
+  if (o.status === 'analise') newStatus = 'producao';
+  else if (o.status === 'producao') newStatus = 'pronto';
+  else if (o.status === 'pronto' && window._segmento === 'acougue') newStatus = 'entregue';
+  else newStatus = 'pronto';
   // Se estava em analise e vai para producao, verifica se para o alerta
   if (o.status === 'analise') setTimeout(_checkStopAlert, 200);
   // UI otimista: atualiza imediatamente para resposta instantânea

@@ -297,12 +297,15 @@ body{
 .kol-analise{background:rgba(196,149,106,.08);border-color:rgba(196,149,106,.18)}
 .kol-producao{background:rgba(129,140,248,.06);border-color:rgba(129,140,248,.14)}
 .kol-pronto{background:rgba(52,211,153,.06);border-color:rgba(52,211,153,.14)}
+.kol-entregue{background:rgba(99,102,241,.06);border-color:rgba(99,102,241,.14);display:none}
+.acougue-kanban .kol-entregue{display:flex}
 .kol-head{padding:13px 16px;display:flex;align-items:center;justify-content:space-between}
 .kol-title{font-weight:700;font-size:12.5px;display:flex;align-items:center;gap:8px;letter-spacing:.1px;text-transform:uppercase;font-size:11px}
 .kol-cnt{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}
 .kol-analise .kol-title{color:#dbb896}
 .kol-producao .kol-title{color:#a5b4fc}
 .kol-pronto .kol-title{color:#6ee7b7}
+.kol-entregue .kol-title{color:#a78bfa}
 .kol-body{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:7px}
 .kol-body::-webkit-scrollbar{width:2px}
 .kol-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}

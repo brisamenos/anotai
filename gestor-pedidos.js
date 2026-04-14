@@ -113,7 +113,9 @@ function _buildMesaKanbanOrders() {
 }
 
 function renderKanban() {
-  const statuses = ['analise', 'producao', 'pronto'];
+  const statuses = window._segmento === 'acougue'
+    ? ['analise', 'producao', 'pronto', 'entregue']
+    : ['analise', 'producao', 'pronto'];
   const mesaKanban = _buildMesaKanbanOrders();
   statuses.forEach(st => {
     const col = document.getElementById('col-' + st);
@@ -169,9 +171,16 @@ function renderKanban() {
         } else if (st === 'producao') {
           const prontoLabel = isMesa ? 'Pronto p/ servir!' : isRetirada ? 'Pronto no balcão!' : '🚀 Pronto!';
           actionBtn = '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById(' + o.id + ')">' + prontoLabel + '</button>' + (_printMode === 'manual' ? '<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById(' + o.id + ')">🖨️</button>' : '');
+        } else if (st === 'entregue') {
+          actionBtn = '<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById(' + o.id + ')">✅ Finalizar</button>';
         } else {
-          const finLabel = isMesa ? 'Servido!' : isRetirada ? 'Retirado!' : 'Finalizar';
-          actionBtn = '<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById(' + o.id + ')">' + finLabel + '</button>';
+          const _isAcougueKanban = window._segmento === 'acougue';
+          if (_isAcougueKanban) {
+            actionBtn = '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById(' + o.id + ')">📦 Entregar</button>';
+          } else {
+            const finLabel = isMesa ? 'Servido!' : isRetirada ? 'Retirado!' : 'Finalizar';
+            actionBtn = '<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById(' + o.id + ')">' + finLabel + '</button>';
+          }
         }
 
         // Badge de pagamento
