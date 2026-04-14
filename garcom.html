@@ -1100,7 +1100,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 
       <!-- pizza meio a meio -->
       <div class="half-section" id="half-section" style="display:none">
-        <div class="half-title">2ª metade <span class="half-badge">PIZZA</span></div>
+        <div class="half-title">2ª metade <span class="half-badge">PIZZA</span> <span style="font-size:11px;font-weight:500;color:var(--muted);opacity:.8">(opcional)</span></div>
         <div class="half-selected" id="half-selected-row" style="display:none" onclick="toggleHalfPicker()">
           <div class="half-selected-emoji" id="half-sel-emoji">🍕</div>
           <div class="half-selected-info">
@@ -1113,7 +1113,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
           <div class="half-selected-emoji">🍕</div>
           <div class="half-selected-info">
             <div class="half-selected-name">Escolher 2ª metade</div>
-            <div class="half-selected-hint">Toque para selecionar</div>
+            <div class="half-selected-hint">Opcional — deixe sem para pizza inteira</div>
           </div>
           <span class="half-pick-btn">→</span>
         </div>
@@ -2616,12 +2616,9 @@ function _updateImAddBtn() {
   const isPizzaI = _isPizzaItem(i);
   let price = parseFloat(i.price) + _calcGruposExtra(i);
   if (isPizzaI && _halfItem) price = (parseFloat(i.price) + parseFloat(_halfItem.price)) / 2 + _calcGruposExtra(i);
-  const disabled = isPizzaI && !_halfItem;
   const btn = document.getElementById('im-add-btn');
-  btn.disabled = disabled;
-  btn.innerHTML = disabled
-    ? '🍕 Escolha a 2ª metade acima'
-    : `🛒 Adicionar · R$ ${fmtMoney(price * _imQty)}`;
+  btn.disabled = false;
+  btn.innerHTML = `🛒 Adicionar · R$ ${fmtMoney(price * _imQty)}`;
   // atualiza preço exibido
   document.getElementById('im-price').textContent = 'R$ ' + fmtMoney(isPizzaI && _halfItem
     ? (parseFloat(i.price) + parseFloat(_halfItem.price)) / 2 + _calcGruposExtra(i)
@@ -2645,7 +2642,7 @@ function imConfirmGarcom() {
   }
 
   const isPizzaI = _isPizzaItem(i);
-  if (isPizzaI && !_halfItem) { showToast('🍕 Escolha a 2ª metade da pizza!'); document.getElementById('half-section').scrollIntoView({behavior:'smooth',block:'center'}); return; }
+  // meio a meio é opcional — sem _halfItem = pizza inteira
 
   const obs = document.getElementById('im-obs').value.trim();
   const selectedIngrs = [...document.querySelectorAll('#im-ingr-grid .im-ingr-chip.on')].map(c=>c.querySelector('span')?.textContent?.trim()).filter(Boolean);
@@ -2661,6 +2658,8 @@ function imConfirmGarcom() {
     cartName  = `${i.name} / ${_halfItem.name}`;
     cartPrice = (parseFloat(i.price) + parseFloat(_halfItem.price)) / 2 + gruposExtra;
     cartObs   = cartObs ? `Meio a meio · ${cartObs}` : 'Meio a meio';
+  } else if (isPizzaI && !_halfItem) {
+    cartObs = cartObs ? `Inteira · ${cartObs}` : '';
   }
 
   const cartItem = { ...i, name: cartName, price: cartPrice, obs: cartObs, _grupos: JSON.parse(JSON.stringify(_imGruposState)), _customized: true };
