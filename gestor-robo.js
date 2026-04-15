@@ -1007,6 +1007,115 @@ function cpGetStoreLoc() {
     { enableHighAccuracy: true, timeout: 10000 }
   );
 }
+// ═══════════════════════════════════════
+// MODELOS DE MENSAGEM — Templates editáveis pelo gestor
+// ═══════════════════════════════════════
+const _AUTO_MODELOS = {
+  recebido: [
+    { label: 'Modelo 1 — Direto',    msg: '📥 Olá *{nome}*! Recebemos seu pedido *#{id}* com sucesso! 🎉\n\n🛒 *Itens:*\n{itens}\n\n💰 *Total: R$ {total}*\n\n⏱️ Em breve confirmaremos por aqui!\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+    { label: 'Modelo 2 — Animado',   msg: '✅ Chegou, *{nome}*!\n\nSeu pedido *#{id}* entrou na nossa fila. Obrigado por escolher a gente! 🙌\n\n🛒 *Itens:*\n{itens}\n\n💰 *Total: R$ {total}*\n\nVou te avisar assim que confirmarmos!\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+    { label: 'Modelo 3 — Acolhedor', msg: '🎯 *Pedido #{id} anotado!*\n\n*{nome}*, que ótimo ter você aqui! Recebemos seu pedido certinho.\n\n🛒 *Itens:*\n{itens}\n\n💰 *Total: R$ {total}*\n\n⏳ Aguarda só um instante que confirmamos logo!\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+  ],
+  confirmado: [
+    { label: 'Modelo 1 — Direto',    msg: '✅ Olá *{nome}*! Seu pedido *#{id}* foi confirmado e está sendo preparado! 🍽️\n\n🛒 *Itens:*\n{itens}\n\n💰 *Total: R$ {total}*\n\n{tipo_entrega}\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+    { label: 'Modelo 2 — Animado',   msg: '🔥 *Mãos à obra, {nome}!*\n\nSeu pedido *#{id}* foi confirmado e já está sendo preparado com muito carinho! ❤️\n\n🛒 *Itens:*\n{itens}\n\n💰 *Total: R$ {total}*\n\n{tipo_entrega}\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+    { label: 'Modelo 3 — Simples',   msg: '✅ *Confirmado, {nome}!*\n\nPedido *#{id}* na produção agora. A gente capricha pra você!\n\n🛒 *Itens:*\n{itens}\n\n💰 *Total: R$ {total}*\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+  ],
+  pronto: [
+    { label: 'Modelo 1 — Direto',    msg: '🛎️ *{nome}*, seu pedido *#{id}* está PRONTO! ✅\n\n{tipo_entrega}\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+    { label: 'Modelo 2 — Animado',   msg: '🎉 *Pedido #{id} pronto!*\n\n*{nome}*, ficou ótimo e está te esperando!\n\n{tipo_entrega}\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+    { label: 'Modelo 3 — Caprichado',msg: '🔥 *Tá na hora, {nome}!*\n\nSeu pedido *#{id}* foi preparado com capricho e está pronto!\n\n{tipo_entrega}\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+  ],
+  entrega: [
+    { label: 'Modelo 1 — Direto',    msg: '🛵 *{nome}*, seu pedido *#{id}* saiu para entrega!\n\n📍 *Endereço:* {endereco}\n\nFique de olho, hein! 😉\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+    { label: 'Modelo 2 — Animado',   msg: '🛵 *Saiu, {nome}!*\n\nSeu pedido *#{id}* está na estrada. Chegaremos em breve!\n\n📍 *Destino:* {endereco}\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+    { label: 'Modelo 3 — Urgente',   msg: '🏃 *A caminho, {nome}!*\n\nPedido *#{id}* saiu para entrega. O nosso entregador está indo até você agora! 🛵\n\n📍 {endereco}\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+  ],
+  cancelado: [
+    { label: 'Modelo 1 — Padrão',  msg: '😔 *Pedido #{id} cancelado*\n\n*{nome}*, sentimos muito pelo inconveniente. Infelizmente seu pedido precisou ser cancelado.\n\nEstamos à disposição se quiser fazer um novo pedido ou esclarecer qualquer dúvida.\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+    { label: 'Modelo 2 — Cordial', msg: '⚠️ *Aviso sobre o pedido #{id}*\n\nOi, *{nome}*. Lamentamos informar que seu pedido foi cancelado.\n\nQualquer dúvida, é só responder aqui — vamos resolver juntos! 🤝' },
+  ],
+  aniversario: [
+    { label: 'Modelo 1 — Clássico', msg: '🎉 Feliz aniversário, *{nome}*! 🥳\nQue seu dia seja incrível e cheio de coisas boas!\nDesejamos tudo de melhor pra você! 🎂❤️' },
+    { label: 'Modelo 2 — Animado',  msg: '🎂 *Hoje é dia de festa, {nome}!*\n\nA nossa equipe toda te deseja um aniversário muito especial! Que venham muitos momentos felizes. 🥳✨' },
+    { label: 'Modelo 3 — Simples',  msg: '🎈 *Feliz aniversário, {nome}!*\n\nEsperamos que hoje seja um dia muito especial para você. Conte sempre com a gente! 😊❤️' },
+  ],
+  boasvindas: [
+    { label: 'Modelo 1 — Acolhedor', msg: '👋 Olá *{nome}*, seja muito bem-vindo(a)! 🎉\nFicamos felizes com seu primeiro pedido!\nEm caso de dúvidas, é só chamar aqui. 😊' },
+    { label: 'Modelo 2 — Animado',   msg: '🌟 Seja bem-vindo(a), *{nome}*!\n\nQue alegria ter você como cliente! Esperamos que goste de tudo. Estamos aqui pra que sua experiência seja incrível! 🙌' },
+  ],
+  avaliacao: [
+    { label: 'Modelo 1 — Direto',   msg: '⭐ *{nome}*, esperamos que tenha curtido seu pedido *#{id}*!\nConta pra gente como foi — sua opinião é muito importante!\n\nAvalie agora: {link_avaliacao}' },
+    { label: 'Modelo 2 — Caloroso', msg: '🙏 *Obrigado pela preferência, {nome}!*\n\nFoi um prazer te atender no pedido *#{id}*. O que achou?\n\nSua avaliação nos ajuda muito a melhorar! ⭐\n{link_avaliacao}' },
+  ],
+  retorno: [
+    { label: 'Modelo 1 — Saudade',  msg: '😋 *{nome}*, sentimos sua falta!\nQue tal pedir hoje? Temos novidades no cardápio te esperando! 🍽️' },
+    { label: 'Modelo 2 — Animado',  msg: '👋 Oi *{nome}*! Há alguns dias não te vemos por aqui...\n\nTemos novidades esperando por você! Que tal voltar? 😊' },
+  ],
+};
+
+let _modelosTipoAtual = null;
+
+function abrirModelosModal(tipo) {
+  _modelosTipoAtual = tipo;
+  const modelos = _AUTO_MODELOS[tipo] || [];
+  const overlay  = document.getElementById('auto-modelos-overlay');
+  const lista    = document.getElementById('auto-modelos-lista');
+  const tituloEl = document.getElementById('auto-modelos-titulo');
+  if (!overlay || !lista) return;
+  const nomes = {
+    recebido:'Pedido Recebido', confirmado:'Pedido Confirmado', pronto:'Pedido Pronto',
+    entrega:'Saiu para Entrega', cancelado:'Pedido Cancelado', aniversario:'Aniversário',
+    boasvindas:'Boas-vindas', avaliacao:'Avaliação', retorno:'Retorno de Cliente',
+  };
+  if (tituloEl) tituloEl.textContent = 'Modelos — ' + (nomes[tipo] || tipo);
+  lista.innerHTML = [
+    `<div style="padding:14px;border:1.5px dashed var(--border);border-radius:10px;cursor:pointer;transition:border-color .15s" onclick="_usarVariacoesAuto()" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+        <span style="font-size:15px">🔄</span>
+        <span style="font-weight:600;font-size:13px;color:var(--accent)">Usar variações automáticas do sistema</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);line-height:1.5">O sistema escolhe aleatoriamente entre as variações padrão a cada envio — mensagens mais humanizadas e menos repetitivas. (Apaga o texto atual)</div>
+    </div>`,
+    ...modelos.map((m, i) => `
+      <div style="padding:14px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;transition:border-color .15s" onclick="_selecionarModelo(${i})" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-weight:600;font-size:12.5px;color:var(--accent)">${m.label}</span>
+          <span style="font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:1px 8px;color:var(--muted)">Usar este</span>
+        </div>
+        <pre style="font-family:'DM Sans',sans-serif;font-size:11.5px;color:var(--muted2);white-space:pre-wrap;margin:0;line-height:1.55;max-height:110px;overflow:hidden">${m.msg}</pre>
+      </div>
+    `)
+  ].join('');
+  overlay.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function _fecharModelosModal() {
+  const overlay = document.getElementById('auto-modelos-overlay');
+  if (overlay) overlay.style.display = 'none';
+  document.body.style.overflow = '';
+  _modelosTipoAtual = null;
+}
+
+function _selecionarModelo(idx) {
+  if (!_modelosTipoAtual) return;
+  const m = (_AUTO_MODELOS[_modelosTipoAtual] || [])[idx];
+  if (!m) return;
+  const ta = document.getElementById(`auto-msg-${_modelosTipoAtual}`);
+  if (ta) ta.value = m.msg;
+  _fecharModelosModal();
+  sbToast('ok', 'Modelo aplicado! Lembre de salvar as automações.');
+}
+
+function _usarVariacoesAuto() {
+  if (!_modelosTipoAtual) return;
+  const ta = document.getElementById(`auto-msg-${_modelosTipoAtual}`);
+  if (ta) ta.value = '';
+  _fecharModelosModal();
+  sbToast('ok', 'Variações automáticas ativadas! Lembre de salvar as automações.');
+}
+
 buildEmojiGrid();
 initSidebarState();
 requestNotifPermission();
