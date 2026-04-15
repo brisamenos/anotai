@@ -754,31 +754,42 @@ function setRelPeriodo(p, val = '') {
 }
 
 function _relGetRange() {
-  const now = new Date();
+  // Usa horário de Brasília (UTC-3) para calcular os ranges de data
+  const BR_OFFSET = 3 * 60 * 60 * 1000; // 3h em ms
+  const nowUTC = new Date();
+  // "Agora" em Brasília
+  const nowBR = new Date(nowUTC.getTime() - BR_OFFSET);
+  const anoB  = nowBR.getUTCFullYear();
+  const mesB  = nowBR.getUTCMonth();
+  const diaB  = nowBR.getUTCDate();
+  const diaSemB = nowBR.getUTCDay();
+
+  // Converte data Brasília para UTC (adiciona 3h de volta)
+  const brToUTC = (y, m, d) => new Date(Date.UTC(y, m, d) + BR_OFFSET);
+
   let inicio, fim, label;
   if (_relPeriodo === 'diario') {
-    inicio = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    fim    = new Date(inicio.getTime() + 86400000);
-    label  = 'Hoje, ' + inicio.toLocaleDateString('pt-BR', { day:'2-digit', month:'short' });
+    inicio = brToUTC(anoB, mesB, diaB);
+    fim    = brToUTC(anoB, mesB, diaB + 1);
+    label  = 'Hoje, ' + new Date(inicio.getTime() + BR_OFFSET).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', timeZone:'UTC' });
   } else if (_relPeriodo === 'semanal') {
-    const day = now.getDay();
-    inicio = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day);
-    fim    = new Date(inicio.getTime() + 7 * 86400000);
-    label  = inicio.toLocaleDateString('pt-BR', { day:'2-digit', month:'short' })
-             + ' – ' + new Date(fim - 1).toLocaleDateString('pt-BR', { day:'2-digit', month:'short' });
+    inicio = brToUTC(anoB, mesB, diaB - diaSemB);
+    fim    = brToUTC(anoB, mesB, diaB - diaSemB + 7);
+    label  = new Date(inicio.getTime() + BR_OFFSET).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', timeZone:'UTC' })
+             + ' – ' + new Date(fim.getTime() + BR_OFFSET - 1).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', timeZone:'UTC' });
   } else if (_relPeriodo === 'custom-month' && _relCustomMonth) {
     const [y, m] = _relCustomMonth.split('-');
-    inicio = new Date(parseInt(y), parseInt(m) - 1, 1);
-    fim    = new Date(parseInt(y), parseInt(m), 1);
-    label  = inicio.toLocaleDateString('pt-BR', { month:'long', year:'numeric' });
+    inicio = brToUTC(parseInt(y), parseInt(m) - 1, 1);
+    fim    = brToUTC(parseInt(y), parseInt(m), 1);
+    label  = new Date(inicio.getTime() + BR_OFFSET).toLocaleDateString('pt-BR', { month:'long', year:'numeric', timeZone:'UTC' });
   } else if (_relPeriodo === 'mensal') {
-    inicio = new Date(now.getFullYear(), now.getMonth(), 1);
-    fim    = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    label  = inicio.toLocaleDateString('pt-BR', { month:'long', year:'numeric' });
+    inicio = brToUTC(anoB, mesB, 1);
+    fim    = brToUTC(anoB, mesB + 1, 1);
+    label  = new Date(inicio.getTime() + BR_OFFSET).toLocaleDateString('pt-BR', { month:'long', year:'numeric', timeZone:'UTC' });
   } else {
-    inicio = new Date(now.getFullYear(), 0, 1);
-    fim    = new Date(now.getFullYear() + 1, 0, 1);
-    label  = String(now.getFullYear());
+    inicio = brToUTC(anoB, 0, 1);
+    fim    = brToUTC(anoB + 1, 0, 1);
+    label  = String(anoB);
   }
   return { inicio, fim, label };
 }
