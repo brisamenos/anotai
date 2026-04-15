@@ -427,15 +427,9 @@ function openOrderDetail(id) {
       : `<span>🌐 Pedido via Cardápio Digital</span>`;
   }
 
-  // Painel de adicionar produto — só açougue (não mesa)
+  // Botão de adicionar produto — só açougue (não mesa)
   const _addPanelBtn = document.getElementById('od-add-produto-btn');
-  const _addPanel    = document.getElementById('od-add-panel');
-  const _addSearch   = document.getElementById('od-add-search');
-  const _addResults  = document.getElementById('od-add-results');
   if (_addPanelBtn) _addPanelBtn.style.display = (window._segmento === 'acougue' && !o._isMesa) ? '' : 'none';
-  if (_addPanel)   _addPanel.style.display = 'none';
-  if (_addSearch)  _addSearch.value = '';
-  if (_addResults) _addResults.innerHTML = '';
 
   openModal('modal-order-detail');
 }
@@ -517,73 +511,161 @@ async function cancelarItemKanban(itemIndex) {
   }
 }
 
-// ── Painel de adicionar produto ao pedido açougue ──
-function toggleAddProdutoPanel() {
-  const panel  = document.getElementById('od-add-panel');
-  const search = document.getElementById('od-add-search');
-  if (!panel) return;
-  const isOpen = panel.style.display !== 'none';
-  panel.style.display = isOpen ? 'none' : '';
-  if (!isOpen && search) { search.value = ''; odBuscarProduto(''); search.focus(); }
-}
+// ── Catálogo de produtos para adicionar a pedido existente (açougue) ──
+let _odCatalogoActiveCat = '__todos__';
 
-function odBuscarProduto(q) {
-  const results = document.getElementById('od-add-results');
-  if (!results) return;
-  const lista = (window.allItems || []).filter(i =>
-    i.status !== 'pausado' && i.status !== 'esgotado' &&
-    (!q || i.name.toLowerCase().includes(q.toLowerCase()))
-  ).slice(0, 12);
-
-  if (!lista.length) {
-    results.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:8px 0">Nenhum produto encontrado.</div>`;
-    return;
-  }
-  results.innerHTML = lista.map(i => `
-    <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:border-color .15s"
-      onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'"
-      onclick="odAdicionarProduto(${i.id})">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i.name}</div>
-        ${i.description ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i.description}</div>` : ''}
-      </div>
-      <div style="font-size:12.5px;font-weight:700;color:var(--success);flex-shrink:0">R$ ${(parseFloat(i.price)||0).toFixed(2).replace('.',',')}</div>
-      <div style="width:26px;height:26px;border-radius:7px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.3);color:#4ade80;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</div>
-    </div>`).join('');
-}
-
-async function odAdicionarProduto(menuItemId) {
+function odAbrirCatalogo() {
   const o = window._detailKanbanOrder;
   if (!o) return;
-  const mi = (window.allItems || []).find(x => x.id === menuItemId);
-  if (!mi) return;
+  document.getElementById('od-catalog-overlay')?.remove();
 
-  const newItem = { qty: 1, name: mi.name, price: parseFloat(mi.price) || 0, obs: '' };
-  const items   = Array.isArray(o.items) ? [...o.items] : [];
-  // Se já existe o mesmo produto sem obs, incrementa qty
-  const existing = items.find(i => i.name === newItem.name && !i.obs);
-  if (existing) existing.qty = (existing.qty || 1) + 1;
-  else items.push(newItem);
+  const overlay = document.createElement('div');
+  overlay.id = 'od-catalog-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:99900;display:flex;flex-direction:column;align-items:stretch;backdrop-filter:blur(2px)';
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border-radius:20px 20px 0 0;margin-top:auto;width:100%;max-height:92vh;display:flex;flex-direction:column;overflow:hidden">
+      <div style="padding:12px 20px 0;flex-shrink:0">
+        <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 10px"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-weight:800;font-size:15px">Adicionar ao pedido #${o.num}</div>
+            <div style="font-size:11.5px;color:var(--muted);margin-top:2px">Selecione o produto e configure os complementos</div>
+          </div>
+          <button onclick="document.getElementById('od-catalog-overlay')?.remove()" style="border:none;background:var(--surface2);border-radius:50%;width:32px;height:32px;cursor:pointer;color:var(--muted);font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>
+        </div>
+        <div class="sbox" style="margin:10px 0 0">
+          <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <input id="od-cat-search" placeholder="Buscar produto..." style="background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);width:100%" oninput="_odRenderCatalogGrid()">
+        </div>
+        <div id="od-cat-pills" style="display:flex;gap:6px;overflow-x:auto;padding:10px 0;scrollbar-width:none;flex-shrink:0"></div>
+      </div>
+      <div id="od-cat-grid" style="overflow-y:auto;flex:1;padding:0 12px 20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;align-content:start"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  _odCatalogoActiveCat = '__todos__';
+  _odRenderCatalogCats();
+  _odRenderCatalogGrid();
+}
 
-  const newTotal = items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+function _odRenderCatalogCats() {
+  const el = document.getElementById('od-cat-pills');
+  if (!el) return;
+  const cats = ['Todos', ...new Set(items.filter(i => i.status === 'active').map(i => i.cat).filter(Boolean))];
+  el.innerHTML = cats.map(c => {
+    const k      = c === 'Todos' ? '__todos__' : c;
+    const active = _odCatalogoActiveCat === k;
+    return `<div onclick="_odSelectCat('${k.replace(/'/g,"\\'")}'); " style="padding:5px 13px;border-radius:20px;border:1.5px solid ${active ? 'var(--accent)' : 'var(--border)'};background:${active ? 'rgba(99,102,241,.12)' : 'var(--surface2)'};color:${active ? 'var(--accent)' : 'var(--muted)'};font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .15s">${c}</div>`;
+  }).join('');
+}
+
+function _odSelectCat(k) {
+  _odCatalogoActiveCat = k;
+  _odRenderCatalogCats();
+  _odRenderCatalogGrid();
+}
+
+function _odRenderCatalogGrid() {
+  const grid = document.getElementById('od-cat-grid');
+  if (!grid) return;
+  const q     = (document.getElementById('od-cat-search')?.value || '').toLowerCase();
+  const lista = items.filter(i => {
+    if (i.status !== 'active') return false;
+    if (_odCatalogoActiveCat !== '__todos__' && i.cat !== _odCatalogoActiveCat) return false;
+    if (q && !i.name.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  if (!lista.length) {
+    grid.style.display = 'block';
+    grid.innerHTML = `<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:13px">Nenhum produto encontrado</div>`;
+    return;
+  }
+  grid.style.display = 'grid';
+  grid.innerHTML = lista.map(i => {
+    const imgEl = i.imageUrl
+      ? `<div style="width:100%;aspect-ratio:1;border-radius:10px;overflow:hidden;margin-bottom:8px;background:var(--surface2)"><img src="${i.imageUrl}" style="width:100%;height:100%;object-fit:cover"></div>`
+      : `<div style="width:100%;aspect-ratio:1;border-radius:10px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:8px">${i.emoji || '🥩'}</div>`;
+    return `<div onclick="_odSelecionarProduto(${i.id})" style="background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:10px;cursor:pointer;transition:border-color .15s" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
+      ${imgEl}
+      <div style="font-size:12.5px;font-weight:700;margin-bottom:3px;line-height:1.3">${i.name}</div>
+      <div style="font-size:12px;color:var(--success);font-weight:700">R$ ${(parseFloat(i.price)||0).toFixed(2).replace('.',',')}${i.itemType==='kg'?' /kg':''}</div>
+    </div>`;
+  }).join('');
+}
+
+function _odSelecionarProduto(itemId) {
+  const it = items.find(i => i.id === itemId);
+  if (!it) return;
+  const grupos = (()=>{ try{ return Array.isArray(it.customGroups)?it.customGroups:JSON.parse(it.customGroups||'[]'); }catch{ return []; } })()
+    .filter(g => !['porcao_ref','kit_itens'].includes(g.tipo));
+  const isKg = it.itemType === 'kg' || it.item_type === 'kg';
+  // Abre o modal de configuração do PDV
+  _pdvbAbrirModalItem(it, grupos, isKg);
+  // Troca o botão confirmar para adicionar ao pedido existente (não ao pdvbCart)
+  setTimeout(() => {
+    const modal = document.getElementById('pdvb-modal-item-bg');
+    if (!modal) return;
+    const btn = modal.querySelector('button[onclick^="_pdvbConfirmar"]');
+    if (btn) {
+      btn.textContent = 'Adicionar ao pedido';
+      btn.setAttribute('onclick', `_odConfirmarItemExistente(${itemId})`);
+    }
+  }, 30);
+}
+
+async function _odConfirmarItemExistente(itemId) {
+  const modal = document.getElementById('pdvb-modal-item-bg');
+  if (!modal) return;
+  const o = window._detailKanbanOrder;
+  if (!o) { modal.remove(); return; }
+
+  const it   = modal._item;
+  const isKg = modal._isKg;
+  const qty  = window._pdvbQty || 1;
+
+  let extra = 0;
+  const opcsDesc = [];
+  modal.querySelectorAll('input:checked').forEach(inp => {
+    extra += parseFloat(inp.dataset.preco || 0);
+    if (inp.dataset.nome) opcsDesc.push(inp.dataset.nome);
+  });
+
+  let price    = parseFloat(it.price || 0) + extra;
+  let name     = it.name;
+  let obs      = modal.querySelector('#pdvb-obs-input')?.value?.trim() || '';
+  let finalQty = qty;
+  if (opcsDesc.length) obs = [opcsDesc.join(', '), obs].filter(Boolean).join(' | ');
+
+  if (isKg) {
+    const kg = parseFloat(modal.querySelector('#pdvb-kg-input')?.value || 1);
+    price    = price * kg;
+    name     = it.name + ' ' + kg.toFixed(3).replace('.', ',') + 'kg';
+    finalQty = 1;
+  }
+
+  const newItem      = { qty: finalQty, name, price, obs, emoji: it.emoji || '' };
+  const currentItems = Array.isArray(o.items) ? [...o.items] : [];
+  const existing     = !isKg && currentItems.find(c => c.name === name && (c.obs || '') === obs);
+  if (existing) existing.qty += finalQty;
+  else currentItems.push(newItem);
+
+  const newTotal = currentItems.reduce((s, i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
 
   try {
     const { error } = await sb.from('orders')
-      .update({ items, total: newTotal, updated_at: new Date().toISOString() })
+      .update({ items: currentItems, total: newTotal, updated_at: new Date().toISOString() })
       .eq('id', o.id);
     if (error) throw error;
     const idx = ordersKanban.findIndex(x => x.id === o.id);
     if (idx !== -1) {
-      ordersKanban[idx] = { ...ordersKanban[idx], items, total: newTotal };
+      ordersKanban[idx] = { ...ordersKanban[idx], items: currentItems, total: newTotal };
       window._detailKanbanOrder = ordersKanban[idx];
     }
-    // Fecha painel e reabre o detalhe atualizado
-    const panel = document.getElementById('od-add-panel');
-    if (panel) panel.style.display = 'none';
+    modal.remove();
+    document.getElementById('od-catalog-overlay')?.remove();
     closeModal('modal-order-detail');
     setTimeout(() => openOrderDetail(o.id), 80);
     renderKanban();
-    sbToast('ok', `${mi.name} adicionado ao pedido!`);
+    sbToast('ok', `${name} adicionado ao pedido!`);
   } catch(e) {
     alert('Erro ao adicionar item: ' + (e.message || e));
   }
