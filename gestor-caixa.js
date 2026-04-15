@@ -529,22 +529,94 @@ function _pdvbAbrirModalItem(it, grupos, isKg) {
   const gruposHtml = grupos.map((g, gi) => {
     const opcoes = g.opcoes || g.valores || [];
     if (!opcoes.length) return '';
-    const tipo = g.tipo || 'opcional';
-    const isSingle = ['radio','cortes','preparos','ocasiao','armazenamento','pesos','obrigatorio','sabor'].includes(tipo);
-    const isRequired = ['obrigatorio','sabor','cortes'].includes(tipo);
+    const tipo      = g.tipo || 'opcional';
+    const isSingle  = ['radio','cortes','preparos','ocasiao','armazenamento','pesos','obrigatorio','sabor'].includes(tipo);
+    const isRequired= ['obrigatorio','sabor','cortes'].includes(tipo);
     const inputType = isSingle ? 'radio' : 'checkbox';
-    const label = g.nome || g.name || _TIPO_LABEL[tipo] || 'Adicional';
+    const label     = g.nome || g.name || _TIPO_LABEL[tipo] || 'Adicional';
+
+    // Helper: ícone — URL vira <img>, emoji/texto vira <span>
+    const _iconEl = (src, size) => {
+      if (!src) return '';
+      const s = size || 28;
+      return (String(src).startsWith('http') || String(src).startsWith('/'))
+        ? `<img src="${src}" style="width:${s}px;height:${s}px;object-fit:contain;border-radius:5px;flex-shrink:0" onerror="this.style.display='none'">`
+        : `<span style="font-size:${Math.round(s*.7)}px;flex-shrink:0">${src}</span>`;
+    };
+
+    // Helper: nome seguro (cobre pesos numéricos → "Xg")
+    const _nomeSafe = op =>
+      op === null || op === undefined ? '' :
+      (op.nome || op.name || (typeof op === 'string' ? op : '') ||
+       (typeof op === 'number' ? (op >= 1000 ? (op/1000).toFixed(1).replace('.',',')+'kg' : op+'g') : ''));
+
+    // ── Cortes: grid de cards com imagem ─────────────────────────────
+    if (tipo === 'cortes') {
+      const cards = opcoes.map((op, oi) => {
+        const nome   = _nomeSafe(op);
+        const imgUrl = op.icon || op.image || op.img || op.image_url || '';
+        const imgEl  = (String(imgUrl).startsWith('http') || String(imgUrl).startsWith('/'))
+          ? `<img src="${imgUrl}" style="width:56px;height:48px;object-fit:contain;display:block" onerror="this.style.display='none'">`
+          : `<div style="width:56px;height:48px;display:flex;align-items:center;justify-content:center;font-size:26px">🥩</div>`;
+        return `<label style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 8px;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;cursor:pointer;text-align:center;min-width:80px;max-width:100px;transition:all .15s" onclick="pdvbToggleOpc(this)">
+          <input type="radio" name="pdvb-grp-${gi}" data-grp="${gi}" data-idx="${oi}" data-nome="${nome.replace(/"/g,'&quot;')}" data-preco="0" style="position:absolute;opacity:0;pointer-events:none">
+          ${imgEl}
+          <span style="font-size:11px;font-weight:600;line-height:1.2;color:var(--text)">${nome}</span>
+        </label>`;
+      }).join('');
+      return `<div style="margin-bottom:16px">
+        <div style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px">
+          ${label}${isRequired?' <span style="color:var(--danger);font-size:10px">*obrigatório</span>':''}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">${cards}</div>
+      </div>`;
+    }
+
+    // ── Preparos / Ocasião / Armazenamento: chips com ícone ──────────
+    if (['preparos','ocasiao','armazenamento'].includes(tipo)) {
+      const chips = opcoes.map((op, oi) => {
+        const nome = _nomeSafe(op);
+        const icon = _iconEl(op.icon || op.image || '', 28);
+        return `<label style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;cursor:pointer;text-align:center;min-width:64px;max-width:80px;transition:all .15s" onclick="pdvbToggleOpc(this)">
+          <input type="radio" name="pdvb-grp-${gi}" data-grp="${gi}" data-idx="${oi}" data-nome="${nome.replace(/"/g,'&quot;')}" data-preco="0" style="position:absolute;opacity:0;pointer-events:none">
+          <div style="width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center">${icon}</div>
+          <span style="font-size:10.5px;font-weight:600;line-height:1.2;color:var(--text)">${nome}</span>
+        </label>`;
+      }).join('');
+      return `<div style="margin-bottom:16px">
+        <div style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px">${label}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">${chips}</div>
+      </div>`;
+    }
+
+    // ── Pesos: botões de seleção rápida ──────────────────────────────
+    if (tipo === 'pesos') {
+      const btns = opcoes.map((op, oi) => {
+        const nome  = _nomeSafe(op);
+        const preco = parseFloat(op.preco || op.price || 0);
+        return `<label style="padding:8px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:9px;cursor:pointer;font-size:13px;font-weight:700;text-align:center;transition:all .15s;white-space:nowrap" onclick="pdvbToggleOpc(this)">
+          <input type="radio" name="pdvb-grp-${gi}" data-grp="${gi}" data-idx="${oi}" data-nome="${nome.replace(/"/g,'&quot;')}" data-preco="${preco}" style="position:absolute;opacity:0;pointer-events:none">
+          ${nome}${preco>0?`<span style="color:var(--success);font-size:10px;margin-left:4px">+R$ ${preco.toFixed(2).replace('.',',')}</span>`:''}
+        </label>`;
+      }).join('');
+      return `<div style="margin-bottom:16px">
+        <div style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px">${label}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">${btns}</div>
+      </div>`;
+    }
+
+    // ── Outros grupos (radio / checkbox padrão) ──────────────────────
     return `<div style="margin-bottom:16px">
       <div style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px">
         ${label}${isRequired?' <span style="color:var(--danger);font-size:10px">*obrigatório</span>':''}
       </div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${opcoes.map((op,oi)=>{
-          const nome  = op.nome||op.name||(typeof op==='string'?op:'');
-          const preco = parseFloat(op.preco||op.price||0);
-          const icon  = op.icon?`<span style="font-size:16px">${op.icon}</span>`:'';
+          const nome   = _nomeSafe(op);
+          const preco  = parseFloat(op.preco||op.price||0);
+          const icon   = _iconEl(op.icon || op.image || '', 22);
           const pLabel = preco>0?` <span style="color:var(--success);font-size:11px">+R$ ${preco.toFixed(2).replace('.',',')}</span>`:'';
-          return `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:9px;cursor:pointer" onclick="pdvbToggleOpc(this)">
+          return `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:9px;cursor:pointer;transition:all .15s" onclick="pdvbToggleOpc(this)">
             <input type="${inputType}" name="pdvb-grp-${gi}" data-grp="${gi}" data-idx="${oi}" data-nome="${(nome+'').replace(/"/g,'&quot;')}" data-preco="${preco}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
             ${icon}<span style="font-size:13px;font-weight:500;flex:1">${nome}${pLabel}</span>
           </label>`;
@@ -610,13 +682,18 @@ function pdvbToggleOpc(label) {
   const inp = label.querySelector('input');
   if (!inp) return;
   if (inp.type === 'radio') {
+    // Desmarca todos do grupo
     document.querySelectorAll(`input[name="${inp.name}"]`).forEach(r => {
+      r.checked = false;
       r.closest('label').style.borderColor = 'var(--border)';
       r.closest('label').style.background  = 'var(--surface2)';
     });
+    // Marca este
+    inp.checked = true;
     label.style.borderColor = 'var(--accent)';
     label.style.background  = 'rgba(var(--accent-rgb,249,115,22),.08)';
   } else {
+    inp.checked = !inp.checked;
     if (inp.checked) {
       label.style.borderColor = 'var(--accent)';
       label.style.background  = 'rgba(var(--accent-rgb,249,115,22),.08)';
