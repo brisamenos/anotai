@@ -1005,7 +1005,7 @@ Seu pedido está sendo preparado. Obrigado! 🎉</textarea>
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(139,92,246,.15);display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M5 2h6v6a3 3 0 0 1-6 0V2z" stroke="currentColor" stroke-width="1.4"/><path d="M2 2h3M11 2h3M2 5H5M11 5h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 8v4M5.5 14h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
               <div><div style="font-weight:600;font-size:13.5px">Pedido Recebido</div><div style="font-size:11.5px;color:var(--muted)">Enviado automaticamente assim que o cliente finaliza o pedido</div></div>
             </div>
-            <div class="toggle on" id="auto-toggle-recebido" onclick="this.classList.toggle('on')"></div>
+            <div style="display:flex;align-items:center;gap:8px"><button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="abrirModelosModal('recebido')">📋 Modelos</button><div class="toggle on" id="auto-toggle-recebido" onclick="this.classList.toggle('on')"></div></div>
           </div>
           <textarea class="form-input" id="auto-msg-recebido" rows="4" style="font-size:12.5px">📥 Olá {nome}! Recebemos seu pedido #{id} com sucesso! 🎉
 🛒 {itens}
@@ -1020,7 +1020,7 @@ Seu pedido está sendo preparado. Obrigado! 🎉</textarea>
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(59,130,246,.15);display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
               <div><div style="font-weight:600;font-size:13.5px">Pedido Confirmado</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando o pedido passa para "Em produção"</div></div>
             </div>
-            <div class="toggle on" id="auto-toggle-confirmado" onclick="this.classList.toggle('on')"></div>
+            <div style="display:flex;align-items:center;gap:8px"><button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="abrirModelosModal('confirmado')">📋 Modelos</button><div class="toggle on" id="auto-toggle-confirmado" onclick="this.classList.toggle('on')"></div></div>
           </div>
           <textarea class="form-input" id="auto-msg-confirmado" rows="3" style="font-size:12.5px">✅ Olá {nome}! Seu pedido #{id} foi confirmado e está sendo preparado com carinho! 🍕
 Itens: {itens}
@@ -1035,7 +1035,7 @@ Tempo estimado: 30-40 min ⏱️</textarea>
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(34,197,94,.15);display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="3" y="2" width="10" height="13" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M6 6h4M6 9h3M6 12h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
               <div><div style="font-weight:600;font-size:13.5px">Pedido Pronto</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando o pedido está pronto para retirada ou saiu para entrega</div></div>
             </div>
-            <div class="toggle on" id="auto-toggle-pronto" onclick="this.classList.toggle('on')"></div>
+            <div style="display:flex;align-items:center;gap:8px"><button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="abrirModelosModal('pronto')">📋 Modelos</button><div class="toggle on" id="auto-toggle-pronto" onclick="this.classList.toggle('on')"></div></div>
           </div>
           <textarea class="form-input" id="auto-msg-pronto" rows="3" style="font-size:12.5px">🛎️ {nome}, seu pedido #{id} está PRONTO!
 {tipo_entrega}
@@ -1049,7 +1049,7 @@ Qualquer dúvida, estamos aqui! 😊</textarea>
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(249,115,22,.15);display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/></svg></div>
               <div><div style="font-weight:600;font-size:13.5px">Saiu para Entrega</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando o pedido delivery saiu para entrega</div></div>
             </div>
-            <div class="toggle on" id="auto-toggle-entrega" onclick="this.classList.toggle('on')"></div>
+            <div style="display:flex;align-items:center;gap:8px"><button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="abrirModelosModal('entrega')">📋 Modelos</button><div class="toggle on" id="auto-toggle-entrega" onclick="this.classList.toggle('on')"></div></div>
           </div>
           <textarea class="form-input" id="auto-msg-entrega" rows="3" style="font-size:12.5px">🛵 {nome}, seu pedido #{id} saiu para entrega!
 Endereço: {endereco}
@@ -1063,7 +1063,7 @@ Nosso entregador está a caminho! 🏍️💨</textarea>
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(239,68,68,.15);display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
               <div><div style="font-weight:600;font-size:13.5px">Pedido Cancelado</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando um pedido é cancelado</div></div>
             </div>
-            <div class="toggle" id="auto-toggle-cancelado" onclick="this.classList.toggle('on')"></div>
+            <div style="display:flex;align-items:center;gap:8px"><button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="abrirModelosModal('cancelado')">📋 Modelos</button><div class="toggle" id="auto-toggle-cancelado" onclick="this.classList.toggle('on')"></div></div>
           </div>
           <textarea class="form-input" id="auto-msg-cancelado" rows="2" style="font-size:12.5px">😔 {nome}, infelizmente seu pedido #{id} foi cancelado. Entre em contato conosco para mais informações.</textarea>
         </div>
@@ -1078,7 +1078,7 @@ Nosso entregador está a caminho! 🏍️💨</textarea>
                 <div style="font-size:11.5px;color:var(--muted)">Verificado todo dia e enviado automaticamente para quem faz aniversário</div>
               </div>
             </div>
-            <div class="toggle on" id="auto-toggle-aniversario" onclick="this.classList.toggle('on')"></div>
+            <div style="display:flex;align-items:center;gap:8px"><button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="abrirModelosModal('aniversario')">📋 Modelos</button><div class="toggle on" id="auto-toggle-aniversario" onclick="this.classList.toggle('on')"></div></div>
           </div>
           <textarea class="form-input" id="auto-msg-aniversario" rows="5" style="font-size:12.5px">🎉 Feliz aniversário, {nome}! 🥳
 Que seu dia seja incrível e cheio de coisas boas!
@@ -1105,7 +1105,7 @@ Desejamos tudo de melhor pra você! 🎂❤️</textarea>
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(6,182,212,.15);display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2v3M8 11v3M2 8h3M11 8h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M4.5 4.5l2 2M9.5 9.5l2 2M4.5 11.5l2-2M9.5 6.5l2-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
               <div><div style="font-weight:600;font-size:13.5px">Boas-vindas — Primeiro Pedido</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando o cliente faz o 1º pedido no sistema</div></div>
             </div>
-            <div class="toggle on" id="auto-toggle-boasvindas" onclick="this.classList.toggle('on')"></div>
+            <div style="display:flex;align-items:center;gap:8px"><button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="abrirModelosModal('boasvindas')">📋 Modelos</button><div class="toggle on" id="auto-toggle-boasvindas" onclick="this.classList.toggle('on')"></div></div>
           </div>
           <textarea class="form-input" id="auto-msg-boasvindas" rows="3" style="font-size:12.5px">👋 Olá {nome}, seja muito bem-vindo(a) à Estima Food! 🍕
 Ficamos felizes com seu primeiro pedido!
@@ -1122,7 +1122,7 @@ Em caso de dúvidas, é só chamar aqui. 😊</textarea>
                 <div style="font-size:11.5px;color:var(--muted)">Enviado pelo servidor após o pedido ser <strong>Finalizado</strong> no kanban</div>
               </div>
             </div>
-            <div class="toggle" id="auto-toggle-avaliacao" onclick="this.classList.toggle('on')" title="Ativar/Desativar automação de avaliação"></div>
+            <div style="display:flex;align-items:center;gap:8px"><button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="abrirModelosModal('avaliacao')">📋 Modelos</button><div class="toggle" id="auto-toggle-avaliacao" onclick="this.classList.toggle('on')" title="Ativar/Desativar automação de avaliação"></div></div>
           </div>
           <textarea class="form-input" id="auto-msg-avaliacao" rows="4" style="font-size:12.5px">⭐ {nome}, esperamos que tenha curtido seu pedido #{id}!
 Conta pra gente como foi — sua opinião é muito importante para nós!
@@ -1149,7 +1149,7 @@ Avalie agora: {link_avaliacao}</textarea>
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(236,72,153,.15);display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M5 2h6v6a3 3 0 0 1-6 0V2z" stroke="currentColor" stroke-width="1.4"/><path d="M2 2h3M11 2h3M2 5H5M11 5h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 8v4M5.5 14h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
               <div><div style="font-weight:600;font-size:13.5px">Retorno de Cliente</div><div style="font-size:11.5px;color:var(--muted)">Enviado manualmente para clientes que não pedem há dias</div></div>
             </div>
-            <div class="toggle" id="auto-toggle-retorno" onclick="this.classList.toggle('on')"></div>
+            <div style="display:flex;align-items:center;gap:8px"><button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="abrirModelosModal('retorno')">📋 Modelos</button><div class="toggle" id="auto-toggle-retorno" onclick="this.classList.toggle('on')"></div></div>
           </div>
           <textarea class="form-input" id="auto-msg-retorno" rows="3" style="font-size:12.5px">😋 {nome}, sentimos sua falta aqui na Estima Food!
 Que tal pedir hoje? Temos novidades no cardápio te esperando!
@@ -5337,6 +5337,23 @@ document.addEventListener('DOMContentLoaded', () => {
   _updateUsbStatus();
 });
 </script>
+
+<!-- ══ Modal de Modelos de Mensagem ══ -->
+<div id="auto-modelos-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9900;align-items:flex-end;justify-content:center;backdrop-filter:blur(3px)" onclick="if(event.target===this)_fecharModelosModal()">
+  <div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:540px;max-height:82vh;display:flex;flex-direction:column">
+    <div style="padding:12px 20px 0;flex-shrink:0">
+      <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div>
+    </div>
+    <div style="padding:14px 20px 12px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div id="auto-modelos-titulo" style="font-weight:800;font-size:15px"></div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:2px">Clique em um modelo para usar · depois salve as automações</div>
+      </div>
+      <button onclick="_fecharModelosModal()" style="border:none;background:var(--surface2);border-radius:50%;width:32px;height:32px;cursor:pointer;color:var(--muted);font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>
+    </div>
+    <div id="auto-modelos-lista" style="overflow-y:auto;flex:1;padding:14px 20px;display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+</div>
 
 </body>
 </html>
