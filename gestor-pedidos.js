@@ -290,6 +290,7 @@ function openOrderDetail(id) {
   }
   if (!o) return;
   window._currentDetailId = id;
+  window._detailKanbanOrder = o._isMesa ? null : o;
 
   // Número e status
   document.getElementById('od-id').textContent = 'Pedido #' + o.num;
@@ -312,7 +313,8 @@ function openOrderDetail(id) {
 
   // Itens
   const _oItems = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? (() => { try { return JSON.parse(o.items); } catch { return []; } })() : []);
-  const _isMesaDetalhe = !!o._isMesa;
+  const _isMesaDetalhe  = !!o._isMesa;
+  const _isAcougueDetalhe = window._segmento === 'acougue' && !_isMesaDetalhe;
   document.getElementById('od-items-list').innerHTML = _oItems.map((item, _i) => `
     <div class="od-item-row" style="align-items:center">
       <div class="od-item-qty">${item.qty}x</div>
@@ -323,7 +325,8 @@ function openOrderDetail(id) {
       </div>
       <div style="display:flex;align-items:center;gap:6px">
         <div class="od-item-price">R$&nbsp;${(item.price).toFixed(2).replace('.', ',')}</div>
-        ${_isMesaDetalhe ? `<button onclick="cancelarItemComanda(${item._origIndex ?? _i})" title="Cancelar item" style="width:22px;height:22px;border-radius:6px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.1);color:#f87171;font-size:13px;line-height:1;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0">✕</button>` : ''}
+        ${_isMesaDetalhe  ? `<button onclick="cancelarItemComanda(${item._origIndex ?? _i})"  title="Cancelar item" style="width:22px;height:22px;border-radius:6px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.1);color:#f87171;font-size:13px;line-height:1;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0">✕</button>` : ''}
+        ${_isAcougueDetalhe ? `<button onclick="cancelarItemKanban(${_i})" title="Remover item" style="width:22px;height:22px;border-radius:6px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.1);color:#f87171;font-size:13px;line-height:1;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0">✕</button>` : ''}
       </div>
     </div>`).join('');
 
@@ -424,6 +427,16 @@ function openOrderDetail(id) {
       : `<span>🌐 Pedido via Cardápio Digital</span>`;
   }
 
+  // Painel de adicionar produto — só açougue (não mesa)
+  const _addPanelBtn = document.getElementById('od-add-produto-btn');
+  const _addPanel    = document.getElementById('od-add-panel');
+  const _addSearch   = document.getElementById('od-add-search');
+  const _addResults  = document.getElementById('od-add-results');
+  if (_addPanelBtn) _addPanelBtn.style.display = (window._segmento === 'acougue' && !o._isMesa) ? '' : 'none';
+  if (_addPanel)   _addPanel.style.display = 'none';
+  if (_addSearch)  _addSearch.value = '';
+  if (_addResults) _addResults.innerHTML = '';
+
   openModal('modal-order-detail');
 }
 
@@ -470,6 +483,110 @@ function advanceOrder() {
   const id = window._currentDetailId;
   advanceOrderById(id);
   closeModal('modal-order-detail');
+}
+
+// ── Cancelar item individual em pedido açougue (kanban) ──
+async function cancelarItemKanban(itemIndex) {
+  const o = window._detailKanbanOrder;
+  if (!o) return;
+  const items = Array.isArray(o.items) ? [...o.items] : [];
+  const item  = items[itemIndex];
+  if (!item) return;
+  if (!confirm(`Remover ${item.qty}x ${item.name} do pedido?`)) return;
+
+  const newItems = items.filter((_, i) => i !== itemIndex);
+  const newTotal = newItems.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+
+  try {
+    const { error } = await sb.from('orders')
+      .update({ items: newItems, total: newTotal, updated_at: new Date().toISOString() })
+      .eq('id', o.id);
+    if (error) throw error;
+    // Atualiza cache local
+    const idx = ordersKanban.findIndex(x => x.id === o.id);
+    if (idx !== -1) {
+      ordersKanban[idx] = { ...ordersKanban[idx], items: newItems, total: newTotal };
+      window._detailKanbanOrder = ordersKanban[idx];
+    }
+    closeModal('modal-order-detail');
+    setTimeout(() => openOrderDetail(o.id), 80);
+    renderKanban();
+    sbToast('ok', `${item.qty}x ${item.name} removido!`);
+  } catch(e) {
+    alert('Erro ao remover item: ' + (e.message || e));
+  }
+}
+
+// ── Painel de adicionar produto ao pedido açougue ──
+function toggleAddProdutoPanel() {
+  const panel  = document.getElementById('od-add-panel');
+  const search = document.getElementById('od-add-search');
+  if (!panel) return;
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : '';
+  if (!isOpen && search) { search.value = ''; odBuscarProduto(''); search.focus(); }
+}
+
+function odBuscarProduto(q) {
+  const results = document.getElementById('od-add-results');
+  if (!results) return;
+  const lista = (window.allItems || []).filter(i =>
+    i.status !== 'pausado' && i.status !== 'esgotado' &&
+    (!q || i.name.toLowerCase().includes(q.toLowerCase()))
+  ).slice(0, 12);
+
+  if (!lista.length) {
+    results.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:8px 0">Nenhum produto encontrado.</div>`;
+    return;
+  }
+  results.innerHTML = lista.map(i => `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:border-color .15s"
+      onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'"
+      onclick="odAdicionarProduto(${i.id})">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i.name}</div>
+        ${i.description ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i.description}</div>` : ''}
+      </div>
+      <div style="font-size:12.5px;font-weight:700;color:var(--success);flex-shrink:0">R$ ${(parseFloat(i.price)||0).toFixed(2).replace('.',',')}</div>
+      <div style="width:26px;height:26px;border-radius:7px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.3);color:#4ade80;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</div>
+    </div>`).join('');
+}
+
+async function odAdicionarProduto(menuItemId) {
+  const o = window._detailKanbanOrder;
+  if (!o) return;
+  const mi = (window.allItems || []).find(x => x.id === menuItemId);
+  if (!mi) return;
+
+  const newItem = { qty: 1, name: mi.name, price: parseFloat(mi.price) || 0, obs: '' };
+  const items   = Array.isArray(o.items) ? [...o.items] : [];
+  // Se já existe o mesmo produto sem obs, incrementa qty
+  const existing = items.find(i => i.name === newItem.name && !i.obs);
+  if (existing) existing.qty = (existing.qty || 1) + 1;
+  else items.push(newItem);
+
+  const newTotal = items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+
+  try {
+    const { error } = await sb.from('orders')
+      .update({ items, total: newTotal, updated_at: new Date().toISOString() })
+      .eq('id', o.id);
+    if (error) throw error;
+    const idx = ordersKanban.findIndex(x => x.id === o.id);
+    if (idx !== -1) {
+      ordersKanban[idx] = { ...ordersKanban[idx], items, total: newTotal };
+      window._detailKanbanOrder = ordersKanban[idx];
+    }
+    // Fecha painel e reabre o detalhe atualizado
+    const panel = document.getElementById('od-add-panel');
+    if (panel) panel.style.display = 'none';
+    closeModal('modal-order-detail');
+    setTimeout(() => openOrderDetail(o.id), 80);
+    renderKanban();
+    sbToast('ok', `${mi.name} adicionado ao pedido!`);
+  } catch(e) {
+    alert('Erro ao adicionar item: ' + (e.message || e));
+  }
 }
 
 function cancelarPedidoDetalhe() {
