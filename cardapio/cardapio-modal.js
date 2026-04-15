@@ -1062,6 +1062,15 @@ function imConfirm() {
     return;
   }
 
+  // ── Kit: monta descrição com todos os itens do kit ──
+  if (_isKitItem(i)) {
+    const _kitGrp = (i.custom_groups || []).find(g => g.tipo === 'kit_itens');
+    if (_kitGrp?.itens?.length) {
+      const _kitDesc = 'Kit: ' + _kitGrp.itens.join(' · ');
+      cartObs = [_kitDesc, cartObs].filter(Boolean).join(' | ');
+    }
+  }
+
   // Grupos: add description and extra price
   const gruposDesc  = _buildGruposDesc(i);
   const gruposExtra = _calcGruposExtra(i);
