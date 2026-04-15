@@ -2871,28 +2871,13 @@ Use no seu próximo pedido 🛍️</textarea>
     <!-- Origem -->
     <div id="od-origem-row" style="margin-top:10px;font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:6px"></div>
 
-    <!-- Painel adicionar produto (açougue) -->
-    <div id="od-add-panel" style="display:none;margin-top:10px;border:1.5px solid rgba(34,197,94,.25);border-radius:10px;overflow:hidden">
-      <div style="padding:9px 14px;background:rgba(34,197,94,.08);display:flex;align-items:center;justify-content:space-between">
-        <span style="font-size:12px;font-weight:700;color:#16a34a">➕ Adicionar produto ao pedido</span>
-        <button onclick="toggleAddProdutoPanel()" style="border:none;background:none;color:var(--muted);font-size:16px;cursor:pointer;line-height:1;padding:0 2px">✕</button>
-      </div>
-      <div style="padding:10px 12px">
-        <div class="sbox" style="margin-bottom:8px">
-          <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-          <input id="od-add-search" placeholder="Buscar produto..." style="background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text);width:100%" oninput="odBuscarProduto(this.value)">
-        </div>
-        <div id="od-add-results" style="display:flex;flex-direction:column;gap:6px;max-height:190px;overflow-y:auto"></div>
-      </div>
-    </div>
-
     <!-- Ações -->
     <div style="display:flex;gap:8px;margin-top:14px">
       <button class="btn bd" style="flex:1;justify-content:center" onclick="cancelarPedidoDetalhe()">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         Cancelar pedido
       </button>
-      <button id="od-add-produto-btn" class="btn bg" style="flex:1;justify-content:center;display:none" onclick="toggleAddProdutoPanel()">
+      <button id="od-add-produto-btn" class="btn bg" style="flex:1;justify-content:center;display:none" onclick="odAbrirCatalogo()">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         Adicionar produto
       </button>
