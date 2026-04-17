@@ -3378,11 +3378,22 @@ function salvarImpressora() {
   if (_editImpIdx >= 0) _impressoras[_editImpIdx] = { ..._impressoras[_editImpIdx], ...obj };
   else _impressoras.push(obj);
   _saveImpressoras();
-  // Atualiza impressora principal no Electron
+
+  // Sincroniza formato do papel e impressora globalmente
+  const pw = largura <= 32 ? 58 : 80;
+  const fmt = largura <= 32 ? '58mm' : '80mm';
+  _printFormat = fmt;
+  localStorage.setItem('printFormat', fmt);
+  const fmtSel = document.getElementById('print-format-select');
+  if (fmtSel) fmtSel.value = fmt;
+
   if (isElectron && printerName) {
     _printPrinter = printerName;
     localStorage.setItem('printPrinter', printerName);
-    window.ElectronPrint.saveConfig({ printer: printerName, paperWidth: largura <= 32 ? 58 : 80 }).catch(() => {});
+    window.ElectronPrint.saveConfig({ printer: printerName, paperWidth: pw, printFormat: fmt }).catch(() => {});
+  } else if (printerName) {
+    _printPrinter = printerName;
+    localStorage.setItem('printPrinter', printerName);
   }
   closeModal('modal-impressora');
   _loadImpressoras(); _loadModelos(); renderPrintPreview();
