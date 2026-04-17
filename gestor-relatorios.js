@@ -2541,7 +2541,7 @@ async function loadPrinters() {
 
     // Electron: busca impressoras do Windows diretamente
     if (window.ElectronPrint) {
-      const cfg = await window.ElectronPrint.getPrintConfig();
+      const cfg = await window.ElectronPrint.getConfig();
       printers       = cfg.printers || [];
       defaultPrinter = cfg.printer || '';
       // Restaura impressoras salvas no Electron
@@ -3076,7 +3076,7 @@ async function salvarConfigImpressao() {
 
   // Salva no Electron se disponível — inclui impressoras para persistência local
   if (window.ElectronPrint) {
-    await window.ElectronPrint.savePrintConfig({
+    await window.ElectronPrint.saveConfig({
       nome:            cfg.nome,
       sub:             cfg.sub,
       rodape:          cfg.rodape,
