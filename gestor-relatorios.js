@@ -2325,6 +2325,15 @@ async function loadPrintConfigServer() {
       _printRodape = cfg.printRodape; localStorage.setItem('printRodape', cfg.printRodape);
       const el = document.getElementById('print-rodape'); if (el) el.value = cfg.printRodape;
     }
+    // Restaura impressoras e modelos do servidor
+    if (Array.isArray(cfg.impressoras) && cfg.impressoras.length) {
+      _impressoras = cfg.impressoras;
+      _saveImpressoras();
+    }
+    if (Array.isArray(cfg.modelos) && cfg.modelos.length) {
+      _modelos = cfg.modelos;
+      _saveModelos();
+    }
   } catch {}
 }
 
@@ -2345,17 +2354,19 @@ function setPrintMode(mode) {
 }
 
 function _getPrintConfig() {
-  const fs = parseInt(document.getElementById('print-font-size')?.value || _printFontSize);
-  if (!isNaN(fs)) { _printFontSize = fs; localStorage.setItem('printFontSize', fs); }
-  // Usa campo DOM se preenchido, senão usa variável carregada do servidor
-  const nome   = (document.getElementById('print-nome')?.value   || _printNome   || 'RESTAURANTE').toUpperCase();
-  const sub    =  document.getElementById('print-sub')?.value    || _printSub    || '';
-  const rodape =  document.getElementById('print-rodape')?.value || _printRodape || 'Obrigado!';
+  const fs = _printFontSize || parseInt(document.getElementById('print-font-size')?.value) || 12;
+  // Prioriza variáveis em memória (carregadas do servidor), DOM como fallback
+  const nomeDOM = document.getElementById('print-nome')?.value;
+  const nome   = (_printNome || (nomeDOM && nomeDOM !== '' ? nomeDOM : null) || 'RESTAURANTE').toUpperCase();
+  const subDOM = document.getElementById('print-sub')?.value;
+  const sub    = _printSub || (subDOM && subDOM !== '' ? subDOM : '') || '';
+  const rodDOM = document.getElementById('print-rodape')?.value;
+  const rodape = _printRodape || (rodDOM && rodDOM !== '' ? rodDOM : '') || 'Obrigado!';
   return {
     nome, sub, rodape,
     addr:      document.getElementById('toggle-print-addr')?.classList.contains('on') ?? true,
     pag:       document.getElementById('toggle-print-pag')?.classList.contains('on')  ?? true,
-    fontSize:  fs || 12,
+    fontSize:  fs,
   };
 }
 
@@ -3001,43 +3012,20 @@ function printOrderById(id) {
 
 let _renderImpressaoLoaded = false;
 function renderImpressao(skipServerLoad) {
-  const p = document.getElementById('print-preview');
-  if (!p) return;
-  const slider = document.getElementById('print-font-size');
-  const valEl  = document.getElementById('print-font-size-val');
-
-  if (!skipServerLoad && !_renderImpressaoLoaded) {
-    // Primeira abertura: restaura selects e carrega do servidor
-    const tgtSel = document.getElementById('print-target-select');
-    if (tgtSel) tgtSel.value = _printTarget;
-    const fmtSel = document.getElementById('print-format-select');
-    if (fmtSel) fmtSel.value = _printFormat || '80mm';
-    const viaSel = document.getElementById('print-via-mode-select');
-    if (viaSel) viaSel.value = _printViaMode || 'combinado';
-    const cozWrap = document.getElementById('print-cozinha-wrap');
-    if (cozWrap) cozWrap.style.display = _printViaMode === 'separado' ? '' : 'none';
-    setPrintMode(_printMode);
-    loadPrinters();
-    _updateUsbStatus();
+  if (!_renderImpressaoLoaded && !skipServerLoad) {
+    _renderImpressaoLoaded = true;
     loadPrintConfigServer().then(() => {
-      _renderImpressaoLoaded = true;
-      if (slider) { slider.value = _printFontSize; }
-      if (valEl)  { valEl.textContent = _printFontSize; }
-      const fmtSel2 = document.getElementById('print-format-select');
-      if (fmtSel2) fmtSel2.value = _printFormat || '80mm';
-      const cfg = _getPrintConfig();
-      const ex = { id:99, client:'João Silva', addr:'Mesa 3', mesa_num:3, pag:'PIX', taxa:0,
-        items:[{qty:1,name:'Pizza Calabreza',price:50},{qty:2,name:'Coca Cola 2L',price:14}] };
-      const _ticket = _buildTicketHtml(ex, cfg); p.innerHTML = _printViaMode === 'somente_principal' ? _ticket.principal : _printViaMode === 'separado' ? _ticket.combined : _ticket.singleSheet;
+      _loadImpressoras();
+      _loadModelos();
+      setPrintModeNew(_printMode);
     });
+    _loadImpressoras();
+    _loadModelos();
+    setPrintModeNew(_printMode);
     return;
   }
-
-  // Chamado via oninput do slider: apenas atualiza preview sem sobrescrever o slider
-  const cfg = _getPrintConfig();
-  const ex = { id:99, client:'João Silva', addr:'Mesa 3', mesa_num:3, pag:'PIX', taxa:0,
-    items:[{qty:1,name:'Pizza Calabreza',price:50},{qty:2,name:'Coca Cola 2L',price:14}] };
-  const _ticket = _buildTicketHtml(ex, cfg); p.innerHTML = _printViaMode === 'somente_principal' ? _ticket.principal : _printViaMode === 'separado' ? _ticket.combined : _ticket.singleSheet;
+  _loadImpressoras();
+  _loadModelos();
 }
 
 // Atualiza indicador visual do status USB na tela de config
@@ -3065,7 +3053,7 @@ function _updateUsbStatus() {
 // ── Salva config no servidor (sincroniza entre dispositivos) ──
 async function salvarConfigImpressao() {
   const cfg = _getPrintConfig()
-  const fmt = document.getElementById('print-format-select')?.value || _printFormat || '80mm'
+  const fmt = _printFormat || '80mm'
   const payload = {
     printMode:     _printMode,
     printFormat:   fmt,
@@ -3077,6 +3065,8 @@ async function salvarConfigImpressao() {
     printPrinterCozinha: _printPrinterCozinha,
     printer_caixa:       _printPrinter,
     printer_cozinha:     _printPrinterCozinha,
+    impressoras:         _impressoras,
+    modelos:             _modelos,
   }
   // Salva localmente
   localStorage.setItem('printFormat', fmt); _printFormat = fmt;
@@ -3118,10 +3108,315 @@ async function salvarConfigImpressao() {
 }
 
 async function testPrint() {
-  const ex = { id:99, client:'TESTE IMPRESSÃO', addr:'Balcão', mesa_num:null, pag:'PIX', taxa:5,
+  const ex = { id:99, client:'TESTE IMPRESSÃO', addr:'Balcão', mesa_num:null, pag:'PIX', taxa:5, total:23,
     items:[{qty:1,name:'X-Salada',price:18},{qty:1,name:'Batata Frita',price:10}] };
   await printOrder(ex);
   sbToast('ok', 'Enviando para impressora...');
 }
 
-// ─────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+//  SISTEMA DE IMPRESSORAS E MODELOS (estilo Anota AI)
+// ══════════════════════════════════════════════════════════════
+
+let _impressoras = JSON.parse(localStorage.getItem('anotai_impressoras') || '[]');
+let _modelos = JSON.parse(localStorage.getItem('anotai_modelos') || '[]');
+let _editImpIdx = -1;
+let _editModIdx = -1;
+
+const _MODELOS_PADRAO = [
+  { id:'pedidos_gerais',    nome:'Pedidos gerais',                     sistema:true, ativo:true },
+  { id:'cozinha',           nome:'Cozinha',                            sistema:true, ativo:false },
+  { id:'conferencia_mesa',  nome:'Conferência e fechamento de mesa',   sistema:true, ativo:true },
+  { id:'pix_qrcode',        nome:'PIX - QR Code de pagamento',        sistema:true, ativo:true },
+  { id:'mov_caixa',         nome:'Demonstrativo de movimento do caixa',sistema:true, ativo:true },
+  { id:'fech_caixa',        nome:'Demonstrativo de fechamento do caixa',sistema:true,ativo:true },
+];
+
+function _initModelos() {
+  if (!_modelos.length) {
+    _modelos = _MODELOS_PADRAO.map(m => ({
+      ...m,
+      impressora_idx: 0,
+      apelido: '',
+      largura: 32,
+      nome_estab: _printNome || 'RESTAURANTE',
+      sub: _printSub || '',
+      rodape: _printRodape || 'Obrigado!',
+      fontSize: _printFontSize || 12,
+      showAddr: true,
+      showPag: true,
+    }));
+    _saveModelos();
+  }
+}
+
+function _saveImpressoras() { localStorage.setItem('anotai_impressoras', JSON.stringify(_impressoras)); }
+function _saveModelos()     { localStorage.setItem('anotai_modelos', JSON.stringify(_modelos)); }
+
+function setPrintModeNew(mode) {
+  _printMode = mode;
+  window._printMode = mode;
+  localStorage.setItem('printMode', mode);
+  const isAuto = mode === 'auto';
+  const ba = document.getElementById('btn-mode-auto');
+  const bm = document.getElementById('btn-mode-manual');
+  if (ba) { ba.className = isAuto ? 'btn bp' : 'btn'; }
+  if (bm) { bm.className = !isAuto ? 'btn bp' : 'btn'; }
+  const desc = document.getElementById('print-mode-desc');
+  if (desc) desc.textContent = isAuto ? 'Imprime sozinho quando chega pedido' : 'Botão 🖨️ aparece em cada pedido no kanban';
+  sbToast('ok', isAuto ? 'Impressão automática ativada' : 'Impressão manual ativada');
+}
+
+// ── Abas ──────────────────────────────────────────────────────
+function switchPrintTab(n) {
+  document.getElementById('print-panel-1').style.display = n === 1 ? '' : 'none';
+  document.getElementById('print-panel-2').style.display = n === 2 ? '' : 'none';
+  const t1 = document.getElementById('print-tab-1');
+  const t2 = document.getElementById('print-tab-2');
+  t1.style.borderLeftColor = n === 1 ? 'var(--accent)' : 'transparent';
+  t1.style.fontWeight = n === 1 ? '700' : '600';
+  t1.style.color = n === 1 ? 'var(--text)' : 'var(--muted)';
+  t2.style.borderLeftColor = n === 2 ? 'var(--accent)' : 'transparent';
+  t2.style.fontWeight = n === 2 ? '700' : '600';
+  t2.style.color = n === 2 ? 'var(--text)' : 'var(--muted)';
+}
+
+// ── ABA 1: IMPRESSORAS ────────────────────────────────────────
+function _loadImpressoras() {
+  const list = document.getElementById('impressoras-list');
+  if (!list) return;
+  if (!_impressoras.length) {
+    list.innerHTML = '<div style="text-align:center;padding:30px 0;color:var(--muted);font-size:13px">Nenhuma impressora cadastrada. Clique em "Adicionar impressora".</div>';
+    return;
+  }
+  list.innerHTML = _impressoras.map((imp, idx) => {
+    const statusColor = imp.tipo === 'usb' && localStorage.getItem('escpos_usb_name') ? '#10b981' : (imp.tipo === 'agent' ? '#3b82f6' : '#f59e0b');
+    const statusText  = imp.tipo === 'usb' && localStorage.getItem('escpos_usb_name') ? 'Conectado' : (imp.tipo === 'agent' ? 'Agent' : 'Navegador');
+    const tipoLabel   = imp.printerName || (imp.tipo === 'usb' ? 'USB Direto' : imp.tipo === 'agent' ? 'Print Agent' : 'Navegador');
+    const larguraLabel = imp.largura === 48 ? '80mm (48 col)' : '58mm (32 col)';
+    const vinculados = _modelos.filter(m => m.ativo && m.impressora_idx === idx).map(m => m.nome).join(', ');
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px 20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div>
+          <div style="font-size:11px;color:var(--muted)">Impressora</div>
+          <div style="font-weight:700;font-size:15px">${imp.apelido || 'Sem nome'}</div>
+          <div style="font-size:12px;color:var(--muted)">${tipoLabel} · ${larguraLabel}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:11px;padding:3px 10px;border-radius:99px;background:${statusColor}20;color:${statusColor};font-weight:600;border:1px solid ${statusColor}40">✓ ${statusText}</span>
+          <button onclick="testImpressora(${idx})" class="btn" style="font-size:11px;padding:5px 12px">🖨️ Testar</button>
+          <button onclick="editarImpressora(${idx})" class="btn" style="font-size:11px;padding:5px 12px">✏️</button>
+          <button onclick="deletarImpressoraDir(${idx})" class="btn bd" style="font-size:11px;padding:5px 10px">🗑</button>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--muted)">Comandas vinculadas: ${vinculados || 'Nenhuma'}</div>
+    </div>`;
+  }).join('');
+}
+
+function abrirAddImpressora() {
+  _editImpIdx = -1;
+  document.getElementById('imp-apelido').value = '';
+  document.getElementById('imp-tipo').value = 'usb';
+  document.getElementById('imp-largura').value = '32';
+  document.getElementById('modal-imp-title').textContent = 'Adicionar Impressora';
+  document.getElementById('btn-del-imp').style.display = 'none';
+  toggleImpTipo();
+  openModal('modal-impressora');
+}
+
+function editarImpressora(idx) {
+  const imp = _impressoras[idx]; if (!imp) return;
+  _editImpIdx = idx;
+  document.getElementById('imp-apelido').value = imp.apelido || '';
+  document.getElementById('imp-tipo').value = imp.tipo || 'usb';
+  document.getElementById('imp-largura').value = String(imp.largura || 32);
+  document.getElementById('modal-imp-title').textContent = 'Editar Impressora';
+  document.getElementById('btn-del-imp').style.display = 'inline-flex';
+  toggleImpTipo();
+  if (imp.tipo === 'agent') {
+    loadPrinters().then(() => { const s = document.getElementById('imp-printer-select'); if (s && imp.printerName) s.value = imp.printerName; });
+  }
+  openModal('modal-impressora');
+}
+
+function toggleImpTipo() {
+  const tipo = document.getElementById('imp-tipo').value;
+  document.getElementById('imp-usb-wrap').style.display = tipo === 'usb' ? '' : 'none';
+  document.getElementById('imp-agent-wrap').style.display = tipo === 'agent' ? '' : 'none';
+  if (tipo === 'agent') {
+    loadPrinters().then(() => {
+      const src = document.getElementById('print-printer-select');
+      const dst = document.getElementById('imp-printer-select');
+      if (src && dst) dst.innerHTML = src.innerHTML;
+    });
+  }
+  const usbSt = document.getElementById('imp-usb-status');
+  if (usbSt) {
+    const saved = localStorage.getItem('escpos_usb_name');
+    usbSt.textContent = saved ? '✅ Pareada: ' + saved : 'Nenhuma impressora USB pareada';
+    usbSt.style.color = saved ? '#10b981' : 'var(--muted)';
+  }
+}
+
+async function pairUsbForModal() {
+  try { await pairUsbPrinter(); toggleImpTipo(); } catch(e) { sbToast('err', 'Erro ao parear: ' + e.message); }
+}
+
+function salvarImpressora() {
+  const apelido = document.getElementById('imp-apelido').value.trim();
+  if (!apelido) { sbToast('warn', 'Preencha o apelido'); return; }
+  const tipo = document.getElementById('imp-tipo').value;
+  const largura = parseInt(document.getElementById('imp-largura').value) || 32;
+  let printerName = '';
+  if (tipo === 'usb') printerName = localStorage.getItem('escpos_usb_name') || 'USB';
+  if (tipo === 'agent') printerName = document.getElementById('imp-printer-select')?.value || '';
+  const obj = { apelido, tipo, largura, printerName };
+  if (_editImpIdx >= 0) _impressoras[_editImpIdx] = { ..._impressoras[_editImpIdx], ...obj };
+  else _impressoras.push(obj);
+  _saveImpressoras();
+  closeModal('modal-impressora');
+  _loadImpressoras(); _loadModelos();
+  sbToast('ok', 'Impressora salva!');
+}
+
+function deletarImpressora() {
+  if (!confirm('Excluir esta impressora?')) return;
+  _impressoras.splice(_editImpIdx, 1);
+  _modelos.forEach(m => { if (m.impressora_idx >= _impressoras.length) m.impressora_idx = 0; });
+  _saveImpressoras(); _saveModelos();
+  closeModal('modal-impressora');
+  _loadImpressoras(); _loadModelos();
+  sbToast('ok', 'Impressora removida');
+}
+
+function deletarImpressoraDir(idx) {
+  if (!confirm('Excluir impressora "' + (_impressoras[idx]?.apelido || '') + '"?')) return;
+  _impressoras.splice(idx, 1);
+  _modelos.forEach(m => { if (m.impressora_idx >= _impressoras.length) m.impressora_idx = 0; });
+  _saveImpressoras(); _saveModelos();
+  _loadImpressoras(); _loadModelos();
+  sbToast('ok', 'Impressora removida');
+}
+
+async function testImpressora(idx) {
+  const imp = _impressoras[idx]; if (!imp) return;
+  const ex = { id:99, num:9999, client:'TESTE IMPRESSÃO', addr:'Balcão', pag:'PIX', taxa:5, total:23,
+    items:[{qty:1,name:'X-Salada',price:18},{qty:1,name:'Batata Frita',price:10}] };
+  if (imp.tipo === 'usb') {
+    try { const cfg = _getPrintConfig(); await _printViaUsb(ex, cfg); sbToast('ok', '🖨️ Teste USB enviado!'); }
+    catch(e) { sbToast('err', 'Erro USB: ' + e.message); }
+  } else { await printOrder(ex); sbToast('ok', '🖨️ Teste enviado!'); }
+}
+
+// ── ABA 2: MODELOS ───────────────────────────────────────────
+function _loadModelos() {
+  _initModelos();
+  const list = document.getElementById('modelos-list'); if (!list) return;
+  list.innerHTML = _modelos.map((m, idx) => {
+    const impBadges = _impressoras.length
+      ? _impressoras.filter((_, i) => i === m.impressora_idx).map(imp =>
+          `<span style="font-size:11px;padding:2px 10px;border-radius:99px;background:rgba(16,185,129,.1);color:#10b981;border:1px solid rgba(16,185,129,.3);font-weight:600">✓ ${imp.apelido}</span>`
+        ).join('')
+      : '<span style="font-size:11px;color:var(--muted)">Sem impressora</span>';
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px 20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div class="toggle ${m.ativo ? 'on' : ''}" onclick="toggleModelo(${idx})" style="flex-shrink:0"></div>
+          <div>
+            <div style="font-size:11px;color:var(--muted)">Modelo do sistema</div>
+            <div style="font-weight:700;font-size:14px">${m.nome}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button onclick="editarModelo(${idx})" class="btn" style="font-size:11px;padding:5px 12px">✏️</button>
+          <button onclick="testModelo(${idx})" class="btn" style="font-size:11px;padding:5px 12px">🖨️ Testar</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:11px;color:var(--muted)">Impressoras vinculadas:</span>
+        ${impBadges}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleModelo(idx) {
+  _modelos[idx].ativo = !_modelos[idx].ativo;
+  _saveModelos(); _loadModelos(); _loadImpressoras();
+}
+
+function editarModelo(idx) {
+  const m = _modelos[idx]; if (!m) return;
+  _editModIdx = idx;
+  document.getElementById('modal-mod-title').textContent = 'Configurar: ' + m.nome;
+  document.getElementById('mod-apelido').value = m.apelido || m.nome;
+  document.getElementById('mod-largura').value = String(m.largura || 32);
+  document.getElementById('mod-nome').value = m.nome_estab || _printNome || 'RESTAURANTE';
+  document.getElementById('mod-sub').value = m.sub || _printSub || '';
+  document.getElementById('mod-rodape').value = m.rodape || _printRodape || 'Obrigado!';
+  document.getElementById('mod-font-size').value = m.fontSize || 12;
+  document.getElementById('mod-font-val').textContent = m.fontSize || 12;
+  const addrT = document.getElementById('mod-toggle-addr');
+  if (addrT) { if (m.showAddr !== false) addrT.classList.add('on'); else addrT.classList.remove('on'); }
+  const pagT = document.getElementById('mod-toggle-pag');
+  if (pagT) { if (m.showPag !== false) pagT.classList.add('on'); else pagT.classList.remove('on'); }
+  const sel = document.getElementById('mod-impressora');
+  if (sel) {
+    sel.innerHTML = _impressoras.length
+      ? _impressoras.map((imp, i) => `<option value="${i}" ${i === m.impressora_idx ? 'selected' : ''}>${imp.apelido} (${imp.tipo})</option>`).join('')
+      : '<option value="0">Nenhuma impressora cadastrada</option>';
+  }
+  renderModeloPreview();
+  openModal('modal-modelo');
+}
+
+function renderModeloPreview() {
+  const p = document.getElementById('mod-preview'); if (!p) return;
+  const largura = parseInt(document.getElementById('mod-largura')?.value || 32);
+  const fs = parseInt(document.getElementById('mod-font-size')?.value || 12);
+  const nome = (document.getElementById('mod-nome')?.value || 'RESTAURANTE').toUpperCase();
+  const sub = document.getElementById('mod-sub')?.value || '';
+  const rodape = document.getElementById('mod-rodape')?.value || 'Obrigado!';
+  const showAddr = document.getElementById('mod-toggle-addr')?.classList.contains('on') ?? true;
+  const showPag = document.getElementById('mod-toggle-pag')?.classList.contains('on') ?? true;
+  const cfg = { nome, sub, rodape, addr: showAddr, pag: showPag, fontSize: fs };
+  const is58 = largura <= 32;
+  const oldFmt = localStorage.getItem('printFormat');
+  localStorage.setItem('printFormat', is58 ? '58mm' : '80mm');
+  const ex = { id:2193, num:2193, client:'Cliente Teste', phone:'(00) 0000-0000', addr:'Rua Teste, 123', pag:'PIX', taxa:5, total:45.70,
+    items:[{qty:1,name:'Água Mineral 500ml',price:7.90},{qty:1,name:'Smash Burguer',price:25},{qty:1,name:'Batata Frita Crocante',price:8.90},{qty:1,name:'Batata Frita Crocante',price:8.90}] };
+  const _ticket = _buildTicketHtml(ex, cfg);
+  p.innerHTML = _ticket.principal;
+  if (oldFmt) localStorage.setItem('printFormat', oldFmt); else localStorage.removeItem('printFormat');
+}
+
+function salvarModelo() {
+  const m = _modelos[_editModIdx]; if (!m) return;
+  m.apelido = document.getElementById('mod-apelido')?.value || m.nome;
+  m.impressora_idx = parseInt(document.getElementById('mod-impressora')?.value || 0);
+  m.largura = parseInt(document.getElementById('mod-largura')?.value || 32);
+  m.nome_estab = document.getElementById('mod-nome')?.value || 'RESTAURANTE';
+  m.sub = document.getElementById('mod-sub')?.value || '';
+  m.rodape = document.getElementById('mod-rodape')?.value || 'Obrigado!';
+  m.fontSize = parseInt(document.getElementById('mod-font-size')?.value || 12);
+  m.showAddr = document.getElementById('mod-toggle-addr')?.classList.contains('on') ?? true;
+  m.showPag = document.getElementById('mod-toggle-pag')?.classList.contains('on') ?? true;
+  _printNome = m.nome_estab; localStorage.setItem('printNome', m.nome_estab);
+  _printSub = m.sub; localStorage.setItem('printSub', m.sub);
+  _printRodape = m.rodape; localStorage.setItem('printRodape', m.rodape);
+  _printFontSize = m.fontSize; localStorage.setItem('printFontSize', m.fontSize);
+  _printFormat = m.largura <= 32 ? '58mm' : '80mm'; localStorage.setItem('printFormat', _printFormat);
+  _saveModelos();
+  closeModal('modal-modelo');
+  _loadModelos(); _loadImpressoras();
+  sbToast('ok', 'Modelo salvo!');
+}
+
+async function testModelo(idx) {
+  const m = _modelos[idx]; if (!m) return;
+  const ex = { id:99, num:9999, client:'TESTE IMPRESSÃO', addr:'Balcão', pag:'PIX', taxa:5, total:23,
+    items:[{qty:1,name:'X-Salada',price:18},{qty:1,name:'Batata Frita',price:10}] };
+  await printOrder(ex);
+  sbToast('ok', '🖨️ Teste do modelo "' + m.nome + '" enviado!');
+}

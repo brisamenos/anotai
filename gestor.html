@@ -2486,12 +2486,8 @@ Use no seu próximo pedido 🛍️</textarea>
 <!-- IMPRESSÃO -->
 <div class="page" id="page-impressao">
   <div class="ph">
-    <div><div class="pt">Impressão</div><div class="ps">Configure como os pedidos são impressos na térmica</div></div>
+    <div><div class="pt">Impressão</div><div class="ps">Configure impressoras e modelos de impressão</div></div>
     <div style="display:flex;gap:8px">
-      <button class="btn bp" onclick="testPrint()">
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="10" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="8" r=".6" fill="currentColor"/></svg>
-        Testar impressão
-      </button>
       <button class="btn bg" onclick="salvarConfigImpressao()" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#4ade80">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M13 11v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h6l3 3v6z" stroke="currentColor" stroke-width="1.4"/><path d="M10 2v3H6V2M5 9h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         Salvar configurações
@@ -2499,172 +2495,196 @@ Use no seu próximo pedido 🛍️</textarea>
     </div>
   </div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+  <div style="display:grid;grid-template-columns:220px 1fr;gap:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface)">
 
-    <!-- Config -->
-    <div style="display:flex;flex-direction:column;gap:14px">
-
-      <!-- Modo -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px">
-        <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px">Modo de impressão</div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <label id="lbl-print-auto" onclick="setPrintMode('auto')" style="display:flex;align-items:center;gap:12px;background:rgba(59,130,246,.1);border:2px solid var(--accent);border-radius:10px;padding:12px 14px;cursor:pointer">
-            <div style="width:18px;height:18px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-              <div id="dot-auto" style="width:8px;height:8px;border-radius:50%;background:#fff"></div>
-            </div>
-            <div>
-              <div style="font-weight:700;font-size:13px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="10" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="8" r=".6" fill="currentColor"/></svg> Automático</div>
-              <div style="font-size:11.5px;color:var(--muted);margin-top:1px">Imprime sozinho quando chega um pedido novo</div>
-            </div>
-          </label>
-          <label id="lbl-print-manual" onclick="setPrintMode('manual')" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:2px solid var(--border);border-radius:10px;padding:12px 14px;cursor:pointer">
-            <div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-              <div id="dot-manual" style="width:8px;height:8px;border-radius:50%;background:transparent"></div>
-            </div>
-            <div>
-              <div style="font-weight:700;font-size:13px">Manual</div>
-              <div style="font-size:11.5px;color:var(--muted);margin-top:1px">Botão de impressão aparece em cada pedido no kanban</div>
-            </div>
-          </label>
-        </div>
+    <!-- Sidebar abas -->
+    <div style="border-right:1px solid var(--border);background:var(--surface2)">
+      <div id="print-tab-1" onclick="switchPrintTab(1)" class="print-tab print-tab-active" style="padding:16px 20px;cursor:pointer;border-left:3px solid var(--accent);font-size:13px;font-weight:700">
+        1. Lista de Impressoras
       </div>
-
-      <!-- Destino de impressão (server/browser) -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px">
-        <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px">Destino de impressão</div>
-        <div style="display:flex;flex-direction:column;gap:10px">
-
-          <!-- ── USB direto (ESC/POS) ── -->
-          <div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.25);border-radius:10px;padding:14px">
-            <div style="font-weight:700;font-size:13px;margin-bottom:4px">⚡ Impressão USB Direta <span style="font-size:11px;background:rgba(16,185,129,.2);color:#10b981;padding:2px 7px;border-radius:99px;margin-left:4px">RECOMENDADO</span></div>
-            <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px">Conecta direto na impressora térmica via USB — imprime 100% sem diálogo, sem software extra. Funciona com 58mm e 80mm.</div>
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              <button onclick="pairUsbPrinter()" class="oc-btn" style="background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3);font-size:12px;padding:7px 14px">
-                🔌 Parear impressora USB
-              </button>
-              <button onclick="unpairUsbPrinter()" class="oc-btn" style="background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.2);font-size:12px;padding:7px 14px">
-                ✕ Remover
-              </button>
-              <span id="usb-status" style="font-size:12px;color:var(--muted)">
-                <!-- preenchido por JS -->
-              </span>
-            </div>
-            <div id="usb-paired-info" style="font-size:11px;color:#10b981;margin-top:8px;display:none">
-              ✅ Impressora pareada — impressão será 100% silenciosa
-            </div>
-          </div>
-
-          <div>
-            <label class="form-label">Como imprimir (fallback)</label>
-            <select class="form-input" id="print-target-select"
-              onchange="_printTarget=this.value;localStorage.setItem('printTarget',this.value)">
-              <option value="server">Servidor (silencioso — sem diálogo)</option>
-              <option value="browser">Navegador (diálogo do sistema)</option>
-            </select>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">
-              Usado somente se a impressora USB não estiver conectada
-            </div>
-          </div>
-          <div>
-            <label class="form-label">Modo das vias</label>
-            <select class="form-input" id="print-via-mode-select"
-              onchange="_printViaMode=this.value;localStorage.setItem('printViaMode',this.value);document.getElementById('print-cozinha-wrap').style.display=this.value==='separado'?'':'none'">
-              <option value="combinado">Via única combinada (pedido + cozinha na mesma folha)</option>
-              <option value="separado">Duas vias separadas (balcão e cozinha em impressoras diferentes)</option>
-              <option value="somente_principal">Somente via do cliente (sem via de cozinha)</option>
-            </select>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">
-              "Combinada" imprime tudo em 1 folha: pedido completo em cima, via da cozinha embaixo com linha de corte
-            </div>
-          </div>
-          <div>
-            <label class="form-label">
-              <span style="display:inline-flex;align-items:center;gap:6px">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M5 5V3.5A1.5 1.5 0 0 1 6.5 2h3A1.5 1.5 0 0 1 11 3.5V5" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="9" r="1" fill="currentColor"/></svg>
-                Impressora — Caixa
-              </span>
-            </label>
-            <select class="form-input" id="print-printer-select"
-              onchange="_printPrinter=this.value;localStorage.setItem('printPrinter',this.value)">
-              <option value="">Impressora padrão do sistema</option>
-            </select>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">
-              Recebe: conta da mesa, comanda finalizada, pedidos do balcão
-            </div>
-          </div>
-          <div id="print-cozinha-wrap" style="display:none">
-            <label class="form-label">
-              <span style="display:inline-flex;align-items:center;gap:6px">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 13V8a5 5 0 0 1 10 0v5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M1 13h14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 3v2M5.5 4l1 1.7M10.5 4l-1 1.7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-                Impressora — Cozinha
-              </span>
-            </label>
-            <select class="form-input" id="print-printer-cozinha-select"
-              onchange="_printPrinterCozinha=this.value;localStorage.setItem('printPrinterCozinha',this.value)">
-              <option value="">Mesma do caixa (impressora única)</option>
-            </select>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">
-              Recebe: via da cozinha com itens do pedido (sem valores). Deixe em branco se usa só 1 impressora.
-            </div>
-          </div>
-          <div>
-            <label class="form-label">Formato do papel</label>
-            <select class="form-input" id="print-format-select"
-              onchange="_printFormat=this.value;localStorage.setItem('printFormat',this.value)">
-              <option value="A4">A4</option>
-              <option value="A5">A5</option>
-              <option value="80mm" selected>Térmica 80mm</option>
-              <option value="58mm">Térmica 58mm</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <!-- Configurações do comprovante -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px">
-        <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px">Dados do comprovante</div>
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <div>
-            <label class="form-label">Nome do estabelecimento</label>
-            <input class="form-input" id="print-nome" value="ESTIMA FOOD" oninput="renderImpressao(true)">
-          </div>
-          <div>
-            <label class="form-label">Linha extra (site, telefone...)</label>
-            <input class="form-input" id="print-sub" value="estimafood.evocrm.sbs" oninput="renderImpressao(true)">
-          </div>
-          <div>
-            <label class="form-label">Mensagem de rodapé</label>
-            <input class="form-input" id="print-rodape" value="Obrigado pela preferência! 🙏" oninput="renderImpressao(true)">
-          </div>
-          <div>
-            <label class="form-label" style="display:flex;align-items:center;justify-content:space-between">
-              <span>Tamanho da fonte</span>
-              <span style="font-weight:700;color:var(--accent)" id="print-font-size-val">12</span><span style="color:var(--muted)">px</span>
-            </label>
-            <input type="range" id="print-font-size" min="10" max="22" step="1" value="12"
-              style="width:100%;accent-color:var(--accent);margin-top:6px;cursor:pointer"
-              oninput="document.getElementById('print-font-size-val').textContent=this.value;renderImpressao(true)">
-            <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-top:3px">
-              <span>Menor</span><span>Maior</span>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px">
-            <span style="font-size:12.5px">Imprimir mesa/endereço</span>
-            <div class="toggle on" id="toggle-print-addr" onclick="this.classList.toggle('on');renderImpressao()"></div>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px">
-            <span style="font-size:12.5px">Imprimir forma de pagamento</span>
-            <div class="toggle on" id="toggle-print-pag" onclick="this.classList.toggle('on');renderImpressao()"></div>
-          </div>
-        </div>
+      <div id="print-tab-2" onclick="switchPrintTab(2)" class="print-tab" style="padding:16px 20px;cursor:pointer;border-left:3px solid transparent;font-size:13px;font-weight:600;color:var(--muted)">
+        2. Modelos de Impressão
       </div>
     </div>
 
-    <!-- Prévia -->
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px">
-      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px">Prévia do comprovante</div>
-      <div style="background:#f8f8f8;border-radius:8px;padding:16px;display:flex;justify-content:center">
-        <div class="print-preview" id="print-preview"></div>
+    <!-- Conteúdo das abas -->
+    <div style="padding:24px">
+
+      <!-- ═══ ABA 1: LISTA DE IMPRESSORAS ═══ -->
+      <div id="print-panel-1">
+        <div style="font-size:18px;font-weight:800;margin-bottom:20px">1. Lista de Impressoras</div>
+
+        <!-- Modo auto/manual -->
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-weight:700;font-size:13px">Modo de impressão</div>
+            <div style="font-size:11.5px;color:var(--muted);margin-top:2px" id="print-mode-desc">Imprime sozinho quando chega pedido</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button id="btn-mode-auto" onclick="setPrintModeNew('auto')" class="btn bp" style="font-size:11px;padding:6px 14px">⚡ Automático</button>
+            <button id="btn-mode-manual" onclick="setPrintModeNew('manual')" class="btn" style="font-size:11px;padding:6px 14px">✋ Manual</button>
+          </div>
+        </div>
+
+        <!-- Lista dinâmica de impressoras -->
+        <div id="impressoras-list" style="display:flex;flex-direction:column;gap:14px">
+          <!-- Preenchido por JS -->
+        </div>
+
+        <!-- Adicionar impressora -->
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:13px;color:var(--muted)">Tem outra impressora para usar no Anotaí?</span>
+          <button class="btn bp" onclick="abrirAddImpressora()" style="font-size:12px;padding:8px 16px">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;margin-right:4px"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v6M5 8h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            Adicionar impressora
+          </button>
+        </div>
+      </div>
+
+      <!-- ═══ ABA 2: MODELOS DE IMPRESSÃO ═══ -->
+      <div id="print-panel-2" style="display:none">
+        <div style="font-size:18px;font-weight:800;margin-bottom:20px">2. Modelos de Impressão</div>
+
+        <div id="modelos-list" style="display:flex;flex-direction:column;gap:16px">
+          <!-- Preenchido por JS -->
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Hidden selects para compatibilidade com loadPrinters -->
+<select id="print-printer-select" style="display:none"><option value="">Padrão</option></select>
+<select id="print-printer-cozinha-select" style="display:none"><option value="">Padrão</option></select>
+<input type="hidden" id="print-nome">
+<input type="hidden" id="print-sub">
+<input type="hidden" id="print-rodape">
+<input type="range" id="print-font-size" value="12" style="display:none">
+<span id="print-font-size-val" style="display:none">12</span>
+<div id="toggle-print-addr" class="toggle on" style="display:none"></div>
+<div id="toggle-print-pag" class="toggle on" style="display:none"></div>
+<select id="print-format-select" style="display:none"><option value="80mm">80mm</option><option value="58mm">58mm</option></select>
+<div id="usb-status" style="display:none"></div>
+<div id="usb-paired-info" style="display:none"></div>
+
+<!-- Modal: Adicionar/Editar Impressora -->
+<div class="modal-bg" id="modal-impressora">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <h2 id="modal-imp-title">Adicionar Impressora</h2>
+      <button class="modal-close" onclick="closeModal('modal-impressora')">×</button>
+    </div>
+    <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label class="form-label">Apelido *</label>
+        <input class="form-input" id="imp-apelido" placeholder="Ex: Balcão 1, Cozinha...">
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">Nome para identificar essa impressora</div>
+      </div>
+      <div>
+        <label class="form-label">Tipo de conexão</label>
+        <select class="form-input" id="imp-tipo" onchange="toggleImpTipo()">
+          <option value="usb">USB Direto (ESC/POS — recomendado)</option>
+          <option value="agent">Print Agent (servidor)</option>
+          <option value="browser">Navegador (diálogo do sistema)</option>
+        </select>
+      </div>
+      <div id="imp-usb-wrap">
+        <button onclick="pairUsbForModal()" class="btn bp" style="width:100%;justify-content:center;padding:10px">
+          🔌 Parear impressora USB
+        </button>
+        <div id="imp-usb-status" style="font-size:12px;color:var(--muted);margin-top:6px;text-align:center"></div>
+      </div>
+      <div id="imp-agent-wrap" style="display:none">
+        <label class="form-label">Impressora no sistema</label>
+        <select class="form-input" id="imp-printer-select">
+          <option value="">Impressora padrão do sistema</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Largura da impressão</label>
+        <select class="form-input" id="imp-largura">
+          <option value="32">32 caracteres (58mm)</option>
+          <option value="48">48 caracteres (80mm)</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn bp" style="flex:1;justify-content:center" onclick="salvarImpressora()">Salvar</button>
+        <button class="btn bd" id="btn-del-imp" style="display:none" onclick="deletarImpressora()">Excluir</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Editar Modelo de Impressão -->
+<div class="modal-bg" id="modal-modelo">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <h2 id="modal-mod-title">Configurar Modelo</h2>
+      <button class="modal-close" onclick="closeModal('modal-modelo')">×</button>
+    </div>
+    <div style="padding:20px;display:grid;grid-template-columns:1fr 280px;gap:20px">
+      <!-- Config -->
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div>
+          <label class="form-label">Apelido *</label>
+          <input class="form-input" id="mod-apelido" placeholder="Ex: Balcão 1">
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">Apelido único para identificar esse modelo</div>
+        </div>
+        <div>
+          <label class="form-label">Impressora *</label>
+          <select class="form-input" id="mod-impressora">
+            <!-- Preenchido por JS -->
+          </select>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">Dispositivo conectado ao PC</div>
+        </div>
+        <div>
+          <label class="form-label">Largura da impressão</label>
+          <select class="form-input" id="mod-largura" onchange="renderModeloPreview()">
+            <option value="32">32 caracteres (58mm)</option>
+            <option value="48">48 caracteres (80mm)</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Nome do estabelecimento</label>
+          <input class="form-input" id="mod-nome" oninput="renderModeloPreview()">
+        </div>
+        <div>
+          <label class="form-label">Linha extra (site, telefone)</label>
+          <input class="form-input" id="mod-sub" oninput="renderModeloPreview()">
+        </div>
+        <div>
+          <label class="form-label">Mensagem de rodapé</label>
+          <input class="form-input" id="mod-rodape" oninput="renderModeloPreview()">
+        </div>
+        <div>
+          <label class="form-label" style="display:flex;align-items:center;justify-content:space-between">
+            <span>Tamanho da fonte</span>
+            <span style="font-weight:700;color:var(--accent)" id="mod-font-val">12</span><span style="color:var(--muted)">px</span>
+          </label>
+          <input type="range" id="mod-font-size" min="10" max="22" step="1" value="12"
+            style="width:100%;accent-color:var(--accent);margin-top:4px"
+            oninput="document.getElementById('mod-font-val').textContent=this.value;renderModeloPreview()">
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px">
+          <span style="font-size:12.5px">Imprimir endereço/mesa</span>
+          <div class="toggle on" id="mod-toggle-addr" onclick="this.classList.toggle('on');renderModeloPreview()"></div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px">
+          <span style="font-size:12.5px">Imprimir forma de pagamento</span>
+          <div class="toggle on" id="mod-toggle-pag" onclick="this.classList.toggle('on');renderModeloPreview()"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button class="btn bp" style="flex:1;justify-content:center" onclick="salvarModelo()">Salvar Alterações</button>
+          <button class="btn" style="justify-content:center" onclick="closeModal('modal-modelo')">Cancelar</button>
+        </div>
+      </div>
+      <!-- Prévia -->
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Prévia do comprovante</div>
+        <div style="background:#fdf6e3;border-radius:8px;padding:14px;border:1px solid #e8dcc8">
+          <div class="print-preview" id="mod-preview"></div>
+        </div>
       </div>
     </div>
   </div>
