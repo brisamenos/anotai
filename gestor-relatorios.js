@@ -2727,17 +2727,30 @@ function _buildEscPos(order, cfg, cols = 32) {
     const name  = (i.qty + 'x ' + i.name).toUpperCase().substring(0, maxNameLen);
     const price = money((i.price || 0) * (i.qty || 1));
     push(cols2(name, price) + '\n');
-    if (i.obs) push('  * ' + i.obs + '\n');
+    // Formata itens do kit em linhas separadas
+    let obsText = i.obs || '';
+    if (obsText.startsWith('Kit: ')) {
+      const pipeIdx = obsText.indexOf(' | ');
+      const kitPart = pipeIdx > -1 ? obsText.substring(5, pipeIdx) : obsText.substring(5);
+      obsText = pipeIdx > -1 ? obsText.substring(pipeIdx + 3) : '';
+      const kitItens = kitPart.split(' · ').filter(Boolean);
+      push('  CONTEM:\n');
+      kitItens.forEach(k => push('  - ' + k.trim() + '\n'));
+    }
+    if (obsText) push('  * ' + obsText + '\n');
   });
 
   const subtotal = items.reduce((s, i) => s + (parseFloat(i.price || 0) * (i.qty || 1)), 0);
   const taxa  = parseFloat(order.taxa || 0);
-  const total = subtotal + taxa;
+  const orderTotal = parseFloat(order.total);
+  const desconto = (!isNaN(orderTotal) && orderTotal < subtotal) ? Math.max(0, subtotal - orderTotal) : 0;
+  const total = (!isNaN(orderTotal) ? orderTotal : subtotal) + taxa;
 
   push(sep);
-  if (taxa > 0) {
+  if (taxa > 0 || desconto > 0) {
     push(cols2('Subtotal', money(subtotal)) + '\n');
-    push(cols2('Taxa entrega', money(taxa)) + '\n');
+    if (desconto > 0) push(cols2('Desconto', '-' + money(desconto)) + '\n');
+    if (taxa > 0) push(cols2('Taxa entrega', money(taxa)) + '\n');
   }
   bytes(0x1B, 0x45, 0x01);                   // negrito
   push(cols2('TOTAL', money(total)) + '\n');
