@@ -2354,19 +2354,19 @@ function setPrintMode(mode) {
 }
 
 function _getPrintConfig() {
-  const fs = _printFontSize || parseInt(document.getElementById('print-font-size')?.value) || 12;
-  // Prioriza variáveis em memória (carregadas do servidor), DOM como fallback
-  const nomeDOM = document.getElementById('print-nome')?.value;
-  const nome   = (_printNome || (nomeDOM && nomeDOM !== '' ? nomeDOM : null) || 'RESTAURANTE').toUpperCase();
-  const subDOM = document.getElementById('print-sub')?.value;
-  const sub    = _printSub || (subDOM && subDOM !== '' ? subDOM : '') || '';
-  const rodDOM = document.getElementById('print-rodape')?.value;
-  const rodape = _printRodape || (rodDOM && rodDOM !== '' ? rodDOM : '') || 'Obrigado!';
+  const fsEl = document.getElementById('print-font-size');
+  const fs = (fsEl && fsEl.value) ? parseInt(fsEl.value) : (_printFontSize || 12);
+  const nomeEl = document.getElementById('print-nome');
+  const nome = ((nomeEl && nomeEl.value) ? nomeEl.value : _printNome || 'RESTAURANTE').toUpperCase();
+  const subEl = document.getElementById('print-sub');
+  const sub = (subEl && subEl.value) ? subEl.value : (_printSub || '');
+  const rodEl = document.getElementById('print-rodape');
+  const rodape = (rodEl && rodEl.value) ? rodEl.value : (_printRodape || 'Obrigado!');
   return {
     nome, sub, rodape,
-    addr:      document.getElementById('toggle-print-addr')?.classList.contains('on') ?? true,
-    pag:       document.getElementById('toggle-print-pag')?.classList.contains('on')  ?? true,
-    fontSize:  fs,
+    addr: document.getElementById('toggle-print-addr')?.classList.contains('on') ?? true,
+    pag:  document.getElementById('toggle-print-pag')?.classList.contains('on') ?? true,
+    fontSize: fs,
   };
 }
 
@@ -3014,18 +3014,38 @@ let _renderImpressaoLoaded = false;
 function renderImpressao(skipServerLoad) {
   if (!_renderImpressaoLoaded && !skipServerLoad) {
     _renderImpressaoLoaded = true;
-    loadPrintConfigServer().then(() => {
+    // Restaura valores dos campos DOM
+    const _restoreFields = () => {
+      const el = (id,v) => { const e = document.getElementById(id); if (e && v) e.value = v; };
+      el('print-nome', _printNome);
+      el('print-sub', _printSub);
+      el('print-rodape', _printRodape);
+      el('print-font-size', _printFontSize);
+      const fv = document.getElementById('print-font-size-val');
+      if (fv) fv.textContent = _printFontSize || 12;
+      el('print-format-select', _printFormat || '80mm');
+      setPrintModeNew(_printMode);
       _loadImpressoras();
       _loadModelos();
-      setPrintModeNew(_printMode);
-    });
-    _loadImpressoras();
-    _loadModelos();
-    setPrintModeNew(_printMode);
+      renderPrintPreview();
+    };
+    loadPrintConfigServer().then(_restoreFields);
+    _restoreFields();
     return;
   }
   _loadImpressoras();
   _loadModelos();
+  renderPrintPreview();
+}
+
+function renderPrintPreview() {
+  const p = document.getElementById('print-preview');
+  if (!p) return;
+  const cfg = _getPrintConfig();
+  const ex = { id:2193, num:2193, client:'Cliente Teste', phone:'(00) 0000-0000', addr:'Rua Teste, 123', pag:'PIX', taxa:5, total:45.70,
+    items:[{qty:1,name:'Smash Burguer',price:25},{qty:2,name:'Coca Cola 2L',price:14},{qty:1,name:'Batata Frita',price:8.90}] };
+  const _ticket = _buildTicketHtml(ex, cfg);
+  p.innerHTML = _ticket.principal;
 }
 
 // Atualiza indicador visual do status USB na tela de config
@@ -3165,20 +3185,6 @@ function setPrintModeNew(mode) {
   const desc = document.getElementById('print-mode-desc');
   if (desc) desc.textContent = isAuto ? 'Imprime sozinho quando chega pedido' : 'Botão 🖨️ aparece em cada pedido no kanban';
   sbToast('ok', isAuto ? 'Impressão automática ativada' : 'Impressão manual ativada');
-}
-
-// ── Abas ──────────────────────────────────────────────────────
-function switchPrintTab(n) {
-  document.getElementById('print-panel-1').style.display = n === 1 ? '' : 'none';
-  document.getElementById('print-panel-2').style.display = n === 2 ? '' : 'none';
-  const t1 = document.getElementById('print-tab-1');
-  const t2 = document.getElementById('print-tab-2');
-  t1.style.borderLeftColor = n === 1 ? 'var(--accent)' : 'transparent';
-  t1.style.fontWeight = n === 1 ? '700' : '600';
-  t1.style.color = n === 1 ? 'var(--text)' : 'var(--muted)';
-  t2.style.borderLeftColor = n === 2 ? 'var(--accent)' : 'transparent';
-  t2.style.fontWeight = n === 2 ? '700' : '600';
-  t2.style.color = n === 2 ? 'var(--text)' : 'var(--muted)';
 }
 
 // ── ABA 1: IMPRESSORAS ────────────────────────────────────────
