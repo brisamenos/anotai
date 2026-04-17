@@ -43,6 +43,18 @@ module.exports = async function handleRoutes(req, res, ctx) {
           EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano } = ctx
 
   // ═══════════════════════════════════════════════════════
+  // Download do App Desktop
+  // ═══════════════════════════════════════════════════════
+  if (req.method === 'GET' && (upath === '/download' || upath === '/download/')) {
+    // Redireciona para a página de releases — o usuário baixa o .exe de lá
+    // Alternativa: redirecionar direto pro .exe da versão atual
+    const GITHUB_RELEASES = 'https://github.com/brisamenos/estimafood/releases/latest'
+    res.writeHead(302, { 'Location': GITHUB_RELEASES })
+    res.end()
+    return true
+  }
+
+  // ═══════════════════════════════════════════════════════
   // Auth — Clientes
   // ═══════════════════════════════════════════════════════
 
