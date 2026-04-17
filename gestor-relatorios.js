@@ -2861,8 +2861,25 @@ async function unpairUsbPrinter() {
 
 async function printOrder(order) {
   const cfg    = _getPrintConfig();
-  const ticket = _buildTicketHtml(order, cfg);
   const fmt    = localStorage.getItem('printFormat') || _printFormat || '80mm';
+
+  // ── Verifica se é pedido só de bebida ──────────────────
+  const _isBebida = (item) => {
+    const cat = (item.cat || item.cat_key || '').toLowerCase();
+    const name = (item.name || '').toLowerCase();
+    const bebidas = ['bebida','drink','suco','agua','água','refrigerante','cerveja','chopp','vinho','dose','tanque','long'];
+    return bebidas.some(s => cat.includes(s) || name.includes(s));
+  };
+  const items = Array.isArray(order.items) ? order.items : [];
+  const soBebida = items.length > 0 && items.every(_isBebida);
+  const printBebidaSolo = localStorage.getItem('printBebidaSolo') !== '0'; // padrão: ligado
+
+  if (soBebida && !printBebidaSolo) {
+    console.log('[PRINT] Pedido só de bebida — impressão desativada pelo toggle');
+    return;
+  }
+
+  const ticket = _buildTicketHtml(order, cfg);
 
   // ── Monta jobs de impressão ────────────────────────────
   const jobs = [];
@@ -3014,7 +3031,6 @@ let _renderImpressaoLoaded = false;
 function renderImpressao(skipServerLoad) {
   if (!_renderImpressaoLoaded && !skipServerLoad) {
     _renderImpressaoLoaded = true;
-    // Restaura valores dos campos DOM
     const _restoreFields = () => {
       const el = (id,v) => { const e = document.getElementById(id); if (e && v) e.value = v; };
       el('print-nome', _printNome);
@@ -3027,6 +3043,7 @@ function renderImpressao(skipServerLoad) {
       setPrintModeNew(_printMode);
       _loadImpressoras();
       _loadModelos();
+      _loadRoteamento();
       renderPrintPreview();
     };
     loadPrintConfigServer().then(_restoreFields);
@@ -3035,7 +3052,43 @@ function renderImpressao(skipServerLoad) {
   }
   _loadImpressoras();
   _loadModelos();
+  _loadRoteamento();
   renderPrintPreview();
+}
+
+// ── Preenche selects de roteamento caixa/cozinha ──
+function _loadRoteamento() {
+  const isElectron = !!window.ElectronPrint;
+  const viaSel = document.getElementById('print-via-mode-select');
+  if (viaSel) viaSel.value = _printViaMode || 'combinado';
+  const cozWrap = document.getElementById('print-cozinha-wrap');
+  if (cozWrap) cozWrap.style.display = _printViaMode === 'separado' ? '' : 'none';
+
+  const _fillSelect = (selId, currentVal) => {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    if (isElectron) {
+      window.ElectronPrint.getConfig().then(cfg => {
+        const printers = cfg.printers || [];
+        sel.innerHTML = '<option value="">Padrão do sistema</option>' +
+          printers.map(p => `<option value="${p}" ${p === currentVal ? 'selected' : ''}>${p}${p === cfg.printer ? ' ★' : ''}</option>`).join('');
+      }).catch(() => {});
+    } else {
+      // Usa as impressoras cadastradas no sistema de gerenciamento
+      sel.innerHTML = '<option value="">Padrão do sistema</option>' +
+        _impressoras.map(imp => `<option value="${imp.printerName || imp.apelido}" ${(imp.printerName || imp.apelido) === currentVal ? 'selected' : ''}>${imp.apelido} (${imp.printerName || imp.tipo})</option>`).join('');
+    }
+  };
+  _fillSelect('print-rota-caixa', _printPrinter);
+  _fillSelect('print-rota-cozinha', _printPrinterCozinha);
+
+  // Restaura toggle de bebida
+  const bebidaToggle = document.getElementById('toggle-print-bebida');
+  if (bebidaToggle) {
+    const printBebida = localStorage.getItem('printBebidaSolo') !== '0';
+    if (printBebida) bebidaToggle.classList.add('on');
+    else bebidaToggle.classList.remove('on');
+  }
 }
 
 function renderPrintPreview() {
