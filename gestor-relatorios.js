@@ -2407,20 +2407,33 @@ function _buildTicketHtml(order, cfg) {
   const renderItem = (i) => {
     const nameRaw = (i.qty + 'x ' + i.name).toUpperCase();
     const price = money((i.price||0) * (i.qty||1));
-    const obs = i.obs ? `<div style="padding-left:4px;font-size:0.85em;color:#333;word-break:break-word;overflow-wrap:break-word;border-left:2px solid #999;margin:2px 0 3px">OBS: ${i.obs}</div>` : '';
+    // Separa "Kit: ..." do resto do obs para formatar itens do kit em linhas
+    let obsText = i.obs || '';
+    let kitHtml = '';
+    if (obsText.startsWith('Kit: ')) {
+      const pipeIdx = obsText.indexOf(' | ');
+      const kitPart = pipeIdx > -1 ? obsText.substring(5, pipeIdx) : obsText.substring(5);
+      obsText = pipeIdx > -1 ? obsText.substring(pipeIdx + 3) : '';
+      const kitItens = kitPart.split(' · ').filter(Boolean);
+      kitHtml = `<div style="padding-left:4px;font-size:0.82em;color:#222;border-left:2px solid #555;margin:2px 0 3px;word-break:break-word">
+        <div style="font-weight:bold;margin-bottom:1px">CONTÉM:</div>
+        ${kitItens.map(k => `<div>• ${k.trim()}</div>`).join('')}
+      </div>`;
+    }
+    const obs = obsText ? `<div style="padding-left:4px;font-size:0.85em;color:#333;word-break:break-word;overflow-wrap:break-word;border-left:2px solid #999;margin:2px 0 3px">OBS: ${obsText}</div>` : '';
     if (is58) {
       // 58mm: nome em cima, preço alinhado à direita embaixo
       return `<div style="margin-bottom:4px;word-break:break-word;overflow-wrap:break-word">
         <div style="font-weight:bold">${nameRaw}</div>
         <div style="text-align:right;font-size:0.9em">${price}</div>
-        ${obs}
+        ${kitHtml}${obs}
       </div>`;
     }
     return `<div style="margin-bottom:3px">
       <div style="display:flex;justify-content:space-between;gap:4px">
         <span style="word-break:break-word;flex:1">${nameRaw}</span>
         <span style="white-space:nowrap;flex-shrink:0">${price}</span>
-      </div>${obs}
+      </div>${kitHtml}${obs}
     </div>`;
   };
 
@@ -2428,7 +2441,10 @@ function _buildTicketHtml(order, cfg) {
 
   const subtotal = items.reduce((s,i) => s + (parseFloat(i.price||0) * (i.qty||1)), 0);
   const taxa = parseFloat(order.taxa || 0);
-  const total = subtotal + taxa;
+  // Usa order.total (já vem com desconto aplicado) se disponível
+  const orderTotal = parseFloat(order.total);
+  const desconto = (!isNaN(orderTotal) && orderTotal < subtotal) ? Math.max(0, subtotal - orderTotal) : 0;
+  const total = (!isNaN(orderTotal) ? orderTotal : subtotal) + taxa;
   const orderNum = order.num || order.order_num || order.id;
 
   // Endereço: em 58mm, quebra automática
@@ -2438,11 +2454,15 @@ function _buildTicketHtml(order, cfg) {
   // Pagamento
   const pagLine = cfg.pag && order.pag ? `<div>Pag: ${order.pag}${order.troco > 0 ? ' · Troco p/ ' + money(order.troco) : ''}</div>` : '';
 
+  // ── Linha de desconto ───────────────────────────────────
+  const descontoLine58 = desconto > 0 ? `<div style="color:#333">Desconto.....−${money(desconto)}</div>` : '';
+  const descontoLine80 = desconto > 0 ? `<div style="display:flex;justify-content:space-between;color:#333"><span>Desconto</span><span>−${money(desconto)}</span></div>` : '';
+
   // ── Total layout para 58mm ──────────────────────────────
   const totalBlock = is58
-    ? `${taxa > 0 ? `<div>Subtotal.....${money(subtotal)}</div><div>Taxa........${money(taxa)}</div>` : ''}
+    ? `${(taxa > 0 || desconto > 0) ? `<div>Subtotal.....${money(subtotal)}</div>${descontoLine58}${taxa > 0 ? `<div>Taxa........${money(taxa)}</div>` : ''}` : ''}
        <div style="font-weight:bold;font-size:1.1em">TOTAL ${money(total)}</div>`
-    : `${taxa > 0 ? `<div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${money(subtotal)}</span></div><div style="display:flex;justify-content:space-between"><span>Taxa entrega</span><span>${money(taxa)}</span></div>` : ''}
+    : `${(taxa > 0 || desconto > 0) ? `<div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${money(subtotal)}</span></div>${descontoLine80}${taxa > 0 ? `<div style="display:flex;justify-content:space-between"><span>Taxa entrega</span><span>${money(taxa)}</span></div>` : ''}` : ''}
        <div style="display:flex;justify-content:space-between;font-weight:bold"><span>TOTAL</span><span>${money(total)}</span></div>`;
 
   // ── Via Principal ──────────────────────────────────────────────
