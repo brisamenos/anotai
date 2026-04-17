@@ -3249,9 +3249,10 @@ function _loadImpressoras() {
     return;
   }
   list.innerHTML = _impressoras.map((imp, idx) => {
-    const statusColor = imp.tipo === 'usb' && localStorage.getItem('escpos_usb_name') ? '#10b981' : (imp.tipo === 'agent' ? '#3b82f6' : '#f59e0b');
-    const statusText  = imp.tipo === 'usb' && localStorage.getItem('escpos_usb_name') ? 'Conectado' : (imp.tipo === 'agent' ? 'Agent' : 'Navegador');
-    const tipoLabel   = imp.printerName || (imp.tipo === 'usb' ? 'USB Direto' : imp.tipo === 'agent' ? 'Print Agent' : 'Navegador');
+    const isElectronType = imp.tipo === 'electron' || (imp.tipo === 'usb' && !!window.ElectronPrint);
+    const statusColor = isElectronType ? '#10b981' : (imp.tipo === 'agent' ? '#3b82f6' : imp.tipo === 'usb' ? '#10b981' : '#f59e0b');
+    const statusText  = isElectronType ? 'Conectado' : (imp.tipo === 'agent' ? 'Agent' : imp.tipo === 'usb' ? 'USB' : 'Navegador');
+    const tipoLabel   = imp.printerName || (isElectronType ? 'Windows' : imp.tipo === 'agent' ? 'Print Agent' : 'Navegador');
     const larguraLabel = imp.largura === 48 ? '80mm (48 col)' : '58mm (32 col)';
     const vinculados = _modelos.filter(m => m.ativo && m.impressora_idx === idx).map(m => m.nome).join(', ');
     return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px 20px">
@@ -3304,15 +3305,18 @@ function editarImpressora(idx) {
 }
 
 function toggleImpTipo() {
-  const tipo = document.getElementById('imp-tipo').value;
   const isElectron = !!window.ElectronPrint;
+  const tipo = document.getElementById('imp-tipo').value;
 
-  // No Electron, USB = selecionar impressora do Windows (não tem WebUSB)
-  // No navegador, USB = parear via WebUSB
-  if (tipo === 'usb' && isElectron) {
+  // No Electron: esconde tipo de conexão e parear USB, sempre mostra lista do Windows
+  if (isElectron) {
+    const tipoWrap = document.getElementById('imp-tipo-wrap');
+    if (tipoWrap) tipoWrap.style.display = 'none';
     document.getElementById('imp-usb-wrap').style.display = 'none';
-    document.getElementById('imp-agent-wrap').style.display = '';
-    // Carrega impressoras do Electron
+    document.getElementById('imp-printer-wrap').style.display = '';
+    const hint = document.getElementById('imp-printer-hint');
+    if (hint) hint.textContent = '⚡ Impressoras detectadas do Windows';
+
     window.ElectronPrint.getConfig().then(cfg => {
       const dst = document.getElementById('imp-printer-select');
       if (dst && cfg.printers) {
@@ -3320,11 +3324,16 @@ function toggleImpTipo() {
           cfg.printers.map(p => `<option value="${p}">${p}${p === cfg.printer ? ' ★' : ''}</option>`).join('');
       }
     }).catch(() => {});
-    const usbSt = document.getElementById('imp-usb-status');
-    if (usbSt) { usbSt.textContent = '⚡ Electron detectado — selecione a impressora abaixo'; usbSt.style.color = '#10b981'; usbSt.style.display = ''; }
-  } else if (tipo === 'usb') {
+    return;
+  }
+
+  // No navegador: mostra tipo de conexão
+  const tipoWrap = document.getElementById('imp-tipo-wrap');
+  if (tipoWrap) tipoWrap.style.display = '';
+
+  if (tipo === 'usb') {
     document.getElementById('imp-usb-wrap').style.display = '';
-    document.getElementById('imp-agent-wrap').style.display = 'none';
+    document.getElementById('imp-printer-wrap').style.display = 'none';
     const usbSt = document.getElementById('imp-usb-status');
     if (usbSt) {
       const saved = localStorage.getItem('escpos_usb_name');
@@ -3333,25 +3342,17 @@ function toggleImpTipo() {
     }
   } else if (tipo === 'agent') {
     document.getElementById('imp-usb-wrap').style.display = 'none';
-    document.getElementById('imp-agent-wrap').style.display = '';
-    if (isElectron) {
-      window.ElectronPrint.getConfig().then(cfg => {
-        const dst = document.getElementById('imp-printer-select');
-        if (dst && cfg.printers) {
-          dst.innerHTML = '<option value="">Impressora padrão do sistema</option>' +
-            cfg.printers.map(p => `<option value="${p}">${p}${p === cfg.printer ? ' ★' : ''}</option>`).join('');
-        }
-      }).catch(() => {});
-    } else {
-      loadPrinters().then(() => {
-        const src = document.getElementById('print-printer-select');
-        const dst = document.getElementById('imp-printer-select');
-        if (src && dst) dst.innerHTML = src.innerHTML;
-      });
-    }
+    document.getElementById('imp-printer-wrap').style.display = '';
+    const hint = document.getElementById('imp-printer-hint');
+    if (hint) hint.textContent = 'Impressora do servidor (Print Agent)';
+    loadPrinters().then(() => {
+      const src = document.getElementById('print-printer-select');
+      const dst = document.getElementById('imp-printer-select');
+      if (src && dst) dst.innerHTML = src.innerHTML;
+    });
   } else {
     document.getElementById('imp-usb-wrap').style.display = 'none';
-    document.getElementById('imp-agent-wrap').style.display = 'none';
+    document.getElementById('imp-printer-wrap').style.display = 'none';
   }
 }
 
@@ -3362,41 +3363,44 @@ async function pairUsbForModal() {
 function salvarImpressora() {
   const apelido = document.getElementById('imp-apelido').value.trim();
   if (!apelido) { sbToast('warn', 'Preencha o apelido'); return; }
-  const tipo = document.getElementById('imp-tipo').value;
-  const largura = parseInt(document.getElementById('imp-largura').value) || 32;
-  let printerName = '';
+  const largura = parseInt(document.getElementById('imp-largura').value) || 48;
   const isElectron = !!window.ElectronPrint;
-  if (tipo === 'usb' && isElectron) {
-    // No Electron, USB usa a impressora selecionada do sistema
+  let printerName = '';
+  let tipo = 'usb';
+
+  if (isElectron) {
+    // Electron: sempre pega do select de impressoras do Windows
     printerName = document.getElementById('imp-printer-select')?.value || '';
-  } else if (tipo === 'usb') {
-    printerName = localStorage.getItem('escpos_usb_name') || 'USB';
-  } else if (tipo === 'agent') {
-    printerName = document.getElementById('imp-printer-select')?.value || '';
+    tipo = 'electron';
+  } else {
+    tipo = document.getElementById('imp-tipo').value;
+    if (tipo === 'usb') {
+      printerName = localStorage.getItem('escpos_usb_name') || 'USB';
+    } else if (tipo === 'agent') {
+      printerName = document.getElementById('imp-printer-select')?.value || '';
+    }
   }
+
   const obj = { apelido, tipo, largura, printerName };
   if (_editImpIdx >= 0) _impressoras[_editImpIdx] = { ..._impressoras[_editImpIdx], ...obj };
   else _impressoras.push(obj);
   _saveImpressoras();
 
-  // Sincroniza formato do papel e impressora globalmente
+  // Sincroniza formato do papel globalmente
   const pw = largura <= 32 ? 58 : 80;
   const fmt = largura <= 32 ? '58mm' : '80mm';
   _printFormat = fmt;
   localStorage.setItem('printFormat', fmt);
   const fmtSel = document.getElementById('print-format-select');
   if (fmtSel) fmtSel.value = fmt;
+  _printPrinter = printerName;
+  localStorage.setItem('printPrinter', printerName);
 
-  if (isElectron && printerName) {
-    _printPrinter = printerName;
-    localStorage.setItem('printPrinter', printerName);
+  if (isElectron) {
     window.ElectronPrint.saveConfig({ printer: printerName, paperWidth: pw, printFormat: fmt }).catch(() => {});
-  } else if (printerName) {
-    _printPrinter = printerName;
-    localStorage.setItem('printPrinter', printerName);
   }
   closeModal('modal-impressora');
-  _loadImpressoras(); _loadModelos(); renderPrintPreview();
+  _loadImpressoras(); _loadModelos(); _loadRoteamento(); renderPrintPreview();
   sbToast('ok', 'Impressora salva!');
 }
 
