@@ -874,9 +874,9 @@ function _subscribeRadio() {
 
       showToast(
         '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 1a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 8 1z" stroke="currentColor" stroke-width="1.4"/><path d="M4 7v.5a4 4 0 0 0 8 0V7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
-        `📻 ${data.garcom_nome}: mensagem de voz`
+        `🎙️ ${data.garcom_nome}: mensagem de voz`
       );
-      sendBrowserNotif(`📻 Rádio — ${data.garcom_nome}`, 'Mensagem de voz recebida');
+      sendBrowserNotif(`🎙️ EstimaFone — ${data.garcom_nome}`, 'Mensagem de voz recebida');
 
       if (!_radioPanelOpen) {
         _radioUnread++;
@@ -904,7 +904,7 @@ function _radioShowManualPlay(url, nome) {
   if (el) el.remove();
   const d = document.createElement('div'); d.id = 'radio-manual-banner';
   d.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:9999;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;padding:10px 20px;border-radius:12px;cursor:pointer;font-family:"DM Sans",sans-serif;font-size:13px;font-weight:700;box-shadow:0 4px 20px rgba(0,0,0,.3);display:flex;align-items:center;gap:8px';
-  d.innerHTML = `📻 ${nome} enviou áudio — Clique para ouvir`;
+  d.innerHTML = `🎙️ ${nome} enviou áudio — Clique para ouvir`;
   d.onclick = () => { new Audio(url).play(); d.remove(); };
   document.body.appendChild(d);
   setTimeout(() => d.remove(), 15000);
@@ -937,7 +937,7 @@ async function _radioLoadMessages() {
     const res = await fetch(`/api/radio/messages?user_id=gestor`, { headers: { 'x-tenant-id': tid } });
     const msgs = await res.json();
     const c = document.getElementById('radio-gestor-msgs');
-    if (!msgs.length) { c.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:30px">Nenhum áudio nas últimas 10h</div>'; return; }
+    if (!msgs.length) { c.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:30px">Nenhuma mensagem nas últimas 10h</div>'; return; }
     c.innerHTML = msgs.reverse().map(m => {
       const isMe = m.from_id === 'gestor';
       const time = new Date(m.created_at+'Z').toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -998,7 +998,7 @@ async function _radioGestorStartRec() {
         try{
           await fetch('/api/radio/send',{method:'POST',headers:{'Content-Type':'application/json','x-tenant-id':_sessao?.tenant_id},
             body:JSON.stringify({audio:b64,garcom_nome:'Gestor',garcom_id:null,destino:destId})});
-          sbToast('ok','📻 Áudio enviado!');
+          sbToast('ok','🎙️ Áudio enviado!');
           if(_radioPanelOpen) _radioLoadMessages();
         }catch{ sbToast('err','Erro ao enviar'); }
       };

@@ -4223,7 +4223,7 @@ async function _radioStartRecording() {
               destino: _radioDestino
             })
           });
-          showToast(`📻 Áudio enviado para ${_radioDestinoNome}!`);
+          showToast(`🎙️ Enviado para ${_radioDestinoNome}!`);
         } catch(err) { showToast('❌ Erro ao enviar áudio'); console.error('[RADIO]', err); }
         _radioActive = false;
       };
@@ -4273,7 +4273,7 @@ function _radioSubscribeGarcom() {
       audio.volume = 1.0;
       audio.play().catch(() => {});
       audio.onended = () => URL.revokeObjectURL(url);
-      showToast(`📻 ${data.garcom_nome}: áudio recebido`);
+      showToast(`🎙️ ${data.garcom_nome}: áudio recebido`);
     } catch(err) { console.error('[RADIO RX]', err); }
   });
   _radioSSE.onerror = () => {
@@ -4318,7 +4318,7 @@ async function _radioLoadHistory() {
     const res = await fetch(`/api/radio/messages?user_id=${gid}`, { headers: { 'x-tenant-id': tid } });
     const msgs = await res.json();
     const c = document.getElementById('radio-hist-list');
-    if (!msgs.length) { c.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:11px;padding:16px">Nenhum áudio nas últimas 10h</div>'; return; }
+    if (!msgs.length) { c.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:11px;padding:16px">Nenhuma mensagem nas últimas 10h</div>'; return; }
     c.innerHTML = msgs.reverse().map(m => {
       const isMe = String(m.from_id) === String(gid);
       const time = new Date(m.created_at+'Z').toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -4353,7 +4353,7 @@ async function _radioPlayHist(id) {
 </script>
 
 <!-- FAB flutuante do rádio -->
-<button class="radio-fab" id="radio-fab" onclick="radioTogglePanel()" title="Enviar áudio">
+<button class="radio-fab" id="radio-fab" onclick="radioTogglePanel()" title="EstimaFone">
   <svg width="22" height="22" viewBox="0 0 16 16" fill="none">
     <path d="M8 1a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 8 1z" stroke="#fff" stroke-width="1.3"/>
     <path d="M4 7v.5a4 4 0 0 0 8 0V7" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>
@@ -4365,7 +4365,7 @@ async function _radioPlayHist(id) {
 <!-- Painel de rádio com abas -->
 <div class="radio-panel" id="radio-panel">
   <div class="radio-panel-head" style="display:flex;justify-content:space-between;align-items:center">
-    <span>📻 Rádio</span>
+    <span>🎙️ EstimaFone</span>
     <button onclick="document.getElementById('radio-panel').classList.remove('on')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:2px">✕</button>
   </div>
   <!-- Abas -->
