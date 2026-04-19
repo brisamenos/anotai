@@ -6,12 +6,12 @@
 const GESTOR_TEMAS = [
   {
     key: 'escuro',
-    nome: 'Meia-Noite',
-    desc: 'Escuro elegante com acentos indigo',
-    emoji: '🌑',
+    nome: 'Oceano Profundo',
+    desc: 'Navy elegante com acentos cyan',
+    emoji: '🌊',
     tipo: 'dark',
-    preview: { bg:'#111113', sidebar:'#141416', accent:'#818cf8', card:'#19191d', cardBorder:'rgba(255,255,255,.06)', text:'#e4e4e7', muted:'#71717a', kol1:'rgba(196,149,106,.08)', kol2:'rgba(129,140,248,.06)', kol3:'rgba(52,211,153,.06)', kolT1:'#dbb896', kolT2:'#a5b4fc', kolT3:'#6ee7b7' },
-    vars: null // usa MODO_ESCURO
+    preview: { bg:'#0a1220', sidebar:'#06101e', accent:'#0ea5e9', card:'#0f1a2e', cardBorder:'rgba(56,189,248,.07)', text:'#dce8f4', muted:'#5e7e9e', kol1:'rgba(251,191,36,.08)', kol2:'rgba(14,165,233,.08)', kol3:'rgba(52,211,153,.08)', kolT1:'#fbbf24', kolT2:'#7dd3fc', kolT3:'#6ee7b7' },
+    vars: null // usa variáveis do :root / inline
   },
   {
     key: 'claro',
@@ -24,9 +24,9 @@ const GESTOR_TEMAS = [
   },
   {
     key: 'oceano',
-    nome: 'Oceano',
-    desc: 'Azul profundo com acentos cyan',
-    emoji: '🌊',
+    nome: 'Oceano Clássico',
+    desc: 'Azul profundo com sky blue',
+    emoji: '🐋',
     tipo: 'dark',
     preview: { bg:'#0a1628', sidebar:'#06101e', accent:'#38bdf8', card:'#0f1f38', cardBorder:'rgba(56,189,248,.1)', text:'#e0ecf8', muted:'#6890b0', kol1:'rgba(251,191,36,.08)', kol2:'rgba(56,189,248,.08)', kol3:'rgba(52,211,153,.08)', kolT1:'#fbbf24', kolT2:'#7dd3fc', kolT3:'#6ee7b7' },
     vars: {

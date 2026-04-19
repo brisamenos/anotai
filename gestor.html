@@ -21,18 +21,18 @@ if(window.visualViewport){window.visualViewport.addEventListener('resize',setVH)
 <link rel="stylesheet" href="/gestor.css">
   <script src="/api-client.js"></script>
 <script>
-// ══ TEMA ESCURO NAVY — aplicado antes do gestor.js ══
+// ══ TEMA OCEANO PROFUNDO — aplicado antes do gestor.js ══
 (function(){
   var r = document.documentElement;
   var dark = {
-    '--bg':'#0f1117','--surface':'#181b24','--surface2':'#1e2130','--surface3':'#242840',
-    '--border':'rgba(255,255,255,.07)','--border2':'rgba(255,255,255,.13)',
-    '--accent':'#3b82f6','--accent2':'#06b6d4','--accent3':'#f59e0b',
-    '--accent-dim':'rgba(59,130,246,.18)','--accent-glow':'rgba(59,130,246,.35)',
-    '--success':'#22c55e','--danger':'#ef4444','--purple':'#8b5cf6',
-    '--pink':'#ec4899','--orange':'#f97316',
-    '--text':'#f1f5f9','--muted':'#64748b','--muted2':'#94a3b8',
-    '--sidebar-bg':'#131929','--topnav-bg':'#0d1117','--sfoot-bg':'rgba(8,10,18,.6)'
+    '--bg':'#0a1220','--surface':'#0f1a2e','--surface2':'#152640','--surface3':'#1c3050',
+    '--border':'rgba(56,189,248,.07)','--border2':'rgba(56,189,248,.15)',
+    '--accent':'#0ea5e9','--accent2':'#67e8f9','--accent3':'#fbbf24',
+    '--accent-dim':'rgba(14,165,233,.12)','--accent-glow':'rgba(14,165,233,.25)',
+    '--success':'#34d399','--danger':'#fb7185','--purple':'#a78bfa',
+    '--pink':'#f0abfc','--orange':'#f0a060',
+    '--text':'#dce8f4','--muted':'#5e7e9e','--muted2':'#8baabe',
+    '--sidebar-bg':'#06101e','--topnav-bg':'#040c18','--sfoot-bg':'rgba(4,12,24,.8)'
   };
   // Apaga chaves antigas de tema
   try { ['ef_tema_modo','ef_tema_v2','tema','theme'].forEach(function(k){ localStorage.removeItem(k); }); } catch(e){}
@@ -84,7 +84,7 @@ function nav(id) {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
   </div>
   <a class="logo" href="#" onclick="nav('pedidos');return false">
-    <svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#3b82f6"/><path d="M10 28L20 12L30 28" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 22H26" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/></svg>
+    <svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#0ea5e9"/><path d="M10 28L20 12L30 28" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 22H26" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/></svg>
     Estima Food
   </a>
   <div class="tnr">
@@ -3107,7 +3107,7 @@ Use no seu próximo pedido 🛍️</textarea>
     </div>
 
     <!-- Endereço de entrega (delivery) -->
-    <div id="od-delivery-addr-block" style="display:none;margin-top:10px;background:rgba(129,140,248,.06);border:1px solid rgba(129,140,248,.15);border-radius:10px;padding:12px 14px">
+    <div id="od-delivery-addr-block" style="display:none;margin-top:10px;background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.15);border-radius:10px;padding:12px 14px">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);margin-bottom:6px;display:flex;align-items:center;gap:5px">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1C5.24 1 3 3.24 3 6c0 3.75 5 9 5 9s5-5.25 5-9c0-2.76-2.24-5-5-5z" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="6" r="1.5" stroke="currentColor" stroke-width="1.3"/></svg>
         Endereço de entrega
@@ -5213,9 +5213,9 @@ Use no seu próximo pedido 🛍️</textarea>
 .od-action-btn{width:32px;height:32px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;font-size:15px}
 .od-action-btn:hover{transform:scale(1.08)}
 .od-item-row{display:flex;align-items:flex-start;gap:10px;padding:9px 12px;background:var(--surface2);border-radius:9px;margin-bottom:5px;border:1px solid var(--border)}
-.od-item-qty{font-size:11px;font-weight:700;color:var(--accent);background:rgba(129,140,248,.1);border:1px solid rgba(129,140,248,.18);border-radius:6px;padding:2px 7px;min-width:28px;text-align:center;flex-shrink:0;margin-top:1px}
+.od-item-qty{font-size:11px;font-weight:700;color:var(--accent);background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.18);border-radius:6px;padding:2px 7px;min-width:28px;text-align:center;flex-shrink:0;margin-top:1px}
 .od-item-name{font-size:13px;font-weight:600;color:var(--text)}
-.od-item-obs{font-size:11.5px;color:#c4956a;margin-top:4px;font-weight:600;background:rgba(196,149,106,.08);border:1px solid rgba(196,149,106,.15);border-radius:6px;padding:4px 8px;line-height:1.4}
+.od-item-obs{font-size:11.5px;color:#38bdf8;margin-top:4px;font-weight:600;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.15);border-radius:6px;padding:4px 8px;line-height:1.4}
 .od-item-price{font-size:12.5px;font-weight:700;color:var(--accent3);margin-left:auto;flex-shrink:0;padding-top:2px}
 .od-subtotal-row{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--muted);padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)}
 .od-total-row{display:flex;justify-content:space-between;align-items:center;font-size:15px;font-weight:800;padding:8px 0 0;color:var(--text)}
