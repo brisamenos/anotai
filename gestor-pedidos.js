@@ -49,6 +49,10 @@ function nav(id) {
   if (id === 'taxa') renderTaxaPage();
 
   if (id === 'meu-plano') renderMeuPlano();
+  if (id === 'historico') renderHistorico();
+  if (id === 'fornecedores') renderFornecedores();
+  if (id === 'contas-pagar') { renderFornecedores().then(() => renderContasPagar()); }
+  if (id === 'dre') renderDRE();
   if (id === 'cardapio-publico') {
     const cpPg = document.getElementById('page-cardapio-publico');
     if (cpPg) cpPg.style.display = 'flex';

@@ -234,6 +234,22 @@ function nav(id) {
     <svg viewBox="0 0 16 16" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 13c0-2.76 2.24-5 5-5h1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M9.5 15c0-1.38.9-2.5 2.5-2.5s2.5 1.12 2.5 2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7.5" x2="12" y2="10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Clientes
   </button>
+  <button class="si" id="sn-historico" onclick="nav('historico')">
+    <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="9" r="5" stroke="currentColor" stroke-width="1.4"/><path d="M8 6.5V9l1.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M6 2h4M8 2v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    Histórico de pedidos
+  </button>
+  <button class="si" id="sn-fornecedores" onclick="nav('fornecedores')">
+    <svg viewBox="0 0 16 16" fill="none"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/></svg>
+    Fornecedores
+  </button>
+  <button class="si" id="sn-contas-pagar" onclick="nav('contas-pagar')">
+    <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M2 6h12" stroke="currentColor" stroke-width="1.4"/><path d="M5 9.5h3M5 11h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    Contas a Pagar
+  </button>
+  <button class="si" id="sn-dre" onclick="nav('dre')">
+    <svg viewBox="0 0 16 16" fill="none"><path d="M2 12l4-4 3 3 5-6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 14h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    DRE (Lucro)
+  </button>
   <button class="si" id="sn-desempenho" onclick="nav('desempenho')">
     <svg viewBox="0 0 16 16" fill="none"><path d="M2 12l4-4 3 3 5-6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
     Meu Desempenho
@@ -1792,7 +1808,7 @@ Use no seu próximo pedido 🛍️</textarea>
         <input type="month" id="rel-custom-month" onchange="if(this.value) setRelPeriodo('custom-month', this.value)" title="Escolher mês específico" class="form-input" style="width:auto;padding:3px 8px;font-size:11px;font-family:'Outfit',sans-serif;cursor:pointer;border-radius:7px;background:transparent;border:1px dashed var(--border);color:var(--muted)">
       </div>
       <span id="rel-periodo-label" style="font-size:12px;color:var(--muted)"></span>
-      <button class="btn bg" onclick="relExportar()" style="font-size:12px">
+      <button class="btn bg" onclick="relExportarCompleto()" style="font-size:12px">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 3v8M5 8l3 3 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M3 13h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         Exportar CSV
       </button>
@@ -2383,6 +2399,110 @@ Use no seu próximo pedido 🛍️</textarea>
       Pagamento seguro via Mercado Pago
     </div>
   </div>
+</div>
+
+<!-- HISTÓRICO DE PEDIDOS -->
+<div class="page" id="page-historico">
+  <div class="ph"><div><div class="pt">Histórico de Pedidos</div><div class="ps">Busque e consulte todos os pedidos realizados</div></div></div>
+  <div class="card" style="padding:16px;margin-bottom:16px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <div style="flex:1;min-width:180px"><label class="form-label">Buscar</label><input class="form-input" id="hist-search" placeholder="Nome, telefone ou #pedido" onkeydown="if(event.key==='Enter')histFiltrar()"></div>
+      <div style="min-width:120px"><label class="form-label">Status</label><select class="form-input" id="hist-status"><option value="">Todos</option><option value="entregue">Entregue</option><option value="finalizado">Finalizado</option><option value="pronto">Pronto</option><option value="cancelado">Cancelado</option><option value="mesa_aberta">Mesa aberta</option></select></div>
+      <div><label class="form-label">De</label><input class="form-input" id="hist-de" type="date"></div>
+      <div><label class="form-label">Até</label><input class="form-input" id="hist-ate" type="date"></div>
+      <button class="btn bp" style="padding:8px 16px" onclick="histFiltrar()">Buscar</button>
+    </div>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <div style="font-size:12.5px;color:var(--muted)"><span id="hist-total">0</span> pedidos encontrados</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="btn bg" id="hist-prev" style="font-size:11px;padding:4px 10px" onclick="histPrev()" disabled>← Anterior</button>
+      <span style="font-size:12px;color:var(--muted)" id="hist-pages">Página 1 de 1</span>
+      <button class="btn bg" id="hist-next" style="font-size:11px;padding:4px 10px" onclick="histNext()">Próxima →</button>
+    </div>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden"><div id="hist-list"></div></div>
+</div>
+
+<!-- Modal detalhe do pedido -->
+<div class="modal" id="modal-hist-detalhe"><div class="modal-box" style="max-width:520px"><div class="mh"><div class="mt">Detalhe do Pedido</div><button class="mc" onclick="closeModal('modal-hist-detalhe')">✕</button></div><div id="modal-hist-body"></div></div></div>
+
+<!-- FORNECEDORES -->
+<div class="page" id="page-fornecedores">
+  <div class="ph"><div><div class="pt">Fornecedores</div><div class="ps">Cadastro de fornecedores do estabelecimento</div></div><button class="btn bp" onclick="openAddFornecedor()">+ Novo fornecedor</button></div>
+  <div class="sg"><div class="sc" style="--ca:var(--accent)"><div class="sl">Total cadastrados</div><div class="sv" id="forn-total">0</div></div></div>
+  <div style="display:flex;flex-direction:column;gap:10px" id="forn-list"></div>
+</div>
+
+<!-- Modal fornecedor -->
+<div class="modal" id="modal-fornecedor"><div class="modal-box" style="max-width:480px"><div class="mh"><div class="mt" id="modal-forn-title">Novo Fornecedor</div><button class="mc" onclick="closeModal('modal-fornecedor')">✕</button></div>
+  <input type="hidden" id="forn-edit-id">
+  <div style="padding:20px;display:flex;flex-direction:column;gap:12px">
+    <div class="form-row"><label class="form-label">Nome *</label><input class="form-input" id="forn-nome" placeholder="Ex: Distribuidora ABC"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-row"><label class="form-label">Contato</label><input class="form-input" id="forn-contato" placeholder="Pessoa de contato"></div>
+      <div class="form-row"><label class="form-label">Telefone</label><input class="form-input" id="forn-telefone" placeholder="(00) 00000-0000"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-row"><label class="form-label">E-mail</label><input class="form-input" id="forn-email" placeholder="email@forn.com"></div>
+      <div class="form-row"><label class="form-label">CNPJ</label><input class="form-input" id="forn-cnpj" placeholder="00.000.000/0001-00"></div>
+    </div>
+    <div class="form-row"><label class="form-label">Endereço</label><input class="form-input" id="forn-endereco" placeholder="Rua, número, bairro"></div>
+    <div class="form-row"><label class="form-label">Observações</label><input class="form-input" id="forn-obs" placeholder="Notas sobre este fornecedor"></div>
+    <button class="btn bp" style="width:100%;padding:10px;margin-top:6px" onclick="saveFornecedor()">Salvar</button>
+  </div>
+</div></div>
+
+<!-- CONTAS A PAGAR -->
+<div class="page" id="page-contas-pagar">
+  <div class="ph"><div><div class="pt">Contas a Pagar</div><div class="ps">Controle de despesas fixas e variáveis</div></div><button class="btn bp" onclick="openAddConta()">+ Nova conta</button></div>
+  <div class="sg">
+    <div class="sc" style="--ca:var(--danger)"><div class="sl">Pendentes</div><div class="sv" id="cp-pendentes">0</div></div>
+    <div class="sc" style="--ca:var(--accent3)"><div class="sl">Vencidas</div><div class="sv" id="cp-vencidas" style="color:var(--danger)">0</div></div>
+    <div class="sc" style="--ca:var(--accent)"><div class="sl">Total pendente</div><div class="sv" id="cp-total-pend">R$0</div></div>
+    <div class="sc" style="--ca:var(--success)"><div class="sl">Total pago</div><div class="sv" id="cp-total-pago">R$0</div></div>
+  </div>
+  <div style="margin-bottom:12px"><select class="form-input" id="cp-filtro" style="width:auto;display:inline-block" onchange="renderContasPagar()">
+    <option value="todos">Todos</option><option value="pendente">Pendentes</option><option value="vencidas">Vencidas</option><option value="pago">Pagas</option>
+  </select></div>
+  <div style="display:flex;flex-direction:column;gap:10px" id="cp-list"></div>
+</div>
+
+<!-- Modal conta a pagar -->
+<div class="modal" id="modal-conta-pagar"><div class="modal-box" style="max-width:480px"><div class="mh"><div class="mt" id="modal-cp-title">Nova Conta</div><button class="mc" onclick="closeModal('modal-conta-pagar')">✕</button></div>
+  <input type="hidden" id="cp-edit-id">
+  <div style="padding:20px;display:flex;flex-direction:column;gap:12px">
+    <div class="form-row"><label class="form-label">Descrição *</label><input class="form-input" id="cp-descricao" placeholder="Ex: Aluguel do ponto"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-row"><label class="form-label">Valor (R$) *</label><input class="form-input" id="cp-valor" type="number" step="0.01" placeholder="0,00"></div>
+      <div class="form-row"><label class="form-label">Vencimento *</label><input class="form-input" id="cp-vencimento" type="date"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-row"><label class="form-label">Categoria</label><select class="form-input" id="cp-categoria">
+        <option value="outros">Outros</option><option value="aluguel">Aluguel</option><option value="salario">Salários</option><option value="fornecedor">Fornecedores</option><option value="agua">Água</option><option value="luz">Energia</option><option value="internet">Internet</option><option value="gas">Gás</option><option value="marketing">Marketing</option><option value="manutencao">Manutenção</option><option value="impostos">Impostos</option>
+      </select></div>
+      <div class="form-row"><label class="form-label">Fornecedor</label><select class="form-input" id="cp-fornecedor"><option value="">Nenhum</option></select></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <label style="font-size:12.5px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="cp-recorrente" onchange="document.getElementById('cp-recorrencia-wrap').style.display=this.checked?'':'none'"> Conta recorrente</label>
+      <div id="cp-recorrencia-wrap" style="display:none"><select class="form-input" id="cp-recorrencia" style="width:auto"><option value="mensal">Mensal</option><option value="quinzenal">Quinzenal</option><option value="semanal">Semanal</option></select></div>
+    </div>
+    <div class="form-row"><label class="form-label">Observações</label><input class="form-input" id="cp-obs" placeholder="Notas"></div>
+    <button class="btn bp" style="width:100%;padding:10px;margin-top:6px" onclick="saveConta()">Salvar</button>
+  </div>
+</div></div>
+
+<!-- DRE SIMPLIFICADO -->
+<div class="page" id="page-dre">
+  <div class="ph"><div><div class="pt">DRE Simplificado</div><div class="ps">Demonstrativo de Resultado — Receita vs Despesas</div></div></div>
+  <div class="card" style="padding:14px;margin-bottom:16px">
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <div><label class="form-label">De</label><input class="form-input" id="dre-de" type="date"></div>
+      <div><label class="form-label">Até</label><input class="form-input" id="dre-ate" type="date"></div>
+      <button class="btn bp" style="padding:8px 16px" onclick="renderDRE()">Atualizar</button>
+    </div>
+  </div>
+  <div id="dre-body"></div>
 </div>
 
 <!-- CLIENTES -->
@@ -5120,7 +5240,8 @@ Use no seu próximo pedido 🛍️</textarea>
     'gestor-financeiro.js',
     'gestor-robo.js',
     'gestor-temas.js',
-    'gestor-config.js'
+    'gestor-config.js',
+    'gestor-extras.js'
   ];
   _mods.forEach(function(m){
     document.write('<script src="/' + m + '?v=' + _v + '"><\/script>');

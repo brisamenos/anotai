@@ -331,6 +331,41 @@ const MIGRATIONS = [
       created_at TEXT DEFAULT (datetime('now'))
     )`
   },
+  { version:33, description:'tabela fornecedores', up:
+    `CREATE TABLE IF NOT EXISTS fornecedores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      nome TEXT NOT NULL,
+      contato TEXT,
+      telefone TEXT,
+      email TEXT,
+      cnpj TEXT,
+      endereco TEXT,
+      obs TEXT,
+      ativo INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`
+  },
+  { version:34, description:'tabela contas_pagar', up:
+    `CREATE TABLE IF NOT EXISTS contas_pagar (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      descricao TEXT NOT NULL,
+      valor REAL NOT NULL,
+      vencimento TEXT NOT NULL,
+      categoria TEXT DEFAULT 'outros',
+      fornecedor_id INTEGER,
+      recorrente INTEGER DEFAULT 0,
+      recorrencia TEXT,
+      status TEXT DEFAULT 'pendente',
+      pago_em TEXT,
+      obs TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`
+  },
+  { version:35, description:'fornecedor_id no estoque', up:
+    `ALTER TABLE estoque ADD COLUMN fornecedor_id INTEGER`
+  },
 ]
 
 function runMigrations() {
@@ -564,11 +599,13 @@ const TABLE_COLS = {
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
   orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','garcom_id','garcom_nome','customer_id','order_num','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
-  estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','updated_at'],
+  estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','fornecedor_id','updated_at'],
   fidelidade:   ['id','tenant_id','name','phone','birthday','pts','max_pts','orders_count','resgates','created_at'],
   customers:    ['id','tenant_id','name','phone','addr','orders_count','total_spent','last_order_at','email','birthday','senha_hash','cashback_saldo','created_at'],
   ratings:      ['id','tenant_id','order_id','client','phone','nota','comentario','created_at'],
   pagamentos_cartao: ['id','tenant_id','order_id','mp_payment_id','mp_external_ref','valor','status','status_detail','payer_name','payer_email','last_four_digits','payment_method_id','created_at','paid_at'],
+  fornecedores: ['id','tenant_id','nome','contato','telefone','email','cnpj','endereco','obs','ativo','created_at'],
+  contas_pagar: ['id','tenant_id','descricao','valor','vencimento','categoria','fornecedor_id','recorrente','recorrencia','status','pago_em','obs','created_at'],
 }
 // Colunas que NUNCA aparecem na resposta GET — mas ainda funcionam como filtro WHERE e em escrita
 const STRIP_FROM_OUTPUT = {
@@ -1333,6 +1370,38 @@ const server = http.createServer(async (req,res) => {
   if(req.method==='GET'&&upath==='/api/tenant-info'){const info=handleTenantInfo(params);send(res,info.error?404:200,info);return}
   if(req.method==='GET'&&upath==='/api/tenant-slug'){const tid=req.headers['x-tenant-id']||params.get('tenant_id')||'';if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return};const row=db.prepare('SELECT slug FROM tenants WHERE id=?').get(tid);send(res,200,{slug:row?.slug||''});return}
   if(req.method==='GET'&&upath==='/api/tenant-info-gestor'){const tid=req.headers['x-tenant-id']||params.get('tenant_id')||'';if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return};const row=db.prepare('SELECT id,nome,slug,plano,ativo,expires_at FROM tenants WHERE id=?').get(tid);if(!row){send(res,404,{error:'Tenant não encontrado'});return};send(res,200,row);return}
+
+  // ── Histórico de pedidos (busca com filtros) ──
+  if(req.method==='GET'&&upath==='/api/historico-pedidos'){
+    const tid=req.headers['x-tenant-id']||params.get('tenant_id')||''
+    if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
+    const q=params.get('q')||'', status=params.get('status')||'', de=params.get('de')||'', ate=params.get('ate')||'', page=parseInt(params.get('page')||'1'), limit=parseInt(params.get('limit')||'50')
+    let where='tenant_id=?', vals=[tid]
+    if(status){where+=' AND status=?';vals.push(status)}
+    if(de){where+=' AND created_at>=?';vals.push(de)}
+    if(ate){where+=' AND created_at<=?';vals.push(ate+'T23:59:59.999Z')}
+    if(q){where+=' AND (client LIKE ? OR phone LIKE ? OR id=? OR order_num=?)';vals.push(`%${q}%`,`%${q}%`,parseInt(q)||0,parseInt(q)||0)}
+    const total=db.prepare(`SELECT COUNT(*) as cnt FROM orders WHERE ${where}`).get(...vals)?.cnt||0
+    const rows=db.prepare(`SELECT id,order_num,client,phone,addr,items,total,taxa,pag,status,mesa_num,garcom_nome,created_at FROM orders WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...vals,limit,(page-1)*limit)
+    rows.forEach(r=>{try{r.items=JSON.parse(r.items)}catch{}})
+    send(res,200,{orders:rows,total,page,pages:Math.ceil(total/limit)})
+    return
+  }
+
+  // ── Exportar relatório CSV completo ──
+  if(req.method==='GET'&&upath==='/api/exportar-relatorio'){
+    const tid=req.headers['x-tenant-id']||params.get('tenant_id')||''
+    if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
+    const de=params.get('de')||'', ate=params.get('ate')||''
+    if(!de||!ate){send(res,400,{error:'Informe de e ate'});return}
+    const orders=db.prepare(`SELECT id,order_num,client,phone,addr,items,total,taxa,pag,status,mesa_num,garcom_nome,created_at FROM orders WHERE tenant_id=? AND created_at>=? AND created_at<=? ORDER BY created_at ASC`).all(tid,de,ate+'T23:59:59.999Z')
+    const movs=db.prepare(`SELECT id,description,tipo,val,pag,time,created_at FROM movimentos WHERE tenant_id=? AND created_at>=? AND created_at<=? ORDER BY created_at ASC`).all(tid,de,ate+'T23:59:59.999Z')
+    const contas=db.prepare(`SELECT id,descricao,valor,vencimento,categoria,status,pago_em FROM contas_pagar WHERE tenant_id=? AND vencimento>=? AND vencimento<=? ORDER BY vencimento ASC`).all(tid,de,ate)
+    orders.forEach(r=>{try{r.items=JSON.parse(r.items)}catch{}})
+    send(res,200,{orders,movimentos:movs,contas_pagar:contas})
+    return
+  }
+
   if(upath==='/status'){send(res,200,{ok:true,uptime:Math.floor(process.uptime()),db:'sqlite-multitenant',version:'4.0.0',backup:fs.existsSync(BACKUP_PATH)?fs.statSync(BACKUP_PATH).mtime:null});return}
   if(req.method==='POST'&&upath==='/api/order-status'){await handleOrderStatus(req,res);return}
 
@@ -1422,7 +1491,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/fidelidade/sync','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf'])
+  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/fidelidade/sync','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/exportar-relatorio'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return
