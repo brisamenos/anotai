@@ -870,6 +870,9 @@ setInterval(async () => {
         let houveMudanca = false;
         for (const o of novos) {
           if (!ordersKanban.find(x => x.id === o.id)) {
+            // Pedidos de mesa que acabaram de ser pagos (entregue) não devem entrar no kanban
+            // nem disparar notificação — são comandas finalizadas, não pedidos novos
+            if (o.status === 'entregue' && o.mesa_num) { if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id; continue; }
             if (window._pdvCreatedIds && window._pdvCreatedIds.has(Number(o.id))) { window._pdvCreatedIds.delete(Number(o.id)); ordersKanban.unshift(mapOrder(o)); if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id; continue; }
             ordersKanban.unshift(mapOrder(o));
             houveMudanca = true;
