@@ -1,3 +1,11 @@
+// Converte Date para formato SQLite 'YYYY-MM-DD HH:MM:SS' (UTC)
+// SQLite usa datetime('now') que gera esse formato, então as queries
+// de filtro precisam comparar no mesmo formato.
+function _toSQLite(d) {
+  if (typeof d === 'string') d = new Date(d);
+  return d.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '');
+}
+
 function renderKDS() {
   const g = document.getElementById('kds-grid');
   if (!g) return;
@@ -553,8 +561,8 @@ async function renderDesempenho() {
 
   try {
     const range = _desempGetRange();
-    const since = range.inicio.toISOString();
-    const ate   = range.fim.toISOString();
+    const since = _toSQLite(range.inicio);
+    const ate   = _toSQLite(range.fim);
 
     // Atualiza label do periodo
     const lblEl = document.getElementById('desemp-periodo-label');
@@ -808,10 +816,10 @@ async function renderRelatorios() {
 
   const now      = new Date();
   const range    = _relGetRange();
-  const iniISO   = range.inicio.toISOString();
-  const fimISO   = range.fim.toISOString();
-  const anoIn    = new Date(now.getFullYear(), 0, 1).toISOString();
-  const lbl30ago = new Date(now - 30*86400000).toISOString();
+  const iniISO   = _toSQLite(range.inicio);
+  const fimISO   = _toSQLite(range.fim);
+  const anoIn    = _toSQLite(new Date(now.getFullYear(), 0, 1));
+  const lbl30ago = _toSQLite(new Date(now - 30*86400000));
 
   const periLabel = { diario:'hoje', semanal:'na semana', mensal:'no mês', anual:'no ano' }[_relPeriodo] || 'no período';
   const lblEl = document.getElementById('rel-periodo-label');
@@ -1280,7 +1288,7 @@ async function renderRelatorios() {
 
     // ─── Clientes ────────────────────────────────────────
     const cliAll  = allCustomers || [];
-    const limite30 = new Date(now - 30*86400000).toISOString();
+    const limite30 = _toSQLite(new Date(now - 30*86400000));
     const cliTotal   = cliAll.length;
     const cliComPed  = cliAll.filter(c=>(c.orders_count||0)>0).length;
     const cliFid     = fidClients.length;
@@ -1487,8 +1495,8 @@ async function relImprimirCaixa() {
   try {
     const money   = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.', ',');
     const range   = _relGetRange();
-    const iniISO  = range.inicio.toISOString();
-    const fimISO  = range.fim.toISOString();
+    const iniISO  = _toSQLite(range.inicio);
+    const fimISO  = _toSQLite(range.fim);
     const nomeLoja = _sessao?.nome || 'Estabelecimento';
     const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' });
 
