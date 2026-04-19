@@ -306,21 +306,21 @@ async function renderContasPagar() {
 }
 
 function openAddConta() {
-  document.getElementById('cp-edit-id').value = '';
-  ['cp-descricao','cp-valor','cp-vencimento','cp-obs'].forEach(id => {
+  document.getElementById('ctp-edit-id').value = '';
+  ['ctp-descricao','ctp-valor','ctp-vencimento','ctp-obs'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value = '';
   });
-  document.getElementById('cp-categoria').value = 'outros';
-  document.getElementById('cp-fornecedor').value = '';
-  document.getElementById('cp-recorrente').checked = false;
-  document.getElementById('cp-recorrencia-wrap').style.display = 'none';
+  document.getElementById('ctp-categoria').value = 'outros';
+  document.getElementById('ctp-fornecedor').value = '';
+  document.getElementById('ctp-recorrente').checked = false;
+  document.getElementById('ctp-recorrencia-wrap').style.display = 'none';
   document.getElementById('modal-cp-title').textContent = 'Nova Conta a Pagar';
   _populateFornSelect();
   openModal('modal-conta-pagar');
 }
 
 function _populateFornSelect() {
-  const sel = document.getElementById('cp-fornecedor');
+  const sel = document.getElementById('ctp-fornecedor');
   if (!sel) return;
   sel.innerHTML = '<option value="">Nenhum</option>' +
     fornecedoresCache.map(f => `<option value="${f.id}">${f.nome}</option>`).join('');
@@ -329,36 +329,36 @@ function _populateFornSelect() {
 function editConta(id) {
   const c = contasPagarCache.find(x => x.id === id);
   if (!c) return;
-  document.getElementById('cp-edit-id').value = id;
-  document.getElementById('cp-descricao').value = c.descricao || '';
-  document.getElementById('cp-valor').value = c.valor || '';
-  document.getElementById('cp-vencimento').value = c.vencimento || '';
-  document.getElementById('cp-categoria').value = c.categoria || 'outros';
-  document.getElementById('cp-obs').value = c.obs || '';
-  document.getElementById('cp-recorrente').checked = !!c.recorrente;
-  document.getElementById('cp-recorrencia-wrap').style.display = c.recorrente ? '' : 'none';
-  if (c.recorrencia) document.getElementById('cp-recorrencia').value = c.recorrencia;
+  document.getElementById('ctp-edit-id').value = id;
+  document.getElementById('ctp-descricao').value = c.descricao || '';
+  document.getElementById('ctp-valor').value = c.valor || '';
+  document.getElementById('ctp-vencimento').value = c.vencimento || '';
+  document.getElementById('ctp-categoria').value = c.categoria || 'outros';
+  document.getElementById('ctp-obs').value = c.obs || '';
+  document.getElementById('ctp-recorrente').checked = !!c.recorrente;
+  document.getElementById('ctp-recorrencia-wrap').style.display = c.recorrente ? '' : 'none';
+  if (c.recorrencia) document.getElementById('ctp-recorrencia').value = c.recorrencia;
   document.getElementById('modal-cp-title').textContent = 'Editar Conta';
   _populateFornSelect();
-  if (c.fornecedor_id) document.getElementById('cp-fornecedor').value = c.fornecedor_id;
+  if (c.fornecedor_id) document.getElementById('ctp-fornecedor').value = c.fornecedor_id;
   openModal('modal-conta-pagar');
 }
 
 async function saveConta() {
-  const id = document.getElementById('cp-edit-id').value;
-  const descricao = document.getElementById('cp-descricao').value.trim();
-  const valor = parseFloat(document.getElementById('cp-valor').value) || 0;
-  const vencimento = document.getElementById('cp-vencimento').value;
+  const id = document.getElementById('ctp-edit-id').value;
+  const descricao = document.getElementById('ctp-descricao').value.trim();
+  const valor = parseFloat(document.getElementById('ctp-valor').value) || 0;
+  const vencimento = document.getElementById('ctp-vencimento').value;
   if (!descricao) { sbToast('err','Informe a descrição'); return; }
   if (!valor) { sbToast('err','Informe o valor'); return; }
   if (!vencimento) { sbToast('err','Informe o vencimento'); return; }
   const obj = {
     descricao, valor, vencimento,
-    categoria: document.getElementById('cp-categoria').value || 'outros',
-    fornecedor_id: parseInt(document.getElementById('cp-fornecedor').value) || null,
-    recorrente: document.getElementById('cp-recorrente').checked ? 1 : 0,
-    recorrencia: document.getElementById('cp-recorrente').checked ? (document.getElementById('cp-recorrencia')?.value || 'mensal') : null,
-    obs: document.getElementById('cp-obs').value.trim(),
+    categoria: document.getElementById('ctp-categoria').value || 'outros',
+    fornecedor_id: parseInt(document.getElementById('ctp-fornecedor').value) || null,
+    recorrente: document.getElementById('ctp-recorrente').checked ? 1 : 0,
+    recorrencia: document.getElementById('ctp-recorrente').checked ? (document.getElementById('ctp-recorrencia')?.value || 'mensal') : null,
+    obs: document.getElementById('ctp-obs').value.trim(),
   };
   sbLoading(true);
   if (id) {
