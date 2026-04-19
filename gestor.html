@@ -2470,24 +2470,24 @@ Use no seu próximo pedido 🛍️</textarea>
 
 <!-- Modal conta a pagar -->
 <div class="modal-bg" id="modal-conta-pagar" onclick="if(event.target===this)closeModal('modal-conta-pagar')"><div class="modal" style="max-width:480px"><div class="mh"><div class="mt" id="modal-cp-title">Nova Conta</div><button class="mc" onclick="closeModal('modal-conta-pagar')">✕</button></div>
-  <input type="hidden" id="cp-edit-id">
+  <input type="hidden" id="ctp-edit-id">
   <div style="padding:20px;display:flex;flex-direction:column;gap:12px">
-    <div class="form-row"><label class="form-label">Descrição *</label><input class="form-input" id="cp-descricao" placeholder="Ex: Aluguel do ponto"></div>
+    <div class="form-row"><label class="form-label">Descrição *</label><input class="form-input" id="ctp-descricao" placeholder="Ex: Aluguel do ponto"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="form-row"><label class="form-label">Valor (R$) *</label><input class="form-input" id="cp-valor" type="number" step="0.01" placeholder="0,00"></div>
-      <div class="form-row"><label class="form-label">Vencimento *</label><input class="form-input" id="cp-vencimento" type="date"></div>
+      <div class="form-row"><label class="form-label">Valor (R$) *</label><input class="form-input" id="ctp-valor" type="number" step="0.01" placeholder="0,00"></div>
+      <div class="form-row"><label class="form-label">Vencimento *</label><input class="form-input" id="ctp-vencimento" type="date"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="form-row"><label class="form-label">Categoria</label><select class="form-input" id="cp-categoria">
+      <div class="form-row"><label class="form-label">Categoria</label><select class="form-input" id="ctp-categoria">
         <option value="outros">Outros</option><option value="aluguel">Aluguel</option><option value="salario">Salários</option><option value="fornecedor">Fornecedores</option><option value="agua">Água</option><option value="luz">Energia</option><option value="internet">Internet</option><option value="gas">Gás</option><option value="marketing">Marketing</option><option value="manutencao">Manutenção</option><option value="impostos">Impostos</option>
       </select></div>
-      <div class="form-row"><label class="form-label">Fornecedor</label><select class="form-input" id="cp-fornecedor"><option value="">Nenhum</option></select></div>
+      <div class="form-row"><label class="form-label">Fornecedor</label><select class="form-input" id="ctp-fornecedor"><option value="">Nenhum</option></select></div>
     </div>
     <div style="display:flex;align-items:center;gap:10px">
-      <label style="font-size:12.5px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="cp-recorrente" onchange="document.getElementById('cp-recorrencia-wrap').style.display=this.checked?'':'none'"> Conta recorrente</label>
-      <div id="cp-recorrencia-wrap" style="display:none"><select class="form-input" id="cp-recorrencia" style="width:auto"><option value="mensal">Mensal</option><option value="quinzenal">Quinzenal</option><option value="semanal">Semanal</option></select></div>
+      <label style="font-size:12.5px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="ctp-recorrente" onchange="document.getElementById('ctp-recorrencia-wrap').style.display=this.checked?'':'none'"> Conta recorrente</label>
+      <div id="ctp-recorrencia-wrap" style="display:none"><select class="form-input" id="ctp-recorrencia" style="width:auto"><option value="mensal">Mensal</option><option value="quinzenal">Quinzenal</option><option value="semanal">Semanal</option></select></div>
     </div>
-    <div class="form-row"><label class="form-label">Observações</label><input class="form-input" id="cp-obs" placeholder="Notas"></div>
+    <div class="form-row"><label class="form-label">Observações</label><input class="form-input" id="ctp-obs" placeholder="Notas"></div>
     <button class="btn bp" style="width:100%;padding:10px;margin-top:6px" onclick="saveConta()">Salvar</button>
   </div>
 </div></div>
