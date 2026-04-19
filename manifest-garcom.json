@@ -1,0 +1,14 @@
+{
+  "name": "Anotai — Garçom",
+  "short_name": "Garçom",
+  "description": "App do garçom para gestão de mesas e pedidos",
+  "start_url": "/garcom.html",
+  "display": "standalone",
+  "background_color": "#111113",
+  "theme_color": "#111113",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/favicon-garcom.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/garcom_icon.png", "sizes": "1024x1024", "type": "image/png" }
+  ]
+}
