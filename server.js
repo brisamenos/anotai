@@ -1368,6 +1368,36 @@ const server = http.createServer(async (req,res) => {
 
   if(upath.startsWith('/sse/')){sseSubscribe(decodeURIComponent(upath.slice(5)),res);return}
   if(req.method==='GET'&&upath==='/api/tenant-info'){const info=handleTenantInfo(params);send(res,info.error?404:200,info);return}
+
+  // ── Manifest PWA dinâmico para o garçom (por tenant) ──
+  if(req.method==='GET'&&upath==='/api/manifest-garcom'){
+    const tid=params.get('t')||params.get('tenant')||''
+    const slug=params.get('slug')||''
+    let t=null
+    if(tid) t=db.prepare('SELECT id,nome,slug FROM tenants WHERE id=? AND ativo=1').get(tid)
+    else if(slug) t=db.prepare('SELECT id,nome,slug FROM tenants WHERE slug=? AND ativo=1').get(slug)
+    const cfg=t?db.prepare('SELECT store_name,store_logo_url FROM store_config WHERE tenant_id=?').get(t.id):null
+    const nome=cfg?.store_name||t?.nome||'Garçom'
+    const logo=cfg?.store_logo_url||'/favicon-garcom.png'
+    const startSlug=t?.slug||slug||tid
+    const startUrl=startSlug?`/garcom.html?t=${startSlug}`:`/garcom.html`
+    const manifest={
+      name:`${nome} — Garçom`,
+      short_name:nome.length>12?nome.substring(0,12):nome,
+      description:`App do garçom — ${nome}`,
+      start_url:startUrl,
+      display:'standalone',
+      background_color:'#111113',
+      theme_color:'#111113',
+      orientation:'portrait-primary',
+      icons:[
+        {src:logo,sizes:'512x512',type:'image/png',purpose:'any maskable'}
+      ]
+    }
+    res.writeHead(200,{'Content-Type':'application/manifest+json','Cache-Control':'no-cache'})
+    res.end(JSON.stringify(manifest))
+    return
+  }
   if(req.method==='GET'&&upath==='/api/tenant-slug'){const tid=req.headers['x-tenant-id']||params.get('tenant_id')||'';if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return};const row=db.prepare('SELECT slug FROM tenants WHERE id=?').get(tid);send(res,200,{slug:row?.slug||''});return}
   if(req.method==='GET'&&upath==='/api/tenant-info-gestor'){const tid=req.headers['x-tenant-id']||params.get('tenant_id')||'';if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return};const row=db.prepare('SELECT id,nome,slug,plano,ativo,expires_at FROM tenants WHERE id=?').get(tid);if(!row){send(res,404,{error:'Tenant não encontrado'});return};send(res,200,row);return}
 
@@ -1491,7 +1521,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/fidelidade/sync','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/exportar-relatorio'])
+  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/fidelidade/sync','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/exportar-relatorio'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return
