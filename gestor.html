@@ -2425,7 +2425,7 @@ Use no seu próximo pedido 🛍️</textarea>
 </div>
 
 <!-- Modal detalhe do pedido -->
-<div class="modal" id="modal-hist-detalhe"><div class="modal-box" style="max-width:520px"><div class="mh"><div class="mt">Detalhe do Pedido</div><button class="mc" onclick="closeModal('modal-hist-detalhe')">✕</button></div><div id="modal-hist-body"></div></div></div>
+<div class="modal-bg" id="modal-hist-detalhe" onclick="if(event.target===this)closeModal('modal-hist-detalhe')"><div class="modal" style="max-width:520px"><div class="mh"><div class="mt">Detalhe do Pedido</div><button class="mc" onclick="closeModal('modal-hist-detalhe')">✕</button></div><div id="modal-hist-body"></div></div></div>
 
 <!-- FORNECEDORES -->
 <div class="page" id="page-fornecedores">
@@ -2435,7 +2435,7 @@ Use no seu próximo pedido 🛍️</textarea>
 </div>
 
 <!-- Modal fornecedor -->
-<div class="modal" id="modal-fornecedor"><div class="modal-box" style="max-width:480px"><div class="mh"><div class="mt" id="modal-forn-title">Novo Fornecedor</div><button class="mc" onclick="closeModal('modal-fornecedor')">✕</button></div>
+<div class="modal-bg" id="modal-fornecedor" onclick="if(event.target===this)closeModal('modal-fornecedor')"><div class="modal" style="max-width:480px"><div class="mh"><div class="mt" id="modal-forn-title">Novo Fornecedor</div><button class="mc" onclick="closeModal('modal-fornecedor')">✕</button></div>
   <input type="hidden" id="forn-edit-id">
   <div style="padding:20px;display:flex;flex-direction:column;gap:12px">
     <div class="form-row"><label class="form-label">Nome *</label><input class="form-input" id="forn-nome" placeholder="Ex: Distribuidora ABC"></div>
@@ -2469,7 +2469,7 @@ Use no seu próximo pedido 🛍️</textarea>
 </div>
 
 <!-- Modal conta a pagar -->
-<div class="modal" id="modal-conta-pagar"><div class="modal-box" style="max-width:480px"><div class="mh"><div class="mt" id="modal-cp-title">Nova Conta</div><button class="mc" onclick="closeModal('modal-conta-pagar')">✕</button></div>
+<div class="modal-bg" id="modal-conta-pagar" onclick="if(event.target===this)closeModal('modal-conta-pagar')"><div class="modal" style="max-width:480px"><div class="mh"><div class="mt" id="modal-cp-title">Nova Conta</div><button class="mc" onclick="closeModal('modal-conta-pagar')">✕</button></div>
   <input type="hidden" id="cp-edit-id">
   <div style="padding:20px;display:flex;flex-direction:column;gap:12px">
     <div class="form-row"><label class="form-label">Descrição *</label><input class="form-input" id="cp-descricao" placeholder="Ex: Aluguel do ponto"></div>
