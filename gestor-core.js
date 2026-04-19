@@ -450,6 +450,7 @@ function unsubscribeAll() {
   _rtChannels.forEach(ch => { try { sb.removeChannel(ch); } catch(e){} });
   _rtChannels = [];
   if (_heartbeat) { clearInterval(_heartbeat); _heartbeat = null; }
+  if (_radioSSE) { try { _radioSSE.close(); } catch{} _radioSSE = null; }
 }
 
 // mesaOrdersCache e tables são declarados em mesa-state.js (carregado antes)
@@ -824,6 +825,78 @@ function subscribeOrders() {
   }, 25000);
 
   _rtChannels = [chOrders, chMesas, chConfig];
+
+  // ── Rádio garçom → gestor (push-to-talk via SSE) ──────────────
+  _subscribeRadio();
+}
+
+// ══ RÁDIO GARÇOM → GESTOR (push-to-talk) ══════════════════════════════
+let _radioSSE = null;
+
+function _subscribeRadio() {
+  if (_radioSSE) { try { _radioSSE.close(); } catch{} }
+  const tid = _sessao?.tenant_id;
+  if (!tid) return;
+
+  _radioSSE = new EventSource(`/sse/radio-rt:${tid}`);
+
+  _radioSSE.addEventListener('radio:msg', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (!data.audio) return;
+
+      // Toca áudio automaticamente no alto-falante do PC
+      const blob = _base64ToBlob(data.audio, 'audio/webm');
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.volume = 1.0;
+      audio.play().catch(err => {
+        console.warn('[RADIO] autoplay blocked:', err);
+        // Fallback: mostra notificação clicável
+        _radioShowManualPlay(url, data.garcom_nome);
+      });
+      audio.onended = () => URL.revokeObjectURL(url);
+
+      // Toast visual
+      showToast(
+        '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 1a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 8 1z" stroke="currentColor" stroke-width="1.4"/><path d="M4 7v.5a4 4 0 0 0 8 0V7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+        `📻 ${data.garcom_nome}: mensagem de voz`
+      );
+      sendBrowserNotif(`📻 Rádio — ${data.garcom_nome}`, 'Mensagem de voz recebida');
+    } catch(err) { console.error('[RADIO] parse/play error:', err); }
+  });
+
+  _radioSSE.onerror = () => {
+    _radioSSE?.close();
+    _radioSSE = null;
+    // Reconecta após 5s
+    setTimeout(() => _subscribeRadio(), 5000);
+  };
+}
+
+function _base64ToBlob(base64, mime) {
+  const bin = atob(base64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+function _radioShowManualPlay(url, nome) {
+  // Cria um banner clicável para tocar manualmente (caso autoplay seja bloqueado)
+  const existing = document.getElementById('radio-manual-banner');
+  if (existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'radio-manual-banner';
+  div.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:9999;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;padding:10px 20px;border-radius:12px;cursor:pointer;font-family:"DM Sans",sans-serif;font-size:13px;font-weight:700;box-shadow:0 4px 20px rgba(0,0,0,.3);display:flex;align-items:center;gap:8px;animation:slideDown .3s ease';
+  div.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 8 1z" stroke="#fff" stroke-width="1.4"/><path d="M4 7v.5a4 4 0 0 0 8 0V7" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/></svg> 📻 ${nome} enviou áudio — Clique para ouvir`;
+  div.onclick = () => {
+    const a = new Audio(url);
+    a.play();
+    a.onended = () => URL.revokeObjectURL(url);
+    div.remove();
+  };
+  document.body.appendChild(div);
+  setTimeout(() => div.remove(), 15000);
 }
 
 // ── Timer de atualização do tempo decorrido por mesa (a cada 60s) ──────

@@ -1538,6 +1538,21 @@ module.exports = async function handleRoutes(req, res, ctx) {
       send(res, 200, { ok: true }); return true
     }
   }
+  // ── Rádio garçom → gestor (push-to-talk) ──────────────────────────────────
+  if (req.method === 'POST' && upath === '/api/radio/send') {
+    const tid  = getTenantId(req, params)
+    if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    const body = await readBody(req)
+    const { audio, garcom_nome } = body
+    if (!audio) { send(res, 400, { error: 'Áudio obrigatório' }); return true }
+    // Limita tamanho do áudio (~10s de voz ≈ 150KB em webm/opus)
+    if (audio.length > 500000) { send(res, 413, { error: 'Áudio muito grande (máx 10s)' }); return true }
+    // Broadcast via SSE para o gestor
+    sseBroadcast(`radio-rt:${tid}`, 'radio:msg', { audio, garcom_nome: garcom_nome || 'Garçom', ts: Date.now() })
+    send(res, 200, { ok: true })
+    return true
+  }
+
   if (req.method === 'POST' && upath === '/api/garcom-login') {
     const tid  = getTenantId(req, params)
     const body = await readBody(req)

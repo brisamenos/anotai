@@ -152,6 +152,20 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 }
 .topbar-btn:hover { border-color:rgba(251,113,133,.3); color:var(--red); }
 
+/* Push-to-talk radio button */
+.radio-ptt {
+  width:36px; height:36px; border-radius:50%; border:2px solid var(--border);
+  background:var(--surface2); color:var(--muted); cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  transition:all .15s; flex-shrink:0; -webkit-user-select:none; user-select:none;
+  touch-action:none;
+}
+.radio-ptt:active, .radio-ptt.recording {
+  border-color:var(--red); background:rgba(239,68,68,.15); color:var(--red);
+  box-shadow:0 0 0 4px rgba(239,68,68,.2); animation:radio-pulse 1s ease infinite;
+}
+@keyframes radio-pulse { 0%,100%{box-shadow:0 0 0 4px rgba(239,68,68,.2)} 50%{box-shadow:0 0 0 8px rgba(239,68,68,0)} }
+
 /* Bottom Nav */
 .tabs-bar { display: none; }
 .bottom-nav {
@@ -750,6 +764,11 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
     <div class="topbar-sep"></div>
     <div class="topbar-garcom" id="topbar-garcom-name">—</div>
     <div class="topbar-right">
+      <button class="radio-ptt" id="radio-ptt-btn" title="Segurar para falar com o caixa"
+        onpointerdown="radioStartRec(event)" onpointerup="radioStopRec()" onpointerleave="radioStopRec()"
+        oncontextmenu="event.preventDefault()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 8 1z" stroke="currentColor" stroke-width="1.4"/><path d="M4 7v.5a4 4 0 0 0 8 0V7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="8" y1="11.5" x2="8" y2="14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="6" y1="14" x2="10" y2="14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
       <div class="topbar-status"><div class="dot" id="rt-dot"></div><span id="rt-txt">Conectando...</span></div>
       <button class="topbar-btn" onclick="doLogout()">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M10 3h3a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-3M7 11l-3-3 3-3M4 8h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -4064,6 +4083,65 @@ function showToast(msg) {
   t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=>t.classList.remove('show'), 2500);
+}
+// ══ RÁDIO PUSH-TO-TALK ═══════════════════
+let _radioRec = null;
+let _radioStream = null;
+let _radioChunks = [];
+let _radioActive = false;
+
+async function radioStartRec(e) {
+  if (e) e.preventDefault();
+  if (_radioActive) return;
+  _radioActive = true;
+  const btn = document.getElementById('radio-ptt-btn');
+  btn.classList.add('recording');
+
+  try {
+    _radioStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:true, noiseSuppression:true } });
+    _radioChunks = [];
+    _radioRec = new MediaRecorder(_radioStream, { mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm' });
+    _radioRec.ondataavailable = e => { if (e.data.size > 0) _radioChunks.push(e.data); };
+    _radioRec.onstop = async () => {
+      _radioStream?.getTracks().forEach(t => t.stop());
+      _radioStream = null;
+      if (!_radioChunks.length) return;
+      const blob = new Blob(_radioChunks, { type: 'audio/webm' });
+      if (blob.size < 500) return; // muito curto, ignora
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result.split(',')[1];
+        try {
+          const tid = _garcomTenantId || JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id || '';
+          await fetch('/api/radio/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+            body: JSON.stringify({ audio: base64, garcom_nome: currentGarcom?.nome || 'Garçom' })
+          });
+          showToast('📻 Mensagem enviada!');
+        } catch(err) { showToast('❌ Erro ao enviar áudio'); console.error('[RADIO]', err); }
+      };
+      reader.readAsDataURL(blob);
+    };
+    _radioRec.start();
+  } catch(err) {
+    console.error('[RADIO] mic error:', err);
+    showToast('❌ Permita o microfone');
+    _radioActive = false;
+    btn.classList.remove('recording');
+  }
+}
+
+function radioStopRec() {
+  if (!_radioActive) return;
+  _radioActive = false;
+  document.getElementById('radio-ptt-btn')?.classList.remove('recording');
+  if (_radioRec && _radioRec.state === 'recording') {
+    _radioRec.stop();
+  } else {
+    _radioStream?.getTracks().forEach(t => t.stop());
+    _radioStream = null;
+  }
 }
 </script>
 </body>
