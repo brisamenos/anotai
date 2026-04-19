@@ -302,6 +302,42 @@ function _aplicarOverrideClaro(vars) {
     .cb{border-color:${bord2}!important;background:${sur}!important}
     .cb:checked{background:${acc}!important;border-color:${acc}!important}
 
+    /* ── Toast & Notificações ── */
+    #toast{background:${sur}!important;border-color:${bord}!important;color:${text}!important;box-shadow:0 8px 32px rgba(0,0,0,.12)!important;backdrop-filter:blur(20px)!important}
+    #toast *{color:${text}!important}
+    .notif-panel{background:${sur}!important;border-color:${bord}!important;box-shadow:0 8px 40px rgba(0,0,0,.12)!important;backdrop-filter:blur(20px)!important}
+    .notif-panel *{color:${text}!important}
+    .np-head{border-bottom-color:${bord}!important;color:${text}!important}
+
+    /* ── Rádio / WhatsApp panel ── */
+    #radio-panel-gestor{background:${sur}!important;border-color:${bord}!important;box-shadow:0 8px 40px rgba(0,0,0,.12)!important}
+    #radio-panel-gestor *{color:${text}!important}
+
+    /* ── Upgrade modal overlay ── */
+    #upgrade-modal-overlay > div{background:${sur}!important;border-color:${bord}!important;box-shadow:0 16px 48px rgba(0,0,0,.12)!important}
+    #upgrade-modal-overlay > div *{color:${text}!important}
+    #upgrade-modal-overlay > div button{color:${text}!important}
+
+    /* ── Auto modelos overlay ── */
+    #auto-modelos-overlay > div{background:${sur}!important;border-color:${bord}!important;color:${text}!important}
+    #auto-modelos-overlay > div *{color:${text}!important}
+    #auto-modelos-overlay input,#auto-modelos-overlay textarea{background:${sur2}!important;color:${text}!important;border-color:${bord}!important}
+    #auto-modelos-lista > div{background:${sur2}!important;border-color:${bord}!important;color:${text}!important}
+    #auto-modelos-lista > div:hover{border-color:${acc}!important}
+
+    /* ── Mobile menu (m-mais) ── */
+    #m-mais{background:${sur}!important;border-color:${bord}!important}
+    #m-mais *{color:${text}!important}
+    #m-nav{background:${sur}!important;border-top-color:${bord}!important}
+    #m-nav *{color:${muted}!important}
+
+    /* ── Dropdowns & context menus genéricos ── */
+    [style*="background:var(--surface)"][style*="z-index"]{box-shadow:0 8px 32px rgba(0,0,0,.1)!important}
+
+    /* ── Garantia: qualquer div com bg escuro hardcoded em z alto ── */
+    .modal .btn.bp,.modal button.bp{color:#fff!important}
+    .modal .bp{background:${acc}!important;color:#fff!important}
+
     /* ── Scrollbar ── */
     ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12)!important;border-radius:99px!important}
     ::-webkit-scrollbar-track{background:transparent!important}
