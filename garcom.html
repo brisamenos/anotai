@@ -152,19 +152,64 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 }
 .topbar-btn:hover { border-color:rgba(251,113,133,.3); color:var(--red); }
 
-/* Push-to-talk radio button */
-.radio-ptt {
-  width:36px; height:36px; border-radius:50%; border:2px solid var(--border);
-  background:var(--surface2); color:var(--muted); cursor:pointer;
+/* Push-to-talk FAB flutuante */
+.radio-fab {
+  position:fixed; bottom:80px; right:16px; z-index:300;
+  width:50px; height:50px; border-radius:50%;
+  background:linear-gradient(135deg,#6366f1,#4f46e5);
+  color:#fff; border:none; cursor:pointer;
   display:flex; align-items:center; justify-content:center;
-  transition:all .15s; flex-shrink:0; -webkit-user-select:none; user-select:none;
-  touch-action:none;
+  box-shadow:0 4px 16px rgba(99,102,241,.4);
+  transition:all .2s; -webkit-user-select:none; user-select:none;
 }
-.radio-ptt:active, .radio-ptt.recording {
-  border-color:var(--red); background:rgba(239,68,68,.15); color:var(--red);
-  box-shadow:0 0 0 4px rgba(239,68,68,.2); animation:radio-pulse 1s ease infinite;
+.radio-fab:active { transform:scale(.92); }
+.radio-fab.has-unread { animation:radio-fab-pulse 2s infinite; }
+@keyframes radio-fab-pulse { 0%,100%{box-shadow:0 4px 16px rgba(99,102,241,.4)} 50%{box-shadow:0 4px 16px rgba(99,102,241,.8),0 0 0 8px rgba(99,102,241,.15)} }
+
+/* Painel de seleção de destino */
+.radio-panel {
+  position:fixed; bottom:140px; right:16px; z-index:301;
+  width:220px; background:var(--surface); border:1.5px solid var(--border);
+  border-radius:16px; box-shadow:0 8px 32px rgba(0,0,0,.4);
+  overflow:hidden; display:none; animation:radioSlideUp .2s ease;
 }
-@keyframes radio-pulse { 0%,100%{box-shadow:0 0 0 4px rgba(239,68,68,.2)} 50%{box-shadow:0 0 0 8px rgba(239,68,68,0)} }
+.radio-panel.on { display:block; }
+@keyframes radioSlideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+.radio-panel-head {
+  padding:12px 14px; font-size:12px; font-weight:700; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.5px; border-bottom:1px solid var(--border);
+}
+.radio-dest {
+  display:flex; align-items:center; gap:10px; padding:11px 14px;
+  cursor:pointer; transition:background .12s; border:none; background:none;
+  width:100%; text-align:left; font-family:'DM Sans',sans-serif;
+  color:var(--text); font-size:13px; font-weight:600;
+}
+.radio-dest:active, .radio-dest:hover { background:rgba(99,102,241,.08); }
+.radio-dest .radio-dest-icon {
+  width:32px; height:32px; border-radius:50%; display:flex;
+  align-items:center; justify-content:center; flex-shrink:0;
+  font-size:14px;
+}
+.radio-dest-gestor .radio-dest-icon { background:rgba(245,158,11,.12); }
+.radio-dest-garcom .radio-dest-icon { background:rgba(99,102,241,.12); }
+
+/* Gravando — overlay */
+.radio-rec-overlay {
+  position:fixed; inset:0; z-index:400; background:rgba(0,0,0,.7);
+  display:none; flex-direction:column; align-items:center; justify-content:center; gap:16px;
+}
+.radio-rec-overlay.on { display:flex; }
+.radio-rec-circle {
+  width:90px; height:90px; border-radius:50%;
+  background:linear-gradient(135deg,#ef4444,#dc2626);
+  display:flex; align-items:center; justify-content:center;
+  animation:radio-rec-pulse 1s ease infinite;
+  touch-action:none; -webkit-user-select:none; user-select:none;
+}
+@keyframes radio-rec-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4)} 50%{box-shadow:0 0 0 20px rgba(239,68,68,0)} }
+.radio-rec-label { color:#fff; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:700; }
+.radio-rec-dest { color:rgba(255,255,255,.6); font-family:'DM Sans',sans-serif; font-size:12px; }
 
 /* Bottom Nav */
 .tabs-bar { display: none; }
@@ -764,11 +809,6 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
     <div class="topbar-sep"></div>
     <div class="topbar-garcom" id="topbar-garcom-name">—</div>
     <div class="topbar-right">
-      <button class="radio-ptt" id="radio-ptt-btn" title="Segurar para falar com o caixa"
-        onpointerdown="radioStartRec(event)" onpointerup="radioStopRec()" onpointerleave="radioStopRec()"
-        oncontextmenu="event.preventDefault()">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 8 1z" stroke="currentColor" stroke-width="1.4"/><path d="M4 7v.5a4 4 0 0 0 8 0V7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="8" y1="11.5" x2="8" y2="14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="6" y1="14" x2="10" y2="14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-      </button>
       <div class="topbar-status"><div class="dot" id="rt-dot"></div><span id="rt-txt">Conectando...</span></div>
       <button class="topbar-btn" onclick="doLogout()">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M10 3h3a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-3M7 11l-3-3 3-3M4 8h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -4084,30 +4124,90 @@ function showToast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=>t.classList.remove('show'), 2500);
 }
-// ══ RÁDIO PUSH-TO-TALK ═══════════════════
+// ══ RÁDIO PUSH-TO-TALK (FAB flutuante) ═══
+document.addEventListener('pointerdown', (e) => {
+  const panel = document.getElementById('radio-panel');
+  const fab = document.getElementById('radio-fab');
+  if (panel?.classList.contains('on') && !panel.contains(e.target) && !fab.contains(e.target)) {
+    panel.classList.remove('on');
+  }
+});
 let _radioRec = null;
 let _radioStream = null;
 let _radioChunks = [];
 let _radioActive = false;
+let _radioDestino = null; // 'gestor' ou ID do garçom
+let _radioDestinoNome = '';
+let _radioGarconsList = [];
+let _radioSSE = null;
 
-async function radioStartRec(e) {
-  if (e) e.preventDefault();
+// ── Carrega lista de garçons ─────────────────────
+async function _radioLoadGarcons() {
+  try {
+    const tid = _garcomTenantId || JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id || '';
+    const res = await fetch('/api/radio/garcons', { headers: { 'x-tenant-id': tid } });
+    _radioGarconsList = await res.json();
+  } catch { _radioGarconsList = []; }
+}
+
+// ── Abre/fecha painel de seleção ─────────────────
+async function radioTogglePanel() {
+  const panel = document.getElementById('radio-panel');
+  if (panel.classList.contains('on')) { panel.classList.remove('on'); return; }
+
+  await _radioLoadGarcons();
+  const myId = currentGarcom?.id;
+  const list = document.getElementById('radio-dest-list');
+
+  // Gestor sempre aparece
+  let html = `<button class="radio-dest radio-dest-gestor" onclick="radioSelectDest('gestor','Gestor')">
+    <div class="radio-dest-icon">📋</div>
+    <span>Gestor / Caixa</span>
+  </button>`;
+
+  // Garçons (exceto ele mesmo)
+  _radioGarconsList.filter(g => g.id !== myId).forEach(g => {
+    html += `<button class="radio-dest radio-dest-garcom" onclick="radioSelectDest(${g.id},'${g.nome.replace(/'/g,"\\'")}')">
+      <div class="radio-dest-icon">👤</div>
+      <span>${g.nome}</span>
+    </button>`;
+  });
+
+  list.innerHTML = html;
+  panel.classList.add('on');
+}
+
+// ── Seleciona destino e inicia gravação ──────────
+function radioSelectDest(destino, nome) {
+  document.getElementById('radio-panel').classList.remove('on');
+  _radioDestino = destino;
+  _radioDestinoNome = nome;
+  _radioStartRecording();
+}
+
+// ── Inicia gravação ──────────────────────────────
+async function _radioStartRecording() {
   if (_radioActive) return;
   _radioActive = true;
-  const btn = document.getElementById('radio-ptt-btn');
-  btn.classList.add('recording');
+
+  const overlay = document.getElementById('radio-rec-overlay');
+  document.getElementById('radio-rec-dest-name').textContent = `Para: ${_radioDestinoNome}`;
+  overlay.classList.add('on');
 
   try {
     _radioStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:true, noiseSuppression:true } });
     _radioChunks = [];
-    _radioRec = new MediaRecorder(_radioStream, { mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm' });
+    _radioRec = new MediaRecorder(_radioStream, {
+      mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm'
+    });
     _radioRec.ondataavailable = e => { if (e.data.size > 0) _radioChunks.push(e.data); };
     _radioRec.onstop = async () => {
       _radioStream?.getTracks().forEach(t => t.stop());
       _radioStream = null;
-      if (!_radioChunks.length) return;
+      overlay.classList.remove('on');
+      if (!_radioChunks.length) { _radioActive = false; return; }
       const blob = new Blob(_radioChunks, { type: 'audio/webm' });
-      if (blob.size < 500) return; // muito curto, ignora
+      if (blob.size < 500) { _radioActive = false; return; }
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64 = reader.result.split(',')[1];
@@ -4116,10 +4216,16 @@ async function radioStartRec(e) {
           await fetch('/api/radio/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-            body: JSON.stringify({ audio: base64, garcom_nome: currentGarcom?.nome || 'Garçom' })
+            body: JSON.stringify({
+              audio: base64,
+              garcom_nome: currentGarcom?.nome || 'Garçom',
+              garcom_id: currentGarcom?.id || null,
+              destino: _radioDestino
+            })
           });
-          showToast('📻 Mensagem enviada!');
+          showToast(`📻 Áudio enviado para ${_radioDestinoNome}!`);
         } catch(err) { showToast('❌ Erro ao enviar áudio'); console.error('[RADIO]', err); }
+        _radioActive = false;
       };
       reader.readAsDataURL(blob);
     };
@@ -4128,21 +4234,172 @@ async function radioStartRec(e) {
     console.error('[RADIO] mic error:', err);
     showToast('❌ Permita o microfone');
     _radioActive = false;
-    btn.classList.remove('recording');
+    overlay.classList.remove('on');
   }
 }
 
+// ── Para gravação (ao soltar o botão) ────────────
 function radioStopRec() {
   if (!_radioActive) return;
-  _radioActive = false;
-  document.getElementById('radio-ptt-btn')?.classList.remove('recording');
   if (_radioRec && _radioRec.state === 'recording') {
     _radioRec.stop();
   } else {
     _radioStream?.getTracks().forEach(t => t.stop());
     _radioStream = null;
+    _radioActive = false;
+    document.getElementById('radio-rec-overlay')?.classList.remove('on');
   }
 }
+
+// ── SSE: receber áudio de outros garçons ─────────
+function _radioSubscribeGarcom() {
+  if (_radioSSE) { try { _radioSSE.close(); } catch{} }
+  const tid = _garcomTenantId || '';
+  const gid = currentGarcom?.id;
+  if (!tid || !gid) return;
+
+  _radioSSE = new EventSource(`/sse/radio-garcom-${gid}:${tid}`);
+  _radioSSE.addEventListener('radio:msg', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (!data.audio) return;
+      // Toca automaticamente
+      const bin = atob(data.audio);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      const blob = new Blob([arr], { type: 'audio/webm' });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.volume = 1.0;
+      audio.play().catch(() => {});
+      audio.onended = () => URL.revokeObjectURL(url);
+      showToast(`📻 ${data.garcom_nome}: áudio recebido`);
+    } catch(err) { console.error('[RADIO RX]', err); }
+  });
+  _radioSSE.onerror = () => {
+    _radioSSE?.close(); _radioSSE = null;
+    setTimeout(() => _radioSubscribeGarcom(), 5000);
+  };
+}
+
+// Inicia SSE do rádio após login
+const _origSubscribeRT = typeof subscribeRealtime === 'function' ? subscribeRealtime : null;
+if (_origSubscribeRT) {
+  const _wrappedSubscribeRT = subscribeRealtime;
+  subscribeRealtime = function() {
+    _wrappedSubscribeRT();
+    _radioSubscribeGarcom();
+  };
+}
+
+// ── Abas do painel ───────────────────────
+function _radioTab(tab) {
+  const sendC = document.getElementById('radio-tab-send-content');
+  const histC = document.getElementById('radio-tab-hist-content');
+  const sendB = document.getElementById('radio-tab-send');
+  const histB = document.getElementById('radio-tab-hist');
+  if (tab === 'send') {
+    sendC.style.display = ''; histC.style.display = 'none';
+    sendB.style.background = 'rgba(99,102,241,.1)'; sendB.style.color = 'var(--accent)'; sendB.style.borderBottom = '2px solid var(--accent)';
+    histB.style.background = 'none'; histB.style.color = 'var(--muted)'; histB.style.borderBottom = '2px solid transparent';
+  } else {
+    sendC.style.display = 'none'; histC.style.display = '';
+    histB.style.background = 'rgba(99,102,241,.1)'; histB.style.color = 'var(--accent)'; histB.style.borderBottom = '2px solid var(--accent)';
+    sendB.style.background = 'none'; sendB.style.color = 'var(--muted)'; sendB.style.borderBottom = '2px solid transparent';
+    _radioLoadHistory();
+  }
+}
+
+async function _radioLoadHistory() {
+  const tid = _garcomTenantId || '';
+  const gid = currentGarcom?.id || '';
+  if (!tid || !gid) return;
+  try {
+    const res = await fetch(`/api/radio/messages?user_id=${gid}`, { headers: { 'x-tenant-id': tid } });
+    const msgs = await res.json();
+    const c = document.getElementById('radio-hist-list');
+    if (!msgs.length) { c.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:11px;padding:16px">Nenhum áudio nas últimas 10h</div>'; return; }
+    c.innerHTML = msgs.reverse().map(m => {
+      const isMe = String(m.from_id) === String(gid);
+      const time = new Date(m.created_at+'Z').toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+      const align = isMe ? 'flex-end' : 'flex-start';
+      const bg = isMe ? 'rgba(99,102,241,.1)' : 'var(--surface2)';
+      const brd = isMe ? 'rgba(99,102,241,.2)' : 'var(--border)';
+      const destLabel = m.to_id === 'gestor' ? 'Gestor' : `Garçom`;
+      const lbl = isMe ? `Você → ${destLabel}` : m.from_nome;
+      return `<div style="align-self:${align};max-width:90%;background:${bg};border:1px solid ${brd};border-radius:10px;padding:6px 10px">
+        <div style="font-size:9px;font-weight:700;color:var(--muted);margin-bottom:3px">${lbl} · ${time}</div>
+        <button onclick="_radioPlayHist(${m.id})" style="display:flex;align-items:center;gap:5px;background:none;border:none;color:var(--text);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;padding:0">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><polygon points="4,2 14,8 4,14" fill="currentColor"/></svg> Reproduzir
+        </button>
+      </div>`;
+    }).join('');
+    c.scrollTop = c.scrollHeight;
+  } catch(e) { console.error('[RADIO HIST]', e); }
+}
+
+async function _radioPlayHist(id) {
+  const tid = _garcomTenantId || '';
+  try {
+    const res = await fetch(`/api/radio/audio/${id}`, { headers: { 'x-tenant-id': tid } });
+    const d = await res.json(); if (!d.audio) return;
+    const bin = atob(d.audio); const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    const blob = new Blob([arr], { type: 'audio/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = new Audio(url); a.play(); a.onended = () => URL.revokeObjectURL(url);
+  } catch { showToast('❌ Erro ao reproduzir'); }
+}
 </script>
+
+<!-- FAB flutuante do rádio -->
+<button class="radio-fab" id="radio-fab" onclick="radioTogglePanel()" title="Enviar áudio">
+  <svg width="22" height="22" viewBox="0 0 16 16" fill="none">
+    <path d="M8 1a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 8 1z" stroke="#fff" stroke-width="1.3"/>
+    <path d="M4 7v.5a4 4 0 0 0 8 0V7" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>
+    <line x1="8" y1="11.5" x2="8" y2="14" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>
+    <line x1="6" y1="14" x2="10" y2="14" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>
+  </svg>
+</button>
+
+<!-- Painel de rádio com abas -->
+<div class="radio-panel" id="radio-panel">
+  <div class="radio-panel-head" style="display:flex;justify-content:space-between;align-items:center">
+    <span>📻 Rádio</span>
+    <button onclick="document.getElementById('radio-panel').classList.remove('on')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:2px">✕</button>
+  </div>
+  <!-- Abas -->
+  <div style="display:flex;border-bottom:1px solid var(--border)">
+    <button id="radio-tab-send" onclick="_radioTab('send')" style="flex:1;padding:8px;font-size:11px;font-weight:700;border:none;background:rgba(99,102,241,.1);color:var(--accent);cursor:pointer;border-bottom:2px solid var(--accent)">Enviar</button>
+    <button id="radio-tab-hist" onclick="_radioTab('hist')" style="flex:1;padding:8px;font-size:11px;font-weight:700;border:none;background:none;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent">Histórico</button>
+  </div>
+  <div id="radio-tab-send-content">
+    <div id="radio-dest-list"></div>
+  </div>
+  <div id="radio-tab-hist-content" style="display:none;max-height:300px;overflow-y:auto;padding:8px">
+    <div id="radio-hist-list" style="display:flex;flex-direction:column;gap:6px">
+      <div style="text-align:center;color:var(--muted);font-size:11px;padding:16px">Carregando...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Overlay de gravação -->
+<div class="radio-rec-overlay" id="radio-rec-overlay">
+  <div class="radio-rec-dest" id="radio-rec-dest-name">Para: Gestor</div>
+  <div class="radio-rec-circle"
+    onpointerdown="event.preventDefault()"
+    onpointerup="radioStopRec()"
+    onpointerleave="radioStopRec()">
+    <svg width="36" height="36" viewBox="0 0 16 16" fill="none">
+      <path d="M8 1a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 8 1z" stroke="#fff" stroke-width="1.2"/>
+      <path d="M4 7v.5a4 4 0 0 0 8 0V7" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>
+    </svg>
+  </div>
+  <div class="radio-rec-label">Gravando... solte para enviar</div>
+  <button onclick="radioStopRec()" style="margin-top:12px;padding:10px 28px;border-radius:10px;border:1.5px solid rgba(255,255,255,.3);background:rgba(255,255,255,.1);color:#fff;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">
+    Parar e enviar
+  </button>
+</div>
+
 </body>
 </html>

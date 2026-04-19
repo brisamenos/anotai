@@ -1538,18 +1538,74 @@ module.exports = async function handleRoutes(req, res, ctx) {
       send(res, 200, { ok: true }); return true
     }
   }
-  // ── Rádio garçom → gestor (push-to-talk) ──────────────────────────────────
+  // ── Rádio push-to-talk (garçom ↔ garçom, garçom ↔ gestor) ──────────────────
   if (req.method === 'POST' && upath === '/api/radio/send') {
     const tid  = getTenantId(req, params)
     if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
     const body = await readBody(req)
-    const { audio, garcom_nome } = body
+    const { audio, garcom_nome, garcom_id, destino } = body
     if (!audio) { send(res, 400, { error: 'Áudio obrigatório' }); return true }
-    // Limita tamanho do áudio (~10s de voz ≈ 150KB em webm/opus)
     if (audio.length > 500000) { send(res, 413, { error: 'Áudio muito grande (máx 10s)' }); return true }
-    // Broadcast via SSE para o gestor
-    sseBroadcast(`radio-rt:${tid}`, 'radio:msg', { audio, garcom_nome: garcom_nome || 'Garçom', ts: Date.now() })
+
+    const from_id = garcom_id ? String(garcom_id) : 'gestor'
+    const to_id = (!destino || destino === 'gestor') ? 'gestor' : String(destino)
+    const from_nome = garcom_nome || (from_id === 'gestor' ? 'Gestor' : 'Garçom')
+
+    // Salva no banco
+    try {
+      db.prepare('INSERT INTO radio_messages (tenant_id, from_id, from_nome, to_id, audio) VALUES (?,?,?,?,?)').run(tid, from_id, from_nome, to_id, audio)
+    } catch(e) { console.warn('[RADIO] db insert:', e.message) }
+
+    const payload = { audio, garcom_nome: from_nome, garcom_id: from_id, ts: Date.now() }
+    if (to_id === 'gestor') {
+      sseBroadcast(`radio-rt:${tid}`, 'radio:msg', payload)
+    } else {
+      sseBroadcast(`radio-garcom-${to_id}:${tid}`, 'radio:msg', payload)
+    }
     send(res, 200, { ok: true })
+    return true
+  }
+
+  // ── Lista mensagens de rádio (histórico das últimas 10h) ──────────────────
+  if (req.method === 'GET' && upath === '/api/radio/messages') {
+    const tid = getTenantId(req, params)
+    if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    const user_id = params.get('user_id') || 'gestor'
+    try {
+      // Retorna mensagens enviadas OU recebidas por este user nos últimos 10h (sem o blob de áudio — só metadata)
+      const rows = db.prepare(`
+        SELECT id, from_id, from_nome, to_id, created_at
+        FROM radio_messages
+        WHERE tenant_id=? AND (from_id=? OR to_id=?)
+          AND created_at >= datetime('now','-10 hours')
+        ORDER BY id DESC LIMIT 100
+      `).all(tid, user_id, user_id)
+      send(res, 200, rows || [])
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Busca áudio de uma mensagem específica ────────────────────────────────
+  if (req.method === 'GET' && upath.startsWith('/api/radio/audio/')) {
+    const tid = getTenantId(req, params)
+    const msgId = parseInt(upath.split('/')[4]) || 0
+    if (!tid || !msgId) { send(res, 400, { error: 'Parâmetros inválidos' }); return true }
+    try {
+      const row = db.prepare('SELECT audio FROM radio_messages WHERE id=? AND tenant_id=?').get(msgId, tid)
+      if (!row) { send(res, 404, { error: 'Áudio não encontrado' }); return true }
+      send(res, 200, { audio: row.audio })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Lista garçons ativos (para o seletor de rádio) ────────────────────────
+  if (req.method === 'GET' && upath === '/api/radio/garcons') {
+    const tid = getTenantId(req, params)
+    if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    try {
+      const rows = db.prepare('SELECT id, nome FROM garcons WHERE tenant_id=? AND ativo=1 ORDER BY nome').all(tid)
+      send(res, 200, rows || [])
+    } catch(e) { send(res, 500, { error: e.message }) }
     return true
   }
 

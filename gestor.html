@@ -96,6 +96,10 @@ function nav(id) {
       <div class="sdot" id="rt-dot" style="background:var(--muted)"></div>
       <span style="font-weight:600;font-size:11px" id="rt-txt">Conectando</span>
     </div>
+    <div class="ibtn" onclick="radioTogglePanelGestor()" title="Rádio — Áudios" id="radio-topbtn" style="width:38px;height:38px;position:relative">
+      <svg viewBox="0 0 16 16" fill="none" width="17" height="17"><path d="M8 1a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 8 1z" stroke="currentColor" stroke-width="1.3"/><path d="M4 7v.5a4 4 0 0 0 8 0V7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><line x1="8" y1="11.5" x2="8" y2="14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><line x1="6" y1="14" x2="10" y2="14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      <span class="nbadge" id="radio-unread-badge" style="display:none;background:#6366f1">0</span>
+    </div>
     <div class="ibtn" onclick="topnavCopiarCardapio(this)" title="Copiar link do cardápio" style="width:38px;height:38px">
       <svg viewBox="0 0 16 16" fill="none" width="17" height="17"><circle cx="12" cy="4" r="1.8" stroke="currentColor" stroke-width="1.3"/><circle cx="12" cy="12" r="1.8" stroke="currentColor" stroke-width="1.3"/><circle cx="4" cy="8" r="1.8" stroke="currentColor" stroke-width="1.3"/><path d="M5.7 7.1l4.7-2.3M5.7 8.9l4.7 2.3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
     </div>
@@ -117,6 +121,27 @@ function nav(id) {
 <!-- NOTIF PANEL -->
 <div class="notif-panel" id="notif-panel">
   <div class="np-head">Notificações <button class="bg btn" style="font-size:10.5px;padding:2px 7px" onclick="clearNotifs()">Limpar</button></div>
+</div>
+
+<!-- RADIO PANEL (gestor) -->
+<div id="radio-panel-gestor" style="display:none;position:fixed;top:52px;right:10px;width:340px;max-height:calc(100vh - 70px);background:var(--surface);border:1.5px solid var(--border);border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.4);z-index:600;overflow:hidden;display:none;flex-direction:column">
+  <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+    <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:800">📻 Rádio</div>
+    <button onclick="radioTogglePanelGestor()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:4px">✕</button>
+  </div>
+  <!-- Seletor de destino + botão gravar -->
+  <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+    <select id="radio-gestor-dest" class="form-input" style="flex:1;font-size:12px;padding:7px 10px">
+      <option value="" disabled selected>Selecionar destino...</option>
+    </select>
+    <button id="radio-gestor-rec-btn" onclick="_radioGestorStartRec()" style="width:38px;height:38px;border-radius:50%;border:2px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s" title="Gravar e enviar">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 8 1z" stroke="currentColor" stroke-width="1.3"/><path d="M4 7v.5a4 4 0 0 0 8 0V7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+  <!-- Lista de áudios -->
+  <div id="radio-gestor-msgs" style="flex:1;overflow-y:auto;padding:10px 16px;display:flex;flex-direction:column;gap:8px">
+    <div style="text-align:center;color:var(--muted);font-size:12px;padding:20px">Carregando...</div>
+  </div>
 </div>
 
 <div class="app">

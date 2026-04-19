@@ -844,8 +844,14 @@ function subscribeOrders() {
   _subscribeRadio();
 }
 
-// ══ RÁDIO GARÇOM → GESTOR (push-to-talk) ══════════════════════════════
+// ══ RÁDIO GARÇOM ↔ GESTOR (push-to-talk + chat de áudios) ══════════════════
 let _radioSSE = null;
+let _radioPanelOpen = false;
+let _radioUnread = 0;
+let _radioGestorRec = null;
+let _radioGestorStream = null;
+let _radioGestorChunks = [];
+let _radioGestorRecording = false;
 
 function _subscribeRadio() {
   if (_radioSSE) { try { _radioSSE.close(); } catch{} }
@@ -853,65 +859,158 @@ function _subscribeRadio() {
   if (!tid) return;
 
   _radioSSE = new EventSource(`/sse/radio-rt:${tid}`);
-
   _radioSSE.addEventListener('radio:msg', (e) => {
     try {
       const data = JSON.parse(e.data);
       if (!data.audio) return;
 
-      // Toca áudio automaticamente no alto-falante do PC
+      // Toca automaticamente
       const blob = _base64ToBlob(data.audio, 'audio/webm');
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audio.volume = 1.0;
-      audio.play().catch(err => {
-        console.warn('[RADIO] autoplay blocked:', err);
-        // Fallback: mostra notificação clicável
-        _radioShowManualPlay(url, data.garcom_nome);
-      });
+      audio.play().catch(() => _radioShowManualPlay(url, data.garcom_nome));
       audio.onended = () => URL.revokeObjectURL(url);
 
-      // Toast visual
       showToast(
         '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 1a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 8 1z" stroke="currentColor" stroke-width="1.4"/><path d="M4 7v.5a4 4 0 0 0 8 0V7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
         `📻 ${data.garcom_nome}: mensagem de voz`
       );
       sendBrowserNotif(`📻 Rádio — ${data.garcom_nome}`, 'Mensagem de voz recebida');
-    } catch(err) { console.error('[RADIO] parse/play error:', err); }
+
+      if (!_radioPanelOpen) {
+        _radioUnread++;
+        const badge = document.getElementById('radio-unread-badge');
+        if (badge) { badge.style.display = 'flex'; badge.textContent = _radioUnread; }
+      }
+      if (_radioPanelOpen) _radioLoadMessages();
+    } catch(err) { console.error('[RADIO] error:', err); }
   });
 
   _radioSSE.onerror = () => {
-    _radioSSE?.close();
-    _radioSSE = null;
-    // Reconecta após 5s
+    _radioSSE?.close(); _radioSSE = null;
     setTimeout(() => _subscribeRadio(), 5000);
   };
 }
 
-function _base64ToBlob(base64, mime) {
-  const bin = atob(base64);
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return new Blob([arr], { type: mime });
+function _base64ToBlob(b64, mime) {
+  const bin = atob(b64); const a = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+  return new Blob([a], { type: mime });
 }
 
 function _radioShowManualPlay(url, nome) {
-  // Cria um banner clicável para tocar manualmente (caso autoplay seja bloqueado)
-  const existing = document.getElementById('radio-manual-banner');
-  if (existing) existing.remove();
-  const div = document.createElement('div');
-  div.id = 'radio-manual-banner';
-  div.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:9999;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;padding:10px 20px;border-radius:12px;cursor:pointer;font-family:"DM Sans",sans-serif;font-size:13px;font-weight:700;box-shadow:0 4px 20px rgba(0,0,0,.3);display:flex;align-items:center;gap:8px;animation:slideDown .3s ease';
-  div.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 8 1z" stroke="#fff" stroke-width="1.4"/><path d="M4 7v.5a4 4 0 0 0 8 0V7" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/></svg> 📻 ${nome} enviou áudio — Clique para ouvir`;
-  div.onclick = () => {
-    const a = new Audio(url);
-    a.play();
-    a.onended = () => URL.revokeObjectURL(url);
-    div.remove();
-  };
-  document.body.appendChild(div);
-  setTimeout(() => div.remove(), 15000);
+  const el = document.getElementById('radio-manual-banner');
+  if (el) el.remove();
+  const d = document.createElement('div'); d.id = 'radio-manual-banner';
+  d.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:9999;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;padding:10px 20px;border-radius:12px;cursor:pointer;font-family:"DM Sans",sans-serif;font-size:13px;font-weight:700;box-shadow:0 4px 20px rgba(0,0,0,.3);display:flex;align-items:center;gap:8px';
+  d.innerHTML = `📻 ${nome} enviou áudio — Clique para ouvir`;
+  d.onclick = () => { new Audio(url).play(); d.remove(); };
+  document.body.appendChild(d);
+  setTimeout(() => d.remove(), 15000);
 }
+
+// ── Painel do gestor ─────────────────────────────────────
+async function radioTogglePanelGestor() {
+  const panel = document.getElementById('radio-panel-gestor');
+  if (_radioPanelOpen) { panel.style.display = 'none'; _radioPanelOpen = false; return; }
+  panel.style.display = 'flex';
+  _radioPanelOpen = true;
+  _radioUnread = 0;
+  const badge = document.getElementById('radio-unread-badge');
+  if (badge) badge.style.display = 'none';
+
+  try {
+    const tid = _sessao?.tenant_id;
+    const res = await fetch('/api/radio/garcons', { headers: { 'x-tenant-id': tid } });
+    const garcons = await res.json();
+    const sel = document.getElementById('radio-gestor-dest');
+    sel.innerHTML = '<option value="" disabled selected>Selecionar destino...</option>'
+      + garcons.map(g => `<option value="${g.id}">${g.nome}</option>`).join('');
+  } catch {}
+  _radioLoadMessages();
+}
+
+async function _radioLoadMessages() {
+  const tid = _sessao?.tenant_id; if (!tid) return;
+  try {
+    const res = await fetch(`/api/radio/messages?user_id=gestor`, { headers: { 'x-tenant-id': tid } });
+    const msgs = await res.json();
+    const c = document.getElementById('radio-gestor-msgs');
+    if (!msgs.length) { c.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:30px">Nenhum áudio nas últimas 10h</div>'; return; }
+    c.innerHTML = msgs.reverse().map(m => {
+      const isMe = m.from_id === 'gestor';
+      const time = new Date(m.created_at+'Z').toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+      const align = isMe ? 'flex-end' : 'flex-start';
+      const bg = isMe ? 'rgba(99,102,241,.12)' : 'var(--surface2)';
+      const brd = isMe ? 'rgba(99,102,241,.25)' : 'var(--border)';
+      const lbl = isMe ? `Você → ${_radioDestNome(m.to_id)}` : m.from_nome;
+      return `<div style="align-self:${align};max-width:85%;background:${bg};border:1px solid ${brd};border-radius:12px;padding:8px 12px">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);margin-bottom:4px">${lbl} · ${time}</div>
+        <button onclick="_radioPlayMsg(${m.id})" style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;padding:0">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><polygon points="4,2 14,8 4,14" fill="currentColor"/></svg> Reproduzir
+        </button>
+      </div>`;
+    }).join('');
+    c.scrollTop = c.scrollHeight;
+  } catch(e) { console.error('[RADIO] load:', e); }
+}
+
+function _radioDestNome(id) {
+  if (id === 'gestor') return 'Gestor';
+  const s = document.getElementById('radio-gestor-dest');
+  if (s) for (const o of s.options) if (o.value === String(id)) return o.textContent;
+  return `Garçom #${id}`;
+}
+
+async function _radioPlayMsg(id) {
+  try {
+    const res = await fetch(`/api/radio/audio/${id}`, { headers: { 'x-tenant-id': _sessao?.tenant_id } });
+    const d = await res.json(); if (!d.audio) return;
+    const blob = _base64ToBlob(d.audio, 'audio/webm');
+    const url = URL.createObjectURL(blob);
+    const a = new Audio(url); a.play(); a.onended = () => URL.revokeObjectURL(url);
+  } catch { sbToast('err', 'Erro ao reproduzir'); }
+}
+
+// ── Gravação do gestor ───────────────────────────────────
+async function _radioGestorStartRec() {
+  const destId = document.getElementById('radio-gestor-dest')?.value;
+  if (!destId) { sbToast('err', 'Selecione um garçom primeiro'); return; }
+  if (_radioGestorRecording) { _radioGestorStopRec(); return; }
+  _radioGestorRecording = true;
+  const btn = document.getElementById('radio-gestor-rec-btn');
+  btn.style.cssText += ';border-color:#ef4444;background:rgba(239,68,68,.15);color:#ef4444';
+  try {
+    _radioGestorStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true }});
+    _radioGestorChunks = [];
+    _radioGestorRec = new MediaRecorder(_radioGestorStream, { mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'audio/webm' });
+    _radioGestorRec.ondataavailable = e => { if(e.data.size>0) _radioGestorChunks.push(e.data); };
+    _radioGestorRec.onstop = async () => {
+      _radioGestorStream?.getTracks().forEach(t=>t.stop()); _radioGestorStream=null;
+      _radioGestorRecording=false;
+      btn.style.borderColor=''; btn.style.background=''; btn.style.color='';
+      if(!_radioGestorChunks.length)return;
+      const blob=new Blob(_radioGestorChunks,{type:'audio/webm'}); if(blob.size<500)return;
+      const r=new FileReader();
+      r.onloadend=async()=>{
+        const b64=r.result.split(',')[1];
+        try{
+          await fetch('/api/radio/send',{method:'POST',headers:{'Content-Type':'application/json','x-tenant-id':_sessao?.tenant_id},
+            body:JSON.stringify({audio:b64,garcom_nome:'Gestor',garcom_id:null,destino:destId})});
+          sbToast('ok','📻 Áudio enviado!');
+          if(_radioPanelOpen) _radioLoadMessages();
+        }catch{ sbToast('err','Erro ao enviar'); }
+      };
+      r.readAsDataURL(blob);
+    };
+    _radioGestorRec.start();
+  } catch(e) {
+    sbToast('err','Permita o microfone'); _radioGestorRecording=false;
+    btn.style.borderColor=''; btn.style.background=''; btn.style.color='';
+  }
+}
+function _radioGestorStopRec() { if(_radioGestorRec?.state==='recording') _radioGestorRec.stop(); }
 
 // ── Timer de atualização do tempo decorrido por mesa (a cada 60s) ──────
 setInterval(() => {
