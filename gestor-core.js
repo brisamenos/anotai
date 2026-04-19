@@ -531,7 +531,21 @@ function _renderMesaPageFromCache() {
 // Imprime pedido de conta no caixa quando garçom solicita fechamento
 // SOMENTE impressora do caixa — sem via de cozinha
 async function _printComandaMesa(mesaNum, mesaData) {
-  const pedidos = mesaOrdersCache.filter(o => parseInt(o.mesa_num) === parseInt(mesaNum));
+  const _mesaNum = parseInt(mesaNum);
+  const mesa = tables.find(t => t.num === _mesaNum) || mesaData;
+
+  // Filtra pedidos da sessão atual — mesmo filtro usado em _renderMesaPageFromCache
+  const pedidos = mesaOrdersCache.filter(o => {
+    if (parseInt(o.mesa_num) !== _mesaNum) return false;
+    if (o.status === 'cancelado') return false;
+    // session_ref explícita (bebidas e novos pedidos)
+    if (o.session_ref !== undefined && o.session_ref !== null) {
+      return o.session_ref === mesa?.opened_at;
+    }
+    // Fallback por opened_at
+    if (!mesa?.opened_at) return o.status !== 'entregue';
+    return new Date(o.created_at || 0).getTime() >= new Date(mesa.opened_at).getTime() - 5000;
+  });
   if (!pedidos.length) return;
 
   const allItems = pedidos.flatMap(o => _parseItems(o.items))
@@ -793,8 +807,8 @@ function subscribeOrders() {
           const navBtn = document.querySelector('[onclick*="pedidos-mesa"]');
           if (navBtn) navBtn.style.animation = 'pulse 1s ease 3';
         }
-        // Imprime comanda da mesa automaticamente ao finalizar
-        try { _printComandaMesa(mesaNum, p.new); } catch(e) { console.warn('[PRINT MESA]', e); }
+        // Imprime comanda da mesa — REMOVIDO: impressão agora é opcional no modal de pagamento
+        // try { _printComandaMesa(mesaNum, p.new); } catch(e) { console.warn('[PRINT MESA]', e); }
       }
 
       // UPDATE → refresh cirúrgico de apenas a mesa afectada.
