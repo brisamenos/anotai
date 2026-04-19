@@ -10,7 +10,7 @@ const GESTOR_TEMAS = [
     desc: 'Navy elegante com acentos cyan',
     emoji: '🌊',
     tipo: 'dark',
-    preview: { bg:'#0a1220', sidebar:'#06101e', accent:'#0ea5e9', card:'#0f1a2e', cardBorder:'rgba(56,189,248,.07)', text:'#dce8f4', muted:'#5e7e9e', kol1:'rgba(251,191,36,.08)', kol2:'rgba(14,165,233,.08)', kol3:'rgba(52,211,153,.08)', kolT1:'#fbbf24', kolT2:'#7dd3fc', kolT3:'#6ee7b7' },
+    preview: { bg:'#0b0e14', sidebar:'#080b11', accent:'#0ea5e9', card:'#12161e', cardBorder:'rgba(255,255,255,.07)', text:'#e2e8f0', muted:'#64748b', kol1:'rgba(251,191,36,.08)', kol2:'rgba(14,165,233,.08)', kol3:'rgba(52,211,153,.08)', kolT1:'#fbbf24', kolT2:'#7dd3fc', kolT3:'#6ee7b7' },
     vars: null // usa variáveis do :root / inline
   },
   {

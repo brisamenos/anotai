@@ -21,18 +21,18 @@ if(window.visualViewport){window.visualViewport.addEventListener('resize',setVH)
 <link rel="stylesheet" href="/gestor.css">
   <script src="/api-client.js"></script>
 <script>
-// ══ TEMA OCEANO PROFUNDO — aplicado antes do gestor.js ══
+// ══ TEMA OCEANO PROFUNDO v2 — aplicado antes do gestor.js ══
 (function(){
   var r = document.documentElement;
   var dark = {
-    '--bg':'#0a1220','--surface':'#0f1a2e','--surface2':'#152640','--surface3':'#1c3050',
-    '--border':'rgba(56,189,248,.07)','--border2':'rgba(56,189,248,.15)',
+    '--bg':'#0b0e14','--surface':'#12161e','--surface2':'#1a1f2a','--surface3':'#222834',
+    '--border':'rgba(255,255,255,.07)','--border2':'rgba(255,255,255,.14)',
     '--accent':'#0ea5e9','--accent2':'#67e8f9','--accent3':'#fbbf24',
-    '--accent-dim':'rgba(14,165,233,.12)','--accent-glow':'rgba(14,165,233,.25)',
+    '--accent-dim':'rgba(14,165,233,.10)','--accent-glow':'rgba(14,165,233,.20)',
     '--success':'#34d399','--danger':'#fb7185','--purple':'#a78bfa',
     '--pink':'#f0abfc','--orange':'#f0a060',
-    '--text':'#dce8f4','--muted':'#5e7e9e','--muted2':'#8baabe',
-    '--sidebar-bg':'#06101e','--topnav-bg':'#040c18','--sfoot-bg':'rgba(4,12,24,.8)'
+    '--text':'#e2e8f0','--muted':'#64748b','--muted2':'#94a3b8',
+    '--sidebar-bg':'#080b11','--topnav-bg':'#060910','--sfoot-bg':'rgba(6,9,16,.8)'
   };
   // Apaga chaves antigas de tema
   try { ['ef_tema_modo','ef_tema_v2','tema','theme'].forEach(function(k){ localStorage.removeItem(k); }); } catch(e){}
@@ -3107,7 +3107,7 @@ Use no seu próximo pedido 🛍️</textarea>
     </div>
 
     <!-- Endereço de entrega (delivery) -->
-    <div id="od-delivery-addr-block" style="display:none;margin-top:10px;background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.15);border-radius:10px;padding:12px 14px">
+    <div id="od-delivery-addr-block" style="display:none;margin-top:10px;background:rgba(14,165,233,.06);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:12px 14px">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);margin-bottom:6px;display:flex;align-items:center;gap:5px">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1C5.24 1 3 3.24 3 6c0 3.75 5 9 5 9s5-5.25 5-9c0-2.76-2.24-5-5-5z" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="6" r="1.5" stroke="currentColor" stroke-width="1.3"/></svg>
         Endereço de entrega
@@ -4660,18 +4660,18 @@ Use no seu próximo pedido 🛍️</textarea>
       <!-- Oceano -->
       <div class="cp-tema-card" data-tema="oceano" onclick="cpSelecionarTema('oceano')" title="Azul oceano profundo, ideal para frutos do mar e sushi" style="border:2px solid transparent;border-radius:10px;overflow:hidden;cursor:pointer;transition:all .18s;position:relative">
         <div style="background:#0a1628;padding:10px 10px 8px">
-          <div style="background:#0f1f38;border-radius:6px;padding:7px 8px;margin-bottom:5px;border:1px solid rgba(56,189,248,.15)">
+          <div style="background:#0f1f38;border-radius:6px;padding:7px 8px;margin-bottom:5px;border:1px solid rgba(255,255,255,.08)">
             <div style="width:60%;height:7px;background:#e0ecf8;border-radius:3px;margin-bottom:3px"></div>
             <div style="width:40%;height:5px;background:#6890b0;border-radius:3px;opacity:.6"></div>
           </div>
           <div style="display:flex;flex-direction:column;gap:4px">
-            <div style="background:#0f1f38;border-radius:5px;padding:5px 6px;border:1px solid rgba(56,189,248,.1);display:flex;gap:5px;align-items:center">
+            <div style="background:#0f1f38;border-radius:5px;padding:5px 6px;border:1px solid rgba(14,165,233,.08);display:flex;gap:5px;align-items:center">
               <div style="width:30px;height:22px;background:#152a48;border-radius:3px;flex-shrink:0"></div>
               <div><div style="width:50px;height:5px;background:#e0ecf8;border-radius:2px;margin-bottom:2px;opacity:.9"></div><div style="width:30px;height:5px;background:#6890b0;border-radius:2px;opacity:.5"></div></div>
             </div>
           </div>
         </div>
-        <div style="background:#040c18;padding:5px 8px;font-size:10.5px;font-weight:700;color:#7dd3fc;border-top:1px solid rgba(56,189,248,.15)">🌊 Oceano</div>
+        <div style="background:#040c18;padding:5px 8px;font-size:10.5px;font-weight:700;color:#7dd3fc;border-top:1px solid rgba(255,255,255,.08)">🌊 Oceano</div>
         <div class="cp-tema-check" style="display:none;position:absolute;top:6px;right:6px;width:18px;height:18px;background:var(--accent);border-radius:50%;align-items:center;justify-content:center">
           <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
@@ -5213,7 +5213,7 @@ Use no seu próximo pedido 🛍️</textarea>
 .od-action-btn{width:32px;height:32px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;font-size:15px}
 .od-action-btn:hover{transform:scale(1.08)}
 .od-item-row{display:flex;align-items:flex-start;gap:10px;padding:9px 12px;background:var(--surface2);border-radius:9px;margin-bottom:5px;border:1px solid var(--border)}
-.od-item-qty{font-size:11px;font-weight:700;color:var(--accent);background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.18);border-radius:6px;padding:2px 7px;min-width:28px;text-align:center;flex-shrink:0;margin-top:1px}
+.od-item-qty{font-size:11px;font-weight:700;color:var(--accent);background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.15);border-radius:6px;padding:2px 7px;min-width:28px;text-align:center;flex-shrink:0;margin-top:1px}
 .od-item-name{font-size:13px;font-weight:600;color:var(--text)}
 .od-item-obs{font-size:11.5px;color:#38bdf8;margin-top:4px;font-weight:600;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.15);border-radius:6px;padding:4px 8px;line-height:1.4}
 .od-item-price{font-size:12.5px;font-weight:700;color:var(--accent3);margin-left:auto;flex-shrink:0;padding-top:2px}
