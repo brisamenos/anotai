@@ -1120,11 +1120,22 @@ function abrirComprovantesMesa(num, totalVal, forma, time, ordensPreSalvas, taxa
 function imprimirComprovanteMesa() {
   const conteudo = document.getElementById('comp-mesa-content')?.innerHTML;
   if (!conteudo) return;
-  const html = conteudo;
   const fmt  = localStorage.getItem('printFormat') || _printFormat || '80mm';
+  const printer = (() => { try { const c = JSON.parse(localStorage.getItem('printConfig')||'{}'); return c.printer_caixa || c.printer || ''; } catch { return ''; } })() || localStorage.getItem('printPrinter') || '';
 
-  // Tenta via agente (silencioso)
   (async () => {
+    // 1. Electron (silencioso via app desktop)
+    if (window.ElectronPrint) {
+      try {
+        const pw = fmt === '58mm' ? 58 : 80;
+        if (window.ElectronPrint.printHtml) {
+          const r = await window.ElectronPrint.printHtml(conteudo, { printer, paperWidth: pw, landscape: false, scaleFactor: 100 });
+          if (r && r.ok) { sbToast('ok', '🖨️ Comprovante impresso!'); return; }
+        }
+      } catch(e) { console.warn('[PRINT COMPROVANTE] Electron falhou:', e.message); }
+    }
+
+    // 2. Print Agent (agente silencioso via servidor)
     try {
       const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
       if (tid) {
@@ -1134,18 +1145,20 @@ function imprimirComprovanteMesa() {
           await fetch('/api/print-queue/job', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-            body: JSON.stringify({ html, format: fmt, tipo: 'caixa' }),
+            body: JSON.stringify({ html: conteudo, format: fmt, printer: printer || undefined, tipo: 'caixa' }),
           });
-          if (typeof sbToast === 'function') sbToast('ok', '🖨️ Comprovante enviado ao agente!');
+          sbToast('ok', '🖨️ Comprovante enviado ao agente!');
           return;
         }
       }
     } catch {}
-    // Fallback: popup com window.print()
+
+    // 3. Fallback: popup com window.print()
     const w = window.open('', '_blank', 'width=400,height=600');
+    if (!w) { sbToast('err', 'Permita popups para imprimir'); return; }
     w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comprovante</title>
-      <style>body{margin:0;padding:16px;font-family:monospace} @media print{@page{margin:2mm;size:${fmt} auto} body{margin:0}}</style>
-      </head><body>${conteudo}<script>window.onload=()=>{window.print();window.close()}<\/script></body></html>`);
+      <style>body{margin:0;padding:16px;font-family:monospace;background:#fff;color:#000} @media print{@page{margin:2mm;size:${fmt} auto} body{margin:0}}</style>
+      </head><body>${conteudo}<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}<\/script></body></html>`);
     w.document.close();
   })();
 }
