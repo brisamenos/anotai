@@ -528,12 +528,16 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
   document.getElementById('modal-pag-total').textContent = 'R$ ' + totalVal.toFixed(2).replace('.',',');
   document.getElementById('modal-pag-subtotal').value = totalVal.toFixed(2);
 
-  // Taxa — verifica se já está como item na comanda
+  // Taxa — verifica se já está como item na comanda (filtra por sessão)
   const taxaBloco = document.getElementById('modal-taxa-bloco');
   const taxaCheck = document.getElementById('modal-taxa-check');
-  const _cacheOrdersTaxa = mesaOrdersCache.filter(o =>
-    parseInt(o.mesa_num) === parseInt(num) && o.status !== 'cancelado'
-  );
+  const _sessStart = t?.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
+  const _cacheOrdersTaxa = mesaOrdersCache.filter(o => {
+    if (parseInt(o.mesa_num) !== parseInt(num) || o.status === 'cancelado') return false;
+    if (o.session_ref !== undefined && o.session_ref !== null) return o.session_ref === t?.opened_at;
+    if (!_sessStart) return o.status !== 'entregue';
+    return new Date(o.created_at || 0).getTime() >= _sessStart;
+  });
   const _taxaJaItem = _taxaServicoPct > 0 && _cacheOrdersTaxa.some(o =>
     _parseItems(o.items).some(i => i.item_type === 'taxa' && i.item_status !== 'cancelado')
   );
@@ -997,8 +1001,16 @@ async function confirmarPagamentoMesa() {
 
     // Usa cache local para o comprovante — já tem os dados corretos antes do update
     // O cache é limpo logo abaixo, então capturamos aqui
+    // Filtra apenas pedidos da sessão atual (mesmo filtro de _renderMesaPageFromCache)
     const _cacheComp = mesaOrdersCache
-      .filter(o => parseInt(o.mesa_num) === num && o.status !== 'cancelado')
+      .filter(o => {
+        if (parseInt(o.mesa_num) !== num || o.status === 'cancelado') return false;
+        if (o.session_ref !== undefined && o.session_ref !== null) {
+          return o.session_ref === _savedOpenedAt;
+        }
+        if (!_savedOpenedAt) return o.status !== 'entregue';
+        return new Date(o.created_at || 0).getTime() >= new Date(_savedOpenedAt).getTime() - 5000;
+      })
       .map(o => ({ ...o, items: _parseItems(o.items) }));
 
     let _ordensComprovante = _cacheComp.length ? _cacheComp : (_fallbackItens.length
@@ -1034,9 +1046,20 @@ function abrirComprovantesMesa(num, totalVal, forma, time, ordensPreSalvas, taxa
   if (!modal) return;
 
   // Usa os pedidos pré-salvos (passados antes de limpar o cache) ou fallback no cache
-  const sessionOrders = ordensPreSalvas && ordensPreSalvas.length > 0
-    ? ordensPreSalvas
-    : mesaOrdersCache.filter(o => parseInt(o.mesa_num) === parseInt(num));
+  // Fallback: filtra pela sessão via opened_at se disponível
+  let sessionOrders;
+  if (ordensPreSalvas && ordensPreSalvas.length > 0) {
+    sessionOrders = ordensPreSalvas;
+  } else {
+    const _mesa = tables.find(t => t.num === parseInt(num));
+    const _oa = _mesa?.opened_at;
+    sessionOrders = mesaOrdersCache.filter(o => {
+      if (parseInt(o.mesa_num) !== parseInt(num) || o.status === 'cancelado') return false;
+      if (o.session_ref !== undefined && o.session_ref !== null) return o.session_ref === _oa;
+      if (!_oa) return o.status !== 'entregue';
+      return new Date(o.created_at || 0).getTime() >= new Date(_oa).getTime() - 5000;
+    });
+  }
 
   // Consolida itens
   const itemMap = {};
