@@ -113,32 +113,65 @@ function applyTiposEntrega() {
 }
 
 // ── Bloco de geo do cliente (delivery por km) ─────────
+let _geoDistKm = null; // distância calculada pelo GPS
+
 function renderGeoBlock() {
   const wrap = document.getElementById('geo-block');
   if (!wrap) return;
-  // Só aparece se: delivery + taxa por km + loja tem GPS
-  wrap.style.display = (deliveryType === 'delivery' && feeConfig?.tipo === 'por_km' && _storeLat && _storeLng) ? '' : 'none';
+  const show = deliveryType === 'delivery' && feeConfig?.tipo === 'por_km' && _storeLat && _storeLng;
+  wrap.style.display = show ? '' : 'none';
+  // Pede GPS automaticamente ao entrar em delivery + por_km
+  if (show && _geoDistKm === null) {
+    _autoGetGeo();
+  }
 }
 
-function clientGetGeo() {
-  if (!navigator.geolocation) { toast('⚠️','GPS não suportado'); return; }
+function _autoGetGeo() {
+  if (!navigator.geolocation) return;
   const res = document.getElementById('geo-result');
-  if (res) res.textContent = '📡 Obtendo localização...';
+  if (res) res.innerHTML = '<span style="color:var(--accent)">📡 Obtendo sua localização...</span>';
   navigator.geolocation.getCurrentPosition(
     pos => {
       const dist = calcDist(_storeLat, _storeLng, pos.coords.latitude, pos.coords.longitude);
-      // Auto-seleciona a faixa mais barata que cobre a distância
+      _geoDistKm = dist;
       const faixas = feeConfig?.faixas || [];
       let idx = faixas.findIndex(f => f.ate_km >= dist);
-      if (idx === -1) idx = faixas.length - 1;  // Se além de tudo, aplica a última faixa
-      if (idx >= 0) selectFaixa(idx);
-      if (res) res.textContent = '📍 Localização obtida com sucesso.';
+      if (idx === -1) idx = faixas.length - 1;
+      if (idx >= 0) selectedFaixa = idx;
+      const faixaSel = faixas[selectedFaixa];
+      const distStr = dist.toFixed(1).replace('.', ',');
+      if (faixaSel) {
+        if (res) res.innerHTML = `<span style="color:var(--green)">📍 Você está a <strong>${distStr} km</strong> — Taxa: <strong>R$ ${fmt(faixaSel.taxa)}</strong></span>`;
+      } else {
+        if (res) res.innerHTML = `<span style="color:var(--red)">📍 Você está a ${distStr} km — fora da área de entrega</span>`;
+      }
+      renderTotals();
     },
     err => {
-      if (res) res.textContent = 'Não foi possível obter a localização.';
+      // GPS negado/falhou — mostra faixas para seleção manual como fallback
+      if (res) res.innerHTML = '<span style="color:var(--muted)">Não foi possível obter localização. Selecione sua faixa:</span>';
+      _showFaixasFallback();
     },
     { enableHighAccuracy: true, timeout: 10000 }
   );
+}
+
+function clientGetGeo() {
+  _geoDistKm = null;
+  _autoGetGeo();
+}
+
+function _showFaixasFallback() {
+  const wrap = document.getElementById('faixas-wrap');
+  const list = document.getElementById('faixas-list');
+  const faixas = feeConfig?.faixas || [];
+  if (!faixas.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  list.innerHTML = faixas.map((f,i) => `
+    <div class="faixa-item ${i===selectedFaixa?'on':''}" onclick="selectFaixa(${i})">
+      <span class="faixa-label"><svg width="14" height="12" viewBox="0 0 16 14" fill="none"><circle cx="3" cy="11" r="2" stroke="currentColor" stroke-width="1.3"/><circle cx="13" cy="11" r="2" stroke="currentColor" stroke-width="1.3"/><path d="M5 11H3M11 11h2M6 11L7.5 5.5h3L12 8.5H6z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg> Até ${f.ate_km} km</span>
+      <span class="faixa-val">R$ ${fmt(f.taxa)}</span>
+    </div>`).join('');
 }
 
 function calcDist(lat1, lng1, lat2, lng2) {
@@ -194,17 +227,11 @@ function setPay(el) {
 
 function renderFaixas() {
   const wrap   = document.getElementById('faixas-wrap');
-  const list   = document.getElementById('faixas-list');
   const faixas = feeConfig?.faixas || [];
+  // Faixas ficam ocultas por padrão — só aparecem se GPS falhar (via _showFaixasFallback)
   if (deliveryType !== 'delivery' || feeConfig?.tipo !== 'por_km' || !faixas.length) {
-    wrap.style.display = 'none'; renderGeoBlock(); return;
+    wrap.style.display = 'none';
   }
-  wrap.style.display = 'none';
-  list.innerHTML = faixas.map((f,i) => `
-    <div class="faixa-item ${i===selectedFaixa?'on':''}" onclick="selectFaixa(${i})">
-      <span class="faixa-label"><svg width="14" height="12" viewBox="0 0 16 14" fill="none"><circle cx="3" cy="11" r="2" stroke="currentColor" stroke-width="1.3"/><circle cx="13" cy="11" r="2" stroke="currentColor" stroke-width="1.3"/><path d="M5 11H3M11 11h2M6 11L7.5 5.5h3L12 8.5H6z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg> Até ${f.ate_km} km</span>
-      <span class="faixa-val">R$ ${fmt(f.taxa)}</span>
-    </div>`).join('');
   renderGeoBlock();
 }
 
