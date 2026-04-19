@@ -202,6 +202,12 @@ function renderImGrupos(item) {
   const _ACOUGUE_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
   const genericGrupos  = grupos.filter(g => !_ACOUGUE_TIPOS.includes(g.tipo));
   if (!genericGrupos.length) { wrap.innerHTML = ''; return; }
+
+  // ── Detecta padrão de borda por tamanho ──
+  // Se existem grupos com nome tipo "Borda Recheada (P)", "Borda Recheada (M)", "Borda Recheada (G)"
+  // eles ficam ocultos até o tamanho ser selecionado
+  const _bordaTamRegex = /^(.+)\s*\((P|M|G)\)\s*$/i;
+
   wrap.innerHTML = genericGrupos.map(g => {
     const isRequired = g.required === true;
     const badge = isRequired
@@ -225,6 +231,18 @@ function renderImGrupos(item) {
         <div style="display:flex;align-items:center;gap:8px">${priceLabel}${qtyEl}</div>
       </div>`;
     }).join('');
+
+    // Detecta se é grupo de borda por tamanho
+    const bordaMatch = g.nome.match(_bordaTamRegex);
+    if (bordaMatch) {
+      const bordaNomeBase = bordaMatch[1].trim();
+      const bordaTam = bordaMatch[2].toUpperCase();
+      // Renderiza com data attributes e oculto por padrão
+      return `<div class="grp-section" data-borda-tamanho="${bordaTam}" data-borda-grupo="${_escape(g.nome)}" style="display:none">
+        <div class="grp-section-title">${bordaNomeBase} ${badge}</div>
+        <div class="grp-opts">${optsHtml}</div>
+      </div>`;
+    }
 
     return `<div class="grp-section">
       <div class="grp-section-title">${g.nome} ${badge}</div>
@@ -846,6 +864,27 @@ function grpToggle(el, grupoNome, optNome, preco, tipo, maxSel) {
       if (qtyEl) qtyEl.classList.add('show');
     }
   }
+
+  // ── Borda condicional por tamanho ──
+  // Quando seleciona tamanho, mostra apenas o grupo de borda correspondente
+  if (grupoNome.toLowerCase() === 'tamanho' && tipo === 'radio') {
+    const tamanhoKey = optNome.match(/\(([PMG])\)/i)?.[1]?.toUpperCase() || '';
+    document.querySelectorAll('.grp-section[data-borda-tamanho]').forEach(sec => {
+      const bordaTam = sec.dataset.bordaTamanho;
+      if (bordaTam === tamanhoKey) {
+        sec.style.display = '';
+      } else {
+        sec.style.display = 'none';
+        // Limpa seleção da borda oculta
+        const nomeGrp = sec.dataset.bordaGrupo;
+        if (nomeGrp && _imGruposState[nomeGrp]) {
+          delete _imGruposState[nomeGrp];
+          sec.querySelectorAll('.grp-opt-item.on').forEach(e => e.classList.remove('on'));
+        }
+      }
+    });
+  }
+
   // Animação ingrediente voando
   const vtype = _itemVisualType(allItems.find(x => x.id === _imItemId));
   if (vtype === 'acai' || vtype === 'marmita') {
