@@ -1780,10 +1780,13 @@ function subscribeRealtime() {
         }
         renderMyOrders();
       } else if (p.eventType === 'UPDATE') {
+        // ── Status que indicam "pedido encerrado" — remover dos caches ──
+        const _isEncerrado = ['entregue', 'cancelado'].includes(p.new.status);
+
         // Atualiza allMesaOrders
         const allIdx = allMesaOrders.findIndex(o => o.id === p.new.id);
         if (allIdx !== -1) {
-          if (p.new.status === 'cancelado') allMesaOrders.splice(allIdx, 1);
+          if (_isEncerrado) allMesaOrders.splice(allIdx, 1);
           else allMesaOrders[allIdx] = p.new;
         } else if (p.new.mesa_num && p.new.status === 'mesa_aberta') {
           allMesaOrders.unshift(p.new);
@@ -1792,16 +1795,15 @@ function subscribeRealtime() {
         // Atualiza myOrders
         const idx = myOrders.findIndex(o => o.id === p.new.id);
         if (idx !== -1) {
-          if (p.new.status === 'cancelado') {
+          if (_isEncerrado) {
+            // Pedido entregue ou cancelado → remove (seja mesa ou não)
             myOrders.splice(idx, 1);
           } else if (p.new.status === 'mesa_aberta' || p.new.mesa_num) {
             myOrders[idx] = p.new;
-          } else if (['entregue'].includes(p.new.status) && !p.new.mesa_num) {
-            myOrders.splice(idx, 1);
           } else {
             myOrders[idx] = p.new;
           }
-        } else if (_hasMyItems(p.new) && p.new.status !== 'cancelado') {
+        } else if (_hasMyItems(p.new) && !_isEncerrado) {
           // Outro garçom pode ter adicionado itens deste garçom à comanda
           myOrders.unshift(p.new);
         }
