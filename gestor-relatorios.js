@@ -2402,164 +2402,189 @@ function _wrapTicketHtml(html, fontSize) {
 }
 
 function _buildTicketHtml(order, cfg) {
-  const items = Array.isArray(order.items) ? order.items : [];
-  const now = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  const money = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
-  const fmt = localStorage.getItem('printFormat') || _printFormat || '80mm';
-  const is58 = fmt === '58mm';
+  const items    = Array.isArray(order.items) ? order.items : [];
+  const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const money    = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
+  const fmt      = localStorage.getItem('printFormat') || _printFormat || '80mm';
+  const is58     = fmt === '58mm';
+  const fs       = is58 ? Math.min(cfg.fontSize, 10) : cfg.fontSize;
+  const W        = is58 ? 48 : 72; // largura útil em mm (referência visual)
+
+  // ── Helpers de HTML ─────────────────────────────────────
+  const H  = (...parts) => parts.join('');                              // concatena
+  const D  = (style, content) => `<div style="${style}">${content}</div>`;
+  const S  = (style, content) => `<span style="${style}">${content}</span>`;
+  const HR = () => '<hr style="border:none;border-top:1px dashed #000;margin:5px 0">';
+  // Linha de dois itens (nome esquerda, valor direita)
+  const ROW = (left, right, bold) => {
+    const b = bold ? 'font-weight:bold;' : '';
+    return D(`display:flex;justify-content:space-between;align-items:baseline;gap:4px;${b}`,
+      S('flex:1;word-break:break-word', left) + S('white-space:nowrap;flex-shrink:0', right));
+  };
+  // Linha simples centralizada
+  const CENTER = (content, style='') => D(`text-align:center;${style}`, content);
+  // Banner de bloco (fundo colorido, texto branco)
+  const BANNER = (content, bg, style='') =>
+    D(`text-align:center;font-weight:bold;background:${bg};color:#fff;padding:5px 4px;margin:5px 0;${style}`, content);
 
   // ── Tipo de entrega ─────────────────────────────────────
-  const _addr = (order.addr || '').toLowerCase();
-  const isMesa     = !!(order.mesa_num || (order.addr || '').startsWith('Mesa'));
-  const isRetirada = !isMesa && !!(_addr.includes('retirada') || _addr.includes('balcão') || _addr.includes('balcao') || _addr.includes('retirar'));
-  const isDelivery = !isMesa && !isRetirada;
-
-  const tipoTexto = isMesa
-    ? 'MESA ' + (order.mesa_num || '')
-    : isRetirada ? 'RETIRADA' : 'DELIVERY';
-  const tipoEmoji = isMesa ? '🪑' : isRetirada ? '🏃' : '🛵';
-  const tipoBg    = isMesa ? '#1a3a5c' : isRetirada ? '#2d4a1e' : '#7a2020';
-
-  const tipoBanner = `<div style="text-align:center;font-weight:bold;font-size:1.25em;background:${tipoBg};color:#fff;padding:5px 2px;margin:6px 0 4px;letter-spacing:1px">${tipoEmoji} ${tipoTexto}</div>`;
+  const _addr    = (order.addr || '').toLowerCase();
+  const isMesa   = !!(order.mesa_num || (order.addr || '').startsWith('Mesa'));
+  const isRetira = !isMesa && !!(_addr.includes('retirada') || _addr.includes('balcão') || _addr.includes('balcao') || _addr.includes('retirar'));
+  const tipoTxt  = isMesa ? 'MESA ' + (order.mesa_num || '') : isRetira ? 'RETIRADA' : 'DELIVERY';
+  const tipoIcon = isMesa ? '🪑' : isRetira ? '🏃' : '🛵';
+  const tipoBg   = isMesa ? '#1a3a5c' : isRetira ? '#2d4a1e' : '#7a2020';
+  const tipoBanner = BANNER(`${tipoIcon} ${tipoTxt}`, tipoBg, 'font-size:1.2em;letter-spacing:1px');
 
   // ── Status de pagamento ─────────────────────────────────
-  const _pagLabels = {
-    dinheiro:'Dinheiro', cartao:'Cartão', credito:'Crédito', debito:'Débito',
-    pix:'PIX', pix_mp:'PIX Online', cartao_mp:'Crédito Online', mesa:'Conta da Mesa'
+  const _pagMap  = { dinheiro:'Dinheiro', cartao:'Cartão', credito:'Crédito', debito:'Débito', pix:'PIX', pix_mp:'PIX Online', cartao_mp:'Crédito Online', mesa:'Conta da Mesa' };
+  const pagNome  = _pagMap[order.pag] || order.pag || '—';
+  const jaPago   = (order.pag_momento === 'agora') || order.pag === 'pix_mp' || order.pag === 'cartao_mp';
+  const pagTxt   = (jaPago ? '✅ PAGO' : '⏳ A PAGAR') + ' — ' + pagNome + (order.troco > 0 ? ' · Troco p/ ' + money(order.troco) : '');
+  const pagBanner = BANNER(pagTxt, jaPago ? '#1a4a1a' : '#4a3500', 'font-size:1em');
+
+  // ── Filtra itens para cozinha ───────────────────────────
+  const _isCoz = (item) => {
+    const c = (item.cat || item.cat_key || '').toLowerCase();
+    const n = (item.name || '').toLowerCase();
+    return !['bebida','drink','suco','agua','água','refrigerante','cerveja','chopp','vinho','dose','tanque','long'].some(s => c.includes(s) || n.includes(s));
   };
-  const pagNome   = _pagLabels[order.pag] || order.pag || '—';
-  const momento   = order.pag_momento || 'entrega';
-  const jaPago    = momento === 'agora' || order.pag === 'pix_mp' || order.pag === 'cartao_mp';
-  const trocoStr  = (order.troco > 0) ? ` · Troco p/ ${money(order.troco)}` : '';
+  const itensCozinha = items.filter(_isCoz);
 
-  const pagStatusBanner = `<div style="text-align:center;font-weight:bold;font-size:1.05em;background:${jaPago ? '#1a4a1a' : '#4a3500'};color:#fff;padding:4px 2px;margin:4px 0;border-radius:2px">
-    ${jaPago ? '✅ PAGO' : '⏳ A PAGAR'} — ${pagNome}${trocoStr}
-  </div>`;
-
-  // Tamanho de fonte adaptado
-  const fs = is58 ? Math.min(cfg.fontSize, 10) : cfg.fontSize;
-
-  // Categorias que vão para a cozinha (pratos, porções — exclui bebidas e similares)
-  const _isCozinha = (item) => {
-    const cat = (item.cat || item.cat_key || '').toLowerCase();
-    const name = (item.name || '').toLowerCase();
-    const skip = ['bebida','drink','suco','agua','refrigerante','cerveja','chopp','vinho','dose','tanque','long'];
-    if (skip.some(s => cat.includes(s) || name.includes(s))) return false;
-    return true;
-  };
-
-  const itensCozinha = items.filter(_isCozinha);
-
-  // Renderiza item: em 58mm, preço fica embaixo quando nome é longo
+  // ── Renderiza um item do pedido ─────────────────────────
   const renderItem = (i) => {
-    const nameRaw = (i.qty + 'x ' + i.name).toUpperCase();
-    const price = money((i.price||0) * (i.qty||1));
-    // Separa "Kit: ..." do resto do obs para formatar itens do kit em linhas
+    const nome  = (i.qty + 'x ' + i.name).toUpperCase();
+    const preco = money((i.price||0) * (i.qty||1));
     let obsText = i.obs || '';
     let kitHtml = '';
+
+    // Kit: separa os sub-itens
     if (obsText.startsWith('Kit: ')) {
       const pipeIdx = obsText.indexOf(' | ');
       const kitPart = pipeIdx > -1 ? obsText.substring(5, pipeIdx) : obsText.substring(5);
       obsText = pipeIdx > -1 ? obsText.substring(pipeIdx + 3) : '';
       const kitItens = kitPart.split(' · ').filter(Boolean);
-      kitHtml = `<div style="padding-left:4px;font-size:0.82em;color:#222;border-left:2px solid #555;margin:2px 0 3px;word-break:break-word">
-        <div style="font-weight:bold;margin-bottom:1px">CONTÉM:</div>
-        ${kitItens.map(k => `<div>• ${k.trim()}</div>`).join('')}
-      </div>`;
+      kitHtml = D('padding-left:6px;font-size:0.82em;color:#222;border-left:2px solid #555;margin:2px 0 4px',
+        D('font-weight:bold;margin-bottom:2px', 'CONTÉM:') +
+        kitItens.map(k => D('', '• ' + k.trim())).join(''));
     }
-    const obs = obsText ? `<div style="padding-left:4px;font-size:0.85em;color:#333;word-break:break-word;overflow-wrap:break-word;border-left:2px solid #999;margin:2px 0 3px">OBS: ${obsText}</div>` : '';
+
+    const obsHtml = obsText
+      ? D('padding-left:6px;font-size:0.85em;color:#333;border-left:2px solid #aaa;margin:2px 0 4px;word-break:break-word', 'OBS: ' + obsText)
+      : '';
+
+    const wrapper = 'border-bottom:1px dotted #ddd;padding-bottom:4px;margin-bottom:4px';
+
     if (is58) {
-      // 58mm: nome em cima, preço alinhado à direita embaixo
-      return `<div style="margin-bottom:4px;word-break:break-word;overflow-wrap:break-word">
-        <div style="font-weight:bold">${nameRaw}</div>
-        <div style="text-align:right;font-size:0.9em">${price}</div>
-        ${kitHtml}${obs}
-      </div>`;
+      // 58mm: nome em negrito, preço alinhado à direita na linha seguinte
+      return D(wrapper,
+        D('font-weight:bold;word-break:break-word', nome) +
+        D('text-align:right;font-size:0.9em;color:#333', preco) +
+        kitHtml + obsHtml);
     }
-    return `<div style="margin-bottom:3px">
-      <div style="display:flex;justify-content:space-between;gap:4px">
-        <span style="word-break:break-word;flex:1">${nameRaw}</span>
-        <span style="white-space:nowrap;flex-shrink:0">${price}</span>
-      </div>${kitHtml}${obs}
-    </div>`;
+    // 80mm: nome e preço na mesma linha, alinhados
+    return D(wrapper,
+      ROW(D('font-weight:bold', nome), preco) +
+      kitHtml + obsHtml);
   };
 
   const itemLines = items.map(renderItem).join('');
 
-  const subtotal = items.reduce((s,i) => s + (parseFloat(i.price||0) * (i.qty||1)), 0);
-  const taxa = parseFloat(order.taxa || 0);
-  // Usa order.total (já vem com desconto aplicado) se disponível
+  // ── Totais ──────────────────────────────────────────────
+  const subtotal   = items.reduce((s,i) => s + (parseFloat(i.price||0) * (i.qty||1)), 0);
+  const taxa       = parseFloat(order.taxa || 0);
   const orderTotal = parseFloat(order.total);
-  const desconto = (!isNaN(orderTotal) && orderTotal < subtotal) ? Math.max(0, subtotal - orderTotal) : 0;
-  const total = (!isNaN(orderTotal) ? orderTotal : subtotal) + taxa;
-  const orderNum = order.num || order.order_num || order.id;
+  const desconto   = (!isNaN(orderTotal) && orderTotal < subtotal) ? Math.max(0, subtotal - orderTotal) : 0;
+  const total      = (!isNaN(orderTotal) ? orderTotal : subtotal) + taxa;
+  const orderNum   = order.num || order.order_num || order.id;
 
-  // Endereço: em 58mm, quebra automática
-  const addrStyle = is58 ? 'word-break:break-word;overflow-wrap:break-word' : '';
-  const addrLine = cfg.addr && order.addr ? `<div style="${addrStyle}">Local: ${order.addr}</div>` : '';
+  const totalBlock = H(
+    (taxa > 0 || desconto > 0) ? H(
+      ROW('Subtotal', money(subtotal)),
+      desconto > 0 ? ROW('Desconto', '−' + money(desconto)) : '',
+      taxa > 0     ? ROW('Taxa entrega', money(taxa))        : ''
+    ) : '',
+    ROW(S('font-weight:bold;font-size:1.1em', 'TOTAL'), S('font-weight:bold;font-size:1.1em', money(total)))
+  );
 
-  // ── Linha de desconto ───────────────────────────────────
-  const descontoLine58 = desconto > 0 ? `<div style="color:#333">Desconto.....−${money(desconto)}</div>` : '';
-  const descontoLine80 = desconto > 0 ? `<div style="display:flex;justify-content:space-between;color:#333"><span>Desconto</span><span>−${money(desconto)}</span></div>` : '';
+  // ── Endereço (só delivery mostra) ──────────────────────
+  const addrLine = (cfg.addr && order.addr)
+    ? D('word-break:break-word;margin-top:2px', '📍 ' + order.addr)
+    : '';
 
-  // ── Total layout para 58mm ──────────────────────────────
-  const totalBlock = is58
-    ? `${(taxa > 0 || desconto > 0) ? `<div>Subtotal.....${money(subtotal)}</div>${descontoLine58}${taxa > 0 ? `<div>Taxa........${money(taxa)}</div>` : ''}` : ''}
-       <div style="font-weight:bold;font-size:1.1em">TOTAL ${money(total)}</div>`
-    : `${(taxa > 0 || desconto > 0) ? `<div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${money(subtotal)}</span></div>${descontoLine80}${taxa > 0 ? `<div style="display:flex;justify-content:space-between"><span>Taxa entrega</span><span>${money(taxa)}</span></div>` : ''}` : ''}
-       <div style="display:flex;justify-content:space-between;font-weight:bold"><span>TOTAL</span><span>${money(total)}</span></div>`;
+  // ── Telefone (opcional) ─────────────────────────────────
+  const phoneLine = order.phone
+    ? D('color:#555', '📞 ' + order.phone)
+    : '';
 
-  // ── Via Principal ──────────────────────────────────────────────
-  const viaPrincipal = `<div class="print-ticket" style="font-size:${fs}px;max-width:100%;overflow:visible">
-    <div class="pt-center pt-large">${cfg.nome}</div>
-    ${cfg.sub ? `<div class="pt-center" style="font-size:0.85em">${cfg.sub}</div>` : ''}
-    ${tipoBanner}
-    <hr class="pt-hr">
-    <div>Pedido: <b>#${orderNum}</b></div>
-    <div>Data: ${now}</div>
-    <div>Cliente: ${order.client || '—'}</div>
-    ${addrLine}
-    <hr class="pt-hr">
-    ${itemLines}
-    <hr class="pt-hr">
-    ${totalBlock}
-    ${pagStatusBanner}
-    <hr class="pt-hr">
-    <div class="pt-center" style="font-size:0.85em">${cfg.rodape}</div>
-  </div>`;
+  // ══════════════════════════════════════════════════════
+  // VIA PRINCIPAL
+  // ══════════════════════════════════════════════════════
+  const viaPrincipal = D('font-family:\'Courier New\',monospace;font-size:' + fs + 'px;width:100%;box-sizing:border-box;padding:0 2px',
+    H(
+      // Cabeçalho
+      CENTER(cfg.nome, 'font-size:1.3em;font-weight:bold;margin-bottom:2px'),
+      cfg.sub ? CENTER(cfg.sub, 'font-size:0.85em;margin-bottom:3px') : '',
+      // Banner tipo de entrega
+      tipoBanner,
+      HR(),
+      // Info do pedido
+      D('','') ,
+      ROW('Pedido Nº', '#' + orderNum),
+      D('margin-bottom:1px', 'Data: ' + now),
+      D('margin-bottom:1px', 'Cliente: ' + (order.client || '—')),
+      phoneLine,
+      addrLine,
+      HR(),
+      // Itens
+      itemLines,
+      HR(),
+      // Totais
+      totalBlock,
+      // Banner pagamento
+      pagBanner,
+      HR(),
+      // Rodapé
+      CENTER(cfg.rodape || '', 'font-size:0.85em;color:#333')
+    )
+  );
 
-  // ── Via da Cozinha (só se tiver itens de cozinha) ──────────────
+  // ══════════════════════════════════════════════════════
+  // VIA COZINHA
+  // ══════════════════════════════════════════════════════
   let viaCozinha = '';
   if (itensCozinha.length > 0) {
-    const itensHtmlCoz = itensCozinha.map(i => {
-      const nameRaw = (i.qty + 'x ' + i.name).toUpperCase();
-      const obs = i.obs ? `<div style="padding-left:4px;font-size:0.9em;border-left:2px solid #999;margin:2px 0 3px;word-break:break-word">OBS: ${i.obs}</div>` : '';
-      return `<div style="margin-bottom:4px;word-break:break-word"><div style="font-weight:bold">${nameRaw}</div>${obs}</div>`;
+    const itensCozHtml = itensCozinha.map(i => {
+      const nome   = (i.qty + 'x ' + i.name).toUpperCase();
+      const obsHtml = i.obs
+        ? D('padding-left:6px;font-size:0.9em;border-left:2px solid #999;margin:2px 0 4px;word-break:break-word', 'OBS: ' + i.obs)
+        : '';
+      return D('border-bottom:1px dotted #ddd;padding-bottom:4px;margin-bottom:4px',
+        D('font-weight:bold;font-size:1.05em;word-break:break-word', nome) + obsHtml);
     }).join('');
 
-    viaCozinha = `
-    <div style="page-break-before:always"></div>
-    <div class="print-ticket" style="font-size:${fs}px;max-width:100%;overflow:visible">
-      <div class="pt-center pt-large">*** COZINHA ***</div>
-      ${tipoBanner}
-      <hr class="pt-hr">
-      <div>Pedido: <b>#${orderNum}</b></div>
-      <div>Data: ${now}</div>
-      <div>Cliente: ${order.client || '—'}</div>
-      ${order.addr ? `<div style="word-break:break-word">Local: ${order.addr}</div>` : ''}
-      <hr class="pt-hr">
-      ${itensHtmlCoz}
-      <hr class="pt-hr">
-      <div class="pt-center" style="font-size:0.85em">— cozinha —</div>
-    </div>`;
+    viaCozinha = D('page-break-before:always', '') +
+      D('font-family:\'Courier New\',monospace;font-size:' + fs + 'px;width:100%;box-sizing:border-box;padding:0 2px',
+        H(
+          CENTER('★ COZINHA ★', 'font-size:1.3em;font-weight:bold;margin-bottom:2px'),
+          tipoBanner,
+          HR(),
+          ROW('Pedido Nº', '#' + orderNum),
+          D('margin-bottom:1px', 'Data: ' + now),
+          D('margin-bottom:1px', 'Cliente: ' + (order.client || '—')),
+          order.addr ? D('word-break:break-word;margin-top:2px', '📍 ' + order.addr) : '',
+          HR(),
+          itensCozHtml,
+          HR(),
+          CENTER('— via cozinha —', 'font-size:0.85em;color:#555')
+        )
+      );
   }
 
-  // Via combinada (mesma folha): principal + linha de corte + cozinha
-  const cutLine = `<div style="text-align:center;margin:8px 0;font-size:0.8em;color:#999">
-    ✂ · · · · · · · · · · · · · · · · · · · · · · · ✂
-  </div>`;
+  // ── Via combinada (folha única) ─────────────────────────
+  const cutLine = CENTER('· · · · ✂ · · · · · · · · ✂ · · · ·', 'font-size:0.75em;color:#aaa;margin:6px 0');
   const singleSheet = viaCozinha
-    ? viaPrincipal + cutLine + viaCozinha.replace('<div style="page-break-before:always"></div>', '')
+    ? viaPrincipal + cutLine + viaCozinha.replace(D('page-break-before:always', ''), '')
     : viaPrincipal;
 
   return { principal: viaPrincipal, cozinha: viaCozinha, combined: viaPrincipal + viaCozinha, singleSheet };
