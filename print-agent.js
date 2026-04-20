@@ -127,10 +127,10 @@ function wrapHtml(html, fontSize = 12) {
   .pt-center { text-align:center }
   .pt-large  { font-size:${fontSize + 3}px; font-weight:bold }
   .pt-hr     { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .print-ticket { padding:2px; width:100%; word-wrap:break-word; overflow-wrap:break-word; overflow:hidden }
+  .print-ticket { padding:0 2px; width:100%; word-wrap:break-word; overflow-wrap:break-word; overflow:visible }
   span, div { word-break:break-word; overflow-wrap:break-word }
   @media print {
-    @page { margin:1mm; size: portrait }
+    @page { margin:0 }
     .print-ticket + div { page-break-before: always }
   }
 </style>
@@ -155,7 +155,7 @@ async function printHtml(html, format, printerName) {
       path: pdfPath,
       printBackground: true,
       landscape: false,
-      margin: { top: '2mm', bottom: '2mm', left: '2mm', right: '2mm' },
+      margin: { top: '2mm', bottom: '3mm', left: '0', right: '0' },
     };
 
     const fmt = format || FORMAT;

@@ -1658,17 +1658,18 @@ module.exports = async function handleRoutes(req, res, ctx) {
         const fullHtml = job.html.includes('<html') ? job.html
           : `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
-  * { margin:0; padding:0; box-sizing:border-box }
-  body { font-family:'Courier New',monospace; font-size:12px; color:#000; background:#fff }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important }
+  body { font-family:'Courier New',monospace; font-size:12px; color:#000; background:#fff; width:100%; overflow-wrap:break-word; word-break:break-word }
   hr { border:none; border-top:1px dashed #000; margin:4px 0 }
   .pt-center { text-align:center } .pt-large { font-size:15px; font-weight:bold }
   .pt-hr { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .print-ticket { padding:4px; width:100% }
+  .print-ticket { padding:0 2px; width:100%; overflow:visible; word-wrap:break-word; overflow-wrap:break-word }
+  @media print { @page { margin:0 } }
 </style></head><body>${job.html}</body></html>`
         await page.setContent(fullHtml, { waitUntil: 'networkidle0' })
         const pdfOpts = {
           printBackground: true,
-          margin: { top:'4mm', bottom:'4mm', left:'4mm', right:'4mm' }
+          margin: { top:'2mm', bottom:'3mm', left:'0', right:'0' }
         }
         const fmt = job.format || 'A4'
         if (fmt === '80mm' || fmt === '58mm') {
@@ -1765,12 +1766,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
         const fullHtml = body.html.includes('<html') ? body.html
           : `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
-  * { margin:0; padding:0; box-sizing:border-box }
-  body { font-family:'Courier New',monospace; font-size:12px; color:#000; background:#fff }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important }
+  body { font-family:'Courier New',monospace; font-size:12px; color:#000; background:#fff; width:100%; overflow-wrap:break-word; word-break:break-word }
   hr { border:none; border-top:1px dashed #000; margin:4px 0 }
   .pt-center { text-align:center } .pt-large { font-size:15px; font-weight:bold }
   .pt-hr { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .print-ticket { padding:4px; width:100% }
+  .print-ticket { padding:0 2px; width:100%; overflow:visible; word-wrap:break-word; overflow-wrap:break-word }
+  @media print { @page { margin:0 } }
 </style></head><body>${body.html}</body></html>`
 
         await page.setContent(fullHtml, { waitUntil: 'networkidle0' })
@@ -1778,7 +1780,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
         const pdfOpts = {
           printBackground: true,
-          margin: { top:'2mm', bottom:'2mm', left:'2mm', right:'2mm' }
+          margin: { top:'2mm', bottom:'3mm', left:'0', right:'0' }
         }
         if (fmt === '80mm' || fmt === '58mm') {
           pdfOpts.width  = fmt
