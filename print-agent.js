@@ -117,7 +117,7 @@ async function getPuppeteer() {
 }
 
 // Cria HTML completo para o ticket
-function wrapHtml(html, fontSize = 12) {
+function wrapHtml(html, fontSize = 12, marginH = 5, marginV = 2) {
   if (html.includes('<html')) return html;
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
@@ -130,14 +130,14 @@ function wrapHtml(html, fontSize = 12) {
   .print-ticket { padding:4px 6px; width:100%; word-wrap:break-word; overflow-wrap:break-word; overflow:hidden }
   span, div { word-break:break-word; overflow-wrap:break-word }
   @media print {
-    @page { margin: 2mm 5mm; size: portrait }
+    @page { margin: ${marginV}mm ${marginH}mm; size: portrait }
     .print-ticket + div { page-break-before: always }
   }
 </style>
 </head><body>${html}</body></html>`;
 }
 
-async function printHtml(html, format, printerName) {
+async function printHtml(html, format, printerName, marginH = 5, marginV = 2) {
   const pptr   = await getPuppeteer();
   const tmpDir = os.tmpdir();
   const pdfPath = path.join(tmpDir, `anotai-print-${Date.now()}.pdf`);
@@ -149,13 +149,13 @@ async function printHtml(html, format, printerName) {
 
   try {
     const page = await browser.newPage();
-    await page.setContent(wrapHtml(html), { waitUntil: 'networkidle0' });
+    await page.setContent(wrapHtml(html, 12, marginH, marginV), { waitUntil: 'networkidle0' });
 
     const pdfOpts = {
       path: pdfPath,
       printBackground: true,
       landscape: false,
-      margin: { top: '2mm', bottom: '2mm', left: '5mm', right: '5mm' },
+      margin: { top: `${marginV}mm`, bottom: `${marginV}mm`, left: `${marginH}mm`, right: `${marginH}mm` },
     };
 
     const fmt = format || FORMAT;
@@ -256,7 +256,7 @@ async function processPendingJobs() {
   for (const job of res.body) {
     log(`🖨️  Imprimindo job #${job.id} (${job.format || FORMAT})...`);
     try {
-      await printHtml(job.html, job.format, job.printer);
+      await printHtml(job.html, job.format, job.printer, job.marginH ?? 5, job.marginV ?? 2);
       await request('PATCH', `/api/print-queue/job/${job.id}/done`, { status: 'done' });
       log(`✅  Job #${job.id} impresso!`);
     } catch (e) {
