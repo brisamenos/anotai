@@ -2390,10 +2390,10 @@ function _wrapTicketHtml(html, fontSize) {
   .pt-center { text-align:center }
   .pt-large  { font-size:${fs + 3}px; font-weight:bold }
   .pt-hr     { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .print-ticket { padding:0 2px; width:100%; word-wrap:break-word; overflow-wrap:break-word; overflow:visible }
+  .print-ticket { padding:2px 6px; width:100%; word-wrap:break-word; overflow-wrap:break-word; overflow:visible }
   span, div { word-break:break-word; overflow-wrap:break-word }
   @media print {
-    @page { margin:0 }
+    @page { margin:2mm 5mm }
     body > *:not(.print-ticket) { display:none !important }
     .print-ticket { display:block !important }
   }
@@ -2707,9 +2707,9 @@ function _printViaBrowser(html) {
   hr { border:none; border-top:1px dashed #000; margin:4px 0 }
   .pt-center { text-align:center } .pt-large { font-size:15px; font-weight:bold }
   .pt-hr { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .print-ticket { padding:0 2px; width:100%; overflow:visible; overflow-wrap:break-word; word-break:break-word }
+  .print-ticket { padding:2px 6px; width:100%; overflow:visible; overflow-wrap:break-word; word-break:break-word }
   span, div { word-break:break-word; overflow-wrap:break-word }
-  @media print { @page { margin:0 } body { margin:0 } }
+  @media print { @page { margin:2mm 5mm } body { margin:0 } }
 </style></head><body>${html}
 <script>
   window.onload = function() {
@@ -2990,7 +2990,7 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
   // 1️⃣ Electron — usa printHtml para enviar HTML + impressora específica do job
   if (window.ElectronPrint) {
     try {
-      const pw = fmt === '58mm' ? 58 : 80;
+      const pw = fmt === '58mm' ? 48 : 72;
       const wrappedHtml = _wrapTicketHtml(html, cfg ? cfg.fontSize : 12);
 
       // Respeita o tipo do job para escolher a impressora correta
@@ -3097,7 +3097,7 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
   let st = document.getElementById('_print_style');
   if (!st) { st = document.createElement('style'); st.id = '_print_style'; document.head.appendChild(st); }
   st.innerHTML = `@media print {
-    @page { margin: 0; size: ${fmt} auto; }
+    @page { margin: 2mm 5mm; size: ${fmt} auto; }
     body > *:not(#_print_area):not(#_print_style) { display: none !important; }
     #_print_area { display: block !important; position: static !important; }
   }`;
