@@ -2390,10 +2390,10 @@ function _wrapTicketHtml(html, fontSize) {
   .pt-center { text-align:center }
   .pt-large  { font-size:${fs + 3}px; font-weight:bold }
   .pt-hr     { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .print-ticket { padding:2px; width:100%; word-wrap:break-word; overflow-wrap:break-word; overflow:hidden }
+  .print-ticket { padding:2px 3px; width:100%; word-wrap:break-word; overflow-wrap:break-word; overflow:visible }
   span, div { word-break:break-word; overflow-wrap:break-word }
   @media print {
-    @page { margin:1mm; size: portrait }
+    @page { margin:1mm 2mm }
     body > *:not(.print-ticket) { display:none !important }
     .print-ticket { display:block !important }
   }
@@ -2510,7 +2510,7 @@ function _buildTicketHtml(order, cfg) {
        <div style="display:flex;justify-content:space-between;font-weight:bold"><span>TOTAL</span><span>${money(total)}</span></div>`;
 
   // ── Via Principal ──────────────────────────────────────────────
-  const viaPrincipal = `<div class="print-ticket" style="font-size:${fs}px;max-width:${is58 ? '48' : '72'}mm;overflow:hidden">
+  const viaPrincipal = `<div class="print-ticket" style="font-size:${fs}px;max-width:100%;overflow:visible">
     <div class="pt-center pt-large">${cfg.nome}</div>
     ${cfg.sub ? `<div class="pt-center" style="font-size:0.85em">${cfg.sub}</div>` : ''}
     ${tipoBanner}
@@ -2539,7 +2539,7 @@ function _buildTicketHtml(order, cfg) {
 
     viaCozinha = `
     <div style="page-break-before:always"></div>
-    <div class="print-ticket" style="font-size:${fs}px;max-width:${is58 ? '48' : '72'}mm;overflow:hidden">
+    <div class="print-ticket" style="font-size:${fs}px;max-width:100%;overflow:visible">
       <div class="pt-center pt-large">*** COZINHA ***</div>
       ${tipoBanner}
       <hr class="pt-hr">
@@ -2682,9 +2682,9 @@ function _printViaBrowser(html) {
   hr { border:none; border-top:1px dashed #000; margin:4px 0 }
   .pt-center { text-align:center } .pt-large { font-size:15px; font-weight:bold }
   .pt-hr { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .print-ticket { padding:2px; width:100%; overflow:hidden; overflow-wrap:break-word; word-break:break-word }
+  .print-ticket { padding:2px 3px; width:100%; overflow:visible; overflow-wrap:break-word; word-break:break-word }
   span, div { word-break:break-word; overflow-wrap:break-word }
-  @media print { @page { margin:1mm } body { margin:0 } }
+  @media print { @page { margin:1mm 2mm } body { margin:0 } }
 </style></head><body>${html}
 <script>
   window.onload = function() {
@@ -3072,7 +3072,7 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
   let st = document.getElementById('_print_style');
   if (!st) { st = document.createElement('style'); st.id = '_print_style'; document.head.appendChild(st); }
   st.innerHTML = `@media print {
-    @page { margin: 2mm; size: ${fmt} auto; }
+    @page { margin: 1mm 2mm; size: ${fmt} auto; }
     body > *:not(#_print_area):not(#_print_style) { display: none !important; }
     #_print_area { display: block !important; position: static !important; }
   }`;
