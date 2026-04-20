@@ -425,23 +425,22 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (!r.ok) { const fb = db.prepare('SELECT status FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId)); send(res, 200, { status: fb ? fb.status : 'pendente' }); return true }
       const novoStatus = pd.status === 'approved' ? 'aprovado' : pd.status === 'rejected' ? 'rejeitado' : pd.status === 'cancelled' ? 'cancelado' : 'pendente'
       const rowAtual = db.prepare('SELECT status,valor,tenant_id,order_id FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
+      // Atualiza status do pagamento apenas se mudou
       if (rowAtual && rowAtual.status !== novoStatus) {
         db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=? WHERE mp_payment_id=?').run(novoStatus, pd.date_approved || null, String(mpId))
-        if (novoStatus === 'aprovado') {
-          log('✅', `PIX APROVADO: R$${rowAtual.valor} tenant=${rowAtual.tenant_id}`)
+      }
+      // Libera o pedido para o gestor SEMPRE que aprovado — independente de mudança de status
+      // (corrige race condition: webhook pode ter setado 'aprovado' antes do poll chegar aqui)
+      if (novoStatus === 'aprovado' && rowAtual?.order_id) {
+        const pedAtual = db.prepare("SELECT status FROM orders WHERE id=?").get(rowAtual.order_id)
+        if (pedAtual?.status === 'aguardando_pix') {
+          log('✅', `PIX APROVADO (poll): R$${rowAtual.valor} tenant=${rowAtual.tenant_id}`)
           marcarDirty()
-          // Se pedido ainda estava aguardando PIX, libera para o gestor agora
-          if (rowAtual.order_id) {
-            const pedAtual = db.prepare("SELECT status FROM orders WHERE id=?").get(rowAtual.order_id)
-            if (pedAtual?.status === 'aguardando_pix') {
-              db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=?").run(rowAtual.order_id)
-              const _fo1 = db.prepare("SELECT * FROM orders WHERE id=?").get(rowAtual.order_id)
-              const _it1 = _fo1 && typeof _fo1.items==='string' ? (() => { try{return JSON.parse(_fo1.items)}catch{return []} })() : (_fo1?.items||[])
-              sseBroadcast(`orders-rt:${rowAtual.tenant_id}`, `orders:UPDATE`, _fo1 ? {..._fo1, items:_it1, status:'analise', pag:'pix_mp'} : { id: rowAtual.order_id, status: 'analise', pag: 'pix_mp' })
-              // Notifica cliente: pagamento PIX confirmado
-              _notificarPixConfirmado(rowAtual.tenant_id, _fo1, sendWA, fillVars, EVO_INST, db)
-            }
-          }
+          db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=?").run(rowAtual.order_id)
+          const _fo1 = db.prepare("SELECT * FROM orders WHERE id=?").get(rowAtual.order_id)
+          const _it1 = _fo1 && typeof _fo1.items==='string' ? (() => { try{return JSON.parse(_fo1.items)}catch{return []} })() : (_fo1?.items||[])
+          sseBroadcast(`orders-rt:${rowAtual.tenant_id}`, `orders:UPDATE`, _fo1 ? {..._fo1, items:_it1, status:'analise', pag:'pix_mp'} : { id: rowAtual.order_id, status: 'analise', pag: 'pix_mp' })
+          _notificarPixConfirmado(rowAtual.tenant_id, _fo1, sendWA, fillVars, EVO_INST, db)
         }
       }
       send(res, 200, { status: novoStatus, mp_status: pd.status })
