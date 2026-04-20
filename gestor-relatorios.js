@@ -2408,6 +2408,34 @@ function _buildTicketHtml(order, cfg) {
   const fmt = localStorage.getItem('printFormat') || _printFormat || '80mm';
   const is58 = fmt === '58mm';
 
+  // ── Tipo de entrega ─────────────────────────────────────
+  const _addr = (order.addr || '').toLowerCase();
+  const isMesa     = !!(order.mesa_num || (order.addr || '').startsWith('Mesa'));
+  const isRetirada = !isMesa && !!(_addr.includes('retirada') || _addr.includes('balcão') || _addr.includes('balcao') || _addr.includes('retirar'));
+  const isDelivery = !isMesa && !isRetirada;
+
+  const tipoTexto = isMesa
+    ? 'MESA ' + (order.mesa_num || '')
+    : isRetirada ? 'RETIRADA' : 'DELIVERY';
+  const tipoEmoji = isMesa ? '🪑' : isRetirada ? '🏃' : '🛵';
+  const tipoBg    = isMesa ? '#1a3a5c' : isRetirada ? '#2d4a1e' : '#7a2020';
+
+  const tipoBanner = `<div style="text-align:center;font-weight:bold;font-size:1.25em;background:${tipoBg};color:#fff;padding:5px 2px;margin:6px 0 4px;letter-spacing:1px">${tipoEmoji} ${tipoTexto}</div>`;
+
+  // ── Status de pagamento ─────────────────────────────────
+  const _pagLabels = {
+    dinheiro:'Dinheiro', cartao:'Cartão', credito:'Crédito', debito:'Débito',
+    pix:'PIX', pix_mp:'PIX Online', cartao_mp:'Crédito Online', mesa:'Conta da Mesa'
+  };
+  const pagNome   = _pagLabels[order.pag] || order.pag || '—';
+  const momento   = order.pag_momento || 'entrega';
+  const jaPago    = momento === 'agora' || order.pag === 'pix_mp' || order.pag === 'cartao_mp';
+  const trocoStr  = (order.troco > 0) ? ` · Troco p/ ${money(order.troco)}` : '';
+
+  const pagStatusBanner = `<div style="text-align:center;font-weight:bold;font-size:1.05em;background:${jaPago ? '#1a4a1a' : '#4a3500'};color:#fff;padding:4px 2px;margin:4px 0;border-radius:2px">
+    ${jaPago ? '✅ PAGO' : '⏳ A PAGAR'} — ${pagNome}${trocoStr}
+  </div>`;
+
   // Tamanho de fonte adaptado
   const fs = is58 ? Math.min(cfg.fontSize, 10) : cfg.fontSize;
 
@@ -2470,9 +2498,6 @@ function _buildTicketHtml(order, cfg) {
   const addrStyle = is58 ? 'word-break:break-word;overflow-wrap:break-word' : '';
   const addrLine = cfg.addr && order.addr ? `<div style="${addrStyle}">Local: ${order.addr}</div>` : '';
 
-  // Pagamento
-  const pagLine = cfg.pag && order.pag ? `<div>Pag: ${order.pag}${order.troco > 0 ? ' · Troco p/ ' + money(order.troco) : ''}</div>` : '';
-
   // ── Linha de desconto ───────────────────────────────────
   const descontoLine58 = desconto > 0 ? `<div style="color:#333">Desconto.....−${money(desconto)}</div>` : '';
   const descontoLine80 = desconto > 0 ? `<div style="display:flex;justify-content:space-between;color:#333"><span>Desconto</span><span>−${money(desconto)}</span></div>` : '';
@@ -2488,6 +2513,7 @@ function _buildTicketHtml(order, cfg) {
   const viaPrincipal = `<div class="print-ticket" style="font-size:${fs}px;max-width:${is58 ? '48' : '72'}mm;overflow:hidden">
     <div class="pt-center pt-large">${cfg.nome}</div>
     ${cfg.sub ? `<div class="pt-center" style="font-size:0.85em">${cfg.sub}</div>` : ''}
+    ${tipoBanner}
     <hr class="pt-hr">
     <div>Pedido: <b>#${orderNum}</b></div>
     <div>Data: ${now}</div>
@@ -2497,7 +2523,7 @@ function _buildTicketHtml(order, cfg) {
     ${itemLines}
     <hr class="pt-hr">
     ${totalBlock}
-    ${pagLine}
+    ${pagStatusBanner}
     <hr class="pt-hr">
     <div class="pt-center" style="font-size:0.85em">${cfg.rodape}</div>
   </div>`;
@@ -2515,6 +2541,7 @@ function _buildTicketHtml(order, cfg) {
     <div style="page-break-before:always"></div>
     <div class="print-ticket" style="font-size:${fs}px;max-width:${is58 ? '48' : '72'}mm;overflow:hidden">
       <div class="pt-center pt-large">*** COZINHA ***</div>
+      ${tipoBanner}
       <hr class="pt-hr">
       <div>Pedido: <b>#${orderNum}</b></div>
       <div>Data: ${now}</div>
@@ -2729,6 +2756,20 @@ function _buildEscPos(order, cfg, cols = 32) {
   bytes(0x1B, 0x61, 0x00);                   // alinhar esquerda
   push(sep);
 
+  // ── Tipo de entrega ────────────────────────────────────
+  const _escAddr = (order.addr || '').toLowerCase();
+  const _escIsMesa     = !!(order.mesa_num || (order.addr || '').startsWith('Mesa'));
+  const _escIsRetirada = !_escIsMesa && !!(_escAddr.includes('retirada') || _escAddr.includes('balcão') || _escAddr.includes('balcao') || _escAddr.includes('retirar'));
+  const _escTipoLabel  = _escIsMesa
+    ? '[ MESA ' + (order.mesa_num || '') + ' ]'
+    : _escIsRetirada ? '[ RETIRADA ]' : '[ DELIVERY ]';
+  bytes(0x1B, 0x61, 0x01);                   // centralizar
+  bytes(0x1D, 0x21, 0x10);                   // fonte dupla altura
+  push(_escTipoLabel + '\n');
+  bytes(0x1D, 0x21, 0x00);                   // fonte normal
+  bytes(0x1B, 0x61, 0x00);                   // alinhar esquerda
+  push(sep);
+
   const now = new Date().toLocaleString('pt-BR', {
     day:'2-digit', month:'2-digit', year:'numeric',
     hour:'2-digit', minute:'2-digit'
@@ -2737,7 +2778,6 @@ function _buildEscPos(order, cfg, cols = 32) {
   push('Data: ' + now + '\n');
   push('Cliente: ' + (order.client || '—') + '\n');
   if (cfg.addr && order.addr) push('Local: ' + order.addr + '\n');
-  if (order.pag) push('Pagto: ' + order.pag + '\n');
   push(sep);
 
   const items = Array.isArray(order.items) ? order.items : [];
@@ -2776,6 +2816,21 @@ function _buildEscPos(order, cfg, cols = 32) {
   bytes(0x1B, 0x45, 0x00);
   push(sep);
 
+  // ── Status de pagamento ────────────────────────────────
+  const _escPagLabels = {
+    dinheiro:'Dinheiro', cartao:'Cartao', credito:'Credito', debito:'Debito',
+    pix:'PIX', pix_mp:'PIX Online', cartao_mp:'Credito Online', mesa:'Conta Mesa'
+  };
+  const _escPagNome = _escPagLabels[order.pag] || order.pag || '---';
+  const _escJaPago  = (order.pag_momento === 'agora') || order.pag === 'pix_mp' || order.pag === 'cartao_mp';
+  const _escTrocoStr = (order.troco > 0) ? ' Troco p/ ' + money(order.troco) : '';
+  bytes(0x1B, 0x61, 0x01);                   // centralizar
+  bytes(0x1D, 0x21, 0x10);                   // fonte dupla
+  push((_escJaPago ? '** PAGO **' : '** A PAGAR **') + '\n');
+  bytes(0x1D, 0x21, 0x00);                   // normal
+  push(_escPagNome + _escTrocoStr + '\n');
+  bytes(0x1B, 0x61, 0x00);                   // esquerda
+  push(sep);
   bytes(0x1B, 0x61, 0x01);                   // centralizar
   push((cfg.rodape || 'Obrigado!') + '\n');
   bytes(0x1B, 0x61, 0x00);
