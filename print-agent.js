@@ -122,15 +122,15 @@ function wrapHtml(html, fontSize = 12) {
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important }
-  body { font-family:'Courier New',monospace; font-size:${fontSize}px; color:#000 !important; background:#fff; width:100%; overflow-wrap:break-word; word-break:break-word }
+  body { font-family:'Courier New',monospace; font-size:${fontSize}px; color:#000 !important; background:#fff; width:100%; overflow-wrap:break-word; word-break:break-word; padding: 0 2px }
   hr { border:none; border-top:1px dashed #000; margin:4px 0 }
   .pt-center { text-align:center }
   .pt-large  { font-size:${fontSize + 3}px; font-weight:bold }
   .pt-hr     { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .print-ticket { padding:0 2px; width:100%; word-wrap:break-word; overflow-wrap:break-word; overflow:visible }
+  .print-ticket { padding:4px 6px; width:100%; word-wrap:break-word; overflow-wrap:break-word; overflow:hidden }
   span, div { word-break:break-word; overflow-wrap:break-word }
   @media print {
-    @page { margin:0 }
+    @page { margin: 2mm 5mm; size: portrait }
     .print-ticket + div { page-break-before: always }
   }
 </style>
@@ -155,7 +155,7 @@ async function printHtml(html, format, printerName) {
       path: pdfPath,
       printBackground: true,
       landscape: false,
-      margin: { top: '2mm', bottom: '3mm', left: '0', right: '0' },
+      margin: { top: '2mm', bottom: '2mm', left: '5mm', right: '5mm' },
     };
 
     const fmt = format || FORMAT;
