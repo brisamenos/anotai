@@ -842,6 +842,8 @@ function subscribeOrders() {
 
   // ── Rádio garçom → gestor (push-to-talk via SSE) ──────────────
   _subscribeRadio();
+  // ── SSE do servidor para pedidos PIX online ────────────────────
+  _subscribeOrdersSSE();
 }
 
 // ══ RÁDIO GARÇOM ↔ GESTOR (push-to-talk + chat de áudios) ══════════════════
@@ -890,6 +892,59 @@ function _subscribeRadio() {
   _radioSSE.onerror = () => {
     _radioSSE?.close(); _radioSSE = null;
     setTimeout(() => _subscribeRadio(), 5000);
+  };
+}
+
+// ══ SSE SERVIDOR → GESTOR (pedidos PIX online) ════════════════════════════
+let _ordersSSE = null;
+
+function _subscribeOrdersSSE() {
+  if (_ordersSSE) { try { _ordersSSE.close(); } catch{} }
+  const tid = _sessao?.tenant_id;
+  if (!tid) return;
+
+  _ordersSSE = new EventSource(`/sse/orders-rt:${tid}`);
+
+  _ordersSSE.addEventListener('orders:UPDATE', (e) => {
+    try {
+      const order = JSON.parse(e.data);
+      if (!order || !order.id) return;
+
+      const idx = ordersKanban.findIndex(x => x.id === order.id);
+
+      // Pedido PIX online confirmado — ainda não está no kanban, entra agora
+      if (idx === -1 && order.status === 'analise' && (order.pag === 'pix_mp' || order.pag === 'pix_manual' || order.pag === 'pix')) {
+        const items = typeof order.items === 'string' ? (() => { try { return JSON.parse(order.items); } catch { return []; } })() : (order.items || []);
+        ordersKanban.unshift(mapOrder({ ...order, items }));
+        renderKanban();
+        playOrderSound();
+        if (!order.mesa_num) _startPersistentAlert();
+        const nc = document.getElementById('notif-count');
+        if (nc) { nc.style.display = 'flex'; nc.textContent = parseInt(nc.textContent || 0) + 1; }
+        const itemsList = Array.isArray(items) ? items.map(i => `${i.qty}x ${i.name}`).join(', ') : '';
+        showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg>', `PIX confirmado! Pedido #${order.id} — ${order.client}`);
+        sendBrowserNotif(`PIX confirmado! #${order.id}`, `${order.client} — ${itemsList}`);
+        if (_autoAcceptOn) setTimeout(() => advanceOrderById(order.id), 800);
+        if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(order)) printOrder(mapOrder({ ...order, items }));
+        return;
+      }
+
+      // Pedido já no kanban — atualiza
+      if (idx !== -1) {
+        const items = typeof order.items === 'string' ? (() => { try { return JSON.parse(order.items); } catch { return []; } })() : (order.items || []);
+        if (['entregue', 'cancelado'].includes(order.status)) {
+          ordersKanban.splice(idx, 1);
+        } else {
+          ordersKanban[idx] = mapOrder({ ...order, items });
+        }
+        renderKanban();
+      }
+    } catch(err) { console.error('[ORDERS-SSE] error:', err); }
+  });
+
+  _ordersSSE.onerror = () => {
+    _ordersSSE?.close(); _ordersSSE = null;
+    setTimeout(() => _subscribeOrdersSSE(), 5000);
   };
 }
 
