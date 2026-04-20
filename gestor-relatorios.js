@@ -1706,7 +1706,7 @@ async function relImprimirCaixa() {
           await fetch('/api/print-queue/job', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-            body: JSON.stringify({ html, format: fmt, tipo: 'caixa' }),
+            body: JSON.stringify({ html, format: fmt, tipo: 'caixa', marginH: _printMarginH, marginV: _printMarginV }),
           });
           sbToast('ok', '🖨️ Relatório enviado para impressora!');
           return;
@@ -2289,6 +2289,8 @@ let _printPrinter  = localStorage.getItem('printPrinter')  || '';
 let _printPrinterCozinha = localStorage.getItem('printPrinterCozinha') || '';
 let _printViaMode = localStorage.getItem('printViaMode') || 'combinado';
 let _printFormat   = localStorage.getItem('printFormat')   || '80mm';  // padrão 80mm
+let _printMarginH  = parseInt(localStorage.getItem('printMarginH')  || '5');  // margem lateral em mm
+let _printMarginV  = parseInt(localStorage.getItem('printMarginV')  || '2');  // margem vertical em mm
 // Dados do estabelecimento carregados do servidor — evita usar fallback genérico
 let _printNome   = localStorage.getItem('printNome')   || '';
 let _printSub    = localStorage.getItem('printSub')    || '';
@@ -2393,7 +2395,7 @@ function _wrapTicketHtml(html, fontSize) {
   .print-ticket { padding:2px 6px; width:100%; word-wrap:break-word; overflow-wrap:break-word; overflow:visible }
   span, div { word-break:break-word; overflow-wrap:break-word }
   @media print {
-    @page { margin:2mm 5mm }
+    @page { margin:${_printMarginV}mm ${_printMarginH}mm }
     body > *:not(.print-ticket) { display:none !important }
     .print-ticket { display:block !important }
   }
@@ -2647,7 +2649,7 @@ async function _printViaAgent(html) {
   const res = await fetch('/api/print-queue/job', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-    body:    JSON.stringify({ html, format, printer: printer || undefined }),
+    body:    JSON.stringify({ html, format, printer: printer || undefined, marginH: _printMarginH, marginV: _printMarginV }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Erro ao criar job');
@@ -2709,7 +2711,7 @@ function _printViaBrowser(html) {
   .pt-hr { border:none; border-top:1px dashed #000; margin:4px 0 }
   .print-ticket { padding:2px 6px; width:100%; overflow:visible; overflow-wrap:break-word; word-break:break-word }
   span, div { word-break:break-word; overflow-wrap:break-word }
-  @media print { @page { margin:2mm 5mm } body { margin:0 } }
+  @media print { @page { margin:${_printMarginV}mm ${_printMarginH}mm } body { margin:0 } }
 </style></head><body>${html}
 <script>
   window.onload = function() {
@@ -3005,7 +3007,7 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
       }
 
       if (window.ElectronPrint.printHtml) {
-        const r = await window.ElectronPrint.printHtml(wrappedHtml, { printer: targetPrinter, paperWidth: pw, landscape: false, scaleFactor: 100 });
+        const r = await window.ElectronPrint.printHtml(wrappedHtml, { printer: targetPrinter, paperWidth: pw, landscape: false, scaleFactor: 100, marginH: _printMarginH, marginV: _printMarginV });
         if (r.ok) { sbToast('ok', '🖨️ Impresso!' + (targetPrinter ? ' → ' + targetPrinter : '')); return; }
       } else {
         const r = await window.ElectronPrint.printOrder(order);
@@ -3033,7 +3035,7 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
         await fetch('/api/print-queue/job', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-          body: JSON.stringify({ html, format: fmt, printer: printer || undefined, tipo: tipo || undefined }),
+          body: JSON.stringify({ html, format: fmt, printer: printer || undefined, tipo: tipo || undefined, marginH: _printMarginH, marginV: _printMarginV }),
         });
         sbToast('ok', '🖨️ Enviado ao agente!');
         return;
@@ -3097,7 +3099,7 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
   let st = document.getElementById('_print_style');
   if (!st) { st = document.createElement('style'); st.id = '_print_style'; document.head.appendChild(st); }
   st.innerHTML = `@media print {
-    @page { margin: 2mm 5mm; size: ${fmt} auto; }
+    @page { margin: ${_printMarginV}mm ${_printMarginH}mm; size: ${fmt} auto; }
     body > *:not(#_print_area):not(#_print_style) { display: none !important; }
     #_print_area { display: block !important; position: static !important; }
   }`;
@@ -3128,6 +3130,10 @@ function renderImpressao(skipServerLoad) {
       const fv = document.getElementById('print-font-size-val');
       if (fv) fv.textContent = _printFontSize || 12;
       el('print-format-select', _printFormat || '80mm');
+      const mhEl = document.getElementById('print-margin-h');
+      if (mhEl) { mhEl.value = _printMarginH; document.getElementById('print-margin-h-val').textContent = _printMarginH; }
+      const mvEl = document.getElementById('print-margin-v');
+      if (mvEl) { mvEl.value = _printMarginV; document.getElementById('print-margin-v-val').textContent = _printMarginV; }
       setPrintModeNew(_printMode);
       _loadImpressoras();
       _loadModelos();
