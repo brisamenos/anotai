@@ -1007,6 +1007,46 @@ function cpGetStoreLoc() {
     { enableHighAccuracy: true, timeout: 10000 }
   );
 }
+
+function cpParseGmapsLink() {
+  const raw = (document.getElementById('cp-gmaps-link')?.value || '').trim();
+  if (!raw) { sbToast('err', 'Cole um link do Google Maps primeiro'); return; }
+
+  let lat = null, lng = null;
+
+  // Formato 1: /@lat,lng  (google.com/maps/@... ou /maps/place/.../@...)
+  const atMatch = raw.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (atMatch) { lat = atMatch[1]; lng = atMatch[2]; }
+
+  // Formato 2: ?q=lat,lng ou &q=lat,lng
+  if (!lat) {
+    const qMatch = raw.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if (qMatch) { lat = qMatch[1]; lng = qMatch[2]; }
+  }
+
+  // Formato 3: !3dLAT!4dLNG  (URLs longas do Place)
+  if (!lat) {
+    const dMatch = raw.match(/!3d(-?\d+\.\d+).*?!4d(-?\d+\.\d+)/);
+    if (dMatch) { lat = dMatch[1]; lng = dMatch[2]; }
+  }
+
+  // Formato 4: ll=lat,lng
+  if (!lat) {
+    const llMatch = raw.match(/[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if (llMatch) { lat = llMatch[1]; lng = llMatch[2]; }
+  }
+
+  if (lat && lng) {
+    const elLat = document.getElementById('cp-store-lat');
+    const elLng = document.getElementById('cp-store-lng');
+    if (elLat) elLat.value = parseFloat(lat).toFixed(6);
+    if (elLng) elLng.value = parseFloat(lng).toFixed(6);
+    document.getElementById('cp-gmaps-link').value = '';
+    sbToast('ok', `📍 Coordenadas extraídas: ${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`);
+  } else {
+    sbToast('err', 'Não foi possível extrair coordenadas. Use um link completo do Google Maps (não links curtos goo.gl).');
+  }
+}
 // ═══════════════════════════════════════
 // MODELOS DE MENSAGEM — Templates editáveis pelo gestor
 // ═══════════════════════════════════════
