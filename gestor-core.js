@@ -675,6 +675,7 @@ function subscribeOrders() {
         }
         const kpg = document.getElementById('page-kds');
         if (kpg && kpg.classList.contains('on')) renderKDS();
+        renderKanban();
         return;
       }
       if (!ordersKanban.find(x => x.id === p.new.id)) {
@@ -766,6 +767,7 @@ function subscribeOrders() {
         }
         _patchOrderInCache(p.new);
         _renderMesaPageFromCache();
+        renderKanban();
       }
       _syncSwState();
       // Atualiza KDS se aberto — pula se acabamos de renderizar manualmente (kdsMarkMesaPronto)
