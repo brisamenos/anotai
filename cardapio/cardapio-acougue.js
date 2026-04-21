@@ -929,7 +929,13 @@ function _buildGruposDesc(item) {
   for (const g of grupos) {
     const sel = _imGruposState[g.nome] || [];
     if (sel.length) {
-      const names = sel.map(o => o.qty > 1 ? `${o.qty}x ${o.nome}` : o.nome).join(', ');
+      const names = sel.map(o => {
+        const qtyPrefix = o.qty > 1 ? `${o.qty}x ` : '';
+        const preco = o.preco > 0
+          ? ` (+R$ ${parseFloat(o.preco).toFixed(2).replace('.', ',')})`
+          : '';
+        return `${qtyPrefix}${o.nome}${preco}`;
+      }).join(', ');
       parts.push(`${g.nome}: ${names}`);
     }
   }
