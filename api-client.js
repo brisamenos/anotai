@@ -13,17 +13,26 @@
   // CRÍTICO: detecta o contexto pela URL pra escolher a sessão certa.
   // Se o usuário tem o gestor de um tenant aberto numa aba e o cardápio de
   // OUTRO tenant em outra, ler sys_session primeiro vazaria o pedido do
-  // cardápio pro gestor errado. Por isso:
-  //   - Páginas de cardápio (/cardapio/*, /c/*, ?cardapio=...) → cardapio_session
-  //   - Páginas de gestor/admin/garçom/app → sys_session
+  // cardápio pro gestor errado.
+  //
+  // Páginas de cardápio neste sistema:
+  //   - /                         (raiz, com ?slug=... ou ?cardapio=...)
+  //   - /index.html?slug=...
+  //   - /cardapio/* ou /c/*       (rotas legadas/futuras)
+  //
+  // Páginas de gestor: /gestor.html, /admin.html, /app.html, /garcom.html, /estimafood.html
   function isCardapioPage() {
     try {
       const path = (window.location.pathname || '').toLowerCase();
-      const search = (window.location.search || '').toLowerCase();
+      // Páginas explícitas de gestor — sys_session sempre
+      if (path.endsWith('/gestor.html') || path.endsWith('/admin.html')
+          || path.endsWith('/app.html')   || path.endsWith('/garcom.html')
+          || path.endsWith('/estimafood.html')) return false;
+      // Caminhos de cardápio explícitos (futuro)
       if (path.startsWith('/cardapio') || path.startsWith('/c/')) return true;
-      if (path.includes('/cardapio/')) return true;
-      if (search.includes('cardapio=') || search.includes('slug=')) return true;
-      // Detecção pelo body/html (caso a rota seja servida sem path padrão)
+      // Cardápio público real: raiz + index.html
+      if (path === '/' || path === '' || path.endsWith('/index.html')) return true;
+      // Detecção por marcador no body (caso a página seja servida via outra rota)
       if (document.body && document.body.dataset && document.body.dataset.contexto === 'cardapio') return true;
       return false;
     } catch (e) { return false; }
@@ -46,23 +55,17 @@
       if (inCardapio) {
         const cTid = readSession('cardapio_session');
         if (cTid) return cTid;
-        // Fallback só se cardapio_session não existir ainda (pré-resolveTenant)
+        // Fallback: window._tenantId é setado pelo cardapio-core.js antes do sessionStorage
+        if (typeof window !== 'undefined' && window._tenantId) return window._tenantId;
+        // Último recurso: sys_session (caso o cardápio rode antes de gravar cardapio_session)
         const sTid = readSession('sys_session');
-        if (sTid) {
-          console.warn('[v0] getTenantId: cardápio sem cardapio_session, usando sys_session como fallback');
-          return sTid;
-        }
+        if (sTid) return sTid;
       } else {
         const sTid = readSession('sys_session');
         if (sTid) return sTid;
-        // Fallback pra cardapio_session (não deveria acontecer no gestor)
         const cTid = readSession('cardapio_session');
-        if (cTid) {
-          console.warn('[v0] getTenantId: gestor sem sys_session, usando cardapio_session como fallback');
-          return cTid;
-        }
+        if (cTid) return cTid;
       }
-      console.warn('[v0] getTenantId: nenhum tenant_id encontrado nas sessões');
       return null;
     } catch (e) {
       console.error('[v0] getTenantId: erro:', e);
