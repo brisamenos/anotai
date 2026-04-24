@@ -121,6 +121,8 @@ function renderKanban() {
     ? ['analise', 'producao', 'pronto', 'entregue']
     : ['analise', 'producao', 'pronto'];
   const mesaKanban = _buildMesaKanbanOrders();
+  const _searchNum = (document.getElementById('kanban-search-num')?.value || '').trim();
+  const _searchClient = (document.getElementById('kanban-search-client')?.value || '').trim().toLowerCase();
   statuses.forEach(st => {
     const col = document.getElementById('col-' + st);
     const cnt = document.getElementById('cnt-' + st);
@@ -131,6 +133,24 @@ function renderKanban() {
     if (_kanbanFilter === 'delivery') filtered = filtered.filter(o => !o._isMesa && o.addr && !o.addr.includes('Mesa') && !o.addr.toLowerCase().includes('retirada') && !o.addr.toLowerCase().includes('balcão') && !o.addr.toLowerCase().includes('balcao'));
     if (_kanbanFilter === 'balcao') filtered = filtered.filter(o => !o._isMesa && (!o.addr || o.addr.toLowerCase().includes('retirada') || o.addr.toLowerCase().includes('balcão') || o.addr.toLowerCase().includes('balcao')));
     if (_kanbanFilter === 'mesa') filtered = filtered.filter(o => o._isMesa || o.mesa_num || (o.addr && o.addr.includes('Mesa')));
+
+    // ── Pesquisa por número do pedido ──
+    if (_searchNum) {
+      filtered = filtered.filter(o => {
+        const num = String(o.num || o.order_num || o.id);
+        return num.includes(_searchNum) || num.padStart(3, '0').includes(_searchNum);
+      });
+    }
+
+    // ── Pesquisa por nome do cliente ──
+    if (_searchClient) {
+      filtered = filtered.filter(o => {
+        const client = (o.client || '').toLowerCase();
+        const phone = (o.phone || '').toLowerCase();
+        return client.includes(_searchClient) || phone.includes(_searchClient);
+      });
+    }
+
     if (cnt) cnt.textContent = filtered.length;
     if (!col) return;
     if (filtered.length === 0) {
