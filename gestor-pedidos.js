@@ -273,6 +273,107 @@ function renderKanban() {
     });
   });
   document.getElementById('pedidos-badge').textContent = ordersKanban.filter(o => o.status === 'analise' || o.status === 'aguardando_pix').length || '';
+
+  // ── Busca no histórico quando kanban não encontra ──
+  const _histPanel = document.getElementById('kanban-hist-results');
+  if (_histPanel) {
+    const hasSearch = _searchNum || _searchClient;
+    const allEmpty = statuses.every(st => {
+      const cnt = document.getElementById('cnt-' + st);
+      return cnt && cnt.textContent === '0';
+    });
+    if (hasSearch && allEmpty) {
+      // Debounce: espera 400ms após parar de digitar
+      clearTimeout(window._kanbanHistTimer);
+      window._kanbanHistTimer = setTimeout(() => {
+        _kanbanHistSearch(_searchNum, _searchClient);
+      }, 400);
+    } else {
+      _histPanel.style.display = 'none';
+      clearTimeout(window._kanbanHistTimer);
+    }
+  }
+}
+
+// ── Busca no histórico a partir do kanban ──
+let _kanbanHistData = [];
+async function _kanbanHistSearch(numQ, clientQ) {
+  const panel = document.getElementById('kanban-hist-results');
+  const list = document.getElementById('kanban-hist-list');
+  if (!panel || !list) return;
+
+  const q = numQ || clientQ;
+  if (!q) { panel.style.display = 'none'; return; }
+
+  panel.style.display = '';
+  list.innerHTML = '<div style="text-align:center;padding:12px;color:var(--muted);font-size:12px">🔍 Buscando no histórico...</div>';
+
+  try {
+    const params = new URLSearchParams({ page: 1, limit: 10, q });
+    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+    const res = await fetch('/api/historico-pedidos?' + params, {
+      headers: { 'x-tenant-id': tid }
+    });
+    const data = await res.json();
+    _kanbanHistData = data.orders || [];
+
+    if (!_kanbanHistData.length) {
+      list.innerHTML = '<div style="text-align:center;padding:12px;color:var(--muted);font-size:12px">Nenhum pedido encontrado no histórico.</div>';
+      return;
+    }
+
+    const statusMap = {
+      analise: '⏳ Análise', producao: '👨‍🍳 Produção', pronto: '✅ Pronto',
+      entregue: '📦 Entregue', finalizado: '✅ Finalizado', cancelado: '❌ Cancelado',
+      mesa_aberta: '🍽️ Mesa', aguardando_pix: '💠 PIX'
+    };
+    const statusColor = {
+      analise: 'var(--accent3)', producao: 'var(--accent)', pronto: 'var(--success)',
+      entregue: 'var(--success)', finalizado: 'var(--success)', cancelado: 'var(--danger)',
+      mesa_aberta: 'var(--purple)', aguardando_pix: 'var(--accent3)'
+    };
+
+    list.innerHTML = _kanbanHistData.map(o => {
+      const items = Array.isArray(o.items) ? o.items : [];
+      const itensStr = items.map(i => `${i.qty}x ${i.name}`).join(', ');
+      const dt = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) : '';
+      const num = o.order_num || o.id;
+      const total = (parseFloat(o.total || 0) + parseFloat(o.taxa || 0)).toFixed(2).replace('.', ',');
+      const sc = statusColor[o.status] || 'var(--muted)';
+      return `<div onclick="kanbanHistOpenDetail(${o.id})" style="display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;padding:10px 14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;cursor:pointer;transition:all .15s" onmouseenter="this.style.borderColor='rgba(14,165,233,.3)';this.style.background='rgba(14,165,233,.04)'" onmouseleave="this.style.borderColor='rgba(255,255,255,.06)';this.style.background='rgba(255,255,255,.03)'">
+        <div style="font-weight:800;color:var(--accent);font-size:13px;min-width:50px">#${num}</div>
+        <div style="min-width:0">
+          <div style="font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${o.client || '—'}${o.mesa_num ? ' <span style="color:var(--purple);font-size:11px">Mesa ' + o.mesa_num + '</span>' : ''}</div>
+          <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px">${itensStr || '—'}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-weight:700;font-size:12.5px;color:var(--success)">R$ ${total}</div>
+          <div style="font-size:10.5px;color:var(--muted)">${dt}</div>
+        </div>
+        <span style="font-size:10px;padding:2px 8px;border-radius:99px;font-weight:600;background:${sc}18;color:${sc};border:1px solid ${sc}30;white-space:nowrap">${statusMap[o.status] || o.status}</span>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = `<div style="text-align:center;padding:12px;color:var(--danger);font-size:12px">Erro: ${e.message}</div>`;
+  }
+}
+
+function kanbanHistHide() {
+  const panel = document.getElementById('kanban-hist-results');
+  if (panel) panel.style.display = 'none';
+}
+
+function kanbanHistOpenDetail(id) {
+  const o = _kanbanHistData.find(x => x.id === id);
+  if (!o) return;
+  // Usa o mesmo modal de histórico detalhado
+  if (typeof histDetalhe === 'function') {
+    // Coloca no cache do histórico para histDetalhe funcionar
+    if (typeof _histData !== 'undefined') {
+      if (!_histData.find(x => x.id === id)) _histData.push(o);
+    }
+    histDetalhe(id);
+  }
 }
 
 
