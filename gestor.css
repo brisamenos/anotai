@@ -293,10 +293,14 @@ body{
 
 /* ══ KANBAN ════════════════════════════════════════════════ */
 .kanban{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;height:calc(100vh - 200px);height:calc(100dvh - 200px);min-height:300px}
-.kol{border-radius:14px;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--border)}
+.kanban.kanban-4cols{grid-template-columns:repeat(4,minmax(0,1fr))}
+.kanban.kanban-5cols{grid-template-columns:repeat(5,minmax(0,1fr))}
+.kol{border-radius:14px;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--border);min-width:0}
 .kol-analise{background:rgba(14,165,233,.08);border-color:rgba(14,165,233,.18)}
 .kol-producao{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14)}
 .kol-pronto{background:rgba(52,211,153,.06);border-color:rgba(52,211,153,.14)}
+.kol-saiu{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.2)}
+.kol-saiu .kol-title{color:#fbbf24}
 .kol-entregue{background:rgba(99,102,241,.06);border-color:rgba(99,102,241,.14);display:none}
 .acougue-kanban .kol-entregue{display:flex}
 .acougue-kanban{grid-template-columns:repeat(4,1fr)}

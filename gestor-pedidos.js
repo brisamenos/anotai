@@ -122,15 +122,35 @@ function renderKanban() {
   //   restaurante: analise → producao → pronto → (saiu se delivery) → entregue
   // Mostra coluna "saiu" sempre que houver qualquer pedido com esse status OU filtro = delivery
   const hasSaiu = ordersKanban.some(o => o.status === 'saiu');
+  const hasEntregueNaoMesa = ordersKanban.some(o => o.status === 'entregue' && !o.mesa_num);
   const showSaiu = hasSaiu || _kanbanFilter === 'delivery';
+  const showEntregue = hasEntregueNaoMesa || _kanbanFilter === 'delivery' || window._segmento === 'acougue';
   // Mostra/esconde o wrapper da coluna "Saiu pra entrega" (definido no HTML como #kol-wrap-saiu)
   const _saiuWrap = document.getElementById('kol-wrap-saiu');
   if (_saiuWrap) _saiuWrap.style.display = (showSaiu && window._segmento !== 'acougue') ? '' : 'none';
+  // Mostra/esconde coluna "Entregue" para restaurante (no açougue já fica sempre visível via CSS)
+  const _entregueWrap = document.querySelector('.kol-entregue');
+  if (_entregueWrap && window._segmento !== 'acougue') {
+    _entregueWrap.style.display = showEntregue ? 'flex' : 'none';
+  }
+  // Ajusta o grid do container conforme número de colunas visíveis
+  const _board = document.getElementById('kanban-board');
+  if (_board) {
+    _board.classList.remove('kanban-4cols', 'kanban-5cols');
+    let numCols = 3; // base: analise + producao + pronto
+    if (window._segmento === 'acougue') numCols = 4; // açougue sempre tem entregue fixa
+    else {
+      if (showSaiu) numCols++;
+      if (showEntregue) numCols++;
+    }
+    if (numCols === 4) _board.classList.add('kanban-4cols');
+    else if (numCols >= 5) _board.classList.add('kanban-5cols');
+  }
   const statuses = window._segmento === 'acougue'
     ? ['analise', 'producao', 'pronto', 'entregue']
     : (showSaiu
-        ? ['analise', 'producao', 'pronto', 'saiu', 'entregue']
-        : ['analise', 'producao', 'pronto', 'entregue']);
+        ? (showEntregue ? ['analise', 'producao', 'pronto', 'saiu', 'entregue'] : ['analise', 'producao', 'pronto', 'saiu'])
+        : (showEntregue ? ['analise', 'producao', 'pronto', 'entregue']          : ['analise', 'producao', 'pronto']));
   const mesaKanban = _buildMesaKanbanOrders();
   const _searchNum = (document.getElementById('kanban-search-num')?.value || '').trim();
   const _searchClient = (document.getElementById('kanban-search-client')?.value || '').trim().toLowerCase();
