@@ -575,20 +575,30 @@ setInterval(() => {
 // pelo gestor. Se o gestor esquece, pedidos acumulam no kanban. Após 6h sem ação, assumimos
 // que já foi de fato finalizado e limpamos automaticamente.
 // Roda a cada 30 min.
+// Cleanup de pedidos em 'entregue' abandonados — finaliza automaticamente após 6 horas.
+// APENAS para tenants de segmento 'restaurante'. No açougue, pedidos em 'entregue' são
+// legítimos — ficam na coluna esperando o gestor clicar em "Finalizar" para registrar o
+// movimento financeiro. Não devemos limpar automaticamente.
+// Motivo: o novo fluxo de delivery (saiu → entregue → finalizado) exige clique em "Finalizar"
+// pelo gestor. Se o gestor esquece, pedidos acumulam no kanban. Após 6h sem ação, assumimos
+// que já foi de fato finalizado e limpamos automaticamente (só restaurante).
+// Roda a cada 30 min.
 setInterval(() => {
   try {
     const rows = db.prepare(
-      `SELECT id, tenant_id FROM orders
-       WHERE status='entregue'
-       AND created_at < datetime('now','-6 hours')`
+      `SELECT o.id, o.tenant_id FROM orders o
+       JOIN tenants t ON t.id = o.tenant_id
+       WHERE o.status='entregue'
+       AND o.created_at < datetime('now','-6 hours')
+       AND COALESCE(t.segmento, 'restaurante') != 'acougue'`
     ).all()
     if (rows.length) {
+      const ids = rows.map(r => r.id)
+      const placeholders = ids.map(() => '?').join(',')
       db.prepare(
-        `UPDATE orders SET status='finalizado'
-         WHERE status='entregue'
-         AND created_at < datetime('now','-6 hours')`
-      ).run()
-      log('🧹', `[CLEANUP] ${rows.length} pedido(s) em "entregue" há >6h foram auto-finalizados`)
+        `UPDATE orders SET status='finalizado' WHERE id IN (${placeholders})`
+      ).run(...ids)
+      log('🧹', `[CLEANUP] ${rows.length} pedido(s) restaurante em "entregue" há >6h foram auto-finalizados`)
       marcarDirty()
       const byTenant = new Map()
       for (const r of rows) {
