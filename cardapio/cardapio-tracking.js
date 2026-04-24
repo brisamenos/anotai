@@ -120,19 +120,29 @@ async function solicitarCancelamento() {
   const btn = document.getElementById('track-cancel-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Cancelando…'; }
   try {
-    const res = await fetch(`/api/orders?id=eq.${_trackOrderId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
-      body: JSON.stringify({ status: 'cancelado' })
+    // Usa endpoint dedicado e seguro (valida ownership e status permitido)
+    const headers = { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId };
+    try {
+      const tk = localStorage.getItem('ef_customer_token_' + (_tenantId||''));
+      if (tk) headers['Authorization'] = 'Bearer ' + tk;
+    } catch(_) {}
+    // Pega o phone do customer logado (fallback pro acesso anônimo via phone do pedido)
+    let phoneFallback = '';
+    try { phoneFallback = (JSON.parse(localStorage.getItem(AUTH_KEY)||'{}').phone||'').replace(/\D/g,''); } catch(_) {}
+    const res = await fetch('/api/customer-cancel-order', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ order_id: _trackOrderId, phone: phoneFallback })
     });
-    if (!res.ok) throw new Error('Erro ao cancelar');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Erro ao cancelar');
     toast('✅', 'Pedido cancelado.');
     updateTracker('cancelado');
     closeTracker();
     try { localStorage.removeItem('ef_order_' + (_tenantId||'')); } catch(e) {}
     try { const u=new URL(window.location.href); u.searchParams.delete('acompanhar'); window.history.replaceState({},'',u.toString()); } catch(e) {}
   } catch(e) {
-    toast('❌', 'Não foi possível cancelar.');
+    toast('❌', e.message || 'Não foi possível cancelar.');
     if (btn) { btn.disabled = false; btn.textContent = '✕ Cancelar pedido'; }
   }
 }

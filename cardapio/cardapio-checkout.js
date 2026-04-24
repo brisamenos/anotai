@@ -225,8 +225,9 @@ async function _doSubmitOrder(addr, troco) {
   const items = cart.map(i => ({ qty: i.qty, name: i.name, price: i.price, obs: i.obs||'' }));
   const time  = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   // Total bruto (sem descontar cashback) — usado no pedido e no total_spent do cliente
-  const _grossTotal = Math.max(0, cartSubtotal() - getDiscount() + getTaxa());
-  const _cbDesconto = (_cbUsar && _cbSaldo > 0) ? Math.min(_cbSaldo, _grossTotal) : 0;
+  // Total bruto (o que o cliente efetivamente paga — já considera cashback e cupom)
+  const _grossTotal = displayTotal();
+  const _cbDesconto = getCashbackDesconto();
 
   try {
     let customerId = _customer?.id || null;

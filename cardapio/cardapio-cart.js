@@ -40,7 +40,8 @@ function getDiscount() {
   const tipo = appliedCupom.type || appliedCupom.tipo || '';
   const val  = parseFloat(appliedCupom.value ?? appliedCupom.val ?? 0);
   if (tipo === 'percent' || tipo === '%') return sub * val / 100;
-  if (tipo === 'frete') return deliveryType === 'delivery' ? getTaxa() : 0;
+  // Cupom de frete: zera a taxa (via lógica em getTaxa). Aqui retorna 0 pra evitar dupla contagem.
+  if (tipo === 'frete') return 0;
   return Math.min(val, sub);
 }
 
@@ -89,19 +90,39 @@ function validarDelivery() {
   return { ok: true };
 }
 
-function grandTotal() {
+// Cálculo do desconto efetivo de cashback (single source of truth).
+// Cashback pode consumir o pedido inteiro INCLUINDO a taxa de entrega.
+function getCashbackDesconto() {
+  if (!_cbUsar || !(_cbSaldo > 0)) return 0;
   const sub  = cartSubtotal();
   const disc = getDiscount();
-  // NOTA: taxa NÃO entra aqui — é salva separadamente no campo 'taxa' do pedido.
-  // O total do pedido = subtotal - desconto (- cashback se aplicável).
-  const net  = Math.max(0, sub - disc);
-  if (_cbUsar && _cbSaldo > 0) return Math.max(0, net - Math.min(_cbSaldo, net));
+  const taxa = getTaxa();
+  const maxDescontavel = Math.max(0, sub - disc + taxa);
+  return Math.min(_cbSaldo, maxDescontavel);
+}
+
+function grandTotal() {
+  // Total "do pedido" = subtotal - desconto - parte do cashback que não foi pra taxa.
+  // A taxa é salva separadamente no campo 'taxa' do pedido, nunca misturada aqui.
+  // O cashback é debitado pelo endpoint /api/cashback/usar com o valor de getCashbackDesconto().
+  const sub  = cartSubtotal();
+  const disc = getDiscount();
+  const taxa = getTaxa();
+  const cbDesc = getCashbackDesconto();
+  // Desconto de cashback aplica primeiro na taxa, depois no subtotal — assim o total do pedido
+  // reflete o que o restaurante efetivamente recebe pelos itens.
+  const cbSobraProTotal = Math.max(0, cbDesc - taxa);
+  const net = Math.max(0, sub - disc - cbSobraProTotal);
   return net;
 }
 
-// Total para exibição ao cliente (inclui taxa de entrega)
+// Total para exibição ao cliente (subtotal + taxa - desconto - cashback, nunca negativo)
 function displayTotal() {
-  return grandTotal() + getTaxa();
+  const sub   = cartSubtotal();
+  const disc  = getDiscount();
+  const taxa  = getTaxa();
+  const cb    = getCashbackDesconto();
+  return Math.max(0, sub - disc + taxa - cb);
 }
 
 function updateCartFloat() {
@@ -295,12 +316,12 @@ function renderCartDrawer() {
 }
 
 function renderTotals() {
-  const sub  = cartSubtotal();
-  const disc = getDiscount();
-  const taxa = getTaxa();
-  const net  = Math.max(0, sub - disc + taxa);
-  const cbDesc = (_cbUsar && _cbSaldo > 0) ? Math.min(_cbSaldo, Math.max(0, sub - disc + taxa)) : 0;
-  const tot  = Math.max(0, net - cbDesc);
+  const sub    = cartSubtotal();
+  const disc   = getDiscount();
+  const taxa   = getTaxa();
+  const cbDesc = getCashbackDesconto();
+  const tot    = displayTotal();
+  const isCupomFrete = appliedCupom && (appliedCupom.tipo === 'frete' || appliedCupom.type === 'frete');
   let taxaLabel = 'Taxa de entrega';
   if (deliveryType === 'delivery' && feeConfig?.tipo === 'por_km') {
     const f = (feeConfig.faixas||[])[selectedFaixa];
@@ -313,13 +334,15 @@ function renderTotals() {
   }
   // Aviso de pedido mínimo
   const minimoFalta = _pedidoMinimo > 0 && deliveryType === 'delivery' && sub < _pedidoMinimo ? _pedidoMinimo - sub : 0;
+  // Label da taxa: se cupom de frete aplicado, mostra "Grátis (cupom)" para feedback ao cliente
+  const taxaTxt = isCupomFrete ? 'Grátis (cupom)' : (taxa > 0 ? 'R$ ' + fmt(taxa) : 'Grátis');
   document.getElementById('totals-wrap').innerHTML = `
     ${minimoFalta > 0 ? `<div style="padding:8px 12px;margin-bottom:8px;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:12px;color:#92400e;display:flex;align-items:center;gap:7px">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3M8 10v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
       Faltam <strong>R$ ${fmt(minimoFalta)}</strong> para o pedido mínimo delivery (R$ ${fmt(_pedidoMinimo)})
     </div>` : ''}
     <div class="total-row"><span>Subtotal</span><span>R$ ${fmt(sub)}</span></div>
-    ${deliveryType === 'delivery' ? `<div class="total-row"><span>${taxaLabel}</span><span>${taxa>0?'R$ '+fmt(taxa):'Grátis'}</span></div>` : ''}
+    ${deliveryType === 'delivery' ? `<div class="total-row ${isCupomFrete?'total-disc':''}"><span>${taxaLabel}</span><span>${taxaTxt}</span></div>` : ''}
     ${disc > 0 ? `<div class="total-row total-disc"><span>Desconto (${appliedCupom.code})</span><span>− R$ ${fmt(disc)}</span></div>` : ''}
     ${cbDesc > 0 ? `<div class="total-row total-disc"><span>Cashback usado</span><span>− R$ ${fmt(cbDesc)}</span></div>` : ''}
     <div class="total-row big"><span>Total</span><span>R$ ${fmt(tot)}</span></div>`;
