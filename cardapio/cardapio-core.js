@@ -234,11 +234,24 @@ function isLojaAberta(horarios, store_open) {
     const dias = ['dom','seg','ter','qua','qui','sex','sab'];
     const hoje = h[dias[new Date().getDay()]];
     if (!hoje || !hoje.ativo) return false;
-    const now = new Date().getHours()*60 + new Date().getMinutes();
-    const [ah,am] = (hoje.abertura||'00:00').split(':').map(Number);
-    const [fh,fm] = (hoje.fechamento||'23:59').split(':').map(Number);
-    return now >= ah*60+am && now <= fh*60+fm;
-  } catch(e) { return store_open !== false; }
+
+    const parseHora = (str) => {
+      const match = (str || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+      if (!match) return null;
+      const h = parseInt(match[1], 10);
+      const m = parseInt(match[2], 10);
+      if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+      return h * 60 + m;
+    };
+
+    const aberturaMinutos = parseHora(hoje.abertura) ?? 0;
+    const fechamentoMinutos = parseHora(hoje.fechamento) ?? 1439;
+    const now = new Date().getHours() * 60 + new Date().getMinutes();
+
+    return now >= aberturaMinutos && now < fechamentoMinutos;
+  } catch(e) {
+    return false;
+  }
 }
 
 let _cachedHorarios = null;
