@@ -490,6 +490,14 @@ td:first-child{padding-left:18px}
 .modal::-webkit-scrollbar{width:3px}
 .modal::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:99px}
 .modal::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.15)}
+.modal-fullscreen{
+  width:100vw!important;
+  max-width:100vw!important;
+  height:100vh!important;
+  max-height:100vh!important;
+  border-radius:0!important;
+  overflow-y:auto!important;
+}
 @keyframes modalIn{from{opacity:0;transform:scale(.96) translateY(12px)}to{opacity:1;transform:none}}
 .modal-head{display:flex;align-items:center;justify-content:space-between;padding:0 0 16px;margin-bottom:16px;border-bottom:1px solid rgba(255,255,255,.06)}
 .modal-title{font-family:'Playfair Display',serif;font-size:18px;font-weight:700;letter-spacing:-.2px}
