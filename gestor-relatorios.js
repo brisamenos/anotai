@@ -3638,3 +3638,88 @@ async function testModelo(idx) {
   await printOrder(ex);
   sbToast('ok', '🖨️ Teste do modelo "' + m.nome + '" enviado!');
 }
+
+// ── CALIBRAÇÃO DA IMPRESSORA ─────────────────────────────────
+// Imprime uma régua pra o usuário identificar a área imprimível real da impressora.
+// Depois ele preenche o valor em "Largura imprimível" e salva.
+
+async function calibrarImpressora() {
+  if (!window.ElectronPrint || !window.ElectronPrint.calibrate) {
+    if (typeof sbToast === 'function') sbToast('error', 'Calibração disponível só no app EstimaFood (desktop). Atualize o app se já estiver instalado.');
+    else alert('Calibração disponível só no app EstimaFood (desktop).');
+    return;
+  }
+  try {
+    const paperWidth = parseInt(document.getElementById('calib-paper-width').value) || 80;
+    if (typeof sbToast === 'function') sbToast('info', '📏 Enviando régua pra impressora...');
+    const r = await window.ElectronPrint.calibrate({ paperWidth });
+    if (r && r.ok === false) {
+      if (typeof sbToast === 'function') sbToast('error', 'Erro: ' + (r.error || 'desconhecido'));
+    } else {
+      if (typeof sbToast === 'function') sbToast('ok', '✅ Régua enviada. Veja até qual número foi impresso sem cortar e preencha no campo abaixo.');
+    }
+  } catch (e) {
+    console.error('calibrar:', e);
+    if (typeof sbToast === 'function') sbToast('error', 'Erro ao imprimir régua: ' + e.message);
+  }
+}
+
+async function salvarCalibracao() {
+  if (!window.ElectronPrint || !window.ElectronPrint.saveConfig) {
+    if (typeof sbToast === 'function') sbToast('error', 'Configuração disponível só no app EstimaFood.');
+    return;
+  }
+  try {
+    const rawPw = document.getElementById('calib-paper-width').value;
+    const rawPrintable = document.getElementById('calib-printable-width').value;
+    const paperWidth = parseInt(rawPw) || 80;
+    // Vazio = auto (0). Preenchido = usa o valor informado.
+    let printableWidth = 0;
+    if (rawPrintable && rawPrintable.trim() !== '') {
+      printableWidth = parseInt(rawPrintable);
+      if (isNaN(printableWidth) || printableWidth < 30 || printableWidth > 80) {
+        if (typeof sbToast === 'function') sbToast('error', 'Largura imprimível deve ficar entre 30 e 80mm.');
+        return;
+      }
+    }
+    const r = await window.ElectronPrint.saveConfig({ paperWidth, printableWidth });
+    if (r && r.ok === false) {
+      if (typeof sbToast === 'function') sbToast('error', 'Erro ao salvar: ' + (r.error || 'desconhecido'));
+    } else {
+      if (typeof sbToast === 'function') {
+        sbToast('ok', printableWidth
+          ? `✅ Calibração salva: ${printableWidth}mm imprimível em papel ${paperWidth}mm.`
+          : `✅ Calibração restaurada para automático (papel ${paperWidth}mm).`);
+      }
+    }
+  } catch (e) {
+    console.error('salvarCalibracao:', e);
+    if (typeof sbToast === 'function') sbToast('error', 'Erro ao salvar: ' + e.message);
+  }
+}
+
+// Carrega os valores salvos quando a tela de configurações é aberta
+async function carregarCalibracao() {
+  if (!window.ElectronPrint || !window.ElectronPrint.getConfig) return;
+  try {
+    const cfg = await window.ElectronPrint.getConfig();
+    if (!cfg) return;
+    const pw = document.getElementById('calib-paper-width');
+    const pr = document.getElementById('calib-printable-width');
+    if (pw && cfg.paperWidth) pw.value = String(cfg.paperWidth);
+    if (pr) pr.value = cfg.printableWidth && cfg.printableWidth > 0 ? String(cfg.printableWidth) : '';
+  } catch (e) {
+    console.warn('carregarCalibracao:', e);
+  }
+}
+
+// Auto-carrega quando a aba de Impressão fica visível
+document.addEventListener('DOMContentLoaded', () => {
+  // tenta carregar ao iniciar
+  setTimeout(carregarCalibracao, 800);
+  // e sempre que o usuário clicar em um link/aba de impressão
+  document.addEventListener('click', (ev) => {
+    const txt = (ev.target && ev.target.textContent || '').toLowerCase();
+    if (txt.includes('impress')) setTimeout(carregarCalibracao, 300);
+  });
+});

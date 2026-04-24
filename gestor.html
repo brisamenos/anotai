@@ -2739,6 +2739,45 @@ Use no seu próximo pedido 🛍️</textarea>
         </div>
       </div>
 
+      <!-- ── SEÇÃO: CALIBRAÇÃO DA IMPRESSORA ──── -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+          <div style="width:32px;height:32px;border-radius:8px;background:rgba(245,158,11,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 3v10M5 3v2M5 8v2M8 3v4M11 3v2M11 9v2M14 3v10" stroke="#f59e0b" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </div>
+          <div>
+            <div style="font-weight:800;font-size:14px">Calibração</div>
+            <div style="font-size:11px;color:var(--muted)">Ajuste fino se a impressão estiver cortando algum lado</div>
+          </div>
+        </div>
+        <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">
+          <div style="padding:10px 12px;background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.15);border-radius:8px;font-size:11px;color:var(--muted);line-height:1.5">
+            <strong style="color:#f59e0b">Como calibrar:</strong><br>
+            1. Clique em <strong>Imprimir régua</strong> abaixo<br>
+            2. Veja até qual número a régua foi impressa <strong>sem cortar</strong><br>
+            3. Digite esse número em "Largura imprimível" e salve
+          </div>
+          <div>
+            <label class="form-label">Largura do papel</label>
+            <select class="form-input" id="calib-paper-width">
+              <option value="80">80mm (padrão)</option>
+              <option value="58">58mm</option>
+            </select>
+          </div>
+          <button class="btn bp" style="justify-content:center;padding:10px" onclick="calibrarImpressora()">
+            📏 Imprimir régua de calibração
+          </button>
+          <div>
+            <label class="form-label">Largura imprimível (mm)</label>
+            <input type="number" class="form-input" id="calib-printable-width" min="30" max="80" step="1" placeholder="Auto (deixe vazio)" />
+            <div style="font-size:10px;color:var(--muted);margin-top:3px">Deixe vazio para usar o valor automático. Preencha após rodar a calibração.</div>
+          </div>
+          <button class="btn bp" style="justify-content:center;padding:10px" onclick="salvarCalibracao()">
+            Salvar calibração
+          </button>
+        </div>
+      </div>
+
       <!-- ── SEÇÃO 3: MODELOS DE IMPRESSÃO ──── -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
         <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
