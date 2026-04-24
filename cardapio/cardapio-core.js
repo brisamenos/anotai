@@ -73,11 +73,11 @@ function applyTema(tema, accentCor) {
       '--hero-overlay':'rgba(13,50,32,.65)','--sticky-bg':'#f0faf2'
     },
     noturno: {
-      '--bg':'#0d0d1a','--s1':'#14142a','--s2':'#1c1c35','--s3':'#242445',
-      '--border':'rgba(120,100,200,.15)','--border2':'rgba(120,100,200,.25)',
-      '--text':'#e8e5ff','--muted':'#9090c0','--muted2':'#6060a0','--white':'#fff',
-      '--hero-bg':'#07071a','--hero-text':'#fff','--hero-desc-color':'rgba(200,190,255,.85)',
-      '--hero-overlay':'rgba(7,7,26,.7)','--sticky-bg':'#0d0d1a'
+      '--bg':'#080810','--s1':'#0f0f1c','--s2':'#161625','--s3':'#1e1e30',
+      '--border':'rgba(255,255,255,.06)','--border2':'rgba(255,255,255,.10)',
+      '--text':'#eeedf6','--muted':'#7878a0','--muted2':'#50506a','--white':'#fff',
+      '--hero-bg':'#04040c','--hero-text':'#fff','--hero-desc-color':'rgba(230,228,248,.80)',
+      '--hero-overlay':'rgba(4,4,12,.72)','--sticky-bg':'#080810'
     },
     rose: {
       '--bg':'#fff5f7','--s1':'#ffffff','--s2':'#ffe4ea','--s3':'#ffc9d5',
@@ -107,7 +107,7 @@ function applyTema(tema, accentCor) {
 
   // Força meta theme-color
   const metaTheme = document.querySelector('meta[name="theme-color"]');
-  const bgMap = { classico:'#f8f9fb', dark:'#0f1117', tropical:'#fef9f0', minimalista:'#ffffff', acougue:'#1a0a05', verde:'#f0faf2', noturno:'#0d0d1a', rose:'#fff5f7', oceano:'#0a1628', dourado:'#0f0d08' };
+  const bgMap = { classico:'#f8f9fb', dark:'#0f1117', tropical:'#fef9f0', minimalista:'#ffffff', acougue:'#1a0a05', verde:'#f0faf2', noturno:'#080810', rose:'#fff5f7', oceano:'#0a1628', dourado:'#0f0d08' };
   if (metaTheme) metaTheme.content = bgMap[t] || '#f8f9fb';
 }
 
