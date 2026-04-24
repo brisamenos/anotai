@@ -3525,7 +3525,10 @@ Use no seu próximo pedido 🛍️</textarea>
     <div class="form-row">
       <label class="form-label" style="margin-bottom:8px">Grupos de Customização <span style="font-size:10.5px;color:var(--muted);font-weight:400">(tamanho, complementos, sabores…)</span></label>
       <div id="edit-grupos-list"></div>
-      <button type="button" class="add-grp-btn" onclick="addGrupo('edit')">+ Adicionar grupo</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button type="button" class="add-grp-btn" onclick="addGrupo('edit')" style="flex:1;min-width:160px">+ Adicionar grupo</button>
+        <button type="button" class="add-grp-btn" onclick="openAplicarGruposModal()" style="flex:1;min-width:160px;background:rgba(59,130,246,.12);border-color:rgba(59,130,246,.35);color:#93c5fd">📋 Aplicar em outros itens</button>
+      </div>
     </div>
 
     <div class="form-row">
@@ -3554,6 +3557,68 @@ Use no seu próximo pedido 🛍️</textarea>
     <div style="display:flex;gap:8px;margin-top:18px">
       <button class="btn bd" style="flex:1;justify-content:center" onclick="deleteItem()">Excluir item</button>
       <button class="btn bp" style="flex:1;justify-content:center" onclick="saveEditItem()"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.4"/><path d="M5 2v5h6V2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><rect x="5" y="9" width="6" height="5" stroke="currentColor" stroke-width="1.4"/></svg> Salvar alterações</button>
+    </div>
+  </div>
+</div>
+
+<!-- Aplicar grupos em outros itens -->
+<div class="modal-bg" id="modal-aplicar-grupos" onclick="if(event.target===this)closeModal('modal-aplicar-grupos')" style="align-items:center;justify-content:center">
+  <div class="modal" style="width:640px;max-height:88vh;overflow-y:auto">
+    <button class="modal-close" onclick="closeModal('modal-aplicar-grupos')"></button>
+    <div class="modal-title" style="margin-bottom:4px">Aplicar grupos em outros itens</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Copie os grupos de customização deste item para outros produtos, economizando tempo na montagem do cardápio.</div>
+
+    <!-- Seleção de grupos -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+        <span>1. Quais grupos aplicar?</span>
+        <div style="display:flex;gap:6px">
+          <button type="button" onclick="agSelecionarTodosGrupos(true)" style="font-size:10.5px;padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer">Todos</button>
+          <button type="button" onclick="agSelecionarTodosGrupos(false)" style="font-size:10.5px;padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer">Nenhum</button>
+        </div>
+      </div>
+      <div id="ag-grupos-list" style="display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+
+    <!-- Modo de aplicação -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px">2. Como aplicar?</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <label style="display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--surface);border:1.5px solid var(--accent);border-radius:8px;cursor:pointer" id="ag-modo-mesclar-wrap">
+          <input type="radio" name="ag-modo" value="mesclar" checked onchange="agSetModo('mesclar')" style="margin-top:2px;accent-color:var(--accent)">
+          <div>
+            <div style="font-size:12.5px;font-weight:600;color:var(--text)">Mesclar</div>
+            <div style="font-size:10.5px;color:var(--muted);line-height:1.3;margin-top:2px">Adiciona os grupos novos sem remover os já existentes. Duplicatas (mesmo nome) são ignoradas.</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;cursor:pointer" id="ag-modo-substituir-wrap">
+          <input type="radio" name="ag-modo" value="substituir" onchange="agSetModo('substituir')" style="margin-top:2px;accent-color:var(--accent)">
+          <div>
+            <div style="font-size:12.5px;font-weight:600;color:var(--text)">Substituir</div>
+            <div style="font-size:10.5px;color:var(--muted);line-height:1.3;margin-top:2px">Apaga todos os grupos atuais dos itens destino e coloca apenas os selecionados acima.</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Seleção de itens destino -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+        <span>3. Aplicar em quais itens?</span>
+        <div style="display:flex;gap:6px">
+          <button type="button" onclick="agMesmaCategoria()" style="font-size:10.5px;padding:3px 8px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);border-radius:6px;color:#93c5fd;cursor:pointer">Mesma categoria</button>
+          <button type="button" onclick="agSelecionarTodosItens(true)" style="font-size:10.5px;padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer">Todos</button>
+          <button type="button" onclick="agSelecionarTodosItens(false)" style="font-size:10.5px;padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer">Nenhum</button>
+        </div>
+      </div>
+      <input type="text" id="ag-busca-item" placeholder="Buscar item..." oninput="agFiltrarItens(this.value)" style="width:100%;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12.5px;color:var(--text);margin-bottom:8px">
+      <div id="ag-itens-list" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:2px"></div>
+      <div id="ag-contagem" style="font-size:11px;color:var(--muted);margin-top:8px;text-align:right">0 itens selecionados</div>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-aplicar-grupos')">Cancelar</button>
+      <button class="btn bp" style="flex:2;justify-content:center" onclick="aplicarGruposEmLote()" id="ag-btn-aplicar">Aplicar</button>
     </div>
   </div>
 </div>

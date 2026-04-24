@@ -1838,4 +1838,262 @@ function renderImagens() {
     </div>`).join('');
 }
 
+// ═══════════════════════════════════════════════════════════
+// APLICAR GRUPOS EM LOTE — copia grupos do item em edição
+// para outros itens do cardápio (mesma categoria ou outras).
+// ═══════════════════════════════════════════════════════════
+let _agGruposSelecionados = [];   // grupos do item atual, com flag selecionado
+let _agItensSelecionados  = new Set(); // ids dos itens destino
+let _agModo               = 'mesclar'; // 'mesclar' | 'substituir'
+
+function openAplicarGruposModal() {
+  // Lê os grupos atualmente no formulário de edição (não precisa ter salvo ainda)
+  const gruposAtuais = (typeof readGrupos === 'function') ? readGrupos('edit') : [];
+  if (!gruposAtuais.length) {
+    sbToast('err', 'Adicione pelo menos um grupo antes de aplicar em outros itens.');
+    return;
+  }
+  _agGruposSelecionados = gruposAtuais.map((g, i) => ({ ...g, _idx: i, _sel: true }));
+  _agItensSelecionados  = new Set();
+  _agModo               = 'mesclar';
+  agSetModo('mesclar');
+  agRenderGrupos();
+  agRenderItens('');
+  agAtualizarContagem();
+  const el = document.getElementById('ag-busca-item');
+  if (el) el.value = '';
+  openModal('modal-aplicar-grupos');
+}
+
+function agSetModo(modo) {
+  _agModo = modo;
+  const wM = document.getElementById('ag-modo-mesclar-wrap');
+  const wS = document.getElementById('ag-modo-substituir-wrap');
+  if (wM) wM.style.borderColor = modo === 'mesclar'    ? 'var(--accent)' : 'var(--border)';
+  if (wS) wS.style.borderColor = modo === 'substituir' ? 'var(--accent)' : 'var(--border)';
+}
+
+function agRenderGrupos() {
+  const list = document.getElementById('ag-grupos-list');
+  if (!list) return;
+  if (!_agGruposSelecionados.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px">Nenhum grupo configurado.</div>';
+    return;
+  }
+  list.innerHTML = _agGruposSelecionados.map((g, i) => {
+    const nOpcoes = (g.opcoes || []).length;
+    const tipoLbl = g.tipo === 'checkbox' ? `Múltipla (${g.min||0}–${g.max||1})` : 'Escolha 1';
+    return `
+    <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;cursor:pointer">
+      <input type="checkbox" ${g._sel ? 'checked' : ''} onchange="agToggleGrupo(${i})" style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12.5px;font-weight:600;color:var(--text)">${(g.nome||'(sem nome)').replace(/</g,'&lt;')}</div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:1px">${tipoLbl} · ${nOpcoes} ${nOpcoes === 1 ? 'opção' : 'opções'}${g.required ? ' · obrigatório' : ''}</div>
+      </div>
+    </label>`;
+  }).join('');
+}
+
+function agToggleGrupo(i) {
+  if (_agGruposSelecionados[i]) {
+    _agGruposSelecionados[i]._sel = !_agGruposSelecionados[i]._sel;
+  }
+}
+
+function agSelecionarTodosGrupos(marcar) {
+  _agGruposSelecionados.forEach(g => { g._sel = !!marcar; });
+  agRenderGrupos();
+}
+
+function agRenderItens(filtro) {
+  const list = document.getElementById('ag-itens-list');
+  if (!list) return;
+  const f = (filtro || '').trim().toLowerCase();
+  // Agrupa por categoria (mantém a ordem das categories globais)
+  const cats = (typeof categories !== 'undefined' && Array.isArray(categories)) ? categories : [];
+  const todosItens = (typeof items !== 'undefined' && Array.isArray(items)) ? items : [];
+  // Exclui o próprio item sendo editado da lista de destinos
+  const itensDisponiveis = todosItens.filter(i => i.id !== editingId);
+  // Ordena por cat + nome
+  const porCat = new Map();
+  for (const cat of cats) porCat.set(cat.name, { cat, items: [] });
+  // Bucket fallback pra itens sem categoria reconhecida
+  porCat.set('__sem_cat__', { cat: { name: '__sem_cat__', label: 'Sem categoria' }, items: [] });
+  for (const it of itensDisponiveis) {
+    if (f && !(it.name||'').toLowerCase().includes(f)) continue;
+    const key = porCat.has(it.catKey) ? it.catKey : '__sem_cat__';
+    porCat.get(key).items.push(it);
+  }
+  const html = [];
+  for (const { cat, items: its } of porCat.values()) {
+    if (!its.length) continue;
+    const catSelId = `ag-cat-${(cat.name||'').replace(/[^a-zA-Z0-9]/g,'_')}`;
+    const allSel   = its.every(i => _agItensSelecionados.has(i.id));
+    const someSel  = its.some(i => _agItensSelecionados.has(i.id));
+    html.push(`
+      <div style="margin-top:6px">
+        <label style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface);border-radius:6px;cursor:pointer;font-weight:700;font-size:11.5px;color:var(--muted)">
+          <input type="checkbox" id="${catSelId}" ${allSel ? 'checked' : ''} ${(someSel && !allSel) ? 'data-indeterminate="1"' : ''} onchange="agToggleCategoria('${(cat.name||'').replace(/'/g,"\\'")}', this.checked)" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">
+          <span style="text-transform:uppercase;letter-spacing:.5px">${(cat.label||cat.name||'Categoria').replace(/</g,'&lt;')}</span>
+          <span style="margin-left:auto;font-size:10px;color:var(--muted)">${its.length} ${its.length === 1 ? 'item' : 'itens'}</span>
+        </label>`);
+    for (const it of its) {
+      const sel = _agItensSelecionados.has(it.id);
+      const temGrupos = Array.isArray(it.customGroups) && it.customGroups.length > 0;
+      html.push(`
+        <label style="display:flex;align-items:center;gap:10px;padding:6px 10px 6px 24px;border-radius:6px;cursor:pointer;font-size:12.5px">
+          <input type="checkbox" ${sel ? 'checked' : ''} onchange="agToggleItem(${it.id}, this.checked)" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">
+          <span style="flex:1;color:var(--text)">${(it.name||'').replace(/</g,'&lt;')}</span>
+          ${temGrupos ? '<span title="Já tem grupos configurados" style="font-size:10px;color:#fbbf24;background:rgba(245,158,11,.12);padding:1px 5px;border-radius:99px">tem grupos</span>' : ''}
+        </label>`);
+    }
+    html.push('</div>');
+  }
+  if (!html.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:12px">Nenhum item encontrado.</div>';
+  } else {
+    list.innerHTML = html.join('');
+  }
+  // Ajusta indeterminate (não pode ser setado via atributo HTML)
+  list.querySelectorAll('input[data-indeterminate="1"]').forEach(el => { el.indeterminate = true; });
+}
+
+function agToggleItem(id, marcar) {
+  if (marcar) _agItensSelecionados.add(id);
+  else _agItensSelecionados.delete(id);
+  agAtualizarContagem();
+  // Re-renderiza só pra atualizar o checkbox da categoria (all/some/none)
+  const busca = document.getElementById('ag-busca-item');
+  agRenderItens(busca ? busca.value : '');
+}
+
+function agToggleCategoria(catName, marcar) {
+  const todosItens = (typeof items !== 'undefined' && Array.isArray(items)) ? items : [];
+  const busca = document.getElementById('ag-busca-item');
+  const f = busca ? (busca.value||'').trim().toLowerCase() : '';
+  for (const it of todosItens) {
+    if (it.id === editingId) continue;
+    const key = it.catKey || '__sem_cat__';
+    if (key !== catName) continue;
+    if (f && !(it.name||'').toLowerCase().includes(f)) continue;
+    if (marcar) _agItensSelecionados.add(it.id);
+    else _agItensSelecionados.delete(it.id);
+  }
+  agAtualizarContagem();
+  agRenderItens(f);
+}
+
+function agSelecionarTodosItens(marcar) {
+  const todosItens = (typeof items !== 'undefined' && Array.isArray(items)) ? items : [];
+  const busca = document.getElementById('ag-busca-item');
+  const f = busca ? (busca.value||'').trim().toLowerCase() : '';
+  for (const it of todosItens) {
+    if (it.id === editingId) continue;
+    if (f && !(it.name||'').toLowerCase().includes(f)) continue;
+    if (marcar) _agItensSelecionados.add(it.id);
+    else _agItensSelecionados.delete(it.id);
+  }
+  agAtualizarContagem();
+  agRenderItens(f);
+}
+
+function agMesmaCategoria() {
+  // Marca todos os itens da mesma categoria do item em edição
+  const itAtual = (typeof items !== 'undefined' ? items : []).find(i => i.id === editingId);
+  if (!itAtual) return;
+  const catAtual = itAtual.catKey;
+  _agItensSelecionados = new Set();
+  for (const it of items) {
+    if (it.id === editingId) continue;
+    if ((it.catKey || '__sem_cat__') === (catAtual || '__sem_cat__')) {
+      _agItensSelecionados.add(it.id);
+    }
+  }
+  agAtualizarContagem();
+  const busca = document.getElementById('ag-busca-item');
+  agRenderItens(busca ? busca.value : '');
+}
+
+function agFiltrarItens(valor) {
+  agRenderItens(valor || '');
+}
+
+function agAtualizarContagem() {
+  const n = _agItensSelecionados.size;
+  const el = document.getElementById('ag-contagem');
+  if (el) el.textContent = `${n} ${n === 1 ? 'item selecionado' : 'itens selecionados'}`;
+  const btn = document.getElementById('ag-btn-aplicar');
+  if (btn) {
+    const grpsSel = _agGruposSelecionados.filter(g => g._sel).length;
+    btn.disabled = (n === 0 || grpsSel === 0);
+    btn.style.opacity = btn.disabled ? '0.5' : '1';
+    btn.style.pointerEvents = btn.disabled ? 'none' : '';
+  }
+}
+
+async function aplicarGruposEmLote() {
+  const grupos = _agGruposSelecionados.filter(g => g._sel).map(g => {
+    const { _idx, _sel, ...clean } = g;
+    return clean;
+  });
+  if (!grupos.length) { sbToast('err','Selecione ao menos um grupo.'); return; }
+  const alvos = Array.from(_agItensSelecionados);
+  if (!alvos.length) { sbToast('err','Selecione ao menos um item de destino.'); return; }
+
+  const modo = _agModo;
+  const msg = modo === 'substituir'
+    ? `Tem certeza? Isso vai APAGAR todos os grupos atuais de ${alvos.length} ${alvos.length===1?'item':'itens'} e colocar apenas os ${grupos.length} grupo(s) selecionados.`
+    : `Confirmar: adicionar ${grupos.length} grupo(s) em ${alvos.length} ${alvos.length===1?'item':'itens'} (mantendo os existentes)?`;
+  if (!confirm(msg)) return;
+
+  // Tipos exclusivos do açougue — nunca copiamos esses grupos em lote
+  const _AC_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
+  const gruposCopiaveis = grupos.filter(g => !_AC_TIPOS.includes(g.tipo));
+  if (!gruposCopiaveis.length) {
+    sbToast('err','Os grupos selecionados são exclusivos do açougue e não podem ser copiados em lote.');
+    return;
+  }
+
+  sbLoading(true);
+  let sucesso = 0, falhas = 0;
+  try {
+    for (const id of alvos) {
+      const itDest = items.find(i => i.id === id);
+      if (!itDest) { falhas++; continue; }
+      // Preserva grupos exclusivos do açougue já existentes no destino
+      const gruposDestAtuais = Array.isArray(itDest.customGroups) ? itDest.customGroups : [];
+      const preservados = gruposDestAtuais.filter(g => _AC_TIPOS.includes(g.tipo));
+      let finalGrupos;
+      if (modo === 'substituir') {
+        finalGrupos = [...preservados, ...gruposCopiaveis];
+      } else {
+        // Mesclar: mantém todos os atuais + adiciona novos (ignorando duplicatas por nome case-insensitive)
+        const nomesExistentes = new Set(gruposDestAtuais.map(g => (g.nome||'').toLowerCase().trim()).filter(Boolean));
+        const novosSemDup = gruposCopiaveis.filter(g => !nomesExistentes.has((g.nome||'').toLowerCase().trim()));
+        finalGrupos = [...gruposDestAtuais, ...novosSemDup];
+      }
+      try {
+        const { error } = await sb.from('menu_items').update({ custom_groups: finalGrupos }).eq('id', id);
+        if (error) { falhas++; console.warn('[aplicarGrupos] falhou id=', id, error); continue; }
+        // Atualiza cache local
+        itDest.customGroups = finalGrupos;
+        sucesso++;
+      } catch(e) {
+        falhas++;
+        console.warn('[aplicarGrupos] exceção id=', id, e);
+      }
+    }
+  } finally {
+    sbLoading(false);
+  }
+  closeModal('modal-aplicar-grupos');
+  if (sucesso && !falhas) {
+    sbToast('ok', `✅ Grupos aplicados em ${sucesso} ${sucesso===1?'item':'itens'}!`);
+  } else if (sucesso && falhas) {
+    sbToast('ok', `Aplicado em ${sucesso} ${sucesso===1?'item':'itens'}. ${falhas} ${falhas===1?'falhou':'falharam'}.`);
+  } else {
+    sbToast('err', `Nenhum item foi atualizado. Tente novamente.`);
+  }
+}
+
 // ─────────────────────────────────────────
