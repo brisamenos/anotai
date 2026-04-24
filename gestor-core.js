@@ -227,12 +227,17 @@ async function loadAllData(silent = false) {
     const safe = q => q.then(r => r).catch(e => ({ data: null, error: e }));
 
     const [
-      itemsRes, catsRes, ordersRes, movsRes,
+      itemsRes, catsRes, ordersRes, ordersEntregueRes, movsRes,
       cuponsRes, mesasRes, estoqueRes, fidRes, cfgRes, mesaAbertaRes
     ] = await Promise.all([
       safe(sb.from('menu_items').select('*').order('sort_order').order('id')),
       safe(sb.from('categories').select('*').order('sort_order')),
-      safe(sb.from('orders').select('*').in('status',['aguardando_pix','analise','producao','pronto','saiu','entregue']).order('id',{ascending:false})),
+      // Status ativos (análise até saiu) — sem limite, todos entram no kanban
+      safe(sb.from('orders').select('*').in('status',['aguardando_pix','analise','producao','pronto','saiu']).order('id',{ascending:false})),
+      // Status "entregue" — só os 30 mais recentes e de hoje (evita kanban com 100+ pedidos antigos)
+      safe(sb.from('orders').select('*').eq('status','entregue')
+        .gte('created_at', (() => { const d=new Date(); d.setHours(d.getHours()-3); return d.toISOString().split('T')[0]; })())
+        .order('id',{ascending:false}).limit(30)),
       safe(sb.from('movimentos').select('*').gte('created_at', (() => {
         // Usa data local BR (UTC-3) para não perder movimentos do início do dia
         const d = new Date(); d.setHours(d.getHours() - 3);
@@ -251,7 +256,11 @@ async function loadAllData(silent = false) {
       id: c.id, name: c.name, label: c.label || c.name,
       type: c.type||'Itens principais', promo:!!c.promo, open:false
     }));
-    if (ordersRes.data?.length)   ordersKanban  = ordersRes.data.map(mapOrder);
+    // Merge pedidos ativos + pedidos entregue recentes
+    const _ativos   = (ordersRes?.data || []);
+    const _entreg   = (ordersEntregueRes?.data || []);
+    const _todosPed = [..._ativos, ..._entreg];
+    if (_todosPed.length)         ordersKanban  = _todosPed.map(mapOrder);
     // Comandas mesa_aberta: entram no cache do salão, não no kanban
     (mesaAbertaRes?.data || []).forEach(o => {
       if (!mesaOrdersCache.find(x => x.id === o.id)) mesaOrdersCache.unshift({ ...o, items: _parseItems(o.items), num: _orderNum(o.id, o.order_num) });
@@ -1524,10 +1533,17 @@ function _detectOrderType(o) {
 // Expõe como global pra outros arquivos (gestor-pedidos) usarem
 if (typeof window !== 'undefined') window._detectOrderType = _detectOrderType;
 
+// Guard contra cliques duplos: impede que o mesmo pedido seja avançado 2x antes do servidor responder.
+const _advancingIds = new Set();
+
 async function advanceOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
   if (!o) return;
+  // Dedupe: se já temos um advance em voo para este pedido, ignora cliques extras
+  if (_advancingIds.has(id)) return;
+  _advancingIds.add(id);
   if (o.status === 'aguardando_pix') {
+    _advancingIds.delete(id);
     sbToast('err', 'Use o botão "Confirmar Pago PIX" para este pedido.');
     return;
   }
@@ -1565,6 +1581,8 @@ async function advanceOrderById(id) {
     o.status = oldStatus;
     renderKanban();
     sbToast('err', 'Erro ao avançar pedido: ' + e.message);
+  } finally {
+    _advancingIds.delete(id);
   }
 }
 

@@ -366,6 +366,14 @@ const MIGRATIONS = [
   { version:35, description:'fornecedor_id no estoque', up:
     `ALTER TABLE estoque ADD COLUMN fornecedor_id INTEGER`
   },
+  { version:36, description:'finaliza pedidos entregue antigos (>12h)', up:
+    // Pedidos que ficaram em 'entregue' por mais de 12 horas são marcados como 'finalizado'.
+    // Motivo: mudança no fluxo de delivery (pronto→saiu→entregue→finalizado) fez com que
+    // pedidos antigos, que antes sumiam do kanban ao chegar em 'entregue', passassem a ficar
+    // visíveis aguardando clique em "Finalizar" — poluindo o kanban com centenas de pedidos
+    // históricos. Esta migração limpa esse backlog uma única vez.
+    `UPDATE orders SET status='finalizado' WHERE status='entregue' AND created_at < datetime('now','-12 hours')`
+  },
 ]
 
 function runMigrations() {
@@ -561,6 +569,40 @@ setInterval(() => {
     }
   } catch(e) { log('⚠️','[CLEANUP] erro:', e.message) }
 }, 5 * 60 * 1000)
+
+// Cleanup de pedidos em 'entregue' abandonados — finaliza automaticamente após 6 horas.
+// Motivo: o novo fluxo de delivery (saiu → entregue → finalizado) exige clique em "Finalizar"
+// pelo gestor. Se o gestor esquece, pedidos acumulam no kanban. Após 6h sem ação, assumimos
+// que já foi de fato finalizado e limpamos automaticamente.
+// Roda a cada 30 min.
+setInterval(() => {
+  try {
+    const rows = db.prepare(
+      `SELECT id, tenant_id FROM orders
+       WHERE status='entregue'
+       AND created_at < datetime('now','-6 hours')`
+    ).all()
+    if (rows.length) {
+      db.prepare(
+        `UPDATE orders SET status='finalizado'
+         WHERE status='entregue'
+         AND created_at < datetime('now','-6 hours')`
+      ).run()
+      log('🧹', `[CLEANUP] ${rows.length} pedido(s) em "entregue" há >6h foram auto-finalizados`)
+      marcarDirty()
+      const byTenant = new Map()
+      for (const r of rows) {
+        if (!byTenant.has(r.tenant_id)) byTenant.set(r.tenant_id, [])
+        byTenant.get(r.tenant_id).push(r.id)
+      }
+      for (const [tid, ids] of byTenant) {
+        for (const id of ids) {
+          sseBroadcast(`orders-rt:${tid}`, 'orders:UPDATE', { id, status: 'finalizado' })
+        }
+      }
+    }
+  } catch(e) { log('⚠️','[CLEANUP entregue] erro:', e.message) }
+}, 30 * 60 * 1000)
 
 // ════════════════════════════════════════════════════════
 // SSE — Server-Sent Events
@@ -1238,9 +1280,22 @@ async function handleOrderStatus(req, res) {
             const _pkey = `${order.id}_${new_status}`
             if (new_status==='finalizado') {
               const min=Math.max(1,parseInt(auto._aval_minutos||1,10)||1)
+              // Adiciona ao set ANTES do setTimeout para bloquear duplicações imediatas
+              if (processed.has(_pkey)) return
+              processed.add(_pkey)
               log('⏳',`Avaliação agendada em ${min}min para #${idStr}`)
-              setTimeout(async()=>{ if(processed.has(_pkey))return; const cfgNow=db.prepare("SELECT evo_automacoes FROM store_config WHERE tenant_id=?").get(tid); if(jsonParse(cfgNow?.evo_automacoes)||{}['avaliacao']?.on===false)return; const r=await sendWA(order.phone,msgFinal,inst); if(r.ok)processed.add(_pkey) },min*60*1000)
-            } else { if(!processed.has(_pkey)){ const r=await sendWA(order.phone,msgFinal,inst); if(r.ok)processed.add(_pkey) } }
+              setTimeout(async()=>{ const cfgNow=db.prepare("SELECT evo_automacoes FROM store_config WHERE tenant_id=?").get(tid); if((jsonParse(cfgNow?.evo_automacoes)||{})['avaliacao']?.on===false) { processed.delete(_pkey); return } await sendWA(order.phone,msgFinal,inst) },min*60*1000)
+            } else {
+              // Marca ANTES do await para evitar race condition entre cliques duplos no gestor:
+              // se 2 POSTs /api/order-status chegam em paralelo, ambos leem oldStatus='pronto',
+              // passariam pelo check antigo simultaneamente e enviariam o WA duas vezes.
+              if (processed.has(_pkey)) return
+              processed.add(_pkey)
+              try {
+                const r = await sendWA(order.phone, msgFinal, inst)
+                if (!r.ok) processed.delete(_pkey) // se falhou, permite retry
+              } catch(_) { processed.delete(_pkey) }
+            }
           }
         } catch(e) { log('❌',`Erro WA order-status #${order_id}:`,{error:e.message}) }
       })
