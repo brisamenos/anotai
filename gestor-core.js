@@ -1584,9 +1584,11 @@ async function cancelOrderById(id) {
     // Estorno: se existir movimento financeiro deste pedido, cria saída para anular
     if (o) {
       try {
+        // Usa separador " –" para evitar match de prefixo (ex: #3 pegando #31).
+        // Se a descrição do movimento mudar, ajustar aqui junto com finishOrderById.
         const { data: movs } = await sb.from('movimentos')
           .select('id,val,pag')
-          .ilike('description', `%#${o.num}%`)
+          .ilike('description', `Pedido #${o.num} –%`)
           .eq('tipo', 'entrada')
           .limit(1);
         if (movs?.length) {

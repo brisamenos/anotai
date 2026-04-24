@@ -529,6 +529,39 @@ setInterval(() => {
   try { db.prepare("DELETE FROM radio_messages WHERE created_at < datetime('now','-10 hours')").run(); } catch {}
 }, 30 * 60 * 1000)
 
+// Cleanup de pedidos abandonados em pagamento online — marca como 'cancelado' após 30 min.
+// Cliente abandonou o checkout (fechou a aba sem pagar) → não polui kanban nem relatórios.
+// Roda a cada 5 min. Pedidos 'aguardando_pix'/'aguardando_cartao' mais velhos que 30min viram 'cancelado'.
+setInterval(() => {
+  try {
+    const rows = db.prepare(
+      `SELECT id, tenant_id FROM orders
+       WHERE status IN ('aguardando_pix','aguardando_cartao')
+       AND created_at < datetime('now','-30 minutes')`
+    ).all()
+    if (rows.length) {
+      db.prepare(
+        `UPDATE orders SET status='cancelado'
+         WHERE status IN ('aguardando_pix','aguardando_cartao')
+         AND created_at < datetime('now','-30 minutes')`
+      ).run()
+      log('🧹', `[CLEANUP] ${rows.length} pedido(s) pendente(s) abandonado(s) foram cancelados`)
+      marcarDirty()
+      // Broadcast SSE para remover do kanban aberto no gestor
+      const byTenant = new Map()
+      for (const r of rows) {
+        if (!byTenant.has(r.tenant_id)) byTenant.set(r.tenant_id, [])
+        byTenant.get(r.tenant_id).push(r.id)
+      }
+      for (const [tid, ids] of byTenant) {
+        for (const id of ids) {
+          sseBroadcast(`orders-rt:${tid}`, 'orders:UPDATE', { id, status: 'cancelado' })
+        }
+      }
+    }
+  } catch(e) { log('⚠️','[CLEANUP] erro:', e.message) }
+}, 5 * 60 * 1000)
+
 // ════════════════════════════════════════════════════════
 // SSE — Server-Sent Events
 // ════════════════════════════════════════════════════════
@@ -829,6 +862,12 @@ async function handleREST(req, res, table, params, body) {
       // WHERE já filtra por tenant_id via buildWhere(), então remover do payload é suficiente.
       if (!NO_TENANT_FILTER.has(table) && 'tenant_id' in payload && payload.tenant_id !== tenantId) {
         delete payload.tenant_id
+      }
+      // Segurança: mudança de status de pedido DEVE passar por endpoints dedicados
+      // (/api/order-status pelo gestor, /api/customer-cancel-order pelo cliente).
+      // Bloqueia tentativa de PATCH /api/orders { status: 'cancelado' } ou qualquer outro status.
+      if (table === 'orders' && 'status' in payload) {
+        delete payload.status
       }
       const keys    = Object.keys(payload).filter(k=>cols.includes(k))
       if (!keys.length) return send(res, 400, { error: 'Sem campos válidos' })

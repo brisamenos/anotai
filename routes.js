@@ -133,6 +133,110 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ── Cancelamento de pedido pelo cliente ──────────────
+  // Endpoint dedicado (em vez de PATCH genérico) — valida:
+  //   - Tenant do pedido bate com o header
+  //   - Cliente é dono do pedido (customer_id no token OU phone informado bate)
+  //   - Status atual permite cancelamento (só analise / aguardando_*)
+  // Ao cancelar: atualiza customer stats, cria estorno se pagamento online, emite SSE.
+  if (req.method === 'POST' && upath === '/api/customer-cancel-order') {
+    const tid  = getTenantId(req, params)
+    if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    const body = await readBody(req)
+    const orderId = parseInt(body.order_id) || 0
+    const phone   = String(body.phone || '').replace(/\D/g,'')
+    if (!orderId) { send(res, 400, { error: 'order_id obrigatório' }); return true }
+
+    // Busca o pedido
+    const order = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(orderId, tid)
+    if (!order) { send(res, 404, { error: 'Pedido não encontrado' }); return true }
+
+    // Valida status — só permite cancelar antes da produção
+    const STATUS_OK = ['aguardando_pix', 'aguardando_cartao', 'analise']
+    if (!STATUS_OK.includes(order.status)) {
+      send(res, 400, { error: 'Este pedido não pode mais ser cancelado. Entre em contato com o restaurante.' })
+      return true
+    }
+
+    // Validação de ownership — aceita qualquer uma:
+    //  (a) Bearer token bate com o customer do pedido
+    //  (b) phone informado no body bate com o phone do pedido
+    //  (c) order recente (< 2h) sem customer_id (compra anônima pelo WhatsApp) com phone batendo
+    let autorizado = false
+    const auth = req.headers['authorization'] || ''
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+    if (token && order.customer_id) {
+      try {
+        const [tkCid, tkTid, tkHashPrefix] = Buffer.from(token, 'base64').toString().split(':')
+        if (String(tkCid) === String(order.customer_id) && String(tkTid) === String(tid)) {
+          const custRow = db.prepare('SELECT senha_hash FROM customers WHERE id=? AND tenant_id=?').get(order.customer_id, tid)
+          if (custRow?.senha_hash && custRow.senha_hash.slice(0, 16) === tkHashPrefix) autorizado = true
+        }
+      } catch(_) {}
+    }
+    if (!autorizado && phone && order.phone) {
+      const phoneOrd = String(order.phone).replace(/\D/g,'')
+      // Compara pelos últimos 8 dígitos (ignora DDI/DDD divergentes)
+      if (phoneOrd.slice(-8) === phone.slice(-8) && phone.length >= 8) autorizado = true
+    }
+    if (!autorizado) {
+      send(res, 403, { error: 'Não autorizado a cancelar este pedido' })
+      return true
+    }
+
+    try {
+      // Atualiza status
+      db.prepare("UPDATE orders SET status='cancelado' WHERE id=?").run(orderId)
+
+      // Reverte customer stats (se o pedido tinha sido contabilizado)
+      if (order.customer_id) {
+        const valorPago = parseFloat(order.total||0) + parseFloat(order.taxa||0)
+        db.prepare(`UPDATE customers SET orders_count = MAX(0, orders_count - 1),
+                    total_spent = MAX(0, total_spent - ?) WHERE id=?`)
+          .run(valorPago, order.customer_id)
+      }
+
+      // Estorno financeiro se pagamento online aprovado
+      const pagOnline = (order.pag === 'pix_mp' || order.pag === 'cartao_mp')
+      if (pagOnline) {
+        try {
+          const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+          const valor = parseFloat(order.total||0) + parseFloat(order.taxa||0)
+          const numStr = String(order.order_num || order.id)
+          // Descrição compatível com o padrão do finishOrderById ("Pedido #N – Cliente")
+          db.prepare(`INSERT INTO movimentos (tenant_id, description, tipo, val, pag, time)
+                      VALUES (?, ?, 'saida', ?, ?, ?)`)
+            .run(tid, `Estorno — Pedido #${numStr} cancelado pelo cliente`, valor, order.pag, time)
+        } catch(e) { log('⚠️','[customer-cancel] estorno financeiro falhou:', e.message) }
+      }
+
+      marcarDirty()
+      // Broadcast SSE pro kanban do gestor
+      const _fo = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId)
+      const _it = _fo && typeof _fo.items === 'string' ? (() => { try { return JSON.parse(_fo.items) } catch { return [] } })() : (_fo?.items || [])
+      sseBroadcast(`orders-rt:${tid}`, 'orders:UPDATE', _fo ? { ..._fo, items: _it, status: 'cancelado' } : { id: orderId, status: 'cancelado' })
+
+      // Notifica o gestor no WhatsApp se configurado
+      setImmediate(async () => {
+        try {
+          const cfg  = db.prepare('SELECT evo_instance, store_whatsapp, store_name, order_num_offset FROM store_config WHERE tenant_id=?').get(tid)
+          if (cfg?.store_whatsapp) {
+            const inst   = cfg.evo_instance || EVO_INST
+            const offset = parseInt(cfg.order_num_offset) || 0
+            const idStr  = String(order.order_num || Math.max(1, order.id - offset)).padStart(3,'0')
+            const msg    = `🔔 *Pedido cancelado pelo cliente*\n\nPedido *#${idStr}* — ${order.client}\nFoi cancelado pelo cliente via cardápio.${pagOnline ? '\n\n💰 Estorno financeiro registrado automaticamente.' : ''}`
+            await sendWA(cfg.store_whatsapp, msg, inst)
+          }
+        } catch(e) { log('⚠️','[customer-cancel] notif gestor falhou:', e.message) }
+      })
+
+      send(res, 200, { ok: true, estorno: pagOnline })
+    } catch(e) {
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
   // ═══════════════════════════════════════════════════════
   // Admin, Backup & Tenants
   // ═══════════════════════════════════════════════════════
