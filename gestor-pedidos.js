@@ -919,7 +919,22 @@ function noSetDelivery(tipo) {
     btn.style.fontSize = '12px';
   });
   document.getElementById('no-addr-block').style.display = tipo === 'delivery' ? '' : 'none';
-  document.getElementById('no-mesa-block').style.display = tipo === 'mesa' ? '' : 'none';
+  const mesaBlock = document.getElementById('no-mesa-block');
+  if (mesaBlock) {
+    mesaBlock.style.display = tipo === 'mesa' ? '' : 'none';
+    if (tipo === 'mesa') {
+      const select = document.getElementById('order-mesa');
+      if (select) {
+        select.innerHTML = '<option value="">Selecione a mesa...</option>';
+        (tables || []).forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.num;
+          opt.textContent = 'Mesa ' + t.num + (t.guests ? ' (' + t.guests + ' pessoas)' : '');
+          select.appendChild(opt);
+        });
+      }
+    }
+  }
 }
 
 function noFilterItems(q) {
@@ -1228,10 +1243,12 @@ function noRenderCart() {
 function noOpenModal() {
   _noCart = [];
   _noDelivery = 'delivery';
-  ['order-client', 'order-phone', 'order-addr', 'order-obs', 'order-mesa'].forEach(id => {
+  ['order-client', 'order-phone', 'order-addr', 'order-obs'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  const mesaSelect = document.getElementById('order-mesa');
+  if (mesaSelect) mesaSelect.value = '';
   document.getElementById('no-search').value = '';
   noSetDelivery('delivery');
   noFilterItems('');
