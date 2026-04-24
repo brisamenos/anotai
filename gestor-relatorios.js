@@ -3666,39 +3666,48 @@ async function calibrarImpressora() {
 
 async function salvarCalibracao() {
   if (!window.ElectronPrint || !window.ElectronPrint.saveConfig) {
-    if (typeof sbToast === 'function') sbToast('error', 'Configuração disponível só no app EstimaFood.');
+    if (typeof sbToast === 'function') sbToast('error', 'Calibração disponível só no app EstimaFood (desktop).');
+    else alert('Calibração disponível só no app EstimaFood.');
     return;
   }
   try {
-    const rawPw = document.getElementById('calib-paper-width').value;
-    const rawPrintable = document.getElementById('calib-printable-width').value;
-    const paperWidth = parseInt(rawPw) || 80;
-    // Vazio = auto (0). Preenchido = usa o valor informado.
+    const pwEl = document.getElementById('calib-paper-width');
+    const prEl = document.getElementById('calib-printable-width');
+    if (!pwEl || !prEl) return;
+    const rawPrintable = prEl.value;
+    const paperWidth = parseInt(pwEl.value) || 80;
+
     let printableWidth = 0;
-    if (rawPrintable && rawPrintable.trim() !== '') {
+    if (rawPrintable && String(rawPrintable).trim() !== '') {
       printableWidth = parseInt(rawPrintable);
       if (isNaN(printableWidth) || printableWidth < 30 || printableWidth > 80) {
         if (typeof sbToast === 'function') sbToast('error', 'Largura imprimível deve ficar entre 30 e 80mm.');
         return;
       }
     }
+
     const r = await window.ElectronPrint.saveConfig({ paperWidth, printableWidth });
     if (r && r.ok === false) {
       if (typeof sbToast === 'function') sbToast('error', 'Erro ao salvar: ' + (r.error || 'desconhecido'));
-    } else {
-      if (typeof sbToast === 'function') {
-        sbToast('ok', printableWidth
-          ? `✅ Calibração salva: ${printableWidth}mm imprimível em papel ${paperWidth}mm.`
-          : `✅ Calibração restaurada para automático (papel ${paperWidth}mm).`);
-      }
+      return;
+    }
+
+    // Recarrega pra confirmar visualmente que ficou salvo
+    await carregarCalibracao();
+
+    if (typeof sbToast === 'function') {
+      sbToast('ok', printableWidth
+        ? '✅ Calibração salva: ' + printableWidth + 'mm em papel ' + paperWidth + 'mm'
+        : '✅ Calibração restaurada para automático');
     }
   } catch (e) {
     console.error('salvarCalibracao:', e);
-    if (typeof sbToast === 'function') sbToast('error', 'Erro ao salvar: ' + e.message);
+    if (typeof sbToast === 'function') sbToast('error', 'Erro ao salvar: ' + (e && e.message ? e.message : String(e)));
   }
 }
 
-// Carrega os valores salvos quando a tela de configurações é aberta
+// Carrega os valores salvos nos campos de calibração.
+// Também pode ser chamada manualmente depois de salvar pra confirmar os valores.
 async function carregarCalibracao() {
   if (!window.ElectronPrint || !window.ElectronPrint.getConfig) return;
   try {
@@ -3707,19 +3716,43 @@ async function carregarCalibracao() {
     const pw = document.getElementById('calib-paper-width');
     const pr = document.getElementById('calib-printable-width');
     if (pw && cfg.paperWidth) pw.value = String(cfg.paperWidth);
-    if (pr) pr.value = cfg.printableWidth && cfg.printableWidth > 0 ? String(cfg.printableWidth) : '';
+    if (pr) pr.value = (cfg.printableWidth && Number(cfg.printableWidth) > 0) ? String(cfg.printableWidth) : '';
   } catch (e) {
     console.warn('carregarCalibracao:', e);
   }
 }
 
-// Auto-carrega quando a aba de Impressão fica visível
-document.addEventListener('DOMContentLoaded', () => {
-  // tenta carregar ao iniciar
-  setTimeout(carregarCalibracao, 800);
-  // e sempre que o usuário clicar em um link/aba de impressão
-  document.addEventListener('click', (ev) => {
-    const txt = (ev.target && ev.target.textContent || '').toLowerCase();
-    if (txt.includes('impress')) setTimeout(carregarCalibracao, 300);
-  });
-});
+// Estratégia robusta: MutationObserver fica escutando o DOM inteiro e,
+// sempre que o campo de calibração aparecer (usuário navegou pra aba),
+// carrega os valores imediatamente. Funciona independente de como a SPA monta a tela.
+(function setupCalibracaoAutoLoad() {
+  let ultimoCarregamento = 0;
+  function tentarCarregar() {
+    // Debounce de 200ms pra não spammar o getConfig
+    const agora = Date.now();
+    if (agora - ultimoCarregamento < 200) return;
+    const pr = document.getElementById('calib-printable-width');
+    if (!pr) return; // campo ainda não está na tela
+    ultimoCarregamento = agora;
+    carregarCalibracao();
+  }
+
+  function iniciar() {
+    // Tenta carregar ao inicializar (caso a aba já esteja renderizada)
+    tentarCarregar();
+
+    // Observa mudanças no DOM — quando o campo aparecer, carrega
+    const obs = new MutationObserver(() => tentarCarregar());
+    obs.observe(document.body, { childList: true, subtree: true });
+
+    // Também recarrega quando o usuário volta o foco pra aba/janela
+    window.addEventListener('focus', tentarCarregar);
+    document.addEventListener('visibilitychange', tentarCarregar);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', iniciar);
+  } else {
+    iniciar();
+  }
+})();
