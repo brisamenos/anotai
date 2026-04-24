@@ -79,6 +79,44 @@ const GESTOR_TEMAS = [
       '--topnav-bg':'#070d1a',
       '--sfoot-bg':'rgba(7,13,26,.85)'
     }
+  },
+  {
+    key: 'noturno',
+    nome: 'Modo Noturno',
+    desc: 'Charcoal elegante com bordas sutis',
+    emoji: '🌙',
+    tipo: 'dark',
+    preview: {
+      bg:'#080810', sidebar:'#04040c', accent:'#0ea5e9',
+      card:'#0f0f1c', cardBorder:'rgba(255,255,255,.06)',
+      text:'#eeedf6', muted:'#7878a0',
+      kol1:'rgba(251,191,36,.06)', kol2:'rgba(14,165,233,.06)', kol3:'rgba(52,211,153,.06)',
+      kolT1:'#fbbf24', kolT2:'#7dd3fc', kolT3:'#6ee7b7'
+    },
+    vars: {
+      '--bg':'#080810',
+      '--surface':'#0f0f1c',
+      '--surface2':'#161625',
+      '--surface3':'#1e1e30',
+      '--border':'rgba(255,255,255,.06)',
+      '--border2':'rgba(255,255,255,.10)',
+      '--accent':'#0ea5e9',
+      '--accent2':'#67e8f9',
+      '--accent3':'#fbbf24',
+      '--accent-dim':'rgba(14,165,233,.10)',
+      '--accent-glow':'rgba(14,165,233,.20)',
+      '--success':'#34d399',
+      '--danger':'#fb7185',
+      '--purple':'#a78bfa',
+      '--pink':'#f0abfc',
+      '--orange':'#f0a060',
+      '--text':'#eeedf6',
+      '--muted':'#7878a0',
+      '--muted2':'#50506a',
+      '--sidebar-bg':'#04040c',
+      '--topnav-bg':'#020205',
+      '--sfoot-bg':'rgba(2,2,5,.9)'
+    }
   }
 ];
 
@@ -381,7 +419,8 @@ function temaAplicarCompleto(key) {
   const mapa = {
     'escuro':'escuro', 'dark':'escuro', 'oceano':'escuro', 'cobre':'escuro',
     'cafe':'escuro', 'lavanda':'escuro', 'cereja':'escuro', 'crepusculo':'escuro', 'esmeralda':'escuro',
-    'claro':'claro', 'light':'claro', 'artico':'claro', 'classico':'claro', 'minimalista':'claro'
+    'claro':'claro', 'light':'claro', 'artico':'claro', 'classico':'claro', 'minimalista':'claro',
+    'noturno':'noturno'
   };
   const resolved = mapa[key] || 'escuro';
   const tema = GESTOR_TEMAS.find(t => t.key === resolved) || GESTOR_TEMAS[0];
