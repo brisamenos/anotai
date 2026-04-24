@@ -2834,7 +2834,7 @@ Use no seu próximo pedido 🛍️</textarea>
   <div class="modal" style="max-width:480px">
     <div class="modal-header">
       <h2 id="modal-imp-title">Adicionar Impressora</h2>
-      <button class="modal-close" onclick="closeModal('modal-impressora')">×</button>
+      <button class="modal-close" onclick="closeModal('modal-impressora')"></button>
     </div>
     <div style="padding:20px;display:flex;flex-direction:column;gap:12px">
       <div>
@@ -2879,7 +2879,7 @@ Use no seu próximo pedido 🛍️</textarea>
   <div class="modal" style="max-width:700px">
     <div class="modal-header">
       <h2 id="modal-mod-title">Configurar Modelo</h2>
-      <button class="modal-close" onclick="closeModal('modal-modelo')">×</button>
+      <button class="modal-close" onclick="closeModal('modal-modelo')"></button>
     </div>
     <div style="padding:20px;display:grid;grid-template-columns:1fr 260px;gap:20px">
       <div style="display:flex;flex-direction:column;gap:12px">
@@ -3152,20 +3152,20 @@ Use no seu próximo pedido 🛍️</textarea>
     </div>
 
     <!-- Ações -->
-    <div style="display:flex;gap:8px;margin-top:14px">
-      <button class="btn bd" style="flex:1;justify-content:center" onclick="cancelarPedidoDetalhe()">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:18px;padding-top:16px;border-top:1px solid rgba(255,255,255,.06)">
+      <button class="btn bd" style="justify-content:center;border-radius:12px;padding:10px 12px" onclick="cancelarPedidoDetalhe()">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        Cancelar pedido
+        Cancelar
       </button>
-      <button id="od-add-produto-btn" class="btn bg" style="flex:1;justify-content:center;display:none" onclick="odAbrirCatalogo()">
+      <button id="od-add-produto-btn" class="btn bg" style="justify-content:center;border-radius:12px;padding:10px 12px;display:none" onclick="odAbrirCatalogo()">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-        Adicionar produto
+        Adicionar
       </button>
-      <button class="btn bg" style="flex:1;justify-content:center" onclick="printOrderDetail()">
+      <button class="btn bg" style="justify-content:center;border-radius:12px;padding:10px 12px" onclick="printOrderDetail()">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="10" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4"/></svg>
-        Imprimir comanda
+        Imprimir
       </button>
-      <button class="btn bp" style="flex:1;justify-content:center" onclick="advanceOrder()">
+      <button class="btn bp" style="justify-content:center;border-radius:12px;padding:10px 12px;grid-column:1/-1" onclick="advanceOrder()">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         Avançar pedido
       </button>
@@ -5244,28 +5244,105 @@ Use no seu próximo pedido 🛍️</textarea>
 }
 
 /* ══ ORDER DETAIL MODAL ══════════════════════════════════════ */
-.od-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid var(--border);margin-bottom:14px}
-.od-id{font-family:'Playfair Display',sans-serif;font-size:20px;font-weight:900;letter-spacing:-.3px}
-.od-status-badge{font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:99px;letter-spacing:.4px}
-.badge-analise{background:rgba(249,115,22,.15);color:#fb923c;border:1px solid rgba(249,115,22,.3)}
-.badge-producao{background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.3)}
-.badge-pronto{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3)}
-.od-timer{font-size:11px;color:var(--muted);margin-left:auto;background:var(--surface2);padding:3px 9px;border-radius:99px;border:1px solid var(--border)}
+.od-header{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding-bottom:18px;margin-bottom:18px;position:relative;
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+.od-header::after{
+  content:'';position:absolute;bottom:-1px;left:0;width:56px;height:2px;
+  background:var(--accent);border-radius:99px;
+}
+.od-id{
+  font-family:'Playfair Display',sans-serif;font-size:22px;font-weight:900;
+  letter-spacing:-.4px;
+  background:linear-gradient(135deg,var(--text) 40%,var(--accent));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+.od-status-badge{
+  font-size:10.5px;font-weight:700;padding:4px 12px;
+  border-radius:99px;letter-spacing:.4px;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+.badge-analise{
+  background:rgba(249,115,22,.12);color:#fb923c;
+  border:1px solid rgba(249,115,22,.25);
+  box-shadow:0 0 12px rgba(249,115,22,.1);
+}
+.badge-producao{
+  background:rgba(59,130,246,.12);color:#93c5fd;
+  border:1px solid rgba(59,130,246,.25);
+  box-shadow:0 0 12px rgba(59,130,246,.1);
+}
+.badge-pronto{
+  background:rgba(34,197,94,.12);color:#4ade80;
+  border:1px solid rgba(34,197,94,.25);
+  box-shadow:0 0 12px rgba(34,197,94,.1);
+}
+.od-timer{
+  font-size:11px;color:var(--muted);margin-left:auto;
+  background:rgba(255,255,255,.04);padding:4px 11px;
+  border-radius:99px;border:1px solid rgba(255,255,255,.06);
+  font-weight:600;letter-spacing:.2px;
+}
 .od-actions{display:flex;gap:6px;margin-left:4px}
-.od-action-btn{width:32px;height:32px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;font-size:15px}
-.od-action-btn:hover{transform:scale(1.08)}
-.od-item-row{display:flex;align-items:flex-start;gap:10px;padding:9px 12px;background:var(--surface2);border-radius:9px;margin-bottom:5px;border:1px solid var(--border)}
-.od-item-qty{font-size:11px;font-weight:700;color:var(--accent);background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.15);border-radius:6px;padding:2px 7px;min-width:28px;text-align:center;flex-shrink:0;margin-top:1px}
-.od-item-name{font-size:13px;font-weight:600;color:var(--text)}
-.od-item-obs{font-size:11.5px;color:#38bdf8;margin-top:4px;font-weight:600;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.15);border-radius:6px;padding:4px 8px;line-height:1.4}
-.od-item-price{font-size:12.5px;font-weight:700;color:var(--accent3);margin-left:auto;flex-shrink:0;padding-top:2px}
-.od-subtotal-row{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--muted);padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)}
-.od-total-row{display:flex;justify-content:space-between;align-items:center;font-size:15px;font-weight:800;padding:8px 0 0;color:var(--text)}
-.od-info-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:14px}
-.od-info-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
-.od-info-card-title{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:5px}
-.od-info-card-val{font-size:12.5px;font-weight:700;color:var(--text);line-height:1.3}
-.od-info-card-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.od-action-btn{
+  width:34px;height:34px;border-radius:10px;
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(255,255,255,.04);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .2s ease;font-size:15px;
+}
+.od-action-btn:hover{transform:scale(1.08);background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.15)}
+.od-item-row{
+  display:flex;align-items:flex-start;gap:12px;
+  padding:12px 14px;
+  background:linear-gradient(135deg,rgba(255,255,255,.03) 0%,rgba(255,255,255,.01) 100%);
+  border-radius:12px;margin-bottom:6px;
+  border:1px solid rgba(255,255,255,.05);
+  transition:all .18s ease;
+}
+.od-item-row:hover{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.08)}
+.od-item-qty{
+  font-size:11px;font-weight:700;color:var(--accent);
+  background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.15);
+  border-radius:8px;padding:3px 8px;min-width:30px;text-align:center;
+  flex-shrink:0;margin-top:1px;
+}
+.od-item-name{font-size:13.5px;font-weight:600;color:var(--text);letter-spacing:-.1px}
+.od-item-obs{
+  font-size:11.5px;color:#38bdf8;margin-top:5px;font-weight:600;
+  background:rgba(14,165,233,.06);border:1px solid rgba(14,165,233,.12);
+  border-radius:8px;padding:5px 10px;line-height:1.4;
+}
+.od-item-price{
+  font-size:13px;font-weight:700;color:var(--accent3);
+  margin-left:auto;flex-shrink:0;padding-top:2px;
+}
+.od-subtotal-row{
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:12.5px;color:var(--muted);padding:6px 0;
+  border-bottom:1px solid rgba(255,255,255,.03);
+}
+.od-total-row{
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:16px;font-weight:800;padding:10px 0 0;color:var(--text);
+  margin-top:2px;
+}
+.od-info-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:18px}
+.od-info-card{
+  background:linear-gradient(145deg,rgba(255,255,255,.04) 0%,rgba(255,255,255,.01) 100%);
+  border:1px solid rgba(255,255,255,.06);border-radius:12px;
+  padding:12px 14px;transition:all .18s ease;
+}
+.od-info-card:hover{border-color:rgba(255,255,255,.1);background:rgba(255,255,255,.05)}
+.od-info-card-title{
+  font-size:9px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.8px;color:var(--muted);margin-bottom:6px;
+}
+.od-info-card-val{font-size:13px;font-weight:700;color:var(--text);line-height:1.3}
+.od-info-card-sub{font-size:11px;color:var(--muted);margin-top:3px}
 @media(max-width:520px){.od-info-row{grid-template-columns:1fr 1fr}.od-header{gap:7px}}
 </style>
 
