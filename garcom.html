@@ -1791,7 +1791,15 @@ async function _sincronizarPedidosOffline() {
     const falhas = [];
     for (const pedido of fila) {
       try {
-        const { error } = await sb.from('orders').insert(pedido);
+        // Defesa em profundidade: se por algum motivo o pedido offline não tem
+        // tenant_id, injeta o tenant atual antes de enviar.
+        if (!pedido.tenant_id && _garcomTenantId) {
+          pedido.tenant_id = _garcomTenantId;
+        }
+        // Remove campos internos que não existem na tabela
+        const { _ts, ...payload } = pedido;
+        if (!payload.tenant_id) { falhas.push(pedido); continue; }
+        const { error } = await sb.from('orders').insert(payload);
         if (!error) enviados++;
         else falhas.push(pedido);
       } catch(e) {

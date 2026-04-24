@@ -1021,7 +1021,9 @@ async function duplicateCategory(id) {
     const catItems = items.filter(i => i.catKey === cat.name || i.cat === cat.name);
     let itensCriados = 0;
     for (const it of catItems) {
+      if (!_sessao?.tenant_id) { sbToast('err', 'Sessão sem tenant'); break; }
       const { data: newItem, error: itemErr } = await sb.from('menu_items').insert({
+        tenant_id:    _sessao.tenant_id,
         emoji:        it.emoji        || '🍽️',
         name:         it.name,
         description:  it.desc         || '',
@@ -1058,7 +1060,9 @@ async function duplicateItem(id) {
   if (!it) return;
   sbLoading(true);
   try {
+    if (!_sessao?.tenant_id) { sbLoading(false); sbToast('err', 'Sessão sem tenant'); return; }
     const { data: newItem, error } = await sb.from('menu_items').insert({
+      tenant_id:    _sessao.tenant_id,
       emoji:        it.emoji        || '🍽️',
       name:         it.name + ' (cópia)',
       description:  it.desc         || '',
@@ -1489,8 +1493,10 @@ async function addItem() {
 
   if (!catKey) { sbToast('err', 'Selecione uma categoria'); return; }
   if (price < 0) { sbToast('err', 'Preço inválido'); return; }
+  if (!_sessao?.tenant_id) { sbToast('err', 'Sessão sem tenant'); return; }
 
   const payload = {
+    tenant_id: _sessao.tenant_id,
     emoji, name,
     cat:          catLabel,
     cat_key:      catKey,

@@ -1341,7 +1341,9 @@ async function createOrder() {
 
   try {
     sbLoading(true);
+    if (!_sessao?.tenant_id) { sbLoading(false); sbToast('err', 'Sessão sem tenant — recarregue'); return; }
     const { data: orderData, error: oErr } = await sb.from('orders').insert({
+      tenant_id: _sessao.tenant_id,
       client, phone, addr,
       items: itemsArr,
       total: tot,
@@ -1953,7 +1955,9 @@ async function aplicarModelo() {
 
       for (const itemDef of itensDef) {
         console.log('[MODELO]   → item:', itemDef.name, '| emoji:', itemDef.emoji, '| preço:', itemDef.price);
+        if (!_sessao?.tenant_id) { erros++; continue; }
         const { data: itemData, error: itemErr } = await sb.from('menu_items').insert({
+          tenant_id: _sessao.tenant_id,
           emoji: itemDef.emoji || '🍽️',
           name: itemDef.name,
           description: itemDef.description || '',

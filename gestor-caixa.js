@@ -900,7 +900,8 @@ async function pdvbGerarPedido(){
   const itemsData=pdvbCart.map(ci=>({id:ci.id,name:ci.name,qty:ci.qty,price:ci.price,obs:ci.obs||'',emoji:ci.emoji||''}));
   sbLoading(true);
   try{
-    const payload={client:client||'Balcão',phone,items:itemsData,total,taxa:pdvbEntregaTaxa,status:'analise',addr,pag:pdvbPagamento,time};
+    if(!_sessao?.tenant_id){sbLoading(false);sbToast('err','Sessão sem tenant — recarregue');return;}
+    const payload={tenant_id:_sessao.tenant_id,client:client||'Balcão',phone,items:itemsData,total,taxa:pdvbEntregaTaxa,status:'analise',addr,pag:pdvbPagamento,time};
     if(pdvbMesaNum)payload.mesa_num=pdvbMesaNum;
     const{data:ord,error:ordErr}=await sb.from('orders').insert(payload).select().single();
     if(ordErr)throw ordErr;

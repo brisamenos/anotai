@@ -1716,7 +1716,8 @@ async function criarPedido() {
   const pag  = document.getElementById('np-pag').value;
   const obs  = document.getElementById('np-obs').value.trim();
   if (!nome) { toast('Informe o nome', 'err'); return; }
-  const { data, error } = await sb.from('orders').insert({ client: nome, phone: tel, addr: tipo === 'delivery' ? addr : tipo === 'mesa' ? 'Mesa' : 'Balcão', items: obs ? JSON.stringify([{ name: obs, qty: 1, price: 0 }]) : '[]', total: 0, taxa: 0, pag, status: 'analise' }).select().single();
+  if (!_tid) { toast('Sessão sem tenant — recarregue', 'err'); return; }
+  const { data, error } = await sb.from('orders').insert({ tenant_id: _tid, client: nome, phone: tel, addr: tipo === 'delivery' ? addr : tipo === 'mesa' ? 'Mesa' : 'Balcão', items: obs ? JSON.stringify([{ name: obs, qty: 1, price: 0 }]) : '[]', total: 0, taxa: 0, pag, status: 'analise' }).select().single();
   if (error) { toast('Erro ao criar pedido: ' + error.message, 'err'); return; }
   closeModal('modal-novo-ped');
   toast('Pedido criado!');
@@ -1782,7 +1783,7 @@ async function confirmarPagMesa() {
   const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   await sb.from('orders').update({ status: 'entregue' }).eq('mesa_num', num).in('status', ['analise', 'producao', 'pronto']);
   await sb.from('mesas').update({ status: 'free', total: null, pag_forma: null, guests: null, opened_at: null, updated_at: new Date().toISOString() }).eq('num', num);
-  if (total > 0) await sb.from('movimentos').insert({ description: `Mesa ${num} — Pagamento`, tipo: 'entrada', val: total, pag: forma, time });
+  if (total > 0 && _tid) await sb.from('movimentos').insert({ tenant_id: _tid, description: `Mesa ${num} — Pagamento`, tipo: 'entrada', val: total, pag: forma, time });
   m.status = 'free'; m.total = 0;
   _orders = _orders.filter(o => parseInt(o.mesa_num) !== num);
   renderKanban(); renderMesas();
@@ -1795,7 +1796,8 @@ async function criarMesa() {
   const num = parseInt(document.getElementById('nm-num').value);
   const cap = parseInt(document.getElementById('nm-cap').value) || 4;
   if (!num) { toast('Informe o número', 'err'); return; }
-  const { error } = await sb.from('mesas').insert({ num, guests: cap, status: 'free' });
+  if (!_tid) { toast('Sessão sem tenant — recarregue', 'err'); return; }
+  const { error } = await sb.from('mesas').insert({ tenant_id: _tid, num, guests: cap, status: 'free' });
   if (error) { toast('Erro: ' + error.message, 'err'); return; }
   closeModal('modal-nova-mesa');
   toast('Mesa ' + num + ' criada!');
@@ -1881,9 +1883,10 @@ async function salvarItem() {
   const status = document.getElementById('mi-status').value;
   const desc = document.getElementById('mi-desc').value.trim();
   if (!nome) { toast('Informe o nome', 'err'); return; }
+  if (!_tid) { toast('Sessão sem tenant — recarregue', 'err'); return; }
   const payload = { name: nome, description: desc, price: preco, price_old: promo, cat: cat?.label || catKey, cat_key: catKey, status };
   if (_editItemId) { const { error } = await sb.from('menu_items').update(payload).eq('id', _editItemId); if (error) { toast('Erro: ' + error.message, 'err'); return; } }
-  else { const { error } = await sb.from('menu_items').insert(payload); if (error) { toast('Erro: ' + error.message, 'err'); return; } }
+  else { const { error } = await sb.from('menu_items').insert({ ...payload, tenant_id: _tid }); if (error) { toast('Erro: ' + error.message, 'err'); return; } }
   closeModal('modal-item'); toast('Item salvo!'); carregarCardapio();
 }
 async function deletarItem() { if (!confirm('Excluir item?')) return; await sb.from('menu_items').delete().eq('id', _editItemId); closeModal('modal-item'); toast('Item excluído'); carregarCardapio(); }
@@ -2112,9 +2115,10 @@ async function salvarCupom() {
   const min = parseFloat(document.getElementById('cup-min').value) || 0;
   const type = document.getElementById('cup-tipo').value;
   if (!code) { toast('Informe o código', 'err'); return; }
+  if (!_tid) { toast('Sessão sem tenant — recarregue', 'err'); return; }
   const payload = { code, type, value: val, min_order: min, ativo: 1 };
   if (_editCupId) { const { error } = await sb.from('cupons').update(payload).eq('id', _editCupId); if (error) { toast('Erro: ' + error.message, 'err'); return; } }
-  else { const { error } = await sb.from('cupons').insert(payload); if (error) { toast('Erro: ' + error.message, 'err'); return; } }
+  else { const { error } = await sb.from('cupons').insert({ ...payload, tenant_id: _tid }); if (error) { toast('Erro: ' + error.message, 'err'); return; } }
   closeModal('modal-cupom'); toast('Cupom salvo!'); carregarCupons();
 }
 async function deletarCupom() { if (!confirm('Excluir cupom?')) return; await sb.from('cupons').delete().eq('id', _editCupId); closeModal('modal-cupom'); toast('Cupom excluído'); carregarCupons(); }
@@ -2306,7 +2310,9 @@ async function pdvConfirmar() {
   const pag = document.getElementById('pdv-pag').value;
   const mesa = parseInt(document.getElementById('pdv-mesa').value) || null;
   const cliente = document.getElementById('pdv-cliente').value.trim() || 'Balcão';
+  if (!_tid) { toast('Sessão sem tenant — recarregue', 'err'); return; }
   const payload = {
+    tenant_id: _tid,
     client: cliente,
     items: JSON.stringify(_pdvCart.map(c => ({ name: c.name, price: c.price, qty: c.qty }))),
     total,
@@ -2467,12 +2473,13 @@ async function salvarEstoque() {
   const min = parseFloat(document.getElementById('estq-min').value) || 5;
   const unidade = document.getElementById('estq-unidade').value;
   if (!nome) { toast('Informe o nome', 'err'); return; }
+  if (!_tid) { toast('Sessão sem tenant — recarregue', 'err'); return; }
   const payload = { name: nome, qty, min_qty: min, unidade };
   if (_editEstqId) {
     const { error } = await sb.from('estoque').update(payload).eq('id', _editEstqId);
     if (error) { toast('Erro: ' + error.message, 'err'); return; }
   } else {
-    const { error } = await sb.from('estoque').insert(payload);
+    const { error } = await sb.from('estoque').insert({ ...payload, tenant_id: _tid });
     if (error) { toast('Erro: ' + error.message, 'err'); return; }
   }
   closeModal('modal-estoque'); toast('Estoque salvo!'); carregarEstoque();
@@ -2683,7 +2690,8 @@ function renderGarcons() {
 async function addGarcom() {
   const nome = document.getElementById('gc-novo-nome').value.trim();
   if (!nome) { toast('Informe o nome', 'err'); return; }
-  const { error } = await sb.from('garcons').insert({ name: nome, ativo: 1 });
+  if (!_tid) { toast('Sessão sem tenant — recarregue', 'err'); return; }
+  const { error } = await sb.from('garcons').insert({ tenant_id: _tid, name: nome, ativo: 1 });
   if (error) { toast('Erro: ' + error.message, 'err'); return; }
   document.getElementById('gc-novo-nome').value = '';
   toast('Garçom adicionado!'); carregarGarcons();

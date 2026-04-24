@@ -989,7 +989,9 @@ async function confirmarPagamentoMesa() {
 
     // Registra movimento parcial
     try {
+      if (!_sessao?.tenant_id) throw new Error('Sessão sem tenant');
       await sb.from('movimentos').insert({
+        tenant_id: _sessao.tenant_id,
         description: `Mesa ${num} — Pagamento ${_novoCount}/${_splitN_pag}`,
         tipo: 'entrada', val: _splitCada_p, pag: forma, time
       });

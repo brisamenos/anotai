@@ -1625,8 +1625,9 @@ async function cancelOrderById(id) {
           .ilike('description', `Pedido #${o.num} –%`)
           .eq('tipo', 'entrada')
           .limit(1);
-        if (movs?.length) {
+        if (movs?.length && _sessao?.tenant_id) {
           await sb.from('movimentos').insert({
+            tenant_id: _sessao.tenant_id,
             description: `Estorno — Pedido #${o.num} cancelado`,
             tipo: 'saida', val: movs[0].val,
             pag: o.pag || 'Estorno', time
@@ -1655,10 +1656,11 @@ async function finishOrderById(id) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erro');
     // Registra movimento financeiro
-    if (o) {
+    if (o && _sessao?.tenant_id) {
       // Fix: usa parseFloat para evitar concatenação de string quando vem do SSE/JSON
       const _totalVal = parseFloat(o.total || 0) + parseFloat(o.taxa || 0);
       await sb.from('movimentos').insert({
+        tenant_id: _sessao.tenant_id,
         description: `Pedido #${o.num} – ${o.client}`,
         tipo: 'entrada', val: _totalVal, pag: o.pag || 'PIX', time
       });

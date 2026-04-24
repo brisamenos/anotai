@@ -401,7 +401,9 @@ async function finalizeSale() {
     descricao = `Atendimento – ${resumo.slice(0, 80)}${resumo.length > 80 ? '…' : ''}`;
   }
   try {
+    if (!_sessao?.tenant_id) { sbToast('err', 'Sessão sem tenant'); return; }
     const { data, error } = await sb.from('movimentos').insert({
+      tenant_id: _sessao.tenant_id,
       description: descricao, tipo: 'entrada', val: parseFloat(tot.toFixed(2)), pag: pay, time
     }).select().single();
     if (!error && data) movimentos.push({
@@ -521,8 +523,9 @@ async function toggleMesaStatus(num) {
 async function addTable() {
   const num = tables.length ? Math.max(...tables.map(t => t.num)) + 1 : 1;
   sbLoading(true);
+  if (!_sessao?.tenant_id) { sbLoading(false); sbToast('err', 'Sessão sem tenant'); return; }
   const { data, error } = await sb.from('mesas').insert({
-    num, status: 'free'
+    tenant_id: _sessao.tenant_id, num, status: 'free'
   }).select().single();
   sbLoading(false);
   if (error) { sbToast('err', 'Erro ao criar mesa'); return; }
@@ -544,7 +547,8 @@ async function saveNovaMesa() {
   if (!num || num < 1) { sbToast('err', 'Informe o número da mesa'); return; }
   if (tables.find(t => t.num === num)) { sbToast('err', `Mesa ${num} já existe`); return; }
   sbLoading(true);
-  const { data, error } = await sb.from('mesas').insert({ num, status: 'free', guests }).select().single();
+  if (!_sessao?.tenant_id) { sbLoading(false); sbToast('err', 'Sessão sem tenant'); return; }
+  const { data, error } = await sb.from('mesas').insert({ tenant_id: _sessao.tenant_id, num, status: 'free', guests }).select().single();
   sbLoading(false);
   if (error) { sbToast('err', 'Erro ao criar mesa'); return; }
   tables.push({ num, status: 'free', guests, total: null });
@@ -947,8 +951,9 @@ async function addCupom() {
   const tipo = document.getElementById('cupom-tipo').value.includes('%') ? '%' : 'frete';
   if (!code) { sbToast('err', 'Informe o código'); return; }
   sbLoading(true);
+  if (!_sessao?.tenant_id) { sbLoading(false); sbToast('err', 'Sessão sem tenant'); return; }
   const { data, error } = await sb.from('cupons').insert({
-    code, type: tipo === '%' ? 'percent' : 'fixed', value: val, min_order: 0, uses_left: -1, ativo: true
+    tenant_id: _sessao.tenant_id, code, type: tipo === '%' ? 'percent' : 'fixed', value: val, min_order: 0, uses_left: -1, ativo: true
   }).select().single();
   sbLoading(false);
   if (error) { sbToast('err', error.code === '23505' ? 'Código já existe' : 'Erro ao criar cupom'); return; }
@@ -1354,7 +1359,9 @@ async function addFidClient() {
   const name = document.getElementById('fid-add-name').value.trim();
   const phone = document.getElementById('fid-add-phone').value.trim();
   if (!name) { sbToast('err', 'Informe o nome'); return; }
+  if (!_sessao?.tenant_id) { sbToast('err', 'Sessão sem tenant'); return; }
   const { data, error } = await sb.from('fidelidade').insert({
+    tenant_id: _sessao.tenant_id,
     name, phone, pts: 0, max_pts: _fidConfig.meta_pts, orders_count: 0, resgates: 0
   }).select().single();
   if (error) { sbToast('err', 'Erro ao cadastrar'); return; }
@@ -1511,8 +1518,10 @@ async function submitGarcomOrder() {
 
     // 1. Itens de cozinha → kanban (analise/producao)
     if (itensCozinha.length > 0) {
+      if (!_sessao?.tenant_id) throw new Error('Sessão sem tenant');
       const itemsArr = itensCozinha.map(c => ({ qty: c.qty, name: c.name, price: c.price, obs: c.obs || '' }));
       const { data: orderData, error: oErr } = await sb.from('orders').insert({
+        tenant_id: _sessao.tenant_id,
         client: `Mesa ${garcomMesa}`, phone: '', addr: `Mesa ${garcomMesa}`,
         mesa_num: garcomMesa, items: itemsArr, total: totCozinha, taxa: 0,
         status: mesaAutoAccept ? 'producao' : 'analise', time, pag: 'Mesa'
@@ -1524,8 +1533,10 @@ async function submitGarcomOrder() {
 
     // 2. Itens imediatos (bebidas, etc) → direto como entregue (só billing, não vão ao kanban)
     if (itensImediatos.length > 0) {
+      if (!_sessao?.tenant_id) throw new Error('Sessão sem tenant');
       const itemsArrImediato = itensImediatos.map(c => ({ qty: c.qty, name: c.name, price: c.price, obs: c.obs || '' }));
       const { data: billingData, error: bErr } = await sb.from('orders').insert({
+        tenant_id: _sessao.tenant_id,
         client: `Mesa ${garcomMesa}`, phone: '', addr: `Mesa ${garcomMesa}`,
         mesa_num: garcomMesa, items: itemsArrImediato, total: totImediato, taxa: 0,
         status: 'entregue', time, pag: 'Mesa'
