@@ -3,6 +3,9 @@
 // ═══════════════════════════════════════════════════════
 
 const SOUND_OPTIONS = [
+  { id: 'ifood',     label: 'iFood',        desc: 'Toque clássico de delivery'  },
+  { id: 'ifood_duplo', label: 'iFood insistente', desc: 'Toque iFood repetido 2x'  },
+  { id: 'ifood_suave', label: 'iFood suave',  desc: 'Versão mais discreta'        },
   { id: 'sino',      label: 'Sino',         desc: 'Três bipes suaves'         },
   { id: 'duplo',     label: 'Duplo alerta',  desc: 'Dois bipes rápidos'        },
   { id: 'caixa',     label: 'Caixa',        desc: 'Estilo caixa registradora'  },
@@ -12,7 +15,7 @@ const SOUND_OPTIONS = [
 ];
 
 let _soundPref = (() => {
-  try { return localStorage.getItem('ef_sound') || 'sino'; } catch { return 'sino'; }
+  try { return localStorage.getItem('ef_sound') || 'ifood'; } catch { return 'ifood'; }
 })();
 
 function _getAudioCtx() {
@@ -31,7 +34,66 @@ function _tone(ctx, type, freq, startAt, dur, vol, endVol = 0.001) {
   o.stop(ctx.currentTime + startAt + dur + 0.01);
 }
 
+// Nota estilo "glockenspiel" (xilofone/sino metálico) — usada no som iFood.
+// Mistura sine (fundamental) + triangle (harmônico) + sine aguda (brilho) com ADSR curto.
+function _bell(ctx, freq, startAt, vol = 0.35) {
+  const t0 = ctx.currentTime + startAt;
+  // Attack muito rápido (ataque "ding"), decay exponencial longo (~0.6s)
+  const decay = 0.65;
+  // Fundamental (sine)
+  const o1 = ctx.createOscillator();
+  const g1 = ctx.createGain();
+  o1.type = 'sine'; o1.frequency.value = freq;
+  o1.connect(g1); g1.connect(ctx.destination);
+  g1.gain.setValueAtTime(0.0001, t0);
+  g1.gain.exponentialRampToValueAtTime(vol, t0 + 0.005);
+  g1.gain.exponentialRampToValueAtTime(0.0001, t0 + decay);
+  o1.start(t0); o1.stop(t0 + decay + 0.02);
+  // Harmônico (triangle — dá o timbre metálico)
+  const o2 = ctx.createOscillator();
+  const g2 = ctx.createGain();
+  o2.type = 'triangle'; o2.frequency.value = freq * 2;
+  o2.connect(g2); g2.connect(ctx.destination);
+  g2.gain.setValueAtTime(0.0001, t0);
+  g2.gain.exponentialRampToValueAtTime(vol * 0.25, t0 + 0.004);
+  g2.gain.exponentialRampToValueAtTime(0.0001, t0 + decay * 0.7);
+  o2.start(t0); o2.stop(t0 + decay + 0.02);
+  // Brilho (sine 3ª harmônica)
+  const o3 = ctx.createOscillator();
+  const g3 = ctx.createGain();
+  o3.type = 'sine'; o3.frequency.value = freq * 3.01;  // leve detune pra não ficar plastificado
+  o3.connect(g3); g3.connect(ctx.destination);
+  g3.gain.setValueAtTime(0.0001, t0);
+  g3.gain.exponentialRampToValueAtTime(vol * 0.12, t0 + 0.003);
+  g3.gain.exponentialRampToValueAtTime(0.0001, t0 + decay * 0.4);
+  o3.start(t0); o3.stop(t0 + decay + 0.02);
+}
+
+// Melodia iFood — 4 notas em escala pentatônica ascendente.
+// Estilo: "tlim-tlim-tlim-tlim" subindo — reconhecível, urgente mas não agressivo.
+// Notas: Sol5 (784) → Lá5 (880) → Dó6 (1047) → Mi6 (1319)
+function _ifoodJingle(ctx, startOffset = 0, vol = 0.35) {
+  const notas = [784, 880, 1047, 1319];
+  const gap   = 0.14;  // 140ms entre notas
+  notas.forEach((f, i) => _bell(ctx, f, startOffset + i * gap, vol));
+}
+
 const SOUNDS = {
+  // Toque estilo iFood — pentatônica ascendente, uma vez
+  ifood: (ctx) => {
+    _ifoodJingle(ctx, 0, 0.38);
+  },
+  // Toque iFood insistente — repete 2x com pausa curta (estilo quando pedido é urgente)
+  ifood_duplo: (ctx) => {
+    _ifoodJingle(ctx, 0,    0.38);
+    _ifoodJingle(ctx, 0.75, 0.32);
+  },
+  // Toque iFood suave — mesma melodia com volume reduzido e tempo mais lento
+  ifood_suave: (ctx) => {
+    const notas = [784, 880, 1047, 1319];
+    const gap   = 0.20;
+    notas.forEach((f, i) => _bell(ctx, f, i * gap, 0.18));
+  },
   // Três dings de sino — suave e claro
   sino: (ctx) => {
     [[1046, 0, 0.22, 0.28], [1318, 0.28, 0.22, 0.28], [1568, 0.56, 0.3, 0.36]].forEach(([f, t, d, vol]) => {
@@ -78,15 +140,15 @@ function playOrderSound() {
   if (_soundPref === 'desligado') return;
   try {
     const ctx = _getAudioCtx();
-    (SOUNDS[_soundPref] || SOUNDS.sino)(ctx);
+    (SOUNDS[_soundPref] || SOUNDS.ifood)(ctx);
   } catch(e) {}
 }
 
-// ── Alerta persistente — insiste até aceitar ──────────
+// ── Alerta persistente — insiste até aceitar (estilo iFood) ──────────
 let _alertInterval  = null;
 let _alertCount     = 0;   // quantas vezes já tocou neste ciclo
-const _ALERT_GAP    = 8000; // ms entre repetições (8s)
-const _ALERT_MAX    = 60;   // para após 60 repetições (~8 min) como failsafe
+const _ALERT_GAP    = 10000; // ms entre repetições (10s — próximo do iFood)
+const _ALERT_MAX    = 60;   // para após 60 repetições (~10 min) como failsafe
 
 function _startPersistentAlert() {
   if (_soundPref === 'desligado') return;
