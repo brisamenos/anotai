@@ -115,6 +115,12 @@ function _adaptarParaSegmento() {
   });
   // Dispara evento para outros módulos
   document.dispatchEvent(new CustomEvent('segmento:acougue'));
+  // Re-renderiza o kanban — fetch de /tenant-segmento é assíncrono e pode chegar DEPOIS do
+  // 1º renderKanban(), que já terá aplicado inline display:none !important no kol-entregue
+  // assumindo restaurante. Precisamos chamar de novo agora pra corrigir.
+  if (typeof renderKanban === 'function') {
+    try { renderKanban(); } catch(e) { console.warn('[adaptar] renderKanban falhou:', e.message); }
+  }
 }
 
 // ── Loading overlay ──────────────────────────────────
@@ -234,13 +240,14 @@ async function loadAllData(silent = false) {
       safe(sb.from('categories').select('*').order('sort_order')),
       // Status ativos (análise até saiu) — sem limite, todos entram no kanban
       safe(sb.from('orders').select('*').in('status',['aguardando_pix','analise','producao','pronto','saiu']).order('id',{ascending:false})),
-      // Status "entregue" — só para açougue (restaurante pula esse status direto pra finalizado via finishOrderById).
-      // Mesmo para açougue, limita aos 30 mais recentes de hoje pra evitar kanban lotado.
-      safe(window._segmento === 'acougue'
-        ? sb.from('orders').select('*').eq('status','entregue')
-            .gte('created_at', (() => { const d=new Date(); d.setHours(d.getHours()-3); return d.toISOString().split('T')[0]; })())
-            .order('id',{ascending:false}).limit(30)
-        : Promise.resolve({ data: [] })),
+      // Status "entregue" — sempre busca (limitado a 30 mais recentes de hoje).
+      // No açougue, aparecem na coluna "Entregue".
+      // No restaurante, ficam no array mas a coluna está oculta — não é problema (custo de memória é pequeno).
+      // IMPORTANTE: não condicionar ao window._segmento aqui porque essa query roda antes
+      // do fetch /api/tenant-segmento terminar — o segmento real ainda pode ser 'restaurante' (default).
+      safe(sb.from('orders').select('*').eq('status','entregue')
+        .gte('created_at', (() => { const d=new Date(); d.setHours(d.getHours()-3); return d.toISOString().split('T')[0]; })())
+        .order('id',{ascending:false}).limit(30)),
       safe(sb.from('movimentos').select('*').gte('created_at', (() => {
         // Usa data local BR (UTC-3) para não perder movimentos do início do dia
         const d = new Date(); d.setHours(d.getHours() - 3);
