@@ -62,6 +62,33 @@ function getTaxa() {
   return parseFloat(feeConfig.valor ?? feeConfig.value ?? 0);
 }
 
+// Retorna { ok, motivo } — valida se o pedido delivery pode ser submetido.
+// - por_bairro: exige bairro digitado que exista na lista
+// - por_km:     exige distância calculada dentro da maior faixa
+function validarDelivery() {
+  if (deliveryType !== 'delivery') return { ok: true };
+  // por_bairro: bairro precisa existir na lista
+  if (feeConfig?.tipo === 'por_bairro') {
+    const bairros = Array.isArray(feeConfig.bairros) ? feeConfig.bairros : [];
+    if (!bairros.length) return { ok: true }; // sem lista — sem cobrança, permite
+    const digitado = (document.getElementById('f-bairro')?.value || '').trim().toLowerCase();
+    if (!digitado) return { ok: false, motivo: 'Informe o bairro para calcular a taxa de entrega' };
+    const match = bairros.find(b => b.bairro.trim().toLowerCase() === digitado);
+    if (!match) return { ok: false, motivo: 'Bairro fora da área de entrega. Fale com o restaurante.' };
+  }
+  // por_km: se tem GPS calculado e estourou a maior faixa, bloqueia
+  if (feeConfig?.tipo === 'por_km') {
+    const faixas = Array.isArray(feeConfig.faixas) ? feeConfig.faixas : [];
+    if (faixas.length && typeof _geoDistKm === 'number' && _geoDistKm > 0) {
+      const maiorFaixa = parseFloat(faixas[faixas.length - 1]?.ate_km || 0);
+      if (_geoDistKm > maiorFaixa + 0.001) {
+        return { ok: false, motivo: `Você está a ${_geoDistKm.toFixed(1).replace('.', ',')} km — fora da área de entrega (até ${maiorFaixa} km)` };
+      }
+    }
+  }
+  return { ok: true };
+}
+
 function grandTotal() {
   const sub  = cartSubtotal();
   const disc = getDiscount();

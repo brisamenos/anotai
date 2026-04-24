@@ -132,6 +132,11 @@ async function submitOrder() {
     if (!num) { toast('⚠️','Informe o número'); return; }
     const bairro = document.getElementById('f-bairro').value.trim();
     const compl  = document.getElementById('f-compl').value.trim();
+    // Valida bairro / distância antes de montar o endereço
+    if (typeof validarDelivery === 'function') {
+      const v = validarDelivery();
+      if (!v.ok) { toast('⚠️', v.motivo); return; }
+    }
     addr = [rua, num, bairro, compl].filter(Boolean).join(', ');
     saveDeliveryAddr();
   } else if (deliveryType === 'mesa') {
@@ -562,6 +567,11 @@ async function _iniciarSubmit() {
     if (!num) { toast('⚠️','Informe o número'); return; }
     const bairro = document.getElementById('f-bairro').value.trim();
     const compl  = document.getElementById('f-compl').value.trim();
+    // Valida bairro / distância antes de montar o endereço
+    if (typeof validarDelivery === 'function') {
+      const v = validarDelivery();
+      if (!v.ok) { toast('⚠️', v.motivo); return; }
+    }
     addr = [rua, num, bairro, compl].filter(Boolean).join(', ');
     saveDeliveryAddr();
   } else if (deliveryType === 'mesa') {
