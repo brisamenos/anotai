@@ -905,10 +905,13 @@ async function handleREST(req, res, table, params, body) {
       if (!NO_TENANT_FILTER.has(table) && 'tenant_id' in payload && payload.tenant_id !== tenantId) {
         delete payload.tenant_id
       }
-      // Segurança: mudança de status de pedido DEVE passar por endpoints dedicados
-      // (/api/order-status pelo gestor, /api/customer-cancel-order pelo cliente).
-      // Bloqueia tentativa de PATCH /api/orders { status: 'cancelado' } ou qualquer outro status.
-      if (table === 'orders' && 'status' in payload) {
+      // Segurança: bloqueia tentativa de cancelar pedido via PATCH genérico.
+      // Cancelamento deve passar pelos endpoints dedicados:
+      //   - /api/order-status (gestor muda status livremente dentro do tenant)
+      //   - /api/customer-cancel-order (cliente cancela o próprio pedido com validação)
+      // Outros status (entregue, mesa_aberta, finalizado, etc.) continuam permitidos via PATCH —
+      // o gestor precisa deles pra finalizar comanda de mesa, reabrir mesa, etc.
+      if (table === 'orders' && payload.status === 'cancelado') {
         delete payload.status
       }
       const keys    = Object.keys(payload).filter(k=>cols.includes(k))
