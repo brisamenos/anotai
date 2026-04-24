@@ -114,7 +114,10 @@ async function submitRating() {
     phone  = sess.phone || sess.fone  || '';
   } catch(e) {}
   try {
+    const _tid = (typeof _tenantId !== 'undefined' && _tenantId) || window._tenantId || null;
+    if (!_tid) throw new Error('tenant_id ausente — avaliação bloqueada');
     const { error } = await sb.from('ratings').insert({
+      tenant_id:  _tid,
       order_id:   _ratingOrderId || null,
       client:     client || null,
       phone:      phone  || null,

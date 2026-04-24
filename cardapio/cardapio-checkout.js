@@ -269,6 +269,7 @@ async function _doSubmitOrder(addr, troco) {
           }).eq('id', cl.id);
         } else {
           const { data: ins } = await sb.from('customers').insert({
+            tenant_id: _tenantId,
             name, phone, addr,
             orders_count: 1, total_spent: _grossTotal,
             last_order_at: new Date().toISOString()
@@ -278,7 +279,15 @@ async function _doSubmitOrder(addr, troco) {
       }
     } catch(e) {}
 
+    // CRÍTICO: tenant_id DEVE ser passado explicitamente. Sem ele, o pedido
+    // pode cair no tenant errado (no tenant da sessão Supabase ativa no momento)
+    // e aparecer no gestor de outro cliente.
+    if (!_tenantId) {
+      throw new Error('tenant_id ausente — pedido bloqueado para evitar vazamento entre tenants');
+    }
+
     const { data: order, error } = await sb.from('orders').insert({
+      tenant_id: _tenantId,
       client: name, phone, addr,
       items, total: grandTotal(), taxa: getTaxa(),
       status: selectedPay === 'pix' ? 'aguardando_pix'
