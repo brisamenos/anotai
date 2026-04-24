@@ -218,13 +218,27 @@ async function _doSubmitOrder(addr, troco) {
     try { localStorage.setItem(PROFILE_KEY, JSON.stringify({ name, phone })); } catch(e) {}
   }
 
+  // Guarda tenant em memória (fallback se sessionStorage se perder)
+  if (_tenantId) {
+    try { window._tenantId = _tenantId; } catch(_) {}
+  }
+
+  // Validação dura: sem tenant_id não adianta tentar
+  if (!_tenantId) {
+    toast('❌', 'Erro de conexão com o restaurante. Recarregue a página e tente novamente.');
+    return;
+  }
+  if (!cart.length) {
+    toast('⚠️', 'Seu carrinho está vazio.');
+    return;
+  }
+
   const btn = document.getElementById('confirm-btn');
   btn.disabled = true;
   btn.innerHTML = '<div class="spin"></div> Enviando…';
 
   const items = cart.map(i => ({ qty: i.qty, name: i.name, price: i.price, obs: i.obs||'' }));
   const time  = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-  // Total bruto (sem descontar cashback) — usado no pedido e no total_spent do cliente
   // Total bruto (o que o cliente efetivamente paga — já considera cashback e cupom)
   const _grossTotal = displayTotal();
   const _cbDesconto = getCashbackDesconto();
@@ -361,8 +375,18 @@ async function _doSubmitOrder(addr, troco) {
     }
 
   } catch(e) {
-    console.error(e);
-    toast('❌','Erro ao enviar pedido. Tente novamente.');
+    console.error('[submitOrder] falhou:', e);
+    // Mensagem específica baseada no tipo de erro
+    let msg = 'Erro ao enviar pedido. Tente novamente.';
+    if (e?.network || /Failed to fetch|Network|rede|esgotado/i.test(e?.message || '')) {
+      msg = 'Sem conexão. Verifique sua internet e tente novamente.';
+    } else if (/tenant/i.test(e?.message || '')) {
+      msg = 'Erro de configuração. Recarregue a página.';
+    } else if (e?.message && e.message.length < 80 && !/TypeError/i.test(e.message)) {
+      // Mostra a mensagem do servidor se for curta e legível
+      msg = 'Erro: ' + e.message;
+    }
+    toast('❌', msg);
     btn.disabled = false;
     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar Pedido';
   }
