@@ -234,10 +234,13 @@ async function loadAllData(silent = false) {
       safe(sb.from('categories').select('*').order('sort_order')),
       // Status ativos (análise até saiu) — sem limite, todos entram no kanban
       safe(sb.from('orders').select('*').in('status',['aguardando_pix','analise','producao','pronto','saiu']).order('id',{ascending:false})),
-      // Status "entregue" — só os 30 mais recentes e de hoje (evita kanban com 100+ pedidos antigos)
-      safe(sb.from('orders').select('*').eq('status','entregue')
-        .gte('created_at', (() => { const d=new Date(); d.setHours(d.getHours()-3); return d.toISOString().split('T')[0]; })())
-        .order('id',{ascending:false}).limit(30)),
+      // Status "entregue" — só para açougue (restaurante pula esse status direto pra finalizado via finishOrderById).
+      // Mesmo para açougue, limita aos 30 mais recentes de hoje pra evitar kanban lotado.
+      safe(window._segmento === 'acougue'
+        ? sb.from('orders').select('*').eq('status','entregue')
+            .gte('created_at', (() => { const d=new Date(); d.setHours(d.getHours()-3); return d.toISOString().split('T')[0]; })())
+            .order('id',{ascending:false}).limit(30)
+        : Promise.resolve({ data: [] })),
       safe(sb.from('movimentos').select('*').gte('created_at', (() => {
         // Usa data local BR (UTC-3) para não perder movimentos do início do dia
         const d = new Date(); d.setHours(d.getHours() - 3);
@@ -739,18 +742,19 @@ function subscribeOrders() {
         return;
       }
       if (idx !== -1) {
-        // Só remove do kanban quando finalizado (ou cancelado).
-        // 'entregue' de delivery/balcão permanece na coluna para o gestor clicar em "Finalizar".
-        // 'entregue' de mesa sai (comanda finalizada).
-        // 'saiu' permanece (coluna "Saiu pra entrega").
+        // Só mantém no kanban os status ativos (analise/producao/pronto/saiu).
+        // 'entregue' só permanece para açougue (que tem coluna própria). Para restaurante,
+        // 'entregue' não é mais um estado visível no kanban — ele vira 'finalizado' direto
+        // via finishOrderById. Se chegar via SSE, remove.
+        // 'finalizado'/'cancelado' sempre saem do kanban.
         if (['finalizado','cancelado'].includes(p.new.status)) {
           if (p.new.status === 'cancelado') {
             showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>', `Pedido #${_orderNum(p.new.id, p.new.order_num)} cancelado pelo cliente — ${p.new.client}`);
             sendBrowserNotif(`Pedido cancelado pelo cliente`, `#${_orderNum(p.new.id, p.new.order_num)} — ${p.new.client}`);
           }
           ordersKanban.splice(idx, 1);
-        } else if (p.new.status === 'entregue' && p.new.mesa_num) {
-          // Mesa entregue → comanda finalizada, remove do kanban
+        } else if (p.new.status === 'entregue' && window._segmento !== 'acougue') {
+          // Restaurante: entregue não é exibido → remove do kanban (mesa, delivery, balcão)
           ordersKanban.splice(idx, 1);
         } else {
           ordersKanban[idx] = mapOrder(p.new);
@@ -1172,13 +1176,13 @@ setInterval(async () => {
               if (['finalizado','cancelado'].includes(a.status)) {
                 // finalizado/cancelado → remove do kanban
                 ordersKanban.splice(idx, 1);
-              } else if (a.status === 'entregue' && ordersKanban[idx].mesa_num) {
-                // Pedidos de mesa em 'entregue' saem do kanban (comanda finalizada)
+              } else if (a.status === 'entregue' && window._segmento !== 'acougue') {
+                // Restaurante: entregue não aparece no kanban → remove (mesa, delivery, balcão)
                 ordersKanban.splice(idx, 1);
               } else if (a.status === 'aguardando_pix') {
                 // continua como analise no kanban — é pix_manual pendente
               } else {
-                // analise/producao/pronto/saiu/entregue (não-mesa) → atualiza e mantém visível
+                // analise/producao/pronto/saiu (e entregue só em açougue) → atualiza e mantém visível
                 ordersKanban[idx].status   = a.status;
                 ordersKanban[idx]._statusReal = a.status;
                 ordersKanban[idx]._pixPendente = false;
@@ -1555,11 +1559,16 @@ async function advanceOrderById(id) {
   else if (o.status === 'pronto') {
     // Fluxo por tipo:
     //   delivery: pronto → saiu (saiu para entrega, dispara WA "a caminho")
-    //   mesa/balcao/açougue: pronto → entregue
+    //   mesa/balcao/açougue: pronto → entregue (na verdade vai finalizar pelo finishOrderById)
     if (tipo === 'delivery') newStatus = 'saiu';
     else newStatus = 'entregue';
   }
-  else if (o.status === 'saiu') newStatus = 'entregue';
+  else if (o.status === 'saiu') {
+    // Saiu → "Entregue ao cliente" → finaliza direto (kanban tem só 4 colunas, sem "entregue" para delivery).
+    // Delega para finishOrderById que cuida de: movimento financeiro, cashback, fidelidade, remover do kanban.
+    _advancingIds.delete(id);
+    return finishOrderById(id);
+  }
   else newStatus = 'pronto';
   // Se estava em analise e vai para producao, verifica se para o alerta
   if (o.status === 'analise') setTimeout(_checkStopAlert, 200);

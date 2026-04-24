@@ -117,40 +117,33 @@ function _buildMesaKanbanOrders() {
 }
 
 function renderKanban() {
-  // Colunas padrão:
-  //   açougue: analise → producao → pronto → entregue
-  //   restaurante: analise → producao → pronto → (saiu se delivery) → entregue
-  // Mostra coluna "saiu" sempre que houver qualquer pedido com esse status OU filtro = delivery
-  const hasSaiu = ordersKanban.some(o => o.status === 'saiu');
-  const hasEntregueNaoMesa = ordersKanban.some(o => o.status === 'entregue' && !o.mesa_num);
-  const showSaiu = hasSaiu || _kanbanFilter === 'delivery';
-  const showEntregue = hasEntregueNaoMesa || _kanbanFilter === 'delivery' || window._segmento === 'acougue';
-  // Mostra/esconde o wrapper da coluna "Saiu pra entrega" (definido no HTML como #kol-wrap-saiu)
-  const _saiuWrap = document.getElementById('kol-wrap-saiu');
-  if (_saiuWrap) _saiuWrap.style.display = (showSaiu && window._segmento !== 'acougue') ? '' : 'none';
-  // Mostra/esconde coluna "Entregue" para restaurante (no açougue já fica sempre visível via CSS)
-  const _entregueWrap = document.querySelector('.kol-entregue');
-  if (_entregueWrap && window._segmento !== 'acougue') {
-    _entregueWrap.style.display = showEntregue ? 'flex' : 'none';
+  // Layout: SEMPRE 4 colunas (ou 3 se não houver nada na 4ª).
+  //   Açougue:    analise → producao → pronto → entregue
+  //   Restaurante: analise → producao → pronto → saiu pra entrega
+  //     (ao clicar "Entregue ao cliente" na coluna "Saiu", o pedido vai direto pra finalizado
+  //      e sai do kanban — não passa mais pela coluna "entregue", que fica oculta para restaurante)
+  //   Pedidos de mesa/balcão também pulam a coluna saiu: clicar "Servido!"/"Retirado!" finaliza direto.
+  const isAcougue = window._segmento === 'acougue';
+  const _saiuWrap      = document.getElementById('kol-wrap-saiu');
+  const _entregueWrap  = document.querySelector('.kol-entregue');
+  if (isAcougue) {
+    // Açougue: esconde "saiu", mostra "entregue"
+    if (_saiuWrap)     _saiuWrap.style.display     = 'none';
+    if (_entregueWrap) _entregueWrap.style.display = 'flex';
+  } else {
+    // Restaurante: mostra "saiu" (sempre, pra não ter jump de 3→4 cols), esconde "entregue"
+    if (_saiuWrap)     _saiuWrap.style.display     = '';
+    if (_entregueWrap) _entregueWrap.style.display = 'none';
   }
-  // Ajusta o grid do container conforme número de colunas visíveis
+  // Ajusta o grid para 4 colunas fixas
   const _board = document.getElementById('kanban-board');
   if (_board) {
-    _board.classList.remove('kanban-4cols', 'kanban-5cols');
-    let numCols = 3; // base: analise + producao + pronto
-    if (window._segmento === 'acougue') numCols = 4; // açougue sempre tem entregue fixa
-    else {
-      if (showSaiu) numCols++;
-      if (showEntregue) numCols++;
-    }
-    if (numCols === 4) _board.classList.add('kanban-4cols');
-    else if (numCols >= 5) _board.classList.add('kanban-5cols');
+    _board.classList.remove('kanban-5cols');
+    _board.classList.add('kanban-4cols');
   }
-  const statuses = window._segmento === 'acougue'
+  const statuses = isAcougue
     ? ['analise', 'producao', 'pronto', 'entregue']
-    : (showSaiu
-        ? (showEntregue ? ['analise', 'producao', 'pronto', 'saiu', 'entregue'] : ['analise', 'producao', 'pronto', 'saiu'])
-        : (showEntregue ? ['analise', 'producao', 'pronto', 'entregue']          : ['analise', 'producao', 'pronto']));
+    : ['analise', 'producao', 'pronto', 'saiu'];
   const mesaKanban = _buildMesaKanbanOrders();
   const _searchNum = (document.getElementById('kanban-search-num')?.value || '').trim();
   const _searchClient = (document.getElementById('kanban-search-client')?.value || '').trim().toLowerCase();
