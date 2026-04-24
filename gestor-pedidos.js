@@ -184,6 +184,10 @@ function renderKanban() {
           } else {
             const finLabel = isMesa ? 'Servido!' : isRetirada ? 'Retirado!' : 'Finalizar';
             actionBtn = '<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById(' + o.id + ')">' + finLabel + '</button>';
+            // Botão de fechar mesa para pedidos de mesa na coluna pronto
+            if (isMesa && o.mesa_num) {
+              actionBtn += '<button class="oc-btn" style="width:100%;margin-top:4px;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-weight:700;border:none" onclick="event.stopPropagation();cobrarMesaDireta(' + o.mesa_num + ')">💰 Fechar Mesa</button>';
+            }
           }
         }
 
@@ -445,7 +449,25 @@ function openOrderDetail(id) {
   const _addPanelBtn = document.getElementById('od-add-produto-btn');
   if (_addPanelBtn) _addPanelBtn.style.display = (!o._isMesa) ? '' : 'none';
 
+  // Botão de fechar mesa — só para pedidos de mesa em status pronto
+  const _fecharMesaBtn = document.getElementById('od-fechar-mesa-btn');
+  if (_fecharMesaBtn) {
+    const isMesaOrder = o._isMesa || (o.mesa_num && o.mesa_num > 0);
+    const isPronto = o.status === 'pronto';
+    _fecharMesaBtn.style.display = (isMesaOrder && isPronto) ? '' : 'none';
+    window._detailMesaNum = o.mesa_num || null;
+  }
+
   openModal('modal-order-detail');
+}
+
+// ── Fechar mesa a partir do modal de detalhe do pedido ──
+function odFecharMesa() {
+  const mesaNum = window._detailMesaNum;
+  if (!mesaNum) return;
+  closeModal('modal-order-detail');
+  // Pequeno delay para garantir que o modal de detalhe fechou antes de abrir o de pagamento
+  setTimeout(() => cobrarMesaDireta(mesaNum), 200);
 }
 
 async function cancelarItemComanda(origIndex) {
