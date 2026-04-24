@@ -117,9 +117,20 @@ function _buildMesaKanbanOrders() {
 }
 
 function renderKanban() {
+  // Colunas padrão:
+  //   açougue: analise → producao → pronto → entregue
+  //   restaurante: analise → producao → pronto → (saiu se delivery) → entregue
+  // Mostra coluna "saiu" sempre que houver qualquer pedido com esse status OU filtro = delivery
+  const hasSaiu = ordersKanban.some(o => o.status === 'saiu');
+  const showSaiu = hasSaiu || _kanbanFilter === 'delivery';
+  // Mostra/esconde o wrapper da coluna "Saiu pra entrega" (definido no HTML como #kol-wrap-saiu)
+  const _saiuWrap = document.getElementById('kol-wrap-saiu');
+  if (_saiuWrap) _saiuWrap.style.display = (showSaiu && window._segmento !== 'acougue') ? '' : 'none';
   const statuses = window._segmento === 'acougue'
     ? ['analise', 'producao', 'pronto', 'entregue']
-    : ['analise', 'producao', 'pronto'];
+    : (showSaiu
+        ? ['analise', 'producao', 'pronto', 'saiu', 'entregue']
+        : ['analise', 'producao', 'pronto', 'entregue']);
   const mesaKanban = _buildMesaKanbanOrders();
   const _searchNum = (document.getElementById('kanban-search-num')?.value || '').trim();
   const _searchClient = (document.getElementById('kanban-search-client')?.value || '').trim().toLowerCase();
@@ -130,9 +141,9 @@ function renderKanban() {
       ...ordersKanban.filter(o => o.status === st),
       ...mesaKanban.filter(o => o.status === st)
     ];
-    if (_kanbanFilter === 'delivery') filtered = filtered.filter(o => !o._isMesa && o.addr && !o.addr.includes('Mesa') && !o.addr.toLowerCase().includes('retirada') && !o.addr.toLowerCase().includes('balcão') && !o.addr.toLowerCase().includes('balcao'));
-    if (_kanbanFilter === 'balcao') filtered = filtered.filter(o => !o._isMesa && (!o.addr || o.addr.toLowerCase().includes('retirada') || o.addr.toLowerCase().includes('balcão') || o.addr.toLowerCase().includes('balcao')));
-    if (_kanbanFilter === 'mesa') filtered = filtered.filter(o => o._isMesa || o.mesa_num || (o.addr && o.addr.includes('Mesa')));
+    if (_kanbanFilter === 'delivery') filtered = filtered.filter(o => (window._detectOrderType ? window._detectOrderType(o) : 'delivery') === 'delivery');
+    if (_kanbanFilter === 'balcao')   filtered = filtered.filter(o => (window._detectOrderType ? window._detectOrderType(o) : 'delivery') === 'balcao');
+    if (_kanbanFilter === 'mesa')     filtered = filtered.filter(o => (window._detectOrderType ? window._detectOrderType(o) : 'delivery') === 'mesa');
 
     // ── Pesquisa por número do pedido ──
     if (_searchNum) {
@@ -161,10 +172,11 @@ function renderKanban() {
         const obsStr = o.items.filter(i => i.obs).map(i => '📝 ' + i.obs).join(' · ');
         const total = 'R$ ' + (parseFloat(o.total || 0) + parseFloat(o.taxa || 0)).toFixed(2).replace('.', ',');
 
-        // ── Tipo de entrega ──────────────────────────────
-        const isMesa = !!(o.mesa_num || (o.addr && o.addr.includes('Mesa')));
-        const isRetirada = !isMesa && !!(o.addr && (o.addr.toLowerCase().includes('retirada') || o.addr.toLowerCase().includes('balcão') || o.addr.toLowerCase().includes('balcao')));
-        const isDelivery = !isMesa && !isRetirada;
+        // ── Tipo de entrega (via helper unificado) ───────
+        const _tipo = (window._detectOrderType ? window._detectOrderType(o) : 'delivery');
+        const isMesa     = _tipo === 'mesa';
+        const isRetirada = _tipo === 'balcao';
+        const isDelivery = _tipo === 'delivery';
         const _tipoBadge = isMesa
           ? `<span class="oc-tipo-badge oc-tipo-mesa"><svg width='11' height='11' viewBox='0 0 16 16' fill='none'><rect x='2' y='5' width='12' height='2' rx='1' fill='currentColor'/><line x1='4' y1='7' x2='4' y2='13' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/><line x1='12' y1='7' x2='12' y2='13' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/></svg> Mesa ${o.mesa_num || ''}</span>`
           : isRetirada
@@ -195,6 +207,24 @@ function renderKanban() {
         } else if (st === 'producao') {
           const prontoLabel = isMesa ? 'Pronto p/ servir!' : isRetirada ? 'Pronto no balcão!' : '🚀 Pronto!';
           actionBtn = '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById(' + o.id + ')">' + prontoLabel + '</button>' + (_printMode === 'manual' ? '<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById(' + o.id + ')">🖨️</button>' : '');
+        } else if (st === 'pronto') {
+          // Fluxo por tipo:
+          //   delivery: pronto → [🛵 Saiu p/ entrega] → saiu → entregue → finalizar
+          //   balcao:   pronto → [✅ Retirado!] finaliza
+          //   mesa:     pronto → [🍽️ Servido!] finaliza + Fechar mesa
+          if (isDelivery) {
+            actionBtn = '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById(' + o.id + ')">🛵 Saiu p/ entrega</button>' + (_printMode === 'manual' ? '<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById(' + o.id + ')">🖨️</button>' : '');
+          } else if (isRetirada) {
+            actionBtn = '<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById(' + o.id + ')">✅ Retirado!</button>';
+          } else if (isMesa) {
+            actionBtn = '<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById(' + o.id + ')">🍽️ Servido!</button>';
+            if (o.mesa_num) {
+              actionBtn += '<button class="oc-btn" style="width:100%;margin-top:4px;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-weight:700;border:none" onclick="event.stopPropagation();cobrarMesaDireta(' + o.mesa_num + ')">💰 Fechar Mesa</button>';
+            }
+          }
+        } else if (st === 'saiu') {
+          // Coluna "Saiu pra entrega" — só delivery deveria estar aqui
+          actionBtn = '<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();advanceOrderById(' + o.id + ')">✅ Entregue ao cliente</button>';
         } else if (st === 'entregue') {
           actionBtn = '<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById(' + o.id + ')">✅ Finalizar</button>';
         } else {
@@ -522,10 +552,11 @@ function openOrderDetail(id) {
   setEl('od-client-name', o.client || 'Não informado');
   setEl('od-client-phone', o.phone || '');
 
-  // Tipo de entrega
-  const isMesa = !!(o.mesa_num || (o.addr || '').startsWith('Mesa'));
-  const isBalcao = !isMesa && (o.addr || '').toLowerCase().includes('balc');
-  const isDelivery = !isMesa && !isBalcao;
+  // Tipo de entrega (helper unificado)
+  const _tipoDet = (window._detectOrderType ? window._detectOrderType(o) : 'delivery');
+  const isMesa = _tipoDet === 'mesa';
+  const isBalcao = _tipoDet === 'balcao';
+  const isDelivery = _tipoDet === 'delivery';
   const tipoLabel = isMesa ? 'Mesa ' + (o.mesa_num || '') : isBalcao ? 'Balcão / Retirada' : '🛵 Delivery';
   setEl('od-tipo', tipoLabel);
   setEl('od-addr', isMesa && o.garcom_nome ? 'Garçom: ' + o.garcom_nome : '');

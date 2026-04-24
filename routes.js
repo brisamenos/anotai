@@ -25,7 +25,7 @@ function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
       const pixConf = auto['pix_confirmado'] || {}
       if (pixConf.on === false) return
       const offset = parseInt(cfg?.order_num_offset) || 0
-      const idStr  = String(Math.max(1, order.id - offset)).padStart(3,'0')
+      const idStr  = String(order.order_num || Math.max(1, order.id - offset)).padStart(3,'0')
       const nome   = order.client || 'Cliente'
       const items  = (()=>{ try{ return (JSON.parse(order.items)||[]).map(i=>`• ${i.qty}x ${i.name}`).join('\n') }catch{ return '' } })()
       const total  = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
@@ -106,6 +106,26 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const tid = getTenantId(req, params)
     const cid = params.get('customer_id')
     if (!tid || !cid) { send(res, 400, { error: 'Parâmetros faltando' }); return true }
+    // Valida token Bearer se enviado — compara contra senha_hash do customer
+    const auth = req.headers['authorization'] || ''
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+    if (token) {
+      try {
+        const decoded = Buffer.from(token, 'base64').toString()
+        const [tkCid, tkTid, tkHashPrefix] = decoded.split(':')
+        if (String(tkCid) !== String(cid) || String(tkTid) !== String(tid)) {
+          send(res, 403, { error: 'Token inválido para este cliente' }); return true
+        }
+        const custRow = db.prepare('SELECT senha_hash FROM customers WHERE id=? AND tenant_id=?').get(cid, tid)
+        if (!custRow || !custRow.senha_hash || custRow.senha_hash.slice(0, 16) !== tkHashPrefix) {
+          send(res, 403, { error: 'Token inválido' }); return true
+        }
+      } catch (e) {
+        send(res, 403, { error: 'Token malformado' }); return true
+      }
+    }
+    // Nota: sem token, endpoint continua público para compatibilidade com pedido por URL (?acompanhar=).
+    // Para hardening total, exigir token sempre e atualizar frontend para enviar Authorization header.
     try {
       const rows = db.prepare('SELECT id,order_num,client,phone,addr,items,total,taxa,pag,status,created_at FROM orders WHERE tenant_id=? AND customer_id=? ORDER BY id DESC LIMIT 30').all(tid, cid)
       send(res, 200, rows.map(r => ({ ...r, items: (() => { try { return JSON.parse(r.items) } catch { return [] } })() })))
@@ -381,13 +401,15 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (qr && body.phone) {
         setImmediate(async () => {
           try {
-            const cfgWa  = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset FROM store_config WHERE tenant_id=?').get(tid)
+            const cfgWa  = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(tid)
             const inst   = cfgWa?.evo_instance || EVO_INST
             const auto   = (() => { try { return JSON.parse(cfgWa?.evo_automacoes||'{}') } catch { return {} } })()
             const pixCop = auto['pix_copia_cola'] || {}
             if (pixCop.on === false) return
             const offset = parseInt(cfgWa?.order_num_offset) || 0
-            const idStr  = String(Math.max(1, (body.order_id || 0) - offset)).padStart(3,'0')
+            // Usa order_num sequencial do tenant quando disponível; senão fallback p/ id - offset
+            const _ord   = body.order_id ? db.prepare('SELECT id, order_num FROM orders WHERE id=? AND tenant_id=?').get(body.order_id, tid) : null
+            const idStr  = String(_ord?.order_num || Math.max(1, (body.order_id || 0) - offset)).padStart(3,'0')
             const nome   = client || 'Cliente'
             const fmtVal = parseFloat(valor).toFixed(2).replace('.',',')
             // Mensagem 1: texto com instruções (customizável pelo gestor, sem o código)
@@ -456,16 +478,20 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const mpId = String(body.mp_payment_id || ''), ordId = parseInt(body.order_id) || 0
     if (!mpId || !ordId) { send(res, 400, { error: 'obrigatórios' }); return true }
     // Verifica ownership: o pagamento deve pertencer ao tenant
-    const pixRow = db.prepare('SELECT tenant_id FROM pagamentos_pix WHERE mp_payment_id=?').get(mpId)
+    const pixRow = db.prepare('SELECT tenant_id, status FROM pagamentos_pix WHERE mp_payment_id=?').get(mpId)
     if (!pixRow) { send(res, 404, { error: 'Pagamento não encontrado' }); return true }
     if (pixRow.tenant_id !== tid) { send(res, 403, { error: 'Acesso negado' }); return true }
     // Verifica ownership do pedido
     const orderRow = db.prepare('SELECT tenant_id FROM orders WHERE id=?').get(ordId)
     if (!orderRow || orderRow.tenant_id !== tid) { send(res, 403, { error: 'Pedido não pertence ao tenant' }); return true }
+    // Vincula sempre (mesmo se ainda pendente)
     db.prepare('UPDATE pagamentos_pix SET order_id=? WHERE mp_payment_id=?').run(ordId, mpId)
-    db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=?").run(ordId)
+    // Só marca como pago se o pagamento estiver realmente aprovado
+    if (pixRow.status === 'aprovado') {
+      db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=?").run(ordId)
+    }
     marcarDirty()
-    send(res, 200, { ok: true })
+    send(res, 200, { ok: true, aprovado: pixRow.status === 'aprovado' })
     return true
   }
 
@@ -535,12 +561,14 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const pd = await r.json()
       if (!r.ok) { send(res, 200, { ok: true }); return true }
       const novoStatus = pd.status === 'approved' ? 'aprovado' : pd.status === 'rejected' ? 'rejeitado' : pd.status === 'cancelled' ? 'cancelado' : 'pendente'
+
+      // ── Rota 1: PIX (pagamentos_pix) ──────────────────────────────────────
       const row = db.prepare('SELECT status,valor,tenant_id,order_id FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
       if (row && row.status !== novoStatus) {
         db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=? WHERE mp_payment_id=?').run(novoStatus, pd.date_approved || null, String(mpId))
         marcarDirty()
         if (novoStatus === 'aprovado') {
-          log('✅', `Webhook MP APROVADO: R$${row.valor} tenant=${row.tenant_id}`)
+          log('✅', `Webhook MP APROVADO (PIX): R$${row.valor} tenant=${row.tenant_id}`)
           if (row.order_id) {
             const pedAtual = db.prepare("SELECT status FROM orders WHERE id=?").get(row.order_id)
             const eraAguardando = pedAtual?.status === 'aguardando_pix'
@@ -555,6 +583,46 @@ module.exports = async function handleRoutes(req, res, ctx) {
             sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, _fo4 ? {..._fo4, items:_it4, status:_ns4, pag:'pix_mp'} : { id: row.order_id, status: _ns4, pag: 'pix_mp' })
             // Notifica cliente: pagamento PIX confirmado
             if (eraAguardando) _notificarPixConfirmado(row.tenant_id, _fo4, sendWA, fillVars, EVO_INST, db)
+          }
+        }
+      }
+
+      // ── Rota 2: Cartão online (pagamentos_cartao) ────────────────────────
+      const rowC = db.prepare('SELECT status,valor,tenant_id,order_id FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpId))
+      if (rowC && rowC.status !== novoStatus) {
+        db.prepare('UPDATE pagamentos_cartao SET status=?, status_detail=?, paid_at=? WHERE mp_payment_id=?')
+          .run(novoStatus, pd.status_detail || '', pd.date_approved || null, String(mpId))
+        marcarDirty()
+        if (novoStatus === 'aprovado') {
+          log('✅', `Webhook MP APROVADO (CARTÃO): R$${rowC.valor} tenant=${rowC.tenant_id}`)
+          if (rowC.order_id) {
+            const pedAtualC = db.prepare("SELECT status FROM orders WHERE id=?").get(rowC.order_id)
+            const eraAguardandoC = pedAtualC?.status === 'aguardando_cartao'
+            if (eraAguardandoC) {
+              db.prepare("UPDATE orders SET status='analise', pag='cartao_mp' WHERE id=?").run(rowC.order_id)
+            } else {
+              db.prepare("UPDATE orders SET pag='cartao_mp' WHERE id=?").run(rowC.order_id)
+            }
+            const _nsC = eraAguardandoC ? 'analise' : pedAtualC?.status
+            const _foC = db.prepare("SELECT * FROM orders WHERE id=?").get(rowC.order_id)
+            const _itC = _foC && typeof _foC.items==='string' ? (() => { try{return JSON.parse(_foC.items)}catch{return []} })() : (_foC?.items||[])
+            sseBroadcast(`orders-rt:${rowC.tenant_id}`, `orders:UPDATE`, _foC ? {..._foC, items:_itC, status:_nsC, pag:'cartao_mp'} : { id: rowC.order_id, status: _nsC, pag: 'cartao_mp' })
+            // Notifica cliente: cartão confirmado (reusa estrutura de _notificarPixConfirmado — msg contextual)
+            if (eraAguardandoC && _foC?.phone) {
+              setImmediate(async () => {
+                try {
+                  const cfg    = db.prepare('SELECT evo_instance, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(rowC.tenant_id)
+                  const inst   = cfg?.evo_instance || EVO_INST
+                  const loja   = cfg?.store_name || 'Restaurante'
+                  const offset = parseInt(cfg?.order_num_offset) || 0
+                  const idStr  = String(_foC.order_num || Math.max(1, _foC.id - offset)).padStart(3,'0')
+                  const nome   = (_foC.client || 'Cliente').split(' ')[0]
+                  const total  = (parseFloat(_foC.total||0)+parseFloat(_foC.taxa||0)).toFixed(2).replace('.',',')
+                  const msg    = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento confirmado!*\n\nOlá, *${nome}*! Recebemos seu pagamento do pedido *#${idStr}* no cartão. 💳\n\n💰 *Total: R$ ${total}*\n\n📦 Seu pedido está sendo preparado! 🎉\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
+                  await sendWA(_foC.phone, msg, inst)
+                } catch(e) { log('❌','Erro notif cartão:', e.message) }
+              })
+            }
           }
         }
       }
@@ -626,34 +694,48 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const { pix_key, pix_key_tipo = 'aleatoria' } = body
       if (!pix_key) { send(res, 400, { error: 'Chave PIX obrigatória' }); return true }
 
-      // PIX aprovados
-      const pixLiq  = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
-      // Cartão aprovados (desconta 7% taxa)
-      const cartaoB = db.prepare("SELECT COALESCE(SUM(valor),0) as v FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
-      const cartaoLiq = cartaoB * 0.93
+      // Executa cálculo + insert dentro de uma transação para evitar race condition
+      let resultado
+      try {
+        resultado = db.transaction(() => {
+          // PIX aprovados
+          const pixLiq  = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+          // Cartão aprovados (desconta 7% taxa)
+          const cartaoB = db.prepare("SELECT COALESCE(SUM(valor),0) as v FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+          const cartaoLiq = cartaoB * 0.93
 
-      const totalRecebido = pixLiq + cartaoLiq
-      const totalSacado   = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM saques WHERE tenant_id=? AND status IN ('pendente','aprovado','pago')").get(tid)?.v || 0
-      const saldo = Math.max(0, totalRecebido - totalSacado)
+          const totalRecebido = pixLiq + cartaoLiq
+          const totalSacado   = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM saques WHERE tenant_id=? AND status IN ('pendente','aprovado','pago')").get(tid)?.v || 0
+          const saldo = Math.max(0, totalRecebido - totalSacado)
 
-      if (saldo < 1) { send(res, 400, { error: 'Saldo insuficiente para saque' }); return true }
-      const jaTemPendente = db.prepare("SELECT id FROM saques WHERE tenant_id=? AND status='pendente'").get(tid)
-      if (jaTemPendente) { send(res, 400, { error: 'Você já tem um saque pendente aguardando aprovação' }); return true }
+          if (saldo < 1) return { err: 'Saldo insuficiente para saque' }
+          const jaTemPendente = db.prepare("SELECT id FROM saques WHERE tenant_id=? AND status='pendente'").get(tid)
+          if (jaTemPendente) return { err: 'Você já tem um saque pendente aguardando aprovação' }
 
-      const numPix    = db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(taxa),0) as t FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)
-      const numCartao = db.prepare("SELECT COUNT(*) as c FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)
-      const numTotal  = (numPix?.c || 0) + (numCartao?.c || 0)
-      const taxaTotal = (numPix?.t || 0) + (cartaoB * 0.07)
+          const numPix    = db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(taxa),0) as t FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)
+          const numCartao = db.prepare("SELECT COUNT(*) as c FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)
+          const numTotal  = (numPix?.c || 0) + (numCartao?.c || 0)
+          const taxaTotal = (numPix?.t || 0) + (cartaoB * 0.07)
 
-      const tenant  = db.prepare('SELECT nome FROM tenants WHERE id=?').get(tid)
-      const saqInfo = db.prepare(`INSERT INTO saques (tenant_id,tenant_nome,valor_solicitado,num_pagamentos,taxa_total,valor_liquido,pix_key,pix_key_tipo)
-        VALUES (?,?,?,?,?,?,?,?)`).run(tid, tenant?.nome || tid, saldo, numTotal, taxaTotal, saldo, pix_key, pix_key_tipo)
-      const saqNovo = db.prepare('SELECT * FROM saques WHERE id=?').get(saqInfo.lastInsertRowid)
-      sseBroadcast('saques-admin', 'saques:INSERT', saqNovo)
-      sseBroadcast(`saques-rt:${tid}`, 'saques:INSERT', saqNovo)
+          const tenant  = db.prepare('SELECT nome FROM tenants WHERE id=?').get(tid)
+          const saqInfo = db.prepare(`INSERT INTO saques (tenant_id,tenant_nome,valor_solicitado,num_pagamentos,taxa_total,valor_liquido,pix_key,pix_key_tipo)
+            VALUES (?,?,?,?,?,?,?,?)`).run(tid, tenant?.nome || tid, saldo, numTotal, taxaTotal, saldo, pix_key, pix_key_tipo)
+          const saqNovo = db.prepare('SELECT * FROM saques WHERE id=?').get(saqInfo.lastInsertRowid)
+          return { ok: true, saqNovo, saldo, pixLiq, cartaoLiq }
+        })()
+      } catch(txErr) {
+        log('❌', '/api/saques/solicitar transação falhou:', txErr.message)
+        send(res, 500, { error: 'Erro ao processar saque' })
+        return true
+      }
+
+      if (resultado.err) { send(res, 400, { error: resultado.err }); return true }
+
+      sseBroadcast('saques-admin', 'saques:INSERT', resultado.saqNovo)
+      sseBroadcast(`saques-rt:${tid}`, 'saques:INSERT', resultado.saqNovo)
       marcarDirty()
-      log('💰', `Saque solicitado: R$${saldo.toFixed(2)} tenant=${tid} (pix=${pixLiq.toFixed(2)} + cartão=${cartaoLiq.toFixed(2)})`)
-      send(res, 200, { ok: true, valor: saldo, pix_key })
+      log('💰', `Saque solicitado: R$${resultado.saldo.toFixed(2)} tenant=${tid} (pix=${resultado.pixLiq.toFixed(2)} + cartão=${resultado.cartaoLiq.toFixed(2)})`)
+      send(res, 200, { ok: true, valor: resultado.saldo, pix_key })
     } catch (e) { log('❌', '/api/saques/solicitar erro:', e.message); send(res, 500, { error: e.message }) }
     return true
   }
@@ -1196,9 +1278,42 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const pd = await r.json()
       const statusMap = { approved: 'aprovado', rejected: 'rejeitado', cancelled: 'cancelado', in_process: 'em_processo', pending: 'pendente' }
       const novoStatus = statusMap[pd.status] || 'pendente'
+      // Lê status anterior antes de atualizar (para detectar transição para 'aprovado')
+      const rowBefore = db.prepare('SELECT status, tenant_id, order_id FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpId))
       // Atualiza banco
       db.prepare('UPDATE pagamentos_cartao SET status=?, status_detail=?, paid_at=? WHERE mp_payment_id=?')
         .run(novoStatus, pd.status_detail || '', pd.date_approved || null, String(mpId))
+      // Se acabou de aprovar (transição pendente/in_process → aprovado), sincroniza pedido e notifica
+      if (rowBefore && rowBefore.status !== 'aprovado' && novoStatus === 'aprovado' && rowBefore.order_id) {
+        const pedAtual = db.prepare("SELECT status FROM orders WHERE id=?").get(rowBefore.order_id)
+        const eraAguardando = pedAtual?.status === 'aguardando_cartao'
+        if (eraAguardando) {
+          db.prepare("UPDATE orders SET status='analise', pag='cartao_mp' WHERE id=?").run(rowBefore.order_id)
+        } else {
+          db.prepare("UPDATE orders SET pag='cartao_mp' WHERE id=?").run(rowBefore.order_id)
+        }
+        marcarDirty()
+        const _ns = eraAguardando ? 'analise' : pedAtual?.status
+        const _fo = db.prepare("SELECT * FROM orders WHERE id=?").get(rowBefore.order_id)
+        const _it = _fo && typeof _fo.items === 'string' ? (() => { try { return JSON.parse(_fo.items) } catch { return [] } })() : (_fo?.items || [])
+        sseBroadcast(`orders-rt:${rowBefore.tenant_id}`, 'orders:UPDATE', _fo ? { ..._fo, items: _it, status: _ns, pag: 'cartao_mp' } : { id: rowBefore.order_id, status: _ns, pag: 'cartao_mp' })
+        // Notifica cliente
+        if (eraAguardando && _fo?.phone) {
+          setImmediate(async () => {
+            try {
+              const cfg    = db.prepare('SELECT evo_instance, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(rowBefore.tenant_id)
+              const inst   = cfg?.evo_instance || EVO_INST
+              const loja   = cfg?.store_name || 'Restaurante'
+              const offset = parseInt(cfg?.order_num_offset) || 0
+              const idStr  = String(_fo.order_num || Math.max(1, _fo.id - offset)).padStart(3,'0')
+              const nome   = (_fo.client || 'Cliente').split(' ')[0]
+              const total  = (parseFloat(_fo.total||0)+parseFloat(_fo.taxa||0)).toFixed(2).replace('.',',')
+              const msg    = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento confirmado!*\n\nOlá, *${nome}*! Recebemos seu pagamento do pedido *#${idStr}* no cartão. 💳\n\n💰 *Total: R$ ${total}*\n\n📦 Seu pedido está sendo preparado! 🎉\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
+              await sendWA(_fo.phone, msg, inst)
+            } catch(e) { log('❌','Erro notif cartão (poll):', e.message) }
+          })
+        }
+      }
       send(res, 200, { status: novoStatus, status_detail: pd.status_detail || '', mp_status: pd.status })
     } catch(e) {
       const fb = db.prepare('SELECT status,status_detail FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpId))
@@ -1615,11 +1730,23 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!usuario || !senha) { send(res, 400, { error: 'Usuário e senha obrigatórios' }); return true }
     if (!tid)               { send(res, 400, { error: 'Tenant não identificado' }); return true }
     try {
-      const g = db.prepare(
-        'SELECT id, tenant_id, nome, usuario, ativo FROM garcons WHERE tenant_id=? AND usuario=? AND senha=? AND ativo=1'
-      ).get(tid, usuario.trim().toLowerCase(), senha)
-      if (!g) { send(res, 401, { error: 'Usuário ou senha incorretos' }); return true }
-      send(res, 200, { id: g.id, tenant_id: g.tenant_id, nome: g.nome, usuario: g.usuario, ativo: true })
+      // Senha pode estar em plain text (legado) ou SHA256 (novo).
+      // Aceita ambos e, ao detectar plain text, migra automaticamente para hash.
+      const user = usuario.trim().toLowerCase()
+      const hashSenha = crypto.createHash('sha256').update(senha).digest('hex')
+      const row = db.prepare(
+        'SELECT id, tenant_id, nome, usuario, senha, ativo FROM garcons WHERE tenant_id=? AND usuario=? AND ativo=1'
+      ).get(tid, user)
+      if (!row) { send(res, 401, { error: 'Usuário ou senha incorretos' }); return true }
+      const stored = row.senha || ''
+      const isHash = /^[a-f0-9]{64}$/i.test(stored)
+      const match = isHash ? (stored === hashSenha) : (stored === senha)
+      if (!match) { send(res, 401, { error: 'Usuário ou senha incorretos' }); return true }
+      // Migração lazy: se estava em plain text, atualiza para hash
+      if (!isHash) {
+        try { db.prepare('UPDATE garcons SET senha=? WHERE id=?').run(hashSenha, row.id); log('🔐', `[MIGRACAO] Senha do garçom ${row.usuario} migrada para hash`) } catch(_) {}
+      }
+      send(res, 200, { id: row.id, tenant_id: row.tenant_id, nome: row.nome, usuario: row.usuario, ativo: true })
     } catch(e) { send(res, 500, { error: e.message }) }
     return true
   }
@@ -1872,6 +1999,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
         created_at TEXT DEFAULT (datetime('now')), done_at TEXT
       )`)
       try { db.exec(`ALTER TABLE print_jobs ADD COLUMN tipo TEXT DEFAULT NULL`) } catch (_) {}
+      // Recupera jobs travados em 'processing' há mais de 2 minutos — agente pode ter caído
+      try { db.exec(`UPDATE print_jobs SET status='pending' WHERE status='processing' AND created_at < datetime('now','-2 minutes')`) } catch (_) {}
       let jobs
       if (tipoFilter) {
         jobs = db.prepare(

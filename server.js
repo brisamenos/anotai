@@ -666,6 +666,8 @@ function buildWhere(params, cols, tenantId, table) {
     }
     if ((m=val.match(/^eq\.(.+)$/)))   { let v=m[1]==='null'?null:m[1]; if(v==='true')v=1;else if(v==='false')v=0;else if(v==='0')v=0;else if(v==='1')v=1; conds.push(`"${key}" = ?`);  vals.push(v); continue }
     if ((m=val.match(/^neq\.(.+)$/)))  { let v=m[1]; if(v==='true')v=1;else if(v==='false')v=0; conds.push(`"${key}" != ?`); vals.push(v); continue }
+    if ((m=val.match(/^like\.(.+)$/))) { conds.push(`"${key}" LIKE ?`); vals.push(m[1]); continue }
+    if ((m=val.match(/^ilike\.(.+)$/))){ conds.push(`LOWER("${key}") LIKE LOWER(?)`); vals.push(m[1]); continue }
     if ((m=val.match(/^gte\.(.+)$/)))  { conds.push(`"${key}" >= ?`); vals.push(m[1]); continue }
     if ((m=val.match(/^lte\.(.+)$/)))  { conds.push(`"${key}" <= ?`); vals.push(m[1]); continue }
     if ((m=val.match(/^gt\.(.+)$/)))   { conds.push(`"${key}" > ?`);  vals.push(m[1]); continue }
@@ -730,7 +732,14 @@ async function handleREST(req, res, table, params, body) {
     const returnRep = req.headers['prefer']?.includes('return=representation')
     try {
       const payload = serialize(table, body)
-      if (tenantId && !NO_TENANT_FILTER.has(table) && !payload.tenant_id) payload.tenant_id = tenantId
+      // Segurança: para tabelas com tenant_id, SEMPRE força o tenant_id do header.
+      // Isso previne que um cliente injete tenant_id no body para escrever em outro tenant.
+      if (tenantId && !NO_TENANT_FILTER.has(table)) {
+        if (payload.tenant_id && payload.tenant_id !== tenantId) {
+          return send(res, 403, { error: 'tenant_id do body não bate com o header' })
+        }
+        payload.tenant_id = tenantId
+      }
       if (table === 'store_config') {
         const scTid = tenantId || payload.tenant_id
         if (!scTid) return send(res, 400, { error: 'tenant_id obrigatório' })
@@ -816,6 +825,11 @@ async function handleREST(req, res, table, params, body) {
   if (req.method === 'PATCH') {
     try {
       const payload = serialize(table, body)
+      // Segurança: nunca deixa o payload reassignar tenant_id.
+      // WHERE já filtra por tenant_id via buildWhere(), então remover do payload é suficiente.
+      if (!NO_TENANT_FILTER.has(table) && 'tenant_id' in payload && payload.tenant_id !== tenantId) {
+        delete payload.tenant_id
+      }
       const keys    = Object.keys(payload).filter(k=>cols.includes(k))
       if (!keys.length) return send(res, 400, { error: 'Sem campos válidos' })
       if (table === 'store_config') {
@@ -873,29 +887,61 @@ function handleTenantInfo(params) {
 // ════════════════════════════════════════════════════════
 // UPLOAD DE IMAGENS
 // ════════════════════════════════════════════════════════
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 // 10 MB
+const ALLOWED_EXT = new Set(['.jpg','.jpeg','.png','.webp','.gif'])
+
 function handleUpload(req, res) {
   return new Promise(resolve => {
     const chunks = []
-    req.on('data', c => chunks.push(c))
+    let total = 0
+    let abortado = false
+    req.on('data', c => {
+      total += c.length
+      if (total > MAX_UPLOAD_BYTES) {
+        abortado = true
+        try { req.destroy() } catch(_) {}
+        try { res.statusCode = 413; res.end(JSON.stringify({ error: 'Arquivo muito grande (máx 10MB)' })) } catch(_) {}
+        resolve()
+        return
+      }
+      chunks.push(c)
+    })
     req.on('end', () => {
+      if (abortado) return
       try {
         const buffer   = Buffer.concat(chunks)
         const ct       = req.headers['content-type'] || ''
         const boundary = ct.split('boundary=')[1]
-        const urlBase  = path.basename((req.url||'').split('?')[0])
+        // Sanitiza nome do arquivo — path.basename remove diretórios, também remove .. e barras residuais
+        const urlBaseRaw = path.basename((req.url||'').split('?')[0])
+        const urlBase = urlBaseRaw.replace(/[^a-zA-Z0-9._-]/g, '_') // limita charset
         const hasExt   = /\.(jpg|jpeg|png|webp|gif)$/i.test(urlBase)
+        const _ensureAllowedExt = (n) => {
+          const e = path.extname(n).toLowerCase()
+          return ALLOWED_EXT.has(e)
+        }
         let fname      = hasExt ? urlBase : `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
+        if (!_ensureAllowedExt(fname)) fname = `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
         if (!boundary) {
           const body = JSON.parse(buffer.toString()), ext=(body.mime||'image/jpeg').split('/')[1]||'jpg'
-          if (!hasExt) fname = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-          fs.writeFileSync(path.join(UPLOADS_DIR, fname), Buffer.from(body.data,'base64'))
+          const safeExt = ALLOWED_EXT.has('.'+ext.toLowerCase()) ? ext.toLowerCase() : 'jpg'
+          if (!hasExt) fname = `${Date.now()}-${Math.random().toString(36).slice(2)}.${safeExt}`
+          // Valida tamanho do base64 decodificado
+          const decoded = Buffer.from(body.data,'base64')
+          if (decoded.length > MAX_UPLOAD_BYTES) { resolve(send(res, 413, { error: 'Arquivo muito grande (máx 10MB)' })); return }
+          fs.writeFileSync(path.join(UPLOADS_DIR, fname), decoded)
         } else {
           const raw   = buffer.toString('binary')
           const parts = raw.split('--'+boundary).filter(p=>p.includes('filename='))
           if (parts.length) {
             const [head,...bodyParts] = parts[0].split('\r\n\r\n')
             const fnMatch = head.match(/filename="([^"]+)"/)
-            if (!hasExt&&fnMatch) { const ext=path.extname(fnMatch[1])||'.jpg'; fname=`${Date.now()}-${Math.random().toString(36).slice(2)}${ext}` }
+            if (!hasExt&&fnMatch) {
+              const rawExt = path.extname(fnMatch[1]).toLowerCase() || '.jpg'
+              const ext = ALLOWED_EXT.has(rawExt) ? rawExt : '.jpg'
+              fname=`${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
+            }
+            if (!_ensureAllowedExt(fname)) { resolve(send(res, 400, { error: 'Extensão não permitida' })); return }
             fs.writeFileSync(path.join(UPLOADS_DIR, fname), Buffer.from(bodyParts.join('\r\n\r\n').replace(/\r\n$/,''),'binary'))
           } else { fs.writeFileSync(path.join(UPLOADS_DIR, fname), buffer) }
         }
@@ -1470,10 +1516,15 @@ const server = http.createServer(async (req,res) => {
     if(!tid||!phone||valor<=0){send(res,400,{error:'Parâmetros inválidos'});return}
     const cust=db.prepare('SELECT id,cashback_saldo FROM customers WHERE tenant_id=? AND phone LIKE ?').get(tid,`%${phone.slice(-8)}%`)
     if(!cust){send(res,404,{error:'Cliente não encontrado'});return}
-    const saldo=parseFloat(cust.cashback_saldo||0)
-    if(saldo<valor){send(res,400,{error:'Saldo insuficiente',saldo});return}
-    db.prepare('UPDATE customers SET cashback_saldo=cashback_saldo-? WHERE id=?').run(valor,cust.id)
-    marcarDirty();send(res,200,{ok:true,saldo_restante:parseFloat((saldo-valor).toFixed(2))});return
+    // Atômico: só decrementa se o saldo ainda for >= valor (evita race condition)
+    const info = db.prepare('UPDATE customers SET cashback_saldo=cashback_saldo-? WHERE id=? AND tenant_id=? AND cashback_saldo>=?').run(valor, cust.id, tid, valor)
+    if (info.changes === 0) {
+      const atual = db.prepare('SELECT cashback_saldo FROM customers WHERE id=?').get(cust.id)
+      send(res, 400, { error: 'Saldo insuficiente', saldo: parseFloat(atual?.cashback_saldo||0) })
+      return
+    }
+    const updated = db.prepare('SELECT cashback_saldo FROM customers WHERE id=?').get(cust.id)
+    marcarDirty();send(res,200,{ok:true,saldo_restante:parseFloat(updated?.cashback_saldo||0)});return
   }
   if(req.method==='POST'&&upath==='/api/cashback/ajustar'){
     const tid=req.headers['x-tenant-id']||params.get('tenant_id')||''

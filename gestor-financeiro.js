@@ -1214,7 +1214,17 @@ async function addGarcom() {
   if (!usuario) { sbToast('err','Informe o usuário'); return; }
   if (!senha)   { sbToast('err','Informe a senha'); return; }
   sbLoading(true);
-  const { data, error } = await sb.from('garcons').insert({ nome, usuario, senha, ativo:true }).select().single();
+  // Hash SHA256 da senha antes de salvar (backend aceita hash hex 64 chars)
+  let senhaHash = senha;
+  try {
+    const enc = new TextEncoder().encode(senha);
+    const buf = await crypto.subtle.digest('SHA-256', enc);
+    senhaHash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (e) {
+    // fallback se subtle indisponível (HTTP): mantém plain text; backend fará migração no 1º login
+    console.warn('[addGarcom] crypto.subtle indisponível, usando fallback:', e?.message);
+  }
+  const { data, error } = await sb.from('garcons').insert({ nome, usuario, senha: senhaHash, ativo:true }).select().single();
   sbLoading(false);
   if (error) { sbToast('err', error.code==='23505'?'Usuário já existe':'Erro ao cadastrar'); return; }
   garcons.push(data);

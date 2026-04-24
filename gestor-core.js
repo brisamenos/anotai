@@ -232,7 +232,7 @@ async function loadAllData(silent = false) {
     ] = await Promise.all([
       safe(sb.from('menu_items').select('*').order('sort_order').order('id')),
       safe(sb.from('categories').select('*').order('sort_order')),
-      safe(sb.from('orders').select('*').in('status',['aguardando_pix','analise','producao','pronto','entregue']).order('id',{ascending:false})),
+      safe(sb.from('orders').select('*').in('status',['aguardando_pix','analise','producao','pronto','saiu','entregue']).order('id',{ascending:false})),
       safe(sb.from('movimentos').select('*').gte('created_at', (() => {
         // Usa data local BR (UTC-3) para não perder movimentos do início do dia
         const d = new Date(); d.setHours(d.getHours() - 3);
@@ -730,16 +730,19 @@ function subscribeOrders() {
         return;
       }
       if (idx !== -1) {
-        if (['entregue','cancelado'].includes(p.new.status)) {
+        // Só remove do kanban quando finalizado (ou cancelado).
+        // 'entregue' de delivery/balcão permanece na coluna para o gestor clicar em "Finalizar".
+        // 'entregue' de mesa sai (comanda finalizada).
+        // 'saiu' permanece (coluna "Saiu pra entrega").
+        if (['finalizado','cancelado'].includes(p.new.status)) {
           if (p.new.status === 'cancelado') {
             showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>', `Pedido #${_orderNum(p.new.id, p.new.order_num)} cancelado pelo cliente — ${p.new.client}`);
             sendBrowserNotif(`Pedido cancelado pelo cliente`, `#${_orderNum(p.new.id, p.new.order_num)} — ${p.new.client}`);
           }
-          if (p.new.status === 'entregue' && window._segmento === 'acougue') {
-            ordersKanban[idx] = mapOrder(p.new);
-          } else {
-            ordersKanban.splice(idx, 1);
-          }
+          ordersKanban.splice(idx, 1);
+        } else if (p.new.status === 'entregue' && p.new.mesa_num) {
+          // Mesa entregue → comanda finalizada, remove do kanban
+          ordersKanban.splice(idx, 1);
         } else {
           ordersKanban[idx] = mapOrder(p.new);
         }
@@ -934,7 +937,10 @@ function _subscribeOrdersSSE() {
       // Pedido já no kanban — atualiza
       if (idx !== -1) {
         const items = typeof order.items === 'string' ? (() => { try { return JSON.parse(order.items); } catch { return []; } })() : (order.items || []);
-        if (['entregue', 'cancelado'].includes(order.status)) {
+        // Remove do kanban só quando o pedido foi finalizado (ou cancelado).
+        // 'entregue' continua visível na coluna para que o gestor clique em "Finalizar".
+        // 'saiu' também continua visível (aparece na coluna Saiu pra entrega).
+        if (['finalizado', 'cancelado'].includes(order.status)) {
           ordersKanban.splice(idx, 1);
         } else {
           ordersKanban[idx] = mapOrder({ ...order, items });
@@ -1103,7 +1109,7 @@ setInterval(async () => {
     {
       const q = sb.from('orders')
         .select('*')
-        .in('status', ['aguardando_pix','analise','producao','pronto','entregue'])
+        .in('status', ['aguardando_pix','analise','producao','pronto','saiu','entregue'])
         .order('id', {ascending:false});
       // Quando _maxKnownOrderId > 0 usa filtro eficiente; quando 0 varre todos os ativos
       if (_maxKnownOrderId > 0) q.gt('id', _maxKnownOrderId);
@@ -1154,16 +1160,16 @@ setInterval(async () => {
             // mas 'aguardando_pix' no banco, então não devem ser removidos por isso
             const statusNoCanban = ordersKanban[idx]._statusReal || ordersKanban[idx].status;
             if (statusNoCanban !== a.status) {
-              if (['entregue','cancelado'].includes(a.status)) {
-                if (a.status === 'entregue' && window._segmento === 'acougue') {
-                  ordersKanban[idx].status = a.status;
-                  ordersKanban[idx]._statusReal = a.status;
-                } else {
-                  ordersKanban.splice(idx, 1);
-                }
+              if (['finalizado','cancelado'].includes(a.status)) {
+                // finalizado/cancelado → remove do kanban
+                ordersKanban.splice(idx, 1);
+              } else if (a.status === 'entregue' && ordersKanban[idx].mesa_num) {
+                // Pedidos de mesa em 'entregue' saem do kanban (comanda finalizada)
+                ordersKanban.splice(idx, 1);
               } else if (a.status === 'aguardando_pix') {
                 // continua como analise no kanban — é pix_manual pendente
               } else {
+                // analise/producao/pronto/saiu/entregue (não-mesa) → atualiza e mantém visível
                 ordersKanban[idx].status   = a.status;
                 ordersKanban[idx]._statusReal = a.status;
                 ordersKanban[idx]._pixPendente = false;
@@ -1499,6 +1505,25 @@ function triggerImageUpload(itemId, itemName) {
 // ── createOrder ──────────────────────────────────────
 
 // ── advanceOrderById ─────────────────────────────────
+
+// Helper unificado de detecção do tipo do pedido.
+// Retorna 'mesa' | 'balcao' | 'delivery'.
+// Usa prioridade: mesa_num > _isMesa > addr.startsWith('Mesa') > addr contém balcão/retirada > delivery (default).
+function _detectOrderType(o) {
+  if (!o) return 'delivery';
+  if (o._isMesa || (o.mesa_num && Number(o.mesa_num) > 0)) return 'mesa';
+  const addr = String(o.addr || '').trim();
+  if (/^Mesa\b/i.test(addr)) return 'mesa';
+  const lower = addr.toLowerCase();
+  if (lower.startsWith('retirada') || lower.startsWith('balcão') || lower.startsWith('balcao')
+      || lower.includes('retirada no balc') || lower.includes('balcão') || lower === 'balcao') {
+    return 'balcao';
+  }
+  return 'delivery';
+}
+// Expõe como global pra outros arquivos (gestor-pedidos) usarem
+if (typeof window !== 'undefined') window._detectOrderType = _detectOrderType;
+
 async function advanceOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
   if (!o) return;
@@ -1507,10 +1532,18 @@ async function advanceOrderById(id) {
     return;
   }
   const oldStatus = o.status;
+  const tipo = _detectOrderType(o);
   let newStatus;
   if (o.status === 'analise') newStatus = 'producao';
   else if (o.status === 'producao') newStatus = 'pronto';
-  else if (o.status === 'pronto' && window._segmento === 'acougue') newStatus = 'entregue';
+  else if (o.status === 'pronto') {
+    // Fluxo por tipo:
+    //   delivery: pronto → saiu (saiu para entrega, dispara WA "a caminho")
+    //   mesa/balcao/açougue: pronto → entregue
+    if (tipo === 'delivery') newStatus = 'saiu';
+    else newStatus = 'entregue';
+  }
+  else if (o.status === 'saiu') newStatus = 'entregue';
   else newStatus = 'pronto';
   // Se estava em analise e vai para producao, verifica se para o alerta
   if (o.status === 'analise') setTimeout(_checkStopAlert, 200);
@@ -1587,15 +1620,17 @@ async function finishOrderById(id) {
     if (!res.ok) throw new Error(data.error || 'Erro');
     // Registra movimento financeiro
     if (o) {
+      // Fix: usa parseFloat para evitar concatenação de string quando vem do SSE/JSON
+      const _totalVal = parseFloat(o.total || 0) + parseFloat(o.taxa || 0);
       await sb.from('movimentos').insert({
         description: `Pedido #${o.num} – ${o.client}`,
-        tipo: 'entrada', val: o.total + o.taxa, pag: o.pag || 'PIX', time
+        tipo: 'entrada', val: _totalVal, pag: o.pag || 'PIX', time
       });
-      movimentos.push({ desc:`Pedido #${o.num} – ${o.client}`, tipo:'entrada', val:o.total+o.taxa, pag:o.pag||'PIX', time });
+      movimentos.push({ desc:`Pedido #${o.num} – ${o.client}`, tipo:'entrada', val: _totalVal, pag:o.pag||'PIX', time });
     }
     ordersKanban = ordersKanban.filter(x => x.id !== id);
     // BUG 1 fix: adiciona pontos de fidelidade ao finalizar
-    if (o?.phone) _autoAddFidPoints(o.phone, o.total + o.taxa);
+    if (o?.phone) _autoAddFidPoints(o.phone, parseFloat(o.total || 0) + parseFloat(o.taxa || 0));
   } catch(e) {
     sbLoading(false);
     sbToast('err', 'Erro ao finalizar pedido: ' + e.message); return;
