@@ -238,34 +238,66 @@
     const url = `${API_BASE}/${this._table}${this._params.toString() ? "?" + this._params.toString() : ""}`;
     const hdrs = defaultHeaders(this._headers);
     if (this._single) hdrs['Prefer'] = (hdrs['Prefer'] ? hdrs['Prefer'] + ',' : '') + 'single';
+
+    // Fallback tenant_id: se o sessionStorage perdeu (iOS Safari background kill, modo privado, etc),
+    // tenta recuperar do window._tenantId (setado pelo cardapio-core.js em memória).
+    if (!hdrs['x-tenant-id']) {
+      const memTid = (typeof window !== 'undefined' && window._tenantId) ? window._tenantId : null;
+      if (memTid) {
+        console.warn('[v0] fallback tenant_id via window._tenantId:', memTid);
+        hdrs['x-tenant-id'] = memTid;
+      }
+    }
+
     const opts = { method: this._method, headers: hdrs };
     if (this._body !== null) opts.body = JSON.stringify(this._body);
-    
-    // Log para debug
+
+    // Log para debug (só writes)
     if (this._method !== 'GET') {
-      console.log(`[v0] API ${this._method} ${this._table}:`, {
-        url, 
-        headers: hdrs,
-        body: this._body
-      });
+      console.log(`[v0] API ${this._method} ${this._table}:`, { url, headers: hdrs, body: this._body });
     }
-    
-    try {
-      const res = await fetch(url, opts);
-      const json = await res.json().catch(() => null);
-      
-      if (!res.ok) {
-        console.error(`[v0] API ${this._method} ${this._table} ERRO:`, {
-          status: res.status,
-          response: json
-        });
+
+    // Retry: writes (POST/PATCH/DELETE) têm 2 tentativas extras com backoff 600ms/1.8s em caso
+    // de erro de rede (TypeError: Failed to fetch) ou 5xx. NÃO faz retry em 4xx (erro do cliente).
+    // GET também tenta 1x extra. Timeout de 15s via AbortController.
+    const maxAttempts = this._method === 'GET' ? 2 : 3;
+    const backoffs = [0, 600, 1800];
+    let lastErr = null;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (backoffs[attempt]) await new Promise(r => setTimeout(r, backoffs[attempt]));
+
+      const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      const tid = ctrl ? setTimeout(() => ctrl.abort(), 15000) : null;
+      if (ctrl) opts.signal = ctrl.signal;
+
+      try {
+        const res = await fetch(url, opts);
+        if (tid) clearTimeout(tid);
+        const json = await res.json().catch(() => null);
+
+        // 4xx: erro do cliente (validação, auth) — não adianta retry
+        if (res.status >= 400 && res.status < 500) {
+          console.error(`[v0] API ${this._method} ${this._table} ${res.status}:`, json);
+          return { data: null, error: { message: json?.error || res.statusText, status: res.status } };
+        }
+        // 5xx: erro do servidor — tenta de novo
+        if (!res.ok) {
+          lastErr = { message: json?.error || res.statusText, status: res.status };
+          console.warn(`[v0] API ${this._method} ${this._table} ${res.status} (tentativa ${attempt+1}/${maxAttempts})`);
+          continue;
+        }
+        return { data: json, error: null };
+      } catch (e) {
+        if (tid) clearTimeout(tid);
+        const isTimeout = e.name === 'AbortError';
+        lastErr = { message: isTimeout ? 'Tempo esgotado ao conectar' : (e.message || 'Erro de rede'), network: true };
+        console.warn(`[v0] API ${this._method} ${this._table} rede (${attempt+1}/${maxAttempts}):`, e.message);
       }
-      
-      return res.ok ? { data: json, error: null } : { data: null, error: { message: json?.error || res.statusText } };
-    } catch (e) { 
-      console.error(`[v0] API ${this._method} ${this._table} EXCEÇÃO:`, e);
-      return { data: null, error: { message: e.message } }; 
     }
+
+    console.error(`[v0] API ${this._method} ${this._table} falhou após ${maxAttempts} tentativas`);
+    return { data: null, error: lastErr || { message: 'Falha de conexão' } };
   }
 }
 

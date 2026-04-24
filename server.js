@@ -846,13 +846,23 @@ async function handleREST(req, res, table, params, body) {
       }
       const info = stmt.run(...keys.map(k=>sanitize(payload[k])))
 
-      // ── Auto-assign order_num sequencial por tenant ─────────────────────
+      // ── Auto-assign order_num sequencial por tenant (atômico via transação) ──
+      // Race: 2 pedidos simultâneos podem ler o mesmo MAX e gerar order_num duplicado.
+      // Solução: executar SELECT MAX + UPDATE dentro de uma transação BEGIN IMMEDIATE.
+      // SQLite + better-sqlite3 serializa as transações, então duas threads concorrentes
+      // esperam uma a outra — sem duplicação.
       if (table === 'orders' && info.lastInsertRowid) {
         const _tid = tenantId || payload.tenant_id
         if (_tid) {
-          const _maxRow = db.prepare('SELECT COALESCE(MAX(order_num),0) as mx FROM orders WHERE tenant_id=?').get(_tid)
-          const _nextNum = (_maxRow?.mx || 0) + 1
-          db.prepare('UPDATE orders SET order_num=? WHERE rowid=?').run(_nextNum, info.lastInsertRowid)
+          try {
+            const txFn = db.transaction((tenantId, rowid) => {
+              const row = db.prepare('SELECT COALESCE(MAX(order_num),0) as mx FROM orders WHERE tenant_id=?').get(tenantId)
+              const next = (row?.mx || 0) + 1
+              db.prepare('UPDATE orders SET order_num=? WHERE rowid=?').run(next, rowid)
+              return next
+            })
+            txFn(_tid, info.lastInsertRowid)
+          } catch(e) { log('⚠️', 'order_num atômico falhou:', e.message) }
         }
       }
       // ────────────────────────────────────────────────────────────────────
