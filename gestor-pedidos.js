@@ -126,14 +126,16 @@ function renderKanban() {
   const isAcougue = window._segmento === 'acougue';
   const _saiuWrap      = document.getElementById('kol-wrap-saiu');
   const _entregueWrap  = document.querySelector('.kol-entregue');
+  // Usa setProperty com 'important' porque o CSS do mobile (@media max-width:900px)
+  // tem display:flex!important em .kol — sem important aqui, a coluna "escondida" apareceria no mobile.
   if (isAcougue) {
     // Açougue: esconde "saiu", mostra "entregue"
-    if (_saiuWrap)     _saiuWrap.style.display     = 'none';
-    if (_entregueWrap) _entregueWrap.style.display = 'flex';
+    if (_saiuWrap)     _saiuWrap.style.setProperty('display', 'none', 'important');
+    if (_entregueWrap) _entregueWrap.style.setProperty('display', 'flex', 'important');
   } else {
     // Restaurante: mostra "saiu" (sempre, pra não ter jump de 3→4 cols), esconde "entregue"
-    if (_saiuWrap)     _saiuWrap.style.display     = '';
-    if (_entregueWrap) _entregueWrap.style.display = 'none';
+    if (_saiuWrap)     _saiuWrap.style.setProperty('display', 'flex', 'important');
+    if (_entregueWrap) _entregueWrap.style.setProperty('display', 'none', 'important');
   }
   // Ajusta o grid para 4 colunas fixas
   const _board = document.getElementById('kanban-board');
