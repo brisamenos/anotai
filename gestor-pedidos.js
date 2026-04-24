@@ -319,20 +319,30 @@ function openOrderDetail(id) {
   const _oItems = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? (() => { try { return JSON.parse(o.items); } catch { return []; } })() : []);
   const _isMesaDetalhe  = !!o._isMesa;
   const _isAcougueDetalhe = window._segmento === 'acougue' && !_isMesaDetalhe;
-  document.getElementById('od-items-list').innerHTML = _oItems.map((item, _i) => `
+  const _statusIcons = { producao: '🍳', pronto: '✅', entregue: '🟢', cancelado: '❌' };
+  document.getElementById('od-items-list').innerHTML = _oItems.map((item, _i) => {
+    const itemStatus = item.item_status || 'active';
+    const statusIcon = _statusIcons[itemStatus] || '⚪';
+    const canCancel = itemStatus !== 'cancelado' && itemStatus !== 'entregue';
+    const itemIndexToPass = item._origIndex ?? _i;
+    return `
     <div class="od-item-row" style="align-items:center">
       <div class="od-item-qty">${item.qty}x</div>
       <div style="flex:1">
-        <div class="od-item-name">${item.name}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <span style="font-size:14px">${statusIcon}</span>
+          <div class="od-item-name">${item.name}</div>
+          ${itemStatus !== 'active' && itemStatus !== 'cancelado' ? `<span style="font-size:10px;color:var(--muted);font-weight:600">${itemStatus.charAt(0).toUpperCase() + itemStatus.slice(1)}</span>` : ''}
+        </div>
         ${item.obs ? `<div class="od-item-obs">📝 ${item.obs}</div>` : ''}
         ${Array.isArray(item.extras) && item.extras.length ? `<div class="od-item-obs">➕ ${item.extras.join(', ')}</div>` : ''}
       </div>
       <div style="display:flex;align-items:center;gap:6px">
         <div class="od-item-price">R$&nbsp;${(item.price).toFixed(2).replace('.', ',')}</div>
-        ${_isMesaDetalhe  ? `<button onclick="cancelarItemComanda(${item._origIndex ?? _i})"  title="Cancelar item" style="width:22px;height:22px;border-radius:6px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.1);color:#f87171;font-size:13px;line-height:1;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0">✕</button>` : ''}
-        ${_isAcougueDetalhe ? `<button onclick="cancelarItemKanban(${_i})" title="Remover item" style="width:22px;height:22px;border-radius:6px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.1);color:#f87171;font-size:13px;line-height:1;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0">✕</button>` : ''}
+        ${canCancel ? `<button onclick="cancelarItemGenerico(${window._currentDetailId}, ${itemIndexToPass}, ${_isMesaDetalhe})" title="Cancelar item" style="width:22px;height:22px;border-radius:6px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.1);color:#f87171;font-size:13px;line-height:1;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0">✕</button>` : ''}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   // Totais
   const fmt = v => 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ',');
@@ -431,9 +441,9 @@ function openOrderDetail(id) {
       : `<span>🌐 Pedido via Cardápio Digital</span>`;
   }
 
-  // Botão de adicionar produto — só açougue (não mesa)
+  // Botão de adicionar produto — todos os segmentos (exceto mesa)
   const _addPanelBtn = document.getElementById('od-add-produto-btn');
-  if (_addPanelBtn) _addPanelBtn.style.display = (window._segmento === 'acougue' && !o._isMesa) ? '' : 'none';
+  if (_addPanelBtn) _addPanelBtn.style.display = (!o._isMesa) ? '' : 'none';
 
   openModal('modal-order-detail');
 }
@@ -515,7 +525,70 @@ async function cancelarItemKanban(itemIndex) {
   }
 }
 
-// ── Catálogo de produtos para adicionar a pedido existente (açougue) ──
+// ── Função unificada para cancelar itens em qualquer tipo de pedido ──
+async function cancelarItemGenerico(orderId, itemIndex, isMesaOrder) {
+  // Busca o pedido correto (mesa ou kanban)
+  let o = null;
+  if (isMesaOrder) {
+    const mesaOrder = mesaOrdersCache.find(x => x.id === orderId);
+    if (!mesaOrder) return;
+    o = mesaOrder;
+  } else {
+    o = ordersKanban.find(x => x.id === orderId);
+    if (!o) return;
+  }
+
+  // Obtém todos os itens
+  const allItems = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? (() => { try { return JSON.parse(o.items); } catch { return []; } })() : []);
+  const item = allItems[itemIndex];
+
+  if (!item || item.item_status === 'cancelado') return;
+
+  if (!confirm(`Cancelar ${item.qty}x ${item.name}?`)) return;
+
+  // Marca o item como cancelado
+  const updatedItems = allItems.map((i, idx) =>
+    idx === itemIndex ? { ...i, item_status: 'cancelado' } : i
+  );
+
+  const newTotal = updatedItems
+    .filter(i => i.item_status !== 'cancelado')
+    .reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+
+  try {
+    const { error } = await sb.from('orders')
+      .update({ items: updatedItems, total: newTotal, updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+    if (error) throw error;
+
+    // Atualiza cache local
+    if (isMesaOrder) {
+      const idx = mesaOrdersCache.findIndex(x => x.id === orderId);
+      if (idx !== -1) {
+        mesaOrdersCache[idx] = { ...mesaOrdersCache[idx], items: updatedItems, total: newTotal };
+        window._detailMesaAllItems = updatedItems;
+      }
+    } else {
+      const idx = ordersKanban.findIndex(x => x.id === orderId);
+      if (idx !== -1) {
+        ordersKanban[idx] = { ...ordersKanban[idx], items: updatedItems, total: newTotal };
+        window._detailKanbanOrder = ordersKanban[idx];
+      }
+    }
+
+    // Re-renderiza
+    closeModal('modal-order-detail');
+    setTimeout(() => openOrderDetail(orderId), 80);
+    renderKanban();
+    if (isMesaOrder) _renderMesaPageFromCache();
+    sbToast('ok', `${item.qty}x ${item.name} cancelado!`);
+  } catch(e) {
+    console.error('[cancelarItemGenerico]', e);
+    alert('Erro ao cancelar item: ' + (e.message || e));
+  }
+}
+
+// ── Catálogo de produtos para adicionar a pedido existente ──
 let _odCatalogoActiveCat = '__todos__';
 
 function odAbrirCatalogo() {
@@ -587,7 +660,7 @@ function _odRenderCatalogGrid() {
   grid.innerHTML = lista.map(i => {
     const imgEl = i.imageUrl
       ? `<div style="width:100%;aspect-ratio:1;border-radius:10px;overflow:hidden;margin-bottom:8px;background:var(--surface2)"><img src="${i.imageUrl}" style="width:100%;height:100%;object-fit:cover"></div>`
-      : `<div style="width:100%;aspect-ratio:1;border-radius:10px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:8px">${i.emoji || '🥩'}</div>`;
+      : `<div style="width:100%;aspect-ratio:1;border-radius:10px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:8px">${i.emoji || '🍽️'}</div>`;
     return `<div onclick="_odSelecionarProduto(${i.id})" style="background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:10px;cursor:pointer;transition:border-color .15s" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
       ${imgEl}
       <div style="font-size:12.5px;font-weight:700;margin-bottom:3px;line-height:1.3">${i.name}</div>
