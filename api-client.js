@@ -210,6 +210,8 @@
     select(cols = '*')     { this._params.set('select', cols);                                    return this; }
     eq(col, val)           { this._params.set(col, `eq.${val === null ? 'null' : val}`);          return this; }
     neq(col, val)          { this._params.set(col, `neq.${val}`);                                 return this; }
+    like(col, val)         { this._params.set(col, `like.${val}`);                                return this; }
+    ilike(col, val)        { this._params.set(col, `ilike.${val}`);                               return this; }
     in(col, vals)          { this._params.set(col, `in.(${vals.join(',')})`);                     return this; }
     gte(col, val)          { this._params.append(col, `gte.${val}`);                              return this; } // append = permite coexistir com lt no mesmo campo
     lte(col, val)          { this._params.append(col, `lte.${val}`);                              return this; }
