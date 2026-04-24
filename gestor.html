@@ -313,6 +313,17 @@ function nav(id) {
       <button class="btn bp" onclick="noOpenModal()"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Novo pedido</button>
     </div>
   </div>
+  <!-- Resultado da busca no histórico (aparece quando kanban não encontra) -->
+  <div id="kanban-hist-results" style="display:none;margin:0 0 12px;padding:16px 18px;background:linear-gradient(135deg,rgba(14,165,233,.04),rgba(14,165,233,.02));border:1px solid rgba(14,165,233,.15);border-radius:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--accent)">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Resultados do histórico
+      </div>
+      <button class="btn bg" style="font-size:10.5px;padding:3px 10px" onclick="kanbanHistHide()">✕ Fechar</button>
+    </div>
+    <div id="kanban-hist-list" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto"></div>
+  </div>
   <div class="kanban" id="kanban-board">
     <!-- Em análise -->
     <div class="kol kol-analise">
@@ -2425,7 +2436,7 @@ Use no seu próximo pedido 🛍️</textarea>
 </div>
 
 <!-- Modal detalhe do pedido -->
-<div class="modal-bg" id="modal-hist-detalhe" onclick="if(event.target===this)closeModal('modal-hist-detalhe')"><div class="modal" style="max-width:520px"><div class="mh"><div class="mt">Detalhe do Pedido</div><button class="mc" onclick="closeModal('modal-hist-detalhe')">✕</button></div><div id="modal-hist-body"></div></div></div>
+<div class="modal-bg" id="modal-hist-detalhe" onclick="if(event.target===this)closeModal('modal-hist-detalhe')"><div class="modal" style="max-width:520px"><button class="modal-close" onclick="closeModal('modal-hist-detalhe')"></button><div class="modal-header"><h2>Detalhe do Pedido</h2></div><div id="modal-hist-body"></div></div></div>
 
 <!-- FORNECEDORES -->
 <div class="page" id="page-fornecedores">
