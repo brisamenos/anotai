@@ -2694,7 +2694,17 @@ function _buildGruposDesc(item) {
   const parts = [];
   for (const g of (item.custom_groups || [])) {
     const sel = _imGruposState[g.nome] || [];
-    if (sel.length) parts.push(`${g.nome}: ${sel.map(o=>o.qty>1?`${o.qty}x ${o.nome}`:o.nome).join(', ')}`);
+    if (sel.length) {
+      const names = sel.map(o => {
+        const qtyPrefix = (o.qty || 1) > 1 ? `${o.qty}x ` : '';
+        // Só mostra preço se for >0 — adicionais gratuitos (ex: "sem cebola") ficam sem "(+R$ 0,00)"
+        const preco = (parseFloat(o.preco) || 0) > 0
+          ? ` (+R$ ${parseFloat(o.preco).toFixed(2).replace('.', ',')})`
+          : '';
+        return `${qtyPrefix}${o.nome}${preco}`;
+      }).join(', ');
+      parts.push(`${g.nome}: ${names}`);
+    }
   }
   return parts.join(' · ');
 }
