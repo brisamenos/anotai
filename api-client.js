@@ -10,32 +10,63 @@
   const API_BASE = BASE + '/api';
 
   // ── Sessão / tenant ───────────────────────────────────
+  // CRÍTICO: detecta o contexto pela URL pra escolher a sessão certa.
+  // Se o usuário tem o gestor de um tenant aberto numa aba e o cardápio de
+  // OUTRO tenant em outra, ler sys_session primeiro vazaria o pedido do
+  // cardápio pro gestor errado. Por isso:
+  //   - Páginas de cardápio (/cardapio/*, /c/*, ?cardapio=...) → cardapio_session
+  //   - Páginas de gestor/admin/garçom/app → sys_session
+  function isCardapioPage() {
+    try {
+      const path = (window.location.pathname || '').toLowerCase();
+      const search = (window.location.search || '').toLowerCase();
+      if (path.startsWith('/cardapio') || path.startsWith('/c/')) return true;
+      if (path.includes('/cardapio/')) return true;
+      if (search.includes('cardapio=') || search.includes('slug=')) return true;
+      // Detecção pelo body/html (caso a rota seja servida sem path padrão)
+      if (document.body && document.body.dataset && document.body.dataset.contexto === 'cardapio') return true;
+      return false;
+    } catch (e) { return false; }
+  }
+
+  function readSession(key) {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && parsed.tenant_id ? parsed.tenant_id : null;
+    } catch (e) { return null; }
+  }
+
   function getTenantId() {
     try {
-      // Sessão do gestor/admin tem prioridade
-      const s = sessionStorage.getItem('sys_session');
-      if (s) {
-        const parsed = JSON.parse(s);
-        if (parsed.tenant_id) {
-          console.log('[v0] getTenantId: encontrado tenant_id na sys_session:', parsed.tenant_id);
-          return parsed.tenant_id;
+      const inCardapio = isCardapioPage();
+      // Em páginas de cardápio: cardapio_session é a fonte de verdade.
+      // Em páginas de gestor/admin/etc: sys_session é a fonte de verdade.
+      if (inCardapio) {
+        const cTid = readSession('cardapio_session');
+        if (cTid) return cTid;
+        // Fallback só se cardapio_session não existir ainda (pré-resolveTenant)
+        const sTid = readSession('sys_session');
+        if (sTid) {
+          console.warn('[v0] getTenantId: cardápio sem cardapio_session, usando sys_session como fallback');
+          return sTid;
         }
-        console.warn('[v0] getTenantId: sys_session existe mas sem tenant_id:', parsed);
-      }
-      // Fallback: sessão do cardápio (chave separada para não sobrescrever gestor)
-      const c = sessionStorage.getItem('cardapio_session');
-      if (c) {
-        const parsed = JSON.parse(c);
-        if (parsed.tenant_id) {
-          console.log('[v0] getTenantId: encontrado tenant_id na cardapio_session:', parsed.tenant_id);
-          return parsed.tenant_id;
+      } else {
+        const sTid = readSession('sys_session');
+        if (sTid) return sTid;
+        // Fallback pra cardapio_session (não deveria acontecer no gestor)
+        const cTid = readSession('cardapio_session');
+        if (cTid) {
+          console.warn('[v0] getTenantId: gestor sem sys_session, usando cardapio_session como fallback');
+          return cTid;
         }
       }
       console.warn('[v0] getTenantId: nenhum tenant_id encontrado nas sessões');
       return null;
-    } catch (e) { 
-      console.error('[v0] getTenantId: erro ao ler sessão:', e);
-      return null; 
+    } catch (e) {
+      console.error('[v0] getTenantId: erro:', e);
+      return null;
     }
   }
 
