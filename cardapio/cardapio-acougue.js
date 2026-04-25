@@ -150,6 +150,24 @@ function renderImGrupos(item) {
   const grupos = item.custom_groups || [];
   if (!grupos.length) { wrap.innerHTML = ''; return; }
 
+  // ── Garante lista de esgotados atualizada antes de renderizar ──
+  // O Supabase Realtime PODE não estar publicando addons_esgotados (depende da
+  // configuração do projeto). Em vez de confiar só nele, fazemos um fetch fresco
+  // a cada abertura de modal — leva ~150ms e garante que o cliente vê o estado
+  // real do servidor, mesmo se ficou minutos com o cardápio aberto.
+  if (typeof loadAddonsEsgotados === 'function') {
+    loadAddonsEsgotados().then(() => _renderImGruposNow(item)).catch(() => _renderImGruposNow(item));
+    return;
+  }
+  _renderImGruposNow(item);
+}
+
+function _renderImGruposNow(item) {
+  const wrap = document.getElementById('im-grupos-wrap');
+  if (!wrap) return;
+  const grupos = item.custom_groups || [];
+  if (!grupos.length) { wrap.innerHTML = ''; return; }
+
   // ── Modo açougue ────────────────────────────────────────
   if (_isAcougueItem(item)) {
     _acougueCortes = {};

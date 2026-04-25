@@ -508,6 +508,21 @@ async function init() {
     applyTiposEntrega();
     applyDeliveryInfo();
     setInterval(() => applyStatus(undefined, undefined), 60000);
+    // ── Polling de adicionais esgotados (defesa contra realtime indisponível) ──
+    // A cada 30s recarrega a lista. Se mudou e o modal está aberto, re-renderiza.
+    setInterval(async () => {
+      try {
+        const before = JSON.stringify([..._addonsEsgotadosSet].sort());
+        await loadAddonsEsgotados();
+        const after = JSON.stringify([..._addonsEsgotadosSet].sort());
+        if (before === after) return; // sem mudança, nada a fazer
+        const modal = document.getElementById('item-modal-bg');
+        if (modal && modal.classList.contains('on') && _imItemId != null) {
+          const item = allItems.find(x => x.id === _imItemId);
+          if (item && typeof _renderImGruposNow === 'function') _renderImGruposNow(item);
+        }
+      } catch(e) {}
+    }, 30000);
   } catch(e) {
     console.error(e);
     document.getElementById('menu-wrap').innerHTML =
@@ -576,8 +591,9 @@ async function onAddonsEsgotadosChanged() {
   if (modal && modal.classList.contains('on') && typeof _imItemId !== 'undefined' && _imItemId != null) {
     const item = (typeof allItems !== 'undefined' && Array.isArray(allItems))
       ? allItems.find(x => x.id === _imItemId) : null;
-    if (item && typeof renderImGrupos === 'function') {
-      try { renderImGrupos(item); } catch(e) { console.warn('[realtime] re-render falhou:', e); }
+    // Usa _renderImGruposNow direto pra evitar refetch (acabamos de carregar)
+    if (item && typeof _renderImGruposNow === 'function') {
+      try { _renderImGruposNow(item); } catch(e) { console.warn('[realtime] re-render falhou:', e); }
     }
   }
 }
