@@ -849,6 +849,63 @@ async function handleREST(req, res, table, params, body) {
         }
         payload.tenant_id = tenantId
       }
+
+      // ── Validação server-side para orders ────────────────────────────────
+      // Previne: (a) bypass de bairros_bloqueados via API direta;
+      //          (b) downgrade de taxa fixa via cliente malicioso;
+      //          (c) cobrança indevida em retirada/mesa.
+      if (table === 'orders' && tenantId) {
+        const addrRaw = String(payload.addr || '').trim()
+        const isMesa     = (payload.mesa_num != null && payload.mesa_num !== '') || /^Mesa\b/i.test(addrRaw)
+        const isRetirada = /^Retirada\b/i.test(addrRaw)
+        const isDelivery = !isMesa && !isRetirada && addrRaw.length > 0
+
+        if (!isDelivery) {
+          // Mesa ou retirada: nunca cobra taxa de entrega
+          payload.taxa = 0
+        } else {
+          try {
+            const sc = db.prepare('SELECT delivery_fee_config FROM store_config WHERE tenant_id=?').get(tenantId)
+            const cfg = sc?.delivery_fee_config ? jsonParse(sc.delivery_fee_config) : {}
+
+            // Bloqueio: bairro do endereço bate com lista de bairros_bloqueados
+            const bloqueados = Array.isArray(cfg.bairros_bloqueados) ? cfg.bairros_bloqueados : []
+            if (bloqueados.length) {
+              const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()
+              const addrNorm = norm(addrRaw)
+              for (const bb of bloqueados) {
+                const bbNorm = norm(bb)
+                if (bbNorm && new RegExp(`(^|[^a-z0-9])${bbNorm.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}([^a-z0-9]|$)`).test(addrNorm)) {
+                  return send(res, 403, { error: `Bairro "${bb}" não é atendido pela loja.` })
+                }
+              }
+            }
+
+            // Anti-downgrade: taxa fixa não pode ser menor que o configurado
+            if (cfg.tipo === 'fixo') {
+              const taxaConf  = parseFloat(cfg.valor) || 0
+              const taxaEnvio = parseFloat(payload.taxa) || 0
+              if (taxaEnvio < taxaConf) payload.taxa = taxaConf
+            }
+            // Anti-downgrade: por_bairro — se algum bairro cadastrado bate, força a taxa correta
+            else if (cfg.tipo === 'por_bairro' && Array.isArray(cfg.bairros) && cfg.bairros.length) {
+              const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()
+              const addrNorm = norm(addrRaw)
+              for (const b of cfg.bairros) {
+                const bNorm = norm(b.bairro)
+                if (bNorm && addrNorm.includes(bNorm)) {
+                  const taxaConf = parseFloat(b.taxa) || 0
+                  if ((parseFloat(payload.taxa)||0) < taxaConf) payload.taxa = taxaConf
+                  break
+                }
+              }
+            }
+            // por_km: não há como recalcular sem GPS no servidor — confia no front
+          } catch(e) { log('⚠️', 'validação de delivery falhou:', e.message) }
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       if (table === 'store_config') {
         const scTid = tenantId || payload.tenant_id
         if (!scTid) return send(res, 400, { error: 'tenant_id obrigatório' })
@@ -1221,8 +1278,8 @@ async function handleOrderStatus(req, res) {
     const order = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(order_id,tid)
     if (!order) return send(res,404,{ok:false,error:'Pedido não encontrado'})
     const oldStatus = order.status
-    db.prepare("UPDATE orders SET status=? WHERE id=?").run(new_status,order_id)
-    const updated = db.prepare("SELECT * FROM orders WHERE id=?").get(order_id)
+    db.prepare("UPDATE orders SET status=? WHERE id=? AND tenant_id=?").run(new_status,order_id,tid)
+    const updated = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(order_id,tid)
     emit(tid,'orders',parseRow('orders',updated),'UPDATE')
     send(res,200,{ok:true,order:parseRow('orders',updated)})
 
@@ -1510,7 +1567,23 @@ async function handleIAWebhook(req, res) {
       const horariosCfg=jsonParse(cfg.horarios_config)||{}, diaConfig=horariosCfg[diaHoje]
       if (diaConfig) { if(!diaConfig.ativo)lojaAbertaAgora=false; else{const[ah,am]=(diaConfig.abertura||'00:00').split(':').map(Number);const[fh,fm]=(diaConfig.fechamento||'23:59').split(':').map(Number);lojaAbertaAgora=horaMin>=ah*60+am&&horaMin<=fh*60+fm} }
       const taxaCfg=jsonParse(cfg.delivery_fee_config)||{}
-      const infoLoja=[`Nome: ${nomeLoja}`,`Status: ${lojaAbertaAgora?'🟢 ABERTO':'🔴 FECHADO'}`,cfg.store_whatsapp?`WhatsApp: ${cfg.store_whatsapp}`:null,cfg.store_descricao?`Descrição: ${cfg.store_descricao}`:null,cfg.store_tempo_entrega?`Tempo de entrega: ${cfg.store_tempo_entrega}`:null,taxaCfg.tipo==='fixo'?`Taxa: ${parseFloat(taxaCfg.valor||0)>0?'R$ '+parseFloat(taxaCfg.valor).toFixed(2).replace('.',','):'Grátis'}`:null,`Cardápio: ${linkCardapio}`].filter(Boolean)
+      // Monta string de taxa para os 3 tipos (fixo / por_km / por_bairro)
+      let taxaInfo = null
+      if (taxaCfg.tipo === 'fixo') {
+        const v = parseFloat(taxaCfg.valor||0)
+        taxaInfo = `Taxa: ${v > 0 ? 'R$ ' + v.toFixed(2).replace('.',',') + ' (fixa, em qualquer bairro)' : 'Grátis'}`
+      } else if (taxaCfg.tipo === 'por_km' && Array.isArray(taxaCfg.faixas) && taxaCfg.faixas.length) {
+        const lista = taxaCfg.faixas.map(f => `até ${f.ate_km} km = R$ ${parseFloat(f.taxa||0).toFixed(2).replace('.',',')}`).join('; ')
+        taxaInfo = `Taxa por distância: ${lista}`
+      } else if (taxaCfg.tipo === 'por_bairro' && Array.isArray(taxaCfg.bairros) && taxaCfg.bairros.length) {
+        const lista = taxaCfg.bairros.map(b => `${b.bairro} = R$ ${parseFloat(b.taxa||0).toFixed(2).replace('.',',')}`).join('; ')
+        taxaInfo = `Taxa por bairro: ${lista}`
+      }
+      // Bairros bloqueados — informar para a IA não prometer entrega lá
+      const bairrosBloq = Array.isArray(taxaCfg.bairros_bloqueados) ? taxaCfg.bairros_bloqueados.filter(Boolean) : []
+      const bloqInfo = bairrosBloq.length ? `Bairros NÃO atendidos: ${bairrosBloq.join(', ')}` : null
+
+      const infoLoja=[`Nome: ${nomeLoja}`,`Status: ${lojaAbertaAgora?'🟢 ABERTO':'🔴 FECHADO'}`,cfg.store_whatsapp?`WhatsApp: ${cfg.store_whatsapp}`:null,cfg.store_descricao?`Descrição: ${cfg.store_descricao}`:null,cfg.store_tempo_entrega?`Tempo de entrega: ${cfg.store_tempo_entrega}`:null,taxaInfo,bloqInfo,`Cardápio: ${linkCardapio}`].filter(Boolean)
       contexto.push(`INFORMAÇÕES DA LOJA:\n${infoLoja.join('\n')}`)
       const diasNome={dom:'Domingo',seg:'Segunda',ter:'Terça',qua:'Quarta',qui:'Quinta',sex:'Sexta',sab:'Sábado'}
       if (Object.keys(horariosCfg).length) contexto.push('HORÁRIO:\n'+Object.entries(horariosCfg).map(([d,h])=>h.ativo?`${diasNome[d]}: ${h.abertura} às ${h.fechamento}${d===diaHoje?' ← hoje':''}`:` ${diasNome[d]}: Fechado`).join('\n'))

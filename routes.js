@@ -88,10 +88,17 @@ function _iniciarPixRecoveryJob(db, log, sseBroadcast, getToken) {
               db.prepare("UPDATE pagamentos_pix SET status='aprovado', paid_at=? WHERE mp_payment_id=?")
                 .run(pd.date_approved || new Date().toISOString(), String(row.mp_payment_id))
 
-              const pedAtual = db.prepare("SELECT status FROM orders WHERE id=?").get(row.order_id)
-              if (pedAtual?.status === 'aguardando_pix') {
-                db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=?").run(row.order_id)
-                const pedFull = db.prepare("SELECT * FROM orders WHERE id=?").get(row.order_id)
+              const pedAtual = db.prepare("SELECT status, pag FROM orders WHERE id=? AND tenant_id=?").get(row.order_id, tenantId)
+              const eraAguardando = pedAtual?.status === 'aguardando_pix'
+              // Ressurreição: pedido cancelado por timeout (cleanup) que recebeu pagamento depois.
+              // Critério: status='cancelado' AND pag ainda não é 'pix_mp'/'cartao_mp' (não confirmado antes).
+              const podeRessurreicao = pedAtual?.status === 'cancelado'
+                && pedAtual?.pag !== 'pix_mp' && pedAtual?.pag !== 'cartao_mp'
+
+              if (eraAguardando || podeRessurreicao) {
+                db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, tenantId)
+                if (podeRessurreicao) log('🔄', `PEDIDO RESSUSCITADO (recovery): pagamento PIX chegou após cancelamento — id=${row.order_id} tenant=${tenantId}`)
+                const pedFull = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(row.order_id, tenantId)
                 const items   = pedFull && typeof pedFull.items === 'string'
                   ? (() => { try { return JSON.parse(pedFull.items) } catch { return [] } })()
                   : (pedFull?.items || [])
@@ -278,7 +285,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
     try {
       // Atualiza status
-      db.prepare("UPDATE orders SET status='cancelado' WHERE id=?").run(orderId)
+      db.prepare("UPDATE orders SET status='cancelado' WHERE id=? AND tenant_id=?").run(orderId, tid)
 
       // Reverte customer stats (se o pedido tinha sido contabilizado)
       if (order.customer_id) {
@@ -549,8 +556,29 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const tid = req.headers['x-tenant-id']
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
     const body = await readBody(req)
-    const { valor, order_id, client, email = 'pagador@email.com' } = body
+    const { order_id, client, email = 'pagador@email.com' } = body
+    let valor = body.valor
     if (!valor || valor <= 0) { send(res, 400, { error: 'valor inválido' }); return true }
+
+    // ── Validações anti-fraude server-side ────────────────────────────────
+    // (a) order_id deve pertencer ao tenant
+    // (b) valor deve bater com total+taxa do pedido (anti-downgrade)
+    // Se algo divergir, sobrescreve valor com o real do pedido (resiliente).
+    if (order_id) {
+      const ped = db.prepare('SELECT tenant_id, total, taxa, status FROM orders WHERE id=?').get(order_id)
+      if (!ped) { send(res, 404, { error: 'Pedido não encontrado' }); return true }
+      if (ped.tenant_id !== tid) { send(res, 403, { error: 'Pedido não pertence ao tenant' }); return true }
+      // Status: 'aguardando_pix' (recém-criado). Outros status indicam pagamento já iniciado/finalizado.
+      if (ped.status !== 'aguardando_pix') {
+        send(res, 409, { error: `Pedido em status "${ped.status}" — não pode iniciar novo PIX` }); return true
+      }
+      // Anti-downgrade: força o valor real do pedido (com tolerância de 1 centavo p/ rounding)
+      const totalPedido = (parseFloat(ped.total) || 0) + (parseFloat(ped.taxa) || 0)
+      if (totalPedido > 0 && Math.abs(parseFloat(valor) - totalPedido) > 0.01) {
+        log('⚠️', `PIX: valor R$${valor} ≠ total do pedido R$${totalPedido.toFixed(2)} — usando valor do pedido (anti-fraude) tenant=${tid}`)
+        valor = totalPedido
+      }
+    }
 
     let mpToken = MP_TOKEN
     let taxa = TAXA_PIX
@@ -562,7 +590,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
     } catch {}
     if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago não configurado. Configure no painel Admin → Configurações.' }); return true }
 
-    const extRef = `ef-${tid.slice(0, 8)}-${order_id || Date.now()}`
+    // extRef único — usa tenant_id completo + order_id (ou timestamp se não tiver pedido)
+    const extRef = `ef-${tid}-${order_id || Date.now()}`
     const valorLiq = Math.max(0, parseFloat(valor) - taxa)
 
     try {
@@ -650,12 +679,16 @@ module.exports = async function handleRoutes(req, res, ctx) {
       // Libera o pedido para o gestor SEMPRE que aprovado — independente de mudança de status
       // (corrige race condition: webhook pode ter setado 'aprovado' antes do poll chegar aqui)
       if (novoStatus === 'aprovado' && rowAtual?.order_id) {
-        const pedAtual = db.prepare("SELECT status FROM orders WHERE id=?").get(rowAtual.order_id)
-        if (pedAtual?.status === 'aguardando_pix') {
-          log('✅', `PIX APROVADO (poll): R$${rowAtual.valor} tenant=${rowAtual.tenant_id}`)
+        const pedAtual = db.prepare("SELECT status, pag FROM orders WHERE id=? AND tenant_id=?").get(rowAtual.order_id, rowAtual.tenant_id)
+        const eraAguardando = pedAtual?.status === 'aguardando_pix'
+        // Ressurreição: pedido cancelado pelo cleanup que recebeu pagamento depois
+        const podeRessurreicao = pedAtual?.status === 'cancelado'
+          && pedAtual?.pag !== 'pix_mp' && pedAtual?.pag !== 'cartao_mp'
+        if (eraAguardando || podeRessurreicao) {
+          log('✅', `PIX APROVADO (poll): R$${rowAtual.valor} tenant=${rowAtual.tenant_id}${podeRessurreicao ? ' — pedido ressuscitado' : ''}`)
           marcarDirty()
-          db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=?").run(rowAtual.order_id)
-          const _fo1 = db.prepare("SELECT * FROM orders WHERE id=?").get(rowAtual.order_id)
+          db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=? AND tenant_id=?").run(rowAtual.order_id, rowAtual.tenant_id)
+          const _fo1 = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(rowAtual.order_id, rowAtual.tenant_id)
           const _it1 = _fo1 && typeof _fo1.items==='string' ? (() => { try{return JSON.parse(_fo1.items)}catch{return []} })() : (_fo1?.items||[])
           sseBroadcast(`orders-rt:${rowAtual.tenant_id}`, `orders:UPDATE`, _fo1 ? {..._fo1, items:_it1, status:'analise', pag:'pix_mp'} : { id: rowAtual.order_id, status: 'analise', pag: 'pix_mp' })
           _notificarPixConfirmado(rowAtual.tenant_id, _fo1, sendWA, fillVars, EVO_INST, db)
@@ -681,10 +714,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const orderRow = db.prepare('SELECT tenant_id FROM orders WHERE id=?').get(ordId)
     if (!orderRow || orderRow.tenant_id !== tid) { send(res, 403, { error: 'Pedido não pertence ao tenant' }); return true }
     // Vincula sempre (mesmo se ainda pendente)
-    db.prepare('UPDATE pagamentos_pix SET order_id=? WHERE mp_payment_id=?').run(ordId, mpId)
+    db.prepare('UPDATE pagamentos_pix SET order_id=? WHERE mp_payment_id=? AND tenant_id=?').run(ordId, mpId, tid)
     // Só marca como pago se o pagamento estiver realmente aprovado
     if (pixRow.status === 'aprovado') {
-      db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=?").run(ordId)
+      db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=? AND tenant_id=?").run(ordId, tid)
     }
     marcarDirty()
     send(res, 200, { ok: true, aprovado: pixRow.status === 'aprovado' })
@@ -766,19 +799,24 @@ module.exports = async function handleRoutes(req, res, ctx) {
         if (novoStatus === 'aprovado') {
           log('✅', `Webhook MP APROVADO (PIX): R$${row.valor} tenant=${row.tenant_id}`)
           if (row.order_id) {
-            const pedAtual = db.prepare("SELECT status FROM orders WHERE id=?").get(row.order_id)
+            const pedAtual = db.prepare("SELECT status, pag FROM orders WHERE id=? AND tenant_id=?").get(row.order_id, row.tenant_id)
             const eraAguardando = pedAtual?.status === 'aguardando_pix'
-            if (eraAguardando) {
-              db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=?").run(row.order_id)
-            } else {
-              db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=?").run(row.order_id)
+            // Ressurreição: pedido cancelado pelo cleanup que recebeu pagamento agora
+            const podeRessurreicao = pedAtual?.status === 'cancelado'
+              && pedAtual?.pag !== 'pix_mp' && pedAtual?.pag !== 'cartao_mp'
+
+            if (eraAguardando || podeRessurreicao) {
+              db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, row.tenant_id)
+              if (podeRessurreicao) log('🔄', `PEDIDO RESSUSCITADO (webhook): pagamento PIX chegou após cancelamento — id=${row.order_id} tenant=${row.tenant_id}`)
+            } else if (pedAtual) {
+              db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, row.tenant_id)
             }
-            const _ns4 = eraAguardando ? 'analise' : pedAtual?.status
-            const _fo4 = db.prepare("SELECT * FROM orders WHERE id=?").get(row.order_id)
+            const _ns4 = (eraAguardando || podeRessurreicao) ? 'analise' : pedAtual?.status
+            const _fo4 = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(row.order_id, row.tenant_id)
             const _it4 = _fo4 && typeof _fo4.items==='string' ? (() => { try{return JSON.parse(_fo4.items)}catch{return []} })() : (_fo4?.items||[])
             sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, _fo4 ? {..._fo4, items:_it4, status:_ns4, pag:'pix_mp'} : { id: row.order_id, status: _ns4, pag: 'pix_mp' })
             // Notifica cliente: pagamento PIX confirmado
-            if (eraAguardando) _notificarPixConfirmado(row.tenant_id, _fo4, sendWA, fillVars, EVO_INST, db)
+            if (eraAguardando || podeRessurreicao) _notificarPixConfirmado(row.tenant_id, _fo4, sendWA, fillVars, EVO_INST, db)
           }
         }
       }
@@ -792,19 +830,23 @@ module.exports = async function handleRoutes(req, res, ctx) {
         if (novoStatus === 'aprovado') {
           log('✅', `Webhook MP APROVADO (CARTÃO): R$${rowC.valor} tenant=${rowC.tenant_id}`)
           if (rowC.order_id) {
-            const pedAtualC = db.prepare("SELECT status FROM orders WHERE id=?").get(rowC.order_id)
+            const pedAtualC = db.prepare("SELECT status, pag FROM orders WHERE id=? AND tenant_id=?").get(rowC.order_id, rowC.tenant_id)
             const eraAguardandoC = pedAtualC?.status === 'aguardando_cartao'
-            if (eraAguardandoC) {
-              db.prepare("UPDATE orders SET status='analise', pag='cartao_mp' WHERE id=?").run(rowC.order_id)
-            } else {
-              db.prepare("UPDATE orders SET pag='cartao_mp' WHERE id=?").run(rowC.order_id)
+            const podeRessurreicaoC = pedAtualC?.status === 'cancelado'
+              && pedAtualC?.pag !== 'pix_mp' && pedAtualC?.pag !== 'cartao_mp'
+
+            if (eraAguardandoC || podeRessurreicaoC) {
+              db.prepare("UPDATE orders SET status='analise', pag='cartao_mp' WHERE id=? AND tenant_id=?").run(rowC.order_id, rowC.tenant_id)
+              if (podeRessurreicaoC) log('🔄', `PEDIDO RESSUSCITADO (cartão): pagamento chegou após cancelamento — id=${rowC.order_id} tenant=${rowC.tenant_id}`)
+            } else if (pedAtualC) {
+              db.prepare("UPDATE orders SET pag='cartao_mp' WHERE id=? AND tenant_id=?").run(rowC.order_id, rowC.tenant_id)
             }
-            const _nsC = eraAguardandoC ? 'analise' : pedAtualC?.status
-            const _foC = db.prepare("SELECT * FROM orders WHERE id=?").get(rowC.order_id)
+            const _nsC = (eraAguardandoC || podeRessurreicaoC) ? 'analise' : pedAtualC?.status
+            const _foC = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(rowC.order_id, rowC.tenant_id)
             const _itC = _foC && typeof _foC.items==='string' ? (() => { try{return JSON.parse(_foC.items)}catch{return []} })() : (_foC?.items||[])
             sseBroadcast(`orders-rt:${rowC.tenant_id}`, `orders:UPDATE`, _foC ? {..._foC, items:_itC, status:_nsC, pag:'cartao_mp'} : { id: rowC.order_id, status: _nsC, pag: 'cartao_mp' })
-            // Notifica cliente: cartão confirmado (reusa estrutura de _notificarPixConfirmado — msg contextual)
-            if (eraAguardandoC && _foC?.phone) {
+            // Notifica cliente: cartão confirmado
+            if ((eraAguardandoC || podeRessurreicaoC) && _foC?.phone) {
               setImmediate(async () => {
                 try {
                   const cfg    = db.prepare('SELECT evo_instance, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(rowC.tenant_id)
@@ -1428,9 +1470,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
       // Se aprovado, atualiza o pedido para 'analise'
       if (novoStatus === 'aprovado' && order_id) {
-        db.prepare("UPDATE orders SET status='analise', pag='cartao_mp' WHERE id=? AND status='aguardando_cartao'").run(order_id)
+        db.prepare("UPDATE orders SET status='analise', pag='cartao_mp' WHERE id=? AND tenant_id=? AND status='aguardando_cartao'").run(order_id, tid)
         marcarDirty()
-        const ord = db.prepare('SELECT * FROM orders WHERE id=?').get(order_id)
+        const ord = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(order_id, tid)
         if (ord) {
           const its = (() => { try { return JSON.parse(ord.items) } catch { return [] } })()
           sseBroadcast(`orders-rt:${tid}`, 'orders:UPDATE', { ...ord, items: its, status: 'analise', pag: 'cartao_mp' })
@@ -1481,20 +1523,23 @@ module.exports = async function handleRoutes(req, res, ctx) {
         .run(novoStatus, pd.status_detail || '', pd.date_approved || null, String(mpId))
       // Se acabou de aprovar (transição pendente/in_process → aprovado), sincroniza pedido e notifica
       if (rowBefore && rowBefore.status !== 'aprovado' && novoStatus === 'aprovado' && rowBefore.order_id) {
-        const pedAtual = db.prepare("SELECT status FROM orders WHERE id=?").get(rowBefore.order_id)
+        const pedAtual = db.prepare("SELECT status, pag FROM orders WHERE id=? AND tenant_id=?").get(rowBefore.order_id, rowBefore.tenant_id)
         const eraAguardando = pedAtual?.status === 'aguardando_cartao'
-        if (eraAguardando) {
-          db.prepare("UPDATE orders SET status='analise', pag='cartao_mp' WHERE id=?").run(rowBefore.order_id)
-        } else {
-          db.prepare("UPDATE orders SET pag='cartao_mp' WHERE id=?").run(rowBefore.order_id)
+        const podeRessurreicao = pedAtual?.status === 'cancelado'
+          && pedAtual?.pag !== 'pix_mp' && pedAtual?.pag !== 'cartao_mp'
+        if (eraAguardando || podeRessurreicao) {
+          db.prepare("UPDATE orders SET status='analise', pag='cartao_mp' WHERE id=? AND tenant_id=?").run(rowBefore.order_id, rowBefore.tenant_id)
+          if (podeRessurreicao) log('🔄', `PEDIDO RESSUSCITADO (cartão poll): id=${rowBefore.order_id} tenant=${rowBefore.tenant_id}`)
+        } else if (pedAtual) {
+          db.prepare("UPDATE orders SET pag='cartao_mp' WHERE id=? AND tenant_id=?").run(rowBefore.order_id, rowBefore.tenant_id)
         }
         marcarDirty()
-        const _ns = eraAguardando ? 'analise' : pedAtual?.status
-        const _fo = db.prepare("SELECT * FROM orders WHERE id=?").get(rowBefore.order_id)
+        const _ns = (eraAguardando || podeRessurreicao) ? 'analise' : pedAtual?.status
+        const _fo = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(rowBefore.order_id, rowBefore.tenant_id)
         const _it = _fo && typeof _fo.items === 'string' ? (() => { try { return JSON.parse(_fo.items) } catch { return [] } })() : (_fo?.items || [])
         sseBroadcast(`orders-rt:${rowBefore.tenant_id}`, 'orders:UPDATE', _fo ? { ..._fo, items: _it, status: _ns, pag: 'cartao_mp' } : { id: rowBefore.order_id, status: _ns, pag: 'cartao_mp' })
         // Notifica cliente
-        if (eraAguardando && _fo?.phone) {
+        if ((eraAguardando || podeRessurreicao) && _fo?.phone) {
           setImmediate(async () => {
             try {
               const cfg    = db.prepare('SELECT evo_instance, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(rowBefore.tenant_id)

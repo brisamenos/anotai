@@ -2665,6 +2665,14 @@ input,textarea{font-family:inherit}
             <div id="pix-manual-valor-show" style="font-size:20px;font-weight:700;font-family:'Fraunces',serif;color:var(--amber)"></div>
           </div>
 
+          <!-- Erro ao gerar PIX (rede / MP indisponível) -->
+          <div id="pix-error-wrap" style="display:none;background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.25);border-radius:16px;padding:18px;text-align:center">
+            <div style="font-size:22px;margin-bottom:6px">⚠️</div>
+            <div style="font-size:13px;font-weight:700;margin-bottom:4px;color:var(--text)">Não foi possível gerar o PIX</div>
+            <div id="pix-error-msg" style="font-size:12px;color:var(--muted);margin-bottom:14px">Verifique sua conexão e tente novamente.</div>
+            <button id="pix-retry-btn" style="background:var(--accent-g);color:#fff;border:none;border-radius:9px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer">Tentar novamente</button>
+          </div>
+
         </div>
 
         <!-- ── CARTÃO DE CRÉDITO MP ── -->
