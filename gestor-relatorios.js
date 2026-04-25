@@ -2507,9 +2507,27 @@ function _buildTicketHtml(order, cfg) {
   const W        = is58 ? 48 : 72; // largura útil em mm (referência visual)
 
   // ── Data/hora do pedido (usa order.created_at se tiver, senão now) ──────
-  const _orderDate = order.created_at ? new Date(order.created_at) : new Date();
+  // IMPORTANTE: SQLite datetime('now') retorna UTC sem sufixo "Z" (ex: "2026-04-25 17:30:00").
+  // new Date(string) sem "Z" é interpretado como horário LOCAL do navegador → bug de 3h em Brasília.
+  // _parseCreatedAt força interpretação UTC quando a string não tiver timezone explícita.
+  const _parseCreatedAt = (raw) => {
+    if (!raw) return new Date();
+    if (raw instanceof Date) return raw;
+    const s = String(raw).trim();
+    // Se já tem timezone explícita (Z, +HH:MM, -HH:MM no final), confia
+    if (/(Z|[+-]\d{2}:?\d{2})$/.test(s)) return new Date(s);
+    // Formato SQLite "YYYY-MM-DD HH:MM:SS" → trata como UTC
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+    if (m) return new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]));
+    return new Date(s);
+  };
+  // Formata em horário de Brasília (independente do fuso do navegador)
+  const _fmtBR = (d, opts) => d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', ...opts });
+  const _hhmmBR = (d) => _fmtBR(d, { hour: '2-digit', minute: '2-digit', hour12: false });
+
+  const _orderDate = _parseCreatedAt(order.created_at);
   const _pad2 = n => String(n).padStart(2,'0');
-  const dataHoraTxt = `${_pad2(_orderDate.getDate())}/${_pad2(_orderDate.getMonth()+1)}/${_orderDate.getFullYear()} ${_pad2(_orderDate.getHours())}:${_pad2(_orderDate.getMinutes())}`;
+  const dataHoraTxt = _fmtBR(_orderDate, { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false }).replace(',', '');
   const now = dataHoraTxt; // mantém compat com via cozinha
 
   // ── Janela de entrega prevista (só pra delivery) ─────────────────
@@ -2526,7 +2544,7 @@ function _buildTicketHtml(order, cfg) {
   const [_tmin, _tmax] = _parseTempoEntrega(cfg.tempoEntrega);
   const _ini = new Date(_orderDate.getTime() + _tmin*60000);
   const _fim = new Date(_orderDate.getTime() + _tmax*60000);
-  const janelaEntregaTxt = `${_pad2(_ini.getHours())}:${_pad2(_ini.getMinutes())} - ${_pad2(_fim.getHours())}:${_pad2(_fim.getMinutes())}`;
+  const janelaEntregaTxt = `${_hhmmBR(_ini)} - ${_hhmmBR(_fim)}`;
 
   // ── Helpers de HTML ─────────────────────────────────────
   const H  = (...parts) => parts.join('');                              // concatena
@@ -2978,9 +2996,22 @@ function _buildEscPos(order, cfg, cols = 32) {
   };
 
   // ── Data/hora do pedido + janela de entrega ─────────────
-  const _orderDate = order.created_at ? new Date(order.created_at) : new Date();
+  // IMPORTANTE: SQLite datetime('now') retorna UTC sem sufixo "Z" (ex: "2026-04-25 17:30:00").
+  // Sem isso o new Date() interpreta como horário local → janela de entrega errada em 3h (Brasília UTC-3).
+  const _parseCreatedAt = (raw) => {
+    if (!raw) return new Date();
+    if (raw instanceof Date) return raw;
+    const s = String(raw).trim();
+    if (/(Z|[+-]\d{2}:?\d{2})$/.test(s)) return new Date(s);
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+    if (m) return new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]));
+    return new Date(s);
+  };
+  const _fmtBR = (d, opts) => d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', ...opts });
+  const _hhmmBR = (d) => _fmtBR(d, { hour: '2-digit', minute: '2-digit', hour12: false });
+  const _orderDate = _parseCreatedAt(order.created_at);
   const _pad2 = n => String(n).padStart(2,'0');
-  const dataHoraTxt = `${_pad2(_orderDate.getDate())}/${_pad2(_orderDate.getMonth()+1)}/${_orderDate.getFullYear()} ${_pad2(_orderDate.getHours())}:${_pad2(_orderDate.getMinutes())}`;
+  const dataHoraTxt = _fmtBR(_orderDate, { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false }).replace(',', '');
   const _parseTempoEntrega = (txt) => {
     if (!txt) return [30, 45];
     const m = String(txt).match(/(\d+)\s*[-–to a]+\s*(\d+)/);
@@ -2992,7 +3023,7 @@ function _buildEscPos(order, cfg, cols = 32) {
   const [_tmin, _tmax] = _parseTempoEntrega(cfg.tempoEntrega);
   const _ini = new Date(_orderDate.getTime() + _tmin*60000);
   const _fim = new Date(_orderDate.getTime() + _tmax*60000);
-  const janelaTxt = `${_pad2(_ini.getHours())}:${_pad2(_ini.getMinutes())} - ${_pad2(_fim.getHours())}:${_pad2(_fim.getMinutes())}`;
+  const janelaTxt = `${_hhmmBR(_ini)} - ${_hhmmBR(_fim)}`;
 
   // ── Tipo de entrega ────────────────────────────────────
   const _escAddr = (order.addr || '').toLowerCase();
