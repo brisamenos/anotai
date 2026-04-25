@@ -549,6 +549,7 @@ function subscribeRealtime() {
   sb.channel('menu-rt')
     .on('postgres_changes',{event:'*',table:'menu_items'},()=>reloadMenu())
     .on('postgres_changes',{event:'*',table:'categories'},()=>reloadMenu())
+    .on('postgres_changes',{event:'*',table:'addons_esgotados'}, ()=>onAddonsEsgotadosChanged())
     .subscribe();
   sb.channel('store-config-rt')
     .on('postgres_changes',{event:'UPDATE',table:'store_config'}, p => {
@@ -563,6 +564,22 @@ function subscribeRealtime() {
       applyBrandingLive(cfg);
     })
     .subscribe();
+}
+
+// ── Recarrega lista de adicionais esgotados e atualiza UI em tempo real ──
+// Cliente pode estar com modal aberto vendo o produto — re-renderiza grupos pra
+// mostrar os adicionais como esgotados (ou disponíveis) na hora que o gestor pausa/libera.
+async function onAddonsEsgotadosChanged() {
+  await loadAddonsEsgotados();
+  // Se o modal de produto está aberto, re-renderiza os grupos com o estado novo
+  const modal = document.getElementById('item-modal-bg');
+  if (modal && modal.classList.contains('on') && typeof _imItemId !== 'undefined' && _imItemId != null) {
+    const item = (typeof allItems !== 'undefined' && Array.isArray(allItems))
+      ? allItems.find(x => x.id === _imItemId) : null;
+    if (item && typeof renderImGrupos === 'function') {
+      try { renderImGrupos(item); } catch(e) { console.warn('[realtime] re-render falhou:', e); }
+    }
+  }
 }
 
 // Aplica mudanças de branding vindas do SSE (store_config row completo)
