@@ -64,10 +64,29 @@ function getTaxa() {
 }
 
 // Retorna { ok, motivo } — valida se o pedido delivery pode ser submetido.
+// - bairros_bloqueados: bloqueia em qualquer modo, antes de tudo
 // - por_bairro: exige bairro digitado que exista na lista
 // - por_km:     exige distância calculada dentro da maior faixa
 function validarDelivery() {
   if (deliveryType !== 'delivery') return { ok: true };
+
+  // Normaliza para comparação case-insensitive e sem acentos
+  const _norm = s => (s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  // Bairros bloqueados — vale para QUALQUER tipo de cobrança
+  const bloqueados = Array.isArray(feeConfig?.bairros_bloqueados) ? feeConfig.bairros_bloqueados : [];
+  if (bloqueados.length) {
+    const digitadoRaw = (document.getElementById('f-bairro')?.value || '').trim();
+    if (!digitadoRaw) {
+      return { ok: false, motivo: 'Informe o bairro para verificarmos a área de entrega.' };
+    }
+    const digitadoNorm = _norm(digitadoRaw);
+    const hit = bloqueados.find(b => _norm(b) === digitadoNorm);
+    if (hit) {
+      return { ok: false, motivo: `Infelizmente não atendemos no bairro ${hit}. Confira nossa área de cobertura.` };
+    }
+  }
+
   // por_bairro: bairro precisa existir na lista
   if (feeConfig?.tipo === 'por_bairro') {
     const bairros = Array.isArray(feeConfig.bairros) ? feeConfig.bairros : [];
