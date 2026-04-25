@@ -2372,11 +2372,15 @@ function _getPrintConfig() {
   const sub = (subEl && subEl.value) ? subEl.value : (_printSub || '');
   const rodEl = document.getElementById('print-rodape');
   const rodape = (rodEl && rodEl.value) ? rodEl.value : (_printRodape || 'Obrigado!');
+  // Tempo de entrega (do branding) — usado pra calcular janela "Entrega prevista: HH:MM - HH:MM"
+  const tempoEl = document.getElementById('cp-tempo');
+  const tempoEntrega = (tempoEl && tempoEl.value) ? tempoEl.value : '30-45 min';
   return {
     nome, sub, rodape,
     addr: document.getElementById('toggle-print-addr')?.classList.contains('on') ?? true,
     pag:  document.getElementById('toggle-print-pag')?.classList.contains('on') ?? true,
     fontSize: fs,
+    tempoEntrega,
   };
 }
 
@@ -2491,12 +2495,33 @@ function _wrapText(text, width, prefix = '') {
 
 function _buildTicketHtml(order, cfg) {
   const items    = Array.isArray(order.items) ? order.items : [];
-  const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
   const money    = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
   const fmt      = localStorage.getItem('printFormat') || _printFormat || '80mm';
   const is58     = fmt === '58mm';
   const fs       = is58 ? Math.min(cfg.fontSize, 10) : cfg.fontSize;
   const W        = is58 ? 48 : 72; // largura útil em mm (referência visual)
+
+  // ── Data/hora do pedido (usa order.created_at se tiver, senão now) ──────
+  const _orderDate = order.created_at ? new Date(order.created_at) : new Date();
+  const _pad2 = n => String(n).padStart(2,'0');
+  const dataHoraTxt = `${_pad2(_orderDate.getDate())}/${_pad2(_orderDate.getMonth()+1)}/${_orderDate.getFullYear()} ${_pad2(_orderDate.getHours())}:${_pad2(_orderDate.getMinutes())}`;
+  const now = dataHoraTxt; // mantém compat com via cozinha
+
+  // ── Janela de entrega prevista (só pra delivery) ─────────────────
+  // Lê store_tempo_entrega (ex: "30-45 min" ou "30-45" ou "30 min" ou "30")
+  // Calcula início = orderDate + min, fim = orderDate + max
+  const _parseTempoEntrega = (txt) => {
+    if (!txt) return [30, 45];
+    const m = String(txt).match(/(\d+)\s*[-–to a]+\s*(\d+)/);
+    if (m) return [parseInt(m[1]), parseInt(m[2])];
+    const single = String(txt).match(/(\d+)/);
+    if (single) { const v = parseInt(single[1]); return [v, v + 15]; }
+    return [30, 45];
+  };
+  const [_tmin, _tmax] = _parseTempoEntrega(cfg.tempoEntrega);
+  const _ini = new Date(_orderDate.getTime() + _tmin*60000);
+  const _fim = new Date(_orderDate.getTime() + _tmax*60000);
+  const janelaEntregaTxt = `${_pad2(_ini.getHours())}:${_pad2(_ini.getMinutes())} - ${_pad2(_fim.getHours())}:${_pad2(_fim.getMinutes())}`;
 
   // ── Helpers de HTML ─────────────────────────────────────
   const H  = (...parts) => parts.join('');                              // concatena
@@ -2514,22 +2539,23 @@ function _buildTicketHtml(order, cfg) {
   // Banner de bloco (fundo colorido, texto branco)
   const BANNER = (content, bg, style='') =>
     D(`text-align:center;font-weight:bold;background:${bg};color:#fff;padding:5px 4px;margin:5px 0;${style}`, content);
+  // Rótulo de seção (estilo Anota AI: texto à esquerda, semi-bold)
+  const SECTION = (label) => D('font-weight:bold;font-size:1.1em;margin:6px 0 4px', label);
 
   // ── Tipo de entrega ─────────────────────────────────────
   const _addr    = (order.addr || '').toLowerCase();
   const isMesa   = !!(order.mesa_num || (order.addr || '').startsWith('Mesa'));
   const isRetira = !isMesa && !!(_addr.includes('retirada') || _addr.includes('balcão') || _addr.includes('balcao') || _addr.includes('retirar'));
-  const tipoTxt  = isMesa ? 'MESA ' + (order.mesa_num || '') : isRetira ? 'RETIRADA' : 'DELIVERY';
+  const tipoTxt  = isMesa ? 'MESA ' + (order.mesa_num || '') : isRetira ? 'PARA RETIRADA' : 'PARA ENTREGA';
   const tipoIcon = isMesa ? '🪑' : isRetira ? '🏃' : '🛵';
   const tipoBg   = isMesa ? '#1a3a5c' : isRetira ? '#2d4a1e' : '#7a2020';
-  const tipoBanner = BANNER(`${tipoIcon} ${tipoTxt}`, tipoBg, 'font-size:1.2em;letter-spacing:1px');
+  // Cabeçalho do tipo (estilo Anota: pequeno, simples)
+  const tipoHeader = CENTER(tipoTxt, 'font-weight:bold;font-size:0.95em;letter-spacing:0.5px;margin-bottom:2px');
 
-  // ── Status de pagamento ─────────────────────────────────
+  // ── Pagamento (sem banner colorido, estilo Anota AI) ───
   const _pagMap  = { dinheiro:'Dinheiro', cartao:'Cartão', credito:'Crédito', debito:'Débito', pix:'PIX', pix_mp:'PIX Online', cartao_mp:'Crédito Online', mesa:'Conta da Mesa' };
   const pagNome  = _pagMap[order.pag] || order.pag || '—';
   const jaPago   = (order.pag_momento === 'agora') || order.pag === 'pix_mp' || order.pag === 'cartao_mp';
-  const pagTxt   = (jaPago ? '✅ PAGO' : '⏳ A PAGAR') + ' — ' + pagNome + (order.troco > 0 ? ' · Troco p/ ' + money(order.troco) : '');
-  const pagBanner = BANNER(pagTxt, jaPago ? '#1a4a1a' : '#4a3500', 'font-size:1em');
 
   // ── Filtra itens para cozinha ───────────────────────────
   const _isCoz = (item) => {
@@ -2539,56 +2565,54 @@ function _buildTicketHtml(order, cfg) {
   };
   const itensCozinha = items.filter(_isCoz);
 
-  // ── Renderiza um item do pedido ─────────────────────────
+  // ── Renderiza um item do pedido (estilo Anota: "(qty) nome    R$ x") ──
   const renderItem = (i) => {
-    const nome  = (i.qty + 'x ' + i.name).toUpperCase();
+    const qtyPrefix = `(${i.qty||1})`;
+    const nome  = i.name;
     const preco = money((i.price||0) * (i.qty||1));
     const parsed = _parseObs(i.obs);
     let kitHtml = '';
     let extrasHtml = '';
 
-    // Kit: separa os sub-itens
+    // Kit: sub-itens com indentação maior (estilo "(1) sub-item")
     if (parsed.kitItens.length) {
-      kitHtml = D('padding-left:6px;font-size:0.82em;color:#222;border-left:2px solid #555;margin:2px 0 4px',
-        D('font-weight:bold;margin-bottom:2px', 'CONTÉM:') +
-        parsed.kitItens.map(k => D('', '• ' + k)).join(''));
+      kitHtml = parsed.kitItens.map(k =>
+        D('padding-left:18px;font-size:0.95em', `(1) ${k}`)
+      ).join('');
     }
 
     // Pizza meio a meio
     let meioHtml = '';
     if (parsed.meioMeio) {
-      meioHtml = D('padding-left:6px;font-size:0.85em;color:#333;border-left:2px solid #aaa;margin:2px 0 4px',
-        D('font-weight:bold', '½ + ½ ') + parsed.meioMeio);
+      meioHtml = D('padding-left:18px;font-size:0.95em;font-weight:bold', '½ + ½ ' + parsed.meioMeio);
     }
 
-    // Grupos (Adicionais, Ponto, Molhos, etc) — cada grupo numa linha com bullets
+    // Grupos (Adicionais, Ponto, Molhos…) — cada grupo numa linha com bullets
     if (parsed.grupos.length) {
       const linhasGrupos = parsed.grupos.map(g =>
-        D('margin-top:2px',
-          D('font-weight:bold;font-size:0.85em', g.nome + ':') +
-          g.itens.map(it => D('padding-left:8px;font-size:0.85em', '• ' + it)).join('')
+        D('padding-left:18px;margin-top:1px',
+          D('font-weight:bold;font-size:0.9em', g.nome + ':') +
+          g.itens.map(it => D('padding-left:10px;font-size:0.9em', '• ' + it)).join('')
         )
       ).join('');
-      extrasHtml = D('padding-left:6px;color:#222;border-left:2px solid #aaa;margin:2px 0 4px;word-break:break-word', linhasGrupos);
+      extrasHtml = linhasGrupos;
     }
 
     // Obs livre (digitada pelo cliente)
     const obsLivreHtml = parsed.obsLivre
-      ? D('padding-left:6px;font-size:0.85em;color:#333;border-left:2px solid #aaa;margin:2px 0 4px;word-break:break-word', 'OBS: ' + parsed.obsLivre)
+      ? D('padding-left:18px;font-size:0.9em;font-style:italic', '✎ ' + parsed.obsLivre)
       : '';
 
-    const wrapper = 'border-bottom:1px dotted #ddd;padding-bottom:4px;margin-bottom:4px';
-
     if (is58) {
-      // 58mm: nome em negrito, preço alinhado à direita na linha seguinte
-      return D(wrapper,
-        D('font-weight:bold;word-break:break-word', nome) +
-        D('text-align:right;font-size:0.9em;color:#333', preco) +
+      // 58mm: nome com qty na primeira linha, preço alinhado direita na seguinte
+      return D('margin-bottom:3px',
+        D('word-break:break-word', `${qtyPrefix} ${nome}`) +
+        D('text-align:right;font-size:0.9em;color:#000', preco) +
         kitHtml + meioHtml + extrasHtml + obsLivreHtml);
     }
-    // 80mm: nome e preço na mesma linha, alinhados
-    return D(wrapper,
-      ROW(D('font-weight:bold', nome), preco) +
+    // 80mm: "(qty) nome ............ R$ X,XX" na mesma linha
+    return D('margin-bottom:3px',
+      ROW(D('word-break:break-word', `${qtyPrefix} ${nome}`), preco) +
       kitHtml + meioHtml + extrasHtml + obsLivreHtml);
   };
 
@@ -2602,53 +2626,88 @@ function _buildTicketHtml(order, cfg) {
   const total      = (!isNaN(orderTotal) ? orderTotal : subtotal) + taxa;
   const orderNum   = order.num || order.order_num || order.id;
 
+  // Banner "* Cobrar do cliente *" (só se não pago)
+  const cobrarBanner = !jaPago
+    ? CENTER('* Cobrar do cliente *', 'font-weight:bold;margin:6px 0 4px')
+    : CENTER('* Pedido já pago *', 'font-weight:bold;margin:6px 0 4px');
+
+  // Bloco de totais (sempre mostra subtotal + taxa + total)
   const totalBlock = H(
-    (taxa > 0 || desconto > 0) ? H(
-      ROW('Subtotal', money(subtotal)),
-      desconto > 0 ? ROW('Desconto', '−' + money(desconto)) : '',
-      taxa > 0     ? ROW('Taxa entrega', money(taxa))        : ''
-    ) : '',
-    ROW(S('font-weight:bold;font-size:1.1em', 'TOTAL'), S('font-weight:bold;font-size:1.1em', money(total)))
+    ROW('Subtotal:', money(subtotal)),
+    desconto > 0 ? ROW('Desconto:', '−' + money(desconto)) : '',
+    taxa > 0     ? ROW('Taxa de entrega:', money(taxa))    : '',
+    ROW(S('font-weight:bold', 'Total:'), S('font-weight:bold', money(total)))
   );
 
-  // ── Endereço (só delivery mostra) ──────────────────────
+  // Troco
+  const trocoLine = (order.pag === 'dinheiro')
+    ? ROW('Troco para:', order.troco > 0 ? money(order.troco) : 'Não precisa')
+    : '';
+
+  // ── Endereço estruturado (extrai referência se presente) ─────
+  // Formato típico: "Rua X, 123, Bairro, complemento, Ref: prox merc"
+  const _splitAddr = (addrStr) => {
+    if (!addrStr) return { full:'', referencia:'' };
+    const partes = addrStr.split(', ');
+    let referencia = '';
+    const refIdx = partes.findIndex(p => /^Ref:\s*/i.test(p));
+    if (refIdx >= 0) {
+      referencia = partes[refIdx].replace(/^Ref:\s*/i,'').trim();
+      partes.splice(refIdx, 1);
+    }
+    return { full: partes.join(', '), referencia };
+  };
+  const _addrParts = _splitAddr(order.addr);
   const addrLine = (cfg.addr && order.addr)
-    ? D('word-break:break-word;margin-top:2px', '📍 ' + order.addr)
+    ? D('word-break:break-word;margin-top:2px', _addrParts.full)
+    : '';
+  const refLine = (cfg.addr && _addrParts.referencia)
+    ? D('word-break:break-word;margin-top:1px', 'Referência: ' + _addrParts.referencia)
     : '';
 
   // ── Telefone (opcional) ─────────────────────────────────
   const phoneLine = order.phone
-    ? D('color:#555', '📞 ' + order.phone)
+    ? D('margin-top:1px', 'Telefone: ' + order.phone)
     : '';
 
   // ══════════════════════════════════════════════════════
-  // VIA PRINCIPAL
+  // VIA PRINCIPAL — Layout estilo Anota AI
   // ══════════════════════════════════════════════════════
   const viaPrincipal = D('font-family:\'Courier New\',monospace;font-size:' + fs + 'px;width:100%;box-sizing:border-box;padding:0 2px',
     H(
-      // Cabeçalho
-      CENTER(cfg.nome, 'font-size:1.3em;font-weight:bold;margin-bottom:2px'),
-      cfg.sub ? CENTER(cfg.sub, 'font-size:0.85em;margin-bottom:3px') : '',
-      // Banner tipo de entrega
-      tipoBanner,
+      // ── 1) Topo: tipo + data + janela + nome da loja ──
+      tipoHeader,
+      CENTER(dataHoraTxt, 'font-size:0.9em;margin-bottom:1px'),
+      (!isMesa && !isRetira) ? CENTER('Entrega prevista: ' + janelaEntregaTxt, 'font-size:0.9em;margin-bottom:2px') : '',
+      CENTER(cfg.nome, 'font-size:0.95em;font-weight:bold;margin-bottom:4px'),
       HR(),
-      // Info do pedido
-      D('','') ,
-      ROW('Pedido Nº', '#' + orderNum),
-      D('margin-bottom:1px', 'Data: ' + now),
-      D('margin-bottom:1px', 'Cliente: ' + (order.client || '—')),
-      phoneLine,
-      addrLine,
+
+      // ── 2) PEDIDO NN gigante ──
+      CENTER('PEDIDO ' + orderNum, 'font-size:1.7em;font-weight:bold;letter-spacing:1px;margin:6px 0 4px'),
       HR(),
-      // Itens
+
+      // ── 3) Itens ──
+      SECTION('Itens'),
       itemLines,
       HR(),
-      // Totais
-      totalBlock,
-      // Banner pagamento
-      pagBanner,
+
+      // ── 4) Cliente ──
+      SECTION('Cliente'),
+      D('margin-top:1px', 'Nome: ' + (order.client || '—')),
+      phoneLine,
+      addrLine ? D('margin-top:3px', 'Entrega: ' + _addrParts.full) : '',
+      refLine,
       HR(),
-      // Rodapé
+
+      // ── 5) Pagamento ──
+      SECTION('Pagamento'),
+      D('margin-top:1px', 'Forma de Pagamento: ' + pagNome),
+      cobrarBanner,
+      totalBlock,
+      trocoLine,
+      HR(),
+
+      // ── 6) Rodapé ──
       CENTER(cfg.rodape || '', 'font-size:0.85em;color:#333')
     )
   );
@@ -2701,12 +2760,14 @@ function _buildTicketHtml(order, cfg) {
       D('font-family:\'Courier New\',monospace;font-size:' + fs + 'px;width:100%;box-sizing:border-box;padding:0 2px',
         H(
           CENTER('★ COZINHA ★', 'font-size:1.3em;font-weight:bold;margin-bottom:2px'),
-          tipoBanner,
+          BANNER(`${tipoIcon} ${isMesa ? 'MESA ' + (order.mesa_num || '') : isRetira ? 'RETIRADA' : 'DELIVERY'}`, tipoBg, 'font-size:1.2em;letter-spacing:1px'),
           HR(),
-          ROW('Pedido Nº', '#' + orderNum),
+          CENTER('PEDIDO ' + orderNum, 'font-size:1.5em;font-weight:bold;letter-spacing:1px;margin:4px 0'),
+          HR(),
           D('margin-bottom:1px', 'Data: ' + now),
           D('margin-bottom:1px', 'Cliente: ' + (order.client || '—')),
-          order.addr ? D('word-break:break-word;margin-top:2px', '📍 ' + order.addr) : '',
+          order.addr ? D('word-break:break-word;margin-top:2px', '📍 ' + _addrParts.full) : '',
+          _addrParts.referencia ? D('word-break:break-word;margin-top:1px', 'Ref: ' + _addrParts.referencia) : '',
           HR(),
           itensCozHtml,
           HR(),
@@ -2887,7 +2948,7 @@ function _showPrintAgentToast() {
 // ══════════════════════════════════════════════════════════════
 let _usbDevice = null; // guarda o device pareado entre impressões
 
-// Converte o pedido em bytes ESC/POS puros
+// Converte o pedido em bytes ESC/POS puros — layout estilo Anota AI
 function _buildEscPos(order, cfg, cols = 32) {
   const enc  = new TextEncoder();
   const buf  = [];
@@ -2904,114 +2965,169 @@ function _buildEscPos(order, cfg, cols = 32) {
     return left + (space > 0 ? ' '.repeat(space) : ' ') + right;
   };
 
-  // Init
-  const sep = '-'.repeat(cols) + '\n';
-  bytes(0x1B, 0x40);                         // ESC @ — reset
-  bytes(0x1B, 0x61, 0x01);                   // centralizar
-  bytes(0x1D, 0x21, 0x10);                   // fonte dupla altura
-  push(cfg.nome + '\n');
-  bytes(0x1D, 0x21, 0x00);                   // fonte normal
-  if (cfg.sub) push(cfg.sub + '\n');
-  bytes(0x1B, 0x61, 0x00);                   // alinhar esquerda
-  push(sep);
+  // ── Data/hora do pedido + janela de entrega ─────────────
+  const _orderDate = order.created_at ? new Date(order.created_at) : new Date();
+  const _pad2 = n => String(n).padStart(2,'0');
+  const dataHoraTxt = `${_pad2(_orderDate.getDate())}/${_pad2(_orderDate.getMonth()+1)}/${_orderDate.getFullYear()} ${_pad2(_orderDate.getHours())}:${_pad2(_orderDate.getMinutes())}`;
+  const _parseTempoEntrega = (txt) => {
+    if (!txt) return [30, 45];
+    const m = String(txt).match(/(\d+)\s*[-–to a]+\s*(\d+)/);
+    if (m) return [parseInt(m[1]), parseInt(m[2])];
+    const single = String(txt).match(/(\d+)/);
+    if (single) { const v = parseInt(single[1]); return [v, v + 15]; }
+    return [30, 45];
+  };
+  const [_tmin, _tmax] = _parseTempoEntrega(cfg.tempoEntrega);
+  const _ini = new Date(_orderDate.getTime() + _tmin*60000);
+  const _fim = new Date(_orderDate.getTime() + _tmax*60000);
+  const janelaTxt = `${_pad2(_ini.getHours())}:${_pad2(_ini.getMinutes())} - ${_pad2(_fim.getHours())}:${_pad2(_fim.getMinutes())}`;
 
   // ── Tipo de entrega ────────────────────────────────────
   const _escAddr = (order.addr || '').toLowerCase();
   const _escIsMesa     = !!(order.mesa_num || (order.addr || '').startsWith('Mesa'));
   const _escIsRetirada = !_escIsMesa && !!(_escAddr.includes('retirada') || _escAddr.includes('balcão') || _escAddr.includes('balcao') || _escAddr.includes('retirar'));
   const _escTipoLabel  = _escIsMesa
-    ? '[ MESA ' + (order.mesa_num || '') + ' ]'
-    : _escIsRetirada ? '[ RETIRADA ]' : '[ DELIVERY ]';
+    ? 'MESA ' + (order.mesa_num || '')
+    : _escIsRetirada ? 'PARA RETIRADA' : 'PARA ENTREGA';
+
+  // ── Endereço estruturado (extrai referência) ───────────
+  const _splitAddrEsc = (addrStr) => {
+    if (!addrStr) return { full:'', referencia:'' };
+    const partes = addrStr.split(', ');
+    let referencia = '';
+    const refIdx = partes.findIndex(p => /^Ref:\s*/i.test(p));
+    if (refIdx >= 0) {
+      referencia = partes[refIdx].replace(/^Ref:\s*/i,'').trim();
+      partes.splice(refIdx, 1);
+    }
+    return { full: partes.join(', '), referencia };
+  };
+  const _addrPartsEsc = _splitAddrEsc(order.addr);
+
+  const sep = '-'.repeat(cols) + '\n';
+  bytes(0x1B, 0x40);                         // ESC @ — reset
+
+  // ── 1) TOPO: tipo + data + janela + nome da loja ──
   bytes(0x1B, 0x61, 0x01);                   // centralizar
-  bytes(0x1D, 0x21, 0x10);                   // fonte dupla altura
+  bytes(0x1B, 0x45, 0x01);                   // negrito
   push(_escTipoLabel + '\n');
+  bytes(0x1B, 0x45, 0x00);
+  push(dataHoraTxt + '\n');
+  if (!_escIsMesa && !_escIsRetirada) push('Entrega prevista: ' + janelaTxt + '\n');
+  bytes(0x1B, 0x45, 0x01);
+  push(cfg.nome + '\n');
+  bytes(0x1B, 0x45, 0x00);
+  bytes(0x1B, 0x61, 0x00);                   // alinhar esquerda
+  push(sep);
+
+  // ── 2) PEDIDO NN gigante ──
+  bytes(0x1B, 0x61, 0x01);                   // centralizar
+  bytes(0x1D, 0x21, 0x11);                   // fonte dupla altura+largura
+  bytes(0x1B, 0x45, 0x01);                   // negrito
+  push('PEDIDO ' + (order.num || order.id) + '\n');
+  bytes(0x1B, 0x45, 0x00);
   bytes(0x1D, 0x21, 0x00);                   // fonte normal
   bytes(0x1B, 0x61, 0x00);                   // alinhar esquerda
   push(sep);
 
-  const now = new Date().toLocaleString('pt-BR', {
-    day:'2-digit', month:'2-digit', year:'numeric',
-    hour:'2-digit', minute:'2-digit'
-  });
-  push('Pedido: #' + (order.num || order.id) + '\n');
-  push('Data: ' + now + '\n');
-  push('Cliente: ' + (order.client || '—') + '\n');
-  if (cfg.addr && order.addr) push('Local: ' + order.addr + '\n');
-  push(sep);
-
+  // ── 3) Itens ──
+  bytes(0x1B, 0x45, 0x01);                   // negrito
+  push('Itens\n');
+  bytes(0x1B, 0x45, 0x00);
   const items = Array.isArray(order.items) ? order.items : [];
-  const maxNameLen = cols - 14; // reserva espaço para preço "R$ 9.999,99"
+  const maxNameLen = cols - 14;
   items.forEach(i => {
-    const name  = (i.qty + 'x ' + i.name).toUpperCase().substring(0, maxNameLen);
+    const qtyPrefix = `(${i.qty||1}) `;
+    const fullName  = (qtyPrefix + i.name).substring(0, maxNameLen);
     const price = money((i.price || 0) * (i.qty || 1));
-    push(cols2(name, price) + '\n');
+    push(cols2(fullName, price) + '\n');
 
     const parsed = _parseObs(i.obs);
 
-    // Kit: lista de itens
+    // Kit: sub-itens com (1) prefix
     if (parsed.kitItens.length) {
-      push('  CONTEM:\n');
       parsed.kitItens.forEach(k => {
-        _wrapText(k, cols, '  - ').forEach(l => push(l + '\n'));
+        _wrapText(k, cols, '    (1) ').forEach(l => push(l + '\n'));
       });
     }
 
     // Pizza meio a meio
     if (parsed.meioMeio) {
-      _wrapText('1/2 + 1/2 ' + parsed.meioMeio, cols, '  ').forEach(l => push(l + '\n'));
+      _wrapText('1/2 + 1/2 ' + parsed.meioMeio, cols, '    ').forEach(l => push(l + '\n'));
     }
 
-    // Grupos (Adicionais, Ponto, Molhos…) — cada grupo + bullets
+    // Grupos (Adicionais, Ponto, Molhos…)
     if (parsed.grupos.length) {
-      // negrito leve no nome do grupo (ESC E)
       parsed.grupos.forEach(g => {
         bytes(0x1B, 0x45, 0x01);
-        push('  ' + g.nome + ':\n');
+        push('    ' + g.nome + ':\n');
         bytes(0x1B, 0x45, 0x00);
         g.itens.forEach(it => {
-          _wrapText(it, cols, '    - ').forEach(l => push(l + '\n'));
+          _wrapText(it, cols, '      - ').forEach(l => push(l + '\n'));
         });
       });
     }
 
     // Obs livre
     if (parsed.obsLivre) {
-      _wrapText(parsed.obsLivre, cols, '  * ').forEach(l => push(l + '\n'));
+      _wrapText(parsed.obsLivre, cols, '    * ').forEach(l => push(l + '\n'));
     }
   });
-
-  const subtotal = items.reduce((s, i) => s + (parseFloat(i.price || 0) * (i.qty || 1)), 0);
-  const taxa  = parseFloat(order.taxa || 0);
-  const orderTotal = parseFloat(order.total);
-  const desconto = (!isNaN(orderTotal) && orderTotal < subtotal) ? Math.max(0, subtotal - orderTotal) : 0;
-  const total = (!isNaN(orderTotal) ? orderTotal : subtotal) + taxa;
-
   push(sep);
-  if (taxa > 0 || desconto > 0) {
-    push(cols2('Subtotal', money(subtotal)) + '\n');
-    if (desconto > 0) push(cols2('Desconto', '-' + money(desconto)) + '\n');
-    if (taxa > 0) push(cols2('Taxa entrega', money(taxa)) + '\n');
-  }
-  bytes(0x1B, 0x45, 0x01);                   // negrito
-  push(cols2('TOTAL', money(total)) + '\n');
+
+  // ── 4) Cliente ──
+  bytes(0x1B, 0x45, 0x01);
+  push('Cliente\n');
   bytes(0x1B, 0x45, 0x00);
+  push('Nome: ' + (order.client || '—') + '\n');
+  if (order.phone) push('Telefone: ' + order.phone + '\n');
+  if (cfg.addr && _addrPartsEsc.full && !_escIsMesa) {
+    _wrapText('Entrega: ' + _addrPartsEsc.full, cols, '').forEach(l => push(l + '\n'));
+    if (_addrPartsEsc.referencia) {
+      _wrapText('Referencia: ' + _addrPartsEsc.referencia, cols, '').forEach(l => push(l + '\n'));
+    }
+  }
   push(sep);
 
-  // ── Status de pagamento ────────────────────────────────
+  // ── 5) Pagamento ──
+  bytes(0x1B, 0x45, 0x01);
+  push('Pagamento\n');
+  bytes(0x1B, 0x45, 0x00);
   const _escPagLabels = {
     dinheiro:'Dinheiro', cartao:'Cartao', credito:'Credito', debito:'Debito',
     pix:'PIX', pix_mp:'PIX Online', cartao_mp:'Credito Online', mesa:'Conta Mesa'
   };
   const _escPagNome = _escPagLabels[order.pag] || order.pag || '---';
   const _escJaPago  = (order.pag_momento === 'agora') || order.pag === 'pix_mp' || order.pag === 'cartao_mp';
-  const _escTrocoStr = (order.troco > 0) ? ' Troco p/ ' + money(order.troco) : '';
+  push('Forma de Pagamento: ' + _escPagNome + '\n');
+
+  // Banner cobrar do cliente
   bytes(0x1B, 0x61, 0x01);                   // centralizar
-  bytes(0x1D, 0x21, 0x10);                   // fonte dupla
-  push((_escJaPago ? '** PAGO **' : '** A PAGAR **') + '\n');
-  bytes(0x1D, 0x21, 0x00);                   // normal
-  push(_escPagNome + _escTrocoStr + '\n');
+  bytes(0x1B, 0x45, 0x01);                   // negrito
+  push((_escJaPago ? '* Pedido ja pago *' : '* Cobrar do cliente *') + '\n');
+  bytes(0x1B, 0x45, 0x00);
   bytes(0x1B, 0x61, 0x00);                   // esquerda
+
+  // Totais
+  const subtotal = items.reduce((s, i) => s + (parseFloat(i.price || 0) * (i.qty || 1)), 0);
+  const taxa  = parseFloat(order.taxa || 0);
+  const orderTotal = parseFloat(order.total);
+  const desconto = (!isNaN(orderTotal) && orderTotal < subtotal) ? Math.max(0, subtotal - orderTotal) : 0;
+  const total = (!isNaN(orderTotal) ? orderTotal : subtotal) + taxa;
+  push(cols2('Subtotal:', money(subtotal)) + '\n');
+  if (desconto > 0) push(cols2('Desconto:', '-' + money(desconto)) + '\n');
+  if (taxa > 0)     push(cols2('Taxa de entrega:', money(taxa)) + '\n');
+  bytes(0x1B, 0x45, 0x01);
+  push(cols2('Total:', money(total)) + '\n');
+  bytes(0x1B, 0x45, 0x00);
+
+  // Troco
+  if (order.pag === 'dinheiro') {
+    push(cols2('Troco para:', order.troco > 0 ? money(order.troco) : 'Nao precisa') + '\n');
+  }
   push(sep);
+
+  // ── 6) Rodapé ──
   bytes(0x1B, 0x61, 0x01);                   // centralizar
   push((cfg.rodape || 'Obrigado!') + '\n');
   bytes(0x1B, 0x61, 0x00);
