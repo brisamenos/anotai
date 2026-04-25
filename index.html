@@ -1915,6 +1915,424 @@ input,textarea{font-family:inherit}
 .xsell-card.on .xsell-check{ display:flex }
 
 
+/* ═══════════════════════════════════════════════════════════
+   PREMIUM ELEVATION — refinamento de alto padrão
+   Sobrepõe estilos dos 9 modais/sheets sem quebrar estrutura.
+   Mantém IDs, classes e animações core — eleva apenas o
+   acabamento (sombras, espaçamento, tipografia, detalhes).
+═══════════════════════════════════════════════════════════ */
+
+/* ── Overlays: blur mais denso + vignette no fundo ── */
+.modal-overlay,
+.drawer-bg,
+.track-drawer-bg,
+.auth-overlay,
+.account-overlay,
+.troco-overlay,
+.pag-overlay,
+.rating-overlay,
+.ac-peso-overlay{
+  background:
+    radial-gradient(ellipse at top, rgba(0,0,0,.55) 0%, rgba(0,0,0,.82) 100%) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+}
+
+/* ── Easing editorial + duração mais elegante em todos os sheets ── */
+@keyframes sheetUpPremium{
+  from{ transform:translateY(100%); opacity:.6; filter:blur(2px) }
+  to  { transform:translateY(0);    opacity:1;  filter:blur(0) }
+}
+.item-modal,
+.drawer,
+.track-sheet,
+.auth-sheet,
+.account-sheet,
+.troco-sheet,
+.pag-sheet,
+.rating-sheet,
+.ac-peso-sheet{
+  animation: sheetUpPremium .42s cubic-bezier(.22,.72,.28,1) !important;
+  border-radius: 28px 28px 0 0 !important;
+  position: relative;
+  box-shadow:
+    0 -1px 0 rgba(255,255,255,.04) inset,
+    0 -40px 80px -20px rgba(0,0,0,.65),
+    0 -2px 0 rgba(249,115,22,.14);
+}
+
+/* ── Linha luminosa sutil no topo de cada sheet (premium detail) ── */
+.item-modal::before,
+.drawer::before,
+.track-sheet::before,
+.auth-sheet::before,
+.account-sheet::before,
+.troco-sheet::before,
+.pag-sheet::before,
+.rating-sheet::before,
+.ac-peso-sheet::before{
+  content:'';
+  position:absolute;
+  top:0; left:14%; right:14%;
+  height:1px;
+  background:linear-gradient(90deg,
+    transparent 0%,
+    rgba(249,115,22,.35) 50%,
+    transparent 100%);
+  pointer-events:none;
+  z-index:2;
+}
+
+/* ── Handle refinado: maior, com gradiente sutil, adaptativo a tema ── */
+.im-handle,
+.drawer-handle,
+.auth-handle,
+.troco-handle,
+.pag-handle,
+.rating-handle{
+  width:42px !important;
+  height:4px !important;
+  background:var(--border2) !important;
+  opacity:.75;
+  margin-top:14px !important;
+  margin-bottom:10px !important;
+}
+
+/* ── Headers dos sheets: mais respiro + tipografia editorial ── */
+.drawer-header,
+.track-head,
+.account-head{
+  padding:20px 24px 18px !important;
+  border-bottom:1px solid var(--border) !important;
+  position:relative;
+}
+.drawer-header::after,
+.track-head::after,
+.account-head::after{
+  content:'';
+  position:absolute;
+  left:24px; right:24px; bottom:-1px;
+  height:1px;
+  background:linear-gradient(90deg,
+    transparent, var(--border2) 20%, var(--border2) 80%, transparent);
+  pointer-events:none;
+}
+
+.drawer-title,
+.track-head-title,
+.account-title{
+  font-size:22px !important;
+  letter-spacing:-.02em;
+  line-height:1.1;
+}
+
+/* ── Botões de fechar mais elegantes (ghost refinado) ── */
+.drawer-close,
+.track-x,
+.account-x{
+  width:36px !important;
+  height:36px !important;
+  background:transparent !important;
+  border:1px solid var(--border) !important;
+  transition:all .25s cubic-bezier(.22,.72,.28,1) !important;
+}
+.drawer-close:hover,
+.track-x:hover,
+.account-x:hover{
+  background:var(--s2) !important;
+  border-color:var(--border2) !important;
+  color:var(--text) !important;
+  transform:rotate(90deg);
+}
+
+/* ── Auth modal: header mais cerimonial ── */
+.auth-head{ padding:32px 28px 4px !important; }
+.auth-icon{
+  font-size:40px !important;
+  width:64px; height:64px;
+  margin:0 auto 16px !important;
+  border-radius:50%;
+  background:var(--s2);
+  display:flex; align-items:center; justify-content:center;
+  border:1px solid var(--border);
+  box-shadow:
+    0 8px 24px -8px rgba(249,115,22,.25),
+    0 0 0 6px rgba(249,115,22,.04);
+}
+.auth-title{
+  font-size:26px !important;
+  letter-spacing:-.02em;
+  line-height:1.15;
+  margin-bottom:10px !important;
+}
+.auth-sub{
+  font-size:14px !important;
+  line-height:1.55 !important;
+  max-width:340px;
+  margin:0 auto 24px !important;
+}
+.auth-tabs{ padding:0 28px !important; gap:8px !important; margin-bottom:24px !important; }
+.auth-tab{
+  padding:12px !important;
+  border-radius:12px !important;
+  font-size:13.5px !important;
+  letter-spacing:.01em;
+  transition:all .25s cubic-bezier(.22,.72,.28,1) !important;
+}
+
+/* ── Auth body: espaçamento generoso ── */
+.auth-body{ padding:0 28px 32px !important; }
+
+/* ── Account: perfil hero com destaque ── */
+.account-profile{
+  padding:28px 24px !important;
+  background:
+    radial-gradient(ellipse at top left, rgba(249,115,22,.05), transparent 60%),
+    var(--s1);
+  border-bottom:1px solid var(--border) !important;
+}
+.account-avatar{
+  width:64px !important;
+  height:64px !important;
+  font-size:26px !important;
+  margin-bottom:14px !important;
+  box-shadow:
+    0 10px 30px -10px rgba(249,115,22,.4),
+    0 0 0 4px rgba(249,115,22,.08);
+}
+.account-name{
+  font-size:22px !important;
+  letter-spacing:-.015em;
+  margin-bottom:6px !important;
+}
+
+/* ── Cards de estatística do account: mais premium ── */
+.account-stat{
+  border-radius:14px !important;
+  padding:16px 18px !important;
+  background:
+    linear-gradient(180deg, var(--s2) 0%, var(--s1) 120%) !important;
+  border:1px solid var(--border) !important;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.03) inset,
+    0 4px 12px -4px rgba(0,0,0,.06);
+  transition:all .25s cubic-bezier(.22,.72,.28,1);
+}
+.account-stat:hover{
+  border-color:var(--border2) !important;
+  transform:translateY(-1px);
+}
+.account-stat-val{
+  font-size:24px !important;
+  letter-spacing:-.02em;
+}
+
+/* ── Order cards (minha conta): hover elegante ── */
+.order-card{
+  border-radius:16px !important;
+  padding:16px 18px !important;
+  transition:all .28s cubic-bezier(.22,.72,.28,1) !important;
+  background:
+    linear-gradient(180deg, var(--s2) 0%, var(--s1) 130%) !important;
+}
+.order-card:hover{
+  transform:translateY(-2px);
+  border-color:rgba(249,115,22,.35) !important;
+  box-shadow:
+    0 10px 30px -10px rgba(249,115,22,.15),
+    0 4px 12px -4px rgba(0,0,0,.08);
+}
+
+/* ── Section labels: hierarquia refinada ── */
+.account-section-label,
+.form-section-label{
+  letter-spacing:.08em !important;
+  font-size:10.5px !important;
+  font-weight:700 !important;
+  color:var(--muted) !important;
+  opacity:.85;
+}
+
+/* ── Tracker timeline: ícones mais generosos ── */
+.tstep-icon{
+  width:46px !important;
+  height:46px !important;
+  font-size:19px !important;
+  transition:all .4s cubic-bezier(.34,1.56,.64,1) !important;
+}
+.tstep-title{
+  font-size:15.5px !important;
+  letter-spacing:-.01em;
+}
+
+/* ── Item modal: imagem com gradiente sutil no rodapé ── */
+.im-img{
+  height:260px !important;
+  position:relative;
+}
+.im-img::after{
+  content:'';
+  position:absolute;
+  left:0; right:0; bottom:0;
+  height:40%;
+  background:linear-gradient(to top, rgba(0,0,0,.25), transparent);
+  pointer-events:none;
+}
+
+/* ── Botões de fechar flutuantes (im-close) ── */
+.im-close{
+  width:40px !important;
+  height:40px !important;
+  background:rgba(0,0,0,.5) !important;
+  border:1px solid rgba(255,255,255,.12) !important;
+  backdrop-filter:blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter:blur(16px) saturate(180%) !important;
+  transition:all .25s cubic-bezier(.22,.72,.28,1) !important;
+}
+.im-close:hover{
+  background:rgba(0,0,0,.7) !important;
+  transform:rotate(90deg) scale(1.05);
+}
+
+/* ── Radio/Options no troco/pag: refinamento ── */
+.troco-opt,
+.pag-opt{
+  border-radius:16px !important;
+  padding:16px 18px !important;
+  transition:all .25s cubic-bezier(.22,.72,.28,1) !important;
+  background:
+    linear-gradient(180deg, var(--s2) 0%, var(--s1) 140%) !important;
+}
+.troco-opt:hover,
+.pag-opt:hover{
+  transform:translateY(-1px);
+  box-shadow:
+    0 8px 20px -8px rgba(249,115,22,.15),
+    0 4px 10px -4px rgba(0,0,0,.05);
+}
+.troco-opt.on,
+.pag-opt.on{
+  background:
+    linear-gradient(180deg, rgba(249,115,22,.1) 0%, rgba(249,115,22,.04) 100%) !important;
+  box-shadow:
+    0 0 0 1px var(--accent) inset,
+    0 8px 24px -8px rgba(249,115,22,.25);
+}
+
+/* ── Títulos dos sheets centrais (troco/pag/rating) ── */
+.troco-title,
+.pag-title,
+.rating-title{
+  font-size:24px !important;
+  letter-spacing:-.02em;
+  line-height:1.15 !important;
+  margin-bottom:8px !important;
+}
+.troco-sub,
+.pag-sub,
+.rating-sub{
+  font-size:14px !important;
+  line-height:1.55 !important;
+  max-width:360px;
+  margin:0 auto 26px !important;
+}
+
+/* ── Rating: estrelas mais dramáticas ── */
+.rating-star{
+  font-size:46px !important;
+  transition:transform .25s cubic-bezier(.34,1.56,.64,1), filter .25s, opacity .25s !important;
+}
+.rating-star.on{
+  transform:scale(1.25) !important;
+  filter:drop-shadow(0 6px 14px rgba(245,158,11,.4)) !important;
+}
+
+/* ── CTAs primários nos sheets: sombra com profundidade ── */
+.troco-confirm,
+.pag-confirm,
+.rating-send-btn{
+  padding:16px !important;
+  font-size:15.5px !important;
+  letter-spacing:.01em;
+  border-radius:16px !important;
+  box-shadow:
+    0 10px 30px -8px rgba(249,115,22,.45),
+    0 4px 10px -2px rgba(249,115,22,.2),
+    0 0 0 1px rgba(255,255,255,.06) inset !important;
+  transition:all .28s cubic-bezier(.22,.72,.28,1) !important;
+}
+.troco-confirm:hover,
+.pag-confirm:hover,
+.rating-send-btn:hover{
+  transform:translateY(-2px) !important;
+  box-shadow:
+    0 16px 40px -10px rgba(249,115,22,.55),
+    0 6px 16px -4px rgba(249,115,22,.25),
+    0 0 0 1px rgba(255,255,255,.08) inset !important;
+}
+.troco-confirm:active,
+.pag-confirm:active,
+.rating-send-btn:active{
+  transform:translateY(0) !important;
+  transition-duration:.08s !important;
+}
+
+/* ── Inputs dos auth e troco: toque de foco premium ── */
+.auth-input,
+.troco-valor-input,
+.form-input{
+  transition:border-color .2s, box-shadow .2s, background .2s !important;
+}
+.auth-input:focus,
+.troco-valor-input:focus,
+.form-input:focus{
+  box-shadow:0 0 0 4px rgba(249,115,22,.08);
+}
+
+/* ── Delivery tabs (topo do carrinho): seleção mais elegante ── */
+.delivery-tabs{ gap:8px !important; margin:20px 0 !important; }
+.dtab{
+  padding:12px 6px !important;
+  border-radius:12px !important;
+  border-width:1px !important;
+  transition:all .25s cubic-bezier(.22,.72,.28,1) !important;
+}
+.dtab.on{
+  box-shadow:
+    0 0 0 1px var(--accent) inset,
+    0 6px 16px -6px rgba(249,115,22,.2);
+}
+
+/* ── Auth tabs refinadas ── */
+.auth-tab.on{
+  box-shadow:
+    0 0 0 1px var(--accent) inset,
+    0 4px 12px -4px rgba(249,115,22,.18);
+}
+
+/* ── Ajustes finos em mobile (<520px) ── */
+@media(max-width:520px){
+  .item-modal,
+  .drawer,
+  .track-sheet,
+  .auth-sheet,
+  .account-sheet,
+  .troco-sheet,
+  .pag-sheet,
+  .rating-sheet,
+  .ac-peso-sheet{
+    border-radius:24px 24px 0 0 !important;
+  }
+  .drawer-title,
+  .track-head-title,
+  .account-title{ font-size:20px !important; }
+  .auth-title{ font-size:22px !important; }
+  .troco-title,
+  .pag-title,
+  .rating-title{ font-size:21px !important; }
+}
+
+
 </style>
 <script src="/api-client.js"></script>
 </head>
