@@ -197,6 +197,13 @@ function _parseItems(items) {
   return [];
 }
 
+// Mesma coisa, mas exclui itens cancelados (item_status='cancelado').
+// Use sempre que for SOMAR valores ou EXIBIR pro cliente — não use em telas
+// internas que precisem rastrear o que foi cancelado.
+function _parseItemsAtivos(items) {
+  return _parseItems(items).filter(i => (i?.item_status || 'active') !== 'cancelado');
+}
+
 function mapOrder(o) {
   const pixPendente = o.status === 'aguardando_pix' && o.pag === 'pix_manual';
   const rawTime = o.created_at || o.time || '';

@@ -517,8 +517,9 @@ function openOrderDetail(id) {
   // Totais
   const fmt = v => 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ',');
 
-  // Subtotal real = soma dos itens (o.total já vem com descontos/cashback aplicados)
-  const itemsSubtotal = _oItems.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+  // Subtotal real = soma dos itens NÃO cancelados (o.total já vem com descontos/cashback aplicados)
+  const _oItemsAtivos = _oItems.filter(i => (i?.item_status || 'active') !== 'cancelado');
+  const itemsSubtotal = _oItemsAtivos.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
   const desconto = Math.max(0, itemsSubtotal - parseFloat(o.total || 0));
 
   document.getElementById('od-subtotal').textContent = fmt(itemsSubtotal);

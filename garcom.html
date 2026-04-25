@@ -1670,7 +1670,8 @@ async function garcomPrint(order, newItems) {
     const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
     const orderNum = order.mesa_num ? `Mesa ${order.mesa_num}` : (order.id ? `#${_garcomOrderNum(order.id, order.order_num)}` : '?');
 
-    const items = Array.isArray(newItems) && newItems.length ? newItems : _parseItems(order.items);
+    const items = (Array.isArray(newItems) && newItems.length ? newItems : _parseItems(order.items))
+      .filter(i => (i?.item_status || 'active') !== 'cancelado');
     if (!items.length) return;
 
     const isCozinha = i => {
@@ -2154,7 +2155,11 @@ async function openMesaDetail(num) {
 
   // Busca pedidos desta mesa (usa allMesaOrders — todos os garçons)
   const orders  = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
-  const total   = orders.reduce((s,o)=>s+parseFloat(o.total||0),0);
+  // Recalcula total da mesa pelos itens NÃO cancelados (o.total no banco pode estar desatualizado)
+  const total   = orders.reduce((s,o) => {
+    const its = _parseItems(o.items).filter(i => (i?.item_status || 'active') !== 'cancelado');
+    return s + its.reduce((a,i) => a + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
+  }, 0);
 
   const body = document.getElementById('mds-body');
   if (!orders.length) {
@@ -3478,12 +3483,13 @@ function _parseItems(items) {
 function calcularTotalMesa(orders) {
   let total = 0;
   (orders || []).forEach(o => {
-    const items = _parseItems(o.items);
-    if (o.status === 'mesa_aberta' && items.length) {
-      total += items
-        .filter(i => (i.item_status || 'active') !== 'cancelado')
-        .reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+    const items = _parseItems(o.items).filter(i => (i?.item_status || 'active') !== 'cancelado');
+    // Sempre recalcula pelos itens NÃO cancelados.
+    // o.total no banco pode estar desatualizado após cancelamento de item.
+    if (items.length) {
+      total += items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
     } else {
+      // Fallback: pedido sem itens parseáveis — usa o.total como estava antes
       total += parseFloat(o.total || 0);
     }
     total += parseFloat(o.taxa || 0);
