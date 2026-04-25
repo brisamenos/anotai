@@ -492,12 +492,152 @@ function _grupoHtml(g) {
 }
 
 function _optHtml(o) {
-  var html = '<div class="grp-opt-row">';
-  html += '<input class="grp-opt-name" placeholder="Nome da opção" value="' + (o.nome||'').replace(/"/g,'&quot;') + '">';
+  // Estado de "esgotado" — lê do Set global do gestor.
+  // Se o Set ainda não foi carregado (usuário não passou pela tela "Adicionais Esgotados"),
+  // _carregarEsgotadosBg() é disparado em background pra atualizar os botões depois.
+  var nomeNorm = (typeof _normAddonGestor === 'function')
+    ? _normAddonGestor(o.nome || '')
+    : String(o.nome||'').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  var esgotado = (typeof _addonsEsgSet !== 'undefined' && _addonsEsgSet && _addonsEsgSet.has)
+    ? _addonsEsgSet.has(nomeNorm)
+    : false;
+  if (typeof _carregarEsgotadosBg === 'function') _carregarEsgotadosBg();
+
+  // Botão de pausa: ⏸ cinza quando disponível, ▶ laranja quando esgotado
+  var pauseStyle = esgotado
+    ? 'background:rgba(249,115,22,.15);color:var(--accent);border:1px solid var(--accent)'
+    : 'background:none;color:var(--muted);border:1px solid var(--border)';
+  var pauseTitle = esgotado
+    ? 'Esgotado em todos os pratos — clique para liberar'
+    : 'Pausar este adicional em todos os pratos';
+  var pauseIcon = esgotado
+    ? '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M5 3l8 5-8 5V3z" fill="currentColor"/></svg>'
+    : '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor"/><rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor"/></svg>';
+
+  var html = '<div class="grp-opt-row" data-nome-norm="' + nomeNorm + '">';
+  html += '<input class="grp-opt-name" placeholder="Nome da opção" value="' + (o.nome||'').replace(/"/g,'&quot;') + '" onchange="_atualizarPauseBtnRow(this)">';
   html += '<input class="grp-opt-price" type="number" step="0.01" min="0" placeholder="+R$" value="' + (o.preco||'') + '">';
+  html += '<button type="button" class="grp-opt-pause" title="' + pauseTitle + '" style="width:28px;height:28px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;' + pauseStyle + '" onclick="_togglePauseRow(this)">' + pauseIcon + '</button>';
   html += '<button type="button" class="grp-opt-del" onclick="delGrupoOpt(this)">×</button>';
   html += '</div>';
   return html;
+}
+
+// ── Atualiza o botão de pausa de UMA linha (chamado quando o usuário muda o nome do adicional) ──
+function _atualizarPauseBtnRow(inputNome) {
+  var row = inputNome.closest('.grp-opt-row');
+  if (!row) return;
+  var nomeNorm = (typeof _normAddonGestor === 'function')
+    ? _normAddonGestor(inputNome.value || '')
+    : String(inputNome.value||'').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  row.dataset.nomeNorm = nomeNorm;
+  _refreshPauseBtnStateRow(row);
+}
+
+// ── Reflete o estado atual (esgotado/disponível) no botão de pausa de UMA linha ──
+function _refreshPauseBtnStateRow(row) {
+  if (!row) return;
+  var btn = row.querySelector('.grp-opt-pause');
+  if (!btn) return;
+  var nomeNorm = row.dataset.nomeNorm || '';
+  var esgotado = (typeof _addonsEsgSet !== 'undefined' && _addonsEsgSet && _addonsEsgSet.has)
+    ? _addonsEsgSet.has(nomeNorm) : false;
+  if (esgotado) {
+    btn.style.background = 'rgba(249,115,22,.15)';
+    btn.style.color      = 'var(--accent)';
+    btn.style.border     = '1px solid var(--accent)';
+    btn.title            = 'Esgotado em todos os pratos — clique para liberar';
+    btn.innerHTML        = '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M5 3l8 5-8 5V3z" fill="currentColor"/></svg>';
+  } else {
+    btn.style.background = 'none';
+    btn.style.color      = 'var(--muted)';
+    btn.style.border     = '1px solid var(--border)';
+    btn.title            = 'Pausar este adicional em todos os pratos';
+    btn.innerHTML        = '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor"/><rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor"/></svg>';
+  }
+}
+
+// ── Atualiza TODAS as linhas visíveis (chamado depois de carregar o Set do servidor) ──
+function _refreshTodosPauseBtns() {
+  document.querySelectorAll('.grp-opt-row').forEach(_refreshPauseBtnStateRow);
+}
+
+// ── Carrega esgotados em background (idempotente; só a 1ª chamada faz fetch) ──
+var _esgotadosBgFetched = false;
+async function _carregarEsgotadosBg() {
+  if (_esgotadosBgFetched) return;
+  _esgotadosBgFetched = true;
+  try {
+    var tid = '';
+    try { tid = JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||''; } catch(e) {}
+    if (!tid) { _esgotadosBgFetched = false; return; }
+    var r = await fetch('/api/addons-esgotados', { headers: { 'x-tenant-id': tid } });
+    if (!r.ok) { _esgotadosBgFetched = false; return; }
+    var data = await r.json();
+    if (typeof _addonsEsgSet !== 'undefined') {
+      _addonsEsgSet = new Set(data.esgotados || []);
+    } else {
+      window._addonsEsgSet = new Set(data.esgotados || []);
+    }
+    _refreshTodosPauseBtns();
+  } catch(e) { _esgotadosBgFetched = false; }
+}
+
+// ── Toggle pausa: pega o nome do input, chama o endpoint, atualiza TODAS as linhas com mesmo nome ──
+async function _togglePauseRow(btn) {
+  var row = btn.closest('.grp-opt-row');
+  if (!row) return;
+  var inputNome = row.querySelector('.grp-opt-name');
+  var nome = (inputNome?.value || '').trim();
+  if (!nome) {
+    if (typeof sbToast === 'function') sbToast('err', 'Digite o nome do adicional antes de pausar');
+    return;
+  }
+  var nomeNorm = (typeof _normAddonGestor === 'function')
+    ? _normAddonGestor(nome)
+    : nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  row.dataset.nomeNorm = nomeNorm;
+
+  var jaEsgotado = (typeof _addonsEsgSet !== 'undefined' && _addonsEsgSet && _addonsEsgSet.has)
+    ? _addonsEsgSet.has(nomeNorm) : false;
+  var ativando = !jaEsgotado;
+
+  // Otimista: atualiza Set local e TODAS as linhas com mesmo nome_norm
+  if (typeof _addonsEsgSet !== 'undefined') {
+    if (ativando) _addonsEsgSet.add(nomeNorm); else _addonsEsgSet.delete(nomeNorm);
+  }
+  document.querySelectorAll('.grp-opt-row').forEach(function(r){
+    if (r.dataset.nomeNorm === nomeNorm) _refreshPauseBtnStateRow(r);
+  });
+  // Desabilita o botão durante a chamada
+  btn.disabled = true; btn.style.opacity = '0.6'; btn.style.cursor = 'wait';
+
+  try {
+    var tid = '';
+    try { tid = JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||''; } catch(e) {}
+    if (!tid) throw new Error('sem tenant');
+    var url = '/api/addons-esgotados' + (!ativando ? '?nome=' + encodeURIComponent(nome) : '');
+    var r = await fetch(url, {
+      method: ativando ? 'POST' : 'DELETE',
+      headers: { 'Content-Type':'application/json', 'x-tenant-id': tid },
+      body: ativando ? JSON.stringify({ nome: nome }) : undefined
+    });
+    if (!r.ok) throw new Error('falhou');
+    if (typeof sbToast === 'function') {
+      sbToast('ok', ativando ? (nome + ': pausado em todos os pratos') : (nome + ': disponível novamente'));
+    }
+  } catch(e) {
+    // Reverte
+    if (typeof _addonsEsgSet !== 'undefined') {
+      if (ativando) _addonsEsgSet.delete(nomeNorm); else _addonsEsgSet.add(nomeNorm);
+    }
+    document.querySelectorAll('.grp-opt-row').forEach(function(r){
+      if (r.dataset.nomeNorm === nomeNorm) _refreshPauseBtnStateRow(r);
+    });
+    if (typeof sbToast === 'function') sbToast('err', 'Erro ao salvar');
+  } finally {
+    btn.disabled = false; btn.style.opacity = ''; btn.style.cursor = 'pointer';
+  }
 }
 
 function delGrupo(btn)    { btn.closest('.grp-wrap').remove(); }
