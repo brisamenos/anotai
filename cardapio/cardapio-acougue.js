@@ -165,21 +165,29 @@ function renderImGrupos(item) {
           ? `<span class="grp-required-badge">Obrigatório</span>`
           : `<span class="grp-optional-badge">Opcional</span>`;
         const optsHtml = (g.opcoes || []).map(o => {
-          const priceLabel = o.preco > 0
-            ? `<span class="grp-opt-price">+ R$ ${fmt(o.preco)}</span>`
-            : `<span class="grp-opt-price free">Grátis</span>`;
+          const esgotado = _isAddonEsgotado(o.nome);
+          const priceLabel = esgotado
+            ? `<span class="grp-opt-price" style="color:var(--muted);text-decoration:line-through">+ R$ ${fmt(o.preco||0)}</span>`
+            : (o.preco > 0
+              ? `<span class="grp-opt-price">+ R$ ${fmt(o.preco)}</span>`
+              : `<span class="grp-opt-price free">Grátis</span>`);
           const indicator = g.tipo === 'checkbox'
             ? `<div class="grp-opt-indicator multi"></div>`
             : `<div class="grp-opt-indicator"></div>`;
-          const qtyEl = g.tipo === 'checkbox'
+          const qtyEl = g.tipo === 'checkbox' && !esgotado
             ? `<div class="grp-opt-qty" id="gqty_${_slug(g.nome)}_${_slug(o.nome)}">
                  <button class="grp-qty-btn" onclick="event.stopPropagation();grpQty('${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},-1)">−</button>
                  <span class="grp-qty-num" id="gqnum_${_slug(g.nome)}_${_slug(o.nome)}">1</span>
                  <button class="grp-qty-btn" onclick="event.stopPropagation();grpQty('${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},1)">+</button>
                </div>` : '';
-          return `<div class="grp-opt-item" data-grupo="${_escape(g.nome)}" data-nome="${_escape(o.nome)}" data-preco="${o.preco||0}" data-tipo="${g.tipo}" onclick="grpToggle(this,'${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},'${g.tipo}',${g.max||1})">
+          const esgBadge = esgotado
+            ? `<span class="grp-esg-badge" style="background:var(--s2);color:var(--muted);padding:3px 8px;border-radius:6px;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--border)">Esgotado</span>`
+            : '';
+          const clickAttr = esgotado ? '' : `onclick="grpToggle(this,'${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},'${g.tipo}',${g.max||1})"`;
+          const styleAttr = esgotado ? 'opacity:.5;cursor:not-allowed;pointer-events:none' : '';
+          return `<div class="grp-opt-item${esgotado?' esgotado':''}" data-grupo="${_escape(g.nome)}" data-nome="${_escape(o.nome)}" data-preco="${o.preco||0}" data-tipo="${g.tipo}" ${clickAttr} style="${styleAttr}">
             <div class="grp-opt-left">${indicator}<span class="grp-opt-name">${o.nome}</span></div>
-            <div style="display:flex;align-items:center;gap:8px">${priceLabel}${qtyEl}</div>
+            <div style="display:flex;align-items:center;gap:8px">${esgBadge || priceLabel}${qtyEl}</div>
           </div>`;
         }).join('');
         return `<div class="grp-section">
@@ -214,21 +222,29 @@ function renderImGrupos(item) {
       ? `<span class="grp-required-badge">Obrigatório</span>`
       : `<span class="grp-optional-badge">Opcional</span>`;
     const optsHtml = (g.opcoes || []).map(o => {
-      const priceLabel = o.preco > 0
-        ? `<span class="grp-opt-price">+ R$ ${fmt(o.preco)}</span>`
-        : `<span class="grp-opt-price free">Grátis</span>`;
+      const esgotado = _isAddonEsgotado(o.nome);
+      const priceLabel = esgotado
+        ? `<span class="grp-opt-price" style="color:var(--muted);text-decoration:line-through">+ R$ ${fmt(o.preco||0)}</span>`
+        : (o.preco > 0
+          ? `<span class="grp-opt-price">+ R$ ${fmt(o.preco)}</span>`
+          : `<span class="grp-opt-price free">Grátis</span>`);
       const indicator = g.tipo === 'checkbox'
         ? `<div class="grp-opt-indicator multi"></div>`
         : `<div class="grp-opt-indicator"></div>`;
-      const qtyEl = g.tipo === 'checkbox'
+      const qtyEl = g.tipo === 'checkbox' && !esgotado
         ? `<div class="grp-opt-qty" id="gqty_${_slug(g.nome)}_${_slug(o.nome)}">
              <button class="grp-qty-btn" onclick="event.stopPropagation();grpQty('${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},-1)">−</button>
              <span class="grp-qty-num" id="gqnum_${_slug(g.nome)}_${_slug(o.nome)}">1</span>
              <button class="grp-qty-btn" onclick="event.stopPropagation();grpQty('${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},1)">+</button>
            </div>` : '';
-      return `<div class="grp-opt-item" data-grupo="${_escape(g.nome)}" data-nome="${_escape(o.nome)}" data-preco="${o.preco||0}" data-tipo="${g.tipo}" onclick="grpToggle(this,'${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},'${g.tipo}',${g.max||1})">
+      const esgBadge = esgotado
+        ? `<span class="grp-esg-badge" style="background:var(--s2);color:var(--muted);padding:3px 8px;border-radius:6px;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--border)">Esgotado</span>`
+        : '';
+      const clickAttr = esgotado ? '' : `onclick="grpToggle(this,'${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},'${g.tipo}',${g.max||1})"`;
+      const styleAttr = esgotado ? 'opacity:.5;cursor:not-allowed;pointer-events:none' : '';
+      return `<div class="grp-opt-item${esgotado?' esgotado':''}" data-grupo="${_escape(g.nome)}" data-nome="${_escape(o.nome)}" data-preco="${o.preco||0}" data-tipo="${g.tipo}" ${clickAttr} style="${styleAttr}">
         <div class="grp-opt-left">${indicator}<span class="grp-opt-name">${o.nome}</span></div>
-        <div style="display:flex;align-items:center;gap:8px">${priceLabel}${qtyEl}</div>
+        <div style="display:flex;align-items:center;gap:8px">${esgBadge || priceLabel}${qtyEl}</div>
       </div>`;
     }).join('');
 
@@ -834,6 +850,11 @@ function closePreparoDetail() {
 }
 
 function grpToggle(el, grupoNome, optNome, preco, tipo, maxSel) {
+  // Defesa: se o adicional foi marcado como esgotado, ignora o clique
+  if (typeof _isAddonEsgotado === 'function' && _isAddonEsgotado(optNome)) {
+    if (typeof toast === 'function') toast('warn', `${optNome} está esgotado`);
+    return;
+  }
   if (!_imGruposState[grupoNome]) _imGruposState[grupoNome] = [];
   const state = _imGruposState[grupoNome];
 

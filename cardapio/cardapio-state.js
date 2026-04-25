@@ -56,6 +56,16 @@ function _orderNum(id, orderNum) {
   return Math.max(1, id - _orderNumOffset);
 }
 
+// ── Adicionais globalmente esgotados (Set de nomes normalizados) ──
+let _addonsEsgotadosSet = new Set();
+// Normalização — case-insensitive, sem acento, trim
+function _normAddon(s) {
+  return String(s||'').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+function _isAddonEsgotado(nome) {
+  return _addonsEsgotadosSet.has(_normAddon(nome));
+}
+
 // ── PIX ──
 let _pixPollTimer    = null;
 let _pixMpId         = null;

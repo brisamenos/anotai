@@ -661,9 +661,26 @@ async function reloadMenu() {
     destaque: !!x.destaque
   }));
   allCats  = (catsR.data  || []);
+  await loadAddonsEsgotados();
   buildCats();
   renderPreparoFilterSection();
   renderMenu();
+}
+
+// ── Adicionais globalmente esgotados ──
+// Carrega a lista do tenant. Usado pra desabilitar opções no modal de produto.
+async function loadAddonsEsgotados() {
+  if (!_tenantId) return;
+  try {
+    const r = await fetch('/api/addons-esgotados', {
+      headers: { 'x-tenant-id': _tenantId }
+    });
+    if (!r.ok) return;
+    const data = await r.json();
+    _addonsEsgotadosSet = new Set(data.esgotados || []);
+  } catch(e) {
+    console.warn('[addons-esgotados] falha ao carregar:', e?.message);
+  }
 }
 
 
