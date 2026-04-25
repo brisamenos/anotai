@@ -741,22 +741,52 @@ function pdvbAtualizarTotal() {
 function _pdvbConfirmar(itemId) {
   const modal = document.getElementById('pdvb-modal-item-bg');
   if (!modal) return;
-  const it   = modal._item;
-  const isKg = modal._isKg;
-  const qty  = window._pdvbQty || 1;
+  const it     = modal._item;
+  const isKg   = modal._isKg;
+  const grupos = Array.isArray(modal._grupos) ? modal._grupos : [];
+  const qty    = window._pdvbQty || 1;
 
+  // ── Agrupa opções selecionadas POR GRUPO ──
+  // O parser de impressão (_parseObs em gestor-relatorios.js) espera o formato:
+  //   "NomeGrupo: opcao1, opcao2 (+R$ 3,00) · OutroGrupo: x · observação livre"
+  // Sem isso a comanda imprime sem os adicionais.
   let extra = 0;
-  const opcsDesc = [];
+  const porGrupo = new Map(); // gi → { nome, opcoes:[] }
   document.querySelectorAll('#pdvb-modal-item-bg input:checked').forEach(inp => {
-    extra += parseFloat(inp.dataset.preco || 0);
-    opcsDesc.push(inp.dataset.nome);
+    const preco = parseFloat(inp.dataset.preco || 0);
+    extra += preco;
+    const gi = parseInt(inp.dataset.grp);
+    if (isNaN(gi)) return;
+    const g = grupos[gi];
+    if (!g) return;
+    const grpNome = g.nome || g.name || (
+      g.tipo === 'cortes'        ? 'Corte' :
+      g.tipo === 'preparos'      ? 'Preparo' :
+      g.tipo === 'ocasiao'       ? 'Ocasião' :
+      g.tipo === 'armazenamento' ? 'Armazenamento' :
+      g.tipo === 'pesos'         ? 'Porção' :
+      g.tipo === 'sabor'         ? 'Sabor' : 'Adicional'
+    );
+    const opcNome = inp.dataset.nome || '';
+    if (!opcNome) return;
+    const opcLabel = preco > 0
+      ? `${opcNome} (+R$ ${preco.toFixed(2).replace('.',',')})`
+      : opcNome;
+    if (!porGrupo.has(gi)) porGrupo.set(gi, { nome: grpNome, opcoes: [] });
+    porGrupo.get(gi).opcoes.push(opcLabel);
   });
 
   let price = parseFloat(it.price||0) + extra;
   let name  = it.name;
-  let obs   = document.getElementById('pdvb-obs-input')?.value.trim() || '';
+  const obsLivre = document.getElementById('pdvb-obs-input')?.value.trim() || '';
 
-  if (opcsDesc.length) obs = [opcsDesc.join(', '), obs].filter(Boolean).join(' | ');
+  // Monta string final no formato esperado pelo parser
+  const partesObs = [];
+  for (const { nome: grpNome, opcoes } of porGrupo.values()) {
+    if (opcoes.length) partesObs.push(`${grpNome}: ${opcoes.join(', ')}`);
+  }
+  if (obsLivre) partesObs.push(obsLivre);
+  const obs = partesObs.join(' · ');
 
   if (isKg) {
     const kg = parseFloat(document.getElementById('pdvb-kg-input')?.value || 1);
