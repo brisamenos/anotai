@@ -5915,10 +5915,20 @@ function _extrairAdicionaisDoMenu() {
   // Percorre todos os items e coleta opções de grupos genéricos (Adicionais, Molhos, etc).
   // Ignora grupos especiais de açougue/kit (cortes, pesos, kit_itens, etc) — eles não são "adicionais".
   const TIPOS_ESPECIAIS = new Set(['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens']);
+  // `items` é declarado com `let` em gestor-core.js — não é exposto em window.items.
+  // Tenta as duas formas: variável global de escopo de script + window (caso algum dia mude).
+  const lista = (typeof items !== 'undefined' && Array.isArray(items)) ? items
+              : (Array.isArray(window.items) ? window.items : []);
   const map = new Map(); // nome_norm → { nome, count, grupos:Set }
-  for (const it of (window.items || [])) {
+  for (const it of lista) {
     let cgs = it.custom_groups;
     if (typeof cgs === 'string') { try { cgs = JSON.parse(cgs); } catch { cgs = []; } }
+    // Fallback: alguns lugares do código usam `customGroups` em camelCase
+    if (!Array.isArray(cgs)) {
+      let cg2 = it.customGroups;
+      if (typeof cg2 === 'string') { try { cg2 = JSON.parse(cg2); } catch { cg2 = []; } }
+      if (Array.isArray(cg2)) cgs = cg2;
+    }
     if (!Array.isArray(cgs)) continue;
     for (const g of cgs) {
       if (TIPOS_ESPECIAIS.has(g.tipo)) continue;
