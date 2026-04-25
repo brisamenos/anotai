@@ -36,11 +36,103 @@ function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
   })
 }
 
+// ── Job de recuperação de pagamentos PIX aprovados ────────────────────────────
+// Roda a cada 60 segundos e verifica pagamentos que foram aprovados no Mercado
+// Pago mas que o pedido ainda está preso em 'aguardando_pix' (cliente fechou a
+// página antes do poll frontend confirmar ou webhook não chegou).
+let _pixJobIniciado = false
+
+function _iniciarPixRecoveryJob(db, log, sseBroadcast, getToken) {
+  if (_pixJobIniciado) return
+  _pixJobIniciado = true
+  log('🔄', 'PIX recovery job iniciado (intervalo: 60s)')
+
+  setInterval(async () => {
+    try {
+      const mpToken = getToken()
+      if (!mpToken) return
+
+      // Busca pagamentos pendentes criados nas últimas 24h que ainda têm pedido aguardando
+      const pendentes = db.prepare(`
+        SELECT p.mp_payment_id, p.order_id, p.tenant_id, p.valor
+        FROM pagamentos_pix p
+        LEFT JOIN orders o ON o.id = p.order_id
+        WHERE p.status = 'pendente'
+          AND p.order_id IS NOT NULL
+          AND (o.status = 'aguardando_pix' OR o.status IS NULL)
+          AND p.created_at > datetime('now', '-24 hours')
+      `).all()
+
+      if (!pendentes.length) return
+
+      // Agrupa por tenant para log mais claro
+      const porTenant = pendentes.reduce((acc, r) => {
+        acc[r.tenant_id] = acc[r.tenant_id] || []
+        acc[r.tenant_id].push(r)
+        return acc
+      }, {})
+
+      for (const [tenantId, pagamentos] of Object.entries(porTenant)) {
+        log('🔍', `PIX recovery: tenant=${tenantId} — verificando ${pagamentos.length} pagamento(s) pendente(s)`)
+        let liberados = 0, rejeitados = 0
+
+        for (const row of pagamentos) {
+          try {
+            const r = await fetch(`https://api.mercadopago.com/v1/payments/${row.mp_payment_id}`, {
+              headers: { 'Authorization': `Bearer ${mpToken}` }
+            })
+            if (!r.ok) continue
+            const pd = await r.json()
+
+            if (pd.status === 'approved') {
+              db.prepare("UPDATE pagamentos_pix SET status='aprovado', paid_at=? WHERE mp_payment_id=?")
+                .run(pd.date_approved || new Date().toISOString(), String(row.mp_payment_id))
+
+              const pedAtual = db.prepare("SELECT status FROM orders WHERE id=?").get(row.order_id)
+              if (pedAtual?.status === 'aguardando_pix') {
+                db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=?").run(row.order_id)
+                const pedFull = db.prepare("SELECT * FROM orders WHERE id=?").get(row.order_id)
+                const items   = pedFull && typeof pedFull.items === 'string'
+                  ? (() => { try { return JSON.parse(pedFull.items) } catch { return [] } })()
+                  : (pedFull?.items || [])
+                sseBroadcast(`orders-rt:${tenantId}`, 'orders:UPDATE',
+                  pedFull ? { ...pedFull, items, status: 'analise', pag: 'pix_mp' }
+                          : { id: row.order_id, status: 'analise', pag: 'pix_mp' })
+                liberados++
+              }
+            } else if (pd.status === 'rejected' || pd.status === 'cancelled') {
+              db.prepare("UPDATE pagamentos_pix SET status=? WHERE mp_payment_id=?")
+                .run(pd.status === 'rejected' ? 'rejeitado' : 'cancelado', String(row.mp_payment_id))
+              rejeitados++
+            }
+          } catch (e) {
+            log('⚠️', `PIX recovery: erro mp_id=${row.mp_payment_id} tenant=${tenantId}:`, e.message)
+          }
+        }
+
+        if (liberados)  log('✅', `PIX recovery: tenant=${tenantId} — ${liberados} pedido(s) liberado(s)`)
+        if (rejeitados) log('⚠️', `PIX recovery: tenant=${tenantId} — ${rejeitados} pagamento(s) rejeitado(s)/cancelado(s)`)
+      }
+    } catch (e) {
+      log('⚠️', 'PIX recovery job erro geral:', e.message)
+    }
+  }, 60_000)
+}
+
 module.exports = async function handleRoutes(req, res, ctx) {
   const { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
           validarSessaoAdmin, criarSessaoAdmin, fazerBackup, restaurarBackup, getTenantId,
           MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
           EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano } = ctx
+
+  // ── Inicia job de recuperação de PIX na primeira requisição ───────────────
+  _iniciarPixRecoveryJob(db, log, sseBroadcast, () => {
+    try {
+      const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+      return g.mp_token || MP_TOKEN
+    } catch { return MP_TOKEN }
+  })
 
   // ═══════════════════════════════════════════════════════
   // Download do App Desktop
