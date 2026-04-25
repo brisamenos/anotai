@@ -2103,3 +2103,211 @@ async function aplicarGruposEmLote() {
 }
 
 // ─────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════
+// REPLICAR IMAGEM EM OUTROS PRODUTOS
+// ═══════════════════════════════════════════════════════════
+let _riItensSelecionados = new Set();
+let _riSourceItem = null;
+let _riAllItensCache = [];
+
+function openReplicarImagemModal() {
+  // Pega o item que está sendo editado (variável global do gestor-cardapio.js)
+  const _id = (typeof editingId !== 'undefined' && editingId) ? editingId : (window._editItemId || null);
+  if (!_id) { sbToast('err', 'Salve o item antes de replicar a imagem.'); return; }
+
+  // Pega URL da imagem (preferindo o que está em memória — pode ser nova upload ainda não salva)
+  const sourceUrl = (typeof _editItemImageUrl !== 'undefined' && _editItemImageUrl)
+                 || window._editItemImageUrl
+                 || document.getElementById('edit-img-thumb')?.src
+                 || null;
+
+  if (!sourceUrl || sourceUrl === window.location.href || sourceUrl.endsWith('#')) {
+    sbToast('err', 'Esse item ainda não tem imagem. Envie uma foto antes de replicar.');
+    return;
+  }
+
+  // Acha o item de origem nos dados em memória
+  const allItems = (typeof items !== 'undefined' && items) ? items : [];
+  _riSourceItem = allItems.find(it => it.id === _id) || { id: _id, name: 'Item atual', imageUrl: sourceUrl, cat: '' };
+  // Sobrescreve imageUrl com a URL atual (pode ter sido trocada antes de salvar)
+  _riSourceItem.imageUrl = sourceUrl;
+
+  // Atualiza preview
+  document.getElementById('ri-thumb').src = sourceUrl;
+  document.getElementById('ri-thumb').style.display = 'block';
+  document.getElementById('ri-no-img').style.display = 'none';
+  document.getElementById('ri-source-name').textContent = _riSourceItem.name || 'Item atual';
+
+  // Cache de todos os itens (exceto o de origem)
+  _riAllItensCache = allItems.filter(it => it.id !== _id);
+  _riItensSelecionados = new Set();
+
+  riRender('');
+  document.getElementById('ri-busca-item').value = '';
+  openModal('modal-replicar-imagem');
+}
+
+function riRender(filtro) {
+  const list = document.getElementById('ri-itens-list');
+  if (!list) return;
+
+  const term = (filtro || '').toLowerCase().trim();
+  const filtered = _riAllItensCache.filter(it => {
+    if (!term) return true;
+    return (it.name || '').toLowerCase().includes(term)
+        || (it.cat || '').toLowerCase().includes(term);
+  });
+
+  if (!filtered.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px">Nenhum produto encontrado</div>';
+    riAtualizarContagem();
+    return;
+  }
+
+  // Agrupa por categoria pra ficar organizado
+  const porCategoria = {};
+  filtered.forEach(it => {
+    const cat = it.cat || 'Sem categoria';
+    if (!porCategoria[cat]) porCategoria[cat] = [];
+    porCategoria[cat].push(it);
+  });
+
+  let html = '';
+  for (const cat of Object.keys(porCategoria).sort()) {
+    html += `<div style="font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:8px;margin-bottom:4px;padding-left:4px">${escapeHtml(cat)}</div>`;
+    for (const it of porCategoria[cat]) {
+      const checked = _riItensSelecionados.has(it.id);
+      const hasImg = !!it.imageUrl;
+      const thumb = hasImg
+        ? `<img src="${escapeHtml(it.imageUrl)}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;flex-shrink:0">`
+        : `<div style="width:32px;height:32px;background:var(--surface);border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--muted);font-size:14px">📷</div>`;
+      const warning = hasImg
+        ? `<span style="font-size:9.5px;color:#fbbf24;margin-left:auto">já tem imagem</span>`
+        : `<span style="font-size:9.5px;color:#86efac;margin-left:auto">sem imagem</span>`;
+      html += `
+        <label style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface);border-radius:6px;cursor:pointer;border:1px solid ${checked ? 'var(--accent)' : 'transparent'}" onmouseenter="this.style.background='var(--surface3)'" onmouseleave="this.style.background='var(--surface)'">
+          <input type="checkbox" ${checked ? 'checked' : ''} onchange="riToggleItem(${it.id}, this.checked)" style="accent-color:var(--accent);flex-shrink:0">
+          ${thumb}
+          <span style="font-size:12px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(it.name || '')}</span>
+          ${warning}
+        </label>`;
+    }
+  }
+  list.innerHTML = html;
+  riAtualizarContagem();
+}
+
+function riToggleItem(id, checked) {
+  if (checked) _riItensSelecionados.add(id);
+  else _riItensSelecionados.delete(id);
+  riAtualizarContagem();
+  // Atualiza só a borda do label clicado, sem re-render completo (mais performático)
+  const list = document.getElementById('ri-itens-list');
+  if (!list) return;
+  list.querySelectorAll('label').forEach(lbl => {
+    const cb = lbl.querySelector('input[type=checkbox]');
+    if (cb && cb.getAttribute('onchange')?.includes(`riToggleItem(${id},`)) {
+      lbl.style.border = '1px solid ' + (checked ? 'var(--accent)' : 'transparent');
+    }
+  });
+}
+
+function riAtualizarContagem() {
+  const c = document.getElementById('ri-contagem');
+  if (c) {
+    const n = _riItensSelecionados.size;
+    c.textContent = `${n} produto${n===1?'':'s'} selecionado${n===1?'':'s'}`;
+  }
+}
+
+function riSelecionarTodos(marcar) {
+  _riItensSelecionados = new Set();
+  if (marcar) {
+    // Pega só os itens visíveis (depois de filtrar)
+    const term = (document.getElementById('ri-busca-item')?.value || '').toLowerCase().trim();
+    const filtered = _riAllItensCache.filter(it => {
+      if (!term) return true;
+      return (it.name || '').toLowerCase().includes(term)
+          || (it.cat || '').toLowerCase().includes(term);
+    });
+    filtered.forEach(it => _riItensSelecionados.add(it.id));
+  }
+  const term = document.getElementById('ri-busca-item')?.value || '';
+  riRender(term);
+}
+
+function riMesmaCategoria() {
+  if (!_riSourceItem) return;
+  const cat = _riSourceItem.cat;
+  _riItensSelecionados = new Set();
+  _riAllItensCache.forEach(it => {
+    if (it.cat === cat) _riItensSelecionados.add(it.id);
+  });
+  const term = document.getElementById('ri-busca-item')?.value || '';
+  riRender(term);
+}
+
+function riSemImagem() {
+  _riItensSelecionados = new Set();
+  _riAllItensCache.forEach(it => {
+    if (!it.imageUrl) _riItensSelecionados.add(it.id);
+  });
+  const term = document.getElementById('ri-busca-item')?.value || '';
+  riRender(term);
+}
+
+function riFiltrar(term) {
+  riRender(term);
+}
+
+async function replicarImagemEmLote() {
+  const ids = Array.from(_riItensSelecionados);
+  if (!ids.length) { sbToast('err', 'Selecione pelo menos 1 produto.'); return; }
+  if (!_riSourceItem || !_riSourceItem.imageUrl) {
+    const url = window._editItemImageUrl || document.getElementById('edit-img-thumb')?.src || null;
+    if (!url) { sbToast('err', 'Imagem não encontrada.'); return; }
+    if (_riSourceItem) _riSourceItem.imageUrl = url;
+  }
+
+  const url = _riSourceItem.imageUrl;
+  const btn = document.getElementById('ri-btn-aplicar');
+  if (btn) { btn.disabled = true; btn.textContent = `Aplicando em ${ids.length}...`; }
+
+  let sucesso = 0, falhas = 0;
+  // Atualiza em lote no banco e no cache local
+  for (const id of ids) {
+    try {
+      const { error } = await sb.from('menu_items').update({ image_url: url }).eq('id', id);
+      if (error) { falhas++; continue; }
+      sucesso++;
+      // Atualiza cache em memória pra refletir na UI sem reload
+      const allItems = (typeof items !== 'undefined' && items) ? items : [];
+      const it = allItems.find(x => x.id === id);
+      if (it) it.imageUrl = url;
+    } catch (e) {
+      falhas++;
+    }
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Replicar imagem'; }
+  closeModal('modal-replicar-imagem');
+
+  // Re-render do cardápio se a função existir
+  if (typeof renderCardapio === 'function') {
+    try { renderCardapio(); } catch(_) {}
+  } else if (typeof renderCardapioGestor === 'function') {
+    try { renderCardapioGestor(); } catch(_) {}
+  }
+
+  if (sucesso && !falhas) sbToast('ok', `✅ Imagem replicada em ${sucesso} ${sucesso===1?'produto':'produtos'}!`);
+  else if (sucesso && falhas) sbToast('ok', `Replicada em ${sucesso}. ${falhas} ${falhas===1?'falhou':'falharam'}.`);
+  else sbToast('err', 'Nenhum produto foi atualizado. Tente novamente.');
+}
+
+// Helper: escapeHtml (caso ainda não exista no escopo)
+if (typeof escapeHtml === 'undefined') {
+  window.escapeHtml = function(s) {
+    return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  };
+}
