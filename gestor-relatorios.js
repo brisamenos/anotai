@@ -2403,6 +2403,92 @@ function _wrapTicketHtml(html, fontSize) {
 </head><body>${html}</body></html>`;
 }
 
+// ══════════════════════════════════════════════════════════════
+// Parser de observações de itens (cupom/comanda)
+// ──────────────────────────────────────────────────────────────
+// O `obs` de cada item vem montado como string concatenada:
+//   "Kit: A · B | Adicionais: Bacon (+R$ 3,00), Queijo · Ponto: Mal passado · obs livre"
+// Esta função quebra essa string em estrutura para impressão organizada.
+//
+// Retorno:
+//   {
+//     kitItens:   ['Item A', 'Item B', ...]      // se for kit
+//     meioMeio:   'sabor1 + sabor2'              // se for pizza meio a meio
+//     grupos:     [{ nome:'Adicionais', itens:['Bacon (+R$ 3,00)', 'Queijo'] }, ...]
+//     obsLivre:   'observação digitada pelo cliente'
+//   }
+function _parseObs(rawObs) {
+  const out = { kitItens: [], meioMeio: '', grupos: [], obsLivre: '' };
+  if (!rawObs || typeof rawObs !== 'string') return out;
+  let s = rawObs.trim();
+
+  // 1) Kit: tudo até o primeiro " | " é a lista de itens do kit
+  if (s.startsWith('Kit: ')) {
+    const pipeIdx = s.indexOf(' | ');
+    const kitPart = pipeIdx > -1 ? s.substring(5, pipeIdx) : s.substring(5);
+    out.kitItens = kitPart.split(' · ').map(x => x.trim()).filter(Boolean);
+    s = pipeIdx > -1 ? s.substring(pipeIdx + 3).trim() : '';
+  }
+
+  // 2) Meio a meio: prefixo "Meio a meio · ..."
+  if (s.startsWith('Meio a meio')) {
+    const rest = s.substring('Meio a meio'.length).replace(/^\s*·\s*/, '').trim();
+    out.meioMeio = rest.split(' · ')[0] || 'meio a meio';
+    // Continua processando o resto após o primeiro separador
+    const idx = rest.indexOf(' · ');
+    s = idx > -1 ? rest.substring(idx + 3).trim() : '';
+  }
+
+  if (!s) return out;
+
+  // 3) Quebra por grupos (separador " · ")
+  // Cada parte pode ser "Nome do Grupo: item1, item2" OU obs livre (sem ":")
+  const partes = s.split(' · ').map(p => p.trim()).filter(Boolean);
+  for (const parte of partes) {
+    const colonIdx = parte.indexOf(':');
+    if (colonIdx > 0 && colonIdx < 40) {
+      // Tem nome de grupo
+      const nome  = parte.substring(0, colonIdx).trim();
+      const valor = parte.substring(colonIdx + 1).trim();
+      // Split por vírgula RESPEITANDO parênteses (não quebra preços tipo "(+R$ 3,00)")
+      const itens = [];
+      let buf = '', depth = 0;
+      for (const ch of valor) {
+        if (ch === '(') depth++;
+        else if (ch === ')') depth = Math.max(0, depth - 1);
+        if (ch === ',' && depth === 0) {
+          if (buf.trim()) itens.push(buf.trim());
+          buf = '';
+        } else {
+          buf += ch;
+        }
+      }
+      if (buf.trim()) itens.push(buf.trim());
+      out.grupos.push({ nome, itens });
+    } else {
+      // Sem ":" → vai pra obs livre
+      out.obsLivre = (out.obsLivre ? out.obsLivre + ' · ' : '') + parte;
+    }
+  }
+  return out;
+}
+
+// Quebra texto em múltiplas linhas respeitando largura máxima (impressora térmica)
+function _wrapText(text, width, prefix = '') {
+  if (!text) return [];
+  const innerWidth = Math.max(10, width - prefix.length);
+  const words = text.split(' ');
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    if (!cur) { cur = w; continue; }
+    if ((cur.length + 1 + w.length) <= innerWidth) cur += ' ' + w;
+    else { lines.push(cur); cur = w; }
+  }
+  if (cur) lines.push(cur);
+  return lines.map(l => prefix + l);
+}
+
 function _buildTicketHtml(order, cfg) {
   const items    = Array.isArray(order.items) ? order.items : [];
   const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
@@ -2457,22 +2543,38 @@ function _buildTicketHtml(order, cfg) {
   const renderItem = (i) => {
     const nome  = (i.qty + 'x ' + i.name).toUpperCase();
     const preco = money((i.price||0) * (i.qty||1));
-    let obsText = i.obs || '';
+    const parsed = _parseObs(i.obs);
     let kitHtml = '';
+    let extrasHtml = '';
 
     // Kit: separa os sub-itens
-    if (obsText.startsWith('Kit: ')) {
-      const pipeIdx = obsText.indexOf(' | ');
-      const kitPart = pipeIdx > -1 ? obsText.substring(5, pipeIdx) : obsText.substring(5);
-      obsText = pipeIdx > -1 ? obsText.substring(pipeIdx + 3) : '';
-      const kitItens = kitPart.split(' · ').filter(Boolean);
+    if (parsed.kitItens.length) {
       kitHtml = D('padding-left:6px;font-size:0.82em;color:#222;border-left:2px solid #555;margin:2px 0 4px',
         D('font-weight:bold;margin-bottom:2px', 'CONTÉM:') +
-        kitItens.map(k => D('', '• ' + k.trim())).join(''));
+        parsed.kitItens.map(k => D('', '• ' + k)).join(''));
     }
 
-    const obsHtml = obsText
-      ? D('padding-left:6px;font-size:0.85em;color:#333;border-left:2px solid #aaa;margin:2px 0 4px;word-break:break-word', 'OBS: ' + obsText)
+    // Pizza meio a meio
+    let meioHtml = '';
+    if (parsed.meioMeio) {
+      meioHtml = D('padding-left:6px;font-size:0.85em;color:#333;border-left:2px solid #aaa;margin:2px 0 4px',
+        D('font-weight:bold', '½ + ½ ') + parsed.meioMeio);
+    }
+
+    // Grupos (Adicionais, Ponto, Molhos, etc) — cada grupo numa linha com bullets
+    if (parsed.grupos.length) {
+      const linhasGrupos = parsed.grupos.map(g =>
+        D('margin-top:2px',
+          D('font-weight:bold;font-size:0.85em', g.nome + ':') +
+          g.itens.map(it => D('padding-left:8px;font-size:0.85em', '• ' + it)).join('')
+        )
+      ).join('');
+      extrasHtml = D('padding-left:6px;color:#222;border-left:2px solid #aaa;margin:2px 0 4px;word-break:break-word', linhasGrupos);
+    }
+
+    // Obs livre (digitada pelo cliente)
+    const obsLivreHtml = parsed.obsLivre
+      ? D('padding-left:6px;font-size:0.85em;color:#333;border-left:2px solid #aaa;margin:2px 0 4px;word-break:break-word', 'OBS: ' + parsed.obsLivre)
       : '';
 
     const wrapper = 'border-bottom:1px dotted #ddd;padding-bottom:4px;margin-bottom:4px';
@@ -2482,12 +2584,12 @@ function _buildTicketHtml(order, cfg) {
       return D(wrapper,
         D('font-weight:bold;word-break:break-word', nome) +
         D('text-align:right;font-size:0.9em;color:#333', preco) +
-        kitHtml + obsHtml);
+        kitHtml + meioHtml + extrasHtml + obsLivreHtml);
     }
     // 80mm: nome e preço na mesma linha, alinhados
     return D(wrapper,
       ROW(D('font-weight:bold', nome), preco) +
-      kitHtml + obsHtml);
+      kitHtml + meioHtml + extrasHtml + obsLivreHtml);
   };
 
   const itemLines = items.map(renderItem).join('');
@@ -2558,11 +2660,41 @@ function _buildTicketHtml(order, cfg) {
   if (itensCozinha.length > 0) {
     const itensCozHtml = itensCozinha.map(i => {
       const nome   = (i.qty + 'x ' + i.name).toUpperCase();
-      const obsHtml = i.obs
-        ? D('padding-left:6px;font-size:0.9em;border-left:2px solid #999;margin:2px 0 4px;word-break:break-word', 'OBS: ' + i.obs)
-        : '';
+      const parsed = _parseObs(i.obs);
+      let detalhesHtml = '';
+
+      // Kit
+      if (parsed.kitItens.length) {
+        detalhesHtml += D('padding-left:6px;font-size:0.9em;border-left:3px solid #444;margin:3px 0',
+          D('font-weight:bold', 'CONTÉM:') +
+          parsed.kitItens.map(k => D('padding-left:6px', '• ' + k)).join(''));
+      }
+
+      // Meio a meio
+      if (parsed.meioMeio) {
+        detalhesHtml += D('padding-left:6px;font-size:0.95em;border-left:3px solid #444;margin:3px 0;font-weight:bold',
+          '½ + ½ ' + parsed.meioMeio);
+      }
+
+      // Grupos (Adicionais, Ponto, Molhos…) — destaque alto na cozinha
+      if (parsed.grupos.length) {
+        const linhasGrupos = parsed.grupos.map(g =>
+          D('margin-top:2px',
+            D('font-weight:bold;text-transform:uppercase;font-size:0.9em', '› ' + g.nome + ':') +
+            g.itens.map(it => D('padding-left:10px;font-size:0.95em', '• ' + it)).join('')
+          )
+        ).join('');
+        detalhesHtml += D('padding-left:6px;border-left:3px solid #999;margin:3px 0;word-break:break-word', linhasGrupos);
+      }
+
+      // Obs livre
+      if (parsed.obsLivre) {
+        detalhesHtml += D('padding-left:6px;font-size:0.95em;border-left:3px solid #999;margin:3px 0;word-break:break-word;font-weight:bold',
+          'OBS: ' + parsed.obsLivre);
+      }
+
       return D('border-bottom:1px dotted #ddd;padding-bottom:4px;margin-bottom:4px',
-        D('font-weight:bold;font-size:1.05em;word-break:break-word', nome) + obsHtml);
+        D('font-weight:bold;font-size:1.05em;word-break:break-word', nome) + detalhesHtml);
     }).join('');
 
     viaCozinha = D('page-break-before:always', '') +
@@ -2813,17 +2945,39 @@ function _buildEscPos(order, cfg, cols = 32) {
     const name  = (i.qty + 'x ' + i.name).toUpperCase().substring(0, maxNameLen);
     const price = money((i.price || 0) * (i.qty || 1));
     push(cols2(name, price) + '\n');
-    // Formata itens do kit em linhas separadas
-    let obsText = i.obs || '';
-    if (obsText.startsWith('Kit: ')) {
-      const pipeIdx = obsText.indexOf(' | ');
-      const kitPart = pipeIdx > -1 ? obsText.substring(5, pipeIdx) : obsText.substring(5);
-      obsText = pipeIdx > -1 ? obsText.substring(pipeIdx + 3) : '';
-      const kitItens = kitPart.split(' · ').filter(Boolean);
+
+    const parsed = _parseObs(i.obs);
+
+    // Kit: lista de itens
+    if (parsed.kitItens.length) {
       push('  CONTEM:\n');
-      kitItens.forEach(k => push('  - ' + k.trim() + '\n'));
+      parsed.kitItens.forEach(k => {
+        _wrapText(k, cols, '  - ').forEach(l => push(l + '\n'));
+      });
     }
-    if (obsText) push('  * ' + obsText + '\n');
+
+    // Pizza meio a meio
+    if (parsed.meioMeio) {
+      _wrapText('1/2 + 1/2 ' + parsed.meioMeio, cols, '  ').forEach(l => push(l + '\n'));
+    }
+
+    // Grupos (Adicionais, Ponto, Molhos…) — cada grupo + bullets
+    if (parsed.grupos.length) {
+      // negrito leve no nome do grupo (ESC E)
+      parsed.grupos.forEach(g => {
+        bytes(0x1B, 0x45, 0x01);
+        push('  ' + g.nome + ':\n');
+        bytes(0x1B, 0x45, 0x00);
+        g.itens.forEach(it => {
+          _wrapText(it, cols, '    - ').forEach(l => push(l + '\n'));
+        });
+      });
+    }
+
+    // Obs livre
+    if (parsed.obsLivre) {
+      _wrapText(parsed.obsLivre, cols, '  * ').forEach(l => push(l + '\n'));
+    }
   });
 
   const subtotal = items.reduce((s, i) => s + (parseFloat(i.price || 0) * (i.qty || 1)), 0);

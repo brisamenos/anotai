@@ -613,7 +613,7 @@ input,textarea{font-family:inherit}
 .half-selected-emoji{width:32px;height:32px;border-radius:8px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;overflow:hidden}
 .half-selected-emoji img{width:100%;height:100%;object-fit:cover}
 .half-selected-info{flex:1;min-width:0}
-.half-selected-name{font-size:13px;font-weight:700;line-height:1.3;word-break:break-word;overflow-wrap:anywhere}
+.half-selected-name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .half-selected-hint{font-size:11px;color:var(--muted);margin-top:1px}
 .half-pick-btn{font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0}
 .half-picker{
@@ -629,155 +629,10 @@ input,textarea{font-family:inherit}
 .half-opt.on{background:rgba(249,115,22,.1)}
 .half-opt-emoji{width:28px;height:28px;border-radius:7px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;overflow:hidden}
 .half-opt-emoji img{width:100%;height:100%;object-fit:cover}
-.half-opt-name{flex:1;font-size:13px;font-weight:600;min-width:0;line-height:1.3;word-break:break-word;overflow-wrap:anywhere}
+.half-opt-name{flex:1;font-size:13px;font-weight:600;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .half-opt-price{font-size:12px;color:var(--amber);flex-shrink:0}
 .half-opt-check{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px}
 .half-opt.on .half-opt-check{background:var(--accent);border-color:var(--accent);color:#fff}
-
-/* ═══════════════════════════════════════
-   WHEEL PICKER 3D — estilo iPhone
-═══════════════════════════════════════ */
-.wp-wrap{
-  background:var(--s2);border:1px solid var(--border);border-radius:14px;
-  padding:8px 12px 12px;margin-bottom:8px;position:relative;
-  display:flex;flex-direction:column;align-items:stretch;gap:6px;
-}
-.wp-arrow{
-  background:var(--s3);border:1px solid var(--border);
-  width:32px;height:24px;border-radius:8px;cursor:pointer;
-  color:var(--muted);align-self:center;
-  display:flex;align-items:center;justify-content:center;
-  transition:background .15s, color .15s;
-}
-.wp-arrow:hover{background:rgba(249,115,22,.15);color:var(--accent)}
-.wp-arrow:active{transform:scale(.95)}
-.wp-mask{
-  position:relative;height:280px;overflow:hidden;
-  perspective:600px;perspective-origin:center;
-  user-select:none;-webkit-user-select:none;touch-action:none;
-  cursor:grab;
-}
-.wp-mask:active{cursor:grabbing}
-/* Gradiente fade nas bordas pra dar sensação de profundidade */
-.wp-mask::before, .wp-mask::after{
-  content:'';position:absolute;left:0;right:0;height:80px;z-index:3;pointer-events:none;
-}
-.wp-mask::before{ top:0; background:linear-gradient(to bottom, var(--s2), transparent) }
-.wp-mask::after{ bottom:0; background:linear-gradient(to top, var(--s2), transparent) }
-.wp-track{
-  position:absolute;top:50%;left:0;right:0;
-  margin-top:-28px; /* metade da altura do item (56/2) */
-  transform-style:preserve-3d;
-  transition:none;
-  will-change:transform;
-}
-.wp-item{
-  height:56px;display:flex;align-items:center;gap:10px;
-  padding:0 14px;
-  transform-style:preserve-3d;
-  backface-visibility:hidden;
-  transition:opacity .12s linear;
-  cursor:pointer;
-}
-.wp-item-thumb{
-  width:38px;height:38px;border-radius:8px;background:var(--s3);
-  display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;color:var(--muted);overflow:hidden;
-}
-.wp-item-info{flex:1;min-width:0}
-.wp-item-name{
-  font-size:13.5px;font-weight:600;color:var(--text);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-.wp-item-price{
-  font-size:11.5px;color:var(--muted);margin-top:1px;
-}
-/* Item central: destaque */
-.wp-item.wp-active .wp-item-name{color:var(--accent);font-weight:800;font-size:14.5px}
-.wp-item.wp-active .wp-item-price{color:var(--amber)}
-.wp-item.wp-active .wp-item-thumb{background:rgba(249,115,22,.12);box-shadow:0 0 0 2px rgba(249,115,22,.3)}
-/* Linha guia central */
-.wp-highlight{
-  position:absolute;left:8px;right:8px;top:50%;height:56px;
-  transform:translateY(-50%);
-  border-top:1.5px solid rgba(249,115,22,.4);
-  border-bottom:1.5px solid rgba(249,115,22,.4);
-  border-radius:6px;pointer-events:none;z-index:2;
-}
-.wp-confirm{
-  margin-top:4px;padding:11px 14px;
-  background:var(--accent);color:#fff;
-  border:none;border-radius:10px;
-  font-size:13px;font-weight:700;cursor:pointer;
-  transition:transform .1s, box-shadow .15s;
-}
-.wp-confirm:hover{box-shadow:0 4px 16px rgba(249,115,22,.35)}
-.wp-confirm:active{transform:scale(.98)}
-
-/* ═══════════════════════════════════════
-   MODAL EXTERNO DO WHEEL PICKER
-═══════════════════════════════════════ */
-.hp-modal{
-  position:fixed;inset:0;z-index:9000;
-  display:none;align-items:center;justify-content:center;
-  padding:16px;
-  background:transparent; /* backdrop totalmente transparente */
-  pointer-events:auto;
-}
-.hp-modal.show{ display:flex; animation:hp-fade-in .24s ease forwards }
-.hp-card{
-  position:relative;
-  background:var(--s2);
-  border:1px solid var(--border);
-  border-radius:18px;
-  width:100%;max-width:380px;
-  padding:22px 18px 18px;
-  box-shadow:0 24px 60px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.4);
-  /* Animação inicial: começa pequeno + transladado pra baixo */
-  transform:translateY(24px) scale(.94);
-  opacity:0;
-  animation:hp-slide-up .28s cubic-bezier(.2,.9,.3,1.2) forwards;
-}
-.hp-modal.show .hp-card{
-  /* já cuidado pelo @keyframes — só garante o estado final se animação não rodar */
-}
-@keyframes hp-fade-in{
-  from { opacity:0 } to { opacity:1 }
-}
-@keyframes hp-slide-up{
-  from { transform:translateY(24px) scale(.94); opacity:0 }
-  to   { transform:translateY(0) scale(1); opacity:1 }
-}
-/* Saída — usado quando .show é removido */
-.hp-modal:not(.show) .hp-card{
-  animation:hp-slide-down .22s ease-in forwards;
-}
-@keyframes hp-slide-down{
-  from { transform:translateY(0) scale(1); opacity:1 }
-  to   { transform:translateY(20px) scale(.95); opacity:0 }
-}
-.hp-close{
-  position:absolute;top:10px;right:10px;
-  width:30px;height:30px;border-radius:50%;
-  background:var(--s3);border:1px solid var(--border);
-  color:var(--muted);cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  transition:all .15s;
-}
-.hp-close:hover{ background:rgba(249,115,22,.15);color:var(--accent) }
-.hp-title{
-  font-size:15px;font-weight:700;color:var(--text);
-  text-align:center;margin-bottom:2px;
-}
-.hp-sub{
-  font-size:11.5px;color:var(--muted);
-  text-align:center;margin-bottom:14px;
-}
-/* Dentro do modal externo, o .wp-wrap não precisa de fundo próprio */
-.hp-card .wp-wrap{
-  background:transparent;border:none;padding:0;margin:0;
-}
-.hp-card .wp-mask{ height:260px }
 
 /* ═══════════════════════════════════════
    WHATSAPP TOGGLE (premium)
@@ -2609,8 +2464,24 @@ input,textarea{font-family:inherit}
           <button class="im-qty-btn" onclick="imQty(1)">+</button>
         </div>
       </div>
+      <!-- ── Grupos de customização (renderizados via JS) ── -->
+      <div id="im-grupos-wrap"></div>
 
-      <!-- ── PIZZA: metade a metade (TOPO) ── -->
+      <textarea class="im-obs" id="im-obs" rows="2" placeholder="Observação"></textarea>
+
+      <!-- ── Ingredientes selecionáveis ── -->
+      <div id="im-ingr-section" style="display:none">
+        <div class="im-ingr-wrap">
+          <div class="im-ingr-label">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+            Escolha os complementos
+            <span class="im-ingr-count" id="im-ingr-count">0</span>
+          </div>
+          <div class="im-ingr-grid" id="im-ingr-grid"></div>
+        </div>
+      </div>
+
+      <!-- ── PIZZA: metade a metade ── -->
       <div class="half-section" id="half-section" style="display:none">
         <!-- Visual animado da pizza — Canvas 2D -->
         <div id="pizza-visual-wrap">
@@ -2648,24 +2519,6 @@ input,textarea{font-family:inherit}
         <div style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center" id="half-price-note"></div>
       </div>
 
-      <!-- ── Grupos de customização (renderizados via JS) — adicionais e bordas ── -->
-      <div id="im-grupos-wrap"></div>
-
-      <!-- ── Ingredientes selecionáveis ── -->
-      <div id="im-ingr-section" style="display:none">
-        <div class="im-ingr-wrap">
-          <div class="im-ingr-label">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
-            Escolha os complementos
-            <span class="im-ingr-count" id="im-ingr-count">0</span>
-          </div>
-          <div class="im-ingr-grid" id="im-ingr-grid"></div>
-        </div>
-      </div>
-
-      <!-- ── Observação (perto do botão de adicionar) ── -->
-      <textarea class="im-obs" id="im-obs" rows="2" placeholder="Observação"></textarea>
-
       <button class="im-add-btn" id="im-add-btn" onclick="imConfirm()">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> Adicionar ao carrinho
       </button>
@@ -2673,19 +2526,6 @@ input,textarea{font-family:inherit}
       <!-- ── Cross-sell (bebidas, acompanhamentos) ── -->
       <div id="im-xsell-wrap"></div>
     </div>
-  </div>
-</div>
-
-<!-- ══════════════ MODAL EXTERNO: WHEEL PICKER 3D ══════════════ -->
-<div class="hp-modal" id="modal-half-picker" onclick="halfPickerBackdropClick(event)">
-  <div class="hp-card" id="hp-card">
-    <button type="button" class="hp-close" onclick="closeHalfPickerModal()" aria-label="Fechar">
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-    </button>
-    <div class="hp-title">Escolha o sabor</div>
-    <div class="hp-sub">Inteira ou meio a meio</div>
-    <!-- Container onde o renderHalfPicker injeta o wheel -->
-    <div id="hp-list"></div>
   </div>
 </div>
 
