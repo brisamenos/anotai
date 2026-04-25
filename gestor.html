@@ -3124,7 +3124,28 @@ Use no seu próximo pedido 🛍️</textarea>
       </div>
     </div>
     <div id="no-addr-block">
-      <div class="form-row"><label class="form-label">Endereço de entrega</label><input class="form-input" id="order-addr" placeholder="Rua, número, bairro, complemento"></div>
+      <div class="form-row" style="margin-bottom:6px"><label class="form-label">Rua / Avenida</label><input class="form-input" id="no-f-rua" placeholder="Rua / Avenida"></div>
+      <div class="form-row-2" style="gap:8px;margin-bottom:6px">
+        <div class="form-row" style="margin:0"><label class="form-label">Número</label><input class="form-input" id="no-f-num" placeholder="Nº"></div>
+        <div class="form-row" style="margin:0;position:relative"><label class="form-label">Bairro</label>
+          <input class="form-input" id="no-f-bairro" placeholder="Bairro" oninput="noOnBairroInput(this)" onfocus="noOnBairroFocus(this)" autocomplete="off">
+          <div id="no-bairros-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;max-height:180px;overflow-y:auto;z-index:50;margin-top:2px;box-shadow:0 6px 18px rgba(0,0,0,0.18)"></div>
+        </div>
+      </div>
+      <div class="form-row" style="margin-bottom:6px"><label class="form-label">Complemento (opcional)</label><input class="form-input" id="no-f-compl" placeholder="Apto, bloco, casa..."></div>
+      <div class="form-row" style="margin-bottom:8px"><label class="form-label">Ponto de referência</label><input class="form-input" id="no-f-referencia" placeholder="Ex: próximo ao mercado, em frente à praça..."></div>
+
+      <!-- Taxa de entrega -->
+      <div class="form-row" style="margin-bottom:10px">
+        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span>Taxa de entrega (R$)</span>
+          <span id="no-taxa-info" style="font-size:10.5px;font-weight:500;color:var(--muted);text-transform:none;letter-spacing:0"></span>
+        </label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input class="form-input" id="no-taxa-val" type="number" step="0.50" min="0" placeholder="0,00" style="flex:1" oninput="_noTaxaManualOverride=true">
+          <button type="button" class="btn bg" style="font-size:11px;padding:7px 10px;white-space:nowrap" onclick="noResetTaxaAuto()" title="Recalcular pelo bairro">Auto</button>
+        </div>
+      </div>
     </div>
     <div id="no-mesa-block" style="display:none">
       <div class="form-row"><label class="form-label">Número da mesa</label><select class="form-input" id="order-mesa"><option value="">Selecione a mesa...</option></select></div>
