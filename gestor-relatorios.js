@@ -62,7 +62,9 @@ function renderKDS() {
     const timerCls= isLate ? 't-late' : isWarn ? 't-warn' : 't-ok';
     const typeLabel = type === 'mesa' ? `\${o.addr||('Mesa '+(o.mesa_num||''))}` : type === 'balcao' ? '🏠 Balcão' : 'Delivery';
     const typeCls   = 'kds-type-'+type;
-    const items = Array.isArray(o.items) ? o.items : [];
+    // Filtra itens cancelados — cozinha não vê cancelados
+    const items = (Array.isArray(o.items) ? o.items : [])
+      .filter(i => (i?.item_status || 'active') !== 'cancelado');
 
     const itemsHtml = items.map(i => {
       const isDrink = !!i.drink;
@@ -2494,7 +2496,10 @@ function _wrapText(text, width, prefix = '') {
 }
 
 function _buildTicketHtml(order, cfg) {
-  const items    = Array.isArray(order.items) ? order.items : [];
+  // Filtra itens cancelados — não devem aparecer na comanda nem ser cobrados.
+  // Cancelamentos vêm tanto do gestor (gestor-pedidos.js cancelarItem) quanto do cliente (no cardápio).
+  const items    = (Array.isArray(order.items) ? order.items : [])
+    .filter(i => (i?.item_status || 'active') !== 'cancelado');
   const money    = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
   const fmt      = localStorage.getItem('printFormat') || _printFormat || '80mm';
   const is58     = fmt === '58mm';
@@ -2622,8 +2627,13 @@ function _buildTicketHtml(order, cfg) {
   const subtotal   = items.reduce((s,i) => s + (parseFloat(i.price||0) * (i.qty||1)), 0);
   const taxa       = parseFloat(order.taxa || 0);
   const orderTotal = parseFloat(order.total);
-  const desconto   = (!isNaN(orderTotal) && orderTotal < subtotal) ? Math.max(0, subtotal - orderTotal) : 0;
-  const total      = (!isNaN(orderTotal) ? orderTotal : subtotal) + taxa;
+  // Detecta se houve cancelamento de item (array original tinha mais itens que o filtrado)
+  const _itemsAll  = Array.isArray(order.items) ? order.items : [];
+  const _temCancelado = _itemsAll.some(i => (i?.item_status||'active') === 'cancelado');
+  // Se há cancelados, o order.total do banco está desatualizado — usa subtotal recalculado.
+  // Senão, mantém a lógica original (order.total pode incluir desconto de cupom/cashback).
+  const desconto   = (!_temCancelado && !isNaN(orderTotal) && orderTotal < subtotal) ? Math.max(0, subtotal - orderTotal) : 0;
+  const total      = (_temCancelado || isNaN(orderTotal)) ? (subtotal + taxa) : (orderTotal + taxa);
   const orderNum   = order.num || order.order_num || order.id;
 
   // Banner "* Cobrar do cliente *" (só se não pago)
@@ -3036,7 +3046,9 @@ function _buildEscPos(order, cfg, cols = 32) {
   bytes(0x1B, 0x45, 0x01);                   // negrito
   push('Itens\n');
   bytes(0x1B, 0x45, 0x00);
-  const items = Array.isArray(order.items) ? order.items : [];
+  // Filtra itens cancelados — não imprime nem cobra
+  const items = (Array.isArray(order.items) ? order.items : [])
+    .filter(i => (i?.item_status || 'active') !== 'cancelado');
   const maxNameLen = cols - 14;
   items.forEach(i => {
     const qtyPrefix = `(${i.qty||1}) `;
@@ -3114,8 +3126,11 @@ function _buildEscPos(order, cfg, cols = 32) {
   const subtotal = items.reduce((s, i) => s + (parseFloat(i.price || 0) * (i.qty || 1)), 0);
   const taxa  = parseFloat(order.taxa || 0);
   const orderTotal = parseFloat(order.total);
-  const desconto = (!isNaN(orderTotal) && orderTotal < subtotal) ? Math.max(0, subtotal - orderTotal) : 0;
-  const total = (!isNaN(orderTotal) ? orderTotal : subtotal) + taxa;
+  // Se houver itens cancelados, o order.total está desatualizado — usa subtotal recalculado
+  const _itemsAllEsc  = Array.isArray(order.items) ? order.items : [];
+  const _temCancEsc   = _itemsAllEsc.some(i => (i?.item_status||'active') === 'cancelado');
+  const desconto = (!_temCancEsc && !isNaN(orderTotal) && orderTotal < subtotal) ? Math.max(0, subtotal - orderTotal) : 0;
+  const total = (_temCancEsc || isNaN(orderTotal)) ? (subtotal + taxa) : (orderTotal + taxa);
   push(cols2('Subtotal:', money(subtotal)) + '\n');
   if (desconto > 0) push(cols2('Desconto:', '-' + money(desconto)) + '\n');
   if (taxa > 0)     push(cols2('Taxa de entrega:', money(taxa)) + '\n');
@@ -3233,7 +3248,9 @@ async function printOrder(order) {
     const bebidas = ['bebida','drink','suco','agua','água','refrigerante','cerveja','chopp','vinho','dose','tanque','long'];
     return bebidas.some(s => cat.includes(s) || name.includes(s));
   };
-  const items = Array.isArray(order.items) ? order.items : [];
+  // Considera apenas itens não cancelados pra avaliar "só bebida"
+  const items = (Array.isArray(order.items) ? order.items : [])
+    .filter(i => (i?.item_status || 'active') !== 'cancelado');
   const soBebida = items.length > 0 && items.every(_isBebida);
   const printBebidaSolo = localStorage.getItem('printBebidaSolo') !== '0'; // padrão: ligado
 
