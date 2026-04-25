@@ -389,7 +389,7 @@ function _iniciarSchedulerAniversario() {
 }
 
 async function evoSalvarAutomacoes() {
-  const tipos = ['pix_cobranca','pix_copia_cola','pix_confirmado','recebido','confirmado','pronto','entrega','cancelado','aniversario','boasvindas','avaliacao','retorno','promocao','pontos','cashback','conta'];
+  const tipos = ['pix_cobranca','pix_copia_cola','pix_confirmado','recebido','confirmado','pronto','entrega','cancelado','aniversario','boasvindas','avaliacao','retorno','pedido_perdido','promocao','pontos','cashback','conta'];
   const data = {};
   tipos.forEach(tipo => {
     data[tipo] = {
@@ -1092,6 +1092,11 @@ const _AUTO_MODELOS = {
     { label: 'Modelo 1 — Saudade',  msg: '😋 *{nome}*, sentimos sua falta!\nQue tal pedir hoje? Temos novidades no cardápio te esperando! 🍽️' },
     { label: 'Modelo 2 — Animado',  msg: '👋 Oi *{nome}*! Há alguns dias não te vemos por aqui...\n\nTemos novidades esperando por você! Que tal voltar? 😊' },
   ],
+  pedido_perdido: [
+    { label: 'Modelo 1 — Cordial',  msg: '👋 Oi *{nome}*! Passei aqui pra saber se você ainda está interessado(a) em fazer seu pedido.\n\nQualquer dúvida sobre o cardápio, é só chamar! 🍽️' },
+    { label: 'Modelo 2 — Direto',   msg: '🤔 *{nome}*, vi que você ficou por aqui mas ainda não finalizou o pedido.\n\nPosso te ajudar com alguma coisa? 😊' },
+    { label: 'Modelo 3 — Incentivo', msg: '🔥 *{nome}*, seu pedido está quase lá!\n\nFinalize agora e garanta seu sabor favorito antes que acabe! 🍕\n\n_Precisa de ajuda? É só responder aqui!_' },
+  ],
 };
 
 let _modelosTipoAtual = null;
@@ -1107,6 +1112,7 @@ function abrirModelosModal(tipo) {
     recebido:'Pedido Recebido', confirmado:'Pedido Confirmado', pronto:'Pedido Pronto',
     entrega:'Saiu para Entrega', cancelado:'Pedido Cancelado', aniversario:'Aniversário',
     boasvindas:'Boas-vindas', avaliacao:'Avaliação', retorno:'Retorno de Cliente',
+    pedido_perdido:'Pedido Perdido (10 min)',
   };
   if (tituloEl) tituloEl.textContent = 'Modelos — ' + (nomes[tipo] || tipo);
   lista.innerHTML = [

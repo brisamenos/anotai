@@ -374,6 +374,18 @@ const MIGRATIONS = [
     // históricos. Esta migração limpa esse backlog uma única vez.
     `UPDATE orders SET status='finalizado' WHERE status='entregue' AND created_at < datetime('now','-12 hours')`
   },
+  { version:37, description:'tabela wa_followup_sent (idempotência do follow-up de pedido perdido)', up:[
+    `CREATE TABLE IF NOT EXISTS wa_followup_sent (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      phone TEXT NOT NULL,
+      tipo TEXT NOT NULL DEFAULT 'pedido_perdido',
+      anchor_ts INTEGER NOT NULL,
+      sent_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, phone, tipo, anchor_ts)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_wa_fup_sent_at ON wa_followup_sent(sent_at)`
+  ]},
 ]
 
 function runMigrations() {
@@ -1109,6 +1121,83 @@ async function checarAniv() {
   }
 }
 
+// ════════════════════════════════════════════════════════
+// FOLLOW-UP PEDIDO PERDIDO
+// ════════════════════════════════════════════════════════
+// Cliente mandou mensagem no WhatsApp mas não fez pedido em 10 min → manda follow-up.
+// Roda a cada 60s. Busca contatos cuja última mensagem no wa_messages é do cliente
+// (from_me=0) há 10-15 minutos, e que não criaram pedido nem receberam resposta depois.
+// Idempotente via tabela wa_followup_sent (UNIQUE por tenant+phone+anchor_ts).
+async function checarPedidoPerdido() {
+  const tenants = db.prepare("SELECT id FROM tenants WHERE ativo=1").all()
+  const agora = Math.floor(Date.now()/1000)
+  const janelaIni = agora - 15*60  // não olha mais longe que 15min atrás
+  const janelaFim = agora - 10*60  // última msg precisa ter pelo menos 10min
+  for (const t of tenants) {
+    try {
+      const cfg = db.prepare("SELECT evo_automacoes, evo_instance FROM store_config WHERE tenant_id=?").get(t.id)
+      if (!cfg) continue
+      const auto = jsonParse(cfg.evo_automacoes)||{}
+      const pp   = auto['pedido_perdido']||{}
+      if (pp.on === false) continue                  // desligado
+      if (!pp.msg || !pp.msg.trim()) continue        // sem template configurado
+      const inst = cfg.evo_instance||EVO_INST
+      // Pega, por JID, a última mensagem (maior ts) dentro da janela, só se for do cliente (from_me=0)
+      const rows = db.prepare(`
+        SELECT w.remote_jid, w.ts, w.from_me
+        FROM wa_messages w
+        WHERE w.tenant_id = ?
+          AND w.ts BETWEEN ? AND ?
+          AND w.ts = (
+            SELECT MAX(w2.ts) FROM wa_messages w2
+            WHERE w2.tenant_id = w.tenant_id AND w2.remote_jid = w.remote_jid
+          )
+          AND w.from_me = 0
+      `).all(t.id, janelaIni, janelaFim)
+      if (!rows.length) continue
+      for (const r of rows) {
+        const jid   = r.remote_jid
+        const phone = jid.replace('@s.whatsapp.net','').replace('@c.us','')
+        if (!phone || !/^\d{10,15}$/.test(phone)) continue
+        // Idempotência: já enviou pra este cliente nesta janela?
+        const already = db.prepare(
+          "SELECT 1 FROM wa_followup_sent WHERE tenant_id=? AND phone=? AND tipo='pedido_perdido' AND anchor_ts=?"
+        ).get(t.id, phone, r.ts)
+        if (already) continue
+        // Cliente já pediu depois da mensagem? (compara ISO->epoch)
+        const pedidoRecente = db.prepare(`
+          SELECT 1 FROM orders
+          WHERE tenant_id=? AND phone=?
+            AND CAST(strftime('%s', created_at) AS INTEGER) >= ?
+        `).get(t.id, phone, r.ts)
+        if (pedidoRecente) continue
+        // Pausa humana ativa? (gestor assumiu via WA ou chat — mesma lógica da IA)
+        const pausaKey = `pausa:${t.id}:${phone}`
+        const pausaAt  = _pausaHumano.get(pausaKey)
+        if (pausaAt && (Date.now()-pausaAt) < 30*60*1000) continue
+        // Envia
+        const nomeRow = db.prepare("SELECT name FROM customers WHERE tenant_id=? AND phone=? ORDER BY id DESC LIMIT 1").get(t.id, phone)
+        const nome = (nomeRow?.name || '').split(' ')[0] || 'tudo bem'
+        const texto = fillVars(pp.msg, { nome })
+        const r2 = await sendWA(phone, texto, inst)
+        // Marca como enviado mesmo em falha pra não ficar tentando infinitamente
+        try {
+          db.prepare(
+            "INSERT OR IGNORE INTO wa_followup_sent (tenant_id, phone, tipo, anchor_ts) VALUES (?,?,?,?)"
+          ).run(t.id, phone, 'pedido_perdido', r.ts)
+          marcarDirty()
+        } catch(e) {}
+        log(r2.ok?'💤':'⚠️', `[FOLLOWUP] pedido_perdido ${phone} tenant=${t.id} ok=${r2.ok}`)
+        await sleep(1500)
+      }
+    } catch(e) { log('❌','[FOLLOWUP] erro tenant '+t.id+':',{error:e.message}) }
+  }
+  // Limpa registros com mais de 7 dias
+  try {
+    db.prepare("DELETE FROM wa_followup_sent WHERE sent_at < datetime('now','-7 days')").run()
+  } catch(e) {}
+}
+
 const processed = new Set()
 setInterval(() => { if (processed.size > 5000) processed.clear() }, 60 * 60 * 1000)
 async function handleOrderStatus(req, res) {
@@ -1753,6 +1842,9 @@ server.listen(PORT,()=>{
 
 setInterval(checarAniv,60000)
 setTimeout(checarAniv,5000)
+
+setInterval(checarPedidoPerdido, 60000)
+setTimeout(checarPedidoPerdido, 15000)
 
 function shutdown(){fazerBackup(true);db.close();server.close();process.exit(0)}
 process.on('SIGTERM',shutdown)
