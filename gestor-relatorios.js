@@ -2578,7 +2578,18 @@ function _buildTicketHtml(order, cfg) {
   // ── Pagamento (sem banner colorido, estilo Anota AI) ───
   const _pagMap  = { dinheiro:'Dinheiro', cartao:'Cartão', credito:'Crédito', debito:'Débito', pix:'PIX', pix_mp:'PIX Online', cartao_mp:'Crédito Online', mesa:'Conta da Mesa' };
   const pagNome  = _pagMap[order.pag] || order.pag || '—';
-  const jaPago   = (order.pag_momento === 'agora') || order.pag === 'pix_mp' || order.pag === 'cartao_mp';
+  // Detecta se o pedido já foi pago. Cobre 3 cenários:
+  //   1. pag='pix_mp' / 'cartao_mp'  → pagamento online MP confirmado pelo webhook (servidor já atualizou pag).
+  //      Esse é o sinal mais confiável: o servidor SÓ grava 'pix_mp'/'cartao_mp' quando o pagamento foi aprovado.
+  //   2. pag='pix_manual' E status já saiu de 'aguardando_pix' → gestor confirmou recebimento manualmente
+  //   3. pag_momento='agora' → legado (versão antiga do app gravava assim quando o pagamento era online)
+  // IMPORTANTE: pag_momento='online' SOZINHO não é prova de pagamento — esse campo é gravado na criação
+  // do pedido, antes do PIX ser confirmado. Por isso ele NÃO entra na detecção.
+  const _statusPago = order.status && !['aguardando_pix','aguardando_cartao'].includes(order.status);
+  const jaPago   = order.pag === 'pix_mp'
+                || order.pag === 'cartao_mp'
+                || order.pag_momento === 'agora'
+                || (order.pag === 'pix_manual' && _statusPago);
 
   // ── Filtra itens para cozinha ───────────────────────────
   const _isCoz = (item) => {
@@ -3143,7 +3154,13 @@ function _buildEscPos(order, cfg, cols = 32) {
     pix:'PIX', pix_mp:'PIX Online', cartao_mp:'Credito Online', mesa:'Conta Mesa'
   };
   const _escPagNome = _escPagLabels[order.pag] || order.pag || '---';
-  const _escJaPago  = (order.pag_momento === 'agora') || order.pag === 'pix_mp' || order.pag === 'cartao_mp';
+  // Mesma lógica de detecção do HTML — ver comentário lá pra explicação completa.
+  // pag_momento='online' SOZINHO não é prova de pagamento (gravado antes da confirmação).
+  const _escStatusPago = order.status && !['aguardando_pix','aguardando_cartao'].includes(order.status);
+  const _escJaPago  = order.pag === 'pix_mp'
+                   || order.pag === 'cartao_mp'
+                   || order.pag_momento === 'agora'
+                   || (order.pag === 'pix_manual' && _escStatusPago);
   push('Forma de Pagamento: ' + _escPagNome + '\n');
 
   // Banner cobrar do cliente
