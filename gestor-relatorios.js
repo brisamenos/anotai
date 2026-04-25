@@ -2708,7 +2708,8 @@ function _buildTicketHtml(order, cfg) {
       HR(),
 
       // ── 6) Rodapé ──
-      CENTER(cfg.rodape || '', 'font-size:0.85em;color:#333')
+      CENTER(cfg.rodape || '', 'font-size:0.85em;color:#333'),
+      CENTER('Powered By: EstimaFood', 'font-size:0.8em;color:#555;margin-top:4px')
     )
   );
 
@@ -2771,7 +2772,8 @@ function _buildTicketHtml(order, cfg) {
           HR(),
           itensCozHtml,
           HR(),
-          CENTER('— via cozinha —', 'font-size:0.85em;color:#555')
+          CENTER('— via cozinha —', 'font-size:0.85em;color:#555'),
+          CENTER('Powered By: EstimaFood', 'font-size:0.8em;color:#555;margin-top:4px')
         )
       );
   }
@@ -3130,6 +3132,7 @@ function _buildEscPos(order, cfg, cols = 32) {
   // ── 6) Rodapé ──
   bytes(0x1B, 0x61, 0x01);                   // centralizar
   push((cfg.rodape || 'Obrigado!') + '\n');
+  push('Powered By: EstimaFood\n');
   bytes(0x1B, 0x61, 0x00);
 
   // Avança papel e corta
