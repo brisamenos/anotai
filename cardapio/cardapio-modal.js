@@ -262,34 +262,307 @@ function selectHalfWhole() {
 function renderHalfPicker(baseItem) {
   const siblings = getPizzaSiblings(baseItem);
   const list = document.getElementById('half-picker-list');
-  // Opção "Inteira com mesmo sabor"
-  const wholeOn = _isWholeFlavorSelected() ? ' on' : '';
-  const wholeCheck = _isWholeFlavorSelected() ? '✓' : '';
-  const wholeOpt = `
-    <div class="half-opt${wholeOn}" onclick="selectHalfWhole()" style="border-left:3px solid var(--green)">
-      <div class="half-opt-emoji"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l9 18H3L12 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 14h8M10 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></div>
-      <span class="half-opt-name">Inteira — mesmo sabor</span>
-      <span class="half-opt-price" style="color:var(--green)">Sem acréscimo</span>
-      <div class="half-opt-check">${wholeCheck}</div>
-    </div>`;
-  if (!siblings.length) {
-    list.innerHTML = wholeOpt;
-    return;
+
+  // Monta lista de opções: [Inteira mesmo sabor, ...siblings]
+  const opts = [{
+    id: '__whole__',
+    name: 'Inteira — mesmo sabor',
+    price: 0,
+    image_url: null,
+    isWhole: true
+  }].concat(siblings.map(s => ({
+    id: s.id,
+    name: s.name,
+    price: parseFloat(s.price) || 0,
+    image_url: s.image_url || null,
+    isWhole: false
+  })));
+
+  // Determina índice inicial (sabor atualmente selecionado, se houver)
+  let initialIdx = 0;
+  if (_isWholeFlavorSelected()) {
+    initialIdx = 0; // "Inteira mesmo sabor"
+  } else if (_halfItem) {
+    const found = opts.findIndex(o => o.id === _halfItem.id);
+    if (found > 0) initialIdx = found;
+  } else {
+    initialIdx = 1; // Primeira opção real (depois de "inteira")
   }
-  list.innerHTML = wholeOpt + siblings.map(s => {
-    const on = (_halfItem && _halfItem.id === s.id && !_isWholeFlavorSelected()) ? ' on' : '';
-    const thumbInner = s.image_url
-      ? `<img src="${s.image_url}" alt="${s.name}" style="width:100%;height:100%;object-fit:cover;border-radius:7px">`
-      : `<span>$<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l9 18H3L12 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 14h8M10 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>`;
-    const check = (_halfItem && _halfItem.id === s.id && !_isWholeFlavorSelected()) ? '✓' : '';
+
+  // HTML do wheel
+  const itemsHtml = opts.map((o, i) => {
+    const thumb = o.isWhole
+      ? `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2l9 18H3L12 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 14h8M10 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`
+      : (o.image_url
+          ? `<img src="${o.image_url}" alt="" style="width:38px;height:38px;object-fit:cover;border-radius:8px">`
+          : `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2l9 18H3L12 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`);
+    const priceLabel = o.isWhole ? 'Sem acréscimo' : `R$ ${fmt(o.price)}`;
     return `
-    <div class="half-opt${on}" onclick="selectHalf(${s.id})">
-      <div class="half-opt-emoji">${thumbInner}</div>
-      <span class="half-opt-name">${s.name}</span>
-      <span class="half-opt-price">R$ ${fmt(s.price)}</span>
-      <div class="half-opt-check">${check}</div>
-    </div>`;
+      <div class="wp-item" data-idx="${i}" data-id="${o.id}">
+        <div class="wp-item-thumb">${thumb}</div>
+        <div class="wp-item-info">
+          <div class="wp-item-name">${(o.name||'').replace(/</g,'&lt;')}</div>
+          <div class="wp-item-price">${priceLabel}</div>
+        </div>
+      </div>`;
   }).join('');
+
+  list.innerHTML = `
+    <div class="wp-wrap" id="wp-wrap">
+      <button type="button" class="wp-arrow wp-arrow-up" onclick="wpStep(-1)" aria-label="Anterior">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 10l5-5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="wp-mask" id="wp-mask">
+        <div class="wp-track" id="wp-track">${itemsHtml}</div>
+        <div class="wp-highlight" aria-hidden="true"></div>
+      </div>
+      <button type="button" class="wp-arrow wp-arrow-down" onclick="wpStep(1)" aria-label="Próximo">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 6l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button type="button" class="wp-confirm" onclick="wpConfirm()">Confirmar sabor</button>
+    </div>`;
+
+  // Inicializa o wheel
+  _wpInit(opts, initialIdx);
+}
+
+// ══════════════════════════════════════════════════════
+//  WHEEL PICKER 3D — estilo iPhone
+// ══════════════════════════════════════════════════════
+let _wp = {
+  opts: [],
+  idx: 0,
+  itemH: 56,    // altura de cada item em px
+  visible: 5,   // 2 acima + central + 2 abaixo
+  dragging: false,
+  startY: 0,
+  startIdx: 0,
+  velocity: 0,
+  lastY: 0,
+  lastT: 0,
+  rafId: null
+};
+
+function _wpInit(opts, startIdx) {
+  _wp.opts = opts;
+  _wp.idx = Math.max(0, Math.min(startIdx, opts.length - 1));
+  if (_wp.rafId) { cancelAnimationFrame(_wp.rafId); _wp.rafId = null; }
+
+  const mask = document.getElementById('wp-mask');
+  const track = document.getElementById('wp-track');
+  if (!mask || !track) return;
+
+  // Posiciona no índice inicial
+  _wpRender();
+
+  // Eventos de toque
+  mask.addEventListener('touchstart', _wpTouchStart, { passive: true });
+  mask.addEventListener('touchmove', _wpTouchMove, { passive: false });
+  mask.addEventListener('touchend', _wpTouchEnd);
+  // Mouse (desktop)
+  mask.addEventListener('mousedown', _wpMouseDown);
+  // Wheel (scroll do mouse)
+  mask.addEventListener('wheel', _wpWheel, { passive: false });
+  // Click direto num item
+  track.addEventListener('click', _wpClickItem);
+}
+
+function _wpRender() {
+  const track = document.getElementById('wp-track');
+  if (!track) return;
+  const { idx, itemH, opts } = _wp;
+  // Translada o track pra centralizar o item ativo
+  const offset = -idx * itemH;
+  track.style.transform = `translate3d(0, ${offset}px, 0)`;
+
+  // Aplica transform 3D em cada item baseado na distância do centro
+  const items = track.querySelectorAll('.wp-item');
+  items.forEach((el, i) => {
+    const dist = i - idx;
+    const absDist = Math.abs(dist);
+    if (absDist === 0) {
+      el.style.transform = 'translate3d(0,0,0) rotateX(0deg) scale(1)';
+      el.style.opacity = '1';
+      el.classList.add('wp-active');
+    } else {
+      // Rotação 3D — quanto mais longe do centro, mais rotacionado
+      const rotation = Math.sign(dist) * Math.min(absDist * 22, 70);
+      const scale = Math.max(0.7, 1 - absDist * 0.1);
+      const opacity = Math.max(0.15, 1 - absDist * 0.32);
+      el.style.transform = `translate3d(0,0,0) rotateX(${rotation}deg) scale(${scale})`;
+      el.style.opacity = String(opacity);
+      el.classList.remove('wp-active');
+    }
+  });
+}
+
+function _wpTouchStart(e) {
+  _wp.dragging = true;
+  _wp.startY = e.touches[0].clientY;
+  _wp.lastY = _wp.startY;
+  _wp.lastT = Date.now();
+  _wp.startIdx = _wp.idx;
+  _wp.velocity = 0;
+}
+
+function _wpTouchMove(e) {
+  if (!_wp.dragging) return;
+  e.preventDefault();
+  const y = e.touches[0].clientY;
+  const dy = y - _wp.startY;
+  const idxDelta = -dy / _wp.itemH;
+  let newIdx = _wp.startIdx + idxDelta;
+  newIdx = Math.max(0, Math.min(_wp.opts.length - 1, newIdx));
+  _wp.idx = newIdx;
+  _wpRender();
+  // Calcula velocidade pra inércia
+  const now = Date.now();
+  const dt = Math.max(now - _wp.lastT, 1);
+  _wp.velocity = (y - _wp.lastY) / dt; // px/ms
+  _wp.lastY = y;
+  _wp.lastT = now;
+}
+
+function _wpTouchEnd() {
+  if (!_wp.dragging) return;
+  _wp.dragging = false;
+  // Aplica inércia se houver velocidade alta
+  if (Math.abs(_wp.velocity) > 0.4) {
+    _wpInertia();
+  } else {
+    _wpSnap();
+  }
+}
+
+function _wpInertia() {
+  // Continua rolando até a velocidade decair
+  const decay = 0.94;
+  const step = () => {
+    _wp.velocity *= decay;
+    const idxDelta = -_wp.velocity * 0.5;
+    let newIdx = _wp.idx + idxDelta;
+    newIdx = Math.max(0, Math.min(_wp.opts.length - 1, newIdx));
+    _wp.idx = newIdx;
+    _wpRender();
+    if (Math.abs(_wp.velocity) > 0.05) {
+      _wp.rafId = requestAnimationFrame(step);
+    } else {
+      _wpSnap();
+    }
+  };
+  _wp.rafId = requestAnimationFrame(step);
+}
+
+function _wpSnap() {
+  // Animação de "snap" pro inteiro mais próximo
+  const target = Math.round(_wp.idx);
+  const targetClamped = Math.max(0, Math.min(_wp.opts.length - 1, target));
+  const animate = () => {
+    const diff = targetClamped - _wp.idx;
+    if (Math.abs(diff) < 0.01) {
+      _wp.idx = targetClamped;
+      _wpRender();
+      return;
+    }
+    _wp.idx += diff * 0.25;
+    _wpRender();
+    _wp.rafId = requestAnimationFrame(animate);
+  };
+  animate();
+}
+
+function _wpMouseDown(e) {
+  _wp.dragging = true;
+  _wp.startY = e.clientY;
+  _wp.lastY = e.clientY;
+  _wp.lastT = Date.now();
+  _wp.startIdx = _wp.idx;
+  _wp.velocity = 0;
+  const onMove = (ev) => {
+    if (!_wp.dragging) return;
+    const dy = ev.clientY - _wp.startY;
+    let newIdx = _wp.startIdx - (dy / _wp.itemH);
+    newIdx = Math.max(0, Math.min(_wp.opts.length - 1, newIdx));
+    _wp.idx = newIdx;
+    _wpRender();
+    const now = Date.now();
+    const dt = Math.max(now - _wp.lastT, 1);
+    _wp.velocity = (ev.clientY - _wp.lastY) / dt;
+    _wp.lastY = ev.clientY;
+    _wp.lastT = now;
+  };
+  const onUp = () => {
+    _wp.dragging = false;
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    if (Math.abs(_wp.velocity) > 0.4) _wpInertia(); else _wpSnap();
+  };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+  e.preventDefault();
+}
+
+function _wpWheel(e) {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? 1 : -1;
+  let newIdx = _wp.idx + delta;
+  newIdx = Math.max(0, Math.min(_wp.opts.length - 1, newIdx));
+  _wp.idx = newIdx;
+  _wpRender();
+  // Cancela qualquer animação anterior e snap depois
+  if (_wp.rafId) { cancelAnimationFrame(_wp.rafId); _wp.rafId = null; }
+  clearTimeout(_wp._wheelTimer);
+  _wp._wheelTimer = setTimeout(() => _wpSnap(), 80);
+}
+
+function _wpClickItem(e) {
+  const item = e.target.closest('.wp-item');
+  if (!item) return;
+  const idx = parseInt(item.getAttribute('data-idx'));
+  if (isNaN(idx)) return;
+  if (_wp.rafId) { cancelAnimationFrame(_wp.rafId); _wp.rafId = null; }
+  // Anima até o clicado
+  const target = idx;
+  const animate = () => {
+    const diff = target - _wp.idx;
+    if (Math.abs(diff) < 0.01) {
+      _wp.idx = target;
+      _wpRender();
+      return;
+    }
+    _wp.idx += diff * 0.22;
+    _wpRender();
+    _wp.rafId = requestAnimationFrame(animate);
+  };
+  animate();
+}
+
+function wpStep(dir) {
+  if (_wp.rafId) { cancelAnimationFrame(_wp.rafId); _wp.rafId = null; }
+  let target = Math.round(_wp.idx) + dir;
+  target = Math.max(0, Math.min(_wp.opts.length - 1, target));
+  const animate = () => {
+    const diff = target - _wp.idx;
+    if (Math.abs(diff) < 0.01) {
+      _wp.idx = target;
+      _wpRender();
+      return;
+    }
+    _wp.idx += diff * 0.25;
+    _wpRender();
+    _wp.rafId = requestAnimationFrame(animate);
+  };
+  animate();
+}
+
+function wpConfirm() {
+  const opt = _wp.opts[Math.round(_wp.idx)];
+  if (!opt) return;
+  if (opt.isWhole) {
+    selectHalfWhole();
+  } else {
+    selectHalf(opt.id);
+  }
 }
 
 function selectHalf(id) {
