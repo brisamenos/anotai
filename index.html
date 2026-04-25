@@ -613,7 +613,7 @@ input,textarea{font-family:inherit}
 .half-selected-emoji{width:32px;height:32px;border-radius:8px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;overflow:hidden}
 .half-selected-emoji img{width:100%;height:100%;object-fit:cover}
 .half-selected-info{flex:1;min-width:0}
-.half-selected-name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.half-selected-name{font-size:13px;font-weight:700;line-height:1.3;word-break:break-word;overflow-wrap:anywhere}
 .half-selected-hint{font-size:11px;color:var(--muted);margin-top:1px}
 .half-pick-btn{font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0}
 .half-picker{
@@ -629,10 +629,90 @@ input,textarea{font-family:inherit}
 .half-opt.on{background:rgba(249,115,22,.1)}
 .half-opt-emoji{width:28px;height:28px;border-radius:7px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;overflow:hidden}
 .half-opt-emoji img{width:100%;height:100%;object-fit:cover}
-.half-opt-name{flex:1;font-size:13px;font-weight:600;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.half-opt-name{flex:1;font-size:13px;font-weight:600;min-width:0;line-height:1.3;word-break:break-word;overflow-wrap:anywhere}
 .half-opt-price{font-size:12px;color:var(--amber);flex-shrink:0}
 .half-opt-check{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px}
 .half-opt.on .half-opt-check{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* ═══════════════════════════════════════
+   WHEEL PICKER 3D — estilo iPhone
+═══════════════════════════════════════ */
+.wp-wrap{
+  background:var(--s2);border:1px solid var(--border);border-radius:14px;
+  padding:8px 12px 12px;margin-bottom:8px;position:relative;
+  display:flex;flex-direction:column;align-items:stretch;gap:6px;
+}
+.wp-arrow{
+  background:var(--s3);border:1px solid var(--border);
+  width:32px;height:24px;border-radius:8px;cursor:pointer;
+  color:var(--muted);align-self:center;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s, color .15s;
+}
+.wp-arrow:hover{background:rgba(249,115,22,.15);color:var(--accent)}
+.wp-arrow:active{transform:scale(.95)}
+.wp-mask{
+  position:relative;height:280px;overflow:hidden;
+  perspective:600px;perspective-origin:center;
+  user-select:none;-webkit-user-select:none;touch-action:none;
+  cursor:grab;
+}
+.wp-mask:active{cursor:grabbing}
+/* Gradiente fade nas bordas pra dar sensação de profundidade */
+.wp-mask::before, .wp-mask::after{
+  content:'';position:absolute;left:0;right:0;height:80px;z-index:3;pointer-events:none;
+}
+.wp-mask::before{ top:0; background:linear-gradient(to bottom, var(--s2), transparent) }
+.wp-mask::after{ bottom:0; background:linear-gradient(to top, var(--s2), transparent) }
+.wp-track{
+  position:absolute;top:50%;left:0;right:0;
+  margin-top:-28px; /* metade da altura do item (56/2) */
+  transform-style:preserve-3d;
+  transition:none;
+  will-change:transform;
+}
+.wp-item{
+  height:56px;display:flex;align-items:center;gap:10px;
+  padding:0 14px;
+  transform-style:preserve-3d;
+  backface-visibility:hidden;
+  transition:opacity .12s linear;
+  cursor:pointer;
+}
+.wp-item-thumb{
+  width:38px;height:38px;border-radius:8px;background:var(--s3);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;color:var(--muted);overflow:hidden;
+}
+.wp-item-info{flex:1;min-width:0}
+.wp-item-name{
+  font-size:13.5px;font-weight:600;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.wp-item-price{
+  font-size:11.5px;color:var(--muted);margin-top:1px;
+}
+/* Item central: destaque */
+.wp-item.wp-active .wp-item-name{color:var(--accent);font-weight:800;font-size:14.5px}
+.wp-item.wp-active .wp-item-price{color:var(--amber)}
+.wp-item.wp-active .wp-item-thumb{background:rgba(249,115,22,.12);box-shadow:0 0 0 2px rgba(249,115,22,.3)}
+/* Linha guia central */
+.wp-highlight{
+  position:absolute;left:8px;right:8px;top:50%;height:56px;
+  transform:translateY(-50%);
+  border-top:1.5px solid rgba(249,115,22,.4);
+  border-bottom:1.5px solid rgba(249,115,22,.4);
+  border-radius:6px;pointer-events:none;z-index:2;
+}
+.wp-confirm{
+  margin-top:4px;padding:11px 14px;
+  background:var(--accent);color:#fff;
+  border:none;border-radius:10px;
+  font-size:13px;font-weight:700;cursor:pointer;
+  transition:transform .1s, box-shadow .15s;
+}
+.wp-confirm:hover{box-shadow:0 4px 16px rgba(249,115,22,.35)}
+.wp-confirm:active{transform:scale(.98)}
 
 /* ═══════════════════════════════════════
    WHATSAPP TOGGLE (premium)
