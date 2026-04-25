@@ -966,6 +966,10 @@ function noSetDelivery(tipo) {
     btn.style.fontSize = '12px';
   });
   document.getElementById('no-addr-block').style.display = tipo === 'delivery' ? '' : 'none';
+  // Ao voltar pra delivery, garante que a taxa esteja calculada de novo
+  if (tipo === 'delivery') {
+    setTimeout(noUpdateTaxaAuto, 30);
+  }
   const mesaBlock = document.getElementById('no-mesa-block');
   if (mesaBlock) {
     mesaBlock.style.display = tipo === 'mesa' ? '' : 'none';
@@ -1321,13 +1325,145 @@ function noRenderCart() {
   if (totalEl) totalEl.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
 }
 
-function noOpenModal() {
+// ── Config de taxa carregada ao abrir o modal ──
+let _noFeeConfig = null;            // { tipo: 'fixo'|'por_bairro'|'por_km', valor, bairros, faixas }
+let _noTaxaManualOverride = false;  // true se o usuário editou o campo de taxa manualmente
+
+// Carrega delivery_fee_config do banco; retorna a config (e atualiza _noFeeConfig)
+async function _noCarregarFeeConfig() {
+  // Reaproveita _taxaConfig se já estiver carregado em gestor-financeiro
+  if (typeof _taxaConfig !== 'undefined' && _taxaConfig && _taxaConfig.tipo) {
+    _noFeeConfig = _taxaConfig;
+    return _noFeeConfig;
+  }
+  try {
+    const { data } = await sb.from('store_config').select('delivery_fee_config').single();
+    _noFeeConfig = data?.delivery_fee_config || { tipo: 'fixo', valor: 0 };
+  } catch (e) {
+    _noFeeConfig = { tipo: 'fixo', valor: 0 };
+  }
+  return _noFeeConfig;
+}
+
+// Normaliza nome de bairro pra comparação (lowercase, sem acento, trim)
+function _noNormBairro(s) {
+  return String(s || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+// Recalcula a taxa baseado no bairro digitado + config
+// Não sobrescreve se o usuário marcou override manual
+function noUpdateTaxaAuto() {
+  if (_noTaxaManualOverride) return;
+  const taxaInp = document.getElementById('no-taxa-val');
+  const info    = document.getElementById('no-taxa-info');
+  if (!taxaInp) return;
+
+  const cfg  = _noFeeConfig || { tipo: 'fixo', valor: 0 };
+  const bair = (document.getElementById('no-f-bairro')?.value || '').trim();
+
+  let taxa = 0;
+  let infoTxt = '';
+
+  if (cfg.tipo === 'por_bairro') {
+    const bairros = Array.isArray(cfg.bairros) ? cfg.bairros : [];
+    if (!bair) { infoTxt = bairros.length ? 'Digite o bairro para auto-calcular' : ''; }
+    else {
+      const norm = _noNormBairro(bair);
+      const match = bairros.find(b => _noNormBairro(b.bairro) === norm);
+      if (match) { taxa = parseFloat(match.taxa) || 0; infoTxt = '✓ Bairro reconhecido'; }
+      else { infoTxt = '⚠ Bairro fora da lista — taxa zero (edite manualmente)'; }
+    }
+  } else if (cfg.tipo === 'por_km') {
+    infoTxt = 'Taxa por km — defina manualmente abaixo';
+    taxa = 0;
+  } else {
+    // fixo
+    taxa = parseFloat(cfg.valor ?? cfg.value ?? 0) || 0;
+    infoTxt = taxa > 0 ? `Taxa fixa: R$ ${taxa.toFixed(2).replace('.',',')}` : '';
+  }
+
+  taxaInp.value = taxa.toFixed(2);
+  if (info) info.textContent = infoTxt;
+}
+
+// Botão "Auto" — força recálculo (limpa override manual)
+function noResetTaxaAuto() {
+  _noTaxaManualOverride = false;
+  noUpdateTaxaAuto();
+  if (typeof sbToast === 'function') sbToast('ok', 'Taxa recalculada pelo bairro');
+}
+
+// ── Autocomplete de bairros (quando config = por_bairro) ──
+function noOnBairroInput(input) {
+  noUpdateTaxaAuto();
+  _noRenderBairrosDropdown(input);
+}
+function noOnBairroFocus(input) {
+  _noRenderBairrosDropdown(input);
+}
+function _noRenderBairrosDropdown(input) {
+  const dd = document.getElementById('no-bairros-dropdown');
+  if (!dd) return;
+  const cfg = _noFeeConfig || {};
+  if (cfg.tipo !== 'por_bairro') { dd.style.display = 'none'; return; }
+  const bairros = Array.isArray(cfg.bairros) ? cfg.bairros : [];
+  if (!bairros.length) { dd.style.display = 'none'; return; }
+
+  const q = _noNormBairro(input.value);
+  const lista = q
+    ? bairros.filter(b => _noNormBairro(b.bairro).includes(q)).slice(0, 8)
+    : bairros.slice(0, 8);
+  if (!lista.length) { dd.style.display = 'none'; return; }
+
+  dd.innerHTML = lista.map(b => `<div class="no-bairro-opt" data-nome="${(b.bairro || '').replace(/"/g, '&quot;')}" data-taxa="${parseFloat(b.taxa)||0}" style="padding:8px 12px;cursor:pointer;font-size:12.5px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;align-items:center" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+    <span style="color:var(--text)">${b.bairro}</span>
+    <span style="color:var(--muted);font-size:11px;font-weight:600">R$ ${parseFloat(b.taxa).toFixed(2).replace('.',',')}</span>
+  </div>`).join('');
+
+  // Click handlers
+  dd.querySelectorAll('.no-bairro-opt').forEach(opt => {
+    opt.addEventListener('mousedown', (e) => {
+      e.preventDefault(); // evita perder foco antes do click
+      const nome = opt.dataset.nome;
+      input.value = nome;
+      _noTaxaManualOverride = false; // selecionar bairro reseta override
+      noUpdateTaxaAuto();
+      dd.style.display = 'none';
+    });
+  });
+  dd.style.display = 'block';
+}
+// Fecha dropdown ao clicar fora
+document.addEventListener('click', (e) => {
+  const dd = document.getElementById('no-bairros-dropdown');
+  const inp = document.getElementById('no-f-bairro');
+  if (dd && inp && e.target !== inp && !dd.contains(e.target)) dd.style.display = 'none';
+});
+
+// ── Helper: monta a string de endereço a partir dos campos separados ──
+function _noMontarAddr() {
+  const rua  = (document.getElementById('no-f-rua')?.value || '').trim();
+  const num  = (document.getElementById('no-f-num')?.value || '').trim();
+  const bair = (document.getElementById('no-f-bairro')?.value || '').trim();
+  const comp = (document.getElementById('no-f-compl')?.value || '').trim();
+  const ref  = (document.getElementById('no-f-referencia')?.value || '').trim();
+  const partes = [rua, num, bair, comp, ref ? `Ref: ${ref}` : ''].filter(Boolean);
+  return partes.join(', ');
+}
+
+async function noOpenModal() {
   _noCart = [];
   _noDelivery = 'delivery';
-  ['order-client', 'order-phone', 'order-addr', 'order-obs'].forEach(id => {
+  _noTaxaManualOverride = false;
+  // Reseta os 5 campos novos + outros
+  ['order-client', 'order-phone', 'order-obs',
+   'no-f-rua', 'no-f-num', 'no-f-bairro', 'no-f-compl', 'no-f-referencia',
+   'no-taxa-val'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  const taxaInfo = document.getElementById('no-taxa-info');
+  if (taxaInfo) taxaInfo.textContent = '';
   const mesaSelect = document.getElementById('order-mesa');
   if (mesaSelect) mesaSelect.value = '';
   document.getElementById('no-search').value = '';
@@ -1335,17 +1471,42 @@ function noOpenModal() {
   noFilterItems('');
   noRenderCart();
   openModal('modal-new-order');
-  // Inicializa autocomplete de clientes no Novo Pedido
-  initClienteAutocomplete('order-client', {
-    nameId: 'order-client',
-    phoneId: 'order-phone',
-    addrId: 'order-addr'
-  });
-  initClienteAutocomplete('order-phone', {
-    nameId: 'order-client',
-    phoneId: 'order-phone',
-    addrId: 'order-addr'
-  });
+  // Carrega config de taxa em background e aplica taxa inicial
+  await _noCarregarFeeConfig();
+  noUpdateTaxaAuto();
+  // Inicializa autocomplete de clientes — quando seleciona um cliente com endereço,
+  // tenta separar em campos. Se não der, joga tudo em "rua".
+  const onSelectCliente = (cliente) => {
+    if (!cliente?.addr) return;
+    _noPreencherAddrCampos(cliente.addr);
+    setTimeout(noUpdateTaxaAuto, 50);
+  };
+  initClienteAutocomplete('order-client', { nameId: 'order-client', phoneId: 'order-phone', onSelect: onSelectCliente });
+  initClienteAutocomplete('order-phone',  { nameId: 'order-client', phoneId: 'order-phone', onSelect: onSelectCliente });
+}
+
+// Tenta separar uma string de endereço em rua/num/bairro/compl/referencia.
+// Os pedidos antigos foram salvos como "Rua, Num, Bairro, Compl, Ref: ..."
+function _noPreencherAddrCampos(addrStr) {
+  if (!addrStr) return;
+  const partes = String(addrStr).split(',').map(p => p.trim()).filter(Boolean);
+  // Extrai "Ref: ..." (qualquer posição)
+  let ref = '';
+  const idxRef = partes.findIndex(p => /^Ref:\s*/i.test(p));
+  if (idxRef >= 0) {
+    ref = partes[idxRef].replace(/^Ref:\s*/i, '').trim();
+    partes.splice(idxRef, 1);
+  }
+  const rua    = partes[0] || '';
+  const num    = partes[1] || '';
+  const bairro = partes[2] || '';
+  const compl  = partes.slice(3).join(', ');
+  const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
+  set('no-f-rua', rua);
+  set('no-f-num', num);
+  set('no-f-bairro', bairro);
+  set('no-f-compl', compl);
+  set('no-f-referencia', ref);
 }
 
 async function createOrder() {
@@ -1359,13 +1520,21 @@ async function createOrder() {
 
   let addr = '';
   let mesaNum = null;
+  let taxa = 0;
   if (_noDelivery === 'delivery') {
-    addr = document.getElementById('order-addr').value.trim();
+    const rua = (document.getElementById('no-f-rua')?.value || '').trim();
+    const num = (document.getElementById('no-f-num')?.value || '').trim();
+    if (!rua) { window._pdvCriandoPedido = false; sbToast('err', 'Informe a rua'); return; }
+    if (!num) { window._pdvCriandoPedido = false; sbToast('err', 'Informe o número'); return; }
+    addr = _noMontarAddr();
+    taxa = parseFloat(document.getElementById('no-taxa-val')?.value) || 0;
   } else if (_noDelivery === 'mesa') {
     mesaNum = parseInt(document.getElementById('order-mesa').value) || null;
     addr = mesaNum ? 'Mesa ' + mesaNum : 'Mesa';
+    taxa = 0;
   } else {
     addr = 'Retirada no balcão';
+    taxa = 0;
   }
 
   if (!_noCart.length) { window._pdvCriandoPedido = false; sbToast('err', 'Adicione pelo menos um produto'); return; }
@@ -1394,7 +1563,7 @@ async function createOrder() {
       client, phone, addr,
       items: itemsArr,
       total: tot,
-      taxa: _noDelivery === 'delivery' ? 5 : 0,
+      taxa,
       mesa_num: mesaNum,
       status: 'analise',
       time, pag
