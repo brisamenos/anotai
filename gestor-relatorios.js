@@ -2285,7 +2285,7 @@ setTimeout(() => {
 // ─────────────────────────────────────────
 window._printMode  = localStorage.getItem('printMode')     || 'auto';
 let _printMode     = window._printMode;
-let _printFontSize = parseInt(localStorage.getItem('printFontSize') || '12');
+let _printFontSize = 15; // valor restaurado do servidor via loadPrintConfigServer()
 let _printTarget   = localStorage.getItem('printTarget')   || 'server';
 let _printPrinter  = localStorage.getItem('printPrinter')  || '';
 let _printPrinterCozinha = localStorage.getItem('printPrinterCozinha') || '';
@@ -2317,7 +2317,7 @@ async function loadPrintConfigServer() {
     const cfg = JSON.parse(data.print_config)
     if (cfg.printMode)    { _printMode = cfg.printMode;   localStorage.setItem('printMode', cfg.printMode) }
     if (cfg.printFormat)  { _printFormat = cfg.printFormat; localStorage.setItem('printFormat', cfg.printFormat) }
-    if (cfg.printFontSize){ _printFontSize = cfg.printFontSize; localStorage.setItem('printFontSize', cfg.printFontSize) }
+    if (cfg.printFontSize){ _printFontSize = cfg.printFontSize }
     if (cfg.printViaMode) { _printViaMode = cfg.printViaMode; localStorage.setItem('printViaMode', cfg.printViaMode) }
     // Impressora caixa (salva em ambos os campos que o sistema usa)
     const _savedCaixa = cfg.printer_caixa || cfg.printer || cfg.printPrinter || ''
@@ -3575,6 +3575,7 @@ async function salvarConfigImpressao() {
   }
   // Salva localmente
   localStorage.setItem('printFormat', fmt); _printFormat = fmt;
+  _printFontSize = cfg.fontSize; // mantém memória sincronizada; servidor é a fonte de verdade
   localStorage.setItem('printNome', cfg.nome);   _printNome   = cfg.nome;
   localStorage.setItem('printSub', cfg.sub);     _printSub    = cfg.sub;
   localStorage.setItem('printRodape', cfg.rodape); _printRodape = cfg.rodape;
@@ -3961,7 +3962,7 @@ function salvarModelo() {
   _printNome = m.nome_estab; localStorage.setItem('printNome', m.nome_estab);
   _printSub = m.sub; localStorage.setItem('printSub', m.sub);
   _printRodape = m.rodape; localStorage.setItem('printRodape', m.rodape);
-  _printFontSize = m.fontSize; localStorage.setItem('printFontSize', m.fontSize);
+  _printFontSize = m.fontSize;
   _printFormat = m.largura <= 32 ? '58mm' : '80mm'; localStorage.setItem('printFormat', _printFormat);
   _saveModelos();
   closeModal('modal-modelo');
