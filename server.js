@@ -386,6 +386,17 @@ const MIGRATIONS = [
     )`,
     `CREATE INDEX IF NOT EXISTS idx_wa_fup_sent_at ON wa_followup_sent(sent_at)`
   ]},
+  { version:38, description:'tabela addons_esgotados (adicionais globalmente esgotados por tenant)', up:[
+    `CREATE TABLE IF NOT EXISTS addons_esgotados (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      nome_norm TEXT NOT NULL,
+      nome_original TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, nome_norm)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_addons_esg_tenant ON addons_esgotados(tenant_id)`
+  ]},
 ]
 
 function runMigrations() {
@@ -655,14 +666,15 @@ function sseBroadcast(channel, event, data) {
 }
 
 const TABLE_CHANNELS = {
-  orders:       (tid) => [`orders-rt:${tid}`],
-  mesas:        (tid) => [`mesas-rt:${tid}`],
-  store_config: (tid) => [`store-config-rt:${tid}`],
-  menu_items:   (tid) => [`menu-rt:${tid}`],
-  categories:   (tid) => [`cats-rt:${tid}`, `menu-rt:${tid}`],
-  garcons:      (tid) => [`orders-rt:${tid}`],
-  saques:       (tid) => [`saques-rt:${tid}`, `saques-admin`],
-  customers:    (tid) => [`customers-rt:${tid}`],
+  orders:           (tid) => [`orders-rt:${tid}`],
+  mesas:            (tid) => [`mesas-rt:${tid}`],
+  store_config:     (tid) => [`store-config-rt:${tid}`],
+  menu_items:       (tid) => [`menu-rt:${tid}`],
+  categories:       (tid) => [`cats-rt:${tid}`, `menu-rt:${tid}`],
+  garcons:          (tid) => [`orders-rt:${tid}`],
+  saques:           (tid) => [`saques-rt:${tid}`, `saques-admin`],
+  customers:        (tid) => [`customers-rt:${tid}`],
+  addons_esgotados: (tid) => [`menu-rt:${tid}`],
 }
 const GARCOM_PREFIXES = ['garcom-mesas-', 'garcom-orders-']
 
@@ -719,7 +731,7 @@ const JSON_FIELDS = {
   store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config','cashback_config','tipos_entrega']),
 }
 const BOOL_FIELDS  = new Set(['ativo','store_open','caixa_open','destaque'])
-const SSE_TABLES   = new Set(['orders','mesas','store_config','menu_items','categories','garcons','customers'])
+const SSE_TABLES   = new Set(['orders','mesas','store_config','menu_items','categories','garcons','customers','addons_esgotados'])
 
 function jsonParse(v) { if(typeof v!=='string')return v; try{return JSON.parse(v)}catch{return v} }
 
@@ -1691,6 +1703,36 @@ const server = http.createServer(async (req,res) => {
   if(upath==='/status'){send(res,200,{ok:true,uptime:Math.floor(process.uptime()),db:'sqlite-multitenant',version:'4.0.0',backup:fs.existsSync(BACKUP_PATH)?fs.statSync(BACKUP_PATH).mtime:null});return}
   if(req.method==='POST'&&upath==='/api/order-status'){await handleOrderStatus(req,res);return}
 
+  // ── Adicionais esgotados (global por tenant) ─────────────
+  // Normaliza nome (lowercase + trim + sem acento) para garantir match independente de digitação
+  const _normAddon = (s) => String(s||'').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+  if(upath==='/api/addons-esgotados'){
+    const tid=req.headers['x-tenant-id']||params.get('tenant_id')||''
+    if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
+    if(req.method==='GET'){
+      // Público — qualquer um pode consultar (cardápio precisa)
+      const rows=db.prepare('SELECT nome_norm,nome_original FROM addons_esgotados WHERE tenant_id=?').all(tid)
+      send(res,200,{esgotados:rows.map(r=>r.nome_norm),items:rows});return
+    }
+    if(req.method==='POST'){
+      const body=await readBody(req)
+      const nome=String(body.nome||'').trim()
+      if(!nome){send(res,400,{error:'nome obrigatório'});return}
+      const norm=_normAddon(nome)
+      db.prepare('INSERT OR IGNORE INTO addons_esgotados (tenant_id,nome_norm,nome_original) VALUES (?,?,?)').run(tid,norm,nome)
+      emit(tid,'addons_esgotados',{nome_norm:norm,nome_original:nome},'INSERT')
+      marcarDirty();send(res,200,{ok:true,nome_norm:norm});return
+    }
+    if(req.method==='DELETE'){
+      const nome=params.get('nome')||(await readBody(req).catch(()=>({}))).nome||''
+      if(!nome){send(res,400,{error:'nome obrigatório'});return}
+      const norm=_normAddon(nome)
+      db.prepare('DELETE FROM addons_esgotados WHERE tenant_id=? AND nome_norm=?').run(tid,norm)
+      emit(tid,'addons_esgotados',{nome_norm:norm},'DELETE')
+      marcarDirty();send(res,200,{ok:true});return
+    }
+  }
+
   // ── Cashback ─────────────────────────────────────────────
   if(upath==='/api/cashback/config'){
     const tid=req.headers['x-tenant-id']||params.get('tenant_id')||''
@@ -1782,7 +1824,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/fidelidade/sync','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/exportar-relatorio'])
+  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/fidelidade/sync','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/exportar-relatorio'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return

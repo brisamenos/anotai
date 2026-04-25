@@ -176,6 +176,7 @@ function nav(id) {
   <button class="si ssub" id="sn-gestor-main" onclick="nav('gestor')"><span data-label-restaurante="Gestor" data-label-acougue="Produtos">Gestor</span></button>
   <button class="si ssub" id="sn-imagens" onclick="nav('imagens')"><span data-label-restaurante="Imagens do cardápio" data-label-acougue="Fotos dos produtos">Imagens do cardápio</span></button>
   <button class="si ssub" id="sn-edicao" onclick="nav('edicao')"><span data-label-restaurante="Edição em massa" data-label-acougue="Edição em massa">Edição em massa</span></button>
+  <button class="si ssub" id="sn-adicionais-esgotados" onclick="nav('adicionais-esgotados')">Adicionais Esgotados</button>
   <button class="si ssub" id="sn-potencializador" onclick="nav('potencializador')">Potencializador</button>
   <button class="si" id="sn-cardapio-publico" onclick="nav('cardapio-publico')">
     <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 2c-1.5 2-2.5 3.8-2.5 6s1 4 2.5 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 2c1.5 2 2.5 3.8 2.5 6s-1 4-2.5 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M2 8h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
@@ -630,6 +631,35 @@ function nav(id) {
     </div>
     <table><thead><tr><th><input type="checkbox" class="cb" id="check-all" onchange="toggleAll(this)"></th><th>Itens</th><th>Preço</th><th>Categoria</th><th>Disponibilidade</th><th>Status</th><th>Ações</th></tr></thead>
     <tbody id="table-body"></tbody></table>
+  </div>
+</div>
+
+<!-- ADICIONAIS ESGOTADOS -->
+<div class="page" id="page-adicionais-esgotados">
+  <div class="ph">
+    <div>
+      <div class="pt">Adicionais Esgotados</div>
+      <div class="ps">Pause adicionais que estão sem estoque — eles aparecerão como "Esgotado" no cardápio e no garçom em todos os pratos que os usam</div>
+    </div>
+    <button class="btn bg" onclick="loadAddonsEsgPanel()">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><path d="M2 8a6 6 0 0 1 11-3.5L14.5 3M14 8a6 6 0 0 1-11 3.5L1.5 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      Atualizar
+    </button>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+    <div class="sbox" style="flex:1;max-width:300px"><svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><input id="addons-esg-search" placeholder="Buscar adicional..." oninput="renderAddonsEsg()" style="flex:1"></div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:14px">
+      <div style="font-size:12px;color:var(--muted)">
+        <span id="addons-esg-count-on" style="color:var(--accent);font-weight:600">0</span> de
+        <span id="addons-esg-count-total">0</span> esgotados
+      </div>
+    </div>
+  </div>
+  <div id="addons-esg-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px"></div>
+  <div id="addons-esg-empty" style="display:none;text-align:center;padding:60px 20px;color:var(--muted)">
+    <div style="font-size:32px;margin-bottom:8px">📋</div>
+    <div style="font-weight:600;color:var(--text);margin-bottom:4px">Nenhum adicional cadastrado</div>
+    <div style="font-size:13px">Adicione adicionais aos seus pratos no Cardápio e eles aparecerão aqui.</div>
   </div>
 </div>
 
@@ -5866,6 +5896,169 @@ document.addEventListener('DOMContentLoaded', () => {
     <div id="auto-modelos-lista" style="overflow-y:auto;flex:1;padding:14px 20px;display:flex;flex-direction:column;gap:10px"></div>
   </div>
 </div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     ADICIONAIS ESGOTADOS — JS da página
+     Lista todos os adicionais únicos do menu, com toggle on/off.
+     Esgotar é GLOBAL: marca por nome normalizado, vale pra todos
+     os pratos que usam aquele adicional.
+═══════════════════════════════════════════════════════════ -->
+<script>
+let _addonsEsgSet = new Set();           // nomes_norm atualmente esgotados
+let _addonsTodos  = [];                  // lista única de adicionais extraídos do menu
+
+function _normAddonGestor(s) {
+  return String(s||'').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
+function _extrairAdicionaisDoMenu() {
+  // Percorre todos os items e coleta opções de grupos genéricos (Adicionais, Molhos, etc).
+  // Ignora grupos especiais de açougue/kit (cortes, pesos, kit_itens, etc) — eles não são "adicionais".
+  const TIPOS_ESPECIAIS = new Set(['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens']);
+  const map = new Map(); // nome_norm → { nome, count, grupos:Set }
+  for (const it of (window.items || [])) {
+    let cgs = it.custom_groups;
+    if (typeof cgs === 'string') { try { cgs = JSON.parse(cgs); } catch { cgs = []; } }
+    if (!Array.isArray(cgs)) continue;
+    for (const g of cgs) {
+      if (TIPOS_ESPECIAIS.has(g.tipo)) continue;
+      for (const o of (g.opcoes || [])) {
+        if (!o?.nome) continue;
+        const norm = _normAddonGestor(o.nome);
+        if (!norm) continue;
+        const cur = map.get(norm) || { nome: o.nome, count: 0, grupos: new Set() };
+        cur.count += 1;
+        cur.grupos.add(g.nome || '');
+        map.set(norm, cur);
+      }
+    }
+  }
+  return [...map.entries()]
+    .map(([norm, v]) => ({ nome_norm: norm, nome: v.nome, count: v.count, grupos: [...v.grupos] }))
+    .sort((a,b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+async function loadAddonsEsgPanel() {
+  // Carrega lista atualizada de adicionais esgotados do servidor
+  try {
+    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||''; } catch { return ''; } })();
+    if (!tid) { _addonsEsgSet = new Set(); }
+    else {
+      const r = await fetch('/api/addons-esgotados', { headers: { 'x-tenant-id': tid } });
+      const data = r.ok ? await r.json() : { esgotados: [] };
+      _addonsEsgSet = new Set(data.esgotados || []);
+    }
+  } catch(e) { _addonsEsgSet = new Set(); }
+  _addonsTodos = _extrairAdicionaisDoMenu();
+  renderAddonsEsg();
+}
+
+function renderAddonsEsg() {
+  const grid    = document.getElementById('addons-esg-grid');
+  const empty   = document.getElementById('addons-esg-empty');
+  const search  = (document.getElementById('addons-esg-search')?.value || '').toLowerCase().trim();
+  if (!grid) return;
+
+  const lista = _addonsTodos.filter(a =>
+    !search || a.nome.toLowerCase().includes(search) || a.grupos.some(g => (g||'').toLowerCase().includes(search))
+  );
+
+  // Atualiza contadores (sempre baseado em todos, não no filtro)
+  const onCount = _addonsTodos.filter(a => _addonsEsgSet.has(a.nome_norm)).length;
+  const elOn = document.getElementById('addons-esg-count-on');
+  const elTot = document.getElementById('addons-esg-count-total');
+  if (elOn)  elOn.textContent  = onCount;
+  if (elTot) elTot.textContent = _addonsTodos.length;
+
+  if (!_addonsTodos.length) {
+    grid.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  if (!lista.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--muted);font-size:13px">Nenhum adicional encontrado para "' + search + '"</div>';
+    return;
+  }
+
+  grid.innerHTML = lista.map(a => {
+    const esgotado = _addonsEsgSet.has(a.nome_norm);
+    const grupoLabel = a.grupos.filter(Boolean).slice(0,2).join(' · ') || '—';
+    const usos = a.count + ' ' + (a.count === 1 ? 'prato' : 'pratos');
+    return `<div class="addon-esg-card" style="border:1px solid ${esgotado ? 'var(--accent)' : 'var(--border)'};border-radius:10px;padding:12px 14px;background:${esgotado ? 'rgba(249,115,22,.04)' : 'var(--s1)'};display:flex;align-items:center;justify-content:space-between;gap:12px;transition:all .18s">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escapeHtml(a.nome)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escapeHtml(grupoLabel)} · ${usos}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+        ${esgotado ? '<span style="font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--accent);text-transform:uppercase">Esgotado</span>' : ''}
+        <div class="toggle ${esgotado ? 'on' : ''}" onclick="_toggleAddonEsg('${_escapeAttr(a.nome)}','${a.nome_norm}',this)"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function _toggleAddonEsg(nome, nome_norm, toggleEl) {
+  const ativando = !_addonsEsgSet.has(nome_norm); // se ainda não está esgotado, vamos ativar
+  // Otimista
+  if (ativando) _addonsEsgSet.add(nome_norm);
+  else          _addonsEsgSet.delete(nome_norm);
+  toggleEl?.classList.toggle('on', ativando);
+
+  try {
+    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||''; } catch { return ''; } })();
+    if (!tid) throw new Error('sem tenant');
+    const r = await fetch(
+      '/api/addons-esgotados' + (!ativando ? '?nome=' + encodeURIComponent(nome) : ''),
+      {
+        method: ativando ? 'POST' : 'DELETE',
+        headers: { 'Content-Type':'application/json', 'x-tenant-id': tid },
+        body: ativando ? JSON.stringify({ nome }) : undefined
+      }
+    );
+    if (!r.ok) throw new Error('falhou');
+    if (typeof sbToast === 'function') sbToast('ok', ativando ? `${nome}: marcado como esgotado` : `${nome}: disponível novamente`);
+    renderAddonsEsg(); // re-renderiza pra atualizar visual do card
+  } catch(e) {
+    // Reverte estado em caso de erro
+    if (ativando) _addonsEsgSet.delete(nome_norm);
+    else          _addonsEsgSet.add(nome_norm);
+    toggleEl?.classList.toggle('on', !ativando);
+    if (typeof sbToast === 'function') sbToast('err', 'Erro ao salvar');
+  }
+}
+
+// Helpers de escape (caso já existam globais, redeclaração local não conflita)
+function _escapeHtml(s) {
+  return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function _escapeAttr(s) {
+  return String(s||'').replace(/['"\\]/g, '\\$&');
+}
+
+// Hook: quando entra na página, recarrega
+(function () {
+  const _origNav = window.nav;
+  // Espera nav real estar pronto
+  function _hookNav() {
+    if (typeof window._navReady === 'function') {
+      const realNav = window._navReady;
+      window._navReady = function (id) {
+        const ret = realNav(id);
+        if (id === 'adicionais-esgotados') {
+          // Aguarda 1 tick pra DOM estar pronto
+          setTimeout(loadAddonsEsgPanel, 50);
+        }
+        return ret;
+      };
+    } else {
+      setTimeout(_hookNav, 100);
+    }
+  }
+  _hookNav();
+})();
+</script>
 
 </body>
 </html>
