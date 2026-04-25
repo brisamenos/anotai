@@ -885,22 +885,22 @@ async function _odConfirmarItemExistente(itemId) {
   const o = window._detailKanbanOrder;
   if (!o) { modal.remove(); return; }
 
-  const it   = modal._item;
-  const isKg = modal._isKg;
-  const qty  = window._pdvbQty || 1;
+  const it     = modal._item;
+  const isKg   = modal._isKg;
+  const grupos = Array.isArray(modal._grupos) ? modal._grupos : [];
+  const qty    = window._pdvbQty || 1;
 
+  // Calcula só o extra de preço (a string formatada vem do helper _noFmtObsAdicionais)
   let extra = 0;
-  const opcsDesc = [];
   modal.querySelectorAll('input:checked').forEach(inp => {
     extra += parseFloat(inp.dataset.preco || 0);
-    if (inp.dataset.nome) opcsDesc.push(inp.dataset.nome);
   });
 
   let price    = parseFloat(it.price || 0) + extra;
   let name     = it.name;
-  let obs      = modal.querySelector('#pdvb-obs-input')?.value?.trim() || '';
+  const obsLivre = modal.querySelector('#pdvb-obs-input')?.value?.trim() || '';
+  let obs      = _noFmtObsAdicionais(modal, grupos, obsLivre);
   let finalQty = qty;
-  if (opcsDesc.length) obs = [opcsDesc.join(', '), obs].filter(Boolean).join(' | ');
 
   if (isKg) {
     const kg = parseFloat(modal.querySelector('#pdvb-kg-input')?.value || 1);
@@ -1208,31 +1208,65 @@ function noAtualizarTotalModal(item, isKg) {
   if (el) el.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
 }
 
+// ── Helper compartilhado: monta string de adicionais no formato esperado pelo parser de impressão ──
+// O _parseObs em gestor-relatorios.js espera:
+//   "NomeGrupo: opcao1, opcao2 (+R$ 3,00) · OutroGrupo: x · obs livre"
+// Sem isso, a comanda imprime sem os adicionais.
+function _noFmtObsAdicionais(modalEl, grupos, obsLivre) {
+  const porGrupo = new Map();
+  modalEl.querySelectorAll('input:checked').forEach(inp => {
+    const gi = parseInt(inp.dataset.grp);
+    if (isNaN(gi)) return;
+    const g = (grupos || [])[gi];
+    if (!g) return;
+    const grpNome = g.nome || g.name || (
+      g.tipo === 'cortes'        ? 'Corte' :
+      g.tipo === 'preparos'      ? 'Preparo' :
+      g.tipo === 'ocasiao'       ? 'Ocasião' :
+      g.tipo === 'armazenamento' ? 'Armazenamento' :
+      g.tipo === 'pesos'         ? 'Porção' :
+      g.tipo === 'sabor'         ? 'Sabor' : 'Adicional'
+    );
+    const opcNome = inp.dataset.nome || '';
+    if (!opcNome) return;
+    const preco   = parseFloat(inp.dataset.preco || 0);
+    const opcLbl  = preco > 0 ? `${opcNome} (+R$ ${preco.toFixed(2).replace('.',',')})` : opcNome;
+    if (!porGrupo.has(gi)) porGrupo.set(gi, { nome: grpNome, opcoes: [] });
+    porGrupo.get(gi).opcoes.push(opcLbl);
+  });
+  const partes = [];
+  for (const { nome, opcoes } of porGrupo.values()) {
+    if (opcoes.length) partes.push(`${nome}: ${opcoes.join(', ')}`);
+  }
+  if (obsLivre) partes.push(obsLivre);
+  return partes.join(' · ');
+}
+
 function noConfirmarAdicionais(itemId) {
   const modal = document.getElementById('modal-no-adicionais-bg');
   if (!modal) return;
-  const item = modal._item;
-  const isKg = modal._isKg;
-  const qty = window._noModalQtyVal || 1;
+  const item   = modal._item;
+  const isKg   = modal._isKg;
+  const grupos = Array.isArray(modal._grupos) ? modal._grupos : [];
+  const qty    = window._noModalQtyVal || 1;
 
+  // Calcula extra (preço somado dos adicionais)
   let extra = 0;
-  const opcsDesc = [];
-  document.querySelectorAll('#modal-no-adicionais-bg input:checked').forEach(inp => {
+  modal.querySelectorAll('input:checked').forEach(inp => {
     extra += parseFloat(inp.dataset.preco || 0);
-    opcsDesc.push(inp.dataset.nome);
   });
 
   let price = parseFloat(item.price || 0) + extra;
-  let name = item.name;
-  let obs = document.getElementById('no-obs-input')?.value.trim() || '';
+  let name  = item.name;
+  const obsLivre = document.getElementById('no-obs-input')?.value.trim() || '';
 
-  if (opcsDesc.length) obs = [opcsDesc.join(', '), obs].filter(Boolean).join(' | ');
+  // Monta obs no formato esperado pelo parser de impressão (com nome do grupo)
+  const obs = _noFmtObsAdicionais(modal, grupos, obsLivre);
 
   if (isKg) {
     const kg = parseFloat(document.getElementById('no-kg-input')?.value || 1);
     price = price * kg;
     name = item.name + ' ' + kg.toFixed(3).replace('.', ',') + 'kg';
-    // Add once (qty=1 for kg items)
     _noCart.push({ id: item.id, name, qty: 1, price, emoji: item.emoji || '🍽️', obs });
   } else {
     const existing = _noCart.find(c => c.id === item.id && c.obs === obs && c.name === item.name);
@@ -1336,8 +1370,20 @@ async function createOrder() {
 
   if (!_noCart.length) { window._pdvCriandoPedido = false; sbToast('err', 'Adicione pelo menos um produto'); return; }
 
-  const itemsArr = _noCart.map(c => ({ qty: c.qty, name: c.name, price: c.price, obs: '' }));
-  if (obs) itemsArr[itemsArr.length - 1].obs = obs;
+  // Preserva o `obs` de cada item (que já vem com os adicionais formatados pelo modal).
+  // Se o usuário digitou uma observação geral, anexa apenas no último item.
+  const itemsArr = _noCart.map(c => ({
+    id: c.id,
+    qty: c.qty,
+    name: c.name,
+    price: c.price,
+    obs: c.obs || '',
+    emoji: c.emoji || ''
+  }));
+  if (obs && itemsArr.length) {
+    const last = itemsArr[itemsArr.length - 1];
+    last.obs = last.obs ? `${last.obs} · ${obs}` : obs;
+  }
   const tot = _noCart.reduce((s, c) => s + c.price * c.qty, 0);
 
   try {
