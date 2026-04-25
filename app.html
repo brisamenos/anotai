@@ -857,7 +857,6 @@ textarea.inp{resize:vertical;min-height:80px}
     <div class="frow">
       <div class="sel-wrap"><select class="inp-sel" id="taxa-tipo" onchange="onTaxaTipoChange()">
         <option value="fixo">Taxa fixa</option>
-        <option value="gratis">Grátis</option>
         <option value="faixas">Por faixas de km</option>
         <option value="bairro">Por bairro</option>
       </select></div>
@@ -2584,20 +2583,36 @@ async function deletarCliente() {
 
 // ═══════════════════════════════════════════════════════
 // TAXA DE ENTREGA
+// Lê/escreve em store_config.delivery_fee_config (formato canônico)
+// + colunas separadas: pedido_minimo, store_tempo_entrega
 // ═══════════════════════════════════════════════════════
 async function carregarTaxa() {
-  const { data } = await sb.from('store_config').select('taxa_config').single();
-  let cfg = {}; try { cfg = data?.taxa_config ? JSON.parse(data.taxa_config) : {}; } catch {}
-  const tipo = cfg.tipo || 'fixo';
-  document.getElementById('taxa-tipo').value = tipo;
+  const { data } = await sb.from('store_config').select('delivery_fee_config,pedido_minimo,store_tempo_entrega').single();
+  const cfg = (data && typeof data.delivery_fee_config === 'object') ? data.delivery_fee_config : {};
+
+  // Mapeia tipo canônico → valor do <select> local
+  // Canônico: 'fixo' | 'por_km' | 'por_bairro'  (não há mais 'gratis'; fixo+valor=0 substitui)
+  const tipoCanon = cfg.tipo || 'fixo';
+  const tipoUI = tipoCanon === 'por_km' ? 'faixas' : tipoCanon === 'por_bairro' ? 'bairro' : 'fixo';
+
+  document.getElementById('taxa-tipo').value = tipoUI;
   document.getElementById('taxa-fixo-val').value = cfg.valor || '';
-  document.getElementById('taxa-min-pedido').value = cfg.min_pedido || '';
-  document.getElementById('taxa-tempo').value = cfg.tempo || '';
-  if (tipo === 'faixas' && cfg.faixas) {
-    cfg.faixas.forEach(f => addTaxaFaixa(f.km, f.taxa));
+  document.getElementById('taxa-min-pedido').value = data?.pedido_minimo || '';
+
+  // store_tempo_entrega vem como "30-45 min" — extrai número se possível
+  const tempoStr = data?.store_tempo_entrega || '';
+  const tempoMatch = tempoStr.match(/(\d+)/);
+  document.getElementById('taxa-tempo').value = tempoMatch ? tempoMatch[1] : '';
+
+  // Limpa listas antes de re-renderizar (evita acumular ao reabrir tela)
+  document.getElementById('taxa-faixas-list').innerHTML = '';
+  document.getElementById('taxa-bairro-list').innerHTML = '';
+
+  if (tipoCanon === 'por_km' && Array.isArray(cfg.faixas)) {
+    cfg.faixas.forEach(f => addTaxaFaixa(f.ate_km, f.taxa));
   }
-  if (tipo === 'bairro' && cfg.bairros) {
-    cfg.bairros.forEach(b => addTaxaBairro(b.nome, b.taxa));
+  if (tipoCanon === 'por_bairro' && Array.isArray(cfg.bairros)) {
+    cfg.bairros.forEach(b => addTaxaBairro(b.bairro, b.taxa));
   }
   onTaxaTipoChange();
 }
@@ -2624,7 +2639,7 @@ function addTaxaBairro(nome = '', taxa = '') {
   const list = document.getElementById('taxa-bairro-list');
   const row = document.createElement('div');
   row.className = 'taxa-faixa';
-  row.innerHTML = `<input class="inp" placeholder="Bairro" value="${nome}" style="flex:2">
+  row.innerHTML = `<input class="inp" placeholder="Bairro" value="${(nome||'').replace(/"/g,'&quot;')}" style="flex:2">
     <span style="color:var(--mu);font-size:12px">R$</span>
     <input class="inp" placeholder="Taxa" type="number" step="0.01" value="${taxa}" style="max-width:90px">
     <button class="btn btn-d" style="padding:8px;min-height:0" onclick="this.closest('.taxa-faixa').remove()">✕</button>`;
@@ -2632,28 +2647,53 @@ function addTaxaBairro(nome = '', taxa = '') {
 }
 
 async function salvarTaxa() {
-  const tipo = document.getElementById('taxa-tipo').value;
+  const tipoUI = document.getElementById('taxa-tipo').value;
+  // Mapeia UI → tipo canônico
+  const tipoCanon = tipoUI === 'faixas' ? 'por_km' : tipoUI === 'bairro' ? 'por_bairro' : 'fixo';
+
+  // Preserva bairros_bloqueados que possam existir no banco (configurados em outra tela)
+  let bairrosBloqueados = [];
+  try {
+    const { data: prev } = await sb.from('store_config').select('delivery_fee_config').single();
+    if (prev?.delivery_fee_config && Array.isArray(prev.delivery_fee_config.bairros_bloqueados)) {
+      bairrosBloqueados = prev.delivery_fee_config.bairros_bloqueados;
+    }
+  } catch (e) {}
+
   const cfg = {
-    tipo,
-    valor: parseFloat(document.getElementById('taxa-fixo-val').value) || 0,
-    min_pedido: parseFloat(document.getElementById('taxa-min-pedido').value) || 0,
-    tempo: parseInt(document.getElementById('taxa-tempo').value) || 30,
+    tipo: tipoCanon,
+    valor: tipoCanon === 'fixo' ? (parseFloat(document.getElementById('taxa-fixo-val').value) || 0) : 0,
     faixas: [],
-    bairros: []
+    bairros: [],
+    bairros_bloqueados: bairrosBloqueados
   };
-  if (tipo === 'faixas') {
+
+  if (tipoCanon === 'por_km') {
     cfg.faixas = [...document.querySelectorAll('#taxa-faixas-list .taxa-faixa')].map(r => {
       const inputs = r.querySelectorAll('input');
-      return { km: parseFloat(inputs[0].value) || 0, taxa: parseFloat(inputs[1].value) || 0 };
-    });
+      return { ate_km: parseFloat(inputs[0].value) || 0, taxa: parseFloat(inputs[1].value) || 0 };
+    }).filter(f => f.ate_km > 0).sort((a, b) => a.ate_km - b.ate_km);
   }
-  if (tipo === 'bairro') {
+  if (tipoCanon === 'por_bairro') {
     cfg.bairros = [...document.querySelectorAll('#taxa-bairro-list .taxa-faixa')].map(r => {
       const inputs = r.querySelectorAll('input');
-      return { nome: inputs[0].value, taxa: parseFloat(inputs[1].value) || 0 };
-    });
+      return { bairro: (inputs[0].value || '').trim(), taxa: parseFloat(inputs[1].value) || 0 };
+    }).filter(b => b.bairro);
   }
-  const { error } = await sb.from('store_config').upsert({ tenant_id: _tid, taxa_config: JSON.stringify(cfg) });
+
+  // pedido_minimo e tempo são colunas separadas em store_config
+  const pedidoMin = parseFloat(document.getElementById('taxa-min-pedido').value) || 0;
+  const tempoMin  = parseInt(document.getElementById('taxa-tempo').value) || 0;
+  const tempoStr  = tempoMin > 0 ? `${tempoMin} min` : '';
+
+  const payload = {
+    tenant_id: _tid,
+    delivery_fee_config: cfg,
+    pedido_minimo: pedidoMin
+  };
+  if (tempoStr) payload.store_tempo_entrega = tempoStr;
+
+  const { error } = await sb.from('store_config').upsert(payload);
   if (error) toast('Erro: ' + error.message, 'err'); else toast('Taxa de entrega salva!');
 }
 

@@ -1326,21 +1326,24 @@ function noRenderCart() {
 }
 
 // ── Config de taxa carregada ao abrir o modal ──
-let _noFeeConfig = null;            // { tipo: 'fixo'|'por_bairro'|'por_km', valor, bairros, faixas }
+let _noFeeConfig = null;            // { tipo: 'fixo'|'por_bairro'|'por_km', valor, bairros, faixas, bairros_bloqueados }
 let _noTaxaManualOverride = false;  // true se o usuário editou o campo de taxa manualmente
+let _noPedidoMinimo = 0;            // valor mínimo de pedido para delivery (vem de store_config.pedido_minimo)
 
-// Carrega delivery_fee_config do banco; retorna a config (e atualiza _noFeeConfig)
+// Carrega delivery_fee_config + pedido_minimo do banco
 async function _noCarregarFeeConfig() {
   // Reaproveita _taxaConfig se já estiver carregado em gestor-financeiro
   if (typeof _taxaConfig !== 'undefined' && _taxaConfig && _taxaConfig.tipo) {
     _noFeeConfig = _taxaConfig;
-    return _noFeeConfig;
   }
   try {
-    const { data } = await sb.from('store_config').select('delivery_fee_config').single();
-    _noFeeConfig = data?.delivery_fee_config || { tipo: 'fixo', valor: 0 };
+    const { data } = await sb.from('store_config').select('delivery_fee_config,pedido_minimo').single();
+    if (!_noFeeConfig || !_noFeeConfig.tipo) {
+      _noFeeConfig = data?.delivery_fee_config || { tipo: 'fixo', valor: 0 };
+    }
+    _noPedidoMinimo = parseFloat(data?.pedido_minimo) || 0;
   } catch (e) {
-    _noFeeConfig = { tipo: 'fixo', valor: 0 };
+    if (!_noFeeConfig) _noFeeConfig = { tipo: 'fixo', valor: 0 };
   }
   return _noFeeConfig;
 }
@@ -1363,27 +1366,43 @@ function noUpdateTaxaAuto() {
 
   let taxa = 0;
   let infoTxt = '';
+  let infoCor = '';
+
+  // Aviso prioritário: bairro está na lista de bloqueio?
+  const bloqueados = Array.isArray(cfg.bairros_bloqueados) ? cfg.bairros_bloqueados : [];
+  if (bair && bloqueados.length) {
+    const norm = _noNormBairro(bair);
+    const hit = bloqueados.find(b => _noNormBairro(b) === norm);
+    if (hit) {
+      infoTxt = `⚠ Bairro "${hit}" está na lista de bloqueados — confirme antes de seguir`;
+      infoCor = '#b45309';
+    }
+  }
 
   if (cfg.tipo === 'por_bairro') {
     const bairros = Array.isArray(cfg.bairros) ? cfg.bairros : [];
-    if (!bair) { infoTxt = bairros.length ? 'Digite o bairro para auto-calcular' : ''; }
+    if (!bair) { if (!infoTxt) infoTxt = bairros.length ? 'Digite o bairro para auto-calcular' : ''; }
     else {
       const norm = _noNormBairro(bair);
       const match = bairros.find(b => _noNormBairro(b.bairro) === norm);
-      if (match) { taxa = parseFloat(match.taxa) || 0; infoTxt = '✓ Bairro reconhecido'; }
-      else { infoTxt = '⚠ Bairro fora da lista — taxa zero (edite manualmente)'; }
+      if (match) { taxa = parseFloat(match.taxa) || 0; if (!infoTxt) infoTxt = '✓ Bairro reconhecido'; }
+      else { if (!infoTxt) infoTxt = '⚠ Bairro fora da lista — taxa zero (edite manualmente)'; }
     }
   } else if (cfg.tipo === 'por_km') {
-    infoTxt = 'Taxa por km — defina manualmente abaixo';
+    if (!infoTxt) infoTxt = 'Taxa por km — defina manualmente abaixo';
     taxa = 0;
   } else {
     // fixo
     taxa = parseFloat(cfg.valor ?? cfg.value ?? 0) || 0;
-    infoTxt = taxa > 0 ? `Taxa fixa: R$ ${taxa.toFixed(2).replace('.',',')}` : '';
+    if (!infoTxt) infoTxt = taxa > 0 ? `Taxa fixa: R$ ${taxa.toFixed(2).replace('.',',')}` : '';
   }
 
   taxaInp.value = taxa.toFixed(2);
-  if (info) info.textContent = infoTxt;
+  if (info) {
+    info.textContent = infoTxt;
+    info.style.color = infoCor || '';
+    info.style.fontWeight = infoCor ? '700' : '';
+  }
 }
 
 // Botão "Auto" — força recálculo (limpa override manual)
@@ -1524,10 +1543,31 @@ async function createOrder() {
   if (_noDelivery === 'delivery') {
     const rua = (document.getElementById('no-f-rua')?.value || '').trim();
     const num = (document.getElementById('no-f-num')?.value || '').trim();
+    const bair = (document.getElementById('no-f-bairro')?.value || '').trim();
     if (!rua) { window._pdvCriandoPedido = false; sbToast('err', 'Informe a rua'); return; }
     if (!num) { window._pdvCriandoPedido = false; sbToast('err', 'Informe o número'); return; }
+
+    // Aviso (não-bloqueante) se bairro está na lista de bloqueados
+    const cfg = _noFeeConfig || {};
+    const bloqueados = Array.isArray(cfg.bairros_bloqueados) ? cfg.bairros_bloqueados : [];
+    if (bair && bloqueados.length) {
+      const norm = _noNormBairro(bair);
+      const hit = bloqueados.find(b => _noNormBairro(b) === norm);
+      if (hit) {
+        const ok = confirm(`O bairro "${hit}" está na sua lista de bloqueados.\n\nDeseja criar o pedido mesmo assim?`);
+        if (!ok) { window._pdvCriandoPedido = false; return; }
+      }
+    }
+
     addr = _noMontarAddr();
     taxa = parseFloat(document.getElementById('no-taxa-val')?.value) || 0;
+
+    // Validação de pedido mínimo (apenas para delivery)
+    const subtotal = _noCart.reduce((s, c) => s + c.price * c.qty, 0);
+    if (_noPedidoMinimo > 0 && subtotal < _noPedidoMinimo) {
+      const ok = confirm(`Pedido abaixo do mínimo de delivery (R$ ${_noPedidoMinimo.toFixed(2).replace('.',',')}).\nSubtotal atual: R$ ${subtotal.toFixed(2).replace('.',',')}.\n\nCriar mesmo assim?`);
+      if (!ok) { window._pdvCriandoPedido = false; return; }
+    }
   } else if (_noDelivery === 'mesa') {
     mesaNum = parseInt(document.getElementById('order-mesa').value) || null;
     addr = mesaNum ? 'Mesa ' + mesaNum : 'Mesa';
