@@ -251,9 +251,13 @@ function selectHalfWhole() {
   const base = allItems.find(x => x.id === _imItemId);
   if (!base) return;
   _halfItem = { ...base };
-  _halfPickerOpen = false;
-  document.getElementById('half-picker-list').style.display = 'none';
-  renderHalfPicker(base);
+  // Fecha modal externo (se aberto), ou esconde lista antiga (compat)
+  if (_halfPickerOpen) {
+    closeHalfPickerModal();
+  } else {
+    const oldList = document.getElementById('half-picker-list');
+    if (oldList) oldList.style.display = 'none';
+  }
   updateHalfUI();
   updateImAddBtn();
   _updatePizzaVisual();
@@ -261,7 +265,10 @@ function selectHalfWhole() {
 
 function renderHalfPicker(baseItem) {
   const siblings = getPizzaSiblings(baseItem);
-  const list = document.getElementById('half-picker-list');
+  // Procura primeiro o container do modal externo (novo); fallback no antigo
+  const list = document.getElementById('hp-list')
+            || document.getElementById('half-picker-list');
+  if (!list) return;
 
   // Monta lista de opções: [Inteira mesmo sabor, ...siblings]
   const opts = [{
@@ -567,10 +574,13 @@ function wpConfirm() {
 
 function selectHalf(id) {
   _halfItem = allItems.find(x => x.id === id) || null;
-  _halfPickerOpen = false;
-  document.getElementById('half-picker-list').style.display = 'none';
-  const baseItem = allItems.find(x => x.id === _imItemId);
-  if (baseItem) renderHalfPicker(baseItem);
+  // Fecha modal externo (se aberto), ou esconde lista antiga (compat)
+  if (_halfPickerOpen) {
+    closeHalfPickerModal();
+  } else {
+    const oldList = document.getElementById('half-picker-list');
+    if (oldList) oldList.style.display = 'none';
+  }
   updateHalfUI();
   updateImAddBtn();
   // Atualiza visual animado da pizza
@@ -618,8 +628,51 @@ function updateHalfUI() {
 }
 
 function toggleHalfPicker() {
-  _halfPickerOpen = !_halfPickerOpen;
-  document.getElementById('half-picker-list').style.display = _halfPickerOpen ? '' : 'none';
+  if (_halfPickerOpen) {
+    closeHalfPickerModal();
+  } else {
+    openHalfPickerModal();
+  }
+}
+
+function openHalfPickerModal() {
+  const modal = document.getElementById('modal-half-picker');
+  if (!modal) return;
+  // Re-renderiza o picker dentro do modal externo
+  const baseItem = allItems.find(x => x.id === _imItemId);
+  if (baseItem) renderHalfPicker(baseItem);
+  // Mostra com animação
+  modal.style.display = 'flex';
+  // Força reflow pra animação pegar
+  void modal.offsetWidth;
+  modal.classList.add('show');
+  _halfPickerOpen = true;
+  // Listener de ESC
+  document.addEventListener('keydown', _hpKeyEsc);
+  // Trava scroll do body por trás
+  document.body.style.overflow = 'hidden';
+}
+
+function closeHalfPickerModal() {
+  const modal = document.getElementById('modal-half-picker');
+  if (!modal) return;
+  modal.classList.remove('show');
+  // Espera animação terminar antes de hidar
+  setTimeout(() => {
+    modal.style.display = 'none';
+  }, 240);
+  _halfPickerOpen = false;
+  document.removeEventListener('keydown', _hpKeyEsc);
+  document.body.style.overflow = '';
+}
+
+function _hpKeyEsc(e) {
+  if (e.key === 'Escape') closeHalfPickerModal();
+}
+
+// Bound em onclick="if(event.target===this)..." no HTML
+function halfPickerBackdropClick(ev) {
+  if (ev.target.id === 'modal-half-picker') closeHalfPickerModal();
 }
 
 function updateImAddBtn() {
