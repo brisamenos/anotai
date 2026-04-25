@@ -460,8 +460,33 @@ async function _iniciarFluxoPix(order) {
   sec.style.display = '';
   document.getElementById('pix-qr-wrap').style.display            = 'none';
   document.getElementById('pix-manual-success-wrap').style.display = 'none';
+  const errWrap = document.getElementById('pix-error-wrap');
+  if (errWrap) errWrap.style.display = 'none';
+
+  // Mostra fallback: se tem chave manual configurada, usa ela; senão, mostra bloco de erro com retry
+  const _showFallback = (msg) => {
+    if (_pixKeyManual) {
+      document.getElementById('pix-manual-success-wrap').style.display = '';
+      document.getElementById('pix-manual-key-show').value             = _pixKeyManual;
+      document.getElementById('pix-manual-banco-lbl').textContent      = _pixKeyManualBanco ? `🏦 ${_pixKeyManualBanco}` : '';
+      document.getElementById('pix-manual-valor-show').textContent     = 'R$ ' + fmt(parseFloat(order.total) + parseFloat(order.taxa || 0));
+      return;
+    }
+    if (errWrap) {
+      errWrap.style.display = '';
+      const msgEl = document.getElementById('pix-error-msg');
+      if (msgEl) msgEl.textContent = msg || 'Verifique sua conexão e tente novamente.';
+      const btn = document.getElementById('pix-retry-btn');
+      if (btn) btn.onclick = () => _iniciarFluxoPix(order);
+    } else {
+      sec.style.display = 'none';
+      toast('❌', msg || 'Erro ao gerar PIX. Entre em contato com o restaurante.');
+    }
+  };
+
   try {
     if (!_pixAtivoGestor) {
+      // PIX MP não está ativo — usa só chave manual (se configurada)
       if (_pixKeyManual) {
         document.getElementById('pix-manual-success-wrap').style.display = '';
         document.getElementById('pix-manual-key-show').value             = _pixKeyManual;
@@ -475,8 +500,14 @@ async function _iniciarFluxoPix(order) {
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
       body: JSON.stringify({ valor: parseFloat(order.total) + parseFloat(order.taxa || 0), order_id: order.id, client: order.client, phone: order.phone })
     });
-    const pd = pr.ok ? await pr.json() : null;
-    if (pr.ok && pd?.qr_code) {
+    const pd = await pr.json().catch(() => null);
+    if (!pr.ok) {
+      const msg = pd?.error ? `Erro: ${pd.error}` : `Erro do servidor (${pr.status}).`;
+      console.error('[pix/criar]', pr.status, pd);
+      _showFallback(msg);
+      return;
+    }
+    if (pd?.qr_code) {
       const qrEl = document.getElementById('pix-qr-img');
       qrEl.innerHTML = '';
       new QRCode(qrEl, { text: pd.qr_code, width: 180, height: 180, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
@@ -487,15 +518,12 @@ async function _iniciarFluxoPix(order) {
       _startPixPoll(pd.mp_payment_id, order.id);
       return;
     }
-    if (_pixKeyManual) {
-      document.getElementById('pix-manual-success-wrap').style.display = '';
-      document.getElementById('pix-manual-key-show').value             = _pixKeyManual;
-      document.getElementById('pix-manual-banco-lbl').textContent      = _pixKeyManualBanco ? `🏦 ${_pixKeyManualBanco}` : '';
-      document.getElementById('pix-manual-valor-show').textContent     = 'R$ ' + fmt(parseFloat(order.total) + parseFloat(order.taxa || 0));
-      return;
-    }
-    sec.style.display = 'none';
-  } catch(e) { console.error('_iniciarFluxoPix:', e); sec.style.display = 'none'; }
+    // Resposta OK mas sem qr_code (caso raro)
+    _showFallback('Resposta inesperada do servidor. Tente novamente.');
+  } catch(e) {
+    console.error('_iniciarFluxoPix:', e);
+    _showFallback('Sem conexão com o servidor. Verifique sua internet.');
+  }
 }
 
 // ══════════════════════════════════════════
