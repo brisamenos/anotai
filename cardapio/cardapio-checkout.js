@@ -132,12 +132,15 @@ async function submitOrder() {
     if (!num) { toast('⚠️','Informe o número'); return; }
     const bairro = document.getElementById('f-bairro').value.trim();
     const compl  = document.getElementById('f-compl').value.trim();
+    const refEl  = document.getElementById('f-referencia');
+    const referencia = refEl ? refEl.value.trim() : '';
+    if (!referencia) { toast('⚠️','Informe um ponto de referência'); if (refEl) refEl.focus(); return; }
     // Valida bairro / distância antes de montar o endereço
     if (typeof validarDelivery === 'function') {
       const v = validarDelivery();
       if (!v.ok) { toast('⚠️', v.motivo); return; }
     }
-    addr = [rua, num, bairro, compl].filter(Boolean).join(', ');
+    addr = [rua, num, bairro, compl, 'Ref: ' + referencia].filter(Boolean).join(', ');
     saveDeliveryAddr();
   } else if (deliveryType === 'mesa') {
     const m = document.getElementById('f-mesa').value.trim();
@@ -601,12 +604,15 @@ async function _iniciarSubmit() {
     if (!num) { toast('⚠️','Informe o número'); return; }
     const bairro = document.getElementById('f-bairro').value.trim();
     const compl  = document.getElementById('f-compl').value.trim();
+    const refEl  = document.getElementById('f-referencia');
+    const referencia = refEl ? refEl.value.trim() : '';
+    if (!referencia) { toast('⚠️','Informe um ponto de referência'); if (refEl) refEl.focus(); return; }
     // Valida bairro / distância antes de montar o endereço
     if (typeof validarDelivery === 'function') {
       const v = validarDelivery();
       if (!v.ok) { toast('⚠️', v.motivo); return; }
     }
-    addr = [rua, num, bairro, compl].filter(Boolean).join(', ');
+    addr = [rua, num, bairro, compl, 'Ref: ' + referencia].filter(Boolean).join(', ');
     saveDeliveryAddr();
   } else if (deliveryType === 'mesa') {
     const m = document.getElementById('f-mesa').value.trim();

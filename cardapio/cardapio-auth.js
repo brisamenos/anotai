@@ -233,19 +233,32 @@ function _addrStorageKey() {
   return _customer?.id ? `${ADDR_KEY}_${tid}_c${_customer.id}` : `${ADDR_KEY}_${tid}`;
 }
 
-// Tenta parsear string "Rua, Num, Bairro, Compl" de volta para campos
+// Tenta parsear string "Rua, Num, Bairro, Compl, Ref: xxx" de volta para campos
 function _parseAddrString(addrStr) {
   if (!addrStr || typeof addrStr !== 'string') return null;
   const parts = addrStr.split(', ');
   if (parts.length < 2) return null;
-  return { rua: parts[0] || '', num: parts[1] || '', bairro: parts[2] || '', compl: parts.slice(3).join(', ') || '' };
+  // Extrai ponto de referência (parte que começa com "Ref:")
+  let referencia = '';
+  const refIdx = parts.findIndex(p => /^Ref:\s*/i.test(p));
+  if (refIdx >= 0) {
+    referencia = parts[refIdx].replace(/^Ref:\s*/i, '').trim();
+    parts.splice(refIdx, 1);
+  }
+  return {
+    rua: parts[0] || '',
+    num: parts[1] || '',
+    bairro: parts[2] || '',
+    compl: parts.slice(3).join(', ') || '',
+    referencia
+  };
 }
 
 function _showAddrBanner(a) {
   const banner = document.getElementById('saved-addr-banner');
   const txt    = document.getElementById('saved-addr-text');
   if (!banner || !txt) return;
-  const parts = [a.rua, a.num, a.bairro, a.compl].filter(Boolean);
+  const parts = [a.rua, a.num, a.bairro, a.compl, a.referencia ? 'Ref: ' + a.referencia : ''].filter(Boolean);
   if (!parts.length) return;
   txt.textContent = '📍 ' + parts.join(', ');
   banner.style.display = 'flex';
@@ -265,6 +278,7 @@ function loadSavedAddr() {
       set('f-num',    a.num);
       set('f-bairro', a.bairro);
       set('f-compl',  a.compl);
+      set('f-referencia', a.referencia);
       _showAddrBanner(a);
       if (feeConfig?.tipo === 'por_bairro') renderTotals();
       return;
@@ -279,6 +293,7 @@ function loadSavedAddr() {
       set('f-num',    a.num);
       set('f-bairro', a.bairro);
       set('f-compl',  a.compl);
+      set('f-referencia', a.referencia);
       _showAddrBanner(a);
       // Salva estruturado para próximas vezes neste dispositivo
       try { localStorage.setItem(_addrStorageKey(), JSON.stringify(a)); } catch(e) {}
@@ -293,12 +308,12 @@ function saveDeliveryAddr() {
     const g = id => (document.getElementById(id)?.value || '').trim();
     const rua = g('f-rua'); const num = g('f-num');
     if (!rua || !num) return;
-    const a = { rua, num, bairro: g('f-bairro'), compl: g('f-compl'), cep: g('f-cep') };
+    const a = { rua, num, bairro: g('f-bairro'), compl: g('f-compl'), referencia: g('f-referencia'), cep: g('f-cep') };
     // Salva estruturado no localStorage (chave por cliente se logado)
     localStorage.setItem(_addrStorageKey(), JSON.stringify(a));
     // Atualiza cache do cliente logado para cross-device via banco
     if (_customer) {
-      _customer.addr = [rua, num, a.bairro, a.compl].filter(Boolean).join(', ');
+      _customer.addr = [rua, num, a.bairro, a.compl, a.referencia ? 'Ref: ' + a.referencia : ''].filter(Boolean).join(', ');
       try { localStorage.setItem(AUTH_KEY, JSON.stringify(_customer)); } catch(e) {}
     }
   } catch(e) {}
@@ -311,7 +326,7 @@ function clearSavedAddr() {
     _customer.addr = '';
     try { localStorage.setItem(AUTH_KEY, JSON.stringify(_customer)); } catch(e) {}
   }
-  ['f-rua','f-num','f-bairro','f-compl'].forEach(id => {
+  ['f-rua','f-num','f-bairro','f-compl','f-referencia'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const banner = document.getElementById('saved-addr-banner');
