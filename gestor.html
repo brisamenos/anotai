@@ -5996,25 +5996,38 @@ function renderAddonsEsg() {
     const esgotado = _addonsEsgSet.has(a.nome_norm);
     const grupoLabel = a.grupos.filter(Boolean).slice(0,2).join(' · ') || '—';
     const usos = a.count + ' ' + (a.count === 1 ? 'prato' : 'pratos');
+    // Botão único que reflete o estado atual: vermelho "Pausar" se disponível, verde "Disponível" se pausado
+    const btnHtml = esgotado
+      ? `<button onclick="_toggleAddonEsg('${_escapeAttr(a.nome)}','${a.nome_norm}',this)" style="background:var(--success,#16a34a);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;transition:filter .15s" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter='none'">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Disponível
+        </button>`
+      : `<button onclick="_toggleAddonEsg('${_escapeAttr(a.nome)}','${a.nome_norm}',this)" style="background:transparent;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .15s" onmouseover="this.style.background='var(--accent)';this.style.color='#fff';this.style.borderColor='var(--accent)'" onmouseout="this.style.background='transparent';this.style.color='var(--text)';this.style.borderColor='var(--border)'">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor"/><rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor"/></svg>
+          Pausar
+        </button>`;
     return `<div class="addon-esg-card" style="border:1px solid ${esgotado ? 'var(--accent)' : 'var(--border)'};border-radius:10px;padding:12px 14px;background:${esgotado ? 'rgba(249,115,22,.04)' : 'var(--s1)'};display:flex;align-items:center;justify-content:space-between;gap:12px;transition:all .18s">
       <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:13.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escapeHtml(a.nome)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escapeHtml(grupoLabel)} · ${usos}</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+          <div style="font-weight:600;font-size:13.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escapeHtml(a.nome)}</div>
+          ${esgotado ? '<span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;color:var(--accent);text-transform:uppercase;background:rgba(249,115,22,.12);padding:2px 6px;border-radius:4px;flex-shrink:0">Esgotado</span>' : ''}
+        </div>
+        <div style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escapeHtml(grupoLabel)} · ${usos}</div>
       </div>
-      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
-        ${esgotado ? '<span style="font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--accent);text-transform:uppercase">Esgotado</span>' : ''}
-        <div class="toggle ${esgotado ? 'on' : ''}" onclick="_toggleAddonEsg('${_escapeAttr(a.nome)}','${a.nome_norm}',this)"></div>
+      <div style="display:flex;align-items:center;flex-shrink:0">
+        ${btnHtml}
       </div>
     </div>`;
   }).join('');
 }
 
-async function _toggleAddonEsg(nome, nome_norm, toggleEl) {
-  const ativando = !_addonsEsgSet.has(nome_norm); // se ainda não está esgotado, vamos ativar
-  // Otimista
+async function _toggleAddonEsg(nome, nome_norm, btnEl) {
+  const ativando = !_addonsEsgSet.has(nome_norm); // se ainda não está pausado, vamos pausar
+  // Desabilita o botão durante a chamada pra evitar duplo-clique
+  if (btnEl) { btnEl.disabled = true; btnEl.style.opacity = '0.6'; btnEl.style.cursor = 'wait'; }
+  // Atualização otimista do Set local
   if (ativando) _addonsEsgSet.add(nome_norm);
   else          _addonsEsgSet.delete(nome_norm);
-  toggleEl?.classList.toggle('on', ativando);
 
   try {
     const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||''; } catch { return ''; } })();
@@ -6028,14 +6041,14 @@ async function _toggleAddonEsg(nome, nome_norm, toggleEl) {
       }
     );
     if (!r.ok) throw new Error('falhou');
-    if (typeof sbToast === 'function') sbToast('ok', ativando ? `${nome}: marcado como esgotado` : `${nome}: disponível novamente`);
-    renderAddonsEsg(); // re-renderiza pra atualizar visual do card
+    if (typeof sbToast === 'function') sbToast('ok', ativando ? `${nome}: pausado em todos os pratos` : `${nome}: disponível novamente`);
+    renderAddonsEsg(); // re-renderiza — o botão antigo é substituído pelo novo (Pausar ↔ Disponível)
   } catch(e) {
     // Reverte estado em caso de erro
     if (ativando) _addonsEsgSet.delete(nome_norm);
     else          _addonsEsgSet.add(nome_norm);
-    toggleEl?.classList.toggle('on', !ativando);
-    if (typeof sbToast === 'function') sbToast('err', 'Erro ao salvar');
+    if (btnEl) { btnEl.disabled = false; btnEl.style.opacity = ''; btnEl.style.cursor = 'pointer'; }
+    if (typeof sbToast === 'function') sbToast('err', 'Erro ao salvar — verifique sua conexão');
   }
 }
 
