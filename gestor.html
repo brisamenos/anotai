@@ -951,6 +951,19 @@ function nav(id) {
     </div>
   </div>
 
+  <!-- BAIRROS BLOQUEADOS — vale para qualquer tipo de cobrança -->
+  <div class="card" style="margin-bottom:16px;border-color:rgba(239,68,68,.25);background:rgba(239,68,68,.03)">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <span style="display:flex;align-items:center;gap:8px">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style="color:var(--danger)"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><path d="M3.5 3.5l9 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Bairros que não atendo
+      </span>
+      <button class="btn bg" style="font-size:11px;padding:4px 10px" onclick="addTaxaBairroBloqueado()">+ Adicionar bairro</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin:8px 0 14px">Bairros aqui cadastrados serão bloqueados no checkout do cliente, independente do tipo de taxa configurado acima. Útil para áreas fora do raio de atendimento.</p>
+    <div id="taxa-bairros-bloqueados-list" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
+
   <!-- Preview -->
   <div class="card" id="taxa-preview-block" style="background:rgba(59,130,246,.05);border-color:rgba(59,130,246,.15)">
     <div class="card-title">Prévia — como o cliente vai ver</div>

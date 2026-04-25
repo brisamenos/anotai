@@ -296,6 +296,14 @@ async function renderTaxaPage() {
     bairros.forEach(b => _addBairroRow(b.bairro, b.taxa));
   }
 
+  // Bairros bloqueados (sempre carrega, vale para qualquer tipo)
+  const bloqueados = _taxaConfig.bairros_bloqueados || [];
+  const listBlock = document.getElementById('taxa-bairros-bloqueados-list');
+  if (listBlock) {
+    listBlock.innerHTML = '';
+    bloqueados.forEach(b => _addBairroBloqueadoRow(b));
+  }
+
   onTaxaTipoChange();
 }
 
@@ -340,6 +348,28 @@ function _addBairroRow(bairro, taxa) {
 }
 
 function addTaxaBairroRow() { _addBairroRow('', ''); }
+
+function _addBairroBloqueadoRow(bairro) {
+  const list = document.getElementById('taxa-bairros-bloqueados-list');
+  if (!list) return;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center';
+  row.innerHTML = `
+    <input class="form-input" type="text" placeholder="Ex: Centro" value="${(bairro||'').replace(/"/g,'&quot;')}" style="margin-bottom:0">
+    <button onclick="this.closest('div').remove()" style="width:28px;height:28px;border-radius:7px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.2);color:var(--danger);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">✕</button>
+  `;
+  list.appendChild(row);
+}
+
+function addTaxaBairroBloqueado() { _addBairroBloqueadoRow(''); }
+
+function getTaxaBairrosBloqueadosFromDOM() {
+  const rows = document.querySelectorAll('#taxa-bairros-bloqueados-list > div');
+  return Array.from(rows).map(r => {
+    const input = r.querySelector('input');
+    return (input?.value || '').trim();
+  }).filter(Boolean);
+}
 
 function getTaxaBairrosFromDOM() {
   const rows = document.querySelectorAll('#taxa-bairros-list > div');
@@ -408,6 +438,8 @@ async function saveTaxaConfig() {
     config.faixas  = [];
     config.valor   = 0;
   }
+  // Bairros bloqueados — vale para qualquer tipo
+  config.bairros_bloqueados = getTaxaBairrosBloqueadosFromDOM();
   try {
     await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, delivery_fee_config: config });
     _taxaConfig = config;
