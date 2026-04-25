@@ -715,6 +715,71 @@ input,textarea{font-family:inherit}
 .wp-confirm:active{transform:scale(.98)}
 
 /* ═══════════════════════════════════════
+   MODAL EXTERNO DO WHEEL PICKER
+═══════════════════════════════════════ */
+.hp-modal{
+  position:fixed;inset:0;z-index:9000;
+  display:none;align-items:center;justify-content:center;
+  padding:16px;
+  background:transparent; /* backdrop totalmente transparente */
+  pointer-events:auto;
+}
+.hp-modal.show{ display:flex; animation:hp-fade-in .24s ease forwards }
+.hp-card{
+  position:relative;
+  background:var(--s2);
+  border:1px solid var(--border);
+  border-radius:18px;
+  width:100%;max-width:380px;
+  padding:22px 18px 18px;
+  box-shadow:0 24px 60px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.4);
+  /* Animação inicial: começa pequeno + transladado pra baixo */
+  transform:translateY(24px) scale(.94);
+  opacity:0;
+  animation:hp-slide-up .28s cubic-bezier(.2,.9,.3,1.2) forwards;
+}
+.hp-modal.show .hp-card{
+  /* já cuidado pelo @keyframes — só garante o estado final se animação não rodar */
+}
+@keyframes hp-fade-in{
+  from { opacity:0 } to { opacity:1 }
+}
+@keyframes hp-slide-up{
+  from { transform:translateY(24px) scale(.94); opacity:0 }
+  to   { transform:translateY(0) scale(1); opacity:1 }
+}
+/* Saída — usado quando .show é removido */
+.hp-modal:not(.show) .hp-card{
+  animation:hp-slide-down .22s ease-in forwards;
+}
+@keyframes hp-slide-down{
+  from { transform:translateY(0) scale(1); opacity:1 }
+  to   { transform:translateY(20px) scale(.95); opacity:0 }
+}
+.hp-close{
+  position:absolute;top:10px;right:10px;
+  width:30px;height:30px;border-radius:50%;
+  background:var(--s3);border:1px solid var(--border);
+  color:var(--muted);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;
+}
+.hp-close:hover{ background:rgba(249,115,22,.15);color:var(--accent) }
+.hp-title{
+  font-size:15px;font-weight:700;color:var(--text);
+  text-align:center;margin-bottom:2px;
+}
+.hp-sub{
+  font-size:11.5px;color:var(--muted);
+  text-align:center;margin-bottom:14px;
+}
+/* Dentro do modal externo, o .wp-wrap não precisa de fundo próprio */
+.hp-card .wp-wrap{
+  background:transparent;border:none;padding:0;margin:0;
+}
+.hp-card .wp-mask{ height:260px }
+
+/* ═══════════════════════════════════════
    WHATSAPP TOGGLE (premium)
 ═══════════════════════════════════════ */
 .wa-toggle-row{
@@ -2608,6 +2673,19 @@ input,textarea{font-family:inherit}
       <!-- ── Cross-sell (bebidas, acompanhamentos) ── -->
       <div id="im-xsell-wrap"></div>
     </div>
+  </div>
+</div>
+
+<!-- ══════════════ MODAL EXTERNO: WHEEL PICKER 3D ══════════════ -->
+<div class="hp-modal" id="modal-half-picker" onclick="halfPickerBackdropClick(event)">
+  <div class="hp-card" id="hp-card">
+    <button type="button" class="hp-close" onclick="closeHalfPickerModal()" aria-label="Fechar">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <div class="hp-title">Escolha o sabor</div>
+    <div class="hp-sub">Inteira ou meio a meio</div>
+    <!-- Container onde o renderHalfPicker injeta o wheel -->
+    <div id="hp-list"></div>
   </div>
 </div>
 
