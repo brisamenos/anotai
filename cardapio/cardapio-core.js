@@ -2,6 +2,33 @@
 //  CORE — Tenant, branding, init, realtime, status da loja
 //  Estima Food — Cardápio
 // ══════════════════════════════════════════
+
+// ── Favicon dinâmico (usa logo da loja) ─────────────────
+// Aceita URL absoluta, caminho relativo ou data URL.
+// Em caso de falha de carregamento, mantém o favicon padrão.
+function setFavicon(url) {
+  if (!url) return;
+  // Pré-carrega pra garantir que a imagem é válida antes de trocar
+  const test = new Image();
+  test.onload = () => {
+    // Remove favicons existentes
+    document.querySelectorAll('link[rel~="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]').forEach(el => el.remove());
+    // Favicon padrão (navegador)
+    const link = document.createElement('link');
+    link.rel  = 'icon';
+    link.href = url;
+    // Deixa o navegador auto-detectar o type (png/jpg/webp/svg)
+    document.head.appendChild(link);
+    // Apple touch icon (iOS, PWA "add to home screen")
+    const apple = document.createElement('link');
+    apple.rel  = 'apple-touch-icon';
+    apple.href = url;
+    document.head.appendChild(apple);
+  };
+  test.onerror = () => {}; // mantém favicon atual em caso de falha
+  test.src = url;
+}
+
 async function resolveTenant() {
   const p    = new URLSearchParams(location.search);
   const slug = p.get('slug') || p.get('t');
@@ -147,6 +174,9 @@ function applyBranding(b, nome) {
     logoWrap.innerHTML = '';
     logoWrap.appendChild(img);
   }
+
+  // Favicon dinâmico — usa o logo da loja
+  if (b?.store_logo_url) setFavicon(b.store_logo_url);
 
   // Banner — aparece abaixo das categorias com animação de boneco puxando
   if (b?.store_banner_url) {
@@ -578,6 +608,8 @@ function applyBrandingLive(cfg) {
         logoWrap.appendChild(img);
       }
     }
+    // Atualiza favicon ao mudar o logo em tempo real
+    setFavicon(cfg.store_logo_url);
   }
 
   // Banner
