@@ -559,9 +559,8 @@ function _renderBairrosDropdownCardapio(input) {
     : bairros.slice(0, 8);
   if (!lista.length) { dd.style.display = 'none'; return; }
 
-  dd.innerHTML = lista.map(b => `<div class="bairro-opt-card" data-nome="${(b.bairro || '').replace(/"/g, '&quot;')}" style="padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;align-items:center;color:var(--text)" onmouseover="this.style.background='var(--s2,rgba(0,0,0,.04))'" onmouseout="this.style.background=''">
+  dd.innerHTML = lista.map(b => `<div class="bairro-opt-card" data-nome="${(b.bairro || '').replace(/"/g, '&quot;')}" style="padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);color:var(--text)" onmouseover="this.style.background='var(--s2,rgba(0,0,0,.04))'" onmouseout="this.style.background=''">
     <span>${b.bairro}</span>
-    <span style="color:var(--muted);font-size:11.5px;font-weight:600">R$ ${parseFloat(b.taxa).toFixed(2).replace('.',',')}</span>
   </div>`).join('');
 
   dd.querySelectorAll('.bairro-opt-card').forEach(opt => {
