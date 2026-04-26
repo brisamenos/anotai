@@ -3117,96 +3117,168 @@ Use no seu próximo pedido 🛍️</textarea>
 
 <!-- Novo Pedido -->
 <div class="modal-bg" id="modal-new-order">
-  <div class="modal order-detail modal-fullscreen" style="overflow-y:auto;padding:20px">
-    <button class="modal-close" onclick="closeModal('modal-new-order')"></button>
-    <h2>Novo Pedido</h2>
-
-    <!-- Cliente -->
-    <div class="form-row-2">
-      <div class="form-row"><label class="form-label">Cliente</label><input class="form-input" id="order-client" placeholder="Nome completo"></div>
-      <div class="form-row"><label class="form-label">Telefone</label><input class="form-input" id="order-phone" placeholder="(99) 99999-0000"></div>
+  <div class="modal order-detail modal-fullscreen" style="overflow:hidden;padding:0;display:flex;flex-direction:column">
+    <!-- HEADER STICKY -->
+    <div style="flex-shrink:0;padding:18px 28px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:space-between;gap:16px">
+      <h2 style="margin:0;font-size:20px;font-weight:700;letter-spacing:-.3px">Novo Pedido</h2>
+      <button class="modal-close" onclick="closeModal('modal-new-order')" style="position:static"></button>
     </div>
 
-    <!-- Tipo de entrega -->
-    <div class="form-row" style="margin-bottom:12px">
-      <label class="form-label">Tipo de entrega</label>
-      <div style="display:flex;gap:8px;margin-top:4px">
-        <button class="btn bp" id="no-dtab-delivery"  onclick="noSetDelivery('delivery')"  style="flex:1;justify-content:center;font-size:12px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/></svg> Delivery</button>
-        <button class="btn bg" id="no-dtab-retirada"  onclick="noSetDelivery('retirada')"  style="flex:1;justify-content:center;font-size:12px">Retirada</button>
-        <button class="btn bg" id="no-dtab-mesa" data-hide-acougue onclick="noSetDelivery('mesa')"      style="flex:1;justify-content:center;font-size:12px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="2" y="5" width="12" height="2" rx="1" fill="currentColor"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="8" y1="4" x2="8" y2="2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg> Mesa</button>
-      </div>
-    </div>
-    <div id="no-addr-block">
-      <div class="form-row" style="margin-bottom:6px"><label class="form-label">Rua / Avenida</label><input class="form-input" id="no-f-rua" placeholder="Rua / Avenida"></div>
-      <div class="form-row-2" style="gap:8px;margin-bottom:6px">
-        <div class="form-row" style="margin:0"><label class="form-label">Número</label><input class="form-input" id="no-f-num" placeholder="Nº"></div>
-        <div class="form-row" style="margin:0;position:relative"><label class="form-label">Bairro</label>
-          <input class="form-input" id="no-f-bairro" placeholder="Bairro" oninput="noOnBairroInput(this)" onfocus="noOnBairroFocus(this)" autocomplete="off">
-          <div id="no-bairros-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;max-height:180px;overflow-y:auto;z-index:50;margin-top:2px;box-shadow:0 6px 18px rgba(0,0,0,0.18)"></div>
+    <!-- CONTEÚDO: 2 COLUNAS -->
+    <div style="flex:1;display:grid;grid-template-columns:1fr 380px;gap:0;overflow:hidden;min-height:0">
+      <!-- ESQUERDA: Form + Lista de produtos -->
+      <div style="overflow-y:auto;padding:20px 28px;border-right:1px solid var(--border)">
+
+        <!-- Cliente -->
+        <div class="form-row-2" style="margin-bottom:14px">
+          <div class="form-row" style="margin:0"><label class="form-label">Cliente</label><input class="form-input" id="order-client" placeholder="Nome completo"></div>
+          <div class="form-row" style="margin:0"><label class="form-label">Telefone</label><input class="form-input" id="order-phone" placeholder="(99) 99999-0000"></div>
+        </div>
+
+        <!-- Tipo de entrega — tabs grandes coloridas -->
+        <div style="margin-bottom:14px">
+          <label class="form-label" style="margin-bottom:6px;display:block">Tipo de entrega</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+            <button id="no-dtab-delivery" onclick="noSetDelivery('delivery')" type="button" class="no-dtab-btn no-dtab-delivery" style="padding:14px 12px;border-radius:10px;border:2px solid var(--border);background:var(--surface2);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:6px;transition:all .15s ease">
+              <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/></svg>
+              Delivery
+            </button>
+            <button id="no-dtab-retirada" onclick="noSetDelivery('retirada')" type="button" class="no-dtab-btn no-dtab-retirada" style="padding:14px 12px;border-radius:10px;border:2px solid var(--border);background:var(--surface2);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:6px;transition:all .15s ease">
+              <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M2 6.5L8 2l6 4.5V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6 14V9h4v5" stroke="currentColor" stroke-width="1.4"/></svg>
+              Retirada
+            </button>
+            <button id="no-dtab-mesa" data-hide-acougue onclick="noSetDelivery('mesa')" type="button" class="no-dtab-btn no-dtab-mesa" style="padding:14px 12px;border-radius:10px;border:2px solid var(--border);background:var(--surface2);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:6px;transition:all .15s ease">
+              <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="2" rx="1" fill="currentColor"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="8" y1="4" x2="8" y2="2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              Mesa
+            </button>
+          </div>
+        </div>
+
+        <!-- Endereço (delivery) -->
+        <div id="no-addr-block" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">📍 Endereço de entrega</div>
+          <div class="form-row" style="margin-bottom:8px"><label class="form-label">Rua / Avenida</label><input class="form-input" id="no-f-rua" placeholder="Rua / Avenida"></div>
+          <div class="form-row-2" style="gap:8px;margin-bottom:8px">
+            <div class="form-row" style="margin:0"><label class="form-label">Número</label><input class="form-input" id="no-f-num" placeholder="Nº"></div>
+            <div class="form-row" style="margin:0;position:relative"><label class="form-label">Bairro</label>
+              <input class="form-input" id="no-f-bairro" placeholder="Bairro" oninput="noOnBairroInput(this)" onfocus="noOnBairroFocus(this)" autocomplete="off">
+              <div id="no-bairros-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;max-height:180px;overflow-y:auto;z-index:50;margin-top:2px;box-shadow:0 6px 18px rgba(0,0,0,0.18)"></div>
+            </div>
+          </div>
+          <div class="form-row" style="margin-bottom:8px"><label class="form-label">Complemento (opcional)</label><input class="form-input" id="no-f-compl" placeholder="Apto, bloco, casa..."></div>
+          <div class="form-row" style="margin-bottom:10px"><label class="form-label">Ponto de referência</label><input class="form-input" id="no-f-referencia" placeholder="Ex: próximo ao mercado, em frente à praça..."></div>
+
+          <!-- Taxa de entrega -->
+          <div class="form-row" style="margin:0">
+            <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span>Taxa de entrega (R$)</span>
+              <span id="no-taxa-info" style="font-size:10.5px;font-weight:500;color:var(--muted);text-transform:none;letter-spacing:0"></span>
+            </label>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input class="form-input" id="no-taxa-val" type="number" step="0.50" min="0" placeholder="0,00" style="flex:1" oninput="_noTaxaManualOverride=true; if(typeof noRenderCart==='function') noRenderCart();">
+              <button type="button" class="btn bg" style="font-size:11px;padding:7px 10px;white-space:nowrap" onclick="noResetTaxaAuto()" title="Recalcular pelo bairro">Auto</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mesa -->
+        <div id="no-mesa-block" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">🪑 Atendimento na mesa</div>
+          <div class="form-row" style="margin:0"><label class="form-label">Número da mesa</label><select class="form-input" id="order-mesa"><option value="">Selecione a mesa...</option></select></div>
+        </div>
+
+        <!-- Pagamento e observação -->
+        <div class="form-row-2" style="margin-bottom:18px">
+          <div class="form-row" style="margin:0">
+            <label class="form-label">Pagamento</label>
+            <select id="order-pag" class="form-input" style="width:100%">
+              <option value="Dinheiro">💵 Dinheiro</option>
+              <option value="Cartão">💳 Cartão</option>
+              <option value="PIX" selected>⚡ PIX</option>
+            </select>
+          </div>
+          <div class="form-row" style="margin:0"><label class="form-label">Observação geral</label><input class="form-input" id="order-obs" placeholder="Ex: sem cebola, troco para R$50..."></div>
+        </div>
+
+        <!-- Lista de produtos -->
+        <div style="margin-bottom:8px">
+          <label class="form-label" style="margin-bottom:6px;display:flex;align-items:center;justify-content:space-between">
+            <span>Adicionar produtos</span>
+            <span style="font-size:10px;font-weight:500;color:var(--muted);text-transform:none;letter-spacing:0">Clique para adicionar</span>
+          </label>
+          <div class="sbox" style="max-width:100%;margin-top:4px;margin-bottom:10px">
+            <svg viewBox="0 0 16 16" fill="none" width="14" height="14" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            <input type="text" id="no-search" placeholder="Buscar produto por nome..." oninput="noFilterItems(this.value)" style="background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);width:100%">
+          </div>
+          <div id="no-items-list" style="border:1px solid var(--border);border-radius:10px;background:var(--surface2)"></div>
         </div>
       </div>
-      <div class="form-row" style="margin-bottom:6px"><label class="form-label">Complemento (opcional)</label><input class="form-input" id="no-f-compl" placeholder="Apto, bloco, casa..."></div>
-      <div class="form-row" style="margin-bottom:8px"><label class="form-label">Ponto de referência</label><input class="form-input" id="no-f-referencia" placeholder="Ex: próximo ao mercado, em frente à praça..."></div>
 
-      <!-- Taxa de entrega -->
-      <div class="form-row" style="margin-bottom:10px">
-        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-          <span>Taxa de entrega (R$)</span>
-          <span id="no-taxa-info" style="font-size:10.5px;font-weight:500;color:var(--muted);text-transform:none;letter-spacing:0"></span>
-        </label>
-        <div style="display:flex;gap:6px;align-items:center">
-          <input class="form-input" id="no-taxa-val" type="number" step="0.50" min="0" placeholder="0,00" style="flex:1" oninput="_noTaxaManualOverride=true">
-          <button type="button" class="btn bg" style="font-size:11px;padding:7px 10px;white-space:nowrap" onclick="noResetTaxaAuto()" title="Recalcular pelo bairro">Auto</button>
+      <!-- DIREITA: Carrinho fixo (sticky no layout grid) -->
+      <div style="display:flex;flex-direction:column;background:var(--surface2);overflow:hidden;min-height:0">
+        <div style="flex-shrink:0;padding:18px 22px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Itens selecionados</div>
+            <div id="no-cart-counter" style="font-size:18px;font-weight:700;margin-top:2px">0 itens</div>
+          </div>
+          <svg width="22" height="22" viewBox="0 0 16 16" fill="none" style="color:var(--muted)"><path d="M1.5 2H3l2 9h8l2-7H4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="14" r="1" fill="currentColor"/><circle cx="12" cy="14" r="1" fill="currentColor"/></svg>
+        </div>
+
+        <div id="no-cart" style="flex:1;overflow-y:auto;padding:8px 22px 16px;min-height:0">
+          <div id="no-cart-empty" style="text-align:center;padding:40px 12px;color:var(--muted);font-size:12.5px">
+            <svg width="44" height="44" viewBox="0 0 16 16" fill="none" style="opacity:.3;margin-bottom:10px"><path d="M1.5 2H3l2 9h8l2-7H4" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="14" r="1" fill="currentColor"/><circle cx="12" cy="14" r="1" fill="currentColor"/></svg>
+            <div>Nenhum item adicionado ainda</div>
+            <div style="font-size:11px;margin-top:4px;opacity:.7">Use a busca à esquerda para adicionar produtos</div>
+          </div>
+        </div>
+
+        <!-- Resumo no rodapé do carrinho -->
+        <div id="no-cart-summary" style="flex-shrink:0;padding:14px 22px;border-top:1px solid var(--border);background:var(--surface);display:none">
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-bottom:4px">
+            <span>Subtotal</span>
+            <span id="no-subtotal-display">R$ 0,00</span>
+          </div>
+          <div id="no-taxa-line" style="display:none;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-bottom:4px">
+            <span>Taxa de entrega</span>
+            <span id="no-taxa-display">R$ 0,00</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700;margin-top:6px;padding-top:8px;border-top:1px dashed var(--border)">
+            <span>Total</span>
+            <span id="no-total-display" style="color:var(--success)">R$ 0,00</span>
+          </div>
         </div>
       </div>
     </div>
-    <div id="no-mesa-block" style="display:none">
-      <div class="form-row"><label class="form-label">Número da mesa</label><select class="form-input" id="order-mesa"><option value="">Selecione a mesa...</option></select></div>
-    </div>
 
-    <!-- Busca e lista de produtos -->
-    <div class="form-row" style="margin-bottom:6px">
-      <label class="form-label">Adicionar produtos</label>
-      <div class="sbox" style="max-width:100%;margin-top:4px">
-        <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="color:var(--muted);flex-shrink:0"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        <input type="text" id="no-search" placeholder="Buscar produto..." oninput="noFilterItems(this.value)" style="background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:12.5px;color:var(--text);width:100%">
+    <!-- FOOTER STICKY -->
+    <div style="flex-shrink:0;padding:14px 28px;border-top:1px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:space-between;gap:14px">
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <span style="font-size:12px;color:var(--muted);font-weight:600">Total a cobrar:</span>
+        <span id="no-footer-total" style="font-size:24px;font-weight:800;color:var(--success);font-family:'Playfair Display',serif">R$ 0,00</span>
       </div>
-    </div>
-    <div id="no-items-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:14px"></div>
-
-    <!-- Carrinho do pedido -->
-    <div style="margin-bottom:14px">
-      <label class="form-label" style="margin-bottom:6px;display:block">Itens selecionados</label>
-      <div id="no-cart" style="min-height:40px;border:1px solid var(--border);border-radius:10px;padding:8px">
-        <div id="no-cart-empty" style="text-align:center;padding:12px;color:var(--muted);font-size:12.5px">Nenhum item adicionado ainda</div>
+      <div style="display:flex;gap:10px">
+        <button class="btn bg" style="padding:10px 22px;font-size:13px" onclick="closeModal('modal-new-order')">Cancelar</button>
+        <button class="btn bp" id="no-criar-btn" style="padding:10px 26px;font-size:13.5px;font-weight:700" onclick="createOrder()" title="Atalho: Ctrl+Enter">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;margin-right:5px"><path d="M3 8l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span id="no-criar-btn-label">Criar pedido</span>
+        </button>
       </div>
-      <div style="display:flex;justify-content:flex-end;margin-top:8px;gap:16px;font-size:13px">
-        <span style="color:var(--muted)">Total:</span>
-        <span id="no-total-display" style="font-weight:700;color:var(--success)">R$ 0,00</span>
-      </div>
-    </div>
-
-    <!-- Pagamento e observação -->
-    <div class="form-row-2">
-      <div class="form-row">
-        <label class="form-label">Pagamento</label>
-        <div class="sw" style="width:100%">
-          <select id="order-pag" class="form-input" style="width:100%">
-            <option value="Dinheiro">Dinheiro</option>
-            <option value="Cartão">Cartão</option>
-            <option value="PIX" selected>PIX</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-row"><label class="form-label">Observação geral</label><input class="form-input" id="order-obs" placeholder="Ex: sem cebola, troco para R$50..."></div>
-    </div>
-
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-new-order')">Cancelar</button>
-      <button class="btn bp" style="flex:1;justify-content:center" onclick="createOrder()">Criar pedido</button>
     </div>
   </div>
 </div>
+
+<style>
+/* Tabs de tipo de entrega — cores quando ativas */
+.no-dtab-btn.on.no-dtab-delivery{ border-color:#3b82f6;background:rgba(59,130,246,.1);color:#3b82f6 }
+.no-dtab-btn.on.no-dtab-retirada{ border-color:#22c55e;background:rgba(34,197,94,.1);color:#22c55e }
+.no-dtab-btn.on.no-dtab-mesa    { border-color:#f59e0b;background:rgba(245,158,11,.1);color:#f59e0b }
+.no-dtab-btn:hover:not(.on){ border-color:var(--muted);background:rgba(255,255,255,.04) }
+/* Animação ao adicionar item */
+@keyframes noCartPulse { 0%{transform:scale(1)} 50%{transform:scale(1.04);background:rgba(34,197,94,.08)} 100%{transform:scale(1)} }
+.no-cart-row.pulse{ animation:noCartPulse .35s ease }
+/* Botão Criar quando vazio */
+#no-criar-btn:disabled{ opacity:.45;cursor:not-allowed }
+</style>
 
 <!-- Detalhe Pedido -->
 <div class="modal-bg" id="modal-order-detail">

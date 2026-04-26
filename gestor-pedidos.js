@@ -960,10 +960,7 @@ function noSetDelivery(tipo) {
   ['delivery', 'retirada', 'mesa'].forEach(t => {
     const btn = document.getElementById('no-dtab-' + t);
     if (!btn) return;
-    btn.className = t === tipo ? 'btn bp' : 'btn bg';
-    btn.style.flex = '1';
-    btn.style.justifyContent = 'center';
-    btn.style.fontSize = '12px';
+    btn.classList.toggle('on', t === tipo);
   });
   document.getElementById('no-addr-block').style.display = tipo === 'delivery' ? '' : 'none';
   // Ao voltar pra delivery, garante que a taxa esteja calculada de novo
@@ -986,6 +983,8 @@ function noSetDelivery(tipo) {
       }
     }
   }
+  // Re-renderiza carrinho pra atualizar linha da taxa (visível só em delivery)
+  if (typeof noRenderCart === 'function') noRenderCart();
 }
 
 function noFilterItems(q) {
@@ -1061,6 +1060,17 @@ function noAddToCartDireto(item, name, price, obs, grupos) {
     _noCart.push({ id: item.id, name, qty: 1, price, emoji: item.emoji || '🍽️', obs, _grupos: grupos });
   }
   noRenderCart();
+  // Animação de pulse no item recém-adicionado
+  setTimeout(() => {
+    const rows = document.querySelectorAll('#no-cart .no-cart-row');
+    const idx = _noCart.findIndex(c => c.id === item.id && c.obs === obs && c.name === name);
+    if (idx >= 0 && rows[idx]) {
+      rows[idx].classList.add('pulse');
+      setTimeout(() => rows[idx].classList.remove('pulse'), 400);
+      // Auto-scroll do carrinho pro item
+      rows[idx].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, 30);
   sbToast('ok', name + ' adicionado!');
 }
 
@@ -1294,35 +1304,71 @@ function noChangeQty(itemId, delta) {
 function noRenderCart() {
   const el = document.getElementById('no-cart');
   const empty = document.getElementById('no-cart-empty');
-  const totalEl = document.getElementById('no-total-display');
+  const subEl    = document.getElementById('no-subtotal-display');
+  const taxaLine = document.getElementById('no-taxa-line');
+  const taxaEl   = document.getElementById('no-taxa-display');
+  const totalEl  = document.getElementById('no-total-display');
+  const footEl   = document.getElementById('no-footer-total');
+  const counter  = document.getElementById('no-cart-counter');
+  const summary  = document.getElementById('no-cart-summary');
+  const btn      = document.getElementById('no-criar-btn');
+  const btnLabel = document.getElementById('no-criar-btn-label');
   if (!el) return;
+
+  // Limpa rows anteriores
+  el.querySelectorAll('.no-cart-row').forEach(r => r.remove());
+
+  const totalQty = _noCart.reduce((s, c) => s + c.qty, 0);
+
   if (!_noCart.length) {
-    if (empty) empty.style.display = '';
-    el.querySelectorAll('.no-cart-row').forEach(r => r.remove());
+    if (empty)   empty.style.display = '';
+    if (summary) summary.style.display = 'none';
+    if (counter) counter.textContent = '0 itens';
+    if (subEl)   subEl.textContent   = 'R$ 0,00';
     if (totalEl) totalEl.textContent = 'R$ 0,00';
+    if (footEl)  footEl.textContent  = 'R$ 0,00';
+    if (btn) { btn.disabled = true; }
+    if (btnLabel) btnLabel.textContent = 'Criar pedido';
     return;
   }
-  if (empty) empty.style.display = 'none';
-  el.querySelectorAll('.no-cart-row').forEach(r => r.remove());
+
+  if (empty)   empty.style.display = 'none';
+  if (summary) summary.style.display = '';
+  if (counter) counter.textContent = `${totalQty} ${totalQty === 1 ? 'item' : 'itens'}`;
+
   const frag = document.createDocumentFragment();
   _noCart.forEach(c => {
     const div = document.createElement('div');
     div.className = 'no-cart-row';
-    div.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--border)';
+    div.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid var(--border)';
     div.innerHTML = `
-      <span style="font-size:18px">${c.emoji}</span>
-      <span style="flex:1;font-size:13px;font-weight:500">${c.name}</span>
-      <div style="display:flex;align-items:center;gap:6px">
-        <button onclick="noChangeQty(${c.id},-1)" style="width:24px;height:24px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">−</button>
-        <span style="font-size:13px;font-weight:700;min-width:20px;text-align:center">${c.qty}</span>
-        <button onclick="noChangeQty(${c.id},1)"  style="width:24px;height:24px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">+</button>
+      <span style="font-size:18px;flex-shrink:0">${c.emoji || '🍽️'}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12.5px;font-weight:600;line-height:1.3;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:1px">R$ ${parseFloat(c.price).toFixed(2).replace('.', ',')} cada</div>
       </div>
-      <span style="font-size:12.5px;font-weight:700;color:var(--success);min-width:60px;text-align:right">R$ ${(c.price * c.qty).toFixed(2).replace('.', ',')}</span>`;
+      <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+        <button onclick="noChangeQty(${c.id},-1)" style="width:24px;height:24px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">−</button>
+        <span style="font-size:13px;font-weight:700;min-width:18px;text-align:center">${c.qty}</span>
+        <button onclick="noChangeQty(${c.id},1)"  style="width:24px;height:24px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">+</button>
+      </div>
+      <span style="font-size:12.5px;font-weight:700;color:var(--success);min-width:60px;text-align:right;flex-shrink:0">R$ ${(c.price * c.qty).toFixed(2).replace('.', ',')}</span>`;
     frag.appendChild(div);
   });
   el.appendChild(frag);
-  const total = _noCart.reduce((s, c) => s + c.price * c.qty, 0);
+
+  const subtotal = _noCart.reduce((s, c) => s + c.price * c.qty, 0);
+  // Taxa só conta para delivery
+  const taxa = (_noDelivery === 'delivery') ? (parseFloat(document.getElementById('no-taxa-val')?.value) || 0) : 0;
+  const total = subtotal + taxa;
+
+  if (subEl)   subEl.textContent   = 'R$ ' + subtotal.toFixed(2).replace('.', ',');
+  if (taxaLine) taxaLine.style.display = (_noDelivery === 'delivery' && taxa > 0) ? 'flex' : 'none';
+  if (taxaEl)  taxaEl.textContent  = 'R$ ' + taxa.toFixed(2).replace('.', ',');
   if (totalEl) totalEl.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+  if (footEl)  footEl.textContent  = 'R$ ' + total.toFixed(2).replace('.', ',');
+  if (btn)     btn.disabled = false;
+  if (btnLabel) btnLabel.textContent = `Criar pedido (${totalQty})`;
 }
 
 // ── Config de taxa carregada ao abrir o modal ──
@@ -1403,6 +1449,8 @@ function noUpdateTaxaAuto() {
     info.style.color = infoCor || '';
     info.style.fontWeight = infoCor ? '700' : '';
   }
+  // Re-renderiza carrinho pra refletir a taxa no total/footer
+  if (typeof noRenderCart === 'function') noRenderCart();
 }
 
 // Botão "Auto" — força recálculo (limpa override manual)
@@ -1502,6 +1550,20 @@ async function noOpenModal() {
   };
   initClienteAutocomplete('order-client', { nameId: 'order-client', phoneId: 'order-phone', onSelect: onSelectCliente });
   initClienteAutocomplete('order-phone',  { nameId: 'order-client', phoneId: 'order-phone', onSelect: onSelectCliente });
+
+  // Atalho Ctrl+Enter para criar pedido (ativo enquanto o modal está aberto)
+  if (!window._noKbdHook) {
+    window._noKbdHook = (e) => {
+      const modal = document.getElementById('modal-new-order');
+      if (!modal || !modal.classList.contains('on')) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        const btn = document.getElementById('no-criar-btn');
+        if (btn && !btn.disabled) btn.click();
+      }
+    };
+    document.addEventListener('keydown', window._noKbdHook);
+  }
 }
 
 // Tenta separar uma string de endereço em rua/num/bairro/compl/referencia.
