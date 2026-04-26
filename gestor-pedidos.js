@@ -1936,6 +1936,148 @@ async function createOrder() {
 
   if (!_noCart.length) { window._pdvCriandoPedido = false; sbToast('err', 'Adicione pelo menos um produto'); return; }
 
+  // ── PEDIDO DE MESA — segue o mesmo formato do garçom (status: 'mesa_aberta',
+  // itens com item_status: 'producao'). Isso garante que:
+  //   • o kanban exibe corretamente em "Em produção" (não em "Pronto")
+  //   • o garçom vê a mesa como ocupada
+  //   • qualquer garçom pode adicionar itens à mesa aberta pelo gestor
+  if (_noDelivery === 'mesa') {
+    if (!mesaNum) { window._pdvCriandoPedido = false; sbToast('err', 'Selecione a mesa'); return; }
+    try {
+      sbLoading(true);
+      if (!_sessao?.tenant_id) { sbLoading(false); sbToast('err', 'Sessão sem tenant — recarregue'); return; }
+
+      // 1. Garante que a mesa esteja marcada como busy + opened_at
+      const mesaAtual = (typeof tables !== 'undefined' ? tables : []).find(t => t.num === mesaNum);
+      const _now = new Date().toISOString();
+      const shouldSetOpenedAt = !mesaAtual || mesaAtual.status === 'free' || !mesaAtual.opened_at;
+      const mesaPayload = shouldSetOpenedAt
+        ? { status: 'busy', opened_at: _now, updated_at: _now }
+        : { status: 'busy', updated_at: _now };
+      await sb.from('mesas').update(mesaPayload).eq('num', mesaNum);
+      if (mesaAtual) {
+        mesaAtual.status = 'busy';
+        mesaAtual.updated_at = _now;
+        if (shouldSetOpenedAt) mesaAtual.opened_at = _now;
+      }
+
+      // 2. Monta itens com item_status: 'producao' (formato garçom)
+      const _ts = Date.now();
+      const newItems = _noCart.map((c, idx) => ({
+        id: c.id,
+        qty: c.qty,
+        name: c.name,
+        price: c.price,
+        obs: c.obs || '',
+        emoji: c.emoji || '',
+        item_status: 'producao',
+        item_id: `${_ts}_g${idx}`,
+        added_at: new Date().toISOString(),
+        garcom_id: null,
+        garcom_nome: 'Gestor'
+      }));
+      if (obs && newItems.length) {
+        const last = newItems[newItems.length - 1];
+        last.obs = last.obs ? `${last.obs} · ${obs}` : obs;
+      }
+
+      // 3. Verifica se já existe comanda mesa_aberta para esta mesa (sessão atual)
+      const sessionStartTs = mesaAtual?.opened_at
+        ? new Date(new Date(mesaAtual.opened_at).getTime() - 5000).getTime()
+        : null;
+      const { data: existingArr } = await sb.from('orders')
+        .select('*')
+        .eq('mesa_num', mesaNum)
+        .eq('status', 'mesa_aberta')
+        .order('id', { ascending: false })
+        .limit(5);
+      const existing = (Array.isArray(existingArr) ? existingArr : []).find(o => {
+        if (!sessionStartTs) return true;
+        return new Date(o.created_at || 0).getTime() >= sessionStartTs;
+      }) || null;
+
+      let savedOrder;
+      if (existing) {
+        // Acrescenta à comanda existente (UPDATE)
+        const existingItems = (() => {
+          if (Array.isArray(existing.items)) return existing.items;
+          try { return JSON.parse(existing.items || '[]'); } catch { return []; }
+        })();
+        const updatedItems = [...existingItems, ...newItems];
+        const newTotal = updatedItems
+          .filter(i => i.item_status !== 'cancelado')
+          .reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+        const { data, error } = await sb.from('orders')
+          .update({ items: updatedItems, total: newTotal, updated_at: _now })
+          .eq('id', existing.id)
+          .select()
+          .single();
+        if (error) throw error;
+        savedOrder = data;
+      } else {
+        // Cria nova comanda mesa_aberta (INSERT)
+        const newTotal = newItems.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+        const { data, error } = await sb.from('orders').insert({
+          tenant_id: _sessao.tenant_id,
+          client: client || `Mesa ${mesaNum}`,
+          phone: phone || '',
+          addr,
+          items: newItems,
+          total: newTotal,
+          taxa: 0,
+          mesa_num: mesaNum,
+          status: 'mesa_aberta',
+          time,
+          pag: pag || 'Mesa'
+        }).select().single();
+        if (error) throw error;
+        savedOrder = data;
+      }
+
+      // 4. Atualiza cache local de mesas (mesaOrdersCache) — não vai pro ordersKanban
+      if (typeof mesaOrdersCache !== 'undefined') {
+        const enriched = {
+          ...savedOrder,
+          items: (() => {
+            if (Array.isArray(savedOrder.items)) return savedOrder.items;
+            try { return JSON.parse(savedOrder.items || '[]'); } catch { return []; }
+          })(),
+          num: (typeof _orderNum === 'function') ? _orderNum(savedOrder.id, savedOrder.order_num) : savedOrder.id
+        };
+        const idx = mesaOrdersCache.findIndex(o => o.id === savedOrder.id);
+        if (idx !== -1) mesaOrdersCache[idx] = enriched;
+        else mesaOrdersCache.unshift(enriched);
+      }
+
+      // Marca ID como criado pelo PDV
+      if (!window._pdvCreatedIds) window._pdvCreatedIds = new Set();
+      window._pdvCreatedIds.add(Number(savedOrder.id));
+      if (Number(savedOrder.id) > (_maxKnownOrderId || 0)) _maxKnownOrderId = Number(savedOrder.id);
+
+      // Re-renderiza kanban (vai mostrar a comanda em "Em produção" via _buildMesaKanbanOrders)
+      if (typeof renderKanban === 'function') renderKanban();
+      // Re-renderiza página de mesas se estiver visível
+      if (typeof renderMesasPage === 'function') renderMesasPage();
+      if (typeof renderQR === 'function') renderQR();
+
+      sbLoading(false);
+      playOrderSound();
+      const nc = document.getElementById('notif-count');
+      if (nc) { nc.style.display = 'flex'; nc.textContent = parseInt(nc.textContent || 0) + 1; }
+      closeModal('modal-new-order');
+      nav('pedidos');
+      sbToast('ok', existing ? `Itens adicionados à Mesa ${mesaNum}` : `Mesa ${mesaNum} aberta`);
+    } catch (e) {
+      sbLoading(false);
+      console.error('[createOrder/mesa]', e);
+      sbToast('err', 'Erro ao abrir mesa: ' + (e?.message || e));
+    } finally {
+      window._pdvCriandoPedido = false;
+    }
+    return;
+  }
+
+  // ── PEDIDOS DE DELIVERY E RETIRADA — fluxo original (status: 'analise')
   // Preserva o `obs` de cada item (que já vem com os adicionais formatados pelo modal).
   // Se o usuário digitou uma observação geral, anexa apenas no último item.
   const itemsArr = _noCart.map(c => ({
@@ -1962,7 +2104,8 @@ async function createOrder() {
       total: tot,
       taxa,
       mesa_num: mesaNum,
-      status: 'analise',
+      // Pedido criado pelo gestor no PDV já entra em produção (pula análise)
+      status: 'producao',
       time, pag
     }).select().single();
 
