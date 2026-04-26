@@ -4591,6 +4591,18 @@ Use no seu próximo pedido 🛍️</textarea>
           </div>
         </label>
       </div>
+
+      <!-- Pausa rápida de delivery (mantém retirada/mesa ativos) -->
+      <div id="cp-pausa-delivery-block" style="margin-top:12px;padding:12px;border-radius:9px;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2)">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="cp-pausa-delivery" style="width:15px;height:15px;accent-color:#d97706" onchange="cpPausaDeliveryChange()">
+          <div style="flex:1">
+            <div style="font-size:12.5px;font-weight:700;color:#b45309">⏸ Pausar delivery temporariamente</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">Útil em horários de pico ou cozinha sobrecarregada. Retirada e mesa continuam ativos.</div>
+          </div>
+        </label>
+        <div id="cp-pausa-delivery-status" style="display:none;margin-top:8px;font-size:11.5px;color:#b45309;font-weight:600">⚠ Delivery pausado para os clientes do cardápio público</div>
+      </div>
     </div>
   </div>
 

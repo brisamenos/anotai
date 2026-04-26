@@ -200,6 +200,48 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ── Tempo de entrega estimado (ajusta dinamicamente conforme backlog) ─
+  // Conta pedidos ativos (analise/producao/pronto) e adiciona overhead à
+  // string base configurada em store_tempo_entrega.
+  if (req.method === 'GET' && upath === '/api/tempo-estimado') {
+    const tid = getTenantId(req, params)
+    if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    try {
+      const cfg = db.prepare('SELECT store_tempo_entrega FROM store_config WHERE tenant_id=?').get(tid)
+      const baseStr = (cfg?.store_tempo_entrega || '').trim()
+
+      // Extrai range numérico da string (ex: "30-45 min", "30 min", "45")
+      // Suporta ambos os hífens (- e –) e formatos "30 a 45"
+      let lo = 30, hi = 45 // defaults
+      const m = baseStr.match(/(\d+)\s*[-–a]\s*(\d+)/) || baseStr.match(/(\d+)/)
+      if (m) {
+        lo = parseInt(m[1])
+        hi = parseInt(m[2] || m[1]) || lo + 15
+      }
+
+      // Conta backlog: pedidos delivery em produção
+      const backlog = db.prepare(
+        "SELECT COUNT(*) as n FROM orders WHERE tenant_id=? AND status IN ('analise','producao','pronto') AND addr IS NOT NULL AND addr NOT LIKE 'Mesa%' AND addr NOT LIKE 'Retirada%'"
+      ).get(tid)?.n || 0
+
+      // Heurística: cada 3 pedidos de backlog adiciona +5 min
+      // Limita a +30 min de overhead pra não assustar
+      const overhead = Math.min(Math.floor(backlog / 3) * 5, 30)
+      const finalLo = lo + overhead
+      const finalHi = hi + overhead
+      const isHighDemand = backlog >= 6
+
+      send(res, 200, {
+        base: baseStr,
+        backlog,
+        overhead_min: overhead,
+        tempo_estimado: `${finalLo}-${finalHi} min`,
+        alta_demanda: isHighDemand
+      })
+    } catch (e) { send(res, 400, { error: e.message }) }
+    return true
+  }
+
   // ── Pedidos do cliente ───────────────────────────────
   if (req.method === 'GET' && upath === '/api/customer-orders') {
     const tid = getTenantId(req, params)

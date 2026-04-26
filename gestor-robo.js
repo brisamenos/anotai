@@ -704,7 +704,7 @@ let _cpBannerUrl = '';
 
 async function loadCardapioPublico() {
   const { data } = await sb.from('store_config').select(
-    'store_name,store_descricao,store_logo_url,store_banner_url,store_cor,store_tema,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega'
+    'store_name,store_descricao,store_logo_url,store_banner_url,store_cor,store_tema,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega,delivery_fee_config'
   ).single();
   if (!data) return;
 
@@ -730,6 +730,15 @@ async function loadCardapioPublico() {
   if (el_r) el_r.checked = tipos.includes('retirada');
   if (el_m) el_m.checked = tipos.includes('mesa');
   cpTipoChange(); // atualiza bordas visuais
+
+  // Pausa de delivery — vem dentro do delivery_fee_config
+  const feeCfg = data.delivery_fee_config || {};
+  const elPausa = document.getElementById('cp-pausa-delivery');
+  const elPausaStatus = document.getElementById('cp-pausa-delivery-status');
+  if (elPausa) {
+    elPausa.checked = !!feeCfg.delivery_pausado;
+    if (elPausaStatus) elPausaStatus.style.display = feeCfg.delivery_pausado ? '' : 'none';
+  }
 
   // Horários de funcionamento
   let horarios = {};
@@ -988,6 +997,32 @@ function cpGetTiposEntrega() {
   // Garante pelo menos delivery
   if (!tipos.length) tipos.push('delivery');
   return tipos;
+}
+
+// Pausa rápida de delivery — salva IMEDIATAMENTE no clique
+// (preserva resto da config do delivery_fee_config)
+async function cpPausaDeliveryChange() {
+  const cb     = document.getElementById('cp-pausa-delivery');
+  const status = document.getElementById('cp-pausa-delivery-status');
+  if (!cb) return;
+  const pausado = !!cb.checked;
+  if (status) status.style.display = pausado ? '' : 'none';
+  try {
+    const { data } = await sb.from('store_config').select('delivery_fee_config').single();
+    const cfg = (data && typeof data.delivery_fee_config === 'object') ? data.delivery_fee_config : {};
+    cfg.delivery_pausado = pausado;
+    const { error } = await sb.from('store_config').upsert({
+      tenant_id: _sessao?.tenant_id,
+      delivery_fee_config: cfg
+    });
+    if (error) throw error;
+    sbToast('ok', pausado ? '⏸ Delivery pausado para clientes' : '✅ Delivery reativado');
+  } catch (e) {
+    sbToast('err', 'Erro ao salvar: ' + (e.message || JSON.stringify(e)));
+    // Reverte UI em caso de erro
+    cb.checked = !pausado;
+    if (status) status.style.display = !pausado ? '' : 'none';
+  }
 }
 
 function cpGetStoreLoc() {
