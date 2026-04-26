@@ -987,18 +987,68 @@ function noSetDelivery(tipo) {
   if (typeof noRenderCart === 'function') noRenderCart();
 }
 
+// Categoria atualmente selecionada nos chips do PDV (null = todas)
+let _noCatFilter = null;
+
+function noRenderCategoriasChips() {
+  const wrap = document.getElementById('no-cats-chips');
+  if (!wrap) return;
+  // Coleta categorias dos itens ativos, preservando ordem do `categories` array global
+  const itensAtivos = (items || []).filter(i => i.status !== 'pausado');
+  const cats = [];
+  const seen = new Set();
+  // Usa ordem de `categories` (se disponível) — chega isso de gestor-cardapio
+  const catsOrder = (typeof categories !== 'undefined' && Array.isArray(categories))
+    ? categories.filter(c => c.ativo).map(c => c.name)
+    : [];
+  catsOrder.forEach(cn => {
+    if (itensAtivos.some(i => (i.cat || i.cat_key) === cn)) { cats.push(cn); seen.add(cn); }
+  });
+  // Adiciona categorias que existem nos itens mas não estão em `categories`
+  itensAtivos.forEach(i => {
+    const c = i.cat || i.cat_key || 'Outros';
+    if (!seen.has(c)) { cats.push(c); seen.add(c); }
+  });
+
+  if (!cats.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'flex';
+
+  const chipBase = 'flex-shrink:0;padding:7px 14px;border-radius:99px;border:1.5px solid var(--border);background:var(--surface);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s ease;font-family:inherit;color:var(--text)';
+  const chipActive = 'border-color:var(--accent);background:var(--accent);color:#fff';
+
+  wrap.innerHTML = `
+    <button type="button" data-cat="" onclick="noSetCatFilter('')" style="${chipBase}${_noCatFilter==null?';'+chipActive:''}">Todas (${itensAtivos.length})</button>
+    ${cats.map(cn => {
+      const n = itensAtivos.filter(i => (i.cat || i.cat_key) === cn).length;
+      const ativo = _noCatFilter === cn;
+      return `<button type="button" data-cat="${cn.replace(/"/g, '&quot;')}" onclick="noSetCatFilter('${cn.replace(/'/g, "\\'")}')" style="${chipBase}${ativo?';'+chipActive:''}">${cn} <span style="opacity:.65;font-weight:500;margin-left:2px">${n}</span></button>`;
+    }).join('')}
+  `;
+}
+
+function noSetCatFilter(cat) {
+  _noCatFilter = cat || null;
+  noRenderCategoriasChips();
+  // Mantém o termo de busca atual
+  const q = document.getElementById('no-search')?.value || '';
+  noFilterItems(q);
+}
+
 function noFilterItems(q) {
   const list = document.getElementById('no-items-list');
   if (!list) return;
   const search = (q || '').toLowerCase();
   const filtered = items.filter(i =>
     i.status !== 'pausado' &&
+    (!_noCatFilter || (i.cat || i.cat_key) === _noCatFilter) &&
     (!search || i.name.toLowerCase().includes(search) || (i.desc || '').toLowerCase().includes(search))
   ).slice(0, 50);
   if (!filtered.length) {
-    list.innerHTML = '<div style="padding:12px;text-align:center;color:var(--muted);font-size:12.5px">Nenhum produto encontrado</div>';
+    list.innerHTML = '<div style="padding:18px;text-align:center;color:var(--muted);font-size:12.5px">Nenhum produto encontrado</div>';
     return;
   }
+  // Se há filtro de categoria, esconde os headers de grupo (já está filtrado)
+  const showHeaders = !_noCatFilter;
   const catMap = {};
   filtered.forEach(item => {
     const cat = item.cat || item.cat_key || 'Outros';
@@ -1007,21 +1057,25 @@ function noFilterItems(q) {
   });
 
   list.innerHTML = Object.entries(catMap).map(([cat, its]) => `
-    <div style="padding:8px 12px 4px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);background:var(--surface2);border-bottom:1px solid var(--border)">${cat}</div>
+    ${showHeaders ? `<div style="padding:8px 12px 4px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);background:var(--surface);border-bottom:1px solid var(--border)">${cat}</div>` : ''}
     ${its.map(item => {
     const price = parseFloat(item.price || 0);
     const priceStr = 'R$ ' + price.toFixed(2).replace('.', ',') + (item.itemType === 'kg' ? ' <span style="font-size:10px;opacity:.7">/kg</span>' : '');
     const _allGrupos = (() => { try { return Array.isArray(item.customGroups) ? item.customGroups : JSON.parse(item.customGroups || '[]') } catch { return [] } })();
     const grupos = _allGrupos.filter(g => !['porcao_ref', 'kit_itens'].includes(g.tipo));
-    const temAdicionais = grupos.length > 0 || item.itemType === 'kg';
+    const ehPizza = _noEhPizza(item);
+    const temAdicionais = grupos.length > 0 || item.itemType === 'kg' || ehPizza;
+    const tagAdicional = ehPizza
+      ? '<div style="font-size:10px;color:#dc2626;margin-top:2px;font-weight:700">🍕 meio a meio disponível</div>'
+      : (temAdicionais ? '<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600">+ adicionais</div>' : '');
     return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;active:background:var(--surface2)" onclick="noAddItem(${item.id})">
         ${item.imageUrl
         ? `<img src="${item.imageUrl}" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0">`
-        : `<div style="width:44px;height:44px;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${item.emoji || '🍽️'}</div>`}
+        : `<div style="width:44px;height:44px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${item.emoji || '🍽️'}</div>`}
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.name}</div>
           ${item.desc ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">${item.desc}</div>` : ''}
-          ${temAdicionais ? `<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600">+ adicionais</div>` : ''}
+          ${tagAdicional}
         </div>
         <div style="text-align:right;flex-shrink:0">
           <div style="font-size:13px;font-weight:700;color:var(--success)">${priceStr}</div>
@@ -1034,9 +1088,29 @@ function noFilterItems(q) {
   ).join('');
 }
 
+// Detecta se item é pizza (mesmo critério do cardápio cliente)
+function _noEhPizza(item) {
+  if (!item) return false;
+  if (item.allowHalf) return true;  // flag explícita do gestor
+  if (item.meio_a_meio || item.tipo === 'pizza' || item.is_pizza) return true;
+  // Por categoria
+  const catKey = item.cat || item.cat_key;
+  if (typeof categories !== 'undefined' && Array.isArray(categories)) {
+    const cat = categories.find(c => c.name === catKey);
+    if (cat && (cat.meio_a_meio || (cat.name || '').toLowerCase().includes('pizza') || (cat.label || '').toLowerCase().includes('pizza'))) return true;
+  }
+  return false;
+}
+
 function noAddItem(itemId) {
   const item = items.find(i => i.id === itemId);
   if (!item) return;
+
+  // Pizza? abre modal específico de meio a meio (com opção de inteira)
+  if (_noEhPizza(item)) {
+    noAbrirModalPizza(item);
+    return;
+  }
 
   // Se tem grupos de adicionais, abre modal de seleção
   const grupos = (() => { try { return Array.isArray(item.customGroups) ? item.customGroups : JSON.parse(item.customGroups || '[]') } catch { return [] } })()
@@ -1050,6 +1124,225 @@ function noAddItem(itemId) {
   }
   // Sem adicionais — adiciona direto
   noAddToCartDireto(item, item.name, parseFloat(item.price || 0), '', []);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Modal pizza meio a meio (PDV gestor)
+// Permite escolher: pizza inteira (1 sabor) ou meia-meia (2 sabores).
+// Preço da meia-meia = média das duas metades (mesma regra do cliente).
+// ─────────────────────────────────────────────────────────────────────
+let _noPizzaBase = null;   // pizza base (item clicado)
+let _noPizzaHalf = null;   // 2ª metade selecionada (null = inteira)
+
+function noAbrirModalPizza(item) {
+  document.getElementById('modal-no-pizza-bg')?.remove();
+  _noPizzaBase = item;
+  _noPizzaHalf = null;
+
+  // Outras pizzas da mesma categoria (irmãs)
+  const catKey = item.cat || item.cat_key;
+  const irmas = items.filter(x =>
+    x.id !== item.id &&
+    (x.cat === catKey || x.cat_key === catKey) &&
+    x.status !== 'pausado' &&
+    _noEhPizza(x)
+  );
+
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg on';
+  bg.id = 'modal-no-pizza-bg';
+  bg.style.zIndex = '99999';
+
+  const priceBase = parseFloat(item.price || 0);
+  bg.innerHTML = `
+    <div class="modal" style="max-width:520px;width:92vw;padding:0;overflow:hidden">
+      <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div>
+          <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px">🍕 Pizza</div>
+          <div style="font-size:17px;font-weight:700;margin-top:2px">${item.name}</div>
+        </div>
+        <button onclick="document.getElementById('modal-no-pizza-bg')?.remove()" style="width:30px;height:30px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:14px">✕</button>
+      </div>
+
+      <div style="padding:16px 22px">
+        <!-- Seletor inteira/meia-meia -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+          <button id="no-pizza-mode-inteira" onclick="noPizzaSetMode('inteira')" type="button" style="padding:14px;border-radius:10px;border:2px solid var(--accent);background:rgba(var(--accent-rgb,249,115,22),.1);color:var(--accent);cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:4px">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="14" cy="11" r="1" fill="currentColor"/><circle cx="11" cy="14" r="1" fill="currentColor"/></svg>
+            Inteira
+          </button>
+          <button id="no-pizza-mode-meia" onclick="noPizzaSetMode('meia')" type="button" style="padding:14px;border-radius:10px;border:2px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:4px">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="21" stroke="currentColor" stroke-width="2"/><circle cx="8" cy="11" r="1" fill="currentColor"/><circle cx="16" cy="11" r="1" fill="currentColor"/></svg>
+            Meia / Meia
+          </button>
+        </div>
+
+        <!-- 1ª metade (sempre o item base) -->
+        <div style="margin-bottom:8px">
+          <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">1ª Metade</div>
+          <div style="padding:10px 12px;border:1.5px solid var(--accent);border-radius:9px;background:rgba(var(--accent-rgb,249,115,22),.08);display:flex;align-items:center;gap:10px">
+            <span style="font-size:22px">${item.emoji || '🍕'}</span>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:700">${item.name}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:1px">R$ ${priceBase.toFixed(2).replace('.', ',')}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2ª metade (só aparece em modo meia-meia) -->
+        <div id="no-pizza-half-block" style="display:none;margin-bottom:14px">
+          <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">2ª Metade · escolha um sabor</div>
+          <div id="no-pizza-half-list" style="max-height:240px;overflow-y:auto;border:1.5px solid var(--border);border-radius:9px;background:var(--surface2)">
+            ${irmas.length
+              ? irmas.map(p => `<div class="no-pizza-half-opt" data-id="${p.id}" data-name="${(p.name || '').replace(/"/g, '&quot;')}" data-price="${parseFloat(p.price)||0}" data-emoji="${p.emoji || '🍕'}" style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:10px;transition:background .15s">
+                  <span style="font-size:22px">${p.emoji || '🍕'}</span>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+                    <div style="font-size:11px;color:var(--muted)">R$ ${parseFloat(p.price || 0).toFixed(2).replace('.', ',')}</div>
+                  </div>
+                  <div class="no-pizza-half-check" style="width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0"></div>
+                </div>`).join('')
+              : '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12.5px">Nenhuma outra pizza disponível na categoria.</div>'
+            }
+          </div>
+        </div>
+
+        <!-- Observação -->
+        <div style="margin-bottom:14px">
+          <label style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:block">Observação (opcional)</label>
+          <input type="text" id="no-pizza-obs" placeholder="Ex: sem cebola, borda recheada..." style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;font-family:inherit">
+        </div>
+
+        <!-- Resumo + ação -->
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);margin-bottom:12px">
+          <div>
+            <div style="font-size:11px;color:var(--muted)">Total</div>
+            <div id="no-pizza-total" style="font-size:18px;font-weight:800;color:var(--success)">R$ ${priceBase.toFixed(2).replace('.', ',')}</div>
+          </div>
+          <button id="no-pizza-add-btn" onclick="noPizzaAdicionar()" style="padding:11px 22px;background:var(--accent);color:#fff;border:none;border-radius:9px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit">Adicionar ao pedido</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(bg);
+
+  // Click handlers para metades
+  bg.querySelectorAll('.no-pizza-half-opt').forEach(opt => {
+    opt.addEventListener('click', () => {
+      _noPizzaHalf = {
+        id:    parseInt(opt.dataset.id),
+        name:  opt.dataset.name,
+        price: parseFloat(opt.dataset.price) || 0,
+        emoji: opt.dataset.emoji
+      };
+      // Visual: marca selecionado, desmarca outros
+      bg.querySelectorAll('.no-pizza-half-opt').forEach(o => {
+        const sel = parseInt(o.dataset.id) === _noPizzaHalf.id;
+        o.style.background = sel ? 'rgba(var(--accent-rgb,249,115,22),.08)' : '';
+        const ck = o.querySelector('.no-pizza-half-check');
+        if (ck) {
+          ck.style.borderColor = sel ? 'var(--accent)' : 'var(--border)';
+          ck.style.background  = sel ? 'var(--accent)' : '';
+          ck.innerHTML = sel ? '<svg width="100%" height="100%" viewBox="0 0 16 16" fill="none"><path d="M3 8l3 3 7-7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '';
+        }
+      });
+      noPizzaAtualizarTotal();
+    });
+  });
+
+  // Fecha ao clicar no fundo
+  bg.addEventListener('click', e => { if (e.target === bg) bg.remove(); });
+}
+
+function noPizzaSetMode(mode) {
+  const halfBlock = document.getElementById('no-pizza-half-block');
+  const btnInt    = document.getElementById('no-pizza-mode-inteira');
+  const btnMeia   = document.getElementById('no-pizza-mode-meia');
+  if (!halfBlock || !btnInt || !btnMeia) return;
+  if (mode === 'meia') {
+    halfBlock.style.display = '';
+    btnMeia.style.borderColor = 'var(--accent)';
+    btnMeia.style.background  = 'rgba(var(--accent-rgb,249,115,22),.1)';
+    btnMeia.style.color       = 'var(--accent)';
+    btnInt.style.borderColor = 'var(--border)';
+    btnInt.style.background  = 'var(--surface2)';
+    btnInt.style.color       = 'var(--text)';
+  } else {
+    halfBlock.style.display = 'none';
+    _noPizzaHalf = null;
+    btnInt.style.borderColor = 'var(--accent)';
+    btnInt.style.background  = 'rgba(var(--accent-rgb,249,115,22),.1)';
+    btnInt.style.color       = 'var(--accent)';
+    btnMeia.style.borderColor = 'var(--border)';
+    btnMeia.style.background  = 'var(--surface2)';
+    btnMeia.style.color       = 'var(--text)';
+    // Reset checkmarks
+    document.querySelectorAll('.no-pizza-half-opt').forEach(o => {
+      o.style.background = '';
+      const ck = o.querySelector('.no-pizza-half-check');
+      if (ck) { ck.style.borderColor = 'var(--border)'; ck.style.background = ''; ck.innerHTML = ''; }
+    });
+  }
+  noPizzaAtualizarTotal();
+}
+
+function noPizzaAtualizarTotal() {
+  if (!_noPizzaBase) return;
+  const totalEl = document.getElementById('no-pizza-total');
+  const btn     = document.getElementById('no-pizza-add-btn');
+  if (!totalEl || !btn) return;
+  const halfBlock = document.getElementById('no-pizza-half-block');
+  const isMeia = halfBlock && halfBlock.style.display !== 'none';
+
+  const priceBase = parseFloat(_noPizzaBase.price || 0);
+  let preco = priceBase;
+  let podeAdd = true;
+
+  if (isMeia) {
+    if (_noPizzaHalf) {
+      // Média dos dois preços (mesma regra do cardápio cliente)
+      preco = (priceBase + _noPizzaHalf.price) / 2;
+    } else {
+      podeAdd = false; // precisa selecionar 2ª metade
+    }
+  }
+
+  totalEl.textContent = 'R$ ' + preco.toFixed(2).replace('.', ',');
+  btn.disabled = !podeAdd;
+  btn.style.opacity = podeAdd ? '1' : '.45';
+  btn.style.cursor  = podeAdd ? 'pointer' : 'not-allowed';
+  btn.textContent   = podeAdd
+    ? 'Adicionar ao pedido'
+    : 'Selecione a 2ª metade';
+}
+
+function noPizzaAdicionar() {
+  if (!_noPizzaBase) return;
+  const halfBlock = document.getElementById('no-pizza-half-block');
+  const isMeia = halfBlock && halfBlock.style.display !== 'none';
+  const obs = (document.getElementById('no-pizza-obs')?.value || '').trim();
+
+  if (isMeia && !_noPizzaHalf) {
+    if (typeof sbToast === 'function') sbToast('err', 'Selecione a 2ª metade da pizza');
+    return;
+  }
+
+  const priceBase = parseFloat(_noPizzaBase.price || 0);
+  let nome, preco, obsCart;
+
+  if (isMeia && _noPizzaHalf) {
+    nome    = `${_noPizzaBase.name} / ${_noPizzaHalf.name}`;
+    preco   = (priceBase + _noPizzaHalf.price) / 2;
+    obsCart = obs ? `Meio a meio · ${obs}` : 'Meio a meio';
+  } else {
+    nome    = _noPizzaBase.name;
+    preco   = priceBase;
+    obsCart = obs;
+  }
+
+  noAddToCartDireto(_noPizzaBase, nome, preco, obsCart, []);
+  document.getElementById('modal-no-pizza-bg')?.remove();
+  _noPizzaBase = null;
+  _noPizzaHalf = null;
 }
 
 function noAddToCartDireto(item, name, price, obs, grupos) {
@@ -1534,7 +1827,9 @@ async function noOpenModal() {
   const mesaSelect = document.getElementById('order-mesa');
   if (mesaSelect) mesaSelect.value = '';
   document.getElementById('no-search').value = '';
+  _noCatFilter = null; // reset filtro de categoria
   noSetDelivery('delivery');
+  noRenderCategoriasChips();
   noFilterItems('');
   noRenderCart();
   openModal('modal-new-order');
