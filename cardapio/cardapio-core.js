@@ -461,6 +461,26 @@ async function init() {
       _storeLat     = parseFloat(c.store_lat) || null;
       _storeLng     = parseFloat(c.store_lng) || null;
       _tiposEntrega = Array.isArray(c.tipos_entrega) ? c.tipos_entrega : ['delivery','retirada','mesa'];
+      // Pausa rápida de delivery — remove delivery dos tipos disponíveis
+      if (feeConfig?.delivery_pausado) {
+        _tiposEntrega = _tiposEntrega.filter(t => t !== 'delivery');
+        // Mostra aviso visível no topo do cardápio
+        try {
+          const banner = document.getElementById('delivery-pausado-banner');
+          if (!banner) {
+            const div = document.createElement('div');
+            div.id = 'delivery-pausado-banner';
+            div.style.cssText = 'position:sticky;top:0;z-index:90;background:rgba(245,158,11,.95);color:#fff;text-align:center;padding:8px 12px;font-size:12.5px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.15)';
+            div.innerHTML = '⏸ Delivery temporariamente pausado — apenas retirada/mesa disponíveis';
+            document.body.insertBefore(div, document.body.firstChild);
+          } else {
+            banner.style.display = '';
+          }
+        } catch (e) {}
+      } else {
+        const banner = document.getElementById('delivery-pausado-banner');
+        if (banner) banner.style.display = 'none';
+      }
       try {
         const segR = await fetch('/api/tenant-segmento', { headers: { 'x-tenant-id': _tenantId } });
         if (segR.ok) { const segD = await segR.json(); if (segD.segmento === 'acougue') { _segmento = 'acougue'; _tiposEntrega = _tiposEntrega.filter(t => t !== 'mesa'); document.body.setAttribute('data-segmento','acougue'); } }
@@ -679,6 +699,34 @@ function applyBrandingLive(cfg) {
     _waNumero = cfg.store_whatsapp.replace(/\D/g, '');
     if (_waNumero.length <= 11) _waNumero = '55' + _waNumero;
   }
+
+  // Estimativa dinâmica de tempo (ajusta conforme backlog atual)
+  // Não bloqueia render — atualiza quando chegar
+  fetch('/api/tempo-estimado', { headers: { 'x-tenant-id': _tenantId } })
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      if (!d || !d.tempo_estimado) return;
+      const el = document.getElementById('hero-tempo');
+      if (el) {
+        el.textContent = d.tempo_estimado;
+        if (d.alta_demanda) el.title = '⚠ Alta demanda agora';
+      }
+      const badge = document.getElementById('badge-tempo');
+      if (badge) badge.textContent = d.tempo_estimado;
+      // Banner discreto de alta demanda
+      if (d.alta_demanda) {
+        let warn = document.getElementById('alta-demanda-warn');
+        if (!warn) {
+          warn = document.createElement('div');
+          warn.id = 'alta-demanda-warn';
+          warn.style.cssText = 'background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#92400e;padding:6px 12px;font-size:11.5px;text-align:center;font-weight:600;border-radius:8px;margin:8px 12px';
+          warn.textContent = `⚠ Alta demanda — tempo de entrega: ${d.tempo_estimado}`;
+          const target = document.getElementById('hero-banner') || document.body;
+          target.parentElement?.insertBefore(warn, target.nextSibling);
+        }
+      }
+    })
+    .catch(()=>{});
 }
 
 async function reloadMenu() {

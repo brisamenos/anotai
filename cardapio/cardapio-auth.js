@@ -224,6 +224,8 @@ function fillCartForm() {
   // Dispara consulta de cashback para cliente logado (oninput não é acionado por .value=)
   if (_customer.phone) onPhoneCashback(_customer.phone);
   loadSavedAddr();
+  // Carrega endereços salvos do cliente
+  if (typeof carregarEnderecosSalvos === 'function') carregarEnderecosSalvos();
 }
 
 // ── Endereço salvo ─────────────────────────────────────
@@ -370,18 +372,26 @@ async function loadMyOrders() {
       const d = new Date(o.created_at);
       const dateStr = isNaN(d) ? '' : d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
       const isActive = ['analise','producao','pronto','saiu'].includes(o.status);
+      // "Repetir pedido" disponível para pedidos finalizados (entregue/cancelado) com itens válidos
+      const podeRepetir = !isActive && Array.isArray(o.items) && o.items.length > 0;
       return `
-      <div class="order-card" onclick="${isActive?`openOrderTracker(${o.id},${o.order_num||0})`:'void(0)'}">
-        <div class="order-card-head">
-          <span class="order-card-num">#${String(_orderNum(o.id, o.order_num)).padStart(3,'0')}</span>
-          <span class="order-card-status ${o.status}">${SL[o.status]||o.status}</span>
+      <div class="order-card">
+        <div class="order-card-clickarea" ${isActive?`onclick="openOrderTracker(${o.id},${o.order_num||0})"`:''} style="${isActive?'cursor:pointer':''}">
+          <div class="order-card-head">
+            <span class="order-card-num">#${String(_orderNum(o.id, o.order_num)).padStart(3,'0')}</span>
+            <span class="order-card-status ${o.status}">${SL[o.status]||o.status}</span>
+          </div>
+          <div class="order-card-items">${itemsTxt}</div>
+          <div class="order-card-foot">
+            <span class="order-card-total">R$ ${fmt(o.total)}</span>
+            <span class="order-card-date">${dateStr}</span>
+          </div>
+          ${isActive?'<div style="font-size:11px;color:var(--accent);margin-top:6px;font-weight:600"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M1 13c1-3 2.5-5 7-5s6 2 7 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M3.5 11c.8-2 2-3 4.5-3s3.7 1 4.5 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="10" r="1.2" fill="currentColor"/></svg> Toque para acompanhar</div>':''}
         </div>
-        <div class="order-card-items">${itemsTxt}</div>
-        <div class="order-card-foot">
-          <span class="order-card-total">R$ ${fmt(o.total)}</span>
-          <span class="order-card-date">${dateStr}</span>
-        </div>
-        ${isActive?'<div style="font-size:11px;color:var(--accent);margin-top:6px;font-weight:600"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M1 13c1-3 2.5-5 7-5s6 2 7 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M3.5 11c.8-2 2-3 4.5-3s3.7 1 4.5 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="10" r="1.2" fill="currentColor"/></svg> Toque para acompanhar</div>':''}
+        ${podeRepetir ? `<button onclick="event.stopPropagation();repetirPedido(${o.id})" style="margin-top:8px;width:100%;padding:8px 12px;background:rgba(var(--accent-rgb,249,115,22),.08);border:1.5px solid var(--accent);color:var(--accent);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2.5 8a5.5 5.5 0 0 1 9.5-3.8M13.5 8a5.5 5.5 0 0 1-9.5 3.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M12 1.5v3h-3M4 14.5v-3h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Repetir pedido
+        </button>` : ''}
       </div>`;
     }).join('');
   } catch(e) {
@@ -413,3 +423,191 @@ function openOrderTracker(orderId, orderNum) {
 }
 
 // ══════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════
+// Múltiplos endereços salvos por cliente (apenas para logados)
+// CRUD via tabela customer_enderecos. Cliente vê dropdown no checkout.
+// ══════════════════════════════════════════════════════════════════════
+
+async function carregarEnderecosSalvos() {
+  const wrap = document.getElementById('end-salvos-wrap');
+  const list = document.getElementById('end-salvos-list');
+  if (!wrap || !list) return;
+  if (!_customer || !_customer.id) { wrap.style.display = 'none'; return; }
+  try {
+    const { data } = await sb.from('customer_enderecos').select('*').eq('customer_id', _customer.id).order('is_default', { ascending: false }).order('id', { ascending: false });
+    const eds = data || [];
+    if (!eds.length) {
+      wrap.style.display = '';
+      list.innerHTML = '<div style="font-size:11.5px;color:var(--muted);padding:6px 2px;text-align:center">Nenhum endereço salvo. Preencha abaixo e salve para usar nos próximos pedidos.</div>';
+      return;
+    }
+    wrap.style.display = '';
+    list.innerHTML = eds.map(e => {
+      const titulo = e.label || (e.rua ? `${e.rua}, ${e.numero || 's/n'}` : 'Endereço');
+      const sub    = [e.bairro, e.complemento, e.referencia ? 'Ref: ' + e.referencia : ''].filter(Boolean).join(' • ');
+      return `<div class="end-item" data-id="${e.id}" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:700;color:var(--text)">${e.is_default ? '★ ' : ''}${titulo}</div>
+          ${sub ? `<div style="font-size:11px;color:var(--muted);margin-top:1px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap">${sub}</div>` : ''}
+        </div>
+        <button onclick="event.stopPropagation();excluirEnderecoSalvo(${e.id})" style="background:transparent;border:none;color:var(--danger,#ef4444);cursor:pointer;font-size:14px;padding:4px 8px" title="Excluir">✕</button>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('.end-item').forEach(div => {
+      div.addEventListener('click', () => usarEnderecoSalvo(parseInt(div.dataset.id)));
+    });
+  } catch (e) {
+    console.error('carregarEnderecosSalvos:', e);
+    wrap.style.display = 'none';
+  }
+}
+
+async function usarEnderecoSalvo(id) {
+  try {
+    const { data } = await sb.from('customer_enderecos').select('*').eq('id', id).single();
+    if (!data) return;
+    const set = (inputId, v) => { const el = document.getElementById(inputId); if (el) el.value = v || ''; };
+    set('f-cep',        data.cep);
+    set('f-rua',        data.rua);
+    set('f-num',        data.numero);
+    set('f-bairro',     data.bairro);
+    set('f-compl',      data.complemento);
+    set('f-referencia', data.referencia);
+    document.querySelectorAll('.end-item').forEach(d => {
+      d.style.borderColor = parseInt(d.dataset.id) === id ? 'var(--accent)' : 'var(--border)';
+      d.style.background  = parseInt(d.dataset.id) === id ? 'rgba(var(--accent-rgb,249,115,22),.06)' : '';
+    });
+    if (typeof renderTotals === 'function') renderTotals();
+    if (typeof toast === 'function') toast('📍 Endereço carregado');
+  } catch (e) { console.error('usarEnderecoSalvo:', e); }
+}
+
+async function abrirCadastrarEndereco() {
+  if (!_customer || !_customer.id) {
+    if (typeof toast === 'function') toast('⚠ Faça login para salvar endereços');
+    return;
+  }
+  const cep = (document.getElementById('f-cep')?.value || '').trim();
+  const rua = (document.getElementById('f-rua')?.value || '').trim();
+  const num = (document.getElementById('f-num')?.value || '').trim();
+  const bairro = (document.getElementById('f-bairro')?.value || '').trim();
+  const compl  = (document.getElementById('f-compl')?.value || '').trim();
+  const ref    = (document.getElementById('f-referencia')?.value || '').trim();
+  if (!rua || !num) {
+    if (typeof toast === 'function') toast('⚠ Preencha rua e número antes de salvar');
+    return;
+  }
+  const label = prompt('Dê um nome a este endereço (ex: Casa, Trabalho):', '') || '';
+  try {
+    const { error } = await sb.from('customer_enderecos').insert({
+      customer_id: _customer.id,
+      label: label.trim() || null,
+      cep, rua, numero: num, bairro, complemento: compl, referencia: ref,
+      is_default: 0
+    });
+    if (error) throw error;
+    if (typeof toast === 'function') toast('✅ Endereço salvo!');
+    await carregarEnderecosSalvos();
+  } catch (e) {
+    if (typeof toast === 'function') toast('❌ Erro ao salvar: ' + (e.message || ''));
+  }
+}
+
+async function excluirEnderecoSalvo(id) {
+  if (!confirm('Excluir este endereço?')) return;
+  try {
+    const { error } = await sb.from('customer_enderecos').delete().eq('id', id);
+    if (error) throw error;
+    if (typeof toast === 'function') toast('🗑 Removido');
+    await carregarEnderecosSalvos();
+  } catch (e) {
+    if (typeof toast === 'function') toast('❌ Erro: ' + (e.message || ''));
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Repetir pedido — recria o carrinho com os mesmos itens de um pedido
+// finalizado. Cruza com allItems pra pegar preço e disponibilidade atuais.
+// Itens pausados/removidos são pulados com aviso.
+// ══════════════════════════════════════════════════════════════════════
+async function repetirPedido(orderId) {
+  if (!_customer || !_customer.id) {
+    if (typeof toast === 'function') toast('⚠ Faça login para repetir pedidos');
+    return;
+  }
+  try {
+    // Busca pedido completo (snapshot dos itens guardados em items JSON)
+    const { data, error } = await sb.from('orders').select('items,addr,total').eq('id', orderId).single();
+    if (error || !data) {
+      if (typeof toast === 'function') toast('❌ Pedido não encontrado');
+      return;
+    }
+    const itensSalvos = Array.isArray(data.items) ? data.items : (() => { try { return JSON.parse(data.items || '[]'); } catch { return []; } })();
+    if (!itensSalvos.length) {
+      if (typeof toast === 'function') toast('⚠ Pedido sem itens válidos');
+      return;
+    }
+
+    // Reseta cart e cupons
+    if (typeof cart !== 'undefined') cart.length = 0;
+    if (typeof appliedCupom !== 'undefined') appliedCupom = null;
+
+    let pulados = 0;
+    let adicionados = 0;
+    for (const it of itensSalvos) {
+      // Resolve item atual pelo id (preço pode ter mudado, item pode estar pausado/removido)
+      const atual = (typeof allItems !== 'undefined' && Array.isArray(allItems))
+        ? allItems.find(x => Number(x.id) === Number(it.id))
+        : null;
+      if (!atual) {
+        // Item não disponível (pausado, removido ou de outra loja) — pula
+        pulados++;
+        continue;
+      }
+      // Cria item de carrinho usando preço atual do menu (não o histórico)
+      // Mantém obs/customizações do pedido original quando possível
+      const cartItem = {
+        ...atual,
+        // Preserva obs e customizações do pedido anterior (ex: "Sem cebola")
+        obs: it.obs || '',
+        qty: parseInt(it.qty) || 1
+      };
+      // Se item tinha customizações específicas (preço calculado, addons), preserva
+      // mas marca o `name` original (que pode ter "+ Bacon" etc)
+      if (it.name && it.name !== atual.name) cartItem.name = it.name;
+      if (it.price && Math.abs(parseFloat(it.price) - parseFloat(atual.price)) > 0.01) {
+        // Preço difere significativamente — usa o preço atual mas avisa
+        cartItem.price = parseFloat(atual.price);
+      }
+      cart.push(cartItem);
+      adicionados++;
+    }
+
+    if (!adicionados) {
+      if (typeof toast === 'function') toast('❌ Nenhum item desse pedido está disponível agora');
+      return;
+    }
+
+    // Limpa cupom anterior se ficou no DOM
+    const cupomInp = document.getElementById('cupom-input');
+    if (cupomInp) cupomInp.value = '';
+    const cupomMsg = document.getElementById('cupom-msg');
+    if (cupomMsg) cupomMsg.innerHTML = '';
+
+    // Fecha modal de conta e abre o carrinho
+    if (typeof closeAccount === 'function') closeAccount();
+    if (typeof updateCartFloat === 'function') updateCartFloat();
+    if (typeof openCart === 'function') openCart();
+
+    if (typeof toast === 'function') {
+      const msg = pulados > 0
+        ? `🔁 ${adicionados} item${adicionados>1?'ns':''} adicionado${adicionados>1?'s':''} (${pulados} indisponíve${pulados>1?'is':'l'} pulado${pulados>1?'s':''})`
+        : `🔁 ${adicionados} item${adicionados>1?'ns':''} adicionado${adicionados>1?'s':''} ao carrinho`;
+      toast(msg);
+    }
+  } catch (e) {
+    console.error('repetirPedido:', e);
+    if (typeof toast === 'function') toast('❌ Erro ao repetir pedido');
+  }
+}

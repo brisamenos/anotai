@@ -280,6 +280,10 @@ function setDelivery(type) {
   renderGeoBlock();
   renderTotals();
   updateCartFloat();
+  // Carrega endereços salvos quando entrar na aba delivery (cliente logado)
+  if (type === 'delivery' && typeof carregarEnderecosSalvos === 'function') {
+    carregarEnderecosSalvos();
+  }
 }
 
 function setPay(el) {
@@ -439,3 +443,144 @@ function toggleUsarCashback() {
   }
   renderTotals();
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// Geolocalização — usa GPS + reverse geocoding (Nominatim/OSM, gratuito)
+// para preencher rua/bairro automaticamente. Também atualiza _geoDistKm
+// quando taxa por_km. Disponível em qualquer tipo de taxa.
+// ══════════════════════════════════════════════════════════════════════
+async function usarMinhaLocalizacao() {
+  const status = document.getElementById('gps-status');
+  const btn    = document.getElementById('gps-btn');
+  if (!navigator.geolocation) {
+    if (status) { status.textContent = '⚠️ Seu navegador não suporta geolocalização.'; status.style.color = 'var(--danger,#ef4444)'; }
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+  if (status) { status.textContent = '📡 Obtendo sua localização...'; status.style.color = 'var(--accent)'; }
+
+  navigator.geolocation.getCurrentPosition(
+    async pos => {
+      const { latitude: lat, longitude: lng } = pos.coords;
+
+      // 1. Calcula distância pra loja (se loja tem GPS configurado)
+      if (typeof _storeLat === 'number' && typeof _storeLng === 'number' && _storeLat && _storeLng) {
+        _geoDistKm = calcDist(_storeLat, _storeLng, lat, lng);
+        // Se taxa por_km, ajusta selectedFaixa
+        if (feeConfig?.tipo === 'por_km' && Array.isArray(feeConfig.faixas)) {
+          let idx = feeConfig.faixas.findIndex(f => f.ate_km >= _geoDistKm);
+          if (idx === -1) idx = feeConfig.faixas.length - 1;
+          if (idx >= 0) selectedFaixa = idx;
+        }
+      }
+
+      // 2. Reverse geocoding via Nominatim (OSM) — preenche os campos
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=pt-BR`, {
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await r.json();
+        const a = data?.address || {};
+        // Mapeia campos do Nominatim para nossos inputs
+        const rua    = a.road || a.pedestrian || a.footway || a.path || '';
+        const bairro = a.suburb || a.neighbourhood || a.quarter || a.city_district || a.village || '';
+        const set = (id, val) => { const el = document.getElementById(id); if (el && val && !el.value) el.value = val; };
+        if (rua)    set('f-rua', rua);
+        if (bairro) set('f-bairro', bairro);
+        // Foca no número (sempre digitado manualmente)
+        const numEl = document.getElementById('f-num');
+        if (numEl) numEl.focus();
+
+        if (status) {
+          const distStr = _geoDistKm != null ? ` (a ${_geoDistKm.toFixed(1).replace('.',',')} km daqui)` : '';
+          const desc = [rua, bairro].filter(Boolean).join(', ') || 'Localização capturada';
+          status.innerHTML = `✅ <strong>${desc}</strong>${distStr}`;
+          status.style.color = 'var(--success,#16a34a)';
+        }
+      } catch(e) {
+        // Geocoding falhou mas a distância pode ter sido calculada
+        if (status) {
+          if (_geoDistKm != null) {
+            status.innerHTML = `✅ Localização capturada (${_geoDistKm.toFixed(1).replace('.',',')} km da loja). Preencha o endereço manualmente.`;
+            status.style.color = 'var(--success,#16a34a)';
+          } else {
+            status.textContent = '✅ Localização capturada. Preencha o endereço manualmente.';
+            status.style.color = 'var(--muted)';
+          }
+        }
+      }
+
+      // Recalcula taxa
+      if (typeof renderTotals === 'function') renderTotals();
+      if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+    },
+    err => {
+      const motivos = {
+        1: 'Permissão negada. Habilite a localização no navegador.',
+        2: 'Posição indisponível. Tente em outro local com melhor sinal.',
+        3: 'Tempo esgotado. Tente novamente.'
+      };
+      if (status) { status.textContent = '❌ ' + (motivos[err.code] || 'Não foi possível obter sua localização.'); status.style.color = 'var(--danger,#ef4444)'; }
+      if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+    },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Autocomplete de bairros no checkout do cardápio cliente.
+// Mostra dropdown com bairros cadastrados em feeConfig.bairros (quando
+// taxa por_bairro). Filtra conforme o cliente digita.
+// ══════════════════════════════════════════════════════════════════════
+function _normBairroCard(s) {
+  return String(s || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function onBairroInputCardapio(input) {
+  // Recalcula totais (mantém comportamento antigo)
+  if (feeConfig?.tipo === 'por_bairro' && typeof renderTotals === 'function') renderTotals();
+  _renderBairrosDropdownCardapio(input);
+}
+
+function onBairroFocusCardapio(input) {
+  _renderBairrosDropdownCardapio(input);
+}
+
+function _renderBairrosDropdownCardapio(input) {
+  const dd = document.getElementById('bairros-dropdown-cardapio');
+  if (!dd) return;
+  if (feeConfig?.tipo !== 'por_bairro') { dd.style.display = 'none'; return; }
+  const bairros = Array.isArray(feeConfig.bairros) ? feeConfig.bairros : [];
+  if (!bairros.length) { dd.style.display = 'none'; return; }
+
+  const q = _normBairroCard(input.value);
+  const lista = q
+    ? bairros.filter(b => _normBairroCard(b.bairro).includes(q)).slice(0, 8)
+    : bairros.slice(0, 8);
+  if (!lista.length) { dd.style.display = 'none'; return; }
+
+  dd.innerHTML = lista.map(b => `<div class="bairro-opt-card" data-nome="${(b.bairro || '').replace(/"/g, '&quot;')}" style="padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;align-items:center;color:var(--text)" onmouseover="this.style.background='var(--s2,rgba(0,0,0,.04))'" onmouseout="this.style.background=''">
+    <span>${b.bairro}</span>
+    <span style="color:var(--muted);font-size:11.5px;font-weight:600">R$ ${parseFloat(b.taxa).toFixed(2).replace('.',',')}</span>
+  </div>`).join('');
+
+  dd.querySelectorAll('.bairro-opt-card').forEach(opt => {
+    opt.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      input.value = opt.dataset.nome;
+      dd.style.display = 'none';
+      if (typeof renderTotals === 'function') renderTotals();
+      // Foca no próximo campo (compl)
+      const next = document.getElementById('f-compl');
+      if (next) next.focus();
+    });
+  });
+  dd.style.display = 'block';
+}
+
+// Fecha dropdown ao clicar fora
+document.addEventListener('click', (e) => {
+  const dd = document.getElementById('bairros-dropdown-cardapio');
+  const inp = document.getElementById('f-bairro');
+  if (dd && inp && e.target !== inp && !dd.contains(e.target)) dd.style.display = 'none';
+});
