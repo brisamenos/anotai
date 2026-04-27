@@ -127,6 +127,23 @@ function _iniciarPixRecoveryJob(db, log, sseBroadcast, getToken) {
 }
 
 // ═══════════════════════════════════════════════════════
+// Helper compartilhado: lê instância de WhatsApp para cobranças
+// (configurada em /admin → Saques PIX → "WhatsApp para cobranças")
+// Fallback: instância padrão (mesma usada pelos pedidos)
+// ═══════════════════════════════════════════════════════
+function _getInstanciaCobranca(db, fallbackInst) {
+  try {
+    const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+    const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+    if (g.cobranca_wa_instance && typeof g.cobranca_wa_instance === 'string') {
+      const inst = g.cobranca_wa_instance.trim()
+      if (inst) return inst
+    }
+  } catch {}
+  return fallbackInst
+}
+
+// ═══════════════════════════════════════════════════════
 // CRON DIÁRIO: auto-cobrança 3 dias antes de vencer
 // ═══════════════════════════════════════════════════════
 let _autoCobrancaJobIniciado = false
@@ -236,7 +253,8 @@ function _iniciarAutoCobrancaJob(ctx) {
                 ``,
                 `_O pagamento renova seu acesso automaticamente._ ✅`
               ].join('\n')
-              await sendWA(telefone, msg, EVO_INST)
+              const instCob = _getInstanciaCobranca(db, EVO_INST)
+              await sendWA(telefone, msg, instCob)
             }
           } catch (eWa) { log('⚠️', `Auto-cobrança WA falhou tenant=${t.nome}: ${eWa.message}`) }
 
@@ -1095,8 +1113,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
                   ``,
                   `Seu acesso continua ativo. Obrigado por usar o *Estima Food*! 🍽️`
                 ].join('\n')
-                await sendWA(telefone, msg, EVO_INST)
-                log('📨', `Confirmação fatura WA enviada: tenant=${tenant.nome}`)
+                const instCob = _getInstanciaCobranca(db, EVO_INST)
+                await sendWA(telefone, msg, instCob)
+                log('📨', `Confirmação fatura WA enviada: tenant=${tenant.nome} (instância: ${instCob})`)
               }
             } catch (e) { log('⚠️', 'Confirmação fatura WA erro:', e.message) }
           })()
@@ -2887,9 +2906,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
       ]
       const msg = linhas.join('\n')
 
-      await sendWA(telefone, msg, EVO_INST)
-      log('📨', `Cobrança WA enviada: tenant=${tenant.nome} fatura=${fatura.id} tel=${telefone}`)
-      return { enviado: true, telefone }
+      const instCob = _getInstanciaCobranca(db, EVO_INST)
+      await sendWA(telefone, msg, instCob)
+      log('📨', `Cobrança WA enviada: tenant=${tenant.nome} fatura=${fatura.id} tel=${telefone} (instância: ${instCob})`)
+      return { enviado: true, telefone, instance: instCob }
     } catch (e) {
       log('⚠️', 'Cobrança WA erro:', e.message)
       return { enviado: false, motivo: e.message }
@@ -3010,6 +3030,45 @@ module.exports = async function handleRoutes(req, res, ctx) {
         detalhes: { tenant_id: f.tenant_id, valor: f.valor }
       }, req.headers)
       send(res, 200, { ok: true })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── GET /api/admin/cobranca-wa — lê instância configurada ──
+  if (req.method === 'GET' && upath === '/api/admin/cobranca-wa') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    try {
+      const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+      send(res, 200, { instance: g.cobranca_wa_instance || '' })
+    } catch(e) { send(res, 200, { instance: '' }) }
+    return true
+  }
+
+  // ── POST /api/admin/cobranca-wa — salva instância ──
+  if (req.method === 'POST' && upath === '/api/admin/cobranca-wa') {
+    const sess = validarSessaoAdmin(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    let instance = (body?.instance || '').trim()
+    // Validação: só letras/números/-/_
+    if (instance && !/^[a-zA-Z0-9_-]+$/.test(instance)) {
+      send(res, 400, { error: 'Nome da instância inválido (use apenas letras, números, - e _)' })
+      return true
+    }
+    try {
+      const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+      g.cobranca_wa_instance = instance || null
+      db.prepare("INSERT INTO store_config (tenant_id, ia_config) VALUES ('_global', ?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config")
+        .run(JSON.stringify(g))
+      marcarDirty()
+      _registrarAudit(sess, {
+        acao: 'config.cobranca_wa',
+        alvo_tipo: null, alvo_id: null, alvo_nome: null,
+        detalhes: { instance: instance || null }
+      }, req.headers)
+      send(res, 200, { ok: true, instance: instance || null })
     } catch(e) { send(res, 500, { error: e.message }) }
     return true
   }

@@ -880,6 +880,39 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
           </div>
         </div>
 
+        <!-- Config WhatsApp para cobranças -->
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-head">
+            <div>
+              <div class="card-title">📲 WhatsApp para cobranças (admin)</div>
+              <div class="card-sub" id="cob-wa-status-txt">Número que envia cobranças/lembretes para os gestores dos restaurantes (seus clientes SaaS)</div>
+            </div>
+            <button class="btn bp bsm" onclick="salvarCobrancaWA()">💾 Salvar</button>
+          </div>
+
+          <div class="form-group" style="margin-bottom:14px">
+            <label class="form-label">Nome da instância na Evolution API</label>
+            <input class="minput" id="cob-wa-instance" type="text" placeholder="estima-admin" autocomplete="off" style="font-family:monospace">
+            <div class="form-hint">
+              Crie uma instância separada na Evolution para não misturar cobranças com mensagens dos clientes finais.
+              Deixe vazio para usar a instância padrão (mesma dos pedidos).
+            </div>
+          </div>
+
+          <div class="infobox infobox-blue" style="font-size:12.5px;display:flex;align-items:flex-start;gap:10px">
+            <div style="font-size:18px;flex-shrink:0">💡</div>
+            <div>
+              <div style="font-weight:700;margin-bottom:3px">Como configurar:</div>
+              <ol style="margin:0;padding-left:18px;line-height:1.7">
+                <li>Acesse o painel da sua Evolution API e crie uma instância nova (ex: <code style="background:rgba(0,0,0,.3);padding:1px 6px;border-radius:4px">estima-admin</code>)</li>
+                <li>Escaneie o QR Code com o WhatsApp do número que vai cobrar</li>
+                <li>Digite o nome da instância no campo acima e salve</li>
+                <li>Pronto — todas as cobranças e lembretes vão sair desse número</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
         <!-- Estatísticas de saques -->
         <div class="grid-3" style="margin-bottom:20px">
           <div class="stat-card" style="--ca:var(--orange)">
@@ -1354,7 +1387,7 @@ function navTo(id) {
   document.getElementById('topbar-title').textContent = titles[id] || id;
   if (id==='ia')          { iaAdminCarregar(); }
   if (id==='backup')      { renderBackupList(); }
-  if (id==='saques')      { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); conectarAdminSSE(); }
+  if (id==='saques')      { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); carregarCobrancaWA(); conectarAdminSSE(); }
   if (id==='planos')      { carregarPrecosPlanos(); carregarAdminPhone(); carregarLeads(); }
   if (id==='faturamento') { carregarFaturamento(); }
   if (id==='auditoria')   { carregarAuditoria(); }
@@ -2682,6 +2715,41 @@ async function salvarMpConfig() {
     if (!r.ok) throw new Error(d.error);
     toast('ok', '✅ Configuração MP salva!');
     carregarMpConfig();
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+// ── 📲 WhatsApp para cobranças (instância admin) ──────
+async function carregarCobrancaWA() {
+  try {
+    const r = await fetch('/api/admin/cobranca-wa', { headers: adminAuthHeader() });
+    if (!r.ok) return;
+    const d = await r.json();
+    const inp = document.getElementById('cob-wa-instance');
+    const st  = document.getElementById('cob-wa-status-txt');
+    if (inp) inp.value = d.instance || '';
+    if (st)  st.innerHTML = d.instance
+      ? `<span style="color:var(--success)">✅ Instância configurada: <code style="background:rgba(0,0,0,.3);padding:1px 6px;border-radius:4px">${d.instance}</code></span>`
+      : `<span style="color:var(--muted)">Número que envia cobranças/lembretes para os gestores dos restaurantes (seus clientes SaaS)</span>`;
+  } catch(e) {}
+}
+async function salvarCobrancaWA() {
+  const instance = (document.getElementById('cob-wa-instance')?.value || '').trim();
+  // Valida nome de instância: só letras, números, hífen, underscore
+  if (instance && !/^[a-zA-Z0-9_-]+$/.test(instance)) {
+    toast('err', 'Nome da instância inválido (use só letras, números, - e _)');
+    return;
+  }
+  try {
+    const r = await fetch('/api/admin/cobranca-wa', {
+      method: 'POST', headers: adminAuthHeader(),
+      body: JSON.stringify({ instance })
+    });
+    if (r.status === 401) { toast('err','Sessão expirada'); setTimeout(doLogout,1500); return; }
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    await auditLog('config.cobranca_wa', null, { instance });
+    toast('ok', instance ? '✅ Instância de cobrança salva!' : '✅ Voltou para instância padrão');
+    carregarCobrancaWA();
   } catch(e) { toast('err', 'Erro: ' + e.message); }
 }
 
