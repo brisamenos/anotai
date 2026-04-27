@@ -126,6 +126,134 @@ function _iniciarPixRecoveryJob(db, log, sseBroadcast, getToken) {
   }, 60_000)
 }
 
+// ═══════════════════════════════════════════════════════
+// CRON DIÁRIO: auto-cobrança 3 dias antes de vencer
+// ═══════════════════════════════════════════════════════
+let _autoCobrancaJobIniciado = false
+function _iniciarAutoCobrancaJob(ctx) {
+  if (_autoCobrancaJobIniciado) return
+  _autoCobrancaJobIniciado = true
+  const { db, log, MP_TOKEN, EVO_URL, EVO_KEY, EVO_INST, sendWA, marcarDirty } = ctx
+  log('🔄', 'Auto-cobrança job iniciado (intervalo: 6h)')
+
+  async function tick() {
+    try {
+      // Lê preços globais
+      let precoEss = 79.99, precoPre = 99.90
+      try {
+        const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+        const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+        if (g.preco_essencial !== undefined) precoEss = parseFloat(g.preco_essencial)
+        if (g.preco_premium   !== undefined) precoPre = parseFloat(g.preco_premium)
+      } catch {}
+
+      // Token MP
+      let mpToken = MP_TOKEN
+      try {
+        const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+        const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+        if (g.mp_token) mpToken = g.mp_token
+      } catch {}
+      if (!mpToken) return // sem token, pula silenciosamente
+
+      // Tenants ativos vencendo em 3 dias (janela: hoje+2 a hoje+4 para evitar timing)
+      const tenants = db.prepare(`
+        SELECT * FROM tenants
+        WHERE ativo=1
+          AND slug NOT IN ('_admin','_global','admin')
+          AND expires_at IS NOT NULL
+          AND date(expires_at) BETWEEN date('now','+2 days') AND date('now','+4 days')
+      `).all()
+      if (!tenants.length) return
+
+      let geradas = 0
+      for (const t of tenants) {
+        // Já existe fatura pendente recente para este tenant? (evita duplicar)
+        const ja = db.prepare(`
+          SELECT id FROM faturas
+          WHERE tenant_id=? AND status='pendente'
+            AND created_at > datetime('now','-7 days')
+          LIMIT 1
+        `).get(t.id)
+        if (ja) continue
+
+        try {
+          const plano = (t.plano === 'premium') ? 'premium' : 'essencial'
+          const valor = (plano === 'premium') ? precoPre : precoEss
+          const extRef = `auto-${t.id.slice(0,8)}-${plano}-${Date.now()}`
+          const descricao = `Renovação Plano ${plano === 'premium' ? 'Premium' : 'Essencial'} — ${t.nome}`
+
+          const mpResp = await fetch('https://api.mercadopago.com/v1/payments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
+            body: JSON.stringify({
+              transaction_amount: parseFloat(valor),
+              description: descricao,
+              payment_method_id: 'pix',
+              external_reference: extRef,
+              date_of_expiration: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().replace('Z', '-03:00'),
+              payer: { email: 'cobranca@estimafood.com', first_name: t.nome.split(' ')[0] || 'Cliente' }
+            })
+          })
+          const mpData = await mpResp.json()
+          if (!mpResp.ok) { log('⚠️', `Auto-cobrança falhou tenant=${t.nome}: ${mpData.message || 'erro MP'}`); continue }
+
+          const venceEm = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()
+          const link = mpData.point_of_interaction?.transaction_data?.ticket_url || null
+          const qr   = mpData.point_of_interaction?.transaction_data?.qr_code || null
+          const qrB64= mpData.point_of_interaction?.transaction_data?.qr_code_base64 || null
+
+          const info = db.prepare(`INSERT INTO faturas
+            (tenant_id, plano, valor, meses, metodo, status, link_pagamento, mp_payment_id, mp_external_ref, qr_code, qr_code_base64, vence_em, obs)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+              t.id, plano, parseFloat(valor), 1, 'pix', 'pendente',
+              link, String(mpData.id), extRef, qr, qrB64, venceEm,
+              'Gerada automaticamente (3 dias antes do vencimento)'
+            )
+          const fatura = db.prepare('SELECT * FROM faturas WHERE id=?').get(info.lastInsertRowid)
+          marcarDirty()
+
+          // Manda WA
+          try {
+            let telefone = null
+            const cfg = db.prepare('SELECT store_whatsapp FROM store_config WHERE tenant_id=?').get(t.id)
+            if (cfg?.store_whatsapp) telefone = String(cfg.store_whatsapp).replace(/\D/g, '')
+            if (telefone && (telefone.length === 11 || telefone.length === 10)) telefone = '55' + telefone
+            if (telefone) {
+              const valorTxt = parseFloat(valor).toFixed(2).replace('.', ',')
+              const planoNome = plano === 'premium' ? 'Premium' : 'Essencial'
+              const venceEmTxt = new Date(venceEm).toLocaleDateString('pt-BR')
+              const msg = [
+                `🧾 *Lembrete: sua mensalidade vence em breve*`,
+                ``,
+                `Olá! Seu plano *${planoNome}* do Estima Food vence em *3 dias*.`,
+                ``,
+                `💰 *Valor:* R$ ${valorTxt}`,
+                `⏰ *Pague até:* ${venceEmTxt}`,
+                ``,
+                `💸 *Pague agora via PIX:*`,
+                link || '(link indisponível)',
+                ``,
+                `_O pagamento renova seu acesso automaticamente._ ✅`
+              ].join('\n')
+              await sendWA(telefone, msg, EVO_INST)
+            }
+          } catch (eWa) { log('⚠️', `Auto-cobrança WA falhou tenant=${t.nome}: ${eWa.message}`) }
+
+          geradas++
+        } catch (e) {
+          log('⚠️', `Auto-cobrança erro tenant=${t.nome}:`, e.message)
+        }
+      }
+      if (geradas) log('✅', `Auto-cobrança: ${geradas} fatura(s) gerada(s) automaticamente`)
+    } catch (e) { log('⚠️', 'Auto-cobrança job erro geral:', e.message) }
+  }
+
+  // Roda 1x ao iniciar (após 5min para não atrasar startup) e depois a cada 6h
+  setTimeout(tick, 5 * 60_000)
+  setInterval(tick, 6 * 3600_000)
+}
+
 module.exports = async function handleRoutes(req, res, ctx) {
   const { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
           validarSessaoAdmin, criarSessaoAdmin, fazerBackup, restaurarBackup, getTenantId,
@@ -140,6 +268,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
       return g.mp_token || MP_TOKEN
     } catch { return MP_TOKEN }
   })
+
+  // ── Inicia job de auto-cobrança SaaS (uma vez) ────────────────────────────
+  _iniciarAutoCobrancaJob(ctx)
 
   // ═══════════════════════════════════════════════════════
   // Download do App Desktop
@@ -905,6 +1036,75 @@ module.exports = async function handleRoutes(req, res, ctx) {
             }
           }
         }
+      }
+
+      // ── Rota 3: Fatura SaaS (assinatura mensal do restaurante) ───────────
+      // Tenta casar por mp_payment_id (PIX) ou external_reference (cartão preference)
+      let rowF = db.prepare('SELECT * FROM faturas WHERE mp_payment_id=?').get(String(mpId))
+      if (!rowF && pd.external_reference) {
+        rowF = db.prepare('SELECT * FROM faturas WHERE mp_external_ref=?').get(pd.external_reference)
+        // Se casou por external_ref e ainda não tinha mp_payment_id (caso preference), salva
+        if (rowF && !rowF.mp_payment_id) {
+          db.prepare('UPDATE faturas SET mp_payment_id=? WHERE id=?').run(String(mpId), rowF.id)
+        }
+      }
+      if (rowF && rowF.status !== 'pago' && novoStatus === 'aprovado') {
+        const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(rowF.tenant_id)
+        if (tenant) {
+          // Marca fatura paga
+          db.prepare("UPDATE faturas SET status='pago', pago_em=? WHERE id=?")
+            .run(pd.date_approved || new Date().toISOString(), rowF.id)
+
+          // Renova plano: soma meses ao expires_at atual (ou hoje se já expirou/sem data)
+          const hoje = new Date()
+          const baseDate = (tenant.expires_at && new Date(tenant.expires_at) > hoje)
+            ? new Date(tenant.expires_at)
+            : hoje
+          const novaExp = new Date(baseDate)
+          novaExp.setDate(novaExp.getDate() + (parseInt(rowF.meses) || 1) * 30)
+          const novaExpISO = novaExp.toISOString().slice(0, 10)
+
+          // Atualiza plano também (caso fatura tenha sido pra upgrade)
+          const planoNovo = ['premium','essencial','pro'].includes(rowF.plano) ? rowF.plano : tenant.plano
+          db.prepare('UPDATE tenants SET expires_at=?, ativo=1, plano=?, updated_at=datetime(\'now\') WHERE id=?')
+            .run(novaExpISO, planoNovo, tenant.id)
+
+          marcarDirty()
+          log('✅', `FATURA PAGA: tenant=${tenant.nome} valor=R$${rowF.valor} plano=${planoNovo} novo_vencimento=${novaExpISO}`)
+
+          // Notifica gestor por WhatsApp
+          ;(async () => {
+            try {
+              let telefone = null
+              try {
+                const cfg = db.prepare('SELECT store_whatsapp FROM store_config WHERE tenant_id=?').get(tenant.id)
+                if (cfg?.store_whatsapp) telefone = String(cfg.store_whatsapp).replace(/\D/g, '')
+              } catch {}
+              if (telefone && (telefone.length === 11 || telefone.length === 10)) telefone = '55' + telefone
+              if (telefone) {
+                const planoNome = planoNovo === 'premium' ? 'Premium' : 'Essencial'
+                const valorTxt  = parseFloat(rowF.valor).toFixed(2).replace('.', ',')
+                const venceTxt  = novaExp.toLocaleDateString('pt-BR')
+                const msg = [
+                  `✅ *Pagamento confirmado!*`,
+                  ``,
+                  `Recebemos seu pagamento do plano *${planoNome}*.`,
+                  ``,
+                  `💰 *Valor:* R$ ${valorTxt}`,
+                  `📅 *Próximo vencimento:* ${venceTxt}`,
+                  ``,
+                  `Seu acesso continua ativo. Obrigado por usar o *Estima Food*! 🍽️`
+                ].join('\n')
+                await sendWA(telefone, msg, EVO_INST)
+                log('📨', `Confirmação fatura WA enviada: tenant=${tenant.nome}`)
+              }
+            } catch (e) { log('⚠️', 'Confirmação fatura WA erro:', e.message) }
+          })()
+        }
+      } else if (rowF && rowF.status !== novoStatus && (novoStatus === 'rejeitado' || novoStatus === 'cancelado')) {
+        db.prepare("UPDATE faturas SET status=? WHERE id=?").run(novoStatus, rowF.id)
+        marcarDirty()
+        log('⚠️', `Fatura ${rowF.id} marcada como ${novoStatus}`)
       }
     } catch (e) { log('❌', 'Webhook MP erro:', e.message) }
     send(res, 200, { ok: true })
@@ -2415,6 +2615,402 @@ module.exports = async function handleRoutes(req, res, ctx) {
     } catch(e) {
       send(res, 500, { error: e.message })
     }
+    return true
+  }
+
+  // ════════════════════════════════════════════════════════
+  // ADMIN — AUDIT LOG, FATURAMENTO, COBRANÇA, SAÚDE
+  // ════════════════════════════════════════════════════════
+
+  // ── Helper interno: registra log de auditoria ─────────
+  function _registrarAudit(adminSess, payload, reqHeaders) {
+    try {
+      const ip = (reqHeaders['x-forwarded-for'] || reqHeaders['x-real-ip'] || '').toString().split(',')[0].trim()
+        || req.socket?.remoteAddress || ''
+      const ua = (reqHeaders['user-agent'] || '').toString().slice(0, 500)
+      const det = payload.detalhes && typeof payload.detalhes === 'object'
+        ? JSON.stringify(payload.detalhes)
+        : (payload.detalhes || null)
+      db.prepare(`INSERT INTO admin_audit_log
+        (admin_id, admin_nome, admin_email, acao, alvo_tipo, alvo_id, alvo_nome, detalhes, ip, user_agent)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
+          adminSess?.user_id || null,
+          adminSess?.nome    || null,
+          adminSess?.email   || null,
+          String(payload.acao || ''),
+          payload.alvo_tipo  || null,
+          payload.alvo_id    ? String(payload.alvo_id) : null,
+          payload.alvo_nome  || null,
+          det,
+          ip,
+          ua
+        )
+      marcarDirty()
+      return true
+    } catch (e) {
+      log('⚠️', 'audit log erro:', e.message)
+      return false
+    }
+  }
+
+  // ── POST /api/admin/audit-log — registra ação do admin ───
+  if (req.method === 'POST' && upath === '/api/admin/audit-log') {
+    const sess = validarSessaoAdmin(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    if (!body?.acao) { send(res, 400, { error: 'campo acao obrigatorio' }); return true }
+    _registrarAudit(sess, body, req.headers)
+    send(res, 200, { ok: true })
+    return true
+  }
+
+  // ── GET /api/admin/audit-log — lista logs ────────────
+  if (req.method === 'GET' && upath === '/api/admin/audit-log') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    try {
+      const limit  = Math.min(parseInt(params.get('limit'))  || 200, 1000)
+      const offset = Math.max(parseInt(params.get('offset')) || 0, 0)
+      const acao   = params.get('acao') || null
+      let sql  = 'SELECT * FROM admin_audit_log'
+      const ps = []
+      if (acao) { sql += ' WHERE acao LIKE ?'; ps.push(acao + '%') }
+      sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
+      ps.push(limit, offset)
+      const rows = db.prepare(sql).all(...ps)
+      // Faz parse do JSON detalhes para o frontend não precisar
+      const out = rows.map(r => {
+        let det = r.detalhes
+        try { det = det ? JSON.parse(det) : {} } catch { /* deixa string */ }
+        return { ...r, detalhes: det }
+      })
+      send(res, 200, out)
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── GET /api/admin/saude/:tenantId — métricas do cliente ─
+  if (req.method === 'GET' && /^\/api\/admin\/saude\/[^/]+$/.test(upath)) {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const tid = upath.split('/').pop()
+    try {
+      const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tid)
+      if (!tenant) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
+
+      // Pedidos 30d (apenas finalizados/entregues, ignorando cancelados)
+      const pedidos30d = db.prepare(`
+        SELECT COUNT(*) as cnt, COALESCE(SUM(total),0) + COALESCE(SUM(taxa),0) as fat
+        FROM orders
+        WHERE tenant_id=?
+          AND created_at > datetime('now','-30 days')
+          AND status NOT IN ('cancelado','aguardando_pix','aguardando_cartao')
+      `).get(tid) || { cnt: 0, fat: 0 }
+
+      // Mensagens IA 30d (heurística: count em wa_messages do bot, se a tabela existir)
+      let mensagensIa = 0
+      try {
+        mensagensIa = db.prepare(`
+          SELECT COUNT(*) as cnt FROM wa_messages
+          WHERE tenant_id=? AND from_me=1
+            AND created_at > datetime('now','-30 days')
+        `).get(tid)?.cnt || 0
+      } catch { /* tabela pode não existir */ }
+
+      // Último login do gestor (sys_users.ultimo_acesso)
+      let ultimoLoginDias = null
+      try {
+        const u = db.prepare(`
+          SELECT MAX(ultimo_acesso) as ult FROM sys_users
+          WHERE tenant_id=? AND ativo=1 AND role='gestor'
+        `).get(tid)
+        if (u?.ult) {
+          const dt = new Date(u.ult).getTime()
+          if (!isNaN(dt)) ultimoLoginDias = Math.floor((Date.now() - dt) / (24 * 3600 * 1000))
+        }
+      } catch { /* não-fatal */ }
+
+      // IA configurada?
+      let iaAtiva = false
+      try {
+        const cfg = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id=?").get(tid)
+        if (cfg?.ia_config) {
+          const ia = JSON.parse(cfg.ia_config)
+          iaAtiva = !!(ia.openai_key || ia.ativo)
+        }
+      } catch { /* não-fatal */ }
+
+      send(res, 200, {
+        pedidos_30d:     pedidos30d.cnt || 0,
+        faturamento_30d: parseFloat(pedidos30d.fat || 0),
+        mensagens_ia_30d: mensagensIa,
+        ultimo_login_dias: ultimoLoginDias,
+        ia_ativa: iaAtiva,
+        criado_em: tenant.created_at,
+        plano: tenant.plano,
+        ativo: !!tenant.ativo,
+        expires_at: tenant.expires_at,
+      })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── GET /api/admin/faturamento — lista todas faturas ──
+  if (req.method === 'GET' && upath === '/api/admin/faturamento') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    try {
+      const rows = db.prepare(`
+        SELECT f.*, t.nome as tenant_nome, t.slug as tenant_slug
+        FROM faturas f
+        LEFT JOIN tenants t ON t.id = f.tenant_id
+        ORDER BY f.created_at DESC
+        LIMIT 500
+      `).all()
+      send(res, 200, rows)
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Helper: gera cobrança PIX no Mercado Pago e retorna { fatura, link } ──
+  async function _gerarCobrancaMP(tenant, opts) {
+    const { plano, valor, meses, metodo } = opts
+
+    // Token MP (mesmo padrão dos saques: ia_config global)
+    let mpToken = MP_TOKEN
+    try {
+      const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+      if (g.mp_token) mpToken = g.mp_token
+    } catch {}
+    if (!mpToken) throw new Error('Token Mercado Pago não configurado em /admin → Saques PIX')
+
+    const extRef = `fatura-${tenant.id.slice(0, 8)}-${plano}-${Date.now()}`
+    const venceEm = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString() // expira em 7d
+    const descricao = `Plano ${plano === 'premium' ? 'Premium' : 'Essencial'} — ${meses} ${meses === 1 ? 'mês' : 'meses'} — ${tenant.nome}`
+
+    let mpData = null, qrCode = null, qrCodeBase64 = null, linkPagamento = null
+
+    if (metodo === 'pix') {
+      // Cria pagamento PIX direto
+      const mpResp = await fetch('https://api.mercadopago.com/v1/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
+        body: JSON.stringify({
+          transaction_amount: parseFloat(valor),
+          description: descricao,
+          payment_method_id: 'pix',
+          external_reference: extRef,
+          date_of_expiration: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().replace('Z', '-03:00'),
+          payer: { email: 'cobranca@estimafood.com', first_name: tenant.nome.split(' ')[0] || 'Cliente' }
+        })
+      })
+      mpData = await mpResp.json()
+      if (!mpResp.ok) throw new Error(mpData.message || 'Falha ao criar PIX no Mercado Pago')
+      qrCode       = mpData.point_of_interaction?.transaction_data?.qr_code || null
+      qrCodeBase64 = mpData.point_of_interaction?.transaction_data?.qr_code_base64 || null
+      // Link de pagamento (ticket_url para ver QR no MP, ou nosso próprio link)
+      linkPagamento = mpData.point_of_interaction?.transaction_data?.ticket_url || null
+    } else {
+      // Cartão de crédito: cria preference (link de checkout)
+      const prefResp = await fetch('https://api.mercadopago.com/checkout/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}` },
+        body: JSON.stringify({
+          items: [{ title: descricao, quantity: 1, unit_price: parseFloat(valor), currency_id: 'BRL' }],
+          external_reference: extRef,
+          payment_methods: { excluded_payment_types: [{ id: 'ticket' }, { id: 'atm' }], installments: 12 },
+          expires: true,
+          expiration_date_to: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+          metadata: { tenant_id: tenant.id, plano, meses }
+        })
+      })
+      mpData = await prefResp.json()
+      if (!prefResp.ok) throw new Error(mpData.message || 'Falha ao criar preferência no Mercado Pago')
+      linkPagamento = mpData.init_point || mpData.sandbox_init_point || null
+    }
+
+    // Salva fatura
+    const info = db.prepare(`INSERT INTO faturas
+      (tenant_id, plano, valor, meses, metodo, status, link_pagamento, mp_payment_id, mp_external_ref, qr_code, qr_code_base64, vence_em)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        tenant.id, plano, parseFloat(valor), parseInt(meses) || 1, metodo, 'pendente',
+        linkPagamento, mpData.id ? String(mpData.id) : null, extRef,
+        qrCode, qrCodeBase64, venceEm
+      )
+    marcarDirty()
+    const fatura = db.prepare('SELECT * FROM faturas WHERE id=?').get(info.lastInsertRowid)
+    return { fatura, link: linkPagamento, qr_code: qrCode }
+  }
+
+  // ── Helper: envia link de pagamento por WhatsApp pro gestor ──
+  async function _enviarCobrancaWA(tenant, fatura) {
+    try {
+      const gestor = db.prepare(`
+        SELECT nome, email FROM sys_users
+        WHERE tenant_id=? AND role='gestor' AND ativo=1
+        ORDER BY created_at ASC LIMIT 1
+      `).get(tenant.id)
+
+      // Tenta achar telefone: prioriza store_config.store_whatsapp do tenant
+      let telefone = null
+      try {
+        const cfg = db.prepare('SELECT store_whatsapp FROM store_config WHERE tenant_id=?').get(tenant.id)
+        if (cfg?.store_whatsapp) telefone = String(cfg.store_whatsapp).replace(/\D/g, '')
+      } catch {}
+      if (!telefone) {
+        log('⚠️', `Cobrança WA: tenant ${tenant.nome} sem telefone — link gerado mas não enviado`)
+        return { enviado: false, motivo: 'telefone_nao_configurado' }
+      }
+      // Garante DDI 55
+      if (telefone.length === 11 || telefone.length === 10) telefone = '55' + telefone
+
+      const valorTxt = parseFloat(fatura.valor).toFixed(2).replace('.', ',')
+      const planoNome = fatura.plano === 'premium' ? 'Premium' : 'Essencial'
+      const venceEmTxt = fatura.vence_em
+        ? new Date(fatura.vence_em).toLocaleDateString('pt-BR')
+        : '7 dias'
+
+      const linhas = [
+        `🧾 *Cobrança — Plano ${planoNome}*`,
+        ``,
+        `Olá ${(gestor?.nome || tenant.nome).split(' ')[0]}! 👋`,
+        ``,
+        `Sua mensalidade do *Estima Food* está disponível para pagamento:`,
+        ``,
+        `💰 *Valor:* R$ ${valorTxt}`,
+        `📅 *Período:* ${fatura.meses} ${fatura.meses === 1 ? 'mês' : 'meses'}`,
+        `⏰ *Vence em:* ${venceEmTxt}`,
+        ``,
+        fatura.metodo === 'pix' ? `💸 *Pague agora via PIX:*` : `💳 *Pague com cartão:*`,
+        fatura.link_pagamento || '(link indisponível)',
+        ``,
+        `_Após o pagamento, seu acesso é renovado automaticamente._ ✅`,
+        `_Dúvidas? É só responder esta mensagem._`
+      ]
+      const msg = linhas.join('\n')
+
+      await sendWA(telefone, msg, EVO_INST)
+      log('📨', `Cobrança WA enviada: tenant=${tenant.nome} fatura=${fatura.id} tel=${telefone}`)
+      return { enviado: true, telefone }
+    } catch (e) {
+      log('⚠️', 'Cobrança WA erro:', e.message)
+      return { enviado: false, motivo: e.message }
+    }
+  }
+
+  // ── POST /api/admin/cobranca/gerar — gera 1 cobrança e envia ──
+  if (req.method === 'POST' && upath === '/api/admin/cobranca/gerar') {
+    const sess = validarSessaoAdmin(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    const { tenant_id, plano, valor, meses, metodo } = body || {}
+    if (!tenant_id || !plano || !valor) { send(res, 400, { error: 'tenant_id, plano e valor obrigatórios' }); return true }
+    try {
+      const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenant_id)
+      if (!tenant) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
+      const result = await _gerarCobrancaMP(tenant, {
+        plano: ['essencial', 'premium', 'pro'].includes(plano) ? plano : 'essencial',
+        valor: parseFloat(valor),
+        meses: parseInt(meses) || 1,
+        metodo: metodo === 'cartao' ? 'cartao' : 'pix'
+      })
+      const wa = await _enviarCobrancaWA(tenant, result.fatura)
+      _registrarAudit(sess, {
+        acao: 'cobranca.gerar',
+        alvo_tipo: 'tenant', alvo_id: tenant_id, alvo_nome: tenant.nome,
+        detalhes: { fatura_id: result.fatura.id, valor: result.fatura.valor, plano, meses, metodo, wa_enviado: wa.enviado }
+      }, req.headers)
+      send(res, 200, { ok: true, fatura: result.fatura, link: result.link, wa })
+    } catch(e) {
+      log('❌', 'Cobrança gerar erro:', e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  // ── POST /api/admin/cobranca/em-massa — várias cobranças ──
+  if (req.method === 'POST' && upath === '/api/admin/cobranca/em-massa') {
+    const sess = validarSessaoAdmin(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    const ids = Array.isArray(body?.tenant_ids) ? body.tenant_ids : []
+    if (!ids.length) { send(res, 400, { error: 'tenant_ids obrigatório (array)' }); return true }
+    // Lê preços dos planos
+    let precoEss = 79.99, precoPre = 99.90
+    try {
+      const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+      if (g.preco_essencial !== undefined) precoEss = parseFloat(g.preco_essencial)
+      if (g.preco_premium   !== undefined) precoPre = parseFloat(g.preco_premium)
+    } catch {}
+
+    let enviadas = 0, falhas = 0
+    const erros = []
+    for (const id of ids) {
+      try {
+        const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(id)
+        if (!tenant) { falhas++; erros.push({ id, erro: 'tenant não encontrado' }); continue }
+        const plano = (tenant.plano === 'premium') ? 'premium' : 'essencial'
+        const valor = (plano === 'premium') ? precoPre : precoEss
+        const result = await _gerarCobrancaMP(tenant, { plano, valor, meses: 1, metodo: 'pix' })
+        await _enviarCobrancaWA(tenant, result.fatura)
+        enviadas++
+      } catch(e) {
+        falhas++
+        erros.push({ id, erro: e.message })
+        log('⚠️', `Cobrança massa falhou tenant=${id}:`, e.message)
+      }
+    }
+    _registrarAudit(sess, {
+      acao: 'cobranca.em_massa',
+      alvo_tipo: null, alvo_id: null, alvo_nome: null,
+      detalhes: { total: ids.length, enviadas, falhas, erros }
+    }, req.headers)
+    send(res, 200, { ok: true, enviadas, falhas, erros })
+    return true
+  }
+
+  // ── POST /api/admin/cobranca/reenviar — reenvia link via WA ──
+  if (req.method === 'POST' && upath === '/api/admin/cobranca/reenviar') {
+    const sess = validarSessaoAdmin(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    if (!body?.id) { send(res, 400, { error: 'id obrigatório' }); return true }
+    try {
+      const f = db.prepare('SELECT * FROM faturas WHERE id=?').get(body.id)
+      if (!f) { send(res, 404, { error: 'Fatura não encontrada' }); return true }
+      if (f.status === 'pago') { send(res, 400, { error: 'Fatura já paga' }); return true }
+      if (f.status === 'cancelado') { send(res, 400, { error: 'Fatura cancelada' }); return true }
+      const t = db.prepare('SELECT * FROM tenants WHERE id=?').get(f.tenant_id)
+      if (!t) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
+      const wa = await _enviarCobrancaWA(t, f)
+      _registrarAudit(sess, {
+        acao: 'cobranca.reenviar',
+        alvo_tipo: 'tenant', alvo_id: t.id, alvo_nome: t.nome,
+        detalhes: { fatura_id: f.id, wa_enviado: wa.enviado }
+      }, req.headers)
+      send(res, 200, { ok: true, wa })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── POST /api/admin/cobranca/cancelar ────────────────
+  if (req.method === 'POST' && upath === '/api/admin/cobranca/cancelar') {
+    const sess = validarSessaoAdmin(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    if (!body?.id) { send(res, 400, { error: 'id obrigatório' }); return true }
+    try {
+      const f = db.prepare('SELECT * FROM faturas WHERE id=?').get(body.id)
+      if (!f) { send(res, 404, { error: 'Fatura não encontrada' }); return true }
+      if (f.status === 'pago') { send(res, 400, { error: 'Fatura já paga, não pode cancelar' }); return true }
+      db.prepare("UPDATE faturas SET status='cancelado', cancelado_em=datetime('now') WHERE id=?").run(body.id)
+      marcarDirty()
+      _registrarAudit(sess, {
+        acao: 'cobranca.cancelar',
+        alvo_tipo: 'fatura', alvo_id: String(body.id), alvo_nome: `Fatura #${body.id}`,
+        detalhes: { tenant_id: f.tenant_id, valor: f.valor }
+      }, req.headers)
+      send(res, 200, { ok: true })
+    } catch(e) { send(res, 500, { error: e.message }) }
     return true
   }
 

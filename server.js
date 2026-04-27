@@ -407,6 +407,54 @@ const MIGRATIONS = [
     )`,
     `CREATE INDEX IF NOT EXISTS idx_addons_esg_tenant ON addons_esgotados(tenant_id)`
   ]},
+  { version:39, description:'audit log admin + faturas + updated_at em tenants', up:[
+    // updated_at em tenants (usado pelo cálculo de churn: quem ficou inativo nos últimos 30d)
+    `ALTER TABLE tenants ADD COLUMN updated_at TEXT`,
+    // backfill: usa created_at para registros existentes
+    `UPDATE tenants SET updated_at = created_at WHERE updated_at IS NULL`,
+    // Audit log: rastreia ações administrativas (deletar/pausar/renovar/cobrar/mudar preço)
+    `CREATE TABLE IF NOT EXISTS admin_audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      admin_id TEXT,
+      admin_nome TEXT,
+      admin_email TEXT,
+      acao TEXT NOT NULL,
+      alvo_tipo TEXT,
+      alvo_id TEXT,
+      alvo_nome TEXT,
+      detalhes TEXT,
+      ip TEXT,
+      user_agent TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_acao ON admin_audit_log(acao)`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_alvo ON admin_audit_log(alvo_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_data ON admin_audit_log(created_at DESC)`,
+    // Faturas (cobranças mensais dos restaurantes pagando o SaaS)
+    `CREATE TABLE IF NOT EXISTS faturas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      plano TEXT,
+      valor REAL NOT NULL,
+      meses INTEGER DEFAULT 1,
+      metodo TEXT DEFAULT 'pix',
+      status TEXT DEFAULT 'pendente',
+      link_pagamento TEXT,
+      mp_payment_id TEXT,
+      mp_external_ref TEXT,
+      qr_code TEXT,
+      qr_code_base64 TEXT,
+      vence_em TEXT,
+      pago_em TEXT,
+      cancelado_em TEXT,
+      obs TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_faturas_tenant  ON faturas(tenant_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_faturas_status  ON faturas(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_faturas_mp      ON faturas(mp_payment_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_faturas_extref  ON faturas(mp_external_ref)`,
+  ]},
 ]
 
 function runMigrations() {
@@ -708,7 +756,7 @@ function emit(tenantId, table, record, type) {
 // REST ENGINE
 // ════════════════════════════════════════════════════════
 const TABLE_COLS = {
-  tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','created_at'],
+  tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
   store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
@@ -726,6 +774,8 @@ const TABLE_COLS = {
   pagamentos_cartao: ['id','tenant_id','order_id','mp_payment_id','mp_external_ref','valor','status','status_detail','payer_name','payer_email','last_four_digits','payment_method_id','created_at','paid_at'],
   fornecedores: ['id','tenant_id','nome','contato','telefone','email','cnpj','endereco','obs','ativo','created_at'],
   contas_pagar: ['id','tenant_id','descricao','valor','vencimento','categoria','fornecedor_id','recorrente','recorrencia','status','pago_em','obs','created_at'],
+  faturas:      ['id','tenant_id','plano','valor','meses','metodo','status','link_pagamento','mp_payment_id','mp_external_ref','qr_code','qr_code_base64','vence_em','pago_em','cancelado_em','obs','created_at'],
+  admin_audit_log: ['id','admin_id','admin_nome','admin_email','acao','alvo_tipo','alvo_id','alvo_nome','detalhes','ip','user_agent','created_at'],
 }
 // Colunas que NUNCA aparecem na resposta GET — mas ainda funcionam como filtro WHERE e em escrita
 const STRIP_FROM_OUTPUT = {
@@ -735,11 +785,12 @@ const STRIP_FROM_OUTPUT = {
   store_config: new Set([]),
 }
 
-const NO_TENANT_FILTER = new Set(['tenants','sys_users'])
+const NO_TENANT_FILTER = new Set(['tenants','sys_users','admin_audit_log'])
 const JSON_FIELDS = {
   orders:       new Set(['items']),
   menu_items:   new Set(['days','ingredients','custom_groups']),
   store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config','cashback_config','tipos_entrega']),
+  admin_audit_log: new Set(['detalhes']),
 }
 const BOOL_FIELDS  = new Set(['ativo','store_open','caixa_open','destaque'])
 const SSE_TABLES   = new Set(['orders','mesas','store_config','menu_items','categories','garcons','customers','addons_esgotados'])

@@ -371,6 +371,9 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
       <button class="sb-item" id="nav-saques" onclick="navTo('saques')">
         <span class="sb-icon">💰</span> Saques PIX
       </button>
+      <button class="sb-item" id="nav-faturamento" onclick="navTo('faturamento')">
+        <span class="sb-icon">🧾</span> Faturamento
+      </button>
 
       <div class="sb-sec" style="margin-top:6px">Sistema</div>
       <button class="sb-item" id="nav-ia" onclick="navTo('ia')">
@@ -378,6 +381,9 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
       </button>
       <button class="sb-item" id="nav-backup" onclick="navTo('backup')">
         <span class="sb-icon">💾</span> Backup
+      </button>
+      <button class="sb-item" id="nav-auditoria" onclick="navTo('auditoria')">
+        <span class="sb-icon">📋</span> Auditoria
       </button>
     </nav>
     <div class="sb-foot">
@@ -407,6 +413,35 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
 
       <!-- ════ DASHBOARD ════ -->
       <div id="sec-dash" class="sec-page">
+        <!-- 💰 FINANCEIRO -->
+        <div class="stats-grid">
+          <div class="stat-card" style="--ca:var(--success);background:linear-gradient(135deg,rgba(34,197,94,.08),transparent)">
+            <div class="stat-card-label">MRR — Receita Mensal</div>
+            <div class="stat-card-val" id="st-mrr" style="color:var(--success)">R$ —</div>
+            <div class="stat-card-sub" id="st-mrr-sub">— ativos pagantes</div>
+            <div class="stat-card-icon">💰</div>
+          </div>
+          <div class="stat-card" style="--ca:var(--purple);background:linear-gradient(135deg,rgba(139,92,246,.08),transparent)">
+            <div class="stat-card-label">ARR — Receita Anual</div>
+            <div class="stat-card-val" id="st-arr" style="color:var(--purple)">R$ —</div>
+            <div class="stat-card-sub">projeção em 12 meses</div>
+            <div class="stat-card-icon">📈</div>
+          </div>
+          <div class="stat-card" style="--ca:var(--orange)">
+            <div class="stat-card-label">Ticket Médio</div>
+            <div class="stat-card-val" id="st-ticket" style="color:var(--orange)">R$ —</div>
+            <div class="stat-card-sub">por cliente ativo</div>
+            <div class="stat-card-icon">🎫</div>
+          </div>
+          <div class="stat-card" style="--ca:var(--danger)">
+            <div class="stat-card-label">Churn (30d)</div>
+            <div class="stat-card-val" id="st-churn" style="color:var(--danger)">—%</div>
+            <div class="stat-card-sub" id="st-churn-sub">— cancelaram</div>
+            <div class="stat-card-icon">📉</div>
+          </div>
+        </div>
+
+        <!-- 📊 OPERACIONAL -->
         <div class="stats-grid">
           <div class="stat-card" style="--ca:var(--accent)">
             <div class="stat-card-label">Total Clientes</div>
@@ -482,12 +517,43 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
               <input id="cli-q" placeholder="Buscar por nome, slug..." oninput="renderClientes()">
             </div>
           </div>
+
+          <!-- 🔍 FILTROS + ORDENAÇÃO -->
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 16px 12px;border-bottom:1px solid var(--border)">
+            <select id="cli-f-plano" class="minput" onchange="renderClientes()" style="width:auto;padding:6px 10px;font-size:12px">
+              <option value="">Todos os planos</option>
+              <option value="pro">Pro / Essencial</option>
+              <option value="premium">Premium</option>
+              <option value="basico">Básico</option>
+            </select>
+            <select id="cli-f-status" class="minput" onchange="renderClientes()" style="width:auto;padding:6px 10px;font-size:12px">
+              <option value="">Todos os status</option>
+              <option value="ativo">✅ Ativos</option>
+              <option value="inativo">⏸ Inativos</option>
+              <option value="expirando">⚠️ Expirando em 7d</option>
+              <option value="expirado">❌ Expirados</option>
+            </select>
+            <select id="cli-f-segmento" class="minput" onchange="renderClientes()" style="width:auto;padding:6px 10px;font-size:12px">
+              <option value="">Todos os segmentos</option>
+              <option value="restaurante">🍔 Restaurante</option>
+              <option value="acougue">🥩 Açougue</option>
+            </select>
+            <select id="cli-f-sort" class="minput" onchange="renderClientes()" style="width:auto;padding:6px 10px;font-size:12px">
+              <option value="recentes">Mais recentes</option>
+              <option value="antigos">Mais antigos</option>
+              <option value="nome">Nome (A-Z)</option>
+              <option value="expira">Expira em breve</option>
+            </select>
+            <button class="btn bg2 bsm" onclick="limparFiltrosCli()" style="margin-left:auto">✕ Limpar</button>
+          </div>
+
           <table>
             <thead>
               <tr>
                 <th>Estabelecimento</th>
                 <th>Gestor principal</th>
                 <th>Plano</th>
+                <th>Segmento</th>
                 <th>Expira em</th>
                 <th>Status</th>
                 <th>Ações</th>
@@ -495,6 +561,16 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
             </thead>
             <tbody id="cli-tbody"></tbody>
           </table>
+
+          <!-- 📄 PAGINAÇÃO -->
+          <div id="cli-pagination" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border);font-size:12.5px;color:var(--muted);flex-wrap:wrap;gap:10px">
+            <div id="cli-pag-info">—</div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <button class="btn bg2 bsm" onclick="cliPagPrev()" id="cli-pag-prev">← Anterior</button>
+              <span id="cli-pag-num" style="padding:0 8px;font-weight:600;color:var(--text)">1</span>
+              <button class="btn bg2 bsm" onclick="cliPagNext()" id="cli-pag-next">Próxima →</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -857,9 +933,195 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
         </div>
       </div>
 
+      <!-- ════ FATURAMENTO ════ -->
+      <div id="sec-faturamento" style="display:none" class="sec-page">
+        <div class="sec-head">
+          <div>
+            <div class="sec-head-title">🧾 Faturamento</div>
+            <div class="sec-head-sub">Cobranças geradas, pagas e pendentes dos clientes</div>
+          </div>
+          <button class="btn bg2 bsm" onclick="carregarFaturamento()">🔄 Atualizar</button>
+        </div>
+
+        <div class="grid-3" style="margin-bottom:20px">
+          <div class="stat-card" style="--ca:var(--success)">
+            <div class="stat-card-label">Recebido (mês)</div>
+            <div class="stat-card-val" id="ft-recebido" style="color:var(--success);font-size:22px">R$ —</div>
+            <div class="stat-card-sub" id="ft-recebido-sub">— pagamentos</div>
+            <div class="stat-card-icon">✅</div>
+          </div>
+          <div class="stat-card" style="--ca:var(--orange)">
+            <div class="stat-card-label">A Receber</div>
+            <div class="stat-card-val" id="ft-pendente" style="color:var(--orange);font-size:22px">R$ —</div>
+            <div class="stat-card-sub" id="ft-pendente-sub">— pendentes</div>
+            <div class="stat-card-icon">⏳</div>
+          </div>
+          <div class="stat-card" style="--ca:var(--danger)">
+            <div class="stat-card-label">Vencidas</div>
+            <div class="stat-card-val" id="ft-vencidas" style="color:var(--danger);font-size:22px">R$ —</div>
+            <div class="stat-card-sub" id="ft-vencidas-sub">— inadimplentes</div>
+            <div class="stat-card-icon">🚨</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-head">
+            <div>
+              <div class="card-title">⚡ Cobrança em massa</div>
+              <div class="card-sub">Gera cobrança automática para todos os clientes que vencem nos próximos 7 dias</div>
+            </div>
+            <button class="btn bp bsm" onclick="cobrancaEmMassa()">📲 Disparar cobrança em massa</button>
+          </div>
+          <div id="ft-massa-info" class="infobox infobox-blue" style="font-size:12.5px">
+            Cada cliente recebe um link Mercado Pago (PIX/Cartão) por WhatsApp. O vencimento é renovado automaticamente após o pagamento.
+          </div>
+        </div>
+
+        <div class="tw">
+          <div class="tmeta">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="card-title">Histórico de cobranças</div>
+              <span class="badge bg-gray" id="ft-count">—</span>
+            </div>
+            <div style="display:flex;gap:8px">
+              <select id="ft-filtro" class="minput" onchange="renderFaturamento()" style="width:auto;padding:6px 10px;font-size:12px">
+                <option value="">Todas</option>
+                <option value="pago">✅ Pagas</option>
+                <option value="pendente">⏳ Pendentes</option>
+                <option value="vencido">🚨 Vencidas</option>
+                <option value="cancelado">⏹ Canceladas</option>
+              </select>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Cliente</th><th>Plano</th><th>Valor</th><th>Método</th><th>Vencimento</th><th>Status</th><th>Ações</th></tr>
+            </thead>
+            <tbody id="ft-tbody"><tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ════ AUDITORIA ════ -->
+      <div id="sec-auditoria" style="display:none" class="sec-page">
+        <div class="sec-head">
+          <div>
+            <div class="sec-head-title">📋 Auditoria</div>
+            <div class="sec-head-sub">Histórico de todas as ações administrativas realizadas no sistema</div>
+          </div>
+          <button class="btn bg2 bsm" onclick="carregarAuditoria()">🔄 Atualizar</button>
+        </div>
+
+        <div class="tw">
+          <div class="tmeta">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="card-title">Logs administrativos</div>
+              <span class="badge bg-gray" id="audit-count">—</span>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <select id="audit-f-acao" class="minput" onchange="renderAuditoria()" style="width:auto;padding:6px 10px;font-size:12px">
+                <option value="">Todas as ações</option>
+                <option value="cliente">Clientes</option>
+                <option value="usuario">Usuários</option>
+                <option value="cobranca">Cobranças</option>
+                <option value="planos">Preços</option>
+                <option value="ia">IA</option>
+              </select>
+              <input id="audit-q" class="minput" placeholder="Buscar..." oninput="renderAuditoria()" style="width:200px;padding:6px 10px;font-size:12px">
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Data/Hora</th><th>Admin</th><th>Ação</th><th>Alvo</th><th>Detalhes</th></tr>
+            </thead>
+            <tbody id="audit-tbody"><tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
     </div><!-- /content -->
   </main>
 </div><!-- /painel -->
+
+<!-- ══════════ MODAL CONFIRMAÇÃO DUPLA ══════════ -->
+<div class="modal-bg" id="m-confirm-dupla">
+  <div class="modal" style="width:440px">
+    <button class="modal-x" onclick="fecharModal('m-confirm-dupla')">✕</button>
+    <h2 id="cd-titulo" style="color:var(--danger)">⚠️ Confirmar ação destrutiva</h2>
+    <div id="cd-mensagem" style="font-size:13.5px;color:var(--text-2);margin-bottom:16px;line-height:1.55"></div>
+    <div class="infobox infobox-orange" style="font-size:12.5px;margin-bottom:14px">
+      Esta ação <strong>não pode ser desfeita</strong>. Para confirmar, digite exatamente:
+      <div id="cd-token" style="font-family:monospace;background:rgba(0,0,0,.4);padding:8px 12px;border-radius:6px;margin-top:8px;font-size:13px;color:var(--orange);user-select:all"></div>
+    </div>
+    <input class="minput" id="cd-input" placeholder="Digite aqui para confirmar" autocomplete="off" oninput="cdValidar()" style="font-family:monospace">
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn bg2" style="flex:1" onclick="fecharModal('m-confirm-dupla')">Cancelar</button>
+      <button class="btn bd" style="flex:1" id="cd-confirmar" disabled onclick="cdExecutar()">Confirmar exclusão</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ DRAWER SAÚDE DO CLIENTE ══════════ -->
+<div class="modal-bg" id="m-saude">
+  <div class="modal" style="width:720px;max-height:90vh;overflow-y:auto">
+    <button class="modal-x" onclick="fecharModal('m-saude')">✕</button>
+    <h2 id="sd-titulo">📊 Saúde do Cliente</h2>
+    <div id="sd-content">
+      <div style="text-align:center;padding:40px;color:var(--muted)">Carregando...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ MODAL COBRANÇA MP ══════════ -->
+<div class="modal-bg" id="m-cobranca">
+  <div class="modal" style="width:480px">
+    <button class="modal-x" onclick="fecharModal('m-cobranca')">✕</button>
+    <h2 id="cb-titulo">💳 Gerar cobrança</h2>
+    <div id="cb-info" style="font-size:13px;color:var(--text-2);margin-bottom:14px"></div>
+
+    <div class="mrow2">
+      <div class="mrow" style="margin:0">
+        <label class="mlabel">Plano</label>
+        <select class="minput" id="cb-plano">
+          <option value="essencial">Essencial</option>
+          <option value="premium">Premium</option>
+        </select>
+      </div>
+      <div class="mrow" style="margin:0">
+        <label class="mlabel">Valor (R$)</label>
+        <input class="minput" id="cb-valor" type="number" step="0.01" min="0">
+      </div>
+    </div>
+
+    <div class="mrow" style="margin-top:12px">
+      <label class="mlabel">Período (meses)</label>
+      <select class="minput" id="cb-meses" onchange="cbRecalcular()">
+        <option value="1">1 mês</option>
+        <option value="3">3 meses</option>
+        <option value="6">6 meses</option>
+        <option value="12">12 meses (anual)</option>
+      </select>
+    </div>
+
+    <div class="mrow" style="margin-top:12px">
+      <label class="mlabel">Método</label>
+      <select class="minput" id="cb-metodo">
+        <option value="pix">PIX (instantâneo)</option>
+        <option value="cartao">Cartão de crédito</option>
+      </select>
+    </div>
+
+    <div class="infobox infobox-blue" style="font-size:12.5px;margin-top:14px">
+      Ao confirmar, é gerado um link de pagamento Mercado Pago e enviado ao gestor pelo WhatsApp.
+      Quando o pagamento for confirmado, o vencimento é renovado automaticamente.
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn bg2" style="flex:1" onclick="fecharModal('m-cobranca')">Cancelar</button>
+      <button class="btn bp" style="flex:1" id="cb-confirmar" onclick="cbGerar()">📲 Gerar e enviar</button>
+    </div>
+  </div>
+</div>
 
 <!-- ══════════ MODAL CLIENTE ══════════ -->
 <div class="modal-bg" id="m-cliente">
@@ -1083,17 +1345,19 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 // ── NAVEGAÇÃO ──────────────────────────────────────────
 function navTo(id) {
-  ['dash','clientes','ia','backup','saques','planos'].forEach(s => {
+  ['dash','clientes','ia','backup','saques','planos','faturamento','auditoria'].forEach(s => {
     const sec = document.getElementById('sec-'+s);
     if (sec) sec.style.display = s===id ? 'block' : 'none';
     document.getElementById('nav-'+s)?.classList.toggle('on', s===id);
   });
-  const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA', backup:'Backup & Restore', saques:'Saques PIX', planos:'Planos & Leads' };
+  const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA', backup:'Backup & Restore', saques:'Saques PIX', planos:'Planos & Leads', faturamento:'Faturamento', auditoria:'Auditoria' };
   document.getElementById('topbar-title').textContent = titles[id] || id;
-  if (id==='ia')      { iaAdminCarregar(); }
-  if (id==='backup')  { renderBackupList(); }
-  if (id==='saques')  { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); conectarAdminSSE(); }
-  if (id==='planos')  { carregarPrecosPlanos(); carregarAdminPhone(); carregarLeads(); }
+  if (id==='ia')          { iaAdminCarregar(); }
+  if (id==='backup')      { renderBackupList(); }
+  if (id==='saques')      { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); conectarAdminSSE(); }
+  if (id==='planos')      { carregarPrecosPlanos(); carregarAdminPhone(); carregarLeads(); }
+  if (id==='faturamento') { carregarFaturamento(); }
+  if (id==='auditoria')   { carregarAuditoria(); }
 }
 
 // ── PLANOS ─────────────────────────────────────────────
@@ -1118,7 +1382,9 @@ async function salvarPrecosPlanos() {
     if (r.status === 401) { toast('err','Sessão expirada'); setTimeout(doLogout,1500); return; }
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
+    await auditLog('planos.alterar_precos', null, { essencial, premium });
     toast('ok', '✅ Preços salvos com sucesso!');
+    calcularFinanceiro(); // recalcula MRR/ARR com novos preços
   } catch(e) { toast('err', 'Erro: ' + e.message); }
 }
 
@@ -1209,6 +1475,9 @@ async function carregarPixStatus() {
 }
 
 async function loadAll() {
+  // Carrega preços antes de calcular MRR
+  await carregarPrecosPlanos();
+
   const [cr, ur] = await Promise.all([
     sb.from('tenants').select('*').neq('slug','_admin').order('created_at',{ascending:false}),
     sb.from('sys_users').select('*,tenants(nome)').neq('role','superadmin').order('created_at',{ascending:false})
@@ -1221,8 +1490,43 @@ async function loadAll() {
   document.getElementById('st-inativos').textContent = _clientes.filter(c=>!c.ativo).length;
   document.getElementById('st-users').textContent    = _usuarios.length;
 
+  calcularFinanceiro();
   renderDash(); renderClientes();
   carregarPixStatus();
+}
+
+// ── 💰 FINANCEIRO (MRR/ARR/Churn/Ticket) ─────────────────
+function _precoPlano(plano) {
+  const ess = parseFloat(document.getElementById('adm-preco-essencial')?.value) || 79.99;
+  const pre = parseFloat(document.getElementById('adm-preco-premium')?.value)   || 99.90;
+  if (plano === 'premium') return pre;
+  if (plano === 'pro' || plano === 'essencial') return ess;
+  return 0; // básico/grátis
+}
+function calcularFinanceiro() {
+  const ativos = _clientes.filter(c => c.ativo);
+  const mrr = ativos.reduce((s,c) => s + _precoPlano(c.plano), 0);
+  const arr = mrr * 12;
+  const ticket = ativos.length ? mrr / ativos.length : 0;
+
+  // Churn 30d: clientes inativados nos últimos 30 dias / total ativos no início do período
+  const trintaDias = Date.now() - 30*24*3600*1000;
+  const cancelaram = _clientes.filter(c => {
+    if (c.ativo) return false;
+    const dt = c.updated_at ? new Date(c.updated_at).getTime() : 0;
+    return dt >= trintaDias;
+  }).length;
+  const baseChurn = ativos.length + cancelaram;
+  const churnPct = baseChurn ? (cancelaram / baseChurn * 100) : 0;
+
+  const fmt = v => v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const setText = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+  setText('st-mrr',     'R$ ' + fmt(mrr));
+  setText('st-mrr-sub', `${ativos.length} ativos pagantes`);
+  setText('st-arr',     'R$ ' + fmt(arr));
+  setText('st-ticket',  'R$ ' + fmt(ticket));
+  setText('st-churn',   churnPct.toFixed(1) + '%');
+  setText('st-churn-sub', `${cancelaram} cancelaram em 30d`);
 }
 
 // ── Badges de plano ────────────────────────────────────
@@ -1290,26 +1594,89 @@ function renderDash() {
 }
 
 // ── CLIENTES ───────────────────────────────────────────
+let _cliPag = 1;
+const _CLI_POR_PAG = 20;
+
+function limparFiltrosCli() {
+  ['cli-q'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  ['cli-f-plano','cli-f-status','cli-f-segmento'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  const s = document.getElementById('cli-f-sort'); if (s) s.value='recentes';
+  _cliPag = 1;
+  renderClientes();
+}
+function cliPagPrev() { if (_cliPag>1){ _cliPag--; renderClientes(); } }
+function cliPagNext() { _cliPag++; renderClientes(); }
+
 function renderClientes() {
-  const q  = (document.getElementById('cli-q')?.value||'').toLowerCase();
+  const q       = (document.getElementById('cli-q')?.value||'').toLowerCase();
+  const fPlano  = document.getElementById('cli-f-plano')?.value || '';
+  const fStatus = document.getElementById('cli-f-status')?.value || '';
+  const fSeg    = document.getElementById('cli-f-segmento')?.value || '';
+  const sortBy  = document.getElementById('cli-f-sort')?.value || 'recentes';
   const el = document.getElementById('cli-tbody');
   const badge = document.getElementById('cli-count-badge');
   if (!el) return;
-  const fil = _clientes.filter(c=>!q||c.nome.toLowerCase().includes(q)||c.email?.toLowerCase().includes(q)||(c.slug||'').includes(q));
+
+  const agora = Date.now();
+  const SETE_DIAS = 7*24*3600*1000;
+
+  let fil = _clientes.filter(c => {
+    if (q && !(c.nome.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q) || (c.slug||'').includes(q))) return false;
+    if (fPlano && c.plano !== fPlano) return false;
+    if (fSeg && (c.segmento||'restaurante') !== fSeg) return false;
+    if (fStatus) {
+      const expDate = c.expires_at ? new Date(c.expires_at).getTime() : null;
+      if (fStatus === 'ativo'     && !c.ativo) return false;
+      if (fStatus === 'inativo'   &&  c.ativo) return false;
+      if (fStatus === 'expirando' && (!expDate || expDate <= agora || expDate - agora > SETE_DIAS)) return false;
+      if (fStatus === 'expirado'  && (!expDate || expDate > agora)) return false;
+    }
+    return true;
+  });
+
+  // Ordenação
+  fil.sort((a,b) => {
+    if (sortBy === 'nome')    return a.nome.localeCompare(b.nome,'pt-BR');
+    if (sortBy === 'antigos') return new Date(a.created_at) - new Date(b.created_at);
+    if (sortBy === 'expira') {
+      const da = a.expires_at ? new Date(a.expires_at).getTime() : Infinity;
+      const db = b.expires_at ? new Date(b.expires_at).getTime() : Infinity;
+      return da - db;
+    }
+    return new Date(b.created_at) - new Date(a.created_at); // recentes
+  });
+
   if (badge) badge.textContent = fil.length;
+
+  // Paginação
+  const totalPag = Math.max(1, Math.ceil(fil.length / _CLI_POR_PAG));
+  if (_cliPag > totalPag) _cliPag = totalPag;
+  const ini = (_cliPag - 1) * _CLI_POR_PAG;
+  const pag = fil.slice(ini, ini + _CLI_POR_PAG);
+
+  const pagInfo = document.getElementById('cli-pag-info');
+  const pagNum  = document.getElementById('cli-pag-num');
+  const pagPrev = document.getElementById('cli-pag-prev');
+  const pagNext = document.getElementById('cli-pag-next');
+  if (pagInfo) pagInfo.textContent = fil.length ? `Mostrando ${ini+1}-${Math.min(ini+_CLI_POR_PAG, fil.length)} de ${fil.length}` : 'Nenhum resultado';
+  if (pagNum)  pagNum.textContent  = `${_cliPag} / ${totalPag}`;
+  if (pagPrev) pagPrev.disabled    = _cliPag <= 1;
+  if (pagNext) pagNext.disabled    = _cliPag >= totalPag;
+
   if (!fil.length) {
-    el.innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="es-icon">🔍</div><div class="es-msg">Nenhum cliente encontrado</div></div></td></tr>';
+    el.innerHTML='<tr><td colspan="7"><div class="empty-state"><div class="es-icon">🔍</div><div class="es-msg">Nenhum cliente encontrado</div></div></td></tr>';
     return;
   }
-  el.innerHTML = fil.map(c => {
+  el.innerHTML = pag.map(c => {
     const users  = _usuarios.filter(u=>u.tenant_id===c.id);
     const gestor = users.find(u=>u.role==='gestor')||users[0];
     const uCount = users.length;
     const expOk  = c.expires_at ? new Date(c.expires_at) > new Date() : true;
+    const expSoon = c.expires_at && (new Date(c.expires_at).getTime() - agora) < SETE_DIAS && expOk;
     return `<tr>
       <td>
         <div class="av-row">
-          <div class="av" style="border-radius:9px">${c.nome.charAt(0).toUpperCase()}</div>
+          <div class="av" style="border-radius:9px;cursor:pointer" onclick="abrirSaudeCliente('${c.id}')" title="Ver saúde">${c.nome.charAt(0).toUpperCase()}</div>
           <div>
             <div style="font-weight:600;font-size:13px">${c.nome}</div>
             <div style="font-size:11px;color:var(--muted)">/${c.slug}</div>
@@ -1321,16 +1688,18 @@ function renderClientes() {
         <div style="font-size:11px;color:var(--muted)">${gestor?.email||c.email||'—'}</div>
       </td>
       <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${planoLabel[c.plano]||c.plano}</span></td>
-      <td><span class="badge ${c.segmento==='acougue'?'bg-orange':'bg-blue'}">${c.segmento==='acougue'?'🥩 Açougue':'🍔 Restaurante'}</span></td>
-      <td style="font-size:12.5px;color:${expOk?'var(--text-2)':'var(--danger)'}">${c.expires_at ? new Date(c.expires_at).toLocaleDateString('pt-BR') : '—'}</td>
+      <td><span class="badge ${(c.segmento||'restaurante')==='acougue'?'bg-orange':'bg-blue'}">${(c.segmento||'restaurante')==='acougue'?'🥩 Açougue':'🍔 Restaurante'}</span></td>
+      <td style="font-size:12.5px;color:${expOk?(expSoon?'var(--orange)':'var(--text-2)'):'var(--danger)'}">${c.expires_at ? new Date(c.expires_at).toLocaleDateString('pt-BR') : '—'}${expSoon?' ⚠️':''}</td>
       <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">● ${c.ativo?'Ativo':'Inativo'}</span></td>
       <td>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn bg2 bsm btn-icon" title="Saúde do cliente" onclick="abrirSaudeCliente('${c.id}')">📊</button>
           <button class="btn bg2 bsm btn-icon" title="Editar" onclick="editarCliente('${c.id}')">✏️</button>
           <button class="btn bg2 bsm btn-icon" title="${uCount} usuário(s)" onclick="abrirUsuariosCliente('${c.id}')">👥</button>
+          <button class="btn bg2 bsm btn-icon" title="Cobrar via Mercado Pago" onclick="gerarCobrancaCliente('${c.id}')">💳</button>
           <button class="btn bg2 bsm btn-icon" title="Renovar acesso" onclick="abrirRenovar('${c.id}')">🔄</button>
           <button class="btn bg2 bsm btn-icon" title="${c.ativo?'Pausar':'Ativar'}" onclick="toggleCliente('${c.id}',${c.ativo})">${c.ativo?'⏸':'▶'}</button>
-          <button class="btn bd bsm btn-icon" title="Excluir" onclick="deletarCliente('${c.id}','${c.nome.replace(/'/g,"\\'")}')">🗑</button>
+          <button class="btn bd bsm btn-icon" title="Excluir" onclick="deletarCliente('${c.id}','${c.nome.replace(/'/g,"\\'")}','${c.slug}')">🗑</button>
         </div>
       </td>
     </tr>`;
@@ -1443,25 +1812,54 @@ async function salvarCliente() {
 }
 
 async function toggleCliente(id, ativo) {
-  await sb.from('tenants').update({ ativo:!ativo }).eq('id',id);
-  const c=_clientes.find(x=>x.id===id); if(c) c.ativo=!ativo;
+  const novoStatus = !ativo;
+  // Confirmação leve para desativar (não é destrutivo, mas afeta cliente em produção)
+  if (ativo && !confirm(`Pausar este cliente? Ele perderá acesso ao painel imediatamente.`)) return;
+  const { error } = await sb.from('tenants').update({ ativo: novoStatus, updated_at: new Date().toISOString() }).eq('id',id);
+  if (error) { toast('err','Erro: '+error.message); return; }
+  const c=_clientes.find(x=>x.id===id);
+  if(c) { c.ativo=novoStatus; c.updated_at = new Date().toISOString(); }
+  await auditLog(novoStatus?'cliente.ativar':'cliente.pausar', { tipo:'tenant', id, nome: c?.nome }, { plano: c?.plano });
   renderClientes(); renderDash();
   document.getElementById('st-ativos').textContent   = _clientes.filter(c=>c.ativo).length;
   document.getElementById('st-inativos').textContent = _clientes.filter(c=>!c.ativo).length;
-  toast('ok', !ativo?'Cliente ativado!':'Cliente pausado');
+  calcularFinanceiro();
+  toast('ok', novoStatus?'Cliente ativado!':'Cliente pausado');
 }
 
-async function deletarCliente(id, nome) {
-  if (!confirm(`Excluir "${nome}"? Todos os dados e usuários serão removidos.`)) return;
-  await sb.from('tenants').delete().eq('id',id);
-  _clientes = _clientes.filter(c=>c.id!==id);
-  _usuarios = _usuarios.filter(u=>u.tenant_id!==id);
-  renderClientes(); renderDash();
-  document.getElementById('st-total').textContent    = _clientes.length;
-  document.getElementById('st-ativos').textContent   = _clientes.filter(c=>c.ativo).length;
-  document.getElementById('st-inativos').textContent = _clientes.filter(c=>!c.ativo).length;
-  document.getElementById('st-users').textContent    = _usuarios.length;
-  toast('ok','Cliente removido');
+async function deletarCliente(id, nome, slug) {
+  // Conta dados para mostrar impacto real
+  const c = _clientes.find(x=>x.id===id);
+  const users = _usuarios.filter(u=>u.tenant_id===id);
+
+  confirmarDupla({
+    titulo: '🗑 Excluir cliente permanentemente',
+    mensagem: `Você está prestes a <strong>excluir todos os dados</strong> de <strong>${nome}</strong>:<br><br>
+      • ${users.length} usuário(s) cadastrado(s)<br>
+      • Todos os pedidos, cardápio, configurações<br>
+      • Histórico de saques e pagamentos<br>
+      • Imagens do cardápio<br><br>
+      <strong style="color:var(--danger)">Esta ação é IRREVERSÍVEL.</strong>`,
+    token: slug || 'confirmar',
+    callback: async () => {
+      try {
+        const { error } = await sb.from('tenants').delete().eq('id',id);
+        if (error) throw error;
+        await auditLog('cliente.deletar', { tipo:'tenant', id, nome }, { slug, plano: c?.plano, ativo: c?.ativo, usuarios_count: users.length });
+        _clientes = _clientes.filter(c=>c.id!==id);
+        _usuarios = _usuarios.filter(u=>u.tenant_id!==id);
+        renderClientes(); renderDash();
+        document.getElementById('st-total').textContent    = _clientes.length;
+        document.getElementById('st-ativos').textContent   = _clientes.filter(c=>c.ativo).length;
+        document.getElementById('st-inativos').textContent = _clientes.filter(c=>!c.ativo).length;
+        document.getElementById('st-users').textContent    = _usuarios.length;
+        calcularFinanceiro();
+        toast('ok','Cliente removido');
+      } catch(e) {
+        toast('err','Erro ao excluir: ' + e.message);
+      }
+    }
+  });
 }
 
 // ── RENOVAR ACESSO ─────────────────────────────────────
@@ -1492,14 +1890,17 @@ async function renovarData() {
   await _aplicarRenovacao(id, data);
 }
 async function _aplicarRenovacao(id, dataISO) {
-  const { error } = await sb.from('tenants').update({ expires_at: dataISO, ativo: true }).eq('id', id);
-  if (error) { toast('err', 'Erro ao renovar: ' + error.message); return; }
   const c = _clientes.find(x=>x.id===id);
+  const expAntes = c?.expires_at;
+  const { error } = await sb.from('tenants').update({ expires_at: dataISO, ativo: true, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) { toast('err', 'Erro ao renovar: ' + error.message); return; }
   if (c) { c.expires_at = dataISO; c.ativo = true; }
+  await auditLog('cliente.renovar', { tipo:'tenant', id, nome: c?.nome }, { de: expAntes, para: dataISO, plano: c?.plano });
   fecharModal('m-renovar');
   renderClientes(); renderDash();
   document.getElementById('st-ativos').textContent   = _clientes.filter(c=>c.ativo).length;
   document.getElementById('st-inativos').textContent = _clientes.filter(c=>!c.ativo).length;
+  calcularFinanceiro();
   toast('ok', `Acesso renovado até ${new Date(dataISO).toLocaleDateString('pt-BR')}`);
 }
 
@@ -1592,12 +1993,21 @@ async function toggleUsuario(id, ativo) {
   toast('ok', !ativo?'Usuário ativado!':'Usuário pausado');
 }
 async function deletarUsuario(id, nome) {
-  if (!confirm(`Remover usuário "${nome}"?`)) return;
-  await sb.from('sys_users').delete().eq('id',id);
-  _usuarios = _usuarios.filter(u=>u.id!==id);
-  renderUsuariosCliente(); renderClientes();
-  document.getElementById('st-users').textContent = _usuarios.length;
-  toast('ok','Usuário removido');
+  const u = _usuarios.find(x=>x.id===id);
+  confirmarDupla({
+    titulo: '🗑 Remover usuário',
+    mensagem: `Você está prestes a remover o usuário <strong>${nome}</strong>.<br>Ele perderá acesso imediatamente.`,
+    token: 'remover',
+    callback: async () => {
+      const { error } = await sb.from('sys_users').delete().eq('id',id);
+      if (error) { toast('err','Erro: '+error.message); return; }
+      await auditLog('usuario.deletar', { tipo:'sys_users', id, nome }, { tenant_id: u?.tenant_id, role: u?.role });
+      _usuarios = _usuarios.filter(u=>u.id!==id);
+      renderUsuariosCliente(); renderClientes();
+      document.getElementById('st-users').textContent = _usuarios.length;
+      toast('ok','Usuário removido');
+    }
+  });
 }
 
 // ── HELPERS ────────────────────────────────────────────
@@ -1611,6 +2021,421 @@ function toast(type, msg) {
   d.innerHTML = (type==='ok'?'✅':'❌') + ' ' + msg;
   c.appendChild(d);
   setTimeout(()=>d.remove(), 3500);
+}
+
+// ── 🔐 AUDIT LOG ───────────────────────────────────────
+async function auditLog(acao, alvo, detalhes) {
+  // Loga no servidor (endpoint a implementar) e no console como fallback
+  try {
+    await fetch('/api/admin/audit-log', {
+      method:'POST',
+      headers: adminAuthHeader(),
+      body: JSON.stringify({ acao, alvo_tipo: alvo?.tipo||null, alvo_id: alvo?.id||null, alvo_nome: alvo?.nome||null, detalhes: detalhes||{} })
+    });
+  } catch(e) {
+    console.warn('[audit]', acao, alvo, detalhes, e);
+  }
+}
+
+// ── 🛡️ CONFIRMAÇÃO DUPLA ───────────────────────────────
+let _cdCallback = null;
+function confirmarDupla({ titulo, mensagem, token, callback }) {
+  document.getElementById('cd-titulo').textContent = titulo || '⚠️ Confirmar ação destrutiva';
+  document.getElementById('cd-mensagem').innerHTML = mensagem || '';
+  document.getElementById('cd-token').textContent  = token;
+  const inp = document.getElementById('cd-input');
+  inp.value = '';
+  inp.placeholder = `Digite "${token}" para confirmar`;
+  document.getElementById('cd-confirmar').disabled = true;
+  _cdCallback = callback;
+  abrirModal('m-confirm-dupla');
+  setTimeout(()=>inp.focus(), 100);
+}
+function cdValidar() {
+  const tok = document.getElementById('cd-token').textContent;
+  const val = document.getElementById('cd-input').value;
+  document.getElementById('cd-confirmar').disabled = (val.trim() !== tok);
+}
+async function cdExecutar() {
+  const cb = _cdCallback;
+  fecharModal('m-confirm-dupla');
+  _cdCallback = null;
+  if (cb) await cb();
+}
+
+// ── 💳 COBRANÇA MERCADO PAGO ───────────────────────────
+let _cbTenantAtual = null;
+function gerarCobrancaCliente(tenantId) {
+  const c = _clientes.find(x=>x.id===tenantId);
+  if (!c) return;
+  _cbTenantAtual = c;
+  document.getElementById('cb-titulo').textContent = `💳 Cobrar — ${c.nome}`;
+  document.getElementById('cb-info').innerHTML = `Vencimento atual: <strong>${c.expires_at?new Date(c.expires_at).toLocaleDateString('pt-BR'):'Sem data'}</strong>`;
+  document.getElementById('cb-plano').value = (c.plano==='premium')?'premium':'essencial';
+  document.getElementById('cb-meses').value = '1';
+  document.getElementById('cb-metodo').value = 'pix';
+  cbRecalcular();
+  abrirModal('m-cobranca');
+}
+function cbRecalcular() {
+  const plano = document.getElementById('cb-plano').value;
+  const meses = parseInt(document.getElementById('cb-meses').value) || 1;
+  const valor = _precoPlano(plano) * meses;
+  document.getElementById('cb-valor').value = valor.toFixed(2);
+}
+document.addEventListener('change', e => {
+  if (e.target && e.target.id === 'cb-plano') cbRecalcular();
+});
+async function cbGerar() {
+  if (!_cbTenantAtual) return;
+  const btn = document.getElementById('cb-confirmar');
+  btn.disabled = true; btn.textContent = '⏳ Gerando...';
+  try {
+    const payload = {
+      tenant_id: _cbTenantAtual.id,
+      plano:  document.getElementById('cb-plano').value,
+      valor:  parseFloat(document.getElementById('cb-valor').value),
+      meses:  parseInt(document.getElementById('cb-meses').value),
+      metodo: document.getElementById('cb-metodo').value
+    };
+    const r = await fetch('/api/admin/cobranca/gerar', {
+      method:'POST', headers: adminAuthHeader(), body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Falha ao gerar cobrança');
+    await auditLog('cobranca.gerar', { tipo:'tenant', id: payload.tenant_id, nome: _cbTenantAtual.nome }, payload);
+    toast('ok', `✅ Cobrança gerada e enviada via WhatsApp!`);
+    fecharModal('m-cobranca');
+  } catch(e) {
+    toast('err', 'Erro: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '📲 Gerar e enviar';
+  }
+}
+
+// ── 📊 SAÚDE DO CLIENTE ────────────────────────────────
+async function abrirSaudeCliente(tenantId) {
+  const c = _clientes.find(x=>x.id===tenantId);
+  if (!c) return;
+  document.getElementById('sd-titulo').textContent = `📊 ${c.nome}`;
+  document.getElementById('sd-content').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Carregando dados...</div>';
+  abrirModal('m-saude');
+
+  try {
+    const r = await fetch(`/api/admin/saude/${tenantId}`, { headers: adminAuthHeader() });
+    let dados = null;
+    if (r.ok) dados = await r.json();
+    renderSaude(c, dados);
+  } catch(e) {
+    renderSaude(c, null);
+  }
+}
+function renderSaude(c, d) {
+  const users    = _usuarios.filter(u=>u.tenant_id===c.id);
+  const gestor   = users.find(u=>u.role==='gestor')||users[0];
+  const expDate  = c.expires_at ? new Date(c.expires_at) : null;
+  const expDias  = expDate ? Math.ceil((expDate - new Date())/(24*3600*1000)) : null;
+  const criado   = c.created_at ? new Date(c.created_at) : null;
+  const diasNaPlataforma = criado ? Math.floor((Date.now() - criado.getTime())/(24*3600*1000)) : 0;
+
+  // Score de saúde simples
+  let score = 50;
+  if (c.ativo) score += 15;
+  if (expDias !== null && expDias > 7) score += 10;
+  if (expDias !== null && expDias < 0) score -= 30;
+  if (d?.pedidos_30d > 50) score += 15;
+  if (d?.pedidos_30d > 0 && d?.pedidos_30d < 5) score -= 10;
+  if (d?.ultimo_login_dias === 0) score += 10;
+  if (d?.ultimo_login_dias > 14) score -= 20;
+  score = Math.max(0, Math.min(100, score));
+  const scoreClr = score >= 70 ? 'var(--success)' : score >= 40 ? 'var(--orange)' : 'var(--danger)';
+  const scoreEmoji = score >= 70 ? '💚' : score >= 40 ? '🟡' : '🔴';
+
+  const fmt = v => (v ?? '—');
+  const fmtMoney = v => v != null ? 'R$ ' + parseFloat(v).toLocaleString('pt-BR',{minimumFractionDigits:2}) : '—';
+
+  const html = `
+    <!-- Score -->
+    <div class="card" style="background:linear-gradient(135deg,${scoreClr.replace('var(--','rgba(').replace(')',',.1)')},transparent);border-color:${scoreClr};margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div>
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:700">Health Score</div>
+          <div style="font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:${scoreClr};line-height:1">${scoreEmoji} ${score}/100</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:12px;color:var(--muted)">Cliente há</div>
+          <div style="font-size:18px;font-weight:700">${diasNaPlataforma} dias</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resumo do plano -->
+    <div class="grid-2" style="margin-bottom:14px">
+      <div class="card">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:6px">Plano</div>
+        <div style="font-size:20px;font-weight:800">${planoLabel[c.plano]||c.plano}</div>
+        <div style="font-size:13px;color:var(--text-2);margin-top:4px">${fmtMoney(_precoPlano(c.plano))}/mês</div>
+      </div>
+      <div class="card">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:6px">Vencimento</div>
+        <div style="font-size:20px;font-weight:800;color:${expDias<0?'var(--danger)':expDias<7?'var(--orange)':'var(--success)'}">
+          ${expDate ? expDate.toLocaleDateString('pt-BR') : 'Sem data'}
+        </div>
+        <div style="font-size:13px;color:var(--text-2);margin-top:4px">
+          ${expDias === null ? '—' : expDias < 0 ? `❌ Expirou há ${Math.abs(expDias)} dias` : `⏱ ${expDias} dias restantes`}
+        </div>
+      </div>
+    </div>
+
+    <!-- Métricas operacionais -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:12px">📈 Atividade (últimos 30 dias)</div>
+      <div class="grid-3">
+        <div>
+          <div style="font-size:11px;color:var(--muted)">Pedidos</div>
+          <div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:var(--accent)">${fmt(d?.pedidos_30d)}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">Faturamento</div>
+          <div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:var(--success)">${fmtMoney(d?.faturamento_30d)}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">Mensagens IA</div>
+          <div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:var(--purple)">${fmt(d?.mensagens_ia_30d)}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Engajamento -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:12px">👤 Engajamento</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--text-2)">Gestor principal</span>
+          <span style="font-weight:600">${gestor?.nome||'—'}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--text-2)">Total de usuários</span>
+          <span style="font-weight:600">${users.length}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--text-2)">Último login</span>
+          <span style="font-weight:600;color:${d?.ultimo_login_dias > 14?'var(--danger)':d?.ultimo_login_dias > 7?'var(--orange)':'var(--success)'}">
+            ${d?.ultimo_login_dias === 0 ? 'Hoje' : d?.ultimo_login_dias != null ? `Há ${d.ultimo_login_dias} dias` : '—'}
+          </span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0">
+          <span style="color:var(--text-2)">IA configurada</span>
+          <span style="font-weight:600">${d?.ia_ativa ? '✅ Sim' : '⚪ Não'}</span>
+        </div>
+      </div>
+    </div>
+
+    ${score < 50 ? `
+    <div class="infobox infobox-orange" style="font-size:12.5px;margin-bottom:14px">
+      <strong>⚠️ Cliente em risco de churn.</strong> Considere entrar em contato.
+    </div>` : ''}
+
+    <!-- Ações rápidas -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn bp bsm" onclick="fecharModal('m-saude');gerarCobrancaCliente('${c.id}')">💳 Gerar cobrança</button>
+      <button class="btn bg2 bsm" onclick="fecharModal('m-saude');abrirRenovar('${c.id}')">🔄 Renovar</button>
+      <button class="btn bg2 bsm" onclick="fecharModal('m-saude');editarCliente('${c.id}')">✏️ Editar</button>
+      ${gestor?.email ? `<a class="btn bg2 bsm" href="mailto:${gestor.email}" target="_blank">📧 Email gestor</a>` : ''}
+    </div>
+  `;
+  document.getElementById('sd-content').innerHTML = html;
+}
+
+// ── 🧾 FATURAMENTO ──────────────────────────────────────
+let _faturas = [];
+async function carregarFaturamento() {
+  const tbody = document.getElementById('ft-tbody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr>';
+  try {
+    const r = await fetch('/api/admin/faturamento', { headers: adminAuthHeader() });
+    _faturas = r.ok ? await r.json() : [];
+  } catch(e) {
+    _faturas = [];
+    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--danger)">Erro ao carregar (endpoint /api/admin/faturamento ainda não implementado no servidor)</td></tr>`;
+  }
+
+  // Estatísticas
+  const agora = Date.now();
+  const inicioMes = new Date(); inicioMes.setDate(1); inicioMes.setHours(0,0,0,0);
+  const recebidoMes = _faturas.filter(f => f.status==='pago' && f.pago_em && new Date(f.pago_em) >= inicioMes);
+  const pendentes   = _faturas.filter(f => f.status==='pendente' && (!f.vence_em || new Date(f.vence_em).getTime() >= agora));
+  const vencidas    = _faturas.filter(f => f.status==='pendente' &&  f.vence_em && new Date(f.vence_em).getTime() < agora);
+
+  const sum = arr => arr.reduce((s,f)=>s + parseFloat(f.valor||0), 0);
+  const fmt = v => 'R$ ' + v.toLocaleString('pt-BR',{minimumFractionDigits:2});
+
+  document.getElementById('ft-recebido').textContent     = fmt(sum(recebidoMes));
+  document.getElementById('ft-recebido-sub').textContent = `${recebidoMes.length} pagamentos`;
+  document.getElementById('ft-pendente').textContent     = fmt(sum(pendentes));
+  document.getElementById('ft-pendente-sub').textContent = `${pendentes.length} pendentes`;
+  document.getElementById('ft-vencidas').textContent     = fmt(sum(vencidas));
+  document.getElementById('ft-vencidas-sub').textContent = `${vencidas.length} inadimplentes`;
+
+  renderFaturamento();
+}
+function renderFaturamento() {
+  const tbody = document.getElementById('ft-tbody');
+  const filtro = document.getElementById('ft-filtro')?.value || '';
+  if (!tbody) return;
+
+  const agora = Date.now();
+  let lista = _faturas.map(f => {
+    let st = f.status;
+    if (st === 'pendente' && f.vence_em && new Date(f.vence_em).getTime() < agora) st = 'vencido';
+    return { ...f, _st: st };
+  });
+  if (filtro) lista = lista.filter(f => f._st === filtro);
+
+  document.getElementById('ft-count').textContent = lista.length;
+
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)"><div class="empty-state"><div class="es-icon">🧾</div><div class="es-msg">Nenhuma cobrança encontrada</div></div></td></tr>';
+    return;
+  }
+
+  const stBadge = { pago:'bg-green', pendente:'bg-orange', vencido:'bg-red', cancelado:'bg-gray' };
+  const stLabel = { pago:'✅ Pago', pendente:'⏳ Pendente', vencido:'🚨 Vencido', cancelado:'⏹ Cancelado' };
+  const metIcon = { pix:'⚡ PIX', cartao:'💳 Cartão', boleto:'🧾 Boleto' };
+
+  tbody.innerHTML = lista.map(f => {
+    const cli = _clientes.find(c=>c.id===f.tenant_id);
+    return `<tr>
+      <td>
+        <div style="font-weight:600;font-size:13px">${cli?.nome || f.tenant_nome || '—'}</div>
+        <div style="font-size:11px;color:var(--muted)">/${cli?.slug || '—'}</div>
+      </td>
+      <td><span class="badge ${planoBadge[f.plano]||'bg-gray'}">${planoLabel[f.plano]||f.plano}</span></td>
+      <td style="font-weight:700">R$ ${parseFloat(f.valor||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+      <td style="font-size:12px">${metIcon[f.metodo]||f.metodo||'—'}</td>
+      <td style="font-size:12.5px">${f.vence_em ? new Date(f.vence_em).toLocaleDateString('pt-BR') : '—'}</td>
+      <td><span class="badge ${stBadge[f._st]||'bg-gray'}">${stLabel[f._st]||f._st}</span></td>
+      <td>
+        <div style="display:flex;gap:4px">
+          ${f.link_pagamento ? `<a class="btn bg2 bsm btn-icon" title="Abrir link" href="${f.link_pagamento}" target="_blank">🔗</a>` : ''}
+          ${f._st === 'vencido' || f._st === 'pendente' ? `<button class="btn bp bsm btn-icon" title="Reenviar via WhatsApp" onclick="reenviarCobranca('${f.id}')">📲</button>` : ''}
+          ${f._st === 'pendente' ? `<button class="btn bd bsm btn-icon" title="Cancelar" onclick="cancelarCobranca('${f.id}')">✕</button>` : ''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+async function cobrancaEmMassa() {
+  const expirando = _clientes.filter(c => {
+    if (!c.expires_at) return false;
+    const dt = new Date(c.expires_at).getTime();
+    const agora = Date.now();
+    return c.ativo && dt - agora < 7*24*3600*1000 && dt > agora - 30*24*3600*1000;
+  });
+  if (!expirando.length) {
+    toast('err', 'Nenhum cliente com vencimento próximo (7 dias)');
+    return;
+  }
+  if (!confirm(`Disparar cobrança via WhatsApp para ${expirando.length} cliente(s)?\n\n${expirando.map(c=>'• '+c.nome).join('\n')}`)) return;
+  try {
+    const r = await fetch('/api/admin/cobranca/em-massa', {
+      method:'POST', headers: adminAuthHeader(),
+      body: JSON.stringify({ tenant_ids: expirando.map(c=>c.id) })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Falha');
+    await auditLog('cobranca.em_massa', null, { total: expirando.length, ids: expirando.map(c=>c.id) });
+    toast('ok', `✅ ${d.enviadas || expirando.length} cobranças enviadas!`);
+    carregarFaturamento();
+  } catch(e) {
+    toast('err', 'Erro: ' + e.message);
+  }
+}
+async function reenviarCobranca(id) {
+  try {
+    const r = await fetch('/api/admin/cobranca/reenviar', {
+      method:'POST', headers: adminAuthHeader(), body: JSON.stringify({ id })
+    });
+    if (!r.ok) throw new Error((await r.json()).error || 'Falha');
+    toast('ok','📲 Reenviada por WhatsApp');
+  } catch(e) { toast('err','Erro: '+e.message); }
+}
+async function cancelarCobranca(id) {
+  if (!confirm('Cancelar esta cobrança?')) return;
+  try {
+    const r = await fetch('/api/admin/cobranca/cancelar', {
+      method:'POST', headers: adminAuthHeader(), body: JSON.stringify({ id })
+    });
+    if (!r.ok) throw new Error((await r.json()).error || 'Falha');
+    await auditLog('cobranca.cancelar', { tipo:'cobranca', id });
+    toast('ok','Cobrança cancelada');
+    carregarFaturamento();
+  } catch(e) { toast('err','Erro: '+e.message); }
+}
+
+// ── 📋 AUDITORIA ────────────────────────────────────────
+let _auditLogs = [];
+async function carregarAuditoria() {
+  const tbody = document.getElementById('audit-tbody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr>';
+  try {
+    const r = await fetch('/api/admin/audit-log?limit=200', { headers: adminAuthHeader() });
+    _auditLogs = r.ok ? await r.json() : [];
+  } catch(e) {
+    _auditLogs = [];
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--danger)">Erro ao carregar (endpoint /api/admin/audit-log ainda não implementado no servidor)</td></tr>';
+    return;
+  }
+  renderAuditoria();
+}
+function renderAuditoria() {
+  const tbody = document.getElementById('audit-tbody');
+  const fAcao = document.getElementById('audit-f-acao')?.value || '';
+  const q     = (document.getElementById('audit-q')?.value || '').toLowerCase();
+  if (!tbody) return;
+
+  let lista = _auditLogs;
+  if (fAcao) lista = lista.filter(l => (l.acao||'').startsWith(fAcao));
+  if (q) lista = lista.filter(l =>
+    (l.acao||'').toLowerCase().includes(q) ||
+    (l.alvo_nome||'').toLowerCase().includes(q) ||
+    (l.admin_nome||'').toLowerCase().includes(q) ||
+    JSON.stringify(l.detalhes||{}).toLowerCase().includes(q)
+  );
+
+  document.getElementById('audit-count').textContent = lista.length;
+
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)"><div class="empty-state"><div class="es-icon">📋</div><div class="es-msg">Nenhum log encontrado</div></div></td></tr>';
+    return;
+  }
+
+  const acaoBadge = a => {
+    if (a.startsWith('cliente.deletar') || a.includes('deletar')) return 'bg-red';
+    if (a.startsWith('cliente.pausar')) return 'bg-orange';
+    if (a.startsWith('cliente.ativar') || a.startsWith('cliente.renovar')) return 'bg-green';
+    if (a.startsWith('cobranca')) return 'bg-blue';
+    if (a.startsWith('planos'))   return 'bg-purple';
+    return 'bg-gray';
+  };
+
+  tbody.innerHTML = lista.map(l => {
+    const dt = l.created_at ? new Date(l.created_at) : null;
+    const det = l.detalhes && typeof l.detalhes === 'object' ? l.detalhes : {};
+    const detTxt = Object.keys(det).length ? JSON.stringify(det).slice(0,80) : '—';
+    return `<tr>
+      <td style="font-size:11.5px;color:var(--muted);white-space:nowrap">
+        ${dt ? dt.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'}
+      </td>
+      <td>
+        <div style="font-size:12.5px;font-weight:600">${l.admin_nome||'Admin'}</div>
+        <div style="font-size:10.5px;color:var(--muted);font-family:monospace">${l.ip||''}</div>
+      </td>
+      <td><span class="badge ${acaoBadge(l.acao||'')}" style="font-family:monospace;font-size:10.5px">${l.acao||'—'}</span></td>
+      <td style="font-size:12px">${l.alvo_nome || (l.alvo_id?l.alvo_id.slice(0,8)+'...':'—')}</td>
+      <td style="font-size:11px;color:var(--text-2);font-family:monospace;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title='${detTxt.replace(/'/g,"&#39;")}'>${detTxt}</td>
+    </tr>`;
+  }).join('');
 }
 
 // ── AGENTE IA ──────────────────────────────────────────
