@@ -1190,13 +1190,13 @@ setInterval(async () => {
               if (['finalizado','cancelado'].includes(a.status)) {
                 // finalizado/cancelado → remove do kanban
                 ordersKanban.splice(idx, 1);
-              } else if (a.status === 'entregue' && window._segmento !== 'acougue') {
-                // Restaurante: entregue não aparece no kanban → remove (mesa, delivery, balcão)
+              } else if (a.status === 'entregue') {
+                // entregue não aparece no kanban → remove (mesa, delivery, balcão, açougue)
                 ordersKanban.splice(idx, 1);
               } else if (a.status === 'aguardando_pix') {
                 // continua como analise no kanban — é pix_manual pendente
               } else {
-                // analise/producao/pronto/saiu (e entregue só em açougue) → atualiza e mantém visível
+                // analise/producao/pronto/saiu → atualiza e mantém visível
                 ordersKanban[idx].status   = a.status;
                 ordersKanban[idx]._statusReal = a.status;
                 ordersKanban[idx]._pixPendente = false;
@@ -1571,11 +1571,16 @@ async function advanceOrderById(id) {
   if (o.status === 'analise') newStatus = 'producao';
   else if (o.status === 'producao') newStatus = 'pronto';
   else if (o.status === 'pronto') {
-    // Fluxo por tipo:
+    // Fluxo unificado (restaurante e açougue):
     //   delivery: pronto → saiu (saiu para entrega, dispara WA "a caminho")
-    //   mesa/balcao/açougue: pronto → entregue (na verdade vai finalizar pelo finishOrderById)
+    //   mesa/balcão: pronto → usa finishOrderById via botão no kanban (não passa por aqui)
     if (tipo === 'delivery') newStatus = 'saiu';
-    else newStatus = 'entregue';
+    else {
+      // Balcão e mesa são finalizados via finishOrderById (botão dedicado no kanban).
+      // Se advanceOrderById for chamado, delega para finishOrderById.
+      _advancingIds.delete(id);
+      return finishOrderById(id);
+    }
   }
   else if (o.status === 'saiu') {
     // Saiu → "Entregue ao cliente" → finaliza direto (kanban tem só 4 colunas, sem "entregue" para delivery).
