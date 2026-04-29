@@ -175,6 +175,18 @@ function applyBranding(b, nome) {
     logoWrap.appendChild(img);
   }
 
+  // Logo no splash de carregamento
+  if (b?.store_logo_url) {
+    const splashImg   = document.getElementById('splash-logo-img');
+    const splashEmoji = document.getElementById('splash-logo-emoji');
+    if (splashImg) {
+      splashImg.src = b.store_logo_url;
+      splashImg.style.display = 'block';
+      if (splashEmoji) splashEmoji.style.display = 'none';
+      splashImg.onerror = () => { splashImg.style.display = 'none'; if (splashEmoji) splashEmoji.style.display = ''; };
+    }
+  }
+
   // Favicon dinâmico — usa o logo da loja
   if (b?.store_logo_url) setFavicon(b.store_logo_url);
 
