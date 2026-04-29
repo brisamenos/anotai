@@ -845,7 +845,8 @@ function _odRenderCatalogGrid() {
 function _odSelecionarProduto(itemId) {
   const it = items.find(i => i.id === itemId);
   if (!it) return;
-  const grupos = (()=>{ try{ return Array.isArray(it.customGroups)?it.customGroups:JSON.parse(it.customGroups||'[]'); }catch{ return []; } })()
+  const _rawGruposOd = it.customGroups ?? it.custom_groups;
+  const grupos = (()=>{ try{ return Array.isArray(_rawGruposOd)?_rawGruposOd:JSON.parse(_rawGruposOd||'[]'); }catch{ return []; } })()
     .filter(g => !['porcao_ref','kit_itens'].includes(g.tipo));
   const isKg = it.itemType === 'kg' || it.item_type === 'kg';
   // Abre o modal de configuração do PDV
@@ -1043,11 +1044,13 @@ function noFilterItems(q) {
     ${showHeaders ? `<div style="padding:8px 12px 4px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);background:var(--surface);border-bottom:1px solid var(--border)">${cat}</div>` : ''}
     ${its.map(item => {
     const price = parseFloat(item.price || 0);
-    const priceStr = 'R$ ' + price.toFixed(2).replace('.', ',') + (item.itemType === 'kg' ? ' <span style="font-size:10px;opacity:.7">/kg</span>' : '');
-    const _allGrupos = (() => { try { return Array.isArray(item.customGroups) ? item.customGroups : JSON.parse(item.customGroups || '[]') } catch { return [] } })();
+    const _isKgItem = item.itemType === 'kg' || item.item_type === 'kg';
+    const priceStr = 'R$ ' + price.toFixed(2).replace('.', ',') + (_isKgItem ? ' <span style="font-size:10px;opacity:.7">/kg</span>' : '');
+    const _rawGruposNR = item.customGroups ?? item.custom_groups;
+    const _allGrupos = (() => { try { return Array.isArray(_rawGruposNR) ? _rawGruposNR : JSON.parse(_rawGruposNR || '[]') } catch { return [] } })();
     const grupos = _allGrupos.filter(g => !['porcao_ref', 'kit_itens'].includes(g.tipo));
     const ehPizza = _noEhPizza(item);
-    const temAdicionais = grupos.length > 0 || item.itemType === 'kg' || ehPizza;
+    const temAdicionais = grupos.length > 0 || _isKgItem || ehPizza;
     const tagAdicional = ehPizza
       ? '<div style="font-size:10px;color:#dc2626;margin-top:2px;font-weight:700">🍕 meio a meio disponível</div>'
       : (temAdicionais ? '<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600">+ adicionais</div>' : '');
@@ -1096,10 +1099,11 @@ function noAddItem(itemId) {
   }
 
   // Se tem grupos de adicionais, abre modal de seleção
-  const grupos = (() => { try { return Array.isArray(item.customGroups) ? item.customGroups : JSON.parse(item.customGroups || '[]') } catch { return [] } })()
+  const _rawGroups = item.customGroups ?? item.custom_groups;
+  const grupos = (() => { try { return Array.isArray(_rawGroups) ? _rawGroups : JSON.parse(_rawGroups || '[]') } catch { return [] } })()
     .filter(g => !['porcao_ref', 'kit_itens'].includes(g.tipo));
 
-  const isKg = item.itemType === 'kg';
+  const isKg = item.itemType === 'kg' || item.item_type === 'kg';
 
   if (grupos.length > 0 || isKg) {
     noAbrirModalAdicionais(item, grupos, isKg);
