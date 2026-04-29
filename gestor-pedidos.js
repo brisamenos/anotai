@@ -1142,7 +1142,7 @@ function noAbrirModalPizza(item) {
 
   const priceBase = parseFloat(item.price || 0);
   bg.innerHTML = `
-    <div class="modal" style="max-width:520px;width:92vw;padding:0;overflow:hidden">
+    <div class="modal" style="max-width:520px;width:92vw;padding:0;overflow-y:auto">
       <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px">
         <div>
           <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px">🍕 Pizza</div>
