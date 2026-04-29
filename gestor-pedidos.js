@@ -117,35 +117,25 @@ function _buildMesaKanbanOrders() {
 }
 
 function renderKanban() {
-  // Layout: SEMPRE 4 colunas (ou 3 se não houver nada na 4ª).
-  //   Açougue:    analise → producao → pronto → entregue
-  //   Restaurante: analise → producao → pronto → saiu pra entrega
-  //     (ao clicar "Entregue ao cliente" na coluna "Saiu", o pedido vai direto pra finalizado
-  //      e sai do kanban — não passa mais pela coluna "entregue", que fica oculta para restaurante)
-  //   Pedidos de mesa/balcão também pulam a coluna saiu: clicar "Servido!"/"Retirado!" finaliza direto.
-  const isAcougue = window._segmento === 'acougue';
+  // Layout: SEMPRE 4 colunas — fluxo unificado para restaurante e açougue.
+  //   analise → producao → pronto → saiu pra entrega (delivery)
+  //   Pedidos de balcão: clicar "Retirado!" finaliza direto do pronto.
+  //   Pedidos de mesa: clicar "Servido!" finaliza direto do pronto.
+  //   Ao clicar "Entregue ao cliente" na coluna "Saiu", o pedido vai direto pra finalizado.
   const _saiuWrap      = document.getElementById('kol-wrap-saiu');
   const _entregueWrap  = document.querySelector('.kol-entregue');
   // Usa setProperty com 'important' porque o CSS do mobile (@media max-width:900px)
   // tem display:flex!important em .kol — sem important aqui, a coluna "escondida" apareceria no mobile.
-  if (isAcougue) {
-    // Açougue: esconde "saiu", mostra "entregue"
-    if (_saiuWrap)     _saiuWrap.style.setProperty('display', 'none', 'important');
-    if (_entregueWrap) _entregueWrap.style.setProperty('display', 'flex', 'important');
-  } else {
-    // Restaurante: mostra "saiu" (sempre, pra não ter jump de 3→4 cols), esconde "entregue"
-    if (_saiuWrap)     _saiuWrap.style.setProperty('display', 'flex', 'important');
-    if (_entregueWrap) _entregueWrap.style.setProperty('display', 'none', 'important');
-  }
+  // Fluxo unificado: mostra "saiu", esconde "entregue"
+  if (_saiuWrap)     _saiuWrap.style.setProperty('display', 'flex', 'important');
+  if (_entregueWrap) _entregueWrap.style.setProperty('display', 'none', 'important');
   // Ajusta o grid para 4 colunas fixas
   const _board = document.getElementById('kanban-board');
   if (_board) {
     _board.classList.remove('kanban-5cols');
     _board.classList.add('kanban-4cols');
   }
-  const statuses = isAcougue
-    ? ['analise', 'producao', 'pronto', 'entregue']
-    : ['analise', 'producao', 'pronto', 'saiu'];
+  const statuses = ['analise', 'producao', 'pronto', 'saiu'];
   const mesaKanban = _buildMesaKanbanOrders();
   const _searchNum = (document.getElementById('kanban-search-num')?.value || '').trim();
   const _searchClient = (document.getElementById('kanban-search-client')?.value || '').trim().toLowerCase();
@@ -240,19 +230,12 @@ function renderKanban() {
         } else if (st === 'saiu') {
           // Coluna "Saiu pra entrega" — só delivery deveria estar aqui
           actionBtn = '<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();advanceOrderById(' + o.id + ')">✅ Entregue ao cliente</button>';
-        } else if (st === 'entregue') {
-          actionBtn = '<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById(' + o.id + ')">✅ Finalizar</button>';
         } else {
-          const _isAcougueKanban = window._segmento === 'acougue';
-          if (_isAcougueKanban) {
-            actionBtn = '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();advanceOrderById(' + o.id + ')">📦 Entregar</button>';
-          } else {
-            const finLabel = isMesa ? 'Servido!' : isRetirada ? 'Retirado!' : 'Finalizar';
-            actionBtn = '<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById(' + o.id + ')">' + finLabel + '</button>';
-            // Botão de fechar mesa para pedidos de mesa na coluna pronto
-            if (isMesa && o.mesa_num) {
-              actionBtn += '<button class="oc-btn" style="width:100%;margin-top:4px;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-weight:700;border:none" onclick="event.stopPropagation();cobrarMesaDireta(' + o.mesa_num + ')">💰 Fechar Mesa</button>';
-            }
+          const finLabel = isMesa ? 'Servido!' : isRetirada ? 'Retirado!' : 'Finalizar';
+          actionBtn = '<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();finishOrderById(' + o.id + ')">' + finLabel + '</button>';
+          // Botão de fechar mesa para pedidos de mesa na coluna pronto
+          if (isMesa && o.mesa_num) {
+            actionBtn += '<button class="oc-btn" style="width:100%;margin-top:4px;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-weight:700;border:none" onclick="event.stopPropagation();cobrarMesaDireta(' + o.mesa_num + ')">💰 Fechar Mesa</button>';
           }
         }
 
@@ -276,7 +259,7 @@ function renderKanban() {
           return '';
         })();
 
-        // Açougue: botão de indisponibilidade de peso (só para itens kg)
+        // Botão de indisponibilidade de peso (açougue — para itens kg)
         const _isAcougue = window._segmento === 'acougue';
         const _temItemKg = _isAcougue && (o.items || []).some(i => i.item_type === 'kg' || (i.obs && /\d+g /.test(i.obs)));
         const _acougueBtn = _temItemKg
