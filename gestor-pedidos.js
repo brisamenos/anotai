@@ -1194,6 +1194,9 @@ function noAbrirModalPizza(item) {
           </div>
         </div>
 
+        <!-- Adicionais / grupos de customização da pizza -->
+        <div id="no-pizza-grupos-wrap"></div>
+
         <!-- Observação -->
         <div style="margin-bottom:14px">
           <label style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:block">Observação (opcional)</label>
@@ -1212,7 +1215,38 @@ function noAbrirModalPizza(item) {
     </div>`;
   document.body.appendChild(bg);
 
-  // Click handlers para metades
+  // Renderiza adicionais (custom_groups) da pizza base
+  const _rawPizzaGrupos = item.customGroups ?? item.custom_groups;
+  const pizzaGrupos = (() => { try { return Array.isArray(_rawPizzaGrupos) ? _rawPizzaGrupos : JSON.parse(_rawPizzaGrupos || '[]'); } catch { return []; } })()
+    .filter(g => !['porcao_ref','kit_itens'].includes(g.tipo));
+  const gruposWrap = bg.querySelector('#no-pizza-grupos-wrap');
+  if (gruposWrap && pizzaGrupos.length) {
+    const _TIPO_LABEL = { radio:'Escolha', checkbox:'Adicional', opcional:'Adicional', adicionais:'Adicional', obrigatorio:'Escolha obrigatória', sabor:'Sabor' };
+    gruposWrap.innerHTML = pizzaGrupos.map((g, gi) => {
+      const opcoes = g.opcoes || [];
+      if (!opcoes.length) return '';
+      const isSingle = ['radio','obrigatorio','sabor'].includes(g.tipo || '');
+      const isRequired = ['obrigatorio','sabor'].includes(g.tipo || '');
+      const inputType = isSingle ? 'radio' : 'checkbox';
+      const label = g.nome || g.name || _TIPO_LABEL[g.tipo] || 'Adicional';
+      return `<div style="margin-bottom:14px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">
+          ${label}${isRequired ? ' <span style="color:var(--danger);font-size:10px">*obrigatório</span>' : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          ${opcoes.map((op, oi) => {
+            const nome = op.nome || op.name || '';
+            const preco = parseFloat(op.preco || op.price || 0);
+            const precoLabel = preco > 0 ? ` <span style="color:var(--success);font-size:11px">+R$ ${preco.toFixed(2).replace('.',',')}</span>` : '';
+            return `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;cursor:pointer" onclick="noToggleOpc(this)">
+              <input type="${inputType}" name="no-pizza-grp-${gi}" value="${oi}" data-grp="${gi}" data-idx="${oi}" data-nome="${nome.replace(/"/g,'&quot;')}" data-preco="${preco}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
+              <span style="font-size:13px;font-weight:500;flex:1">${nome}${precoLabel}</span>
+            </label>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }).join('');
+  }
   bg.querySelectorAll('.no-pizza-half-opt').forEach(opt => {
     opt.addEventListener('click', () => {
       _noPizzaHalf = {
@@ -1314,19 +1348,40 @@ function noPizzaAdicionar() {
   }
 
   const priceBase = parseFloat(_noPizzaBase.price || 0);
+
+  // Lê adicionais selecionados no modal
+  const bg2 = document.getElementById('modal-no-pizza-bg');
+  let gruposExtra = 0;
+  const gruposDesc = [];
+  const gruposSel = [];
+  if (bg2) {
+    const inputs = bg2.querySelectorAll('#no-pizza-grupos-wrap input:checked');
+    inputs.forEach(inp => {
+      const nome = inp.dataset.nome || '';
+      const preco = parseFloat(inp.dataset.preco) || 0;
+      gruposExtra += preco;
+      if (nome) gruposDesc.push(nome + (preco > 0 ? ` (+R$ ${preco.toFixed(2).replace('.',',')})` : ''));
+      gruposSel.push({ nome, preco, qty: 1 });
+    });
+  }
+
   let nome, preco, obsCart;
 
   if (isMeia && _noPizzaHalf) {
     nome    = `${_noPizzaBase.name} / ${_noPizzaHalf.name}`;
-    preco   = (priceBase + _noPizzaHalf.price) / 2;
-    obsCart = obs ? `Meio a meio · ${obs}` : 'Meio a meio';
+    preco   = (priceBase + _noPizzaHalf.price) / 2 + gruposExtra;
+    const partes = ['Meio a meio', ...gruposDesc];
+    if (obs) partes.push(obs);
+    obsCart = partes.join(' · ');
   } else {
     nome    = _noPizzaBase.name;
-    preco   = priceBase;
-    obsCart = obs;
+    preco   = priceBase + gruposExtra;
+    const partes = [...gruposDesc];
+    if (obs) partes.push(obs);
+    obsCart = partes.join(' · ');
   }
 
-  noAddToCartDireto(_noPizzaBase, nome, preco, obsCart, []);
+  noAddToCartDireto(_noPizzaBase, nome, preco, obsCart, gruposSel);
   document.getElementById('modal-no-pizza-bg')?.remove();
   _noPizzaBase = null;
   _noPizzaHalf = null;
