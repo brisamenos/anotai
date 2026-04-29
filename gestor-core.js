@@ -1161,7 +1161,7 @@ setInterval(async () => {
             showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${_orderNum(o.id, o.order_num)} — ${o.client}`);
             sendBrowserNotif(`Novo pedido #${_orderNum(o.id, o.order_num)}`, `${o.client} — ${items}`);
             if (_autoAcceptOn && o.status === 'analise') setTimeout(() => advanceOrderById(o.id), 800);
-            if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(o)) printOrder(mapOrder(o));
+            if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(o) && !(o.status === 'aguardando_pix' && o.pag !== 'pix_manual')) printOrder(mapOrder(o));
             // Atualiza cache mesa se for pedido de mesa
             if (o.mesa_num) { _patchOrderInCache(o); _renderMesaPageFromCache(); }
           }
