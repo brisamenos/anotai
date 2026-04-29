@@ -953,7 +953,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
         <input id="np-num" type="text" placeholder="Nº" style="width:60px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--text);font-size:13px;font-family:inherit;outline:none;text-align:center">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <input id="np-bairro" type="text" placeholder="Bairro" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none">
+        <div id="np-bairro-wrap" style="display:contents"><input id="np-bairro" type="text" placeholder="Bairro" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none"></div>
         <input id="np-compl" type="text" placeholder="Complemento" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none">
       </div>
     </div>
@@ -1648,6 +1648,7 @@ function mesaLabel(order) {
 
 let _garcomPrintCfg = null; // cache de print_config do tenant
 let _garcomTaxaServicoPct = 0; // % taxa de serviço (carregado do store_config)
+let _garcomFeeConfig = {}; // delivery_fee_config (carregado do store_config)
 let _garcomOrderNumOffset = 0; // offset de numeração por tenant (fallback)
 function _garcomOrderNum(id, orderNum) {
   if (orderNum) return Number(orderNum);
@@ -1836,7 +1837,7 @@ async function loadData() {
     sb.from('mesas').select('*').order('num'),
     sb.from('menu_items').select('*').neq('status','pausado').order('id'),
     sb.from('categories').select('*').order('sort_order'),
-    sb.from('store_config').select('print_config,store_name,order_num_offset,taxa_servico_pct').eq('tenant_id', _garcomTenantId).single()
+    sb.from('store_config').select('print_config,store_name,order_num_offset,taxa_servico_pct,delivery_fee_config').eq('tenant_id', _garcomTenantId).single()
   ]);
   tables   = (mesasRes.data || []);
   allItems = (itemsRes.data || []);
@@ -1844,7 +1845,9 @@ async function loadData() {
   try { _garcomPrintCfg = cfgRes.data?.print_config ? JSON.parse(cfgRes.data.print_config) : {}; } catch { _garcomPrintCfg = {}; }
   _garcomOrderNumOffset = parseInt(cfgRes.data?.order_num_offset) || 0;
   _garcomTaxaServicoPct = parseFloat(cfgRes.data?.taxa_servico_pct) || 0;
+  try { _garcomFeeConfig = cfgRes.data?.delivery_fee_config ? (typeof cfgRes.data.delivery_fee_config === 'string' ? JSON.parse(cfgRes.data.delivery_fee_config) : cfgRes.data.delivery_fee_config) : {}; } catch { _garcomFeeConfig = {}; }
   if (!_garcomNomeLoja && cfgRes.data?.store_name) _garcomNomeLoja = cfgRes.data.store_name;
+  npRenderBairroField();
   await loadAddonsEsgotados();
   renderMesas();
   buildCatPills();
@@ -2933,6 +2936,15 @@ function changeCartQty(id, delta) {
   renderItemGrid();
 }
 
+function changeCartQtyByIdx(idx, delta) {
+  if (idx < 0 || idx >= cart.length) return;
+  cart[idx].qty += delta;
+  if (cart[idx].qty <= 0) cart.splice(idx,1);
+  updateCartUI();
+  renderCartSheet();
+  renderItemGrid();
+}
+
 function updateCartUI() {
   const total = cart.reduce((s,i)=>s+i.price*i.qty,0);
   const qty   = cart.reduce((s,i)=>s+i.qty,0);
@@ -2957,7 +2969,7 @@ function renderCartSheet() {
     document.getElementById('cart-totals').innerHTML = '';
     return;
   }
-  el.innerHTML = `<div class="cart-items-sheet">${cart.map(i=>`
+  el.innerHTML = `<div class="cart-items-sheet">${cart.map((i, idx)=>`
     <div class="cart-row">
       <div style="font-size:20px;flex-shrink:0">${i.emoji||'🍽️'}</div>
       <div class="cart-row-name">
@@ -2965,9 +2977,9 @@ function renderCartSheet() {
         ${i.obs ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4">${i.obs}</div>` : ''}
       </div>
       <div class="qty-ctrl">
-        <button class="qbtn" onclick="changeCartQty(${JSON.stringify(i.id)},-1)">−</button>
+        <button class="qbtn" onclick="changeCartQtyByIdx(${idx},-1)">−</button>
         <span class="qnum">${i.qty}</span>
-        <button class="qbtn" onclick="changeCartQty(${JSON.stringify(i.id)},1)">+</button>
+        <button class="qbtn" onclick="changeCartQtyByIdx(${idx},1)">+</button>
       </div>
       <div class="cart-row-price">R$ ${(i.price*i.qty).toFixed(2).replace('.',',')}</div>
     </div>`).join('')}</div>`;
@@ -3185,6 +3197,37 @@ function npAtualizarPreview() {
   preview.style.display = '';
 }
 
+// Renderiza campo de bairro: select se por_bairro, input texto caso contrário
+function npRenderBairroField() {
+  const wrap = document.getElementById('np-bairro-wrap');
+  if (!wrap) return;
+  const baseStyle = 'background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none';
+  if (_garcomFeeConfig?.tipo === 'por_bairro') {
+    const bairros = Array.isArray(_garcomFeeConfig.bairros) ? _garcomFeeConfig.bairros : [];
+    const opts = bairros.map(b => {
+      const taxa = parseFloat(b.taxa) || 0;
+      const label = taxa > 0 ? `${b.bairro} — R$ ${taxa.toFixed(2).replace('.',',')}` : b.bairro;
+      return `<option value="${b.bairro}">${label}</option>`;
+    }).join('');
+    wrap.innerHTML = `<select id="np-bairro" style="${baseStyle};width:100%"><option value="">Selecione o bairro…</option>${opts}</select>`;
+  } else {
+    wrap.innerHTML = `<input id="np-bairro" type="text" placeholder="Bairro" style="${baseStyle}">`;
+  }
+}
+
+// Calcula taxa de entrega com base no feeConfig e bairro selecionado
+function npGetTaxa() {
+  if (_npTipo !== 'delivery') return 0;
+  const cfg = _garcomFeeConfig || {};
+  if (cfg.tipo === 'por_bairro') {
+    const bairros = Array.isArray(cfg.bairros) ? cfg.bairros : [];
+    const sel = (document.getElementById('np-bairro')?.value || '').trim().toLowerCase();
+    const match = bairros.find(b => b.bairro.trim().toLowerCase() === sel);
+    return match ? parseFloat(match.taxa) || 0 : 0;
+  }
+  return parseFloat(cfg.valor ?? cfg.value ?? 0) || 0;
+}
+
 async function npEnviarPedido() {
   if (_submitting) return;
   const nome  = (document.getElementById('np-nome')?.value || '').trim();
@@ -3203,6 +3246,7 @@ async function npEnviarPedido() {
     const compl  = (document.getElementById('np-compl')?.value || '').trim();
     if (!rua) { showToast('⚠️ Informe a rua'); return; }
     if (!num) { showToast('⚠️ Informe o número'); return; }
+    if (_garcomFeeConfig?.tipo === 'por_bairro' && !bairro) { showToast('⚠️ Selecione o bairro'); return; }
     addr = [rua, num, bairro, compl].filter(Boolean).join(', ');
   } else {
     addr = 'Retirada no balcão';
@@ -3226,7 +3270,7 @@ async function npEnviarPedido() {
       addr,
       items: allItemsArr,
       total: tot,
-      taxa: _npTipo === 'delivery' ? 0 : 0,
+      taxa: npGetTaxa(),
       status: 'analise',
       time,
       pag,
