@@ -42,16 +42,13 @@ function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
 // página antes do poll frontend confirmar ou webhook não chegou).
 let _pixJobIniciado = false
 
-function _iniciarPixRecoveryJob(db, log, sseBroadcast, getToken) {
+function _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN_ENV) {
   if (_pixJobIniciado) return
   _pixJobIniciado = true
   log('🔄', 'PIX recovery job iniciado (intervalo: 60s)')
 
   setInterval(async () => {
     try {
-      const mpToken = getToken()
-      if (!mpToken) return
-
       // Busca pagamentos pendentes criados nas últimas 24h que ainda têm pedido aguardando
       const pendentes = db.prepare(`
         SELECT p.mp_payment_id, p.order_id, p.tenant_id, p.valor
@@ -73,7 +70,16 @@ function _iniciarPixRecoveryJob(db, log, sseBroadcast, getToken) {
       }, {})
 
       for (const [tenantId, pagamentos] of Object.entries(porTenant)) {
-        log('🔍', `PIX recovery: tenant=${tenantId} — verificando ${pagamentos.length} pagamento(s) pendente(s)`)
+        // Resolve token UMA VEZ por tenant (eficiente, e correto: pagamentos
+        // de pedidos do tenant X consultam SEMPRE a conta MP do tenant X,
+        // mesmo que ele já tenha trocado pra conta própria depois).
+        const cfgMp = _resolveMpForTenant(db, tenantId, MP_TOKEN_ENV)
+        const mpToken = cfgMp.mp_token
+        if (!mpToken) {
+          log('⚠️', `PIX recovery: tenant=${tenantId} sem token MP — pulando ${pagamentos.length} pagamento(s)`)
+          continue
+        }
+        log('🔍', `PIX recovery: tenant=${tenantId} (conta=${cfgMp.source}) — verificando ${pagamentos.length} pagamento(s) pendente(s)`)
         let liberados = 0, rejeitados = 0
 
         for (const row of pagamentos) {
@@ -144,6 +150,77 @@ function _getInstanciaCobranca(db, fallbackInst) {
 }
 
 // ═══════════════════════════════════════════════════════
+// HELPER: Resolve token/public_key Mercado Pago por tenant
+// ═══════════════════════════════════════════════════════
+// Decide qual conta MP usar seguindo a regra:
+//   1. Se tenant tem mp_token próprio → usa o do tenant
+//   2. Senão → usa o global (admin)
+//   3. Senão → usa o do .env (MP_TOKEN)
+//
+// IMPORTANTE: NUNCA usar para cobranças SaaS (mensalidades,
+// faturas da plataforma cobrando dos tenants). Essas DEVEM
+// usar SEMPRE o global, senão o tenant pagaria a si mesmo.
+// Use apenas para: PIX/cartão de pedidos do restaurante.
+// ═══════════════════════════════════════════════════════
+function _resolveMpForTenant(db, tenantId, MP_TOKEN_ENV) {
+  const result = { mp_token: '', mp_public_key: '', source: 'none' }
+
+  // 1) Tenta tenant próprio (se tenant_id válido e não for o global)
+  if (tenantId && tenantId !== '_global' && tenantId !== '_admin') {
+    try {
+      const row = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tenantId)
+      const ia  = row?.ia_config ? JSON.parse(row.ia_config) : {}
+      if (ia.mp_token) {
+        result.mp_token      = ia.mp_token
+        result.mp_public_key = ia.mp_public_key || ''
+        result.source        = 'tenant'
+        return result
+      }
+    } catch {}
+  }
+
+  // 2) Fallback: global (admin)
+  try {
+    const row = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+    const g   = row?.ia_config ? JSON.parse(row.ia_config) : {}
+    if (g.mp_token) {
+      result.mp_token      = g.mp_token
+      result.mp_public_key = g.mp_public_key || ''
+      result.source        = 'global'
+      return result
+    }
+  } catch {}
+
+  // 3) Último fallback: env
+  if (MP_TOKEN_ENV) {
+    result.mp_token = MP_TOKEN_ENV
+    result.source   = 'env'
+  }
+  return result
+}
+
+// Helper: descobre tenant_id a partir de um mp_payment_id (PIX ou cartão)
+function _tenantFromPayment(db, mpPaymentId) {
+  try {
+    const r1 = db.prepare('SELECT tenant_id FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpPaymentId))
+    if (r1?.tenant_id) return r1.tenant_id
+    const r2 = db.prepare('SELECT tenant_id FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpPaymentId))
+    if (r2?.tenant_id) return r2.tenant_id
+  } catch {}
+  return null
+}
+
+// Helper exclusivo para cobranças SaaS (mensalidades) — sempre global
+function _resolveMpGlobal(db, MP_TOKEN_ENV) {
+  try {
+    const row = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+    const g   = row?.ia_config ? JSON.parse(row.ia_config) : {}
+    if (g.mp_token) return g.mp_token
+  } catch {}
+  return MP_TOKEN_ENV || ''
+}
+
+// ═══════════════════════════════════════════════════════
 // CRON DIÁRIO: auto-cobrança 3 dias antes de vencer
 // ═══════════════════════════════════════════════════════
 let _autoCobrancaJobIniciado = false
@@ -164,13 +241,10 @@ function _iniciarAutoCobrancaJob(ctx) {
         if (g.preco_premium   !== undefined) precoPre = parseFloat(g.preco_premium)
       } catch {}
 
-      // Token MP
-      let mpToken = MP_TOKEN
-      try {
-        const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
-        const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
-        if (g.mp_token) mpToken = g.mp_token
-      } catch {}
+      // Token MP — SEMPRE GLOBAL (cobrança SaaS da plataforma)
+      // NÃO usar _resolveMpForTenant: é a plataforma cobrando do tenant,
+      // dinheiro tem que cair na conta da plataforma, não na do tenant.
+      const mpToken = _resolveMpGlobal(db, MP_TOKEN)
       if (!mpToken) return // sem token, pula silenciosamente
 
       // Tenants ativos vencendo em 3 dias (janela: hoje+2 a hoje+4 para evitar timing)
@@ -279,13 +353,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
           EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano } = ctx
 
   // ── Inicia job de recuperação de PIX na primeira requisição ───────────────
-  _iniciarPixRecoveryJob(db, log, sseBroadcast, () => {
-    try {
-      const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
-      const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
-      return g.mp_token || MP_TOKEN
-    } catch { return MP_TOKEN }
-  })
+  // O job resolve o token MP por tenant em cada iteração — pagamentos de
+  // pedidos do tenant X consultam a conta MP do tenant X (com fallback global).
+  _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN)
 
   // ── Inicia job de auto-cobrança SaaS (uma vez) ────────────────────────────
   _iniciarAutoCobrancaJob(ctx)
@@ -771,15 +841,21 @@ module.exports = async function handleRoutes(req, res, ctx) {
       }
     }
 
-    let mpToken = MP_TOKEN
+    // ── Resolve conta MP: tenant primeiro, depois global ──
+    // Isolamento garantido: tid vem do x-tenant-id (autenticado).
+    const _mpCfg = _resolveMpForTenant(db, tid, MP_TOKEN)
+    let mpToken = _mpCfg.mp_token
     let taxa = TAXA_PIX
+    // Taxa PIX é da plataforma — sempre lida do global (admin define)
     try {
       const cfgMp = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
       const gCfg = cfgMp?.ia_config ? JSON.parse(cfgMp.ia_config) : {}
-      if (gCfg.mp_token) mpToken = gCfg.mp_token
       if (gCfg.taxa_pix !== undefined) taxa = parseFloat(gCfg.taxa_pix) || 0
     } catch {}
-    if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago não configurado. Configure no painel Admin → Configurações.' }); return true }
+    // Se tenant tem conta própria, taxa da plataforma não se aplica (dinheiro
+    // não passa pela carteira interna — vai direto pro MP do gestor)
+    if (_mpCfg.source === 'tenant') taxa = 0
+    if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago não configurado.' }); return true }
 
     // extRef único — usa tenant_id completo + order_id (ou timestamp se não tiver pedido)
     const extRef = `ef-${tid}-${order_id || Date.now()}`
@@ -803,15 +879,23 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const qr    = mpData.point_of_interaction?.transaction_data?.qr_code || ''
       const qrB64 = mpData.point_of_interaction?.transaction_data?.qr_code_base64 || ''
 
+      // CRÍTICO: Quando MP é do tenant, dinheiro vai direto pra conta dele —
+      // NÃO registramos em pagamentos_pix, pois essa tabela alimenta a carteira
+      // interna da plataforma. Inseririr aqui faria o gestor poder sacar duas
+      // vezes (uma direto na conta MP dele, outra solicitando à plataforma).
+      // Usamos um marcador na tabela apenas para fins de auditoria/rastreio,
+      // mas com valor_liquido = 0 para nunca virar saldo sacável.
+      const isMpProprio = (_mpCfg.source === 'tenant')
       db.prepare(`INSERT OR IGNORE INTO pagamentos_pix
         (tenant_id,order_id,mp_payment_id,mp_external_ref,valor,taxa,valor_liquido,status,payer_name,qr_code,qr_code_base64)
         VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(tid, order_id || null, String(mpData.id), extRef, parseFloat(valor), taxa, valorLiq,
+        .run(tid, order_id || null, String(mpData.id), extRef, parseFloat(valor), taxa,
+          isMpProprio ? 0 : valorLiq,
           (mpData.status==='approved'?'aprovado':mpData.status==='rejected'?'rejeitado':mpData.status==='cancelled'?'cancelado':'pendente'),
-          client || '', qr, qrB64)
+          client || (isMpProprio ? 'MP_PROPRIO' : ''), qr, qrB64)
 
-      log('💳', `PIX criado: R$${valor} tenant=${tid} mp_id=${mpData.id}`)
-      send(res, 200, { ok: true, mp_payment_id: mpData.id, qr_code: qr, qr_code_base64: qrB64, valor, taxa, valor_liquido: valorLiq, status: mpData.status })
+      log('💳', `PIX criado: R$${valor} tenant=${tid} mp_id=${mpData.id} conta=${_mpCfg.source}`)
+      send(res, 200, { ok: true, mp_payment_id: mpData.id, qr_code: qr, qr_code_base64: qrB64, valor, taxa, valor_liquido: isMpProprio ? 0 : valorLiq, status: mpData.status })
 
       // ── Envia copia e cola via WhatsApp ────────────────────────────────────
       if (qr && body.phone) {
@@ -855,7 +939,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (own && own.tenant_id !== tid) { send(res, 403, { error: 'Acesso negado' }); return true }
     }
     let mpToken = MP_TOKEN
-    try { const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get(); const g = c?.ia_config ? JSON.parse(c.ia_config) : {}; if (g.mp_token) mpToken = g.mp_token } catch {}
+    // Resolve token da conta MP que CRIOU este pagamento (tenant ou global).
+    // Mesmo que tid não venha (poll do cliente final), descobrimos pelo pagamento.
+    try {
+      const ownTenant = db.prepare('SELECT tenant_id FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))?.tenant_id
+      const _cfg = _resolveMpForTenant(db, ownTenant, MP_TOKEN)
+      if (_cfg.mp_token) mpToken = _cfg.mp_token
+    } catch {}
     if (!mpToken) { send(res, 400, { error: 'Token MP não configurado' }); return true }
     try {
       const r = await fetch('https://api.mercadopago.com/v1/payments/' + mpId, { headers: { 'Authorization': 'Bearer ' + mpToken } })
@@ -925,16 +1015,21 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const ia   = safeJson(cfg?.ia_config)
       const gCfg = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
       const gIa  = safeJson(gCfg?.ia_config)
-      const mpConfigurado  = !!(gIa.mp_token || MP_TOKEN)
+      // Resolve conta MP que vai ser usada para os pedidos deste tenant
+      const _mpResolv = _resolveMpForTenant(db, tid, MP_TOKEN)
+      const mpConfigurado  = !!_mpResolv.mp_token
       const pixAtivo       = ia.pix_ativo === true
       const pagOnlineAtivo = ia.pag_online_ativo !== false
-      const cartaoDisponivel   = !!(gIa.mp_public_key)           // só disponível se admin configurou a public key
+      // Cartão disponível se a conta resolvida (tenant ou global) tem public key
+      const cartaoDisponivel   = !!_mpResolv.mp_public_key
       const cartaoOnlineAtivo  = ia.cartao_online_ativo !== false && cartaoDisponivel
       send(res, 200, {
         pix_ativo:            pixAtivo,
         pix_ativo_gestor:     pixAtivo,
         mp_configurado:       mpConfigurado,
-        taxa_pix:             gIa.taxa_pix !== undefined ? parseFloat(gIa.taxa_pix) : parseFloat(process.env.TAXA_PIX || '1.00'),
+        // Quando tenant tem conta própria, taxa da plataforma não se aplica
+        taxa_pix:             _mpResolv.source === 'tenant' ? 0 :
+                              (gIa.taxa_pix !== undefined ? parseFloat(gIa.taxa_pix) : parseFloat(process.env.TAXA_PIX || '1.00')),
         pix_key_manual:       ia.pix_key_manual || '',
         pix_key_manual_tipo:  ia.pix_key_manual_tipo || '',
         pix_key_manual_banco: ia.pix_key_manual_banco || '',
@@ -973,8 +1068,15 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const body = await readBody(req)
     const mpId = body?.data?.id || body?.id
     if (!mpId) { send(res, 200, { ok: true }); return true }
+    // Webhook pode vir do MP por qualquer tenant — descobre tenant pelo pagamento.
+    // Tenta tabela PIX primeiro, depois cartão. Se não achar, usa global como fallback
+    // (pode ser pagamento SaaS ou primeiro webhook antes do INSERT).
     let mpToken = MP_TOKEN
-    try { const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get(); const g = c?.ia_config ? JSON.parse(c.ia_config) : {}; if (g.mp_token) mpToken = g.mp_token } catch {}
+    try {
+      const ownTenant = _tenantFromPayment(db, mpId)
+      const _cfg = _resolveMpForTenant(db, ownTenant, MP_TOKEN)
+      if (_cfg.mp_token) mpToken = _cfg.mp_token
+    } catch {}
     if (!mpToken) { send(res, 200, { ok: true }); return true }
     try {
       const r = await fetch(`https://api.mercadopago.com/v1/payments/${mpId}`, { headers: { 'Authorization': `Bearer ${mpToken}` } })
@@ -1163,6 +1265,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
       let taxaPix = 1.00
       try { const gc = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get(); const g = gc?.ia_config ? JSON.parse(gc.ia_config) : {}; if (g.taxa_pix !== undefined) taxaPix = parseFloat(g.taxa_pix) || 0 } catch {}
 
+      // Tenant tem MP próprio? Se sim, novos pagamentos não passam pela carteira
+      const _mpResolv = _resolveMpForTenant(db, tid, MP_TOKEN)
+      const mpProprio = _mpResolv.source === 'tenant'
+
       send(res, 200, {
         saldo_disponivel:  saldoDisp,
         total_recebido:    totalRecebido,
@@ -1179,6 +1285,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
         ultimos_cartao:    ultimosCartao,
         pendentes_count:   pixPendentes?.c || 0,
         pendentes_valor:   pixPendentes?.v || 0,
+        mp_proprio:        mpProprio,
+        mp_source:         _mpResolv.source,
       })
     } catch (e) { log('❌', '/api/carteira erro:', e.message); send(res, 500, { error: e.message }) }
     return true
@@ -1188,6 +1296,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'POST' && upath === '/api/saques/solicitar') {
     const tid = req.headers['x-tenant-id']
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    // Blindagem: se tenant tem MP próprio, dinheiro cai direto na conta dele
+    // — não passa pela carteira interna, então saque não faz sentido.
+    const _mpResolvSaq = _resolveMpForTenant(db, tid, MP_TOKEN)
+    if (_mpResolvSaq.source === 'tenant') {
+      send(res, 400, { error: 'Você está usando sua própria conta Mercado Pago. Os pagamentos vão direto pra ela — não há nada a sacar pela plataforma.' })
+      return true
+    }
     try {
       const body = await readBody(req)
       const { pix_key, pix_key_tipo = 'aleatoria' } = body
@@ -1304,6 +1419,115 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const mp_public_key_mascarado = cfg.mp_public_key ? '••••' + cfg.mp_public_key.slice(-6) : ''
       send(res, 200, { mp_token_mascarado: mp_token, taxa_pix, mp_configurado: !!cfg.mp_token, mp_public_key_mascarado, mp_public_key_configurado: !!cfg.mp_public_key })
     } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // GESTOR: Configuração de Mercado Pago próprio (por tenant)
+  // ═══════════════════════════════════════════════════════
+  // Cada tenant pode opcionalmente cadastrar suas próprias credenciais MP.
+  // Quando configurado, todos os PIX/cartão de pedidos do tenant caem
+  // direto na conta dele — não passa pela carteira interna.
+  // SEGURANÇA CRÍTICA: tenant_id vem do header (sessão), nunca do body.
+  // Isso impede um tenant escrever na config de outro.
+  // ═══════════════════════════════════════════════════════
+
+  // ── Gestor: ler própria config MP ────────────────────
+  if (req.method === 'GET' && upath === '/api/gestor/mp-config') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid || tid === '_global' || tid === '_admin') {
+      send(res, 400, { error: 'x-tenant-id obrigatório' })
+      return true
+    }
+    try {
+      const row = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+      const ia  = row?.ia_config ? JSON.parse(row.ia_config) : {}
+      const tokenMasc = ia.mp_token ? '••••' + ia.mp_token.slice(-6) : ''
+      const pkMasc    = ia.mp_public_key ? '••••' + ia.mp_public_key.slice(-6) : ''
+      // Saldo pendente que ainda pode sacar (mesmo após ativar MP próprio,
+      // se sobrar saldo de antes, queremos avisar pra ele sacar)
+      let saldoCarteira = 0
+      try {
+        const pixLiq  = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+        const cartaoB = db.prepare("SELECT COALESCE(SUM(valor),0) as v FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+        const totalRec = pixLiq + (cartaoB * 0.93)
+        const totalSac = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM saques WHERE tenant_id=? AND status IN ('pendente','aprovado','pago')").get(tid)?.v || 0
+        saldoCarteira = Math.max(0, totalRec - totalSac)
+      } catch {}
+      send(res, 200, {
+        mp_token_mascarado:        tokenMasc,
+        mp_public_key_mascarado:   pkMasc,
+        mp_token_configurado:      !!ia.mp_token,
+        mp_public_key_configurado: !!ia.mp_public_key,
+        usando_global:             !ia.mp_token,
+        saldo_carteira_pendente:   saldoCarteira,
+      })
+    } catch (e) { log('❌', '/api/gestor/mp-config GET erro:', e.message); send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Gestor: salvar/limpar própria config MP ──────────
+  if (req.method === 'POST' && upath === '/api/gestor/mp-config') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid || tid === '_global' || tid === '_admin') {
+      send(res, 400, { error: 'x-tenant-id obrigatório' })
+      return true
+    }
+    const body = await readBody(req)
+    const { mp_token, mp_public_key, limpar } = body
+    try {
+      // Lê config atual e faz MERGE (preserva outros campos do ia_config —
+      // automações WA, configs de PIX manual, etc)
+      const row = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+      const ia  = row?.ia_config ? JSON.parse(row.ia_config) : {}
+
+      if (limpar === true) {
+        // Bloqueio: se ainda tem saldo, força sacar antes
+        // (não é hard block — admin pode override via /api/admin/mp-config)
+        delete ia.mp_token
+        delete ia.mp_public_key
+        log('⚙️', `MP gestor LIMPO tenant=${tid}`)
+      } else {
+        // Validação básica do formato (token MP começa com APP_USR ou TEST)
+        if (mp_token !== undefined) {
+          const tk = String(mp_token || '').trim()
+          if (tk && !tk.startsWith('•')) {
+            // Aceita só se parece com formato válido (defesa simples)
+            if (tk.length < 20) {
+              send(res, 400, { error: 'Token Mercado Pago parece inválido (muito curto)' })
+              return true
+            }
+            ia.mp_token = tk
+          }
+        }
+        if (mp_public_key !== undefined) {
+          const pk = String(mp_public_key || '').trim()
+          if (pk && !pk.startsWith('•')) {
+            if (pk.length < 20) {
+              send(res, 400, { error: 'Public key Mercado Pago parece inválida (muito curta)' })
+              return true
+            }
+            ia.mp_public_key = pk
+          }
+        }
+        log('⚙️', `MP gestor SALVO tenant=${tid} token=${ia.mp_token ? 'sim' : 'não'} pk=${ia.mp_public_key ? 'sim' : 'não'}`)
+      }
+
+      db.prepare('INSERT INTO store_config (tenant_id,ia_config) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config')
+        .run(tid, JSON.stringify(ia))
+      marcarDirty()
+
+      const tokenMasc = ia.mp_token ? '••••' + ia.mp_token.slice(-6) : ''
+      const pkMasc    = ia.mp_public_key ? '••••' + ia.mp_public_key.slice(-6) : ''
+      send(res, 200, {
+        ok: true,
+        mp_token_mascarado:        tokenMasc,
+        mp_public_key_mascarado:   pkMasc,
+        mp_token_configurado:      !!ia.mp_token,
+        mp_public_key_configurado: !!ia.mp_public_key,
+        usando_global:             !ia.mp_token,
+      })
+    } catch (e) { log('❌', '/api/gestor/mp-config POST erro:', e.message); send(res, 500, { error: e.message }) }
     return true
   }
 
@@ -1660,9 +1884,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // ── Retorna public_key para o frontend inicializar o SDK ──
   if (req.method === 'GET' && upath === '/api/cartao/public-key') {
     try {
-      const row = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
-      const cfg = row?.ia_config ? JSON.parse(row.ia_config) : {}
-      const pk  = cfg.mp_public_key || ''
+      // Resolve a public key da conta MP que vai processar este pagamento
+      // (tenant primeiro, depois global). Se não tem header tenant_id (cardápio
+      // público), usa o tenant_id da query string.
+      const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
+      const _cfg = _resolveMpForTenant(db, tid, MP_TOKEN)
+      const pk = _cfg.mp_public_key || ''
       if (!pk) { send(res, 200, { ok: false, public_key: '', cartao_ativo: false }); return true }
       send(res, 200, { ok: true, public_key: pk, cartao_ativo: true })
     } catch(e) { send(res, 500, { error: e.message }) }
@@ -1679,13 +1906,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!payment_method_id)  { send(res, 400, { error: 'payment_method_id obrigatório' }); return true }
     if (!valor || valor <= 0){ send(res, 400, { error: 'valor inválido' }); return true }
 
-    // Busca token MP
-    let mpToken = MP_TOKEN
-    try {
-      const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
-      const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
-      if (g.mp_token) mpToken = g.mp_token
-    } catch {}
+    // Resolve conta MP: tenant primeiro, depois global
+    const _mpCfgC = _resolveMpForTenant(db, tid, MP_TOKEN)
+    const mpToken = _mpCfgC.mp_token
     if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago não configurado' }); return true }
 
     const extRef = `ef-card-${tid.slice(0,8)}-${order_id || Date.now()}`
@@ -1723,11 +1946,18 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const novoStatus = statusMap[mpData.status] || 'pendente'
       const lastFour   = mpData.card?.last_four_digits || ''
 
+      // CRÍTICO: Quando MP é do tenant, dinheiro vai direto pra conta dele —
+      // gravamos valor=0 para que a carteira (que faz cartaoB*0.93) ignore.
+      // Mantemos o registro para auditoria/rastreio do pedido.
+      const isMpProprioC = (_mpCfgC.source === 'tenant')
       db.prepare(`INSERT OR IGNORE INTO pagamentos_cartao
         (tenant_id, order_id, mp_payment_id, mp_external_ref, valor, status, status_detail, payer_name, payer_email, last_four_digits, payment_method_id)
         VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(tid, order_id || null, String(mpData.id), extRef, parseFloat(valor),
-          novoStatus, mpData.status_detail || '', client || '', email, lastFour, payment_method_id)
+        .run(tid, order_id || null, String(mpData.id), extRef,
+          isMpProprioC ? 0 : parseFloat(valor),
+          novoStatus, mpData.status_detail || '',
+          (client || '') + (isMpProprioC ? ' [MP_PROPRIO]' : ''),
+          email, lastFour, payment_method_id)
 
       // Se aprovado, atualiza o pedido para 'analise'
       if (novoStatus === 'aprovado' && order_id) {
@@ -1765,11 +1995,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const own3 = db.prepare('SELECT tenant_id FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpId))
       if (own3 && own3.tenant_id !== tid3) { send(res, 403, { error: 'Acesso negado' }); return true }
     }
+    // Resolve token da conta MP do tenant que originou o pagamento
     let mpToken = MP_TOKEN
     try {
-      const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
-      const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
-      if (g.mp_token) mpToken = g.mp_token
+      const ownTenant = db.prepare('SELECT tenant_id FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpId))?.tenant_id
+      const _cfg = _resolveMpForTenant(db, ownTenant, MP_TOKEN)
+      if (_cfg.mp_token) mpToken = _cfg.mp_token
     } catch {}
     if (!mpToken) { send(res, 400, { error: 'Token MP não configurado' }); return true }
     try {
@@ -1867,12 +2098,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const { plano, valor } = body
     if (!plano || !valor || valor <= 0) { send(res, 400, { error: 'Plano e valor obrigatorios' }); return true }
 
-    let mpToken = MP_TOKEN
-    try {
-      const cfgMp = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
-      const gCfg = cfgMp?.ia_config ? JSON.parse(cfgMp.ia_config) : {}
-      if (gCfg.mp_token) mpToken = gCfg.mp_token
-    } catch {}
+    // Token MP — SEMPRE GLOBAL (mensalidade da plataforma cobrada do tenant)
+    const mpToken = _resolveMpGlobal(db, MP_TOKEN)
     if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago nao configurado.' }); return true }
 
     const tenant = db.prepare('SELECT nome FROM tenants WHERE id=?').get(tid)
@@ -1919,8 +2146,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'GET' && upath === '/api/planos/status-pix') {
     const mpId = params.get('mp_payment_id') || ''
     if (!mpId) { send(res, 400, { error: 'mp_payment_id obrigatorio' }); return true }
-    let mpToken = MP_TOKEN
-    try { const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get(); const g = c?.ia_config ? JSON.parse(c.ia_config) : {}; if (g.mp_token) mpToken = g.mp_token } catch {}
+    // Token MP — SEMPRE GLOBAL (consulta de mensalidade SaaS)
+    const mpToken = _resolveMpGlobal(db, MP_TOKEN)
     if (!mpToken) { send(res, 400, { error: 'Token MP nao configurado' }); return true }
     try {
       const r = await fetch('https://api.mercadopago.com/v1/payments/' + mpId, { headers: { 'Authorization': 'Bearer ' + mpToken } })
@@ -1955,12 +2182,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!card_token) { send(res, 400, { error: 'card_token obrigatorio' }); return true }
     if (!payment_method_id) { send(res, 400, { error: 'payment_method_id obrigatorio' }); return true }
 
-    let mpToken = MP_TOKEN
-    try {
-      const cfgMp = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
-      const gCfg = cfgMp?.ia_config ? JSON.parse(cfgMp.ia_config) : {}
-      if (gCfg.mp_token) mpToken = gCfg.mp_token
-    } catch {}
+    // Token MP — SEMPRE GLOBAL (mensalidade SaaS via cartão)
+    const mpToken = _resolveMpGlobal(db, MP_TOKEN)
     if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago nao configurado.' }); return true }
 
     const tenant = db.prepare('SELECT nome FROM tenants WHERE id=?').get(tid)
@@ -2792,13 +3015,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
   async function _gerarCobrancaMP(tenant, opts) {
     const { plano, valor, meses, metodo } = opts
 
-    // Token MP (mesmo padrão dos saques: ia_config global)
-    let mpToken = MP_TOKEN
-    try {
-      const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
-      const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
-      if (g.mp_token) mpToken = g.mp_token
-    } catch {}
+    // Token MP — SEMPRE GLOBAL (faturamento SaaS da plataforma)
+    const mpToken = _resolveMpGlobal(db, MP_TOKEN)
     if (!mpToken) throw new Error('Token Mercado Pago não configurado em /admin → Saques PIX')
 
     const extRef = `fatura-${tenant.id.slice(0, 8)}-${plano}-${Date.now()}`

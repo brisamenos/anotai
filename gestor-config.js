@@ -346,8 +346,156 @@ async function carregarCarteira() {
     _renderSaqueHistorico(saques);
     _renderPixHistorico(cart.ultimos_pagamentos || []);
     _renderCartaoHistorico(cart.ultimos_cartao || []);
+
+    // ── Esconde TUDO da carteira quando MP próprio está ativo ──
+    // (mostra só o card de configuração MP próprio, no topo)
+    const blocoInterno = document.getElementById('carteira-bloco-interno');
+    if (blocoInterno) {
+      blocoInterno.style.display = cart.mp_proprio ? 'none' : '';
+    }
+    // Carrega config MP do gestor para preencher o card de cima
+    _carregarMpProprio();
   } catch(e) {
     sbToast('err', 'Erro ao carregar carteira: ' + e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// MERCADO PAGO PRÓPRIO (gestor)
+// ═══════════════════════════════════════════════════════
+async function _carregarMpProprio() {
+  try {
+    const tid = _sessao?.tenant_id;
+    if (!tid) return;
+    const r = await fetch('/api/gestor/mp-config', { headers: { 'x-tenant-id': tid } });
+    if (!r.ok) return;
+    const d = await r.json();
+    _renderMpProprio(d);
+  } catch(e) { /* silencia */ }
+}
+
+function _renderMpProprio(d) {
+  const se = id => document.getElementById(id);
+  const ativo = !!d.mp_token_configurado;
+
+  // Badge de status
+  const badge = se('mp-proprio-badge');
+  if (badge) {
+    if (ativo) {
+      badge.textContent = '● Sua conta';
+      badge.style.background = 'rgba(34,197,94,.12)';
+      badge.style.color      = '#16a34a';
+      badge.style.borderColor = 'rgba(34,197,94,.30)';
+    } else {
+      badge.textContent = '● Conta da plataforma';
+      badge.style.background = 'rgba(99,102,241,.10)';
+      badge.style.color      = '#6366f1';
+      badge.style.borderColor = 'rgba(99,102,241,.25)';
+    }
+  }
+
+  // Avisos
+  if (se('mp-proprio-aviso-ativo'))  se('mp-proprio-aviso-ativo').style.display  = ativo ? '' : 'none';
+  if (se('mp-proprio-aviso-global')) se('mp-proprio-aviso-global').style.display = ativo ? 'none' : '';
+
+  // Inputs (mostra mascarado quando configurado)
+  if (se('mp-proprio-token')) se('mp-proprio-token').value = d.mp_token_mascarado || '';
+  if (se('mp-proprio-pk'))    se('mp-proprio-pk').value    = d.mp_public_key_mascarado || '';
+
+  // Aviso de saldo pendente: só relevante quando NÃO está ativo ainda E tem saldo
+  if (se('mp-proprio-aviso-saldo')) {
+    const saldo = parseFloat(d.saldo_carteira_pendente || 0);
+    if (!ativo && saldo >= 1) {
+      se('mp-proprio-aviso-saldo').style.display = '';
+      if (se('mp-proprio-saldo-valor')) se('mp-proprio-saldo-valor').textContent = _fmtR(saldo);
+    } else {
+      se('mp-proprio-aviso-saldo').style.display = 'none';
+    }
+  }
+
+  // Botão de limpar só aparece se tiver algo configurado
+  if (se('btn-mp-proprio-limpar')) se('btn-mp-proprio-limpar').style.display = ativo ? '' : 'none';
+}
+
+async function salvarMpProprio() {
+  const tid = _sessao?.tenant_id;
+  if (!tid) return;
+  const tokenEl = document.getElementById('mp-proprio-token');
+  const pkEl    = document.getElementById('mp-proprio-pk');
+  const token = (tokenEl?.value || '').trim();
+  const pk    = (pkEl?.value || '').trim();
+
+  // Se ambos estão mascarados (sem mudança), não faz nada
+  const tokenInalterado = token.startsWith('•') || token === '';
+  const pkInalterado    = pk.startsWith('•') || pk === '';
+  if (tokenInalterado && pkInalterado) {
+    sbToast('err', 'Cole o Access Token (e Public Key, se quiser cartão) para salvar.');
+    return;
+  }
+
+  // Confirmação clara: ele tá ativando recebimento direto
+  if (!confirm(
+    'Tem certeza que quer ativar sua conta Mercado Pago própria?\n\n' +
+    '• Os pagamentos PIX e cartão dos seus pedidos vão direto pra ela\n' +
+    '• Não terá mais carteira/saques na plataforma\n' +
+    '• Você pode reverter a qualquer momento'
+  )) return;
+
+  const body = {};
+  if (!tokenInalterado) body.mp_token = token;
+  if (!pkInalterado)    body.mp_public_key = pk;
+
+  const btn = document.getElementById('btn-mp-proprio-salvar');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/gestor/mp-config', {
+      method: 'POST',
+      headers: { 'x-tenant-id': tid, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (!r.ok) { sbToast('err', d.error || 'Erro ao salvar'); return; }
+    sbToast('ok', 'Conta Mercado Pago ativada!');
+    _renderMpProprio(d);
+    // Recarrega a carteira pra esconder o bloco interno
+    await carregarCarteira();
+  } catch(e) {
+    sbToast('err', 'Erro: ' + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function limparMpProprio() {
+  const tid = _sessao?.tenant_id;
+  if (!tid) return;
+  if (!confirm(
+    'Voltar a usar a conta da plataforma?\n\n' +
+    '• Os próximos pagamentos voltarão a passar pela carteira interna\n' +
+    '• Você precisará solicitar saques novamente\n' +
+    '• Sua conta MP será removida do sistema'
+  )) return;
+
+  const btn = document.getElementById('btn-mp-proprio-limpar');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/gestor/mp-config', {
+      method: 'POST',
+      headers: { 'x-tenant-id': tid, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limpar: true })
+    });
+    const d = await r.json();
+    if (!r.ok) { sbToast('err', d.error || 'Erro ao limpar'); return; }
+    sbToast('ok', 'Voltou a usar a conta da plataforma.');
+    // Limpa inputs
+    const t = document.getElementById('mp-proprio-token'); if (t) t.value = '';
+    const p = document.getElementById('mp-proprio-pk');    if (p) p.value = '';
+    _renderMpProprio(d);
+    await carregarCarteira();
+  } catch(e) {
+    sbToast('err', 'Erro: ' + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
