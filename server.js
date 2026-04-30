@@ -455,6 +455,10 @@ const MIGRATIONS = [
     `CREATE INDEX IF NOT EXISTS idx_faturas_mp      ON faturas(mp_payment_id)`,
     `CREATE INDEX IF NOT EXISTS idx_faturas_extref  ON faturas(mp_external_ref)`,
   ]},
+  { version:40, description:'mp_source em pagamentos (qual conta MP processou: tenant ou global)', up:[
+    `ALTER TABLE pagamentos_pix    ADD COLUMN mp_source TEXT DEFAULT 'global'`,
+    `ALTER TABLE pagamentos_cartao ADD COLUMN mp_source TEXT DEFAULT 'global'`,
+  ]},
   { version:41, description:'cartao fidelidade carimbinho: stamp_progress + stamp_config', up:[
     `CREATE TABLE IF NOT EXISTS stamp_progress (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -465,10 +469,6 @@ const MIGRATIONS = [
       UNIQUE(tenant_id, phone)
     )`,
     `ALTER TABLE store_config ADD COLUMN stamp_config TEXT DEFAULT '{}'`
-  ]},
-  { version:40, description:'mp_source em pagamentos (qual conta MP processou: tenant ou global)', up:[
-    `ALTER TABLE pagamentos_pix    ADD COLUMN mp_source TEXT DEFAULT 'global'`,
-    `ALTER TABLE pagamentos_cartao ADD COLUMN mp_source TEXT DEFAULT 'global'`,
   ]},
 ]
 
