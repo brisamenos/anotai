@@ -51,7 +51,7 @@ function _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN_ENV) {
     try {
       // Busca pagamentos pendentes criados nas últimas 24h que ainda têm pedido aguardando
       const pendentes = db.prepare(`
-        SELECT p.mp_payment_id, p.order_id, p.tenant_id, p.valor
+        SELECT p.mp_payment_id, p.order_id, p.tenant_id, p.valor, p.mp_source
         FROM pagamentos_pix p
         LEFT JOIN orders o ON o.id = p.order_id
         WHERE p.status = 'pendente'
@@ -70,19 +70,16 @@ function _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN_ENV) {
       }, {})
 
       for (const [tenantId, pagamentos] of Object.entries(porTenant)) {
-        // Resolve token UMA VEZ por tenant (eficiente, e correto: pagamentos
-        // de pedidos do tenant X consultam SEMPRE a conta MP do tenant X,
-        // mesmo que ele já tenha trocado pra conta própria depois).
-        const cfgMp = _resolveMpForTenant(db, tenantId, MP_TOKEN_ENV)
-        const mpToken = cfgMp.mp_token
-        if (!mpToken) {
-          log('⚠️', `PIX recovery: tenant=${tenantId} sem token MP — pulando ${pagamentos.length} pagamento(s)`)
-          continue
-        }
-        log('🔍', `PIX recovery: tenant=${tenantId} (conta=${cfgMp.source}) — verificando ${pagamentos.length} pagamento(s) pendente(s)`)
+        log('🔍', `PIX recovery: tenant=${tenantId} — verificando ${pagamentos.length} pagamento(s) pendente(s)`)
         let liberados = 0, rejeitados = 0
 
         for (const row of pagamentos) {
+          // Resolve token POR PAGAMENTO usando mp_source gravado.
+          // Pagamentos diferentes do mesmo tenant podem ter usado contas
+          // diferentes se o gestor mudou a config entre eles.
+          const _pCfg = _resolveMpForExistingPayment(db, row.mp_payment_id, MP_TOKEN_ENV)
+          const mpToken = _pCfg.mp_token
+          if (!mpToken) continue
           try {
             const r = await fetch(`https://api.mercadopago.com/v1/payments/${row.mp_payment_id}`, {
               headers: { 'Authorization': `Bearer ${mpToken}` }
@@ -208,6 +205,36 @@ function _tenantFromPayment(db, mpPaymentId) {
     if (r2?.tenant_id) return r2.tenant_id
   } catch {}
   return null
+}
+
+// Helper: resolve token MP usado para CONSULTAR um pagamento existente.
+// Crítico para evitar race condition: usa o mp_source GRAVADO no momento da
+// criação do pagamento — não o estado ATUAL do tenant. Assim, se o gestor
+// mudar a config entre a criação e a aprovação, o token continua certo.
+// Retorna: { mp_token, source } | { mp_token: '', source: 'unknown' }
+function _resolveMpForExistingPayment(db, mpPaymentId, MP_TOKEN_ENV) {
+  try {
+    let row = db.prepare('SELECT tenant_id, mp_source FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpPaymentId))
+    if (!row) row = db.prepare('SELECT tenant_id, mp_source FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpPaymentId))
+    if (!row) return { mp_token: '', source: 'unknown' }
+
+    if (row.mp_source === 'tenant' && row.tenant_id) {
+      // Lê token atual do tenant — se ele removeu, fallback para global
+      // (mas isso significa que o pagamento "ficou órfão". É raro e o fallback
+      // pra global vai falhar 404 no MP de qualquer jeito — apenas para não
+      // quebrar a chamada e o sistema mostrar status 'pendente' em vez de erro)
+      const tCfg = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(row.tenant_id)
+      const tIa  = tCfg?.ia_config ? JSON.parse(tCfg.ia_config) : {}
+      if (tIa.mp_token) return { mp_token: tIa.mp_token, source: 'tenant' }
+    }
+
+    // mp_source = 'global' OU tenant removeu o token: usa global
+    const gRow = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+    const gIa  = gRow?.ia_config ? JSON.parse(gRow.ia_config) : {}
+    return { mp_token: gIa.mp_token || MP_TOKEN_ENV || '', source: 'global' }
+  } catch {
+    return { mp_token: MP_TOKEN_ENV || '', source: 'global' }
+  }
 }
 
 // Helper exclusivo para cobranças SaaS (mensalidades) — sempre global
@@ -885,14 +912,18 @@ module.exports = async function handleRoutes(req, res, ctx) {
       // vezes (uma direto na conta MP dele, outra solicitando à plataforma).
       // Usamos um marcador na tabela apenas para fins de auditoria/rastreio,
       // mas com valor_liquido = 0 para nunca virar saldo sacável.
+      // mp_source é fixado no momento da criação para que webhooks e polls
+      // futuros usem SEMPRE a mesma conta MP que originou o pagamento, mesmo
+      // que o gestor mude a config depois (evita race condition).
       const isMpProprio = (_mpCfg.source === 'tenant')
       db.prepare(`INSERT OR IGNORE INTO pagamentos_pix
-        (tenant_id,order_id,mp_payment_id,mp_external_ref,valor,taxa,valor_liquido,status,payer_name,qr_code,qr_code_base64)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+        (tenant_id,order_id,mp_payment_id,mp_external_ref,valor,taxa,valor_liquido,status,payer_name,qr_code,qr_code_base64,mp_source)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
         .run(tid, order_id || null, String(mpData.id), extRef, parseFloat(valor), taxa,
           isMpProprio ? 0 : valorLiq,
           (mpData.status==='approved'?'aprovado':mpData.status==='rejected'?'rejeitado':mpData.status==='cancelled'?'cancelado':'pendente'),
-          client || (isMpProprio ? 'MP_PROPRIO' : ''), qr, qrB64)
+          client || (isMpProprio ? 'MP_PROPRIO' : ''), qr, qrB64,
+          isMpProprio ? 'tenant' : 'global')
 
       log('💳', `PIX criado: R$${valor} tenant=${tid} mp_id=${mpData.id} conta=${_mpCfg.source}`)
       send(res, 200, { ok: true, mp_payment_id: mpData.id, qr_code: qr, qr_code_base64: qrB64, valor, taxa, valor_liquido: isMpProprio ? 0 : valorLiq, status: mpData.status })
@@ -939,13 +970,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (own && own.tenant_id !== tid) { send(res, 403, { error: 'Acesso negado' }); return true }
     }
     let mpToken = MP_TOKEN
-    // Resolve token da conta MP que CRIOU este pagamento (tenant ou global).
-    // Mesmo que tid não venha (poll do cliente final), descobrimos pelo pagamento.
-    try {
-      const ownTenant = db.prepare('SELECT tenant_id FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))?.tenant_id
-      const _cfg = _resolveMpForTenant(db, ownTenant, MP_TOKEN)
-      if (_cfg.mp_token) mpToken = _cfg.mp_token
-    } catch {}
+    // Resolve token usando o mp_source GRAVADO no pagamento (evita race condition
+    // se o gestor mudou a config entre criação e poll).
+    const _cfgPoll = _resolveMpForExistingPayment(db, mpId, MP_TOKEN)
+    if (_cfgPoll.mp_token) mpToken = _cfgPoll.mp_token
     if (!mpToken) { send(res, 400, { error: 'Token MP não configurado' }); return true }
     try {
       const r = await fetch('https://api.mercadopago.com/v1/payments/' + mpId, { headers: { 'Authorization': 'Bearer ' + mpToken } })
@@ -1068,15 +1096,17 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const body = await readBody(req)
     const mpId = body?.data?.id || body?.id
     if (!mpId) { send(res, 200, { ok: true }); return true }
-    // Webhook pode vir do MP por qualquer tenant — descobre tenant pelo pagamento.
-    // Tenta tabela PIX primeiro, depois cartão. Se não achar, usa global como fallback
-    // (pode ser pagamento SaaS ou primeiro webhook antes do INSERT).
+    // Webhook pode vir do MP por qualquer tenant — descobre pelo mp_source
+    // gravado no pagamento. Se não achar (pagamento SaaS ou ainda não inserido),
+    // cai no global como fallback razoável.
     let mpToken = MP_TOKEN
-    try {
-      const ownTenant = _tenantFromPayment(db, mpId)
-      const _cfg = _resolveMpForTenant(db, ownTenant, MP_TOKEN)
-      if (_cfg.mp_token) mpToken = _cfg.mp_token
-    } catch {}
+    const _cfgWh = _resolveMpForExistingPayment(db, mpId, MP_TOKEN)
+    if (_cfgWh.mp_token) mpToken = _cfgWh.mp_token
+    else {
+      // Fallback final: global (cobre faturas SaaS antes do INSERT)
+      const _g = _resolveMpGlobal(db, MP_TOKEN)
+      if (_g) mpToken = _g
+    }
     if (!mpToken) { send(res, 200, { ok: true }); return true }
     try {
       const r = await fetch(`https://api.mercadopago.com/v1/payments/${mpId}`, { headers: { 'Authorization': `Bearer ${mpToken}` } })
@@ -1949,15 +1979,17 @@ module.exports = async function handleRoutes(req, res, ctx) {
       // CRÍTICO: Quando MP é do tenant, dinheiro vai direto pra conta dele —
       // gravamos valor=0 para que a carteira (que faz cartaoB*0.93) ignore.
       // Mantemos o registro para auditoria/rastreio do pedido.
+      // mp_source é fixado para webhooks/polls futuros usarem a conta certa.
       const isMpProprioC = (_mpCfgC.source === 'tenant')
       db.prepare(`INSERT OR IGNORE INTO pagamentos_cartao
-        (tenant_id, order_id, mp_payment_id, mp_external_ref, valor, status, status_detail, payer_name, payer_email, last_four_digits, payment_method_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+        (tenant_id, order_id, mp_payment_id, mp_external_ref, valor, status, status_detail, payer_name, payer_email, last_four_digits, payment_method_id, mp_source)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
         .run(tid, order_id || null, String(mpData.id), extRef,
           isMpProprioC ? 0 : parseFloat(valor),
           novoStatus, mpData.status_detail || '',
-          (client || '') + (isMpProprioC ? ' [MP_PROPRIO]' : ''),
-          email, lastFour, payment_method_id)
+          (isMpProprioC ? 'MP_PROPRIO' : (client || '')),
+          email, lastFour, payment_method_id,
+          isMpProprioC ? 'tenant' : 'global')
 
       // Se aprovado, atualiza o pedido para 'analise'
       if (novoStatus === 'aprovado' && order_id) {
@@ -1995,13 +2027,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const own3 = db.prepare('SELECT tenant_id FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpId))
       if (own3 && own3.tenant_id !== tid3) { send(res, 403, { error: 'Acesso negado' }); return true }
     }
-    // Resolve token da conta MP do tenant que originou o pagamento
+    // Resolve token usando o mp_source GRAVADO no pagamento de cartão
     let mpToken = MP_TOKEN
-    try {
-      const ownTenant = db.prepare('SELECT tenant_id FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpId))?.tenant_id
-      const _cfg = _resolveMpForTenant(db, ownTenant, MP_TOKEN)
-      if (_cfg.mp_token) mpToken = _cfg.mp_token
-    } catch {}
+    const _cfgC = _resolveMpForExistingPayment(db, mpId, MP_TOKEN)
+    if (_cfgC.mp_token) mpToken = _cfgC.mp_token
     if (!mpToken) { send(res, 400, { error: 'Token MP não configurado' }); return true }
     try {
       const r  = await fetch(`https://api.mercadopago.com/v1/payments/${mpId}`, { headers: { 'Authorization': `Bearer ${mpToken}` } })
