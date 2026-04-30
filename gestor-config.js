@@ -437,6 +437,7 @@ async function salvarMpProprio() {
   if (!confirm(
     'Tem certeza que quer ativar sua conta Mercado Pago própria?\n\n' +
     '• Os pagamentos PIX e cartão dos seus pedidos vão direto pra ela\n' +
+    '• PIX e cartão online serão ativados automaticamente no cardápio\n' +
     '• Não terá mais carteira/saques na plataforma\n' +
     '• Você pode reverter a qualquer momento'
   )) return;

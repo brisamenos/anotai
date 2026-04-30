@@ -1512,8 +1512,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const ia  = row?.ia_config ? JSON.parse(row.ia_config) : {}
 
       if (limpar === true) {
-        // Bloqueio: se ainda tem saldo, força sacar antes
-        // (não é hard block — admin pode override via /api/admin/mp-config)
+        // Ao limpar o MP próprio, NÃO desativa o pix_ativo/cartao_online_ativo —
+        // o gestor pode querer continuar recebendo via conta global. Se ele
+        // quiser desligar, faz manualmente em "Pagamentos Online".
         delete ia.mp_token
         delete ia.mp_public_key
         log('⚙️', `MP gestor LIMPO tenant=${tid}`)
@@ -1540,7 +1541,20 @@ module.exports = async function handleRoutes(req, res, ctx) {
             ia.mp_public_key = pk
           }
         }
-        log('⚙️', `MP gestor SALVO tenant=${tid} token=${ia.mp_token ? 'sim' : 'não'} pk=${ia.mp_public_key ? 'sim' : 'não'}`)
+        // Auto-ativa PIX/cartão quando o gestor salva MP próprio.
+        // Faz sentido: ele só configurou MP próprio porque quer receber online.
+        // Antes ele tinha que ir em "Pagamentos Online" e ativar manualmente —
+        // resultado era PIX não aparecer no cardápio mesmo com MP configurado.
+        if (ia.mp_token) {
+          ia.pix_ativo = true
+          // Cartão só faz sentido se tem public key
+          if (ia.mp_public_key) {
+            ia.cartao_online_ativo = true
+          }
+          // Garante que pagamento online geral está ligado
+          ia.pag_online_ativo = true
+        }
+        log('⚙️', `MP gestor SALVO tenant=${tid} token=${ia.mp_token ? 'sim' : 'não'} pk=${ia.mp_public_key ? 'sim' : 'não'} pix_ativo=${ia.pix_ativo}`)
       }
 
       db.prepare('INSERT INTO store_config (tenant_id,ia_config) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config')
