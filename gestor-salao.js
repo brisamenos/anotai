@@ -970,6 +970,99 @@ async function addCupom() {
 let _cbClienteAtual = null; // { id, name, phone, cashback_saldo }
 let _cbTodosClientes = [];  // cache de todos os clientes com saldo > 0
 
+// ─────────────────────────────────────────
+// CARTÃO FIDELIDADE (CARIMBINHO)
+// ─────────────────────────────────────────
+async function loadStampConfig() {
+  try {
+    const tid = _sessao?.tenant_id || '';
+    const res = await fetch('/api/stamp/config', { headers: { 'x-tenant-id': tid } });
+    if (!res.ok) return;
+    const cfg = await res.json();
+    const tog = document.getElementById('stamp-toggle-ativo');
+    if (tog) tog.classList.toggle('on', !!cfg.ativo);
+    const meta = document.getElementById('stamp-meta-compras');
+    const tipo = document.getElementById('stamp-recompensa-tipo');
+    const val  = document.getElementById('stamp-recompensa-valor');
+    if (meta) meta.value = cfg.meta_compras || 10;
+    if (tipo) tipo.value = cfg.recompensa_tipo || 'pedido_gratis';
+    if (val)  val.value  = cfg.recompensa_valor || '';
+    _stampTipoChange();
+    await stampCarregarProgresso();
+  } catch(e) { console.error('[Stamp] loadStampConfig:', e); }
+}
+
+async function saveStampConfig() {
+  const tid  = _sessao?.tenant_id || '';
+  const ativo = document.getElementById('stamp-toggle-ativo')?.classList.contains('on') || false;
+  const meta  = parseInt(document.getElementById('stamp-meta-compras')?.value) || 10;
+  const tipo  = document.getElementById('stamp-recompensa-tipo')?.value || 'pedido_gratis';
+  const valor = parseFloat(document.getElementById('stamp-recompensa-valor')?.value) || 0;
+  if (meta < 2 || meta > 100) { sbToast('err','Meta deve ser entre 2 e 100 compras'); return; }
+  sbLoading(true);
+  try {
+    const r = await fetch('/api/stamp/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify({ ativo, meta_compras: meta, recompensa_tipo: tipo, recompensa_valor: valor })
+    });
+    if (!r.ok) throw new Error('Erro');
+    sbToast('ok', 'Cartão fidelidade salvo!');
+  } catch(e) { sbToast('err', 'Erro ao salvar'); }
+  sbLoading(false);
+}
+
+function _stampTipoChange() {
+  const tipo = document.getElementById('stamp-recompensa-tipo')?.value;
+  const valRow = document.getElementById('stamp-val-row');
+  if (valRow) valRow.style.display = (tipo === 'pedido_gratis' || tipo === 'frete_gratis') ? 'none' : '';
+}
+
+async function stampCarregarProgresso() {
+  const tbody = document.getElementById('stamp-lista-tbody');
+  const vazio = document.getElementById('stamp-lista-vazio');
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--muted)"><div class="spinner" style="margin:0 auto 8px"></div>Carregando...</td></tr>`;
+  try {
+    const tid = _sessao?.tenant_id || '';
+    const { data, error } = await sb.from('stamp_progress')
+      .select('phone,compras,ultimo_resgate')
+      .eq('tenant_id', tid)
+      .order('compras', { ascending: false })
+      .limit(50);
+    if (error) throw new Error(error.message);
+    const rows = (data || []);
+    if (!rows.length) {
+      tbody.innerHTML = '';
+      if (vazio) vazio.style.display = '';
+      return;
+    }
+    if (vazio) vazio.style.display = 'none';
+    const meta = parseInt(document.getElementById('stamp-meta-compras')?.value) || 10;
+    tbody.innerHTML = rows.map(r => {
+      const prog = r.compras - (r.ultimo_resgate||0);
+      const elegivel = prog >= meta;
+      const pct = Math.min(100, Math.round((prog / meta) * 100));
+      return `<tr>
+        <td style="padding:8px 12px;font-size:13px">${r.phone}</td>
+        <td style="padding:8px 12px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+              <div style="width:${pct}%;height:100%;background:${elegivel?'var(--success)':'var(--accent)'};border-radius:3px"></div>
+            </div>
+            <span style="font-size:12px;color:${elegivel?'var(--success)':'var(--muted)'};white-space:nowrap">${prog}/${meta}</span>
+          </div>
+        </td>
+        <td style="padding:8px 12px">
+          ${elegivel ? '<span class="chip chip-green">🎁 Elegível</span>' : `<span style="font-size:12px;color:var(--muted)">faltam ${meta-prog}</span>`}
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;padding:16px;color:var(--muted);font-size:13px">Erro ao carregar</td></tr>`;
+  }
+}
+
 async function loadCashbackConfig() {
   try {
     const tid = _sessao?.tenant_id || '';
