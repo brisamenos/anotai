@@ -96,13 +96,17 @@ function validarDelivery() {
     const match = bairros.find(b => b.bairro.trim().toLowerCase() === digitado);
     if (!match) return { ok: false, motivo: 'Bairro fora da área de entrega. Fale com o restaurante.' };
   }
-  // por_km: se tem GPS calculado e estourou a maior faixa, bloqueia
+  // por_km: exige GPS confirmado e dentro da maior faixa
   if (feeConfig?.tipo === 'por_km') {
     const faixas = Array.isArray(feeConfig.faixas) ? feeConfig.faixas : [];
-    if (faixas.length && typeof _geoDistKm === 'number' && _geoDistKm > 0) {
+    if (faixas.length) {
+      // GPS ainda não respondeu ou foi negado — bloqueia até confirmar localização
+      if (typeof _geoDistKm !== 'number' || _geoDistKm <= 0) {
+        return { ok: false, motivo: '📍 Precisamos confirmar sua localização. Permita o acesso ao GPS e aguarde.' };
+      }
       const maiorFaixa = parseFloat(faixas[faixas.length - 1]?.ate_km || 0);
       if (_geoDistKm > maiorFaixa + 0.001) {
-        return { ok: false, motivo: `Você está a ${_geoDistKm.toFixed(1).replace('.', ',')} km — fora da área de entrega (até ${maiorFaixa} km)` };
+        return { ok: false, motivo: `🚫 Você está a ${_geoDistKm.toFixed(1).replace('.', ',')} km — fora da área de entrega (até ${maiorFaixa} km).` };
       }
     }
   }
@@ -194,30 +198,35 @@ function renderGeoBlock() {
 }
 
 function _autoGetGeo() {
-  if (!navigator.geolocation) return;
   const res = document.getElementById('geo-result');
-  if (res) res.innerHTML = '<span style="color:var(--accent)">📡 Obtendo sua localização...</span>';
+  if (!navigator.geolocation) {
+    if (res) res.innerHTML = '<span style="color:var(--red)">⚠️ GPS não disponível neste dispositivo. Não é possível confirmar a área de entrega.</span>';
+    return;
+  }
+  if (res) res.innerHTML = '<span style="color:var(--accent)">📡 Obtendo sua localização... aguarde para finalizar o pedido.</span>';
   navigator.geolocation.getCurrentPosition(
     pos => {
       const dist = calcDist(_storeLat, _storeLng, pos.coords.latitude, pos.coords.longitude);
       _geoDistKm = dist;
       const faixas = feeConfig?.faixas || [];
-      let idx = faixas.findIndex(f => f.ate_km >= dist);
-      if (idx === -1) idx = faixas.length - 1;
+      const maiorFaixa = parseFloat(faixas[faixas.length - 1]?.ate_km || 0);
+      const distStr = dist.toFixed(1).replace('.', ',');
+      // Fora da área: avisa claramente e não permite prosseguir
+      if (!faixas.length || dist > maiorFaixa + 0.001) {
+        if (res) res.innerHTML = `<span style="color:var(--red)">🚫 Você está a <strong>${distStr} km</strong> — fora da área de entrega (máx. ${maiorFaixa} km). Não é possível finalizar o pedido.</span>`;
+        renderTotals();
+        return;
+      }
+      const idx = faixas.findIndex(f => f.ate_km >= dist);
       if (idx >= 0) selectedFaixa = idx;
       const faixaSel = faixas[selectedFaixa];
-      const distStr = dist.toFixed(1).replace('.', ',');
-      if (faixaSel) {
-        if (res) res.innerHTML = `<span style="color:var(--green)">📍 Você está a <strong>${distStr} km</strong> — Taxa: <strong>R$ ${fmt(faixaSel.taxa)}</strong></span>`;
-      } else {
-        if (res) res.innerHTML = `<span style="color:var(--red)">📍 Você está a ${distStr} km — fora da área de entrega</span>`;
-      }
+      if (res) res.innerHTML = `<span style="color:var(--green)">📍 Você está a <strong>${distStr} km</strong> — Taxa: <strong>R$ ${fmt(faixaSel.taxa)}</strong></span>`;
       renderTotals();
     },
     err => {
-      // GPS negado/falhou — mostra faixas para seleção manual como fallback
-      if (res) res.innerHTML = '<span style="color:var(--muted)">Não foi possível obter localização. Selecione sua faixa:</span>';
-      _showFaixasFallback();
+      // GPS negado/falhou — bloqueia pedido, não permite seleção manual
+      if (res) res.innerHTML = '<span style="color:var(--red)">⚠️ Localização negada. Permita o acesso ao GPS para finalizar o pedido por km.</span>';
+      _geoDistKm = null;
     },
     { enableHighAccuracy: true, timeout: 10000 }
   );
