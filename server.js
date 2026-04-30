@@ -459,17 +459,6 @@ const MIGRATIONS = [
     `ALTER TABLE pagamentos_pix    ADD COLUMN mp_source TEXT DEFAULT 'global'`,
     `ALTER TABLE pagamentos_cartao ADD COLUMN mp_source TEXT DEFAULT 'global'`,
   ]},
-  { version:41, description:'cartao fidelidade carimbinho: stamp_progress + stamp_config', up:[
-    `CREATE TABLE IF NOT EXISTS stamp_progress (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-      phone TEXT NOT NULL,
-      compras INTEGER DEFAULT 0,
-      ultimo_resgate INTEGER DEFAULT 0,
-      UNIQUE(tenant_id, phone)
-    )`,
-    `ALTER TABLE store_config ADD COLUMN stamp_config TEXT DEFAULT '{}'`
-  ]},
 ]
 
 function runMigrations() {
@@ -804,7 +793,7 @@ const NO_TENANT_FILTER = new Set(['tenants','sys_users','admin_audit_log'])
 const JSON_FIELDS = {
   orders:       new Set(['items']),
   menu_items:   new Set(['days','ingredients','custom_groups']),
-  store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config','cashback_config','tipos_entrega','stamp_config']),
+  store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config','cashback_config','tipos_entrega']),
   admin_audit_log: new Set(['detalhes']),
 }
 const BOOL_FIELDS  = new Set(['ativo','store_open','caixa_open','destaque'])
@@ -1398,7 +1387,7 @@ async function handleOrderStatus(req, res) {
     // ── Cashback automático ─────────────────────────────
     if (['finalizado','entregue'].includes(new_status) && !['finalizado','entregue'].includes(oldStatus)) {
       try {
-        const cfg    = db.prepare('SELECT cashback_config, evo_automacoes, evo_instance, fid_config, stamp_config FROM store_config WHERE tenant_id=?').get(tid)
+        const cfg    = db.prepare('SELECT cashback_config, evo_automacoes, evo_instance, fid_config FROM store_config WHERE tenant_id=?').get(tid)
         const inst   = cfg?.evo_instance || EVO_INST
         const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
 
@@ -1463,16 +1452,7 @@ async function handleOrderStatus(req, res) {
             }
           }
         }
-        // ── Cartão Fidelidade (Carimbinho) ─────────────
-        const stampCfg = (() => { try { return JSON.parse(cfg?.stamp_config||'{}') } catch { return {} } })()
-        if (stampCfg.ativo && order.phone) {
-          const phone8s = order.phone.replace(/\D/g,'').slice(-8)
-          db.prepare(`INSERT INTO stamp_progress (tenant_id,phone,compras,ultimo_resgate)
-            VALUES (?,?,1,0) ON CONFLICT(tenant_id,phone) DO UPDATE SET compras=compras+1`)
-            .run(tid, order.phone.replace(/\D/g,''))
-          log('🃏', `Carimbinho +1 → ${order.phone} (pedido #${order_id})`)
-        }
-      } catch(cbErr) { log('⚠️', 'Cashback/Fidelidade/Stamp erro:', cbErr.message) }
+      } catch(cbErr) { log('⚠️', 'Cashback/Fidelidade erro:', cbErr.message) }
     }
     if (order.phone&&oldStatus!==new_status) {
       setImmediate(async () => {
@@ -1949,59 +1929,6 @@ const server = http.createServer(async (req,res) => {
     marcarDirty();send(res,200,{ok:true,saldo:parseFloat(updated?.cashback_saldo||0)});return
   }
 
-  // ── Cartão Fidelidade (Carimbinho) ──────────────────
-  if (upath === '/api/stamp/config') {
-    const tid = req.headers['x-tenant-id'] || ''
-    if (!tid) { send(res, 400, { error: 'tenant_id obrigatório' }); return }
-    if (req.method === 'GET') {
-      const row = db.prepare('SELECT stamp_config FROM store_config WHERE tenant_id=?').get(tid)
-      const cfg = (() => { try { return JSON.parse(row?.stamp_config||'{}') } catch { return {} } })()
-      send(res, 200, cfg); return
-    }
-    if (req.method === 'POST') {
-      const body = await readBody(req)
-      db.prepare('INSERT INTO store_config (tenant_id,stamp_config) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET stamp_config=excluded.stamp_config')
-        .run(tid, JSON.stringify(body))
-      marcarDirty(); send(res, 200, { ok: true }); return
-    }
-  }
-
-  if (req.method === 'GET' && upath === '/api/stamp/check') {
-    const tid   = req.headers['x-tenant-id'] || ''
-    const phone = (params.phone || '').replace(/\D/g,'')
-    if (!tid || !phone) { send(res, 400, { error: 'tenant_id e phone obrigatórios' }); return }
-    const row = db.prepare('SELECT stamp_config FROM store_config WHERE tenant_id=?').get(tid)
-    const cfg = (() => { try { return JSON.parse(row?.stamp_config||'{}') } catch { return {} } })()
-    if (!cfg.ativo || !cfg.meta_compras) { send(res, 200, { ativo: false }); return }
-    const phone8 = phone.slice(-8)
-    const prog = db.prepare('SELECT compras, ultimo_resgate FROM stamp_progress WHERE tenant_id=? AND phone LIKE ?').get(tid, `%${phone8}%`)
-    const compras = prog?.compras || 0
-    const ultimoResgate = prog?.ultimo_resgate || 0
-    const comprasDesdeResgate = compras - ultimoResgate
-    const meta = parseInt(cfg.meta_compras || 10)
-    const elegivel = comprasDesdeResgate >= meta
-    send(res, 200, {
-      ativo: true,
-      compras: comprasDesdeResgate,
-      meta,
-      elegivel,
-      recompensa_tipo: cfg.recompensa_tipo || 'pedido_gratis',
-      recompensa_valor: parseFloat(cfg.recompensa_valor || 0)
-    }); return
-  }
-
-  if (req.method === 'POST' && upath === '/api/stamp/usar') {
-    const tid  = req.headers['x-tenant-id'] || ''
-    const body = await readBody(req)
-    const phone = (body.phone || '').replace(/\D/g,'')
-    if (!tid || !phone) { send(res, 400, { error: 'tenant_id e phone obrigatórios' }); return }
-    const phone8 = phone.slice(-8)
-    db.prepare(`INSERT INTO stamp_progress (tenant_id,phone,compras,ultimo_resgate) VALUES (?,?,0,0)
-      ON CONFLICT(tenant_id,phone) DO UPDATE SET ultimo_resgate=compras`)
-      .run(tid, phone)
-    marcarDirty(); send(res, 200, { ok: true }); return
-  }
-
   // ── Fidelidade: sync automático ao cadastrar/logar ───
   if (req.method === 'POST' && upath === '/api/fidelidade/sync') {
     const tid = req.headers['x-tenant-id'] || ''
@@ -2041,7 +1968,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/exportar-relatorio'])
+  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/fidelidade/sync','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/exportar-relatorio'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return

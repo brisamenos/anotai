@@ -323,19 +323,6 @@ async function _doSubmitOrder(addr, troco) {
       _resetCashbackUI();
     }
 
-    // ── Registrar uso do carimbinho se aplicado ──────
-    if (_stampElegivel && _stampUsado) {
-      try {
-        const tid = _tenantId || '';
-        await fetch('/api/stamp/usar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-          body: JSON.stringify({ phone: phone.replace(/\D/g,'') })
-        });
-      } catch(e) {}
-      _stampElegivel = false; _stampUsado = false;
-    }
-
     cart = [];
     appliedCupom = null;
     _pendingOrderAddr = '';
