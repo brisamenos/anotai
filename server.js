@@ -2075,33 +2075,6 @@ server.listen(PORT,()=>{
   log('🏢',`Multi-tenant · SQLite`)
 })
 
-// ── Inicializa CUPS automaticamente (async, não bloqueia o servidor) ──
-;(async function initCups() {
-  const { exec } = require('child_process')
-  const run = (cmd, timeout = 10000) => new Promise((resolve) => {
-    exec(cmd, { timeout }, (err, stdout) => resolve({ err, stdout: stdout || '' }))
-  })
-  try {
-    const { err: noLp } = await run('which lp', 3000)
-    if (noLp) {
-      log('🖨️', 'Instalando CUPS...')
-      const { err } = await run('apt-get update -qq && apt-get install -y cups cups-filters printer-driver-cups-pdf --no-install-recommends 2>/dev/null', 120000)
-      if (err) { log('⚠️', 'CUPS: falha na instalação: ' + err.message?.slice(0, 60)); return }
-      log('🖨️', 'CUPS instalado com sucesso')
-    } else {
-      log('🖨️', 'CUPS já instalado')
-    }
-    await run('service cups start 2>/dev/null || true', 10000)
-    const { stdout: lpstat } = await run('lpstat -a 2>/dev/null || echo ""', 5000)
-    if (!lpstat.includes('PDF')) {
-      await run('lpadmin -p PDF -E -v cups-pdf:/ -P /usr/share/ppd/cupsfilters/Generic-PDF_Printer-PDF.ppd 2>/dev/null || true', 10000)
-      log('🖨️', 'Impressora PDF virtual registrada')
-    }
-    log('🖨️', 'CUPS inicializado com sucesso')
-  } catch (e) {
-    log('⚠️', 'CUPS: ' + e.message?.slice(0, 80))
-  }
-})()
 
 setInterval(checarAniv,60000)
 setTimeout(checarAniv,5000)
