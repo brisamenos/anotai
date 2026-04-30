@@ -511,8 +511,14 @@ async function init() {
     _pixKeyManualTipo  = pixCfgR.pix_key_manual_tipo  || 'aleatoria';
     _pixKeyManualBanco = pixCfgR.pix_key_manual_banco || '';
 
-    // Oculta PIX somente se desativado E não há chave manual configurada
-    if (!pixCfgR.pix_ativo && !_pixKeyManual) {
+    // Mostra PIX se: pix_ativo OU chave manual OU conta MP configurada (tenant/global).
+    // A última condição é defesa contra estado inconsistente: se MP está configurado
+    // tecnicamente o PIX online deveria funcionar, mesmo que o toggle pix_ativo
+    // esteja false por algum motivo.
+    const podeMostrarPix = pixCfgR.pix_ativo === true
+                        || !!_pixKeyManual
+                        || pixCfgR.mp_configurado === true;
+    if (!podeMostrarPix) {
       const pixBtn = document.querySelector('[data-pay="pix"]');
       if (pixBtn) pixBtn.style.display = 'none';
     }
