@@ -352,6 +352,7 @@ function renderTotals() {
   const disc   = getDiscount();
   const taxa   = getTaxa();
   const cbDesc = getCashbackDesconto();
+  const stDesc = getStampDesconto();
   const tot    = displayTotal();
   const isCupomFrete = appliedCupom && (appliedCupom.tipo === 'frete' || appliedCupom.type === 'frete');
   let taxaLabel = 'Taxa de entrega';
@@ -402,10 +403,35 @@ function applyCupom() {
 }
 
 // ── Cashback no checkout ─────────────────────────────
+// ── Cartão Fidelidade (Carimbinho) ─────────────────
+let _stampElegivel      = false;
+let _stampCompras       = 0;
+let _stampMeta          = 10;
+let _stampRecompensaTipo  = 'pedido_gratis';
+let _stampRecompensaValor = 0;
+let _stampUsado         = false;  // true quando a recompensa já foi aplicada nesta sessão
+
+function getStampDesconto() {
+  if (!_stampElegivel || !_stampUsado) return 0;
+  const sub = cartSubtotal();
+  if (_stampRecompensaTipo === 'pedido_gratis') return sub;
+  if (_stampRecompensaTipo === 'frete_gratis')  return 0; // taxa zerada separado
+  if (_stampRecompensaTipo === 'percent')        return Math.min(sub, parseFloat((sub * _stampRecompensaValor / 100).toFixed(2)));
+  if (_stampRecompensaTipo === 'fixo')           return Math.min(sub, _stampRecompensaValor);
+  return 0;
+}
+
+function _resetStampUI() {
+  _stampElegivel = false; _stampCompras = 0; _stampUsado = false;
+  const bl = document.getElementById('stamp-block');
+  if (bl) bl.style.display = 'none';
+  renderTotals();
+}
+
 let _cbLookupTimer = null;
 async function onPhoneCashback(raw) {
   const phone = raw.replace(/\D/g,'');
-  if (phone.length < 8) { _resetCashbackUI(); return; }
+  if (phone.length < 8) { _resetCashbackUI(); _resetStampUI(); return; }
   clearTimeout(_cbLookupTimer);
   _cbLookupTimer = setTimeout(async () => {
     try {
@@ -423,7 +449,42 @@ async function onPhoneCashback(raw) {
         _resetCashbackUI();
       }
     } catch(e) { _resetCashbackUI(); }
+  // ── Stamp check ──
+  try {
+    const tid = _tenantId || '';
+    const rs = await fetch(`/api/stamp/check?phone=${phone}`, { headers: { 'x-tenant-id': tid } });
+    if (!rs.ok) { _resetStampUI(); return; }
+    const ds = await rs.json();
+    if (!ds.ativo) { _resetStampUI(); return; }
+    _stampMeta          = ds.meta || 10;
+    _stampCompras       = ds.compras || 0;
+    _stampElegivel      = !!ds.elegivel;
+    _stampRecompensaTipo  = ds.recompensa_tipo || 'pedido_gratis';
+    _stampRecompensaValor = parseFloat(ds.recompensa_valor || 0);
+    const bl = document.getElementById('stamp-block');
+    const prog = document.getElementById('stamp-progress-txt');
+    const pbar = document.getElementById('stamp-progress-bar');
+    const act  = document.getElementById('stamp-action');
+    if (bl) {
+      bl.style.display = '';
+      const pct = Math.min(100, Math.round((_stampCompras / _stampMeta) * 100));
+      if (pbar) pbar.style.width = pct + '%';
+      if (prog) prog.textContent = _stampElegivel
+        ? '🎁 Recompensa disponível! Aplicar no pedido?'
+        : `🃏 ${_stampCompras}/${_stampMeta} pedidos — faltam ${_stampMeta - _stampCompras}`;
+      if (act) act.style.display = _stampElegivel ? '' : 'none';
+    }
+    renderTotals();
+  } catch(e) { _resetStampUI(); }
   }, 600);
+}
+
+function toggleStampUso() {
+  if (!_stampElegivel) return;
+  _stampUsado = !_stampUsado;
+  const btn = document.getElementById('stamp-usar-btn');
+  if (btn) btn.textContent = _stampUsado ? '✅ Aplicado — remover' : '🎁 Usar recompensa';
+  renderTotals();
 }
 
 function _resetCashbackUI() {
