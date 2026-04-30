@@ -1646,6 +1646,75 @@ Use no seu próximo pedido 🛍️</textarea>
     </div>
   </div>
 
+  <!-- ══ CARTÃO FIDELIDADE (CARIMBINHO) ══ -->
+  <div style="margin-top:28px;margin-bottom:6px;display:flex;align-items:center;gap:10px">
+    <div style="font-size:13px;font-weight:700;color:var(--text);letter-spacing:.02em;display:flex;align-items:center;gap:7px">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="3" width="14" height="10" rx="1.5" stroke="#f59e0b" stroke-width="1.4"/><circle cx="5" cy="8" r="1.2" fill="#f59e0b"/><circle cx="8" cy="8" r="1.2" fill="#f59e0b"/><circle cx="11" cy="8" r="1.2" fill="#f59e0b"/></svg>
+      Cartão Fidelidade (Carimbinho)
+    </div>
+    <div style="flex:1;height:1px;background:var(--border)"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <div>
+        <div class="card-title" style="margin:0">Configuração</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:3px">Cliente compra X vezes → ganha recompensa automática no próximo pedido</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:12px;color:var(--muted)">Ativo</span>
+        <div class="toggle" id="stamp-toggle-ativo" onclick="this.classList.toggle('on')" title="Ativar/desativar cartão fidelidade"></div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div class="form-row" style="margin:0">
+        <label class="form-label">Compras para recompensa</label>
+        <input class="form-input" id="stamp-meta-compras" type="number" min="2" max="100" placeholder="Ex: 10" value="10">
+      </div>
+      <div class="form-row" style="margin:0">
+        <label class="form-label">Tipo de recompensa</label>
+        <div class="sw" style="width:100%">
+          <select class="form-input" id="stamp-recompensa-tipo" style="width:100%" onchange="_stampTipoChange()">
+            <option value="pedido_gratis">🎁 Pedido grátis</option>
+            <option value="frete_gratis">🚗 Frete grátis</option>
+            <option value="percent">% Desconto</option>
+            <option value="fixo">R$ Valor fixo</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="form-row" id="stamp-val-row" style="margin:0 0 14px;display:none">
+      <label class="form-label">Valor da recompensa</label>
+      <input class="form-input" id="stamp-recompensa-valor" type="number" min="0" placeholder="Ex: 15">
+    </div>
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;padding:8px 10px;background:rgba(245,158,11,.07);border-radius:8px;border:1px solid rgba(245,158,11,.2)">
+      💡 A recompensa é aplicada <strong style="color:var(--text)">automaticamente</strong> quando o cliente informa o telefone no cardápio online, após atingir a meta.
+    </div>
+    <button class="btn bp" onclick="saveStampConfig()" style="width:100%;justify-content:center">Salvar configuração</button>
+  </div>
+
+  <!-- Progresso dos clientes -->
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div class="card-title" style="margin:0">Progresso dos clientes</div>
+      <button class="btn bg" onclick="stampCarregarProgresso()" style="font-size:11px;padding:3px 10px">↻ Atualizar</button>
+    </div>
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border)">
+          <th style="text-align:left;padding:6px 12px;font-size:11.5px;color:var(--muted);font-weight:600">Telefone</th>
+          <th style="text-align:left;padding:6px 12px;font-size:11.5px;color:var(--muted);font-weight:600">Progresso</th>
+          <th style="text-align:left;padding:6px 12px;font-size:11.5px;color:var(--muted);font-weight:600">Status</th>
+        </tr>
+      </thead>
+      <tbody id="stamp-lista-tbody"></tbody>
+    </table>
+    <div id="stamp-lista-vazio" style="text-align:center;padding:24px;color:var(--muted);font-size:13px">
+      <svg width="28" height="28" viewBox="0 0 16 16" fill="none" style="opacity:.3;margin-bottom:8px;display:block;margin:0 auto 8px"><rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="5" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="11" cy="8" r="1.2" fill="currentColor"/></svg>
+      Nenhum cliente com progresso ainda
+    </div>
+  </div>
+
 </div>
 
 <!-- FIDELIDADE -->

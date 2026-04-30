@@ -33,7 +33,7 @@ function nav(id) {
     initChat();
   }
   if (id === 'qrcode') renderQR();
-  if (id === 'cupom') { renderCupons(); loadCashbackConfig(); }
+  if (id === 'cupom') { renderCupons(); loadCashbackConfig(); loadStampConfig(); }
   if (id === 'fidelidade') renderFidelidade();
   if (id === 'garcom') { renderGarcom(); loadGarcons(); }
   if (id === 'kds') renderKDS();
