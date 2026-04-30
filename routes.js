@@ -161,15 +161,21 @@ function _getInstanciaCobranca(db, fallbackInst) {
 // ═══════════════════════════════════════════════════════
 function _resolveMpForTenant(db, tenantId, MP_TOKEN_ENV) {
   const result = { mp_token: '', mp_public_key: '', source: 'none' }
+  // Sanitizador defensivo: tokens podem ter sido salvos com aspas/espaços/quebras
+  // de linha invisíveis em versões anteriores. Limpa SEMPRE antes de usar.
+  const _clean = (s) => String(s || '')
+    .replace(/^["'\s\u200B-\u200D\uFEFF]+|["'\s\u200B-\u200D\uFEFF]+$/g, '')
+    .replace(/[\r\n\t]/g, '')
 
   // 1) Tenta tenant próprio (se tenant_id válido e não for o global)
   if (tenantId && tenantId !== '_global' && tenantId !== '_admin') {
     try {
       const row = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tenantId)
       const ia  = row?.ia_config ? JSON.parse(row.ia_config) : {}
-      if (ia.mp_token) {
-        result.mp_token      = ia.mp_token
-        result.mp_public_key = ia.mp_public_key || ''
+      const tk = _clean(ia.mp_token)
+      if (tk) {
+        result.mp_token      = tk
+        result.mp_public_key = _clean(ia.mp_public_key)
         result.source        = 'tenant'
         return result
       }
@@ -180,9 +186,10 @@ function _resolveMpForTenant(db, tenantId, MP_TOKEN_ENV) {
   try {
     const row = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
     const g   = row?.ia_config ? JSON.parse(row.ia_config) : {}
-    if (g.mp_token) {
-      result.mp_token      = g.mp_token
-      result.mp_public_key = g.mp_public_key || ''
+    const tk = _clean(g.mp_token)
+    if (tk) {
+      result.mp_token      = tk
+      result.mp_public_key = _clean(g.mp_public_key)
       result.source        = 'global'
       return result
     }
@@ -190,7 +197,7 @@ function _resolveMpForTenant(db, tenantId, MP_TOKEN_ENV) {
 
   // 3) Último fallback: env
   if (MP_TOKEN_ENV) {
-    result.mp_token = MP_TOKEN_ENV
+    result.mp_token = _clean(MP_TOKEN_ENV)
     result.source   = 'env'
   }
   return result
@@ -883,6 +890,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
     // não passa pela carteira interna — vai direto pro MP do gestor)
     if (_mpCfg.source === 'tenant') taxa = 0
     if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago não configurado.' }); return true }
+    // Log de diagnóstico: mostra os primeiros caracteres do token usado.
+    // Útil pra confirmar se é APP_USR/TEST e se não tem caracteres estranhos.
+    log('💳', `PIX iniciando tenant=${tid} conta=${_mpCfg.source} token_prefix=${mpToken.slice(0, 12)}... len=${mpToken.length}`)
 
     // extRef único — usa tenant_id completo + order_id (ou timestamp se não tiver pedido)
     const extRef = `ef-${tid}-${order_id || Date.now()}`
@@ -901,7 +911,22 @@ module.exports = async function handleRoutes(req, res, ctx) {
         })
       })
       const mpData = await mp.json()
-      if (!mp.ok) { log('❌', 'MP PIX erro:', mpData); send(res, 400, { error: mpData.message || 'Erro MP' }); return true }
+      if (!mp.ok) {
+        log('❌', `MP PIX erro tenant=${tid} conta=${_mpCfg.source} status=${mp.status}:`, JSON.stringify(mpData).slice(0, 500))
+        // Mensagem mais útil dependendo do erro
+        let userMsg = mpData.message || 'Erro ao gerar PIX'
+        if (mp.status === 401) {
+          userMsg = _mpCfg.source === 'tenant'
+            ? 'Sua conta Mercado Pago rejeitou a operação. Verifique se o Access Token cadastrado em Carteira → Conta MP Própria está correto e ativo.'
+            : 'Conta Mercado Pago da plataforma rejeitou a operação.'
+        } else if (mp.status === 400 && mpData.cause?.[0]?.code === 'invalid_token') {
+          userMsg = 'Access Token Mercado Pago inválido. Atualize em Carteira → Conta MP Própria.'
+        } else if (/payer.*not.*found|collector_id/i.test(JSON.stringify(mpData))) {
+          userMsg = 'Conta Mercado Pago não está habilitada para receber PIX. Verifique no painel MP se as credenciais de produção estão ativas.'
+        }
+        send(res, 400, { error: userMsg })
+        return true
+      }
 
       const qr    = mpData.point_of_interaction?.transaction_data?.qr_code || ''
       const qrB64 = mpData.point_of_interaction?.transaction_data?.qr_code_base64 || ''
@@ -1521,18 +1546,61 @@ module.exports = async function handleRoutes(req, res, ctx) {
       } else {
         // Validação básica do formato (token MP começa com APP_USR ou TEST)
         if (mp_token !== undefined) {
-          const tk = String(mp_token || '').trim()
+          // Sanitização agressiva: remove aspas, espaços, quebras de linha invisíveis,
+          // BOM, etc. Causa comum: gestor copia "APP_USR-..." (com aspas) ou
+          // colou de um campo que tinha \r\n no final.
+          let tk = String(mp_token || '')
+            .replace(/^["'\s\u200B-\u200D\uFEFF]+|["'\s\u200B-\u200D\uFEFF]+$/g, '') // trim aspas/espaços/zero-width
+            .replace(/[\r\n\t]/g, '') // remove qualquer quebra de linha/tab no meio
+
           if (tk && !tk.startsWith('•')) {
             // Aceita só se parece com formato válido (defesa simples)
             if (tk.length < 20) {
               send(res, 400, { error: 'Token Mercado Pago parece inválido (muito curto)' })
               return true
             }
+            // Detecta erros comuns: alguém colou public key no lugar do token
+            if (tk.startsWith('APP_USR-') && tk.length < 60) {
+              // Public keys são curtas, access tokens são longos (>70 chars)
+              send(res, 400, { error: 'Esse parece ser uma Public Key, não o Access Token. Cole o Access Token aqui (geralmente tem ~75 caracteres).' })
+              return true
+            }
+            // Validação de formato esperado
+            if (!tk.startsWith('APP_USR-') && !tk.startsWith('TEST-')) {
+              send(res, 400, { error: 'Access Token deve começar com APP_USR- (produção) ou TEST- (sandbox).' })
+              return true
+            }
+            // VALIDAÇÃO REAL: tenta uma chamada simples ao MP pra ver se token funciona.
+            // Endpoint /v1/payment_methods é leve e exige autenticação válida.
+            try {
+              const testR = await fetch('https://api.mercadopago.com/v1/payment_methods', {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${tk}` }
+              })
+              if (testR.status === 401) {
+                send(res, 400, { error: 'Token Mercado Pago inválido (não autorizado). Confira se copiou o Access Token completo do painel MP.' })
+                return true
+              }
+              if (!testR.ok) {
+                const errData = await testR.json().catch(() => ({}))
+                send(res, 400, { error: 'Mercado Pago rejeitou o token: ' + (errData.message || `erro ${testR.status}`) })
+                return true
+              }
+              // Aviso: token de teste não funciona com clientes reais
+              if (tk.startsWith('TEST-')) {
+                log('⚠️', `MP gestor tenant=${tid} salvou TOKEN DE TESTE — clientes reais não conseguirão pagar`)
+              }
+            } catch (testErr) {
+              // Falha de rede — deixa salvar mas avisa no log
+              log('⚠️', `MP gestor tenant=${tid} validação online falhou (rede?):`, testErr.message)
+            }
             ia.mp_token = tk
           }
         }
         if (mp_public_key !== undefined) {
-          const pk = String(mp_public_key || '').trim()
+          let pk = String(mp_public_key || '')
+            .replace(/^["'\s\u200B-\u200D\uFEFF]+|["'\s\u200B-\u200D\uFEFF]+$/g, '')
+            .replace(/[\r\n\t]/g, '')
           if (pk && !pk.startsWith('•')) {
             if (pk.length < 20) {
               send(res, 400, { error: 'Public key Mercado Pago parece inválida (muito curta)' })
