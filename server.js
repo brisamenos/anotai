@@ -516,7 +516,7 @@ try {
 // BACKUP / RESTORE
 // ════════════════════════════════════════════════════════
 const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_items',
-  'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao']
+  'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress']
   // wa_messages excluída — pode conter muita mídia e estourar JSON.stringify
 
 let _dirty = false
@@ -787,6 +787,7 @@ const TABLE_COLS = {
   customer_enderecos: ['id','tenant_id','customer_id','label','cep','rua','numero','bairro','complemento','referencia','is_default','created_at'],
   ratings:      ['id','tenant_id','order_id','client','phone','nota','comentario','created_at'],
   pagamentos_cartao: ['id','tenant_id','order_id','mp_payment_id','mp_external_ref','valor','status','status_detail','payer_name','payer_email','last_four_digits','payment_method_id','created_at','paid_at','mp_source'],
+  stamp_progress: ['id','tenant_id','phone','compras','ultimo_resgate'],
   fornecedores: ['id','tenant_id','nome','contato','telefone','email','cnpj','endereco','obs','ativo','created_at'],
   contas_pagar: ['id','tenant_id','descricao','valor','vencimento','categoria','fornecedor_id','recorrente','recorrencia','status','pago_em','obs','created_at'],
   faturas:      ['id','tenant_id','plano','valor','meses','metodo','status','link_pagamento','mp_payment_id','mp_external_ref','qr_code','qr_code_base64','vence_em','pago_em','cancelado_em','obs','created_at'],
