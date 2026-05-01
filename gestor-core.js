@@ -184,7 +184,12 @@ function mapItem(i) {
 function _formatTimeBR(ts) {
   if (!ts) return '';
   try {
-    const d = new Date(ts);
+    // SQLite datetime('now') retorna UTC sem sufixo Z. Sem o Z, o JS interpreta
+    // como horário local — gerando offset de 3h no Brasil. Anexa Z se faltar.
+    let s = String(ts).trim();
+    if (s.includes(' ') && !s.includes('T')) s = s.replace(' ', 'T');
+    if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s += 'Z';
+    const d = new Date(s);
     if (isNaN(d.getTime())) return ts;
     return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
   } catch(e) { return ts; }
