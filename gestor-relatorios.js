@@ -1,4126 +1,3413 @@
-// Converte Date para formato SQLite 'YYYY-MM-DD HH:MM:SS' (UTC)
-// SQLite usa datetime('now') que gera esse formato, então as queries
-// de filtro precisam comparar no mesmo formato.
-function _toSQLite(d) {
-  if (typeof d === 'string') d = new Date(d);
-  return d.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '');
-}
+// ═══════════════════════════════════════════════════════
+// ROUTES.JS — Todas as rotas especiais do Estima Food
+// PIX · Carteira · Saques · WhatsApp · IA · Auth · Admin
+// ═══════════════════════════════════════════════════════
+// Para atualizar qualquer funcionalidade:
+//   - edite APENAS este arquivo e reinicie o servidor
+//   - o server.js não precisa ser tocado
+// ═══════════════════════════════════════════════════════
+'use strict'
 
-function renderKDS() {
-  const g = document.getElementById('kds-grid');
-  if (!g) return;
+const fs     = require('fs')
+const path   = require('path')
+const zlib   = require('zlib')
+const crypto = require('crypto')
 
-  // Para/reinicia timer de atualização
-  if (_kdsInterval) clearInterval(_kdsInterval);
-  _kdsInterval = setInterval(() => _kdsUpdateTimers(), 1000);
-
-  // Pedidos normais (delivery/balcão) em produção
-  let orders = ordersKanban.filter(o => o.status === 'producao' || o.status === 'analise');
-  // Comandas de mesa com itens em produção (mesa_aberta com item_status=producao)
-  const mesaOrders = mesaOrdersCache
-    .filter(o => o.status === 'mesa_aberta' && Array.isArray(o.items) && o.items.some(i => i.item_status === 'producao'))
-    .map(o => ({ ...o, status: 'producao', _isMesa: true, items: o.items.filter(i => i.item_status === 'producao') }));
-  // Mescla comandas de mesa ao array principal para exibição no KDS
-  orders = [...orders, ...mesaOrders];
-  if (kdsFilter === 'mesa')     orders = orders.filter(o => _kdsOrderType(o) === 'mesa' || o._isMesa);
-  if (kdsFilter === 'delivery') orders = orders.filter(o => _kdsOrderType(o) === 'delivery');
-  if (kdsFilter === 'balcao')   orders = orders.filter(o => _kdsOrderType(o) === 'balcao');
-
-  // Ordena: analise primeiro, depois por tempo (mais antigos primeiro)
-  orders.sort((a, b) => {
-    if (a.status === 'analise' && b.status !== 'analise') return -1;
-    if (b.status === 'analise' && a.status !== 'analise') return  1;
-    return _kdsElapsed(b) - _kdsElapsed(a);
-  });
-
-  // Inicializa timers para novos pedidos
-  orders.forEach(o => {
-    if (!kdsTimers[o.id]) kdsTimers[o.id] = { startTs: Date.now(), extra: 0 };
-  });
-
-  // Atualiza stats
-  const late = orders.filter(o => _kdsElapsed(o) > 900).length; // >15min
-  const newOrders = orders.filter(o => o.status === 'analise').length;
-  const sEl = id => { const e = document.getElementById(id); return e; };
-  const se = (id, v) => { const e = sEl(id); if (e && e.textContent !== String(v)) e.textContent = v; };
-  se('kds-cnt-total', orders.length);
-  se('kds-cnt-new',   newOrders);
-  se('kds-cnt-late',  late);
-
-  if (!orders.length) {
-    g.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:80px 20px;color:var(--muted)"><div style="display:none">x</div><div style="font-size:16px;font-weight:600">Cozinha vazia</div><div style="font-size:13px;margin-top:6px">Nenhum pedido em preparo no momento</div></div>';
-    return;
-  }
-
-  g.innerHTML = orders.map(o => {
-    const type    = _kdsOrderType(o);
-    const elapsed = _kdsElapsed(o);
-    const isNew   = o.status === 'analise';
-    const isLate  = elapsed > 900;
-    const isWarn  = elapsed > 480 && !isLate;
-    const cardCls = isNew ? 'st-new' : isLate ? 'st-late' : isWarn ? 'st-ok' : '';
-    const timerCls= isLate ? 't-late' : isWarn ? 't-warn' : 't-ok';
-    const typeLabel = type === 'mesa' ? `\${o.addr||('Mesa '+(o.mesa_num||''))}` : type === 'balcao' ? '🏠 Balcão' : 'Delivery';
-    const typeCls   = 'kds-type-'+type;
-    // Filtra itens cancelados — cozinha não vê cancelados
-    const items = (Array.isArray(o.items) ? o.items : [])
-      .filter(i => (i?.item_status || 'active') !== 'cancelado');
-
-    const itemsHtml = items.map(i => {
-      const isDrink = !!i.drink;
-      return `<div class="kds-item2">
-        <span class="kds-item2-qty">${i.qty}×</span>
-        <div>
-          <div class="kds-item2-name ${isDrink ? 'kds-item2-drink' : ''}">${isDrink ? '' : ''}${i.name.toUpperCase()}</div>
-          ${i.obs ? `<div class="kds-item2-obs">${i.obs}</div>` : ''}
-        </div>
-      </div>`;
-    }).join('');
-
-    const actionBtns = o._isMesa
-      ? `<button class="kds-btn-pronto" onclick="kdsMarkMesaPronto(${o.id})">✅ Pronto</button>
-         <button class="kds-btn-mais" onclick="kdsAddTime(${o.id})" title="+5 min">+5min</button>`
-      : isNew
-        ? `<button class="kds-btn-pronto" style="background:var(--orange)" onclick="kdsConfirm(${o.id})">✔ Confirmar</button>
-           <button class="kds-btn-mais" onclick="kdsCancelOrder(${o.id})" style="color:var(--danger)">✕</button>`
-        : `<button class="kds-btn-pronto" onclick="kdsMarkPronto(${o.id})">✅ Pronto</button>
-           <button class="kds-btn-mais" onclick="kdsAddTime(${o.id})" title="+5 min">+5min</button>`;
-
-    return `<div class="kds-card2 ${cardCls}" id="kds-card-${o.id}">
-      <div class="kds-card2-head">
-        <div style="display:flex;align-items:center;gap:8px">
-          <div class="kds-card2-id">#${o.num}</div>
-          <span class="kds-card2-type ${typeCls}">${typeLabel}</span>
-          ${isNew ? '<span style="font-size:9px;background:rgba(249,115,22,.2);color:#fed7aa;padding:1px 5px;border-radius:99px;font-weight:700;animation:blink .6s step-end infinite">NOVO</span>' : ''}
-        </div>
-        <div class="kds-timer ${timerCls}" id="kds-timer-${o.id}">${_kdsFormatTime(elapsed)}</div>
-      </div>
-      <div class="kds-card2-body">
-        <div class="kds-card2-client">${o.client || ''}${o.phone ? ' · ' + o.phone : ''}</div>
-        ${itemsHtml}
-      </div>
-      <div class="kds-card2-foot">${actionBtns}</div>
-    </div>`;
-  }).join('');
-
-  // Tempo médio
-  if (orders.length > 0) {
-    const avg = Math.round(orders.reduce((s,o) => s + _kdsElapsed(o), 0) / orders.length);
-    se('kds-avg-time', _kdsFormatTime(avg));
-  }
-
-  // Append mesa cards (item-level production) after regular orders
-  if (mesaOrders.length > 0 && (kdsFilter === 'todos' || kdsFilter === 'mesa')) {
-    g.innerHTML += mesaOrders.map(o => {
-      if (!kdsTimers[o.id]) kdsTimers[o.id] = { startTs: Date.now(), extra: 0 };
-      const elapsed  = _kdsElapsed(o);
-      const isLate   = elapsed > 900;
-      const isWarn   = elapsed > 480 && !isLate;
-      const cardCls  = isLate ? 'st-late' : isWarn ? 'st-ok' : '';
-      const timerCls = isLate ? 't-late' : isWarn ? 't-warn' : 't-ok';
-      const prodItems = o.items.filter(i => i.item_status === 'producao');
-      const itemsHtml = prodItems.map(item => {
-        const itemId = item.item_id || o.items.indexOf(item);
-        return `<div class="kds-item2" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-          <div style="display:flex;align-items:center;gap:6px;flex:1">
-            <span class="kds-item2-qty">${item.qty}×</span>
-            <div>
-              <div class="kds-item2-name">${item.name.toUpperCase()}</div>
-              ${item.obs ? `<div class="kds-item2-obs">${item.obs}</div>` : ''}
-            </div>
-          </div>
-          <button onclick="kdsItemPronto(${o.id},'${itemId}')"
-            style="padding:4px 10px;border-radius:7px;border:none;background:rgba(34,197,94,.15);color:var(--success);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
-            ✅ Pronto
-          </button>
-        </div>`;
-      }).join('');
-      return `<div class="kds-card2 ${cardCls}" id="kds-card-${o.id}">
-        <div class="kds-card2-head">
-          <div style="display:flex;align-items:center;gap:8px">
-            <div class="kds-card2-id">#${_orderNum(o.id, o.order_num)}</div>
-            <span class="kds-card2-type kds-type-mesa">${o.addr || 'Mesa ' + o.mesa_num}</span>
-          </div>
-          <div class="kds-timer ${timerCls}" id="kds-timer-${o.id}">${_kdsFormatTime(elapsed)}</div>
-        </div>
-        <div class="kds-card2-body">${itemsHtml}</div>
-      </div>`;
-    }).join('');
-    se('kds-cnt-total', orders.length + mesaOrders.length);
-  }
-}
-
-function _kdsUpdateTimers() {
-  // Atualiza só os timers sem re-renderizar tudo (evita piscar)
-  ordersKanban
-    .filter(o => o.status === 'producao' || o.status === 'analise')
-    .forEach(o => {
-      const el = document.getElementById('kds-timer-' + o.id);
-      if (!el) return;
-      const elapsed = _kdsElapsed(o);
-      const isLate = elapsed > 900;
-      const isWarn = elapsed > 480 && !isLate;
-      el.textContent = _kdsFormatTime(elapsed);
-      el.className = 'kds-timer ' + (isLate ? 't-late' : isWarn ? 't-warn' : 't-ok');
-    });
-}
-
-async function kdsConfirm(id) {
-  try {
-    const res = await fetch('/api/order-status', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order_id: id, new_status: 'producao', tenant_id: _sessao?.tenant_id })
-    });
-    if (!res.ok) throw new Error((await res.json()).error || 'Erro');
-    const o = ordersKanban.find(x => x.id === id);
-    if (o) o.status = 'producao';
-    const card = document.getElementById('kds-card-' + id);
-    if (card) card.classList.remove('st-new');
-    renderKDS();
-    sbToast('ok', `Pedido #${_orderNum(id)} em preparo`);
-  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
-}
-
-async function kdsMarkMesaPronto(orderId) {
-  const order = mesaOrdersCache.find(o => o.id === orderId);
-  if (!order) return;
-  const updatedItems = (order.items || []).map(i =>
-    i.item_status === 'producao' ? { ...i, item_status: 'pronto' } : i
-  );
-  // Atualiza cache local IMEDIATAMENTE (UI otimista — responsividade instantânea)
-  const cacheIdx = mesaOrdersCache.findIndex(o => o.id === orderId);
-  if (cacheIdx !== -1) mesaOrdersCache[cacheIdx] = { ...mesaOrdersCache[cacheIdx], items: updatedItems };
-  delete kdsTimers[orderId];
-  renderKDS();
-  _renderMesaPageFromCache();
-  sbToast('ok', 'Mesa ' + order.mesa_num + ' — itens prontos');
-  try {
-    // Marca flag para pular re-render duplicado do SSE (já renderizamos acima)
-    window._kdsSkipSseRender = Date.now();
-    const { error } = await sb.from('orders')
-      .update({ items: updatedItems, updated_at: new Date().toISOString() })
-      .eq('id', orderId);
-    if (error) {
-      // Reverte cache se falhou
-      if (cacheIdx !== -1) mesaOrdersCache[cacheIdx] = { ...mesaOrdersCache[cacheIdx], items: order.items };
-      renderKDS();
-      _renderMesaPageFromCache();
-      throw error;
-    }
-  } catch(e) { sbToast('err', 'Erro ao marcar pronto: ' + (e?.message || e)); }
-}
-
-async function kdsMarkPronto(id) {
-  try {
-    const res = await fetch('/api/order-status', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order_id: id, new_status: 'pronto', tenant_id: _sessao?.tenant_id })
-    });
-    if (!res.ok) throw new Error((await res.json()).error || 'Erro');
-    const o = ordersKanban.find(x => x.id === id);
-    if (o) o.status = 'pronto';
-    delete kdsTimers[id];
+// ── Helper: notifica cliente quando PIX é confirmado (online ou manual) ──────
+function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
+  if (!order?.phone) return
+  setImmediate(async () => {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      [[660,0],[880,.1],[1100,.2]].forEach(([f,t]) => {
-        const osc = ctx.createOscillator(), gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.frequency.value = f; gain.gain.setValueAtTime(.3, ctx.currentTime+t);
-        gain.gain.exponentialRampToValueAtTime(.001, ctx.currentTime+t+.15);
-        osc.start(ctx.currentTime+t); osc.stop(ctx.currentTime+t+.2);
-      });
-    } catch(e){}
-    renderKDS(); renderKanban();
-    sbToast('ok', `Pedido #${_orderNum(id)} confirmado`);
-  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
+      const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(tid)
+      const inst   = cfg?.evo_instance || EVO_INST
+      const loja   = cfg?.store_name || 'Restaurante'
+      const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
+      const pixConf = auto['pix_confirmado'] || {}
+      if (pixConf.on === false) return
+      const offset = parseInt(cfg?.order_num_offset) || 0
+      const idStr  = String(order.order_num || Math.max(1, order.id - offset)).padStart(3,'0')
+      const nome   = order.client || 'Cliente'
+      const items  = (()=>{ try{ return (JSON.parse(order.items)||[]).map(i=>`• ${i.qty}x ${i.name}`).join('\n') }catch{ return '' } })()
+      const total  = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
+      const msgPad = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento PIX confirmado!*\n\nOlá, *${nome}*! Recebemos seu pagamento do pedido *#${idStr}* com sucesso.\n\n*Itens:*\n${items}\n\n💰 *Total: R$ ${total}*\n\n📦 Seu pedido está sendo preparado. Obrigado! 🎉\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
+      const msgFin = pixConf.msg ? fillVars(pixConf.msg, { nome, id: idStr, itens: items, total, loja }) : msgPad
+      await sendWA(order.phone, msgFin, inst)
+    } catch(e) { /* silencia erros de notificação */ }
+  })
 }
 
-async function kdsCancelOrder(id) {
-  if (!confirm('Cancelar pedido #' + _orderNum(id) + '?')) return;
-  try {
-    const res = await fetch('/api/order-status', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order_id: id, new_status: 'cancelado', tenant_id: _sessao?.tenant_id })
-    });
-    if (!res.ok) throw new Error((await res.json()).error || 'Erro');
-    ordersKanban = ordersKanban.filter(x => x.id !== id);
-    delete kdsTimers[id];
-    renderKDS(); renderKanban();
-    sbToast('ok', `Pedido #${id} cancelado`);
-  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
-}
+// ── Job de recuperação de pagamentos PIX aprovados ────────────────────────────
+// Roda a cada 60 segundos e verifica pagamentos que foram aprovados no Mercado
+// Pago mas que o pedido ainda está preso em 'aguardando_pix' (cliente fechou a
+// página antes do poll frontend confirmar ou webhook não chegou).
+let _pixJobIniciado = false
 
-async function kdsItemPronto(orderId, itemId) {
-  // Marca item individual da comanda de mesa como pronto
-  const order = mesaOrdersCache.find(o => o.id === orderId);
-  if (!order) return;
-  const items = Array.isArray(order.items) ? [...order.items] : [];
-  const idx = typeof itemId === 'string'
-    ? items.findIndex(i => i.item_id === itemId)
-    : parseInt(itemId);
-  if (idx < 0) return;
-  items[idx] = { ...items[idx], item_status: 'pronto' };
-  try {
-    window._kdsSkipSseRender = Date.now();
-    const { error } = await sb.from('orders')
-      .update({ items, updated_at: new Date().toISOString() })
-      .eq('id', orderId);
-    if (error) throw error;
-    // Atualiza cache local
-    const ci = mesaOrdersCache.findIndex(o => o.id === orderId);
-    if (ci !== -1) mesaOrdersCache[ci] = { ...mesaOrdersCache[ci], items };
-    // Toca som de pronto
+function _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN_ENV) {
+  if (_pixJobIniciado) return
+  _pixJobIniciado = true
+  log('🔄', 'PIX recovery job iniciado (intervalo: 60s)')
+
+  setInterval(async () => {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      [[660,0],[880,.1],[1100,.2]].forEach(([f,t]) => {
-        const osc = ctx.createOscillator(), gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.frequency.value = f; gain.gain.setValueAtTime(.3, ctx.currentTime+t);
-        gain.gain.exponentialRampToValueAtTime(.001, ctx.currentTime+t+.15);
-        osc.start(ctx.currentTime+t); osc.stop(ctx.currentTime+t+.2);
-      });
-    } catch(e){}
-    renderKDS();
-    _renderMesaPageFromCache();
-    sbToast('ok', `${items[idx].name} pronto!`);
-  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
-}
-
-// ─────────────────────────────────────────
-// ESTOQUE
-// ─────────────────────────────────────────
-// ─────────────────────────────────────────
-// ESTOQUE — REAL
-// ─────────────────────────────────────────
-function renderEstoque() {
-  const search = (document.getElementById('est-search')?.value || '').toLowerCase();
-  const filtered = estoqueItems.filter(e => e.name.toLowerCase().includes(search));
-
-  // Stats
-  const baixo    = estoqueItems.filter(e => e.qty <= e.min_qty).length;
-  const valor    = estoqueItems.reduce((s,e) => s + (e.qty * (e.custo||0)), 0);
-  const hoje     = estoqueItems.filter(e => {
-    if (!e.updated_at) return false;
-    return new Date(e.updated_at).toDateString() === new Date().toDateString();
-  }).length;
-  const elv = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
-  elv('est-stat-total',    estoqueItems.length);
-  elv('est-stat-baixo',    baixo);
-  elv('est-stat-valor',    'R$ '+valor.toFixed(2).replace('.',','));
-  elv('est-stat-entradas', hoje);
-
-  // Popular select do modal de entrada
-  const sel = document.getElementById('est-sel-ingrediente');
-  if (sel) {
-    sel.innerHTML = '<option value="">Selecione...</option>' +
-      estoqueItems.map(e => `<option value="${e.id}">${e.name} (${e.qty} ${e.unit})</option>`).join('');
-  }
-
-  const list = document.getElementById('estoque-list');
-  if (!list) return;
-
-  if (!filtered.length) {
-    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">Nenhum ingrediente cadastrado.<br>Clique em <strong>Novo ingrediente</strong> para começar.</div>';
-    return;
-  }
-
-  list.innerHTML = `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
-      <table style="width:100%;border-collapse:collapse">
-        <thead>
-          <tr style="background:var(--surface2)">
-            <th style="padding:10px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Ingrediente</th>
-            <th style="padding:10px 14px;text-align:center;font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Qty / Mín</th>
-            <th style="padding:10px 14px;text-align:center;font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Estoque</th>
-            <th style="padding:10px 14px;text-align:right;font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Custo unit.</th>
-            <th style="padding:10px 14px;text-align:right;font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Valor total</th>
-            <th style="padding:10px 6px"></th>
-          </tr>
-        </thead>
-        <tbody>
-          ${filtered.map(e => {
-            const pct = e.min_qty > 0 ? Math.min(100, (e.qty / (e.min_qty * 3)) * 100) : (e.qty > 0 ? 100 : 0);
-            const isBaixo = e.qty <= e.min_qty;
-            const isZero  = e.qty === 0;
-            const barColor = isZero ? 'var(--danger)' : isBaixo ? 'var(--accent3)' : 'var(--success)';
-            const valorTotal = (e.qty * (e.custo||0)).toFixed(2).replace('.',',');
-            return `<tr style="border-top:1px solid var(--border);transition:background .13s" onmouseenter="this.style.background='rgba(255,255,255,.02)'" onmouseleave="this.style.background=''">
-              <td style="padding:12px 14px">
-                <div style="font-weight:600;font-size:13px">${e.name}</div>
-                <div style="font-size:11px;color:var(--muted)">${e.unit}${e.updated_at ? ' · atualizado ' + new Date(e.updated_at).toLocaleDateString('pt-BR') : ''}</div>
-              </td>
-              <td style="padding:12px 14px;text-align:center">
-                <div style="font-family:'Playfair Display',sans-serif;font-size:15px;font-weight:700;color:${isZero?'var(--danger)':isBaixo?'var(--accent3)':'var(--text)'}">${e.qty}</div>
-                <div style="font-size:11px;color:var(--muted)">mín: ${e.min_qty}</div>
-              </td>
-              <td style="padding:12px 14px;min-width:120px">
-                ${isBaixo ? `<span style="font-size:9.5px;background:${isZero?'rgba(239,68,68,.15)':'rgba(245,158,11,.15)'};color:${isZero?'var(--danger)':'var(--accent3)'};padding:1px 6px;border-radius:99px;font-weight:700;display:block;margin-bottom:4px">${isZero?'⚠️ ZERADO':'⚠️ BAIXO'}</span>` : ''}
-                <div style="background:var(--surface2);border-radius:99px;height:5px;overflow:hidden">
-                  <div style="width:${pct}%;height:100%;background:${barColor};border-radius:99px"></div>
-                </div>
-              </td>
-              <td style="padding:12px 14px;text-align:right;font-size:12.5px;color:var(--muted)">
-                ${e.custo ? 'R$ '+e.custo.toFixed(2).replace('.',',') : '—'}
-              </td>
-              <td style="padding:12px 14px;text-align:right;font-size:12.5px;font-weight:600;color:var(--success)">
-                ${e.custo ? 'R$ '+valorTotal : '—'}
-              </td>
-              <td style="padding:12px 6px;text-align:right">
-                <button class="btn bg" style="font-size:11px;padding:3px 8px" onclick="openEditIngrediente(${e.id})"></button>
-              </td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-    </div>`;
-}
-
-async function saveIngrediente() {
-  const nome  = document.getElementById('ing-nome').value.trim();
-  const unit  = document.getElementById('ing-unit').value;
-  const qty   = parseFloat(document.getElementById('ing-qty').value) || 0;
-  const min   = parseFloat(document.getElementById('ing-min').value) || 0;
-  const custo = parseFloat(document.getElementById('ing-custo').value) || 0;
-  if (!nome) { sbToast('err','Informe o nome do ingrediente'); return; }
-  sbLoading(true);
-  const { data, error } = await sb.from('estoque').insert({
-    name: nome, unit, qty, min_qty: min, cost: custo, updated_at: new Date().toISOString()
-  }).select().single();
-  sbLoading(false);
-  if (error) { sbToast('err','Erro ao cadastrar: '+error.message); return; }
-  estoqueItems.push({ id:data.id, name:data.name, unit:data.unit, qty:data.qty,
-    min_qty:data.min_qty, custo:parseFloat(data.cost)||0, updated_at:data.updated_at });
-  closeModal('modal-add-ingrediente');
-  ['ing-nome','ing-qty','ing-min','ing-custo'].forEach(id => {
-    const el = document.getElementById(id); if(el) el.value='';
-  });
-  renderEstoque();
-  sbToast('ok', `${nome} cadastrado!`);
-}
-
-async function registrarEntrada() {
-  const id    = parseInt(document.getElementById('est-sel-ingrediente').value);
-  const qty   = parseFloat(document.getElementById('est-qty-entrada').value) || 0;
-  const custo = parseFloat(document.getElementById('est-custo-entrada').value) || 0;
-  const obs   = document.getElementById('est-obs-entrada').value;
-  if (!id)  { sbToast('err','Selecione o ingrediente'); return; }
-  if (!qty) { sbToast('err','Informe a quantidade'); return; }
-  const item = estoqueItems.find(e => e.id === id);
-  if (!item) return;
-  const newQty = item.qty + qty;
-  const custUnit = qty > 0 && custo > 0 ? custo/qty : item.custo;
-  sbLoading(true);
-  const { error } = await sb.from('estoque').update({
-    qty: newQty, cost: custUnit, updated_at: new Date().toISOString()
-  }).eq('id', id);
-  sbLoading(false);
-  if (error) { sbToast('err','Erro ao registrar'); return; }
-  item.qty = newQty; item.custo = custUnit; item.updated_at = new Date().toISOString();
-  closeModal('modal-estoque');
-  ['est-qty-entrada','est-custo-entrada','est-obs-entrada'].forEach(i => {
-    const el=document.getElementById(i); if(el) el.value='';
-  });
-  renderEstoque();
-  sbToast('ok', `+${qty} ${item.unit} de ${item.name} registrado!`);
-}
-
-function openEditIngrediente(id) {
-  const e = estoqueItems.find(x => x.id === id);
-  if (!e) return;
-  document.getElementById('edit-ing-id').value    = id;
-  document.getElementById('edit-ing-nome').value  = e.name;
-  document.getElementById('edit-ing-qty').value   = e.qty;
-  document.getElementById('edit-ing-min').value   = e.min_qty;
-  document.getElementById('edit-ing-custo').value = e.custo||0;
-  openModal('modal-edit-ingrediente');
-}
-
-async function saveEditIngrediente() {
-  const id    = parseInt(document.getElementById('edit-ing-id').value);
-  const nome  = document.getElementById('edit-ing-nome').value.trim();
-  const qty   = parseFloat(document.getElementById('edit-ing-qty').value) || 0;
-  const min   = parseFloat(document.getElementById('edit-ing-min').value) || 0;
-  const custo = parseFloat(document.getElementById('edit-ing-custo').value) || 0;
-  if (!nome) { sbToast('err','Informe o nome'); return; }
-  sbLoading(true);
-  const { error } = await sb.from('estoque').update({
-    name: nome, qty, min_qty: min, cost: custo, updated_at: new Date().toISOString()
-  }).eq('id', id);
-  sbLoading(false);
-  if (error) { sbToast('err','Erro ao salvar'); return; }
-  const item = estoqueItems.find(e => e.id === id);
-  if (item) { item.name=nome; item.qty=qty; item.min_qty=min; item.custo=custo; item.updated_at=new Date().toISOString(); }
-  closeModal('modal-edit-ingrediente');
-  renderEstoque();
-  sbToast('ok', `${nome} atualizado!`);
-}
-
-async function deleteIngrediente() {
-  const id   = parseInt(document.getElementById('edit-ing-id').value);
-  const item = estoqueItems.find(e => e.id === id);
-  if (!confirm(`Excluir ${item?.name}?`)) return;
-  sbLoading(true);
-  const { error } = await sb.from('estoque').delete().eq('id', id);
-  sbLoading(false);
-  if (error) { sbToast('err','Erro ao excluir'); return; }
-  estoqueItems = estoqueItems.filter(e => e.id !== id);
-  closeModal('modal-edit-ingrediente');
-  renderEstoque();
-  sbToast('ok', `${item?.name} removido!`);
-}
-
-// ─────────────────────────────────────────
-// DESEMPENHO
-// ─────────────────────────────────────────
-let _desempPrd = 'mensal';
-let _desempCustomStart = null;
-let _desempCustomEnd = null;
-
-function setDesempPrd(prd) {
-  _desempPrd = prd;
-  _desempCustomStart = null;
-  _desempCustomEnd = null;
-  // Hide custom range panel
-  const panel = document.getElementById('desemp-custom-range');
-  if (panel) panel.style.display = 'none';
-  _updateDesempButtons();
-  renderDesempenho();
-}
-
-function _updateDesempButtons() {
-  ['diario','semanal','mensal','anual','custom'].forEach(id => {
-    const btn = document.getElementById('dpb-' + id);
-    if (!btn) return;
-    const active = id === _desempPrd || (id === 'custom' && _desempPrd === 'custom');
-    btn.classList.remove('bp', 'bg');
-    btn.classList.add(active ? 'bp' : 'bg');
-  });
-}
-
-function toggleDesempCustom() {
-  const panel = document.getElementById('desemp-custom-range');
-  if (!panel) return;
-  const isOpen = panel.style.display !== 'none';
-  panel.style.display = isOpen ? 'none' : 'block';
-  if (!isOpen) {
-    // Pre-fill with current month if empty
-    const startEl = document.getElementById('desemp-date-start');
-    const endEl   = document.getElementById('desemp-date-end');
-    if (startEl && !startEl.value) {
-      const now = new Date();
-      startEl.value = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-      endEl.value   = now.toISOString().split('T')[0];
-    }
-  }
-}
-
-function applyDesempCustomRange() {
-  const startEl = document.getElementById('desemp-date-start');
-  const endEl   = document.getElementById('desemp-date-end');
-  if (!startEl?.value || !endEl?.value) {
-    if (typeof sbToast === 'function') sbToast('err', 'Selecione as datas de início e fim');
-    return;
-  }
-  _desempCustomStart = new Date(startEl.value + 'T00:00:00');
-  _desempCustomEnd   = new Date(endEl.value + 'T23:59:59.999');
-  if (_desempCustomEnd < _desempCustomStart) {
-    if (typeof sbToast === 'function') sbToast('err', 'A data final deve ser maior que a inicial');
-    return;
-  }
-  _desempPrd = 'custom';
-  _updateDesempButtons();
-  renderDesempenho();
-}
-
-function _desempGetRange() {
-  if (_desempPrd === 'custom' && _desempCustomStart && _desempCustomEnd) {
-    const inicio = _desempCustomStart;
-    const fim    = new Date(_desempCustomEnd.getTime() + 1);
-    const label  = inicio.toLocaleDateString('pt-BR', { day:'2-digit', month:'short' })
-                 + ' – ' + _desempCustomEnd.toLocaleDateString('pt-BR', { day:'2-digit', month:'short', year:'numeric' });
-    return { inicio, fim, label };
-  }
-  // Reutiliza a mesma logica de _relGetRange mas com _desempPrd
-  const saved = _relPeriodo;
-  _relPeriodo = _desempPrd;
-  const range = _relGetRange();
-  _relPeriodo = saved;
-  return range;
-}
-
-async function renderDesempenho() {
-  const dg  = document.getElementById('desemp-grid');
-  const bar = document.getElementById('desemp-bar');
-  const top = document.getElementById('desemp-top');
-
-  // Loading state
-  if (dg)  dg.innerHTML  = Array(6).fill('<div class="desemp-card"><div class="desemp-label">Carregando...</div><div class="desemp-val" style="font-size:18px;color:var(--muted)">—</div></div>').join('');
-  if (bar) bar.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:20px;text-align:center">Carregando...</div>';
-  if (top) top.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px">Carregando...</div>';
-
-  try {
-    const range = _desempGetRange();
-    const since = _toSQLite(range.inicio);
-    const ate   = _toSQLite(range.fim);
-
-    // Atualiza label do periodo
-    const lblEl = document.getElementById('desemp-periodo-label');
-    if (lblEl) lblEl.textContent = range.label;
-
-    // Busca pedidos reais do período
-    const { data: allOrders } = await sb.from('orders')
-      .select('id,status,total,items,mesa_num,pag,created_at,garcom_nome')
-      .gte('created_at', since)
-      .lt('created_at', ate)
-      .order('created_at', { ascending: true });
-
-    const orders = allOrders || [];
-    console.log('[DESEMPENHO]', _desempPrd, '| desde:', since, '| ate:', ate, '| pedidos:', orders.length);
-    const entregues = orders.filter(o => ['pronto','entregue','finalizado'].includes(o.status));
-
-    // ── KPIs ─────────────────────────────
-    const totalPedidos   = entregues.length; // só pedidos concluídos contam
-    const faturamento    = entregues.reduce((s,o) => s + parseFloat(o.total||0), 0);
-    const ticketMedio    = totalPedidos > 0 ? faturamento / totalPedidos : 0;
-    const cancelados     = orders.filter(o => o.status === 'cancelado').length;
-    const taxaCancelamento = totalPedidos > 0 ? (cancelados / totalPedidos * 100) : 0;
-    const mesasSet       = new Set(orders.map(o => o.mesa_num).filter(Boolean));
-    const itensQtd       = entregues.reduce((s,o) => {
-      if (!Array.isArray(o.items)) return s;
-      return s + o.items.reduce((si,i) => si + (i.qty||1), 0);
-    }, 0);
-
-    const _svgIcons = {
-      faturamento: `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 4v8M5.5 6.5A2 1.5 0 0 1 8 5a2 1.5 0 0 1 0 3 2 1.5 0 0 0 0 3 2 1.5 0 0 0 2.5-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
-      pedidos: `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M5 2h6v6a3 3 0 0 1-6 0V2z" stroke="currentColor" stroke-width="1.4"/><path d="M2 2h3M11 2h3M2 5H5M11 5h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 8v4M5.5 14h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
-      ticket: `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M8 2v3M8 11v3M2 8h3M11 8h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M4.5 4.5l2 2M9.5 9.5l2 2M4.5 11.5l2-2M9.5 6.5l2-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
-      mesas: `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="2" rx="1" fill="currentColor"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
-      itens: `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M2 5l6-3 6 3v6l-6 3-6-3V5z" stroke="currentColor" stroke-width="1.4"/><path d="M8 2v12M2 5l6 3 6-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
-      cancelamentos: `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`
-    };
-
-    const _gradients = {
-      faturamento: 'linear-gradient(135deg,rgba(245,158,11,.18),rgba(245,158,11,.06))',
-      pedidos: 'linear-gradient(135deg,rgba(59,130,246,.18),rgba(59,130,246,.06))',
-      ticket: 'linear-gradient(135deg,rgba(139,92,246,.18),rgba(139,92,246,.06))',
-      mesas: 'linear-gradient(135deg,rgba(34,197,94,.18),rgba(34,197,94,.06))',
-      itens: 'linear-gradient(135deg,rgba(249,115,22,.18),rgba(249,115,22,.06))',
-      cancelamentos: 'linear-gradient(135deg,rgba(239,68,68,.18),rgba(239,68,68,.06))'
-    };
-
-    const _iconBgs = {
-      faturamento: 'rgba(245,158,11,.2)',
-      pedidos: 'rgba(59,130,246,.2)',
-      ticket: 'rgba(139,92,246,.2)',
-      mesas: 'rgba(34,197,94,.2)',
-      itens: 'rgba(249,115,22,.2)',
-      cancelamentos: 'rgba(239,68,68,.2)'
-    };
-
-    const _borders = {
-      faturamento: 'rgba(245,158,11,.25)',
-      pedidos: 'rgba(59,130,246,.25)',
-      ticket: 'rgba(139,92,246,.25)',
-      mesas: 'rgba(34,197,94,.25)',
-      itens: 'rgba(249,115,22,.25)',
-      cancelamentos: 'rgba(239,68,68,.25)'
-    };
-
-    const metrics = [
-      { key:'faturamento', label:'Faturamento', val: 'R$ ' + faturamento.toFixed(2).replace('.',','), color:'var(--accent3)' },
-      { key:'pedidos', label:'Total de pedidos', val: totalPedidos, color:'var(--accent)' },
-      { key:'ticket', label:'Ticket médio', val: 'R$ ' + ticketMedio.toFixed(2).replace('.',','), color:'var(--purple)' },
-      { key:'mesas', label:'Mesas atendidas', val: mesasSet.size, color:'var(--success)' },
-      { key:'itens', label:'Itens vendidos', val: itensQtd, color:'var(--accent2,var(--accent))' },
-      { key:'cancelamentos', label:'Cancelamentos', val: cancelados + (taxaCancelamento > 0 ? ` (${taxaCancelamento.toFixed(1)}%)` : ''), color: cancelados > 0 ? 'var(--danger)' : 'var(--muted)' },
-    ];
-
-    if (dg) dg.innerHTML = metrics.map(m => `
-      <div class="desemp-card" style="background:${_gradients[m.key]};border-color:${_borders[m.key]};--dc:${m.color}">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
-          <div class="desemp-label">${m.label}</div>
-          <div style="width:36px;height:36px;border-radius:10px;background:${_iconBgs[m.key]};display:flex;align-items:center;justify-content:center;color:${m.color};flex-shrink:0">${_svgIcons[m.key]}</div>
-        </div>
-        <div class="desemp-val" style="font-size:24px;color:${m.color}">${m.val}</div>
-      </div>`).join('');
-
-    // ── Grafico dinamico por periodo ────────
-    const barCard = bar?.closest('.card')?.querySelector('.card-title');
-    if (bar) {
-      let barData = [], barLabels = [];
-      if (_desempPrd === 'anual') {
-        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por mês');
-        const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-        barData = new Array(12).fill(0); barLabels = months;
-        orders.forEach(o => { barData[new Date(o.created_at).getMonth()]++; });
-      } else if (_desempPrd === 'mensal') {
-        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por semana');
-        barData = [0,0,0,0,0]; barLabels = ['Sem 1','Sem 2','Sem 3','Sem 4','Sem 5'];
-        orders.forEach(o => {
-          const w = Math.min(Math.floor((new Date(o.created_at).getDate()-1)/7), 4);
-          barData[w]++;
-        });
-      } else if (_desempPrd === 'semanal') {
-        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por dia da semana');
-        barData = [0,0,0,0,0,0,0]; barLabels = DAYS_FULL;
-        orders.forEach(o => { barData[new Date(o.created_at).getDay()]++; });
-      } else if (_desempPrd === 'custom') {
-        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por dia da semana');
-        barData = [0,0,0,0,0,0,0]; barLabels = DAYS_FULL;
-        orders.forEach(o => { barData[new Date(o.created_at).getDay()]++; });
-      } else { // diario
-        if (barCard) barCard.innerHTML = barCard.innerHTML.replace(/Pedidos.*/, 'Pedidos por hora');
-        barData = new Array(24).fill(0);
-        barLabels = Array.from({length:24}, (_,i) => i % 4 === 0 ? i + 'h' : '');
-        orders.forEach(o => { barData[new Date(o.created_at).getHours()]++; });
-      }
-      const maxD = Math.max(...barData, 1);
-      bar.innerHTML = barLabels.map((lbl, i) => [
-        '<div class="bar-col">',
-        '<div class="bar-val">' + (barData[i] || '') + '</div>',
-        '<div class="bar-fill" style="height:' + Math.max(Math.round(barData[i]/maxD*100), barData[i]>0?3:2) + '%;background:var(--accent)' + (barData[i]===0?';opacity:.2':'') + '"></div>',
-        '<div class="bar-label">' + lbl + '</div>',
-        '</div>'
-      ].join('')).join('');
-    }
-
-    // ── Top itens mais vendidos ──────────
-    const itemMap = {};
-    entregues.forEach(o => {
-      if (!Array.isArray(o.items)) return;
-      o.items.forEach(i => {
-        const k = i.name;
-        if (!itemMap[k]) itemMap[k] = { qty: 0, rev: 0 };
-        itemMap[k].qty += (i.qty||1);
-        itemMap[k].rev += (parseFloat(i.price||0) * (i.qty||1));
-      });
-    });
-    const sorted = Object.entries(itemMap).sort((a,b) => b[1].qty - a[1].qty).slice(0,8);
-
-    if (top) {
-      if (!sorted.length) {
-        top.innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:12px;text-align:center">Nenhum item no período</div>';
-      } else {
-        // Find emoji from items list if available
-        top.innerHTML = sorted.map(([name, {qty, rev}], idx) => {
-          const menuItem = items.find(i => i.name === name);
-          const emoji = menuItem?.emoji || '';
-          return `<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--border)">
-            <span style="font-size:12px;font-weight:700;color:var(--accent);width:18px">${idx+1}</span>
-            <span style="font-size:18px">${emoji}</span>
-            <span style="flex:1;font-size:12.5px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</span>
-            <span style="font-size:11px;color:var(--muted);margin-right:6px">${qty}x</span>
-            <span style="font-size:12px;font-weight:700;color:var(--success);flex-shrink:0">R$ ${rev.toFixed(2).replace('.',',')}</span>
-          </div>`;
-        }).join('');
-      }
-    }
-
-  } catch(e) {
-    console.error('renderDesempenho error:', e);
-    if (dg) dg.innerHTML = '<div style="color:var(--danger);font-size:13px;padding:12px;grid-column:span 3">Erro ao carregar dados de desempenho</div>';
-  }
-}
-
-// ─────────────────────────────────────────
-// RELATÓRIOS
-// ─────────────────────────────────────────
-let _relPeriodo = 'mensal';
-let _relCustomMonth = '';
-
-function setRelPeriodo(p, val = '') {
-  _relPeriodo = p;
-  if (p === 'custom-month') {
-    _relCustomMonth = val; // formato 'YYYY-MM'
-  }
-  
-  ['diario','semanal','mensal','anual'].forEach(id => {
-    const btn = document.getElementById('rpb-' + id);
-    if (!btn) return;
-    const active = id === p;
-    btn.style.background  = active ? 'var(--accent)' : '';
-    btn.style.color       = active ? '#fff' : '';
-    btn.style.borderColor = active ? 'var(--accent)' : '';
-  });
-
-  const cmBtn = document.getElementById('rel-custom-month');
-  if (cmBtn) {
-    if (p === 'custom-month') {
-      cmBtn.style.color = 'var(--text)';
-      cmBtn.style.borderColor = 'var(--accent)';
-      cmBtn.style.background = 'rgba(59,130,246,.1)';
-    } else {
-      cmBtn.style.color = 'var(--muted)';
-      cmBtn.style.borderColor = 'var(--border)';
-      cmBtn.style.background = 'transparent';
-      cmBtn.value = ''; // limpa se clicar em outro
-    }
-  }
-
-  renderRelatorios();
-}
-
-function _relGetRange() {
-  // Usa horário de Brasília (UTC-3) para calcular os ranges de data
-  const BR_OFFSET = 3 * 60 * 60 * 1000; // 3h em ms
-  const nowUTC = new Date();
-  // "Agora" em Brasília
-  const nowBR = new Date(nowUTC.getTime() - BR_OFFSET);
-  const anoB  = nowBR.getUTCFullYear();
-  const mesB  = nowBR.getUTCMonth();
-  const diaB  = nowBR.getUTCDate();
-  const diaSemB = nowBR.getUTCDay();
-
-  // Converte data Brasília para UTC (adiciona 3h de volta)
-  const brToUTC = (y, m, d) => new Date(Date.UTC(y, m, d) + BR_OFFSET);
-
-  let inicio, fim, label;
-  if (_relPeriodo === 'diario') {
-    inicio = brToUTC(anoB, mesB, diaB);
-    fim    = brToUTC(anoB, mesB, diaB + 1);
-    label  = 'Hoje, ' + new Date(inicio.getTime() + BR_OFFSET).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', timeZone:'UTC' });
-  } else if (_relPeriodo === 'semanal') {
-    inicio = brToUTC(anoB, mesB, diaB - diaSemB);
-    fim    = brToUTC(anoB, mesB, diaB - diaSemB + 7);
-    label  = new Date(inicio.getTime() + BR_OFFSET).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', timeZone:'UTC' })
-             + ' – ' + new Date(fim.getTime() + BR_OFFSET - 1).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', timeZone:'UTC' });
-  } else if (_relPeriodo === 'custom-month' && _relCustomMonth) {
-    const [y, m] = _relCustomMonth.split('-');
-    inicio = brToUTC(parseInt(y), parseInt(m) - 1, 1);
-    fim    = brToUTC(parseInt(y), parseInt(m), 1);
-    label  = new Date(inicio.getTime() + BR_OFFSET).toLocaleDateString('pt-BR', { month:'long', year:'numeric', timeZone:'UTC' });
-  } else if (_relPeriodo === 'mensal') {
-    inicio = brToUTC(anoB, mesB, 1);
-    fim    = brToUTC(anoB, mesB + 1, 1);
-    label  = new Date(inicio.getTime() + BR_OFFSET).toLocaleDateString('pt-BR', { month:'long', year:'numeric', timeZone:'UTC' });
-  } else {
-    inicio = brToUTC(anoB, 0, 1);
-    fim    = brToUTC(anoB + 1, 0, 1);
-    label  = String(anoB);
-  }
-  return { inicio, fim, label };
-}
-
-async function renderRelatorios() {
-  const money  = v => 'R$\u00a0' + parseFloat(v||0).toFixed(2).replace('.', ',');
-  const moneyK = v => { const n=parseFloat(v||0); return n>=1000 ? 'R$\u00a0'+Math.round(n/1000)+'k' : money(n); };
-  const pct    = (a,b) => b>0 ? Math.round(a/b*100)+'%' : '0%';
-  const elv    = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
-  const loading = id  => { const e=document.getElementById(id); if(e) e.innerHTML='<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center">Carregando...</div>'; };
-
-  ['rel-line-chart','rel-hour-bar','rel-day-bar','rel-gauges','rel-platforms','rel-tipo-venda',
-   'rel-areas','rel-heatmap','rel-month-bar','rel-produtos-list','rel-produtos-fat',
-   'rel-cats-bar','rel-top-clients','rel-top-gastos','rel-novos-clientes',
-   'rel-entradas-list','rel-fat-pag','rel-sat-list','rel-sat-resumo'].forEach(loading);
-
-  const now      = new Date();
-  const range    = _relGetRange();
-  const iniISO   = _toSQLite(range.inicio);
-  const fimISO   = _toSQLite(range.fim);
-  const anoIn    = _toSQLite(new Date(now.getFullYear(), 0, 1));
-  const lbl30ago = _toSQLite(new Date(now - 30*86400000));
-
-  const periLabel = { diario:'hoje', semanal:'na semana', mensal:'no mês', anual:'no ano' }[_relPeriodo] || 'no período';
-  const lblEl = document.getElementById('rel-periodo-label');
-  if (lblEl) lblEl.textContent = range.label;
-
-  // Atualiza botões de período
-  ['diario','semanal','mensal','anual'].forEach(id => {
-    const btn = document.getElementById('rpb-'+id);
-    if (!btn) return;
-    const on = id === _relPeriodo;
-    btn.style.background  = on ? 'var(--accent)' : 'none';
-    btn.style.color       = on ? '#fff'           : 'var(--muted)';
-  });
-
-  try {
-    const [
-      { data: periodOrdersRaw },
-      { data: anoOrdersRaw },
-      { data: movsFromDB },
-      { data: ratings },
-      { data: allCustomers }
-    ] = await Promise.all([
-      sb.from('orders').select('id,status,total,taxa,items,mesa_num,addr,pag,phone,customer_id,created_at')
-        .gte('created_at', iniISO).lt('created_at', fimISO).order('created_at', { ascending: true }),
-      sb.from('orders').select('id,status,total,created_at')
-        .gte('created_at', anoIn).order('created_at', { ascending: true }),
-      sb.from('movimentos').select('*').order('id', { ascending: false }).limit(200),
-      sb.from('ratings').select('*').order('created_at', { ascending: false }),
-      fetch('/api/clientes-gestor', { headers: { 'Content-Type':'application/json', 'x-tenant-id': (() => { try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||'' } catch{return''} })() } }).then(r=>r.ok?r.json():[]).then(d=>({data:d})).catch(()=>({data:[]}))
-    ]);
-
-    const mesPedidos = periodOrdersRaw || [];
-    const mesValidos = mesPedidos.filter(o => ['pronto','entregue','finalizado'].includes(o.status));
-    const allYear    = anoOrdersRaw || [];
-
-    // ─── KPIs ───────────────────────────────────────────
-    const fatMes    = mesValidos.reduce((s,o) => s + parseFloat(o.total||0) + parseFloat(o.taxa||0), 0);
-    const qtdMes    = mesPedidos.length;
-    const ticket    = mesValidos.length > 0 ? fatMes / mesValidos.length : 0;
-    const cancelMes = mesPedidos.filter(o => o.status === 'cancelado').length;
-    const pctCancel = qtdMes > 0 ? (cancelMes/qtdMes*100).toFixed(1) : '0';
-
-    elv('rel-kpi-fat',        moneyK(fatMes));
-    elv('rel-kpi-fat-sub',    mesValidos.length + ' pedidos confirmados ' + periLabel);
-    elv('rel-kpi-ped',        qtdMes);
-    elv('rel-kpi-ped-sub',    mesValidos.length + ' confirmados · ' + cancelMes + ' cancelados');
-    elv('rel-kpi-ticket',     money(ticket));
-    elv('rel-kpi-cancel',     cancelMes);
-    elv('rel-kpi-cancel-sub', pctCancel + '% do total de pedidos');
-
-    // Trends (compara com período anterior simples — positivo/negativo por ticket)
-    const trendFat  = document.getElementById('rel-kpi-fat-trend');
-    const trendPed  = document.getElementById('rel-kpi-ped-trend');
-    if (trendFat) trendFat.innerHTML = fatMes>0
-      ? `<span style="color:var(--success)">↑ ${pct(mesValidos.length,qtdMes||1)} confirmação</span>`
-      : '<span style="color:var(--muted)">Sem dados</span>';
-    if (trendPed) trendPed.innerHTML = mesValidos.length > 0
-      ? `<span style="color:var(--success)">✓ ${mesValidos.length} pedidos válidos</span>`
-      : '<span style="color:var(--muted)">Sem pedidos confirmados</span>';
-
-    // ─── Gráfico de linha (SVG) ─────────────────────────
-    const lineEl = document.getElementById('rel-line-chart');
-    if (lineEl) {
-      const titleEl = document.getElementById('rel-chart-title');
-      let points = [], labels = [], granLabel = '';
-      if (_relPeriodo === 'anual') {
-        granLabel = 'Faturamento mensal';
-        points = new Array(12).fill(0);
-        labels = ['J','F','M','A','M','J','J','A','S','O','N','D'];
-        allYear.filter(o=>['pronto','entregue','finalizado'].includes(o.status)).forEach(o=>{
-          points[new Date(o.created_at).getMonth()] += parseFloat(o.total||0);
-        });
-      } else if (_relPeriodo === 'mensal') {
-        granLabel = 'Faturamento por semana';
-        const semanas = Math.ceil(new Date(now.getFullYear(),now.getMonth()+1,0).getDate()/7);
-        points = new Array(semanas).fill(0);
-        labels = points.map((_,i)=>'S'+(i+1));
-        mesValidos.forEach(o=>{
-          const w = Math.min(Math.floor((new Date(o.created_at).getDate()-1)/7), semanas-1);
-          points[w] += parseFloat(o.total||0) + parseFloat(o.taxa||0);
-        });
-      } else if (_relPeriodo === 'semanal') {
-        granLabel = 'Faturamento por dia';
-        labels = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-        points = new Array(7).fill(0);
-        mesValidos.forEach(o=>{ points[new Date(o.created_at).getDay()] += parseFloat(o.total||0)+parseFloat(o.taxa||0); });
-      } else {
-        granLabel = 'Faturamento por hora';
-        points = new Array(24).fill(0);
-        labels = Array.from({length:24},(_,i)=>i%6===0?i+'h':'');
-        mesValidos.forEach(o=>{ points[new Date(o.created_at).getHours()] += parseFloat(o.total||0)+parseFloat(o.taxa||0); });
-      }
-      if (titleEl) titleEl.textContent = granLabel;
-
-      const maxP = Math.max(...points, 1);
-      const W=580, H=140, pad=10, botPad=24, topPad=10;
-      const n = points.length;
-      const xStep = (W-pad*2)/(n-1||1);
-      const toX = i => pad + i*xStep;
-      const toY = v => topPad + (H-botPad-topPad)*(1-v/maxP);
-      const pathD = points.map((v,i) => (i===0?'M':'L')+toX(i).toFixed(1)+','+toY(v).toFixed(1)).join(' ');
-      const areaD = pathD + ` L${toX(n-1).toFixed(1)},${H-botPad} L${pad},${H-botPad} Z`;
-
-      lineEl.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:100%" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="lg1" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#3b82f6" stop-opacity=".4"/>
-            <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
-          </linearGradient>
-        </defs>
-        ${points.map((_,i) => i%Math.max(1,Math.floor(n/5))===0 ? `<line x1="${toX(i).toFixed(1)}" y1="${topPad}" x2="${toX(i).toFixed(1)}" y2="${H-botPad}" stroke="rgba(255,255,255,.04)" stroke-width="1"/>` : '').join('')}
-        <path d="${areaD}" fill="url(#lg1)"/>
-        <path d="${pathD}" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-        ${points.map((v,i)=> v>0 ? `<circle cx="${toX(i).toFixed(1)}" cy="${toY(v).toFixed(1)}" r="3" fill="#3b82f6"/>
-          <text x="${toX(i).toFixed(1)}" y="${(toY(v)-6).toFixed(1)}" font-size="8" text-anchor="middle" fill="#94a3b8">${v>=1000?Math.round(v/1000)+'k':'R$'+Math.round(v)}</text>` : '').join('')}
-        ${labels.map((l,i)=> l ? `<text x="${toX(i).toFixed(1)}" y="${H-4}" font-size="9" text-anchor="middle" fill="#64748b">${l}</text>` : '').join('')}
-      </svg>`;
-    }
-
-    // ─── Pedidos por hora ───────────────────────────────
-    const hourCounts = new Array(24).fill(0);
-    mesPedidos.forEach(o => { hourCounts[new Date(o.created_at).getHours()]++; });
-    const maxH = Math.max(...hourCounts, 1);
-    const hourEl = document.getElementById('rel-hour-bar');
-    if (hourEl) hourEl.innerHTML = hourCounts.map((v,i)=>`
-      <div class="bar-col">
-        <div class="bar-val" style="font-size:8px">${v>0?v:''}</div>
-        <div class="bar-fill" style="height:${Math.max(Math.round(v/maxH*100),v>0?4:1)}%;background:${v===Math.max(...hourCounts)?'var(--orange)':'var(--accent2)'};${v===0?'opacity:.15':''}"></div>
-        <div class="bar-label" style="font-size:8px">${i%4===0?i+'h':''}</div>
-      </div>`).join('');
-
-    // ─── Dias da semana ─────────────────────────────────
-    const dayC = [0,0,0,0,0,0,0];
-    mesPedidos.forEach(o=>{ dayC[new Date(o.created_at).getDay()]++; });
-    const maxDy = Math.max(...dayC, 1);
-    const dayEl = document.getElementById('rel-day-bar');
-    if (dayEl) dayEl.innerHTML = DAYS_FULL.map((d,i)=>`
-      <div class="bar-col">
-        <div class="bar-val">${dayC[i]}</div>
-        <div class="bar-fill" style="height:${Math.max(Math.round(dayC[i]/maxDy*100),2)}%;background:${dayC[i]===Math.max(...dayC)?'var(--success)':'var(--accent3)'}"></div>
-        <div class="bar-label">${d}</div>
-      </div>`).join('');
-
-    // ─── Heatmap hora × dia ─────────────────────────────
-    const hmEl = document.getElementById('rel-heatmap');
-    if (hmEl) {
-      const hm = Array.from({length:7},()=>new Array(24).fill(0));
-      mesPedidos.forEach(o=>{
-        const d=new Date(o.created_at);
-        hm[d.getDay()][d.getHours()]++;
-      });
-      const maxHM = Math.max(...hm.flat(), 1);
-      const dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-      hmEl.innerHTML = `<table style="border-collapse:collapse;font-size:9px;width:100%">
-        <tr><td style="color:var(--muted);padding:2px 6px"></td>${Array.from({length:24},(_,h)=>`<td style="text-align:center;color:var(--muted);padding:1px 1px;width:3.8%">${h%4===0?h+'h':''}</td>`).join('')}</tr>
-        ${dias.map((dia,d)=>`<tr>
-          <td style="color:var(--muted2);padding:2px 6px;white-space:nowrap;font-size:9.5px;font-weight:600">${dia}</td>
-          ${hm[d].map(v=>{
-            const ratio = v/maxHM;
-            const bg = ratio===0 ? 'rgba(255,255,255,.04)' :
-              ratio<.25 ? 'rgba(59,130,246,.25)' :
-              ratio<.5  ? 'rgba(59,130,246,.55)' :
-              ratio<.75 ? 'rgba(249,115,22,.6)'  : 'rgba(239,68,68,.8)';
-            return `<td title="${v} pedidos" style="background:${bg};border:1px solid rgba(0,0,0,.2);border-radius:2px;height:16px"></td>`;
-          }).join('')}
-        </tr>`).join('')}
-        <tr><td></td><td colspan="24"><div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:9px;color:var(--muted)">
-          <span>Baixo</span>
-          <div style="width:12px;height:10px;background:rgba(59,130,246,.25);border-radius:2px"></div>
-          <div style="width:12px;height:10px;background:rgba(59,130,246,.55);border-radius:2px"></div>
-          <div style="width:12px;height:10px;background:rgba(249,115,22,.6);border-radius:2px"></div>
-          <div style="width:12px;height:10px;background:rgba(239,68,68,.8);border-radius:2px"></div>
-          <span>Alto</span>
-        </div></td></tr>
-      </table>`;
-    }
-
-    // ─── Gráfico de barras anual ────────────────────────
-    const mbEl = document.getElementById('rel-month-bar');
-    const mTitle = document.getElementById('rel-month-title');
-    if (mbEl) {
-      const monthData = new Array(12).fill(0);
-      allYear.filter(o=>['pronto','entregue','finalizado'].includes(o.status)).forEach(o=>{
-        monthData[new Date(o.created_at).getMonth()] += parseFloat(o.total||0);
-      });
-      const maxMB = Math.max(...monthData, 1);
-      const mNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-      mbEl.innerHTML = monthData.map((v,i)=>`
-        <div class="bar-col">
-          <div class="bar-val" style="font-size:9px">${v>0?'R$'+Math.round(v/1000)+'k':''}</div>
-          <div class="bar-fill" style="height:${Math.max(Math.round(v/maxMB*100),v>0?3:1)}%;${v===0?'opacity:.15':''}"></div>
-          <div class="bar-label">${mNames[i]}</div>
-        </div>`).join('');
-      if (mTitle) mTitle.textContent = 'Faturamento mensal '+now.getFullYear();
-    }
-
-    // ─── Pagamentos ─────────────────────────────────────
-    const pagMap = {};
-    mesValidos.forEach(o=>{
-      const k = (o.pag||'outro').toLowerCase().includes('pix')   ? 'PIX'
-              : (o.pag||'').toLowerCase().includes('cart')        ? 'Cartão'
-              : (o.pag||'').toLowerCase().includes('dinheiro')    ? 'Dinheiro'
-              : (o.pag||'').toLowerCase().includes('mesa')        ? 'Mesa'
-              : (o.pag||'outro');
-      if (!pagMap[k]) pagMap[k] = {count:0, fat:0};
-      pagMap[k].count++; pagMap[k].fat += parseFloat(o.total||0)+parseFloat(o.taxa||0);
-    });
-    const pagCols = { PIX:'var(--purple)', Cartão:'var(--accent)', Dinheiro:'var(--success)', Mesa:'var(--accent3)' };
-    const pagEmojis = { PIX:'PIX', Cartão:'Cartão', Dinheiro:'Dinheiro', Mesa:'Mesa' };
-    const pagEl = document.getElementById('rel-gauges');
-    if (pagEl) {
-      const ents = Object.entries(pagMap).sort((a,b)=>b[1].count-a[1].count);
-      const totPag = ents.reduce((s,[,v])=>s+v.count,0)||1;
-      pagEl.innerHTML = ents.length ? ents.map(([k,v])=>`
-        <div style="margin-bottom:12px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-            <div style="display:flex;align-items:center;gap:7px">
-              <span style="font-size:16px">${''}</span>
-              <span style="font-size:13px;font-weight:600">${k}</span>
-            </div>
-            <div style="text-align:right">
-              <span style="font-size:13px;font-weight:700;color:${pagCols[k]||'var(--accent)'}">${v.count} pedidos</span>
-              <span style="font-size:11px;color:var(--muted);margin-left:6px">${money(v.fat)}</span>
-            </div>
-          </div>
-          <div style="height:7px;background:var(--border);border-radius:99px;overflow:hidden">
-            <div style="height:100%;width:${pct(v.count,totPag)};background:${pagCols[k]||'var(--accent)'};border-radius:99px;transition:width .5s"></div>
-          </div>
-          <div style="font-size:10px;color:var(--muted);margin-top:3px">${pct(v.count,totPag)} dos pedidos</div>
-        </div>`).join('')
-        : '<div style="color:var(--muted);font-size:12px;padding:12px">Sem dados no período</div>';
-    }
-
-    // ─── Receita por pagamento (financeiro) ─────────────
-    const fatPagEl = document.getElementById('rel-fat-pag');
-    if (fatPagEl) {
-      const ents = Object.entries(pagMap).sort((a,b)=>b[1].fat-a[1].fat);
-      const maxFP = Math.max(...ents.map(([,v])=>v.fat), 1);
-      fatPagEl.innerHTML = ents.length ? ents.map(([k,v])=>`
-        <div style="margin-bottom:14px">
-          <div style="display:flex;justify-content:space-between;margin-bottom:5px">
-            <span style="font-size:12.5px;font-weight:600">${''} ${k}</span>
-            <span style="font-size:13px;font-weight:700;color:${pagCols[k]||'var(--accent)'}">${money(v.fat)}</span>
-          </div>
-          <div style="height:8px;background:var(--border);border-radius:99px;overflow:hidden">
-            <div style="height:100%;width:${Math.round(v.fat/maxFP*100)}%;background:${pagCols[k]||'var(--accent)'};border-radius:99px"></div>
-          </div>
-        </div>`).join('')
-        : '<div style="color:var(--muted);font-size:12px;padding:12px">Sem dados</div>';
-    }
-
-    // ─── Origem (plataforma) ─────────────────────────────
-    const originMap = {};
-    mesValidos.forEach(o=>{
-      const ori = o.mesa_num || (o.addr||'').startsWith('Mesa') ? 'Mesa (Garçom)'
-                : (o.addr||'').toLowerCase().includes('balc')   ? 'Balcão / Retirada'
-                :                                                  'Delivery';
-      if(!originMap[ori]) originMap[ori]={count:0,fat:0};
-      originMap[ori].count++; originMap[ori].fat+=parseFloat(o.total||0)+parseFloat(o.taxa||0);
-    });
-    const _oriColors = { 'Mesa (Garçom)':'#22c55e', 'Delivery':'#3b82f6', 'Balcão / Retirada':'#f59e0b' };
-    const _oriIcons = {
-      'Mesa (Garçom)': `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="2" rx="1" fill="currentColor"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
-      'Delivery': `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/></svg>`,
-      'Balcão / Retirada': `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 7l6-5 6 5v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7z" stroke="currentColor" stroke-width="1.4"/><path d="M6 14V9h4v5" stroke="currentColor" stroke-width="1.4"/></svg>`
-    };
-    const peEl = document.getElementById('rel-platforms');
-    if (peEl) {
-      const ents = Object.entries(originMap).sort((a,b)=>b[1].fat-a[1].fat);
-      const maxOF = Math.max(...ents.map(([,v])=>v.fat),1);
-      peEl.innerHTML = ents.length ? ents.map(([k,v])=>{
-        const col = _oriColors[k] || 'var(--accent)';
-        return `
-        <div style="margin-bottom:14px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-            <div style="display:flex;align-items:center;gap:8px">
-              <div style="width:26px;height:26px;border-radius:7px;background:${col}18;display:flex;align-items:center;justify-content:center;color:${col}">${_oriIcons[k]||''}</div>
-              <span style="font-size:13px;font-weight:600">${k}</span>
-            </div>
-            <div style="text-align:right">
-              <span style="font-size:13px;font-weight:700;color:${col}">${money(v.fat)}</span>
-              <span style="font-size:11px;color:var(--muted);margin-left:5px">${v.count} ped.</span>
-            </div>
-          </div>
-          <div style="height:8px;background:var(--border);border-radius:99px;overflow:hidden">
-            <div style="height:100%;width:${Math.round(v.fat/maxOF*100)}%;background:${col};border-radius:99px;transition:width .6s ease"></div>
-          </div>
-        </div>`;
-      }).join('')
-        : '<div style="color:var(--muted);font-size:12px;padding:8px">Sem pedidos no período</div>';
-    }
-
-    // ─── Tipo de Venda — Donut Chart Premium ────────────────
-    const tipoVendaMap = {};
-    mesValidos.forEach(o => {
-      let tipo;
-      if (o.mesa_num || (o.addr||'').startsWith('Mesa')) tipo = 'Mesa';
-      else if ((o.addr||'').toLowerCase().includes('balc'))  tipo = 'Balcão';
-      else tipo = 'Delivery';
-      if (!tipoVendaMap[tipo]) tipoVendaMap[tipo] = { count: 0, fat: 0 };
-      tipoVendaMap[tipo].count++;
-      tipoVendaMap[tipo].fat += parseFloat(o.total||0) + parseFloat(o.taxa||0);
-    });
-    const tvEl = document.getElementById('rel-tipo-venda');
-    if (tvEl) {
-      const isAcougue = window._segmento === 'acougue';
-      // Filter out Mesa for açougue
-      const tvEntries = Object.entries(tipoVendaMap)
-        .filter(([k]) => !(isAcougue && k === 'Mesa'))
-        .sort((a,b) => b[1].count - a[1].count);
-      const totalTV = tvEntries.reduce((s,[,v]) => s + v.count, 0) || 1;
-
-      if (!tvEntries.length) {
-        tvEl.innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:20px;text-align:center;width:100%">Sem vendas no período</div>';
-      } else {
-        const tvColors = { Mesa:'#22c55e', Delivery:'#3b82f6', 'Balcão':'#f59e0b' };
-        const tvIcons  = {
-          Mesa: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="2" rx="1" fill="currentColor"/><line x1="4" y1="7" x2="4" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="12" y1="7" x2="12" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
-          Delivery: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/></svg>`,
-          'Balcão': `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 7l6-5 6 5v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7z" stroke="currentColor" stroke-width="1.4"/><path d="M6 14V9h4v5" stroke="currentColor" stroke-width="1.4"/></svg>`
-        };
-
-        // SVG Donut chart
-        const R = 60, strokeW = 14, C = 2 * Math.PI * R;
-        let offset = 0;
-        const arcs = tvEntries.map(([k,v]) => {
-          const pct = v.count / totalTV;
-          const dash = pct * C;
-          const gap  = C - dash;
-          const arc = `<circle cx="80" cy="80" r="${R}" fill="none" stroke="${tvColors[k]||'#888'}" stroke-width="${strokeW}" stroke-dasharray="${dash.toFixed(2)} ${gap.toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" stroke-linecap="round" style="transition:stroke-dasharray .6s ease,stroke-dashoffset .6s ease;filter:drop-shadow(0 0 4px ${tvColors[k]||'#888'}40)"/>`;
-          offset += dash;
-          return arc;
-        }).join('');
-
-        const donutSVG = `<svg viewBox="0 0 160 160" width="160" height="160" style="flex-shrink:0;transform:rotate(-90deg)">
-          <circle cx="80" cy="80" r="${R}" fill="none" stroke="rgba(255,255,255,.04)" stroke-width="${strokeW}"/>
-          ${arcs}
-        </svg>`;
-
-        // Center label
-        const centerLabel = `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center">
-          <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:800;color:var(--text)">${totalTV}</div>
-          <div style="font-size:9.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px">pedidos</div>
-        </div>`;
-
-        // Legend
-        const legend = tvEntries.map(([k,v]) => {
-          const pctVal = ((v.count/totalTV)*100).toFixed(1);
-          const col = tvColors[k]||'#888';
-          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:${col}0d;border:1px solid ${col}25;border-radius:10px;transition:all .2s" onmouseenter="this.style.borderColor='${col}55';this.style.transform='translateX(4px)'" onmouseleave="this.style.borderColor='${col}25';this.style.transform='none'">
-            <div style="width:30px;height:30px;border-radius:8px;background:${col}20;display:flex;align-items:center;justify-content:center;color:${col}">${tvIcons[k]||''}</div>
-            <div style="flex:1">
-              <div style="font-size:12.5px;font-weight:700;color:var(--text)">${k}</div>
-              <div style="font-size:11px;color:var(--muted)">${v.count} pedido${v.count!==1?'s':''} · ${money(v.fat)}</div>
-            </div>
-            <div style="text-align:right">
-              <div style="font-size:18px;font-weight:800;color:${col};font-family:'Playfair Display',serif">${pctVal}%</div>
-            </div>
-          </div>`;
-        }).join('');
-
-        tvEl.innerHTML = `
-          <div style="position:relative;flex-shrink:0">
-            ${donutSVG}
-            ${centerLabel}
-          </div>
-          <div style="flex:1;display:flex;flex-direction:column;gap:8px">
-            ${legend}
-          </div>`;
-      }
-    }
-
-    // ─── Top bairros ─────────────────────────────────────
-    const areaMap = {};
-    mesValidos.filter(o=>!o.mesa_num&&o.addr&&!o.addr.startsWith('Mesa')).forEach(o=>{
-      const parts = (o.addr||'').split(',');
-      const bairro = (parts[1]||parts[0]||'').trim().split(' ').slice(0,3).join(' ') || 'Não informado';
-      if(!areaMap[bairro]) areaMap[bairro]={fat:0,ped:0};
-      areaMap[bairro].fat+=parseFloat(o.total||0); areaMap[bairro].ped++;
-    });
-    const aeEl = document.getElementById('rel-areas');
-    if (aeEl) {
-      const ents = Object.entries(areaMap).sort((a,b)=>b[1].ped-a[1].ped).slice(0,6);
-      aeEl.innerHTML = ents.length ? ents.map(([k,v],i)=>`
-        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-          <span style="font-size:13px;font-weight:800;color:var(--accent);width:20px">#${i+1}</span>
-          <div style="flex:1">
-            <div style="font-weight:600;font-size:12.5px">${k}</div>
-            <div style="font-size:11px;color:var(--muted)">${v.ped} pedido${v.ped!==1?'s':''}</div>
-          </div>
-          <div style="font-size:12.5px;font-weight:700;color:var(--success)">${money(v.fat)}</div>
-        </div>`).join('')
-        : '<div style="color:var(--muted);font-size:12px;padding:8px">Apenas pedidos de mesa</div>';
-    }
-
-    // ─── Produtos mais vendidos ─────────────────────────
-    const itemMap = {};
-    mesValidos.forEach(o=>{
-      (Array.isArray(o.items)?o.items:[]).forEach(i=>{
-        const k=i.name||'?';
-        if(!itemMap[k]) itemMap[k]={qty:0,fat:0,cat:i.cat||''};
-        itemMap[k].qty+=(i.qty||1);
-        itemMap[k].fat+=parseFloat(i.price||0)*(i.qty||1);
-      });
-    });
-    const sortedQty = Object.entries(itemMap).sort((a,b)=>b[1].qty-a[1].qty).slice(0,12);
-    const sortedFat = Object.entries(itemMap).sort((a,b)=>b[1].fat-a[1].fat).slice(0,12);
-    const totalQty  = sortedQty.reduce((s,[,v])=>s+v.qty,0)||1;
-    const totalFat  = sortedFat.reduce((s,[,v])=>s+v.fat,0)||1;
-
-    const renderProdList = (sorted, field, total, color) => sorted.map(([name,v],idx)=>{
-      const mi = items.find(i=>i.name===name);
-      return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
-        <span style="width:18px;font-size:11.5px;font-weight:700;color:var(--muted)">${idx+1}</span>
-        <span style="font-size:17px">${mi?.emoji||''}</span>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
-          <div style="height:4px;background:var(--border);border-radius:99px;margin-top:4px;overflow:hidden">
-            <div style="height:100%;width:${Math.round(v[field]/total*100)}%;background:${color};border-radius:99px"></div>
-          </div>
-        </div>
-        <div style="text-align:right;flex-shrink:0">
-          ${field==='qty'
-            ? `<div style="font-size:13px;font-weight:700;color:${color}">${v.qty}x</div><div style="font-size:11px;color:var(--muted)">${money(v.fat)}</div>`
-            : `<div style="font-size:13px;font-weight:700;color:${color}">${money(v.fat)}</div><div style="font-size:11px;color:var(--muted)">${v.qty}x vendidos</div>`}
-        </div>
-      </div>`;
-    }).join('');
-
-    const rpl = document.getElementById('rel-produtos-list');
-    if (rpl) rpl.innerHTML = sortedQty.length ? renderProdList(sortedQty,'qty',totalQty,'var(--accent)')
-      : '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">Sem vendas no período</div>';
-
-    const rpf = document.getElementById('rel-produtos-fat');
-    if (rpf) rpf.innerHTML = sortedFat.length ? renderProdList(sortedFat,'fat',totalFat,'var(--success)')
-      : '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">Sem vendas no período</div>';
-
-    // ─── Faturamento por categoria ───────────────────────
-    const catMap = {};
-    mesValidos.forEach(o=>{
-      (Array.isArray(o.items)?o.items:[]).forEach(i=>{
-        const k = i.cat || i.cat_key || 'Outros';
-        if(!catMap[k]) catMap[k]={fat:0,qty:0};
-        catMap[k].fat+=parseFloat(i.price||0)*(i.qty||1);
-        catMap[k].qty+=(i.qty||1);
-      });
-    });
-    const catEnt = Object.entries(catMap).sort((a,b)=>b[1].fat-a[1].fat);
-    const maxCF  = Math.max(...catEnt.map(([,v])=>v.fat),1);
-    const catColors = ['var(--accent)','var(--success)','var(--purple)','var(--accent3)','var(--accent2)','var(--orange)'];
-    const catEl  = document.getElementById('rel-cats-bar');
-    if (catEl) catEl.innerHTML = catEnt.length ? catEnt.map(([k,v],i)=>`
-      <div style="margin-bottom:14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-          <span style="font-size:12.5px;font-weight:600">${k}</span>
-          <div>
-            <span style="font-size:13px;font-weight:700;color:${catColors[i%catColors.length]}">${money(v.fat)}</span>
-            <span style="font-size:11px;color:var(--muted);margin-left:6px">${v.qty} itens</span>
-          </div>
-        </div>
-        <div style="height:9px;background:var(--border);border-radius:99px;overflow:hidden">
-          <div style="height:100%;width:${Math.round(v.fat/maxCF*100)}%;background:${catColors[i%catColors.length]};border-radius:99px;transition:width .6s"></div>
-        </div>
-      </div>`).join('')
-      : '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">Sem vendas no período</div>';
-
-    // ─── Clientes ────────────────────────────────────────
-    const cliAll  = allCustomers || [];
-    const limite30 = _toSQLite(new Date(now - 30*86400000));
-    const cliTotal   = cliAll.length;
-    const cliComPed  = cliAll.filter(c=>(c.orders_count||0)>0).length;
-    const cliFid     = fidClients.length;
-    const cliInativos= cliAll.filter(c=>c.last_order_at && c.last_order_at<limite30 && (c.orders_count||0)>0).length;
-    elv('rel-cli-total',    cliTotal);
-    elv('rel-cli-com-pedido', cliComPed);
-    elv('rel-cli-fid',      cliFid);
-    elv('rel-cli-inativos', cliInativos);
-
-    // Top frequentes
-    const topFreq = [...cliAll].sort((a,b)=>(b.orders_count||0)-(a.orders_count||0)).slice(0,8);
-    const rtcEl = document.getElementById('rel-top-clients');
-    if (rtcEl) rtcEl.innerHTML = topFreq.length ? topFreq.map((c,i)=>`
-      <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
-        <span style="font-size:13px;font-weight:800;color:var(--accent);width:20px">#${i+1}</span>
-        <div class="fid-av" style="width:30px;height:30px;min-width:30px;font-size:12px">${(c.name||'?')[0].toUpperCase()}</div>
-        <div style="flex:1">
-          <div style="font-weight:600;font-size:12.5px">${c.name||'—'}</div>
-          <div style="font-size:11px;color:var(--muted)">${c.phone||''}</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:13px;font-weight:700;color:var(--accent)">${c.orders_count||0} pedidos</div>
-          <div style="font-size:11px;color:var(--success)">${money(c.total_spent||0)}</div>
-        </div>
-      </div>`).join('')
-      : '<div style="color:var(--muted);font-size:12px;padding:12px">Nenhum cliente com pedidos</div>';
-
-    // Top gastadores
-    const topGasto = [...cliAll].sort((a,b)=>(b.total_spent||0)-(a.total_spent||0)).slice(0,8);
-    const tgEl = document.getElementById('rel-top-gastos');
-    if (tgEl) tgEl.innerHTML = topGasto.length ? topGasto.map((c,i)=>`
-      <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
-        <span style="font-size:13px;font-weight:800;color:var(--success);width:20px">#${i+1}</span>
-        <div class="fid-av" style="width:30px;height:30px;min-width:30px;font-size:12px">${(c.name||'?')[0].toUpperCase()}</div>
-        <div style="flex:1">
-          <div style="font-weight:600;font-size:12.5px">${c.name||'—'}</div>
-          <div style="font-size:11px;color:var(--muted)">${c.orders_count||0} pedidos</div>
-        </div>
-        <div style="font-size:14px;font-weight:800;color:var(--success)">${money(c.total_spent||0)}</div>
-      </div>`).join('')
-      : '<div style="color:var(--muted);font-size:12px;padding:12px">Nenhum cliente com gastos</div>';
-
-    // Novos clientes no período
-    const novos = cliAll.filter(c=>c.created_at>=iniISO&&c.created_at<fimISO);
-    const ncEl = document.getElementById('rel-novos-clientes');
-    if (ncEl) ncEl.innerHTML = novos.length
-      ? `<div style="margin-bottom:12px;font-size:13px;color:var(--success);font-weight:700">✨ ${novos.length} novo${novos.length!==1?'s':''} cliente${novos.length!==1?'s':''} cadastrado${novos.length!==1?'s':''} ${periLabel}</div>`
-        + novos.slice(0,10).map(c=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
-          <div class="fid-av" style="width:28px;height:28px;min-width:28px;font-size:11px">${(c.name||'?')[0].toUpperCase()}</div>
-          <div style="flex:1"><div style="font-size:12.5px;font-weight:600">${c.name||'—'}</div><div style="font-size:11px;color:var(--muted)">${c.phone||''}</div></div>
-          <div style="font-size:11px;color:var(--muted)">${new Date(c.created_at).toLocaleDateString('pt-BR')}</div>
-        </div>`).join('')
-      : '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">Nenhum cliente cadastrado '+periLabel+'</div>';
-
-    // ─── Financeiro: movimentos ───────────────────────────
-    // movimentos.time usa formato SQLite 'YYYY-MM-DD HH:MM:SS' — normaliza para ISO
-    const normDate = s => s ? new Date(s.replace(' ', 'T')) : null;
-    const movsFiltrados = (movsFromDB||[]).filter(m=>{
-      const t = normDate(m.created_at||m.time);
-      return t && t >= range.inicio && t < range.fim;
-    });
-    const totEnt = movsFiltrados.filter(m=>m.tipo==='entrada').reduce((s,m)=>s+parseFloat(m.val||0),0);
-    const totSai = movsFiltrados.filter(m=>m.tipo==='saida').reduce((s,m)=>s+parseFloat(m.val||0),0);
-    const saldo  = totEnt - totSai;
-
-    elv('rel-fin-entradas', money(totEnt));
-    elv('rel-fin-saidas',   money(totSai));
-    const saldoEl = document.getElementById('rel-fin-saldo');
-    if (saldoEl) { saldoEl.textContent = money(saldo); saldoEl.style.color = saldo>=0?'var(--success)':'var(--danger)'; }
-
-    const movEl = document.getElementById('rel-entradas-list');
-    if (movEl) movEl.innerHTML = movsFiltrados.length
-      ? movsFiltrados.slice(0,30).map(m=>`
-        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-          <div style="width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;
-            background:${m.tipo==='entrada'?'rgba(34,197,94,.12)':'rgba(239,68,68,.12)'}">
-            ${m.tipo==='entrada'?'↑':'↓'}
-          </div>
-          <div style="flex:1">
-            <div style="font-size:12.5px;font-weight:500">${m.description||'—'}</div>
-            <div style="font-size:11px;color:var(--muted)">${m.pag||''} ${m.time||m.created_at?'· '+new Date(m.created_at||m.time).toLocaleDateString('pt-BR'):''}</div>
-          </div>
-          <div style="font-weight:700;font-size:13px;color:${m.tipo==='entrada'?'var(--success)':'var(--danger)'}">
-            ${m.tipo==='entrada'?'+':'-'}${money(m.val)}
-          </div>
-        </div>`).join('')
-      : '<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center">Nenhuma movimentação no período</div>';
-
-    // ─── Satisfação ───────────────────────────────────────
-    const ratList = ratings || [];
-    const ratPeriodo = ratList.filter(r=>r.created_at>=iniISO);
-    const satResumoEl = document.getElementById('rel-sat-resumo');
-    if (satResumoEl) {
-      if (!ratList.length) {
-        satResumoEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">Nenhuma avaliação recebida</div>';
-      } else {
-        const media = ratList.reduce((s,r)=>s+(r.nota||5),0) / ratList.length;
-        const dist  = [5,4,3,2,1].map(n=>({ nota:n, count:ratList.filter(r=>(r.nota||5)===n).length }));
-        satResumoEl.innerHTML = `
-          <div style="text-align:center;margin-bottom:16px">
-            <div style="font-size:42px;font-weight:900;color:var(--accent3)">${media.toFixed(1)}</div>
-            <div style="margin-bottom:6px">${''}</div>
-            <div style="font-size:12px;color:var(--muted)">${ratList.length} avaliações</div>
-          </div>
-          ${dist.map(({nota,count})=>`
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-              <span style="font-size:12px;color:var(--muted);width:12px">${nota}</span>
-              <div style="flex:1;height:7px;background:var(--border);border-radius:99px;overflow:hidden">
-                <div style="height:100%;width:${ratList.length?Math.round(count/ratList.length*100):0}%;background:var(--accent3);border-radius:99px"></div>
-              </div>
-              <span style="font-size:11px;color:var(--muted);width:24px">${count}</span>
-            </div>`).join('')}`;
-      }
-    }
-    const satListEl = document.getElementById('rel-sat-list');
-    if (satListEl) satListEl.innerHTML = ratList.length
-      ? ratList.slice(0,20).map(r=>`
-        <div style="padding:12px;border-bottom:1px solid var(--border)">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-            <div style="font-weight:600;font-size:12.5px">${r.client||'Anônimo'}</div>
-            <div>
-              <span style="font-size:13px">${''}</span>
-              <span style="font-size:11px;color:var(--muted);margin-left:6px">${r.created_at?new Date(r.created_at).toLocaleDateString('pt-BR'):''}</span>
-            </div>
-          </div>
-          ${r.comentario?`<div style="font-size:12px;color:var(--muted2);font-style:italic">"${r.comentario}"</div>`:''}
-        </div>`).join('')
-      : '<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center">Nenhuma avaliação com comentário</div>';
-
-
-    // ─── Relatório por Garçom ─────────────────────────────
-    // Apenas pedidos finalizados de mesa com garçom — exclui cancelados e mesas abertas
-    const garcomMap = {};
-    mesValidos
-      .filter(o => (o.mesa_num || (o.addr||'').startsWith('Mesa')) && o.garcom_nome)
-      .forEach(o => {
-        const nome = o.garcom_nome;
-        if (!garcomMap[nome]) garcomMap[nome] = { pedidos: 0, fat: 0, mesas: new Set() };
-        garcomMap[nome].pedidos++;
-        // Recalcula pelo itens ativos, excluindo cancelados e a própria taxa de serviço
-        const itens = (() => { try { return Array.isArray(o.items) ? o.items : JSON.parse(o.items||'[]'); } catch { return []; } })();
-        const fatSemTaxa = itens
-          .filter(i => (i.item_status||'active') !== 'cancelado' && i.item_type !== 'taxa')
-          .reduce((s, i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
-        garcomMap[nome].fat += fatSemTaxa;
-        if (o.mesa_num) garcomMap[nome].mesas.add(o.mesa_num);
-      });
-
-    const garcomEl = document.getElementById('rel-garcom-section');
-    if (garcomEl) {
-      const entries = Object.entries(garcomMap).sort((a,b) => b[1].fat - a[1].fat);
-      if (!entries.length) {
-        garcomEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">Nenhum dado de garçom no período</div>';
-      } else {
-        const maxFat = Math.max(...entries.map(([,v]) => v.fat), 1);
-        garcomEl.innerHTML = entries.map(([nome, v]) => {
-          const ticket = v.pedidos > 0 ? v.fat / v.pedidos : 0;
-          const comissao = v.fat * 0.1;
-          const pct = Math.round(v.fat / maxFat * 100);
-          return `<div style="padding:12px 0;border-bottom:1px solid var(--border)">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-              <div style="display:flex;align-items:center;gap:8px">
-                <div style="width:32px;height:32px;border-radius:50%;background:rgba(59,130,246,.15);border:1.5px solid rgba(59,130,246,.3);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--accent)">${nome.charAt(0).toUpperCase()}</div>
-                <div>
-                  <div style="font-size:13px;font-weight:700">${nome}</div>
-                  <div style="font-size:11px;color:var(--muted)">${v.pedidos} pedido(s) · ${v.mesas.size} mesa(s) atendida(s)</div>
-                  <div style="font-size:11px;color:var(--accent3);font-weight:600">Comissão (10%): R$ ${comissao.toFixed(2).replace('.',',')}</div>
-                </div>
-              </div>
-              <div style="text-align:right">
-                <div style="font-size:14px;font-weight:800;color:var(--success)">R$ ${v.fat.toFixed(2).replace('.',',')}</div>
-                <div style="font-size:11px;color:var(--muted)">ticket R$ ${ticket.toFixed(2).replace('.',',')}</div>
-              </div>
-            </div>
-            <div style="height:5px;background:var(--border);border-radius:99px;overflow:hidden">
-              <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--accent),var(--success));border-radius:99px"></div>
-            </div>
-          </div>`;
-        }).join('');
-      }
-    }
-  } catch(e) {
-    console.error('renderRelatorios error:', e);
-    sbToast('err', 'Erro ao carregar relatórios: ' + e.message);
-  }
-}
-
-function relExportar() {
-  const range = _relGetRange();
-  const rows  = [['Período', range.label], ['Gerado em', new Date().toLocaleString('pt-BR')]];
-  const csv   = rows.map(r=>r.join(';')).join('\n');
-  const a     = document.createElement('a');
-  a.href      = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-  a.download  = 'relatorio-' + _relPeriodo + '.csv';
-  a.click();
-  sbToast('ok', 'CSV exportado!');
-}
-
-// ─────────────────────────────────────────
-// IMPRIMIR RELATÓRIO NA IMPRESSORA DO CAIXA
-// ─────────────────────────────────────────
-async function relImprimirCaixa() {
-  sbLoading(true);
-  try {
-    const money   = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.', ',');
-    const range   = _relGetRange();
-    const iniISO  = _toSQLite(range.inicio);
-    const fimISO  = _toSQLite(range.fim);
-    const nomeLoja = _sessao?.nome || 'Estabelecimento';
-    const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' });
-
-    // ── Busca dados ──────────────────────────────────────
-    const [
-      { data: ordersRaw },
-      { data: movsRaw }
-    ] = await Promise.all([
-      sb.from('orders')
-        .select('id,status,total,taxa,items,mesa_num,addr,pag,garcom_nome,created_at,order_num')
-        .gte('created_at', iniISO).lt('created_at', fimISO)
-        .order('created_at', { ascending: true }),
-      sb.from('movimentos')
-        .select('*').order('id', { ascending: false }).limit(500)
-    ]);
-
-    const orders   = ordersRaw || [];
-    // Apenas pedidos efetivamente concluídos — exclui cancelados, mesas abertas e mesas em espera
-    const validos  = orders.filter(o => ['pronto','entregue','finalizado'].includes(o.status));
-
-    // Recalcula total de cada pedido pelos itens ativos (exclui item_status=cancelado e item_type=taxa)
-    const _calcTotalItens = o => {
-      const its = (() => { try { return Array.isArray(o.items) ? o.items : JSON.parse(o.items||'[]'); } catch { return []; } })();
-      return its
-        .filter(i => (i.item_status||'active') !== 'cancelado')
-        .reduce((s, i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
-    };
-
-    // ── KPIs gerais ──────────────────────────────────────
-    const fatTotal  = validos.reduce((s,o) => s + _calcTotalItens(o), 0);
-    const qtdTotal  = validos.length;
-    const ticket    = qtdTotal > 0 ? fatTotal / qtdTotal : 0;
-    const cancelados = orders.filter(o => o.status === 'cancelado').length;
-
-    // ── Vendas por forma de pagamento ────────────────────
-    const pagMap = {};
-    validos.forEach(o => {
-      const k = o.pag || 'Não informado';
-      if (!pagMap[k]) pagMap[k] = 0;
-      pagMap[k] += _calcTotalItens(o);
-    });
-
-    // ── Entradas e saídas (movimentos) ───────────────────
-    const normDate = s => s ? new Date(s.replace(' ', 'T')) : null;
-    const movsFiltrados = (movsRaw||[]).filter(m => {
-      const t = normDate(m.created_at||m.time);
-      return t && t >= range.inicio && t < range.fim;
-    });
-    const totEntradas = movsFiltrados.filter(m=>m.tipo==='entrada').reduce((s,m)=>s+parseFloat(m.val||0),0);
-    const totSaidas   = movsFiltrados.filter(m=>m.tipo==='saida').reduce((s,m)=>s+parseFloat(m.val||0),0);
-    const saldo       = totEntradas - totSaidas;
-
-    // ── Mesas: horários e totais ──────────────────────────
-    const mesaOrders = validos.filter(o => o.mesa_num);
-    const mesaMap = {};
-    mesaOrders.forEach(o => {
-      const m = `Mesa ${o.mesa_num}`;
-      if (!mesaMap[m]) mesaMap[m] = { total: 0, pedidos: 0, ultimo: '' };
-      mesaMap[m].total   += parseFloat(o.total||0) + parseFloat(o.taxa||0);
-      mesaMap[m].pedidos++;
-      const d = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR',{timeZone:'America/Fortaleza',hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}) : '';
-      if (!mesaMap[m].ultimo || o.created_at > mesaMap[m].ultimo) mesaMap[m].ultimo = d;
-    });
-
-    // ── Itens vendidos e garçom que lançou ──────────────
-    const itemMap = {};
-    validos.forEach(o => {
-      const garcom = o.garcom_nome || '—';
-      const itens  = (() => { try { return Array.isArray(o.items) ? o.items : JSON.parse(o.items||'[]'); } catch { return []; } })();
-      itens.forEach(i => {
-        if ((i.item_status||'active') === 'cancelado') return;
-        if (i.item_type === 'taxa') return;
-        const k = i.name || '?';
-        if (!itemMap[k]) itemMap[k] = { qty: 0, total: 0, garcons: new Set() };
-        itemMap[k].qty   += (parseInt(i.qty)||1);
-        itemMap[k].total += (parseFloat(i.price)||0) * (parseInt(i.qty)||1);
-        itemMap[k].garcons.add(garcom);
-      });
-    });
-    const topItens = Object.entries(itemMap)
-      .sort((a,b) => b[1].total - a[1].total)
-      .slice(0, 30);
-
-    // ── Relatório por garçom ──────────────────────────────
-    // Apenas pedidos finalizados de mesa (exclui cancelados e mesas ainda abertas)
-    const garcomMap = {};
-    validos
-      .filter(o => (o.mesa_num || (o.addr||'').startsWith('Mesa')) && o.garcom_nome)
-      .forEach(o => {
-        const nome = o.garcom_nome;
-        if (!garcomMap[nome]) garcomMap[nome] = { pedidos: 0, fat: 0, mesas: new Set(), taxa: 0 };
-        garcomMap[nome].pedidos++;
-        const itens = (() => { try { return Array.isArray(o.items) ? o.items : JSON.parse(o.items||'[]'); } catch { return []; } })();
-        const itensAtivos = itens.filter(i => (i.item_status||'active') !== 'cancelado');
-        // fat = soma dos itens ativos SEM a taxa (base para cálculo de comissão)
-        const fatSemTaxa = itensAtivos
-          .filter(i => i.item_type !== 'taxa')
-          .reduce((s, i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
-        garcomMap[nome].fat += fatSemTaxa;
-        // Valor da taxa cobrada pelo garçom neste pedido
-        const taxaItem = itensAtivos.find(i => i.item_type === 'taxa');
-        if (taxaItem) garcomMap[nome].taxa += parseFloat(taxaItem.price)||0;
-        if (o.mesa_num) garcomMap[nome].mesas.add(o.mesa_num);
-      });
-
-    // ─── Monta HTML para impressão 80mm ──────────────────
-    const hr  = `<hr style="border:none;border-top:1px dashed #000;margin:5px 0">`;
-    const row = (l, r, bold) => `<div style="display:flex;justify-content:space-between;${bold?'font-weight:700':''}"><span>${l}</span><span>${r}</span></div>`;
-    const title = t => `<div style="font-weight:900;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px">${t}</div>`;
-
-    let html = `<div style="font-family:monospace;font-size:11px;color:#111;background:#fff;padding:12px 8px;max-width:280px;margin:0 auto">`;
-
-    // Cabeçalho
-    html += `<div style="text-align:center;margin-bottom:6px">
-      <div style="font-size:14px;font-weight:900">${nomeLoja.toUpperCase()}</div>
-      <div style="font-size:10px">RELATÓRIO GERENCIAL</div>
-      <div style="font-size:10px">${range.label}</div>
-      <div style="font-size:9px;color:#666">Gerado: ${dataHora}</div>
-    </div>${hr}`;
-
-    // Resumo geral
-    html += title('📊 Resumo Geral');
-    html += row('Faturamento total', money(fatTotal), true);
-    html += row('Pedidos confirmados', qtdTotal);
-    html += row('Ticket médio', money(ticket));
-    html += row('Pedidos cancelados', cancelados);
-
-    // Formas de pagamento
-    html += hr + title('💳 Formas de Pagamento');
-    Object.entries(pagMap).sort((a,b)=>b[1]-a[1]).forEach(([f,v]) => {
-      html += row(f, money(v));
-    });
-
-    // Entradas e saídas
-    html += hr + title('💰 Caixa — Movimentos');
-    html += row('Entradas', money(totEntradas), true);
-    html += row('Saídas', money(totSaidas), true);
-    html += row('Saldo', money(saldo), true);
-    if (movsFiltrados.length) {
-      html += `<div style="margin-top:4px">`;
-      movsFiltrados.slice(0, 20).forEach(m => {
-        const data = m.created_at||m.time ? new Date((m.created_at||m.time).replace(' ','T')).toLocaleDateString('pt-BR') : '';
-        const sinal = m.tipo === 'entrada' ? '+' : '-';
-        html += row(`${sinal} ${(m.description||'').substring(0,18)}`, money(m.val));
-      });
-      html += `</div>`;
-    }
-
-    // Mesas: horários e totais
-    html += hr + title('🍽️ Mesas');
-    const mesaEntries = Object.entries(mesaMap).sort((a,b) => parseInt(a[0].split(' ')[1]) - parseInt(b[0].split(' ')[1]));
-    if (mesaEntries.length) {
-      mesaEntries.forEach(([mesa, v]) => {
-        html += `<div style="margin-bottom:3px">`;
-        html += row(mesa, money(v.total), true);
-        html += `<div style="font-size:10px;color:#555">${v.pedidos} comanda(s) · último: ${v.ultimo}</div>`;
-        html += `</div>`;
-      });
-    } else {
-      html += `<div style="font-size:10px;color:#888;text-align:center;padding:4px">Nenhuma mesa no período</div>`;
-    }
-
-    // Itens vendidos + garçom
-    html += hr + title('🛒 Itens Vendidos');
-    if (topItens.length) {
-      topItens.forEach(([nome, v]) => {
-        const garcons = [...v.garcons].join(', ');
-        html += `<div style="margin-bottom:4px">`;
-        html += row(`${v.qty}x ${nome.substring(0,22)}`, money(v.total), true);
-        html += `<div style="font-size:9px;color:#555">Garçom: ${garcons.substring(0,30)}</div>`;
-        html += `</div>`;
-      });
-    } else {
-      html += `<div style="font-size:10px;color:#888;text-align:center;padding:4px">Sem itens no período</div>`;
-    }
-
-    // Relatório de garçons / comissão
-    html += hr + title('👨‍💼 Garçons — Comissão');
-    const garcomEntries = Object.entries(garcomMap).sort((a,b)=>b[1].fat-a[1].fat);
-    if (garcomEntries.length) {
-      garcomEntries.forEach(([nome, v]) => {
-        const comissao = v.fat > 0 ? v.fat * 0.1 : 0;
-        html += `<div style="margin-bottom:5px">`;
-        html += row(nome, money(v.fat), true);
-        html += row(`  ${v.pedidos} pedido(s) · ${v.mesas.size} mesa(s)`, '');
-        html += row('  Comissão (10%)', money(comissao));
-        if (v.taxa > 0) html += row('  Taxa serviço cobrada', money(v.taxa));
-        html += `</div>`;
-      });
-    } else {
-      html += `<div style="font-size:10px;color:#888;text-align:center;padding:4px">Nenhum garçom no período</div>`;
-    }
-
-    html += hr;
-    html += `<div style="text-align:center;font-size:10px;color:#888;margin-top:6px">*** FIM DO RELATÓRIO ***</div>`;
-    html += `</div>`;
-
-    // ── Envia para impressora ─────────────────────────────
-    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||''; } catch { return ''; } })();
-    const fmt = localStorage.getItem('printFormat') || '80mm';
-
-    // 1. Print Agent
-    try {
-      if (tid) {
-        const st = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } }).then(r=>r.json());
-        if (st.active) {
-          await fetch('/api/print-queue/job', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-            body: JSON.stringify({ html, format: fmt, tipo: 'caixa', marginH: _printMarginH, marginV: _printMarginV }),
-          });
-          sbToast('ok', '🖨️ Relatório enviado para impressora!');
-          return;
+      // Busca pagamentos pendentes criados nas últimas 24h que ainda têm pedido aguardando
+      const pendentes = db.prepare(`
+        SELECT p.mp_payment_id, p.order_id, p.tenant_id, p.valor, p.mp_source
+        FROM pagamentos_pix p
+        LEFT JOIN orders o ON o.id = p.order_id
+        WHERE p.status = 'pendente'
+          AND p.order_id IS NOT NULL
+          AND (o.status = 'aguardando_pix' OR o.status IS NULL)
+          AND p.created_at > datetime('now', '-24 hours')
+      `).all()
+
+      if (!pendentes.length) return
+
+      // Agrupa por tenant para log mais claro
+      const porTenant = pendentes.reduce((acc, r) => {
+        acc[r.tenant_id] = acc[r.tenant_id] || []
+        acc[r.tenant_id].push(r)
+        return acc
+      }, {})
+
+      for (const [tenantId, pagamentos] of Object.entries(porTenant)) {
+        log('🔍', `PIX recovery: tenant=${tenantId} — verificando ${pagamentos.length} pagamento(s) pendente(s)`)
+        let liberados = 0, rejeitados = 0
+
+        for (const row of pagamentos) {
+          // Resolve token POR PAGAMENTO usando mp_source gravado.
+          // Pagamentos diferentes do mesmo tenant podem ter usado contas
+          // diferentes se o gestor mudou a config entre eles.
+          const _pCfg = _resolveMpForExistingPayment(db, row.mp_payment_id, MP_TOKEN_ENV)
+          const mpToken = _pCfg.mp_token
+          if (!mpToken) continue
+          try {
+            const r = await fetch(`https://api.mercadopago.com/v1/payments/${row.mp_payment_id}`, {
+              headers: { 'Authorization': `Bearer ${mpToken}` }
+            })
+            if (!r.ok) continue
+            const pd = await r.json()
+
+            if (pd.status === 'approved') {
+              db.prepare("UPDATE pagamentos_pix SET status='aprovado', paid_at=? WHERE mp_payment_id=?")
+                .run(pd.date_approved || new Date().toISOString(), String(row.mp_payment_id))
+
+              const pedAtual = db.prepare("SELECT status, pag FROM orders WHERE id=? AND tenant_id=?").get(row.order_id, tenantId)
+              const eraAguardando = pedAtual?.status === 'aguardando_pix'
+              // Ressurreição: pedido cancelado por timeout (cleanup) que recebeu pagamento depois.
+              // Critério: status='cancelado' AND pag ainda não é 'pix_mp'/'cartao_mp' (não confirmado antes).
+              const podeRessurreicao = pedAtual?.status === 'cancelado'
+                && pedAtual?.pag !== 'pix_mp' && pedAtual?.pag !== 'cartao_mp'
+
+              if (eraAguardando || podeRessurreicao) {
+                // PIX online confirmado pelo MP → entra direto em produção (pula análise)
+                // O pagamento já foi validado, não precisa de aceite manual.
+                db.prepare("UPDATE orders SET status='producao', pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, tenantId)
+                if (podeRessurreicao) log('🔄', `PEDIDO RESSUSCITADO (recovery): pagamento PIX chegou após cancelamento — id=${row.order_id} tenant=${tenantId}`)
+                const pedFull = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(row.order_id, tenantId)
+                const items   = pedFull && typeof pedFull.items === 'string'
+                  ? (() => { try { return JSON.parse(pedFull.items) } catch { return [] } })()
+                  : (pedFull?.items || [])
+                sseBroadcast(`orders-rt:${tenantId}`, 'orders:UPDATE',
+                  pedFull ? { ...pedFull, items, status: 'producao', pag: 'pix_mp', _pixOnlineConfirmado: true }
+                          : { id: row.order_id, status: 'producao', pag: 'pix_mp', _pixOnlineConfirmado: true })
+                liberados++
+              }
+            } else if (pd.status === 'rejected' || pd.status === 'cancelled') {
+              db.prepare("UPDATE pagamentos_pix SET status=? WHERE mp_payment_id=?")
+                .run(pd.status === 'rejected' ? 'rejeitado' : 'cancelado', String(row.mp_payment_id))
+              rejeitados++
+            }
+          } catch (e) {
+            log('⚠️', `PIX recovery: erro mp_id=${row.mp_payment_id} tenant=${tenantId}:`, e.message)
+          }
         }
+
+        if (liberados)  log('✅', `PIX recovery: tenant=${tenantId} — ${liberados} pedido(s) liberado(s)`)
+        if (rejeitados) log('⚠️', `PIX recovery: tenant=${tenantId} — ${rejeitados} pagamento(s) rejeitado(s)/cancelado(s)`)
       }
-    } catch(e) { console.warn('[REL PRINT] Agent falhou:', e.message); }
-
-    // 2. Electron
-    const _caixaPrinter = localStorage.getItem('printPrinter') || '';
-    if (window.ElectronPrint?.printHtml) {
-      try {
-        await window.ElectronPrint.printHtml(html, { printer: _caixaPrinter, paperWidth: 80 });
-        sbToast('ok', '🖨️ Relatório impresso!');
-        return;
-      } catch(e) { console.warn('[REL PRINT] Electron falhou:', e.message); }
+    } catch (e) {
+      log('⚠️', 'PIX recovery job erro geral:', e.message)
     }
-
-    // 3. Popup de impressão
-    const w = window.open('', '_blank', 'width=420,height=700');
-    if (!w) { sbToast('err', 'Permita popups para imprimir'); return; }
-    w.document.write(`<!DOCTYPE html><html><head><title>Relatório ${range.label}</title>
-      <style>body{margin:0;background:#fff}@media print{body{margin:0}}</style></head>
-      <body>${html}<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}<\/script></body></html>`);
-    w.document.close();
-    sbToast('ok', '🖨️ Abrindo impressão...');
-  } catch(e) {
-    console.error('[REL PRINT]', e);
-    sbToast('err', 'Erro ao gerar relatório: ' + (e?.message||e));
-  } finally {
-    sbLoading(false);
-  }
+  }, 60_000)
 }
 
-
-// ─────────────────────────────────────────
-// SATISFAÇÃO
-// ─────────────────────────────────────────
-async function renderSatisfacao(){
-  const elBars    = document.getElementById('sat-bars');
-  const elReviews = document.getElementById('sat-reviews');
-
-  if (elBars)    elBars.innerHTML    = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Carregando…</div>';
-  if (elReviews) elReviews.innerHTML = '';
-
+// ═══════════════════════════════════════════════════════
+// Helper compartilhado: lê instância de WhatsApp para cobranças
+// (configurada em /admin → Saques PIX → "WhatsApp para cobranças")
+// Fallback: instância padrão (mesma usada pelos pedidos)
+// ═══════════════════════════════════════════════════════
+function _getInstanciaCobranca(db, fallbackInst) {
   try {
-    const { data: ratings, error } = await sb.from('ratings').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-
-    const list  = ratings || [];
-    const total = list.length;
-    const statEls   = document.querySelectorAll('#page-satisfacao .sg .sv');
-    const statTrend = document.querySelector('#page-satisfacao .sg .str');
-
-    if (total === 0) {
-      const vazio = `<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:13px">
-        <div style="margin-bottom:12px;color:var(--accent3)"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5L8 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
-        Nenhuma avaliação ainda.<br>
-        <small style="font-size:11.5px">Quando clientes responderem ao link de avaliação, os dados aparecerão aqui.</small>
-      </div>`;
-      if (elBars)    elBars.innerHTML    = vazio;
-      if (elReviews) elReviews.innerHTML = '';
-      if (statEls[0]) statEls[0].textContent = '—';
-      if (statEls[1]) statEls[1].textContent = '0';
-      if (statEls[2]) statEls[2].textContent = '—';
-      if (statEls[3]) statEls[3].textContent = '—';
-      return;
-    }
-
-    const soma          = list.reduce((s, r) => s + (r.nota || 0), 0);
-    const media         = soma / total;
-    const satisfeitos   = list.filter(r => r.nota >= 4).length;
-    const insatisfeitos = list.filter(r => r.nota <= 2).length;
-
-    if (statEls[0]) statEls[0].textContent = media.toFixed(1);
-    if (statEls[1]) statEls[1].textContent = total;
-    if (statEls[2]) statEls[2].textContent = Math.round((satisfeitos / total) * 100) + '%';
-    if (statEls[3]) statEls[3].textContent = Math.round((insatisfeitos / total) * 100) + '%';
-    if (statTrend)  statTrend.textContent  = media >= 4.5 ? '↑ Excelente' : media >= 3.5 ? '→ Bom' : '↓ Atenção';
-
-    // Distribuição de notas
-    const dist = [5,4,3,2,1].map(nota => {
-      const count = list.filter(r => r.nota === nota).length;
-      const pct   = Math.round((count / total) * 100);
-      const clr   = nota >= 4 ? 'var(--success)' : nota === 3 ? '#f59e0b' : 'var(--danger)';
-      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <span style="font-size:12px;font-weight:700;min-width:14px;text-align:right">${nota}</span>
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5L8 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
-        <div style="flex:1;height:9px;background:var(--surface2);border-radius:99px;overflow:hidden">
-          <div style="width:${pct}%;height:100%;background:${clr};border-radius:99px"></div>
-        </div>
-        <span style="font-size:11.5px;color:var(--muted);min-width:32px;text-align:right">${count}x</span>
-      </div>`;
-    }).join('');
-    if (elBars) elBars.innerHTML = dist;
-
-    // Últimas avaliações
-    const EMOJI = { 5:'😍', 4:'😊', 3:'😐', 2:'😕', 1:'😠' };
-    const revs = list.slice(0, 30).map(r => {
-      const stars = '⭐'.repeat(r.nota || 0);
-      const dt    = r.created_at
-        ? new Date(r.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })
-        : '';
-      return `<div style="padding:12px 0;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start">
-        <div style="font-size:26px;flex-shrink:0;line-height:1">${EMOJI[r.nota] || '⭐'}</div>
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px">
-            <span style="font-weight:700;font-size:13px">${r.client || 'Cliente'}</span>
-            <span style="font-size:11px;color:var(--muted);white-space:nowrap">${dt}</span>
-          </div>
-          <div style="font-size:13px;margin-bottom:${r.comentario ? '5px' : '0'}">${stars}</div>
-          ${r.comentario ? `<div style="font-size:12.5px;color:var(--muted2);line-height:1.5">${r.comentario}</div>` : ''}
-          ${r.order_id   ? `<div style="font-size:11px;color:var(--muted);margin-top:3px">Pedido #${String(r.order_id).padStart(3,'0')}</div>` : ''}
-        </div>
-      </div>`;
-    }).join('');
-    if (elReviews) elReviews.innerHTML = revs || '<div style="color:var(--muted);font-size:12px;padding:12px">Nenhuma avaliação.</div>';
-
-  } catch(e) {
-    console.error('renderSatisfacao:', e);
-    const err = '<div style="color:var(--muted);font-size:12.5px;padding:20px;text-align:center">Erro ao carregar avaliações.</div>';
-    if (elBars)    elBars.innerHTML    = err;
-    if (elReviews) elReviews.innerHTML = '';
-  }
-}
-
-// ─────────────────────────────────────────
-// MEU PLANO
-// ─────────────────────────────────────────
-async function renderMeuPlano() {
-  const elNome   = document.getElementById('plano-nome-display');
-  const elExpira = document.getElementById('plano-expira-display');
-  const elDias   = document.getElementById('plano-dias-display');
-  const elTenant = document.getElementById('plano-tenant-display');
-  const elBadge  = document.getElementById('plano-badge-wrap');
-  const elStatus = document.getElementById('plano-status-wrap');
-  const elRecursos = document.getElementById('plano-recursos-grid');
-  const elBgDeco = document.getElementById('plano-bg-deco');
-
-  if (elNome) elNome.textContent = 'Carregando...';
-  
-  // Carregar precos dos planos
-  carregarPrecosPlanos();
-
-  try {
-    const tid = _sessao?.tenant_id;
-    if (!tid) throw new Error('Sessão inválida');
-
-    const res = await fetch('/api/tenant-info-gestor', {
-      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid }
-    });
-    if (!res.ok) throw new Error('Erro HTTP ' + res.status);
-    const data = await res.json();
-    if (!data) throw new Error('Tenant não encontrado');
-
-    const plano     = (data.plano || 'pro').toLowerCase();
-    const isPremium = plano === 'premium';
-    const expira    = data.expires_at ? new Date(data.expires_at) : null;
-    const hoje      = new Date();
-    hoje.setHours(0,0,0,0);
-    const diasRestantes = expira
-      ? Math.ceil((expira - hoje) / (1000 * 60 * 60 * 24))
-      : null;
-
-    // ── Nome e badge ──
-    const planoLabel = isPremium ? 'Premium' : 'Pro';
-    const planoColor = isPremium ? '#7c3aed' : 'var(--accent)';
-    if (elNome)   { elNome.textContent = planoLabel; elNome.style.color = planoColor; }
-    if (elBgDeco) elBgDeco.style.background = planoColor;
-    if (elBadge)  elBadge.innerHTML = `
-      <div style="padding:4px 12px;border-radius:99px;font-size:11px;font-weight:800;letter-spacing:.4px;
-        background:${isPremium ? 'rgba(124,58,237,.15)' : 'rgba(59,130,246,.12)'};
-        color:${planoColor};border:1px solid ${isPremium ? 'rgba(124,58,237,.35)' : 'rgba(59,130,246,.3)'}">
-        ${planoLabel.toUpperCase()}
-      </div>`;
-
-    // ── Vencimento ──
-    const expiraStr = expira
-      ? expira.toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric' })
-      : 'Sem data definida';
-    if (elExpira) elExpira.textContent = expiraStr;
-
-    // ── Dias restantes ──
-    let diasStr = 'Sem data definida';
-    let diasColor = 'var(--text)';
-    if (diasRestantes !== null) {
-      if (diasRestantes > 30)       { diasStr = `${diasRestantes} dias`; diasColor = 'var(--success)'; }
-      else if (diasRestantes > 7)   { diasStr = `${diasRestantes} dias`; diasColor = 'var(--warning,#f59e0b)'; }
-      else if (diasRestantes > 0)   { diasStr = `${diasRestantes} dias — vence em breve`; diasColor = 'var(--danger)'; }
-      else if (diasRestantes === 0) { diasStr = 'Vence hoje'; diasColor = 'var(--danger)'; }
-      else                          { diasStr = 'Vencido'; diasColor = 'var(--danger)'; }
-    }
-    if (elDias) { elDias.textContent = diasStr; elDias.style.color = diasColor; }
-
-    // ── Nome do tenant ──
-    if (elTenant) elTenant.textContent = data.nome || _sessao?.nome || '—';
-
-    // ── Status ──
-    if (elStatus) {
-      const ativo = data.ativo !== 0 && data.ativo !== false;
-      const vencido = diasRestantes !== null && diasRestantes < 0;
-      const alertaBarra = diasRestantes !== null && diasRestantes <= 30 && diasRestantes >= 0;
-      const pct = alertaBarra ? Math.max(0, Math.min(100, Math.round((diasRestantes / 30) * 100))) : null;
-
-      let statusHtml = '';
-      if (!ativo || vencido) {
-        statusHtml += `
-          <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;
-            background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:10px">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="color:var(--danger);flex-shrink:0">
-              <path d="M8 2L14 13H2L8 2z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M8 6v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-              <circle cx="8" cy="11" r=".6" fill="currentColor"/>
-            </svg>
-            <div>
-              <div style="font-weight:700;font-size:13px;color:var(--danger)">${vencido ? 'Plano vencido' : 'Conta inativa'}</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:1px">Entre em contato com o suporte para reativar.</div>
-            </div>
-          </div>`;
-      } else {
-        statusHtml += `
-          <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;
-            background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="color:var(--success);flex-shrink:0">
-              <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/>
-              <path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-            </svg>
-            <div>
-              <div style="font-weight:700;font-size:13px;color:var(--success)">Assinatura ativa</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:1px">Todos os recursos disponíveis.</div>
-            </div>
-          </div>`;
-      }
-      if (alertaBarra && pct !== null) {
-        const barColor = diasRestantes <= 7 ? 'var(--danger)' : '#f59e0b';
-        statusHtml += `
-          <div style="margin-top:4px">
-            <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-bottom:5px">
-              <span>Tempo restante do plano</span>
-              <span style="font-weight:700;color:${barColor}">${diasRestantes}d de 30d</span>
-            </div>
-            <div style="height:7px;background:var(--surface2);border-radius:99px;overflow:hidden">
-              <div style="width:${pct}%;height:100%;background:${barColor};border-radius:99px;transition:width .5s"></div>
-            </div>
-          </div>`;
-      }
-      elStatus.innerHTML = statusHtml;
-    }
-
-    // ── Recursos ──
-    const recursosPro = [
-      { svg:'<path d="M2 2h12v12H2z" stroke="currentColor" stroke-width="1.4" fill="none" rx="2"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>', label:'Gestão de pedidos (Kanban)' },
-      { svg:'<rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8.5" r="2" stroke="currentColor" stroke-width="1.4"/>', label:'PDV / Pedidos no balcão' },
-      { svg:'<rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 8h6M8 5v6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>', label:'Gestor de cardápio' },
-      { svg:'<path d="M3 12V5l5-3 5 3v7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><rect x="6" y="8" width="4" height="4" rx=".5" stroke="currentColor" stroke-width="1.4"/>', label:'Mesas e garçons' },
-      { svg:'<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 2c-1.5 2-2.5 3.8-2.5 6s1 4 2.5 6M2 8h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>', label:'Cardápio público online' },
-      { svg:'<path d="M2 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H5l-3 2V4z" stroke="currentColor" stroke-width="1.4" fill="none"/>', label:'Automações de WhatsApp' },
-      { svg:'<path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/>', label:'Satisfação e avaliações' },
-      { svg:'<rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/>', label:'QR Code da mesa' },
-      { svg:'<path d="M2 12L6 4l3 5 2-2.5L14 12H2z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>', label:'Relatórios e desempenho' },
-      { svg:'<rect x="1" y="4" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="9" r="1.5" stroke="currentColor" stroke-width="1.4"/>', label:'Caixa e movimentos' },
-      { svg:'<path d="M8 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM2 13c0-2.76 2.24-5 5-5h2c2.76 0 5 2.24 5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>', label:'Programa de fidelidade' },
-      { svg:'<rect x="3" y="2" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="10" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M3 6H2a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1M13 6h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" stroke="currentColor" stroke-width="1.4"/>', label:'Impressão térmica' },
-    ];
-    const extraPremium = [
-      { svg:'<rect x="3" y="5" width="10" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="9" r="1" fill="currentColor"/><circle cx="10" cy="9" r="1" fill="currentColor"/><path d="M6 5V3.5M10 5V3.5M6 3.5H10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>', label:'Agente IA no WhatsApp', destaque: true },
-      { svg:'<path d="M2 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H5l-3 2V4z" stroke="currentColor" stroke-width="1.4"/><path d="M5 7h6M5 9.5h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>', label:'Simulador do robô', destaque: true },
-    ];
-    const recursos = isPremium ? [...recursosPro, ...extraPremium] : recursosPro;
-    if (elRecursos) {
-      elRecursos.innerHTML = recursos.map(r => `
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;
-          background:var(--surface2);border:1px solid ${r.destaque ? 'rgba(124,58,237,.3)' : 'var(--border)'};border-radius:10px;
-          ${r.destaque ? 'background:rgba(124,58,237,.07);' : ''}">
-          <div style="width:28px;height:28px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
-            background:${r.destaque ? 'rgba(124,58,237,.15)' : 'var(--surface)'};
-            border:1px solid ${r.destaque ? 'rgba(124,58,237,.25)' : 'var(--border)'};
-            color:${r.destaque ? '#a78bfa' : 'var(--muted)'}">
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">${r.svg}</svg>
-          </div>
-          <span style="font-size:12.5px;font-weight:500;color:${r.destaque ? 'var(--text)' : 'var(--muted2)'};flex:1">${r.label}</span>
-          <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="flex-shrink:0;color:${r.destaque ? '#a78bfa' : 'var(--success)'}">
-            ${r.destaque
-              ? '<path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5z" stroke="currentColor" stroke-width="1.3" fill="none"/>'
-              : '<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'}
-          </svg>
-        </div>`).join('');
-    }
-
-  } catch(e) {
-    console.error('renderMeuPlano:', e);
-    if (elNome) elNome.textContent = '—';
-    if (elStatus) elStatus.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px;text-align:center">Não foi possível carregar as informações do plano.</div>`;
-  }
-}
-
-// ─────────────────────────────────────────
-// RENOVACAO DE PLANOS
-// ─────────────────────────────────────────
-let _planoSelecionado = 'premium';
-let _formaPagPlano = 'pix';
-let _precosPlanos = { essencial: 79.99, premium: 99.90 };
-let _pixPlanoInterval = null;
-
-async function carregarPrecosPlanos() {
-  try {
-    const res = await fetch('/api/planos/precos');
-    if (res.ok) {
-      const data = await res.json();
-      _precosPlanos = { essencial: data.essencial || 79.99, premium: data.premium || 99.90 };
-      const elEss = document.getElementById('preco-essencial');
-      const elPre = document.getElementById('preco-premium');
-      if (elEss) elEss.textContent = _precosPlanos.essencial.toFixed(2).replace('.', ',');
-      if (elPre) elPre.textContent = _precosPlanos.premium.toFixed(2).replace('.', ',');
-    }
-  } catch(e) { console.error('carregarPrecosPlanos:', e); }
-}
-
-function selecionarPlano(plano) {
-  _planoSelecionado = plano;
-  const cardEss = document.getElementById('plano-card-essencial');
-  const cardPre = document.getElementById('plano-card-premium');
-  const dotEss = document.getElementById('plano-dot-essencial');
-  const dotPre = document.getElementById('plano-dot-premium');
-  const checkEss = document.getElementById('plano-check-essencial');
-  const checkPre = document.getElementById('plano-check-premium');
-
-  if (plano === 'essencial') {
-    if (cardEss) { cardEss.style.borderColor = 'var(--accent)'; cardEss.style.background = 'rgba(59,130,246,.05)'; }
-    if (cardPre) { cardPre.style.borderColor = 'rgba(139,92,246,.3)'; cardPre.style.background = 'linear-gradient(135deg,rgba(139,92,246,.08),rgba(236,72,153,.05))'; }
-    if (dotEss) dotEss.style.background = 'var(--accent)';
-    if (dotPre) dotPre.style.background = 'transparent';
-    if (checkEss) checkEss.style.borderColor = 'var(--accent)';
-    if (checkPre) checkPre.style.borderColor = 'rgba(139,92,246,.5)';
-  } else {
-    if (cardEss) { cardEss.style.borderColor = 'var(--border)'; cardEss.style.background = 'var(--surface2)'; }
-    if (cardPre) { cardPre.style.borderColor = 'var(--purple)'; cardPre.style.background = 'linear-gradient(135deg,rgba(139,92,246,.12),rgba(236,72,153,.08))'; }
-    if (dotEss) dotEss.style.background = 'transparent';
-    if (dotPre) dotPre.style.background = 'var(--purple)';
-    if (checkEss) checkEss.style.borderColor = 'var(--border)';
-    if (checkPre) checkPre.style.borderColor = 'var(--purple)';
-  }
-}
-
-function selecionarFormaPagPlano(forma) {
-  _formaPagPlano = forma;
-  const optPix = document.getElementById('pag-opt-pix');
-  const optCartao = document.getElementById('pag-opt-cartao');
-  if (forma === 'pix') {
-    if (optPix) { optPix.style.background = 'rgba(59,130,246,.08)'; optPix.style.borderColor = 'var(--accent)'; }
-    if (optCartao) { optCartao.style.background = 'var(--surface)'; optCartao.style.borderColor = 'var(--border)'; }
-  } else {
-    if (optPix) { optPix.style.background = 'var(--surface)'; optPix.style.borderColor = 'var(--border)'; }
-    if (optCartao) { optCartao.style.background = 'rgba(59,130,246,.08)'; optCartao.style.borderColor = 'var(--accent)'; }
-  }
-}
-
-async function iniciarPagamentoPlano() {
-  const btn = document.getElementById('btn-pagar-plano');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processando...'; }
-  
-  const planoNome = _planoSelecionado === 'essencial' ? 'Plano Essencial' : 'Plano Premium';
-  const valor = _precosPlanos[_planoSelecionado];
-  
-  if (_formaPagPlano === 'pix') {
-    try {
-      const tid = _sessao?.tenant_id;
-      const res = await fetch('/api/planos/pagar-pix', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-        body: JSON.stringify({ plano: _planoSelecionado, valor })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao criar PIX');
-      
-      // Mostrar modal com QR Code
-      document.getElementById('pix-plano-titulo').textContent = planoNome;
-      document.getElementById('pix-plano-valor').textContent = 'R$ ' + valor.toFixed(2).replace('.', ',');
-      document.getElementById('pix-plano-code').value = data.qr_code || '';
-      document.getElementById('pix-plano-mp-id').value = data.mp_payment_id || '';
-      
-      if (data.qr_code_base64) {
-        document.getElementById('pix-qr-img').innerHTML = `<img src="data:image/png;base64,${data.qr_code_base64}" style="width:200px;height:200px">`;
-      } else {
-        document.getElementById('pix-qr-img').innerHTML = '<div style="color:var(--muted);font-size:12px">QR Code nao disponivel.<br>Use o codigo PIX abaixo.</div>';
-      }
-      
-      document.getElementById('modal-pag-pix-plano').classList.add('on');
-      iniciarPollingPixPlano(data.mp_payment_id);
-      
-    } catch(e) {
-      sbToast('err', e.message);
-    }
-  } else {
-    // Cartao
-    document.getElementById('cartao-plano-titulo').textContent = planoNome;
-    document.getElementById('cartao-plano-valor').textContent = 'R$ ' + valor.toFixed(2).replace('.', ',');
-    document.getElementById('modal-pag-cartao-plano').classList.add('on');
-  }
-  
-  if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Renovar Plano'; }
-}
-
-function iniciarPollingPixPlano(mpId) {
-  if (_pixPlanoInterval) clearInterval(_pixPlanoInterval);
-  let checks = 0;
-  _pixPlanoInterval = setInterval(async () => {
-    checks++;
-    if (checks > 120) { // 10 minutos
-      clearInterval(_pixPlanoInterval);
-      document.getElementById('pix-status-text').textContent = 'Tempo esgotado. Tente novamente.';
-      return;
-    }
-    try {
-      const res = await fetch('/api/planos/status-pix?mp_payment_id=' + mpId);
-      const data = await res.json();
-      if (data.status === 'aprovado') {
-        clearInterval(_pixPlanoInterval);
-        document.getElementById('pix-status-text').textContent = 'Pagamento confirmado!';
-        document.getElementById('pix-status-text').parentElement.style.background = 'rgba(34,197,94,.1)';
-        document.getElementById('pix-status-text').parentElement.style.borderColor = 'rgba(34,197,94,.3)';
-        sbToast('ok', 'Pagamento confirmado! Seu plano foi renovado.');
-        setTimeout(() => {
-          fecharModalPagPlano();
-          renderMeuPlano();
-        }, 2000);
-      }
-    } catch(e) {}
-  }, 5000);
-}
-
-function copiarPixPlano() {
-  const code = document.getElementById('pix-plano-code').value;
-  if (!code) { sbToast('err', 'Codigo PIX nao disponivel'); return; }
-  navigator.clipboard.writeText(code).then(() => {
-    sbToast('ok', 'Codigo PIX copiado!');
-    const btn = document.getElementById('btn-copiar-pix-plano');
-    if (btn) { btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8l4 4 8-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Copiado!'; }
-  });
-}
-
-function fecharModalPagPlano() {
-  document.getElementById('modal-pag-pix-plano')?.classList.remove('on');
-  document.getElementById('modal-pag-cartao-plano')?.classList.remove('on');
-  if (_pixPlanoInterval) { clearInterval(_pixPlanoInterval); _pixPlanoInterval = null; }
-}
-
-function formatarCartao(el) {
-  let v = el.value.replace(/\D/g, '');
-  v = v.replace(/(\d{4})(?=\d)/g, '$1 ');
-  el.value = v.substring(0, 19);
-}
-
-function formatarValidade(el) {
-  let v = el.value.replace(/\D/g, '');
-  if (v.length >= 2) v = v.substring(0,2) + '/' + v.substring(2);
-  el.value = v.substring(0, 5);
-}
-
-function formatarCPF(el) {
-  let v = el.value.replace(/\D/g, '');
-  v = v.replace(/(\d{3})(\d)/, '$1.$2');
-  v = v.replace(/(\d{3})(\d)/, '$1.$2');
-  v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-  el.value = v.substring(0, 14);
-}
-
-let _mpPlanoInstance = null;
-
-async function carregarMPSDKPlano() {
-  if (_mpPlanoInstance) return _mpPlanoInstance;
-  // Carrega SDK se ainda nao carregado
-  if (!window.MercadoPago) {
-    await new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = 'https://sdk.mercadopago.com/js/v2';
-      s.onload = resolve;
-      s.onerror = reject;
-      document.head.appendChild(s);
-    });
-  }
-  // Busca public key
-  const res = await fetch('/api/planos/mp-public-key');
-  const data = await res.json();
-  if (!data.public_key) throw new Error('Public Key do Mercado Pago nao configurada no Admin');
-  _mpPlanoInstance = new MercadoPago(data.public_key);
-  return _mpPlanoInstance;
-}
-
-async function processarPagamentoCartao() {
-  const btn = document.getElementById('btn-pagar-cartao-plano');
-  const numero = document.getElementById('cartao-numero').value.replace(/\s/g, '');
-  const validade = document.getElementById('cartao-validade').value;
-  const cvv = document.getElementById('cartao-cvv').value;
-  const nome = document.getElementById('cartao-nome').value;
-  const cpf = document.getElementById('cartao-cpf').value.replace(/\D/g, '');
-  const email = document.getElementById('cartao-email')?.value || 'cliente@email.com';
-  
-  if (!numero || numero.length < 13) { sbToast('err', 'Numero do cartao invalido'); return; }
-  if (!validade || validade.length < 5) { sbToast('err', 'Validade invalida'); return; }
-  if (!cvv || cvv.length < 3) { sbToast('err', 'CVV invalido'); return; }
-  if (!nome) { sbToast('err', 'Nome no cartao obrigatorio'); return; }
-  if (!cpf || cpf.length < 11) { sbToast('err', 'CPF invalido'); return; }
-  
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processando...'; }
-  
-  try {
-    // Carrega SDK do Mercado Pago
-    const mp = await carregarMPSDKPlano();
-    
-    const [mes, ano] = validade.split('/');
-    
-    // Cria card token usando SDK
-    const cardToken = await mp.createCardToken({
-      cardNumber: numero,
-      cardholderName: nome,
-      cardExpirationMonth: mes,
-      cardExpirationYear: '20' + ano,
-      securityCode: cvv,
-      identificationType: 'CPF',
-      identificationNumber: cpf
-    });
-    
-    if (!cardToken?.id) throw new Error('Erro ao gerar token do cartao');
-    
-    // Detecta bandeira do cartao
-    let paymentMethodId = 'visa';
-    try {
-      const bin = numero.substring(0, 6);
-      const pmRes = await fetch(`https://api.mercadopago.com/v1/payment_methods/search?bin=${bin}&site_id=MLB`);
-      const pmData = await pmRes.json();
-      if (pmData.results?.[0]?.id) paymentMethodId = pmData.results[0].id;
-    } catch {}
-    
-    const tid = _sessao?.tenant_id;
-    const res = await fetch('/api/planos/pagar-cartao', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-      body: JSON.stringify({
-        plano: _planoSelecionado,
-        valor: _precosPlanos[_planoSelecionado],
-        card_token: cardToken.id,
-        payment_method_id: paymentMethodId,
-        payer_email: email,
-        payer_cpf: cpf
-      })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Erro ao processar pagamento');
-    
-    if (data.status === 'aprovado') {
-      sbToast('ok', 'Pagamento aprovado! Seu plano foi renovado.');
-      fecharModalPagPlano();
-      renderMeuPlano();
-    } else if (data.status === 'pendente') {
-      sbToast('ok', 'Pagamento em analise. Aguarde confirmacao.');
-    } else {
-      throw new Error(data.status_detail || 'Pagamento recusado');
-    }
-  } catch(e) {
-    sbToast('err', e.message);
-  }
-  
-  if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Pagar agora'; }
-}
-
-// Inicializar selecao padrao
-setTimeout(() => {
-  selecionarPlano('premium');
-  carregarPrecosPlanos();
-}, 100);
-
-// ─────────────────────────────────────────
-// IMPRESSÃO SILENCIOSA (server-side)
-// ─────────────────────────────────────────
-window._printMode  = localStorage.getItem('printMode')     || 'auto';
-let _printMode     = window._printMode;
-let _printFontSize = 15; // valor restaurado do servidor via loadPrintConfigServer()
-let _printTarget   = localStorage.getItem('printTarget')   || 'server';
-let _printPrinter  = localStorage.getItem('printPrinter')  || '';
-let _printPrinterCozinha = localStorage.getItem('printPrinterCozinha') || '';
-let _printViaMode = localStorage.getItem('printViaMode') || 'combinado';
-let _printFormat   = localStorage.getItem('printFormat')   || '80mm';  // padrão 80mm
-let _printMarginH  = parseInt(localStorage.getItem('printMarginH')  || '5');  // margem lateral em mm
-let _printMarginV  = parseInt(localStorage.getItem('printMarginV')  || '2');  // margem vertical em mm
-// Dados do estabelecimento carregados do servidor — evita usar fallback genérico
-let _printNome   = localStorage.getItem('printNome')   || '';
-let _printSub    = localStorage.getItem('printSub')    || '';
-let _printRodape = localStorage.getItem('printRodape') || '';
-
-// ── Salva config de impressão no servidor (sincroniza entre dispositivos) ──
-async function savePrintConfigServer(cfg) {
-  try {
-    const tid = (typeof _sessao !== 'undefined' && _sessao?.tenant_id) || window._tenantId || null
-    if (!tid) return
-    await window.AppAPI.from('store_config').update({ print_config: JSON.stringify(cfg) }).eq('tenant_id', tid)
-  } catch {}
-}
-
-// ── Carrega config de impressão do servidor ──
-async function loadPrintConfigServer() {
-  try {
-    const tid = (typeof _sessao !== 'undefined' && _sessao?.tenant_id) || window._tenantId || null
-    if (!tid) return
-    const { data } = await window.AppAPI.from('store_config').select('print_config').eq('tenant_id', tid).single()
-    if (!data?.print_config) return
-    const cfg = JSON.parse(data.print_config)
-    if (cfg.printMode)    { _printMode = cfg.printMode;   localStorage.setItem('printMode', cfg.printMode) }
-    if (cfg.printFormat)  { _printFormat = cfg.printFormat; localStorage.setItem('printFormat', cfg.printFormat) }
-    if (cfg.printFontSize){ _printFontSize = cfg.printFontSize }
-    if (cfg.printViaMode) { _printViaMode = cfg.printViaMode; localStorage.setItem('printViaMode', cfg.printViaMode) }
-    // Impressora caixa (salva em ambos os campos que o sistema usa)
-    const _savedCaixa = cfg.printer_caixa || cfg.printer || cfg.printPrinter || ''
-    if (_savedCaixa) { _printPrinter = _savedCaixa; localStorage.setItem('printPrinter', _savedCaixa) }
-    // Impressora cozinha
-    const _savedCoz = cfg.printer_cozinha || cfg.printPrinterCozinha || ''
-    if (_savedCoz) { _printPrinterCozinha = _savedCoz; localStorage.setItem('printPrinterCozinha', _savedCoz) }
-    if (cfg.printNome)   {
-      _printNome = cfg.printNome; localStorage.setItem('printNome', cfg.printNome);
-      const el = document.getElementById('print-nome'); if (el) el.value = cfg.printNome;
-    }
-    if (cfg.printSub)    {
-      _printSub = cfg.printSub; localStorage.setItem('printSub', cfg.printSub);
-      const el = document.getElementById('print-sub'); if (el) el.value = cfg.printSub;
-    }
-    if (cfg.printRodape) {
-      _printRodape = cfg.printRodape; localStorage.setItem('printRodape', cfg.printRodape);
-      const el = document.getElementById('print-rodape'); if (el) el.value = cfg.printRodape;
-    }
-    // Restaura impressoras e modelos do servidor
-    if (Array.isArray(cfg.impressoras) && cfg.impressoras.length) {
-      _impressoras = cfg.impressoras;
-      _saveImpressoras();
-    }
-    if (Array.isArray(cfg.modelos) && cfg.modelos.length) {
-      _modelos = cfg.modelos;
-      _saveModelos();
+    const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+    const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+    if (g.cobranca_wa_instance && typeof g.cobranca_wa_instance === 'string') {
+      const inst = g.cobranca_wa_instance.trim()
+      if (inst) return inst
     }
   } catch {}
+  return fallbackInst
 }
 
-function setPrintMode(mode) {
-  _printMode = mode;
-  window._printMode = mode;
-  localStorage.setItem('printMode', mode);
-  const isAuto = mode === 'auto';
-  const la = document.getElementById('lbl-print-auto');
-  const lm = document.getElementById('lbl-print-manual');
-  const da = document.getElementById('dot-auto');
-  const dm = document.getElementById('dot-manual');
-  if (la) { la.style.background = isAuto ? 'rgba(59,130,246,.1)' : 'var(--surface2)'; la.style.borderColor = isAuto ? 'var(--accent)' : 'var(--border)'; }
-  if (lm) { lm.style.background = !isAuto ? 'rgba(59,130,246,.1)' : 'var(--surface2)'; lm.style.borderColor = !isAuto ? 'var(--accent)' : 'var(--border)'; }
-  if (da) da.style.background = isAuto ? '#fff' : 'transparent';
-  if (dm) dm.style.background = !isAuto ? '#fff' : 'transparent';
-  sbToast('ok', isAuto ? 'Impressão automática ativada' : 'Impressão manual ativada');
-}
-
-function _getPrintConfig() {
-  const fsEl = document.getElementById('print-font-size');
-  const fs = (fsEl && fsEl.value) ? parseInt(fsEl.value) : (_printFontSize || 12);
-  const nomeEl = document.getElementById('print-nome');
-  const nome = ((nomeEl && nomeEl.value) ? nomeEl.value : _printNome || 'RESTAURANTE').toUpperCase();
-  const subEl = document.getElementById('print-sub');
-  const sub = (subEl && subEl.value) ? subEl.value : (_printSub || '');
-  const rodEl = document.getElementById('print-rodape');
-  const rodape = (rodEl && rodEl.value) ? rodEl.value : (_printRodape || 'Obrigado!');
-  // Tempo de entrega (do branding) — usado pra calcular janela "Entrega prevista: HH:MM - HH:MM"
-  const tempoEl = document.getElementById('cp-tempo');
-  const tempoEntrega = (tempoEl && tempoEl.value) ? tempoEl.value : '30-45 min';
-  return {
-    nome, sub, rodape,
-    addr: document.getElementById('toggle-print-addr')?.classList.contains('on') ?? true,
-    pag:  document.getElementById('toggle-print-pag')?.classList.contains('on') ?? true,
-    fontSize: fs,
-    tempoEntrega,
-  };
-}
-
-// Envolve fragmento HTML do ticket com CSS completo para impressão (usado no Electron e fallbacks)
-function _wrapTicketHtml(html, fontSize) {
-  if (html && html.includes('<html')) return html;
-  const fs = fontSize || 12;
-  return `<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important }
-  body { font-family:'Courier New',monospace; font-size:${fs}px; color:#000 !important; background:#fff; width:100%; overflow-wrap:break-word; word-break:break-word }
-  hr { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .pt-center { text-align:center }
-  .pt-large  { font-size:${fs + 3}px; font-weight:bold }
-  .pt-hr     { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .print-ticket { padding:2px 6px; width:100%; word-wrap:break-word; overflow-wrap:break-word; overflow:visible }
-  span, div { word-break:break-word; overflow-wrap:break-word }
-  @media print {
-    @page { margin:${_printMarginV}mm ${_printMarginH}mm }
-    body > *:not(.print-ticket) { display:none !important }
-    .print-ticket { display:block !important }
-  }
-</style>
-</head><body>${html}</body></html>`;
-}
-
-// ══════════════════════════════════════════════════════════════
-// Parser de observações de itens (cupom/comanda)
-// ──────────────────────────────────────────────────────────────
-// O `obs` de cada item vem montado como string concatenada:
-//   "Kit: A · B | Adicionais: Bacon (+R$ 3,00), Queijo · Ponto: Mal passado · obs livre"
-// Esta função quebra essa string em estrutura para impressão organizada.
+// ═══════════════════════════════════════════════════════
+// HELPER: Resolve token/public_key Mercado Pago por tenant
+// ═══════════════════════════════════════════════════════
+// Decide qual conta MP usar seguindo a regra:
+//   1. Se tenant tem mp_token próprio → usa o do tenant
+//   2. Senão → usa o global (admin)
+//   3. Senão → usa o do .env (MP_TOKEN)
 //
-// Retorno:
-//   {
-//     kitItens:   ['Item A', 'Item B', ...]      // se for kit
-//     meioMeio:   'sabor1 + sabor2'              // se for pizza meio a meio
-//     grupos:     [{ nome:'Adicionais', itens:['Bacon (+R$ 3,00)', 'Queijo'] }, ...]
-//     obsLivre:   'observação digitada pelo cliente'
-//   }
-function _parseObs(rawObs) {
-  const out = { kitItens: [], meioMeio: '', grupos: [], obsLivre: '' };
-  if (!rawObs || typeof rawObs !== 'string') return out;
-  let s = rawObs.trim();
+// IMPORTANTE: NUNCA usar para cobranças SaaS (mensalidades,
+// faturas da plataforma cobrando dos tenants). Essas DEVEM
+// usar SEMPRE o global, senão o tenant pagaria a si mesmo.
+// Use apenas para: PIX/cartão de pedidos do restaurante.
+// ═══════════════════════════════════════════════════════
+function _resolveMpForTenant(db, tenantId, MP_TOKEN_ENV) {
+  const result = { mp_token: '', mp_public_key: '', source: 'none' }
+  // Sanitizador defensivo: tokens podem ter sido salvos com aspas/espaços/quebras
+  // de linha invisíveis em versões anteriores. Limpa SEMPRE antes de usar.
+  const _clean = (s) => String(s || '')
+    .replace(/^["'\s\u200B-\u200D\uFEFF]+|["'\s\u200B-\u200D\uFEFF]+$/g, '')
+    .replace(/[\r\n\t]/g, '')
 
-  // 1) Kit: tudo até o primeiro " | " é a lista de itens do kit
-  if (s.startsWith('Kit: ')) {
-    const pipeIdx = s.indexOf(' | ');
-    const kitPart = pipeIdx > -1 ? s.substring(5, pipeIdx) : s.substring(5);
-    out.kitItens = kitPart.split(' · ').map(x => x.trim()).filter(Boolean);
-    s = pipeIdx > -1 ? s.substring(pipeIdx + 3).trim() : '';
+  // 1) Tenta tenant próprio (se tenant_id válido e não for o global)
+  if (tenantId && tenantId !== '_global' && tenantId !== '_admin') {
+    try {
+      const row = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tenantId)
+      const ia  = row?.ia_config ? JSON.parse(row.ia_config) : {}
+      const tk = _clean(ia.mp_token)
+      if (tk) {
+        result.mp_token      = tk
+        result.mp_public_key = _clean(ia.mp_public_key)
+        result.source        = 'tenant'
+        return result
+      }
+    } catch {}
   }
 
-  // 2) Meio a meio: prefixo "Meio a meio · ..."
-  if (s.startsWith('Meio a meio')) {
-    const rest = s.substring('Meio a meio'.length).replace(/^\s*·\s*/, '').trim();
-    out.meioMeio = rest.split(' · ')[0] || 'meio a meio';
-    // Continua processando o resto após o primeiro separador
-    const idx = rest.indexOf(' · ');
-    s = idx > -1 ? rest.substring(idx + 3).trim() : '';
+  // 2) Fallback: global (admin)
+  try {
+    const row = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+    const g   = row?.ia_config ? JSON.parse(row.ia_config) : {}
+    const tk = _clean(g.mp_token)
+    if (tk) {
+      result.mp_token      = tk
+      result.mp_public_key = _clean(g.mp_public_key)
+      result.source        = 'global'
+      return result
+    }
+  } catch {}
+
+  // 3) Último fallback: env
+  if (MP_TOKEN_ENV) {
+    result.mp_token = _clean(MP_TOKEN_ENV)
+    result.source   = 'env'
   }
+  return result
+}
 
-  if (!s) return out;
+// Helper: descobre tenant_id a partir de um mp_payment_id (PIX ou cartão)
+function _tenantFromPayment(db, mpPaymentId) {
+  try {
+    const r1 = db.prepare('SELECT tenant_id FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpPaymentId))
+    if (r1?.tenant_id) return r1.tenant_id
+    const r2 = db.prepare('SELECT tenant_id FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpPaymentId))
+    if (r2?.tenant_id) return r2.tenant_id
+  } catch {}
+  return null
+}
 
-  // 3) Quebra por grupos (separador " · ")
-  // Cada parte pode ser "Nome do Grupo: item1, item2" OU obs livre (sem ":")
-  const partes = s.split(' · ').map(p => p.trim()).filter(Boolean);
-  for (const parte of partes) {
-    const colonIdx = parte.indexOf(':');
-    if (colonIdx > 0 && colonIdx < 40) {
-      // Tem nome de grupo
-      const nome  = parte.substring(0, colonIdx).trim();
-      const valor = parte.substring(colonIdx + 1).trim();
-      // Split por vírgula RESPEITANDO parênteses (não quebra preços tipo "(+R$ 3,00)")
-      const itens = [];
-      let buf = '', depth = 0;
-      for (const ch of valor) {
-        if (ch === '(') depth++;
-        else if (ch === ')') depth = Math.max(0, depth - 1);
-        if (ch === ',' && depth === 0) {
-          if (buf.trim()) itens.push(buf.trim());
-          buf = '';
-        } else {
-          buf += ch;
+// Helper: resolve token MP usado para CONSULTAR um pagamento existente.
+// Crítico para evitar race condition: usa o mp_source GRAVADO no momento da
+// criação do pagamento — não o estado ATUAL do tenant. Assim, se o gestor
+// mudar a config entre a criação e a aprovação, o token continua certo.
+// Retorna: { mp_token, source } | { mp_token: '', source: 'unknown' }
+function _resolveMpForExistingPayment(db, mpPaymentId, MP_TOKEN_ENV) {
+  try {
+    let row = db.prepare('SELECT tenant_id, mp_source FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpPaymentId))
+    if (!row) row = db.prepare('SELECT tenant_id, mp_source FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpPaymentId))
+    if (!row) return { mp_token: '', source: 'unknown' }
+
+    if (row.mp_source === 'tenant' && row.tenant_id) {
+      // Lê token atual do tenant — se ele removeu, fallback para global
+      // (mas isso significa que o pagamento "ficou órfão". É raro e o fallback
+      // pra global vai falhar 404 no MP de qualquer jeito — apenas para não
+      // quebrar a chamada e o sistema mostrar status 'pendente' em vez de erro)
+      const tCfg = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(row.tenant_id)
+      const tIa  = tCfg?.ia_config ? JSON.parse(tCfg.ia_config) : {}
+      if (tIa.mp_token) return { mp_token: tIa.mp_token, source: 'tenant' }
+    }
+
+    // mp_source = 'global' OU tenant removeu o token: usa global
+    const gRow = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+    const gIa  = gRow?.ia_config ? JSON.parse(gRow.ia_config) : {}
+    return { mp_token: gIa.mp_token || MP_TOKEN_ENV || '', source: 'global' }
+  } catch {
+    return { mp_token: MP_TOKEN_ENV || '', source: 'global' }
+  }
+}
+
+// Helper exclusivo para cobranças SaaS (mensalidades) — sempre global
+function _resolveMpGlobal(db, MP_TOKEN_ENV) {
+  try {
+    const row = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+    const g   = row?.ia_config ? JSON.parse(row.ia_config) : {}
+    if (g.mp_token) return g.mp_token
+  } catch {}
+  return MP_TOKEN_ENV || ''
+}
+
+// ═══════════════════════════════════════════════════════
+// CRON DIÁRIO: auto-cobrança 3 dias antes de vencer
+// ═══════════════════════════════════════════════════════
+let _autoCobrancaJobIniciado = false
+function _iniciarAutoCobrancaJob(ctx) {
+  if (_autoCobrancaJobIniciado) return
+  _autoCobrancaJobIniciado = true
+  const { db, log, MP_TOKEN, EVO_URL, EVO_KEY, EVO_INST, sendWA, marcarDirty } = ctx
+  log('🔄', 'Auto-cobrança job iniciado (intervalo: 6h)')
+
+  async function tick() {
+    try {
+      // Lê preços globais
+      let precoEss = 79.99, precoPre = 99.90
+      try {
+        const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+        const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+        if (g.preco_essencial !== undefined) precoEss = parseFloat(g.preco_essencial)
+        if (g.preco_premium   !== undefined) precoPre = parseFloat(g.preco_premium)
+      } catch {}
+
+      // Token MP — SEMPRE GLOBAL (cobrança SaaS da plataforma)
+      // NÃO usar _resolveMpForTenant: é a plataforma cobrando do tenant,
+      // dinheiro tem que cair na conta da plataforma, não na do tenant.
+      const mpToken = _resolveMpGlobal(db, MP_TOKEN)
+      if (!mpToken) return // sem token, pula silenciosamente
+
+      // Tenants ativos vencendo em 3 dias (janela: hoje+2 a hoje+4 para evitar timing)
+      const tenants = db.prepare(`
+        SELECT * FROM tenants
+        WHERE ativo=1
+          AND slug NOT IN ('_admin','_global','admin')
+          AND expires_at IS NOT NULL
+          AND date(expires_at) BETWEEN date('now','+2 days') AND date('now','+4 days')
+      `).all()
+      if (!tenants.length) return
+
+      let geradas = 0
+      for (const t of tenants) {
+        // Já existe fatura pendente recente para este tenant? (evita duplicar)
+        const ja = db.prepare(`
+          SELECT id FROM faturas
+          WHERE tenant_id=? AND status='pendente'
+            AND created_at > datetime('now','-7 days')
+          LIMIT 1
+        `).get(t.id)
+        if (ja) continue
+
+        try {
+          const plano = (t.plano === 'premium') ? 'premium' : 'essencial'
+          const valor = (plano === 'premium') ? precoPre : precoEss
+          const extRef = `auto-${t.id.slice(0,8)}-${plano}-${Date.now()}`
+          const descricao = `Renovação Plano ${plano === 'premium' ? 'Premium' : 'Essencial'} — ${t.nome}`
+
+          const mpResp = await fetch('https://api.mercadopago.com/v1/payments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
+            body: JSON.stringify({
+              transaction_amount: parseFloat(valor),
+              description: descricao,
+              payment_method_id: 'pix',
+              external_reference: extRef,
+              date_of_expiration: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().replace('Z', '-03:00'),
+              payer: { email: 'cobranca@estimafood.com', first_name: t.nome.split(' ')[0] || 'Cliente' }
+            })
+          })
+          const mpData = await mpResp.json()
+          if (!mpResp.ok) { log('⚠️', `Auto-cobrança falhou tenant=${t.nome}: ${mpData.message || 'erro MP'}`); continue }
+
+          const venceEm = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()
+          const link = mpData.point_of_interaction?.transaction_data?.ticket_url || null
+          const qr   = mpData.point_of_interaction?.transaction_data?.qr_code || null
+          const qrB64= mpData.point_of_interaction?.transaction_data?.qr_code_base64 || null
+
+          const info = db.prepare(`INSERT INTO faturas
+            (tenant_id, plano, valor, meses, metodo, status, link_pagamento, mp_payment_id, mp_external_ref, qr_code, qr_code_base64, vence_em, obs)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+              t.id, plano, parseFloat(valor), 1, 'pix', 'pendente',
+              link, String(mpData.id), extRef, qr, qrB64, venceEm,
+              'Gerada automaticamente (3 dias antes do vencimento)'
+            )
+          const fatura = db.prepare('SELECT * FROM faturas WHERE id=?').get(info.lastInsertRowid)
+          marcarDirty()
+
+          // Manda WA
+          try {
+            let telefone = null
+            const cfg = db.prepare('SELECT store_whatsapp FROM store_config WHERE tenant_id=?').get(t.id)
+            if (cfg?.store_whatsapp) telefone = String(cfg.store_whatsapp).replace(/\D/g, '')
+            if (telefone && (telefone.length === 11 || telefone.length === 10)) telefone = '55' + telefone
+            if (telefone) {
+              const valorTxt = parseFloat(valor).toFixed(2).replace('.', ',')
+              const planoNome = plano === 'premium' ? 'Premium' : 'Essencial'
+              const venceEmTxt = new Date(venceEm).toLocaleDateString('pt-BR')
+              const msg = [
+                `🧾 *Lembrete: sua mensalidade vence em breve*`,
+                ``,
+                `Olá! Seu plano *${planoNome}* do Estima Food vence em *3 dias*.`,
+                ``,
+                `💰 *Valor:* R$ ${valorTxt}`,
+                `⏰ *Pague até:* ${venceEmTxt}`,
+                ``,
+                `💸 *Pague agora via PIX:*`,
+                link || '(link indisponível)',
+                ``,
+                `_O pagamento renova seu acesso automaticamente._ ✅`
+              ].join('\n')
+              const instCob = _getInstanciaCobranca(db, EVO_INST)
+              await sendWA(telefone, msg, instCob)
+            }
+          } catch (eWa) { log('⚠️', `Auto-cobrança WA falhou tenant=${t.nome}: ${eWa.message}`) }
+
+          geradas++
+        } catch (e) {
+          log('⚠️', `Auto-cobrança erro tenant=${t.nome}:`, e.message)
         }
       }
-      if (buf.trim()) itens.push(buf.trim());
-      out.grupos.push({ nome, itens });
+      if (geradas) log('✅', `Auto-cobrança: ${geradas} fatura(s) gerada(s) automaticamente`)
+    } catch (e) { log('⚠️', 'Auto-cobrança job erro geral:', e.message) }
+  }
+
+  // Roda 1x ao iniciar (após 5min para não atrasar startup) e depois a cada 6h
+  setTimeout(tick, 5 * 60_000)
+  setInterval(tick, 6 * 3600_000)
+}
+
+module.exports = async function handleRoutes(req, res, ctx) {
+  const { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
+          validarSessaoAdmin, criarSessaoAdmin, fazerBackup, restaurarBackup, getTenantId,
+          MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
+          EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano } = ctx
+
+  // ── Inicia job de recuperação de PIX na primeira requisição ───────────────
+  // O job resolve o token MP por tenant em cada iteração — pagamentos de
+  // pedidos do tenant X consultam a conta MP do tenant X (com fallback global).
+  _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN)
+
+  // ── Inicia job de auto-cobrança SaaS (uma vez) ────────────────────────────
+  _iniciarAutoCobrancaJob(ctx)
+
+  // ═══════════════════════════════════════════════════════
+  // Download do App Desktop
+  // ═══════════════════════════════════════════════════════
+  if (req.method === 'GET' && (upath === '/download' || upath === '/download/')) {
+    // Redireciona para a página de releases — o usuário baixa o .exe de lá
+    // Alternativa: redirecionar direto pro .exe da versão atual
+    const GITHUB_RELEASES = 'https://github.com/brisamenos/estimafood/releases/latest'
+    res.writeHead(302, { 'Location': GITHUB_RELEASES })
+    res.end()
+    return true
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // Auth — Clientes
+  // ═══════════════════════════════════════════════════════
+
+
+  // ── Registro de cliente (cardápio) ───────────────────
+  if (req.method === 'POST' && upath === '/api/customer-register') {
+    const body = await readBody(req)
+    const tid  = getTenantId(req, params)
+    const { name, phone, email, senha, birthday } = body
+    if (!name || !phone || !senha) { send(res, 400, { error: 'Nome, telefone e senha são obrigatórios' }); return true }
+    if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    try {
+      const hash     = crypto.createHash('sha256').update(senha).digest('hex')
+      const existing = db.prepare('SELECT id FROM customers WHERE tenant_id=? AND phone=?').get(tid, phone)
+      if (existing) {
+        db.prepare('UPDATE customers SET name=?,email=?,birthday=?,senha_hash=? WHERE tenant_id=? AND phone=?').run(name, email || null, birthday || null, hash, tid, phone)
+        const c = db.prepare('SELECT id,name,phone,email,birthday,orders_count,total_spent,created_at FROM customers WHERE tenant_id=? AND phone=?').get(tid, phone)
+        send(res, 200, { ...c, token: Buffer.from(`${c.id}:${tid}:${hash.slice(0, 16)}`).toString('base64') })
+        return true
+      }
+      const info = db.prepare('INSERT INTO customers (tenant_id,name,phone,email,birthday,senha_hash,orders_count,total_spent) VALUES (?,?,?,?,?,?,0,0)').run(tid, name, phone, email || null, birthday || null, hash)
+      const c    = db.prepare('SELECT id,name,phone,email,birthday,orders_count,total_spent,created_at FROM customers WHERE id=?').get(info.lastInsertRowid)
+      marcarDirty()
+      send(res, 201, { ...c, token: Buffer.from(`${c.id}:${tid}:${hash.slice(0, 16)}`).toString('base64') })
+    } catch (e) { send(res, 400, { error: e.message }) }
+    return true
+  }
+
+  // ── Login de cliente (cardápio) ──────────────────────
+  if (req.method === 'POST' && upath === '/api/customer-login') {
+    const body = await readBody(req)
+    const tid  = getTenantId(req, params)
+    const { phone, senha } = body
+    if (!phone || !senha) { send(res, 400, { error: 'Telefone e senha obrigatórios' }); return true }
+    if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    try {
+      const hash = crypto.createHash('sha256').update(senha).digest('hex')
+      const c    = db.prepare('SELECT id,name,phone,email,birthday,orders_count,total_spent,created_at,senha_hash FROM customers WHERE tenant_id=? AND phone=?').get(tid, phone)
+      if (!c || !c.senha_hash) { send(res, 401, { error: 'Telefone não cadastrado' }); return true }
+      if (c.senha_hash !== hash) { send(res, 401, { error: 'Senha incorreta' }); return true }
+      const { senha_hash: _, ...safe } = c
+      send(res, 200, { ...safe, token: Buffer.from(`${c.id}:${tid}:${hash.slice(0, 16)}`).toString('base64') })
+    } catch (e) { send(res, 400, { error: e.message }) }
+    return true
+  }
+
+  // ── Tempo de entrega estimado (ajusta dinamicamente conforme backlog) ─
+  // Conta pedidos ativos (analise/producao/pronto) e adiciona overhead à
+  // string base configurada em store_tempo_entrega.
+  if (req.method === 'GET' && upath === '/api/tempo-estimado') {
+    const tid = getTenantId(req, params)
+    if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    try {
+      const cfg = db.prepare('SELECT store_tempo_entrega FROM store_config WHERE tenant_id=?').get(tid)
+      const baseStr = (cfg?.store_tempo_entrega || '').trim()
+
+      // Extrai range numérico da string (ex: "30-45 min", "30 min", "45")
+      // Suporta ambos os hífens (- e –) e formatos "30 a 45"
+      let lo = 30, hi = 45 // defaults
+      const m = baseStr.match(/(\d+)\s*[-–a]\s*(\d+)/) || baseStr.match(/(\d+)/)
+      if (m) {
+        lo = parseInt(m[1])
+        hi = parseInt(m[2] || m[1]) || lo + 15
+      }
+
+      // Conta backlog: pedidos delivery em produção
+      const backlog = db.prepare(
+        "SELECT COUNT(*) as n FROM orders WHERE tenant_id=? AND status IN ('analise','producao','pronto') AND addr IS NOT NULL AND addr NOT LIKE 'Mesa%' AND addr NOT LIKE 'Retirada%'"
+      ).get(tid)?.n || 0
+
+      // Heurística: cada 3 pedidos de backlog adiciona +5 min
+      // Limita a +30 min de overhead pra não assustar
+      const overhead = Math.min(Math.floor(backlog / 3) * 5, 30)
+      const finalLo = lo + overhead
+      const finalHi = hi + overhead
+      const isHighDemand = backlog >= 6
+
+      send(res, 200, {
+        base: baseStr,
+        backlog,
+        overhead_min: overhead,
+        tempo_estimado: `${finalLo}-${finalHi} min`,
+        alta_demanda: isHighDemand
+      })
+    } catch (e) { send(res, 400, { error: e.message }) }
+    return true
+  }
+
+  // ── Pedidos do cliente ───────────────────────────────
+  if (req.method === 'GET' && upath === '/api/customer-orders') {
+    const tid = getTenantId(req, params)
+    const cid = params.get('customer_id')
+    if (!tid || !cid) { send(res, 400, { error: 'Parâmetros faltando' }); return true }
+    // Valida token Bearer se enviado — compara contra senha_hash do customer
+    const auth = req.headers['authorization'] || ''
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+    if (token) {
+      try {
+        const decoded = Buffer.from(token, 'base64').toString()
+        const [tkCid, tkTid, tkHashPrefix] = decoded.split(':')
+        if (String(tkCid) !== String(cid) || String(tkTid) !== String(tid)) {
+          send(res, 403, { error: 'Token inválido para este cliente' }); return true
+        }
+        const custRow = db.prepare('SELECT senha_hash FROM customers WHERE id=? AND tenant_id=?').get(cid, tid)
+        if (!custRow || !custRow.senha_hash || custRow.senha_hash.slice(0, 16) !== tkHashPrefix) {
+          send(res, 403, { error: 'Token inválido' }); return true
+        }
+      } catch (e) {
+        send(res, 403, { error: 'Token malformado' }); return true
+      }
+    }
+    // Nota: sem token, endpoint continua público para compatibilidade com pedido por URL (?acompanhar=).
+    // Para hardening total, exigir token sempre e atualizar frontend para enviar Authorization header.
+    try {
+      const rows = db.prepare('SELECT id,order_num,client,phone,addr,items,total,taxa,pag,status,created_at FROM orders WHERE tenant_id=? AND customer_id=? ORDER BY id DESC LIMIT 30').all(tid, cid)
+      send(res, 200, rows.map(r => ({ ...r, items: (() => { try { return JSON.parse(r.items) } catch { return [] } })() })))
+    } catch (e) { send(res, 400, { error: e.message }) }
+    return true
+  }
+
+  // ── Cancelamento de pedido pelo cliente ──────────────
+  // Endpoint dedicado (em vez de PATCH genérico) — valida:
+  //   - Tenant do pedido bate com o header
+  //   - Cliente é dono do pedido (customer_id no token OU phone informado bate)
+  //   - Status atual permite cancelamento (só analise / aguardando_*)
+  // Ao cancelar: atualiza customer stats, cria estorno se pagamento online, emite SSE.
+  if (req.method === 'POST' && upath === '/api/customer-cancel-order') {
+    const tid  = getTenantId(req, params)
+    if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    const body = await readBody(req)
+    const orderId = parseInt(body.order_id) || 0
+    const phone   = String(body.phone || '').replace(/\D/g,'')
+    if (!orderId) { send(res, 400, { error: 'order_id obrigatório' }); return true }
+
+    // Busca o pedido
+    const order = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(orderId, tid)
+    if (!order) { send(res, 404, { error: 'Pedido não encontrado' }); return true }
+
+    // Valida status — só permite cancelar antes da produção
+    const STATUS_OK = ['aguardando_pix', 'aguardando_cartao', 'analise']
+    if (!STATUS_OK.includes(order.status)) {
+      send(res, 400, { error: 'Este pedido não pode mais ser cancelado. Entre em contato com o restaurante.' })
+      return true
+    }
+
+    // Validação de ownership — aceita qualquer uma:
+    //  (a) Bearer token bate com o customer do pedido
+    //  (b) phone informado no body bate com o phone do pedido
+    //  (c) order recente (< 2h) sem customer_id (compra anônima pelo WhatsApp) com phone batendo
+    let autorizado = false
+    const auth = req.headers['authorization'] || ''
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+    if (token && order.customer_id) {
+      try {
+        const [tkCid, tkTid, tkHashPrefix] = Buffer.from(token, 'base64').toString().split(':')
+        if (String(tkCid) === String(order.customer_id) && String(tkTid) === String(tid)) {
+          const custRow = db.prepare('SELECT senha_hash FROM customers WHERE id=? AND tenant_id=?').get(order.customer_id, tid)
+          if (custRow?.senha_hash && custRow.senha_hash.slice(0, 16) === tkHashPrefix) autorizado = true
+        }
+      } catch(_) {}
+    }
+    if (!autorizado && phone && order.phone) {
+      const phoneOrd = String(order.phone).replace(/\D/g,'')
+      // Compara pelos últimos 8 dígitos (ignora DDI/DDD divergentes)
+      if (phoneOrd.slice(-8) === phone.slice(-8) && phone.length >= 8) autorizado = true
+    }
+    if (!autorizado) {
+      send(res, 403, { error: 'Não autorizado a cancelar este pedido' })
+      return true
+    }
+
+    try {
+      // Atualiza status
+      db.prepare("UPDATE orders SET status='cancelado' WHERE id=? AND tenant_id=?").run(orderId, tid)
+
+      // Reverte customer stats (se o pedido tinha sido contabilizado)
+      if (order.customer_id) {
+        const valorPago = parseFloat(order.total||0) + parseFloat(order.taxa||0)
+        db.prepare(`UPDATE customers SET orders_count = MAX(0, orders_count - 1),
+                    total_spent = MAX(0, total_spent - ?) WHERE id=?`)
+          .run(valorPago, order.customer_id)
+      }
+
+      // Estorno financeiro se pagamento online aprovado
+      const pagOnline = (order.pag === 'pix_mp' || order.pag === 'cartao_mp')
+      if (pagOnline) {
+        try {
+          const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+          const valor = parseFloat(order.total||0) + parseFloat(order.taxa||0)
+          const numStr = String(order.order_num || order.id)
+          // Descrição compatível com o padrão do finishOrderById ("Pedido #N – Cliente")
+          db.prepare(`INSERT INTO movimentos (tenant_id, description, tipo, val, pag, time)
+                      VALUES (?, ?, 'saida', ?, ?, ?)`)
+            .run(tid, `Estorno — Pedido #${numStr} cancelado pelo cliente`, valor, order.pag, time)
+        } catch(e) { log('⚠️','[customer-cancel] estorno financeiro falhou:', e.message) }
+      }
+
+      marcarDirty()
+      // Broadcast SSE pro kanban do gestor
+      const _fo = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId)
+      const _it = _fo && typeof _fo.items === 'string' ? (() => { try { return JSON.parse(_fo.items) } catch { return [] } })() : (_fo?.items || [])
+      sseBroadcast(`orders-rt:${tid}`, 'orders:UPDATE', _fo ? { ..._fo, items: _it, status: 'cancelado' } : { id: orderId, status: 'cancelado' })
+
+      // Notifica o gestor no WhatsApp se configurado
+      setImmediate(async () => {
+        try {
+          const cfg  = db.prepare('SELECT evo_instance, store_whatsapp, store_name, order_num_offset FROM store_config WHERE tenant_id=?').get(tid)
+          if (cfg?.store_whatsapp) {
+            const inst   = cfg.evo_instance || EVO_INST
+            const offset = parseInt(cfg.order_num_offset) || 0
+            const idStr  = String(order.order_num || Math.max(1, order.id - offset)).padStart(3,'0')
+            const msg    = `🔔 *Pedido cancelado pelo cliente*\n\nPedido *#${idStr}* — ${order.client}\nFoi cancelado pelo cliente via cardápio.${pagOnline ? '\n\n💰 Estorno financeiro registrado automaticamente.' : ''}`
+            await sendWA(cfg.store_whatsapp, msg, inst)
+          }
+        } catch(e) { log('⚠️','[customer-cancel] notif gestor falhou:', e.message) }
+      })
+
+      send(res, 200, { ok: true, estorno: pagOnline })
+    } catch(e) {
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // Admin, Backup & Tenants
+  // ═══════════════════════════════════════════════════════
+
+
+  // ── Login admin ──────────────────────────────────────
+  if (req.method === 'POST' && upath === '/api/admin-login') {
+    const body = await readBody(req)
+    const { email, senha_hash } = body
+    if (!email || !senha_hash) { send(res, 400, { error: 'email e senha_hash obrigatórios' }); return true }
+    const u = db.prepare("SELECT id,nome,email,role FROM sys_users WHERE email=? AND senha_hash=? AND ativo=1 AND role IN ('superadmin','admin')").get(email.toLowerCase().trim(), senha_hash)
+    if (!u) { send(res, 401, { error: 'Acesso negado. Credenciais inválidas.' }); return true }
+    const token = criarSessaoAdmin(u)
+    send(res, 200, { ok: true, id: u.id, nome: u.nome, email: u.email, role: u.role, token })
+    return true
+  }
+
+  // ── Logout admin ─────────────────────────────────────
+  if (req.method === 'POST' && upath === '/api/admin-logout') {
+    const auth  = req.headers['authorization'] || ''
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+    if (token) db.prepare('DELETE FROM admin_sessions WHERE token=?').run(token)
+    send(res, 200, { ok: true })
+    return true
+  }
+
+  // ── Criar tenant ─────────────────────────────────────
+  if (req.method === 'POST' && upath === '/api/criar-tenant') {
+    const body = await readBody(req)
+    const { nome, plano, slug, email, senha, role, nomeGestor, segmento } = body
+    if (!nome || !email || !senha) { send(res, 400, { error: 'nome, email e senha obrigatórios' }); return true }
+    try {
+      const hash     = crypto.createHash('sha256').update(senha).digest('hex')
+      const slugBase = slug || nome.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/, '')
+      let slugFinal  = slugBase, suffix = 2
+      while (db.prepare('SELECT id FROM tenants WHERE slug=?').get(slugFinal)) slugFinal = `${slugBase}-${suffix++}`
+      if (slug && slugFinal !== slug) { send(res, 400, { error: `Slug "${slug}" já em uso. Sugerimos: "${slugFinal}"` }); return true }
+      if (db.prepare('SELECT id FROM sys_users WHERE email=?').get(email)) { send(res, 400, { error: `E-mail "${email}" já cadastrado.` }); return true }
+      const seg = ['restaurante','acougue'].includes(segmento) ? segmento : 'restaurante'
+      db.prepare('INSERT INTO tenants (nome,plano,slug,segmento) VALUES (?,?,?,?)').run(nome, plano || 'basic', slugFinal, seg)
+      const t = db.prepare('SELECT id FROM tenants WHERE slug=?').get(slugFinal)
+      db.prepare('INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)').run(t.id)
+      // Define offset = max(id) atual para que o 1º pedido deste tenant comece em #1
+      const maxOrderId = db.prepare('SELECT COALESCE(MAX(id),0) as m FROM orders').get()?.m || 0
+      db.prepare('UPDATE store_config SET order_num_offset=? WHERE tenant_id=?').run(maxOrderId, t.id)
+      db.prepare('INSERT INTO sys_users (nome,email,senha_hash,role,tenant_id) VALUES (?,?,?,?,?)').run(nomeGestor || nome, email, hash, role || 'gestor', t.id)
+
+      // ── Seed de categorias padrão por segmento ──────────────────────────
+      if (seg === 'acougue') {
+        const catInsert = db.prepare("INSERT INTO categories (tenant_id,name,label,type,emoji,sort_order,ativo) VALUES (?,?,?,?,?,?,1)")
+        const catsAcougue = [
+          { name: 'bovinos',  label: 'Bovinos',         emoji: '🐄', sort: 1 },
+          { name: 'suinos',   label: 'Suínos',           emoji: '🐷', sort: 2 },
+          { name: 'aves',     label: 'Aves',             emoji: '🐔', sort: 3 },
+          { name: 'ovinos',   label: 'Ovinos',           emoji: '🐑', sort: 4 },
+          { name: 'embutidos',label: 'Embutidos',        emoji: '🌭', sort: 5 },
+          { name: 'kits',     label: 'Kits & Combos',    emoji: '📦', sort: 6 },
+          { name: 'temperos', label: 'Temperos & Acompanhamentos', emoji: '🧄', sort: 7 },
+        ]
+        catsAcougue.forEach(c => catInsert.run(t.id, c.name, c.label, 'Itens principais', c.emoji, c.sort))
+        // Tema e cor padrão do açougue
+        db.prepare('UPDATE store_config SET store_tema=?, store_cor=? WHERE tenant_id=?').run('tropical', '#b45309', t.id)
+        log('🥩', `Categorias padrão açougue criadas para tenant=${t.id}`)
+      } else {
+        const catInsert = db.prepare("INSERT INTO categories (tenant_id,name,label,type,emoji,sort_order,ativo) VALUES (?,?,?,?,?,?,1)")
+        const catsRest = [
+          { name: 'entradas',  label: 'Entradas',    emoji: '🥗', sort: 1 },
+          { name: 'pratos',    label: 'Pratos',       emoji: '🍽️', sort: 2 },
+          { name: 'bebidas',   label: 'Bebidas',      emoji: '🥤', sort: 3 },
+          { name: 'sobremesas',label: 'Sobremesas',   emoji: '🍰', sort: 4 },
+        ]
+        catsRest.forEach(c => catInsert.run(t.id, c.name, c.label, 'Itens principais', c.emoji, c.sort))
+      }
+      // ────────────────────────────────────────────────────────────────────
+
+      marcarDirty()
+      setTimeout(() => fazerBackup(true), 2000)
+      send(res, 201, { ok: true, tenant_id: t.id, slug: slugFinal, segmento: seg })
+    } catch (e) { send(res, 400, { error: e.message }) }
+    return true
+  }
+
+  // ── Backup simples (trigger) ─────────────────────────
+  if (req.method === 'POST' && upath === '/api/backup') {
+    fazerBackup(true)
+    const size = fs.existsSync(BACKUP_PATH) ? fs.statSync(BACKUP_PATH).size : 0
+    send(res, 200, { ok: true, path: BACKUP_PATH, size })
+    return true
+  }
+
+  // ── Restore simples ──────────────────────────────────
+  if (req.method === 'POST' && upath === '/api/restore') {
+    const ok = restaurarBackup()
+    send(res, 200, { ok, msg: ok ? 'Restauração concluída' : 'Nenhum backup encontrado' })
+    return true
+  }
+
+  // ── Endpoints /api/admin-backup/* ────────────────────
+  if (upath.startsWith('/api/admin-backup')) {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado. Faça login no painel admin.' }); return true }
+
+    // ── Lê ia_config de um tenant (usado pelo painel IA) ──
+    if (req.method === 'GET' && upath === '/api/admin-backup/ia-config') {
+      const tid = params.get('tenant_id') || '_global'
+      try {
+        const row = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+        send(res, 200, { ia_config: row?.ia_config || null })
+      } catch(e) { send(res, 500, { error: e.message }) }
+      return true
+    }
+
+    // ── Salva ia_config de um tenant (usado pelo painel IA) ──
+    if (req.method === 'POST' && upath === '/api/admin-backup/ia-config') {
+      const tid  = params.get('tenant_id') || '_global'
+      const body = await readBody(req)
+      const { ia_config } = body
+      if (!ia_config) { send(res, 400, { error: 'ia_config obrigatório' }); return true }
+      try {
+        db.prepare("INSERT INTO store_config (tenant_id,ia_config) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config").run(tid, typeof ia_config === 'string' ? ia_config : JSON.stringify(ia_config))
+        marcarDirty()
+        send(res, 200, { ok: true })
+      } catch(e) { send(res, 500, { error: e.message }) }
+      return true
+    }
+
+    // Download backup JSON
+    if (req.method === 'GET' && upath === '/api/admin-backup-download') {
+      fazerBackup(true)
+      if (!fs.existsSync(BACKUP_PATH)) { send(res, 404, { error: 'Nenhum backup disponível' }); return true }
+      const data  = fs.readFileSync(BACKUP_PATH, 'utf8')
+      const fname = `backup-completo-${new Date().toISOString().slice(0, 10)}.json`
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="${fname}"`, 'Content-Length': Buffer.byteLength(data) })
+      res.end(data)
+      return true
+    }
+
+    // Restore global com imagens
+    if (req.method === 'POST' && upath === '/api/admin-backup-restore-global') {
+      try {
+        const body = await readBody(req)
+        if (!body?.tabelas) { send(res, 400, { error: 'JSON inválido (falta "tabelas")' }); return true }
+        const TABS = ['tenants', 'sys_users', 'store_config', 'categories', 'menu_items', 'cupons', 'mesas', 'garcons', 'orders', 'movimentos', 'estoque', 'fidelidade', 'customers', 'ratings']
+        let totalOk = 0, totalFail = 0
+        for (const t of TABS) {
+          const rows = body.tabelas?.[t]; if (!rows?.length) continue
+          try {
+            const cols = Object.keys(rows[0])
+            const stmt = db.prepare(`INSERT OR IGNORE INTO "${t}" (${cols.map(c => `"${c}"`).join(',')}) VALUES (${cols.map(() => '?').join(',')})`)
+            const ins  = db.transaction(items => { let ok = 0; for (const r of items) { try { stmt.run(Object.values(r)); ok++ } catch { totalFail++ } } return ok })
+            totalOk += ins(rows)
+          } catch (e) { log('⚠️', `Restore ${t}: ${e.message}`) }
+        }
+        let imgOk = 0, imgFail = 0
+        for (const [fname, img] of Object.entries(body.imagens || {})) {
+          try {
+            if (!img?.data || !/^[A-Za-z0-9+/=]+$/.test(img.data.replace(/\s/g, ''))) continue
+            fs.writeFileSync(path.join(UPLOADS_DIR, path.basename(fname)), Buffer.from(img.data, 'base64'))
+            imgOk++
+          } catch (e) { imgFail++; log('⚠️', `Restore img ${fname}: ${e.message}`) }
+        }
+        marcarDirty(); setTimeout(() => fazerBackup(true), 2000)
+        send(res, 200, { ok: true, registros: totalOk, registros_ignorados: totalFail, imagens: imgOk, imagens_falha: imgFail, ts: body.ts || null })
+      } catch (e) { send(res, 400, { error: 'Erro ao restaurar: ' + e.message }) }
+      return true
+    }
+
+    send(res, 404, { error: 'Rota admin não encontrada' })
+    return true
+  }
+
+  // ── Backup completo do gestor (dados + imagens) ──────
+  if (req.method === 'GET' && upath === '/api/backup-completo-gestor') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    const tenant = db.prepare('SELECT id,nome,slug FROM tenants WHERE id=?').get(tid)
+    if (!tenant) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
+    try {
+      const TABS     = ['sys_users', 'store_config', 'categories', 'menu_items', 'cupons', 'mesas', 'garcons', 'orders', 'movimentos', 'estoque', 'fidelidade', 'customers', 'ratings']
+      const snapshot = { ts: new Date().toISOString(), tenant_id: tid, tenant_nome: tenant.nome, tabelas: { tenants: [tenant] }, imagens: {} }
+      for (const t of TABS) { try { snapshot.tabelas[t] = db.prepare(`SELECT * FROM "${t}" WHERE tenant_id=?`).all(tid) } catch { snapshot.tabelas[t] = [] } }
+      const imageUrls = new Set()
+      ;(snapshot.tabelas.menu_items || []).forEach(r => { if (r.image_url) imageUrls.add(r.image_url) })
+      const cfg = (snapshot.tabelas.store_config || [])[0]
+      if (cfg) { if (cfg.store_logo_url) imageUrls.add(cfg.store_logo_url); if (cfg.store_banner_url) imageUrls.add(cfg.store_banner_url) }
+      for (const url of imageUrls) {
+        const fname = path.basename(url.split('?')[0])
+        const fpath = path.join(UPLOADS_DIR, fname)
+        if (fs.existsSync(fpath)) {
+          const ext  = (path.extname(fname).slice(1) || 'jpeg').toLowerCase()
+          const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg'
+          snapshot.imagens[fname] = { mime, data: fs.readFileSync(fpath).toString('base64') }
+        }
+      }
+      const json  = JSON.stringify(snapshot)
+      const slug  = tenant.slug || tid
+      const fname = `backup-completo-${slug}-${new Date().toISOString().slice(0, 10)}.json`
+      log('💾', `Backup completo gestor: ${slug} (${imageUrls.size} imagem(ns), ${Math.round(json.length / 1024)}KB)`)
+      zlib.gzip(Buffer.from(json, 'utf8'), (err, compressed) => {
+        if (err) {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="${fname}"`, 'Content-Length': Buffer.byteLength(json) })
+          res.end(json)
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${fname}.gz"`, 'Content-Encoding': 'gzip', 'Content-Length': compressed.length })
+          res.end(compressed)
+        }
+      })
+    } catch (e) { send(res, 500, { error: 'Erro ao gerar backup: ' + e.message }) }
+    return true
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // PIX, Carteira & Saques
+  // ═══════════════════════════════════════════════════════
+
+
+  // ── Gera cobrança PIX via Mercado Pago ───────────────
+  if (req.method === 'POST' && upath === '/api/pix/criar') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    const body = await readBody(req)
+    const { order_id, client, email = 'pagador@email.com' } = body
+    let valor = body.valor
+    if (!valor || valor <= 0) { send(res, 400, { error: 'valor inválido' }); return true }
+
+    // ── Validações anti-fraude server-side ────────────────────────────────
+    // (a) order_id deve pertencer ao tenant
+    // (b) valor deve bater com total+taxa do pedido (anti-downgrade)
+    // Se algo divergir, sobrescreve valor com o real do pedido (resiliente).
+    if (order_id) {
+      const ped = db.prepare('SELECT tenant_id, total, taxa, status FROM orders WHERE id=?').get(order_id)
+      if (!ped) { send(res, 404, { error: 'Pedido não encontrado' }); return true }
+      if (ped.tenant_id !== tid) { send(res, 403, { error: 'Pedido não pertence ao tenant' }); return true }
+      // Status: 'aguardando_pix' (recém-criado). Outros status indicam pagamento já iniciado/finalizado.
+      if (ped.status !== 'aguardando_pix') {
+        send(res, 409, { error: `Pedido em status "${ped.status}" — não pode iniciar novo PIX` }); return true
+      }
+      // Anti-downgrade: força o valor real do pedido (com tolerância de 1 centavo p/ rounding)
+      const totalPedido = (parseFloat(ped.total) || 0) + (parseFloat(ped.taxa) || 0)
+      if (totalPedido > 0 && Math.abs(parseFloat(valor) - totalPedido) > 0.01) {
+        log('⚠️', `PIX: valor R$${valor} ≠ total do pedido R$${totalPedido.toFixed(2)} — usando valor do pedido (anti-fraude) tenant=${tid}`)
+        valor = totalPedido
+      }
+    }
+
+    // ── Resolve conta MP: tenant primeiro, depois global ──
+    // Isolamento garantido: tid vem do x-tenant-id (autenticado).
+    const _mpCfg = _resolveMpForTenant(db, tid, MP_TOKEN)
+    let mpToken = _mpCfg.mp_token
+    let taxa = TAXA_PIX
+    // Taxa PIX é da plataforma — sempre lida do global (admin define)
+    try {
+      const cfgMp = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const gCfg = cfgMp?.ia_config ? JSON.parse(cfgMp.ia_config) : {}
+      if (gCfg.taxa_pix !== undefined) taxa = parseFloat(gCfg.taxa_pix) || 0
+    } catch {}
+    // Se tenant tem conta própria, taxa da plataforma não se aplica (dinheiro
+    // não passa pela carteira interna — vai direto pro MP do gestor)
+    if (_mpCfg.source === 'tenant') taxa = 0
+    if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago não configurado.' }); return true }
+    // Log de diagnóstico: mostra os primeiros caracteres do token usado.
+    // Útil pra confirmar se é APP_USR/TEST e se não tem caracteres estranhos.
+    log('💳', `PIX iniciando tenant=${tid} conta=${_mpCfg.source} token_prefix=${mpToken.slice(0, 12)}... len=${mpToken.length}`)
+
+    // extRef único — usa tenant_id completo + order_id (ou timestamp se não tiver pedido)
+    const extRef = `ef-${tid}-${order_id || Date.now()}`
+    const valorLiq = Math.max(0, parseFloat(valor) - taxa)
+
+    try {
+      const mp = await fetch('https://api.mercadopago.com/v1/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
+        body: JSON.stringify({
+          transaction_amount: parseFloat(valor),
+          description: `Pedido #${order_id || '?'} - ${client || 'Cliente'}`,
+          payment_method_id: 'pix',
+          external_reference: extRef,
+          payer: { email, first_name: client || 'Cliente', last_name: '' },
+        })
+      })
+      const mpData = await mp.json()
+      if (!mp.ok) {
+        log('❌', `MP PIX erro tenant=${tid} conta=${_mpCfg.source} status=${mp.status}:`, JSON.stringify(mpData).slice(0, 500))
+        // Mensagem mais útil dependendo do erro
+        let userMsg = mpData.message || 'Erro ao gerar PIX'
+        if (mp.status === 401) {
+          userMsg = _mpCfg.source === 'tenant'
+            ? 'Sua conta Mercado Pago rejeitou a operação. Verifique se o Access Token cadastrado em Carteira → Conta MP Própria está correto e ativo.'
+            : 'Conta Mercado Pago da plataforma rejeitou a operação.'
+        } else if (mp.status === 400 && mpData.cause?.[0]?.code === 'invalid_token') {
+          userMsg = 'Access Token Mercado Pago inválido. Atualize em Carteira → Conta MP Própria.'
+        } else if (/payer.*not.*found|collector_id/i.test(JSON.stringify(mpData))) {
+          userMsg = 'Conta Mercado Pago não está habilitada para receber PIX. Verifique no painel MP se as credenciais de produção estão ativas.'
+        }
+        send(res, 400, { error: userMsg })
+        return true
+      }
+
+      const qr    = mpData.point_of_interaction?.transaction_data?.qr_code || ''
+      const qrB64 = mpData.point_of_interaction?.transaction_data?.qr_code_base64 || ''
+
+      // CRÍTICO: Quando MP é do tenant, dinheiro vai direto pra conta dele —
+      // NÃO registramos em pagamentos_pix, pois essa tabela alimenta a carteira
+      // interna da plataforma. Inseririr aqui faria o gestor poder sacar duas
+      // vezes (uma direto na conta MP dele, outra solicitando à plataforma).
+      // Usamos um marcador na tabela apenas para fins de auditoria/rastreio,
+      // mas com valor_liquido = 0 para nunca virar saldo sacável.
+      // mp_source é fixado no momento da criação para que webhooks e polls
+      // futuros usem SEMPRE a mesma conta MP que originou o pagamento, mesmo
+      // que o gestor mude a config depois (evita race condition).
+      const isMpProprio = (_mpCfg.source === 'tenant')
+      db.prepare(`INSERT OR IGNORE INTO pagamentos_pix
+        (tenant_id,order_id,mp_payment_id,mp_external_ref,valor,taxa,valor_liquido,status,payer_name,qr_code,qr_code_base64,mp_source)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(tid, order_id || null, String(mpData.id), extRef, parseFloat(valor), taxa,
+          isMpProprio ? 0 : valorLiq,
+          (mpData.status==='approved'?'aprovado':mpData.status==='rejected'?'rejeitado':mpData.status==='cancelled'?'cancelado':'pendente'),
+          client || (isMpProprio ? 'MP_PROPRIO' : ''), qr, qrB64,
+          isMpProprio ? 'tenant' : 'global')
+
+      log('💳', `PIX criado: R$${valor} tenant=${tid} mp_id=${mpData.id} conta=${_mpCfg.source}`)
+      send(res, 200, { ok: true, mp_payment_id: mpData.id, qr_code: qr, qr_code_base64: qrB64, valor, taxa, valor_liquido: isMpProprio ? 0 : valorLiq, status: mpData.status })
+
+      // ── Envia copia e cola via WhatsApp ────────────────────────────────────
+      if (qr && body.phone) {
+        setImmediate(async () => {
+          try {
+            const cfgWa  = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(tid)
+            const inst   = cfgWa?.evo_instance || EVO_INST
+            const auto   = (() => { try { return JSON.parse(cfgWa?.evo_automacoes||'{}') } catch { return {} } })()
+            const pixCop = auto['pix_copia_cola'] || {}
+            if (pixCop.on === false) return
+            const offset = parseInt(cfgWa?.order_num_offset) || 0
+            // Usa order_num sequencial do tenant quando disponível; senão fallback p/ id - offset
+            const _ord   = body.order_id ? db.prepare('SELECT id, order_num FROM orders WHERE id=? AND tenant_id=?').get(body.order_id, tid) : null
+            const idStr  = String(_ord?.order_num || Math.max(1, (body.order_id || 0) - offset)).padStart(3,'0')
+            const nome   = client || 'Cliente'
+            const fmtVal = parseFloat(valor).toFixed(2).replace('.',',')
+            // Mensagem 1: texto com instruções (customizável pelo gestor, sem o código)
+            const nomeLoja  = cfgWa?.store_name || 'Restaurante'
+            const msgPadTxt = `🏪 *${nomeLoja}*\n${'─'.repeat(20)}\n\n💠 *PIX — Pedido #${idStr}*\n\nOlá, *${nome}*! Para confirmar seu pedido, realize o pagamento via PIX Copia e Cola.\n\n💰 *Valor: R$ ${fmtVal}*\n\nO código PIX chegará na próxima mensagem — só copiar e colar no app! 👇`
+            const msgTxt = pixCop.msg ? fillVars(pixCop.msg.replace('{codigo_pix}', '').trim(), { nome, id: idStr, total: fmtVal, codigo_pix: '' }).trim() : msgPadTxt
+            await sendWA(body.phone, msgTxt, inst)
+            // Mensagem 2: só o código (separado para facilitar cópia)
+            await new Promise(r => setTimeout(r, 1000))
+            await sendWA(body.phone, qr, inst)
+            log('📤', `PIX copia e cola enviado WA → ${body.phone}`)
+          } catch(e) { log('⚠️', 'Erro WA PIX copia e cola:', e.message) }
+        })
+      }
+      // ──────────────────────────────────────────────────────────────────────
+    } catch (e) { log('❌', 'MP fetch erro:', { error: e.message }); send(res, 500, { error: 'Erro ao criar PIX: ' + e.message }) }
+    return true
+  }
+
+  // ── Consulta status PIX ──────────────────────────────
+  if (req.method === 'GET' && upath === '/api/pix/status') {
+    const mpId = params.get('mp_payment_id') || ''
+    if (!mpId) { send(res, 400, { error: 'mp_payment_id obrigatório' }); return true }
+    const tid = req.headers['x-tenant-id'] || ''
+    if (tid) {
+      const own = db.prepare('SELECT tenant_id FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
+      if (own && own.tenant_id !== tid) { send(res, 403, { error: 'Acesso negado' }); return true }
+    }
+    let mpToken = MP_TOKEN
+    // Resolve token usando o mp_source GRAVADO no pagamento (evita race condition
+    // se o gestor mudou a config entre criação e poll).
+    const _cfgPoll = _resolveMpForExistingPayment(db, mpId, MP_TOKEN)
+    if (_cfgPoll.mp_token) mpToken = _cfgPoll.mp_token
+    if (!mpToken) { send(res, 400, { error: 'Token MP não configurado' }); return true }
+    try {
+      const r = await fetch('https://api.mercadopago.com/v1/payments/' + mpId, { headers: { 'Authorization': 'Bearer ' + mpToken } })
+      const pd = await r.json()
+      if (!r.ok) { const fb = db.prepare('SELECT status FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId)); send(res, 200, { status: fb ? fb.status : 'pendente' }); return true }
+      const novoStatus = pd.status === 'approved' ? 'aprovado' : pd.status === 'rejected' ? 'rejeitado' : pd.status === 'cancelled' ? 'cancelado' : 'pendente'
+      const rowAtual = db.prepare('SELECT status,valor,tenant_id,order_id FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
+      // Atualiza status do pagamento apenas se mudou
+      if (rowAtual && rowAtual.status !== novoStatus) {
+        db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=? WHERE mp_payment_id=?').run(novoStatus, pd.date_approved || null, String(mpId))
+      }
+      // Libera o pedido para o gestor SEMPRE que aprovado — independente de mudança de status
+      // (corrige race condition: webhook pode ter setado 'aprovado' antes do poll chegar aqui)
+      if (novoStatus === 'aprovado' && rowAtual?.order_id) {
+        const pedAtual = db.prepare("SELECT status, pag FROM orders WHERE id=? AND tenant_id=?").get(rowAtual.order_id, rowAtual.tenant_id)
+        const eraAguardando = pedAtual?.status === 'aguardando_pix'
+        // Ressurreição: pedido cancelado pelo cleanup que recebeu pagamento depois
+        const podeRessurreicao = pedAtual?.status === 'cancelado'
+          && pedAtual?.pag !== 'pix_mp' && pedAtual?.pag !== 'cartao_mp'
+        if (eraAguardando || podeRessurreicao) {
+          log('✅', `PIX APROVADO (poll): R$${rowAtual.valor} tenant=${rowAtual.tenant_id}${podeRessurreicao ? ' — pedido ressuscitado' : ''}`)
+          marcarDirty()
+          // PIX online confirmado pelo MP → entra direto em produção (pula análise)
+          // O pagamento já foi validado, não precisa de aceite manual.
+          db.prepare("UPDATE orders SET status='producao', pag='pix_mp' WHERE id=? AND tenant_id=?").run(rowAtual.order_id, rowAtual.tenant_id)
+          const _fo1 = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(rowAtual.order_id, rowAtual.tenant_id)
+          const _it1 = _fo1 && typeof _fo1.items==='string' ? (() => { try{return JSON.parse(_fo1.items)}catch{return []} })() : (_fo1?.items||[])
+          sseBroadcast(`orders-rt:${rowAtual.tenant_id}`, `orders:UPDATE`, _fo1 ? {..._fo1, items:_it1, status:'producao', pag:'pix_mp', _pixOnlineConfirmado: true} : { id: rowAtual.order_id, status: 'producao', pag: 'pix_mp', _pixOnlineConfirmado: true })
+          _notificarPixConfirmado(rowAtual.tenant_id, _fo1, sendWA, fillVars, EVO_INST, db)
+        }
+      }
+      send(res, 200, { status: novoStatus, mp_status: pd.status })
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Vincula PIX ao pedido ────────────────────────────
+  if (req.method === 'POST' && upath === '/api/pix/vincular') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    const body = await readBody(req)
+    const mpId = String(body.mp_payment_id || ''), ordId = parseInt(body.order_id) || 0
+    if (!mpId || !ordId) { send(res, 400, { error: 'obrigatórios' }); return true }
+    // Verifica ownership: o pagamento deve pertencer ao tenant
+    const pixRow = db.prepare('SELECT tenant_id, status FROM pagamentos_pix WHERE mp_payment_id=?').get(mpId)
+    if (!pixRow) { send(res, 404, { error: 'Pagamento não encontrado' }); return true }
+    if (pixRow.tenant_id !== tid) { send(res, 403, { error: 'Acesso negado' }); return true }
+    // Verifica ownership do pedido
+    const orderRow = db.prepare('SELECT tenant_id FROM orders WHERE id=?').get(ordId)
+    if (!orderRow || orderRow.tenant_id !== tid) { send(res, 403, { error: 'Pedido não pertence ao tenant' }); return true }
+    // Vincula sempre (mesmo se ainda pendente)
+    db.prepare('UPDATE pagamentos_pix SET order_id=? WHERE mp_payment_id=? AND tenant_id=?').run(ordId, mpId, tid)
+    // Só marca como pago se o pagamento estiver realmente aprovado
+    if (pixRow.status === 'aprovado') {
+      db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=? AND tenant_id=?").run(ordId, tid)
+    }
+    marcarDirty()
+    send(res, 200, { ok: true, aprovado: pixRow.status === 'aprovado' })
+    return true
+  }
+
+  // ── Lê config PIX do tenant ──────────────────────────
+  if (req.method === 'GET' && upath === '/api/pix/config') {
+    const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
+    if (!tid) { send(res, 400, { error: 'tenant_id obrigatório' }); return true }
+    try {
+      const safeJson = (v) => { try { return v ? JSON.parse(v) : {} } catch { return {} } }
+      const cfg  = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+      const ia   = safeJson(cfg?.ia_config)
+      const gCfg = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const gIa  = safeJson(gCfg?.ia_config)
+      // Resolve conta MP que vai ser usada para os pedidos deste tenant
+      const _mpResolv = _resolveMpForTenant(db, tid, MP_TOKEN)
+      const mpConfigurado  = !!_mpResolv.mp_token
+      const pixAtivo       = ia.pix_ativo === true
+      const pagOnlineAtivo = ia.pag_online_ativo !== false
+      // Cartão disponível se a conta resolvida (tenant ou global) tem public key
+      const cartaoDisponivel   = !!_mpResolv.mp_public_key
+      const cartaoOnlineAtivo  = ia.cartao_online_ativo !== false && cartaoDisponivel
+      send(res, 200, {
+        pix_ativo:            pixAtivo,
+        pix_ativo_gestor:     pixAtivo,
+        mp_configurado:       mpConfigurado,
+        // Quando tenant tem conta própria, taxa da plataforma não se aplica
+        taxa_pix:             _mpResolv.source === 'tenant' ? 0 :
+                              (gIa.taxa_pix !== undefined ? parseFloat(gIa.taxa_pix) : parseFloat(process.env.TAXA_PIX || '1.00')),
+        pix_key_manual:       ia.pix_key_manual || '',
+        pix_key_manual_tipo:  ia.pix_key_manual_tipo || '',
+        pix_key_manual_banco: ia.pix_key_manual_banco || '',
+        pag_online_ativo:     pagOnlineAtivo,
+        cartao_disponivel:    cartaoDisponivel,
+        cartao_online_ativo:  cartaoOnlineAtivo,
+      })
+    } catch (e) { log('❌', '/api/pix/config erro:', e.message); send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Gestor salva config PIX ──────────────────────────
+  if (req.method === 'POST' && upath === '/api/pix/gestor-config') {
+    const tid = req.headers['x-tenant-id'] || ''
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    const body = await readBody(req)
+    try {
+      const cfg = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+      const ia  = cfg?.ia_config ? JSON.parse(cfg.ia_config) : {}
+      if (body.pix_ativo !== undefined)            ia.pix_ativo            = body.pix_ativo !== false
+      if (body.pix_key_manual !== undefined)        ia.pix_key_manual       = body.pix_key_manual || ''
+      if (body.pix_key_manual_tipo !== undefined)   ia.pix_key_manual_tipo  = body.pix_key_manual_tipo || ''
+      if (body.pix_key_manual_banco !== undefined)  ia.pix_key_manual_banco = body.pix_key_manual_banco || ''
+      if (body.pag_online_ativo !== undefined)      ia.pag_online_ativo     = body.pag_online_ativo !== false
+      if (body.cartao_online_ativo !== undefined)   ia.cartao_online_ativo  = body.cartao_online_ativo !== false
+      db.prepare('INSERT INTO store_config (tenant_id,ia_config) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config').run(tid, JSON.stringify(ia))
+      marcarDirty()
+      log('⚙️', `PIX/pagamentos config salva tenant=${tid} pix_ativo=${ia.pix_ativo} pag_online=${ia.pag_online_ativo}`)
+      send(res, 200, { ok: true, pix_ativo: ia.pix_ativo, pix_key_manual: ia.pix_key_manual || '', pag_online_ativo: ia.pag_online_ativo !== false, cartao_online_ativo: ia.cartao_online_ativo !== false })
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Webhook Mercado Pago ─────────────────────────────
+  if (req.method === 'POST' && upath === '/webhook/mercadopago') {
+    const body = await readBody(req)
+    const mpId = body?.data?.id || body?.id
+    if (!mpId) { send(res, 200, { ok: true }); return true }
+    // Webhook pode vir do MP por qualquer tenant — descobre pelo mp_source
+    // gravado no pagamento. Se não achar (pagamento SaaS ou ainda não inserido),
+    // cai no global como fallback razoável.
+    let mpToken = MP_TOKEN
+    const _cfgWh = _resolveMpForExistingPayment(db, mpId, MP_TOKEN)
+    if (_cfgWh.mp_token) mpToken = _cfgWh.mp_token
+    else {
+      // Fallback final: global (cobre faturas SaaS antes do INSERT)
+      const _g = _resolveMpGlobal(db, MP_TOKEN)
+      if (_g) mpToken = _g
+    }
+    if (!mpToken) { send(res, 200, { ok: true }); return true }
+    try {
+      const r = await fetch(`https://api.mercadopago.com/v1/payments/${mpId}`, { headers: { 'Authorization': `Bearer ${mpToken}` } })
+      const pd = await r.json()
+      if (!r.ok) { send(res, 200, { ok: true }); return true }
+      const novoStatus = pd.status === 'approved' ? 'aprovado' : pd.status === 'rejected' ? 'rejeitado' : pd.status === 'cancelled' ? 'cancelado' : 'pendente'
+
+      // ── Rota 1: PIX (pagamentos_pix) ──────────────────────────────────────
+      const row = db.prepare('SELECT status,valor,tenant_id,order_id FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
+      if (row && row.status !== novoStatus) {
+        db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=? WHERE mp_payment_id=?').run(novoStatus, pd.date_approved || null, String(mpId))
+        marcarDirty()
+        if (novoStatus === 'aprovado') {
+          log('✅', `Webhook MP APROVADO (PIX): R$${row.valor} tenant=${row.tenant_id}`)
+          if (row.order_id) {
+            const pedAtual = db.prepare("SELECT status, pag FROM orders WHERE id=? AND tenant_id=?").get(row.order_id, row.tenant_id)
+            const eraAguardando = pedAtual?.status === 'aguardando_pix'
+            // Ressurreição: pedido cancelado pelo cleanup que recebeu pagamento agora
+            const podeRessurreicao = pedAtual?.status === 'cancelado'
+              && pedAtual?.pag !== 'pix_mp' && pedAtual?.pag !== 'cartao_mp'
+
+            if (eraAguardando || podeRessurreicao) {
+              // PIX online confirmado pelo MP → entra direto em produção (pula análise)
+              // O pagamento já foi validado pelo Mercado Pago, não precisa de aceite manual.
+              db.prepare("UPDATE orders SET status='producao', pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, row.tenant_id)
+              if (podeRessurreicao) log('🔄', `PEDIDO RESSUSCITADO (webhook): pagamento PIX chegou após cancelamento — id=${row.order_id} tenant=${row.tenant_id}`)
+            } else if (pedAtual) {
+              db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, row.tenant_id)
+            }
+            const _ns4 = (eraAguardando || podeRessurreicao) ? 'producao' : pedAtual?.status
+            const _fo4 = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(row.order_id, row.tenant_id)
+            const _it4 = _fo4 && typeof _fo4.items==='string' ? (() => { try{return JSON.parse(_fo4.items)}catch{return []} })() : (_fo4?.items||[])
+            // Marca _pixOnlineConfirmado para o frontend reconhecer e imprimir automático
+            sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, _fo4 ? {..._fo4, items:_it4, status:_ns4, pag:'pix_mp', _pixOnlineConfirmado: (eraAguardando || podeRessurreicao)} : { id: row.order_id, status: _ns4, pag: 'pix_mp', _pixOnlineConfirmado: (eraAguardando || podeRessurreicao) })
+            // Notifica cliente: pagamento PIX confirmado
+            if (eraAguardando || podeRessurreicao) _notificarPixConfirmado(row.tenant_id, _fo4, sendWA, fillVars, EVO_INST, db)
+          }
+        }
+      }
+
+      // ── Rota 2: Cartão online (pagamentos_cartao) ────────────────────────
+      const rowC = db.prepare('SELECT status,valor,tenant_id,order_id FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpId))
+      if (rowC && rowC.status !== novoStatus) {
+        db.prepare('UPDATE pagamentos_cartao SET status=?, status_detail=?, paid_at=? WHERE mp_payment_id=?')
+          .run(novoStatus, pd.status_detail || '', pd.date_approved || null, String(mpId))
+        marcarDirty()
+        if (novoStatus === 'aprovado') {
+          log('✅', `Webhook MP APROVADO (CARTÃO): R$${rowC.valor} tenant=${rowC.tenant_id}`)
+          if (rowC.order_id) {
+            const pedAtualC = db.prepare("SELECT status, pag FROM orders WHERE id=? AND tenant_id=?").get(rowC.order_id, rowC.tenant_id)
+            const eraAguardandoC = pedAtualC?.status === 'aguardando_cartao'
+            const podeRessurreicaoC = pedAtualC?.status === 'cancelado'
+              && pedAtualC?.pag !== 'pix_mp' && pedAtualC?.pag !== 'cartao_mp'
+
+            if (eraAguardandoC || podeRessurreicaoC) {
+              db.prepare("UPDATE orders SET status='analise', pag='cartao_mp' WHERE id=? AND tenant_id=?").run(rowC.order_id, rowC.tenant_id)
+              if (podeRessurreicaoC) log('🔄', `PEDIDO RESSUSCITADO (cartão): pagamento chegou após cancelamento — id=${rowC.order_id} tenant=${rowC.tenant_id}`)
+            } else if (pedAtualC) {
+              db.prepare("UPDATE orders SET pag='cartao_mp' WHERE id=? AND tenant_id=?").run(rowC.order_id, rowC.tenant_id)
+            }
+            const _nsC = (eraAguardandoC || podeRessurreicaoC) ? 'analise' : pedAtualC?.status
+            const _foC = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(rowC.order_id, rowC.tenant_id)
+            const _itC = _foC && typeof _foC.items==='string' ? (() => { try{return JSON.parse(_foC.items)}catch{return []} })() : (_foC?.items||[])
+            sseBroadcast(`orders-rt:${rowC.tenant_id}`, `orders:UPDATE`, _foC ? {..._foC, items:_itC, status:_nsC, pag:'cartao_mp'} : { id: rowC.order_id, status: _nsC, pag: 'cartao_mp' })
+            // Notifica cliente: cartão confirmado
+            if ((eraAguardandoC || podeRessurreicaoC) && _foC?.phone) {
+              setImmediate(async () => {
+                try {
+                  const cfg    = db.prepare('SELECT evo_instance, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(rowC.tenant_id)
+                  const inst   = cfg?.evo_instance || EVO_INST
+                  const loja   = cfg?.store_name || 'Restaurante'
+                  const offset = parseInt(cfg?.order_num_offset) || 0
+                  const idStr  = String(_foC.order_num || Math.max(1, _foC.id - offset)).padStart(3,'0')
+                  const nome   = (_foC.client || 'Cliente').split(' ')[0]
+                  const total  = (parseFloat(_foC.total||0)+parseFloat(_foC.taxa||0)).toFixed(2).replace('.',',')
+                  const msg    = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento confirmado!*\n\nOlá, *${nome}*! Recebemos seu pagamento do pedido *#${idStr}* no cartão. 💳\n\n💰 *Total: R$ ${total}*\n\n📦 Seu pedido está sendo preparado! 🎉\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
+                  await sendWA(_foC.phone, msg, inst)
+                } catch(e) { log('❌','Erro notif cartão:', e.message) }
+              })
+            }
+          }
+        }
+      }
+
+      // ── Rota 3: Fatura SaaS (assinatura mensal do restaurante) ───────────
+      // Tenta casar por mp_payment_id (PIX) ou external_reference (cartão preference)
+      let rowF = db.prepare('SELECT * FROM faturas WHERE mp_payment_id=?').get(String(mpId))
+      if (!rowF && pd.external_reference) {
+        rowF = db.prepare('SELECT * FROM faturas WHERE mp_external_ref=?').get(pd.external_reference)
+        // Se casou por external_ref e ainda não tinha mp_payment_id (caso preference), salva
+        if (rowF && !rowF.mp_payment_id) {
+          db.prepare('UPDATE faturas SET mp_payment_id=? WHERE id=?').run(String(mpId), rowF.id)
+        }
+      }
+      if (rowF && rowF.status !== 'pago' && novoStatus === 'aprovado') {
+        const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(rowF.tenant_id)
+        if (tenant) {
+          // Marca fatura paga
+          db.prepare("UPDATE faturas SET status='pago', pago_em=? WHERE id=?")
+            .run(pd.date_approved || new Date().toISOString(), rowF.id)
+
+          // Renova plano: soma meses ao expires_at atual (ou hoje se já expirou/sem data)
+          const hoje = new Date()
+          const baseDate = (tenant.expires_at && new Date(tenant.expires_at) > hoje)
+            ? new Date(tenant.expires_at)
+            : hoje
+          const novaExp = new Date(baseDate)
+          novaExp.setDate(novaExp.getDate() + (parseInt(rowF.meses) || 1) * 30)
+          const novaExpISO = novaExp.toISOString().slice(0, 10)
+
+          // Atualiza plano também (caso fatura tenha sido pra upgrade)
+          const planoNovo = ['premium','essencial','pro'].includes(rowF.plano) ? rowF.plano : tenant.plano
+          db.prepare('UPDATE tenants SET expires_at=?, ativo=1, plano=?, updated_at=datetime(\'now\') WHERE id=?')
+            .run(novaExpISO, planoNovo, tenant.id)
+
+          marcarDirty()
+          log('✅', `FATURA PAGA: tenant=${tenant.nome} valor=R$${rowF.valor} plano=${planoNovo} novo_vencimento=${novaExpISO}`)
+
+          // Notifica gestor por WhatsApp
+          ;(async () => {
+            try {
+              let telefone = null
+              try {
+                const cfg = db.prepare('SELECT store_whatsapp FROM store_config WHERE tenant_id=?').get(tenant.id)
+                if (cfg?.store_whatsapp) telefone = String(cfg.store_whatsapp).replace(/\D/g, '')
+              } catch {}
+              if (telefone && (telefone.length === 11 || telefone.length === 10)) telefone = '55' + telefone
+              if (telefone) {
+                const planoNome = planoNovo === 'premium' ? 'Premium' : 'Essencial'
+                const valorTxt  = parseFloat(rowF.valor).toFixed(2).replace('.', ',')
+                const venceTxt  = novaExp.toLocaleDateString('pt-BR')
+                const msg = [
+                  `✅ *Pagamento confirmado!*`,
+                  ``,
+                  `Recebemos seu pagamento do plano *${planoNome}*.`,
+                  ``,
+                  `💰 *Valor:* R$ ${valorTxt}`,
+                  `📅 *Próximo vencimento:* ${venceTxt}`,
+                  ``,
+                  `Seu acesso continua ativo. Obrigado por usar o *Estima Food*! 🍽️`
+                ].join('\n')
+                const instCob = _getInstanciaCobranca(db, EVO_INST)
+                await sendWA(telefone, msg, instCob)
+                log('📨', `Confirmação fatura WA enviada: tenant=${tenant.nome} (instância: ${instCob})`)
+              }
+            } catch (e) { log('⚠️', 'Confirmação fatura WA erro:', e.message) }
+          })()
+        }
+      } else if (rowF && rowF.status !== novoStatus && (novoStatus === 'rejeitado' || novoStatus === 'cancelado')) {
+        db.prepare("UPDATE faturas SET status=? WHERE id=?").run(novoStatus, rowF.id)
+        marcarDirty()
+        log('⚠️', `Fatura ${rowF.id} marcada como ${novoStatus}`)
+      }
+    } catch (e) { log('❌', 'Webhook MP erro:', e.message) }
+    send(res, 200, { ok: true })
+    return true
+  }
+
+  // ── Saldo da carteira ────────────────────────────────
+  if (req.method === 'GET' && upath === '/api/carteira') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    try {
+      // PIX aprovados
+      const pixRecebido  = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+      const pixTaxas     = db.prepare("SELECT COALESCE(SUM(taxa),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+      const pixCount     = db.prepare("SELECT COUNT(*) as c FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.c || 0
+      const ultimosPix   = db.prepare("SELECT * FROM pagamentos_pix WHERE tenant_id=? ORDER BY created_at DESC LIMIT 10").all(tid)
+      const pixPendentes = db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(valor),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='pendente'").get(tid)
+
+      // Cartão online aprovados (taxa = 7% já descontada na hora do pagamento)
+      const cartaoRows   = db.prepare("SELECT COALESCE(SUM(valor),0) as bruto, COUNT(*) as c FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)
+      const cartaoBruto  = cartaoRows?.bruto || 0
+      const cartaoCount  = cartaoRows?.c || 0
+      const TAXA_CARTAO  = 0.07
+      const cartaoLiq    = cartaoBruto * (1 - TAXA_CARTAO)
+      const cartaoTaxas  = cartaoBruto * TAXA_CARTAO
+      const ultimosCartao= db.prepare("SELECT * FROM pagamentos_cartao WHERE tenant_id=? ORDER BY created_at DESC LIMIT 10").all(tid)
+
+      // Total recebido = PIX líquido + Cartão líquido
+      const totalRecebido = pixRecebido + cartaoLiq
+      const totalTaxas    = pixTaxas + cartaoTaxas
+      const totalPagamentos = pixCount + cartaoCount
+
+      // Saques já solicitados/pagos
+      const totalSacado   = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM saques WHERE tenant_id=? AND status IN ('pendente','aprovado','pago')").get(tid)?.v || 0
+      const saldoDisp     = Math.max(0, totalRecebido - totalSacado)
+
+      let taxaPix = 1.00
+      try { const gc = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get(); const g = gc?.ia_config ? JSON.parse(gc.ia_config) : {}; if (g.taxa_pix !== undefined) taxaPix = parseFloat(g.taxa_pix) || 0 } catch {}
+
+      // Tenant tem MP próprio? Se sim, novos pagamentos não passam pela carteira
+      const _mpResolv = _resolveMpForTenant(db, tid, MP_TOKEN)
+      const mpProprio = _mpResolv.source === 'tenant'
+
+      send(res, 200, {
+        saldo_disponivel:  saldoDisp,
+        total_recebido:    totalRecebido,
+        total_sacado:      totalSacado,
+        total_taxas:       totalTaxas,
+        taxa_por_pagamento: taxaPix,
+        total_pagamentos:  totalPagamentos,
+        pix_recebido:      pixRecebido,
+        pix_count:         pixCount,
+        cartao_recebido:   cartaoLiq,
+        cartao_bruto:      cartaoBruto,
+        cartao_count:      cartaoCount,
+        ultimos_pagamentos: ultimosPix,
+        ultimos_cartao:    ultimosCartao,
+        pendentes_count:   pixPendentes?.c || 0,
+        pendentes_valor:   pixPendentes?.v || 0,
+        mp_proprio:        mpProprio,
+        mp_source:         _mpResolv.source,
+      })
+    } catch (e) { log('❌', '/api/carteira erro:', e.message); send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Solicitar saque ──────────────────────────────────
+  if (req.method === 'POST' && upath === '/api/saques/solicitar') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    // Blindagem: se tenant tem MP próprio, dinheiro cai direto na conta dele
+    // — não passa pela carteira interna, então saque não faz sentido.
+    const _mpResolvSaq = _resolveMpForTenant(db, tid, MP_TOKEN)
+    if (_mpResolvSaq.source === 'tenant') {
+      send(res, 400, { error: 'Você está usando sua própria conta Mercado Pago. Os pagamentos vão direto pra ela — não há nada a sacar pela plataforma.' })
+      return true
+    }
+    try {
+      const body = await readBody(req)
+      const { pix_key, pix_key_tipo = 'aleatoria' } = body
+      if (!pix_key) { send(res, 400, { error: 'Chave PIX obrigatória' }); return true }
+
+      // Executa cálculo + insert dentro de uma transação para evitar race condition
+      let resultado
+      try {
+        resultado = db.transaction(() => {
+          // PIX aprovados
+          const pixLiq  = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+          // Cartão aprovados (desconta 7% taxa)
+          const cartaoB = db.prepare("SELECT COALESCE(SUM(valor),0) as v FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+          const cartaoLiq = cartaoB * 0.93
+
+          const totalRecebido = pixLiq + cartaoLiq
+          const totalSacado   = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM saques WHERE tenant_id=? AND status IN ('pendente','aprovado','pago')").get(tid)?.v || 0
+          const saldo = Math.max(0, totalRecebido - totalSacado)
+
+          if (saldo < 1) return { err: 'Saldo insuficiente para saque' }
+          const jaTemPendente = db.prepare("SELECT id FROM saques WHERE tenant_id=? AND status='pendente'").get(tid)
+          if (jaTemPendente) return { err: 'Você já tem um saque pendente aguardando aprovação' }
+
+          const numPix    = db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(taxa),0) as t FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)
+          const numCartao = db.prepare("SELECT COUNT(*) as c FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)
+          const numTotal  = (numPix?.c || 0) + (numCartao?.c || 0)
+          const taxaTotal = (numPix?.t || 0) + (cartaoB * 0.07)
+
+          const tenant  = db.prepare('SELECT nome FROM tenants WHERE id=?').get(tid)
+          const saqInfo = db.prepare(`INSERT INTO saques (tenant_id,tenant_nome,valor_solicitado,num_pagamentos,taxa_total,valor_liquido,pix_key,pix_key_tipo)
+            VALUES (?,?,?,?,?,?,?,?)`).run(tid, tenant?.nome || tid, saldo, numTotal, taxaTotal, saldo, pix_key, pix_key_tipo)
+          const saqNovo = db.prepare('SELECT * FROM saques WHERE id=?').get(saqInfo.lastInsertRowid)
+          return { ok: true, saqNovo, saldo, pixLiq, cartaoLiq }
+        })()
+      } catch(txErr) {
+        log('❌', '/api/saques/solicitar transação falhou:', txErr.message)
+        send(res, 500, { error: 'Erro ao processar saque' })
+        return true
+      }
+
+      if (resultado.err) { send(res, 400, { error: resultado.err }); return true }
+
+      sseBroadcast('saques-admin', 'saques:INSERT', resultado.saqNovo)
+      sseBroadcast(`saques-rt:${tid}`, 'saques:INSERT', resultado.saqNovo)
+      marcarDirty()
+      log('💰', `Saque solicitado: R$${resultado.saldo.toFixed(2)} tenant=${tid} (pix=${resultado.pixLiq.toFixed(2)} + cartão=${resultado.cartaoLiq.toFixed(2)})`)
+      send(res, 200, { ok: true, valor: resultado.saldo, pix_key })
+    } catch (e) { log('❌', '/api/saques/solicitar erro:', e.message); send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Lista saques do gestor ───────────────────────────
+  if (req.method === 'GET' && upath === '/api/saques/meus') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    try {
+      const saques = db.prepare('SELECT * FROM saques WHERE tenant_id=? ORDER BY created_at DESC').all(tid)
+      send(res, 200, saques)
+    } catch (e) { log('❌', '/api/saques/meus erro:', e.message); send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Admin: lista todos os saques ─────────────────────
+  if (req.method === 'GET' && upath === '/api/admin/saques') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const status = params.get('status') || 'pendente'
+    const saques = db.prepare('SELECT s.*,t.slug FROM saques s LEFT JOIN tenants t ON s.tenant_id=t.id WHERE s.status=? ORDER BY s.created_at ASC').all(status)
+    send(res, 200, saques)
+    return true
+  }
+
+  // ── Admin: atualiza status de um saque ───────────────
+  if (req.method === 'PATCH' && upath === '/api/admin/saques/atualizar') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    const { id, status, obs_admin } = body
+    if (!id || !status) { send(res, 400, { error: 'id e status obrigatórios' }); return true }
+    const paid_at = status === 'pago' ? new Date().toISOString() : null
+    db.prepare('UPDATE saques SET status=?,obs_admin=?,paid_at=COALESCE(?,paid_at) WHERE id=?').run(status, obs_admin || null, paid_at, id)
+    const saqAtual = db.prepare('SELECT * FROM saques WHERE id=?').get(id)
+    if (saqAtual) { sseBroadcast(`saques-rt:${saqAtual.tenant_id}`, 'saques:UPDATE', saqAtual); sseBroadcast('saques-admin', 'saques:UPDATE', saqAtual) }
+    marcarDirty()
+    log('💰', `Saque #${id} → ${status}`)
+    send(res, 200, { ok: true })
+    return true
+  }
+
+  // ── Admin: salvar token MP e taxa ────────────────────
+  if (req.method === 'POST' && upath === '/api/admin/mp-config') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    const { mp_token, taxa_pix, mp_public_key } = body
+    try {
+      const cfgMp = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const cur   = cfgMp?.ia_config ? JSON.parse(cfgMp.ia_config) : {}
+      if (mp_token)      cur.mp_token      = mp_token
+      if (mp_public_key) cur.mp_public_key = mp_public_key
+      if (taxa_pix !== undefined) cur.taxa_pix = parseFloat(taxa_pix)
+      db.prepare("INSERT INTO store_config (tenant_id,ia_config) VALUES ('_global',?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config").run(JSON.stringify(cur))
+      marcarDirty()
+      send(res, 200, { ok: true })
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Admin: ler config MP ─────────────────────────────
+  if (req.method === 'GET' && upath === '/api/admin/mp-config') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    try {
+      const row      = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const cfg      = row?.ia_config ? JSON.parse(row.ia_config) : {}
+      const mp_token = cfg.mp_token ? '••••' + cfg.mp_token.slice(-6) : ''
+      const taxa_pix = cfg.taxa_pix !== undefined ? cfg.taxa_pix : TAXA_PIX
+      const mp_public_key_mascarado = cfg.mp_public_key ? '••••' + cfg.mp_public_key.slice(-6) : ''
+      send(res, 200, { mp_token_mascarado: mp_token, taxa_pix, mp_configurado: !!cfg.mp_token, mp_public_key_mascarado, mp_public_key_configurado: !!cfg.mp_public_key })
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // GESTOR: Configuração de Mercado Pago próprio (por tenant)
+  // ═══════════════════════════════════════════════════════
+  // Cada tenant pode opcionalmente cadastrar suas próprias credenciais MP.
+  // Quando configurado, todos os PIX/cartão de pedidos do tenant caem
+  // direto na conta dele — não passa pela carteira interna.
+  // SEGURANÇA CRÍTICA: tenant_id vem do header (sessão), nunca do body.
+  // Isso impede um tenant escrever na config de outro.
+  // ═══════════════════════════════════════════════════════
+
+  // ── Gestor: ler própria config MP ────────────────────
+  if (req.method === 'GET' && upath === '/api/gestor/mp-config') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid || tid === '_global' || tid === '_admin') {
+      send(res, 400, { error: 'x-tenant-id obrigatório' })
+      return true
+    }
+    try {
+      const row = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+      const ia  = row?.ia_config ? JSON.parse(row.ia_config) : {}
+      const tokenMasc = ia.mp_token ? '••••' + ia.mp_token.slice(-6) : ''
+      const pkMasc    = ia.mp_public_key ? '••••' + ia.mp_public_key.slice(-6) : ''
+      // Saldo pendente que ainda pode sacar (mesmo após ativar MP próprio,
+      // se sobrar saldo de antes, queremos avisar pra ele sacar)
+      let saldoCarteira = 0
+      try {
+        const pixLiq  = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+        const cartaoB = db.prepare("SELECT COALESCE(SUM(valor),0) as v FROM pagamentos_cartao WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
+        const totalRec = pixLiq + (cartaoB * 0.93)
+        const totalSac = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM saques WHERE tenant_id=? AND status IN ('pendente','aprovado','pago')").get(tid)?.v || 0
+        saldoCarteira = Math.max(0, totalRec - totalSac)
+      } catch {}
+      send(res, 200, {
+        mp_token_mascarado:        tokenMasc,
+        mp_public_key_mascarado:   pkMasc,
+        mp_token_configurado:      !!ia.mp_token,
+        mp_public_key_configurado: !!ia.mp_public_key,
+        usando_global:             !ia.mp_token,
+        saldo_carteira_pendente:   saldoCarteira,
+      })
+    } catch (e) { log('❌', '/api/gestor/mp-config GET erro:', e.message); send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Gestor: salvar/limpar própria config MP ──────────
+  if (req.method === 'POST' && upath === '/api/gestor/mp-config') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid || tid === '_global' || tid === '_admin') {
+      send(res, 400, { error: 'x-tenant-id obrigatório' })
+      return true
+    }
+    const body = await readBody(req)
+    const { mp_token, mp_public_key, limpar } = body
+    try {
+      // Lê config atual e faz MERGE (preserva outros campos do ia_config —
+      // automações WA, configs de PIX manual, etc)
+      const row = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+      const ia  = row?.ia_config ? JSON.parse(row.ia_config) : {}
+
+      if (limpar === true) {
+        // Ao limpar o MP próprio, NÃO desativa o pix_ativo/cartao_online_ativo —
+        // o gestor pode querer continuar recebendo via conta global. Se ele
+        // quiser desligar, faz manualmente em "Pagamentos Online".
+        delete ia.mp_token
+        delete ia.mp_public_key
+        log('⚙️', `MP gestor LIMPO tenant=${tid}`)
+      } else {
+        // Validação básica do formato (token MP começa com APP_USR ou TEST)
+        if (mp_token !== undefined) {
+          // Sanitização agressiva: remove aspas, espaços, quebras de linha invisíveis,
+          // BOM, etc. Causa comum: gestor copia "APP_USR-..." (com aspas) ou
+          // colou de um campo que tinha \r\n no final.
+          let tk = String(mp_token || '')
+            .replace(/^["'\s\u200B-\u200D\uFEFF]+|["'\s\u200B-\u200D\uFEFF]+$/g, '') // trim aspas/espaços/zero-width
+            .replace(/[\r\n\t]/g, '') // remove qualquer quebra de linha/tab no meio
+
+          if (tk && !tk.startsWith('•')) {
+            // Aceita só se parece com formato válido (defesa simples)
+            if (tk.length < 20) {
+              send(res, 400, { error: 'Token Mercado Pago parece inválido (muito curto)' })
+              return true
+            }
+            // Detecta erros comuns: alguém colou public key no lugar do token
+            if (tk.startsWith('APP_USR-') && tk.length < 60) {
+              // Public keys são curtas, access tokens são longos (>70 chars)
+              send(res, 400, { error: 'Esse parece ser uma Public Key, não o Access Token. Cole o Access Token aqui (geralmente tem ~75 caracteres).' })
+              return true
+            }
+            // Validação de formato esperado
+            if (!tk.startsWith('APP_USR-') && !tk.startsWith('TEST-')) {
+              send(res, 400, { error: 'Access Token deve começar com APP_USR- (produção) ou TEST- (sandbox).' })
+              return true
+            }
+            // VALIDAÇÃO REAL: tenta uma chamada simples ao MP pra ver se token funciona.
+            // Endpoint /v1/payment_methods é leve e exige autenticação válida.
+            try {
+              const testR = await fetch('https://api.mercadopago.com/v1/payment_methods', {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${tk}` }
+              })
+              if (testR.status === 401) {
+                send(res, 400, { error: 'Token Mercado Pago inválido (não autorizado). Confira se copiou o Access Token completo do painel MP.' })
+                return true
+              }
+              if (!testR.ok) {
+                const errData = await testR.json().catch(() => ({}))
+                send(res, 400, { error: 'Mercado Pago rejeitou o token: ' + (errData.message || `erro ${testR.status}`) })
+                return true
+              }
+              // Aviso: token de teste não funciona com clientes reais
+              if (tk.startsWith('TEST-')) {
+                log('⚠️', `MP gestor tenant=${tid} salvou TOKEN DE TESTE — clientes reais não conseguirão pagar`)
+              }
+            } catch (testErr) {
+              // Falha de rede — deixa salvar mas avisa no log
+              log('⚠️', `MP gestor tenant=${tid} validação online falhou (rede?):`, testErr.message)
+            }
+            ia.mp_token = tk
+          }
+        }
+        if (mp_public_key !== undefined) {
+          let pk = String(mp_public_key || '')
+            .replace(/^["'\s\u200B-\u200D\uFEFF]+|["'\s\u200B-\u200D\uFEFF]+$/g, '')
+            .replace(/[\r\n\t]/g, '')
+          if (pk && !pk.startsWith('•')) {
+            if (pk.length < 20) {
+              send(res, 400, { error: 'Public key Mercado Pago parece inválida (muito curta)' })
+              return true
+            }
+            ia.mp_public_key = pk
+          }
+        }
+        // Auto-ativa PIX/cartão quando o gestor salva MP próprio.
+        // Faz sentido: ele só configurou MP próprio porque quer receber online.
+        // Antes ele tinha que ir em "Pagamentos Online" e ativar manualmente —
+        // resultado era PIX não aparecer no cardápio mesmo com MP configurado.
+        if (ia.mp_token) {
+          ia.pix_ativo = true
+          // Cartão só faz sentido se tem public key
+          if (ia.mp_public_key) {
+            ia.cartao_online_ativo = true
+          }
+          // Garante que pagamento online geral está ligado
+          ia.pag_online_ativo = true
+        }
+        log('⚙️', `MP gestor SALVO tenant=${tid} token=${ia.mp_token ? 'sim' : 'não'} pk=${ia.mp_public_key ? 'sim' : 'não'} pix_ativo=${ia.pix_ativo}`)
+      }
+
+      db.prepare('INSERT INTO store_config (tenant_id,ia_config) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config')
+        .run(tid, JSON.stringify(ia))
+      marcarDirty()
+
+      const tokenMasc = ia.mp_token ? '••••' + ia.mp_token.slice(-6) : ''
+      const pkMasc    = ia.mp_public_key ? '••••' + ia.mp_public_key.slice(-6) : ''
+      send(res, 200, {
+        ok: true,
+        mp_token_mascarado:        tokenMasc,
+        mp_public_key_mascarado:   pkMasc,
+        mp_token_configurado:      !!ia.mp_token,
+        mp_public_key_configurado: !!ia.mp_public_key,
+        usando_global:             !ia.mp_token,
+      })
+    } catch (e) { log('❌', '/api/gestor/mp-config POST erro:', e.message); send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Admin: toggle PIX por tenant ─────────────────────
+  if (req.method === 'POST' && upath === '/api/admin/pix-toggle') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    const { tenant_id, pix_ativo } = body
+    if (!tenant_id) { send(res, 400, { error: 'tenant_id obrigatório' }); return true }
+    try {
+      const cfg = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tenant_id)
+      const cur = cfg?.ia_config ? JSON.parse(cfg.ia_config) : {}
+      cur.pix_ativo = pix_ativo !== false
+      db.prepare('INSERT INTO store_config (tenant_id,ia_config) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config').run(tenant_id, JSON.stringify(cur))
+      marcarDirty()
+      send(res, 200, { ok: true, pix_ativo: cur.pix_ativo })
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // WhatsApp, IA & Webhooks
+  // ═══════════════════════════════════════════════════════
+
+
+  // ── Envio manual de mensagem WA ──────────────────────
+  if (req.method === 'POST' && upath === '/enviar') {
+    const { phone, text, tenant_id } = await readBody(req)
+    if (!phone || !text) { send(res, 400, { ok: false, error: 'phone e text obrigatórios' }); return true }
+    const tid    = tenant_id || req.headers['x-tenant-id']
+    const cfgEnv = tid ? db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tid) : null
+    const r      = await sendWA(phone, text, cfgEnv?.evo_instance)
+    send(res, r.ok ? 200 : 500, r)
+    return true
+  }
+
+  // ── Disparo de promoção em massa ─────────────────────
+  if (req.method === 'POST' && upath === '/promocao') {
+    const body = await readBody(req)
+    const { destino = 'todos', msg, tenant_id } = body
+    if (!msg) { send(res, 400, { ok: false, error: 'msg obrigatório' }); return true }
+    const tid  = tenant_id || req.headers['x-tenant-id']
+    const cfgP = tid ? db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tid) : null
+    const instP = cfgP?.evo_instance || EVO_INST
+    let cl = db.prepare('SELECT * FROM fidelidade WHERE phone IS NOT NULL' + (tid ? ' AND tenant_id=?' : '')).all(...(tid ? [tid] : []))
+    if (destino === 'com_pedido') cl = cl.filter(c => c.orders_count > 0)
+    if (!cl.length) { send(res, 200, { ok: true, enviados: 0 }); return true }
+    send(res, 200, { ok: true, total: cl.length, msg: 'Envio iniciado' })
+    ;(async () => {
+      let ok = 0, fail = 0
+      for (const c of cl) { const r = await sendWA(c.phone, fillVars(msg, { nome: c.name }), instP); r.ok ? ok++ : fail++; await sleep(1500) }
+      log('📢', `Promoção: ${ok} ok, ${fail} fail`)
+    })()
+    return true
+  }
+
+  // ── Disparar verificação de aniversariantes ──────────
+  if (req.method === 'POST' && upath === '/aniversario') {
+    checarAniv()
+    send(res, 200, { ok: true })
+    return true
+  }
+
+  // ── Rastreio via WA (IA responde status do pedido) ───
+  if (req.method === 'POST' && upath === '/api/rastreio-wa') {
+    const { phone, order_id, tenant_id } = await readBody(req)
+    if (!phone || !order_id || !tenant_id) { send(res, 400, { ok: false }); return true }
+    const cfg         = db.prepare('SELECT evo_instance,store_name,ia_config,order_num_offset FROM store_config WHERE tenant_id=?').get(tenant_id)
+    const inst        = cfg?.evo_instance || EVO_INST
+    const ia          = cfg?.ia_config ? JSON.parse(cfg.ia_config) : {}
+    if (!ia.ativo && !ia.resp_rastreio_manual) { send(res, 200, { ok: false, msg: 'IA inativa' }); return true }
+    const pedido      = db.prepare('SELECT id,status,items,total,taxa FROM orders WHERE id=? AND tenant_id=?').get(order_id, tenant_id)
+    if (!pedido) { send(res, 400, { ok: false }); return true }
+    const sl          = { analise: '⏳ aguardando confirmação', producao: '👨‍🍳 em preparo', pronto: '🛵 saindo para entrega', entregue: '✅ entregue', cancelado: '❌ cancelado' }
+    const offset      = parseInt(cfg?.order_num_offset || 0) || 0
+    const numPedido   = String(Math.max(1, pedido.id - offset)).padStart(3, '0')
+    const totalComTaxa = (parseFloat(pedido.total||0) + parseFloat(pedido.taxa||0)).toFixed(2).replace('.', ',')
+    const msg         = `🍽️ *${cfg?.store_name || 'Restaurante'}*\n\nOlá! Seu pedido *#${numPedido}* está:\n\n${sl[pedido.status] || pedido.status}\n\nTotal: R$ ${totalComTaxa}\n\nQualquer dúvida é só responder! 😊`
+    const r           = await sendWA(phone, msg, inst)
+    send(res, r.ok ? 200 : 500, r)
+    return true
+  }
+
+  // ── Humano assumiu conversa (pausa IA) ───────────────
+  if (req.method === 'POST' && upath === '/api/ia-humano-assumiu') {
+    const body = await readBody(req)
+    const { phone, tenant_id } = body
+    log('👤', '[PAUSA-DEBUG] Body recebido:', JSON.stringify(body))
+    log('👤', '[PAUSA-DEBUG] phone extraído:', phone, '| tenant_id extraído:', tenant_id)
+    log('👤', '[PAUSA-DEBUG] x-tenant-id header:', req.headers['x-tenant-id'])
+    if (phone && tenant_id) {
+      const pausaKey = `pausa:${tenant_id}:${phone}`
+      _pausaHumano.set(pausaKey, Date.now())
+      log('👤', `[PAUSA-DEBUG] Chave gravada no _pausaHumano: "${pausaKey}"`)
+      log('👤', `[PAUSA-DEBUG] Total de chaves no _pausaHumano: ${_pausaHumano.size}`)
+      log('👤', `Humano assumiu conversa com ${phone}`)
     } else {
-      // Sem ":" → vai pra obs livre
-      out.obsLivre = (out.obsLivre ? out.obsLivre + ' · ' : '') + parte;
+      log('⚠️', '[PAUSA-DEBUG] FALHOU — phone ou tenant_id ausente no body:', { phone, tenant_id })
     }
+    send(res, 200, { ok: true })
+    return true
   }
-  return out;
-}
 
-// Quebra texto em múltiplas linhas respeitando largura máxima (impressora térmica)
-function _wrapText(text, width, prefix = '') {
-  if (!text) return [];
-  const innerWidth = Math.max(10, width - prefix.length);
-  const words = text.split(' ');
-  const lines = [];
-  let cur = '';
-  for (const w of words) {
-    if (!cur) { cur = w; continue; }
-    if ((cur.length + 1 + w.length) <= innerWidth) cur += ' ' + w;
-    else { lines.push(cur); cur = w; }
+  // ── Proxy Evolution API (/api/evo/*) ─────────────────
+  if (upath.startsWith('/api/evo')) {
+    const tenantId = req.headers['x-tenant-id']
+    if (!tenantId) { send(res, 401, { error: 'x-tenant-id obrigatório' }); return true }
+    const cfg      = db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tenantId)
+    const instance = cfg?.evo_instance || null
+    const body     = ['POST', 'DELETE'].includes(req.method) ? await readBody(req) : {}
+    const action   = upath.replace('/api/evo', '')
+    if (req.method === 'POST' && body.instanceName === undefined && instance && action.startsWith('/instance/')) body.instanceName = instance
+    const evoPath  = action.replace(':instance', instance || '')
+    try {
+      const r    = await fetch(`${EVO_URL}${evoPath}`, { method: req.method, headers: { 'Content-Type': 'application/json', apikey: EVO_KEY }, body: req.method !== 'GET' ? JSON.stringify(body) : undefined })
+      const data = await r.json().catch(() => ({}))
+      if (evoPath.startsWith('/instance/create') && r.ok && body.instanceName) db.prepare('UPDATE store_config SET evo_instance=? WHERE tenant_id=?').run(body.instanceName, tenantId)
+      send(res, r.status, data)
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
   }
-  if (cur) lines.push(cur);
-  return lines.map(l => prefix + l);
-}
 
-function _buildTicketHtml(order, cfg) {
-  // Filtra itens cancelados — não devem aparecer na comanda nem ser cobrados.
-  // Cancelamentos vêm tanto do gestor (gestor-pedidos.js cancelarItem) quanto do cliente (no cardápio).
-  const items    = (Array.isArray(order.items) ? order.items : [])
-    .filter(i => (i?.item_status || 'active') !== 'cancelado');
-  const money    = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
-  const fmt      = localStorage.getItem('printFormat') || _printFormat || '80mm';
-  const is58     = fmt === '58mm';
-  const fs       = is58 ? Math.min(cfg.fontSize, 10) : cfg.fontSize;
-  const W        = is58 ? 48 : 72; // largura útil em mm (referência visual)
+  // ── Webhook WhatsApp / IA ────────────────────────────
+  if (req.method === 'POST' && (upath.startsWith('/webhook/whatsapp') || upath.startsWith('/webhook/'))) {
+    const body  = await readBody(req)
+    const event = body?.event || ''
 
-  // ── Data/hora do pedido (usa order.created_at se tiver, senão now) ──────
-  // IMPORTANTE: SQLite datetime('now') retorna UTC sem sufixo "Z" (ex: "2026-04-25 17:30:00").
-  // new Date(string) sem "Z" é interpretado como horário LOCAL do navegador → bug de 3h em Brasília.
-  // _parseCreatedAt força interpretação UTC quando a string não tiver timezone explícita.
-  const _parseCreatedAt = (raw) => {
-    if (!raw) return new Date();
-    if (raw instanceof Date) return raw;
-    const s = String(raw).trim();
-    // Se já tem timezone explícita (Z, +HH:MM, -HH:MM no final), confia
-    if (/(Z|[+-]\d{2}:?\d{2})$/.test(s)) return new Date(s);
-    // Formato SQLite "YYYY-MM-DD HH:MM:SS" → trata como UTC
-    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
-    if (m) return new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]));
-    return new Date(s);
-  };
-  // Formata em horário de Brasília (independente do fuso do navegador)
-  const _fmtBR = (d, opts) => d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', ...opts });
-  const _hhmmBR = (d) => _fmtBR(d, { hour: '2-digit', minute: '2-digit', hour12: false });
+    // Resolve tenant a partir da URL
+    const tid_wh = (() => {
+      if (upath.startsWith('/webhook/whatsapp')) return upath.split('/')[3] || null
+      const slug = upath.split('/')[2] || null
+      if (!slug) return null
+      const row = db.prepare('SELECT id FROM tenants WHERE slug=? OR id=?').get(slug, slug)
+      return row?.id || null
+    })()
 
-  const _orderDate = _parseCreatedAt(order.created_at);
-  const _pad2 = n => String(n).padStart(2,'0');
-  const dataHoraTxt = _fmtBR(_orderDate, { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false }).replace(',', '');
-  const now = dataHoraTxt; // mantém compat com via cozinha
+    // Broadcast SSE + salva no banco — mensagens recebidas E enviadas
+    if (tid_wh && (event === 'messages.upsert' || event === 'message.upsert')) {
+      const msgs = Array.isArray(body?.data?.messages)
+        ? body.data.messages
+        : (body?.data ? [body.data] : [])
 
-  // ── Janela de entrega prevista (só pra delivery) ─────────────────
-  // Lê store_tempo_entrega (ex: "30-45 min" ou "30-45" ou "30 min" ou "30")
-  // Calcula início = orderDate + min, fim = orderDate + max
-  const _parseTempoEntrega = (txt) => {
-    if (!txt) return [30, 45];
-    const m = String(txt).match(/(\d+)\s*[-–to a]+\s*(\d+)/);
-    if (m) return [parseInt(m[1]), parseInt(m[2])];
-    const single = String(txt).match(/(\d+)/);
-    if (single) { const v = parseInt(single[1]); return [v, v + 15]; }
-    return [30, 45];
-  };
-  const [_tmin, _tmax] = _parseTempoEntrega(cfg.tempoEntrega);
-  const _ini = new Date(_orderDate.getTime() + _tmin*60000);
-  const _fim = new Date(_orderDate.getTime() + _tmax*60000);
-  const janelaEntregaTxt = `${_hhmmBR(_ini)} - ${_hhmmBR(_fim)}`;
+      const stmt = db.prepare(
+        'INSERT OR IGNORE INTO wa_messages (tenant_id, remote_jid, msg_id, payload, from_me, ts) VALUES (?,?,?,?,?,?)'
+      )
 
-  // ── Helpers de HTML ─────────────────────────────────────
-  const H  = (...parts) => parts.join('');                              // concatena
-  const D  = (style, content) => `<div style="${style}">${content}</div>`;
-  const S  = (style, content) => `<span style="${style}">${content}</span>`;
-  const HR = () => '<hr style="border:none;border-top:1px dashed #000;margin:5px 0">';
-  // Linha de dois itens (nome esquerda, valor direita)
-  const ROW = (left, right, bold) => {
-    const b = bold ? 'font-weight:bold;' : '';
-    return D(`display:flex;justify-content:space-between;align-items:baseline;gap:4px;${b}`,
-      S('flex:1;word-break:break-word', left) + S('white-space:nowrap;flex-shrink:0', right));
-  };
-  // Linha simples centralizada
-  const CENTER = (content, style='') => D(`text-align:center;${style}`, content);
-  // Banner de bloco (fundo colorido, texto branco)
-  const BANNER = (content, bg, style='') =>
-    D(`text-align:center;font-weight:bold;background:${bg};color:#fff;padding:5px 4px;margin:5px 0;${style}`, content);
-  // Rótulo de seção (estilo Anota AI: texto à esquerda, semi-bold)
-  const SECTION = (label) => D('font-weight:bold;font-size:1.1em;margin:6px 0 4px', label);
+      for (const m of msgs) {
+        const fromMe = m?.key?.fromMe === true || m?.key?.fromMe === 'true'
+        const jid    = m?.key?.remoteJid || ''
+        const mid    = m?.key?.id || ''
+        const ts     = +m?.messageTimestamp || 0
 
-  // ── Tipo de entrega ─────────────────────────────────────
-  const _addr    = (order.addr || '').toLowerCase();
-  const isMesa   = !!(order.mesa_num || (order.addr || '').startsWith('Mesa'));
-  const isRetira = !isMesa && !!(_addr.includes('retirada') || _addr.includes('balcão') || _addr.includes('balcao') || _addr.includes('retirar'));
-  const tipoTxt  = isMesa ? 'MESA ' + (order.mesa_num || '') : isRetira ? 'PARA RETIRADA' : 'PARA ENTREGA';
-  const tipoIcon = isMesa ? '🪑' : isRetira ? '🏃' : '🛵';
-  const tipoBg   = isMesa ? '#1a3a5c' : isRetira ? '#2d4a1e' : '#7a2020';
-  // Cabeçalho do tipo (estilo Anota: pequeno, simples)
-  const tipoHeader = CENTER(tipoTxt, 'font-weight:bold;font-size:0.95em;letter-spacing:0.5px;margin-bottom:2px');
+        // Só ignora status e LIDs — qualquer outra mensagem é válida
+        if (!jid || !mid || jid.startsWith('status@') || jid.endsWith('@lid')) continue
 
-  // ── Pagamento (sem banner colorido, estilo Anota AI) ───
-  const _pagMap  = { dinheiro:'Dinheiro', cartao:'Cartão', credito:'Crédito', debito:'Débito', pix:'PIX', pix_mp:'PIX Online', cartao_mp:'Crédito Online', mesa:'Conta da Mesa' };
-  const pagNome  = _pagMap[order.pag] || order.pag || '—';
-  // Detecta se o pedido já foi pago. Cobre 3 cenários:
-  //   1. pag='pix_mp' / 'cartao_mp'  → pagamento online MP confirmado pelo webhook (servidor já atualizou pag).
-  //      Esse é o sinal mais confiável: o servidor SÓ grava 'pix_mp'/'cartao_mp' quando o pagamento foi aprovado.
-  //   2. pag='pix_manual' E status já saiu de 'aguardando_pix' → gestor confirmou recebimento manualmente
-  //   3. pag_momento='agora' → legado (versão antiga do app gravava assim quando o pagamento era online)
-  // IMPORTANTE: pag_momento='online' SOZINHO não é prova de pagamento — esse campo é gravado na criação
-  // do pedido, antes do PIX ser confirmado. Por isso ele NÃO entra na detecção.
-  const _statusPago = order.status && !['aguardando_pix','aguardando_cartao'].includes(order.status);
-  const jaPago   = order.pag === 'pix_mp'
-                || order.pag === 'cartao_mp'
-                || order.pag_momento === 'agora'
-                || (order.pag === 'pix_manual' && _statusPago);
+        // Salva no banco (recebidas e enviadas)
+        try {
+          stmt.run(tid_wh, jid, mid, JSON.stringify(m), fromMe ? 1 : 0, ts)
+          marcarDirty()
+        } catch(e) { /* UNIQUE — já existe */ }
 
-  // ── Filtra itens para cozinha ───────────────────────────
-  const _isCoz = (item) => {
-    const c = (item.cat || item.cat_key || '').toLowerCase();
-    const n = (item.name || '').toLowerCase();
-    return !['bebida','drink','suco','agua','água','refrigerante','cerveja','chopp','vinho','dose','tanque','long'].some(s => c.includes(s) || n.includes(s));
-  };
-  const itensCozinha = items.filter(_isCoz);
+        // Se gestor enviou mensagem pelo próprio WhatsApp → pausa a IA para este contato
+        if (fromMe && tid_wh) {
+          const phone = jid.replace('@s.whatsapp.net','').replace('@c.us','')
+          if (phone) {
+            const pausaKey = `pausa:${tid_wh}:${phone}`
+            _pausaHumano.set(pausaKey, Date.now())
+            log('👤', `[PAUSA] Gestor enviou via WA (webhook) — IA pausada para ${phone} [${tid_wh}]`)
+          }
+        }
 
-  // ── Renderiza um item do pedido (estilo Anota: "(qty) nome    R$ x") ──
-  const renderItem = (i) => {
-    const qtyPrefix = `(${i.qty||1})`;
-    const nome  = i.name;
-    const preco = money((i.price||0) * (i.qty||1));
-    const parsed = _parseObs(i.obs);
-    let kitHtml = '';
-    let extrasHtml = '';
+        // SSE para mensagens RECEBIDAS (fromMe=false)
+        if (!fromMe) {
+          sseBroadcast(`wa-msgs:${tid_wh}`, 'wa:msg', m)
+        }
+      }
 
-    // Kit: sub-itens com indentação maior (estilo "(1) sub-item")
-    if (parsed.kitItens.length) {
-      kitHtml = parsed.kitItens.map(k =>
-        D('padding-left:18px;font-size:0.95em', `(1) ${k}`)
-      ).join('');
+      // Limpa msgs com mais de 7 dias
+      try {
+        const cutoff = Math.floor(Date.now()/1000) - 7*24*3600
+        db.prepare('DELETE FROM wa_messages WHERE tenant_id=? AND ts < ? AND ts > 0').run(tid_wh, cutoff)
+      } catch(e) {}
     }
 
-    // Pizza meio a meio
-    let meioHtml = '';
-    if (parsed.meioMeio) {
-      meioHtml = D('padding-left:18px;font-size:0.95em;font-weight:bold', '½ + ½ ' + parsed.meioMeio);
-    }
+    // Processa IA (re-usa body já lido)
+    const fakeReq = Object.assign(Object.create(req), { _parsedBody: body })
+    await handleIAWebhook(fakeReq, res)
+    return true
+  }
 
-    // Grupos (Adicionais, Ponto, Molhos…) — cada grupo numa linha com bullets
-    if (parsed.grupos.length) {
-      const linhasGrupos = parsed.grupos.map(g =>
-        D('padding-left:18px;margin-top:1px',
-          D('font-weight:bold;font-size:0.9em', g.nome + ':') +
-          g.itens.map(it => D('padding-left:10px;font-size:0.9em', '• ' + it)).join('')
+  // ── Cache de mensagens WhatsApp — GET (carrega conversa) ──
+  if (req.method === 'GET' && upath === '/api/wa/messages') {
+    const tenantId = req.headers['x-tenant-id']
+    const jid      = params.get('jid')
+    if (!tenantId || !jid) { send(res, 400, { error: 'tenant e jid obrigatórios' }); return true }
+    try {
+      const rows = db.prepare(
+        'SELECT payload FROM wa_messages WHERE tenant_id=? AND remote_jid=? ORDER BY ts ASC LIMIT 200'
+      ).all(tenantId, jid)
+      const msgs = rows.map(r => { try { return JSON.parse(r.payload) } catch { return null } }).filter(Boolean)
+      send(res, 200, msgs)
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Cache de mensagens WhatsApp — POST (salva batch) ───
+  if (req.method === 'POST' && upath === '/api/wa/messages') {
+    const tenantId = req.headers['x-tenant-id']
+    if (!tenantId) { send(res, 401, { error: 'x-tenant-id obrigatório' }); return true }
+    const body = await readBody(req)
+    const msgs = Array.isArray(body) ? body : (body?.messages || [])
+    if (!msgs.length) { send(res, 200, { saved: 0 }); return true }
+    try {
+      const stmt = db.prepare(
+        'INSERT OR IGNORE INTO wa_messages (tenant_id, remote_jid, msg_id, payload, from_me, ts) VALUES (?,?,?,?,?,?)'
+      )
+      const insert = db.transaction(list => {
+        let n = 0
+        for (const m of list) {
+          const jid   = m.key?.remoteJid
+          const mid   = m.key?.id
+          const fromMe = (m.key?.fromMe === true || m.key?.fromMe === 'true') ? 1 : 0
+          const ts    = +m.messageTimestamp || 0
+          if (!jid || !mid) continue
+          try { stmt.run(tenantId, jid, mid, JSON.stringify(m), fromMe, ts); n++ } catch {}
+        }
+        return n
+      })
+      const saved = insert(msgs)
+      // Limpa mensagens com mais de 7 dias para não crescer indefinidamente
+      const cutoff = Math.floor(Date.now()/1000) - 7*24*3600
+      db.prepare('DELETE FROM wa_messages WHERE tenant_id=? AND ts < ? AND ts > 0').run(tenantId, cutoff)
+      marcarDirty()
+      send(res, 200, { saved })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+
+  if (req.method === 'GET' && upath === '/api/wa/avatar') {
+    const rawUrl = params.get('url')
+    if (!rawUrl) { res.writeHead(204); res.end(); return true }
+    try {
+      const decoded = decodeURIComponent(rawUrl)
+      const r = await fetch(decoded, {
+        headers: { 'User-Agent': 'WhatsApp/2.2413.51 A' },
+        signal:  AbortSignal.timeout(5000)
+      })
+      if (!r.ok) { res.writeHead(404); res.end(); return true }
+      const buf = Buffer.from(await r.arrayBuffer())
+      const ct  = r.headers.get('content-type') || 'image/jpeg'
+      res.writeHead(200, {
+        'Content-Type':  ct,
+        'Cache-Control': 'public, max-age=7200',
+        'Access-Control-Allow-Origin': '*'
+      })
+      res.end(buf)
+    } catch { res.writeHead(502); res.end() }
+    return true
+  }
+
+  // ── Download de mídia WhatsApp (sob demanda) ─────────
+  if (req.method === 'POST' && upath === '/api/wa/media') {
+    const tenantId = req.headers['x-tenant-id']
+    if (!tenantId) { send(res, 401, { error: 'x-tenant-id obrigatório' }); return true }
+    const body = await readBody(req)
+    const { messageId, remoteJid } = body
+    if (!messageId || !remoteJid) { send(res, 400, { error: 'messageId e remoteJid obrigatórios' }); return true }
+    try {
+      const cfg  = db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tenantId)
+      const inst = cfg?.evo_instance || EVO_INST
+      if (!inst) { send(res, 400, { error: 'Instância não configurada' }); return true }
+
+      // EVO 2.7: POST /chat/getBase64FromMediaMessage/{instance}
+      const r = await fetch(`${EVO_URL}/chat/getBase64FromMediaMessage/${inst}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', apikey: EVO_KEY },
+        body:    JSON.stringify({
+          message:    { key: { id: messageId, remoteJid } },
+          convertTo:  'base64',
+          convertToMp4: false
+        }),
+        signal: AbortSignal.timeout(30000)
+      })
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) { send(res, r.status, { error: data?.message || 'Erro ao baixar mídia' }); return true }
+      send(res, 200, {
+        base64:   data.base64   || data.data   || null,
+        mimetype: data.mimetype || data.mimeType || 'application/octet-stream',
+        fileName: data.fileName || null
+      })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+
+  // ── Clientes do gestor com stats calculados em tempo real ──
+  if (req.method === 'GET' && upath === '/api/clientes-gestor') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    try {
+      // Customers com stats calculados via JOIN com orders
+      const customers = db.prepare(`
+        SELECT
+          c.id, c.name, c.phone, c.email, c.birthday, c.addr,
+          c.created_at,
+          COUNT(o.id)                       AS orders_count,
+          COALESCE(SUM(o.total + o.taxa), 0) AS total_spent,
+          MAX(o.created_at)                  AS last_order_at
+        FROM customers c
+        LEFT JOIN orders o ON o.tenant_id = c.tenant_id
+          AND (o.customer_id = c.id OR o.phone = c.phone)
+          AND o.status NOT IN ('cancelado', 'aguardando_pix')
+        WHERE c.tenant_id = ?
+        GROUP BY c.id
+        ORDER BY c.created_at DESC
+      `).all(tid)
+
+      // Fidelidade por telefone (para pontos)
+      const fid = db.prepare(
+        'SELECT id, phone, pts, resgates FROM fidelidade WHERE tenant_id = ?'
+      ).all(tid)
+      const fidMap = {}
+      fid.forEach(f => {
+        const ph = (f.phone || '').replace(/\D/g, '').slice(-8)
+        if (ph) fidMap[ph] = f
+      })
+
+      const result = customers.map(c => {
+        const ph = (c.phone || '').replace(/\D/g, '').slice(-8)
+        const f  = fidMap[ph] || null
+        return {
+          ...c,
+          orders_count: c.orders_count || 0,
+          total_spent:  parseFloat(c.total_spent || 0),
+          last_order_at: c.last_order_at || null,
+          fid_pts:  f ? (f.pts || 0) : null,
+          fid_id:   f ? f.id : null
+        }
+      })
+
+      send(res, 200, result)
+    } catch (e) {
+      log('❌', '/api/clientes-gestor erro:', e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  // ══════════════════════════════════════════════════════
+  // CARTÃO DE CRÉDITO — Mercado Pago
+  // ══════════════════════════════════════════════════════
+
+  // ── Retorna public_key para o frontend inicializar o SDK ──
+  if (req.method === 'GET' && upath === '/api/cartao/public-key') {
+    try {
+      // Resolve a public key da conta MP que vai processar este pagamento
+      // (tenant primeiro, depois global). Se não tem header tenant_id (cardápio
+      // público), usa o tenant_id da query string.
+      const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
+      const _cfg = _resolveMpForTenant(db, tid, MP_TOKEN)
+      const pk = _cfg.mp_public_key || ''
+      if (!pk) { send(res, 200, { ok: false, public_key: '', cartao_ativo: false }); return true }
+      send(res, 200, { ok: true, public_key: pk, cartao_ativo: true })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Cria pagamento de cartão com card_token do SDK MP ──
+  if (req.method === 'POST' && upath === '/api/cartao/criar') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    const body = await readBody(req)
+    const { card_token, payment_method_id, valor, order_id, client, email = 'cliente@email.com', issuer_id } = body
+    if (!card_token)         { send(res, 400, { error: 'card_token obrigatório' }); return true }
+    if (!payment_method_id)  { send(res, 400, { error: 'payment_method_id obrigatório' }); return true }
+    if (!valor || valor <= 0){ send(res, 400, { error: 'valor inválido' }); return true }
+
+    // Resolve conta MP: tenant primeiro, depois global
+    const _mpCfgC = _resolveMpForTenant(db, tid, MP_TOKEN)
+    const mpToken = _mpCfgC.mp_token
+    if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago não configurado' }); return true }
+
+    const extRef = `ef-card-${tid.slice(0,8)}-${order_id || Date.now()}`
+
+    try {
+      const mpBody = {
+        transaction_amount: parseFloat(valor),
+        token:              card_token,
+        description:        `Pedido #${order_id || '?'} - ${client || 'Cliente'}`,
+        installments:       1,
+        payment_method_id,
+        external_reference: extRef,
+        payer: { email, first_name: client || 'Cliente', last_name: '' },
+      }
+      if (issuer_id) mpBody.issuer_id = issuer_id
+
+      const mp = await fetch('https://api.mercadopago.com/v1/payments', {
+        method:  'POST',
+        headers: {
+          'Content-Type':    'application/json',
+          'Authorization':   `Bearer ${mpToken}`,
+          'X-Idempotency-Key': extRef
+        },
+        body: JSON.stringify(mpBody)
+      })
+      const mpData = await mp.json()
+
+      if (!mp.ok) {
+        log('❌', 'MP Cartão erro:', mpData)
+        send(res, 400, { error: mpData.message || 'Erro ao processar cartão', cause: mpData.cause || [] })
+        return true
+      }
+
+      const statusMap = { approved: 'aprovado', rejected: 'rejeitado', cancelled: 'cancelado', in_process: 'em_processo', pending: 'pendente' }
+      const novoStatus = statusMap[mpData.status] || 'pendente'
+      const lastFour   = mpData.card?.last_four_digits || ''
+
+      // CRÍTICO: Quando MP é do tenant, dinheiro vai direto pra conta dele —
+      // gravamos valor=0 para que a carteira (que faz cartaoB*0.93) ignore.
+      // Mantemos o registro para auditoria/rastreio do pedido.
+      // mp_source é fixado para webhooks/polls futuros usarem a conta certa.
+      const isMpProprioC = (_mpCfgC.source === 'tenant')
+      db.prepare(`INSERT OR IGNORE INTO pagamentos_cartao
+        (tenant_id, order_id, mp_payment_id, mp_external_ref, valor, status, status_detail, payer_name, payer_email, last_four_digits, payment_method_id, mp_source)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(tid, order_id || null, String(mpData.id), extRef,
+          isMpProprioC ? 0 : parseFloat(valor),
+          novoStatus, mpData.status_detail || '',
+          (isMpProprioC ? 'MP_PROPRIO' : (client || '')),
+          email, lastFour, payment_method_id,
+          isMpProprioC ? 'tenant' : 'global')
+
+      // Se aprovado, atualiza o pedido para 'analise'
+      if (novoStatus === 'aprovado' && order_id) {
+        db.prepare("UPDATE orders SET status='analise', pag='cartao_mp' WHERE id=? AND tenant_id=? AND status='aguardando_cartao'").run(order_id, tid)
+        marcarDirty()
+        const ord = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(order_id, tid)
+        if (ord) {
+          const its = (() => { try { return JSON.parse(ord.items) } catch { return [] } })()
+          sseBroadcast(`orders-rt:${tid}`, 'orders:UPDATE', { ...ord, items: its, status: 'analise', pag: 'cartao_mp' })
+        }
+      }
+
+      log('💳', `Cartão ${novoStatus}: R$${valor} tenant=${tid} mp_id=${mpData.id} detail=${mpData.status_detail}`)
+      send(res, 200, {
+        ok:             novoStatus === 'aprovado',
+        mp_payment_id:  mpData.id,
+        status:         novoStatus,
+        status_detail:  mpData.status_detail || '',
+        last_four:      lastFour,
+        payment_method: payment_method_id,
+      })
+    } catch(e) {
+      log('❌', 'Cartão fetch erro:', e.message)
+      send(res, 500, { error: 'Erro ao processar pagamento: ' + e.message })
+    }
+    return true
+  }
+
+  // ── Consulta status de pagamento de cartão ──
+  if (req.method === 'GET' && upath === '/api/cartao/status') {
+    const mpId = params.get('mp_payment_id') || ''
+    if (!mpId) { send(res, 400, { error: 'mp_payment_id obrigatório' }); return true }
+    const tid3 = req.headers['x-tenant-id'] || ''
+    if (tid3) {
+      const own3 = db.prepare('SELECT tenant_id FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpId))
+      if (own3 && own3.tenant_id !== tid3) { send(res, 403, { error: 'Acesso negado' }); return true }
+    }
+    // Resolve token usando o mp_source GRAVADO no pagamento de cartão
+    let mpToken = MP_TOKEN
+    const _cfgC = _resolveMpForExistingPayment(db, mpId, MP_TOKEN)
+    if (_cfgC.mp_token) mpToken = _cfgC.mp_token
+    if (!mpToken) { send(res, 400, { error: 'Token MP não configurado' }); return true }
+    try {
+      const r  = await fetch(`https://api.mercadopago.com/v1/payments/${mpId}`, { headers: { 'Authorization': `Bearer ${mpToken}` } })
+      const pd = await r.json()
+      const statusMap = { approved: 'aprovado', rejected: 'rejeitado', cancelled: 'cancelado', in_process: 'em_processo', pending: 'pendente' }
+      const novoStatus = statusMap[pd.status] || 'pendente'
+      // Lê status anterior antes de atualizar (para detectar transição para 'aprovado')
+      const rowBefore = db.prepare('SELECT status, tenant_id, order_id FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpId))
+      // Atualiza banco
+      db.prepare('UPDATE pagamentos_cartao SET status=?, status_detail=?, paid_at=? WHERE mp_payment_id=?')
+        .run(novoStatus, pd.status_detail || '', pd.date_approved || null, String(mpId))
+      // Se acabou de aprovar (transição pendente/in_process → aprovado), sincroniza pedido e notifica
+      if (rowBefore && rowBefore.status !== 'aprovado' && novoStatus === 'aprovado' && rowBefore.order_id) {
+        const pedAtual = db.prepare("SELECT status, pag FROM orders WHERE id=? AND tenant_id=?").get(rowBefore.order_id, rowBefore.tenant_id)
+        const eraAguardando = pedAtual?.status === 'aguardando_cartao'
+        const podeRessurreicao = pedAtual?.status === 'cancelado'
+          && pedAtual?.pag !== 'pix_mp' && pedAtual?.pag !== 'cartao_mp'
+        if (eraAguardando || podeRessurreicao) {
+          db.prepare("UPDATE orders SET status='analise', pag='cartao_mp' WHERE id=? AND tenant_id=?").run(rowBefore.order_id, rowBefore.tenant_id)
+          if (podeRessurreicao) log('🔄', `PEDIDO RESSUSCITADO (cartão poll): id=${rowBefore.order_id} tenant=${rowBefore.tenant_id}`)
+        } else if (pedAtual) {
+          db.prepare("UPDATE orders SET pag='cartao_mp' WHERE id=? AND tenant_id=?").run(rowBefore.order_id, rowBefore.tenant_id)
+        }
+        marcarDirty()
+        const _ns = (eraAguardando || podeRessurreicao) ? 'analise' : pedAtual?.status
+        const _fo = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(rowBefore.order_id, rowBefore.tenant_id)
+        const _it = _fo && typeof _fo.items === 'string' ? (() => { try { return JSON.parse(_fo.items) } catch { return [] } })() : (_fo?.items || [])
+        sseBroadcast(`orders-rt:${rowBefore.tenant_id}`, 'orders:UPDATE', _fo ? { ..._fo, items: _it, status: _ns, pag: 'cartao_mp' } : { id: rowBefore.order_id, status: _ns, pag: 'cartao_mp' })
+        // Notifica cliente
+        if ((eraAguardando || podeRessurreicao) && _fo?.phone) {
+          setImmediate(async () => {
+            try {
+              const cfg    = db.prepare('SELECT evo_instance, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(rowBefore.tenant_id)
+              const inst   = cfg?.evo_instance || EVO_INST
+              const loja   = cfg?.store_name || 'Restaurante'
+              const offset = parseInt(cfg?.order_num_offset) || 0
+              const idStr  = String(_fo.order_num || Math.max(1, _fo.id - offset)).padStart(3,'0')
+              const nome   = (_fo.client || 'Cliente').split(' ')[0]
+              const total  = (parseFloat(_fo.total||0)+parseFloat(_fo.taxa||0)).toFixed(2).replace('.',',')
+              const msg    = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento confirmado!*\n\nOlá, *${nome}*! Recebemos seu pagamento do pedido *#${idStr}* no cartão. 💳\n\n💰 *Total: R$ ${total}*\n\n📦 Seu pedido está sendo preparado! 🎉\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
+              await sendWA(_fo.phone, msg, inst)
+            } catch(e) { log('❌','Erro notif cartão (poll):', e.message) }
+          })
+        }
+      }
+      send(res, 200, { status: novoStatus, status_detail: pd.status_detail || '', mp_status: pd.status })
+    } catch(e) {
+      const fb = db.prepare('SELECT status,status_detail FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpId))
+      send(res, 200, { status: fb?.status || 'pendente', status_detail: fb?.status_detail || '' })
+    }
+    return true
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // Planos & Renovacao
+  // ═══════════════════════════════════════════════════════
+
+  // ── Precos dos planos (publico) ──────────────────────
+  if (req.method === 'GET' && upath === '/api/planos/precos') {
+    try {
+      const cfg = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const ia = cfg?.ia_config ? JSON.parse(cfg.ia_config) : {}
+      send(res, 200, {
+        essencial: ia.preco_essencial !== undefined ? parseFloat(ia.preco_essencial) : 79.99,
+        premium: ia.preco_premium !== undefined ? parseFloat(ia.preco_premium) : 99.90
+      })
+    } catch(e) { send(res, 200, { essencial: 79.99, premium: 99.90 }) }
+    return true
+  }
+
+  // ── Admin: Salvar precos dos planos ──────────────────
+  if (req.method === 'POST' && upath === '/api/admin/planos/precos') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Nao autorizado' }); return true }
+    const body = await readBody(req)
+    const { preco_essencial, preco_premium } = body
+    try {
+      const cfg = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const ia = cfg?.ia_config ? JSON.parse(cfg.ia_config) : {}
+      if (preco_essencial !== undefined) ia.preco_essencial = parseFloat(preco_essencial)
+      if (preco_premium !== undefined) ia.preco_premium = parseFloat(preco_premium)
+      db.prepare("INSERT INTO store_config (tenant_id,ia_config) VALUES ('_global',?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config").run(JSON.stringify(ia))
+      marcarDirty()
+      log('⚙️', `Precos planos atualizados: Essencial=R$${ia.preco_essencial} Premium=R$${ia.preco_premium}`)
+      send(res, 200, { ok: true, preco_essencial: ia.preco_essencial, preco_premium: ia.preco_premium })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Pagar plano via PIX ──────────────────────────────
+  if (req.method === 'POST' && upath === '/api/planos/pagar-pix') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    const body = await readBody(req)
+    const { plano, valor } = body
+    if (!plano || !valor || valor <= 0) { send(res, 400, { error: 'Plano e valor obrigatorios' }); return true }
+
+    // Token MP — SEMPRE GLOBAL (mensalidade da plataforma cobrada do tenant)
+    const mpToken = _resolveMpGlobal(db, MP_TOKEN)
+    if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago nao configurado.' }); return true }
+
+    const tenant = db.prepare('SELECT nome FROM tenants WHERE id=?').get(tid)
+    const extRef = `plano-${tid.slice(0,8)}-${plano}-${Date.now()}`
+
+    try {
+      const mp = await fetch('https://api.mercadopago.com/v1/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
+        body: JSON.stringify({
+          transaction_amount: parseFloat(valor),
+          description: `Renovacao ${plano === 'premium' ? 'Plano Premium' : 'Plano Essencial'} - ${tenant?.nome || 'Cliente'}`,
+          payment_method_id: 'pix',
+          external_reference: extRef,
+          payer: { email: 'renovacao@estimafood.com', first_name: tenant?.nome || 'Cliente', last_name: '' },
+        })
+      })
+      const mpData = await mp.json()
+      if (!mp.ok) { log('❌', 'MP PIX plano erro:', mpData); send(res, 400, { error: mpData.message || 'Erro MP' }); return true }
+
+      const qr    = mpData.point_of_interaction?.transaction_data?.qr_code || ''
+      const qrB64 = mpData.point_of_interaction?.transaction_data?.qr_code_base64 || ''
+
+      // Salva na tabela de pagamentos de plano apenas se o tenant existir (leads da landing usam ID temporario)
+      const tenantExiste = db.prepare('SELECT id FROM tenants WHERE id=?').get(tid)
+      if (tenantExiste) {
+        try {
+          db.prepare(`INSERT INTO pagamentos_pix (tenant_id,mp_payment_id,mp_external_ref,valor,taxa,valor_liquido,status,payer_name,qr_code,qr_code_base64)
+            VALUES (?,?,?,?,0,?,?,?,?,?)`)
+            .run(tid, String(mpData.id), extRef, parseFloat(valor), parseFloat(valor),
+              (mpData.status==='approved'?'aprovado':'pendente'), `PLANO:${plano}`, qr, qrB64)
+        } catch (dbErr) { log('⚠️', `PIX plano: nao foi possivel salvar no BD tenant=${tid}:`, dbErr.message) }
+      } else {
+        log('ℹ️', `PIX plano criado para lead externo (sem tenant): mp_id=${mpData.id} plano=${plano}`)
+      }
+
+      log('💳', `PIX plano criado: R$${valor} plano=${plano} tenant=${tid} mp_id=${mpData.id}`)
+      send(res, 200, { ok: true, mp_payment_id: mpData.id, qr_code: qr, qr_code_base64: qrB64, valor, status: mpData.status })
+    } catch (e) { log('❌', 'MP plano fetch erro:', { error: e.message }); send(res, 500, { error: 'Erro ao criar PIX: ' + e.message }) }
+    return true
+  }
+
+  // ── Status PIX plano ─────────────────────────────────
+  if (req.method === 'GET' && upath === '/api/planos/status-pix') {
+    const mpId = params.get('mp_payment_id') || ''
+    if (!mpId) { send(res, 400, { error: 'mp_payment_id obrigatorio' }); return true }
+    // Token MP — SEMPRE GLOBAL (consulta de mensalidade SaaS)
+    const mpToken = _resolveMpGlobal(db, MP_TOKEN)
+    if (!mpToken) { send(res, 400, { error: 'Token MP nao configurado' }); return true }
+    try {
+      const r = await fetch('https://api.mercadopago.com/v1/payments/' + mpId, { headers: { 'Authorization': 'Bearer ' + mpToken } })
+      const pd = await r.json()
+      if (!r.ok) { const fb = db.prepare('SELECT status FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId)); send(res, 200, { status: fb ? fb.status : 'pendente' }); return true }
+      const novoStatus = pd.status === 'approved' ? 'aprovado' : pd.status === 'rejected' ? 'rejeitado' : pd.status === 'cancelled' ? 'cancelado' : 'pendente'
+      const rowAtual = db.prepare('SELECT status,valor,tenant_id,payer_name FROM pagamentos_pix WHERE mp_payment_id=?').get(String(mpId))
+      if (rowAtual && rowAtual.status !== novoStatus) {
+        db.prepare('UPDATE pagamentos_pix SET status=?,paid_at=? WHERE mp_payment_id=?').run(novoStatus, pd.date_approved || null, String(mpId))
+        if (novoStatus === 'aprovado' && rowAtual.payer_name?.startsWith('PLANO:')) {
+          // Renovar o plano do tenant
+          const plano = rowAtual.payer_name.replace('PLANO:', '')
+          const novaExpira = new Date()
+          novaExpira.setDate(novaExpira.getDate() + 30)
+          db.prepare('UPDATE tenants SET plano=?, expires_at=?, ativo=1 WHERE id=?').run(plano, novaExpira.toISOString().slice(0,10), rowAtual.tenant_id)
+          marcarDirty()
+          log('✅', `PLANO RENOVADO: ${plano} tenant=${rowAtual.tenant_id} expira=${novaExpira.toISOString().slice(0,10)}`)
+        }
+      }
+      send(res, 200, { status: novoStatus, mp_status: pd.status })
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Pagar plano via Cartao (usando card_token do SDK MP) ──
+  if (req.method === 'POST' && upath === '/api/planos/pagar-cartao') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    const body = await readBody(req)
+    const { plano, valor, card_token, payment_method_id, payer_email, payer_cpf } = body
+    if (!plano || !valor) { send(res, 400, { error: 'Plano e valor obrigatorios' }); return true }
+    if (!card_token) { send(res, 400, { error: 'card_token obrigatorio' }); return true }
+    if (!payment_method_id) { send(res, 400, { error: 'payment_method_id obrigatorio' }); return true }
+
+    // Token MP — SEMPRE GLOBAL (mensalidade SaaS via cartão)
+    const mpToken = _resolveMpGlobal(db, MP_TOKEN)
+    if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago nao configurado.' }); return true }
+
+    const tenant = db.prepare('SELECT nome FROM tenants WHERE id=?').get(tid)
+    const extRef = `plano-cartao-${tid.slice(0,8)}-${plano}-${Date.now()}`
+
+    try {
+      const mp = await fetch('https://api.mercadopago.com/v1/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
+        body: JSON.stringify({
+          transaction_amount: parseFloat(valor),
+          token: card_token,
+          description: `Renovacao ${plano === 'premium' ? 'Plano Premium' : 'Plano Essencial'} - ${tenant?.nome || 'Cliente'}`,
+          installments: 1,
+          payment_method_id,
+          external_reference: extRef,
+          payer: {
+            email: payer_email || 'renovacao@estimafood.com',
+            identification: { type: 'CPF', number: (payer_cpf || '').replace(/\D/g,'') }
+          }
+        })
+      })
+      const mpData = await mp.json()
+      if (!mp.ok) {
+        log('❌', 'MP Cartao plano erro:', mpData)
+        send(res, 400, { error: mpData.message || mpData.cause?.[0]?.description || 'Erro no pagamento' })
+        return true
+      }
+
+      const novoStatus = mpData.status === 'approved' ? 'aprovado' : mpData.status === 'rejected' ? 'rejeitado' : 'pendente'
+
+      // Salva pagamento
+      db.prepare(`INSERT INTO pagamentos_cartao (tenant_id,mp_payment_id,mp_external_ref,valor,status,status_detail,payer_name,payment_method_id)
+        VALUES (?,?,?,?,?,?,?,?)`)
+        .run(tid, String(mpData.id), extRef, parseFloat(valor), novoStatus, mpData.status_detail || '', `PLANO:${plano}`, mpData.payment_method_id || '')
+
+      // Se aprovado, renova o plano
+      if (novoStatus === 'aprovado') {
+        const novaExpira = new Date()
+        novaExpira.setDate(novaExpira.getDate() + 30)
+        db.prepare('UPDATE tenants SET plano=?, expires_at=?, ativo=1 WHERE id=?').run(plano, novaExpira.toISOString().slice(0,10), tid)
+        marcarDirty()
+        log('✅', `PLANO RENOVADO (Cartao): ${plano} tenant=${tid} expira=${novaExpira.toISOString().slice(0,10)}`)
+      }
+
+      log('💳', `Cartao plano: R$${valor} plano=${plano} tenant=${tid} status=${novoStatus}`)
+      send(res, 200, { ok: true, status: novoStatus, status_detail: mpData.status_detail || '' })
+    } catch (e) { log('❌', 'Cartao plano erro:', { error: e.message }); send(res, 500, { error: 'Erro ao processar pagamento: ' + e.message }) }
+    return true
+  }
+  
+  // ── Obter Public Key MP para frontend ────────────────
+  if (req.method === 'GET' && upath === '/api/planos/mp-public-key') {
+    try {
+      const cfgMp = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const gCfg = cfgMp?.ia_config ? JSON.parse(cfgMp.ia_config) : {}
+      send(res, 200, { public_key: gCfg.mp_public_key || '' })
+    } catch { send(res, 200, { public_key: '' }) }
+    return true
+  }
+
+  // ── Solicitar teste gratis (landing page → WA admin) ─────────────
+  if (req.method === 'POST' && upath === '/api/planos/solicitar-teste') {
+    const body = await readBody(req)
+    const { nome, restaurante, telefone, cidade, plano } = body
+    if (!nome || !telefone) { send(res, 400, { error: 'Nome e telefone obrigatorios' }); return true }
+    try {
+      // Busca numero do admin no config global
+      const cfgG = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const gCfg = cfgG?.ia_config ? JSON.parse(cfgG.ia_config) : {}
+      const adminPhone = (gCfg.admin_phone || '').replace(/\D/g,'')
+      const planoLabel = plano === 'premium' ? 'Premium' : 'Essencial'
+      const msgAdmin = [
+        `*🆕 NOVO LEAD — TESTE GRATIS*`,
+        ``,
+        `*Nome:* ${nome}`,
+        `*Restaurante:* ${restaurante || '—'}`,
+        `*Telefone:* ${telefone}`,
+        `*Cidade:* ${cidade || '—'}`,
+        `*Plano de interesse:* ${planoLabel}`,
+        ``,
+        `_Enviado automaticamente pela landing page_`
+      ].join('\n')
+      // Envia WA para admin
+      if (adminPhone) {
+        try {
+          const evoHeaders = { 'Content-Type': 'application/json', apikey: EVO_KEY }
+          const evoBody = JSON.stringify({ number: adminPhone, text: msgAdmin })
+          await fetch(`${EVO_URL}/message/sendText/${EVO_INST}`, { method: 'POST', headers: evoHeaders, body: evoBody })
+          log('📨', `Trial lead WA enviado para admin (${adminPhone}): ${nome} — ${planoLabel}`)
+        } catch(eWa) { log('⚠️', 'WA admin trial erro:', eWa.message) }
+      } else {
+        log('⚠️', 'admin_phone nao configurado no painel admin — WA nao enviado')
+      }
+      // Salva lead na tabela (cria se nao existir)
+      try {
+        db.prepare(`CREATE TABLE IF NOT EXISTS leads_trial (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          nome TEXT, restaurante TEXT, telefone TEXT, cidade TEXT, plano TEXT,
+          created_at TEXT DEFAULT (datetime('now'))
+        )`).run()
+        db.prepare('INSERT INTO leads_trial (nome,restaurante,telefone,cidade,plano) VALUES (?,?,?,?,?)').run(
+          nome, restaurante||'', telefone, cidade||'', plano||'essencial'
         )
-      ).join('');
-      extrasHtml = linhasGrupos;
+      } catch(eDb) { log('⚠️', 'leads_trial insert erro:', eDb.message) }
+      send(res, 200, { ok: true })
+    } catch(e) { log('❌', 'solicitar-teste erro:', e.message); send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Admin: Configurar telefone admin (WA para receber leads) ──────
+  if (req.method === 'POST' && upath === '/api/admin/planos/admin-phone') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Nao autorizado' }); return true }
+    const body = await readBody(req)
+    const { admin_phone } = body
+    try {
+      const cfgG = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const ia = cfgG?.ia_config ? JSON.parse(cfgG.ia_config) : {}
+      ia.admin_phone = (admin_phone || '').replace(/\D/g,'')
+      db.prepare("INSERT INTO store_config (tenant_id,ia_config) VALUES ('_global',?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config").run(JSON.stringify(ia))
+      marcarDirty()
+      log('⚙️', `admin_phone configurado: ${ia.admin_phone}`)
+      send(res, 200, { ok: true, admin_phone: ia.admin_phone })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Admin: Obter telefone admin ────────────────────────────────────
+  if (req.method === 'GET' && upath === '/api/admin/planos/admin-phone') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Nao autorizado' }); return true }
+    try {
+      const cfgG = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const ia = cfgG?.ia_config ? JSON.parse(cfgG.ia_config) : {}
+      send(res, 200, { admin_phone: ia.admin_phone || '' })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Admin: Listar leads trial ──────────────────────────────────────
+  if (req.method === 'GET' && upath === '/api/admin/leads-trial') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Nao autorizado' }); return true }
+    try {
+      db.prepare(`CREATE TABLE IF NOT EXISTS leads_trial (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT, restaurante TEXT, telefone TEXT, cidade TEXT, plano TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      )`).run()
+      const leads = db.prepare('SELECT * FROM leads_trial ORDER BY created_at DESC LIMIT 200').all()
+      send(res, 200, leads)
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Segmento do tenant ──────────────────────────────────────────────────
+  if (upath === '/api/tenant-segmento') {
+    const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    if (req.method === 'GET') {
+      const row = db.prepare('SELECT segmento FROM tenants WHERE id=?').get(tid)
+      send(res, 200, { segmento: row?.segmento || 'restaurante' }); return true
+    }
+    if (req.method === 'PATCH') {
+      const body = await readBody(req)
+      const seg  = ['restaurante','acougue'].includes(body.segmento) ? body.segmento : 'restaurante'
+      db.prepare('UPDATE tenants SET segmento=? WHERE id=?').run(seg, tid)
+      marcarDirty()
+      send(res, 200, { ok: true, segmento: seg }); return true
+    }
+  }
+
+  // ── Catálogos do Açougue (cortes, preparos, ocasiao, armazenamento) ────────
+  if (upath === '/api/acougue-catalogs') {
+    const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+
+    if (req.method === 'GET') {
+      const row = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+      const ia  = row?.ia_config ? JSON.parse(row.ia_config) : {}
+      send(res, 200, { catalogs: ia.acougue_catalogs || null }); return true
     }
 
-    // Obs livre (digitada pelo cliente)
-    const obsLivreHtml = parsed.obsLivre
-      ? D('padding-left:18px;font-size:0.9em;font-style:italic', '✎ ' + parsed.obsLivre)
-      : '';
-
-    if (is58) {
-      // 58mm: nome com qty na primeira linha, preço alinhado direita na seguinte
-      return D('margin-bottom:3px',
-        D('word-break:break-word', `${qtyPrefix} ${nome}`) +
-        D('text-align:right;font-size:0.9em;color:#000', preco) +
-        kitHtml + meioHtml + extrasHtml + obsLivreHtml);
+    if (req.method === 'POST') {
+      const body = await readBody(req)
+      if (!body || typeof body !== 'object') { send(res, 400, { error: 'Body inválido' }); return true }
+      const row = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+      const ia  = row?.ia_config ? JSON.parse(row.ia_config) : {}
+      ia.acougue_catalogs = body
+      db.prepare('INSERT INTO store_config (tenant_id,ia_config) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config')
+        .run(tid, JSON.stringify(ia))
+      marcarDirty()
+      send(res, 200, { ok: true }); return true
     }
-    // 80mm: "(qty) nome ............ R$ X,XX" na mesma linha
-    return D('margin-bottom:3px',
-      ROW(D('word-break:break-word', `${qtyPrefix} ${nome}`), preco) +
-      kitHtml + meioHtml + extrasHtml + obsLivreHtml);
-  };
+  }
+  // ── Rádio push-to-talk (garçom ↔ garçom, garçom ↔ gestor) ──────────────────
+  if (req.method === 'POST' && upath === '/api/radio/send') {
+    const tid  = getTenantId(req, params)
+    if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    const body = await readBody(req)
+    const { audio, garcom_nome, garcom_id, destino } = body
+    if (!audio) { send(res, 400, { error: 'Áudio obrigatório' }); return true }
+    if (audio.length > 500000) { send(res, 413, { error: 'Áudio muito grande (máx 10s)' }); return true }
 
-  const itemLines = items.map(renderItem).join('');
+    const from_id = garcom_id ? String(garcom_id) : 'gestor'
+    const to_id = (!destino || destino === 'gestor') ? 'gestor' : String(destino)
+    const from_nome = garcom_nome || (from_id === 'gestor' ? 'Gestor' : 'Garçom')
 
-  // ── Totais ──────────────────────────────────────────────
-  const subtotal   = items.reduce((s,i) => s + (parseFloat(i.price||0) * (i.qty||1)), 0);
-  const taxa       = parseFloat(order.taxa || 0);
-  const orderTotal = parseFloat(order.total);
-  // Detecta se houve cancelamento de item (array original tinha mais itens que o filtrado)
-  const _itemsAll  = Array.isArray(order.items) ? order.items : [];
-  const _temCancelado = _itemsAll.some(i => (i?.item_status||'active') === 'cancelado');
-  // Se há cancelados, o order.total do banco está desatualizado — usa subtotal recalculado.
-  // Senão, mantém a lógica original (order.total pode incluir desconto de cupom/cashback).
-  const desconto   = (!_temCancelado && !isNaN(orderTotal) && orderTotal < subtotal) ? Math.max(0, subtotal - orderTotal) : 0;
-  const total      = (_temCancelado || isNaN(orderTotal)) ? (subtotal + taxa) : (orderTotal + taxa);
-  const orderNum   = order.num || order.order_num || order.id;
+    // Salva no banco
+    try {
+      db.prepare('INSERT INTO radio_messages (tenant_id, from_id, from_nome, to_id, audio) VALUES (?,?,?,?,?)').run(tid, from_id, from_nome, to_id, audio)
+    } catch(e) { console.warn('[RADIO] db insert:', e.message) }
 
-  // Banner "* Cobrar do cliente *" (só se não pago)
-  const cobrarBanner = !jaPago
-    ? CENTER('* Cobrar do cliente *', 'font-weight:bold;margin:6px 0 4px')
-    : CENTER('* Pedido já pago *', 'font-weight:bold;margin:6px 0 4px');
-
-  // Bloco de totais (sempre mostra subtotal + taxa + total)
-  const totalBlock = H(
-    ROW('Subtotal:', money(subtotal)),
-    desconto > 0 ? ROW('Desconto:', '−' + money(desconto)) : '',
-    taxa > 0     ? ROW('Taxa de entrega:', money(taxa))    : '',
-    ROW(S('font-weight:bold', 'Total:'), S('font-weight:bold', money(total)))
-  );
-
-  // Troco — deixa explícito quanto o cliente vai pagar e quanto devolver
-  let trocoLine = '';
-  if (order.pag === 'dinheiro') {
-    if (order.troco > 0) {
-      // Cliente informou o valor que vai entregar — calcula o troco a devolver
-      const devolver = Math.max(0, order.troco - total);
-      trocoLine = H(
-        ROW('Cliente paga:', money(order.troco)),
-        ROW(S('font-weight:bold', 'DEVOLVER ao cliente:'), S('font-weight:bold', money(devolver)))
-      );
-    } else if (order.troco === -1) {
-      // Cliente pediu troco mas não informou o valor
-      trocoLine = ROW(S('font-weight:bold', 'Troco:'), S('font-weight:bold', 'SIM (valor nao informado)'));
+    const payload = { audio, garcom_nome: from_nome, garcom_id: from_id, ts: Date.now() }
+    if (to_id === 'gestor') {
+      sseBroadcast(`radio-rt:${tid}`, 'radio:msg', payload)
     } else {
-      // Cliente vai pagar exato (sem necessidade de troco)
-      trocoLine = ROW('Troco:', 'Nao precisa');
+      sseBroadcast(`radio-garcom-${to_id}:${tid}`, 'radio:msg', payload)
     }
+    send(res, 200, { ok: true })
+    return true
   }
 
-  // ── Endereço estruturado (extrai referência se presente) ─────
-  // Formato típico: "Rua X, 123, Bairro, complemento, Ref: prox merc"
-  const _splitAddr = (addrStr) => {
-    if (!addrStr) return { full:'', referencia:'' };
-    const partes = addrStr.split(', ');
-    let referencia = '';
-    const refIdx = partes.findIndex(p => /^Ref:\s*/i.test(p));
-    if (refIdx >= 0) {
-      referencia = partes[refIdx].replace(/^Ref:\s*/i,'').trim();
-      partes.splice(refIdx, 1);
-    }
-    return { full: partes.join(', '), referencia };
-  };
-  const _addrParts = _splitAddr(order.addr);
-  const addrLine = (cfg.addr && order.addr)
-    ? D('word-break:break-word;margin-top:2px', _addrParts.full)
-    : '';
-  const refLine = (cfg.addr && _addrParts.referencia)
-    ? D('word-break:break-word;margin-top:1px', 'Referência: ' + _addrParts.referencia)
-    : '';
-
-  // ── Telefone (opcional) ─────────────────────────────────
-  const phoneLine = order.phone
-    ? D('margin-top:1px', 'Telefone: ' + order.phone)
-    : '';
-
-  // ══════════════════════════════════════════════════════
-  // VIA PRINCIPAL — Layout estilo Anota AI
-  // ══════════════════════════════════════════════════════
-  const viaPrincipal = D('font-family:\'Courier New\',monospace;font-size:' + fs + 'px;width:100%;box-sizing:border-box;padding:0 2px',
-    H(
-      // ── 1) Topo: tipo + data + janela + nome da loja ──
-      tipoHeader,
-      CENTER(dataHoraTxt, 'font-size:0.9em;margin-bottom:1px'),
-      (!isMesa && !isRetira) ? CENTER('Entrega prevista: ' + janelaEntregaTxt, 'font-size:0.9em;margin-bottom:2px') : '',
-      CENTER(cfg.nome, 'font-size:0.95em;font-weight:bold;margin-bottom:4px'),
-      HR(),
-
-      // ── 2) PEDIDO NN gigante ──
-      CENTER('PEDIDO ' + orderNum, 'font-size:1.7em;font-weight:bold;letter-spacing:1px;margin:6px 0 4px'),
-      HR(),
-
-      // ── 3) Itens ──
-      SECTION('Itens'),
-      itemLines,
-      HR(),
-
-      // ── 4) Cliente ──
-      SECTION('Cliente'),
-      D('margin-top:1px', 'Nome: ' + (order.client || '—')),
-      phoneLine,
-      addrLine ? D('margin-top:3px', (isRetira ? 'Retirada: ' : 'Entrega: ') + _addrParts.full) : '',
-      refLine,
-      HR(),
-
-      // ── 5) Pagamento ──
-      SECTION('Pagamento'),
-      D('margin-top:1px', 'Forma de Pagamento: ' + pagNome),
-      cobrarBanner,
-      totalBlock,
-      trocoLine,
-      HR(),
-
-      // ── 6) Rodapé ──
-      CENTER(cfg.rodape || '', 'font-size:0.85em;color:#333'),
-      CENTER('Powered By: EstimaFood', 'font-size:0.8em;color:#555;margin-top:4px')
-    )
-  );
-
-  // ══════════════════════════════════════════════════════
-  // VIA COZINHA
-  // ══════════════════════════════════════════════════════
-  let viaCozinha = '';
-  if (itensCozinha.length > 0) {
-    const itensCozHtml = itensCozinha.map(i => {
-      const nome   = (i.qty + 'x ' + i.name).toUpperCase();
-      const parsed = _parseObs(i.obs);
-      let detalhesHtml = '';
-
-      // Kit
-      if (parsed.kitItens.length) {
-        detalhesHtml += D('padding-left:6px;font-size:0.9em;border-left:3px solid #444;margin:3px 0',
-          D('font-weight:bold', 'CONTÉM:') +
-          parsed.kitItens.map(k => D('padding-left:6px', '• ' + k)).join(''));
-      }
-
-      // Meio a meio
-      if (parsed.meioMeio) {
-        detalhesHtml += D('padding-left:6px;font-size:0.95em;border-left:3px solid #444;margin:3px 0;font-weight:bold',
-          '½ + ½ ' + parsed.meioMeio);
-      }
-
-      // Grupos (Adicionais, Ponto, Molhos…) — destaque alto na cozinha
-      if (parsed.grupos.length) {
-        const linhasGrupos = parsed.grupos.map(g =>
-          D('margin-top:2px',
-            D('font-weight:bold;text-transform:uppercase;font-size:0.9em', '› ' + g.nome + ':') +
-            g.itens.map(it => D('padding-left:10px;font-size:0.95em', '• ' + it)).join('')
-          )
-        ).join('');
-        detalhesHtml += D('padding-left:6px;border-left:3px solid #999;margin:3px 0;word-break:break-word', linhasGrupos);
-      }
-
-      // Obs livre
-      if (parsed.obsLivre) {
-        detalhesHtml += D('padding-left:6px;font-size:0.95em;border-left:3px solid #999;margin:3px 0;word-break:break-word;font-weight:bold',
-          'OBS: ' + parsed.obsLivre);
-      }
-
-      return D('border-bottom:1px dotted #ddd;padding-bottom:4px;margin-bottom:4px',
-        D('font-weight:bold;font-size:1.05em;word-break:break-word', nome) + detalhesHtml);
-    }).join('');
-
-    viaCozinha = D('page-break-before:always', '') +
-      D('font-family:\'Courier New\',monospace;font-size:' + fs + 'px;width:100%;box-sizing:border-box;padding:0 2px',
-        H(
-          CENTER('★ COZINHA ★', 'font-size:1.3em;font-weight:bold;margin-bottom:2px'),
-          BANNER(`${tipoIcon} ${isMesa ? 'MESA ' + (order.mesa_num || '') : isRetira ? 'RETIRADA' : 'DELIVERY'}`, tipoBg, 'font-size:1.2em;letter-spacing:1px'),
-          HR(),
-          CENTER('PEDIDO ' + orderNum, 'font-size:1.5em;font-weight:bold;letter-spacing:1px;margin:4px 0'),
-          HR(),
-          D('margin-bottom:1px', 'Data: ' + now),
-          D('margin-bottom:1px', 'Cliente: ' + (order.client || '—')),
-          order.addr ? D('word-break:break-word;margin-top:2px', '📍 ' + _addrParts.full) : '',
-          _addrParts.referencia ? D('word-break:break-word;margin-top:1px', 'Ref: ' + _addrParts.referencia) : '',
-          HR(),
-          itensCozHtml,
-          HR(),
-          CENTER('— via cozinha —', 'font-size:0.85em;color:#555'),
-          CENTER('Powered By: EstimaFood', 'font-size:0.8em;color:#555;margin-top:4px')
-        )
-      );
+  // ── Lista mensagens de rádio (histórico das últimas 10h) ──────────────────
+  if (req.method === 'GET' && upath === '/api/radio/messages') {
+    const tid = getTenantId(req, params)
+    if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    const user_id = params.get('user_id') || 'gestor'
+    try {
+      // Retorna mensagens enviadas OU recebidas por este user nos últimos 10h (sem o blob de áudio — só metadata)
+      const rows = db.prepare(`
+        SELECT id, from_id, from_nome, to_id, created_at
+        FROM radio_messages
+        WHERE tenant_id=? AND (from_id=? OR to_id=?)
+          AND created_at >= datetime('now','-10 hours')
+        ORDER BY id DESC LIMIT 100
+      `).all(tid, user_id, user_id)
+      send(res, 200, rows || [])
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
   }
 
-  // ── Via combinada (folha única) ─────────────────────────
-  const cutLine = CENTER('· · · · ✂ · · · · · · · · ✂ · · · ·', 'font-size:0.75em;color:#aaa;margin:6px 0');
-  const singleSheet = viaCozinha
-    ? viaPrincipal + cutLine + viaCozinha.replace(D('page-break-before:always', ''), '')
-    : viaPrincipal;
-
-  return { principal: viaPrincipal, cozinha: viaCozinha, combined: viaPrincipal + viaCozinha, singleSheet };
-}
-
-// ── Carrega lista de impressoras do servidor ──────────
-async function loadPrinters() {
-  const sel = document.getElementById('print-printer-select');
-  const selCoz = document.getElementById('print-printer-cozinha-select');
-  if (!sel) return;
-  try {
-    let printers = [];
-    let defaultPrinter = '';
-
-    // Electron: busca impressoras do Windows diretamente
-    if (window.ElectronPrint) {
-      const cfg = await window.ElectronPrint.getConfig();
-      printers       = cfg.printers || [];
-      defaultPrinter = cfg.printer || '';
-      // Restaura impressoras salvas no Electron
-      const _eCaixa = cfg.printer_caixa || cfg.printer || '';
-      const _eCoz   = cfg.printer_cozinha || '';
-      if (_eCaixa) { _printPrinter = _eCaixa; localStorage.setItem('printPrinter', _eCaixa); }
-      if (_eCoz)   { _printPrinterCozinha = _eCoz; localStorage.setItem('printPrinterCozinha', _eCoz); }
-    } else {
-      // Web: busca do servidor
-      const r = await fetch('/api/printers');
-      const d = await r.json();
-      printers       = d.printers || [];
-      defaultPrinter = d.default  || '';
-    }
-
-    const optsBalcao = '<option value="">Impressora padrão do sistema</option>' +
-      printers.map(p =>
-        `<option value="${p}" ${p === _printPrinter ? 'selected' : ''}>${p}${p === defaultPrinter ? ' ★' : ''}</option>`
-      ).join('');
-    sel.innerHTML = optsBalcao;
-    if (_printPrinter) sel.value = _printPrinter;
-
-    // Impressora cozinha
-    if (selCoz) {
-      const optsCoz = '<option value="">Mesma do balcão (impressora única)</option>' +
-        printers.map(p =>
-          `<option value="${p}" ${p === _printPrinterCozinha ? 'selected' : ''}>${p}${p === defaultPrinter ? ' ★' : ''}</option>`
-        ).join('');
-      selCoz.innerHTML = optsCoz;
-      if (_printPrinterCozinha) selCoz.value = _printPrinterCozinha;
-    }
-  } catch {
-    sel.innerHTML = '<option value="">Impressora padrão do sistema</option>';
-    if (selCoz) selCoz.innerHTML = '<option value="">Mesma do balcão (impressora única)</option>';
+  // ── Busca áudio de uma mensagem específica ────────────────────────────────
+  if (req.method === 'GET' && upath.startsWith('/api/radio/audio/')) {
+    const tid = getTenantId(req, params)
+    const msgId = parseInt(upath.split('/')[4]) || 0
+    if (!tid || !msgId) { send(res, 400, { error: 'Parâmetros inválidos' }); return true }
+    try {
+      const row = db.prepare('SELECT audio FROM radio_messages WHERE id=? AND tenant_id=?').get(msgId, tid)
+      if (!row) { send(res, 404, { error: 'Áudio não encontrado' }); return true }
+      send(res, 200, { audio: row.audio })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
   }
-}
 
-// ── Impressão via agente local (computador da loja) ──
-async function _printViaAgent(html) {
-  const printer = document.getElementById('print-printer-select')?.value || _printPrinter || '';
-  const format  = document.getElementById('print-format-select')?.value  || _printFormat  || '80mm';
-  const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
-  const res = await fetch('/api/print-queue/job', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-    body:    JSON.stringify({ html, format, printer: printer || undefined, marginH: _printMarginH, marginV: _printMarginV }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Erro ao criar job');
-  return data;
-}
-
-// ── Impressão via servidor (silenciosa, Puppeteer) ───
-async function _printViaServer(html) {
-  const printer = document.getElementById('print-printer-select')?.value || _printPrinter || '';
-  const format  = document.getElementById('print-format-select')?.value  || _printFormat  || '80mm';
-  _printPrinter = printer; localStorage.setItem('printPrinter', printer);
-  _printFormat  = format;  localStorage.setItem('printFormat',  format);
-  const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
-  const res = await fetch('/api/print', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-    body:    JSON.stringify({ html, printer: printer || undefined, format }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Erro no servidor');
-
-  // Servidor gerou o PDF — abre nova aba e imprime
-  // (Chrome não suporta print() em PDF dentro de iframe)
-  if (data.pdf) {
-    const bytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
-    const blob  = new Blob([bytes], { type: 'application/pdf' });
-    const url   = URL.createObjectURL(blob);
-    const win   = window.open(url, '_blank');
-    if (win) {
-      win.onload = () => {
-        win.print();
-        setTimeout(() => { win.close(); URL.revokeObjectURL(url); }, 2000);
-      };
-      // fallback: onload nem sempre dispara em PDFs
-      setTimeout(() => {
-        try { win.print(); } catch(_) {}
-        setTimeout(() => { try { win.close(); } catch(_){} URL.revokeObjectURL(url); }, 2000);
-      }, 1500);
-    } else {
-      sbToast('warn', '⚠️ Popup bloqueado — abra o Chrome com --kiosk-printing');
-      URL.revokeObjectURL(url);
-    }
+  // ── Lista garçons ativos (para o seletor de rádio) ────────────────────────
+  if (req.method === 'GET' && upath === '/api/radio/garcons') {
+    const tid = getTenantId(req, params)
+    if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    try {
+      const rows = db.prepare('SELECT id, nome FROM garcons WHERE tenant_id=? AND ativo=1 ORDER BY nome').all(tid)
+      send(res, 200, rows || [])
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
   }
-  return data;
-}
 
-// ── Impressão via navegador (fallback final) ─────────
-function _printViaBrowser(html) {
-  const frame = document.getElementById('print-frame');
-  if (!frame) return;
+  if (req.method === 'POST' && upath === '/api/garcom-login') {
+    const tid  = getTenantId(req, params)
+    const body = await readBody(req)
+    const { usuario, senha } = body
+    if (!usuario || !senha) { send(res, 400, { error: 'Usuário e senha obrigatórios' }); return true }
+    if (!tid)               { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    try {
+      // Senha pode estar em plain text (legado) ou SHA256 (novo).
+      // Aceita ambos e, ao detectar plain text, migra automaticamente para hash.
+      const user = usuario.trim().toLowerCase()
+      const hashSenha = crypto.createHash('sha256').update(senha).digest('hex')
+      const row = db.prepare(
+        'SELECT id, tenant_id, nome, usuario, senha, ativo FROM garcons WHERE tenant_id=? AND usuario=? AND ativo=1'
+      ).get(tid, user)
+      if (!row) { send(res, 401, { error: 'Usuário ou senha incorretos' }); return true }
+      const stored = row.senha || ''
+      const isHash = /^[a-f0-9]{64}$/i.test(stored)
+      const match = isHash ? (stored === hashSenha) : (stored === senha)
+      if (!match) { send(res, 401, { error: 'Usuário ou senha incorretos' }); return true }
+      // Migração lazy: se estava em plain text, atualiza para hash
+      if (!isHash) {
+        try { db.prepare('UPDATE garcons SET senha=? WHERE id=?').run(hashSenha, row.id); log('🔐', `[MIGRACAO] Senha do garçom ${row.usuario} migrada para hash`) } catch(_) {}
+      }
+      send(res, 200, { id: row.id, tenant_id: row.tenant_id, nome: row.nome, usuario: row.usuario, ativo: true })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
 
-  // Monta HTML completo dentro do iframe
-  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  // ── Gera PDF de um job e devolve base64 (para extensão Chrome) ──
+  if (req.method === 'GET' && upath.startsWith('/api/print-queue/pdf/')) {
+    const tid   = req.headers['x-tenant-id']
+    const jobId = parseInt(upath.split('/')[4]) || 0
+    if (!tid || !jobId) { send(res, 400, { error: 'parâmetros inválidos' }); return true }
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS print_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id TEXT NOT NULL, html TEXT NOT NULL,
+        format TEXT DEFAULT 'A4', printer TEXT,
+        status TEXT DEFAULT 'pending', error TEXT,
+        created_at TEXT DEFAULT (datetime('now')), done_at TEXT
+      )`)
+      const job = db.prepare(
+        `SELECT id, html, format, printer FROM print_jobs WHERE id=? AND tenant_id=?`
+      ).get(jobId, tid)
+      if (!job) { send(res, 404, { error: 'Job não encontrado' }); return true }
+
+      let puppeteer
+      try { puppeteer = require('puppeteer') } catch {
+        send(res, 500, { error: 'Puppeteer não instalado' }); return true
+      }
+
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu']
+      })
+      let pdfBase64
+      try {
+        const page = await browser.newPage()
+        const fullHtml = job.html.includes('<html') ? job.html
+          : `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
-  * { margin:0; padding:0; box-sizing:border-box }
-  body { font-family:'Courier New',monospace; font-size:12px; color:#000; background:#fff; overflow-wrap:break-word; word-break:break-word }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important }
+  body { font-family:'Courier New',monospace; font-size:12px; color:#000; background:#fff; width:100%; overflow-wrap:break-word; word-break:break-word }
   hr { border:none; border-top:1px dashed #000; margin:4px 0 }
   .pt-center { text-align:center } .pt-large { font-size:15px; font-weight:bold }
   .pt-hr { border:none; border-top:1px dashed #000; margin:4px 0 }
-  .print-ticket { padding:2px 6px; width:100%; overflow:visible; overflow-wrap:break-word; word-break:break-word }
-  span, div { word-break:break-word; overflow-wrap:break-word }
-  @media print { @page { margin:${_printMarginV}mm ${_printMarginH}mm } body { margin:0 } }
-</style></head><body>${html}
-<script>
-  window.onload = function() {
-    window.print();
-    // Avisa o pai para esconder o frame após imprimir
-    setTimeout(function() {
-      try { window.parent.document.getElementById('print-frame').style.display='none'; } catch(_) {}
-    }, 1500);
-  };
-<\/script></body></html>`;
-
-  frame.style.display = 'block';
-  const doc = frame.contentDocument || frame.contentWindow?.document;
-  if (doc) {
-    doc.open();
-    doc.write(fullHtml);
-    doc.close();
-  } else {
-    // Fallback absoluto: blob URL
-    const blob = new Blob([fullHtml], { type: 'text/html' });
-    const url  = URL.createObjectURL(blob);
-    frame.src  = url;
-    frame.onload = () => {
-      try { frame.contentWindow.print(); } catch (_) {}
-      setTimeout(() => { frame.style.display = 'none'; URL.revokeObjectURL(url); }, 2000);
-    };
-  }
-}
-
-// ── Aviso quando nenhum método silencioso está disponível ────────
-function _showPrintAgentToast() {
-  const msg =
-    '🖨️ Nenhum agente ativo. Para imprimir sem confirmação, ' +
-    'inicie o print-agent.js no computador da loja.';
-  if (typeof sbToast === 'function') sbToast('warn', msg);
-  else console.warn(msg);
-}
-
-// ══════════════════════════════════════════════════════════════
-// ESC/POS via WebUSB — imprime direto na térmica sem diálogo
-// ══════════════════════════════════════════════════════════════
-let _usbDevice = null; // guarda o device pareado entre impressões
-
-// Converte o pedido em bytes ESC/POS puros — layout estilo Anota AI
-function _buildEscPos(order, cfg, cols = 32) {
-  const enc  = new TextEncoder();
-  const buf  = [];
-  const push = (str) => enc.encode(str).forEach(b => buf.push(b));
-  const bytes= (...b) => b.forEach(b => buf.push(b));
-
-  const money = v => 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ',');
-  const center = (str) => {
-    const pad = Math.max(0, Math.floor((cols - str.length) / 2));
-    return ' '.repeat(pad) + str;
-  };
-  const cols2 = (left, right) => {
-    const space = cols - left.length - right.length;
-    return left + (space > 0 ? ' '.repeat(space) : ' ') + right;
-  };
-
-  // ── Data/hora do pedido + janela de entrega ─────────────
-  // IMPORTANTE: SQLite datetime('now') retorna UTC sem sufixo "Z" (ex: "2026-04-25 17:30:00").
-  // Sem isso o new Date() interpreta como horário local → janela de entrega errada em 3h (Brasília UTC-3).
-  const _parseCreatedAt = (raw) => {
-    if (!raw) return new Date();
-    if (raw instanceof Date) return raw;
-    const s = String(raw).trim();
-    if (/(Z|[+-]\d{2}:?\d{2})$/.test(s)) return new Date(s);
-    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
-    if (m) return new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]));
-    return new Date(s);
-  };
-  const _fmtBR = (d, opts) => d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', ...opts });
-  const _hhmmBR = (d) => _fmtBR(d, { hour: '2-digit', minute: '2-digit', hour12: false });
-  const _orderDate = _parseCreatedAt(order.created_at);
-  const _pad2 = n => String(n).padStart(2,'0');
-  const dataHoraTxt = _fmtBR(_orderDate, { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false }).replace(',', '');
-  const _parseTempoEntrega = (txt) => {
-    if (!txt) return [30, 45];
-    const m = String(txt).match(/(\d+)\s*[-–to a]+\s*(\d+)/);
-    if (m) return [parseInt(m[1]), parseInt(m[2])];
-    const single = String(txt).match(/(\d+)/);
-    if (single) { const v = parseInt(single[1]); return [v, v + 15]; }
-    return [30, 45];
-  };
-  const [_tmin, _tmax] = _parseTempoEntrega(cfg.tempoEntrega);
-  const _ini = new Date(_orderDate.getTime() + _tmin*60000);
-  const _fim = new Date(_orderDate.getTime() + _tmax*60000);
-  const janelaTxt = `${_hhmmBR(_ini)} - ${_hhmmBR(_fim)}`;
-
-  // ── Tipo de entrega ────────────────────────────────────
-  const _escAddr = (order.addr || '').toLowerCase();
-  const _escIsMesa     = !!(order.mesa_num || (order.addr || '').startsWith('Mesa'));
-  const _escIsRetirada = !_escIsMesa && !!(_escAddr.includes('retirada') || _escAddr.includes('balcão') || _escAddr.includes('balcao') || _escAddr.includes('retirar'));
-  const _escTipoLabel  = _escIsMesa
-    ? 'MESA ' + (order.mesa_num || '')
-    : _escIsRetirada ? 'PARA RETIRADA' : 'PARA ENTREGA';
-
-  // ── Endereço estruturado (extrai referência) ───────────
-  const _splitAddrEsc = (addrStr) => {
-    if (!addrStr) return { full:'', referencia:'' };
-    const partes = addrStr.split(', ');
-    let referencia = '';
-    const refIdx = partes.findIndex(p => /^Ref:\s*/i.test(p));
-    if (refIdx >= 0) {
-      referencia = partes[refIdx].replace(/^Ref:\s*/i,'').trim();
-      partes.splice(refIdx, 1);
+  .print-ticket { padding:0 2px; width:100%; overflow:visible; word-wrap:break-word; overflow-wrap:break-word }
+  @media print { @page { margin:0 } }
+</style></head><body>${job.html}</body></html>`
+        await page.setContent(fullHtml, { waitUntil: 'networkidle0' })
+        const pdfOpts = {
+          printBackground: true,
+          margin: { top:'2mm', bottom:'3mm', left:'0', right:'0' }
+        }
+        const fmt = job.format || 'A4'
+        if (fmt === '80mm' || fmt === '58mm') {
+          pdfOpts.width  = fmt
+          pdfOpts.height = (await page.evaluate(() => document.body.scrollHeight + 20)) + 'px'
+        } else {
+          pdfOpts.format = fmt
+        }
+        const pdfBuf = await page.pdf(pdfOpts)
+        pdfBase64 = pdfBuf.toString('base64')
+      } finally {
+        await browser.close()
+      }
+      send(res, 200, {
+        ok: true,
+        id: job.id,
+        pdf: pdfBase64,
+        format: job.format || 'A4',
+        printer: job.printer || ''
+      })
+    } catch (e) {
+      log('❌', 'PDF para extensão erro:', e.message)
+      send(res, 500, { error: e.message })
     }
-    return { full: partes.join(', '), referencia };
-  };
-  const _addrPartsEsc = _splitAddrEsc(order.addr);
-
-  const sep = '-'.repeat(cols) + '\n';
-  bytes(0x1B, 0x40);                         // ESC @ — reset
-
-  // ── 1) TOPO: tipo + data + janela + nome da loja ──
-  bytes(0x1B, 0x61, 0x01);                   // centralizar
-  bytes(0x1B, 0x45, 0x01);                   // negrito
-  push(_escTipoLabel + '\n');
-  bytes(0x1B, 0x45, 0x00);
-  push(dataHoraTxt + '\n');
-  if (!_escIsMesa && !_escIsRetirada) push('Entrega prevista: ' + janelaTxt + '\n');
-  bytes(0x1B, 0x45, 0x01);
-  push(cfg.nome + '\n');
-  bytes(0x1B, 0x45, 0x00);
-  bytes(0x1B, 0x61, 0x00);                   // alinhar esquerda
-  push(sep);
-
-  // ── 2) PEDIDO NN gigante ──
-  bytes(0x1B, 0x61, 0x01);                   // centralizar
-  bytes(0x1D, 0x21, 0x11);                   // fonte dupla altura+largura
-  bytes(0x1B, 0x45, 0x01);                   // negrito
-  push('PEDIDO ' + (order.num || order.id) + '\n');
-  bytes(0x1B, 0x45, 0x00);
-  bytes(0x1D, 0x21, 0x00);                   // fonte normal
-  bytes(0x1B, 0x61, 0x00);                   // alinhar esquerda
-  push(sep);
-
-  // ── 3) Itens ──
-  bytes(0x1B, 0x45, 0x01);                   // negrito
-  push('Itens\n');
-  bytes(0x1B, 0x45, 0x00);
-  // Filtra itens cancelados — não imprime nem cobra
-  const items = (Array.isArray(order.items) ? order.items : [])
-    .filter(i => (i?.item_status || 'active') !== 'cancelado');
-  const maxNameLen = cols - 14;
-  items.forEach(i => {
-    const qtyPrefix = `(${i.qty||1}) `;
-    const fullName  = (qtyPrefix + i.name).substring(0, maxNameLen);
-    const price = money((i.price || 0) * (i.qty || 1));
-    push(cols2(fullName, price) + '\n');
-
-    const parsed = _parseObs(i.obs);
-
-    // Kit: sub-itens com (1) prefix
-    if (parsed.kitItens.length) {
-      parsed.kitItens.forEach(k => {
-        _wrapText(k, cols, '    (1) ').forEach(l => push(l + '\n'));
-      });
-    }
-
-    // Pizza meio a meio
-    if (parsed.meioMeio) {
-      _wrapText('1/2 + 1/2 ' + parsed.meioMeio, cols, '    ').forEach(l => push(l + '\n'));
-    }
-
-    // Grupos (Adicionais, Ponto, Molhos…)
-    if (parsed.grupos.length) {
-      parsed.grupos.forEach(g => {
-        bytes(0x1B, 0x45, 0x01);
-        push('    ' + g.nome + ':\n');
-        bytes(0x1B, 0x45, 0x00);
-        g.itens.forEach(it => {
-          _wrapText(it, cols, '      - ').forEach(l => push(l + '\n'));
-        });
-      });
-    }
-
-    // Obs livre
-    if (parsed.obsLivre) {
-      _wrapText(parsed.obsLivre, cols, '    * ').forEach(l => push(l + '\n'));
-    }
-  });
-  push(sep);
-
-  // ── 4) Cliente ──
-  bytes(0x1B, 0x45, 0x01);
-  push('Cliente\n');
-  bytes(0x1B, 0x45, 0x00);
-  push('Nome: ' + (order.client || '—') + '\n');
-  if (order.phone) push('Telefone: ' + order.phone + '\n');
-  if (cfg.addr && _addrPartsEsc.full && !_escIsMesa) {
-    _wrapText((_escIsRetirada ? 'Retirada: ' : 'Entrega: ') + _addrPartsEsc.full, cols, '').forEach(l => push(l + '\n'));
-    if (_addrPartsEsc.referencia) {
-      _wrapText('Referencia: ' + _addrPartsEsc.referencia, cols, '').forEach(l => push(l + '\n'));
-    }
-  }
-  push(sep);
-
-  // ── 5) Pagamento ──
-  bytes(0x1B, 0x45, 0x01);
-  push('Pagamento\n');
-  bytes(0x1B, 0x45, 0x00);
-  const _escPagLabels = {
-    dinheiro:'Dinheiro', cartao:'Cartao', credito:'Credito', debito:'Debito',
-    pix:'PIX', pix_mp:'PIX Online', cartao_mp:'Credito Online', mesa:'Conta Mesa'
-  };
-  const _escPagNome = _escPagLabels[order.pag] || order.pag || '---';
-  // Mesma lógica de detecção do HTML — ver comentário lá pra explicação completa.
-  // pag_momento='online' SOZINHO não é prova de pagamento (gravado antes da confirmação).
-  const _escStatusPago = order.status && !['aguardando_pix','aguardando_cartao'].includes(order.status);
-  const _escJaPago  = order.pag === 'pix_mp'
-                   || order.pag === 'cartao_mp'
-                   || order.pag_momento === 'agora'
-                   || (order.pag === 'pix_manual' && _escStatusPago);
-  push('Forma de Pagamento: ' + _escPagNome + '\n');
-
-  // Banner cobrar do cliente
-  bytes(0x1B, 0x61, 0x01);                   // centralizar
-  bytes(0x1B, 0x45, 0x01);                   // negrito
-  push((_escJaPago ? '* Pedido ja pago *' : '* Cobrar do cliente *') + '\n');
-  bytes(0x1B, 0x45, 0x00);
-  bytes(0x1B, 0x61, 0x00);                   // esquerda
-
-  // Totais
-  const subtotal = items.reduce((s, i) => s + (parseFloat(i.price || 0) * (i.qty || 1)), 0);
-  const taxa  = parseFloat(order.taxa || 0);
-  const orderTotal = parseFloat(order.total);
-  // Se houver itens cancelados, o order.total está desatualizado — usa subtotal recalculado
-  const _itemsAllEsc  = Array.isArray(order.items) ? order.items : [];
-  const _temCancEsc   = _itemsAllEsc.some(i => (i?.item_status||'active') === 'cancelado');
-  const desconto = (!_temCancEsc && !isNaN(orderTotal) && orderTotal < subtotal) ? Math.max(0, subtotal - orderTotal) : 0;
-  const total = (_temCancEsc || isNaN(orderTotal)) ? (subtotal + taxa) : (orderTotal + taxa);
-  push(cols2('Subtotal:', money(subtotal)) + '\n');
-  if (desconto > 0) push(cols2('Desconto:', '-' + money(desconto)) + '\n');
-  if (taxa > 0)     push(cols2('Taxa de entrega:', money(taxa)) + '\n');
-  bytes(0x1B, 0x45, 0x01);
-  push(cols2('Total:', money(total)) + '\n');
-  bytes(0x1B, 0x45, 0x00);
-
-  // Troco — deixa explícito quanto o cliente vai pagar e quanto devolver
-  if (order.pag === 'dinheiro') {
-    if (order.troco > 0) {
-      // Cliente informou o valor que vai entregar — calcula e destaca o troco a devolver
-      const devolver = Math.max(0, order.troco - total);
-      push(cols2('Cliente paga:', money(order.troco)) + '\n');
-      bytes(0x1B, 0x45, 0x01);
-      push(cols2('DEVOLVER ao cliente:', money(devolver)) + '\n');
-      bytes(0x1B, 0x45, 0x00);
-    } else if (order.troco === -1) {
-      // Cliente pediu troco mas não informou o valor — alerta o entregador
-      bytes(0x1B, 0x45, 0x01);
-      push(cols2('Troco:', 'SIM (valor nao informado)') + '\n');
-      bytes(0x1B, 0x45, 0x00);
-    } else {
-      // Cliente vai pagar exato
-      push(cols2('Troco:', 'Nao precisa') + '\n');
-    }
-  }
-  push(sep);
-
-  // ── 6) Rodapé ──
-  bytes(0x1B, 0x61, 0x01);                   // centralizar
-  push((cfg.rodape || 'Obrigado!') + '\n');
-  push('Powered By: EstimaFood\n');
-  bytes(0x1B, 0x61, 0x00);
-
-  // Avança papel e corta
-  bytes(0x0A, 0x0A, 0x0A);                   // 3 linhas
-  bytes(0x1D, 0x56, 0x42, 0x00);             // GS V — corte parcial
-
-  return new Uint8Array(buf);
-}
-
-// Conecta (ou reutiliza) o dispositivo USB pareado
-async function _usbConnect() {
-  if (_usbDevice && _usbDevice.opened) return _usbDevice;
-
-  // Tenta reutilizar dispositivo já autorizado
-  const devices = await navigator.usb.getDevices();
-  const saved   = localStorage.getItem('escpos_usb_name');
-  let dev = devices.find(d =>
-    saved ? (d.productName + d.manufacturerName).includes(saved) : true
-  ) || devices[0];
-
-  if (!dev) {
-    // Pede permissão ao usuário (só na primeira vez)
-    dev = await navigator.usb.requestDevice({ filters: [] });
-    localStorage.setItem('escpos_usb_name', (dev.productName || '') + (dev.manufacturerName || ''));
+    return true
   }
 
-  await dev.open();
-  if (dev.configuration === null) await dev.selectConfiguration(1);
-  // Acha a interface com endpoint bulk-out
-  for (const iface of dev.configuration.interfaces) {
+  // ═══════════════════════════════════════════════════════
+  // FILA DE IMPRESSÃO — Agente local
+  // O agente roda no computador da loja e consulta esta fila
+  // ═══════════════════════════════════════════════════════
+
+  // ── Lista impressoras do sistema ──────────────────────────────────
+  if (req.method === 'GET' && upath === '/api/printers') {
+    log('🖨️', '[PRINT] GET /api/printers | plataforma:', process.platform)
     try {
-      await dev.claimInterface(iface.interfaceNumber);
-      _usbDevice = dev;
-      _usbDevice._epOut = iface.alternates[0]?.endpoints
-        .find(e => e.direction === 'out')?.endpointNumber;
-      if (_usbDevice._epOut !== undefined) break;
-      await dev.releaseInterface(iface.interfaceNumber);
-    } catch {}
+      const { execSync } = require('child_process')
+      let printers = []
+      let defaultPrinter = ''
+      try {
+        if (process.platform === 'win32') {
+          const out = execSync('powershell -Command "Get-Printer | Select-Object Name,Default | ConvertTo-Json"', { timeout: 5000 }).toString()
+          const list = JSON.parse(out)
+          const arr = Array.isArray(list) ? list : [list]
+          printers       = arr.map(p => p.Name)
+          defaultPrinter = (arr.find(p => p.Default) || {}).Name || ''
+        } else {
+          const out = execSync('lpstat -a 2>/dev/null || lpstat -p 2>/dev/null', { timeout: 5000 }).toString()
+          printers = out.split('\n').filter(Boolean).map(l => l.split(' ')[0] || l.split('\t')[0]).filter(Boolean)
+          try { defaultPrinter = execSync('lpstat -d 2>/dev/null', { timeout: 3000 }).toString().split(':')[1]?.trim() || '' } catch {}
+        }
+      } catch (e) {
+        log('⚠️', '[PRINT] Erro ao listar impressoras:', e.message)
+      }
+      log('🖨️', '[PRINT] Impressoras encontradas:', printers.length, '| padrão:', defaultPrinter || '(nenhuma)')
+      send(res, 200, { printers, default: defaultPrinter })
+    } catch (e) {
+      log('❌', '[PRINT] /api/printers erro:', e.message)
+      send(res, 200, { printers: [], default: '' })
+    }
+    return true
   }
 
-  if (!_usbDevice) throw new Error('Nenhuma interface de saída encontrada na impressora');
-  return _usbDevice;
-}
+  // ── Gera PDF no servidor e devolve como base64 para o navegador imprimir ──
+  if (req.method === 'POST' && upath === '/api/print') {
+    const tid  = req.headers['x-tenant-id']
+    const body = await readBody(req)
+    log('🖨️', '[PRINT] POST /api/print | tenant:', tid || '(sem tenant)' , '| format:', body.format || '80mm', '| html length:', body.html?.length || 0)
 
-async function _printViaUsb(order, cfg) {
-  if (!navigator.usb) throw new Error('WebUSB não suportado neste navegador');
-  console.log('[USB] Conectando dispositivo...');
-  const dev  = await _usbConnect();
-  console.log('[USB] Dispositivo conectado | endpoint:', _usbDevice._epOut);
-  const fmt  = localStorage.getItem('printFormat') || _printFormat || '80mm';
-  const cols = fmt === '58mm' ? 32 : 48;
-  const data = _buildEscPos(order, cfg, cols);
-  console.log('[USB] Dados ESC/POS gerados | bytes:', data.length, '| colunas:', cols);
-  // Envia em chunks de 64 bytes para evitar overflow em impressoras lentas
-  const CHUNK = 64;
-  for (let i = 0; i < data.length; i += CHUNK) {
-    const chunk = data.slice(i, Math.min(i + CHUNK, data.length));
-    await dev.transferOut(_usbDevice._epOut, chunk);
-  }
-  console.log('[USB] Impressão concluída!');
-}
+    if (!tid)       { log('❌','[PRINT] Rejeitado: sem x-tenant-id'); send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    if (!body.html) { log('❌','[PRINT] Rejeitado: sem html');         send(res, 400, { error: 'html obrigatório' });         return true }
 
-// Pareia a impressora USB (chamado pelo botão na tela de configuração)
-async function pairUsbPrinter() {
-  if (!navigator.usb) {
-    sbToast('err', 'WebUSB não suportado. Use Chrome ou Edge.');
-    return;
-  }
-  try {
-    const dev = await navigator.usb.requestDevice({ filters: [] });
-    localStorage.setItem('escpos_usb_name', (dev.productName || '') + (dev.manufacturerName || ''));
-    _usbDevice = null; // força reconexão na próxima impressão
-    sbToast('ok', '✅ Impressora "' + (dev.productName || 'USB') + '" pareada! Impressão será 100% silenciosa.');
-  } catch (e) {
-    if (e.name === 'NotFoundError') sbToast('warn', 'Nenhuma impressora selecionada.');
-    else sbToast('err', 'Erro ao parear: ' + e.message);
-  }
-}
-
-// Desconecta e remove pareamento
-async function unpairUsbPrinter() {
-  if (_usbDevice) {
-    try { await _usbDevice.close(); } catch {}
-    _usbDevice = null;
-  }
-  localStorage.removeItem('escpos_usb_name');
-  sbToast('ok', 'Impressora USB removida.');
-}
-
-async function printOrder(order) {
-  const cfg    = _getPrintConfig();
-  const fmt    = localStorage.getItem('printFormat') || _printFormat || '80mm';
-
-  // ── Verifica se é pedido só de bebida ──────────────────
-  const _isBebida = (item) => {
-    const cat = (item.cat || item.cat_key || '').toLowerCase();
-    const name = (item.name || '').toLowerCase();
-    const bebidas = ['bebida','drink','suco','agua','água','refrigerante','cerveja','chopp','vinho','dose','tanque','long'];
-    return bebidas.some(s => cat.includes(s) || name.includes(s));
-  };
-  // Considera apenas itens não cancelados pra avaliar "só bebida"
-  const items = (Array.isArray(order.items) ? order.items : [])
-    .filter(i => (i?.item_status || 'active') !== 'cancelado');
-  const soBebida = items.length > 0 && items.every(_isBebida);
-  const printBebidaSolo = localStorage.getItem('printBebidaSolo') !== '0'; // padrão: ligado
-
-  if (soBebida && !printBebidaSolo) {
-    console.log('[PRINT] Pedido só de bebida — impressão desativada pelo toggle');
-    return;
-  }
-
-  const ticket = _buildTicketHtml(order, cfg);
-
-  // ── Monta jobs de impressão ────────────────────────────
-  const jobs = [];
-  if (_printViaMode === 'separado' && _printPrinterCozinha && ticket.cozinha) {
-    if (ticket.principal) jobs.push({ html: ticket.principal, printer: _printPrinter || '', tipo: 'caixa' });
-    jobs.push({ html: ticket.cozinha, printer: _printPrinterCozinha, tipo: 'cozinha' });
-  } else if (_printViaMode === 'somente_principal') {
-    jobs.push({ html: ticket.principal, printer: _printPrinter || '', tipo: 'caixa' });
-  } else {
-    jobs.push({ html: ticket.singleSheet, printer: _printPrinter || '' });
-  }
-
-  for (const job of jobs) {
-    await _printJobCascade(job.html, fmt, job.printer, order, cfg, job.tipo);
-  }
-}
-
-// ── Cascata de impressão silenciosa (1 job) ──────────────
-async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
-  // 1️⃣ Electron — usa printHtml para enviar HTML + impressora específica do job
-  if (window.ElectronPrint) {
     try {
-      const pw = fmt === '58mm' ? 48 : 72;
-      const wrappedHtml = _wrapTicketHtml(html, cfg ? cfg.fontSize : 12);
-
-      // Respeita o tipo do job para escolher a impressora correta
-      // 'caixa' → printer_caixa | 'cozinha' → printer_cozinha | 'manual' → pergunta
-      let targetPrinter = printer || '';
-      if (tipo === 'caixa')   targetPrinter = _printPrinter || printer || '';
-      if (tipo === 'cozinha') targetPrinter = _printPrinterCozinha || _printPrinter || printer || '';
-      if (tipo === 'manual' && window.ElectronPrint.showPrinterDialog) {
-        const sel = await window.ElectronPrint.showPrinterDialog(targetPrinter);
-        if (sel.cancelled) return;
-        targetPrinter = sel.printer;
+      let puppeteer
+      try {
+        puppeteer = require('puppeteer')
+        log('🖨️', '[PRINT] Puppeteer carregado OK')
+      } catch (e) {
+        log('❌', '[PRINT] Puppeteer não instalado:', e.message)
+        send(res, 500, { error: 'Puppeteer não instalado no servidor' }); return true
       }
 
-      if (window.ElectronPrint.printHtml) {
-        const r = await window.ElectronPrint.printHtml(wrappedHtml, { printer: targetPrinter, paperWidth: pw, landscape: false, scaleFactor: 100, marginH: _printMarginH, marginV: _printMarginV });
-        if (r.ok) { sbToast('ok', '🖨️ Impresso!' + (targetPrinter ? ' → ' + targetPrinter : '')); return; }
+      log('🖨️', '[PRINT] Iniciando browser...')
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu']
+      })
+      log('🖨️', '[PRINT] Browser iniciado')
+
+      let pdfBase64
+      try {
+        const page = await browser.newPage()
+        const fmt  = body.format || '80mm'
+        const fullHtml = body.html.includes('<html') ? body.html
+          : `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important }
+  body { font-family:'Courier New',monospace; font-size:12px; color:#000; background:#fff; width:100%; overflow-wrap:break-word; word-break:break-word }
+  hr { border:none; border-top:1px dashed #000; margin:4px 0 }
+  .pt-center { text-align:center } .pt-large { font-size:15px; font-weight:bold }
+  .pt-hr { border:none; border-top:1px dashed #000; margin:4px 0 }
+  .print-ticket { padding:0 2px; width:100%; overflow:visible; word-wrap:break-word; overflow-wrap:break-word }
+  @media print { @page { margin:0 } }
+</style></head><body>${body.html}</body></html>`
+
+        await page.setContent(fullHtml, { waitUntil: 'networkidle0' })
+        log('🖨️', '[PRINT] Página renderizada | formato:', fmt)
+
+        const pdfOpts = {
+          printBackground: true,
+          margin: { top:'2mm', bottom:'3mm', left:'0', right:'0' }
+        }
+        if (fmt === '80mm' || fmt === '58mm') {
+          pdfOpts.width  = fmt
+          pdfOpts.height = (await page.evaluate(() => document.body.scrollHeight + 24)) + 'px'
+        } else {
+          pdfOpts.format = fmt
+        }
+        const pdfBuf = await page.pdf(pdfOpts)
+        pdfBase64 = pdfBuf.toString('base64')
+        log('✅', '[PRINT] PDF gerado | tamanho:', Math.round(pdfBuf.length / 1024) + 'KB')
+      } finally {
+        await browser.close()
+        log('🖨️', '[PRINT] Browser fechado')
+      }
+
+      send(res, 200, { ok: true, pdf: pdfBase64 })
+      log('✅', '[PRINT] PDF enviado ao navegador com sucesso')
+    } catch (e) {
+      log('❌', '[PRINT] /api/print erro:', e.message)
+      log('❌', '[PRINT] Stack:', e.stack?.split('\n')[1] || '')
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  // Mapa em memória: tenant_id → { last_seen, printer, format }
+  if (!handleRoutes._agents) handleRoutes._agents = new Map()
+  const _agents = handleRoutes._agents
+
+  // ── Heartbeat do agente (a cada 10s) ─────────────────
+  if (req.method === 'POST' && upath === '/api/print-queue/heartbeat') {
+    const tid  = req.headers['x-tenant-id']
+    const body = await readBody(req)
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    _agents.set(tid, { last_seen: Date.now(), printer: body.printer || '', format: body.format || 'A4' })
+    send(res, 200, { ok: true })
+    return true
+  }
+
+  // ── Status do agente (gestor consulta antes de criar job) ──
+  if (req.method === 'GET' && upath === '/api/print-queue/status') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    const agent = _agents.get(tid)
+    const active = agent && (Date.now() - agent.last_seen) < 30000
+    send(res, 200, { active: !!active, printer: agent?.printer || '', format: agent?.format || 'A4' })
+    return true
+  }
+
+  // ── Gestor cria job na fila ───────────────────────────
+  if (req.method === 'POST' && upath === '/api/print-queue/job') {
+    const tid  = req.headers['x-tenant-id']
+    const body = await readBody(req)
+    if (!tid)       { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    if (!body.html) { send(res, 400, { error: 'html obrigatório' }); return true }
+    try {
+      // Garante que a tabela existe (com coluna tipo para roteamento caixa/cozinha)
+      db.exec(`CREATE TABLE IF NOT EXISTS print_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id TEXT NOT NULL, html TEXT NOT NULL,
+        format TEXT DEFAULT 'A4', printer TEXT,
+        tipo TEXT DEFAULT NULL,
+        status TEXT DEFAULT 'pending', error TEXT,
+        created_at TEXT DEFAULT (datetime('now')), done_at TEXT
+      )`)
+      // Migration: adiciona coluna tipo se não existir (para DBs já criados)
+      try { db.exec(`ALTER TABLE print_jobs ADD COLUMN tipo TEXT DEFAULT NULL`) } catch (_) {}
+      const info = db.prepare(
+        `INSERT INTO print_jobs (tenant_id, html, format, printer, tipo) VALUES (?, ?, ?, ?, ?)`
+      ).run(tid, body.html, body.format || 'A4', body.printer || null, body.tipo || null)
+      send(res, 201, { ok: true, id: info.lastInsertRowid })
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Agente busca jobs pendentes ───────────────────────
+  if (req.method === 'GET' && upath === '/api/print-queue/pending') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    // Filtro opcional por tipo (caixa, cozinha) via query string ?tipo=caixa
+    const parsedUrl = new URL(req.url, 'http://localhost')
+    const tipoFilter = parsedUrl.searchParams.get('tipo') || null
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS print_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id TEXT NOT NULL, html TEXT NOT NULL,
+        format TEXT DEFAULT 'A4', printer TEXT,
+        tipo TEXT DEFAULT NULL,
+        status TEXT DEFAULT 'pending', error TEXT,
+        created_at TEXT DEFAULT (datetime('now')), done_at TEXT
+      )`)
+      try { db.exec(`ALTER TABLE print_jobs ADD COLUMN tipo TEXT DEFAULT NULL`) } catch (_) {}
+      // Recupera jobs travados em 'processing' há mais de 2 minutos — agente pode ter caído
+      try { db.exec(`UPDATE print_jobs SET status='pending' WHERE status='processing' AND created_at < datetime('now','-2 minutes')`) } catch (_) {}
+      let jobs
+      if (tipoFilter) {
+        jobs = db.prepare(
+          `SELECT id, html, format, printer, tipo FROM print_jobs WHERE tenant_id=? AND status='pending' AND tipo=? ORDER BY id ASC LIMIT 5`
+        ).all(tid, tipoFilter)
       } else {
-        const r = await window.ElectronPrint.printOrder(order);
-        if (r.ok) { sbToast('ok', '🖨️ Impresso (Electron)!'); return; }
+        jobs = db.prepare(
+          `SELECT id, html, format, printer, tipo FROM print_jobs WHERE tenant_id=? AND status='pending' ORDER BY id ASC LIMIT 5`
+        ).all(tid)
       }
-    } catch (e) { console.warn('[PRINT] Electron falhou:', e.message); }
+      // Marca como 'processing' para não duplicar
+      if (jobs.length) {
+        const ids = jobs.map(j => j.id).join(',')
+        db.exec(`UPDATE print_jobs SET status='processing' WHERE id IN (${ids})`)
+      }
+      send(res, 200, jobs)
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
   }
 
-  // 2️⃣ WebUSB ESC/POS
-  if (navigator.usb && _usbDevice) {
+  // ── Agente marca job como concluído ou erro ───────────
+  if (req.method === 'PATCH' && upath.startsWith('/api/print-queue/job/') && upath.endsWith('/done')) {
+    const tid   = req.headers['x-tenant-id']
+    const id    = parseInt(upath.split('/')[4]) || 0
+    const body  = await readBody(req)
+    if (!tid || !id) { send(res, 400, { error: 'parâmetros inválidos' }); return true }
     try {
-      await _printViaUsb(order, cfg);
-      sbToast('ok', '🖨️ Impresso (USB direto)!');
-      return;
-    } catch (e) { console.warn('[PRINT] USB falhou:', e.message); }
+      const status = body.status === 'error' ? 'error' : 'done'
+      db.prepare(
+        `UPDATE print_jobs SET status=?, error=?, done_at=datetime('now') WHERE id=? AND tenant_id=?`
+      ).run(status, body.error || null, id, tid)
+      // Limpa jobs antigos (>24h)
+      db.exec(`DELETE FROM print_jobs WHERE created_at < datetime('now','-1 day')`)
+      send(res, 200, { ok: true })
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
   }
 
-  // 3️⃣ Print Agent
-  try {
-    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
-    if (tid) {
-      const statusRes = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } });
-      const statusData = await statusRes.json();
-      if (statusData.active) {
-        await fetch('/api/print-queue/job', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-          body: JSON.stringify({ html, format: fmt, printer: printer || undefined, tipo: tipo || undefined, marginH: _printMarginH, marginV: _printMarginV }),
-        });
-        sbToast('ok', '🖨️ Enviado ao agente!');
-        return;
-      }
+  // ── Max global ID para cálculo de offset por tenant ──
+  if (req.method === 'GET' && upath === '/api/orders/global-max-id') {
+    try {
+      const row = db.prepare('SELECT COALESCE(MAX(id),0) as max_id FROM orders').get()
+      send(res, 200, { max_id: row?.max_id || 0 })
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+
+  // ── Import cardápio em lote (transação única) ─────────────────────────
+  if (req.method === 'POST' && upath === '/api/importar-cardapio') {
+    const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
+    if (!tid) { send(res, 401, { error: 'Não autorizado' }); return true }
+    try {
+      const body = await readBody(req)
+      const categorias = body?.categorias
+      if (!Array.isArray(categorias)) { send(res, 400, { error: 'categorias[] obrigatório' }); return true }
+
+      const JSON_FIELDS_MI = new Set(['days','ingredients','custom_groups'])
+      const COLS_MI = ['tenant_id','name','description','price','price_old','cat','cat_key','emoji',
+                       'item_type','allow_half','max_flavors','promo','destaque','status',
+                       'days','ingredients','custom_groups','sort_order']
+      const COLS_CAT = ['tenant_id','name','label','type','promo','sort_order']
+
+      let catsCriadas = 0, itensCriados = 0, erros = 0
+      const catIds = {}  // name → id
+
+      const doImport = db.transaction(() => {
+        let catOrder = db.prepare('SELECT COALESCE(MAX(sort_order),0) as mx FROM categories WHERE tenant_id=?').get(tid)?.mx || 0
+
+        for (const catDef of categorias) {
+          if (!catDef.name || !catDef.label) { erros++; continue }
+          try {
+            const catRow = {
+              tenant_id: tid, name: catDef.name, label: catDef.label,
+              type: catDef.type || 'Itens principais',
+              promo: catDef.promo ? 1 : 0,
+              sort_order: ++catOrder
+            }
+            const catKeys = Object.keys(catRow).filter(k => COLS_CAT.includes(k))
+            const catInfo = db.prepare(
+              `INSERT INTO categories (${catKeys.map(k=>`"${k}"`).join(',')}) VALUES (${catKeys.map(()=>'?').join(',')})`
+            ).run(...catKeys.map(k => catRow[k]))
+            catIds[catDef.name] = catInfo.lastInsertRowid
+            catsCriadas++
+
+            let itemOrder = 0
+            for (const itemDef of (catDef.itens || [])) {
+              if (!itemDef.name) { erros++; continue }
+              try {
+                const serialize = v => {
+                  if (v === undefined || v === null) return null
+                  if (v === true) return 1; if (v === false) return 0
+                  if (Array.isArray(v) || (typeof v === 'object')) return JSON.stringify(v)
+                  return v
+                }
+                const itemRow = {
+                  tenant_id: tid,
+                  name: itemDef.name,
+                  description: itemDef.description || '',
+                  price: parseFloat(itemDef.price) || 0,
+                  price_old: itemDef.price_old || null,
+                  cat: catDef.label,
+                  cat_key: catDef.name,
+                  emoji: itemDef.emoji || '🍽️',
+                  item_type: itemDef.item_type || 'normal',
+                  allow_half: itemDef.allow_half ? 1 : 0,
+                  max_flavors: itemDef.max_flavors || 1,
+                  promo: 0, destaque: 0,
+                  status: itemDef.status || 'active',
+                  days: JSON.stringify(itemDef.days || [1,1,1,1,1,1,1]),
+                  ingredients: JSON.stringify(itemDef.ingredients || []),
+                  custom_groups: JSON.stringify(itemDef.custom_groups || []),
+                  sort_order: ++itemOrder
+                }
+                const itemKeys = Object.keys(itemRow).filter(k => COLS_MI.includes(k))
+                db.prepare(
+                  `INSERT INTO menu_items (${itemKeys.map(k=>`"${k}"`).join(',')}) VALUES (${itemKeys.map(()=>'?').join(',')})`
+                ).run(...itemKeys.map(k => itemRow[k]))
+                itensCriados++
+              } catch(e) { erros++ }
+            }
+          } catch(e) { erros++ }
+        }
+      })
+
+      doImport()
+      marcarDirty()
+      send(res, 200, { ok: true, catsCriadas, itensCriados, erros })
+    } catch(e) {
+      send(res, 500, { error: e.message })
     }
-  } catch (e) { console.warn('[PRINT] Agent falhou:', e.message); }
-
-  // 4️⃣ WebUSB auto-connect
-  if (navigator.usb && !_usbDevice) {
-    try {
-      const devices = await navigator.usb.getDevices();
-      if (devices.length > 0) {
-        await _printViaUsb(order, cfg);
-        sbToast('ok', '🖨️ Impresso (USB direto)!');
-        return;
-      }
-    } catch (e) { console.warn('[PRINT] USB auto-connect falhou:', e.message); }
+    return true
   }
 
-  // 5️⃣ Servidor PDF + iframe (iframe único por job, espera afterprint)
-  try {
-    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
-    if (tid) {
-      const r = await fetch('/api/print', {
+  // ════════════════════════════════════════════════════════
+  // ADMIN — AUDIT LOG, FATURAMENTO, COBRANÇA, SAÚDE
+  // ════════════════════════════════════════════════════════
+
+  // ── Helper interno: registra log de auditoria ─────────
+  function _registrarAudit(adminSess, payload, reqHeaders) {
+    try {
+      const ip = (reqHeaders['x-forwarded-for'] || reqHeaders['x-real-ip'] || '').toString().split(',')[0].trim()
+        || req.socket?.remoteAddress || ''
+      const ua = (reqHeaders['user-agent'] || '').toString().slice(0, 500)
+      const det = payload.detalhes && typeof payload.detalhes === 'object'
+        ? JSON.stringify(payload.detalhes)
+        : (payload.detalhes || null)
+      db.prepare(`INSERT INTO admin_audit_log
+        (admin_id, admin_nome, admin_email, acao, alvo_tipo, alvo_id, alvo_nome, detalhes, ip, user_agent)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
+          adminSess?.user_id || null,
+          adminSess?.nome    || null,
+          adminSess?.email   || null,
+          String(payload.acao || ''),
+          payload.alvo_tipo  || null,
+          payload.alvo_id    ? String(payload.alvo_id) : null,
+          payload.alvo_nome  || null,
+          det,
+          ip,
+          ua
+        )
+      marcarDirty()
+      return true
+    } catch (e) {
+      log('⚠️', 'audit log erro:', e.message)
+      return false
+    }
+  }
+
+  // ── POST /api/admin/audit-log — registra ação do admin ───
+  if (req.method === 'POST' && upath === '/api/admin/audit-log') {
+    const sess = validarSessaoAdmin(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    if (!body?.acao) { send(res, 400, { error: 'campo acao obrigatorio' }); return true }
+    _registrarAudit(sess, body, req.headers)
+    send(res, 200, { ok: true })
+    return true
+  }
+
+  // ── GET /api/admin/audit-log — lista logs ────────────
+  if (req.method === 'GET' && upath === '/api/admin/audit-log') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    try {
+      const limit  = Math.min(parseInt(params.get('limit'))  || 200, 1000)
+      const offset = Math.max(parseInt(params.get('offset')) || 0, 0)
+      const acao   = params.get('acao') || null
+      let sql  = 'SELECT * FROM admin_audit_log'
+      const ps = []
+      if (acao) { sql += ' WHERE acao LIKE ?'; ps.push(acao + '%') }
+      sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
+      ps.push(limit, offset)
+      const rows = db.prepare(sql).all(...ps)
+      // Faz parse do JSON detalhes para o frontend não precisar
+      const out = rows.map(r => {
+        let det = r.detalhes
+        try { det = det ? JSON.parse(det) : {} } catch { /* deixa string */ }
+        return { ...r, detalhes: det }
+      })
+      send(res, 200, out)
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── GET /api/admin/saude/:tenantId — métricas do cliente ─
+  if (req.method === 'GET' && /^\/api\/admin\/saude\/[^/]+$/.test(upath)) {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const tid = upath.split('/').pop()
+    try {
+      const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tid)
+      if (!tenant) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
+
+      // Pedidos 30d (apenas finalizados/entregues, ignorando cancelados)
+      const pedidos30d = db.prepare(`
+        SELECT COUNT(*) as cnt, COALESCE(SUM(total),0) + COALESCE(SUM(taxa),0) as fat
+        FROM orders
+        WHERE tenant_id=?
+          AND created_at > datetime('now','-30 days')
+          AND status NOT IN ('cancelado','aguardando_pix','aguardando_cartao')
+      `).get(tid) || { cnt: 0, fat: 0 }
+
+      // Mensagens IA 30d (heurística: count em wa_messages do bot, se a tabela existir)
+      let mensagensIa = 0
+      try {
+        mensagensIa = db.prepare(`
+          SELECT COUNT(*) as cnt FROM wa_messages
+          WHERE tenant_id=? AND from_me=1
+            AND created_at > datetime('now','-30 days')
+        `).get(tid)?.cnt || 0
+      } catch { /* tabela pode não existir */ }
+
+      // Último login do gestor (sys_users.ultimo_acesso)
+      let ultimoLoginDias = null
+      try {
+        const u = db.prepare(`
+          SELECT MAX(ultimo_acesso) as ult FROM sys_users
+          WHERE tenant_id=? AND ativo=1 AND role='gestor'
+        `).get(tid)
+        if (u?.ult) {
+          const dt = new Date(u.ult).getTime()
+          if (!isNaN(dt)) ultimoLoginDias = Math.floor((Date.now() - dt) / (24 * 3600 * 1000))
+        }
+      } catch { /* não-fatal */ }
+
+      // IA configurada?
+      let iaAtiva = false
+      try {
+        const cfg = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id=?").get(tid)
+        if (cfg?.ia_config) {
+          const ia = JSON.parse(cfg.ia_config)
+          iaAtiva = !!(ia.openai_key || ia.ativo)
+        }
+      } catch { /* não-fatal */ }
+
+      send(res, 200, {
+        pedidos_30d:     pedidos30d.cnt || 0,
+        faturamento_30d: parseFloat(pedidos30d.fat || 0),
+        mensagens_ia_30d: mensagensIa,
+        ultimo_login_dias: ultimoLoginDias,
+        ia_ativa: iaAtiva,
+        criado_em: tenant.created_at,
+        plano: tenant.plano,
+        ativo: !!tenant.ativo,
+        expires_at: tenant.expires_at,
+      })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── GET /api/admin/faturamento — lista todas faturas ──
+  if (req.method === 'GET' && upath === '/api/admin/faturamento') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    try {
+      const rows = db.prepare(`
+        SELECT f.*, t.nome as tenant_nome, t.slug as tenant_slug
+        FROM faturas f
+        LEFT JOIN tenants t ON t.id = f.tenant_id
+        ORDER BY f.created_at DESC
+        LIMIT 500
+      `).all()
+      send(res, 200, rows)
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Helper: gera cobrança PIX no Mercado Pago e retorna { fatura, link } ──
+  async function _gerarCobrancaMP(tenant, opts) {
+    const { plano, valor, meses, metodo } = opts
+
+    // Token MP — SEMPRE GLOBAL (faturamento SaaS da plataforma)
+    const mpToken = _resolveMpGlobal(db, MP_TOKEN)
+    if (!mpToken) throw new Error('Token Mercado Pago não configurado em /admin → Saques PIX')
+
+    const extRef = `fatura-${tenant.id.slice(0, 8)}-${plano}-${Date.now()}`
+    const venceEm = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString() // expira em 7d
+    const descricao = `Plano ${plano === 'premium' ? 'Premium' : 'Essencial'} — ${meses} ${meses === 1 ? 'mês' : 'meses'} — ${tenant.nome}`
+
+    let mpData = null, qrCode = null, qrCodeBase64 = null, linkPagamento = null
+
+    if (metodo === 'pix') {
+      // Cria pagamento PIX direto
+      const mpResp = await fetch('https://api.mercadopago.com/v1/payments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-        body: JSON.stringify({ html, format: fmt, printer: printer || undefined }),
-      });
-      const data = await r.json();
-      if (data.pdf) {
-        const bytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
-        const blob  = new Blob([bytes], { type: 'application/pdf' });
-        const url   = URL.createObjectURL(blob);
-        const frame = document.createElement('iframe');
-        frame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;visibility:hidden';
-        document.body.appendChild(frame);
-        if (printer) sbToast('info', '🖨️ Selecione: ' + printer);
-        frame.src = url;
-        await new Promise((resolve) => {
-          frame.onload = () => {
-            try {
-              frame.contentWindow.addEventListener('afterprint', () => resolve(), { once: true });
-              frame.contentWindow.print();
-            } catch(_) { resolve(); }
-          };
-          setTimeout(resolve, 30000);
-        });
-        setTimeout(() => { try { frame.remove(); } catch(_){} URL.revokeObjectURL(url); }, 2000);
-        sbToast('ok', '🖨️ Imprimindo...');
-        return;
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
+        body: JSON.stringify({
+          transaction_amount: parseFloat(valor),
+          description: descricao,
+          payment_method_id: 'pix',
+          external_reference: extRef,
+          date_of_expiration: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().replace('Z', '-03:00'),
+          payer: { email: 'cobranca@estimafood.com', first_name: tenant.nome.split(' ')[0] || 'Cliente' }
+        })
+      })
+      mpData = await mpResp.json()
+      if (!mpResp.ok) throw new Error(mpData.message || 'Falha ao criar PIX no Mercado Pago')
+      qrCode       = mpData.point_of_interaction?.transaction_data?.qr_code || null
+      qrCodeBase64 = mpData.point_of_interaction?.transaction_data?.qr_code_base64 || null
+      // Link de pagamento (ticket_url para ver QR no MP, ou nosso próprio link)
+      linkPagamento = mpData.point_of_interaction?.transaction_data?.ticket_url || null
+    } else {
+      // Cartão de crédito: cria preference (link de checkout)
+      const prefResp = await fetch('https://api.mercadopago.com/checkout/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}` },
+        body: JSON.stringify({
+          items: [{ title: descricao, quantity: 1, unit_price: parseFloat(valor), currency_id: 'BRL' }],
+          external_reference: extRef,
+          payment_methods: { excluded_payment_types: [{ id: 'ticket' }, { id: 'atm' }], installments: 12 },
+          expires: true,
+          expiration_date_to: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+          metadata: { tenant_id: tenant.id, plano, meses }
+        })
+      })
+      mpData = await prefResp.json()
+      if (!prefResp.ok) throw new Error(mpData.message || 'Falha ao criar preferência no Mercado Pago')
+      linkPagamento = mpData.init_point || mpData.sandbox_init_point || null
+    }
+
+    // Salva fatura
+    const info = db.prepare(`INSERT INTO faturas
+      (tenant_id, plano, valor, meses, metodo, status, link_pagamento, mp_payment_id, mp_external_ref, qr_code, qr_code_base64, vence_em)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        tenant.id, plano, parseFloat(valor), parseInt(meses) || 1, metodo, 'pendente',
+        linkPagamento, mpData.id ? String(mpData.id) : null, extRef,
+        qrCode, qrCodeBase64, venceEm
+      )
+    marcarDirty()
+    const fatura = db.prepare('SELECT * FROM faturas WHERE id=?').get(info.lastInsertRowid)
+    return { fatura, link: linkPagamento, qr_code: qrCode }
+  }
+
+  // ── Helper: envia link de pagamento por WhatsApp pro gestor ──
+  async function _enviarCobrancaWA(tenant, fatura) {
+    try {
+      const gestor = db.prepare(`
+        SELECT nome, email FROM sys_users
+        WHERE tenant_id=? AND role='gestor' AND ativo=1
+        ORDER BY created_at ASC LIMIT 1
+      `).get(tenant.id)
+
+      // Tenta achar telefone: prioriza store_config.store_whatsapp do tenant
+      let telefone = null
+      try {
+        const cfg = db.prepare('SELECT store_whatsapp FROM store_config WHERE tenant_id=?').get(tenant.id)
+        if (cfg?.store_whatsapp) telefone = String(cfg.store_whatsapp).replace(/\D/g, '')
+      } catch {}
+      if (!telefone) {
+        log('⚠️', `Cobrança WA: tenant ${tenant.nome} sem telefone — link gerado mas não enviado`)
+        return { enviado: false, motivo: 'telefone_nao_configurado' }
+      }
+      // Garante DDI 55
+      if (telefone.length === 11 || telefone.length === 10) telefone = '55' + telefone
+
+      const valorTxt = parseFloat(fatura.valor).toFixed(2).replace('.', ',')
+      const planoNome = fatura.plano === 'premium' ? 'Premium' : 'Essencial'
+      const venceEmTxt = fatura.vence_em
+        ? new Date(fatura.vence_em).toLocaleDateString('pt-BR')
+        : '7 dias'
+
+      const linhas = [
+        `🧾 *Cobrança — Plano ${planoNome}*`,
+        ``,
+        `Olá ${(gestor?.nome || tenant.nome).split(' ')[0]}! 👋`,
+        ``,
+        `Sua mensalidade do *Estima Food* está disponível para pagamento:`,
+        ``,
+        `💰 *Valor:* R$ ${valorTxt}`,
+        `📅 *Período:* ${fatura.meses} ${fatura.meses === 1 ? 'mês' : 'meses'}`,
+        `⏰ *Vence em:* ${venceEmTxt}`,
+        ``,
+        fatura.metodo === 'pix' ? `💸 *Pague agora via PIX:*` : `💳 *Pague com cartão:*`,
+        fatura.link_pagamento || '(link indisponível)',
+        ``,
+        `_Após o pagamento, seu acesso é renovado automaticamente._ ✅`,
+        `_Dúvidas? É só responder esta mensagem._`
+      ]
+      const msg = linhas.join('\n')
+
+      const instCob = _getInstanciaCobranca(db, EVO_INST)
+      await sendWA(telefone, msg, instCob)
+      log('📨', `Cobrança WA enviada: tenant=${tenant.nome} fatura=${fatura.id} tel=${telefone} (instância: ${instCob})`)
+      return { enviado: true, telefone, instance: instCob }
+    } catch (e) {
+      log('⚠️', 'Cobrança WA erro:', e.message)
+      return { enviado: false, motivo: e.message }
+    }
+  }
+
+  // ── POST /api/admin/cobranca/gerar — gera 1 cobrança e envia ──
+  if (req.method === 'POST' && upath === '/api/admin/cobranca/gerar') {
+    const sess = validarSessaoAdmin(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    const { tenant_id, plano, valor, meses, metodo } = body || {}
+    if (!tenant_id || !plano || !valor) { send(res, 400, { error: 'tenant_id, plano e valor obrigatórios' }); return true }
+    try {
+      const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenant_id)
+      if (!tenant) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
+      const result = await _gerarCobrancaMP(tenant, {
+        plano: ['essencial', 'premium', 'pro'].includes(plano) ? plano : 'essencial',
+        valor: parseFloat(valor),
+        meses: parseInt(meses) || 1,
+        metodo: metodo === 'cartao' ? 'cartao' : 'pix'
+      })
+      const wa = await _enviarCobrancaWA(tenant, result.fatura)
+      _registrarAudit(sess, {
+        acao: 'cobranca.gerar',
+        alvo_tipo: 'tenant', alvo_id: tenant_id, alvo_nome: tenant.nome,
+        detalhes: { fatura_id: result.fatura.id, valor: result.fatura.valor, plano, meses, metodo, wa_enviado: wa.enviado }
+      }, req.headers)
+      send(res, 200, { ok: true, fatura: result.fatura, link: result.link, wa })
+    } catch(e) {
+      log('❌', 'Cobrança gerar erro:', e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  // ── POST /api/admin/cobranca/em-massa — várias cobranças ──
+  if (req.method === 'POST' && upath === '/api/admin/cobranca/em-massa') {
+    const sess = validarSessaoAdmin(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    const ids = Array.isArray(body?.tenant_ids) ? body.tenant_ids : []
+    if (!ids.length) { send(res, 400, { error: 'tenant_ids obrigatório (array)' }); return true }
+    // Lê preços dos planos
+    let precoEss = 79.99, precoPre = 99.90
+    try {
+      const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+      if (g.preco_essencial !== undefined) precoEss = parseFloat(g.preco_essencial)
+      if (g.preco_premium   !== undefined) precoPre = parseFloat(g.preco_premium)
+    } catch {}
+
+    let enviadas = 0, falhas = 0
+    const erros = []
+    for (const id of ids) {
+      try {
+        const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(id)
+        if (!tenant) { falhas++; erros.push({ id, erro: 'tenant não encontrado' }); continue }
+        const plano = (tenant.plano === 'premium') ? 'premium' : 'essencial'
+        const valor = (plano === 'premium') ? precoPre : precoEss
+        const result = await _gerarCobrancaMP(tenant, { plano, valor, meses: 1, metodo: 'pix' })
+        await _enviarCobrancaWA(tenant, result.fatura)
+        enviadas++
+      } catch(e) {
+        falhas++
+        erros.push({ id, erro: e.message })
+        log('⚠️', `Cobrança massa falhou tenant=${id}:`, e.message)
       }
     }
-  } catch (e) { console.warn('[PRINT] Server PDF falhou:', e.message); }
-
-  // 6️⃣ Fallback: window.print() (espera afterprint)
-  console.warn('[PRINT] Usando fallback window.print()');
-  if (printer) sbToast('info', '🖨️ Selecione: ' + printer);
-  let area = document.getElementById('_print_area');
-  if (!area) { area = document.createElement('div'); area.id = '_print_area'; document.body.appendChild(area); }
-  area.innerHTML = html;
-  let st = document.getElementById('_print_style');
-  if (!st) { st = document.createElement('style'); st.id = '_print_style'; document.head.appendChild(st); }
-  st.innerHTML = `@media print {
-    @page { margin: ${_printMarginV}mm ${_printMarginH}mm; size: ${fmt} auto; }
-    body > *:not(#_print_area):not(#_print_style) { display: none !important; }
-    #_print_area { display: block !important; position: static !important; }
-  }`;
-  await new Promise((resolve) => {
-    window.addEventListener('afterprint', () => resolve(), { once: true });
-    window.print();
-    setTimeout(resolve, 30000);
-  });
-  setTimeout(() => { area.innerHTML = ''; }, 2000);
-  sbToast('warn', '🖨️ Imprimindo (com diálogo)...');
-}
-
-function printOrderById(id) {
-  const o = ordersKanban.find(x => x.id === id);
-  if (o) printOrder(o); else sbToast('err', 'Pedido não encontrado');
-}
-
-let _renderImpressaoLoaded = false;
-function renderImpressao(skipServerLoad) {
-  if (!_renderImpressaoLoaded && !skipServerLoad) {
-    _renderImpressaoLoaded = true;
-    const _restoreFields = () => {
-      const el = (id,v) => { const e = document.getElementById(id); if (e && v) e.value = v; };
-      el('print-nome', _printNome);
-      el('print-sub', _printSub);
-      el('print-rodape', _printRodape);
-      el('print-font-size', _printFontSize);
-      const fv = document.getElementById('print-font-size-val');
-      if (fv) fv.textContent = _printFontSize || 12;
-      el('print-format-select', _printFormat || '80mm');
-      const mhEl = document.getElementById('print-margin-h');
-      if (mhEl) { mhEl.value = _printMarginH; document.getElementById('print-margin-h-val').textContent = _printMarginH; }
-      const mvEl = document.getElementById('print-margin-v');
-      if (mvEl) { mvEl.value = _printMarginV; document.getElementById('print-margin-v-val').textContent = _printMarginV; }
-      setPrintModeNew(_printMode);
-      _loadImpressoras();
-      _loadModelos();
-      _loadRoteamento();
-      renderPrintPreview();
-    };
-    loadPrintConfigServer().then(_restoreFields);
-    _restoreFields();
-    return;
+    _registrarAudit(sess, {
+      acao: 'cobranca.em_massa',
+      alvo_tipo: null, alvo_id: null, alvo_nome: null,
+      detalhes: { total: ids.length, enviadas, falhas, erros }
+    }, req.headers)
+    send(res, 200, { ok: true, enviadas, falhas, erros })
+    return true
   }
-  _loadImpressoras();
-  _loadModelos();
-  _loadRoteamento();
-  renderPrintPreview();
-}
 
-// ── Preenche selects de roteamento caixa/cozinha ──
-function _loadRoteamento() {
-  const isElectron = !!window.ElectronPrint;
-  const viaSel = document.getElementById('print-via-mode-select');
-  if (viaSel) viaSel.value = _printViaMode || 'combinado';
-  const cozWrap = document.getElementById('print-cozinha-wrap');
-  if (cozWrap) cozWrap.style.display = _printViaMode === 'separado' ? '' : 'none';
+  // ── POST /api/admin/cobranca/reenviar — reenvia link via WA ──
+  if (req.method === 'POST' && upath === '/api/admin/cobranca/reenviar') {
+    const sess = validarSessaoAdmin(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    if (!body?.id) { send(res, 400, { error: 'id obrigatório' }); return true }
+    try {
+      const f = db.prepare('SELECT * FROM faturas WHERE id=?').get(body.id)
+      if (!f) { send(res, 404, { error: 'Fatura não encontrada' }); return true }
+      if (f.status === 'pago') { send(res, 400, { error: 'Fatura já paga' }); return true }
+      if (f.status === 'cancelado') { send(res, 400, { error: 'Fatura cancelada' }); return true }
+      const t = db.prepare('SELECT * FROM tenants WHERE id=?').get(f.tenant_id)
+      if (!t) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
+      const wa = await _enviarCobrancaWA(t, f)
+      _registrarAudit(sess, {
+        acao: 'cobranca.reenviar',
+        alvo_tipo: 'tenant', alvo_id: t.id, alvo_nome: t.nome,
+        detalhes: { fatura_id: f.id, wa_enviado: wa.enviado }
+      }, req.headers)
+      send(res, 200, { ok: true, wa })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
 
-  const _fillSelect = (selId, currentVal) => {
-    const sel = document.getElementById(selId);
-    if (!sel) return;
-    if (isElectron) {
-      window.ElectronPrint.getConfig().then(cfg => {
-        const printers = cfg.printers || [];
-        sel.innerHTML = '<option value="">Padrão do sistema</option>' +
-          printers.map(p => `<option value="${p}" ${p === currentVal ? 'selected' : ''}>${p}${p === cfg.printer ? ' ★' : ''}</option>`).join('');
-      }).catch(() => {});
-    } else {
-      // Usa as impressoras cadastradas no sistema de gerenciamento
-      sel.innerHTML = '<option value="">Padrão do sistema</option>' +
-        _impressoras.map(imp => `<option value="${imp.printerName || imp.apelido}" ${(imp.printerName || imp.apelido) === currentVal ? 'selected' : ''}>${imp.apelido} (${imp.printerName || imp.tipo})</option>`).join('');
+  // ── POST /api/admin/cobranca/cancelar ────────────────
+  if (req.method === 'POST' && upath === '/api/admin/cobranca/cancelar') {
+    const sess = validarSessaoAdmin(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    if (!body?.id) { send(res, 400, { error: 'id obrigatório' }); return true }
+    try {
+      const f = db.prepare('SELECT * FROM faturas WHERE id=?').get(body.id)
+      if (!f) { send(res, 404, { error: 'Fatura não encontrada' }); return true }
+      if (f.status === 'pago') { send(res, 400, { error: 'Fatura já paga, não pode cancelar' }); return true }
+      db.prepare("UPDATE faturas SET status='cancelado', cancelado_em=datetime('now') WHERE id=?").run(body.id)
+      marcarDirty()
+      _registrarAudit(sess, {
+        acao: 'cobranca.cancelar',
+        alvo_tipo: 'fatura', alvo_id: String(body.id), alvo_nome: `Fatura #${body.id}`,
+        detalhes: { tenant_id: f.tenant_id, valor: f.valor }
+      }, req.headers)
+      send(res, 200, { ok: true })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── GET /api/admin/cobranca-wa — lê instância configurada ──
+  if (req.method === 'GET' && upath === '/api/admin/cobranca-wa') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    try {
+      const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+      send(res, 200, { instance: g.cobranca_wa_instance || '' })
+    } catch(e) { send(res, 200, { instance: '' }) }
+    return true
+  }
+
+  // ── POST /api/admin/cobranca-wa — salva instância ──
+  if (req.method === 'POST' && upath === '/api/admin/cobranca-wa') {
+    const sess = validarSessaoAdmin(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    let instance = (body?.instance || '').trim()
+    // Validação: só letras/números/-/_
+    if (instance && !/^[a-zA-Z0-9_-]+$/.test(instance)) {
+      send(res, 400, { error: 'Nome da instância inválido (use apenas letras, números, - e _)' })
+      return true
     }
-  };
-  _fillSelect('print-rota-caixa', _printPrinter);
-  _fillSelect('print-rota-cozinha', _printPrinterCozinha);
-
-  // Restaura toggle de bebida
-  const bebidaToggle = document.getElementById('toggle-print-bebida');
-  if (bebidaToggle) {
-    const printBebida = localStorage.getItem('printBebidaSolo') !== '0';
-    if (printBebida) bebidaToggle.classList.add('on');
-    else bebidaToggle.classList.remove('on');
-  }
-}
-
-function renderPrintPreview() {
-  const p = document.getElementById('print-preview');
-  if (!p) return;
-  const cfg = _getPrintConfig();
-  const ex = { id:2193, num:2193, client:'Cliente Teste', phone:'(00) 0000-0000', addr:'Rua Teste, 123', pag:'PIX', taxa:5, total:45.70,
-    items:[{qty:1,name:'Smash Burguer',price:25},{qty:2,name:'Coca Cola 2L',price:14},{qty:1,name:'Batata Frita',price:8.90}] };
-  const _ticket = _buildTicketHtml(ex, cfg);
-  p.innerHTML = _ticket.principal;
-}
-
-// Atualiza indicador visual do status USB na tela de config
-function _updateUsbStatus() {
-  const statusEl = document.getElementById('usb-status');
-  const pairedEl = document.getElementById('usb-paired-info');
-  const savedUsb = localStorage.getItem('escpos_usb_name');
-  if (statusEl) {
-    if (!navigator.usb) {
-      statusEl.textContent = '⚠️ WebUSB não suportado — use Chrome ou Edge';
-      statusEl.style.color = '#f87171';
-    } else if (savedUsb) {
-      statusEl.textContent = '🖨️ ' + savedUsb;
-      statusEl.style.color = '#10b981';
-    } else {
-      statusEl.textContent = 'Nenhuma impressora pareada';
-      statusEl.style.color = 'var(--muted)';
-    }
-  }
-  if (pairedEl) {
-    pairedEl.style.display = savedUsb ? 'block' : 'none';
-  }
-}
-
-// ── Salva config no servidor (sincroniza entre dispositivos) ──
-async function salvarConfigImpressao() {
-  const cfg = _getPrintConfig()
-  const fmt = _printFormat || '80mm'
-  const payload = {
-    printMode:     _printMode,
-    printFormat:   fmt,
-    printFontSize: cfg.fontSize,
-    printNome:     cfg.nome,
-    printSub:      cfg.sub,
-    printRodape:   cfg.rodape,
-    printViaMode:        _printViaMode,
-    printPrinterCozinha: _printPrinterCozinha,
-    printer_caixa:       _printPrinter,
-    printer_cozinha:     _printPrinterCozinha,
-    impressoras:         _impressoras,
-    modelos:             _modelos,
-  }
-  // Salva localmente
-  localStorage.setItem('printFormat', fmt); _printFormat = fmt;
-  _printFontSize = cfg.fontSize; // mantém memória sincronizada; servidor é a fonte de verdade
-  localStorage.setItem('printNome', cfg.nome);   _printNome   = cfg.nome;
-  localStorage.setItem('printSub', cfg.sub);     _printSub    = cfg.sub;
-  localStorage.setItem('printRodape', cfg.rodape); _printRodape = cfg.rodape;
-
-  // Salva no Electron se disponível — inclui impressoras para persistência local
-  if (window.ElectronPrint) {
-    await window.ElectronPrint.saveConfig({
-      nome:            cfg.nome,
-      sub:             cfg.sub,
-      rodape:          cfg.rodape,
-      fontSize:        cfg.fontSize,
-      paperWidth:      fmt === '58mm' ? 58 : 80,
-      printer:         _printPrinter,
-      printer_caixa:   _printPrinter,
-      printer_cozinha: _printPrinterCozinha,
-      printViaMode:    _printViaMode,
-      printFormat:     fmt,
-      printMode:       _printMode,
-    }).catch(() => {})
+    try {
+      const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+      const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+      g.cobranca_wa_instance = instance || null
+      db.prepare("INSERT INTO store_config (tenant_id, ia_config) VALUES ('_global', ?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config")
+        .run(JSON.stringify(g))
+      marcarDirty()
+      _registrarAudit(sess, {
+        acao: 'config.cobranca_wa',
+        alvo_tipo: null, alvo_id: null, alvo_nome: null,
+        detalhes: { instance: instance || null }
+      }, req.headers)
+      send(res, 200, { ok: true, instance: instance || null })
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
   }
 
-  // Salva no servidor para sincronizar com outros dispositivos
-  try {
-    const tid = (typeof _sessao !== 'undefined' && _sessao?.tenant_id) || window._tenantId || null
-    if (tid) {
-      await window.AppAPI.from('store_config')
-        .update({ print_config: JSON.stringify(payload) })
-        .eq('tenant_id', tid)
-      sbToast('ok', '✅ Configurações salvas e sincronizadas!')
-    } else {
-      sbToast('ok', '✅ Configurações salvas localmente!')
-    }
-  } catch {
-    sbToast('ok', '✅ Configurações salvas localmente!')
-  }
+  return false // nenhuma rota tratada aqui — passa para o REST engine
 }
-
-async function testPrint() {
-  const ex = { id:99, client:'TESTE IMPRESSÃO', addr:'Balcão', mesa_num:null, pag:'PIX', taxa:5, total:23,
-    items:[{qty:1,name:'X-Salada',price:18},{qty:1,name:'Batata Frita',price:10}] };
-  await printOrder(ex);
-  sbToast('ok', 'Enviando para impressora...');
-}
-
-// ══════════════════════════════════════════════════════════════
-//  SISTEMA DE IMPRESSORAS E MODELOS (estilo Anota AI)
-// ══════════════════════════════════════════════════════════════
-
-let _impressoras = JSON.parse(localStorage.getItem('anotai_impressoras') || '[]');
-let _modelos = JSON.parse(localStorage.getItem('anotai_modelos') || '[]');
-let _editImpIdx = -1;
-let _editModIdx = -1;
-
-const _MODELOS_PADRAO = [
-  { id:'pedidos_gerais',    nome:'Pedidos gerais',                     sistema:true, ativo:true },
-  { id:'cozinha',           nome:'Cozinha',                            sistema:true, ativo:false },
-  { id:'conferencia_mesa',  nome:'Conferência e fechamento de mesa',   sistema:true, ativo:true },
-  { id:'pix_qrcode',        nome:'PIX - QR Code de pagamento',        sistema:true, ativo:true },
-  { id:'mov_caixa',         nome:'Demonstrativo de movimento do caixa',sistema:true, ativo:true },
-  { id:'fech_caixa',        nome:'Demonstrativo de fechamento do caixa',sistema:true,ativo:true },
-];
-
-function _initModelos() {
-  if (!_modelos.length) {
-    _modelos = _MODELOS_PADRAO.map(m => ({
-      ...m,
-      impressora_idx: 0,
-      apelido: '',
-      largura: 32,
-      nome_estab: _printNome || 'RESTAURANTE',
-      sub: _printSub || '',
-      rodape: _printRodape || 'Obrigado!',
-      fontSize: _printFontSize || 12,
-      showAddr: true,
-      showPag: true,
-    }));
-    _saveModelos();
-  }
-}
-
-function _saveImpressoras() { localStorage.setItem('anotai_impressoras', JSON.stringify(_impressoras)); }
-function _saveModelos()     { localStorage.setItem('anotai_modelos', JSON.stringify(_modelos)); }
-
-function setPrintModeNew(mode) {
-  _printMode = mode;
-  window._printMode = mode;
-  localStorage.setItem('printMode', mode);
-  const isAuto = mode === 'auto';
-  const ba = document.getElementById('btn-mode-auto');
-  const bm = document.getElementById('btn-mode-manual');
-  if (ba) { ba.className = isAuto ? 'btn bp' : 'btn'; }
-  if (bm) { bm.className = !isAuto ? 'btn bp' : 'btn'; }
-  const desc = document.getElementById('print-mode-desc');
-  if (desc) desc.textContent = isAuto ? 'Imprime sozinho quando chega pedido' : 'Botão 🖨️ aparece em cada pedido no kanban';
-  sbToast('ok', isAuto ? 'Impressão automática ativada' : 'Impressão manual ativada');
-}
-
-// ── ABA 1: IMPRESSORAS ────────────────────────────────────────
-function _loadImpressoras() {
-  const list = document.getElementById('impressoras-list');
-  if (!list) return;
-  if (!_impressoras.length) {
-    list.innerHTML = '<div style="text-align:center;padding:30px 0;color:var(--muted);font-size:13px">Nenhuma impressora cadastrada. Clique em "Adicionar impressora".</div>';
-    return;
-  }
-  list.innerHTML = _impressoras.map((imp, idx) => {
-    const isElectronType = imp.tipo === 'electron' || (imp.tipo === 'usb' && !!window.ElectronPrint);
-    const statusColor = isElectronType ? '#10b981' : (imp.tipo === 'agent' ? '#3b82f6' : imp.tipo === 'usb' ? '#10b981' : '#f59e0b');
-    const statusText  = isElectronType ? 'Conectado' : (imp.tipo === 'agent' ? 'Agent' : imp.tipo === 'usb' ? 'USB' : 'Navegador');
-    const tipoLabel   = imp.printerName || (isElectronType ? 'Windows' : imp.tipo === 'agent' ? 'Print Agent' : 'Navegador');
-    const larguraLabel = imp.largura === 48 ? '80mm (48 col)' : '58mm (32 col)';
-    const vinculados = _modelos.filter(m => m.ativo && m.impressora_idx === idx).map(m => m.nome).join(', ');
-    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px 20px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div>
-          <div style="font-size:11px;color:var(--muted)">Impressora</div>
-          <div style="font-weight:700;font-size:15px">${imp.apelido || 'Sem nome'}</div>
-          <div style="font-size:12px;color:var(--muted)">${tipoLabel} · ${larguraLabel}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <span style="font-size:11px;padding:3px 10px;border-radius:99px;background:${statusColor}20;color:${statusColor};font-weight:600;border:1px solid ${statusColor}40">✓ ${statusText}</span>
-          <button onclick="testImpressora(${idx})" class="btn" style="font-size:11px;padding:5px 12px">🖨️ Testar</button>
-          <button onclick="editarImpressora(${idx})" class="btn" style="font-size:11px;padding:5px 12px">✏️</button>
-          <button onclick="deletarImpressoraDir(${idx})" class="btn bd" style="font-size:11px;padding:5px 10px">🗑</button>
-        </div>
-      </div>
-      <div style="font-size:11px;color:var(--muted)">Comandas vinculadas: ${vinculados || 'Nenhuma'}</div>
-    </div>`;
-  }).join('');
-}
-
-function abrirAddImpressora() {
-  _editImpIdx = -1;
-  document.getElementById('imp-apelido').value = '';
-  document.getElementById('imp-tipo').value = 'usb';
-  document.getElementById('imp-largura').value = '32';
-  document.getElementById('modal-imp-title').textContent = 'Adicionar Impressora';
-  document.getElementById('btn-del-imp').style.display = 'none';
-  toggleImpTipo();
-  openModal('modal-impressora');
-}
-
-function editarImpressora(idx) {
-  const imp = _impressoras[idx]; if (!imp) return;
-  _editImpIdx = idx;
-  document.getElementById('imp-apelido').value = imp.apelido || '';
-  document.getElementById('imp-tipo').value = imp.tipo || 'usb';
-  document.getElementById('imp-largura').value = String(imp.largura || 32);
-  document.getElementById('modal-imp-title').textContent = 'Editar Impressora';
-  document.getElementById('btn-del-imp').style.display = 'inline-flex';
-  toggleImpTipo();
-  // Restaura impressora selecionada após carregar a lista
-  if (imp.printerName) {
-    setTimeout(() => {
-      const sel = document.getElementById('imp-printer-select');
-      if (sel) sel.value = imp.printerName;
-    }, 300);
-  }
-  openModal('modal-impressora');
-}
-
-function toggleImpTipo() {
-  const isElectron = !!window.ElectronPrint;
-  const tipo = document.getElementById('imp-tipo').value;
-
-  // No Electron: esconde tipo de conexão e parear USB, sempre mostra lista do Windows
-  if (isElectron) {
-    const tipoWrap = document.getElementById('imp-tipo-wrap');
-    if (tipoWrap) tipoWrap.style.display = 'none';
-    document.getElementById('imp-usb-wrap').style.display = 'none';
-    document.getElementById('imp-printer-wrap').style.display = '';
-    const hint = document.getElementById('imp-printer-hint');
-    if (hint) hint.textContent = '⚡ Impressoras detectadas do Windows';
-
-    window.ElectronPrint.getConfig().then(cfg => {
-      const dst = document.getElementById('imp-printer-select');
-      if (dst && cfg.printers) {
-        dst.innerHTML = '<option value="">Impressora padrão do sistema</option>' +
-          cfg.printers.map(p => `<option value="${p}">${p}${p === cfg.printer ? ' ★' : ''}</option>`).join('');
-      }
-    }).catch(() => {});
-    return;
-  }
-
-  // No navegador: mostra tipo de conexão
-  const tipoWrap = document.getElementById('imp-tipo-wrap');
-  if (tipoWrap) tipoWrap.style.display = '';
-
-  if (tipo === 'usb') {
-    document.getElementById('imp-usb-wrap').style.display = '';
-    document.getElementById('imp-printer-wrap').style.display = 'none';
-    const usbSt = document.getElementById('imp-usb-status');
-    if (usbSt) {
-      const saved = localStorage.getItem('escpos_usb_name');
-      usbSt.textContent = saved ? '✅ Pareada: ' + saved : 'Nenhuma impressora USB pareada';
-      usbSt.style.color = saved ? '#10b981' : 'var(--muted)';
-    }
-  } else if (tipo === 'agent') {
-    document.getElementById('imp-usb-wrap').style.display = 'none';
-    document.getElementById('imp-printer-wrap').style.display = '';
-    const hint = document.getElementById('imp-printer-hint');
-    if (hint) hint.textContent = 'Impressora do servidor (Print Agent)';
-    loadPrinters().then(() => {
-      const src = document.getElementById('print-printer-select');
-      const dst = document.getElementById('imp-printer-select');
-      if (src && dst) dst.innerHTML = src.innerHTML;
-    });
-  } else {
-    document.getElementById('imp-usb-wrap').style.display = 'none';
-    document.getElementById('imp-printer-wrap').style.display = 'none';
-  }
-}
-
-async function pairUsbForModal() {
-  try { await pairUsbPrinter(); toggleImpTipo(); } catch(e) { sbToast('err', 'Erro ao parear: ' + e.message); }
-}
-
-function salvarImpressora() {
-  const apelido = document.getElementById('imp-apelido').value.trim();
-  if (!apelido) { sbToast('warn', 'Preencha o apelido'); return; }
-  const largura = parseInt(document.getElementById('imp-largura').value) || 48;
-  const isElectron = !!window.ElectronPrint;
-  let printerName = '';
-  let tipo = 'usb';
-
-  if (isElectron) {
-    // Electron: sempre pega do select de impressoras do Windows
-    printerName = document.getElementById('imp-printer-select')?.value || '';
-    tipo = 'electron';
-  } else {
-    tipo = document.getElementById('imp-tipo').value;
-    if (tipo === 'usb') {
-      printerName = localStorage.getItem('escpos_usb_name') || 'USB';
-    } else if (tipo === 'agent') {
-      printerName = document.getElementById('imp-printer-select')?.value || '';
-    }
-  }
-
-  const obj = { apelido, tipo, largura, printerName };
-  if (_editImpIdx >= 0) _impressoras[_editImpIdx] = { ..._impressoras[_editImpIdx], ...obj };
-  else _impressoras.push(obj);
-  _saveImpressoras();
-
-  // Sincroniza formato do papel globalmente
-  const pw = largura <= 32 ? 58 : 80;
-  const fmt = largura <= 32 ? '58mm' : '80mm';
-  _printFormat = fmt;
-  localStorage.setItem('printFormat', fmt);
-  const fmtSel = document.getElementById('print-format-select');
-  if (fmtSel) fmtSel.value = fmt;
-  _printPrinter = printerName;
-  localStorage.setItem('printPrinter', printerName);
-
-  if (isElectron) {
-    window.ElectronPrint.saveConfig({ printer: printerName, paperWidth: pw, printFormat: fmt }).catch(() => {});
-  }
-  closeModal('modal-impressora');
-  _loadImpressoras(); _loadModelos(); _loadRoteamento(); renderPrintPreview();
-  sbToast('ok', 'Impressora salva!');
-}
-
-function deletarImpressora() {
-  if (!confirm('Excluir esta impressora?')) return;
-  _impressoras.splice(_editImpIdx, 1);
-  _modelos.forEach(m => { if (m.impressora_idx >= _impressoras.length) m.impressora_idx = 0; });
-  _saveImpressoras(); _saveModelos();
-  closeModal('modal-impressora');
-  _loadImpressoras(); _loadModelos();
-  sbToast('ok', 'Impressora removida');
-}
-
-function deletarImpressoraDir(idx) {
-  if (!confirm('Excluir impressora "' + (_impressoras[idx]?.apelido || '') + '"?')) return;
-  _impressoras.splice(idx, 1);
-  _modelos.forEach(m => { if (m.impressora_idx >= _impressoras.length) m.impressora_idx = 0; });
-  _saveImpressoras(); _saveModelos();
-  _loadImpressoras(); _loadModelos();
-  sbToast('ok', 'Impressora removida');
-}
-
-async function testImpressora(idx) {
-  const imp = _impressoras[idx]; if (!imp) return;
-  const ex = { id:99, num:9999, client:'TESTE IMPRESSÃO', addr:'Balcão', pag:'PIX', taxa:5, total:23,
-    items:[{qty:1,name:'X-Salada',price:18},{qty:1,name:'Batata Frita',price:10}] };
-  if (imp.tipo === 'usb') {
-    try { const cfg = _getPrintConfig(); await _printViaUsb(ex, cfg); sbToast('ok', '🖨️ Teste USB enviado!'); }
-    catch(e) { sbToast('err', 'Erro USB: ' + e.message); }
-  } else { await printOrder(ex); sbToast('ok', '🖨️ Teste enviado!'); }
-}
-
-// ── ABA 2: MODELOS ───────────────────────────────────────────
-function _loadModelos() {
-  _initModelos();
-  const list = document.getElementById('modelos-list'); if (!list) return;
-  list.innerHTML = _modelos.map((m, idx) => {
-    const impBadges = _impressoras.length
-      ? _impressoras.filter((_, i) => i === m.impressora_idx).map(imp =>
-          `<span style="font-size:11px;padding:2px 10px;border-radius:99px;background:rgba(16,185,129,.1);color:#10b981;border:1px solid rgba(16,185,129,.3);font-weight:600">✓ ${imp.apelido}</span>`
-        ).join('')
-      : '<span style="font-size:11px;color:var(--muted)">Sem impressora</span>';
-    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px 20px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="display:flex;align-items:center;gap:12px">
-          <div class="toggle ${m.ativo ? 'on' : ''}" onclick="toggleModelo(${idx})" style="flex-shrink:0"></div>
-          <div>
-            <div style="font-size:11px;color:var(--muted)">Modelo do sistema</div>
-            <div style="font-weight:700;font-size:14px">${m.nome}</div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <button onclick="editarModelo(${idx})" class="btn" style="font-size:11px;padding:5px 12px">✏️</button>
-          <button onclick="testModelo(${idx})" class="btn" style="font-size:11px;padding:5px 12px">🖨️ Testar</button>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <span style="font-size:11px;color:var(--muted)">Impressoras vinculadas:</span>
-        ${impBadges}
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function toggleModelo(idx) {
-  _modelos[idx].ativo = !_modelos[idx].ativo;
-  _saveModelos(); _loadModelos(); _loadImpressoras();
-}
-
-function editarModelo(idx) {
-  const m = _modelos[idx]; if (!m) return;
-  _editModIdx = idx;
-  document.getElementById('modal-mod-title').textContent = 'Configurar: ' + m.nome;
-  document.getElementById('mod-apelido').value = m.apelido || m.nome;
-  document.getElementById('mod-largura').value = String(m.largura || 32);
-  document.getElementById('mod-nome').value = m.nome_estab || _printNome || 'RESTAURANTE';
-  document.getElementById('mod-sub').value = m.sub || _printSub || '';
-  document.getElementById('mod-rodape').value = m.rodape || _printRodape || 'Obrigado!';
-  document.getElementById('mod-font-size').value = m.fontSize || 12;
-  document.getElementById('mod-font-val').textContent = m.fontSize || 12;
-  const addrT = document.getElementById('mod-toggle-addr');
-  if (addrT) { if (m.showAddr !== false) addrT.classList.add('on'); else addrT.classList.remove('on'); }
-  const pagT = document.getElementById('mod-toggle-pag');
-  if (pagT) { if (m.showPag !== false) pagT.classList.add('on'); else pagT.classList.remove('on'); }
-  const sel = document.getElementById('mod-impressora');
-  if (sel) {
-    sel.innerHTML = _impressoras.length
-      ? _impressoras.map((imp, i) => `<option value="${i}" ${i === m.impressora_idx ? 'selected' : ''}>${imp.apelido} (${imp.tipo})</option>`).join('')
-      : '<option value="0">Nenhuma impressora cadastrada</option>';
-  }
-  renderModeloPreview();
-  openModal('modal-modelo');
-}
-
-function renderModeloPreview() {
-  const p = document.getElementById('mod-preview'); if (!p) return;
-  const largura = parseInt(document.getElementById('mod-largura')?.value || 32);
-  const fs = parseInt(document.getElementById('mod-font-size')?.value || 12);
-  const nome = (document.getElementById('mod-nome')?.value || 'RESTAURANTE').toUpperCase();
-  const sub = document.getElementById('mod-sub')?.value || '';
-  const rodape = document.getElementById('mod-rodape')?.value || 'Obrigado!';
-  const showAddr = document.getElementById('mod-toggle-addr')?.classList.contains('on') ?? true;
-  const showPag = document.getElementById('mod-toggle-pag')?.classList.contains('on') ?? true;
-  const cfg = { nome, sub, rodape, addr: showAddr, pag: showPag, fontSize: fs };
-  const is58 = largura <= 32;
-  const oldFmt = localStorage.getItem('printFormat');
-  localStorage.setItem('printFormat', is58 ? '58mm' : '80mm');
-  const ex = { id:2193, num:2193, client:'Cliente Teste', phone:'(00) 0000-0000', addr:'Rua Teste, 123', pag:'PIX', taxa:5, total:45.70,
-    items:[{qty:1,name:'Água Mineral 500ml',price:7.90},{qty:1,name:'Smash Burguer',price:25},{qty:1,name:'Batata Frita Crocante',price:8.90},{qty:1,name:'Batata Frita Crocante',price:8.90}] };
-  const _ticket = _buildTicketHtml(ex, cfg);
-  p.innerHTML = _ticket.principal;
-  if (oldFmt) localStorage.setItem('printFormat', oldFmt); else localStorage.removeItem('printFormat');
-}
-
-function salvarModelo() {
-  const m = _modelos[_editModIdx]; if (!m) return;
-  m.apelido = document.getElementById('mod-apelido')?.value || m.nome;
-  m.impressora_idx = parseInt(document.getElementById('mod-impressora')?.value || 0);
-  m.largura = parseInt(document.getElementById('mod-largura')?.value || 32);
-  m.nome_estab = document.getElementById('mod-nome')?.value || 'RESTAURANTE';
-  m.sub = document.getElementById('mod-sub')?.value || '';
-  m.rodape = document.getElementById('mod-rodape')?.value || 'Obrigado!';
-  m.fontSize = parseInt(document.getElementById('mod-font-size')?.value || 12);
-  m.showAddr = document.getElementById('mod-toggle-addr')?.classList.contains('on') ?? true;
-  m.showPag = document.getElementById('mod-toggle-pag')?.classList.contains('on') ?? true;
-  _printNome = m.nome_estab; localStorage.setItem('printNome', m.nome_estab);
-  _printSub = m.sub; localStorage.setItem('printSub', m.sub);
-  _printRodape = m.rodape; localStorage.setItem('printRodape', m.rodape);
-  _printFontSize = m.fontSize;
-  _printFormat = m.largura <= 32 ? '58mm' : '80mm'; localStorage.setItem('printFormat', _printFormat);
-  _saveModelos();
-  closeModal('modal-modelo');
-  _loadModelos(); _loadImpressoras();
-  sbToast('ok', 'Modelo salvo!');
-}
-
-async function testModelo(idx) {
-  const m = _modelos[idx]; if (!m) return;
-  const ex = { id:99, num:9999, client:'TESTE IMPRESSÃO', addr:'Balcão', pag:'PIX', taxa:5, total:23,
-    items:[{qty:1,name:'X-Salada',price:18},{qty:1,name:'Batata Frita',price:10}] };
-  await printOrder(ex);
-  sbToast('ok', '🖨️ Teste do modelo "' + m.nome + '" enviado!');
-}
-
-// ── CALIBRAÇÃO DA IMPRESSORA ─────────────────────────────────
-// Imprime uma régua pra o usuário identificar a área imprimível real da impressora.
-// Depois ele preenche o valor em "Largura imprimível" e salva.
-
-async function calibrarImpressora() {
-  if (!window.ElectronPrint || !window.ElectronPrint.calibrate) {
-    if (typeof sbToast === 'function') sbToast('error', 'Calibração disponível só no app EstimaFood (desktop). Atualize o app se já estiver instalado.');
-    else alert('Calibração disponível só no app EstimaFood (desktop).');
-    return;
-  }
-  try {
-    const paperWidth = parseInt(document.getElementById('calib-paper-width').value) || 80;
-    if (typeof sbToast === 'function') sbToast('info', '📏 Enviando régua pra impressora...');
-    const r = await window.ElectronPrint.calibrate({ paperWidth });
-    if (r && r.ok === false) {
-      if (typeof sbToast === 'function') sbToast('error', 'Erro: ' + (r.error || 'desconhecido'));
-    } else {
-      if (typeof sbToast === 'function') sbToast('ok', '✅ Régua enviada. Veja até qual número foi impresso sem cortar e preencha no campo abaixo.');
-    }
-  } catch (e) {
-    console.error('calibrar:', e);
-    if (typeof sbToast === 'function') sbToast('error', 'Erro ao imprimir régua: ' + e.message);
-  }
-}
-
-async function salvarCalibracao() {
-  if (!window.ElectronPrint || !window.ElectronPrint.saveConfig) {
-    if (typeof sbToast === 'function') sbToast('error', 'Calibração disponível só no app EstimaFood (desktop).');
-    else alert('Calibração disponível só no app EstimaFood.');
-    return;
-  }
-  try {
-    const pwEl = document.getElementById('calib-paper-width');
-    const prEl = document.getElementById('calib-printable-width');
-    if (!pwEl || !prEl) return;
-    const rawPrintable = prEl.value;
-    const paperWidth = parseInt(pwEl.value) || 80;
-
-    let printableWidth = 0;
-    if (rawPrintable && String(rawPrintable).trim() !== '') {
-      printableWidth = parseInt(rawPrintable);
-      if (isNaN(printableWidth) || printableWidth < 30 || printableWidth > 80) {
-        if (typeof sbToast === 'function') sbToast('error', 'Largura imprimível deve ficar entre 30 e 80mm.');
-        return;
-      }
-    }
-
-    const r = await window.ElectronPrint.saveConfig({ paperWidth, printableWidth });
-    if (r && r.ok === false) {
-      if (typeof sbToast === 'function') sbToast('error', 'Erro ao salvar: ' + (r.error || 'desconhecido'));
-      return;
-    }
-
-    // Recarrega pra confirmar visualmente que ficou salvo
-    await carregarCalibracao();
-
-    if (typeof sbToast === 'function') {
-      sbToast('ok', printableWidth
-        ? '✅ Calibração salva: ' + printableWidth + 'mm em papel ' + paperWidth + 'mm'
-        : '✅ Calibração restaurada para automático');
-    }
-  } catch (e) {
-    console.error('salvarCalibracao:', e);
-    if (typeof sbToast === 'function') sbToast('error', 'Erro ao salvar: ' + (e && e.message ? e.message : String(e)));
-  }
-}
-
-// Carrega os valores salvos nos campos de calibração.
-// Também pode ser chamada manualmente depois de salvar pra confirmar os valores.
-async function carregarCalibracao() {
-  if (!window.ElectronPrint || !window.ElectronPrint.getConfig) return;
-  try {
-    const cfg = await window.ElectronPrint.getConfig();
-    if (!cfg) return;
-    const pw = document.getElementById('calib-paper-width');
-    const pr = document.getElementById('calib-printable-width');
-    if (pw && cfg.paperWidth) pw.value = String(cfg.paperWidth);
-    if (pr) pr.value = (cfg.printableWidth && Number(cfg.printableWidth) > 0) ? String(cfg.printableWidth) : '';
-  } catch (e) {
-    console.warn('carregarCalibracao:', e);
-  }
-}
-
-// Estratégia robusta: MutationObserver fica escutando o DOM inteiro e,
-// sempre que o campo de calibração aparecer (usuário navegou pra aba),
-// carrega os valores imediatamente. Funciona independente de como a SPA monta a tela.
-(function setupCalibracaoAutoLoad() {
-  let ultimoCarregamento = 0;
-  function tentarCarregar() {
-    // Debounce de 200ms pra não spammar o getConfig
-    const agora = Date.now();
-    if (agora - ultimoCarregamento < 200) return;
-    const pr = document.getElementById('calib-printable-width');
-    if (!pr) return; // campo ainda não está na tela
-    ultimoCarregamento = agora;
-    carregarCalibracao();
-  }
-
-  function iniciar() {
-    // Tenta carregar ao inicializar (caso a aba já esteja renderizada)
-    tentarCarregar();
-
-    // Observa mudanças no DOM — quando o campo aparecer, carrega
-    const obs = new MutationObserver(() => tentarCarregar());
-    obs.observe(document.body, { childList: true, subtree: true });
-
-    // Também recarrega quando o usuário volta o foco pra aba/janela
-    window.addEventListener('focus', tentarCarregar);
-    document.addEventListener('visibilitychange', tentarCarregar);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', iniciar);
-  } else {
-    iniciar();
-  }
-})();
