@@ -260,7 +260,7 @@ function renderMenu() {
   if (_segmento !== 'acougue' && !searchQ && !activeCat) {
     const destItems = normalItems.filter(i => i.destaque || i.promo || i.price_old);
     if (destItems.length >= 2) {
-      html += `<div class="destaques-wrap"><div class="section-label">Destaques</div><div class="destaques-scroll">`;
+      html += `<div class="destaques-wrap"><div class="section-label">Mais Pedidos</div><div class="destaques-scroll">`;
       destItems.forEach(i => {
         const esg = i.status === 'esgotado';
         html += `<div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}><div class="dest-img">${i.image_url?`<img src="${i.image_url}" alt="${i.name}">`:''}<span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span></div><div class="dest-body"><div class="dest-name">${i.name}</div><div class="dest-prices">${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}<span class="dest-price">R$ ${fmt(i.price)}</span></div></div></div>`;
