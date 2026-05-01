@@ -2678,13 +2678,24 @@ function _buildTicketHtml(order, cfg) {
     ROW(S('font-weight:bold', 'Total:'), S('font-weight:bold', money(total)))
   );
 
-  // Troco
-  const trocoLine = (order.pag === 'dinheiro')
-    ? H(
-        ROW('Troco para:', order.troco > 0 ? money(order.troco) : 'Não precisa'),
-        order.troco > 0 ? ROW(S('font-weight:bold', 'Valor do Troco:'), S('font-weight:bold', money(order.troco - total))) : ''
-      )
-    : '';
+  // Troco — deixa explícito quanto o cliente vai pagar e quanto devolver
+  let trocoLine = '';
+  if (order.pag === 'dinheiro') {
+    if (order.troco > 0) {
+      // Cliente informou o valor que vai entregar — calcula o troco a devolver
+      const devolver = Math.max(0, order.troco - total);
+      trocoLine = H(
+        ROW('Cliente paga:', money(order.troco)),
+        ROW(S('font-weight:bold', 'DEVOLVER ao cliente:'), S('font-weight:bold', money(devolver)))
+      );
+    } else if (order.troco === -1) {
+      // Cliente pediu troco mas não informou o valor
+      trocoLine = ROW(S('font-weight:bold', 'Troco:'), S('font-weight:bold', 'SIM (valor nao informado)'));
+    } else {
+      // Cliente vai pagar exato (sem necessidade de troco)
+      trocoLine = ROW('Troco:', 'Nao precisa');
+    }
+  }
 
   // ── Endereço estruturado (extrai referência se presente) ─────
   // Formato típico: "Rua X, 123, Bairro, complemento, Ref: prox merc"
@@ -3189,13 +3200,23 @@ function _buildEscPos(order, cfg, cols = 32) {
   push(cols2('Total:', money(total)) + '\n');
   bytes(0x1B, 0x45, 0x00);
 
-  // Troco
+  // Troco — deixa explícito quanto o cliente vai pagar e quanto devolver
   if (order.pag === 'dinheiro') {
-    push(cols2('Troco para:', order.troco > 0 ? money(order.troco) : 'Nao precisa') + '\n');
     if (order.troco > 0) {
+      // Cliente informou o valor que vai entregar — calcula e destaca o troco a devolver
+      const devolver = Math.max(0, order.troco - total);
+      push(cols2('Cliente paga:', money(order.troco)) + '\n');
       bytes(0x1B, 0x45, 0x01);
-      push(cols2('Valor do Troco:', money(order.troco - total)) + '\n');
+      push(cols2('DEVOLVER ao cliente:', money(devolver)) + '\n');
       bytes(0x1B, 0x45, 0x00);
+    } else if (order.troco === -1) {
+      // Cliente pediu troco mas não informou o valor — alerta o entregador
+      bytes(0x1B, 0x45, 0x01);
+      push(cols2('Troco:', 'SIM (valor nao informado)') + '\n');
+      bytes(0x1B, 0x45, 0x00);
+    } else {
+      // Cliente vai pagar exato
+      push(cols2('Troco:', 'Nao precisa') + '\n');
     }
   }
   push(sep);
