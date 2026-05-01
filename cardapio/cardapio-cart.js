@@ -267,13 +267,41 @@ function setDelivery(type) {
   });
   document.getElementById('addr-block').style.display       = type==='delivery' ? '' : 'none';
   document.getElementById('mesa-block').style.display       = type==='mesa'     ? '' : 'none';
-  // Endereço de retirada
-  const retBlock = document.getElementById('retirada-addr-block');
-  const retText  = document.getElementById('retirada-addr-text');
-  if (retBlock && retText) {
-    retBlock.style.display = (type === 'retirada' && _storeAddress) ? '' : 'none';
-    retText.textContent    = _storeAddress;
+
+  // Endereço de retirada — simples (sem filiais extras) ou seletor de filial
+  const retBlock    = document.getElementById('retirada-addr-block');
+  const retText     = document.getElementById('retirada-addr-text');
+  const pickupBlock = document.getElementById('pickup-selector-block');
+
+  // Monta lista completa: endereço principal + filiais adicionais
+  const allPickup = [];
+  if (_storeAddress) allPickup.push({ nome: 'Principal', endereco: _storeAddress });
+  if (_pickupAddresses && _pickupAddresses.length) {
+    _pickupAddresses.forEach(p => allPickup.push({ nome: p.nome || 'Filial', endereco: p.endereco || '' }));
   }
+
+  if (type === 'retirada' && allPickup.length > 0) {
+    // Sempre mostra o bloco de retirada
+    if (retBlock) retBlock.style.display = '';
+
+    if (allPickup.length === 1) {
+      // Apenas 1 endereço: mostra texto simples, oculta seletor
+      if (retText)     { retText.style.display = ''; retText.textContent = allPickup[0].endereco; }
+      if (pickupBlock) pickupBlock.style.display = 'none';
+      _selectedPickupIdx = 0;
+    } else {
+      // Múltiplas filiais: oculta texto simples, exibe seletor
+      if (retText)     retText.style.display = 'none';
+      if (pickupBlock) {
+        pickupBlock.style.display = '';
+        _renderPickupSelector(allPickup);
+      }
+    }
+  } else {
+    if (retBlock)    retBlock.style.display = 'none';
+    if (pickupBlock) pickupBlock.style.display = 'none';
+  }
+
   // Pedido mínimo delivery — mostra só na aba delivery
   const minimoBar = document.getElementById('cart-minimo-bar');
   const minimoVal = document.getElementById('cart-minimo-val');
@@ -293,6 +321,57 @@ function setDelivery(type) {
   if (type === 'delivery' && typeof carregarEnderecosSalvos === 'function') {
     carregarEnderecosSalvos();
   }
+}
+
+function _renderPickupSelector(allPickup) {
+  const wrap = document.getElementById('pickup-selector-block');
+  if (!wrap) return;
+  // Clamp selected index to valid range
+  if (_selectedPickupIdx >= allPickup.length) _selectedPickupIdx = 0;
+
+  wrap.innerHTML = `
+    <div style="font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">
+      📍 Escolha o ponto de retirada
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px" id="pickup-options-list">
+      ${allPickup.map((p, i) => `
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:10px;border:1.5px solid ${i === _selectedPickupIdx ? 'var(--accent)' : 'var(--border)'};background:${i === _selectedPickupIdx ? 'rgba(var(--accent-rgb),.06)' : 'var(--s2)'};cursor:pointer;transition:border-color .15s,background .15s" onclick="_selectPickup(${i})">
+          <span style="width:16px;height:16px;border-radius:50%;border:2px solid ${i === _selectedPickupIdx ? 'var(--accent)' : 'var(--border)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;background:${i === _selectedPickupIdx ? 'var(--accent)' : 'transparent'};transition:all .15s">
+            ${i === _selectedPickupIdx ? '<span style="width:6px;height:6px;border-radius:50%;background:#fff;display:block"></span>' : ''}
+          </span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:700;color:${i === _selectedPickupIdx ? 'var(--accent)' : 'var(--text)'};margin-bottom:2px">${p.nome || 'Filial'}</div>
+            <div style="font-size:11.5px;color:var(--muted);line-height:1.4">${p.endereco || ''}</div>
+          </div>
+        </label>
+      `).join('')}
+    </div>
+  `;
+}
+
+function _selectPickup(idx) {
+  const allPickup = [];
+  if (_storeAddress) allPickup.push({ nome: 'Principal', endereco: _storeAddress });
+  if (_pickupAddresses && _pickupAddresses.length) {
+    _pickupAddresses.forEach(p => allPickup.push({ nome: p.nome || 'Filial', endereco: p.endereco || '' }));
+  }
+  _selectedPickupIdx = idx;
+  _renderPickupSelector(allPickup);
+}
+
+// Retorna o endereço de retirada atualmente selecionado
+function _getSelectedPickupAddr() {
+  const allPickup = [];
+  if (_storeAddress) allPickup.push({ nome: 'Principal', endereco: _storeAddress });
+  if (_pickupAddresses && _pickupAddresses.length) {
+    _pickupAddresses.forEach(p => allPickup.push({ nome: p.nome || 'Filial', endereco: p.endereco || '' }));
+  }
+  if (!allPickup.length) return 'Retirada no balcão';
+  const sel = allPickup[_selectedPickupIdx] || allPickup[0];
+  const parts = [];
+  if (allPickup.length > 1 && sel.nome && sel.nome !== 'Principal') parts.push(`[${sel.nome}]`);
+  if (sel.endereco) parts.push(sel.endereco);
+  return parts.length ? parts.join(' — ') : 'Retirada no balcão';
 }
 
 function setPay(el) {

@@ -33,6 +33,8 @@ let _storeAddress = '';
 let _storeLat     = null;
 let _storeLng     = null;
 let _tiposEntrega = ['delivery','retirada','mesa'];
+let _pickupAddresses    = [];  // lista de { nome, endereco } — endereços adicionais de retirada
+let _selectedPickupIdx  = 0;   // índice do endereço de retirada selecionado pelo cliente
 
 // ── Segmento ──
 let _segmento      = 'restaurante'; // 'restaurante' | 'acougue'

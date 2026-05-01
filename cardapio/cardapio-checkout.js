@@ -147,7 +147,7 @@ async function submitOrder() {
     if (!m) { toast('⚠️','Informe o número da mesa'); return; }
     addr = 'Mesa ' + m;
   } else {
-    addr = 'Retirada no balcão';
+    addr = (typeof _getSelectedPickupAddr === 'function') ? _getSelectedPickupAddr() : 'Retirada no balcão';
   }
 
   // Crédito ou débito → abre modal "Pagar agora / Pagar na entrega"
@@ -660,7 +660,7 @@ async function _iniciarSubmit() {
     if (!m) { toast('⚠️','Informe o número da mesa'); return; }
     addr = 'Mesa ' + m;
   } else {
-    addr = 'Retirada no balcão';
+    addr = (typeof _getSelectedPickupAddr === 'function') ? _getSelectedPickupAddr() : 'Retirada no balcão';
   }
   await _doSubmitOrder(addr, null);
 }
