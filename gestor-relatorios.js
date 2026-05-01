@@ -2734,7 +2734,7 @@ function _buildTicketHtml(order, cfg) {
       SECTION('Cliente'),
       D('margin-top:1px', 'Nome: ' + (order.client || '—')),
       phoneLine,
-      addrLine ? D('margin-top:3px', 'Entrega: ' + _addrParts.full) : '',
+      addrLine ? D('margin-top:3px', (isRetira ? 'Retirada: ' : 'Entrega: ') + _addrParts.full) : '',
       refLine,
       HR(),
 
@@ -3138,7 +3138,7 @@ function _buildEscPos(order, cfg, cols = 32) {
   push('Nome: ' + (order.client || '—') + '\n');
   if (order.phone) push('Telefone: ' + order.phone + '\n');
   if (cfg.addr && _addrPartsEsc.full && !_escIsMesa) {
-    _wrapText('Entrega: ' + _addrPartsEsc.full, cols, '').forEach(l => push(l + '\n'));
+    _wrapText((_escIsRetirada ? 'Retirada: ' : 'Entrega: ') + _addrPartsEsc.full, cols, '').forEach(l => push(l + '\n'));
     if (_addrPartsEsc.referencia) {
       _wrapText('Referencia: ' + _addrPartsEsc.referencia, cols, '').forEach(l => push(l + '\n'));
     }
