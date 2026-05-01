@@ -740,8 +740,13 @@ function subscribeOrders() {
     })
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, p => {
       const idx = ordersKanban.findIndex(x => x.id === p.new.id);
-      // Pedido PIX confirmado — entra no kanban agora (online pix_mp/pix ou manual pix_manual)
-      if (idx === -1 && p.new.status === 'analise' && (p.new.pag === 'pix_mp' || p.new.pag === 'pix_manual' || p.new.pag === 'pix')) {
+      // PIX confirmado — entra no kanban agora
+      // PIX online (pix_mp) confirmado pelo MP: status já vem como 'producao' (pula análise)
+      // PIX manual (pix_manual) ou legado (pix): vai para 'analise' (precisa aceite)
+      if (idx === -1 && (
+            (p.new.status === 'producao' && p.new.pag === 'pix_mp') ||
+            (p.new.status === 'analise' && (p.new.pag === 'pix_manual' || p.new.pag === 'pix'))
+          )) {
         ordersKanban.unshift(mapOrder(p.new));
         renderKanban();
         playOrderSound();
@@ -751,8 +756,14 @@ function subscribeOrders() {
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
         showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg>', `PIX confirmado! Pedido #${_orderNum(p.new.id, p.new.order_num)} — ${p.new.client}`);
         sendBrowserNotif(`PIX confirmado! #${_orderNum(p.new.id, p.new.order_num)}`, `${p.new.client} — ${items}`);
-        if (_autoAcceptOn) setTimeout(() => advanceOrderById(p.new.id), 800);
-        if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(p.new)) printOrder(mapOrder(p.new));
+        // PIX online: pagamento já confirmado, imprime sempre (independe do modo de impressão)
+        // PIX manual: respeita _autoAcceptOn e _printMode normalmente
+        if (p.new.pag === 'pix_mp') {
+          if (!_isSoBebidas(p.new)) printOrder(mapOrder(p.new));
+        } else {
+          if (_autoAcceptOn) setTimeout(() => advanceOrderById(p.new.id), 800);
+          if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(p.new)) printOrder(mapOrder(p.new));
+        }
         return;
       }
       if (idx !== -1) {
@@ -945,7 +956,12 @@ function _subscribeOrdersSSE() {
       const idx = ordersKanban.findIndex(x => x.id === order.id);
 
       // Pedido PIX online confirmado — ainda não está no kanban, entra agora
-      if (idx === -1 && order.status === 'analise' && (order.pag === 'pix_mp' || order.pag === 'pix_manual' || order.pag === 'pix')) {
+      // PIX online (pix_mp): vai direto para 'producao' (já confirmado pelo MP)
+      // PIX manual (pix_manual) e legado (pix): continuam indo para 'analise' (precisam aceite)
+      if (idx === -1 && (
+            (order.status === 'producao' && order.pag === 'pix_mp') ||
+            (order.status === 'analise' && (order.pag === 'pix_manual' || order.pag === 'pix'))
+          )) {
         const items = typeof order.items === 'string' ? (() => { try { return JSON.parse(order.items); } catch { return []; } })() : (order.items || []);
         ordersKanban.unshift(mapOrder({ ...order, items }));
         renderKanban();
@@ -956,8 +972,14 @@ function _subscribeOrdersSSE() {
         const itemsList = Array.isArray(items) ? items.map(i => `${i.qty}x ${i.name}`).join(', ') : '';
         showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg>', `PIX confirmado! Pedido #${order.id} — ${order.client}`);
         sendBrowserNotif(`PIX confirmado! #${order.id}`, `${order.client} — ${itemsList}`);
-        if (_autoAcceptOn) setTimeout(() => advanceOrderById(order.id), 800);
-        if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(order)) printOrder(mapOrder({ ...order, items }));
+        // PIX online: pagamento já confirmado pelo MP, imprime automático sempre (independe do _printMode)
+        // PIX manual: respeita _autoAcceptOn e _printMode normalmente
+        if (order.pag === 'pix_mp' && order._pixOnlineConfirmado) {
+          if (!_isSoBebidas(order)) printOrder(mapOrder({ ...order, items }));
+        } else {
+          if (_autoAcceptOn) setTimeout(() => advanceOrderById(order.id), 800);
+          if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(order)) printOrder(mapOrder({ ...order, items }));
+        }
         return;
       }
 
