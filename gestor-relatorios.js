@@ -2680,7 +2680,10 @@ function _buildTicketHtml(order, cfg) {
 
   // Troco
   const trocoLine = (order.pag === 'dinheiro')
-    ? ROW('Troco para:', order.troco > 0 ? money(order.troco) : 'Não precisa')
+    ? H(
+        ROW('Troco para:', order.troco > 0 ? money(order.troco) : 'Não precisa'),
+        order.troco > 0 ? ROW(S('font-weight:bold', 'Valor do Troco:'), S('font-weight:bold', money(order.troco - total))) : ''
+      )
     : '';
 
   // ── Endereço estruturado (extrai referência se presente) ─────
@@ -3189,6 +3192,11 @@ function _buildEscPos(order, cfg, cols = 32) {
   // Troco
   if (order.pag === 'dinheiro') {
     push(cols2('Troco para:', order.troco > 0 ? money(order.troco) : 'Nao precisa') + '\n');
+    if (order.troco > 0) {
+      bytes(0x1B, 0x45, 0x01);
+      push(cols2('Valor do Troco:', money(order.troco - total)) + '\n');
+      bytes(0x1B, 0x45, 0x00);
+    }
   }
   push(sep);
 
