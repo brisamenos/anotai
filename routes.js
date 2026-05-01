@@ -99,17 +99,15 @@ function _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN_ENV) {
                 && pedAtual?.pag !== 'pix_mp' && pedAtual?.pag !== 'cartao_mp'
 
               if (eraAguardando || podeRessurreicao) {
-                // PIX online confirmado pelo MP → entra direto em produção (pula análise)
-                // O pagamento já foi validado, não precisa de aceite manual.
-                db.prepare("UPDATE orders SET status='producao', pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, tenantId)
+                db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, tenantId)
                 if (podeRessurreicao) log('🔄', `PEDIDO RESSUSCITADO (recovery): pagamento PIX chegou após cancelamento — id=${row.order_id} tenant=${tenantId}`)
                 const pedFull = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(row.order_id, tenantId)
                 const items   = pedFull && typeof pedFull.items === 'string'
                   ? (() => { try { return JSON.parse(pedFull.items) } catch { return [] } })()
                   : (pedFull?.items || [])
                 sseBroadcast(`orders-rt:${tenantId}`, 'orders:UPDATE',
-                  pedFull ? { ...pedFull, items, status: 'producao', pag: 'pix_mp', _pixOnlineConfirmado: true }
-                          : { id: row.order_id, status: 'producao', pag: 'pix_mp', _pixOnlineConfirmado: true })
+                  pedFull ? { ...pedFull, items, status: 'analise', pag: 'pix_mp' }
+                          : { id: row.order_id, status: 'analise', pag: 'pix_mp' })
                 liberados++
               }
             } else if (pd.status === 'rejected' || pd.status === 'cancelled') {
@@ -1156,18 +1154,15 @@ module.exports = async function handleRoutes(req, res, ctx) {
               && pedAtual?.pag !== 'pix_mp' && pedAtual?.pag !== 'cartao_mp'
 
             if (eraAguardando || podeRessurreicao) {
-              // PIX online confirmado pelo MP → entra direto em produção (pula análise)
-              // O pagamento já foi validado pelo Mercado Pago, não precisa de aceite manual.
-              db.prepare("UPDATE orders SET status='producao', pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, row.tenant_id)
+              db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, row.tenant_id)
               if (podeRessurreicao) log('🔄', `PEDIDO RESSUSCITADO (webhook): pagamento PIX chegou após cancelamento — id=${row.order_id} tenant=${row.tenant_id}`)
             } else if (pedAtual) {
               db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, row.tenant_id)
             }
-            const _ns4 = (eraAguardando || podeRessurreicao) ? 'producao' : pedAtual?.status
+            const _ns4 = (eraAguardando || podeRessurreicao) ? 'analise' : pedAtual?.status
             const _fo4 = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(row.order_id, row.tenant_id)
             const _it4 = _fo4 && typeof _fo4.items==='string' ? (() => { try{return JSON.parse(_fo4.items)}catch{return []} })() : (_fo4?.items||[])
-            // Marca _pixOnlineConfirmado para o frontend reconhecer e imprimir automático
-            sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, _fo4 ? {..._fo4, items:_it4, status:_ns4, pag:'pix_mp', _pixOnlineConfirmado: (eraAguardando || podeRessurreicao)} : { id: row.order_id, status: _ns4, pag: 'pix_mp', _pixOnlineConfirmado: (eraAguardando || podeRessurreicao) })
+            sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, _fo4 ? {..._fo4, items:_it4, status:_ns4, pag:'pix_mp'} : { id: row.order_id, status: _ns4, pag: 'pix_mp' })
             // Notifica cliente: pagamento PIX confirmado
             if (eraAguardando || podeRessurreicao) _notificarPixConfirmado(row.tenant_id, _fo4, sendWA, fillVars, EVO_INST, db)
           }

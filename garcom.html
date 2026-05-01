@@ -961,25 +961,12 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
     <!-- Forma de pagamento -->
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Pagamento</div>
-      <select id="np-pag" onchange="npAtualizarTroco()" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13.5px;font-family:inherit;outline:none">
+      <select id="np-pag" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13.5px;font-family:inherit;outline:none">
         <option value="dinheiro">Dinheiro</option>
         <option value="pix">PIX</option>
         <option value="credito">Cartão de Crédito</option>
         <option value="debito">Cartão de Débito</option>
       </select>
-
-      <!-- Troco (aparece só quando pagamento = dinheiro) -->
-      <div id="np-troco-wrap" style="margin-top:10px">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Precisa de troco?</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
-          <button type="button" id="np-troco-btn-nao" onclick="npTrocoEscolha('nao')" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">Não precisa</button>
-          <button type="button" id="np-troco-btn-sim" onclick="npTrocoEscolha('sim')" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">Sim, troco para...</button>
-        </div>
-        <div id="np-troco-valor-wrap" style="display:none">
-          <input id="np-troco-valor" type="number" step="0.01" min="0" placeholder="Cliente vai pagar com R$..." style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
-          <div id="np-troco-info" style="margin-top:6px;font-size:11.5px;color:var(--muted)"></div>
-        </div>
-      </div>
     </div>
 
     <!-- Observação -->
@@ -3208,8 +3195,6 @@ function npAtualizarPreview() {
     <span>Total</span><span style="color:var(--success)">R$ ${tot.toFixed(2).replace('.',',')}</span>
   </div>`;
   preview.style.display = '';
-  // Recalcula info de troco (total mudou)
-  if (typeof npAtualizarInfoTroco === 'function') npAtualizarInfoTroco();
 }
 
 // Renderiza campo de bairro: select se por_bairro, input texto caso contrário
@@ -3243,70 +3228,6 @@ function npGetTaxa() {
   return parseFloat(cfg.valor ?? cfg.value ?? 0) || 0;
 }
 
-// ── Troco (Novo Pedido) ────────────────────────────────────────────
-let _npTrocoEscolha = 'nao'; // 'nao' | 'sim'
-
-function npTrocoEscolha(tipo) {
-  _npTrocoEscolha = tipo;
-  const btnNao = document.getElementById('np-troco-btn-nao');
-  const btnSim = document.getElementById('np-troco-btn-sim');
-  const valorWrap = document.getElementById('np-troco-valor-wrap');
-  if (btnNao) {
-    btnNao.style.background = (tipo === 'nao') ? 'var(--accent)' : 'var(--surface)';
-    btnNao.style.color      = (tipo === 'nao') ? '#fff' : 'var(--text)';
-    btnNao.style.border     = (tipo === 'nao') ? 'none' : '1px solid var(--border)';
-  }
-  if (btnSim) {
-    btnSim.style.background = (tipo === 'sim') ? 'var(--accent)' : 'var(--surface)';
-    btnSim.style.color      = (tipo === 'sim') ? '#fff' : 'var(--text)';
-    btnSim.style.border     = (tipo === 'sim') ? 'none' : '1px solid var(--border)';
-  }
-  if (valorWrap) valorWrap.style.display = (tipo === 'sim') ? 'block' : 'none';
-  if (tipo === 'sim') {
-    setTimeout(() => document.getElementById('np-troco-valor')?.focus(), 100);
-  }
-  npAtualizarInfoTroco();
-}
-
-// Mostra/esconde o bloco de troco conforme a forma de pagamento
-function npAtualizarTroco() {
-  const pag = document.getElementById('np-pag')?.value || 'dinheiro';
-  const wrap = document.getElementById('np-troco-wrap');
-  if (!wrap) return;
-  if (pag === 'dinheiro') {
-    wrap.style.display = 'block';
-    npTrocoEscolha(_npTrocoEscolha);
-  } else {
-    wrap.style.display = 'none';
-  }
-}
-
-// Calcula e exibe quanto será devolvido ao cliente em tempo real
-function npAtualizarInfoTroco() {
-  const info = document.getElementById('np-troco-info');
-  if (!info) return;
-  const v = parseFloat(document.getElementById('np-troco-valor')?.value || '0');
-  const tot = _npCart.reduce((s, i) => s + i.price * i.qty, 0) + npGetTaxa();
-  if (v > 0 && tot > 0) {
-    if (v < tot) {
-      info.textContent = `⚠️ Valor menor que o total (R$ ${tot.toFixed(2).replace('.', ',')})`;
-      info.style.color = '#ef4444';
-    } else {
-      const dev = v - tot;
-      info.textContent = `Devolver ao cliente: R$ ${dev.toFixed(2).replace('.', ',')}`;
-      info.style.color = 'var(--muted)';
-    }
-  } else {
-    info.textContent = '';
-  }
-}
-
-// Hook para recalcular o troco quando o usuário digita o valor
-document.addEventListener('DOMContentLoaded', () => {
-  const el = document.getElementById('np-troco-valor');
-  if (el) el.addEventListener('input', npAtualizarInfoTroco);
-});
-
 async function npEnviarPedido() {
   if (_submitting) return;
   const nome  = (document.getElementById('np-nome')?.value || '').trim();
@@ -3316,23 +3237,6 @@ async function npEnviarPedido() {
   if (!nome)  { showToast('⚠️ Informe o nome do cliente'); return; }
   if (!phone) { showToast('⚠️ Informe o WhatsApp'); return; }
   if (!_npCart.length) { showToast('⚠️ Selecione ao menos um item'); return; }
-
-  // ── Troco (só relevante se pagamento = dinheiro) ──
-  // null     = pagará exato / não se aplica (não-dinheiro)
-  // -1       = precisa troco mas não informou valor
-  // > 0      = valor que o cliente vai entregar
-  let troco = null;
-  if (pag === 'dinheiro') {
-    if (_npTrocoEscolha === 'sim') {
-      const v = parseFloat(document.getElementById('np-troco-valor')?.value || '0');
-      const totComTaxa = _npCart.reduce((s, i) => s + i.price * i.qty, 0) + npGetTaxa();
-      if (v > 0 && v < totComTaxa) {
-        showToast('⚠️ Valor para troco menor que o total do pedido');
-        return;
-      }
-      troco = (v > 0) ? v : -1;
-    }
-  }
 
   let addr = '';
   if (_npTipo === 'delivery') {
@@ -3370,7 +3274,6 @@ async function npEnviarPedido() {
       status: 'analise',
       time,
       pag,
-      troco,
       mesa_num: null,
       garcom_id: currentGarcom?.id,
       garcom_nome: currentGarcom?.nome
@@ -3383,10 +3286,6 @@ async function npEnviarPedido() {
     document.getElementById('np-nome').value  = '';
     document.getElementById('np-phone').value = '';
     document.getElementById('np-obs').value   = '';
-    // Reseta troco
-    _npTrocoEscolha = 'nao';
-    const _trVal = document.getElementById('np-troco-valor'); if (_trVal) _trVal.value = '';
-    npAtualizarTroco();
     if (_npTipo === 'delivery') {
       ['np-rua','np-num','np-bairro','np-compl'].forEach(id => {
         const el = document.getElementById(id); if (el) el.value = '';
