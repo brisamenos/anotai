@@ -704,7 +704,7 @@ let _cpBannerUrl = '';
 
 async function loadCardapioPublico() {
   const { data } = await sb.from('store_config').select(
-    'store_name,store_descricao,store_logo_url,store_banner_url,store_cor,store_tema,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega,delivery_fee_config'
+    'store_name,store_descricao,store_logo_url,store_banner_url,store_cor,store_tema,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega,delivery_fee_config,pickup_addresses'
   ).single();
   if (!data) return;
 
@@ -718,6 +718,14 @@ async function loadCardapioPublico() {
   v('cp-store-address', data.store_address);
   v('cp-store-lat',     data.store_lat ?? '');
   v('cp-store-lng',     data.store_lng ?? '');
+
+  // Múltiplos endereços de retirada
+  let pickupAddrs = [];
+  try {
+    const pa = data.pickup_addresses;
+    pickupAddrs = pa ? (Array.isArray(pa) ? pa : JSON.parse(pa)) : [];
+  } catch(e) { pickupAddrs = []; }
+  cpRenderPickupAddresses(pickupAddrs);
 
   // Tipos de entrega
   const tipos = Array.isArray(data.tipos_entrega)
@@ -961,6 +969,7 @@ async function salvarCardapioPublico() {
       store_lat:           parseFloat(document.getElementById('cp-store-lat')?.value)  || null,
       store_lng:           parseFloat(document.getElementById('cp-store-lng')?.value)  || null,
       tipos_entrega:       cpGetTiposEntrega(),
+      pickup_addresses:    JSON.stringify(cpGetPickupAddresses()),
     };
     if (_cpLogoUrl)   payload.store_logo_url   = _cpLogoUrl;
     if (_cpBannerUrl) payload.store_banner_url = _cpBannerUrl;
@@ -997,6 +1006,50 @@ function cpGetTiposEntrega() {
   // Garante pelo menos delivery
   if (!tipos.length) tipos.push('delivery');
   return tipos;
+}
+
+// ── Múltiplos endereços de retirada ──────────────────────────────────────
+function cpGetPickupAddresses() {
+  const rows = document.querySelectorAll('#cp-pickup-list .cp-pickup-row');
+  const addrs = [];
+  rows.forEach(row => {
+    const nome = row.querySelector('.cp-pickup-nome')?.value.trim();
+    const end  = row.querySelector('.cp-pickup-end')?.value.trim();
+    if (nome || end) addrs.push({ nome: nome || '', endereco: end || '' });
+  });
+  return addrs;
+}
+
+function cpRenderPickupAddresses(addrs) {
+  const list = document.getElementById('cp-pickup-list');
+  if (!list) return;
+  list.innerHTML = '';
+  const items = (addrs && addrs.length) ? addrs : [];
+  items.forEach((a, i) => _cpAddPickupRow(list, a.nome, a.endereco));
+}
+
+function _cpAddPickupRow(list, nome, endereco) {
+  if (!list) list = document.getElementById('cp-pickup-list');
+  if (!list) return;
+  const row = document.createElement('div');
+  row.className = 'cp-pickup-row';
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;margin-bottom:7px';
+  row.innerHTML = `
+    <div style="flex:0 0 120px">
+      <input class="cp-pickup-nome form-input" value="${(nome||'').replace(/"/g,'&quot;')}" placeholder="Nome da filial"
+        style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 9px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;outline:none">
+    </div>
+    <div style="flex:1">
+      <input class="cp-pickup-end form-input" value="${(endereco||'').replace(/"/g,'&quot;')}" placeholder="Endereço completo"
+        style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 9px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;outline:none">
+    </div>
+    <button onclick="this.closest('.cp-pickup-row').remove()" style="flex-shrink:0;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:var(--danger);border-radius:7px;padding:5px 10px;cursor:pointer;font-size:13px;font-weight:700;line-height:1" title="Remover">✕</button>
+  `;
+  list.appendChild(row);
+}
+
+function cpAddPickupAddress() {
+  _cpAddPickupRow(null, '', '');
 }
 
 // Pausa rápida de delivery — salva IMEDIATAMENTE no clique

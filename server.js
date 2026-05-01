@@ -470,6 +470,9 @@ const MIGRATIONS = [
     )`,
     `ALTER TABLE store_config ADD COLUMN stamp_config TEXT DEFAULT '{}'`
   ]},
+  { version:42, description:'pickup_addresses em store_config (múltiplos pontos de retirada)', up:
+    `ALTER TABLE store_config ADD COLUMN pickup_addresses TEXT DEFAULT '[]'`
+  },
 ]
 
 function runMigrations() {
@@ -773,7 +776,7 @@ function emit(tenantId, table, record, type) {
 const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
-  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config'],
+  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],

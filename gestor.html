@@ -4853,6 +4853,30 @@ Use no seu próximo pedido 🛍️</textarea>
     <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Preenche a latitude/longitude automaticamente via GPS do navegador</div>
   </div>
 
+  <!-- Endereços adicionais de retirada (filiais) -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between;gap:7px">
+      <span style="display:flex;align-items:center;gap:7px">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--accent);flex-shrink:0"><path d="M3 8h10M8 3v10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><rect x="1.5" y="1.5" width="13" height="13" rx="2.5" stroke="currentColor" stroke-width="1.3"/></svg>
+        Pontos adicionais de retirada
+      </span>
+      <button class="btn bg" style="padding:5px 12px;font-size:11.5px;gap:5px" onclick="cpAddPickupAddress()">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Adicionar filial
+      </button>
+    </div>
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px">
+      Quando cadastrado mais de 1 endereço, o cliente poderá escolher em qual filial vai retirar o pedido.<br>
+      <span style="color:var(--muted2)">O endereço principal acima sempre estará disponível — adicione aqui os demais pontos.</span>
+    </div>
+    <div id="cp-pickup-list" style="min-height:10px">
+      <!-- Linhas geradas por JS -->
+    </div>
+    <div id="cp-pickup-empty" style="display:none;font-size:12px;color:var(--muted);padding:8px 0;text-align:center">
+      Nenhum ponto adicional cadastrado — o cliente usará apenas o endereço principal acima.
+    </div>
+  </div>
+
   <!-- Cores -->
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
     <div style="font-size:13px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:7px">
