@@ -360,6 +360,8 @@ function _selectPickup(idx) {
 }
 
 // Retorna o endereço de retirada atualmente selecionado
+// IMPORTANTE: sempre inicia com "Retirada" para que _detectOrderType classifique corretamente
+// (sem esse prefixo, endereços de filial caíam no default "delivery" no kanban)
 function _getSelectedPickupAddr() {
   const allPickup = [];
   if (_storeAddress) allPickup.push({ nome: 'Principal', endereco: _storeAddress });
@@ -368,10 +370,10 @@ function _getSelectedPickupAddr() {
   }
   if (!allPickup.length) return 'Retirada no balcão';
   const sel = allPickup[_selectedPickupIdx] || allPickup[0];
-  const parts = [];
-  if (allPickup.length > 1 && sel.nome && sel.nome !== 'Principal') parts.push(`[${sel.nome}]`);
+  const parts = ['Retirada'];
+  if (allPickup.length > 1 && sel.nome) parts.push(`[${sel.nome}]`);
   if (sel.endereco) parts.push(sel.endereco);
-  return parts.length ? parts.join(' — ') : 'Retirada no balcão';
+  return parts.join(' — ');
 }
 
 function setPay(el) {
