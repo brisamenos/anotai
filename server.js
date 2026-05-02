@@ -1065,10 +1065,14 @@ async function handleREST(req, res, table, params, body) {
             if (!chavePix) { log('⚠️','PIX manual: chave não configurada para tenant', _tid); return }
             const lojaP   = cfg?.store_name || 'Restaurante'
             const _nomeP = nome.split(' ')[0]
+            // Emoji da loja conforme tipo de produto (açaí/pizza/etc)
+            const _tntP    = db.prepare("SELECT segmento FROM tenants WHERE id=?").get(_tid)
+            const _segP    = _tntP?.segmento || 'restaurante'
+            const _emP     = detectarCategoriaPedido(items, _segP).lojaEmoji
             const _pixVars = [
-              `🏪 *${lojaP}*\n${'-'.repeat(20)}\n\n💠 *PIX — Pedido #${idStr}*\n\nOi, *${_nomeP}*! 👋 Seu pedido chegou pra gente.\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\nPague via PIX pra confirmar:\n🔑 *Tipo:* ${tipoChave}\n📋 *Chave:* ${chavePix}\n\nAssim que o pagamento cair, a gente começa a preparar! ✅\n\n_Dúvidas? É só chamar! 😊_`,
-              `🏪 *${lojaP}*\n${'-'.repeat(20)}\n\n✅ *Pedido #${idStr} recebido!*\n\n*${_nomeP}*, que ótimo ter você por aqui! Seu pedido já está na nossa fila.\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\nSó falta o pagamento via PIX:\n🔑 ${tipoChave}: *${chavePix}*\n\nApós confirmar, partimos pra produção! 🚀\n\n_Qualquer dúvida é só responder! 😄_`,
-              `🏪 *${lojaP}*\n${'-'.repeat(20)}\n\n🎯 *Quase lá, ${_nomeP}!*\n\nRecebemos seu pedido *#${idStr}*. Agora é só pagar via PIX!\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\n📋 Chave PIX (${tipoChave}): *${chavePix}*\n\nAssim que o pagamento for identificado, você receberá confirmação. 🤝\n\n_Dúvidas? Estamos aqui! 😊_`,
+              `${_emP} *${lojaP}*\n${'-'.repeat(20)}\n\n💠 *PIX — Pedido #${idStr}*\n\nOi, *${_nomeP}*! 👋 Seu pedido chegou pra gente.\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\nPague via PIX pra confirmar:\n🔑 *Tipo:* ${tipoChave}\n📋 *Chave:* ${chavePix}\n\nAssim que o pagamento cair, a gente começa a preparar! ✅\n\n_Dúvidas? É só chamar! 😊_`,
+              `${_emP} *${lojaP}*\n${'-'.repeat(20)}\n\n✅ *Pedido #${idStr} recebido!*\n\n*${_nomeP}*, que ótimo ter você por aqui! Seu pedido já está na nossa fila.\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\nSó falta o pagamento via PIX:\n🔑 ${tipoChave}: *${chavePix}*\n\nApós confirmar, partimos pra produção! 🚀\n\n_Qualquer dúvida é só responder! 😄_`,
+              `${_emP} *${lojaP}*\n${'-'.repeat(20)}\n\n🎯 *Quase lá, ${_nomeP}!*\n\nRecebemos seu pedido *#${idStr}*. Agora é só pagar via PIX!\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\n📋 Chave PIX (${tipoChave}): *${chavePix}*\n\nAssim que o pagamento for identificado, você receberá confirmação. 🤝\n\n_Dúvidas? Estamos aqui! 😊_`,
             ]
             const msgPadrao = _pixVars[Math.floor(Math.random() * _pixVars.length)]
             const msgFinal  = pixAuto.msg ? fillVars(pixAuto.msg, { nome, id: idStr, itens: items, total, chave_pix: chavePix, tipo_chave: tipoChave }) : msgPadrao
@@ -1230,6 +1234,62 @@ function handleUpload(req, res) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 function fillVars(tpl, vars) { let t=tpl; for(const[k,v]of Object.entries(vars))t=t.replaceAll(`{${k}}`,v??''); return t }
 
+// ══════════════════════════════════════════════════════════════
+// Emojis por contexto do pedido — detecta categoria pelos itens
+// ══════════════════════════════════════════════════════════════
+// O sistema só tem 2 segmentos no banco (restaurante|acougue), então
+// açaiteria/pizzaria/hamburgueria caem em "restaurante" e pegam emojis
+// genéricos (🍽️ 👨‍🍳) que ficam estranhos. Esse helper detecta o tipo
+// de comida pelos NOMES dos itens e devolve emojis apropriados.
+function detectarCategoriaPedido(itemsStr, segmento) {
+  if (segmento === 'acougue') {
+    return { emojis: ['🥩','🔪','⚖️','🍖','🥓'], lojaEmoji: '🥩' }
+  }
+  const txt = String(itemsStr || '').toLowerCase()
+  // Açaí / sorveteria
+  if (/\baça[ií]|\baca[ií]|sorvete|milkshake|açaiteria|açaí na tigela|tigelinha|cremoso|frozen|gelato/.test(txt)) {
+    return { emojis: ['🍧','🍨','🥥','🍓','🍌'], lojaEmoji: '🍧' }
+  }
+  // Pizza
+  if (/\bpizz/.test(txt)) {
+    return { emojis: ['🍕','🔥','🧀','🍅','✨'], lojaEmoji: '🍕' }
+  }
+  // Hamburgueria / lanches
+  if (/\b(hamb[uú]rguer|hamburgueria|burger|x-|cheese|smash|artesanal|lanche)\b/.test(txt)) {
+    return { emojis: ['🍔','🍟','🥤','🔥','✨'], lojaEmoji: '🍔' }
+  }
+  // Sushi / japonês
+  if (/\b(sushi|sashimi|temaki|hot roll|combinado|yakisoba|japon)/.test(txt)) {
+    return { emojis: ['🍣','🍱','🍤','🥢','✨'], lojaEmoji: '🍣' }
+  }
+  // Doces / confeitaria
+  if (/\b(bolo|brigadeiro|doce|confeitaria|cupcake|torta|brownie|p[aã]o de mel|pudim)\b/.test(txt)) {
+    return { emojis: ['🧁','🍰','🍫','🍪','✨'], lojaEmoji: '🍰' }
+  }
+  // Cafeteria
+  if (/\b(caf[eé]|cappuccino|expresso|latte|moccacino|chocolate quente)\b/.test(txt)) {
+    return { emojis: ['☕','🥐','🍩','✨','💛'], lojaEmoji: '☕' }
+  }
+  // Pastelaria / salgados
+  if (/\b(pastel|coxinha|salgado|esfiha|esfirra|kibe|enroladinho|empada)\b/.test(txt)) {
+    return { emojis: ['🥟','🌭','🔥','⚡','✨'], lojaEmoji: '🥟' }
+  }
+  // Comida saudável / saladas / fitness
+  if (/\b(salada|fit|saud[aá]vel|natural|wrap|low\s*carb|vegano|vegetariano|bowl)\b/.test(txt)) {
+    return { emojis: ['🥗','🥑','🥕','💚','✨'], lojaEmoji: '🥗' }
+  }
+  // Bebidas / sucos
+  if (/\b(suco|smoothie|vitamina|drink|coquetel|caipirinha|cerveja|chopp)\b/.test(txt)) {
+    return { emojis: ['🥤','🍹','🍓','✨','💧'], lojaEmoji: '🥤' }
+  }
+  // Marmita / comida caseira / executivo
+  if (/\b(marmita|prato feito|pf|executivo|caseir[ao]|self.service|self.serv)\b/.test(txt)) {
+    return { emojis: ['🍱','🍚','🍲','✨','💛'], lojaEmoji: '🍱' }
+  }
+  // Default genérico (restaurante)
+  return { emojis: ['🍽️','👨‍🍳','🔥','⚡','✨'], lojaEmoji: '🍽️' }
+}
+
 async function sendWA(phone, text, inst) {
   const instance = inst || EVO_INST
   const num      = phone.replace(/\D/g,'')
@@ -1374,6 +1434,8 @@ async function handleOrderStatus(req, res) {
       setImmediate(async () => {
         try {
           const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(tid)
+          const _tnt   = db.prepare("SELECT segmento FROM tenants WHERE id=?").get(tid)
+          const _seg   = _tnt?.segmento || 'restaurante'
           const inst   = cfg?.evo_instance || EVO_INST
           const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
           const pixConf = auto['pix_confirmado'] || {}
@@ -1385,10 +1447,15 @@ async function handleOrderStatus(req, res) {
           const total  = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
           const lojaC = cfg?.store_name || 'Restaurante'
           const _nomePOk = nome.split(' ')[0]
+          // Emojis baseados nos itens reais (açaí/pizza/etc.) em vez de fixo 🍳
+          const _categPix    = detectarCategoriaPedido(items, _seg)
+          const _emPrep      = _categPix.emojis[0]    // ex: 🍧 pra açaí, 🍕 pra pizza
+          const _emProducao  = _categPix.emojis[1] || '🔥'
+          const _emHeader    = _categPix.lojaEmoji
               const _pixOkVars = [
-                `🏪 *${lojaC}*\n${'-'.repeat(20)}\n\n✅ *PIX confirmado, ${_nomePOk}!*\n\nRecebemos seu pagamento do pedido *#${idStr}*! 🎉\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\n🍳 Já estamos preparando tudo com muito carinho!\n\n_Dúvidas? Estamos aqui! 😊_`,
-                `🏪 *${lojaC}*\n${'-'.repeat(20)}\n\n💚 *Pagamento recebido!*\n\nOi, *${_nomePOk}*! Seu PIX do pedido *#${idStr}* chegou certinho. Obrigado! 🙏\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\n👨‍🍳 A equipe já colocou a mão na massa!\n\n_Qualquer dúvida é só chamar! 😄_`,
-                `🏪 *${lojaC}*\n${'-'.repeat(20)}\n\n🚀 *Bora, ${_nomePOk}!*\n\nPagamento do pedido *#${idStr}* confirmado com sucesso! ✅\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\n🔥 Seu pedido já entrou em produção. Em breve te avisamos quando estiver pronto!\n\n_Dúvidas? Responde aqui! 😊_`,
+                `${_emHeader} *${lojaC}*\n${'-'.repeat(20)}\n\n✅ *PIX confirmado, ${_nomePOk}!*\n\nRecebemos seu pagamento do pedido *#${idStr}*! 🎉\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\n${_emPrep} Já estamos preparando tudo com muito carinho!\n\n_Dúvidas? Estamos aqui! 😊_`,
+                `${_emHeader} *${lojaC}*\n${'-'.repeat(20)}\n\n💚 *Pagamento recebido!*\n\nOi, *${_nomePOk}*! Seu PIX do pedido *#${idStr}* chegou certinho. Obrigado! 🙏\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\n${_emProducao} A equipe já colocou a mão na massa!\n\n_Qualquer dúvida é só chamar! 😄_`,
+                `${_emHeader} *${lojaC}*\n${'-'.repeat(20)}\n\n🚀 *Bora, ${_nomePOk}!*\n\nPagamento do pedido *#${idStr}* confirmado com sucesso! ✅\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\n🔥 Seu pedido já entrou em produção. Em breve te avisamos quando estiver pronto!\n\n_Dúvidas? Responde aqui! 😊_`,
               ]
               const msgPad = _pixOkVars[Math.floor(Math.random() * _pixOkVars.length)]
           const msgFin = pixConf.msg ? fillVars(pixConf.msg, { nome, id: idStr, itens: items, total }) : msgPad
@@ -1410,6 +1477,13 @@ async function handleOrderStatus(req, res) {
         // sem que ela estivesse declarada — ReferenceError silenciado pelo try/catch
         // → nenhuma mensagem chegava ao cliente.
         const nome   = (order.client || 'Cliente').split(' ')[0]
+        // Detecta categoria do pedido pelos itens (açaí/pizza/hambúrguer/etc)
+        // pra que os emojis das mensagens batam com o tipo de comida.
+        const _tnt   = db.prepare("SELECT segmento FROM tenants WHERE id=?").get(tid)
+        const _seg   = _tnt?.segmento || 'restaurante'
+        const itemsStr = (() => { try { return (JSON.parse(order.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') } catch { return '' } })()
+        const _categB  = detectarCategoriaPedido(itemsStr, _seg)
+        const _lojaEmojiB = _categB.lojaEmoji  // ex: 🍧 açaí, 🍕 pizza, 🍔 hamb
 
         // ── Cashback ────────────────────────────────────
         const cbCfg  = (() => { try { return JSON.parse(cfg?.cashback_config||'{}') } catch { return {} } })()
@@ -1433,7 +1507,7 @@ async function handleOrderStatus(req, res) {
               const cbAuto = auto['cashback'] || {}
               if (cbAuto.on !== false) {
                 const lojaB   = cfg?.store_name || 'Restaurante'
-                const msgPadrao = `🏪 *${lojaB}*\n${'-'.repeat(20)}\n\n💰 *Cashback creditado!*\n\nOlá, *${nome}*! Você ganhou *R$ ${credito.toFixed(2).replace('.',',')}* de cashback.\n\n💳 Saldo atual: *R$ ${novoSaldo.toFixed(2).replace('.',',')}*\n\nUse no seu próximo pedido! 🛍️\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
+                const msgPadrao = `${_lojaEmojiB} *${lojaB}*\n${'-'.repeat(20)}\n\n💰 *Cashback creditado!*\n\nOlá, *${nome}*! Você ganhou *R$ ${credito.toFixed(2).replace('.',',')}* de cashback.\n\n💳 Saldo atual: *R$ ${novoSaldo.toFixed(2).replace('.',',')}*\n\nUse no seu próximo pedido! 🛍️\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
                 const msgFinal  = cbAuto.on && cbAuto.msg ? fillVars(cbAuto.msg, { nome, credito: credito.toFixed(2).replace('.',','), saldo: novoSaldo.toFixed(2).replace('.',',') }) : msgPadrao
                 setImmediate(async () => {
                   try {
@@ -1500,7 +1574,7 @@ async function handleOrderStatus(req, res) {
               if (ptAuto.on !== false) {
                 const lojaP2  = cfg?.store_name || 'Restaurante'
                 const faltam     = Math.max(0, meta - novosPts)
-                const msgPadrao  = `🏪 *${lojaP2}*\n${'-'.repeat(20)}\n\n🏆 *Pontos de fidelidade!*\n\nOlá, *${nome}*! Você ganhou *${ptosGanhos} pontos* com seu pedido.\n\n🎯 Saldo atual: *${novosPts} pontos*\n${faltam > 0 ? `⏳ Faltam apenas *${faltam} pontos* para sua recompensa!` : '🎁 Você atingiu sua recompensa! Resgate no próximo pedido.'}\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
+                const msgPadrao  = `${_lojaEmojiB} *${lojaP2}*\n${'-'.repeat(20)}\n\n🏆 *Pontos de fidelidade!*\n\nOlá, *${nome}*! Você ganhou *${ptosGanhos} pontos* com seu pedido.\n\n🎯 Saldo atual: *${novosPts} pontos*\n${faltam > 0 ? `⏳ Faltam apenas *${faltam} pontos* para sua recompensa!` : '🎁 Você atingiu sua recompensa! Resgate no próximo pedido.'}\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
                 const msgFinal   = ptAuto.on && ptAuto.msg ? fillVars(ptAuto.msg, { nome, pontos_ganhos: String(ptosGanhos), pontos_total: String(novosPts), pontos_faltam: String(faltam) }) : msgPadrao
                 setImmediate(async () => {
                   try {
@@ -1549,8 +1623,8 @@ async function handleOrderStatus(req, res) {
               const carimbos   = '● '.repeat(propCheios).trim() + (propCheios < limite ? ' ' + '○ '.repeat(limite - propCheios).trim() : '')
               const lojaSt = cfg?.store_name || 'Restaurante'
               const msgPadrao = elegivel
-                ? `🏪 *${lojaSt}*\n${'-'.repeat(20)}\n\n🎉 *Parabéns, ${nome}!*\n\nVocê completou seu cartão fidelidade!\n\n${carimbos}\n\nGanhou ${recompensaTxt}!\n\nÉ só pedir no próximo pedido que aplicamos automaticamente. 😋`
-                : `🏪 *${lojaSt}*\n${'-'.repeat(20)}\n\n🃏 *Carimbo conquistado!*\n\nOlá, *${nome}*! Mais um carimbo no seu cartão fidelidade:\n\n${carimbos}\n\n${desdeResgate}/${meta} carimbos\n⏳ Faltam *${faltam}* para ganhar ${recompensaTxt}!\n\n_Continua comprando com a gente! 💚_`
+                ? `${_lojaEmojiB} *${lojaSt}*\n${'-'.repeat(20)}\n\n🎉 *Parabéns, ${nome}!*\n\nVocê completou seu cartão fidelidade!\n\n${carimbos}\n\nGanhou ${recompensaTxt}!\n\nÉ só pedir no próximo pedido que aplicamos automaticamente. 😋`
+                : `${_lojaEmojiB} *${lojaSt}*\n${'-'.repeat(20)}\n\n🃏 *Carimbo conquistado!*\n\nOlá, *${nome}*! Mais um carimbo no seu cartão fidelidade:\n\n${carimbos}\n\n${desdeResgate}/${meta} carimbos\n⏳ Faltam *${faltam}* para ganhar ${recompensaTxt}!\n\n_Continua comprando com a gente! 💚_`
               const msgFinal  = stAuto.on && stAuto.msg ? fillVars(stAuto.msg, {
                 nome,
                 carimbos: String(desdeResgate),
@@ -1587,14 +1661,13 @@ async function handleOrderStatus(req, res) {
           const vars  = {nome,id:idStr,itens:items,total,endereco:order.addr||'',mesa:String(order.mesa_num||''),tipo_entrega:isDelivery,loja}
           const tipoAuto = {analise:'recebido',producao:'confirmado',pronto:'pronto',saiu:'entrega',entregue:'entrega',cancelado:'cancelado',finalizado:'avaliacao'}[new_status]
           const ct = tipoAuto?(auto[tipoAuto]||{}):{} 
-          // Emoji da loja por segmento
-          const _lojaEmoji = _seg === 'acougue' ? '🥩' : '🍽️'
+          // Emojis por categoria do pedido (detecta açaí/pizza/hambúrguer/etc
+          // pelos itens; se não bater nada, cai em emojis genéricos de restaurante).
+          const _categ      = detectarCategoriaPedido(items, _seg)
+          const _lojaEmoji  = _categ.lojaEmoji
           const cab = `${_lojaEmoji} *${loja}*\n${'-'.repeat(20)}`
           const rod = '\n\n_Dúvidas? É só responder esta mensagem!_ 😊'
-          // Emojis de comida por segmento
-          const _emojisComida = _seg === 'acougue'
-            ? ['🥩','🔪','⚖️','🍖','🥓']
-            : ['🍽️','👨‍🍳','🔥','⚡','✨']
+          const _emojisComida = _categ.emojis
           const _ec = () => _emojisComida[Math.floor(Math.random() * _emojisComida.length)]
           // Variações humanizadas — escolhe uma aleatoriamente
           const _v = arr => arr[Math.floor(Math.random() * arr.length)]
