@@ -1,6 +1,17 @@
 // ═══════════════════════════════════════════════════════
 // CLIENTE REST — ESTIMA FOOD
 // ═══════════════════════════════════════════════════════
+
+// ── Pré-inicialização de window._printMode ─────────────────
+// gestor-relatorios.js declara `let _printMode` que lê de window._printMode.
+// Como a ordem de carregamento dos <script> não é estritamente garantida em
+// todos os caminhos (e o erro "_printMode is not defined" foi visto em
+// produção), garantimos AQUI que window._printMode já tem valor antes
+// de qualquer outro código rodar.
+if (typeof window._printMode === 'undefined') {
+  window._printMode = localStorage.getItem('printMode') || 'auto';
+}
+
 // URL do servidor de automações — carregada do banco
 let WA_SERVER = '';
 const sb = window.AppAPI;
@@ -184,7 +195,12 @@ function mapItem(i) {
 function _formatTimeBR(ts) {
   if (!ts) return '';
   try {
-    const d = new Date(ts);
+    // SQLite datetime('now') retorna UTC sem sufixo Z. Sem o Z, o JS interpreta
+    // como horário local — gerando offset de 3h no Brasil. Anexa Z se faltar.
+    let s = String(ts).trim();
+    if (s.includes(' ') && !s.includes('T')) s = s.replace(' ', 'T');
+    if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s += 'Z';
+    const d = new Date(s);
     if (isNaN(d.getTime())) return ts;
     return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
   } catch(e) { return ts; }
@@ -277,6 +293,20 @@ async function loadAllData(silent = false) {
     const _ativos   = (ordersRes?.data || []);
     const _entreg   = (ordersEntregueRes?.data || []);
     const _todosPed = [..._ativos, ..._entreg];
+    // FORÇA: PIX online (pix_mp) NUNCA pode estar em análise no kanban. Sempre produção.
+    // Corrige inclusive registros antigos no banco que ficaram com status errado.
+    _todosPed.forEach(o => {
+      if (o.pag === 'pix_mp' && o.status === 'analise') {
+        o.status = 'producao';
+        try {
+          fetch('/api/order-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order_id: o.id, new_status: 'producao', tenant_id: _sessao?.tenant_id })
+          }).catch(()=>{});
+        } catch(e) {}
+      }
+    });
     if (_todosPed.length)         ordersKanban  = _todosPed.map(mapOrder);
     // Comandas mesa_aberta: entram no cache do salão, não no kanban
     (mesaAbertaRes?.data || []).forEach(o => {
@@ -739,9 +769,26 @@ function subscribeOrders() {
       _syncSwState();
     })
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, p => {
+      // FORÇA: PIX online (pix_mp) NUNCA pode ficar em análise. Sempre produção.
+      if (p.new.pag === 'pix_mp' && p.new.status === 'analise') {
+        p.new.status = 'producao';
+        // Persiste no banco em paralelo (não bloqueia)
+        try {
+          fetch('/api/order-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order_id: p.new.id, new_status: 'producao', tenant_id: _sessao?.tenant_id })
+          }).catch(()=>{});
+        } catch(e) {}
+      }
       const idx = ordersKanban.findIndex(x => x.id === p.new.id);
-      // Pedido PIX confirmado — entra no kanban agora (online pix_mp/pix ou manual pix_manual)
-      if (idx === -1 && p.new.status === 'analise' && (p.new.pag === 'pix_mp' || p.new.pag === 'pix_manual' || p.new.pag === 'pix')) {
+      // PIX confirmado — entra no kanban agora
+      // PIX online (pix_mp) confirmado pelo MP: vai direto para 'producao' (pula análise)
+      // PIX manual (pix_manual) ou legado (pix): vai para 'analise' (precisa aceite)
+      if (idx === -1 && (
+            (p.new.status === 'producao' && p.new.pag === 'pix_mp') ||
+            (p.new.status === 'analise' && (p.new.pag === 'pix_manual' || p.new.pag === 'pix'))
+          )) {
         ordersKanban.unshift(mapOrder(p.new));
         renderKanban();
         playOrderSound();
@@ -751,8 +798,26 @@ function subscribeOrders() {
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
         showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg>', `PIX confirmado! Pedido #${_orderNum(p.new.id, p.new.order_num)} — ${p.new.client}`);
         sendBrowserNotif(`PIX confirmado! #${_orderNum(p.new.id, p.new.order_num)}`, `${p.new.client} — ${items}`);
-        if (_autoAcceptOn) setTimeout(() => advanceOrderById(p.new.id), 800);
-        if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(p.new)) printOrder(mapOrder(p.new));
+        // PIX online: pagamento já confirmado, imprime sempre (independe do modo de impressão e do toggle de auto-aceite)
+        // PIX manual: respeita _autoAcceptOn e _printMode normalmente
+        if (p.new.pag === 'pix_mp') {
+          if (!_isSoBebidas(p.new)) printOrder(mapOrder(p.new));
+        } else {
+          if (_autoAcceptOn) setTimeout(() => advanceOrderById(p.new.id), 800);
+          if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(p.new)) printOrder(mapOrder(p.new));
+        }
+        return;
+      }
+      // Pedido já está no kanban e virou pix_mp aprovado → garante que vai para produção e imprime
+      if (idx !== -1 && p.new.pag === 'pix_mp' && (p.new.status === 'producao' || p.new.status === 'analise')) {
+        const wasInAnalise = ordersKanban[idx].status === 'analise' || ordersKanban[idx].status === 'aguardando_pix';
+        ordersKanban[idx] = mapOrder({ ...p.new, status: 'producao' });
+        ordersKanban[idx].status = 'producao';
+        renderKanban();
+        if (wasInAnalise) {
+          playOrderSound();
+          if (!_isSoBebidas(p.new)) printOrder(mapOrder({ ...p.new, status: 'producao' }));
+        }
         return;
       }
       if (idx !== -1) {
@@ -942,10 +1007,27 @@ function _subscribeOrdersSSE() {
       const order = JSON.parse(e.data);
       if (!order || !order.id) return;
 
+      // FORÇA: PIX online (pix_mp) NUNCA pode ficar em análise. Sempre produção.
+      if (order.pag === 'pix_mp' && order.status === 'analise') {
+        order.status = 'producao';
+        try {
+          fetch('/api/order-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order_id: order.id, new_status: 'producao', tenant_id: _sessao?.tenant_id })
+          }).catch(()=>{});
+        } catch(e) {}
+      }
+
       const idx = ordersKanban.findIndex(x => x.id === order.id);
 
       // Pedido PIX online confirmado — ainda não está no kanban, entra agora
-      if (idx === -1 && order.status === 'analise' && (order.pag === 'pix_mp' || order.pag === 'pix_manual' || order.pag === 'pix')) {
+      // PIX online (pix_mp): vai direto para 'producao' (já confirmado pelo MP)
+      // PIX manual (pix_manual) e legado (pix): continuam indo para 'analise' (precisam aceite)
+      if (idx === -1 && (
+            (order.status === 'producao' && order.pag === 'pix_mp') ||
+            (order.status === 'analise' && (order.pag === 'pix_manual' || order.pag === 'pix'))
+          )) {
         const items = typeof order.items === 'string' ? (() => { try { return JSON.parse(order.items); } catch { return []; } })() : (order.items || []);
         ordersKanban.unshift(mapOrder({ ...order, items }));
         renderKanban();
@@ -956,8 +1038,28 @@ function _subscribeOrdersSSE() {
         const itemsList = Array.isArray(items) ? items.map(i => `${i.qty}x ${i.name}`).join(', ') : '';
         showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg>', `PIX confirmado! Pedido #${order.id} — ${order.client}`);
         sendBrowserNotif(`PIX confirmado! #${order.id}`, `${order.client} — ${itemsList}`);
-        if (_autoAcceptOn) setTimeout(() => advanceOrderById(order.id), 800);
-        if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(order)) printOrder(mapOrder({ ...order, items }));
+        // PIX online: pagamento já confirmado pelo MP, imprime automático sempre (independe do toggle/_printMode)
+        // PIX manual: respeita _autoAcceptOn e _printMode normalmente
+        if (order.pag === 'pix_mp') {
+          if (!_isSoBebidas(order)) printOrder(mapOrder({ ...order, items }));
+        } else {
+          if (_autoAcceptOn) setTimeout(() => advanceOrderById(order.id), 800);
+          if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(order)) printOrder(mapOrder({ ...order, items }));
+        }
+        return;
+      }
+
+      // Pedido já no kanban e virou pix_mp aprovado → garante produção e imprime
+      if (idx !== -1 && order.pag === 'pix_mp' && (order.status === 'producao' || order.status === 'analise')) {
+        const items = typeof order.items === 'string' ? (() => { try { return JSON.parse(order.items); } catch { return []; } })() : (order.items || []);
+        const wasInAnaliseOrAguard = ordersKanban[idx].status === 'analise' || ordersKanban[idx].status === 'aguardando_pix';
+        ordersKanban[idx] = mapOrder({ ...order, items, status: 'producao' });
+        ordersKanban[idx].status = 'producao';
+        renderKanban();
+        if (wasInAnaliseOrAguard) {
+          playOrderSound();
+          if (!_isSoBebidas(order)) printOrder(mapOrder({ ...order, items, status: 'producao' }));
+        }
         return;
       }
 
