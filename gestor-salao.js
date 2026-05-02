@@ -992,14 +992,16 @@ async function loadStampConfig() {
   } catch(e) { console.error('[Stamp] loadStampConfig:', e); }
 }
 
-async function saveStampConfig() {
+async function saveStampConfig(silent) {
   const tid  = _sessao?.tenant_id || '';
   const ativo = document.getElementById('stamp-toggle-ativo')?.classList.contains('on') || false;
   const meta  = parseInt(document.getElementById('stamp-meta-compras')?.value) || 10;
   const tipo  = document.getElementById('stamp-recompensa-tipo')?.value || 'pedido_gratis';
   const valor = parseFloat(document.getElementById('stamp-recompensa-valor')?.value) || 0;
-  if (meta < 2 || meta > 100) { sbToast('err','Meta deve ser entre 2 e 100 compras'); return; }
-  sbLoading(true);
+  // Quando salva pelo botão, valida meta. Quando vem do toggle (silent),
+  // pula a validação pra não bloquear ativar/desativar com meta vazia.
+  if (!silent && (meta < 2 || meta > 100)) { sbToast('err','Meta deve ser entre 2 e 100 compras'); return; }
+  if (!silent) sbLoading(true);
   try {
     const r = await fetch('/api/stamp/config', {
       method: 'POST',
@@ -1007,9 +1009,17 @@ async function saveStampConfig() {
       body: JSON.stringify({ ativo, meta_compras: meta, recompensa_tipo: tipo, recompensa_valor: valor })
     });
     if (!r.ok) throw new Error('Erro');
-    sbToast('ok', 'Cartão fidelidade salvo!');
-  } catch(e) { sbToast('err', 'Erro ao salvar'); }
-  sbLoading(false);
+    if (silent) sbToast('ok', ativo ? 'Cartão fidelidade ativado' : 'Cartão fidelidade desativado');
+    else        sbToast('ok', 'Cartão fidelidade salvo!');
+  } catch(e) {
+    sbToast('err', 'Erro ao salvar');
+    // Se falhou, reverte o toggle pra refletir o estado real do banco
+    if (silent) {
+      const tog = document.getElementById('stamp-toggle-ativo');
+      if (tog) tog.classList.toggle('on');
+    }
+  }
+  if (!silent) sbLoading(false);
 }
 
 function _stampTipoChange() {
@@ -1180,15 +1190,17 @@ function cbSelecionarAjuste(id) {
   setTimeout(() => document.getElementById('cb-ajuste-val')?.focus(), 300);
 }
 
-async function saveCashbackConfig() {
+async function saveCashbackConfig(silent) {
   const ativo = document.getElementById('cb-toggle-ativo')?.classList.contains('on') || false;
   const pct = parseFloat(document.getElementById('cb-pct')?.value) || 0;
   const min_pedido = parseFloat(document.getElementById('cb-min-pedido')?.value) || 0;
   const validade_dias = parseInt(document.getElementById('cb-validade')?.value) || 0;
 
-  if (pct < 0 || pct > 100) { sbToast('err', 'Percentual deve ser entre 0 e 100'); return; }
+  // Quando vem do toggle (silent), pula validação de percentual pra permitir
+  // desativar mesmo com pct vazio.
+  if (!silent && (pct < 0 || pct > 100)) { sbToast('err', 'Percentual deve ser entre 0 e 100'); return; }
 
-  sbLoading(true);
+  if (!silent) sbLoading(true);
   try {
     const tid = _sessao?.tenant_id || '';
     const res = await fetch('/api/cashback/config', {
@@ -1197,15 +1209,25 @@ async function saveCashbackConfig() {
       body: JSON.stringify({ ativo, pct, min_pedido, validade_dias })
     });
     if (res.ok) {
-      sbToast('ok', `Cashback ${ativo ? 'ativado' : 'desativado'} — ${pct}% por pedido`);
+      if (silent) sbToast('ok', ativo ? 'Cashback ativado' : 'Cashback desativado');
+      else        sbToast('ok', `Cashback ${ativo ? 'ativado' : 'desativado'} — ${pct}% por pedido`);
     } else {
       const err = await res.json().catch(() => ({}));
       sbToast('err', err.error || 'Erro ao salvar configuração');
+      // Reverte o toggle se foi acionado em silent e falhou
+      if (silent) {
+        const tog = document.getElementById('cb-toggle-ativo');
+        if (tog) tog.classList.toggle('on');
+      }
     }
   } catch (e) {
     sbToast('err', 'Erro de conexão');
+    if (silent) {
+      const tog = document.getElementById('cb-toggle-ativo');
+      if (tog) tog.classList.toggle('on');
+    }
   }
-  sbLoading(false);
+  if (!silent) sbLoading(false);
 }
 
 async function cbBuscarCliente() {
