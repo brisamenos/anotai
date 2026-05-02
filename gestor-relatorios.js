@@ -2297,6 +2297,26 @@ let _printMarginV  = parseInt(localStorage.getItem('printMarginV')  || '2');  //
 let _printNome   = localStorage.getItem('printNome')   || '';
 let _printSub    = localStorage.getItem('printSub')    || '';
 let _printRodape = localStorage.getItem('printRodape') || '';
+// Tempo de entrega — fonte da verdade é store_tempo_entrega (mesma do cardápio
+// público). Sincronizado em loadStoreTempoEntrega() pra que a comanda mostre
+// SEMPRE o mesmo tempo que o cliente vê no cardápio na hora do pedido.
+let _printTempoEntrega = localStorage.getItem('printTempoEntrega') || '';
+
+// Carrega tempo de entrega do banco (mesma fonte usada pelo cardápio público).
+// Chamado no boot e quando a config é alterada.
+async function loadStoreTempoEntrega() {
+  try {
+    const tid = (typeof _sessao !== 'undefined' && _sessao?.tenant_id) || window._tenantId || null;
+    if (!tid) return;
+    const { data } = await window.AppAPI.from('store_config').select('store_tempo_entrega').eq('tenant_id', tid).single();
+    if (data?.store_tempo_entrega) {
+      _printTempoEntrega = String(data.store_tempo_entrega).trim();
+      localStorage.setItem('printTempoEntrega', _printTempoEntrega);
+    }
+  } catch {}
+}
+// Inicia o load no boot (não-bloqueante)
+setTimeout(() => { loadStoreTempoEntrega(); }, 1500);
 
 // ── Salva config de impressão no servidor (sincroniza entre dispositivos) ──
 async function savePrintConfigServer(cfg) {
@@ -2374,9 +2394,17 @@ function _getPrintConfig() {
   const sub = (subEl && subEl.value) ? subEl.value : (_printSub || '');
   const rodEl = document.getElementById('print-rodape');
   const rodape = (rodEl && rodEl.value) ? rodEl.value : (_printRodape || 'Obrigado!');
-  // Tempo de entrega (do branding) — usado pra calcular janela "Entrega prevista: HH:MM - HH:MM"
+  // Tempo de entrega — fonte da verdade é store_tempo_entrega (cardápio público).
+  // Prioridade: (1) input cp-tempo se estiver na tela e preenchido,
+  //             (2) _printTempoEntrega lido do banco (mesma config do cardápio),
+  //             (3) localStorage como fallback offline,
+  //             (4) padrão genérico.
+  // Antes lia só o input — se a impressão acontecesse fora da tela do branding,
+  // sempre caía em '30-45 min' fixo, sem nenhuma relação com a config real.
   const tempoEl = document.getElementById('cp-tempo');
-  const tempoEntrega = (tempoEl && tempoEl.value) ? tempoEl.value : '30-45 min';
+  const tempoEntrega = (tempoEl && tempoEl.value && tempoEl.value.trim())
+    ? tempoEl.value.trim()
+    : (_printTempoEntrega || localStorage.getItem('printTempoEntrega') || '30-45 min');
   return {
     nome, sub, rodape,
     addr: document.getElementById('toggle-print-addr')?.classList.contains('on') ?? true,
