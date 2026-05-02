@@ -462,22 +462,50 @@ function renderTotals() {
     <div class="total-row big"><span>Total</span><span>R$ ${fmt(tot)}</span></div>`;
 }
 
-function applyCupom() {
+async function applyCupom() {
   const code = document.getElementById('cupom-input').value.trim().toUpperCase();
   const msg  = document.getElementById('cupom-msg');
   if (!code) return;
-  const found = allCupons.find(c => (c.code||'').toUpperCase() === code && c.ativo);
-  if (!found) {
-    msg.innerHTML = '<div class="cupom-err">❌ Cupom inválido ou expirado</div>';
-    appliedCupom = null;
-  } else {
-    const minOrder = parseFloat(found.min_order || found.minimo || 0);
-    if (minOrder > 0 && cartSubtotal() < minOrder) {
-      msg.innerHTML = `<div class="cupom-err">❌ Pedido mínimo de R$ ${fmt(minOrder)}</div>`;
+  msg.innerHTML = '<div class="cupom-msg">⏳ Validando...</div>';
+
+  // Valida no servidor (anti-fraude). consume=false: só checa, não decrementa
+  // o uses_left. O decremento real acontece no /api/cupom/validar com consume=true
+  // chamado pelo cardapio-checkout.js ao criar o pedido.
+  try {
+    const r = await fetch('/api/cupom/validar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': window._tenantId || '' },
+      body: JSON.stringify({ code, subtotal: cartSubtotal(), consume: false })
+    });
+    const d = await r.json();
+    if (!d.ok) {
+      msg.innerHTML = `<div class="cupom-err">❌ ${d.error || 'Cupom inválido'}</div>`;
       appliedCupom = null;
     } else {
-      appliedCupom = found;
-      msg.innerHTML = `<div class="cupom-ok">✅ Cupom "${found.code}" aplicado!</div>`;
+      // Usa os dados oficiais retornados pelo servidor (não os do client)
+      appliedCupom = {
+        code: d.code,
+        type: d.type,
+        value: d.value,
+        min_order: d.min_order,
+      };
+      msg.innerHTML = `<div class="cupom-ok">✅ Cupom "${d.code}" aplicado!</div>`;
+    }
+  } catch (e) {
+    // Fallback offline: valida só com os dados do client (cupons já carregados)
+    const found = allCupons.find(c => (c.code||'').toUpperCase() === code && c.ativo);
+    if (!found) {
+      msg.innerHTML = '<div class="cupom-err">❌ Cupom inválido ou expirado</div>';
+      appliedCupom = null;
+    } else {
+      const minOrder = parseFloat(found.min_order || found.minimo || 0);
+      if (minOrder > 0 && cartSubtotal() < minOrder) {
+        msg.innerHTML = `<div class="cupom-err">❌ Pedido mínimo de R$ ${fmt(minOrder)}</div>`;
+        appliedCupom = null;
+      } else {
+        appliedCupom = found;
+        msg.innerHTML = `<div class="cupom-ok">✅ Cupom "${found.code}" aplicado!</div>`;
+      }
     }
   }
   renderTotals();

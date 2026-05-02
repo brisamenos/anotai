@@ -289,6 +289,28 @@ async function _doSubmitOrder(addr, troco) {
       throw new Error('tenant_id ausente — pedido bloqueado para evitar vazamento entre tenants');
     }
 
+    // ── Consume do cupom (decrementa uses_left atomicamente no servidor) ──
+    // Anti-fraude: revalida o cupom no servidor e consome 1 uso antes de criar
+    // o pedido. Se o cupom expirou ou esgotou no meio do checkout, rejeita.
+    if (typeof appliedCupom !== 'undefined' && appliedCupom && appliedCupom.code) {
+      try {
+        const r = await fetch('/api/cupom/validar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
+          body: JSON.stringify({ code: appliedCupom.code, subtotal: cartSubtotal(), consume: true })
+        });
+        const d = await r.json();
+        if (!d.ok) {
+          alert('❌ Cupom inválido: ' + (d.error || 'Cupom não pode mais ser usado.') + '\n\nRemova o cupom e tente novamente.');
+          throw new Error('Cupom inválido: ' + (d.error || ''));
+        }
+      } catch(e) {
+        if (String(e.message).startsWith('Cupom inválido')) throw e;
+        // Erro de rede: prossegue sem bloquear (cupom já foi validado quando aplicou)
+        console.warn('[cupom] consume falhou na rede, prossegue:', e.message);
+      }
+    }
+
     const { data: order, error } = await sb.from('orders').insert({
       tenant_id: _tenantId,
       client: name, phone, addr,

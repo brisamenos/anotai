@@ -462,7 +462,17 @@ async function init() {
       destaque: !!x.destaque
     }));
     allCats   = (catsR.data   || []);
-    allCupons = (cuponsR.data || []);
+    // Cupom: filtra os expirados e sem usos disponíveis no client
+    // (server-side há também rechecagem no /api/cupom/validar antes de fechar pedido)
+    const _agoraISO = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    allCupons = (cuponsR.data || []).filter(c => {
+      if (!c || c.ativo === false) return false;
+      // expires_at: se vazio = sem validade; se preenchido, deve ser futuro
+      if (c.expires_at && String(c.expires_at).trim() && String(c.expires_at) <= _agoraISO) return false;
+      // uses_left: -1 = ilimitado; 0 ou menor = esgotado; >0 = ainda disponível
+      if (c.uses_left !== undefined && c.uses_left !== null && c.uses_left !== -1 && parseInt(c.uses_left) <= 0) return false;
+      return true;
+    });
 
     if (cfgR.data) {
       const c = cfgR.data;
