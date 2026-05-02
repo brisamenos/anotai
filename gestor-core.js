@@ -619,7 +619,7 @@ async function _printComandaMesa(mesaNum, mesaData) {
 
   const cfg      = typeof _getPrintConfig === 'function' ? _getPrintConfig() : {};
   const nome     = (_sessao?.nome || cfg.nome || 'RESTAURANTE').toUpperCase();
-  const fontSize = parseInt(cfg.fontSize) || 12;
+  const fontSize = parseInt(cfg.fontSize) || 13;
   const rodape   = cfg.rodape || 'Obrigado pela preferência!';
   const fmt      = localStorage.getItem('printFormat') || cfg.format || '80mm';
   const printer  = cfg.printer_caixa || cfg.printer || localStorage.getItem('printPrinter') || '';
