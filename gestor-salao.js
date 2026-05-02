@@ -1319,20 +1319,32 @@ async function cbAjustarSaldo() {
 // ─────────────────────────────────────────
 // FIDELIDADE — REAL
 // ─────────────────────────────────────────
-let _fidConfig = { pts_por_real: 10, meta_pts: 500, recompensa_reais: 10 };
+let _fidConfig = { pts_por_real: 10, meta_pts: 500, recompensa_reais: 10, ativo: false };
 
 async function loadFidConfig() {
   try {
     const { data } = await sb.from('store_config').select('fid_config').single();
     if (data?.fid_config) _fidConfig = { ..._fidConfig, ...data.fid_config };
   } catch (e) { }
+  // Sincroniza UI do toggle quando o modal abre.
+  // Importante: backend agora exige ativo === true explícito. Se a config
+  // não tem o campo (config antiga), tratamos como desligado pra o gestor
+  // saber que precisa reativar conscientemente.
+  const tog = document.getElementById('fid-toggle-ativo');
+  if (tog) {
+    if (_fidConfig.ativo === true) tog.classList.add('on');
+    else tog.classList.remove('on');
+  }
 }
 
 async function saveFidConfig() {
-  const pts = parseInt(document.getElementById('fid-cfg-pts')?.value) || 10;
+  const pts  = parseInt(document.getElementById('fid-cfg-pts')?.value) || 10;
   const meta = parseInt(document.getElementById('fid-cfg-meta')?.value) || 500;
-  const rec = parseFloat(document.getElementById('fid-cfg-rec')?.value) || 10;
-  _fidConfig = { pts_por_real: pts, meta_pts: meta, recompensa_reais: rec };
+  const rec  = parseFloat(document.getElementById('fid-cfg-rec')?.value) || 10;
+  // Lê estado do toggle "ativo" — quando desligado, backend não envia mais
+  // mensagem WA de pontos e a IA não menciona o programa.
+  const ativo = !!document.getElementById('fid-toggle-ativo')?.classList.contains('on');
+  _fidConfig = { pts_por_real: pts, meta_pts: meta, recompensa_reais: rec, ativo };
   await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, fid_config: _fidConfig });
   // BUG 3 fix: filtra pelo tenant_id correto para não afetar outros tenants
   await sb.from('fidelidade').update({ max_pts: meta }).eq('tenant_id', _sessao?.tenant_id);
@@ -1340,6 +1352,25 @@ async function saveFidConfig() {
   closeModal('modal-fid-config');
   renderFidelidade();
   sbToast('ok', 'Configurações salvas!');
+}
+
+// Abre o modal de fidelidade já preenchendo os inputs e o toggle com a config
+// salva. Se loadFidConfig roda antes de o modal existir no DOM, o toggle não
+// fica sincronizado — esse helper garante o estado correto a cada abertura.
+async function openFidConfigModal() {
+  await loadFidConfig();
+  const cp = document.getElementById('fid-cfg-pts');
+  const cm = document.getElementById('fid-cfg-meta');
+  const cr = document.getElementById('fid-cfg-rec');
+  if (cp) cp.value = _fidConfig.pts_por_real ?? 10;
+  if (cm) cm.value = _fidConfig.meta_pts ?? 500;
+  if (cr) cr.value = _fidConfig.recompensa_reais ?? 10;
+  const tog = document.getElementById('fid-toggle-ativo');
+  if (tog) {
+    if (_fidConfig.ativo === true) tog.classList.add('on');
+    else tog.classList.remove('on');
+  }
+  openModal('modal-fid-config');
 }
 
 function renderFidelidade() {

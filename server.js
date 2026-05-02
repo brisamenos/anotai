@@ -473,6 +473,9 @@ const MIGRATIONS = [
   { version:42, description:'pickup_addresses em store_config (múltiplos pontos de retirada)', up:
     `ALTER TABLE store_config ADD COLUMN pickup_addresses TEXT DEFAULT '[]'`
   },
+  { version:43, description:'telegram_backup_config em store_config (config do backup automático para Telegram)', up:
+    `ALTER TABLE store_config ADD COLUMN telegram_backup_config TEXT DEFAULT '{}'`
+  },
 ]
 
 function runMigrations() {
@@ -1544,9 +1547,18 @@ async function handleOrderStatus(req, res) {
         }
 
         // ── Fidelidade pontos ────────────────────────────
-        const fidCfg  = (() => { try { return JSON.parse(cfg?.fid_config||'{}') } catch { return {} } })()
-        const ptsPorReal = parseFloat(fidCfg.pts_por_real || 10)
-        if (ptsPorReal > 0 && order.phone) {
+        // Só roda se o gestor ATIVOU explicitamente o programa (ativo === true).
+        // Antes usava fallback pts_por_real=10 quando o campo era undefined,
+        // fazendo TODA loja enviar mensagem de "Você ganhou X pontos" mesmo
+        // sem configurar fidelidade. Agora exige ativação consciente:
+        //   1. ativo === true (gestor clicou no toggle e salvou)
+        //   2. pts_por_real > 0
+        // Lojas com config antiga sem campo "ativo" param de enviar até o
+        // gestor reabrir o modal e clicar em "Salvar".
+        const fidCfg     = (() => { try { return JSON.parse(cfg?.fid_config||'{}') } catch { return {} } })()
+        const ptsPorReal = parseFloat(fidCfg.pts_por_real || 0)
+        const fidAtivo   = fidCfg.ativo === true && ptsPorReal > 0
+        if (fidAtivo && order.phone) {
           const phoneClean = order.phone.replace(/\D/g,'')
           const phone8 = phoneClean.slice(-8)
           let fid = db.prepare("SELECT id, pts, max_pts, name FROM fidelidade WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ?").get(tid, phone8)
@@ -1918,7 +1930,9 @@ async function handleIAWebhook(req, res) {
         const minPed = parseFloat(_cbCfg.min_pedido||0)
         _programasInfo.push(`CASHBACK ATIVO: ${_cbCfg.pct}% de cashback sobre pedidos${minPed > 0 ? ` acima de R$${minPed.toFixed(2).replace('.',',')}` : ''}. Cliente acumula crédito pra usar no próximo pedido.`)
       }
-      if (parseFloat(_fidCfg.pts_por_real||0) > 0) {
+      // Pontos só listados se gestor ATIVOU explicitamente. Lojas com config
+      // antiga (sem campo "ativo") são tratadas como inativas até reativarem.
+      if (_fidCfg.ativo === true && parseFloat(_fidCfg.pts_por_real||0) > 0) {
         _programasAtivos.push('pontos de fidelidade')
         const meta = parseInt(_fidCfg.meta_pts||500)
         _programasInfo.push(`PONTOS DE FIDELIDADE ATIVO: cliente ganha ${_fidCfg.pts_por_real} pontos por cada R$1 gasto. Meta: ${meta} pontos para ganhar recompensa.`)
@@ -1944,11 +1958,76 @@ async function handleIAWebhook(req, res) {
       const _offsetCfg=db.prepare("SELECT order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
       const _iaOffset=parseInt(_offsetCfg?.order_num_offset)||0
       const _iaPedNum=(p)=>String(p.order_num||Math.max(1,p.id-_iaOffset)).padStart(3,'0')
-      const pedCli=db.prepare("SELECT id,order_num,status,total,taxa,items,client,addr,pag,created_at FROM orders WHERE tenant_id=? AND phone LIKE ? ORDER BY id DESC LIMIT 5").all(tenantId,`%${phone.slice(-8)}%`)
-      if(pedCli.length){const sl={analise:'⏳ Em análise',producao:'👨‍🍳 Em preparo',pronto:'✅ Pronto para retirada',saiu:'🛵 Saiu para entrega',entregue:'🎉 Entregue',cancelado:'❌ Cancelado',finalizado:'✅ Finalizado'};contexto.push('PEDIDOS DESTE CLIENTE (número que o cliente conhece):\n'+pedCli.map(p=>{const its=(()=>{try{return(JSON.parse(p.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}catch{return''}})();const totalFinal=(parseFloat(p.total||0)+parseFloat(p.taxa||0)).toFixed(2).replace('.',',');return`  Pedido #${_iaPedNum(p)}: ${sl[p.status]||p.status} — R$${totalFinal}${its?' — Itens: '+its:''}`}).join('\n'))}
-      const numMatch=msgFull.match(/#\*?(\d{1,6})\*?/)||msgFull.match(/pedido\s*[*#]?\s*(\d{1,6})/i)
-      if(numMatch){const n=parseInt(numMatch[1]);const realId=n+_iaOffset;let ped=db.prepare("SELECT id,order_num,status,total,taxa,items,client,addr,pag,created_at FROM orders WHERE tenant_id=? AND id=?").get(tenantId,realId);if(!ped)ped=db.prepare("SELECT id,order_num,status,total,taxa,items,client,addr,pag,created_at FROM orders WHERE tenant_id=? AND order_num=?").get(tenantId,n);if(!ped)ped=db.prepare("SELECT id,order_num,status,total,taxa,items,client,addr,pag,created_at FROM orders WHERE tenant_id=? AND phone LIKE ? ORDER BY id DESC LIMIT 1").get(tenantId,`%${phone.slice(-8)}%`);const sl={analise:'⏳ Em análise — seu pedido foi recebido e está aguardando confirmação',producao:'👨‍🍳 Em preparo — estamos preparando seu pedido agora',pronto:'✅ Pronto — seu pedido está pronto para retirada/entrega',saiu:'🛵 Saiu para entrega — o entregador está a caminho',entregue:'🎉 Entregue — pedido finalizado',cancelado:'❌ Cancelado',finalizado:'✅ Finalizado'};if(ped){const pedNum=_iaPedNum(ped);const its=(()=>{try{return(JSON.parse(ped.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}catch{return''}})();const totalFinal=(parseFloat(ped.total||0)+parseFloat(ped.taxa||0)).toFixed(2).replace('.',',');const taxaStr=parseFloat(ped.taxa||0)>0?`\n  Taxa de entrega: R$${parseFloat(ped.taxa).toFixed(2).replace('.',',')}`:''
-      contexto.push(`DETALHES DO PEDIDO #${pedNum} (este é o número correto do pedido):\n  Status: ${sl[ped.status]||ped.status}\n  Cliente: ${ped.client||'N/A'}\n  Total: R$${totalFinal}${taxaStr}\n  Itens: ${its||'N/A'}\n  Endereço: ${ped.addr||'Retirada/Mesa'}\n  Pagamento: ${ped.pag||'N/A'}\n\nIMPORTANTE: O número do pedido deste cliente é #${pedNum}. Use APENAS este número ao se referir ao pedido. O valor total correto é R$${totalFinal}.`)}else{contexto.push(`PEDIDO #${String(n).padStart(3,'0')}: não encontrado no sistema. Peça ao cliente para confirmar o número.`)}}
+      // Pedidos do cliente — match preciso (não LIKE) pra não pegar pedido de
+      // outro cliente com 8 dígitos finais coincidentes. Inclui created_at pra
+      // a IA saber há quanto tempo o pedido foi feito.
+      const _phone8 = phone.replace(/\D/g,'').slice(-8)
+      const pedCli = db.prepare("SELECT id,order_num,status,total,taxa,items,client,addr,pag,created_at FROM orders WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ? ORDER BY id DESC LIMIT 5").all(tenantId, _phone8)
+      // Helper: formata "há Xmin" / "há Xh" do timestamp UTC
+      const _tempoDecorrido = (ts) => {
+        if (!ts) return ''
+        const t = new Date(String(ts).includes('Z') ? ts : ts.replace(' ','T')+'Z').getTime()
+        if (isNaN(t)) return ''
+        const min = Math.floor((Date.now() - t) / 60000)
+        if (min < 1)  return 'agora há pouco'
+        if (min < 60) return `há ${min} min`
+        const h = Math.floor(min / 60)
+        const m = min % 60
+        return m > 0 ? `há ${h}h${m}min` : `há ${h}h`
+      }
+      if (pedCli.length) {
+        // Status legíveis — agora inclui aguardando_pix/aguardando_cartao que
+        // antes apareciam crus pra IA (cliente recebia "aguardando_pix" textual).
+        const sl = {
+          aguardando_pix:    '⏳ Aguardando pagamento PIX',
+          aguardando_cartao: '⏳ Aguardando pagamento (cartão)',
+          analise:           '⏳ Em análise (aguardando confirmação da loja)',
+          producao:          '👨‍🍳 Em preparo',
+          pronto:            '✅ Pronto para retirada/entrega',
+          saiu:              '🛵 Saiu para entrega',
+          entregue:          '🎉 Entregue',
+          cancelado:         '❌ Cancelado',
+          finalizado:        '✅ Finalizado'
+        }
+        contexto.push('PEDIDOS DESTE CLIENTE (número que o cliente conhece):\n' + pedCli.map(p => {
+          const its = (() => { try { return (JSON.parse(p.items)||[]).map(i => `${i.qty}x ${i.name}`).join(', ') } catch { return '' } })()
+          const totalFinal = (parseFloat(p.total||0) + parseFloat(p.taxa||0)).toFixed(2).replace('.', ',')
+          const td = _tempoDecorrido(p.created_at)
+          return `  Pedido #${_iaPedNum(p)}: ${sl[p.status]||p.status} — R$${totalFinal}${td ? ' — feito ' + td : ''}${its ? ' — Itens: ' + its : ''}`
+        }).join('\n'))
+      }
+      // Detalhes de pedido específico — quando cliente cita "pedido #N" ou "#N"
+      const numMatch = msgFull.match(/#\*?(\d{1,6})\*?/) || msgFull.match(/pedido\s*[*#]?\s*(\d{1,6})/i)
+      if (numMatch) {
+        const n = parseInt(numMatch[1])
+        const realId = n + _iaOffset
+        let ped = db.prepare("SELECT id,order_num,status,total,taxa,items,client,addr,pag,created_at FROM orders WHERE tenant_id=? AND id=?").get(tenantId, realId)
+        if (!ped) ped = db.prepare("SELECT id,order_num,status,total,taxa,items,client,addr,pag,created_at FROM orders WHERE tenant_id=? AND order_num=?").get(tenantId, n)
+        // Fallback: último pedido do cliente — match preciso pelos 8 dígitos finais
+        if (!ped) ped = db.prepare("SELECT id,order_num,status,total,taxa,items,client,addr,pag,created_at FROM orders WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ? ORDER BY id DESC LIMIT 1").get(tenantId, _phone8)
+        // Status legíveis com mais contexto pra IA explicar pro cliente
+        const sl = {
+          aguardando_pix:    '⏳ Aguardando pagamento PIX — assim que o pagamento for identificado, entra em produção',
+          aguardando_cartao: '⏳ Aguardando pagamento por cartão',
+          analise:           '⏳ Em análise — pedido recebido, aguardando confirmação da loja',
+          producao:          '👨‍🍳 Em preparo — estamos preparando agora',
+          pronto:            '✅ Pronto — pedido pronto para retirada/entrega',
+          saiu:              '🛵 Saiu para entrega — entregador a caminho',
+          entregue:          '🎉 Entregue — pedido finalizado',
+          cancelado:         '❌ Cancelado',
+          finalizado:        '✅ Finalizado'
+        }
+        if (ped) {
+          const pedNum = _iaPedNum(ped)
+          const its = (() => { try { return (JSON.parse(ped.items)||[]).map(i => `${i.qty}x ${i.name}`).join(', ') } catch { return '' } })()
+          const totalFinal = (parseFloat(ped.total||0) + parseFloat(ped.taxa||0)).toFixed(2).replace('.', ',')
+          const taxaStr = parseFloat(ped.taxa||0) > 0 ? `\n  Taxa de entrega: R$${parseFloat(ped.taxa).toFixed(2).replace('.', ',')}` : ''
+          const td = _tempoDecorrido(ped.created_at)
+          contexto.push(`DETALHES DO PEDIDO #${pedNum} (este é o número correto do pedido):\n  Status: ${sl[ped.status]||ped.status}\n  Feito: ${td || 'há instantes'}\n  Cliente: ${ped.client||'N/A'}\n  Total: R$${totalFinal}${taxaStr}\n  Itens: ${its||'N/A'}\n  Endereço: ${ped.addr||'Retirada/Mesa'}\n  Pagamento: ${ped.pag||'N/A'}\n\nIMPORTANTE: O número do pedido deste cliente é #${pedNum}. Use APENAS este número ao se referir ao pedido. O valor total correto é R$${totalFinal}.`)
+        } else {
+          contexto.push(`PEDIDO #${String(n).padStart(3,'0')}: não encontrado no sistema. Peça ao cliente para confirmar o número.`)
+        }
+      }
       const _promptPadrao = `Você é o atendente virtual do *${nomeLoja}*. Responda em português brasileiro de forma educada, amigável e DIRETA.
 
 ESTILO DE RESPOSTA:
