@@ -977,6 +977,17 @@ async function salvarCardapioPublico() {
     const { error } = await sb.from('store_config').upsert(payload);
     if (error) throw error;
     sbToast('ok', 'Cardápio público salvo!');
+    // Sincroniza o tempo de entrega usado pela impressão (comanda) com o que
+    // foi salvo no cardápio público — assim a comanda usa SEMPRE o mesmo
+    // valor que o cliente vê.
+    try {
+      const _novoTempo = payload.store_tempo_entrega || '';
+      if (_novoTempo) {
+        window._printTempoEntrega = _novoTempo;
+        if (typeof _printTempoEntrega !== 'undefined') _printTempoEntrega = _novoTempo;
+        localStorage.setItem('printTempoEntrega', _novoTempo);
+      }
+    } catch {}
     // Recarrega dados e atualiza iframe (sincroniza com o cardápio real)
     await loadCardapioPublico();
     // Pequeno delay para o banco propagar via SSE antes de recarregar o iframe
