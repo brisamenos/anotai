@@ -2856,14 +2856,14 @@ Use no seu próximo pedido 🛍️</textarea>
           </div>
           <div>
             <label class="form-label">Impressora do Caixa</label>
-            <select class="form-input" id="print-rota-caixa" onchange="_printPrinter=this.value;localStorage.setItem('printPrinter',this.value)">
+            <select class="form-input" id="print-rota-caixa" onchange="_printPrinter=this.value;localStorage.setItem('printPrinter',this.value);_syncPrintConfigServer()">
               <option value="">Padrão do sistema</option>
             </select>
             <div style="font-size:10px;color:var(--muted);margin-top:3px">Recebe: pedido completo, conta da mesa, valores</div>
           </div>
           <div id="print-cozinha-wrap" style="display:none">
             <label class="form-label">Impressora da Cozinha</label>
-            <select class="form-input" id="print-rota-cozinha" onchange="_printPrinterCozinha=this.value;localStorage.setItem('printPrinterCozinha',this.value)">
+            <select class="form-input" id="print-rota-cozinha" onchange="_printPrinterCozinha=this.value;localStorage.setItem('printPrinterCozinha',this.value);_syncPrintConfigServer()">
               <option value="">Mesma do caixa</option>
             </select>
             <div style="font-size:10px;color:var(--muted);margin-top:3px">Recebe: tudo que precisa preparo (sucos, vitaminas, drinks da casa, comida). Bebidas industrializadas não vão pra cozinha.</div>
@@ -2876,7 +2876,7 @@ Use no seu próximo pedido 🛍️</textarea>
               <div style="font-size:12px;font-weight:600">Imprimir pedido só de bebida industrializada</div>
               <div style="font-size:10px;color:var(--muted)">Ligado: imprime cerveja/refri sozinhos no caixa. Desligado: pedido só com bebida industrializada não imprime (cliente pega direto). Sucos e drinks preparados sempre imprimem.</div>
             </div>
-            <div class="toggle on" id="toggle-print-bebida" onclick="this.classList.toggle('on');localStorage.setItem('printBebidaSolo',this.classList.contains('on')?'1':'0')"></div>
+            <div class="toggle on" id="toggle-print-bebida" onclick="this.classList.toggle('on');localStorage.setItem('printBebidaSolo',this.classList.contains('on')?'1':'0');_syncPrintConfigServer()"></div>
           </div>
         </div>
       </div>

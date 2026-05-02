@@ -1688,6 +1688,10 @@ async function submitGarcomOrder() {
       // pedido é só industrializada, pula a impressão. Caso contrário imprime.
       const _printBebidaSolo = localStorage.getItem('printBebidaSolo') !== '0';
       const _soBebida = !_htmlCozinha && _htmlBar;
+      console.log('[GESTOR MESA PRINT] auto:', _autoPrintOn, '| toggle bebida:', _printBebidaSolo, '| só bebida:', !!_soBebida, '| 2 impressoras:', _doisImpressoras, '| caixa:', _printerCaixa || '(padrão)', '| cozinha:', _printerCozinha || '(nenhuma)');
+      if (_soBebida && !_printBebidaSolo) {
+        console.log('[GESTOR MESA PRINT] Pedido só de bebida e toggle desligado — não imprime.');
+      }
       if (_autoPrintOn && !(_soBebida && !_printBebidaSolo) && (_htmlCozinha || _htmlBar)) {
         if (_doisImpressoras) {
           // Cozinha → printerCozinha; Bebida → printerCaixa (atendente serve)

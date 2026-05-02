@@ -1678,9 +1678,13 @@ async function garcomPrint(order, newItems) {
     const fontSize = parseInt(cfg.fontSize) || 12;
     const rodape   = cfg.rodape || 'Bom apetite!';
     const fmt      = cfg.format || localStorage.getItem('printFormat') || '80mm';
-    const printerCaixa   = cfg.printer_caixa || cfg.printer || '';
-    const printerCozinha = cfg.printer_cozinha || '';
+    // Fallback em cascata: config do banco → localStorage (caso o gestor tenha
+    // salvo só local) → vazio (Electron usa padrão do Windows). Antes só lia
+    // de cfg, e se estava vazia o garçom não imprimia em lugar nenhum.
+    const printerCaixa   = cfg.printer_caixa   || cfg.printer || localStorage.getItem('printPrinter')        || '';
+    const printerCozinha = cfg.printer_cozinha                || localStorage.getItem('printPrinterCozinha') || '';
     const doisImpressoras = printerCaixa && printerCozinha && printerCaixa !== printerCozinha;
+    console.log('[GARCOM PRINT] caixa:', printerCaixa || '(padrão)', '| cozinha:', printerCozinha || '(nenhuma)', '| dois:', doisImpressoras);
     const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
     const orderNum = order.mesa_num ? `Mesa ${order.mesa_num}` : (order.id ? `#${_garcomOrderNum(order.id, order.order_num)}` : '?');
 
@@ -1720,6 +1724,20 @@ async function garcomPrint(order, newItems) {
     const htmlCozinha  = montarVia('VIA DA COZINHA', itensCozinha);
     const htmlBar      = montarVia('VIA DO BAR', itensBebida);
     if (!htmlCozinha && !htmlBar) return;
+
+    // ── REGRA DEFINITIVA do toggle "Imprimir bebida industrializada" ──
+    // Lê do _garcomPrintCfg (config sincronizada do banco pelo gestor).
+    // Se o pedido tem APENAS bebida industrializada E o toggle está DESLIGADO
+    // → não imprime nada. Em qualquer outro caso (tem comida/suco junto, ou
+    //    toggle ligado), imprime tudo normalmente.
+    const _bebidaSoloOn = (cfg.printBebidaSolo === undefined)
+      ? (localStorage.getItem('printBebidaSolo') !== '0') // fallback: padrão ligado
+      : (cfg.printBebidaSolo === true || cfg.printBebidaSolo === '1' || cfg.printBebidaSolo === 1);
+    const _soBebida = !!htmlBar && !htmlCozinha;
+    if (_soBebida && !_bebidaSoloOn) {
+      console.log('[GARCOM PRINT] Pedido só de bebida industrializada e toggle desligado — não imprime.');
+      return;
+    }
 
     const tid = _garcomTenantId;
 

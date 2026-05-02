@@ -2327,6 +2327,33 @@ async function savePrintConfigServer(cfg) {
   } catch {}
 }
 
+// ── Sincroniza config de impressão atual no servidor ────────────────
+// Antes a config de impressora ficava SÓ em localStorage do gestor. O
+// garçom (que roda em outro contexto/aba/máquina) carregava print_config
+// do banco e achava vazio → não sabia em qual impressora imprimir.
+// Agora qualquer mudança nas impressoras é refletida no banco automaticamente.
+async function _syncPrintConfigServer() {
+  try {
+    const cfg = {
+      printer_caixa:        localStorage.getItem('printPrinter')        || '',
+      printer_cozinha:      localStorage.getItem('printPrinterCozinha') || '',
+      printPrinter:         localStorage.getItem('printPrinter')        || '',
+      printPrinterCozinha:  localStorage.getItem('printPrinterCozinha') || '',
+      printMode:            localStorage.getItem('printMode')           || 'auto',
+      printFormat:          localStorage.getItem('printFormat')         || '80mm',
+      printViaMode:         localStorage.getItem('printViaMode')        || 'unico',
+      printFontSize:        (typeof _printFontSize !== 'undefined' ? _printFontSize : null) || parseInt(localStorage.getItem('printFontSize')||'13'),
+      printBebidaSolo:      localStorage.getItem('printBebidaSolo') !== '0',
+      printNome:            localStorage.getItem('printNome')   || '',
+      printSub:             localStorage.getItem('printSub')    || '',
+      printRodape:          localStorage.getItem('printRodape') || '',
+    };
+    await savePrintConfigServer(cfg);
+  } catch (e) { console.warn('[_syncPrintConfigServer] erro:', e?.message); }
+}
+// Expõe globalmente pra ser chamado de onchange inline no HTML
+window._syncPrintConfigServer = _syncPrintConfigServer;
+
 // ── Carrega config de impressão do servidor ──
 async function loadPrintConfigServer() {
   try {
@@ -2365,6 +2392,18 @@ async function loadPrintConfigServer() {
     if (Array.isArray(cfg.modelos) && cfg.modelos.length) {
       _modelos = cfg.modelos;
       _saveModelos();
+    }
+    // Toggle "imprimir bebida industrializada" — sincroniza do banco pro local
+    // pra que o gestor mostre o estado correto ao abrir a tela. Se o campo
+    // não existe no banco (config antiga), mantém o que estiver em localStorage.
+    if (cfg.printBebidaSolo !== undefined) {
+      const v = cfg.printBebidaSolo === true || cfg.printBebidaSolo === '1' || cfg.printBebidaSolo === 1 ? '1' : '0';
+      localStorage.setItem('printBebidaSolo', v);
+      // Atualiza UI do toggle se já está renderizada
+      const tog = document.getElementById('toggle-print-bebida');
+      if (tog) {
+        if (v === '1') tog.classList.add('on'); else tog.classList.remove('on');
+      }
     }
   } catch {}
 }
@@ -2440,70 +2479,126 @@ function _wrapTicketHtml(html, fontSize) {
 // ══════════════════════════════════════════════════════════════
 // Parser de observações de itens (cupom/comanda)
 // ──────────────────────────────────────────────────────────────
-// O `obs` de cada item vem montado como string concatenada:
-//   "Kit: A · B | Adicionais: Bacon (+R$ 3,00), Queijo · Ponto: Mal passado · obs livre"
-// Esta função quebra essa string em estrutura para impressão organizada.
+// O `obs` é montado pelo cardápio com 2 níveis de separadores:
+//   ` | `  → separa SEÇÕES (kit, cortes açougue, grupos, obs livre)
+//   ` · `  → separa ITENS DENTRO de uma seção
+// Exemplos:
+//   Pizza meio a meio:
+//     "Meio a meio · Calabresa + Marguerita | Borda: Catupiry"
+//   Açougue normal:
+//     "500g Patinho · 200g Alcatra · Preparo: Bife | Acompanhamento: Farofa | sem cebola"
+//   Açougue kit:
+//     "Kit: 500g Patinho · 1kg Frango | Acompanhamentos: Farofa, Vinagrete | Molho: Barbecue"
+//
+// Antes do fix: o parser fazia split só por ' · ' e perdia tudo depois do primeiro
+// ' | ' (Molho/obs livre eram engolidos como item do grupo anterior).
 //
 // Retorno:
 //   {
 //     kitItens:   ['Item A', 'Item B', ...]      // se for kit
-//     meioMeio:   'sabor1 + sabor2'              // se for pizza meio a meio
+//     meioMeio:   'sabor1 + sabor2'              // pizza meio a meio
+//     cortes:     ['500g Patinho', '200g Alcatra', ...]  // cortes açougue não-kit
 //     grupos:     [{ nome:'Adicionais', itens:['Bacon (+R$ 3,00)', 'Queijo'] }, ...]
 //     obsLivre:   'observação digitada pelo cliente'
 //   }
 function _parseObs(rawObs) {
-  const out = { kitItens: [], meioMeio: '', grupos: [], obsLivre: '' };
+  const out = { kitItens: [], meioMeio: '', cortes: [], grupos: [], obsLivre: '' };
   if (!rawObs || typeof rawObs !== 'string') return out;
-  let s = rawObs.trim();
 
-  // 1) Kit: tudo até o primeiro " | " é a lista de itens do kit
-  if (s.startsWith('Kit: ')) {
-    const pipeIdx = s.indexOf(' | ');
-    const kitPart = pipeIdx > -1 ? s.substring(5, pipeIdx) : s.substring(5);
-    out.kitItens = kitPart.split(' · ').map(x => x.trim()).filter(Boolean);
-    s = pipeIdx > -1 ? s.substring(pipeIdx + 3).trim() : '';
-  }
-
-  // 2) Meio a meio: prefixo "Meio a meio · ..."
-  if (s.startsWith('Meio a meio')) {
-    const rest = s.substring('Meio a meio'.length).replace(/^\s*·\s*/, '').trim();
-    out.meioMeio = rest.split(' · ')[0] || 'meio a meio';
-    // Continua processando o resto após o primeiro separador
-    const idx = rest.indexOf(' · ');
-    s = idx > -1 ? rest.substring(idx + 3).trim() : '';
-  }
-
-  if (!s) return out;
-
-  // 3) Quebra por grupos (separador " · ")
-  // Cada parte pode ser "Nome do Grupo: item1, item2" OU obs livre (sem ":")
-  const partes = s.split(' · ').map(p => p.trim()).filter(Boolean);
-  for (const parte of partes) {
-    const colonIdx = parte.indexOf(':');
-    if (colonIdx > 0 && colonIdx < 40) {
-      // Tem nome de grupo
-      const nome  = parte.substring(0, colonIdx).trim();
-      const valor = parte.substring(colonIdx + 1).trim();
-      // Split por vírgula RESPEITANDO parênteses (não quebra preços tipo "(+R$ 3,00)")
-      const itens = [];
-      let buf = '', depth = 0;
-      for (const ch of valor) {
-        if (ch === '(') depth++;
-        else if (ch === ')') depth = Math.max(0, depth - 1);
-        if (ch === ',' && depth === 0) {
-          if (buf.trim()) itens.push(buf.trim());
-          buf = '';
-        } else {
-          buf += ch;
-        }
+  // Helper: split por vírgula respeitando parênteses
+  const splitVirg = (valor) => {
+    const itens = [];
+    let buf = '', depth = 0;
+    for (const ch of valor) {
+      if (ch === '(') depth++;
+      else if (ch === ')') depth = Math.max(0, depth - 1);
+      if (ch === ',' && depth === 0) {
+        if (buf.trim()) itens.push(buf.trim());
+        buf = '';
+      } else {
+        buf += ch;
       }
-      if (buf.trim()) itens.push(buf.trim());
-      out.grupos.push({ nome, itens });
-    } else {
-      // Sem ":" → vai pra obs livre
-      out.obsLivre = (out.obsLivre ? out.obsLivre + ' · ' : '') + parte;
+    }
+    if (buf.trim()) itens.push(buf.trim());
+    return itens;
+  };
+
+  // Tenta extrair grupo "Nome: valores" se o nome tiver até 30 chars e for
+  // composto só de letras/espaços (rejeita "atenção: lembrar", "pode entregar:").
+  // Lista branca expandida pra grupos comuns (acentos PT-BR).
+  const tentarGrupo = (texto) => {
+    const colonIdx = texto.indexOf(':');
+    if (colonIdx <= 0 || colonIdx >= 30) return null;
+    const nomeRaw = texto.substring(0, colonIdx).trim();
+    // Nome do grupo deve ser palavras curtas, sem ·, sem números
+    if (!/^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]*$/.test(nomeRaw)) return null;
+    if (nomeRaw.split(/\s+/).length > 4) return null; // mais de 4 palavras = obs livre
+    const valor = texto.substring(colonIdx + 1).trim();
+    return { nome: nomeRaw, itens: splitVirg(valor) };
+  };
+
+  // Quebra por ` | ` (separador entre seções principais)
+  const secoes = rawObs.split(' | ').map(p => p.trim()).filter(Boolean);
+
+  for (const secao of secoes) {
+    // Kit: prefixo "Kit: a · b · c"
+    if (/^Kit:\s/i.test(secao)) {
+      out.kitItens = secao.replace(/^Kit:\s/i, '').split(' · ').map(x => x.trim()).filter(Boolean);
+      continue;
+    }
+
+    // Meio a meio: "Meio a meio · sabor1 + sabor2"
+    if (/^Meio a meio/i.test(secao)) {
+      const rest = secao.replace(/^Meio a meio/i, '').replace(/^\s*·\s*/, '').trim();
+      // Separa o que é meio a meio do que é grupo extra (depois de outro · que tenha :)
+      // Na prática meio a meio só tem 1 valor: "Calabresa + Marguerita"
+      out.meioMeio = rest || 'meio a meio';
+      continue;
+    }
+
+    // Pizza inteira: "Pizza inteira"
+    if (/^Pizza inteira$/i.test(secao)) continue;
+
+    // Sub-quebra por ` · ` — formato antigo do modal (hamburguer):
+    //   "Adicionais: Bacon, Queijo · Ponto: Mal passado"
+    // Cada parte com `:` válido vira um grupo. As que sobram viram obs/cortes.
+    const partes = secao.split(' · ').map(p => p.trim()).filter(Boolean);
+    // Se a seção inteira é UM grupo (sem · ou com · só dentro de parênteses), trata simples
+    const grupoUnico = tentarGrupo(secao);
+    if (grupoUnico && partes.length === 1) {
+      out.grupos.push(grupoUnico);
+      continue;
+    }
+
+    // Várias partes: pode ser cortes (todas começam com peso) OU mix de grupos/obs
+    const todasCortes = partes.length > 0 && partes.every(p => /^\d+\s*(g|kg|un|pç|pc|ml|l)\b/i.test(p));
+    if (todasCortes) {
+      out.cortes.push(...partes);
+      continue;
+    }
+
+    // Mix: tenta classificar cada parte
+    let obsAccum = [];
+    for (const parte of partes) {
+      // Corte ("500g Patinho")
+      if (/^\d+\s*(g|kg|un|pç|pc|ml|l)\b/i.test(parte)) {
+        out.cortes.push(parte);
+        continue;
+      }
+      // Grupo ("Preparo: Bife")
+      const g = tentarGrupo(parte);
+      if (g) {
+        out.grupos.push(g);
+        continue;
+      }
+      // Resto vira obs livre
+      obsAccum.push(parte);
+    }
+    if (obsAccum.length) {
+      out.obsLivre = (out.obsLivre ? out.obsLivre + ' | ' : '') + obsAccum.join(' · ');
     }
   }
+
   return out;
 }
 
@@ -2686,6 +2781,17 @@ function _buildTicketHtml(order, cfg) {
       ).join('');
     }
 
+    // Cortes do açougue (formato "500g Patinho", "1kg Frango") — antes
+    // viravam obs livre e ficavam ilegíveis. Agora aparecem em destaque
+    // como uma seção dedicada com peso por linha.
+    let cortesHtml = '';
+    if (parsed.cortes && parsed.cortes.length) {
+      cortesHtml = D('padding-left:18px;margin-top:2px',
+        D('font-weight:bold;font-size:0.9em', 'Cortes:') +
+        parsed.cortes.map(c => D('padding-left:10px;font-size:0.95em;font-weight:bold', '• ' + c)).join('')
+      );
+    }
+
     // Grupos (Adicionais, Ponto, Molhos…) — cada grupo numa linha com bullets
     if (parsed.grupos.length) {
       const linhasGrupos = parsed.grupos.map(g =>
@@ -2707,12 +2813,12 @@ function _buildTicketHtml(order, cfg) {
       return D('margin-bottom:3px',
         D('word-break:break-word', `${qtyPrefix} ${nome}`) +
         D('text-align:right;font-size:0.9em;color:#000', preco) +
-        kitHtml + meioHtml + extrasHtml + obsLivreHtml);
+        kitHtml + meioHtml + cortesHtml + extrasHtml + obsLivreHtml);
     }
     // 80mm: "(qty) nome ............ R$ X,XX" na mesma linha
     return D('margin-bottom:3px',
       ROW(D('word-break:break-word', `${qtyPrefix} ${nome}`), preco) +
-      kitHtml + meioHtml + extrasHtml + obsLivreHtml);
+      kitHtml + meioHtml + cortesHtml + extrasHtml + obsLivreHtml);
   };
 
   // ── Agrupa itens por categoria ───────────────────────────
@@ -2900,6 +3006,13 @@ function _buildTicketHtml(order, cfg) {
         detalhesHtml += D('padding-left:6px;font-size:0.9em;border-left:3px solid #444;margin:3px 0',
           D('font-weight:bold', 'CONTÉM:') +
           parsed.kitItens.map(k => D('padding-left:6px', '• ' + k)).join(''));
+      }
+
+      // Cortes do açougue — destaque alto pra cozinha pesar e separar certo
+      if (parsed.cortes && parsed.cortes.length) {
+        detalhesHtml += D('padding-left:6px;font-size:1em;border-left:3px solid #444;margin:3px 0;font-weight:bold',
+          D('text-transform:uppercase', '› CORTES:') +
+          parsed.cortes.map(c => D('padding-left:6px', '• ' + c)).join(''));
       }
 
       // Grupos (Adicionais, Ponto, Molhos…) — destaque alto na cozinha
@@ -3299,6 +3412,16 @@ function _buildEscPos(order, cfg, cols = 32) {
       parsed.kitItens.forEach(k => {
         _wrapText(k, cols, '    (1) ').forEach(l => push(l + '\n'));
       });
+    }
+
+    // Cortes do açougue (em negrito pra destacar peso e tipo)
+    if (parsed.cortes && parsed.cortes.length) {
+      bytes(0x1B, 0x45, 0x01);
+      push('    Cortes:\n');
+      parsed.cortes.forEach(c => {
+        _wrapText(c, cols, '      - ').forEach(l => push(l + '\n'));
+      });
+      bytes(0x1B, 0x45, 0x00);
     }
 
     // Grupos (Adicionais, Ponto, Molhos…)
