@@ -2866,15 +2866,15 @@ Use no seu próximo pedido 🛍️</textarea>
             <select class="form-input" id="print-rota-cozinha" onchange="_printPrinterCozinha=this.value;localStorage.setItem('printPrinterCozinha',this.value)">
               <option value="">Mesma do caixa</option>
             </select>
-            <div style="font-size:10px;color:var(--muted);margin-top:3px">Recebe: só itens de preparo (bebidas não imprimem aqui)</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:3px">Recebe: tudo que precisa preparo (sucos, vitaminas, drinks da casa, comida). Bebidas industrializadas não vão pra cozinha.</div>
           </div>
           <div style="padding:10px 12px;background:rgba(16,185,129,.05);border:1px solid rgba(16,185,129,.15);border-radius:8px;font-size:11px;color:var(--muted)">
-            <strong style="color:#10b981">Como funciona:</strong> Bebidas (água, refrigerante, cerveja, suco, etc.) <strong>não imprimem na cozinha</strong>. Se o pedido for só bebida, imprime apenas no caixa.
+            <strong style="color:#10b981">Como funciona:</strong> Bebidas <strong>industrializadas</strong> (água, refrigerante, cerveja, energético) não vão pra cozinha — só pra via do caixa. Sucos, vitaminas e drinks preparados vão pra cozinha normalmente porque precisam ser feitos.
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:8px">
             <div>
-              <div style="font-size:12px;font-weight:600">Imprimir pedido só de bebida</div>
-              <div style="font-size:10px;color:var(--muted)">Se desligado, pedido com apenas bebidas não imprime nada</div>
+              <div style="font-size:12px;font-weight:600">Imprimir pedido só de bebida industrializada</div>
+              <div style="font-size:10px;color:var(--muted)">Ligado: imprime cerveja/refri sozinhos no caixa. Desligado: pedido só com bebida industrializada não imprime (cliente pega direto). Sucos e drinks preparados sempre imprimem.</div>
             </div>
             <div class="toggle on" id="toggle-print-bebida" onclick="this.classList.toggle('on');localStorage.setItem('printBebidaSolo',this.classList.contains('on')?'1':'0')"></div>
           </div>

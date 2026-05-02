@@ -2619,12 +2619,23 @@ function _buildTicketHtml(order, cfg) {
                 || order.pag_momento === 'agora'
                 || (order.pag === 'pix_manual' && _statusPago);
 
-  // ── Filtra itens para cozinha ───────────────────────────
-  const _isCoz = (item) => {
+  // ── Detecta bebidas INDUSTRIALIZADAS (prontas, não precisam preparo) ──
+  // Usado pra (a) decidir se vão pra via cozinha (não vão), (b) aplicar o
+  // toggle "Imprimir pedido só de bebida". Sucos, vitaminas, drinks da casa
+  // NÃO entram aqui — esses precisam ser preparados pela cozinha/copa.
+  const _ehIndustrializada = (item) => {
     const c = (item.cat || item.cat_key || '').toLowerCase();
     const n = (item.name || '').toLowerCase();
-    return !['bebida','drink','suco','agua','água','refrigerante','cerveja','chopp','vinho','dose','tanque','long'].some(s => c.includes(s) || n.includes(s));
+    // Lista de bebidas prontas. Sucos/vitaminas/cafés ficam DE FORA.
+    const re = /refrigerante|coca[\s-]?cola|pepsi|guaran[aá]|fanta|sprite|soda|schweppes|t[oô]nica|[aá]gua\b|mineral|cerveja|chopp|brahma|skol|heineken|budweiser|corona|stella|amstel|itaipava|eisenbahn|vinho|wine|espumante|prosecco|champagne|sake|long[\s.]?neck|energ[eé]tico|red[\s.]?bull|monster|gatorade|powerade|isot[oô]nico|ice[\s.]?tea|nescau/i;
+    return re.test(n) || re.test(c);
   };
+
+  // ── Filtra itens que vão pra via cozinha ────────────────
+  // Cozinha = tudo que precisa preparo. Industrializadas (cerveja, refri,
+  // água) NÃO vão. Mas suco, vitamina, café, drink da casa VÃO — antes
+  // estavam sendo filtrados como "bebida" e nunca chegavam à cozinha.
+  const _isCoz = (item) => !_ehIndustrializada(item);
   const itensCozinha = items.filter(_isCoz);
 
   // ── Renderiza um item do pedido (estilo Anota: "(qty) nome    R$ x") ──
@@ -3494,21 +3505,28 @@ async function printOrder(order) {
   const cfg    = _getPrintConfig();
   const fmt    = localStorage.getItem('printFormat') || _printFormat || '80mm';
 
-  // ── Verifica se é pedido só de bebida ──────────────────
-  const _isBebida = (item) => {
-    const cat = (item.cat || item.cat_key || '').toLowerCase();
+  // ── Toggle "Imprimir pedido só de bebida" ──────────────
+  // Aplica APENAS pra bebidas industrializadas (prontas, não precisam preparo).
+  // Sucos, vitaminas, cafés e drinks da casa NÃO entram nessa lista — esses
+  // sempre imprimem porque a cozinha/copa precisa fazer.
+  // Toggle ON  (padrão) → imprime tudo, inclusive cerveja/refri pura
+  // Toggle OFF           → pedido só de cerveja/refri NÃO imprime (cliente
+  //                        pega direto no balcão). Mas se tiver suco junto,
+  //                        imprime — porque suco precisa ser feito.
+  const _ehIndustrializadaTop = (item) => {
+    const cat  = (item.cat || item.cat_key || '').toLowerCase();
     const name = (item.name || '').toLowerCase();
-    const bebidas = ['bebida','drink','suco','agua','água','refrigerante','cerveja','chopp','vinho','dose','tanque','long'];
-    return bebidas.some(s => cat.includes(s) || name.includes(s));
+    const re = /refrigerante|coca[\s-]?cola|pepsi|guaran[aá]|fanta|sprite|soda|schweppes|t[oô]nica|[aá]gua\b|mineral|cerveja|chopp|brahma|skol|heineken|budweiser|corona|stella|amstel|itaipava|eisenbahn|vinho|wine|espumante|prosecco|champagne|sake|long[\s.]?neck|energ[eé]tico|red[\s.]?bull|monster|gatorade|powerade|isot[oô]nico|ice[\s.]?tea|nescau/i;
+    return re.test(name) || re.test(cat);
   };
-  // Considera apenas itens não cancelados pra avaliar "só bebida"
+  // Considera apenas itens não cancelados
   const items = (Array.isArray(order.items) ? order.items : [])
     .filter(i => (i?.item_status || 'active') !== 'cancelado');
-  const soBebida = items.length > 0 && items.every(_isBebida);
-  const printBebidaSolo = localStorage.getItem('printBebidaSolo') !== '0'; // padrão: ligado
+  const soIndustrializada = items.length > 0 && items.every(_ehIndustrializadaTop);
+  const printBebidaSolo   = localStorage.getItem('printBebidaSolo') !== '0'; // padrão: ligado
 
-  if (soBebida && !printBebidaSolo) {
-    console.log('[PRINT] Pedido só de bebida — impressão desativada pelo toggle');
+  if (soIndustrializada && !printBebidaSolo) {
+    console.log('[PRINT] Pedido só de bebida industrializada — impressão desativada pelo toggle');
     return;
   }
 

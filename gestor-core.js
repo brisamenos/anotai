@@ -723,7 +723,7 @@ function subscribeOrders() {
           const nc = document.getElementById('notif-count');
           if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
           // Auto-impressão para pedidos de mesa — só imprime itens NOVOS (producao)
-          if ((window._printMode || _printMode) === "auto" && !_isSoBebidas(p.new)) {
+          if ((window._printMode || _printMode) === "auto") {
             const _mapped = mapOrder(p.new);
             const _onlyNew = (Array.isArray(p.new.items) ? p.new.items : []).filter(i => i.item_status === 'producao');
             if (_onlyNew.length) { const _clone = Object.assign({}, _mapped, { items: _onlyNew }); printOrder(_clone); }
@@ -756,7 +756,7 @@ function subscribeOrders() {
           setTimeout(() => advanceOrderById(p.new.id), 800);
         }
         // Auto-impressão se modo automático estiver ativo (bebidas não imprimem)
-        if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(p.new)) printOrder(mapOrder(p.new));
+        if ((window._printMode || _printMode) === 'auto') printOrder(mapOrder(p.new));
         // Atualiza KDS se estiver aberto
         const kpg = document.getElementById('page-kds');
         if (kpg && kpg.classList.contains('on')) renderKDS();
@@ -801,10 +801,10 @@ function subscribeOrders() {
         // PIX online: pagamento já confirmado, imprime sempre (independe do modo de impressão e do toggle de auto-aceite)
         // PIX manual: respeita _autoAcceptOn e _printMode normalmente
         if (p.new.pag === 'pix_mp') {
-          if (!_isSoBebidas(p.new)) printOrder(mapOrder(p.new));
+          printOrder(mapOrder(p.new));
         } else {
           if (_autoAcceptOn) setTimeout(() => advanceOrderById(p.new.id), 800);
-          if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(p.new)) printOrder(mapOrder(p.new));
+          if ((window._printMode || _printMode) === 'auto') printOrder(mapOrder(p.new));
         }
         return;
       }
@@ -816,7 +816,7 @@ function subscribeOrders() {
         renderKanban();
         if (wasInAnalise) {
           playOrderSound();
-          if (!_isSoBebidas(p.new)) printOrder(mapOrder({ ...p.new, status: 'producao' }));
+          printOrder(mapOrder({ ...p.new, status: 'producao' }));
         }
         return;
       }
@@ -1041,10 +1041,10 @@ function _subscribeOrdersSSE() {
         // PIX online: pagamento já confirmado pelo MP, imprime automático sempre (independe do toggle/_printMode)
         // PIX manual: respeita _autoAcceptOn e _printMode normalmente
         if (order.pag === 'pix_mp') {
-          if (!_isSoBebidas(order)) printOrder(mapOrder({ ...order, items }));
+          printOrder(mapOrder({ ...order, items }));
         } else {
           if (_autoAcceptOn) setTimeout(() => advanceOrderById(order.id), 800);
-          if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(order)) printOrder(mapOrder({ ...order, items }));
+          if ((window._printMode || _printMode) === 'auto') printOrder(mapOrder({ ...order, items }));
         }
         return;
       }
@@ -1058,7 +1058,7 @@ function _subscribeOrdersSSE() {
         renderKanban();
         if (wasInAnaliseOrAguard) {
           playOrderSound();
-          if (!_isSoBebidas(order)) printOrder(mapOrder({ ...order, items, status: 'producao' }));
+          printOrder(mapOrder({ ...order, items, status: 'producao' }));
         }
         return;
       }
@@ -1263,7 +1263,7 @@ setInterval(async () => {
             showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${_orderNum(o.id, o.order_num)} — ${o.client}`);
             sendBrowserNotif(`Novo pedido #${_orderNum(o.id, o.order_num)}`, `${o.client} — ${items}`);
             if (_autoAcceptOn && o.status === 'analise') setTimeout(() => advanceOrderById(o.id), 800);
-            if ((window._printMode || _printMode) === 'auto' && !_isSoBebidas(o) && !(o.status === 'aguardando_pix' && o.pag !== 'pix_manual')) printOrder(mapOrder(o));
+            if ((window._printMode || _printMode) === 'auto' && !(o.status === 'aguardando_pix' && o.pag !== 'pix_manual')) printOrder(mapOrder(o));
             // Atualiza cache mesa se for pedido de mesa
             if (o.mesa_num) { _patchOrderInCache(o); _renderMesaPageFromCache(); }
           }
