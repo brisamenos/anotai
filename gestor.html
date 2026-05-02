@@ -1554,7 +1554,7 @@ Aguardamos o pagamento. Obrigado pela visita! 🙏</textarea>
   <div class="card" style="margin-bottom:14px">
     <div class="card-title" style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between">
       <span>Configurações de Cashback</span>
-      <div class="toggle" id="cb-toggle-ativo" onclick="this.classList.toggle('on')" title="Ativar/desativar cashback"></div>
+      <div class="toggle" id="cb-toggle-ativo" onclick="this.classList.toggle('on');saveCashbackConfig(true)" title="Ativar/desativar cashback"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px">
       <div>
@@ -1674,7 +1674,7 @@ Use no seu próximo pedido 🛍️</textarea>
       </div>
       <div style="display:flex;align-items:center;gap:10px">
         <span style="font-size:12px;color:var(--muted)">Ativo</span>
-        <div class="toggle" id="stamp-toggle-ativo" onclick="this.classList.toggle('on')" title="Ativar/desativar cartão fidelidade"></div>
+        <div class="toggle" id="stamp-toggle-ativo" onclick="this.classList.toggle('on');saveStampConfig(true)" title="Ativar/desativar cartão fidelidade"></div>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
