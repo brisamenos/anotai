@@ -1064,10 +1064,28 @@ function imConfirm() {
 
   // ── Kit: monta descrição com todos os itens do kit ──
   if (_isKitItem(i)) {
-    const _kitGrp = (i.custom_groups || []).find(g => g.tipo === 'kit_itens');
+    const groups = i.custom_groups || [];
+    const _kitGrp = groups.find(g => g.tipo === 'kit_itens');
     if (_kitGrp?.itens?.length) {
       const _kitDesc = 'Kit: ' + _kitGrp.itens.join(' · ');
       cartObs = [_kitDesc, cartObs].filter(Boolean).join(' | ');
+    }
+    // Chips informativos do kit (preparo/ocasião/armazenamento) — antes
+    // ficavam só na tela como visualização e não chegavam na comanda.
+    // Agora vão pro obs como seções nomeadas pra o açougueiro saber.
+    const _infoChips = [
+      { tipo: 'preparos',     label: 'Forma de preparo' },
+      { tipo: 'ocasiao',      label: 'Tipo de ocasião' },
+      { tipo: 'armazenamento',label: 'Armazenamento' },
+    ];
+    for (const info of _infoChips) {
+      const grp = groups.find(g => g.tipo === info.tipo);
+      const opcoes = grp?.opcoes || [];
+      if (!opcoes.length) continue;
+      const valores = opcoes.map(o => o.nome || o.id).filter(Boolean).join(', ');
+      if (valores) {
+        cartObs = [`${info.label}: ${valores}`, cartObs].filter(Boolean).join(' | ');
+      }
     }
   }
 
