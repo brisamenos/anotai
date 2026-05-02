@@ -1655,7 +1655,41 @@ async function handleOrderStatus(req, res) {
           const offset= parseInt(cfg?.order_num_offset)||0
           const loja  = cfg?.store_name || (_seg==='acougue' ? 'Açougue' : 'Restaurante')
           const nome  = order.client||'Cliente', idStr=String(order.order_num||Math.max(1,order.id-offset)).padStart(3,'0')
-          const items = (()=>{try{return(JSON.parse(order.items)||[]).map(i=>`• ${i.qty}x ${i.name}`).join('\n')}catch{return ''}})()
+          // Formata cada item com seus adicionais (kit, meio-meio, grupos como TEMPERADO,
+          // obs livre). Antes mostrava só "qty x nome" — cliente não via o que escolheu.
+          // Formato do obs: "Forma de preparo: X | TEMPERADO: a, b | Kit: it1 · it2 | obs livre"
+          const items = (()=>{
+            try {
+              return (JSON.parse(order.items)||[]).map(i => {
+                let linha = `• ${i.qty}x ${i.name}`
+                const obs = String(i.obs||'').trim()
+                if (!obs) return linha
+                const partes = obs.split(' | ').map(s => s.trim()).filter(Boolean)
+                const detalhes = []
+                for (const p of partes) {
+                  // "Kit: a · b" → lista os itens do kit
+                  if (/^kit\s*:/i.test(p)) {
+                    const itensKit = p.replace(/^kit\s*:\s*/i, '').split(' · ').filter(Boolean)
+                    if (itensKit.length) detalhes.push('  _Inclui:_ ' + itensKit.join(', '))
+                  }
+                  // "Meio a meio · sabor1 + sabor2"
+                  else if (/^meio a meio/i.test(p)) {
+                    const sabores = p.replace(/^meio a meio\s*·?\s*/i, '').trim()
+                    if (sabores) detalhes.push('  _½ + ½:_ ' + sabores)
+                  }
+                  // "Nome do grupo: opção1, opção2" (TEMPERADO, Adicionais, etc.)
+                  else if (/^[^:]{1,40}:/.test(p)) {
+                    detalhes.push('  ↳ ' + p)
+                  }
+                  // Obs livre digitada pelo cliente
+                  else {
+                    detalhes.push('  _Obs:_ ' + p)
+                  }
+                }
+                return detalhes.length ? linha + '\n' + detalhes.join('\n') : linha
+              }).join('\n')
+            } catch { return '' }
+          })()
           // Detecta tipo de entrega real do pedido. Antes só olhava Mesa/Balcão e
           // qualquer outra coisa (incluindo "Retirada — [Filial]") caía em Entrega,
           // fazendo o cliente que pediu pra retirar receber mensagem de entrega.
@@ -1868,6 +1902,45 @@ async function handleIAWebhook(req, res) {
       }
       const cupons=db.prepare("SELECT code,type,value,min_order FROM cupons WHERE tenant_id=? AND ativo=1 AND (expires_at IS NULL OR expires_at > datetime('now')) LIMIT 5").all(tenantId)
       if(cupons.length) contexto.push('CUPONS:\n'+cupons.map(cp=>`  • *${cp.code}*: ${cp.type==='percent'?`${cp.value}%`:`R$${parseFloat(cp.value).toFixed(2)}`} de desconto${parseFloat(cp.min_order||0)>0?` (mín R$${parseFloat(cp.min_order).toFixed(2)})`:''}`) .join('\n'))
+
+      // ── Programas de fidelidade — só passa pra IA o que o gestor ATIVOU ──
+      // Antes a IA inventava cashback/pontos/carimbinho mesmo sem o gestor ter
+      // ativado nada. Agora cada um só aparece no contexto se realmente está
+      // ligado, e ainda assim com regras explícitas de "não invente valores".
+      const _cfgFidArr = db.prepare("SELECT cashback_config, fid_config, stamp_config FROM store_config WHERE tenant_id=?").get(tenantId) || {}
+      const _cbCfg    = (() => { try { return JSON.parse(_cfgFidArr.cashback_config||'{}') } catch { return {} } })()
+      const _fidCfg   = (() => { try { return JSON.parse(_cfgFidArr.fid_config||'{}') } catch { return {} } })()
+      const _stampCfg = (() => { try { return JSON.parse(_cfgFidArr.stamp_config||'{}') } catch { return {} } })()
+      const _programasAtivos = []
+      const _programasInfo   = []
+      if (_cbCfg.ativo && parseFloat(_cbCfg.pct||0) > 0) {
+        _programasAtivos.push('cashback')
+        const minPed = parseFloat(_cbCfg.min_pedido||0)
+        _programasInfo.push(`CASHBACK ATIVO: ${_cbCfg.pct}% de cashback sobre pedidos${minPed > 0 ? ` acima de R$${minPed.toFixed(2).replace('.',',')}` : ''}. Cliente acumula crédito pra usar no próximo pedido.`)
+      }
+      if (parseFloat(_fidCfg.pts_por_real||0) > 0) {
+        _programasAtivos.push('pontos de fidelidade')
+        const meta = parseInt(_fidCfg.meta_pts||500)
+        _programasInfo.push(`PONTOS DE FIDELIDADE ATIVO: cliente ganha ${_fidCfg.pts_por_real} pontos por cada R$1 gasto. Meta: ${meta} pontos para ganhar recompensa.`)
+      }
+      if (_stampCfg.ativo) {
+        _programasAtivos.push('cartão fidelidade (carimbinho)')
+        const meta = parseInt(_stampCfg.meta_compras||10)
+        const tipoR = _stampCfg.recompensa_tipo || 'pedido_gratis'
+        const valR  = parseFloat(_stampCfg.recompensa_valor||0)
+        let recompensaTxt = 'um pedido grátis'
+        if (tipoR === 'frete_gratis')  recompensaTxt = 'frete grátis'
+        else if (tipoR === 'percent' && valR > 0) recompensaTxt = `${valR}% de desconto`
+        else if (tipoR === 'fixo' && valR > 0)    recompensaTxt = `R$${valR.toFixed(2).replace('.',',')} de desconto`
+        _programasInfo.push(`CARTÃO FIDELIDADE (CARIMBINHO) ATIVO: a cada ${meta} compras o cliente ganha ${recompensaTxt}.`)
+      }
+      if (_programasInfo.length) {
+        contexto.push('PROGRAMAS DE FIDELIDADE DA LOJA (somente esses estão ativos — não mencione outros):\n' + _programasInfo.join('\n'))
+      }
+      // Regra explícita pra evitar alucinação — independente de ter ou não programas ativos
+      const _regrasFidelidade = _programasAtivos.length
+        ? `PROGRAMAS DE FIDELIDADE PERMITIDOS: ${_programasAtivos.join(', ')}. NUNCA mencione programas que não estejam na lista acima. NUNCA invente saldos, valores, pontos ou cashback do cliente — você não tem acesso a essa informação. Se o cliente perguntar quanto tem de saldo/pontos/carimbos, oriente a aguardar a próxima notificação automática ou consultar diretamente com a loja.`
+        : `NÃO HÁ PROGRAMAS DE FIDELIDADE NESTA LOJA. NUNCA mencione cashback, pontos de fidelidade, carimbinho, cartão fidelidade ou qualquer programa de recompensa — esta loja não oferece. Se o cliente perguntar, responda educadamente que a loja não tem programa de fidelidade no momento.`
       const _offsetCfg=db.prepare("SELECT order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
       const _iaOffset=parseInt(_offsetCfg?.order_num_offset)||0
       const _iaPedNum=(p)=>String(p.order_num||Math.max(1,p.id-_iaOffset)).padStart(3,'0')
@@ -1876,40 +1949,41 @@ async function handleIAWebhook(req, res) {
       const numMatch=msgFull.match(/#\*?(\d{1,6})\*?/)||msgFull.match(/pedido\s*[*#]?\s*(\d{1,6})/i)
       if(numMatch){const n=parseInt(numMatch[1]);const realId=n+_iaOffset;let ped=db.prepare("SELECT id,order_num,status,total,taxa,items,client,addr,pag,created_at FROM orders WHERE tenant_id=? AND id=?").get(tenantId,realId);if(!ped)ped=db.prepare("SELECT id,order_num,status,total,taxa,items,client,addr,pag,created_at FROM orders WHERE tenant_id=? AND order_num=?").get(tenantId,n);if(!ped)ped=db.prepare("SELECT id,order_num,status,total,taxa,items,client,addr,pag,created_at FROM orders WHERE tenant_id=? AND phone LIKE ? ORDER BY id DESC LIMIT 1").get(tenantId,`%${phone.slice(-8)}%`);const sl={analise:'⏳ Em análise — seu pedido foi recebido e está aguardando confirmação',producao:'👨‍🍳 Em preparo — estamos preparando seu pedido agora',pronto:'✅ Pronto — seu pedido está pronto para retirada/entrega',saiu:'🛵 Saiu para entrega — o entregador está a caminho',entregue:'🎉 Entregue — pedido finalizado',cancelado:'❌ Cancelado',finalizado:'✅ Finalizado'};if(ped){const pedNum=_iaPedNum(ped);const its=(()=>{try{return(JSON.parse(ped.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}catch{return''}})();const totalFinal=(parseFloat(ped.total||0)+parseFloat(ped.taxa||0)).toFixed(2).replace('.',',');const taxaStr=parseFloat(ped.taxa||0)>0?`\n  Taxa de entrega: R$${parseFloat(ped.taxa).toFixed(2).replace('.',',')}`:''
       contexto.push(`DETALHES DO PEDIDO #${pedNum} (este é o número correto do pedido):\n  Status: ${sl[ped.status]||ped.status}\n  Cliente: ${ped.client||'N/A'}\n  Total: R$${totalFinal}${taxaStr}\n  Itens: ${its||'N/A'}\n  Endereço: ${ped.addr||'Retirada/Mesa'}\n  Pagamento: ${ped.pag||'N/A'}\n\nIMPORTANTE: O número do pedido deste cliente é #${pedNum}. Use APENAS este número ao se referir ao pedido. O valor total correto é R$${totalFinal}.`)}else{contexto.push(`PEDIDO #${String(n).padStart(3,'0')}: não encontrado no sistema. Peça ao cliente para confirmar o número.`)}}
-      const _promptPadrao = `Você é o atendente virtual do *${nomeLoja}* — simpático, acolhedor e com personalidade! Você representa a loja com orgulho e faz o cliente se sentir especial. Responda sempre em português brasileiro, com tom humano e caloroso.
+      const _promptPadrao = `Você é o atendente virtual do *${nomeLoja}*. Responda em português brasileiro de forma educada, amigável e DIRETA.
 
-PERSONALIDADE:
-- Seja caloroso e genuíno, como um atendente que ama o que faz
-- Use emojis com naturalidade (2-4 por mensagem) para dar vida à conversa
-- Chame o cliente de "você" e seja próximo, nunca robótico
-- Demonstre entusiasmo pelos produtos da loja
-- Seja proativo: sugira itens, conte novidades, destaque promoções
-- Respostas devem ter conteúdo rico — nunca respostas secas de 1 linha
+ESTILO DE RESPOSTA:
+- Seja claro e objetivo. Responda exatamente o que o cliente perguntou, sem rodeios.
+- Use no máximo 1 emoji por mensagem (apenas quando combinar). Não enche de emoji.
+- Tom amigável, mas profissional — não exagere em entusiasmo.
+- Não invente informações. Se não souber algo, diga que vai verificar ou peça pra o cliente confirmar com a loja.
 
-FORMATO DAS RESPOSTAS:
-- Use *negrito* para destacar nomes de produtos, preços e informações importantes
-- Organize visualmente com quebras de linha quando listar algo
-- Sempre finalize convidando o cliente a continuar a conversa ou fazer um pedido
-- Quando mencionar o cardápio, SEMPRE inclua o link: ${linkCardapio}`
+FORMATO:
+- Respostas curtas: 1 a 3 linhas na maioria dos casos. Só use mais quando o cliente pediu detalhes específicos.
+- Use *negrito* só pra destacar nomes de produtos ou valores importantes.
+- Quando mencionar o cardápio, inclua o link: ${linkCardapio}
+
+EXEMPLOS DO TOM CERTO:
+Cliente: "Qual horário de funcionamento?"
+Resposta: "Funcionamos de segunda a sábado, das 18h às 23h. Posso te ajudar com mais alguma coisa?"
+
+Cliente: "Como faço pedido?"
+Resposta: "É só acessar nosso cardápio: ${linkCardapio} — escolhe os itens, finaliza e a gente recebe aqui."
+
+Cliente: "Tem entrega no bairro X?"
+Resposta: "Sim, atendemos esse bairro. A taxa é R$ X. Quer pedir agora? ${linkCardapio}"`
 
       const _instrucoesSituacao = []
       if (_isPrimeiraMsgDia) {
-        _instrucoesSituacao.push(`SITUAÇÃO ESPECIAL — PRIMEIRA MENSAGEM DO DIA:
-Esta é a primeira mensagem deste cliente hoje! Comece com uma saudação calorosa em nome do ${nomeLoja}. Use "${_saudacaoHora}" adequado ao horário.
-Modelo: "${_saudacaoHora}! 😊 Seja muito bem-vindo(a) ao *${nomeLoja}*! Que bom ter você aqui com a gente hoje! [continue naturalmente com o que o cliente perguntou ou convide a ver o cardápio com o link: ${linkCardapio}]"`)
+        _instrucoesSituacao.push(`SITUAÇÃO — primeira mensagem do cliente hoje:
+Cumprimente com "${_saudacaoHora}" e o nome da loja, depois responda o que ele perguntou. Mantenha curto e direto.`)
       }
       if (_isSoSaudacao) {
-        _instrucoesSituacao.push(`SITUAÇÃO ESPECIAL — CLIENTE ENVIOU APENAS SAUDAÇÃO:
-O cliente mandou só uma saudação sem perguntar nada específico. NÃO responda apenas com saudação de volta! Responda com calor humano e conduza a conversa:
-- Cumprimente de volta com entusiasmo
-- Apresente-se como atendente do ${nomeLoja}
-- Pergunte como pode ajudar de forma envolvente
-- Mencione algo atrativo (promoção, item popular, novidade) para despertar interesse
-- Compartilhe o link do cardápio: ${linkCardapio}
-Exemplo: "${_saudacaoHora}! 😄 Que prazer ter você aqui no *${nomeLoja}*! Eu sou o assistente virtual e estou aqui pra te ajudar com tudo! 🤗 Quer dar uma olhada no nosso cardápio? Tem coisa deliciosa esperando por você: ${linkCardapio} — Me conta, posso te ajudar com alguma coisa? 😋"`)
+        _instrucoesSituacao.push(`SITUAÇÃO — cliente mandou só uma saudação:
+Responda a saudação e pergunte como pode ajudar. Mande o link do cardápio: ${linkCardapio}
+Mantenha em 1-2 linhas. Não fique enchendo linguiça.`)
       }
 
-      const systemPrompt = `${iaG.prompt_base || _promptPadrao}\n\n${_instrucoesSituacao.length ? _instrucoesSituacao.join('\n\n') + '\n\n' : ''}${contexto.join('\n\n')}\n\nREGRAS OBRIGATÓRIAS:\n- Nunca liste o cardápio inteiro. Cite no máximo 3-4 itens como sugestão e envie o link: ${linkCardapio}\n- Para fazer pedidos, SEMPRE direcione para o cardápio online: ${linkCardapio}\n- Se a loja estiver FECHADA, informe o horário de funcionamento e convide o cliente a ver o cardápio para quando abrir\n- Se o cliente perguntar sobre um pedido, dê informações detalhadas com status e itens\n- Nunca invente informações que não estão no contexto\n- Se houver promoções ou cupons, mencione-os naturalmente quando fizer sentido\n- Mantenha respostas entre 3-8 linhas — ricas em conteúdo mas sem ser prolixo`
+      const systemPrompt = `${iaG.prompt_base || _promptPadrao}\n\n${_instrucoesSituacao.length ? _instrucoesSituacao.join('\n\n') + '\n\n' : ''}${contexto.join('\n\n')}\n\nREGRAS OBRIGATÓRIAS:\n- Nunca liste o cardápio inteiro. Cite no máximo 3 itens como sugestão e envie o link: ${linkCardapio}\n- Para fazer pedidos, SEMPRE direcione para o cardápio online: ${linkCardapio}\n- Se a loja estiver FECHADA, informe o horário de funcionamento de forma curta\n- Se o cliente perguntar sobre um pedido, dê o status, total e itens (apenas o que está no contexto)\n- Nunca invente informações que não estão no contexto\n- ${_regrasFidelidade}\n- CUPONS: só mencione cupons EXPLICITAMENTE listados na seção CUPONS acima. Se não houver seção CUPONS, NÃO invente códigos de desconto.\n- Mantenha respostas CURTAS: 1-3 linhas na maioria dos casos. Use mais só se o cliente pediu algo detalhado.\n- Use no MÁXIMO 1 emoji por resposta. Em mensagens de status ou informativas, pode não usar nenhum.\n- Tom: educado, amigável e direto. Sem exclamações em excesso, sem entusiasmo forçado.`
       try {
         const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${openaiKey}`},body:JSON.stringify({model:modelo,max_tokens:maxTokens,messages:[{role:'system',content:systemPrompt},...convHist.slice(-10),{role:'user',content:msgFull}]})})
         const d=await r.json().catch(()=>({}))
