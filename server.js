@@ -1402,9 +1402,14 @@ async function handleOrderStatus(req, res) {
     // ── Cashback automático ─────────────────────────────
     if (['finalizado','entregue'].includes(new_status) && !['finalizado','entregue'].includes(oldStatus)) {
       try {
-        const cfg    = db.prepare('SELECT cashback_config, evo_automacoes, evo_instance, fid_config, stamp_config FROM store_config WHERE tenant_id=?').get(tid)
+        const cfg    = db.prepare('SELECT cashback_config, evo_automacoes, evo_instance, fid_config, stamp_config, store_name FROM store_config WHERE tenant_id=?').get(tid)
         const inst   = cfg?.evo_instance || EVO_INST
         const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
+        // CRÍTICO: declara `nome` aqui no escopo do bloco. Antes dessa correção,
+        // todas as mensagens WA de cashback/pontos/carimbinho referenciavam `nome`
+        // sem que ela estivesse declarada — ReferenceError silenciado pelo try/catch
+        // → nenhuma mensagem chegava ao cliente.
+        const nome   = (order.client || 'Cliente').split(' ')[0]
 
         // ── Cashback ────────────────────────────────────
         const cbCfg  = (() => { try { return JSON.parse(cfg?.cashback_config||'{}') } catch { return {} } })()
@@ -1430,7 +1435,13 @@ async function handleOrderStatus(req, res) {
                 const lojaB   = cfg?.store_name || 'Restaurante'
                 const msgPadrao = `🏪 *${lojaB}*\n${'-'.repeat(20)}\n\n💰 *Cashback creditado!*\n\nOlá, *${nome}*! Você ganhou *R$ ${credito.toFixed(2).replace('.',',')}* de cashback.\n\n💳 Saldo atual: *R$ ${novoSaldo.toFixed(2).replace('.',',')}*\n\nUse no seu próximo pedido! 🛍️\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
                 const msgFinal  = cbAuto.on && cbAuto.msg ? fillVars(cbAuto.msg, { nome, credito: credito.toFixed(2).replace('.',','), saldo: novoSaldo.toFixed(2).replace('.',',') }) : msgPadrao
-                setImmediate(async () => { try { await sendWA(order.phone, msgFinal, inst) } catch(e) {} })
+                setImmediate(async () => {
+                  try {
+                    const r = await sendWA(order.phone, msgFinal, inst)
+                    if (r?.ok) log('📤', `WA cashback enviado → ${order.phone} (R$${credito})`)
+                    else       log('⚠️', `WA cashback FALHOU → ${order.phone}:`, r?.error || 'sem detalhe')
+                  } catch(e) { log('⚠️', `WA cashback ERROR → ${order.phone}:`, e.message) }
+                })
               }
             } else {
               // Cliente não existe — cria com o crédito inicial.
@@ -1444,7 +1455,13 @@ async function handleOrderStatus(req, res) {
                 const lojaB2  = cfg?.store_name || 'Restaurante'
                 const msgPadrao = `💰 *${nome}*, você ganhou *R$ ${credito.toFixed(2).replace('.',',')}* de cashback com seu pedido!\n\nSeu saldo total: *R$ ${credito.toFixed(2).replace('.',',')}*\nUse no seu próximo pedido! 🛍️`
                 const msgFinal  = cbAuto.on && cbAuto.msg ? fillVars(cbAuto.msg, { nome, credito: credito.toFixed(2).replace('.',','), saldo: credito.toFixed(2).replace('.',',') }) : msgPadrao
-                setImmediate(async () => { try { await sendWA(order.phone, msgFinal, inst) } catch(e) {} })
+                setImmediate(async () => {
+                  try {
+                    const r = await sendWA(order.phone, msgFinal, inst)
+                    if (r?.ok) log('📤', `WA cashback (novo cliente) enviado → ${order.phone} (R$${credito})`)
+                    else       log('⚠️', `WA cashback (novo cliente) FALHOU → ${order.phone}:`, r?.error || 'sem detalhe')
+                  } catch(e) { log('⚠️', `WA cashback (novo cliente) ERROR → ${order.phone}:`, e.message) }
+                })
               }
             }
             marcarDirty()
@@ -1485,7 +1502,13 @@ async function handleOrderStatus(req, res) {
                 const faltam     = Math.max(0, meta - novosPts)
                 const msgPadrao  = `🏪 *${lojaP2}*\n${'-'.repeat(20)}\n\n🏆 *Pontos de fidelidade!*\n\nOlá, *${nome}*! Você ganhou *${ptosGanhos} pontos* com seu pedido.\n\n🎯 Saldo atual: *${novosPts} pontos*\n${faltam > 0 ? `⏳ Faltam apenas *${faltam} pontos* para sua recompensa!` : '🎁 Você atingiu sua recompensa! Resgate no próximo pedido.'}\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
                 const msgFinal   = ptAuto.on && ptAuto.msg ? fillVars(ptAuto.msg, { nome, pontos_ganhos: String(ptosGanhos), pontos_total: String(novosPts), pontos_faltam: String(faltam) }) : msgPadrao
-                setImmediate(async () => { try { await sendWA(order.phone, msgFinal, inst) } catch(e) {} })
+                setImmediate(async () => {
+                  try {
+                    const r = await sendWA(order.phone, msgFinal, inst)
+                    if (r?.ok) log('📤', `WA pontos enviado → ${order.phone} (+${ptosGanhos}pts)`)
+                    else       log('⚠️', `WA pontos FALHOU → ${order.phone}:`, r?.error || 'sem detalhe')
+                  } catch(e) { log('⚠️', `WA pontos ERROR → ${order.phone}:`, e.message) }
+                })
               }
             }
           }
@@ -1535,11 +1558,17 @@ async function handleOrderStatus(req, res) {
                 faltam: String(faltam),
                 recompensa: recompensaTxt.replace(/\*/g, '')
               }) : msgPadrao
-              setImmediate(async () => { try { await sendWA(order.phone, msgFinal, inst) } catch(e) {} })
+              setImmediate(async () => {
+                try {
+                  const r = await sendWA(order.phone, msgFinal, inst)
+                  if (r?.ok) log('📤', `WA carimbinho enviado → ${order.phone} (${desdeResgate}/${meta})`)
+                  else       log('⚠️', `WA carimbinho FALHOU → ${order.phone}:`, r?.error || 'sem detalhe')
+                } catch(e) { log('⚠️', `WA carimbinho ERROR → ${order.phone}:`, e.message) }
+              })
             }
           } catch(stErr) { log('⚠️', 'Notif carimbinho erro:', stErr.message) }
         }
-      } catch(cbErr) { log('⚠️', 'Cashback/Fidelidade/Stamp erro:', cbErr.message) }
+      } catch(cbErr) { log('⚠️', 'Cashback/Fidelidade/Stamp erro:', cbErr.message, '|', cbErr.stack?.split('\n')[1]?.trim() || '') }
     }
     if (order.phone&&oldStatus!==new_status) {
       setImmediate(async () => {
