@@ -1656,7 +1656,15 @@ async function handleOrderStatus(req, res) {
           const loja  = cfg?.store_name || (_seg==='acougue' ? 'Açougue' : 'Restaurante')
           const nome  = order.client||'Cliente', idStr=String(order.order_num||Math.max(1,order.id-offset)).padStart(3,'0')
           const items = (()=>{try{return(JSON.parse(order.items)||[]).map(i=>`• ${i.qty}x ${i.name}`).join('\n')}catch{return ''}})()
-          const isDelivery = (order.addr||'').includes('Mesa')?'🪴 Mesa':(order.addr||'').toLowerCase().includes('balc')?'🏪 Balcão':'🛵 Entrega'
+          // Detecta tipo de entrega real do pedido. Antes só olhava Mesa/Balcão e
+          // qualquer outra coisa (incluindo "Retirada — [Filial]") caía em Entrega,
+          // fazendo o cliente que pediu pra retirar receber mensagem de entrega.
+          const _addrLower = (order.addr||'').toLowerCase()
+          const isDelivery = (order.addr||'').includes('Mesa')
+                ? '🪴 Mesa'
+                : /^retirada\b/i.test(order.addr||'') || _addrLower.includes('balc')
+                  ? '🏪 Retirada'
+                  : '🛵 Entrega'
           const total = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
           const vars  = {nome,id:idStr,itens:items,total,endereco:order.addr||'',mesa:String(order.mesa_num||''),tipo_entrega:isDelivery,loja}
           const tipoAuto = {analise:'recebido',producao:'confirmado',pronto:'pronto',saiu:'entrega',entregue:'entrega',cancelado:'cancelado',finalizado:'avaliacao'}[new_status]
