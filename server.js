@@ -1413,11 +1413,17 @@ async function handleOrderStatus(req, res) {
           const minPed = parseFloat(cbCfg.min_pedido||0)
           if (total >= minPed) {
             const credito = parseFloat((total * cbCfg.pct / 100).toFixed(2))
-            const phone8  = order.phone.replace(/\D/g,'').slice(-8)
-            const cust    = db.prepare('SELECT id, cashback_saldo FROM customers WHERE tenant_id=? AND phone LIKE ?').get(tid, `%${phone8}%`)
+            // Phone clean: só dígitos, normalizado
+            const phoneClean = order.phone.replace(/\D/g,'')
+            const phone8     = phoneClean.slice(-8)
+            // Match preciso: phone DEVE TERMINAR em phone8 (não conter no meio).
+            // SQLite LIKE com sufixo: 'phone LIKE %XXXXXXXX' funciona com escape.
+            const cust    = db.prepare("SELECT id, cashback_saldo FROM customers WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ?").get(tid, phone8)
             if (cust) {
-              db.prepare('UPDATE customers SET cashback_saldo=cashback_saldo+? WHERE id=?').run(credito, cust.id)
-              const novoSaldo = parseFloat(((cust.cashback_saldo||0) + credito).toFixed(2))
+              db.prepare('UPDATE customers SET cashback_saldo=COALESCE(cashback_saldo,0)+? WHERE id=?').run(credito, cust.id)
+              // Lê saldo real após o UPDATE pra evitar race condition
+              const updated  = db.prepare('SELECT cashback_saldo FROM customers WHERE id=?').get(cust.id)
+              const novoSaldo = parseFloat(parseFloat(updated?.cashback_saldo||0).toFixed(2))
               // WA cashback
               const cbAuto = auto['cashback'] || {}
               if (cbAuto.on !== false) {
@@ -1427,7 +1433,12 @@ async function handleOrderStatus(req, res) {
                 setImmediate(async () => { try { await sendWA(order.phone, msgFinal, inst) } catch(e) {} })
               }
             } else {
-              db.prepare('INSERT OR IGNORE INTO customers (tenant_id,name,phone,cashback_saldo) VALUES (?,?,?,?)').run(tid, order.client||order.phone, order.phone, credito)
+              // Cliente não existe — cria com o crédito inicial.
+              // Antes era INSERT OR IGNORE: se já existisse com mesmo phone exato (mas
+              // com outro formato como sufixo), o crédito sumia. Agora UPSERT garante.
+              db.prepare(`INSERT INTO customers (tenant_id,name,phone,cashback_saldo) VALUES (?,?,?,?)
+                          ON CONFLICT(tenant_id,phone) DO UPDATE SET cashback_saldo=COALESCE(cashback_saldo,0)+excluded.cashback_saldo`)
+                .run(tid, order.client||order.phone, phoneClean, credito)
               const cbAuto = auto['cashback'] || {}
               if (cbAuto.on !== false) {
                 const lojaB2  = cfg?.store_name || 'Restaurante'
@@ -1445,8 +1456,20 @@ async function handleOrderStatus(req, res) {
         const fidCfg  = (() => { try { return JSON.parse(cfg?.fid_config||'{}') } catch { return {} } })()
         const ptsPorReal = parseFloat(fidCfg.pts_por_real || 10)
         if (ptsPorReal > 0 && order.phone) {
-          const phone8 = order.phone.replace(/\D/g,'').slice(-8)
-          const fid    = db.prepare('SELECT id, pts, max_pts, name FROM fidelidade WHERE tenant_id=? AND phone LIKE ?').get(tid, `%${phone8}%`)
+          const phoneClean = order.phone.replace(/\D/g,'')
+          const phone8 = phoneClean.slice(-8)
+          let fid = db.prepare("SELECT id, pts, max_pts, name FROM fidelidade WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ?").get(tid, phone8)
+          // Se cliente nunca foi cadastrado em fidelidade, cria agora pra que possa pontuar.
+          // Antes: pedido sem login no cardápio nunca pontuava porque ninguém criava o registro.
+          if (!fid) {
+            const meta = parseInt(fidCfg.meta_pts || 500)
+            const insRes = db.prepare('INSERT OR IGNORE INTO fidelidade (tenant_id,name,phone,pts,max_pts,orders_count,resgates) VALUES (?,?,?,0,?,0,0)')
+              .run(tid, order.client || phoneClean, phoneClean, meta)
+            if (insRes.changes > 0) {
+              log('⭐', `Fidelidade: criado automaticamente para ${order.phone} (sem cadastro prévio)`)
+            }
+            fid = db.prepare("SELECT id, pts, max_pts, name FROM fidelidade WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ?").get(tid, phone8)
+          }
           if (fid) {
             const totalVal  = parseFloat(order.total||0) + parseFloat(order.taxa||0)
             const ptosGanhos = Math.floor(totalVal * ptsPorReal)
@@ -1470,11 +1493,51 @@ async function handleOrderStatus(req, res) {
         // ── Cartão Fidelidade (Carimbinho) ─────────────
         const stampCfg = (() => { try { return JSON.parse(cfg?.stamp_config||'{}') } catch { return {} } })()
         if (stampCfg.ativo && order.phone) {
-          const phone8s = order.phone.replace(/\D/g,'').slice(-8)
+          const phoneCleanS = order.phone.replace(/\D/g,'')
           db.prepare(`INSERT INTO stamp_progress (tenant_id,phone,compras,ultimo_resgate)
             VALUES (?,?,1,0) ON CONFLICT(tenant_id,phone) DO UPDATE SET compras=compras+1`)
-            .run(tid, order.phone.replace(/\D/g,''))
+            .run(tid, phoneCleanS)
           log('🃏', `Carimbinho +1 → ${order.phone} (pedido #${order_id})`)
+
+          // Notificação WhatsApp do carimbinho — antes não havia.
+          // Lê o progresso REAL após o UPDATE pra calcular carimbos restantes
+          // até a recompensa.
+          try {
+            const stAuto = auto['carimbinho'] || auto['stamp'] || {}
+            if (stAuto.on !== false) {
+              const prog = db.prepare('SELECT compras, ultimo_resgate FROM stamp_progress WHERE tenant_id=? AND phone=?').get(tid, phoneCleanS)
+              const compras       = prog?.compras || 0
+              const ultimoResgate = prog?.ultimo_resgate || 0
+              const desdeResgate  = compras - ultimoResgate
+              const meta          = parseInt(stampCfg.meta_compras || 10)
+              const faltam        = Math.max(0, meta - desdeResgate)
+              const elegivel      = desdeResgate >= meta
+              // Texto da recompensa (se atingiu a meta)
+              let recompensaTxt = '🎁 sua recompensa'
+              const tipoR = stampCfg.recompensa_tipo || 'pedido_gratis'
+              const valR  = parseFloat(stampCfg.recompensa_valor || 0)
+              if (tipoR === 'pedido_gratis')      recompensaTxt = '🎁 *um pedido grátis*'
+              else if (tipoR === 'frete_gratis')  recompensaTxt = '🚚 *frete grátis*'
+              else if (tipoR === 'percent' && valR > 0) recompensaTxt = `🏷️ *${valR.toFixed(0).replace('.0','')}% de desconto*`
+              else if (tipoR === 'fixo' && valR > 0)    recompensaTxt = `💵 *R$ ${valR.toFixed(2).replace('.',',')} de desconto*`
+              // Visual dos carimbos: ● (cheio) ○ (vazio) limitado a 10 pra ficar legível no WA
+              const limite = Math.min(meta, 10)
+              const propCheios = Math.min(limite, Math.round((desdeResgate / meta) * limite))
+              const carimbos   = '● '.repeat(propCheios).trim() + (propCheios < limite ? ' ' + '○ '.repeat(limite - propCheios).trim() : '')
+              const lojaSt = cfg?.store_name || 'Restaurante'
+              const msgPadrao = elegivel
+                ? `🏪 *${lojaSt}*\n${'-'.repeat(20)}\n\n🎉 *Parabéns, ${nome}!*\n\nVocê completou seu cartão fidelidade!\n\n${carimbos}\n\nGanhou ${recompensaTxt}!\n\nÉ só pedir no próximo pedido que aplicamos automaticamente. 😋`
+                : `🏪 *${lojaSt}*\n${'-'.repeat(20)}\n\n🃏 *Carimbo conquistado!*\n\nOlá, *${nome}*! Mais um carimbo no seu cartão fidelidade:\n\n${carimbos}\n\n${desdeResgate}/${meta} carimbos\n⏳ Faltam *${faltam}* para ganhar ${recompensaTxt}!\n\n_Continua comprando com a gente! 💚_`
+              const msgFinal  = stAuto.on && stAuto.msg ? fillVars(stAuto.msg, {
+                nome,
+                carimbos: String(desdeResgate),
+                meta: String(meta),
+                faltam: String(faltam),
+                recompensa: recompensaTxt.replace(/\*/g, '')
+              }) : msgPadrao
+              setImmediate(async () => { try { await sendWA(order.phone, msgFinal, inst) } catch(e) {} })
+            }
+          } catch(stErr) { log('⚠️', 'Notif carimbinho erro:', stErr.message) }
         }
       } catch(cbErr) { log('⚠️', 'Cashback/Fidelidade/Stamp erro:', cbErr.message) }
     }
@@ -2030,6 +2093,63 @@ const server = http.createServer(async (req,res) => {
     } catch(e) { send(res, 500, { error: e.message }); return }
   }
 
+  // ── Cupom: validação server-side (anti-fraude) ──────────────
+  // Frontend valida e calcula desconto, mas pode ser burlado. Este endpoint
+  // (a) confirma que o cupom existe, está ativo, não expirado e tem usos disponíveis
+  // (b) decrementa uses_left atomicamente quando consume=true (chamado ao criar pedido)
+  // (c) retorna os dados oficiais (type, value, min_order) pra que o frontend recalcule
+  if (req.method === 'POST' && upath === '/api/cupom/validar') {
+    const tid  = req.headers['x-tenant-id'] || ''
+    const body = await readBody(req)
+    const code = (body.code || '').trim().toUpperCase()
+    const consume = !!body.consume
+    const subtotal = parseFloat(body.subtotal || 0)
+    if (!tid || !code) { send(res, 400, { ok:false, error:'tenant_id e code obrigatórios' }); return }
+    try {
+      const cup = db.prepare(`SELECT id, code, type, value, min_order, uses_left, ativo, expires_at FROM cupons
+        WHERE tenant_id=? AND UPPER(code)=? AND ativo=1`).get(tid, code)
+      if (!cup) { send(res, 200, { ok:false, error:'Cupom inválido' }); return }
+      // Expiração
+      if (cup.expires_at && String(cup.expires_at).trim()) {
+        const exp = new Date(String(cup.expires_at).replace(' ', 'T') + (String(cup.expires_at).includes('Z') ? '' : 'Z'))
+        if (!isNaN(exp.getTime()) && exp.getTime() < Date.now()) {
+          send(res, 200, { ok:false, error:'Cupom expirado' }); return
+        }
+      }
+      // Pedido mínimo
+      if (cup.min_order && subtotal && subtotal < parseFloat(cup.min_order)) {
+        send(res, 200, { ok:false, error:`Pedido mínimo de R$ ${parseFloat(cup.min_order).toFixed(2)}`, min_order: parseFloat(cup.min_order) }); return
+      }
+      // Usos disponíveis
+      const usesLeft = (cup.uses_left === null || cup.uses_left === undefined) ? -1 : parseInt(cup.uses_left)
+      if (usesLeft !== -1 && usesLeft <= 0) {
+        send(res, 200, { ok:false, error:'Cupom esgotado' }); return
+      }
+      // Se for pra consumir, decrementa atomicamente (só se ainda houver usos)
+      if (consume && usesLeft !== -1) {
+        const upd = db.prepare('UPDATE cupons SET uses_left=uses_left-1 WHERE id=? AND tenant_id=? AND uses_left>0').run(cup.id, tid)
+        if (upd.changes === 0) {
+          // Outro pedido consumiu o último uso entre o SELECT e o UPDATE
+          send(res, 200, { ok:false, error:'Cupom esgotado' }); return
+        }
+        marcarDirty()
+        log('🎟️', `Cupom ${cup.code} usado (tenant=${tid}, restam ${usesLeft - 1})`)
+      }
+      send(res, 200, {
+        ok: true,
+        code: cup.code,
+        type: cup.type,
+        value: parseFloat(cup.value || 0),
+        min_order: parseFloat(cup.min_order || 0),
+        uses_left: usesLeft === -1 ? -1 : (consume ? usesLeft - 1 : usesLeft)
+      })
+      return
+    } catch(e) {
+      log('❌', '/api/cupom/validar erro:', e.message)
+      send(res, 500, { ok:false, error:'Erro interno' }); return
+    }
+  }
+
   // ── Rotas especiais — todas em routes.js ───────────────────────────────────
   const _routeCtx = { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
     validarSessaoAdmin, criarSessaoAdmin, fazerBackup, restaurarBackup, getTenantId,
@@ -2045,7 +2165,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/exportar-relatorio'])
+  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/exportar-relatorio'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return
