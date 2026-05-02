@@ -220,6 +220,24 @@ function _renderImGruposNow(item) {
   // ── Modo kit ─────────────────────────────────────────────
   if (_isKitItem(item)) {
     _renderKitGrupos(item, wrap, grupos);
+    // Após os chips informativos do kit, anexa também os grupos de customização
+    // (ex: "TEMPERADO", "ACOMPANHAMENTOS") que o gestor cadastrou. Antes ficavam
+    // invisíveis no kit — cliente não conseguia selecionar e a comanda saía
+    // sem os adicionais escolhidos.
+    const _KIT_INFO_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
+    const genericGruposKit = grupos.filter(g => !_KIT_INFO_TIPOS.includes(g.tipo));
+    if (genericGruposKit.length) {
+      // Reaproveita o mesmo HTML do modo normal abaixo — em vez de duplicar,
+      // chamamos uma função interna que renderiza os grupos no formato padrão
+      // e acrescenta no DOM existente do wrap.
+      const extraHtml = _renderGenericGruposHtml(genericGruposKit);
+      if (extraHtml) {
+        const sep = document.createElement('div');
+        sep.innerHTML = extraHtml;
+        // Anexa no fim do wrap sem apagar os chips informativos já renderizados
+        while (sep.firstChild) wrap.appendChild(sep.firstChild);
+      }
+    }
     return;
   }
 
@@ -234,7 +252,17 @@ function _renderImGruposNow(item) {
   // eles ficam ocultos até o tamanho ser selecionado
   const _bordaTamRegex = /^(.+)\s*\((P|M|G)\)\s*$/i;
 
-  wrap.innerHTML = genericGrupos.map(g => {
+  wrap.innerHTML = _renderGenericGruposHtml(genericGrupos);
+}
+
+// Gera o HTML dos grupos de customização genéricos (Adicionais, Temperos,
+// Acompanhamentos, Borda etc). Extraído pra ser reaproveitado tanto no fluxo
+// normal quanto no modo kit (onde antes esses grupos nem apareciam).
+function _renderGenericGruposHtml(genericGrupos) {
+  if (!genericGrupos || !genericGrupos.length) return '';
+  const _bordaTamRegex = /^(.+)\s*\((P|M|G)\)\s*$/i;
+
+  return genericGrupos.map(g => {
     const isRequired = g.required === true;
     const badge = isRequired
       ? `<span class="grp-required-badge">Obrigatório</span>`
@@ -271,7 +299,6 @@ function _renderImGruposNow(item) {
     if (bordaMatch) {
       const bordaNomeBase = bordaMatch[1].trim();
       const bordaTam = bordaMatch[2].toUpperCase();
-      // Renderiza com data attributes e oculto por padrão
       return `<div class="grp-section" data-borda-tamanho="${bordaTam}" data-borda-grupo="${_escape(g.nome)}" style="display:none">
         <div class="grp-section-title">${bordaNomeBase} ${badge}</div>
         <div class="grp-opts">${optsHtml}</div>
