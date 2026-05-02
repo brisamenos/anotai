@@ -1513,7 +1513,9 @@ function openGarcomMesa(num) {
   garcomMesa = num; garcomCart = [];
   document.getElementById('garcom-mesa-num').textContent = num;
   const gg = document.getElementById('garcom-item-grid');
-  gg.innerHTML = items.filter(i => i.status === 'active').map(i => {
+
+  // ── Renderiza um cartão de item (mesmo HTML de antes, extraído pra reuso) ──
+  const _renderCard = (i) => {
     const isPizza = i.itemType === 'pizza';
     const isKg    = i.itemType === 'kg';
     const hasAdd  = Array.isArray(i.customGroups) && i.customGroups.length > 0;
@@ -1530,7 +1532,49 @@ function openGarcomMesa(num) {
       <div style="font-size:10.5px;color:var(--accent)">R$ ${i.price.toFixed(2).replace('.', ',')}</div>
       ${badge}
     </div>`;
-  }).join('');
+  };
+
+  const ativos = items.filter(i => i.status === 'active');
+
+  // ── Agrupa itens por categoria respeitando a ordem do gestor (sort_order) ──
+  // Antes: tudo aparecia num grid único, sem separação. Agora cada categoria
+  // vira uma seção com cabeçalho, na ordem definida em /Cardápio/Categorias.
+  // O CSS do grid (#garcom-item-grid) provavelmente é display:grid, então
+  // pra ter cabeçalho ocupando linha inteira usamos grid-column: 1/-1.
+  const cats = Array.isArray(categories) ? categories : [];
+  const semCat = [];
+  const usados = new Set();
+  const blocos = [];
+
+  for (const c of cats) {
+    const itensCat = ativos.filter(i =>
+      i.cat === c.name || i.catKey === c.name ||
+      i.cat === c.label || i.catKey === c.label
+    );
+    if (!itensCat.length) continue;
+    itensCat.forEach(i => usados.add(i.id));
+    const titulo = c.label || c.name;
+    blocos.push(
+      `<div style="grid-column:1/-1;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;padding:8px 2px 4px;border-bottom:1px dashed var(--border);margin-top:6px">${titulo}</div>` +
+      itensCat.map(_renderCard).join('')
+    );
+  }
+
+  // Itens sem categoria (ou com cat que não bateu com nenhuma categoria conhecida)
+  // vão pra um bloco "Outros" no fim, pra não desaparecer da tela.
+  ativos.forEach(i => {
+    if (!usados.has(i.id)) semCat.push(i);
+  });
+  if (semCat.length) {
+    blocos.push(
+      `<div style="grid-column:1/-1;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;padding:8px 2px 4px;border-bottom:1px dashed var(--border);margin-top:6px">Outros</div>` +
+      semCat.map(_renderCard).join('')
+    );
+  }
+
+  // Se não houver categorias cadastradas (config antiga), cai no comportamento
+  // antigo de mostrar tudo num grid único — sem cabeçalho mas funcional.
+  gg.innerHTML = blocos.length ? blocos.join('') : ativos.map(_renderCard).join('');
   document.getElementById('garcom-cart-preview').textContent = 'Nenhum item selecionado';
   openModal('modal-garcom-mesa');
 }
