@@ -99,15 +99,17 @@ function _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN_ENV) {
                 && pedAtual?.pag !== 'pix_mp' && pedAtual?.pag !== 'cartao_mp'
 
               if (eraAguardando || podeRessurreicao) {
-                db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, tenantId)
+                // PIX online confirmado pelo MP → entra direto em produção (pula análise)
+                // O pagamento já foi validado, não precisa de aceite manual.
+                db.prepare("UPDATE orders SET status='producao', pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, tenantId)
                 if (podeRessurreicao) log('🔄', `PEDIDO RESSUSCITADO (recovery): pagamento PIX chegou após cancelamento — id=${row.order_id} tenant=${tenantId}`)
                 const pedFull = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(row.order_id, tenantId)
                 const items   = pedFull && typeof pedFull.items === 'string'
                   ? (() => { try { return JSON.parse(pedFull.items) } catch { return [] } })()
                   : (pedFull?.items || [])
                 sseBroadcast(`orders-rt:${tenantId}`, 'orders:UPDATE',
-                  pedFull ? { ...pedFull, items, status: 'analise', pag: 'pix_mp' }
-                          : { id: row.order_id, status: 'analise', pag: 'pix_mp' })
+                  pedFull ? { ...pedFull, items, status: 'producao', pag: 'pix_mp', _pixOnlineConfirmado: true }
+                          : { id: row.order_id, status: 'producao', pag: 'pix_mp', _pixOnlineConfirmado: true })
                 liberados++
               }
             } else if (pd.status === 'rejected' || pd.status === 'cancelled') {
@@ -772,7 +774,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
       try {
         const body = await readBody(req)
         if (!body?.tabelas) { send(res, 400, { error: 'JSON inválido (falta "tabelas")' }); return true }
-        const TABS = ['tenants', 'sys_users', 'store_config', 'categories', 'menu_items', 'cupons', 'mesas', 'garcons', 'orders', 'movimentos', 'estoque', 'fidelidade', 'customers', 'ratings']
+        // Lista deve casar com a do backup pra que o restore consiga restaurar tudo.
+        // Antes faltavam pagamentos_pix, saques, pagamentos_cartao e stamp_progress —
+        // se o backup tivesse essas tabelas, eram silenciosamente descartadas no restore.
+        const TABS = ['tenants', 'sys_users', 'store_config', 'categories', 'menu_items', 'cupons', 'mesas', 'garcons', 'orders', 'movimentos', 'estoque', 'fidelidade', 'customers', 'pagamentos_pix', 'saques', 'pagamentos_cartao', 'stamp_progress', 'ratings']
         let totalOk = 0, totalFail = 0
         for (const t of TABS) {
           const rows = body.tabelas?.[t]; if (!rows?.length) continue
@@ -794,6 +799,149 @@ module.exports = async function handleRoutes(req, res, ctx) {
         marcarDirty(); setTimeout(() => fazerBackup(true), 2000)
         send(res, 200, { ok: true, registros: totalOk, registros_ignorados: totalFail, imagens: imgOk, imagens_falha: imgFail, ts: body.ts || null })
       } catch (e) { send(res, 400, { error: 'Erro ao restaurar: ' + e.message }) }
+      return true
+    }
+
+    // ── Backup GLOBAL completo COM IMAGENS (todos os tenants + sys_users + uploads) ──
+    // Gera snapshot in-memory de todas as tabelas + base64 de cada arquivo de imagem
+    // referenciado em menu_items.image_url e store_config.{store_logo_url, store_banner_url}.
+    // Comprime com gzip pra reduzir tráfego (backup pode passar de 50MB sem compressão).
+    if (req.method === 'GET' && upath === '/api/admin-backup-global-imagens') {
+      try {
+        const TABS = ['tenants','sys_users','store_config','categories','menu_items','cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress','ratings']
+        const snapshot = { ts: new Date().toISOString(), tipo: 'global', tabelas: {}, imagens: {} }
+        let totalRegs = 0
+        for (const t of TABS) {
+          try {
+            const rows = db.prepare(`SELECT * FROM "${t}"`).all()
+            // Não filtra campos grandes aqui (ao contrário do backup interno),
+            // pra que o restore consiga recuperar ia_config, evo_automacoes etc.
+            snapshot.tabelas[t] = rows
+            totalRegs += rows.length
+          } catch (e) {
+            log('⚠️', `Backup global: falha em ${t}: ${e.message}`)
+            snapshot.tabelas[t] = []
+          }
+        }
+
+        // Coleta nomes de imagens referenciadas em menu_items e store_config
+        const imageUrls = new Set()
+        for (const item of (snapshot.tabelas.menu_items || [])) {
+          if (item.image_url) imageUrls.add(item.image_url)
+        }
+        for (const cfg of (snapshot.tabelas.store_config || [])) {
+          if (cfg.store_logo_url)   imageUrls.add(cfg.store_logo_url)
+          if (cfg.store_banner_url) imageUrls.add(cfg.store_banner_url)
+        }
+
+        let imgOk = 0, imgFail = 0
+        for (const url of imageUrls) {
+          try {
+            // Aceita tanto URL absoluta quanto path relativo — extrai só o nome do arquivo
+            const fname = path.basename(url.split('?')[0])
+            const fpath = path.join(UPLOADS_DIR, fname)
+            if (fs.existsSync(fpath)) {
+              const buf  = fs.readFileSync(fpath)
+              const ext  = (path.extname(fname).slice(1) || 'jpeg').toLowerCase()
+              const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : ext === 'svg' ? 'image/svg+xml' : 'image/jpeg'
+              snapshot.imagens[fname] = { mime, data: buf.toString('base64') }
+              imgOk++
+            } else {
+              imgFail++
+            }
+          } catch (e) {
+            imgFail++
+            log('⚠️', `Backup img falhou: ${e.message}`)
+          }
+        }
+
+        const json = JSON.stringify(snapshot)
+        // Gzip pra comprimir — backup grande
+        zlib.gzip(json, (err, buf) => {
+          if (err) {
+            send(res, 500, { error: 'Falha ao comprimir backup: ' + err.message })
+            return
+          }
+          const fname = `backup-global-${new Date().toISOString().slice(0,10)}.json.gz`
+          res.writeHead(200, {
+            'Content-Type':        'application/gzip',
+            'Content-Disposition': `attachment; filename="${fname}"`,
+            'Content-Length':       buf.length,
+          })
+          res.end(buf)
+          log('💾', `Backup global gerado: ${totalRegs} registros, ${imgOk} imagens (${imgFail} falhas), ${(buf.length/1024).toFixed(1)} KB`)
+        })
+      } catch (e) {
+        log('❌', 'Erro backup global:', e.message)
+        send(res, 500, { error: 'Erro ao gerar backup: ' + e.message })
+      }
+      return true
+    }
+
+    // ── Backup de UM tenant específico (dados + imagens) ──
+    // Útil pra suporte: gerar backup de um cliente específico antes de mexer.
+    if (req.method === 'GET' && upath === '/api/admin-backup-tenant') {
+      const tid = params.get('tenant_id')
+      if (!tid) { send(res, 400, { error: 'tenant_id obrigatório' }); return true }
+      try {
+        const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tid)
+        if (!tenant) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
+        // Tabelas que têm tenant_id (todas exceto a tabela tenants em si)
+        const TABS = ['sys_users','store_config','categories','menu_items','cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress','ratings']
+        const snapshot = {
+          ts: new Date().toISOString(),
+          tipo: 'tenant',
+          tenant_id: tid,
+          tenant_nome: tenant.nome,
+          tabelas: { tenants: [tenant] },
+          imagens: {}
+        }
+        let totalRegs = 1
+        for (const t of TABS) {
+          try {
+            const rows = db.prepare(`SELECT * FROM "${t}" WHERE tenant_id=?`).all(tid)
+            snapshot.tabelas[t] = rows
+            totalRegs += rows.length
+          } catch (e) {
+            snapshot.tabelas[t] = []
+          }
+        }
+        // Coleta imagens referenciadas SOMENTE pelo tenant
+        const imageUrls = new Set()
+        for (const item of (snapshot.tabelas.menu_items || [])) {
+          if (item.image_url) imageUrls.add(item.image_url)
+        }
+        for (const cfg of (snapshot.tabelas.store_config || [])) {
+          if (cfg.store_logo_url)   imageUrls.add(cfg.store_logo_url)
+          if (cfg.store_banner_url) imageUrls.add(cfg.store_banner_url)
+        }
+        let imgOk = 0
+        for (const url of imageUrls) {
+          try {
+            const fname = path.basename(url.split('?')[0])
+            const fpath = path.join(UPLOADS_DIR, fname)
+            if (fs.existsSync(fpath)) {
+              const buf  = fs.readFileSync(fpath)
+              const ext  = (path.extname(fname).slice(1) || 'jpeg').toLowerCase()
+              const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : ext === 'svg' ? 'image/svg+xml' : 'image/jpeg'
+              snapshot.imagens[fname] = { mime, data: buf.toString('base64') }
+              imgOk++
+            }
+          } catch {}
+        }
+        const json  = JSON.stringify(snapshot)
+        const fname = `backup-${tenant.slug || tid}-${new Date().toISOString().slice(0,10)}.json`
+        res.writeHead(200, {
+          'Content-Type':        'application/json',
+          'Content-Disposition': `attachment; filename="${fname}"`,
+          'Content-Length':      Buffer.byteLength(json),
+        })
+        res.end(json)
+        log('💾', `Backup tenant ${tenant.slug||tid}: ${totalRegs} regs, ${imgOk} imgs`)
+      } catch (e) {
+        log('❌', 'Erro backup tenant:', e.message)
+        send(res, 500, { error: 'Erro ao gerar backup: ' + e.message })
+      }
       return true
     }
 
@@ -1021,10 +1169,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
         if (eraAguardando || podeRessurreicao) {
           log('✅', `PIX APROVADO (poll): R$${rowAtual.valor} tenant=${rowAtual.tenant_id}${podeRessurreicao ? ' — pedido ressuscitado' : ''}`)
           marcarDirty()
-          db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=? AND tenant_id=?").run(rowAtual.order_id, rowAtual.tenant_id)
+          // PIX online confirmado pelo MP → entra direto em produção (pula análise)
+          // O pagamento já foi validado, não precisa de aceite manual.
+          db.prepare("UPDATE orders SET status='producao', pag='pix_mp' WHERE id=? AND tenant_id=?").run(rowAtual.order_id, rowAtual.tenant_id)
           const _fo1 = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(rowAtual.order_id, rowAtual.tenant_id)
           const _it1 = _fo1 && typeof _fo1.items==='string' ? (() => { try{return JSON.parse(_fo1.items)}catch{return []} })() : (_fo1?.items||[])
-          sseBroadcast(`orders-rt:${rowAtual.tenant_id}`, `orders:UPDATE`, _fo1 ? {..._fo1, items:_it1, status:'analise', pag:'pix_mp'} : { id: rowAtual.order_id, status: 'analise', pag: 'pix_mp' })
+          sseBroadcast(`orders-rt:${rowAtual.tenant_id}`, `orders:UPDATE`, _fo1 ? {..._fo1, items:_it1, status:'producao', pag:'pix_mp', _pixOnlineConfirmado: true} : { id: rowAtual.order_id, status: 'producao', pag: 'pix_mp', _pixOnlineConfirmado: true })
           _notificarPixConfirmado(rowAtual.tenant_id, _fo1, sendWA, fillVars, EVO_INST, db)
         }
       }
@@ -1154,15 +1304,18 @@ module.exports = async function handleRoutes(req, res, ctx) {
               && pedAtual?.pag !== 'pix_mp' && pedAtual?.pag !== 'cartao_mp'
 
             if (eraAguardando || podeRessurreicao) {
-              db.prepare("UPDATE orders SET status='analise', pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, row.tenant_id)
+              // PIX online confirmado pelo MP → entra direto em produção (pula análise)
+              // O pagamento já foi validado pelo Mercado Pago, não precisa de aceite manual.
+              db.prepare("UPDATE orders SET status='producao', pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, row.tenant_id)
               if (podeRessurreicao) log('🔄', `PEDIDO RESSUSCITADO (webhook): pagamento PIX chegou após cancelamento — id=${row.order_id} tenant=${row.tenant_id}`)
             } else if (pedAtual) {
               db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, row.tenant_id)
             }
-            const _ns4 = (eraAguardando || podeRessurreicao) ? 'analise' : pedAtual?.status
+            const _ns4 = (eraAguardando || podeRessurreicao) ? 'producao' : pedAtual?.status
             const _fo4 = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(row.order_id, row.tenant_id)
             const _it4 = _fo4 && typeof _fo4.items==='string' ? (() => { try{return JSON.parse(_fo4.items)}catch{return []} })() : (_fo4?.items||[])
-            sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, _fo4 ? {..._fo4, items:_it4, status:_ns4, pag:'pix_mp'} : { id: row.order_id, status: _ns4, pag: 'pix_mp' })
+            // Marca _pixOnlineConfirmado para o frontend reconhecer e imprimir automático
+            sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, _fo4 ? {..._fo4, items:_it4, status:_ns4, pag:'pix_mp', _pixOnlineConfirmado: (eraAguardando || podeRessurreicao)} : { id: row.order_id, status: _ns4, pag: 'pix_mp', _pixOnlineConfirmado: (eraAguardando || podeRessurreicao) })
             // Notifica cliente: pagamento PIX confirmado
             if (eraAguardando || podeRessurreicao) _notificarPixConfirmado(row.tenant_id, _fo4, sendWA, fillVars, EVO_INST, db)
           }
