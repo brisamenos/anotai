@@ -2285,7 +2285,7 @@ setTimeout(() => {
 // ─────────────────────────────────────────
 window._printMode  = localStorage.getItem('printMode')     || 'auto';
 let _printMode     = window._printMode;
-let _printFontSize = 15; // valor restaurado do servidor via loadPrintConfigServer()
+let _printFontSize = 13; // valor restaurado do servidor via loadPrintConfigServer()
 let _printTarget   = localStorage.getItem('printTarget')   || 'server';
 let _printPrinter  = localStorage.getItem('printPrinter')  || '';
 let _printPrinterCozinha = localStorage.getItem('printPrinterCozinha') || '';
@@ -2387,7 +2387,7 @@ function setPrintMode(mode) {
 
 function _getPrintConfig() {
   const fsEl = document.getElementById('print-font-size');
-  const fs = (fsEl && fsEl.value) ? parseInt(fsEl.value) : (_printFontSize || 12);
+  const fs = (fsEl && fsEl.value) ? parseInt(fsEl.value) : (_printFontSize || 13);
   const nomeEl = document.getElementById('print-nome');
   const nome = ((nomeEl && nomeEl.value) ? nomeEl.value : _printNome || 'RESTAURANTE').toUpperCase();
   const subEl = document.getElementById('print-sub');
@@ -2417,7 +2417,7 @@ function _getPrintConfig() {
 // Envolve fragmento HTML do ticket com CSS completo para impressão (usado no Electron e fallbacks)
 function _wrapTicketHtml(html, fontSize) {
   if (html && html.includes('<html')) return html;
-  const fs = fontSize || 12;
+  const fs = fontSize || 13;
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important }
@@ -2630,23 +2630,49 @@ function _buildTicketHtml(order, cfg) {
   // ── Renderiza um item do pedido (estilo Anota: "(qty) nome    R$ x") ──
   const renderItem = (i) => {
     const qtyPrefix = `(${i.qty||1})`;
-    const nome  = i.name;
     const preco = money((i.price||0) * (i.qty||1));
     const parsed = _parseObs(i.obs);
     let kitHtml = '';
     let extrasHtml = '';
+
+    // Pizza meio a meio: detecta tanto pelo nome (formato "Sabor1 / Sabor2")
+    // quanto pelo prefixo "Meio a meio" na obs. Quebra em linhas separadas
+    // para a cozinha não ter que decifrar nome e obs ao mesmo tempo.
+    let nome = i.name;
+    let meioHtml = '';
+    const nomeContemBarra = / \/ /.test(i.name);
+    if (nomeContemBarra && (parsed.meioMeio || /^meio a meio/i.test(i.obs||''))) {
+      const sabores = i.name.split(' / ').map(s => s.trim()).filter(Boolean);
+      if (sabores.length === 2) {
+        nome = 'Pizza meio a meio';
+        meioHtml = H(
+          D('padding-left:18px;font-size:0.95em;font-weight:bold', '½ ' + sabores[0]),
+          D('padding-left:18px;font-size:0.95em;font-weight:bold', '½ ' + sabores[1])
+        );
+      } else {
+        // Mais de 2 sabores (improvável) — lista um por linha
+        nome = 'Pizza ' + (sabores.length === 1 ? 'inteira' : (sabores.length + ' sabores'));
+        meioHtml = sabores.map(s =>
+          D('padding-left:18px;font-size:0.95em;font-weight:bold', '½ ' + s)
+        ).join('');
+      }
+    } else if (parsed.meioMeio) {
+      // Caso legado: obs "Meio a meio · sabor1 + sabor2" sem barra no nome
+      const sabores = parsed.meioMeio.split(/\s*\+\s*/).map(s => s.trim()).filter(Boolean);
+      if (sabores.length >= 2) {
+        meioHtml = sabores.map(s =>
+          D('padding-left:18px;font-size:0.95em;font-weight:bold', '½ ' + s)
+        ).join('');
+      } else {
+        meioHtml = D('padding-left:18px;font-size:0.95em;font-weight:bold', '½ + ½ ' + parsed.meioMeio);
+      }
+    }
 
     // Kit: sub-itens com indentação maior (estilo "(1) sub-item")
     if (parsed.kitItens.length) {
       kitHtml = parsed.kitItens.map(k =>
         D('padding-left:18px;font-size:0.95em', `(1) ${k}`)
       ).join('');
-    }
-
-    // Pizza meio a meio
-    let meioHtml = '';
-    if (parsed.meioMeio) {
-      meioHtml = D('padding-left:18px;font-size:0.95em;font-weight:bold', '½ + ½ ' + parsed.meioMeio);
     }
 
     // Grupos (Adicionais, Ponto, Molhos…) — cada grupo numa linha com bullets
@@ -2678,7 +2704,33 @@ function _buildTicketHtml(order, cfg) {
       kitHtml + meioHtml + extrasHtml + obsLivreHtml);
   };
 
-  const itemLines = items.map(renderItem).join('');
+  // ── Agrupa itens por categoria ───────────────────────────
+  // Antes os itens vinham todos juntos sem distinção de categoria.
+  // Agora separamos em blocos por categoria com cabeçalho — mais fácil
+  // pra cozinha localizar o que tem que preparar de cada seção.
+  const _categHeader = (label) => D(
+    'font-weight:bold;font-size:0.95em;text-transform:uppercase;letter-spacing:0.5px;' +
+    'margin:6px 0 2px;padding:2px 0;border-bottom:1px dotted #555',
+    label
+  );
+  // Mantém a ordem original do pedido, mas agrupa visualmente por categoria.
+  const _itemsPorCategoria = [];
+  const _idxPorCat = new Map();
+  for (const it of items) {
+    const catLabel = (it.cat || it.cat_key || 'Outros').trim() || 'Outros';
+    if (!_idxPorCat.has(catLabel)) {
+      _idxPorCat.set(catLabel, _itemsPorCategoria.length);
+      _itemsPorCategoria.push({ cat: catLabel, items: [] });
+    }
+    _itemsPorCategoria[_idxPorCat.get(catLabel)].items.push(it);
+  }
+  // Se só há uma categoria, não vale a pena mostrar o cabeçalho duplicado
+  // (o SECTION('Itens') já cumpre o papel).
+  const _mostrarCabecalhoCateg = _itemsPorCategoria.length > 1;
+  const itemLines = _itemsPorCategoria.map(g => {
+    const cabec = _mostrarCabecalhoCateg ? _categHeader(g.cat) : '';
+    return cabec + g.items.map(renderItem).join('');
+  }).join('');
 
   // ── Totais ──────────────────────────────────────────────
   const subtotal   = items.reduce((s,i) => s + (parseFloat(i.price||0) * (i.qty||1)), 0);
@@ -2799,22 +2851,44 @@ function _buildTicketHtml(order, cfg) {
   // ══════════════════════════════════════════════════════
   let viaCozinha = '';
   if (itensCozinha.length > 0) {
-    const itensCozHtml = itensCozinha.map(i => {
-      const nome   = (i.qty + 'x ' + i.name).toUpperCase();
+    const renderItemCoz = (i) => {
       const parsed = _parseObs(i.obs);
-      let detalhesHtml = '';
+      // Mesma lógica do renderItem da via principal: detecta meio a meio
+      // pelo nome ou pela obs e quebra em linhas separadas — facilita pra
+      // cozinha visualizar quais sabores precisam ser feitos.
+      let nome = i.name;
+      let meioHtml = '';
+      const nomeContemBarra = / \/ /.test(i.name);
+      if (nomeContemBarra && (parsed.meioMeio || /^meio a meio/i.test(i.obs||''))) {
+        const sabores = i.name.split(' / ').map(s => s.trim()).filter(Boolean);
+        if (sabores.length === 2) {
+          nome = 'PIZZA MEIO A MEIO';
+          meioHtml = D('padding-left:6px;font-size:1em;border-left:3px solid #444;margin:3px 0;font-weight:bold',
+            sabores.map(s => D('', '½ ' + s)).join(''));
+        } else {
+          nome = 'PIZZA ' + (sabores.length + ' SABORES');
+          meioHtml = D('padding-left:6px;font-size:1em;border-left:3px solid #444;margin:3px 0;font-weight:bold',
+            sabores.map(s => D('', '½ ' + s)).join(''));
+        }
+      } else if (parsed.meioMeio) {
+        const sabores = parsed.meioMeio.split(/\s*\+\s*/).map(s => s.trim()).filter(Boolean);
+        if (sabores.length >= 2) {
+          meioHtml = D('padding-left:6px;font-size:1em;border-left:3px solid #444;margin:3px 0;font-weight:bold',
+            sabores.map(s => D('', '½ ' + s)).join(''));
+        } else {
+          meioHtml = D('padding-left:6px;font-size:0.95em;border-left:3px solid #444;margin:3px 0;font-weight:bold',
+            '½ + ½ ' + parsed.meioMeio);
+        }
+      }
+
+      const nomeFinal = (i.qty + 'x ' + nome).toUpperCase();
+      let detalhesHtml = meioHtml;
 
       // Kit
       if (parsed.kitItens.length) {
         detalhesHtml += D('padding-left:6px;font-size:0.9em;border-left:3px solid #444;margin:3px 0',
           D('font-weight:bold', 'CONTÉM:') +
           parsed.kitItens.map(k => D('padding-left:6px', '• ' + k)).join(''));
-      }
-
-      // Meio a meio
-      if (parsed.meioMeio) {
-        detalhesHtml += D('padding-left:6px;font-size:0.95em;border-left:3px solid #444;margin:3px 0;font-weight:bold',
-          '½ + ½ ' + parsed.meioMeio);
       }
 
       // Grupos (Adicionais, Ponto, Molhos…) — destaque alto na cozinha
@@ -2835,7 +2909,30 @@ function _buildTicketHtml(order, cfg) {
       }
 
       return D('border-bottom:1px dotted #ddd;padding-bottom:4px;margin-bottom:4px',
-        D('font-weight:bold;font-size:1.05em;word-break:break-word', nome) + detalhesHtml);
+        D('font-weight:bold;font-size:1.05em;word-break:break-word', nomeFinal) + detalhesHtml);
+    };
+
+    // Agrupa por categoria também na cozinha — útil quando o pedido tem itens
+    // de seções diferentes (ex: pizza + sobremesa).
+    const _itensCozPorCat = [];
+    const _idxCozPorCat = new Map();
+    for (const it of itensCozinha) {
+      const catLabel = (it.cat || it.cat_key || 'Outros').trim() || 'Outros';
+      if (!_idxCozPorCat.has(catLabel)) {
+        _idxCozPorCat.set(catLabel, _itensCozPorCat.length);
+        _itensCozPorCat.push({ cat: catLabel, items: [] });
+      }
+      _itensCozPorCat[_idxCozPorCat.get(catLabel)].items.push(it);
+    }
+    const _mostrarCabCoz = _itensCozPorCat.length > 1;
+    const _catHeaderCoz = (label) => D(
+      'font-weight:bold;font-size:1em;text-transform:uppercase;letter-spacing:0.5px;' +
+      'margin:6px 0 3px;padding:3px 0;border-top:1px solid #000;border-bottom:1px solid #000;text-align:center',
+      label
+    );
+    const itensCozHtml = _itensCozPorCat.map(g => {
+      const cabec = _mostrarCabCoz ? _catHeaderCoz(g.cat) : '';
+      return cabec + g.items.map(renderItemCoz).join('');
     }).join('');
 
     viaCozinha = D('page-break-before:always', '') +
@@ -3134,24 +3231,63 @@ function _buildEscPos(order, cfg, cols = 32) {
   const items = (Array.isArray(order.items) ? order.items : [])
     .filter(i => (i?.item_status || 'active') !== 'cancelado');
   const maxNameLen = cols - 14;
-  items.forEach(i => {
+
+  // Agrupa por categoria pra dar contexto. Mantém ordem de inserção.
+  const _itensPorCatEsc = [];
+  const _idxCatEsc = new Map();
+  for (const it of items) {
+    const catLabel = (it.cat || it.cat_key || 'Outros').trim() || 'Outros';
+    if (!_idxCatEsc.has(catLabel)) {
+      _idxCatEsc.set(catLabel, _itensPorCatEsc.length);
+      _itensPorCatEsc.push({ cat: catLabel, items: [] });
+    }
+    _itensPorCatEsc[_idxCatEsc.get(catLabel)].items.push(it);
+  }
+  const _mostrarCabEsc = _itensPorCatEsc.length > 1;
+
+  const renderItemEsc = (i) => {
+    const parsed = _parseObs(i.obs);
+    // Pizza meio a meio: detecta pelo nome com "/" + obs "Meio a meio".
+    // Imprime cada sabor numa linha pra cozinha não confundir.
+    let nomeFinal = i.name;
+    let saboresMeio = null;
+    const nomeContemBarra = / \/ /.test(i.name);
+    if (nomeContemBarra && (parsed.meioMeio || /^meio a meio/i.test(i.obs||''))) {
+      const sabores = i.name.split(' / ').map(s => s.trim()).filter(Boolean);
+      if (sabores.length === 2) {
+        nomeFinal = 'Pizza meio a meio';
+        saboresMeio = sabores;
+      } else if (sabores.length > 0) {
+        nomeFinal = 'Pizza ' + sabores.length + ' sabores';
+        saboresMeio = sabores;
+      }
+    } else if (parsed.meioMeio) {
+      const sabores = parsed.meioMeio.split(/\s*\+\s*/).map(s => s.trim()).filter(Boolean);
+      if (sabores.length >= 2) saboresMeio = sabores;
+    }
+
     const qtyPrefix = `(${i.qty||1}) `;
-    const fullName  = (qtyPrefix + i.name).substring(0, maxNameLen);
+    const fullName  = (qtyPrefix + nomeFinal).substring(0, maxNameLen);
     const price = money((i.price || 0) * (i.qty || 1));
     push(cols2(fullName, price) + '\n');
 
-    const parsed = _parseObs(i.obs);
+    // Sabores meio a meio em linhas separadas (em negrito)
+    if (saboresMeio) {
+      bytes(0x1B, 0x45, 0x01);
+      saboresMeio.forEach(s => {
+        _wrapText('1/2 ' + s, cols, '    ').forEach(l => push(l + '\n'));
+      });
+      bytes(0x1B, 0x45, 0x00);
+    } else if (parsed.meioMeio) {
+      // Fallback: meioMeio sem split possível
+      _wrapText('1/2 + 1/2 ' + parsed.meioMeio, cols, '    ').forEach(l => push(l + '\n'));
+    }
 
     // Kit: sub-itens com (1) prefix
     if (parsed.kitItens.length) {
       parsed.kitItens.forEach(k => {
         _wrapText(k, cols, '    (1) ').forEach(l => push(l + '\n'));
       });
-    }
-
-    // Pizza meio a meio
-    if (parsed.meioMeio) {
-      _wrapText('1/2 + 1/2 ' + parsed.meioMeio, cols, '    ').forEach(l => push(l + '\n'));
     }
 
     // Grupos (Adicionais, Ponto, Molhos…)
@@ -3170,6 +3306,18 @@ function _buildEscPos(order, cfg, cols = 32) {
     if (parsed.obsLivre) {
       _wrapText(parsed.obsLivre, cols, '    * ').forEach(l => push(l + '\n'));
     }
+  };
+
+  _itensPorCatEsc.forEach(grupo => {
+    if (_mostrarCabEsc) {
+      // Cabeçalho de categoria centralizado em negrito
+      bytes(0x1B, 0x45, 0x01);
+      const label = grupo.cat.toUpperCase();
+      const pad = Math.max(0, Math.floor((cols - label.length) / 2));
+      push(' '.repeat(pad) + label + '\n');
+      bytes(0x1B, 0x45, 0x00);
+    }
+    grupo.items.forEach(renderItemEsc);
   });
   push(sep);
 
@@ -3388,7 +3536,7 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
   if (window.ElectronPrint) {
     try {
       const pw = fmt === '58mm' ? 48 : 72;
-      const wrappedHtml = _wrapTicketHtml(html, cfg ? cfg.fontSize : 12);
+      const wrappedHtml = _wrapTicketHtml(html, cfg ? cfg.fontSize : 13);
 
       // Respeita o tipo do job para escolher a impressora correta
       // 'caixa' → printer_caixa | 'cozinha' → printer_cozinha | 'manual' → pergunta
@@ -3523,7 +3671,7 @@ function renderImpressao(skipServerLoad) {
       el('print-rodape', _printRodape);
       el('print-font-size', _printFontSize);
       const fv = document.getElementById('print-font-size-val');
-      if (fv) fv.textContent = _printFontSize || 12;
+      if (fv) fv.textContent = _printFontSize || 13;
       el('print-format-select', _printFormat || '80mm');
       const mhEl = document.getElementById('print-margin-h');
       if (mhEl) { mhEl.value = _printMarginH; document.getElementById('print-margin-h-val').textContent = _printMarginH; }
@@ -3705,7 +3853,7 @@ function _initModelos() {
       nome_estab: _printNome || 'RESTAURANTE',
       sub: _printSub || '',
       rodape: _printRodape || 'Obrigado!',
-      fontSize: _printFontSize || 12,
+      fontSize: _printFontSize || 13,
       showAddr: true,
       showPag: true,
     }));
@@ -3969,8 +4117,8 @@ function editarModelo(idx) {
   document.getElementById('mod-nome').value = m.nome_estab || _printNome || 'RESTAURANTE';
   document.getElementById('mod-sub').value = m.sub || _printSub || '';
   document.getElementById('mod-rodape').value = m.rodape || _printRodape || 'Obrigado!';
-  document.getElementById('mod-font-size').value = m.fontSize || 12;
-  document.getElementById('mod-font-val').textContent = m.fontSize || 12;
+  document.getElementById('mod-font-size').value = m.fontSize || 13;
+  document.getElementById('mod-font-val').textContent = m.fontSize || 13;
   const addrT = document.getElementById('mod-toggle-addr');
   if (addrT) { if (m.showAddr !== false) addrT.classList.add('on'); else addrT.classList.remove('on'); }
   const pagT = document.getElementById('mod-toggle-pag');
@@ -3988,7 +4136,7 @@ function editarModelo(idx) {
 function renderModeloPreview() {
   const p = document.getElementById('mod-preview'); if (!p) return;
   const largura = parseInt(document.getElementById('mod-largura')?.value || 32);
-  const fs = parseInt(document.getElementById('mod-font-size')?.value || 12);
+  const fs = parseInt(document.getElementById('mod-font-size')?.value || 13);
   const nome = (document.getElementById('mod-nome')?.value || 'RESTAURANTE').toUpperCase();
   const sub = document.getElementById('mod-sub')?.value || '';
   const rodape = document.getElementById('mod-rodape')?.value || 'Obrigado!';
@@ -4013,7 +4161,7 @@ function salvarModelo() {
   m.nome_estab = document.getElementById('mod-nome')?.value || 'RESTAURANTE';
   m.sub = document.getElementById('mod-sub')?.value || '';
   m.rodape = document.getElementById('mod-rodape')?.value || 'Obrigado!';
-  m.fontSize = parseInt(document.getElementById('mod-font-size')?.value || 12);
+  m.fontSize = parseInt(document.getElementById('mod-font-size')?.value || 13);
   m.showAddr = document.getElementById('mod-toggle-addr')?.classList.contains('on') ?? true;
   m.showPag = document.getElementById('mod-toggle-pag')?.classList.contains('on') ?? true;
   _printNome = m.nome_estab; localStorage.setItem('printNome', m.nome_estab);
