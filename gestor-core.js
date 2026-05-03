@@ -338,16 +338,24 @@ async function loadAllData(silent = false) {
 
 
     // Set orderIdSeq above DB max and init polling tracker
+    // Importante: usa Math.max com valor antigo persistido no localStorage
+    // pra não regressar se o storage tiver valor maior (gestor reabre depois
+    // de pedidos serem cancelados/finalizados — o maxId do kanban atual pode
+    // ser menor que o último ID que ele já viu antes de fechar).
     if (ordersKanban.length) {
       const maxId = Math.max(...ordersKanban.map(o=>o.id));
       orderIdSeq = maxId + 1;
-      _maxKnownOrderId = maxId;
+      _maxKnownOrderId = Math.max(_maxKnownOrderId, maxId);
+      _saveMaxKnownOrderId();
     } else {
       // Kanban vazio — inicializa _maxKnownOrderId com o último ID do banco
       // para o polling detectar novos pedidos do cardápio corretamente
       try {
         const { data: lastOrder } = await sb.from('orders').select('id').order('id', {ascending:false}).limit(1);
-        if (lastOrder?.[0]?.id) _maxKnownOrderId = Number(lastOrder[0].id);
+        if (lastOrder?.[0]?.id) {
+          _maxKnownOrderId = Math.max(_maxKnownOrderId, Number(lastOrder[0].id));
+          _saveMaxKnownOrderId();
+        }
       } catch(e) { console.warn('[gestor-core] silent error:', e?.message || e); }
     }
 
@@ -739,7 +747,7 @@ function subscribeOrders() {
         const _mapped = mapOrder(p.new);
         if (_mapped.status === 'aguardando_pix') _mapped._pixPendente = true;
         ordersKanban.unshift(_mapped);
-        if (p.new.id > _maxKnownOrderId) _maxKnownOrderId = p.new.id;
+        if (p.new.id > _maxKnownOrderId) { _maxKnownOrderId = p.new.id; _saveMaxKnownOrderId(); }
         if (window._pdvCreatedIds && window._pdvCreatedIds.has(Number(p.new.id))) { window._pdvCreatedIds.delete(Number(p.new.id)); renderKanban(); return; }
         renderKanban();
         playOrderSound();
@@ -1223,7 +1231,19 @@ document.addEventListener('visibilitychange', () => {
 
 // Polling de 12s — só re-renderiza se houver mudança real no banco
 let _lastPollHash = '';
-let _maxKnownOrderId = 0; // rastreia o maior ID visto — para detectar novos pedidos
+// Rastreia o maior ID visto — para detectar novos pedidos. Persistido em
+// localStorage por tenant pra sobreviver entre fechar/abrir o gestor. Sem isso,
+// reabrir o gestor zerava esse contador e fazia o polling tratar pedidos
+// antigos (já entregues) como novos, disparando reimpressão de comandas.
+const _maxKnownStorageKey = () => `_maxKnownOrderId:${_sessao?.tenant_id || 'anon'}`;
+let _maxKnownOrderId = (() => {
+  try { return parseInt(localStorage.getItem(_maxKnownStorageKey()) || '0') || 0; }
+  catch { return 0; }
+})();
+function _saveMaxKnownOrderId() {
+  try { localStorage.setItem(_maxKnownStorageKey(), String(_maxKnownOrderId)); }
+  catch {}
+}
 
 // ── Polling principal do kanban — roda a cada 5s ───────
 // Garante que pedidos do garçom e do cardápio cheguem
@@ -1254,6 +1274,17 @@ setInterval(async () => {
             if (window._pdvCreatedIds && window._pdvCreatedIds.has(Number(o.id))) { window._pdvCreatedIds.delete(Number(o.id)); ordersKanban.unshift(mapOrder(o)); if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id; continue; }
             ordersKanban.unshift(mapOrder(o));
             houveMudanca = true;
+            // ── Detecta se o pedido já estava em estado avançado quando entrou ──
+            // Se o status é 'pronto', 'saiu' ou 'entregue', significa que o pedido
+            // já foi processado (gestor fechou e reabriu o painel). NÃO imprime,
+            // NÃO toca som, NÃO mostra toast — só adiciona silenciosamente ao kanban.
+            // Antes esse caso disparava print/som/toast, fazendo a comanda ser
+            // reimpressa toda vez que o gestor abria o gestor.
+            const _jaProcessado = ['pronto','saiu','entregue'].includes(o.status);
+            if (_jaProcessado) {
+              if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id;
+              continue;
+            }
             // Notifica como novo pedido
             playOrderSound();
             if (!o.mesa_num) _startPersistentAlert();
@@ -1270,6 +1301,7 @@ setInterval(async () => {
           if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id;
         }
         if (houveMudanca) renderKanban();
+        _saveMaxKnownOrderId();
       }
     }
 
