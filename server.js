@@ -476,6 +476,14 @@ const MIGRATIONS = [
   { version:43, description:'telegram_backup_config em store_config (config do backup automático para Telegram)', up:
     `ALTER TABLE store_config ADD COLUMN telegram_backup_config TEXT DEFAULT '{}'`
   },
+  { version:44, description:'ia_pausa: persistir pausa da IA entre reinícios do servidor', up:
+    `CREATE TABLE IF NOT EXISTS ia_pausa (
+      tenant_id TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      pausado_em INTEGER NOT NULL,
+      PRIMARY KEY (tenant_id, phone)
+    )`
+  },
 ]
 
 function runMigrations() {
@@ -1802,7 +1810,56 @@ async function handleOrderStatus(req, res) {
 // AGENTE IA
 // ════════════════════════════════════════════════════════
 const _msgBuffer   = new Map()
-const _pausaHumano = new Map()
+// Pausa da IA — agora persistente no banco (ia_pausa) pra sobreviver
+// a reinícios do servidor. A interface é compatível com Map (.set/.get/.keys/.size)
+// pra não quebrar o resto do código que já usa essa variável.
+const _pausaHumano = {
+  set(key, ts) {
+    // key vem como "pausa:tenantId:phone" — extrai os 2 últimos pedaços
+    const parts = String(key).split(':')
+    if (parts.length < 3) return
+    const phone = parts.pop(); const tid = parts.pop()
+    try {
+      db.prepare('INSERT INTO ia_pausa (tenant_id,phone,pausado_em) VALUES (?,?,?) ON CONFLICT(tenant_id,phone) DO UPDATE SET pausado_em=excluded.pausado_em')
+        .run(tid, phone, Math.floor(ts))
+    } catch (e) { log('⚠️','[PAUSA] erro ao gravar:', e.message) }
+  },
+  get(key) {
+    const parts = String(key).split(':')
+    if (parts.length < 3) return undefined
+    const phone = parts.pop(); const tid = parts.pop()
+    try {
+      const row = db.prepare('SELECT pausado_em FROM ia_pausa WHERE tenant_id=? AND phone=?').get(tid, phone)
+      return row?.pausado_em
+    } catch { return undefined }
+  },
+  delete(key) {
+    const parts = String(key).split(':')
+    if (parts.length < 3) return
+    const phone = parts.pop(); const tid = parts.pop()
+    try { db.prepare('DELETE FROM ia_pausa WHERE tenant_id=? AND phone=?').run(tid, phone) } catch {}
+  },
+  // Usados só pelo log de debug
+  keys() {
+    try {
+      return db.prepare('SELECT tenant_id, phone FROM ia_pausa ORDER BY pausado_em DESC LIMIT 20').all()
+        .map(r => `pausa:${r.tenant_id}:${r.phone}`)
+    } catch { return [] }
+  },
+  get size() {
+    try { return db.prepare('SELECT COUNT(*) AS c FROM ia_pausa').get().c } catch { return 0 }
+  },
+}
+
+// Limpa pausas mais antigas que 24h (gestor com pausaMin máximo de 12h aprox)
+// Roda a cada 1h pra não inchar a tabela com pausas já vencidas.
+setInterval(() => {
+  try {
+    const cutoff = Date.now() - 24*60*60*1000
+    const r = db.prepare('DELETE FROM ia_pausa WHERE pausado_em < ?').run(cutoff)
+    if (r.changes > 0) log('🧹', `[PAUSA] Limpou ${r.changes} pausa(s) antiga(s) do banco`)
+  } catch {}
+}, 60*60*1000)
 const _lastDayMsg  = new Map() // rastreia primeira msg do dia: "tenant:phone" → "YYYY-MM-DD"
 
 async function handleIAWebhook(req, res) {
