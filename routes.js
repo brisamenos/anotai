@@ -42,6 +42,23 @@ function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
 // página antes do poll frontend confirmar ou webhook não chegou).
 let _pixJobIniciado = false
 
+// Normaliza valor pra MP — aceita string ("15,90", "15.90"), número, retorna
+// number com 2 casas decimais. Se inválido (NaN, <= 0), retorna null.
+// MP rejeita com erro 4037 ("Invalid transaction_amount") se vier:
+// - NaN, undefined, null
+// - <= 0
+// - mais de 2 casas decimais (ex: 15.999)
+// - string com vírgula sem conversão
+function _mpValor(raw) {
+  if (raw === null || raw === undefined || raw === '') return null
+  // Aceita "15,90" → "15.90"
+  const s = String(raw).replace(',', '.').trim()
+  const n = parseFloat(s)
+  if (!isFinite(n) || isNaN(n) || n <= 0) return null
+  // Arredonda pra 2 casas SEM erros de ponto flutuante (15.595 → 15.60)
+  return Math.round(n * 100) / 100
+}
+
 function _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN_ENV) {
   if (_pixJobIniciado) return
   _pixJobIniciado = true
@@ -307,6 +324,8 @@ function _iniciarAutoCobrancaJob(ctx) {
         try {
           const plano = (t.plano === 'premium') ? 'premium' : 'essencial'
           const valor = (plano === 'premium') ? precoPre : precoEss
+          const _valorMp1 = _mpValor(valor)
+          if (_valorMp1 === null) { log('⚠️', `Auto-cobrança ${t.id}: valor inválido (${valor})`); continue }
           const extRef = `auto-${t.id.slice(0,8)}-${plano}-${Date.now()}`
           const descricao = `Renovação Plano ${plano === 'premium' ? 'Premium' : 'Essencial'} — ${t.nome}`
 
@@ -314,7 +333,7 @@ function _iniciarAutoCobrancaJob(ctx) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
             body: JSON.stringify({
-              transaction_amount: parseFloat(valor),
+              transaction_amount: _valorMp1,
               description: descricao,
               payment_method_id: 'pix',
               external_reference: extRef,
@@ -1038,20 +1057,29 @@ module.exports = async function handleRoutes(req, res, ctx) {
     // não passa pela carteira interna — vai direto pro MP do gestor)
     if (_mpCfg.source === 'tenant') taxa = 0
     if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago não configurado.' }); return true }
+    // Valida e normaliza o valor ANTES de chamar a API. MP rejeita com 4037
+    // ("Invalid transaction_amount") se for string com vírgula, NaN, <=0
+    // ou com mais de 2 casas. O job retentava infinitamente com o valor errado.
+    const _valorMp = _mpValor(valor)
+    if (_valorMp === null) {
+      log('❌', `PIX rejeitado tenant=${tid}: valor inválido (recebido: ${JSON.stringify(valor)})`)
+      send(res, 400, { error: 'Valor do pedido inválido. Verifique se o total está correto.' })
+      return true
+    }
     // Log de diagnóstico: mostra os primeiros caracteres do token usado.
     // Útil pra confirmar se é APP_USR/TEST e se não tem caracteres estranhos.
-    log('💳', `PIX iniciando tenant=${tid} conta=${_mpCfg.source} token_prefix=${mpToken.slice(0, 12)}... len=${mpToken.length}`)
+    log('💳', `PIX iniciando tenant=${tid} conta=${_mpCfg.source} valor=${_valorMp} token_prefix=${mpToken.slice(0, 12)}... len=${mpToken.length}`)
 
     // extRef único — usa tenant_id completo + order_id (ou timestamp se não tiver pedido)
     const extRef = `ef-${tid}-${order_id || Date.now()}`
-    const valorLiq = Math.max(0, parseFloat(valor) - taxa)
+    const valorLiq = Math.max(0, _valorMp - taxa)
 
     try {
       const mp = await fetch('https://api.mercadopago.com/v1/payments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
         body: JSON.stringify({
-          transaction_amount: parseFloat(valor),
+          transaction_amount: _valorMp,
           description: `Pedido #${order_id || '?'} - ${client || 'Cliente'}`,
           payment_method_id: 'pix',
           external_reference: extRef,
@@ -1092,14 +1120,14 @@ module.exports = async function handleRoutes(req, res, ctx) {
       db.prepare(`INSERT OR IGNORE INTO pagamentos_pix
         (tenant_id,order_id,mp_payment_id,mp_external_ref,valor,taxa,valor_liquido,status,payer_name,qr_code,qr_code_base64,mp_source)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(tid, order_id || null, String(mpData.id), extRef, parseFloat(valor), taxa,
+        .run(tid, order_id || null, String(mpData.id), extRef, _valorMp, taxa,
           isMpProprio ? 0 : valorLiq,
           (mpData.status==='approved'?'aprovado':mpData.status==='rejected'?'rejeitado':mpData.status==='cancelled'?'cancelado':'pendente'),
           client || (isMpProprio ? 'MP_PROPRIO' : ''), qr, qrB64,
           isMpProprio ? 'tenant' : 'global')
 
-      log('💳', `PIX criado: R$${valor} tenant=${tid} mp_id=${mpData.id} conta=${_mpCfg.source}`)
-      send(res, 200, { ok: true, mp_payment_id: mpData.id, qr_code: qr, qr_code_base64: qrB64, valor, taxa, valor_liquido: isMpProprio ? 0 : valorLiq, status: mpData.status })
+      log('💳', `PIX criado: R$${_valorMp} tenant=${tid} mp_id=${mpData.id} conta=${_mpCfg.source}`)
+      send(res, 200, { ok: true, mp_payment_id: mpData.id, qr_code: qr, qr_code_base64: qrB64, valor: _valorMp, taxa, valor_liquido: isMpProprio ? 0 : valorLiq, status: mpData.status })
 
       // ── Envia copia e cola via WhatsApp ────────────────────────────────────
       if (qr && body.phone) {
@@ -2169,7 +2197,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const { card_token, payment_method_id, valor, order_id, client, email = 'cliente@email.com', issuer_id } = body
     if (!card_token)         { send(res, 400, { error: 'card_token obrigatório' }); return true }
     if (!payment_method_id)  { send(res, 400, { error: 'payment_method_id obrigatório' }); return true }
-    if (!valor || valor <= 0){ send(res, 400, { error: 'valor inválido' }); return true }
+    const _valorMpC = _mpValor(valor)
+    if (_valorMpC === null) { send(res, 400, { error: 'Valor inválido' }); return true }
 
     // Resolve conta MP: tenant primeiro, depois global
     const _mpCfgC = _resolveMpForTenant(db, tid, MP_TOKEN)
@@ -2180,7 +2209,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
     try {
       const mpBody = {
-        transaction_amount: parseFloat(valor),
+        transaction_amount: _valorMpC,
         token:              card_token,
         description:        `Pedido #${order_id || '?'} - ${client || 'Cliente'}`,
         installments:       1,
@@ -2360,7 +2389,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
     const body = await readBody(req)
     const { plano, valor } = body
-    if (!plano || !valor || valor <= 0) { send(res, 400, { error: 'Plano e valor obrigatorios' }); return true }
+    if (!plano) { send(res, 400, { error: 'Plano obrigatorio' }); return true }
+    const _valorMpP = _mpValor(valor)
+    if (_valorMpP === null) { send(res, 400, { error: 'Valor inválido' }); return true }
 
     // Token MP — SEMPRE GLOBAL (mensalidade da plataforma cobrada do tenant)
     const mpToken = _resolveMpGlobal(db, MP_TOKEN)
@@ -2374,7 +2405,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
         body: JSON.stringify({
-          transaction_amount: parseFloat(valor),
+          transaction_amount: _valorMpP,
           description: `Renovacao ${plano === 'premium' ? 'Plano Premium' : 'Plano Essencial'} - ${tenant?.nome || 'Cliente'}`,
           payment_method_id: 'pix',
           external_reference: extRef,
@@ -2442,7 +2473,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
     const body = await readBody(req)
     const { plano, valor, card_token, payment_method_id, payer_email, payer_cpf } = body
-    if (!plano || !valor) { send(res, 400, { error: 'Plano e valor obrigatorios' }); return true }
+    if (!plano) { send(res, 400, { error: 'Plano obrigatorio' }); return true }
+    const _valorMpPC = _mpValor(valor)
+    if (_valorMpPC === null) { send(res, 400, { error: 'Valor inválido' }); return true }
     if (!card_token) { send(res, 400, { error: 'card_token obrigatorio' }); return true }
     if (!payment_method_id) { send(res, 400, { error: 'payment_method_id obrigatorio' }); return true }
 
@@ -2458,7 +2491,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
         body: JSON.stringify({
-          transaction_amount: parseFloat(valor),
+          transaction_amount: _valorMpPC,
           token: card_token,
           description: `Renovacao ${plano === 'premium' ? 'Plano Premium' : 'Plano Essencial'} - ${tenant?.nome || 'Cliente'}`,
           installments: 1,
@@ -3278,6 +3311,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // ── Helper: gera cobrança PIX no Mercado Pago e retorna { fatura, link } ──
   async function _gerarCobrancaMP(tenant, opts) {
     const { plano, valor, meses, metodo } = opts
+    const _valorMpG = _mpValor(valor)
+    if (_valorMpG === null) throw new Error('Valor da cobrança inválido')
 
     // Token MP — SEMPRE GLOBAL (faturamento SaaS da plataforma)
     const mpToken = _resolveMpGlobal(db, MP_TOKEN)
@@ -3295,7 +3330,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
         body: JSON.stringify({
-          transaction_amount: parseFloat(valor),
+          transaction_amount: _valorMpG,
           description: descricao,
           payment_method_id: 'pix',
           external_reference: extRef,
@@ -3315,7 +3350,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}` },
         body: JSON.stringify({
-          items: [{ title: descricao, quantity: 1, unit_price: parseFloat(valor), currency_id: 'BRL' }],
+          items: [{ title: descricao, quantity: 1, unit_price: _valorMpG, currency_id: 'BRL' }],
           external_reference: extRef,
           payment_methods: { excluded_payment_types: [{ id: 'ticket' }, { id: 'atm' }], installments: 12 },
           expires: true,
