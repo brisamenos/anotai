@@ -130,7 +130,7 @@ async function submitOrder() {
     const num = document.getElementById('f-num').value.trim();
     if (!rua) { toast('⚠️','Informe a rua');   return; }
     if (!num) { toast('⚠️','Informe o número'); return; }
-    const bairro = document.getElementById('f-bairro').value.trim();
+    let bairro = document.getElementById('f-bairro').value.trim();
     const compl  = document.getElementById('f-compl').value.trim();
     const refEl  = document.getElementById('f-referencia');
     const referencia = refEl ? refEl.value.trim() : '';
@@ -139,6 +139,13 @@ async function submitOrder() {
     if (typeof validarDelivery === 'function') {
       const v = validarDelivery();
       if (!v.ok) { toast('⚠️', v.motivo); return; }
+    }
+    // Se o bairro digitado bateu com a lista por fuzzy match, salva o nome
+    // canônico (correto) no pedido em vez do que o cliente digitou. Assim o
+    // gestor sempre vê "Aldeota" no pedido, mesmo se o cliente digitou "Aldoeta".
+    if (typeof feeConfig !== 'undefined' && feeConfig?.tipo === 'por_bairro' && typeof _matchBairro === 'function') {
+      const matchCanon = _matchBairro(bairro, feeConfig.bairros || []);
+      if (matchCanon?.bairro && matchCanon.bairro.trim()) bairro = matchCanon.bairro.trim();
     }
     addr = [rua, num, bairro, compl, 'Ref: ' + referencia].filter(Boolean).join(', ');
     saveDeliveryAddr();
@@ -665,7 +672,7 @@ async function _iniciarSubmit() {
     const num = document.getElementById('f-num').value.trim();
     if (!rua) { toast('⚠️','Informe a rua');   return; }
     if (!num) { toast('⚠️','Informe o número'); return; }
-    const bairro = document.getElementById('f-bairro').value.trim();
+    let bairro = document.getElementById('f-bairro').value.trim();
     const compl  = document.getElementById('f-compl').value.trim();
     const refEl  = document.getElementById('f-referencia');
     const referencia = refEl ? refEl.value.trim() : '';
@@ -674,6 +681,13 @@ async function _iniciarSubmit() {
     if (typeof validarDelivery === 'function') {
       const v = validarDelivery();
       if (!v.ok) { toast('⚠️', v.motivo); return; }
+    }
+    // Se o bairro digitado bateu com a lista por fuzzy match, salva o nome
+    // canônico (correto) no pedido em vez do que o cliente digitou. Assim o
+    // gestor sempre vê "Aldeota" no pedido, mesmo se o cliente digitou "Aldoeta".
+    if (typeof feeConfig !== 'undefined' && feeConfig?.tipo === 'por_bairro' && typeof _matchBairro === 'function') {
+      const matchCanon = _matchBairro(bairro, feeConfig.bairros || []);
+      if (matchCanon?.bairro && matchCanon.bairro.trim()) bairro = matchCanon.bairro.trim();
     }
     addr = [rua, num, bairro, compl, 'Ref: ' + referencia].filter(Boolean).join(', ');
     saveDeliveryAddr();
