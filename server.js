@@ -1920,6 +1920,50 @@ async function handleIAWebhook(req, res) {
       if (pausaNow&&(Date.now()-pausaNow)<pausaMin*60*1000) { log('🔇',`IA bloqueada no timer (humano assumiu durante buffer) — ${phone} [${tenantId}]`); return }
       log('🔍', `[PAUSA-DEBUG] Timer — pausaKey: "${pausaKey}" | pausaNow: ${pausaNow || 'NÃO ENCONTRADO'} — IA vai responder`)
       const msgFull=msgs.join('\n'), inst=cfg.evo_instance||EVO_INST, nomeLoja=cfg.store_name||'Restaurante'
+
+      // ── DETECÇÃO DE MENSAGEM SENSÍVEL ─────────────────────────────────
+      // Tópicos onde a IA SEMPRE alucina ou piora a situação: reclamações,
+      // pedido de reembolso, problemas com pagamento, ameaças de processo.
+      // Nesses casos, melhor pausar a IA e avisar que um atendente humano
+      // vai responder. Isso evita respostas erradas e protege o relacionamento
+      // com o cliente.
+      const _msgLower = msgFull.toLowerCase()
+      const _palavrasReembolso = /\b(reembolso|estorno|devolu[çc][ãa]o|devolver|dinheiro\s+de\s+volta|quero\s+meu\s+dinheiro|me\s+devolva|estornar|me\s+ressarc|reclama[çc][ãa]o|procon|justi[çc]a|advogado|processar|processo)\b/i
+      const _palavrasUrgencia = /\b(urgente|p[eé]ssimo|p[eé]ssima|horr[ií]vel|nojento|absurd|cad[eê]\s+meu|cancelei?\s+(meu|o)|fraude|golpe|enrolad)\b/i
+      // Cliente pode estar frustrado mas a mensagem ser curta — checa por
+      // sinais combinados: reclamação + valor R$ ou + reembolso + status pedido
+      const _temReembolso = _palavrasReembolso.test(_msgLower)
+      const _temUrgencia  = _palavrasUrgencia.test(_msgLower)
+
+      if (_temReembolso || _temUrgencia) {
+        log('⚠️', `[IA] Mensagem sensível detectada de ${phone} — pausando IA e avisando atendente humano. Motivo: ${_temReembolso ? 'reembolso/reclamação' : 'urgência/frustração'}`)
+        // Pausa IA por 24h pra atendente humano resolver — não quer IA
+        // tentando "ajudar" durante a resolução.
+        _pausaHumano.set(pausaKey, Date.now())
+        // Avisa o cliente que um atendente humano vai responder.
+        const _msgPausa = _temReembolso
+          ? 'Entendi sua mensagem. Vou chamar um atendente para te ajudar com isso pessoalmente. Em instantes alguém da loja vai te responder.'
+          : 'Recebi sua mensagem. Um atendente vai te responder em instantes.'
+        try {
+          await sendWA(phone, _msgPausa, inst)
+          log('🤝', `[IA] Aviso de escalação enviado pra ${phone}`)
+        } catch (e) { log('⚠️', `[IA] Falha ao enviar aviso de escalação: ${e.message}`) }
+        // Avisa o gestor pelo SSE — aparece no painel WhatsApp como prioridade
+        try {
+          sseBroadcast(`wa-alerta:${tenantId}`, 'wa:atendimento_urgente', {
+            phone,
+            motivo: _temReembolso ? 'reembolso' : 'urgencia',
+            mensagem: msgFull.slice(0, 200),
+            timestamp: Date.now()
+          })
+        } catch {}
+        // Salva no histórico pra contexto
+        convHist.push({ role: 'user', content: msgFull }, { role: 'assistant', content: _msgPausa })
+        if (convHist.length > 20) convHist.splice(0, convHist.length - 20)
+        _msgBuffer.set(histKey, convHist)
+        return
+      }
+
       // ── Detecção: primeira msg do dia e saudação avulsa ──
       const _hoje = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Fortaleza'})).toISOString().split('T')[0]
       const _dayKey = `${tenantId}:${phone}`
@@ -2043,7 +2087,7 @@ async function handleIAWebhook(req, res) {
           pronto:            '✅ Pronto para retirada/entrega',
           saiu:              '🛵 Saiu para entrega',
           entregue:          '🎉 Entregue',
-          cancelado:         '❌ Cancelado',
+          cancelado:         '❌ Cancelado — IMPORTANTE: motivo desconhecido (pode ter sido timeout de pagamento, gestor cancelou, ou erro). Não afirme com certeza pro cliente. Se ele perguntar, diga que vai verificar com a loja.',
           finalizado:        '✅ Finalizado'
         }
         contexto.push('PEDIDOS DESTE CLIENTE (número que o cliente conhece):\n' + pedCli.map(p => {
@@ -2071,7 +2115,7 @@ async function handleIAWebhook(req, res) {
           pronto:            '✅ Pronto — pedido pronto para retirada/entrega',
           saiu:              '🛵 Saiu para entrega — entregador a caminho',
           entregue:          '🎉 Entregue — pedido finalizado',
-          cancelado:         '❌ Cancelado',
+          cancelado:         '❌ Cancelado — IMPORTANTE: motivo desconhecido (pode ter sido timeout de pagamento, gestor cancelou, ou erro). Não afirme com certeza pro cliente. Se ele perguntar, diga que vai verificar com a loja.',
           finalizado:        '✅ Finalizado'
         }
         if (ped) {
@@ -2091,12 +2135,14 @@ ESTILO DE RESPOSTA:
 - Seja claro e objetivo. Responda exatamente o que o cliente perguntou, sem rodeios.
 - Use no máximo 1 emoji por mensagem (apenas quando combinar). Não enche de emoji.
 - Tom amigável, mas profissional — não exagere em entusiasmo.
-- Não invente informações. Se não souber algo, diga que vai verificar ou peça pra o cliente confirmar com a loja.
+- Não invente informações. Se não souber algo, diga que vai verificar com a loja.
+- NUNCA invente status de pedido. Se o pedido aparecer como "cancelado" no contexto, isso pode ter sido por timeout automático, ação do gestor ou erro técnico — você NÃO sabe o motivo. NÃO afirme com certeza que foi cancelado. Diga "vou verificar com a loja" e escale pra atendente humano.
 
 FORMATO:
 - Respostas curtas: 1 a 3 linhas na maioria dos casos. Só use mais quando o cliente pediu detalhes específicos.
 - Use *negrito* só pra destacar nomes de produtos ou valores importantes.
 - Quando mencionar o cardápio, inclua o link: ${linkCardapio}
+- NÃO mande o link do cardápio em toda mensagem. Só quando o cliente pedir pra ver opções, fizer pedido novo, ou perguntar o que tem.
 
 EXEMPLOS DO TOM CERTO:
 Cliente: "Qual horário de funcionamento?"
