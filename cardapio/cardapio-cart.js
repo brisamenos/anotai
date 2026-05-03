@@ -2,6 +2,85 @@
 //  CARRINHO — addToCart, totais, taxas, cupom, cashback
 //  Estima Food — Cardápio
 // ══════════════════════════════════════════
+
+// Normaliza string pra comparação: remove acentos, espaços extras, caso.
+// Antes o match exigia digitação exata — qualquer diferença (acento, maiúscula,
+// espaço duplo) dava "fora da área". Agora bate mesmo com pequenas variações.
+function _normBairro(s) {
+  return (s || '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // tira acentos
+    .replace(/\s+/g, ' '); // normaliza espaços
+}
+
+// Distância de Levenshtein: quantas letras precisa mudar pra uma string virar outra.
+// Útil pra detectar erros de digitação tipo "Aldoeta" → "Aldeota" (1 letra).
+function _levenshtein(a, b) {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...new Array(n).fill(0)]);
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return dp[m][n];
+}
+
+// Match flexível de bairro contra a lista cadastrada.
+// Retorna o objeto do bairro encontrado (ou null) usando 3 estratégias em ordem:
+//   1) Match exato após normalização (acento/espaço/caso)
+//   2) Match por prefixo ou substring (cliente digitou parte do nome)
+//   3) Fuzzy match com Levenshtein (até 2 letras de diferença em bairros >=5 chars)
+// Se múltiplos baterem na fuzzy, devolve o mais próximo. Se houver empate ou
+// distância grande, retorna null pra evitar match errado.
+function _matchBairro(digitadoRaw, bairrosLista) {
+  if (!digitadoRaw || !Array.isArray(bairrosLista) || !bairrosLista.length) return null;
+  const digitado = _normBairro(digitadoRaw);
+  if (!digitado) return null;
+
+  // 1) Exato (com acento/espaço/caso normalizados)
+  const exato = bairrosLista.find(b => _normBairro(b.bairro || b) === digitado);
+  if (exato) return exato;
+
+  // 2) Substring — cliente digitou "centro" e cadastro tem "Centro Histórico"
+  // ou cliente digitou "Aldeota Sul" e cadastro tem "Aldeota". Aceita só se for
+  // único pra evitar ambiguidade (ex: "Vila" bater em 5 vilas diferentes).
+  const subset = bairrosLista.filter(b => {
+    const cad = _normBairro(b.bairro || b);
+    return cad.includes(digitado) || digitado.includes(cad);
+  });
+  if (subset.length === 1) return subset[0];
+
+  // 3) Fuzzy — até 2 letras de diferença em strings com >=5 chars,
+  // ou 1 letra em strings menores. Retorna o mais próximo se for único.
+  const distancias = bairrosLista
+    .map(b => ({ b, d: _levenshtein(digitado, _normBairro(b.bairro || b)) }))
+    .sort((a, b) => a.d - b.d);
+  const melhor = distancias[0];
+  const segundoMelhor = distancias[1];
+  if (melhor) {
+    const tamanhoMin = Math.min(digitado.length, _normBairro(melhor.b.bairro || melhor.b).length);
+    const tolerancia = tamanhoMin >= 5 ? 2 : 1;
+    // Só aceita se for claramente o mais próximo (distância pra 2º maior que +1)
+    if (melhor.d <= tolerancia && (!segundoMelhor || segundoMelhor.d > melhor.d)) {
+      return melhor.b;
+    }
+  }
+
+  return null;
+}
+
 // ══════════════════════════════════════════
 //  CARRINHO
 // ══════════════════════════════════════════
@@ -55,9 +134,8 @@ function getTaxa() {
   if (feeConfig.tipo === 'por_bairro') {
     const bairros = feeConfig.bairros || [];
     if (!bairros.length) return 0;
-    const digitado = (document.getElementById('f-bairro')?.value || '').trim().toLowerCase();
-    if (!digitado) return 0;
-    const match = bairros.find(b => b.bairro.trim().toLowerCase() === digitado);
+    const digitadoRaw = (document.getElementById('f-bairro')?.value || '');
+    const match = _matchBairro(digitadoRaw, bairros);
     return match ? parseFloat(match.taxa) || 0 : 0;
   }
   return parseFloat(feeConfig.valor ?? feeConfig.value ?? 0);
@@ -91,10 +169,25 @@ function validarDelivery() {
   if (feeConfig?.tipo === 'por_bairro') {
     const bairros = Array.isArray(feeConfig.bairros) ? feeConfig.bairros : [];
     if (!bairros.length) return { ok: true }; // sem lista — sem cobrança, permite
-    const digitado = (document.getElementById('f-bairro')?.value || '').trim().toLowerCase();
-    if (!digitado) return { ok: false, motivo: 'Informe o bairro para calcular a taxa de entrega' };
-    const match = bairros.find(b => b.bairro.trim().toLowerCase() === digitado);
-    if (!match) return { ok: false, motivo: 'Bairro fora da área de entrega. Fale com o restaurante.' };
+    const digitadoRaw = (document.getElementById('f-bairro')?.value || '').trim();
+    if (!digitadoRaw) return { ok: false, motivo: 'Informe o bairro para calcular a taxa de entrega' };
+    const match = _matchBairro(digitadoRaw, bairros);
+    if (!match) {
+      // Se não bateu, mostra os 3 bairros mais próximos pra cliente conferir.
+      // Ajuda quando ele digita errado mas o bairro existe (ex: "Aldoeta" → "Aldeota").
+      const sugestoes = bairros
+        .map(b => ({ nome: b.bairro, d: _levenshtein(_normBairro(digitadoRaw), _normBairro(b.bairro)) }))
+        .sort((a, b) => a.d - b.d)
+        .slice(0, 3)
+        .map(s => s.nome)
+        .join(', ');
+      return {
+        ok: false,
+        motivo: sugestoes
+          ? `Bairro "${digitadoRaw}" não encontrado. Você quis dizer: ${sugestoes}? Verifique a grafia ou fale com a loja.`
+          : 'Bairro fora da área de entrega. Fale com o restaurante.'
+      };
+    }
   }
   // por_km: exige GPS confirmado e dentro da maior faixa
   if (feeConfig?.tipo === 'por_km') {
@@ -441,10 +534,10 @@ function renderTotals() {
     const f = (feeConfig.faixas||[])[selectedFaixa];
     if (f) taxaLabel = `Entrega até ${f.ate_km} km`;
   } else if (deliveryType === 'delivery' && feeConfig?.tipo === 'por_bairro') {
-    const digitado = (document.getElementById('f-bairro')?.value || '').trim().toLowerCase();
-    const match = (feeConfig.bairros||[]).find(b => b.bairro.trim().toLowerCase() === digitado);
+    const digitadoRaw = (document.getElementById('f-bairro')?.value || '').trim();
+    const match = _matchBairro(digitadoRaw, feeConfig.bairros || []);
     if (match) taxaLabel = `Entrega — ${match.bairro}`;
-    else if (digitado) taxaLabel = 'Bairro não encontrado';
+    else if (digitadoRaw) taxaLabel = 'Bairro não encontrado';
   }
   // Aviso de pedido mínimo
   const minimoFalta = _pedidoMinimo > 0 && deliveryType === 'delivery' && sub < _pedidoMinimo ? _pedidoMinimo - sub : 0;
