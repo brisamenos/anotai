@@ -3624,6 +3624,48 @@ async function unpairUsbPrinter() {
   sbToast('ok', 'Impressora USB removida.');
 }
 
+// ── Cache de Print Agent ativo ──────────────────────────────────────
+// Evita perguntar /api/print-queue/status toda vez que vai imprimir (latência)
+// e protege contra falhas momentâneas de rede: se o printestima foi visto
+// nos últimos 90s, presumimos que ainda está ativo, evitando que erro de
+// fetch faça o gestor abrir o diálogo de impressão do navegador.
+let _printAgentCache = { active: false, last_seen: 0, printer: '' };
+let _printAgentInitial = null; // promessa da primeira checagem ao carregar
+
+async function _checkPrintAgent() {
+  try {
+    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+    if (!tid) return _printAgentCache;
+    const r = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } });
+    const d = await r.json();
+    if (d.active) {
+      _printAgentCache = { active: true, last_seen: Date.now(), printer: d.printer || '' };
+    } else if (Date.now() - _printAgentCache.last_seen > 90000) {
+      // só zera se está inativo por mais de 90s
+      _printAgentCache = { active: false, last_seen: _printAgentCache.last_seen, printer: '' };
+    }
+  } catch (e) {
+    // Se falhou a checagem mas o agent foi visto há pouco, mantém ativo
+    console.warn('[PRINT] check agent erro:', e.message);
+  }
+  return _printAgentCache;
+}
+
+// Atualiza cache periodicamente em background (a cada 30s)
+setInterval(() => { _printAgentInitial = _checkPrintAgent(); }, 30000);
+// Faz a primeira checagem imediatamente — guarda a promessa pra que o
+// primeiro printOrder possa esperar ela terminar antes de decidir.
+_printAgentInitial = _checkPrintAgent();
+
+// Helper: retorna true se o usuário está usando o app desktop (printestima)
+// e portanto NÃO queremos abrir o diálogo do navegador como fallback.
+// Considera "agent ativo" quem teve heartbeat nos últimos 90s.
+function _isPrintAgentReady() {
+  const isElectronApp = !!window.ElectronPrint;
+  const agentActive = _printAgentCache.active && (Date.now() - _printAgentCache.last_seen) < 90000;
+  return isElectronApp || agentActive;
+}
+
 async function printOrder(order) {
   const cfg    = _getPrintConfig();
   const fmt    = localStorage.getItem('printFormat') || _printFormat || '80mm';
@@ -3709,13 +3751,19 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
     } catch (e) { console.warn('[PRINT] USB falhou:', e.message); }
   }
 
-  // 3️⃣ Print Agent
+  // 3️⃣ Print Agent (printestima) — prioritário se o agent está ativo
+  // Quando o agent foi visto nos últimos 90s, sempre usa essa rota e
+  // evita os fallbacks 4/5/6 que abririam diálogos no navegador.
   try {
     const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
     if (tid) {
-      const statusRes = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } });
-      const statusData = await statusRes.json();
-      if (statusData.active) {
+      // Espera a primeira checagem do agent terminar (evita cair no fallback
+      // web em pedidos que chegam logo após o login). Em re-imprimir/etc
+      // a promessa já resolveu, então não custa quase nada.
+      try { await _printAgentInitial; } catch {}
+      // Se está em cache antigo (>30s), atualiza
+      if (Date.now() - _printAgentCache.last_seen > 30000) await _checkPrintAgent();
+      if (_printAgentCache.active) {
         await fetch('/api/print-queue/job', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
@@ -3737,6 +3785,16 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
         return;
       }
     } catch (e) { console.warn('[PRINT] USB auto-connect falhou:', e.message); }
+  }
+
+  // ── Se o printestima está ativo, NÃO cai nos fallbacks abaixo ──
+  // Os passos 5 (server PDF + iframe) e 6 (window.print) abrem diálogos
+  // ou o sistema de impressão do navegador, atrapalhando quem tem o
+  // printestima rodando. Pula direto pro toast de erro.
+  if (_isPrintAgentReady()) {
+    console.warn('[PRINT] Print Agent ativo mas falhou — não usar fallback web');
+    sbToast('warn', '⚠️ Print Agent ativo mas job falhou. Verifique o app de impressão.');
+    return;
   }
 
   // 5️⃣ Servidor PDF + iframe (iframe único por job, espera afterprint)
