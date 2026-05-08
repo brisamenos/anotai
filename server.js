@@ -1787,32 +1787,19 @@ async function handleOrderStatus(req, res) {
             ]),
           }
           let msgFinal = null
-          // ── OPT-IN DO CLIENTE + MODO ESSENCIAL ─────────────────
-          // Cliente escolhe no checkout se quer receber atualizações pelo WhatsApp.
-          // - Se NÃO marcou (wa_track=0): só recebe msgs ESSENCIAIS (cancelado +
-          //   finalizado/avaliação). Nada de "recebido", "produção", "pronto",
-          //   "saiu pra entrega" — porque ele não pediu pra receber.
-          // - Se MARCOU (wa_track=1): recebe tudo normal, conforme automações ativas.
+          // ── ENVIO DE STATUS ────────────────────────────────────
+          // Estratégia anti-ban: a loja NUNCA inicia conversa pelo WhatsApp
+          // pra status intermediários do pedido. Quando o cliente quer saber,
+          // ele clica no botão "Acompanhar pedido pelo WhatsApp" na tela de
+          // sucesso, que abre o WA com mensagem pré-pronta ("Quero acompanhar
+          // meu pedido #N") — a IA detecta e responde com status atualizado.
           //
-          // O modo_essencial da loja CONTINUA valendo: mesmo cliente que opt-in,
-          // se a loja ativou modo essencial, ainda pula recebido/produção/pronto.
-          //
-          // Mensagens NUNCA puladas (sempre vão pra qualquer cliente):
-          //   - cancelado (cliente PRECISA saber que cancelou)
-          //   - finalizado (gera avaliação, fecha o ciclo)
-          //   - PIX (cliente precisa pagar — fluxo separado, não passa aqui)
-          //   - Recompensas (única msg pós-finalização — não passa aqui)
-          const _waTrack = parseInt(order.wa_track || 0) === 1
-          const _statusEssenciais = ['cancelado', 'finalizado']
-          const _statusOptIn      = ['analise', 'producao', 'pronto', 'saiu', 'entregue']
-
-          // 1) Cliente NÃO optou e msg não é essencial → pula
-          if (!_waTrack && _statusOptIn.includes(new_status)) {
-            log('🔕', `[wa_track=0] Cliente não optou por acompanhar — pulando "${new_status}" do pedido #${idStr}`)
-          }
-          // 2) Modo essencial da loja ativo + status intermediário → pula
-          else if (auto.modo_essencial === true && ['analise', 'producao', 'pronto'].includes(new_status)) {
-            log('🎯', `[modo_essencial] Pulando "${new_status}" do pedido #${idStr}`)
+          // Por isso pulamos SEMPRE: recebido (analise), produção, pronto.
+          // Saiu/entregue continuam como opcional do gestor — algumas lojas
+          // querem manter a sensação "tá chegando". Cancelado e finalizado
+          // SEMPRE vão (cliente PRECISA saber: cancelamento + avaliação).
+          if (['analise', 'producao', 'pronto'].includes(new_status)) {
+            log('🎯', `[anti-ban] Pulando "${new_status}" do pedido #${idStr} — cliente consulta via IA do WhatsApp se quiser`)
           }
           else if (ct.on===false) { log('⏭️',`Automação "${tipoAuto}" desligada`) }
           else if (ct.on&&ct.msg) { msgFinal=fillVars(ct.msg,vars) }

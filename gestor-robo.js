@@ -398,10 +398,6 @@ async function evoSalvarAutomacoes() {
     };
   });
   data._aniv_hora = document.getElementById('auto-aniv-hora')?.value || '09:00';
-  // Modo essencial: pula notificações intermediárias do pedido (recebido,
-  // confirmado, pronto). Cliente só recebe PIX, saiu/entregue, finalizado.
-  // Reduz ~50% do volume de mensagens automáticas e protege contra ban.
-  data.modo_essencial = document.getElementById('auto-modo-essencial')?.classList.contains('on') || false;
   try {
     const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_automacoes: data });
     if (error) throw error;
@@ -425,11 +421,6 @@ async function evoCarregarAutomacoesSalvas() {
     if (cfg._aniv_hora) {
       const h = document.getElementById('auto-aniv-hora');
       if (h) h.value = cfg._aniv_hora;
-    }
-    // Carrega o toggle do modo essencial
-    const me = document.getElementById('auto-modo-essencial');
-    if (me) {
-      cfg.modo_essencial === true ? me.classList.add('on') : me.classList.remove('on');
     }
   } catch(e) {
     console.warn('evoCarregarAutomacoesSalvas:', e);
