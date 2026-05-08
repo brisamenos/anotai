@@ -3249,7 +3249,13 @@ async function carregarLeadsIndicacao() {
   try {
     const url = '/api/admin/leads-indicacao' + (fStatus ? '?status=' + fStatus : '');
     const r = await fetch(url, { headers: adminAuthHeader() });
-    const rows = await r.json();
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Falha ao carregar leads');
+    const rows = Array.isArray(data) ? data
+      : Array.isArray(data.leads) ? data.leads
+      : Array.isArray(data.rows) ? data.rows
+      : Array.isArray(data.data) ? data.data
+      : [];
     document.getElementById('lead-list-count').textContent = rows.length + ' leads';
     if (!rows.length) {
       tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)">Nenhum lead encontrado.</td></tr>';
