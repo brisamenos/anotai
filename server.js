@@ -1084,7 +1084,9 @@ async function handleREST(req, res, table, params, body) {
         if (_tid) {
           try {
             const txFn = db.transaction((tenantId, rowid) => {
-              const row = db.prepare('SELECT COALESCE(MAX(order_num),0) as mx FROM orders WHERE tenant_id=?').get(tenantId)
+              const cfg = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tenantId)
+              const offset = parseInt(cfg?.order_num_offset) || 0
+              const row = db.prepare('SELECT COALESCE(MAX(order_num),0) as mx FROM orders WHERE tenant_id=? AND id>?').get(tenantId, offset)
               const next = (row?.mx || 0) + 1
               db.prepare('UPDATE orders SET order_num=? WHERE rowid=?').run(next, rowid)
               return next

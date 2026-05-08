@@ -971,7 +971,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // ── Backup completo do gestor (dados + imagens) ──────
   if (req.method === 'GET' && upath === '/api/backup-completo-gestor') {
     const tid = req.headers['x-tenant-id']
-    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
     const tenant = db.prepare('SELECT id,nome,slug FROM tenants WHERE id=?').get(tid)
     if (!tenant) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
     try {
@@ -1310,7 +1310,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // ── Gera cobrança PIX via Mercado Pago ───────────────
   if (req.method === 'POST' && upath === '/api/pix/criar') {
     const tid = req.headers['x-tenant-id']
-    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
     const body = await readBody(req)
     const { order_id, client, email = 'pagador@email.com' } = body
     let valor = body.valor
@@ -3366,6 +3366,31 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
 
   // ── Import cardápio em lote (transação única) ─────────────────────────
+  if (req.method === 'POST' && upath === '/api/orders/reset-counter') {
+    const tid = getTenantId(req, params)
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    try {
+      const body = await readBody(req)
+      if (String(body?.confirmacao || '').trim().toUpperCase() !== 'ZERAR') {
+        send(res, 400, { error: 'Confirmacao invalida' })
+        return true
+      }
+
+      const offset = db.prepare('SELECT COALESCE(MAX(id),0) as max_id FROM orders').get()?.max_id || 0
+      db.transaction(() => {
+        db.prepare('INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)').run(tid)
+        db.prepare('UPDATE store_config SET order_num_offset=? WHERE tenant_id=?').run(offset, tid)
+      })()
+      marcarDirty()
+      sseBroadcast(`orders-rt:${tid}`, 'store_config:UPDATE', { tenant_id: tid, order_num_offset: offset })
+      send(res, 200, { ok: true, order_num_offset: offset, next_order_num: 1 })
+    } catch (e) {
+      log('ERR', `reset-counter erro tenant=${tid}:`, e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
   if (req.method === 'POST' && upath === '/api/importar-cardapio') {
     const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
     if (!tid) { send(res, 401, { error: 'Não autorizado' }); return true }

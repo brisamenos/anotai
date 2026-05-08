@@ -1,6 +1,17 @@
 // ════════════════════════════════════════════════════════
 // ZERAR CONTAGEM DE PEDIDOS
 // ════════════════════════════════════════════════════════
+async function _buscarProximoNumeroPedido() {
+  const { data, error } = await sb.from('orders')
+    .select('id,order_num')
+    .gt('id', _orderNumOffset)
+    .order('id', { ascending: false })
+    .limit(1000);
+  if (error) throw new Error(error.message);
+  const maxOrderNum = (data || []).reduce((max, o) => Math.max(max, Number(o.order_num || 0)), 0);
+  return maxOrderNum + 1;
+}
+
 async function abrirModalZerarPedidos() {
   const input = document.getElementById('zerar-confirmar');
   if (input) input.value = '';
@@ -11,10 +22,8 @@ async function abrirModalZerarPedidos() {
   const contEl = document.getElementById('zerar-contagem');
   if (contEl) contEl.textContent = 'Verificando...';
   try {
-    const { data } = await sb.from('orders').select('id').order('id', { ascending: false }).limit(1);
-    const maxId = data?.[0]?.id || 0;
-    const proxNum = maxId - _orderNumOffset + 1;
-    if (contEl) contEl.innerHTML = maxId
+    const proxNum = await _buscarProximoNumeroPedido();
+    if (contEl) contEl.innerHTML = proxNum > 1
       ? `O próximo pedido é <strong>#${proxNum}</strong>. Após zerar, passará a ser <strong>#1</strong>.`
       : '<span style="color:var(--muted)">Nenhum pedido registrado ainda.</span>';
   } catch(e) {
@@ -41,16 +50,20 @@ async function confirmarZerarPedidos() {
 
   try {
     // Pega o ID máximo atual do banco para usar como novo offset
-    const { data } = await sb.from('orders').select('id').order('id', { ascending: false }).limit(1);
-    const novoOffset = data?.[0]?.id || 0;
+    const res = await fetch('/api/orders/reset-counter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _sessao.tenant_id },
+      body: JSON.stringify({ confirmacao: 'ZERAR' })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Tente novamente');
 
     // Salva o offset no store_config do tenant
-    const { error } = await sb.from('store_config').update({ order_num_offset: novoOffset }).eq('tenant_id', _sessao.tenant_id);
-    if (error) throw new Error(error.message);
+    const novoOffset = Number(data.order_num_offset || 0);
 
     // Atualiza localmente
     _orderNumOffset = novoOffset;
-    ordersKanban = ordersKanban.map(o => ({ ...o, num: _orderNum(o.id) }));
+    ordersKanban = ordersKanban.map(o => ({ ...o, num: _orderNum(o.id, o.order_num) }));
     renderKanban();
 
     closeModal('modal-zerar-pedidos');
@@ -69,10 +82,8 @@ async function _renderConfiguracoes() {
   const el = document.getElementById('cfg-prox-pedido');
   if (!el) return;
   try {
-    const { data } = await sb.from('orders').select('id').order('id', { ascending: false }).limit(1);
-    const maxId  = data?.[0]?.id || 0;
-    const proxNum = maxId - _orderNumOffset + 1;
-    el.innerHTML = maxId
+    const proxNum = await _buscarProximoNumeroPedido();
+    el.innerHTML = proxNum > 1
       ? `Próximo pedido: <strong>#${proxNum}</strong> &nbsp;·&nbsp; Offset atual: ${_orderNumOffset}`
       : 'Nenhum pedido registrado ainda.';
   } catch(e) { el.textContent = '—'; }
