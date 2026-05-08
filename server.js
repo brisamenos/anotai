@@ -1784,7 +1784,25 @@ async function handleOrderStatus(req, res) {
             ]),
           }
           let msgFinal = null
-          if (ct.on===false) { log('⏭️',`Automação "${tipoAuto}" desligada`) }
+          // ── MODO ESSENCIAL ───────────────────────────────────────
+          // Quando ativado (auto.modo_essencial === true), pula notificações
+          // intermediárias do pedido pra reduzir volume de mensagens e evitar
+          // banimento do número no WhatsApp. Cliente só recebe:
+          //   ✅ PIX (pra pagar)              [obrigatório]
+          //   ⏭️ recebido (analise)            — PULADO
+          //   ⏭️ confirmado (producao)         — PULADO
+          //   ⏭️ pronto                        — PULADO
+          //   ✅ saiu/entregue (entrega)
+          //   ✅ cancelado
+          //   ✅ avaliação (finalizado)
+          //   ✅ recompensas (já consolidado em 1 msg)
+          // Reduz ~50% das mensagens automáticas de status do pedido.
+          const _modoEssencial = auto.modo_essencial === true
+          const _statusIntermediarios = ['analise', 'producao', 'pronto']
+          if (_modoEssencial && _statusIntermediarios.includes(new_status)) {
+            log('🎯', `[modo_essencial] Pulando notificação "${new_status}" do pedido #${idStr}`)
+          }
+          else if (ct.on===false) { log('⏭️',`Automação "${tipoAuto}" desligada`) }
           else if (ct.on&&ct.msg) { msgFinal=fillVars(ct.msg,vars) }
           else { msgFinal=msgPadrao[new_status]||null }
           if (msgFinal) {
