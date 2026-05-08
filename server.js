@@ -1087,7 +1087,7 @@ async function handleREST(req, res, table, params, body) {
             ]
             const msgPadrao = _pixVars[Math.floor(Math.random() * _pixVars.length)]
             const msgFinal  = pixAuto.msg ? fillVars(pixAuto.msg, { nome, id: idStr, itens: items, total, chave_pix: chavePix, tipo_chave: tipoChave }) : msgPadrao
-            const r = await sendWA(_ord.phone, msgFinal, inst)
+            const r = await sendWA(_ord.phone, msgFinal, inst, _autoDelayMs())
             if (r.ok) log('📤', `PIX manual notificado → ${_ord.phone} pedido #${idStr}`)
             else       log('⚠️', `PIX manual falhou envio WA → ${_ord.phone}`)
           } catch(e) { log('❌','Erro notif PIX manual:', e.message) }
@@ -1343,6 +1343,15 @@ async function markAsRead(phone, msgId, inst) {
   } catch(e) { /* silencioso — endpoint pode não existir em algumas versões */ }
 }
 
+// Helper: delay variável pra notificações automáticas (0.8s a 3.0s).
+// Evita padrão de bot: hoje cada notificação saía com delay fixo de 1s,
+// fazendo o WhatsApp identificar facilmente o número como automatizado.
+// Cada chamada retorna um valor levemente diferente, então mesmo quando
+// 5 status do pedido saem em sequência, cada um tem latência única.
+function _autoDelayMs() {
+  return 800 + Math.floor(Math.random() * 2200)
+}
+
 const _anivLast = new Map()
 async function checarAniv() {
   const tenants = db.prepare("SELECT id FROM tenants WHERE ativo=1").all()
@@ -1364,7 +1373,13 @@ async function checarAniv() {
       const anivs = [...deF,...deC.filter(c=>!seen.has(c.phone))]
       if (!anivs.length) { db.prepare("UPDATE store_config SET evo_aniv_last=? WHERE tenant_id=?").run(today,t.id); continue }
       const inst = cfg.evo_instance||EVO_INST
-      for (const c of anivs) { await sendWA(c.phone, fillVars(ca.msg,{nome:c.name}), inst); await sleep(1500) }
+      // Envia aniversários com delay variável entre cada cliente (3-7s)
+      // pra não disparar 50 mensagens em rajada quando há muitos aniversariantes.
+      // Antes: sleep fixo de 1.5s = padrão detectável de bot.
+      for (const c of anivs) {
+        await sendWA(c.phone, fillVars(ca.msg,{nome:c.name}), inst, _autoDelayMs())
+        await sleep(3000 + Math.floor(Math.random() * 4000))  // 3-7s entre cada cliente
+      }
       db.prepare("UPDATE store_config SET evo_aniv_last=? WHERE tenant_id=?").run(today,t.id)
       log('🎂',`Aniversários tenant ${t.id}: ${anivs.length} enviados`)
     } catch(e) { log('❌',`Erro aniv ${t.id}:`,{error:e.message}) }
@@ -1494,14 +1509,22 @@ async function handleOrderStatus(req, res) {
               ]
               const msgPad = _pixOkVars[Math.floor(Math.random() * _pixOkVars.length)]
           const msgFin = pixConf.msg ? fillVars(pixConf.msg, { nome, id: idStr, itens: items, total }) : msgPad
-          const r = await sendWA(order.phone, msgFin, inst)
+          const r = await sendWA(order.phone, msgFin, inst, _autoDelayMs())
           if (r.ok) log('📤', `PIX manual confirmado notificado → ${order.phone} #${idStr}`)
         } catch(e) { log('❌','Erro notif pix_confirmado manual:', e.message) }
       })
     }
     // ─────────────────────────────────────────────────────────────────────
 
-    // ── Cashback automático ─────────────────────────────
+    // ── Recompensas (cashback + pontos + carimbinho) ─────
+    // ANTES: cada programa enviava sua PRÓPRIA mensagem WhatsApp ao
+    // finalizar pedido. Cliente recebia 3 msgs em rajada (1 cashback +
+    // 1 pontos + 1 carimbinho) → padrão de bot que faz o WhatsApp banir.
+    //
+    // AGORA: cada programa CALCULA + faz UPDATE no banco normalmente,
+    // mas só ALIMENTA o array `_recompensas`. No fim do bloco, mandamos
+    // UMA mensagem única consolidada com tudo que o cliente ganhou.
+    // Reduz volume em 66% pra clientes que têm múltiplos programas ativos.
     if (['finalizado','entregue'].includes(new_status) && !['finalizado','entregue'].includes(oldStatus)) {
       try {
         const cfg    = db.prepare('SELECT cashback_config, evo_automacoes, evo_instance, fid_config, stamp_config, store_name FROM store_config WHERE tenant_id=?').get(tid)
@@ -1520,6 +1543,9 @@ async function handleOrderStatus(req, res) {
         const _categB  = detectarCategoriaPedido(itemsStr, _seg)
         const _lojaEmojiB = _categB.lojaEmoji  // ex: 🍧 açaí, 🍕 pizza, 🍔 hamb
 
+        // Acumulador de recompensas que serão enviadas em UMA msg só
+        const _recompensas = []  // [{ tipo, linha }, ...]
+
         // ── Cashback ────────────────────────────────────
         const cbCfg  = (() => { try { return JSON.parse(cfg?.cashback_config||'{}') } catch { return {} } })()
         if (cbCfg.ativo && cbCfg.pct > 0 && order.phone) {
@@ -1527,51 +1553,26 @@ async function handleOrderStatus(req, res) {
           const minPed = parseFloat(cbCfg.min_pedido||0)
           if (total >= minPed) {
             const credito = parseFloat((total * cbCfg.pct / 100).toFixed(2))
-            // Phone clean: só dígitos, normalizado
             const phoneClean = order.phone.replace(/\D/g,'')
             const phone8     = phoneClean.slice(-8)
-            // Match preciso: phone DEVE TERMINAR em phone8 (não conter no meio).
-            // SQLite LIKE com sufixo: 'phone LIKE %XXXXXXXX' funciona com escape.
             const cust    = db.prepare("SELECT id, cashback_saldo FROM customers WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ?").get(tid, phone8)
+            let novoSaldo = credito  // fallback para cliente novo
             if (cust) {
               db.prepare('UPDATE customers SET cashback_saldo=COALESCE(cashback_saldo,0)+? WHERE id=?').run(credito, cust.id)
-              // Lê saldo real após o UPDATE pra evitar race condition
-              const updated  = db.prepare('SELECT cashback_saldo FROM customers WHERE id=?').get(cust.id)
-              const novoSaldo = parseFloat(parseFloat(updated?.cashback_saldo||0).toFixed(2))
-              // WA cashback
-              const cbAuto = auto['cashback'] || {}
-              if (cbAuto.on !== false) {
-                const lojaB   = cfg?.store_name || 'Restaurante'
-                const msgPadrao = `${_lojaEmojiB} *${lojaB}*\n${'-'.repeat(20)}\n\n💰 *Cashback creditado!*\n\nOlá, *${nome}*! Você ganhou *R$ ${credito.toFixed(2).replace('.',',')}* de cashback.\n\n💳 Saldo atual: *R$ ${novoSaldo.toFixed(2).replace('.',',')}*\n\nUse no seu próximo pedido! 🛍️\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
-                const msgFinal  = cbAuto.on && cbAuto.msg ? fillVars(cbAuto.msg, { nome, credito: credito.toFixed(2).replace('.',','), saldo: novoSaldo.toFixed(2).replace('.',',') }) : msgPadrao
-                setImmediate(async () => {
-                  try {
-                    const r = await sendWA(order.phone, msgFinal, inst)
-                    if (r?.ok) log('📤', `WA cashback enviado → ${order.phone} (R$${credito})`)
-                    else       log('⚠️', `WA cashback FALHOU → ${order.phone}:`, r?.error || 'sem detalhe')
-                  } catch(e) { log('⚠️', `WA cashback ERROR → ${order.phone}:`, e.message) }
-                })
-              }
+              const updated = db.prepare('SELECT cashback_saldo FROM customers WHERE id=?').get(cust.id)
+              novoSaldo = parseFloat(parseFloat(updated?.cashback_saldo||0).toFixed(2))
             } else {
-              // Cliente não existe — cria com o crédito inicial.
-              // Antes era INSERT OR IGNORE: se já existisse com mesmo phone exato (mas
-              // com outro formato como sufixo), o crédito sumia. Agora UPSERT garante.
               db.prepare(`INSERT INTO customers (tenant_id,name,phone,cashback_saldo) VALUES (?,?,?,?)
                           ON CONFLICT(tenant_id,phone) DO UPDATE SET cashback_saldo=COALESCE(cashback_saldo,0)+excluded.cashback_saldo`)
                 .run(tid, order.client||order.phone, phoneClean, credito)
-              const cbAuto = auto['cashback'] || {}
-              if (cbAuto.on !== false) {
-                const lojaB2  = cfg?.store_name || 'Restaurante'
-                const msgPadrao = `💰 *${nome}*, você ganhou *R$ ${credito.toFixed(2).replace('.',',')}* de cashback com seu pedido!\n\nSeu saldo total: *R$ ${credito.toFixed(2).replace('.',',')}*\nUse no seu próximo pedido! 🛍️`
-                const msgFinal  = cbAuto.on && cbAuto.msg ? fillVars(cbAuto.msg, { nome, credito: credito.toFixed(2).replace('.',','), saldo: credito.toFixed(2).replace('.',',') }) : msgPadrao
-                setImmediate(async () => {
-                  try {
-                    const r = await sendWA(order.phone, msgFinal, inst)
-                    if (r?.ok) log('📤', `WA cashback (novo cliente) enviado → ${order.phone} (R$${credito})`)
-                    else       log('⚠️', `WA cashback (novo cliente) FALHOU → ${order.phone}:`, r?.error || 'sem detalhe')
-                  } catch(e) { log('⚠️', `WA cashback (novo cliente) ERROR → ${order.phone}:`, e.message) }
-                })
-              }
+            }
+            // Só ADICIONA na mensagem consolidada se gestor não desligou notif de cashback
+            const cbAuto = auto['cashback'] || {}
+            if (cbAuto.on !== false) {
+              _recompensas.push({
+                tipo: 'cashback',
+                linha: `💰 *R$ ${credito.toFixed(2).replace('.',',')}* de cashback (saldo: R$ ${novoSaldo.toFixed(2).replace('.',',')})`
+              })
             }
             marcarDirty()
             log('💰', `Cashback R$${credito} creditado → ${order.phone} (pedido #${order_id})`)
@@ -1579,14 +1580,7 @@ async function handleOrderStatus(req, res) {
         }
 
         // ── Fidelidade pontos ────────────────────────────
-        // Só roda se o gestor ATIVOU explicitamente o programa (ativo === true).
-        // Antes usava fallback pts_por_real=10 quando o campo era undefined,
-        // fazendo TODA loja enviar mensagem de "Você ganhou X pontos" mesmo
-        // sem configurar fidelidade. Agora exige ativação consciente:
-        //   1. ativo === true (gestor clicou no toggle e salvou)
-        //   2. pts_por_real > 0
-        // Lojas com config antiga sem campo "ativo" param de enviar até o
-        // gestor reabrir o modal e clicar em "Salvar".
+        // Só roda se o gestor ATIVOU explicitamente (ativo === true).
         const fidCfg     = (() => { try { return JSON.parse(cfg?.fid_config||'{}') } catch { return {} } })()
         const ptsPorReal = parseFloat(fidCfg.pts_por_real || 0)
         const fidAtivo   = fidCfg.ativo === true && ptsPorReal > 0
@@ -1594,15 +1588,10 @@ async function handleOrderStatus(req, res) {
           const phoneClean = order.phone.replace(/\D/g,'')
           const phone8 = phoneClean.slice(-8)
           let fid = db.prepare("SELECT id, pts, max_pts, name FROM fidelidade WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ?").get(tid, phone8)
-          // Se cliente nunca foi cadastrado em fidelidade, cria agora pra que possa pontuar.
-          // Antes: pedido sem login no cardápio nunca pontuava porque ninguém criava o registro.
           if (!fid) {
             const meta = parseInt(fidCfg.meta_pts || 500)
-            const insRes = db.prepare('INSERT OR IGNORE INTO fidelidade (tenant_id,name,phone,pts,max_pts,orders_count,resgates) VALUES (?,?,?,0,?,0,0)')
+            db.prepare('INSERT OR IGNORE INTO fidelidade (tenant_id,name,phone,pts,max_pts,orders_count,resgates) VALUES (?,?,?,0,?,0,0)')
               .run(tid, order.client || phoneClean, phoneClean, meta)
-            if (insRes.changes > 0) {
-              log('⭐', `Fidelidade: criado automaticamente para ${order.phone} (sem cadastro prévio)`)
-            }
             fid = db.prepare("SELECT id, pts, max_pts, name FROM fidelidade WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ?").get(tid, phone8)
           }
           if (fid) {
@@ -1613,24 +1602,20 @@ async function handleOrderStatus(req, res) {
               const meta     = fid.max_pts || 500
               db.prepare('UPDATE fidelidade SET pts=?, orders_count=orders_count+1 WHERE id=?').run(novosPts, fid.id)
               log('⭐', `Fidelidade +${ptosGanhos} pts → ${order.phone} (pedido #${order_id})`)
-              // WA pontos
               const ptAuto = auto['pontos'] || {}
               if (ptAuto.on !== false) {
-                const lojaP2  = cfg?.store_name || 'Restaurante'
-                const faltam     = Math.max(0, meta - novosPts)
-                const msgPadrao  = `${_lojaEmojiB} *${lojaP2}*\n${'-'.repeat(20)}\n\n🏆 *Pontos de fidelidade!*\n\nOlá, *${nome}*! Você ganhou *${ptosGanhos} pontos* com seu pedido.\n\n🎯 Saldo atual: *${novosPts} pontos*\n${faltam > 0 ? `⏳ Faltam apenas *${faltam} pontos* para sua recompensa!` : '🎁 Você atingiu sua recompensa! Resgate no próximo pedido.'}\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
-                const msgFinal   = ptAuto.on && ptAuto.msg ? fillVars(ptAuto.msg, { nome, pontos_ganhos: String(ptosGanhos), pontos_total: String(novosPts), pontos_faltam: String(faltam) }) : msgPadrao
-                setImmediate(async () => {
-                  try {
-                    const r = await sendWA(order.phone, msgFinal, inst)
-                    if (r?.ok) log('📤', `WA pontos enviado → ${order.phone} (+${ptosGanhos}pts)`)
-                    else       log('⚠️', `WA pontos FALHOU → ${order.phone}:`, r?.error || 'sem detalhe')
-                  } catch(e) { log('⚠️', `WA pontos ERROR → ${order.phone}:`, e.message) }
+                const faltam = Math.max(0, meta - novosPts)
+                _recompensas.push({
+                  tipo: 'pontos',
+                  linha: faltam > 0
+                    ? `⭐ *${ptosGanhos} pontos* de fidelidade (total: ${novosPts} — faltam ${faltam} pra recompensa)`
+                    : `⭐ *${ptosGanhos} pontos* — 🎁 *Recompensa desbloqueada!* Resgate no próximo pedido`
                 })
               }
             }
           }
         }
+
         // ── Cartão Fidelidade (Carimbinho) ─────────────
         const stampCfg = (() => { try { return JSON.parse(cfg?.stamp_config||'{}') } catch { return {} } })()
         if (stampCfg.ativo && order.phone) {
@@ -1640,51 +1625,50 @@ async function handleOrderStatus(req, res) {
             .run(tid, phoneCleanS)
           log('🃏', `Carimbinho +1 → ${order.phone} (pedido #${order_id})`)
 
-          // Notificação WhatsApp do carimbinho — antes não havia.
-          // Lê o progresso REAL após o UPDATE pra calcular carimbos restantes
-          // até a recompensa.
-          try {
-            const stAuto = auto['carimbinho'] || auto['stamp'] || {}
-            if (stAuto.on !== false) {
-              const prog = db.prepare('SELECT compras, ultimo_resgate FROM stamp_progress WHERE tenant_id=? AND phone=?').get(tid, phoneCleanS)
-              const compras       = prog?.compras || 0
-              const ultimoResgate = prog?.ultimo_resgate || 0
-              const desdeResgate  = compras - ultimoResgate
-              const meta          = parseInt(stampCfg.meta_compras || 10)
-              const faltam        = Math.max(0, meta - desdeResgate)
-              const elegivel      = desdeResgate >= meta
-              // Texto da recompensa (se atingiu a meta)
-              let recompensaTxt = '🎁 sua recompensa'
-              const tipoR = stampCfg.recompensa_tipo || 'pedido_gratis'
-              const valR  = parseFloat(stampCfg.recompensa_valor || 0)
-              if (tipoR === 'pedido_gratis')      recompensaTxt = '🎁 *um pedido grátis*'
-              else if (tipoR === 'frete_gratis')  recompensaTxt = '🚚 *frete grátis*'
-              else if (tipoR === 'percent' && valR > 0) recompensaTxt = `🏷️ *${valR.toFixed(0).replace('.0','')}% de desconto*`
-              else if (tipoR === 'fixo' && valR > 0)    recompensaTxt = `💵 *R$ ${valR.toFixed(2).replace('.',',')} de desconto*`
-              // Visual dos carimbos: ● (cheio) ○ (vazio) limitado a 10 pra ficar legível no WA
-              const limite = Math.min(meta, 10)
-              const propCheios = Math.min(limite, Math.round((desdeResgate / meta) * limite))
-              const carimbos   = '● '.repeat(propCheios).trim() + (propCheios < limite ? ' ' + '○ '.repeat(limite - propCheios).trim() : '')
-              const lojaSt = cfg?.store_name || 'Restaurante'
-              const msgPadrao = elegivel
-                ? `${_lojaEmojiB} *${lojaSt}*\n${'-'.repeat(20)}\n\n🎉 *Parabéns, ${nome}!*\n\nVocê completou seu cartão fidelidade!\n\n${carimbos}\n\nGanhou ${recompensaTxt}!\n\nÉ só pedir no próximo pedido que aplicamos automaticamente. 😋`
-                : `${_lojaEmojiB} *${lojaSt}*\n${'-'.repeat(20)}\n\n🃏 *Carimbo conquistado!*\n\nOlá, *${nome}*! Mais um carimbo no seu cartão fidelidade:\n\n${carimbos}\n\n${desdeResgate}/${meta} carimbos\n⏳ Faltam *${faltam}* para ganhar ${recompensaTxt}!\n\n_Continua comprando com a gente! 💚_`
-              const msgFinal  = stAuto.on && stAuto.msg ? fillVars(stAuto.msg, {
-                nome,
-                carimbos: String(desdeResgate),
-                meta: String(meta),
-                faltam: String(faltam),
-                recompensa: recompensaTxt.replace(/\*/g, '')
-              }) : msgPadrao
-              setImmediate(async () => {
-                try {
-                  const r = await sendWA(order.phone, msgFinal, inst)
-                  if (r?.ok) log('📤', `WA carimbinho enviado → ${order.phone} (${desdeResgate}/${meta})`)
-                  else       log('⚠️', `WA carimbinho FALHOU → ${order.phone}:`, r?.error || 'sem detalhe')
-                } catch(e) { log('⚠️', `WA carimbinho ERROR → ${order.phone}:`, e.message) }
-              })
-            }
-          } catch(stErr) { log('⚠️', 'Notif carimbinho erro:', stErr.message) }
+          const stAuto = auto['carimbinho'] || auto['stamp'] || {}
+          if (stAuto.on !== false) {
+            const prog = db.prepare('SELECT compras, ultimo_resgate FROM stamp_progress WHERE tenant_id=? AND phone=?').get(tid, phoneCleanS)
+            const compras       = prog?.compras || 0
+            const ultimoResgate = prog?.ultimo_resgate || 0
+            const desdeResgate  = compras - ultimoResgate
+            const meta          = parseInt(stampCfg.meta_compras || 10)
+            const faltam        = Math.max(0, meta - desdeResgate)
+            const elegivel      = desdeResgate >= meta
+            // Texto da recompensa
+            let recompensaTxt = 'sua recompensa'
+            const tipoR = stampCfg.recompensa_tipo || 'pedido_gratis'
+            const valR  = parseFloat(stampCfg.recompensa_valor || 0)
+            if (tipoR === 'pedido_gratis')      recompensaTxt = 'um *pedido grátis*'
+            else if (tipoR === 'frete_gratis')  recompensaTxt = '*frete grátis*'
+            else if (tipoR === 'percent' && valR > 0) recompensaTxt = `*${valR.toFixed(0).replace('.0','')}% de desconto*`
+            else if (tipoR === 'fixo' && valR > 0)    recompensaTxt = `*R$ ${valR.toFixed(2).replace('.',',')} de desconto*`
+            _recompensas.push({
+              tipo: 'carimbo',
+              linha: elegivel
+                ? `🎉 *Cartão fidelidade COMPLETO!* (${desdeResgate}/${meta}) — Você ganhou ${recompensaTxt}`
+                : `🃏 *${desdeResgate}/${meta} carimbos* (faltam ${faltam} pra ganhar ${recompensaTxt})`
+            })
+          }
+        }
+
+        // ── ENVIO CONSOLIDADO ─────────────────────────
+        // 1 mensagem só, com tudo que o cliente ganhou. Substitui as 3 antigas.
+        if (_recompensas.length > 0 && order.phone) {
+          const lojaNome  = cfg?.store_name || 'Restaurante'
+          const linhasRec = _recompensas.map(r => r.linha).join('\n')
+          const msgFinal  = _recompensas.length === 1
+            ? `${_lojaEmojiB} *${lojaNome}*\n\n🎉 *${nome}*, você ganhou:\n\n${linhasRec}\n\n_Use no próximo pedido!_ 🛍️`
+            : `${_lojaEmojiB} *${lojaNome}*\n\n🎉 *${nome}*, seu pedido foi finalizado!\n\nVocê ganhou:\n${linhasRec}\n\n_Tudo isso pra usar no próximo pedido!_ 🛍️`
+          setImmediate(async () => {
+            try {
+              // Delay humanizado pra evitar padrão de bot (rajada de 1s fixo).
+              // Notificações de fidelidade: 1.5s a 4s, com variação aleatória.
+              const _delay = 1500 + Math.floor(Math.random() * 2500)
+              const r = await sendWA(order.phone, msgFinal, inst, _delay)
+              if (r?.ok) log('📤', `WA recompensas (${_recompensas.map(r=>r.tipo).join('+')}) → ${order.phone}`)
+              else       log('⚠️', `WA recompensas FALHOU → ${order.phone}:`, r?.error || 'sem detalhe')
+            } catch(e) { log('⚠️', `WA recompensas ERROR → ${order.phone}:`, e.message) }
+          })
         }
       } catch(cbErr) { log('⚠️', 'Cashback/Fidelidade/Stamp erro:', cbErr.message, '|', cbErr.stack?.split('\n')[1]?.trim() || '') }
     }
@@ -1811,7 +1795,7 @@ async function handleOrderStatus(req, res) {
               if (processed.has(_pkey)) return
               processed.add(_pkey)
               log('⏳',`Avaliação agendada em ${min}min para #${idStr}`)
-              setTimeout(async()=>{ const cfgNow=db.prepare("SELECT evo_automacoes FROM store_config WHERE tenant_id=?").get(tid); if((jsonParse(cfgNow?.evo_automacoes)||{})['avaliacao']?.on===false) { processed.delete(_pkey); return } await sendWA(order.phone,msgFinal,inst) },min*60*1000)
+              setTimeout(async()=>{ const cfgNow=db.prepare("SELECT evo_automacoes FROM store_config WHERE tenant_id=?").get(tid); if((jsonParse(cfgNow?.evo_automacoes)||{})['avaliacao']?.on===false) { processed.delete(_pkey); return } await sendWA(order.phone,msgFinal,inst,_autoDelayMs()) },min*60*1000)
             } else {
               // Marca ANTES do await para evitar race condition entre cliques duplos no gestor:
               // se 2 POSTs /api/order-status chegam em paralelo, ambos leem oldStatus='pronto',
@@ -1819,7 +1803,7 @@ async function handleOrderStatus(req, res) {
               if (processed.has(_pkey)) return
               processed.add(_pkey)
               try {
-                const r = await sendWA(order.phone, msgFinal, inst)
+                const r = await sendWA(order.phone, msgFinal, inst, _autoDelayMs())
                 if (!r.ok) processed.delete(_pkey) // se falhou, permite retry
               } catch(_) { processed.delete(_pkey) }
             }
