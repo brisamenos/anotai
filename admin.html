@@ -342,6 +342,104 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
 
 /* ══ PAGE TRANSITION ══ */
 .sec-page{animation:fadeUp .2s ease}
+
+/* Modern admin refresh */
+:root{
+  --bg:#090d16;--s1:#101624;--s2:#141b2b;--s3:#1b2638;
+  --border:rgba(148,163,184,.16);--border-hover:rgba(148,163,184,.28);
+  --accent:#4f8df7;--accent-dim:rgba(79,141,247,.12);
+  --danger:#f05252;--success:#20b26b;--orange:#f59e0b;--purple:#7c6df2;
+  --text:#f7f8fb;--text-2:#b7c0cf;--muted:#7d8ba1;--sb-w:248px;
+}
+body{background:linear-gradient(180deg,#0b1020 0%,#090d16 260px,#090d16 100%);letter-spacing:0}
+.lg-title,.sb-logo-name,.topbar-title,.stat-card-val,.card-title,.sec-head-title,.modal h2{font-family:'DM Sans',sans-serif;letter-spacing:0}
+#login{background:linear-gradient(180deg,#0d1424,#090d16)}
+.lg-card,.sidebar,.topbar,.card,.tw,.modal,.stat-card,.ti{box-shadow:none}
+.lg-card,.modal{border-radius:12px}
+.sidebar{background:rgba(16,22,36,.96);backdrop-filter:blur(18px)}
+.sb-logo{min-height:78px;padding:18px;border-bottom-color:rgba(148,163,184,.13)}
+.lg-icon,.sb-logo-icon{font-size:0;border-radius:8px;background:linear-gradient(135deg,#3b82f6,#635bff)}
+.lg-icon::before,.sb-logo-icon::before{content:'A';font-size:18px;font-weight:800;color:#fff}
+.sb-logo-tag{background:rgba(79,141,247,.12);color:#9cc2ff;border:1px solid rgba(79,141,247,.22);border-radius:6px;letter-spacing:.4px}
+.sb-nav{padding:14px 10px}
+.sb-sec{padding:16px 12px 7px;letter-spacing:.9px;color:#6f7f96}
+.sb-item{min-height:42px;border-radius:8px;padding:8px 12px;color:#94a3b8}
+.sb-item .sb-icon{width:22px;height:22px;border-radius:6px;font-size:0;background:transparent;position:relative}
+.sb-item .sb-icon::before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.75}
+.sb-item:hover{background:rgba(148,163,184,.08)}
+.sb-item.on{background:rgba(79,141,247,.13);color:#dbeafe}
+.sb-item.on .sb-icon{background:rgba(79,141,247,.14)}
+.sb-user,.sb-av,.btn,.f-input,.minput,.sbox,.badge,.infobox,.toggle-slider,.modal-x,.card,.tw,.stat-card{border-radius:8px}
+.topbar{height:64px;background:rgba(9,13,22,.84);padding:0 28px}
+.content{width:100%;max-width:1280px;margin:0 auto;padding:28px}
+.sec-head{align-items:center;padding-bottom:2px}
+.sec-head-title{font-size:24px;line-height:1.15}
+.sec-head-sub,.card-sub{color:#8391a7}
+.stats-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.stat-card,.card,.tw{background:rgba(16,22,36,.86)}
+.stat-card{min-height:118px;padding:18px}
+.stat-card::before{height:0}
+.stat-card:hover{transform:none}
+.stat-card-label{color:#8391a7;letter-spacing:.5px}
+.stat-card-val{font-size:28px}
+.stat-card-icon,.empty-state .es-icon{display:none}
+.card{padding:18px}
+.card-head{margin-bottom:14px}
+.card-title{font-size:15px}
+.grid-2{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.tw{overflow:auto}
+table{min-width:760px}
+thead th{background:rgba(20,27,43,.92);color:#7f8ca3;padding:11px 14px;letter-spacing:.55px}
+td{padding:13px 14px}
+tbody tr:hover{background:rgba(79,141,247,.055)}
+.btn{min-height:34px;box-shadow:none}
+.bp{background:#2f6fed;box-shadow:none}
+.bp:hover{background:#3b82f6;box-shadow:none;transform:none}
+.bg2{background:rgba(20,27,43,.9)}
+.ind-tab{padding:11px 18px;color:#8391a7}
+.ind-tab.on{color:#f7f8fb;border-bottom-color:#4f8df7}
+.modal-bg{padding:18px}
+.modal{border-radius:10px;padding:24px}
+#toast{right:18px;bottom:18px}
+@media (max-width:1100px){
+  .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+}
+@media (max-width:900px){
+  body{display:block}
+  #painel{min-height:100vh}
+  .sidebar{position:sticky;top:0;width:100%;height:auto;max-height:44vh;border-right:0;border-bottom:1px solid var(--border)}
+  .sb-logo{min-height:auto;padding:12px 14px}
+  .sb-logo-icon{width:32px;height:32px}
+  .sb-nav{display:flex;gap:6px;overflow-x:auto;padding:8px 10px 12px}
+  .sb-sec{display:none}
+  .sb-item{width:auto;flex:0 0 auto;margin:0;min-height:36px;padding:7px 10px;font-size:12.5px}
+  .sb-item .sb-icon{display:none}
+  .sb-foot{display:none}
+  .main{margin-left:0;max-width:none}
+  .topbar{position:sticky;top:0;height:56px;padding:0 14px}
+  .content{padding:16px 12px 84px}
+  .sec-head{align-items:flex-start;flex-direction:column;gap:10px}
+  .sec-head-title{font-size:21px}
+  .stats-grid{grid-template-columns:1fr}
+  .stat-card{min-height:auto}
+  .card,.tw{margin-bottom:12px}
+  .tmeta,.card-head{align-items:flex-start;flex-direction:column}
+  .sbox,.sbox input,.minput{width:100%;min-width:0}
+  .btn{width:auto;max-width:100%}
+  .modal{width:100%;max-width:none;padding:20px}
+  .mrow2{grid-template-columns:1fr}
+  #toast{left:12px;right:12px;align-items:stretch}
+  .ti{min-width:0;max-width:none}
+}
+@media (max-width:560px){
+  .topbar-title{font-size:14px}
+  .topbar .btn{padding:6px 10px;font-size:11.5px}
+  .stat-card-val{font-size:25px}
+  .card{padding:14px}
+  .ind-tab{padding:10px 11px;font-size:12.5px}
+}
 </style>
 <script src="/api-client.js"></script>
 </head>
@@ -3421,6 +3519,28 @@ function escapeHtml(s) {
   if (s == null) return '';
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
+// Remove emojis do admin, inclusive conteudo gerado dinamicamente.
+(function cleanAdminEmoji() {
+  const emojiRe = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu;
+  const skipTags = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT']);
+  function stripNode(node) {
+    if (!node) return;
+    if (node.nodeType === Node.TEXT_NODE) {
+      node.nodeValue = node.nodeValue.replace(emojiRe, '').replace(/\s{2,}/g, ' ');
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE || skipTags.has(node.tagName)) return;
+    node.childNodes.forEach(stripNode);
+  }
+  stripNode(document.body);
+  new MutationObserver(list => {
+    for (const m of list) {
+      m.addedNodes.forEach(stripNode);
+      if (m.type === 'characterData') stripNode(m.target);
+    }
+  }).observe(document.body, { childList: true, subtree: true, characterData: true });
+})();
 
 </script>
 </body>

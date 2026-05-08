@@ -1153,7 +1153,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // ── ADMIN: Listar leads ────────────────────────────
   if (req.method === 'GET' && upath === '/api/admin/leads-indicacao') {
     if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
-    const status = parsedUrl?.query?.status || null
+    const status = params.get('status') || null
     let sql = `SELECT l.*, i.nome AS indicador_nome, i.codigo AS indicador_codigo
                FROM leads_indicacao l LEFT JOIN indicadores i ON i.id=l.indicador_id`
     const params = []
@@ -1207,7 +1207,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // Filtros opcionais: ?status=a_pagar|pago, ?indicador_id=N, ?mes=YYYY-MM
   if (req.method === 'GET' && upath === '/api/admin/comissoes') {
     if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
-    const q = parsedUrl?.query || {}
+    const q = {
+      status: params.get('status') || '',
+      indicador_id: params.get('indicador_id') || '',
+      mes: params.get('mes') || ''
+    }
     let sql = `SELECT c.*, i.nome AS indicador_nome, i.chave_pix,
                l.nome_estabelecimento, l.tenant_id_convertido
                FROM comissoes c
