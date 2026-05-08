@@ -484,6 +484,9 @@ const MIGRATIONS = [
       PRIMARY KEY (tenant_id, phone)
     )`
   },
+  { version:45, description:'orders.wa_track: cliente optou por receber atualizações do pedido via WhatsApp', up:
+    `ALTER TABLE orders ADD COLUMN wa_track INTEGER DEFAULT 0`
+  },
 ]
 
 function runMigrations() {
@@ -1784,23 +1787,32 @@ async function handleOrderStatus(req, res) {
             ]),
           }
           let msgFinal = null
-          // ── MODO ESSENCIAL ───────────────────────────────────────
-          // Quando ativado (auto.modo_essencial === true), pula notificações
-          // intermediárias do pedido pra reduzir volume de mensagens e evitar
-          // banimento do número no WhatsApp. Cliente só recebe:
-          //   ✅ PIX (pra pagar)              [obrigatório]
-          //   ⏭️ recebido (analise)            — PULADO
-          //   ⏭️ confirmado (producao)         — PULADO
-          //   ⏭️ pronto                        — PULADO
-          //   ✅ saiu/entregue (entrega)
-          //   ✅ cancelado
-          //   ✅ avaliação (finalizado)
-          //   ✅ recompensas (já consolidado em 1 msg)
-          // Reduz ~50% das mensagens automáticas de status do pedido.
-          const _modoEssencial = auto.modo_essencial === true
-          const _statusIntermediarios = ['analise', 'producao', 'pronto']
-          if (_modoEssencial && _statusIntermediarios.includes(new_status)) {
-            log('🎯', `[modo_essencial] Pulando notificação "${new_status}" do pedido #${idStr}`)
+          // ── OPT-IN DO CLIENTE + MODO ESSENCIAL ─────────────────
+          // Cliente escolhe no checkout se quer receber atualizações pelo WhatsApp.
+          // - Se NÃO marcou (wa_track=0): só recebe msgs ESSENCIAIS (cancelado +
+          //   finalizado/avaliação). Nada de "recebido", "produção", "pronto",
+          //   "saiu pra entrega" — porque ele não pediu pra receber.
+          // - Se MARCOU (wa_track=1): recebe tudo normal, conforme automações ativas.
+          //
+          // O modo_essencial da loja CONTINUA valendo: mesmo cliente que opt-in,
+          // se a loja ativou modo essencial, ainda pula recebido/produção/pronto.
+          //
+          // Mensagens NUNCA puladas (sempre vão pra qualquer cliente):
+          //   - cancelado (cliente PRECISA saber que cancelou)
+          //   - finalizado (gera avaliação, fecha o ciclo)
+          //   - PIX (cliente precisa pagar — fluxo separado, não passa aqui)
+          //   - Recompensas (única msg pós-finalização — não passa aqui)
+          const _waTrack = parseInt(order.wa_track || 0) === 1
+          const _statusEssenciais = ['cancelado', 'finalizado']
+          const _statusOptIn      = ['analise', 'producao', 'pronto', 'saiu', 'entregue']
+
+          // 1) Cliente NÃO optou e msg não é essencial → pula
+          if (!_waTrack && _statusOptIn.includes(new_status)) {
+            log('🔕', `[wa_track=0] Cliente não optou por acompanhar — pulando "${new_status}" do pedido #${idStr}`)
+          }
+          // 2) Modo essencial da loja ativo + status intermediário → pula
+          else if (auto.modo_essencial === true && ['analise', 'producao', 'pronto'].includes(new_status)) {
+            log('🎯', `[modo_essencial] Pulando "${new_status}" do pedido #${idStr}`)
           }
           else if (ct.on===false) { log('⏭️',`Automação "${tipoAuto}" desligada`) }
           else if (ct.on&&ct.msg) { msgFinal=fillVars(ct.msg,vars) }
