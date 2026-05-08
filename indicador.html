@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Indicador — Painel</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f6f7fb;--panel:#ffffff;--panel-2:#f0f3f8;--line:#dde3ee;
+  --text:#111827;--muted:#667085;--accent:#2563eb;--success:#16a34a;
+  --danger:#dc2626;--orange:#f59e0b;--purple:#7c3aed;
+}
+body{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.45}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.login-card{width:100%;max-width:390px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:28px;box-shadow:0 20px 60px rgba(15,23,42,.08)}
+.brand{font-weight:800;font-size:22px;margin-bottom:6px}
+.sub{font-size:13px;color:var(--muted);margin-bottom:22px}
+.label{font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;display:block}
+.input{width:100%;border:1px solid var(--line);background:#fff;border-radius:8px;padding:11px 12px;font-size:14px;margin-bottom:14px;outline:none}
+.input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.btn{border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer;background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:38px}
+.btn.secondary{background:#fff;color:var(--text);border:1px solid var(--line)}
+.btn.danger{background:var(--danger)}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.err{display:none;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:14px}
+.err.on{display:block}
+#app{display:none;min-height:100vh}
+.topbar{height:64px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:5}
+.top-title{font-size:16px;font-weight:800}
+.top-sub{font-size:12px;color:var(--muted)}
+.content{max-width:1180px;margin:0 auto;padding:26px}
+.hero{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+.hero h1{font-size:28px;line-height:1.1;margin-bottom:6px}
+.hero p{color:var(--muted);font-size:14px}
+.grid{display:grid;gap:14px}
+.stats{grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px}
+.stat-label{font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px}
+.stat-value{font-size:26px;font-weight:850}
+.money{font-size:22px}
+.green{color:var(--success)}.orange{color:var(--orange)}.purple{color:var(--purple)}.red{color:var(--danger)}
+.copy-box{display:flex;gap:8px;margin-top:14px}
+.copy-box input{flex:1;margin:0;background:var(--panel-2)}
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin:18px 0 14px}
+.tab{background:transparent;color:var(--muted);border:0;border-bottom:2px solid transparent;padding:10px 14px;font-weight:800;cursor:pointer}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.table-wrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:auto}
+table{width:100%;border-collapse:collapse;min-width:760px}
+th{font-size:11px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;text-align:left;background:var(--panel-2);padding:11px 14px;border-bottom:1px solid var(--line)}
+td{padding:13px 14px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}
+tr:last-child td{border-bottom:0}
+.badge{display:inline-flex;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:800;background:var(--panel-2);color:var(--muted)}
+.badge.novo,.badge.a_pagar{background:#fff7ed;color:#c2410c}
+.badge.convertido,.badge.pago{background:#ecfdf3;color:#15803d}
+.badge.perdido,.badge.cancelado{background:#f3f4f6;color:#4b5563}
+.badge.em_contato{background:#eff6ff;color:#1d4ed8}
+.badge.negociando{background:#f5f3ff;color:#6d28d9}
+.empty{padding:34px;text-align:center;color:var(--muted)}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+select.input{width:auto;margin:0}
+@media (max-width:900px){
+  .topbar{padding:0 14px}.content{padding:16px 12px 80px}
+  .hero{flex-direction:column}.stats{grid-template-columns:1fr 1fr}
+  .copy-box{flex-direction:column}.copy-box .btn{width:100%}
+}
+@media (max-width:560px){
+  .stats{grid-template-columns:1fr}.hero h1{font-size:24px}
+  .toolbar{align-items:flex-start;flex-direction:column}.tab{padding:9px 10px}
+}
+</style>
+</head>
+<body>
+<div id="login" class="login-wrap">
+  <div class="login-card">
+    <div class="brand">Painel do Indicador</div>
+    <div class="sub">Acompanhe seus leads, conversões e comissões.</div>
+    <div id="login-err" class="err"></div>
+    <label class="label">E-mail</label>
+    <input class="input" id="login-email" type="email" autocomplete="email" placeholder="voce@email.com">
+    <label class="label">Senha</label>
+    <input class="input" id="login-senha" type="password" autocomplete="current-password" placeholder="Sua senha" onkeydown="if(event.key==='Enter')login()">
+    <button id="login-btn" class="btn" style="width:100%" onclick="login()">Entrar</button>
+  </div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <div>
+      <div class="top-title" id="top-nome">Indicador</div>
+      <div class="top-sub" id="top-codigo">—</div>
+    </div>
+    <button class="btn secondary" onclick="logout()">Sair</button>
+  </div>
+  <main class="content">
+    <section class="hero">
+      <div>
+        <h1>Dashboard de indicações</h1>
+        <p>Dados atualizados automaticamente para você acompanhar cada indicação em tempo real.</p>
+      </div>
+      <button class="btn secondary" onclick="loadAll()">Atualizar</button>
+    </section>
+    <div id="app-err" class="err"></div>
+
+    <section class="grid stats">
+      <div class="card"><div class="stat-label">Leads totais</div><div class="stat-value" id="st-leads">—</div></div>
+      <div class="card"><div class="stat-label">Novos</div><div class="stat-value orange" id="st-novos">—</div></div>
+      <div class="card"><div class="stat-label">Convertidos</div><div class="stat-value green" id="st-conv">—</div></div>
+      <div class="card"><div class="stat-label">A pagar</div><div class="stat-value money red" id="st-pagar">—</div></div>
+      <div class="card"><div class="stat-label">Pago total</div><div class="stat-value money" id="st-pago">—</div></div>
+    </section>
+
+    <section class="card">
+      <div class="stat-label">Seu link de indicação</div>
+      <div class="copy-box">
+        <input class="input" id="link-indicacao" readonly>
+        <button class="btn" onclick="copiarLink(this)">Copiar link</button>
+      </div>
+    </section>
+
+    <div class="tabs">
+      <button class="tab on" id="tab-leads" onclick="switchTab('leads')">Leads</button>
+      <button class="tab" id="tab-comissoes" onclick="switchTab('comissoes')">Comissões</button>
+    </div>
+
+    <section id="panel-leads">
+      <div class="toolbar">
+        <div>
+          <div class="top-title">Indicados recebidos</div>
+          <div class="top-sub">Todos os cadastros enviados pelo seu link</div>
+        </div>
+        <select class="input" id="lead-status" onchange="loadLeads()">
+          <option value="">Todos</option>
+          <option value="novo">Novos</option>
+          <option value="em_contato">Em contato</option>
+          <option value="negociando">Negociando</option>
+          <option value="convertido">Convertidos</option>
+          <option value="perdido">Perdidos</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Estabelecimento</th><th>Cliente</th><th>WhatsApp</th><th>Cidade</th><th>Status</th><th>Data</th></tr></thead>
+          <tbody id="leads-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="panel-comissoes" style="display:none">
+      <div class="toolbar">
+        <div>
+          <div class="top-title">Comissões</div>
+          <div class="top-sub">Valores gerados para leads convertidos</div>
+        </div>
+        <select class="input" id="com-status" onchange="loadComissoes()">
+          <option value="">Todas</option>
+          <option value="a_pagar">A pagar</option>
+          <option value="pago">Pagas</option>
+          <option value="cancelado">Canceladas</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mês</th><th>Estabelecimento</th><th>Valor base</th><th>Comissão</th><th>Status</th><th>Pagamento</th></tr></thead>
+          <tbody id="com-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+let session = null;
+let me = null;
+let refreshTimer = null;
+let rtSource = null;
+
+function authHeader() {
+  return session?.token ? { 'Authorization': 'Bearer ' + session.token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+}
+async function sha256(t) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function money(v) {
+  return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtDate(v) {
+  if (!v) return '—';
+  return new Date(v).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function login() {
+  const email = document.getElementById('login-email').value.trim().toLowerCase();
+  const senha = document.getElementById('login-senha').value;
+  const err = document.getElementById('login-err');
+  const btn = document.getElementById('login-btn');
+  err.classList.remove('on');
+  if (!email || !senha) { err.textContent = 'Preencha e-mail e senha.'; err.classList.add('on'); return; }
+  btn.disabled = true; btn.textContent = 'Entrando...';
+  try {
+    const senha_hash = await sha256(senha);
+    const r = await fetch('/api/indicador-login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, senha_hash }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Acesso negado');
+    session = { token:d.token, nome:d.nome, email:d.email, codigo:d.codigo, ts:Date.now() };
+    sessionStorage.setItem('indicador_session', JSON.stringify(session));
+    showApp();
+    loadAll().catch(e => showAppError(e.message || 'Erro ao carregar painel.'));
+  } catch(e) {
+    err.textContent = e.message;
+    err.classList.add('on');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+}
+
+function showApp() {
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(loadAll, 15000);
+}
+
+async function logout() {
+  try { await fetch('/api/indicador-logout', { method:'POST', headers:authHeader() }); } catch(e) {}
+  sessionStorage.removeItem('indicador_session');
+  location.reload();
+}
+
+async function loadAll() {
+  clearAppError();
+  try {
+    const ready = await loadMe();
+    if (ready === false) return;
+    await Promise.all([loadLeads(), loadComissoes()]);
+  } catch(e) {
+    showAppError(e.message || 'Erro ao carregar painel.');
+  }
+}
+
+async function loadMe() {
+  const r = await fetch('/api/indicador/me', { headers: authHeader() });
+  if (r.status === 401) { logout(); return false; }
+  if (!r.ok) throw new Error('Não foi possível carregar os dados do indicador.');
+  me = await r.json();
+  document.getElementById('top-nome').textContent = me.nome || 'Indicador';
+  document.getElementById('top-codigo').textContent = me.codigo ? 'Código ' + me.codigo : '—';
+  document.getElementById('st-leads').textContent = me.resumo?.total_leads ?? 0;
+  document.getElementById('st-novos').textContent = me.resumo?.leads_novos ?? 0;
+  document.getElementById('st-conv').textContent = me.resumo?.convertidos ?? 0;
+  document.getElementById('st-pagar').textContent = money(me.resumo?.a_pagar);
+  document.getElementById('st-pago').textContent = money(me.resumo?.pago_total);
+  document.getElementById('link-indicacao').value = location.origin + '/indicacao/' + me.codigo;
+  connectRealtime();
+  return true;
+}
+
+async function loadLeads() {
+  const tbody = document.getElementById('leads-tbody');
+  const status = document.getElementById('lead-status').value;
+  tbody.innerHTML = '<tr><td colspan="6" class="empty">Carregando...</td></tr>';
+  try {
+    const r = await fetch('/api/indicador/leads' + (status ? '?status=' + encodeURIComponent(status) : ''), { headers: authHeader() });
+    if (!r.ok) { tbody.innerHTML = '<tr><td colspan="6" class="empty">Erro ao carregar leads.</td></tr>'; return; }
+    const rows = await r.json();
+    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">Nenhum lead encontrado.</td></tr>'; return; }
+    tbody.innerHTML = rows.map(l => `
+      <tr>
+        <td><strong>${escapeHtml(l.nome_estabelecimento)}</strong><div class="top-sub">${escapeHtml(l.segmento || '—')}</div></td>
+        <td>${escapeHtml(l.nome_cliente)}</td>
+        <td><a href="https://wa.me/55${String(l.phone_cliente||'').replace(/\D/g,'')}" target="_blank">${escapeHtml(l.phone_cliente || '—')}</a></td>
+        <td>${escapeHtml(l.cidade || '—')}</td>
+        <td><span class="badge ${escapeHtml(l.status)}">${escapeHtml(l.status || 'novo').replace('_',' ')}</span></td>
+        <td>${fmtDate(l.created_at)}</td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">Erro de conexão ao carregar leads.</td></tr>';
+  }
+}
+
+async function loadComissoes() {
+  const tbody = document.getElementById('com-tbody');
+  const status = document.getElementById('com-status').value;
+  tbody.innerHTML = '<tr><td colspan="6" class="empty">Carregando...</td></tr>';
+  try {
+    const r = await fetch('/api/indicador/comissoes' + (status ? '?status=' + encodeURIComponent(status) : ''), { headers: authHeader() });
+    if (!r.ok) { tbody.innerHTML = '<tr><td colspan="6" class="empty">Erro ao carregar comissões.</td></tr>'; return; }
+    const rows = await r.json();
+    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">Nenhuma comissão encontrada.</td></tr>'; return; }
+    tbody.innerHTML = rows.map(c => `
+      <tr>
+        <td><strong>${escapeHtml(c.mes_referencia)}</strong></td>
+        <td>${escapeHtml(c.nome_estabelecimento || '—')}</td>
+        <td>${money(c.valor_pagamento)}</td>
+        <td><strong>${money(c.comissao_valor)}</strong></td>
+        <td><span class="badge ${escapeHtml(c.status)}">${escapeHtml(c.status || '').replace('_',' ')}</span></td>
+        <td>${c.data_pagamento_indicador ? fmtDate(c.data_pagamento_indicador) : '—'}</td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">Erro de conexão ao carregar comissões.</td></tr>';
+  }
+}
+
+function showAppError(msg) {
+  const el = document.getElementById('app-err');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('on');
+}
+
+function clearAppError() {
+  const el = document.getElementById('app-err');
+  if (!el) return;
+  el.classList.remove('on');
+  el.textContent = '';
+}
+
+function switchTab(tab) {
+  document.getElementById('tab-leads').classList.toggle('on', tab === 'leads');
+  document.getElementById('tab-comissoes').classList.toggle('on', tab === 'comissoes');
+  document.getElementById('panel-leads').style.display = tab === 'leads' ? '' : 'none';
+  document.getElementById('panel-comissoes').style.display = tab === 'comissoes' ? '' : 'none';
+}
+
+function connectRealtime() {
+  if (!me?.id || rtSource) return;
+  rtSource = new EventSource('/sse/' + encodeURIComponent('indicador-rt:' + me.id));
+  const reload = () => loadAll();
+  rtSource.addEventListener('indicador:LEAD_INSERT', reload);
+  rtSource.addEventListener('indicador:LEAD_UPDATE', reload);
+  rtSource.addEventListener('indicador:COMISSAO_UPDATE', reload);
+  rtSource.onerror = () => {
+    try { rtSource.close(); } catch(e) {}
+    rtSource = null;
+    setTimeout(connectRealtime, 5000);
+  };
+}
+
+function copiarLink(btn) {
+  const link = document.getElementById('link-indicacao').value;
+  navigator.clipboard.writeText(link).then(() => {
+    if (btn) { const old = btn.textContent; btn.textContent = 'Copiado'; setTimeout(()=>btn.textContent = old, 1400); }
+  });
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  try {
+    const raw = sessionStorage.getItem('indicador_session');
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    if (!s.token || Date.now() - s.ts > 8*60*60*1000) { sessionStorage.removeItem('indicador_session'); return; }
+    session = s;
+    showApp();
+    loadAll().catch(e => showAppError(e.message || 'Erro ao carregar painel.'));
+  } catch(e) {
+    sessionStorage.removeItem('indicador_session');
+  }
+});
+</script>
+</body>
+</html>

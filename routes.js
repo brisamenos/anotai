@@ -407,6 +407,29 @@ module.exports = async function handleRoutes(req, res, ctx) {
           MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
           EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano } = ctx
 
+  const INDICADOR_SESSION_TTL = 8 * 60 * 60 * 1000
+  const criarSessaoIndicador = (ind) => {
+    const token = crypto.randomBytes(32).toString('hex')
+    const ts = Date.now()
+    db.prepare('DELETE FROM indicador_sessions WHERE ts < ?').run(ts - INDICADOR_SESSION_TTL)
+    db.prepare(`INSERT OR REPLACE INTO indicador_sessions
+      (token, indicador_id, nome, email, codigo, ts) VALUES (?,?,?,?,?,?)`)
+      .run(token, ind.id, ind.nome, ind.email, ind.codigo, ts)
+    return token
+  }
+  const validarSessaoIndicador = (req) => {
+    const auth = req.headers['authorization'] || ''
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+    if (!token) return null
+    const s = db.prepare('SELECT * FROM indicador_sessions WHERE token=?').get(token)
+    if (!s) return null
+    if (Date.now() - s.ts > INDICADOR_SESSION_TTL) {
+      db.prepare('DELETE FROM indicador_sessions WHERE token=?').run(token)
+      return null
+    }
+    return s
+  }
+
   // ── Inicia job de recuperação de PIX na primeira requisição ───────────────
   // O job resolve o token MP por tenant em cada iteração — pagamentos de
   // pedidos do tenant X consultam a conta MP do tenant X (com fallback global).
@@ -674,6 +697,31 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const auth  = req.headers['authorization'] || ''
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
     if (token) db.prepare('DELETE FROM admin_sessions WHERE token=?').run(token)
+    send(res, 200, { ok: true })
+    return true
+  }
+
+  // ── Login do indicador ──────────────────────────────
+  if (req.method === 'POST' && upath === '/api/indicador-login') {
+    const body = await readBody(req)
+    const { email, senha_hash } = body
+    if (!email || !senha_hash) { send(res, 400, { error: 'email e senha_hash obrigatórios' }); return true }
+    const ind = db.prepare(`
+      SELECT id, nome, email, codigo, ativo
+      FROM indicadores
+      WHERE lower(email)=lower(?) AND senha_hash=? AND ativo=1
+    `).get(String(email).trim(), senha_hash)
+    if (!ind) { send(res, 401, { error: 'Acesso negado. Credenciais inválidas.' }); return true }
+    const token = criarSessaoIndicador(ind)
+    db.prepare('UPDATE indicadores SET ultimo_acesso=CURRENT_TIMESTAMP WHERE id=?').run(ind.id)
+    send(res, 200, { ok: true, id: ind.id, nome: ind.nome, email: ind.email, codigo: ind.codigo, token })
+    return true
+  }
+
+  if (req.method === 'POST' && upath === '/api/indicador-logout') {
+    const auth = req.headers['authorization'] || ''
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+    if (token) db.prepare('DELETE FROM indicador_sessions WHERE token=?').run(token)
     send(res, 200, { ok: true })
     return true
   }
@@ -1053,8 +1101,56 @@ module.exports = async function handleRoutes(req, res, ctx) {
         .run(ind.id, String(nome_cliente).trim(), _phoneClean, String(nome_estabelecimento).trim(),
              segmento || null, cidade || null, observacoes || null)
       log('🎯', `Novo lead via indicação: ${nome_estabelecimento} (indicador #${ind.id})`)
+      sseBroadcast(`indicador-rt:${ind.id}`, 'indicador:LEAD_INSERT', { id: r.lastInsertRowid })
       send(res, 200, { ok: true, lead_id: r.lastInsertRowid })
     } catch (e) { send(res, 500, { error: 'Falha ao registrar lead: ' + e.message }) }
+    return true
+  }
+
+  // ── INDICADOR: dados do próprio painel ─────────────
+  if (req.method === 'GET' && upath === '/api/indicador/me') {
+    const sess = validarSessaoIndicador(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const ind = db.prepare(`
+      SELECT id, nome, email, phone, chave_pix, codigo, comissao_pct, comissao_meses, ativo, ultimo_acesso
+      FROM indicadores WHERE id=?
+    `).get(sess.indicador_id)
+    if (!ind || !ind.ativo) { send(res, 401, { error: 'Indicador inativo' }); return true }
+    const resumo = {
+      total_leads: db.prepare('SELECT COUNT(*) AS n FROM leads_indicacao WHERE indicador_id=?').get(ind.id)?.n || 0,
+      leads_novos: db.prepare("SELECT COUNT(*) AS n FROM leads_indicacao WHERE indicador_id=? AND status='novo'").get(ind.id)?.n || 0,
+      convertidos: db.prepare("SELECT COUNT(*) AS n FROM leads_indicacao WHERE indicador_id=? AND status='convertido'").get(ind.id)?.n || 0,
+      a_pagar: db.prepare("SELECT COALESCE(SUM(comissao_valor),0) AS v FROM comissoes WHERE indicador_id=? AND status='a_pagar'").get(ind.id)?.v || 0,
+      pago_total: db.prepare("SELECT COALESCE(SUM(comissao_valor),0) AS v FROM comissoes WHERE indicador_id=? AND status='pago'").get(ind.id)?.v || 0
+    }
+    send(res, 200, { ...ind, resumo })
+    return true
+  }
+
+  if (req.method === 'GET' && upath === '/api/indicador/leads') {
+    const sess = validarSessaoIndicador(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const status = params.get('status') || ''
+    const vals = [sess.indicador_id]
+    let sql = 'SELECT * FROM leads_indicacao WHERE indicador_id=?'
+    if (status) { sql += ' AND status=?'; vals.push(status) }
+    sql += ' ORDER BY created_at DESC LIMIT 500'
+    send(res, 200, db.prepare(sql).all(...vals))
+    return true
+  }
+
+  if (req.method === 'GET' && upath === '/api/indicador/comissoes') {
+    const sess = validarSessaoIndicador(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const status = params.get('status') || ''
+    const vals = [sess.indicador_id]
+    let sql = `SELECT c.*, l.nome_estabelecimento, l.nome_cliente, l.tenant_id_convertido
+               FROM comissoes c
+               LEFT JOIN leads_indicacao l ON l.id=c.lead_id
+               WHERE c.indicador_id=?`
+    if (status) { sql += ' AND c.status=?'; vals.push(status) }
+    sql += ' ORDER BY c.mes_referencia DESC, c.created_at DESC LIMIT 500'
+    send(res, 200, db.prepare(sql).all(...vals))
     return true
   }
 
@@ -1062,7 +1158,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'GET' && upath === '/api/admin/indicadores') {
     if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
     const rows = db.prepare(`
-      SELECT i.*,
+      SELECT i.id, i.codigo, i.nome, i.email, i.phone, i.chave_pix,
+        i.comissao_pct, i.comissao_meses, i.ativo, i.observacoes,
+        i.created_at, i.ultimo_acesso,
         (SELECT COUNT(*) FROM leads_indicacao l WHERE l.indicador_id=i.id) AS total_leads,
         (SELECT COUNT(*) FROM leads_indicacao l WHERE l.indicador_id=i.id AND l.status='convertido') AS total_convertidos,
         (SELECT COALESCE(SUM(comissao_valor),0) FROM comissoes c WHERE c.indicador_id=i.id AND c.status='pago') AS total_pago,
@@ -1077,8 +1175,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'POST' && upath === '/api/admin/indicadores') {
     if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
     const body = await readBody(req)
-    const { nome, email, phone, chave_pix, comissao_pct, comissao_meses, observacoes } = body
+    const { nome, email, phone, chave_pix, comissao_pct, comissao_meses, observacoes, senha, senha_hash } = body
     if (!nome) { send(res, 400, { error: 'Nome é obrigatório' }); return true }
+    if (email && db.prepare('SELECT id FROM indicadores WHERE lower(email)=lower(?)').get(String(email).trim())) {
+      send(res, 400, { error: `E-mail "${email}" já cadastrado para outro indicador.` }); return true
+    }
     // Gera código único de 8 chars (alfanumérico maiúsculo, sem ambíguos como 0/O/1/I)
     const _gerarCodigo = () => {
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -1090,15 +1191,16 @@ module.exports = async function handleRoutes(req, res, ctx) {
     while (db.prepare('SELECT 1 FROM indicadores WHERE codigo=?').get(codigo) && tries < 20)
     try {
       const r = db.prepare(`INSERT INTO indicadores
-        (codigo, nome, email, phone, chave_pix, comissao_pct, comissao_meses, observacoes)
-        VALUES (?,?,?,?,?,?,?,?)`)
+        (codigo, nome, email, phone, chave_pix, comissao_pct, comissao_meses, observacoes, senha_hash)
+        VALUES (?,?,?,?,?,?,?,?,?)`)
         .run(codigo, String(nome).trim(),
              email ? String(email).toLowerCase().trim() : null,
              phone ? String(phone).replace(/\D/g, '') : null,
              chave_pix || null,
              parseFloat(comissao_pct) || 30.0,
              parseInt(comissao_meses) || 12,
-             observacoes || null)
+             observacoes || null,
+             senha_hash || (senha ? crypto.createHash('sha256').update(String(senha)).digest('hex') : null))
       send(res, 200, { ok: true, id: r.lastInsertRowid, codigo })
     } catch (e) { send(res, 500, { error: 'Falha ao criar indicador: ' + e.message }) }
     return true
@@ -1112,6 +1214,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const body = await readBody(req)
     const fields = []
     const values = []
+    if (body.email && db.prepare('SELECT id FROM indicadores WHERE lower(email)=lower(?) AND id<>?').get(String(body.email).trim(), id)) {
+      send(res, 400, { error: `E-mail "${body.email}" já cadastrado para outro indicador.` }); return true
+    }
     const allowed = ['nome', 'email', 'phone', 'chave_pix', 'comissao_pct', 'comissao_meses', 'ativo', 'observacoes']
     for (const k of allowed) if (body[k] !== undefined) {
       let v = body[k]
@@ -1121,6 +1226,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (k === 'comissao_meses') v = parseInt(v) || 12
       if (k === 'ativo')           v = v ? 1 : 0
       fields.push(`${k}=?`); values.push(v)
+    }
+    if (body.senha || body.senha_hash) {
+      fields.push('senha_hash=?')
+      values.push(body.senha_hash || crypto.createHash('sha256').update(String(body.senha)).digest('hex'))
     }
     if (!fields.length) { send(res, 400, { error: 'Nada a atualizar' }); return true }
     values.push(id)
@@ -1156,10 +1265,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const status = params.get('status') || null
     let sql = `SELECT l.*, i.nome AS indicador_nome, i.codigo AS indicador_codigo
                FROM leads_indicacao l LEFT JOIN indicadores i ON i.id=l.indicador_id`
-    const params = []
-    if (status) { sql += ' WHERE l.status=?'; params.push(status) }
+    const sqlParams = []
+    if (status) { sql += ' WHERE l.status=?'; sqlParams.push(status) }
     sql += ' ORDER BY l.created_at DESC LIMIT 500'
-    send(res, 200, db.prepare(sql).all(...params))
+    send(res, 200, db.prepare(sql).all(...sqlParams))
     return true
   }
 
@@ -1198,6 +1307,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     values.push(id)
     try {
       db.prepare(`UPDATE leads_indicacao SET ${fields.join(',')} WHERE id=?`).run(...values)
+      sseBroadcast(`indicador-rt:${lead.indicador_id}`, 'indicador:LEAD_UPDATE', { id })
       send(res, 200, { ok: true })
     } catch (e) { send(res, 500, { error: 'Falha ao atualizar: ' + e.message }) }
     return true
@@ -1217,12 +1327,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
                FROM comissoes c
                LEFT JOIN indicadores i ON i.id=c.indicador_id
                LEFT JOIN leads_indicacao l ON l.id=c.lead_id WHERE 1=1`
-    const params = []
-    if (q.status)        { sql += ' AND c.status=?';        params.push(q.status) }
-    if (q.indicador_id)  { sql += ' AND c.indicador_id=?';  params.push(parseInt(q.indicador_id)) }
-    if (q.mes)           { sql += ' AND c.mes_referencia=?'; params.push(q.mes) }
+    const sqlParams = []
+    if (q.status)        { sql += ' AND c.status=?';        sqlParams.push(q.status) }
+    if (q.indicador_id)  { sql += ' AND c.indicador_id=?';  sqlParams.push(parseInt(q.indicador_id)) }
+    if (q.mes)           { sql += ' AND c.mes_referencia=?'; sqlParams.push(q.mes) }
     sql += ' ORDER BY c.mes_referencia DESC, i.nome ASC LIMIT 1000'
-    send(res, 200, db.prepare(sql).all(...params))
+    send(res, 200, db.prepare(sql).all(...sqlParams))
     return true
   }
 
@@ -1257,6 +1367,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           (indicador_id, lead_id, mes_referencia, valor_pagamento, comissao_valor, status)
           VALUES (?,?,?,?,?,'a_pagar')`)
           .run(l.indicador_id, l.lead_id, mes, l.valor_plano, comVal)
+        sseBroadcast(`indicador-rt:${l.indicador_id}`, 'indicador:COMISSAO_UPDATE', { mes })
         geradas++
       } catch (e) { log('⚠️', `[comissao] erro lead ${l.lead_id}:`, e.message) }
     }
@@ -1285,7 +1396,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!fields.length) { send(res, 400, { error: 'Nada a atualizar' }); return true }
     values.push(id)
     try {
+      const atual = db.prepare('SELECT indicador_id FROM comissoes WHERE id=?').get(id)
       db.prepare(`UPDATE comissoes SET ${fields.join(',')} WHERE id=?`).run(...values)
+      if (atual?.indicador_id) sseBroadcast(`indicador-rt:${atual.indicador_id}`, 'indicador:COMISSAO_UPDATE', { id })
       send(res, 200, { ok: true })
     } catch (e) { send(res, 500, { error: 'Falha ao atualizar: ' + e.message }) }
     return true

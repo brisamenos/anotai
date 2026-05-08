@@ -534,6 +534,18 @@ const MIGRATIONS = [
      CREATE INDEX IF NOT EXISTS idx_comissoes_indicador ON comissoes(indicador_id);
      CREATE INDEX IF NOT EXISTS idx_comissoes_status ON comissoes(status);`
   },
+  { version:47, description:'Acesso dos indicadores ao painel próprio', up:[
+    `ALTER TABLE indicadores ADD COLUMN senha_hash TEXT`,
+    `ALTER TABLE indicadores ADD COLUMN ultimo_acesso TIMESTAMP`,
+    `CREATE TABLE IF NOT EXISTS indicador_sessions (
+       token TEXT PRIMARY KEY,
+       indicador_id INTEGER NOT NULL,
+       nome TEXT,
+       email TEXT,
+       codigo TEXT,
+       ts INTEGER NOT NULL
+     )`
+  ] },
 ]
 
 function runMigrations() {
@@ -590,6 +602,12 @@ function marcarDirty() { _dirty = true }
 db.exec(`CREATE TABLE IF NOT EXISTS admin_sessions (
   token TEXT PRIMARY KEY,
   user_id TEXT, nome TEXT, email TEXT, role TEXT,
+  ts INTEGER NOT NULL
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS indicador_sessions (
+  token TEXT PRIMARY KEY,
+  indicador_id INTEGER NOT NULL,
+  nome TEXT, email TEXT, codigo TEXT,
   ts INTEGER NOT NULL
 )`)
 const ADMIN_SESSION_TTL = 8 * 60 * 60 * 1000
@@ -2717,6 +2735,16 @@ const server = http.createServer(async (req,res) => {
   // e busca info do indicador via /api/indicacao/info/{codigo})
   if(req.method==='GET'&&upath.startsWith('/indicacao/')){
     const fpath=path.join(__dirname,'indicacao.html')
+    if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}
+  }
+
+  if(req.method==='GET'&&(upath==='/admin'||upath==='/admin/')){
+    const fpath=path.join(__dirname,'admin.html')
+    if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}
+  }
+
+  if(req.method==='GET'&&(upath==='/indicador'||upath==='/indicador/')){
+    const fpath=path.join(__dirname,'indicador.html')
     if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}
   }
 
