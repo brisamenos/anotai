@@ -1301,12 +1301,15 @@ function detectarCategoriaPedido(itemsStr, segmento) {
   return { emojis: ['🍽️','👨‍🍳','🔥','⚡','✨'], lojaEmoji: '🍽️' }
 }
 
-async function sendWA(phone, text, inst) {
+async function sendWA(phone, text, inst, delayMs) {
   const instance = inst || EVO_INST
   const num      = phone.replace(/\D/g,'')
   const number   = num.startsWith('55') ? num : `55${num}`
   const headers  = { 'Content-Type':'application/json', apikey: EVO_KEY }
-  const body     = { number, text, options: { delay:1000, presence:'composing' } }
+  // delayMs opcional: se passado, controla quanto tempo o WhatsApp mostra
+  // "digitando..." antes de entregar a mensagem. Default 1000ms (legado).
+  const delay    = typeof delayMs === 'number' ? Math.max(0, delayMs) : 1000
+  const body     = { number, text, options: { delay, presence:'composing' } }
   try {
     const r = await fetch(`${EVO_URL}/message/sendText/${instance}`, { method:'POST', headers, body:JSON.stringify(body) })
     const data = await r.json().catch(()=>({}))
@@ -1317,6 +1320,27 @@ async function sendWA(phone, text, inst) {
     if (r2.ok) { log('📤',`Enviado para ${number} (retry)`); return { ok:true, data:data2 } }
     return { ok:false, data:data2 }
   } catch(e) { log('❌','Erro WA:',{error:e.message}); return { ok:false, error:e.message } }
+}
+
+// Marca mensagem do cliente como "lida" (✓✓ azul) na Evolution API.
+// Faz parte do fluxo humanizado: leitura → pausa → digitando → resposta.
+// Falha silenciosamente se o endpoint não estiver disponível ou o ID
+// for inválido — não bloqueia a resposta principal.
+async function markAsRead(phone, msgId, inst) {
+  if (!msgId) return
+  const instance = inst || EVO_INST
+  const num      = phone.replace(/\D/g,'')
+  const number   = num.startsWith('55') ? num : `55${num}`
+  const headers  = { 'Content-Type':'application/json', apikey: EVO_KEY }
+  try {
+    await fetch(`${EVO_URL}/chat/markMessageAsRead/${instance}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        readMessages: [{ remoteJid: `${number}@s.whatsapp.net`, fromMe: false, id: msgId }]
+      })
+    })
+  } catch(e) { /* silencioso — endpoint pode não existir em algumas versões */ }
 }
 
 const _anivLast = new Map()
@@ -1873,6 +1897,7 @@ async function handleIAWebhook(req, res) {
     const msg    = body?.data?.message?.conversation||body?.data?.message?.extendedTextMessage?.text||''
     const from   = body?.data?.key?.remoteJid||''
     const fromMe = body?.data?.key?.fromMe||false
+    const msgId  = body?.data?.key?.id || null  // usado pra marcar como lida (visto azul)
     // Se mensagem foi enviada pelo próprio gestor via WhatsApp, registra pausa da IA
     if (fromMe && from && tenantId) {
       const phone = from.replace('@s.whatsapp.net','').replace('@c.us','')
@@ -1898,9 +1923,9 @@ async function handleIAWebhook(req, res) {
     if (!ia.ativo) { send(res,200,{ok:true}); return }
     const cfgGlobal = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
     const iaG = jsonParse(cfgGlobal?.ia_config)||{}
-    const openaiKey = ia.openai_key || iaG.openai_key || ''
-    if (!openaiKey) { send(res,200,{ok:true}); return }
-    const modelo=iaG.modelo||'gpt-4o-mini', maxTokens=iaG.max_tokens||800, bufferSeg=iaG.buffer_seg||3, quebraLen=iaG.quebra_linha||0, pausaMin=iaG.pausa_min||30
+    // Chave OpenAI não é mais necessária — IA usa roteador determinístico.
+    // Mantemos apenas configs de buffer/quebra/pausa que ainda fazem sentido.
+    const bufferSeg=iaG.buffer_seg||3, quebraLen=iaG.quebra_linha||0, pausaMin=iaG.pausa_min||30
     const pausaKey=`pausa:${tenantId}:${phone}`, pausaAt=_pausaHumano.get(pausaKey)
     log('🔍', `[PAUSA-DEBUG] Webhook — from JID: "${from}" → phone extraído: "${phone}" | tenantId: "${tenantId}"`)
     log('🔍', `[PAUSA-DEBUG] Webhook — pausaKey verificada: "${pausaKey}"`)
@@ -1912,8 +1937,10 @@ async function handleIAWebhook(req, res) {
     const convHist = _msgBuffer.get(histKey)
     const bufKey=`buf:${tenantId}:${phone}`
     if (_msgBuffer.has(bufKey)) clearTimeout(_msgBuffer.get(bufKey).timer)
-    const msgs=_msgBuffer.has(bufKey)?_msgBuffer.get(bufKey).msgs:[]
+    const msgs    = _msgBuffer.has(bufKey) ? _msgBuffer.get(bufKey).msgs    : []
+    const msgIds  = _msgBuffer.has(bufKey) ? _msgBuffer.get(bufKey).msgIds  : []
     msgs.push(msg)
+    if (msgId) msgIds.push(msgId)
     const timer = setTimeout(async () => {
       _msgBuffer.delete(bufKey)
       const pausaNow=_pausaHumano.get(pausaKey)
@@ -1945,7 +1972,11 @@ async function handleIAWebhook(req, res) {
           ? 'Entendi sua mensagem. Vou chamar um atendente para te ajudar com isso pessoalmente. Em instantes alguém da loja vai te responder.'
           : 'Recebi sua mensagem. Um atendente vai te responder em instantes.'
         try {
-          await sendWA(phone, _msgPausa, inst)
+          // Mesmo fluxo humano: marca como lida → pausa → digitando → envia
+          if (msgId) await markAsRead(phone, msgId, inst)
+          await sleep(800 + Math.floor(Math.random() * 1200))
+          const _delayPausa = Math.min(6000, 1200 + Math.floor(Math.random()*800) + _msgPausa.length * 38)
+          await sendWA(phone, _msgPausa, inst, _delayPausa)
           log('🤝', `[IA] Aviso de escalação enviado pra ${phone}`)
         } catch (e) { log('⚠️', `[IA] Falha ao enviar aviso de escalação: ${e.message}`) }
         // Avisa o gestor pelo SSE — aparece no painel WhatsApp como prioridade
@@ -1973,217 +2004,266 @@ async function handleIAWebhook(req, res) {
       const _isSoSaudacao = _saudacaoRegex.test(msgFull.trim())
       const _horaAtual = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Fortaleza'})).getHours()
       const _saudacaoHora = _horaAtual >= 5 && _horaAtual < 12 ? 'Bom dia' : _horaAtual >= 12 && _horaAtual < 18 ? 'Boa tarde' : 'Boa noite'
-      const contexto=[]
+      // ════════════════════════════════════════════════════════════════
+      // ROTEADOR DETERMINÍSTICO (sem OpenAI)
+      // ────────────────────────────────────────────────────────────────
+      // A IA respondia QUALQUER pergunta via OpenAI, gerando padrão de
+      // chatbot que faz o WhatsApp banir o número da loja. Agora ela
+      // responde APENAS 4 coisas, sempre com texto curto e padronizado:
+      //
+      //   1. STATUS DO PEDIDO     (cliente citou pedido)
+      //   2. CUPONS ATIVOS        ("cupom" / "promoção" / "desconto")
+      //   3. HORÁRIO              ("que horas abrem" / "tão aberto")
+      //   4. LINK DO CARDÁPIO     (saudação / primeira msg / "cardápio")
+      //
+      // Se a loja estiver FECHADA, qualquer resposta de saudação/cardápio
+      // já inclui aviso "fechado, abrimos [próximo horário]" automatico.
+      //
+      // Para QUALQUER outro assunto, a IA fica em silêncio — o gestor
+      // responde manualmente. Isso reduz drasticamente a interação
+      // automatizada e evita banimento.
+      // ════════════════════════════════════════════════════════════════
       const tenantRow=db.prepare("SELECT slug FROM tenants WHERE id=?").get(tenantId)
       const proto=req.headers['x-forwarded-proto']||'https', host=req.headers['host']||''
       const linkCardapio=`${proto}://${host}/index.html?slug=${tenantRow?.slug||tenantId}`
       const agora=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Fortaleza'})), diasSemana=['dom','seg','ter','qua','qui','sex','sab'], diaHoje=diasSemana[agora.getDay()], horaMin=agora.getHours()*60+agora.getMinutes()
-      let lojaAbertaAgora=cfg.store_open!==false
-      const horariosCfg=jsonParse(cfg.horarios_config)||{}, diaConfig=horariosCfg[diaHoje]
-      if (diaConfig) { if(!diaConfig.ativo)lojaAbertaAgora=false; else{const[ah,am]=(diaConfig.abertura||'00:00').split(':').map(Number);const[fh,fm]=(diaConfig.fechamento||'23:59').split(':').map(Number);lojaAbertaAgora=horaMin>=ah*60+am&&horaMin<=fh*60+fm} }
-      const taxaCfg=jsonParse(cfg.delivery_fee_config)||{}
-      // Monta string de taxa para os 3 tipos (fixo / por_km / por_bairro)
-      let taxaInfo = null
-      if (taxaCfg.tipo === 'fixo') {
-        const v = parseFloat(taxaCfg.valor||0)
-        taxaInfo = `Taxa: ${v > 0 ? 'R$ ' + v.toFixed(2).replace('.',',') + ' (fixa, em qualquer bairro)' : 'Grátis'}`
-      } else if (taxaCfg.tipo === 'por_km' && Array.isArray(taxaCfg.faixas) && taxaCfg.faixas.length) {
-        const lista = taxaCfg.faixas.map(f => `até ${f.ate_km} km = R$ ${parseFloat(f.taxa||0).toFixed(2).replace('.',',')}`).join('; ')
-        taxaInfo = `Taxa por distância: ${lista}`
-      } else if (taxaCfg.tipo === 'por_bairro' && Array.isArray(taxaCfg.bairros) && taxaCfg.bairros.length) {
-        const lista = taxaCfg.bairros.map(b => `${b.bairro} = R$ ${parseFloat(b.taxa||0).toFixed(2).replace('.',',')}`).join('; ')
-        taxaInfo = `Taxa por bairro: ${lista}`
-      }
-      // Bairros bloqueados — informar para a IA não prometer entrega lá
-      const bairrosBloq = Array.isArray(taxaCfg.bairros_bloqueados) ? taxaCfg.bairros_bloqueados.filter(Boolean) : []
-      const bloqInfo = bairrosBloq.length ? `Bairros NÃO atendidos: ${bairrosBloq.join(', ')}` : null
-
-      const infoLoja=[`Nome: ${nomeLoja}`,`Status: ${lojaAbertaAgora?'🟢 ABERTO':'🔴 FECHADO'}`,cfg.store_whatsapp?`WhatsApp: ${cfg.store_whatsapp}`:null,cfg.store_descricao?`Descrição: ${cfg.store_descricao}`:null,cfg.store_tempo_entrega?`Tempo de entrega: ${cfg.store_tempo_entrega}`:null,taxaInfo,bloqInfo,`Cardápio: ${linkCardapio}`].filter(Boolean)
-      contexto.push(`INFORMAÇÕES DA LOJA:\n${infoLoja.join('\n')}`)
-      const diasNome={dom:'Domingo',seg:'Segunda',ter:'Terça',qua:'Quarta',qui:'Quinta',sex:'Sexta',sab:'Sábado'}
-      if (Object.keys(horariosCfg).length) contexto.push('HORÁRIO:\n'+Object.entries(horariosCfg).map(([d,h])=>h.ativo?`${diasNome[d]}: ${h.abertura} às ${h.fechamento}${d===diaHoje?' ← hoje':''}`:` ${diasNome[d]}: Fechado`).join('\n'))
-      const categorias=db.prepare("SELECT name,label FROM categories WHERE tenant_id=? AND ativo=1 ORDER BY sort_order").all(tenantId)
-      const itensTodos=db.prepare("SELECT name,description,price,price_old,status,cat_key,cat,emoji,promo FROM menu_items WHERE tenant_id=? AND status!='pausado' ORDER BY id").all(tenantId)
-      if (itensTodos.length) {
-        const catMap=new Map()
-        for(const item of itensTodos){const ck=item.cat_key||item.cat||'outros';if(!catMap.has(ck))catMap.set(ck,[]);catMap.get(ck).push(item)}
-        let txt=''
-        for(const[catKey,items]of catMap){const ci=categorias.find(c=>c.name===catKey);const lbl=ci?.label||ci?.name||catKey;txt+=`\n${lbl.toUpperCase()}:\n${items.map(i=>`  • ${i.name}: R$${parseFloat(i.price).toFixed(2).replace('.',',')}${i.price_old?` (era R$${parseFloat(i.price_old).toFixed(2).replace('.',',')})`:''}${i.promo?' 🔥':''} ${i.status==='esgotado'?'[ESGOTADO]':''}${i.description?` — ${i.description.slice(0,60)}`:''}`)}\n`}
-        contexto.push(`CARDÁPIO:${txt}\nPara fotos e pedidos: ${linkCardapio}`)
-        const promo=itensTodos.filter(i=>i.promo&&i.status!=='esgotado')
-        if(promo.length) contexto.push('PROMOÇÕES:\n'+promo.map(i=>`  🔥 ${i.name}: R$${parseFloat(i.price).toFixed(2).replace('.',',')}${i.price_old?` (antes R$${parseFloat(i.price_old).toFixed(2).replace('.',',')})`:''}`) .join('\n'))
-      }
-      const cupons=db.prepare("SELECT code,type,value,min_order FROM cupons WHERE tenant_id=? AND ativo=1 AND (expires_at IS NULL OR expires_at > datetime('now')) LIMIT 5").all(tenantId)
-      if(cupons.length) contexto.push('CUPONS:\n'+cupons.map(cp=>`  • *${cp.code}*: ${cp.type==='percent'?`${cp.value}%`:`R$${parseFloat(cp.value).toFixed(2)}`} de desconto${parseFloat(cp.min_order||0)>0?` (mín R$${parseFloat(cp.min_order).toFixed(2)})`:''}`) .join('\n'))
-
-      // ── Programas de fidelidade — só passa pra IA o que o gestor ATIVOU ──
-      // Antes a IA inventava cashback/pontos/carimbinho mesmo sem o gestor ter
-      // ativado nada. Agora cada um só aparece no contexto se realmente está
-      // ligado, e ainda assim com regras explícitas de "não invente valores".
-      const _cfgFidArr = db.prepare("SELECT cashback_config, fid_config, stamp_config FROM store_config WHERE tenant_id=?").get(tenantId) || {}
-      const _cbCfg    = (() => { try { return JSON.parse(_cfgFidArr.cashback_config||'{}') } catch { return {} } })()
-      const _fidCfg   = (() => { try { return JSON.parse(_cfgFidArr.fid_config||'{}') } catch { return {} } })()
-      const _stampCfg = (() => { try { return JSON.parse(_cfgFidArr.stamp_config||'{}') } catch { return {} } })()
-      const _programasAtivos = []
-      const _programasInfo   = []
-      if (_cbCfg.ativo && parseFloat(_cbCfg.pct||0) > 0) {
-        _programasAtivos.push('cashback')
-        const minPed = parseFloat(_cbCfg.min_pedido||0)
-        _programasInfo.push(`CASHBACK ATIVO: ${_cbCfg.pct}% de cashback sobre pedidos${minPed > 0 ? ` acima de R$${minPed.toFixed(2).replace('.',',')}` : ''}. Cliente acumula crédito pra usar no próximo pedido.`)
-      }
-      // Pontos só listados se gestor ATIVOU explicitamente. Lojas com config
-      // antiga (sem campo "ativo") são tratadas como inativas até reativarem.
-      if (_fidCfg.ativo === true && parseFloat(_fidCfg.pts_por_real||0) > 0) {
-        _programasAtivos.push('pontos de fidelidade')
-        const meta = parseInt(_fidCfg.meta_pts||500)
-        _programasInfo.push(`PONTOS DE FIDELIDADE ATIVO: cliente ganha ${_fidCfg.pts_por_real} pontos por cada R$1 gasto. Meta: ${meta} pontos para ganhar recompensa.`)
-      }
-      if (_stampCfg.ativo) {
-        _programasAtivos.push('cartão fidelidade (carimbinho)')
-        const meta = parseInt(_stampCfg.meta_compras||10)
-        const tipoR = _stampCfg.recompensa_tipo || 'pedido_gratis'
-        const valR  = parseFloat(_stampCfg.recompensa_valor||0)
-        let recompensaTxt = 'um pedido grátis'
-        if (tipoR === 'frete_gratis')  recompensaTxt = 'frete grátis'
-        else if (tipoR === 'percent' && valR > 0) recompensaTxt = `${valR}% de desconto`
-        else if (tipoR === 'fixo' && valR > 0)    recompensaTxt = `R$${valR.toFixed(2).replace('.',',')} de desconto`
-        _programasInfo.push(`CARTÃO FIDELIDADE (CARIMBINHO) ATIVO: a cada ${meta} compras o cliente ganha ${recompensaTxt}.`)
-      }
-      if (_programasInfo.length) {
-        contexto.push('PROGRAMAS DE FIDELIDADE DA LOJA (somente esses estão ativos — não mencione outros):\n' + _programasInfo.join('\n'))
-      }
-      // Regra explícita pra evitar alucinação — independente de ter ou não programas ativos
-      const _regrasFidelidade = _programasAtivos.length
-        ? `PROGRAMAS DE FIDELIDADE PERMITIDOS: ${_programasAtivos.join(', ')}. NUNCA mencione programas que não estejam na lista acima. NUNCA invente saldos, valores, pontos ou cashback do cliente — você não tem acesso a essa informação. Se o cliente perguntar quanto tem de saldo/pontos/carimbos, oriente a aguardar a próxima notificação automática ou consultar diretamente com a loja.`
-        : `NÃO HÁ PROGRAMAS DE FIDELIDADE NESTA LOJA. NUNCA mencione cashback, pontos de fidelidade, carimbinho, cartão fidelidade ou qualquer programa de recompensa — esta loja não oferece. Se o cliente perguntar, responda educadamente que a loja não tem programa de fidelidade no momento.`
-      const _offsetCfg=db.prepare("SELECT order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
-      const _iaOffset=parseInt(_offsetCfg?.order_num_offset)||0
-      const _iaPedNum=(p)=>String(p.order_num||Math.max(1,p.id-_iaOffset)).padStart(3,'0')
-      // Pedidos do cliente — match preciso (não LIKE) pra não pegar pedido de
-      // outro cliente com 8 dígitos finais coincidentes. Inclui created_at pra
-      // a IA saber há quanto tempo o pedido foi feito.
-      const _phone8 = phone.replace(/\D/g,'').slice(-8)
-      const pedCli = db.prepare("SELECT id,order_num,status,total,taxa,items,client,addr,pag,created_at FROM orders WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ? ORDER BY id DESC LIMIT 5").all(tenantId, _phone8)
-      // Helper: formata "há Xmin" / "há Xh" do timestamp UTC
+      // ── Helpers para pedido ──
+      const _offsetCfg = db.prepare("SELECT order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
+      const _iaOffset  = parseInt(_offsetCfg?.order_num_offset) || 0
+      const _iaPedNum  = (p) => String(p.order_num || Math.max(1, p.id - _iaOffset)).padStart(3, '0')
+      const _phone8    = phone.replace(/\D/g, '').slice(-8)
       const _tempoDecorrido = (ts) => {
         if (!ts) return ''
         const t = new Date(String(ts).includes('Z') ? ts : ts.replace(' ','T')+'Z').getTime()
         if (isNaN(t)) return ''
         const min = Math.floor((Date.now() - t) / 60000)
-        if (min < 1)  return 'agora há pouco'
-        if (min < 60) return `há ${min} min`
-        const h = Math.floor(min / 60)
-        const m = min % 60
+        if (min < 1) return 'agora há pouco'
+        if (min < 60) return `há ${min}min`
+        const h = Math.floor(min / 60), m = min % 60
         return m > 0 ? `há ${h}h${m}min` : `há ${h}h`
       }
-      if (pedCli.length) {
-        // Status legíveis — agora inclui aguardando_pix/aguardando_cartao que
-        // antes apareciam crus pra IA (cliente recebia "aguardando_pix" textual).
-        const sl = {
-          aguardando_pix:    '⏳ Aguardando pagamento PIX',
-          aguardando_cartao: '⏳ Aguardando pagamento (cartão)',
-          analise:           '⏳ Em análise (aguardando confirmação da loja)',
-          producao:          '👨‍🍳 Em preparo',
-          pronto:            '✅ Pronto para retirada/entrega',
-          saiu:              '🛵 Saiu para entrega',
-          entregue:          '🎉 Entregue',
-          cancelado:         '❌ Cancelado — IMPORTANTE: motivo desconhecido (pode ter sido timeout de pagamento, gestor cancelou, ou erro). Não afirme com certeza pro cliente. Se ele perguntar, diga que vai verificar com a loja.',
-          finalizado:        '✅ Finalizado'
-        }
-        contexto.push('PEDIDOS DESTE CLIENTE (número que o cliente conhece):\n' + pedCli.map(p => {
-          const its = (() => { try { return (JSON.parse(p.items)||[]).map(i => `${i.qty}x ${i.name}`).join(', ') } catch { return '' } })()
-          const totalFinal = (parseFloat(p.total||0) + parseFloat(p.taxa||0)).toFixed(2).replace('.', ',')
-          const td = _tempoDecorrido(p.created_at)
-          return `  Pedido #${_iaPedNum(p)}: ${sl[p.status]||p.status} — R$${totalFinal}${td ? ' — feito ' + td : ''}${its ? ' — Itens: ' + its : ''}`
-        }).join('\n'))
+      const _statusCurto = {
+        aguardando_pix:    '⏳ Aguardando pagamento PIX',
+        aguardando_cartao: '⏳ Aguardando pagamento (cartão)',
+        analise:           '⏳ Em análise',
+        producao:          '👨‍🍳 Em preparo',
+        pronto:            '✅ Pronto para retirada/entrega',
+        saiu:              '🛵 Saiu para entrega',
+        entregue:          '🎉 Entregue',
+        cancelado:         '❌ Cancelado — qualquer dúvida fale com a loja',
+        finalizado:        '✅ Finalizado'
       }
-      // Detalhes de pedido específico — quando cliente cita "pedido #N" ou "#N"
-      const numMatch = msgFull.match(/#\*?(\d{1,6})\*?/) || msgFull.match(/pedido\s*[*#]?\s*(\d{1,6})/i)
-      if (numMatch) {
-        const n = parseInt(numMatch[1])
-        const realId = n + _iaOffset
-        let ped = db.prepare("SELECT id,order_num,status,total,taxa,items,client,addr,pag,created_at FROM orders WHERE tenant_id=? AND id=?").get(tenantId, realId)
-        if (!ped) ped = db.prepare("SELECT id,order_num,status,total,taxa,items,client,addr,pag,created_at FROM orders WHERE tenant_id=? AND order_num=?").get(tenantId, n)
-        // Fallback: último pedido do cliente — match preciso pelos 8 dígitos finais
-        if (!ped) ped = db.prepare("SELECT id,order_num,status,total,taxa,items,client,addr,pag,created_at FROM orders WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ? ORDER BY id DESC LIMIT 1").get(tenantId, _phone8)
-        // Status legíveis com mais contexto pra IA explicar pro cliente
-        const sl = {
-          aguardando_pix:    '⏳ Aguardando pagamento PIX — assim que o pagamento for identificado, entra em produção',
-          aguardando_cartao: '⏳ Aguardando pagamento por cartão',
-          analise:           '⏳ Em análise — pedido recebido, aguardando confirmação da loja',
-          producao:          '👨‍🍳 Em preparo — estamos preparando agora',
-          pronto:            '✅ Pronto — pedido pronto para retirada/entrega',
-          saiu:              '🛵 Saiu para entrega — entregador a caminho',
-          entregue:          '🎉 Entregue — pedido finalizado',
-          cancelado:         '❌ Cancelado — IMPORTANTE: motivo desconhecido (pode ter sido timeout de pagamento, gestor cancelou, ou erro). Não afirme com certeza pro cliente. Se ele perguntar, diga que vai verificar com a loja.',
-          finalizado:        '✅ Finalizado'
+
+      // ── Detecção de intenção ──
+      const _msgL      = msgFull.toLowerCase()
+      const _numMatch  = msgFull.match(/#\*?(\d{1,6})\*?/) || msgFull.match(/pedido\s*[*#]?\s*(\d{1,6})/i)
+      const _kwPedido  = /\b(meu\s+pedido|pedido\s+(j[aá]|saiu|chegou|t[aá]|est[aá]|ainda|atrasou|atrasado|demorando|pronto|sair[aá]|sai)|status\s+(do\s+)?pedido|cad[eê]\s+(meu|o)\s+pedido|onde\s+(est[aá]|t[aá])\s+(meu|o)\s+pedido|quanto\s+(tempo|falta)|saiu\s+(da|para|pra)\s+entrega|j[aá]\s+saiu)\b/i
+      const _kwCupom   = /\b(cupom|cupons|promo[çc][ãa]o|promo[çc][õo]es|desconto|descontos|oferta|ofertas)\b/i
+      const _kwCardapio= /\b(card[aá]pio|menu|fome|pedir|fazer\s+pedido|quero\s+pedir|tem\s+o\s+que|t[ãa]o\s+servindo|pode\s+fazer)\b/i
+      const _kwHorario = /\b(hor[aá]rio|que\s+horas?|que\s+hora|abre|abrem|fecha|fecham|fechou|fecharam|fechad|abriu|abriram|t[ãa]o?\s+aberto|est[ãa]o?\s+aberto|aberto\s+(agora|hoje)|funciona|funcionam|funcionando|atendem|atendendo|trabalha|trabalham|at[eé]\s+que\s+horas?|de\s+que\s+horas?)\b/i
+
+      // ── Loja aberta? + próximo horário de abertura ──
+      const horariosCfg = jsonParse(cfg.horarios_config) || {}
+      const diaConfig = horariosCfg[diaHoje]
+      let lojaAbertaAgora = cfg.store_open !== false
+      let horarioHojeStr = null  // ex: "das 18h às 23h"
+      if (diaConfig) {
+        if (!diaConfig.ativo) lojaAbertaAgora = false
+        else {
+          const [ah, am] = (diaConfig.abertura||'00:00').split(':').map(Number)
+          const [fh, fm] = (diaConfig.fechamento||'23:59').split(':').map(Number)
+          lojaAbertaAgora = horaMin >= ah*60+am && horaMin <= fh*60+fm
+          horarioHojeStr = `das ${diaConfig.abertura} às ${diaConfig.fechamento}`
+        }
+      }
+
+      // Próximo horário de abertura (caso loja esteja fechada)
+      // — usado tanto na resposta de "que horas abrem" quanto no aviso de
+      //   "loja fechada" inserido em saudação/cardápio.
+      const _diasNome = { dom:'domingo', seg:'segunda', ter:'terça', qua:'quarta', qui:'quinta', sex:'sexta', sab:'sábado' }
+      let proxAberturaStr = null  // ex: "hoje às 18h" / "amanhã às 18h" / "sexta às 18h"
+      if (Object.keys(horariosCfg).length) {
+        const idxHoje = agora.getDay()
+        for (let i = 0; i < 7; i++) {
+          const idx = (idxHoje + i) % 7
+          const dia = diasSemana[idx]
+          const dc = horariosCfg[dia]
+          if (!dc || !dc.ativo) continue
+          const [ah, am] = (dc.abertura||'00:00').split(':').map(Number)
+          const aberturaMin = ah*60 + am
+          if (i === 0) {
+            // Hoje — só conta se ainda não passou da abertura
+            if (horaMin < aberturaMin) { proxAberturaStr = `hoje às ${dc.abertura}`; break }
+          } else {
+            const nome = i === 1 ? 'amanhã' : _diasNome[dia]
+            proxAberturaStr = `${nome} às ${dc.abertura}`
+            break
+          }
+        }
+      }
+      // Aviso curto de "fechado" pra prefixar respostas de cardápio/saudação
+      const _avisoFechado = !lojaAbertaAgora
+        ? `⚠️ No momento estamos fechados${proxAberturaStr ? ` — abrimos ${proxAberturaStr}` : ''}.`
+        : ''
+
+      // ── Helper: sorteia uma variação ──
+      // Reduz padrão de bot — se a resposta da IA é sempre IDÊNTICA, fica
+      // detectável. Cada intenção tem 3 variações; escolhemos uma aleatória.
+      const _pickOne = (arr) => arr[Math.floor(Math.random() * arr.length)]
+
+      // ── Decisão: o que responder ──
+      let resposta = null
+
+      // [1] PEDIDO ─────────────────────────────────────────────
+      if (_numMatch || _kwPedido.test(_msgL)) {
+        let ped = null
+        if (_numMatch) {
+          const n = parseInt(_numMatch[1])
+          const realId = n + _iaOffset
+          ped = db.prepare("SELECT id,order_num,status,total,taxa,created_at FROM orders WHERE tenant_id=? AND id=?").get(tenantId, realId)
+          if (!ped) ped = db.prepare("SELECT id,order_num,status,total,taxa,created_at FROM orders WHERE tenant_id=? AND order_num=?").get(tenantId, n)
+          if (!ped) ped = db.prepare("SELECT id,order_num,status,total,taxa,created_at FROM orders WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ? ORDER BY id DESC LIMIT 1").get(tenantId, _phone8)
+        } else {
+          // Sem número citado — pega o pedido mais recente do cliente
+          ped = db.prepare("SELECT id,order_num,status,total,taxa,created_at FROM orders WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ? ORDER BY id DESC LIMIT 1").get(tenantId, _phone8)
         }
         if (ped) {
           const pedNum = _iaPedNum(ped)
-          const its = (() => { try { return (JSON.parse(ped.items)||[]).map(i => `${i.qty}x ${i.name}`).join(', ') } catch { return '' } })()
-          const totalFinal = (parseFloat(ped.total||0) + parseFloat(ped.taxa||0)).toFixed(2).replace('.', ',')
-          const taxaStr = parseFloat(ped.taxa||0) > 0 ? `\n  Taxa de entrega: R$${parseFloat(ped.taxa).toFixed(2).replace('.', ',')}` : ''
+          const tot = (parseFloat(ped.total||0) + parseFloat(ped.taxa||0)).toFixed(2).replace('.', ',')
           const td = _tempoDecorrido(ped.created_at)
-          contexto.push(`DETALHES DO PEDIDO #${pedNum} (este é o número correto do pedido):\n  Status: ${sl[ped.status]||ped.status}\n  Feito: ${td || 'há instantes'}\n  Cliente: ${ped.client||'N/A'}\n  Total: R$${totalFinal}${taxaStr}\n  Itens: ${its||'N/A'}\n  Endereço: ${ped.addr||'Retirada/Mesa'}\n  Pagamento: ${ped.pag||'N/A'}\n\nIMPORTANTE: O número do pedido deste cliente é #${pedNum}. Use APENAS este número ao se referir ao pedido. O valor total correto é R$${totalFinal}.`)
+          const st = _statusCurto[ped.status] || ped.status
+          const sufixoTempo = td ? ` — feito ${td}` : ''
+          resposta = _pickOne([
+            `Pedido *#${pedNum}*: ${st}\nTotal: R$ ${tot}${sufixoTempo}`,
+            `*Pedido #${pedNum}* — ${st}\nValor: R$ ${tot}${sufixoTempo}`,
+            `Seu pedido *#${pedNum}* está: ${st}\nTotal: R$ ${tot}${sufixoTempo}`
+          ])
         } else {
-          contexto.push(`PEDIDO #${String(n).padStart(3,'0')}: não encontrado no sistema. Peça ao cliente para confirmar o número.`)
+          resposta = _pickOne([
+            `Não localizei seu pedido. Pra fazer um novo: ${linkCardapio}`,
+            `Não achei pedido recente seu. Confira o cardápio: ${linkCardapio}`,
+            `Não encontrei pedido seu por aqui. Cardápio: ${linkCardapio}`
+          ])
         }
       }
-      const _promptPadrao = `Você é o atendente virtual do *${nomeLoja}*. Responda em português brasileiro de forma educada, amigável e DIRETA.
-
-ESTILO DE RESPOSTA:
-- Seja claro e objetivo. Responda exatamente o que o cliente perguntou, sem rodeios.
-- Use no máximo 1 emoji por mensagem (apenas quando combinar). Não enche de emoji.
-- Tom amigável, mas profissional — não exagere em entusiasmo.
-- Não invente informações. Se não souber algo, diga que vai verificar com a loja.
-- NUNCA invente status de pedido. Se o pedido aparecer como "cancelado" no contexto, isso pode ter sido por timeout automático, ação do gestor ou erro técnico — você NÃO sabe o motivo. NÃO afirme com certeza que foi cancelado. Diga "vou verificar com a loja" e escale pra atendente humano.
-
-FORMATO:
-- Respostas curtas: 1 a 3 linhas na maioria dos casos. Só use mais quando o cliente pediu detalhes específicos.
-- Use *negrito* só pra destacar nomes de produtos ou valores importantes.
-- Quando mencionar o cardápio, inclua o link: ${linkCardapio}
-- Envie o link do cardápio AUTOMATICAMENTE em 2 casos: (a) primeira mensagem do dia do cliente, mesmo que seja só "bom dia", (b) quando o cliente perguntar o que tem, fizer pedido novo, ou pedir pra ver opções.
-- Nas mensagens seguintes do dia, só mande o link de novo se for relevante pra resposta. Não enche o cliente de link em toda interação.
-
-EXEMPLOS DO TOM CERTO:
-Cliente: "Qual horário de funcionamento?"
-Resposta: "Funcionamos de segunda a sábado, das 18h às 23h. Posso te ajudar com mais alguma coisa?"
-
-Cliente: "Como faço pedido?"
-Resposta: "É só acessar nosso cardápio: ${linkCardapio} — escolhe os itens, finaliza e a gente recebe aqui."
-
-Cliente: "Tem entrega no bairro X?"
-Resposta: "Sim, atendemos esse bairro. A taxa é R$ X. Quer pedir agora? ${linkCardapio}"`
-
-      const _instrucoesSituacao = []
-      if (_isPrimeiraMsgDia) {
-        _instrucoesSituacao.push(`SITUAÇÃO — primeira mensagem do cliente hoje:
-Cumprimente com "${_saudacaoHora}" e o nome da loja, depois responda o que ele perguntou. **OBRIGATÓRIO incluir o link do cardápio nesta resposta** (mesmo se o cliente não pediu), pois é a primeira interação do dia e o link facilita o pedido.
-Link do cardápio: ${linkCardapio}
-Mantenha curto e direto: 2-3 linhas.
-
-Exemplo de resposta:
-"${_saudacaoHora}! Bem-vindo(a) ao *${nomeLoja}*. Confira nosso cardápio: ${linkCardapio} — qualquer dúvida estou aqui."`)
+      // [2] CUPONS / PROMOÇÕES ─────────────────────────────────
+      else if (_kwCupom.test(_msgL)) {
+        const cupons = db.prepare("SELECT code,type,value,min_order FROM cupons WHERE tenant_id=? AND ativo=1 AND (expires_at IS NULL OR expires_at > datetime('now')) LIMIT 5").all(tenantId)
+        if (cupons.length) {
+          const lista = cupons.map(cp => {
+            const desc = cp.type === 'percent' ? `${cp.value}%` : `R$ ${parseFloat(cp.value).toFixed(2).replace('.',',')}`
+            const min = parseFloat(cp.min_order||0) > 0 ? ` (mín. R$ ${parseFloat(cp.min_order).toFixed(2).replace('.',',')})` : ''
+            return `• *${cp.code}* — ${desc} de desconto${min}`
+          }).join('\n')
+          resposta = _pickOne([
+            `Cupons ativos:\n${lista}\n\nFaça seu pedido: ${linkCardapio}`,
+            `Temos esses cupons agora:\n${lista}\n\nCardápio: ${linkCardapio}`,
+            `Cupons disponíveis:\n${lista}\n\nPra usar é só fazer o pedido: ${linkCardapio}`
+          ])
+        } else {
+          resposta = _pickOne([
+            `No momento não temos cupons ativos. Confira o cardápio: ${linkCardapio}`,
+            `Sem cupons ativos por enquanto. Cardápio aqui: ${linkCardapio}`,
+            `Agora não temos cupons. Dá uma olhada no cardápio: ${linkCardapio}`
+          ])
+        }
       }
-      if (_isSoSaudacao) {
-        _instrucoesSituacao.push(`SITUAÇÃO — cliente mandou só uma saudação:
-Responda a saudação cumprimentando de volta e **SEMPRE envie o link do cardápio**: ${linkCardapio}
-Mantenha em 1-2 linhas. Não fique enchendo linguiça.
-
-Exemplo:
-"${_saudacaoHora}! 👋 Aqui está nosso cardápio: ${linkCardapio} — me avise se quiser ajuda."`)
+      // [3] HORÁRIO DE FUNCIONAMENTO ───────────────────────────
+      else if (_kwHorario.test(_msgL)) {
+        if (lojaAbertaAgora && horarioHojeStr) {
+          resposta = _pickOne([
+            `Hoje funcionamos ${horarioHojeStr}. Estamos abertos agora ✅\nCardápio: ${linkCardapio}`,
+            `Hoje atendemos ${horarioHojeStr}. Aberto agora ✅\nCardápio: ${linkCardapio}`,
+            `Horário de hoje: ${horarioHojeStr}. Aberto agora ✅\n${linkCardapio}`
+          ])
+        } else if (horarioHojeStr && diaConfig?.ativo) {
+          // Hoje atende mas está fora do horário (já fechou ou ainda não abriu)
+          const fechSuffix = proxAberturaStr ? `\nNo momento estamos fechados — abrimos ${proxAberturaStr}.` : '\nNo momento estamos fechados.'
+          resposta = _pickOne([
+            `Hoje funcionamos ${horarioHojeStr}.${fechSuffix}\nCardápio: ${linkCardapio}`,
+            `Atendemos hoje ${horarioHojeStr}.${proxAberturaStr ? `\nAgora estamos fechados — voltamos ${proxAberturaStr}.` : '\nNo momento estamos fechados.'}\nCardápio: ${linkCardapio}`,
+            `Horário de hoje: ${horarioHojeStr}.${fechSuffix}\n${linkCardapio}`
+          ])
+        } else if (proxAberturaStr) {
+          // Hoje não atende
+          resposta = _pickOne([
+            `Hoje estamos fechados.\nAbrimos ${proxAberturaStr}.\nCardápio: ${linkCardapio}`,
+            `Hoje não atendemos.\nVoltamos ${proxAberturaStr}.\nCardápio: ${linkCardapio}`,
+            `Fechado hoje. Abrimos ${proxAberturaStr}.\n${linkCardapio}`
+          ])
+        } else {
+          // Sem config de horário no banco
+          resposta = `Confira nosso cardápio: ${linkCardapio}`
+        }
+      }
+      // [4] SAUDAÇÃO / PRIMEIRA MSG / CARDÁPIO ─────────────────
+      else if (_isPrimeiraMsgDia || _isSoSaudacao || _kwCardapio.test(_msgL)) {
+        const nomeLojaFmt = `*${nomeLoja}*`
+        const aviso = _avisoFechado ? `\n${_avisoFechado}` : ''
+        if (_isPrimeiraMsgDia || _isSoSaudacao) {
+          resposta = _pickOne([
+            `${_saudacaoHora}! Bem-vindo(a) ao ${nomeLojaFmt}.${aviso}\nConfira nosso cardápio: ${linkCardapio}`,
+            `${_saudacaoHora}! Aqui é da ${nomeLojaFmt}.${aviso}\nNosso cardápio: ${linkCardapio}`,
+            `${_saudacaoHora}! Que bom te ver por aqui.${aviso}\nDá uma olhada: ${linkCardapio}`
+          ])
+        } else {
+          resposta = _pickOne([
+            `${aviso ? aviso + '\n' : ''}Aqui está nosso cardápio: ${linkCardapio}`,
+            `${aviso ? aviso + '\n' : ''}Cardápio: ${linkCardapio}`,
+            `${aviso ? aviso + '\n' : ''}Confere nosso cardápio: ${linkCardapio}`
+          ])
+        }
+      }
+      // [5] OUTRAS MENSAGENS — SILÊNCIO ────────────────────────
+      // Não responde. Deixa o atendente humano cuidar. Isso reduz
+      // drasticamente o volume de mensagens automáticas e protege
+      // contra banimento do número no WhatsApp.
+      else {
+        log('🔇', `[IA] Fora do escopo — silêncio | ${phone} [${tenantId}] | "${msgFull.slice(0, 80)}"`)
+        return
       }
 
-      const systemPrompt = `${iaG.prompt_base || _promptPadrao}\n\n${_instrucoesSituacao.length ? _instrucoesSituacao.join('\n\n') + '\n\n' : ''}${contexto.join('\n\n')}\n\nREGRAS OBRIGATÓRIAS:\n- Nunca liste o cardápio inteiro. Cite no máximo 3 itens como sugestão e envie o link: ${linkCardapio}\n- Para fazer pedidos, SEMPRE direcione para o cardápio online: ${linkCardapio}\n- Se a loja estiver FECHADA, informe o horário de funcionamento de forma curta\n- Se o cliente perguntar sobre um pedido, dê o status, total e itens (apenas o que está no contexto)\n- Nunca invente informações que não estão no contexto\n- ${_regrasFidelidade}\n- CUPONS: só mencione cupons EXPLICITAMENTE listados na seção CUPONS acima. Se não houver seção CUPONS, NÃO invente códigos de desconto.\n- Mantenha respostas CURTAS: 1-3 linhas na maioria dos casos. Use mais só se o cliente pediu algo detalhado.\n- Use no MÁXIMO 1 emoji por resposta. Em mensagens de status ou informativas, pode não usar nenhum.\n- Tom: educado, amigável e direto. Sem exclamações em excesso, sem entusiasmo forçado.`
+      // ── Envio ──
       try {
-        const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${openaiKey}`},body:JSON.stringify({model:modelo,max_tokens:maxTokens,messages:[{role:'system',content:systemPrompt},...convHist.slice(-10),{role:'user',content:msgFull}]})})
-        const d=await r.json().catch(()=>({}))
-        let resposta=d?.choices?.[0]?.message?.content||''
-        if(quebraLen>0&&resposta.length>quebraLen){const words=resposta.split(' ');let linha='',result=[];for(const w of words){if((linha+' '+w).trim().length>quebraLen){result.push(linha.trim());linha=w}else linha=(linha+' '+w).trim()};if(linha)result.push(linha);resposta=result.join('\n')}
-        if(resposta){await sendWA(phone,resposta,inst);log('🤖',`IA → ${phone}: ${resposta.slice(0,60)}`);convHist.push({role:'user',content:msgFull},{role:'assistant',content:resposta});if(convHist.length>20)convHist.splice(0,convHist.length-20);_msgBuffer.set(histKey,convHist)}
-      } catch(e){log('❌','IA OpenAI error:',e.message)}
+        // Quebra de linha por largura, se configurada
+        if (quebraLen > 0 && resposta.length > quebraLen) {
+          const words = resposta.split(' ')
+          let linha = '', result = []
+          for (const w of words) {
+            if ((linha + ' ' + w).trim().length > quebraLen) { result.push(linha.trim()); linha = w }
+            else linha = (linha + ' ' + w).trim()
+          }
+          if (linha) result.push(linha)
+          resposta = result.join('\n')
+        }
+
+        // ── Fluxo humano: ler → pausar → digitar → enviar ──
+        // 1) Marca a(s) mensagem(ns) como lida(s) — cliente vê o ✓✓ azul.
+        //    Se cliente mandou várias msgs no buffer, marca todas.
+        for (const id of msgIds) {
+          await markAsRead(phone, id, inst)
+        }
+        // 2) Pausa curta de "leitura" — pessoa leu, agora vai pensar/digitar.
+        //    Antes do "digitando..." aparecer, dá uns segundos pra parecer real.
+        await sleep(800 + Math.floor(Math.random() * 1200))  // 0.8s–2.0s
+
+        // 3) Delay humanizado ("digitando..." aparece e a msg chega no fim).
+        //    Bot é detectado quando responde sempre com mesma latência.
+        //    Aqui simulamos uma pessoa digitando: ~40ms por caractere, mais um
+        //    tempo base de "leitura/pensamento", com variação aleatória.
+        //    Cap em 6s pra não parecer travado.
+        const _baseLeitura = 1200 + Math.floor(Math.random() * 800)  // 1.2s–2.0s
+        const _porChar     = 35 + Math.floor(Math.random() * 15)      // 35-50ms
+        const _humanDelay  = Math.min(6000, _baseLeitura + resposta.length * _porChar)
+
+        await sendWA(phone, resposta, inst, _humanDelay)
+        log('🤖', `IA → ${phone} (delay ${_humanDelay}ms): ${resposta.slice(0, 60).replace(/\n/g,' ')}`)
+        convHist.push({ role: 'user', content: msgFull }, { role: 'assistant', content: resposta })
+        if (convHist.length > 20) convHist.splice(0, convHist.length - 20)
+        _msgBuffer.set(histKey, convHist)
+      } catch (e) { log('❌', '[IA] erro envio:', e.message) }
     }, bufferSeg*1000)
-    _msgBuffer.set(bufKey,{msgs,timer})
+    _msgBuffer.set(bufKey,{msgs,msgIds,timer})
   } catch(e){log('❌','Webhook error:',e.message)}
   send(res,200,{ok:true})
 }
