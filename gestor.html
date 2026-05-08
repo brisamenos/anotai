@@ -1042,26 +1042,6 @@ function nav(id) {
 
       <div style="display:flex;flex-direction:column;gap:12px">
 
-        <!-- ⚡ MODO ESSENCIAL — Reduz drasticamente o volume de mensagens -->
-        <div class="card" style="padding:18px;border:2px solid rgba(34,197,94,.35);background:linear-gradient(135deg,rgba(34,197,94,.08),rgba(34,197,94,.02))">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:14px">
-            <div style="display:flex;align-items:center;gap:12px;flex:1">
-              <div style="width:42px;height:42px;border-radius:10px;background:rgba(34,197,94,.18);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">⚡</div>
-              <div style="flex:1">
-                <div style="font-weight:700;font-size:14px;color:var(--success);display:flex;align-items:center;gap:6px">
-                  Modo Essencial
-                  <span style="font-size:10px;background:rgba(34,197,94,.2);color:var(--success);padding:2px 7px;border-radius:8px;font-weight:600">RECOMENDADO</span>
-                </div>
-                <div style="font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.45">
-                  Pula automaticamente as notificações intermediárias do pedido (recebido, em produção, pronto). Cliente só recebe: <b>PIX</b>, <b>saiu pra entrega</b>, <b>entregue/finalizado</b>, <b>cancelado</b>, <b>recompensas</b>.<br>
-                  <span style="color:var(--success);font-weight:600">↓ Reduz ~50% das mensagens automáticas e protege contra banimento do número no WhatsApp.</span>
-                </div>
-              </div>
-            </div>
-            <div class="toggle" id="auto-modo-essencial" onclick="this.classList.toggle('on')" style="flex-shrink:0"></div>
-          </div>
-        </div>
-
         <!-- Cobrança PIX Manual -->
         <div class="card" style="padding:18px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -1125,7 +1105,7 @@ Seu pedido está sendo preparado. Obrigado! 🎉</textarea>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
             <div style="display:flex;align-items:center;gap:10px">
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(139,92,246,.15);display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M5 2h6v6a3 3 0 0 1-6 0V2z" stroke="currentColor" stroke-width="1.4"/><path d="M2 2h3M11 2h3M2 5H5M11 5h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 8v4M5.5 14h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
-              <div><div style="font-weight:600;font-size:13.5px">Pedido Recebido</div><div style="font-size:11.5px;color:var(--muted)">Enviado automaticamente assim que o cliente finaliza o pedido</div></div>
+              <div><div style="font-weight:600;font-size:13.5px">Pedido Recebido <span style="display:inline-block;font-size:10px;background:rgba(239,68,68,.15);color:#ef4444;padding:2px 7px;border-radius:6px;font-weight:600;margin-left:4px;vertical-align:middle">🔇 NÃO ENVIADO</span></div><div style="font-size:11.5px;color:var(--muted)">Desativado pelo sistema. Cliente consulta status pelo botão "Acompanhar pelo WhatsApp" no cardápio (anti-ban).</div></div>
             </div>
             <div style="display:flex;align-items:center;gap:8px"><button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="abrirModelosModal('recebido')">📋 Modelos</button><div class="toggle on" id="auto-toggle-recebido" onclick="this.classList.toggle('on')"></div></div>
           </div>
@@ -1140,7 +1120,7 @@ Seu pedido está sendo preparado. Obrigado! 🎉</textarea>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
             <div style="display:flex;align-items:center;gap:10px">
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(59,130,246,.15);display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-              <div><div style="font-weight:600;font-size:13.5px">Pedido Confirmado</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando o pedido passa para "Em produção"</div></div>
+              <div><div style="font-weight:600;font-size:13.5px">Pedido Confirmado <span style="display:inline-block;font-size:10px;background:rgba(239,68,68,.15);color:#ef4444;padding:2px 7px;border-radius:6px;font-weight:600;margin-left:4px;vertical-align:middle">🔇 NÃO ENVIADO</span></div><div style="font-size:11.5px;color:var(--muted)">Desativado pelo sistema. Cliente consulta status pelo botão "Acompanhar pelo WhatsApp" no cardápio (anti-ban).</div></div>
             </div>
             <div style="display:flex;align-items:center;gap:8px"><button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="abrirModelosModal('confirmado')">📋 Modelos</button><div class="toggle on" id="auto-toggle-confirmado" onclick="this.classList.toggle('on')"></div></div>
           </div>
@@ -1155,7 +1135,7 @@ Tempo estimado: 30-40 min ⏱️</textarea>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
             <div style="display:flex;align-items:center;gap:10px">
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(34,197,94,.15);display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="3" y="2" width="10" height="13" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M6 6h4M6 9h3M6 12h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
-              <div><div style="font-weight:600;font-size:13.5px">Pedido Pronto</div><div style="font-size:11.5px;color:var(--muted)">Enviado quando o pedido está pronto para retirada ou saiu para entrega</div></div>
+              <div><div style="font-weight:600;font-size:13.5px">Pedido Pronto <span style="display:inline-block;font-size:10px;background:rgba(239,68,68,.15);color:#ef4444;padding:2px 7px;border-radius:6px;font-weight:600;margin-left:4px;vertical-align:middle">🔇 NÃO ENVIADO</span></div><div style="font-size:11.5px;color:var(--muted)">Desativado pelo sistema. Cliente consulta status pelo botão "Acompanhar pelo WhatsApp" no cardápio (anti-ban).</div></div>
             </div>
             <div style="display:flex;align-items:center;gap:8px"><button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="abrirModelosModal('pronto')">📋 Modelos</button><div class="toggle on" id="auto-toggle-pronto" onclick="this.classList.toggle('on')"></div></div>
           </div>
