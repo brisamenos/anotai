@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <title>Indicação — Anotaí</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🍽️%3C/text%3E%3C/svg%3E">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);
+      min-height:100vh;color:#fff;
+      display:flex;align-items:center;justify-content:center;
+      padding:20px;
+    }
+    .card{
+      background:#fff;color:#0f172a;
+      border-radius:20px;padding:32px 28px;
+      width:100%;max-width:440px;
+      box-shadow:0 20px 60px rgba(0,0,0,.4);
+    }
+    .header{text-align:center;margin-bottom:24px}
+    .badge{
+      display:inline-flex;align-items:center;gap:6px;
+      background:rgba(34,197,94,.12);color:#16a34a;
+      font-size:11px;font-weight:600;
+      padding:5px 11px;border-radius:20px;
+      margin-bottom:14px;
+    }
+    .header h1{font-size:22px;font-weight:700;margin-bottom:6px;line-height:1.25}
+    .header p{font-size:13.5px;color:#64748b;line-height:1.5}
+    .indicador-tag{
+      background:linear-gradient(135deg,#fef3c7,#fde68a);
+      border:1px solid #fbbf24;color:#92400e;
+      padding:10px 14px;border-radius:10px;
+      font-size:13px;margin:14px 0;
+      display:flex;align-items:center;gap:8px;
+    }
+    .form{display:flex;flex-direction:column;gap:13px;margin-top:6px}
+    .label{font-size:12px;font-weight:600;color:#475569;margin-bottom:5px;display:block}
+    .input{
+      width:100%;padding:12px 14px;
+      border:1.5px solid #e2e8f0;border-radius:10px;
+      font-size:14px;color:#0f172a;background:#fff;
+      transition:border-color .15s,box-shadow .15s;
+    }
+    .input:focus{outline:0;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.15)}
+    .input.error{border-color:#ef4444}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .btn{
+      width:100%;padding:14px;
+      background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;
+      border:0;border-radius:11px;
+      font-size:15px;font-weight:700;cursor:pointer;
+      box-shadow:0 6px 18px rgba(59,130,246,.3);
+      transition:transform .12s,opacity .15s;margin-top:6px;
+    }
+    .btn:active{transform:translateY(1px)}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .footer-hint{
+      text-align:center;font-size:11px;color:#94a3b8;
+      margin-top:18px;line-height:1.5;
+    }
+    .success-screen{text-align:center;padding:14px 0}
+    .success-icon{
+      width:72px;height:72px;border-radius:50%;
+      background:linear-gradient(135deg,#22c55e,#16a34a);
+      display:flex;align-items:center;justify-content:center;
+      font-size:38px;margin:0 auto 18px;
+      box-shadow:0 10px 30px rgba(34,197,94,.4);
+    }
+    .success-screen h2{font-size:22px;font-weight:700;margin-bottom:10px}
+    .success-screen p{font-size:14px;color:#475569;line-height:1.6}
+    .error-screen{text-align:center;padding:30px 0}
+    .error-screen h2{color:#ef4444;font-size:18px;margin-bottom:8px}
+    .error-screen p{font-size:13.5px;color:#64748b}
+    .skel{display:none;text-align:center;padding:30px;color:#94a3b8;font-size:13px}
+  </style>
+</head>
+<body>
+
+<div class="card">
+
+  <div id="loading" class="skel" style="display:block">Carregando…</div>
+
+  <div id="form-screen" style="display:none">
+    <div class="header">
+      <div class="badge">🎁 OFERTA EXCLUSIVA</div>
+      <h1>Sistema completo para seu delivery</h1>
+      <p>Cardápio online, gestão de pedidos, WhatsApp automático, controle financeiro e muito mais.</p>
+    </div>
+
+    <div class="indicador-tag">
+      <span>👋</span>
+      <span><strong id="indicador-nome">—</strong> te indicou. Preencha abaixo e nossa equipe entra em contato!</span>
+    </div>
+
+    <div class="form">
+      <div>
+        <label class="label">Seu nome completo *</label>
+        <input class="input" id="f-nome" placeholder="Ex: João Silva" autocomplete="name">
+      </div>
+      <div>
+        <label class="label">WhatsApp *</label>
+        <input class="input" id="f-phone" placeholder="(85) 99999-9999" type="tel" inputmode="tel" autocomplete="tel">
+      </div>
+      <div>
+        <label class="label">Nome do seu estabelecimento *</label>
+        <input class="input" id="f-estab" placeholder="Ex: Pizzaria do João">
+      </div>
+      <div class="row">
+        <div>
+          <label class="label">Segmento</label>
+          <select class="input" id="f-seg">
+            <option value="">Selecione…</option>
+            <option value="pizzaria">Pizzaria</option>
+            <option value="hamburgueria">Hamburgueria</option>
+            <option value="acai">Açaiteria</option>
+            <option value="acougue">Açougue</option>
+            <option value="restaurante">Restaurante</option>
+            <option value="lanchonete">Lanchonete</option>
+            <option value="bar">Bar</option>
+            <option value="outro">Outro</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">Cidade</label>
+          <input class="input" id="f-cidade" placeholder="Ex: Russas">
+        </div>
+      </div>
+      <div>
+        <label class="label">Observações (opcional)</label>
+        <input class="input" id="f-obs" placeholder="Quantos pedidos por dia, etc.">
+      </div>
+
+      <button class="btn" id="btn-enviar" onclick="enviar()">Enviar pra equipe entrar em contato</button>
+    </div>
+
+    <div class="footer-hint">
+      Ao enviar, você concorda em ser contatado pela nossa equipe pelo WhatsApp.
+    </div>
+  </div>
+
+  <div id="success-screen" style="display:none">
+    <div class="success-screen">
+      <div class="success-icon">✓</div>
+      <h2>Recebemos sua indicação!</h2>
+      <p>Em breve nossa equipe entra em contato pelo WhatsApp pra apresentar o sistema e tirar suas dúvidas.</p>
+    </div>
+  </div>
+
+  <div id="error-screen" style="display:none">
+    <div class="error-screen">
+      <h2 id="error-title">⚠️ Link inválido</h2>
+      <p id="error-msg">Este link não é válido ou está desativado.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Lê código da URL: /indicacao/CODIGO
+  const codigo = location.pathname.replace(/^\/indicacao\//, '').replace(/\/$/, '').toUpperCase();
+
+  // Mostra erro
+  function mostrarErro(titulo, msg) {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('form-screen').style.display = 'none';
+    document.getElementById('error-screen').style.display = 'block';
+    if (titulo) document.getElementById('error-title').textContent = titulo;
+    if (msg)    document.getElementById('error-msg').textContent = msg;
+  }
+
+  // Carrega info do indicador
+  if (!codigo || codigo.length < 4) {
+    mostrarErro('⚠️ Link inválido', 'Este link de indicação não é válido.');
+  } else {
+    fetch(`/api/indicacao/info/${codigo}`)
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(data => {
+        document.getElementById('indicador-nome').textContent = data.nome;
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('form-screen').style.display = 'block';
+      })
+      .catch(() => mostrarErro('⚠️ Link inválido', 'Este link de indicação não foi encontrado ou foi desativado.'));
+  }
+
+  // Máscara simples de telefone
+  document.getElementById('f-phone')?.addEventListener('input', e => {
+    let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+    if (v.length > 10) v = v.replace(/^(\d{2})(\d{5})(\d{4}).*/, '($1) $2-$3');
+    else if (v.length > 6) v = v.replace(/^(\d{2})(\d{4})(\d{0,4}).*/, '($1) $2-$3');
+    else if (v.length > 2) v = v.replace(/^(\d{2})(\d*)/, '($1) $2');
+    e.target.value = v;
+  });
+
+  async function enviar() {
+    const nome  = document.getElementById('f-nome').value.trim();
+    const phone = document.getElementById('f-phone').value.replace(/\D/g, '');
+    const estab = document.getElementById('f-estab').value.trim();
+    const seg   = document.getElementById('f-seg').value;
+    const cidade = document.getElementById('f-cidade').value.trim();
+    const obs   = document.getElementById('f-obs').value.trim();
+
+    // Validação visual
+    [['f-nome', nome], ['f-phone', phone], ['f-estab', estab]].forEach(([id, v]) => {
+      const el = document.getElementById(id);
+      v ? el.classList.remove('error') : el.classList.add('error');
+    });
+    if (!nome || !phone || !estab) {
+      alert('Preencha os campos obrigatórios marcados em vermelho.');
+      return;
+    }
+    if (phone.length < 10) {
+      document.getElementById('f-phone').classList.add('error');
+      alert('WhatsApp inválido. Use o formato (85) 99999-9999');
+      return;
+    }
+
+    const btn = document.getElementById('btn-enviar');
+    btn.disabled = true;
+    btn.textContent = 'Enviando…';
+
+    try {
+      const r = await fetch('/api/indicacao/lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          codigo,
+          nome_cliente: nome,
+          phone_cliente: phone,
+          nome_estabelecimento: estab,
+          segmento: seg || null,
+          cidade: cidade || null,
+          observacoes: obs || null
+        })
+      });
+      const data = await r.json();
+      if (!r.ok || !data.ok) throw new Error(data.error || 'Falha ao enviar');
+      document.getElementById('form-screen').style.display = 'none';
+      document.getElementById('success-screen').style.display = 'block';
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Enviar pra equipe entrar em contato';
+      alert('Falha ao enviar. Tente novamente em alguns segundos.');
+    }
+  }
+</script>
+
+</body>
+</html>

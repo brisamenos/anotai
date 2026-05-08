@@ -1009,6 +1009,296 @@ module.exports = async function handleRoutes(req, res, ctx) {
   }
 
   // ═══════════════════════════════════════════════════════
+  // SISTEMA DE INDICAÇÕES (referral / afiliados)
+  // ═══════════════════════════════════════════════════════
+  // Permite cadastrar pessoas como "indicadores" (parceiros/afiliados).
+  // Cada um tem um link único: /indicacao/{codigo}
+  // Quando alguém preenche o form do link, cai como "lead" no admin.
+  // Você converte manualmente quando fechar a venda. A cada cobrança paga,
+  // gera-se um registro de comissão no mês (default: 30% × 12 meses).
+
+  // ── PÚBLICO: Captura lead via link de indicação ─────
+  // Não precisa auth — cliente preenche e envia
+  if (req.method === 'GET' && upath.startsWith('/api/indicacao/info/')) {
+    const codigo = upath.replace('/api/indicacao/info/', '').trim()
+    if (!codigo) { send(res, 400, { error: 'Código obrigatório' }); return true }
+    const ind = db.prepare('SELECT id, nome, codigo, ativo FROM indicadores WHERE codigo=?').get(codigo)
+    if (!ind || !ind.ativo) { send(res, 404, { error: 'Link inválido ou desativado' }); return true }
+    // Não retorna dados sensíveis (email/phone/comissão), só o nome do indicador
+    send(res, 200, { nome: ind.nome, codigo: ind.codigo })
+    return true
+  }
+
+  if (req.method === 'POST' && upath === '/api/indicacao/lead') {
+    const body = await readBody(req)
+    const { codigo, nome_cliente, phone_cliente, nome_estabelecimento, segmento, cidade, observacoes } = body
+    if (!codigo || !nome_cliente || !phone_cliente || !nome_estabelecimento) {
+      send(res, 400, { error: 'codigo, nome_cliente, phone_cliente e nome_estabelecimento obrigatórios' })
+      return true
+    }
+    const ind = db.prepare('SELECT id, ativo FROM indicadores WHERE codigo=?').get(codigo)
+    if (!ind || !ind.ativo) { send(res, 404, { error: 'Link inválido ou desativado' }); return true }
+    // Anti-duplicação: se mesma combinação (indicador + phone + estabelecimento)
+    // já existe nos últimos 30 dias, retorna OK sem criar duplicata.
+    const _phoneClean = String(phone_cliente).replace(/\D/g, '')
+    const dup = db.prepare(`SELECT id FROM leads_indicacao
+       WHERE indicador_id=? AND replace(replace(phone_cliente,'+',''),' ','')=?
+         AND lower(nome_estabelecimento)=lower(?) AND created_at > datetime('now','-30 day')`)
+       .get(ind.id, _phoneClean, nome_estabelecimento)
+    if (dup) { send(res, 200, { ok: true, dup: true }); return true }
+    try {
+      const r = db.prepare(`INSERT INTO leads_indicacao
+        (indicador_id, nome_cliente, phone_cliente, nome_estabelecimento, segmento, cidade, observacoes)
+        VALUES (?,?,?,?,?,?,?)`)
+        .run(ind.id, String(nome_cliente).trim(), _phoneClean, String(nome_estabelecimento).trim(),
+             segmento || null, cidade || null, observacoes || null)
+      log('🎯', `Novo lead via indicação: ${nome_estabelecimento} (indicador #${ind.id})`)
+      send(res, 200, { ok: true, lead_id: r.lastInsertRowid })
+    } catch (e) { send(res, 500, { error: 'Falha ao registrar lead: ' + e.message }) }
+    return true
+  }
+
+  // ── ADMIN: Listar indicadores ──────────────────────
+  if (req.method === 'GET' && upath === '/api/admin/indicadores') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const rows = db.prepare(`
+      SELECT i.*,
+        (SELECT COUNT(*) FROM leads_indicacao l WHERE l.indicador_id=i.id) AS total_leads,
+        (SELECT COUNT(*) FROM leads_indicacao l WHERE l.indicador_id=i.id AND l.status='convertido') AS total_convertidos,
+        (SELECT COALESCE(SUM(comissao_valor),0) FROM comissoes c WHERE c.indicador_id=i.id AND c.status='pago') AS total_pago,
+        (SELECT COALESCE(SUM(comissao_valor),0) FROM comissoes c WHERE c.indicador_id=i.id AND c.status='a_pagar') AS total_a_pagar
+      FROM indicadores i ORDER BY i.created_at DESC
+    `).all()
+    send(res, 200, rows)
+    return true
+  }
+
+  // ── ADMIN: Criar indicador ─────────────────────────
+  if (req.method === 'POST' && upath === '/api/admin/indicadores') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    const { nome, email, phone, chave_pix, comissao_pct, comissao_meses, observacoes } = body
+    if (!nome) { send(res, 400, { error: 'Nome é obrigatório' }); return true }
+    // Gera código único de 8 chars (alfanumérico maiúsculo, sem ambíguos como 0/O/1/I)
+    const _gerarCodigo = () => {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+      let c = ''; for (let i = 0; i < 8; i++) c += chars[Math.floor(Math.random() * chars.length)]
+      return c
+    }
+    let codigo, tries = 0
+    do { codigo = _gerarCodigo(); tries++ }
+    while (db.prepare('SELECT 1 FROM indicadores WHERE codigo=?').get(codigo) && tries < 20)
+    try {
+      const r = db.prepare(`INSERT INTO indicadores
+        (codigo, nome, email, phone, chave_pix, comissao_pct, comissao_meses, observacoes)
+        VALUES (?,?,?,?,?,?,?,?)`)
+        .run(codigo, String(nome).trim(),
+             email ? String(email).toLowerCase().trim() : null,
+             phone ? String(phone).replace(/\D/g, '') : null,
+             chave_pix || null,
+             parseFloat(comissao_pct) || 30.0,
+             parseInt(comissao_meses) || 12,
+             observacoes || null)
+      send(res, 200, { ok: true, id: r.lastInsertRowid, codigo })
+    } catch (e) { send(res, 500, { error: 'Falha ao criar indicador: ' + e.message }) }
+    return true
+  }
+
+  // ── ADMIN: Atualizar indicador ─────────────────────
+  if (req.method === 'PUT' && upath.startsWith('/api/admin/indicadores/')) {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const id = parseInt(upath.replace('/api/admin/indicadores/', '').split('/')[0])
+    if (!id) { send(res, 400, { error: 'ID inválido' }); return true }
+    const body = await readBody(req)
+    const fields = []
+    const values = []
+    const allowed = ['nome', 'email', 'phone', 'chave_pix', 'comissao_pct', 'comissao_meses', 'ativo', 'observacoes']
+    for (const k of allowed) if (body[k] !== undefined) {
+      let v = body[k]
+      if (k === 'phone' && v) v = String(v).replace(/\D/g, '')
+      if (k === 'email' && v) v = String(v).toLowerCase().trim()
+      if (k === 'comissao_pct')   v = parseFloat(v) || 30.0
+      if (k === 'comissao_meses') v = parseInt(v) || 12
+      if (k === 'ativo')           v = v ? 1 : 0
+      fields.push(`${k}=?`); values.push(v)
+    }
+    if (!fields.length) { send(res, 400, { error: 'Nada a atualizar' }); return true }
+    values.push(id)
+    try {
+      db.prepare(`UPDATE indicadores SET ${fields.join(',')} WHERE id=?`).run(...values)
+      send(res, 200, { ok: true })
+    } catch (e) { send(res, 500, { error: 'Falha ao atualizar: ' + e.message }) }
+    return true
+  }
+
+  // ── ADMIN: Deletar indicador ───────────────────────
+  if (req.method === 'DELETE' && upath.startsWith('/api/admin/indicadores/')) {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const id = parseInt(upath.replace('/api/admin/indicadores/', '').split('/')[0])
+    if (!id) { send(res, 400, { error: 'ID inválido' }); return true }
+    // Verifica se tem comissões pagas — protege histórico financeiro
+    const cp = db.prepare("SELECT COUNT(*) AS n FROM comissoes WHERE indicador_id=? AND status='pago'").get(id)
+    if (cp?.n > 0) { send(res, 400, { error: 'Indicador tem comissões pagas. Desative em vez de deletar.' }); return true }
+    try {
+      db.prepare('DELETE FROM indicadores WHERE id=?').run(id)
+      send(res, 200, { ok: true })
+    } catch (e) { send(res, 500, { error: 'Falha ao deletar: ' + e.message }) }
+    return true
+  }
+
+  // ── ADMIN: Listar leads ────────────────────────────
+  if (req.method === 'GET' && upath === '/api/admin/leads-indicacao') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const status = parsedUrl?.query?.status || null
+    let sql = `SELECT l.*, i.nome AS indicador_nome, i.codigo AS indicador_codigo
+               FROM leads_indicacao l LEFT JOIN indicadores i ON i.id=l.indicador_id`
+    const params = []
+    if (status) { sql += ' WHERE l.status=?'; params.push(status) }
+    sql += ' ORDER BY l.created_at DESC LIMIT 500'
+    send(res, 200, db.prepare(sql).all(...params))
+    return true
+  }
+
+  // ── ADMIN: Atualizar status do lead ────────────────
+  // Quando muda pra "convertido", deve passar tenant_id e valor_plano.
+  // Sistema marca data_conversao automaticamente.
+  if (req.method === 'PUT' && upath.startsWith('/api/admin/leads-indicacao/')) {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const id = parseInt(upath.replace('/api/admin/leads-indicacao/', '').split('/')[0])
+    if (!id) { send(res, 400, { error: 'ID inválido' }); return true }
+    const body = await readBody(req)
+    const lead = db.prepare('SELECT * FROM leads_indicacao WHERE id=?').get(id)
+    if (!lead) { send(res, 404, { error: 'Lead não encontrado' }); return true }
+
+    const fields = []
+    const values = []
+    if (body.status !== undefined) {
+      const okStatus = ['novo', 'em_contato', 'negociando', 'convertido', 'perdido']
+      if (!okStatus.includes(body.status)) { send(res, 400, { error: 'Status inválido' }); return true }
+      fields.push('status=?'); values.push(body.status)
+      // Se mudou pra convertido pela primeira vez, marca data_conversao
+      if (body.status === 'convertido' && lead.status !== 'convertido') {
+        fields.push('data_conversao=CURRENT_TIMESTAMP')
+      }
+    }
+    if (body.tenant_id_convertido !== undefined) {
+      fields.push('tenant_id_convertido=?'); values.push(body.tenant_id_convertido || null)
+    }
+    if (body.valor_plano !== undefined) {
+      fields.push('valor_plano=?'); values.push(parseFloat(body.valor_plano) || 99.90)
+    }
+    if (body.observacoes !== undefined) {
+      fields.push('observacoes=?'); values.push(body.observacoes || null)
+    }
+    if (!fields.length) { send(res, 400, { error: 'Nada a atualizar' }); return true }
+    values.push(id)
+    try {
+      db.prepare(`UPDATE leads_indicacao SET ${fields.join(',')} WHERE id=?`).run(...values)
+      send(res, 200, { ok: true })
+    } catch (e) { send(res, 500, { error: 'Falha ao atualizar: ' + e.message }) }
+    return true
+  }
+
+  // ── ADMIN: Listar comissões ────────────────────────
+  // Filtros opcionais: ?status=a_pagar|pago, ?indicador_id=N, ?mes=YYYY-MM
+  if (req.method === 'GET' && upath === '/api/admin/comissoes') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const q = parsedUrl?.query || {}
+    let sql = `SELECT c.*, i.nome AS indicador_nome, i.chave_pix,
+               l.nome_estabelecimento, l.tenant_id_convertido
+               FROM comissoes c
+               LEFT JOIN indicadores i ON i.id=c.indicador_id
+               LEFT JOIN leads_indicacao l ON l.id=c.lead_id WHERE 1=1`
+    const params = []
+    if (q.status)        { sql += ' AND c.status=?';        params.push(q.status) }
+    if (q.indicador_id)  { sql += ' AND c.indicador_id=?';  params.push(parseInt(q.indicador_id)) }
+    if (q.mes)           { sql += ' AND c.mes_referencia=?'; params.push(q.mes) }
+    sql += ' ORDER BY c.mes_referencia DESC, i.nome ASC LIMIT 1000'
+    send(res, 200, db.prepare(sql).all(...params))
+    return true
+  }
+
+  // ── ADMIN: Registrar pagamento mensal do tenant convertido ─
+  // Chama esse endpoint quando o tenant pagou a mensalidade. O sistema:
+  //   1. Verifica todos leads "convertidos" e cria/atualiza linha de comissão
+  //      no mes_referencia (limitado a comissao_meses do indicador)
+  //   2. Status default = "a_pagar" (você ainda precisa pagar o indicador depois)
+  if (req.method === 'POST' && upath === '/api/admin/comissoes/gerar-mes') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    const mes = body.mes // formato YYYY-MM
+    if (!mes || !/^\d{4}-\d{2}$/.test(mes)) { send(res, 400, { error: 'mes deve estar no formato YYYY-MM' }); return true }
+    // Pega só leads convertidos com tenant_id, dentro da janela de comissão
+    const leadsAtivos = db.prepare(`
+      SELECT l.id AS lead_id, l.indicador_id, l.valor_plano, l.data_conversao,
+             i.comissao_pct, i.comissao_meses
+      FROM leads_indicacao l
+      JOIN indicadores i ON i.id=l.indicador_id
+      WHERE l.status='convertido' AND l.tenant_id_convertido IS NOT NULL
+    `).all()
+    let geradas = 0, ignoradas = 0
+    const [anoMes, mesNum] = mes.split('-').map(Number)
+    for (const l of leadsAtivos) {
+      // Calcula quantos meses se passaram desde a conversão
+      const dt = new Date(l.data_conversao)
+      const mesesDesde = (anoMes - dt.getFullYear()) * 12 + (mesNum - (dt.getMonth() + 1))
+      if (mesesDesde < 0 || mesesDesde >= l.comissao_meses) { ignoradas++; continue }
+      const comVal = parseFloat((l.valor_plano * l.comissao_pct / 100).toFixed(2))
+      try {
+        db.prepare(`INSERT OR IGNORE INTO comissoes
+          (indicador_id, lead_id, mes_referencia, valor_pagamento, comissao_valor, status)
+          VALUES (?,?,?,?,?,'a_pagar')`)
+          .run(l.indicador_id, l.lead_id, mes, l.valor_plano, comVal)
+        geradas++
+      } catch (e) { log('⚠️', `[comissao] erro lead ${l.lead_id}:`, e.message) }
+    }
+    send(res, 200, { ok: true, geradas, ignoradas, mes })
+    return true
+  }
+
+  // ── ADMIN: Marcar comissão como paga ───────────────
+  if (req.method === 'PUT' && upath.startsWith('/api/admin/comissoes/')) {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const id = parseInt(upath.replace('/api/admin/comissoes/', '').split('/')[0])
+    if (!id) { send(res, 400, { error: 'ID inválido' }); return true }
+    const body = await readBody(req)
+    const fields = []
+    const values = []
+    if (body.status !== undefined) {
+      if (!['a_pagar', 'pago', 'cancelado'].includes(body.status)) {
+        send(res, 400, { error: 'Status inválido' }); return true
+      }
+      fields.push('status=?'); values.push(body.status)
+      if (body.status === 'pago') fields.push('data_pagamento_indicador=CURRENT_TIMESTAMP')
+    }
+    if (body.observacoes !== undefined) {
+      fields.push('observacoes=?'); values.push(body.observacoes || null)
+    }
+    if (!fields.length) { send(res, 400, { error: 'Nada a atualizar' }); return true }
+    values.push(id)
+    try {
+      db.prepare(`UPDATE comissoes SET ${fields.join(',')} WHERE id=?`).run(...values)
+      send(res, 200, { ok: true })
+    } catch (e) { send(res, 500, { error: 'Falha ao atualizar: ' + e.message }) }
+    return true
+  }
+
+  // ── ADMIN: Resumo geral (cards do dashboard) ──────
+  if (req.method === 'GET' && upath === '/api/admin/indicacoes-resumo') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const r = {
+      indicadores_ativos: db.prepare("SELECT COUNT(*) AS n FROM indicadores WHERE ativo=1").get()?.n || 0,
+      leads_novos:        db.prepare("SELECT COUNT(*) AS n FROM leads_indicacao WHERE status='novo'").get()?.n || 0,
+      leads_total:        db.prepare("SELECT COUNT(*) AS n FROM leads_indicacao").get()?.n || 0,
+      convertidos:        db.prepare("SELECT COUNT(*) AS n FROM leads_indicacao WHERE status='convertido'").get()?.n || 0,
+      a_pagar:            db.prepare("SELECT COALESCE(SUM(comissao_valor),0) AS v FROM comissoes WHERE status='a_pagar'").get()?.v || 0,
+      pago_total:         db.prepare("SELECT COALESCE(SUM(comissao_valor),0) AS v FROM comissoes WHERE status='pago'").get()?.v || 0,
+    }
+    send(res, 200, r)
+    return true
+  }
+
+  // ═══════════════════════════════════════════════════════
   // PIX, Carteira & Saques
   // ═══════════════════════════════════════════════════════
 

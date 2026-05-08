@@ -242,6 +242,28 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
 /* ══ MODAL ══ */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
 .modal-bg.on{display:flex}
+
+/* Sub-tabs de Indicações */
+.ind-tab{
+  background:transparent;border:0;color:var(--muted);
+  padding:10px 16px;font-size:13.5px;font-weight:600;cursor:pointer;
+  border-bottom:2px solid transparent;border-radius:0;
+  transition:color .15s,border-color .15s;
+}
+.ind-tab.on{color:var(--text);border-bottom-color:var(--accent)}
+.ind-tab:hover:not(.on){color:var(--text-2)}
+.ind-status-badge{
+  display:inline-block;font-size:10.5px;font-weight:600;
+  padding:2px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:.3px;
+}
+.ind-status-novo       { background:rgba(249,115,22,.15);color:#f97316 }
+.ind-status-em_contato { background:rgba(59,130,246,.15);color:#3b82f6 }
+.ind-status-negociando { background:rgba(168,85,247,.15);color:#a855f7 }
+.ind-status-convertido { background:rgba(34,197,94,.15);color:#16a34a }
+.ind-status-perdido    { background:rgba(100,116,139,.15);color:#64748b }
+.ind-status-a_pagar    { background:rgba(239,68,68,.15);color:#ef4444 }
+.ind-status-pago       { background:rgba(34,197,94,.15);color:#16a34a }
+.ind-status-cancelado  { background:rgba(100,116,139,.15);color:#64748b }
 .modal{
   background:var(--s1);border:1px solid var(--border);border-radius:18px;
   width:520px;max-width:95vw;max-height:90vh;overflow-y:auto;
@@ -373,6 +395,9 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
       </button>
       <button class="sb-item" id="nav-faturamento" onclick="navTo('faturamento')">
         <span class="sb-icon">🧾</span> Faturamento
+      </button>
+      <button class="sb-item" id="nav-indicacoes" onclick="navTo('indicacoes')">
+        <span class="sb-icon">🎯</span> Indicações
       </button>
 
       <div class="sb-sec" style="margin-top:6px">Sistema</div>
@@ -1035,7 +1060,123 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
         </div>
       </div>
 
-      <!-- ════ AUDITORIA ════ -->
+      <!-- ════ AUDITORIA ════ -->      <!-- ══════════════════════════════════════════════════════════════
+           SEÇÃO INDICAÇÕES — Sistema de afiliados/referrals
+           ══════════════════════════════════════════════════════════════ -->
+      <div id="sec-indicacoes" style="display:none" class="sec-page">
+        <div class="sec-head">
+          <div>
+            <div class="sec-head-title">🎯 Indicações</div>
+            <div class="sec-head-sub">Indicadores parceiros, leads recebidos e comissões a pagar</div>
+          </div>
+          <button class="btn bg2 bsm" onclick="abrirModalIndicador()">+ Novo indicador</button>
+        </div>
+
+        <!-- Cards de resumo -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px">
+          <div class="card" style="padding:14px">
+            <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:4px">INDICADORES ATIVOS</div>
+            <div style="font-size:24px;font-weight:700" id="ind-resumo-ativos">—</div>
+          </div>
+          <div class="card" style="padding:14px;border:1px solid rgba(249,115,22,.3)">
+            <div style="font-size:11px;color:#f97316;font-weight:600;margin-bottom:4px">LEADS NOVOS</div>
+            <div style="font-size:24px;font-weight:700;color:#f97316" id="ind-resumo-novos">—</div>
+          </div>
+          <div class="card" style="padding:14px">
+            <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:4px">CONVERTIDOS</div>
+            <div style="font-size:24px;font-weight:700;color:#22c55e" id="ind-resumo-convertidos">—</div>
+          </div>
+          <div class="card" style="padding:14px;border:1px solid rgba(239,68,68,.3)">
+            <div style="font-size:11px;color:#ef4444;font-weight:600;margin-bottom:4px">A PAGAR</div>
+            <div style="font-size:24px;font-weight:700;color:#ef4444" id="ind-resumo-a-pagar">—</div>
+          </div>
+          <div class="card" style="padding:14px">
+            <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:4px">PAGO TOTAL</div>
+            <div style="font-size:24px;font-weight:700" id="ind-resumo-pago">—</div>
+          </div>
+        </div>
+
+        <!-- Sub-tabs: Indicadores | Leads | Comissões -->
+        <div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0">
+          <button class="ind-tab on" data-tab="indicadores" onclick="indSwitchTab('indicadores')">👥 Indicadores</button>
+          <button class="ind-tab"    data-tab="leads"        onclick="indSwitchTab('leads')">🎯 Leads</button>
+          <button class="ind-tab"    data-tab="comissoes"    onclick="indSwitchTab('comissoes')">💰 Comissões</button>
+        </div>
+
+        <!-- TAB: INDICADORES -->
+        <div id="ind-tab-indicadores" class="ind-tab-content">
+          <div class="tw">
+            <div class="tmeta">
+              <div class="card-title">Cadastro de indicadores</div>
+              <span class="badge bg-gray" id="ind-list-count">—</span>
+            </div>
+            <table>
+              <thead>
+                <tr><th>Nome</th><th>Código</th><th>Link</th><th>Comissão</th><th>Leads</th><th>Convertidos</th><th>A pagar</th><th>Status</th><th></th></tr>
+              </thead>
+              <tbody id="ind-tbody"><tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TAB: LEADS -->
+        <div id="ind-tab-leads" class="ind-tab-content" style="display:none">
+          <div class="tw">
+            <div class="tmeta">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div class="card-title">Leads recebidos</div>
+                <span class="badge bg-gray" id="lead-list-count">—</span>
+              </div>
+              <select id="lead-f-status" class="minput" onchange="carregarLeadsIndicacao()" style="width:auto;padding:6px 10px;font-size:12px">
+                <option value="">Todos</option>
+                <option value="novo">🆕 Novos</option>
+                <option value="em_contato">📞 Em contato</option>
+                <option value="negociando">💬 Negociando</option>
+                <option value="convertido">✅ Convertidos</option>
+                <option value="perdido">❌ Perdidos</option>
+              </select>
+            </div>
+            <table>
+              <thead>
+                <tr><th>Estabelecimento</th><th>Cliente</th><th>WhatsApp</th><th>Indicador</th><th>Cidade</th><th>Status</th><th>Data</th><th></th></tr>
+              </thead>
+              <tbody id="lead-tbody"><tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TAB: COMISSÕES -->
+        <div id="ind-tab-comissoes" class="ind-tab-content" style="display:none">
+          <div style="display:flex;gap:10px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+            <input type="month" id="com-mes-input" class="minput" style="width:auto;padding:7px 10px;font-size:13px">
+            <button class="btn bg2 bsm" onclick="gerarComissoesDoMes()">⚙️ Gerar comissões deste mês</button>
+            <span style="font-size:11.5px;color:var(--muted);margin-left:8px">Roda quando os tenants pagarem a mensalidade do mês</span>
+          </div>
+          <div class="tw">
+            <div class="tmeta">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div class="card-title">Comissões</div>
+                <span class="badge bg-gray" id="com-list-count">—</span>
+              </div>
+              <select id="com-f-status" class="minput" onchange="carregarComissoes()" style="width:auto;padding:6px 10px;font-size:12px">
+                <option value="a_pagar">A pagar</option>
+                <option value="pago">Pagas</option>
+                <option value="">Todas</option>
+              </select>
+            </div>
+            <table>
+              <thead>
+                <tr><th>Mês</th><th>Indicador</th><th>Estabelecimento</th><th>Plano</th><th>Comissão</th><th>Chave PIX</th><th>Status</th><th></th></tr>
+              </thead>
+              <tbody id="com-tbody"><tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- /sec-indicacoes -->
+
       <div id="sec-auditoria" style="display:none" class="sec-page">
         <div class="sec-head">
           <div>
@@ -1075,6 +1216,90 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
     </div><!-- /content -->
   </main>
 </div><!-- /painel -->
+
+<!-- ══════════ MODAL NOVO/EDITAR INDICADOR ══════════ -->
+<div class="modal-bg" id="m-indicador">
+  <div class="modal" style="width:480px">
+    <div class="modal-head">
+      <div class="modal-title" id="m-ind-title">+ Novo indicador</div>
+      <button class="modal-close" onclick="fecharModal('m-indicador')">×</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:11px">
+      <input type="hidden" id="m-ind-id">
+      <div>
+        <label class="form-label">Nome completo *</label>
+        <input class="form-input" id="m-ind-nome" placeholder="Ex: João Silva">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label class="form-label">E-mail</label>
+          <input class="form-input" id="m-ind-email" type="email" placeholder="joao@email.com">
+        </div>
+        <div>
+          <label class="form-label">WhatsApp</label>
+          <input class="form-input" id="m-ind-phone" type="tel" placeholder="(85) 99999-9999">
+        </div>
+      </div>
+      <div>
+        <label class="form-label">Chave PIX (pra enviar comissão)</label>
+        <input class="form-input" id="m-ind-pix" placeholder="CPF, e-mail, celular ou aleatória">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label class="form-label">% Comissão</label>
+          <input class="form-input" id="m-ind-pct" type="number" step="0.1" value="30" min="0" max="100">
+        </div>
+        <div>
+          <label class="form-label">Meses de comissão</label>
+          <input class="form-input" id="m-ind-meses" type="number" value="12" min="1" max="120">
+        </div>
+      </div>
+      <div>
+        <label class="form-label">Observações</label>
+        <textarea class="form-input" id="m-ind-obs" rows="2" placeholder="Notas internas sobre o indicador"></textarea>
+      </div>
+      <div id="m-ind-codigo-row" style="display:none;background:var(--s2);padding:10px 12px;border-radius:8px;font-size:12.5px">
+        <div style="color:var(--muted);font-size:11px;margin-bottom:3px">CÓDIGO / LINK DE INDICAÇÃO</div>
+        <div style="font-weight:600" id="m-ind-codigo-show">—</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn bg2 bsm" onclick="fecharModal('m-indicador')">Cancelar</button>
+      <button class="btn bg bsm" onclick="salvarIndicador()" id="m-ind-save">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ MODAL CONVERTER LEAD ══════════ -->
+<div class="modal-bg" id="m-converter-lead">
+  <div class="modal" style="width:440px">
+    <div class="modal-head">
+      <div class="modal-title">✅ Converter lead em cliente</div>
+      <button class="modal-close" onclick="fecharModal('m-converter-lead')">×</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:11px">
+      <input type="hidden" id="m-conv-lead-id">
+      <div style="background:var(--s2);padding:10px 12px;border-radius:8px;font-size:13px">
+        <div style="color:var(--muted);font-size:11px;margin-bottom:3px">ESTABELECIMENTO</div>
+        <div style="font-weight:600" id="m-conv-estab">—</div>
+      </div>
+      <div>
+        <label class="form-label">Tenant ID *</label>
+        <input class="form-input" id="m-conv-tenant-id" placeholder="Ex: pizzaria-do-joao">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">ID do tenant que foi criado pra esse cliente</div>
+      </div>
+      <div>
+        <label class="form-label">Valor do plano (R$)</label>
+        <input class="form-input" id="m-conv-valor" type="number" step="0.01" value="99.90" min="0">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Comissão será calculada sobre esse valor a cada mês</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn bg2 bsm" onclick="fecharModal('m-converter-lead')">Cancelar</button>
+      <button class="btn bg bsm" onclick="confirmarConverterLead()">Marcar como convertido</button>
+    </div>
+  </div>
+</div>
 
 <!-- ══════════ MODAL CONFIRMAÇÃO DUPLA ══════════ -->
 <div class="modal-bg" id="m-confirm-dupla">
@@ -1378,18 +1603,19 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 // ── NAVEGAÇÃO ──────────────────────────────────────────
 function navTo(id) {
-  ['dash','clientes','ia','backup','saques','planos','faturamento','auditoria'].forEach(s => {
+  ['dash','clientes','ia','backup','saques','planos','faturamento','indicacoes','auditoria'].forEach(s => {
     const sec = document.getElementById('sec-'+s);
     if (sec) sec.style.display = s===id ? 'block' : 'none';
     document.getElementById('nav-'+s)?.classList.toggle('on', s===id);
   });
-  const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA', backup:'Backup & Restore', saques:'Saques PIX', planos:'Planos & Leads', faturamento:'Faturamento', auditoria:'Auditoria' };
+  const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA', backup:'Backup & Restore', saques:'Saques PIX', planos:'Planos & Leads', faturamento:'Faturamento', indicacoes:'Indicações', auditoria:'Auditoria' };
   document.getElementById('topbar-title').textContent = titles[id] || id;
   if (id==='ia')          { iaAdminCarregar(); }
   if (id==='backup')      { renderBackupList(); }
   if (id==='saques')      { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); carregarCobrancaWA(); conectarAdminSSE(); }
   if (id==='planos')      { carregarPrecosPlanos(); carregarAdminPhone(); carregarLeads(); }
   if (id==='faturamento') { carregarFaturamento(); }
+  if (id==='indicacoes')  { carregarResumoIndicacoes(); carregarIndicadores(); }
   if (id==='auditoria')   { carregarAuditoria(); }
 }
 
@@ -2869,6 +3095,325 @@ async function atualizarSaque(id, status, obs) {
     carregarSaquesAdmin('pago');
   } catch(e) { toast('err', 'Erro: ' + e.message); }
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// MÓDULO INDICAÇÕES — Sistema de afiliados/referrals
+// ════════════════════════════════════════════════════════════════════════
+
+const INDICACAO_BASE_URL = location.origin + '/indicacao/';
+
+function indSwitchTab(tab) {
+  document.querySelectorAll('.ind-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  document.querySelectorAll('.ind-tab-content').forEach(c => c.style.display = 'none');
+  document.getElementById('ind-tab-' + tab).style.display = 'block';
+  if (tab === 'indicadores') carregarIndicadores();
+  if (tab === 'leads')       carregarLeadsIndicacao();
+  if (tab === 'comissoes')   carregarComissoes();
+}
+
+async function carregarResumoIndicacoes() {
+  try {
+    const r = await fetch('/api/admin/indicacoes-resumo', { headers: adminAuthHeader() });
+    if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById('ind-resumo-ativos').textContent       = d.indicadores_ativos;
+    document.getElementById('ind-resumo-novos').textContent        = d.leads_novos;
+    document.getElementById('ind-resumo-convertidos').textContent  = d.convertidos;
+    document.getElementById('ind-resumo-a-pagar').textContent      = 'R$ ' + (d.a_pagar || 0).toFixed(2).replace('.', ',');
+    document.getElementById('ind-resumo-pago').textContent         = 'R$ ' + (d.pago_total || 0).toFixed(2).replace('.', ',');
+  } catch(e) { console.error('resumo indic:', e); }
+}
+
+// ── INDICADORES ─────────────────────────────────────────
+async function carregarIndicadores() {
+  const tbody = document.getElementById('ind-tbody');
+  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr>';
+  try {
+    const r = await fetch('/api/admin/indicadores', { headers: adminAuthHeader() });
+    const rows = await r.json();
+    document.getElementById('ind-list-count').textContent = rows.length + ' indicadores';
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">Nenhum indicador cadastrado. Clique em "+ Novo indicador" pra começar.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r => {
+      const link = INDICACAO_BASE_URL + r.codigo;
+      return `<tr>
+        <td><b>${escapeHtml(r.nome)}</b>${r.email ? `<div style="font-size:11px;color:var(--muted)">${escapeHtml(r.email)}</div>` : ''}</td>
+        <td><code style="background:var(--s2);padding:3px 7px;border-radius:5px;font-size:12px">${r.codigo}</code></td>
+        <td>
+          <button class="btn bg2 bsm" style="font-size:11px" onclick="copiarLinkIndicacao('${r.codigo}')">📋 Copiar link</button>
+        </td>
+        <td>${r.comissao_pct}% × ${r.comissao_meses}m</td>
+        <td>${r.total_leads}</td>
+        <td><b>${r.total_convertidos}</b></td>
+        <td><b style="color:#ef4444">R$ ${(r.total_a_pagar || 0).toFixed(2).replace('.', ',')}</b></td>
+        <td><span class="ind-status-badge ind-status-${r.ativo ? 'pago' : 'cancelado'}">${r.ativo ? 'Ativo' : 'Inativo'}</span></td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px" onclick='editarIndicador(${JSON.stringify(r).replace(/'/g,"&#39;")})'>✏️</button>
+          <button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px" onclick="toggleAtivoIndicador(${r.id}, ${r.ativo ? 0 : 1})">${r.ativo ? '🔇' : '✅'}</button>
+          ${r.total_convertidos === 0 ? `<button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px;color:#ef4444" onclick="deletarIndicador(${r.id}, '${escapeHtml(r.nome)}')">🗑️</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:#ef4444">Erro: ' + e.message + '</td></tr>'; }
+}
+
+function copiarLinkIndicacao(codigo) {
+  const link = INDICACAO_BASE_URL + codigo;
+  navigator.clipboard.writeText(link).then(() => toast('ok', '🔗 Link copiado: ' + link));
+}
+
+function abrirModalIndicador() {
+  document.getElementById('m-ind-id').value = '';
+  document.getElementById('m-ind-nome').value = '';
+  document.getElementById('m-ind-email').value = '';
+  document.getElementById('m-ind-phone').value = '';
+  document.getElementById('m-ind-pix').value = '';
+  document.getElementById('m-ind-pct').value = '30';
+  document.getElementById('m-ind-meses').value = '12';
+  document.getElementById('m-ind-obs').value = '';
+  document.getElementById('m-ind-codigo-row').style.display = 'none';
+  document.getElementById('m-ind-title').textContent = '+ Novo indicador';
+  document.getElementById('m-indicador').classList.add('on');
+}
+
+function editarIndicador(r) {
+  document.getElementById('m-ind-id').value = r.id;
+  document.getElementById('m-ind-nome').value = r.nome || '';
+  document.getElementById('m-ind-email').value = r.email || '';
+  document.getElementById('m-ind-phone').value = r.phone || '';
+  document.getElementById('m-ind-pix').value = r.chave_pix || '';
+  document.getElementById('m-ind-pct').value = r.comissao_pct;
+  document.getElementById('m-ind-meses').value = r.comissao_meses;
+  document.getElementById('m-ind-obs').value = r.observacoes || '';
+  document.getElementById('m-ind-codigo-show').textContent = INDICACAO_BASE_URL + r.codigo;
+  document.getElementById('m-ind-codigo-row').style.display = 'block';
+  document.getElementById('m-ind-title').textContent = '✏️ Editar indicador';
+  document.getElementById('m-indicador').classList.add('on');
+}
+
+async function salvarIndicador() {
+  const id    = document.getElementById('m-ind-id').value;
+  const nome  = document.getElementById('m-ind-nome').value.trim();
+  if (!nome) { toast('err', 'Nome é obrigatório'); return; }
+  const payload = {
+    nome,
+    email:           document.getElementById('m-ind-email').value.trim() || null,
+    phone:           document.getElementById('m-ind-phone').value.trim() || null,
+    chave_pix:       document.getElementById('m-ind-pix').value.trim() || null,
+    comissao_pct:    parseFloat(document.getElementById('m-ind-pct').value) || 30,
+    comissao_meses:  parseInt(document.getElementById('m-ind-meses').value) || 12,
+    observacoes:     document.getElementById('m-ind-obs').value.trim() || null
+  };
+  try {
+    const url    = id ? `/api/admin/indicadores/${id}` : '/api/admin/indicadores';
+    const method = id ? 'PUT' : 'POST';
+    const r = await fetch(url, { method, headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    toast('ok', id ? '✅ Indicador atualizado' : '✅ Indicador criado: ' + d.codigo);
+    fecharModal('m-indicador');
+    carregarIndicadores();
+    carregarResumoIndicacoes();
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+async function toggleAtivoIndicador(id, ativo) {
+  try {
+    const r = await fetch(`/api/admin/indicadores/${id}`, { method: 'PUT', headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo }) });
+    if (!r.ok) throw new Error('Falha');
+    toast('ok', ativo ? '✅ Indicador reativado' : '🔇 Indicador desativado');
+    carregarIndicadores();
+    carregarResumoIndicacoes();
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+async function deletarIndicador(id, nome) {
+  if (!confirm(`Deletar o indicador "${nome}"? Os leads associados serão removidos.`)) return;
+  try {
+    const r = await fetch(`/api/admin/indicadores/${id}`, { method: 'DELETE', headers: adminAuthHeader() });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    toast('ok', '🗑️ Indicador removido');
+    carregarIndicadores();
+    carregarResumoIndicacoes();
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+// ── LEADS ────────────────────────────────────────────────
+async function carregarLeadsIndicacao() {
+  const tbody = document.getElementById('lead-tbody');
+  const fStatus = document.getElementById('lead-f-status').value;
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr>';
+  try {
+    const url = '/api/admin/leads-indicacao' + (fStatus ? '?status=' + fStatus : '');
+    const r = await fetch(url, { headers: adminAuthHeader() });
+    const rows = await r.json();
+    document.getElementById('lead-list-count').textContent = rows.length + ' leads';
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)">Nenhum lead encontrado.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(l => {
+      const dt = new Date(l.created_at);
+      const dataFmt = dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const phoneFmt = l.phone_cliente.length === 11
+        ? `(${l.phone_cliente.slice(0,2)}) ${l.phone_cliente.slice(2,7)}-${l.phone_cliente.slice(7)}`
+        : l.phone_cliente;
+      return `<tr>
+        <td><b>${escapeHtml(l.nome_estabelecimento)}</b>${l.segmento ? `<div style="font-size:11px;color:var(--muted)">${escapeHtml(l.segmento)}</div>` : ''}</td>
+        <td>${escapeHtml(l.nome_cliente)}</td>
+        <td><a href="https://wa.me/55${l.phone_cliente}" target="_blank" style="color:#22c55e;text-decoration:none">📱 ${phoneFmt}</a></td>
+        <td>${escapeHtml(l.indicador_nome || '—')}</td>
+        <td>${escapeHtml(l.cidade || '—')}</td>
+        <td>
+          <select class="minput" style="padding:4px 7px;font-size:11.5px;width:auto" onchange="mudarStatusLead(${l.id}, this.value, '${l.status}')">
+            <option value="novo"        ${l.status==='novo'?'selected':''}>🆕 Novo</option>
+            <option value="em_contato"  ${l.status==='em_contato'?'selected':''}>📞 Em contato</option>
+            <option value="negociando"  ${l.status==='negociando'?'selected':''}>💬 Negociando</option>
+            <option value="convertido"  ${l.status==='convertido'?'selected':''}>✅ Convertido</option>
+            <option value="perdido"     ${l.status==='perdido'?'selected':''}>❌ Perdido</option>
+          </select>
+        </td>
+        <td style="font-size:11.5px;color:var(--muted)">${dataFmt}</td>
+        <td style="text-align:right">
+          ${l.observacoes ? `<button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px" title="Ver observações" onclick="alert('${escapeHtml(l.observacoes).replace(/'/g,'&#39;')}')">📝</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:#ef4444">Erro: ' + e.message + '</td></tr>'; }
+}
+
+let _leadConvertendo = null;
+function mudarStatusLead(id, novoStatus, statusAnterior) {
+  if (novoStatus === 'convertido' && statusAnterior !== 'convertido') {
+    // Abre modal pra capturar tenant_id e valor do plano
+    _leadConvertendo = id;
+    // Pega o nome do estabelecimento do TR
+    const select = event.target;
+    const tr = select.closest('tr');
+    const estab = tr.querySelector('td b').textContent;
+    document.getElementById('m-conv-lead-id').value = id;
+    document.getElementById('m-conv-estab').textContent = estab;
+    document.getElementById('m-conv-tenant-id').value = '';
+    document.getElementById('m-conv-valor').value = '99.90';
+    document.getElementById('m-converter-lead').classList.add('on');
+    // Reverte o select até o usuário confirmar
+    select.value = statusAnterior;
+  } else {
+    atualizarStatusLead(id, { status: novoStatus });
+  }
+}
+
+async function confirmarConverterLead() {
+  const id        = document.getElementById('m-conv-lead-id').value;
+  const tenantId  = document.getElementById('m-conv-tenant-id').value.trim();
+  const valor     = parseFloat(document.getElementById('m-conv-valor').value) || 99.90;
+  if (!tenantId) { toast('err', 'Tenant ID é obrigatório'); return; }
+  await atualizarStatusLead(id, {
+    status: 'convertido',
+    tenant_id_convertido: tenantId,
+    valor_plano: valor
+  });
+  fecharModal('m-converter-lead');
+}
+
+async function atualizarStatusLead(id, payload) {
+  try {
+    const r = await fetch(`/api/admin/leads-indicacao/${id}`, {
+      method: 'PUT',
+      headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    toast('ok', '✅ Lead atualizado');
+    carregarLeadsIndicacao();
+    carregarResumoIndicacoes();
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+// ── COMISSÕES ────────────────────────────────────────────
+async function carregarComissoes() {
+  const tbody = document.getElementById('com-tbody');
+  const fStatus = document.getElementById('com-f-status').value;
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr>';
+  // Inicializa input de mês com o mês atual se vazio
+  const mesInput = document.getElementById('com-mes-input');
+  if (!mesInput.value) {
+    const now = new Date();
+    mesInput.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+  try {
+    const url = '/api/admin/comissoes' + (fStatus ? '?status=' + fStatus : '');
+    const r = await fetch(url, { headers: adminAuthHeader() });
+    const rows = await r.json();
+    document.getElementById('com-list-count').textContent = rows.length + ' comissões';
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)">Nenhuma comissão encontrada. Clique em "Gerar comissões deste mês" pra processar tenants pagantes.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(c => `
+      <tr>
+        <td><b>${c.mes_referencia}</b></td>
+        <td>${escapeHtml(c.indicador_nome || '—')}</td>
+        <td>${escapeHtml(c.nome_estabelecimento || '—')}</td>
+        <td>R$ ${parseFloat(c.valor_pagamento).toFixed(2).replace('.', ',')}</td>
+        <td><b style="color:${c.status==='pago'?'#16a34a':'#ef4444'}">R$ ${parseFloat(c.comissao_valor).toFixed(2).replace('.', ',')}</b></td>
+        <td>${c.chave_pix ? `<code style="font-size:11px">${escapeHtml(c.chave_pix)}</code> <button class="btn bg2 bsm" style="font-size:10px;padding:2px 6px" onclick="navigator.clipboard.writeText('${escapeHtml(c.chave_pix)}').then(()=>toast('ok','Copiado!'))">📋</button>` : '—'}</td>
+        <td><span class="ind-status-badge ind-status-${c.status}">${c.status==='a_pagar'?'A pagar':c.status==='pago'?'Pago':'Cancelado'}</span></td>
+        <td style="text-align:right;white-space:nowrap">
+          ${c.status === 'a_pagar'
+            ? `<button class="btn bg bsm" style="font-size:11px;padding:4px 9px" onclick="marcarComissaoPaga(${c.id})">✅ Marcar paga</button>`
+            : c.status === 'pago'
+            ? `<span style="font-size:11px;color:var(--muted)">${c.data_pagamento_indicador ? new Date(c.data_pagamento_indicador).toLocaleDateString('pt-BR') : ''}</span>`
+            : ''}
+        </td>
+      </tr>
+    `).join('');
+  } catch(e) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:#ef4444">Erro: ' + e.message + '</td></tr>'; }
+}
+
+async function gerarComissoesDoMes() {
+  const mes = document.getElementById('com-mes-input').value;
+  if (!mes) { toast('err', 'Selecione o mês'); return; }
+  if (!confirm(`Gerar comissões para ${mes}? Isso cria registros pra cada tenant convertido (status "a_pagar").`)) return;
+  try {
+    const r = await fetch('/api/admin/comissoes/gerar-mes', {
+      method: 'POST',
+      headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mes })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    toast('ok', `✅ ${d.geradas} comissões geradas (${d.ignoradas} fora da janela)`);
+    carregarComissoes();
+    carregarResumoIndicacoes();
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+async function marcarComissaoPaga(id) {
+  if (!confirm('Marcar comissão como paga? (você fez o PIX pro indicador)')) return;
+  try {
+    const r = await fetch(`/api/admin/comissoes/${id}`, {
+      method: 'PUT',
+      headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'pago' })
+    });
+    if (!r.ok) throw new Error('Falha');
+    toast('ok', '✅ Comissão marcada como paga');
+    carregarComissoes();
+    carregarResumoIndicacoes();
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+// Helper de HTML escape
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 </script>
 </body>
 </html>

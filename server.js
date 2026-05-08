@@ -487,6 +487,53 @@ const MIGRATIONS = [
   { version:45, description:'orders.wa_track: cliente optou por receber atualizações do pedido via WhatsApp', up:
     `ALTER TABLE orders ADD COLUMN wa_track INTEGER DEFAULT 0`
   },
+  { version:46, description:'Sistema de indicações com comissão recorrente (12 meses)', up:
+    `CREATE TABLE IF NOT EXISTS indicadores (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       codigo TEXT NOT NULL UNIQUE,
+       nome TEXT NOT NULL,
+       email TEXT,
+       phone TEXT,
+       chave_pix TEXT,
+       comissao_pct REAL NOT NULL DEFAULT 30.0,
+       comissao_meses INTEGER NOT NULL DEFAULT 12,
+       ativo INTEGER NOT NULL DEFAULT 1,
+       observacoes TEXT,
+       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+     );
+     CREATE TABLE IF NOT EXISTS leads_indicacao (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       indicador_id INTEGER NOT NULL REFERENCES indicadores(id) ON DELETE CASCADE,
+       nome_cliente TEXT NOT NULL,
+       phone_cliente TEXT NOT NULL,
+       nome_estabelecimento TEXT NOT NULL,
+       segmento TEXT,
+       cidade TEXT,
+       observacoes TEXT,
+       status TEXT NOT NULL DEFAULT 'novo',
+       tenant_id_convertido TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+       data_conversao TIMESTAMP,
+       valor_plano REAL DEFAULT 99.90,
+       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+     );
+     CREATE TABLE IF NOT EXISTS comissoes (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       indicador_id INTEGER NOT NULL REFERENCES indicadores(id) ON DELETE CASCADE,
+       lead_id INTEGER NOT NULL REFERENCES leads_indicacao(id) ON DELETE CASCADE,
+       mes_referencia TEXT NOT NULL,
+       valor_pagamento REAL NOT NULL,
+       comissao_valor REAL NOT NULL,
+       status TEXT NOT NULL DEFAULT 'a_pagar',
+       data_pagamento_indicador TIMESTAMP,
+       observacoes TEXT,
+       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+       UNIQUE(lead_id, mes_referencia)
+     );
+     CREATE INDEX IF NOT EXISTS idx_leads_indicador ON leads_indicacao(indicador_id);
+     CREATE INDEX IF NOT EXISTS idx_leads_status ON leads_indicacao(status);
+     CREATE INDEX IF NOT EXISTS idx_comissoes_indicador ON comissoes(indicador_id);
+     CREATE INDEX IF NOT EXISTS idx_comissoes_status ON comissoes(status);`
+  },
 ]
 
 function runMigrations() {
@@ -2661,6 +2708,14 @@ const server = http.createServer(async (req,res) => {
     if(fs.existsSync(fpath)){const ext=path.extname(fpath);res.setHeader('Content-Type',MIME[ext]||'application/octet-stream');res.setHeader('Cache-Control','public, max-age=2592000');res.writeHead(200);fs.createReadStream(fpath).pipe(res)}
     else{res.writeHead(404);res.end('Not found')}
     return
+  }
+
+  // ── Página pública de captura de leads via link de indicação ──
+  // /indicacao/CODIGO → serve indicacao.html (a página lê o código da URL
+  // e busca info do indicador via /api/indicacao/info/{codigo})
+  if(req.method==='GET'&&upath.startsWith('/indicacao/')){
+    const fpath=path.join(__dirname,'indicacao.html')
+    if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}
   }
 
   if(req.method==='GET'){
