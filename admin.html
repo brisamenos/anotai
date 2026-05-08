@@ -1655,6 +1655,37 @@ tbody tr:hover{background:rgba(79,141,247,.055)}
 </div>
 
 <script>
+function showAdminBootError(msg) {
+ const login = document.getElementById('login');
+ const painel = document.getElementById('painel');
+ const err = document.getElementById('lg-err');
+ document.body.style.display = 'flex';
+ document.body.style.background = 'var(--bg,#090d16)';
+ if (painel) painel.style.display = 'none';
+ if (login) login.style.display = 'flex';
+ if (err && msg) { err.textContent = msg; err.classList.add('on'); }
+}
+
+window.addEventListener('error', e => {
+ console.error('[admin] erro global:', e.error || e.message);
+ showAdminBootError('Erro ao abrir o painel. Atualize a página ou faça login novamente.');
+});
+window.addEventListener('unhandledrejection', e => {
+ console.error('[admin] promessa rejeitada:', e.reason);
+ showAdminBootError('Falha ao carregar dados do painel. Faça login novamente.');
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+ setTimeout(() => {
+ const login = document.getElementById('login');
+ const painel = document.getElementById('painel');
+ if (!login || !painel) return;
+ const loginHidden = getComputedStyle(login).display === 'none';
+ const painelHidden = getComputedStyle(painel).display === 'none';
+ if (loginHidden && painelHidden) showAdminBootError('Inicialização interrompida. Faça login novamente.');
+ }, 1200);
+});
+
 const sb = window.AppAPI;
 let _sessao = null;
 let _clientes = [];
@@ -1693,7 +1724,8 @@ async function doLogin() {
  document.getElementById('painel').style.display = 'flex';
  document.getElementById('adm-av').textContent = u.nome.charAt(0).toUpperCase();
  document.getElementById('adm-nome').textContent = u.nome.split(' ')[0];
- await loadAll();
+ try { await loadAll(); }
+ catch(e) { showAdminBootError('Login feito, mas houve erro ao carregar dados: ' + (e.message || e)); }
 }
 
 function doLogout() {
@@ -1705,20 +1737,31 @@ function doLogout() {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
+ if (!window.AppAPI) {
+ showAdminBootError('Falha ao carregar /api-client.js. Verifique o deploy e atualize a página.');
+ return;
+ }
  const raw = sessionStorage.getItem('adm_session');
  if (!raw) return;
  try {
  const s = JSON.parse(raw);
  if (!s.token || Date.now() - s.ts >= 8*60*60*1000) { sessionStorage.removeItem('adm_session'); return; }
  const check = await fetch('/api/admin/mp-config', { headers: { 'Authorization': 'Bearer '+s.token, 'Content-Type': 'application/json' } }).catch(()=>null);
- if (!check || check.status === 401) { sessionStorage.removeItem('adm_session'); return; }
+ if (!check || !check.ok) {
+ sessionStorage.removeItem('adm_session');
+ showAdminBootError('Sessão expirada ou inválida. Faça login novamente.');
+ return;
+ }
  _sessao = s;
  document.getElementById('login').style.display = 'none';
  document.getElementById('painel').style.display = 'flex';
  document.getElementById('adm-av').textContent = s.nome.charAt(0).toUpperCase();
  document.getElementById('adm-nome').textContent = s.nome.split(' ')[0];
- loadAll();
- } catch(e) { sessionStorage.removeItem('adm_session'); }
+ loadAll().catch(e => showAdminBootError('Erro ao carregar dados do painel: ' + (e.message || e)));
+ } catch(e) {
+ sessionStorage.removeItem('adm_session');
+ showAdminBootError('Sessão local inválida. Faça login novamente.');
+ }
 });
 
 // ── NAVEGAÇÃO ──────────────────────────────────────────
