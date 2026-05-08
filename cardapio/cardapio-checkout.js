@@ -318,6 +318,11 @@ async function _doSubmitOrder(addr, troco) {
       }
     }
 
+    // Cliente optou por receber atualizações pelo WhatsApp?
+    // Checkbox no checkout (#f-wa-track). Default desligado pra reduzir
+    // volume de mensagens automáticas e proteger o número da loja contra ban.
+    const _waTrack = document.getElementById('f-wa-track')?.checked ? 1 : 0;
+
     const { data: order, error } = await sb.from('orders').insert({
       tenant_id: _tenantId,
       client: name, phone, addr,
@@ -332,7 +337,8 @@ async function _doSubmitOrder(addr, troco) {
                  : (selectedPay === 'credito' || selectedPay === 'debito') ? 'entrega'
                  : 'entrega',
       troco: troco || null,
-      customer_id: customerId
+      customer_id: customerId,
+      wa_track: _waTrack
     }).select().single();
 
     if (error) throw error;
