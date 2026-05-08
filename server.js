@@ -1787,19 +1787,29 @@ async function handleOrderStatus(req, res) {
             ]),
           }
           let msgFinal = null
-          // ── ENVIO DE STATUS ────────────────────────────────────
-          // Estratégia anti-ban: a loja NUNCA inicia conversa pelo WhatsApp
-          // pra status intermediários do pedido. Quando o cliente quer saber,
-          // ele clica no botão "Acompanhar pedido pelo WhatsApp" na tela de
-          // sucesso, que abre o WA com mensagem pré-pronta ("Quero acompanhar
-          // meu pedido #N") — a IA detecta e responde com status atualizado.
+          // ── ENVIO DE STATUS — opt-in via WhatsApp ─────────────
+          // Estratégia anti-ban: a loja só envia atualizações de status
+          // (analise, producao, pronto, saiu, entregue) se o cliente ATIVOU
+          // o tracking. O fluxo é:
+          //   1) Cliente faz pedido → na tela de sucesso clica em
+          //      "Acompanhar pedido pelo WhatsApp"
+          //   2) WhatsApp abre com msg pré-pronta "Quero acompanhar #N"
+          //   3) Cliente envia → IA detecta intenção de pedido → marca
+          //      o pedido com wa_track=1 no banco
+          //   4) A partir daí, qualquer mudança de status dispara
+          //      notificação automática
           //
-          // Por isso pulamos SEMPRE: recebido (analise), produção, pronto.
-          // Saiu/entregue continuam como opcional do gestor — algumas lojas
-          // querem manter a sensação "tá chegando". Cancelado e finalizado
-          // SEMPRE vão (cliente PRECISA saber: cancelamento + avaliação).
-          if (['analise', 'producao', 'pronto'].includes(new_status)) {
-            log('🎯', `[anti-ban] Pulando "${new_status}" do pedido #${idStr} — cliente consulta via IA do WhatsApp se quiser`)
+          // Se cliente NÃO clicar no botão (não ativar tracking), pulamos
+          // toda atualização de status. Loja não inicia conversa.
+          //
+          // Status que SEMPRE vão (independente de tracking — cliente PRECISA
+          // saber): cancelado, finalizado.
+          // Plus: PIX e recompensas (rodam em outro fluxo, não passam aqui).
+          const _trackingAtivo = parseInt(order.wa_track || 0) === 1
+          const _statusOptIn = ['analise', 'producao', 'pronto', 'saiu', 'entregue']
+
+          if (!_trackingAtivo && _statusOptIn.includes(new_status)) {
+            log('🔕', `[anti-ban] Pulando "${new_status}" do pedido #${idStr} — cliente não ativou tracking via WhatsApp`)
           }
           else if (ct.on===false) { log('⏭️',`Automação "${tipoAuto}" desligada`) }
           else if (ct.on&&ct.msg) { msgFinal=fillVars(ct.msg,vars) }
@@ -2134,10 +2144,22 @@ async function handleIAWebhook(req, res) {
           const td = _tempoDecorrido(ped.created_at)
           const st = _statusCurto[ped.status] || ped.status
           const sufixoTempo = td ? ` — feito ${td}` : ''
+
+          // ── ATIVA TRACKING DESTE PEDIDO ────────────────────────
+          // Cliente perguntou sobre o pedido (geralmente clicou no botão
+          // "Acompanhar pelo WhatsApp"). A partir de agora, esse pedido
+          // tem `wa_track=1` e a loja PASSA a enviar atualizações de
+          // status (em produção, pronto, saiu, entregue) automaticamente,
+          // sem o cliente perguntar de novo.
+          // Se o pedido já está com tracking ativo, o UPDATE é noop.
+          try {
+            db.prepare("UPDATE orders SET wa_track=1 WHERE id=? AND tenant_id=? AND COALESCE(wa_track,0)=0").run(ped.id, tenantId)
+          } catch(e) { log('⚠️', '[wa_track] falha ao ativar:', e.message) }
+
           resposta = _pickOne([
-            `Pedido *#${pedNum}*: ${st}\nTotal: R$ ${tot}${sufixoTempo}`,
-            `*Pedido #${pedNum}* — ${st}\nValor: R$ ${tot}${sufixoTempo}`,
-            `Seu pedido *#${pedNum}* está: ${st}\nTotal: R$ ${tot}${sufixoTempo}`
+            `Pedido *#${pedNum}*: ${st}\nTotal: R$ ${tot}${sufixoTempo}\n\n_Vou te avisar a cada novidade do seu pedido!_ ✅`,
+            `*Pedido #${pedNum}* — ${st}\nValor: R$ ${tot}${sufixoTempo}\n\n_Pode deixar que te aviso aqui quando mudar de etapa!_`,
+            `Seu pedido *#${pedNum}* está: ${st}\nTotal: R$ ${tot}${sufixoTempo}\n\n_Te aviso por aqui em cada etapa do pedido._ 🛎️`
           ])
         } else {
           resposta = _pickOne([
