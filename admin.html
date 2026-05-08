@@ -3152,7 +3152,7 @@ async function carregarIndicadores() {
         <td style="text-align:right;white-space:nowrap">
           <button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px" onclick='editarIndicador(${JSON.stringify(r).replace(/'/g,"&#39;")})'>✏️</button>
           <button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px" onclick="toggleAtivoIndicador(${r.id}, ${r.ativo ? 0 : 1})">${r.ativo ? '🔇' : '✅'}</button>
-          ${r.total_convertidos === 0 ? `<button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px;color:#ef4444" onclick="deletarIndicador(${r.id}, '${escapeHtml(r.nome)}')">🗑️</button>` : ''}
+          ${r.total_leads === 0 ? `<button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px;color:#ef4444" onclick="deletarIndicador(${r.id}, '${escapeHtml(r.nome)}')">🗑️</button>` : ''}
         </td>
       </tr>`;
     }).join('');
@@ -3268,7 +3268,7 @@ async function carregarLeadsIndicacao() {
         <td>${escapeHtml(l.indicador_nome || '—')}</td>
         <td>${escapeHtml(l.cidade || '—')}</td>
         <td>
-          <select class="minput" style="padding:4px 7px;font-size:11.5px;width:auto" onchange="mudarStatusLead(${l.id}, this.value, '${l.status}')">
+          <select class="minput" style="padding:4px 7px;font-size:11.5px;width:auto" onchange="mudarStatusLead(${l.id}, this.value, '${l.status}', event)">
             <option value="novo"        ${l.status==='novo'?'selected':''}>🆕 Novo</option>
             <option value="em_contato"  ${l.status==='em_contato'?'selected':''}>📞 Em contato</option>
             <option value="negociando"  ${l.status==='negociando'?'selected':''}>💬 Negociando</option>
@@ -3286,21 +3286,23 @@ async function carregarLeadsIndicacao() {
 }
 
 let _leadConvertendo = null;
-function mudarStatusLead(id, novoStatus, statusAnterior) {
+function mudarStatusLead(id, novoStatus, statusAnterior, ev) {
+  ev = ev || event; // fallback pra navegadores antigos / chamadas inline
   if (novoStatus === 'convertido' && statusAnterior !== 'convertido') {
     // Abre modal pra capturar tenant_id e valor do plano
     _leadConvertendo = id;
-    // Pega o nome do estabelecimento do TR
-    const select = event.target;
-    const tr = select.closest('tr');
-    const estab = tr.querySelector('td b').textContent;
+    const select = ev?.target;
+    const tr = select?.closest('tr');
+    const bEl = tr?.querySelector('td b');
+    const estab = bEl ? bEl.textContent : 'Lead';
     document.getElementById('m-conv-lead-id').value = id;
     document.getElementById('m-conv-estab').textContent = estab;
     document.getElementById('m-conv-tenant-id').value = '';
     document.getElementById('m-conv-valor').value = '99.90';
     document.getElementById('m-converter-lead').classList.add('on');
-    // Reverte o select até o usuário confirmar
-    select.value = statusAnterior;
+    // Reverte o select pro status anterior. Se usuário confirmar, a lista
+    // será recarregada via atualizarStatusLead → carregarLeadsIndicacao.
+    if (select) select.value = statusAnterior;
   } else {
     atualizarStatusLead(id, { status: novoStatus });
   }

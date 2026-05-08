@@ -1136,9 +1136,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
     const id = parseInt(upath.replace('/api/admin/indicadores/', '').split('/')[0])
     if (!id) { send(res, 400, { error: 'ID inválido' }); return true }
-    // Verifica se tem comissões pagas — protege histórico financeiro
-    const cp = db.prepare("SELECT COUNT(*) AS n FROM comissoes WHERE indicador_id=? AND status='pago'").get(id)
-    if (cp?.n > 0) { send(res, 400, { error: 'Indicador tem comissões pagas. Desative em vez de deletar.' }); return true }
+    // Protege histórico financeiro: se tem QUALQUER comissão registrada
+    // (a_pagar, pago ou cancelado), não deixa deletar — só desativar.
+    const cp = db.prepare("SELECT COUNT(*) AS n FROM comissoes WHERE indicador_id=?").get(id)
+    if (cp?.n > 0) { send(res, 400, { error: `Indicador tem ${cp.n} comissão(ões) registrada(s). Desative em vez de deletar — preserva histórico financeiro.` }); return true }
+    // Protege também se tiver leads convertidos
+    const lc = db.prepare("SELECT COUNT(*) AS n FROM leads_indicacao WHERE indicador_id=? AND status='convertido'").get(id)
+    if (lc?.n > 0) { send(res, 400, { error: `Indicador tem ${lc.n} lead(s) convertido(s). Desative em vez de deletar.` }); return true }
     try {
       db.prepare('DELETE FROM indicadores WHERE id=?').run(id)
       send(res, 200, { ok: true })
