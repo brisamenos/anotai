@@ -592,7 +592,8 @@ try {
 // BACKUP / RESTORE
 // ════════════════════════════════════════════════════════
 const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_items',
-  'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress']
+  'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress',
+  'indicadores','leads_indicacao','comissoes']
   // wa_messages excluída — pode conter muita mídia e estourar JSON.stringify
 
 let _dirty = false

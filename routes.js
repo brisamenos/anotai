@@ -1101,6 +1101,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         .run(ind.id, String(nome_cliente).trim(), _phoneClean, String(nome_estabelecimento).trim(),
              segmento || null, cidade || null, observacoes || null)
       log('🎯', `Novo lead via indicação: ${nome_estabelecimento} (indicador #${ind.id})`)
+      marcarDirty()
       sseBroadcast(`indicador-rt:${ind.id}`, 'indicador:LEAD_INSERT', { id: r.lastInsertRowid })
       send(res, 200, { ok: true, lead_id: r.lastInsertRowid })
     } catch (e) { send(res, 500, { error: 'Falha ao registrar lead: ' + e.message }) }
@@ -1201,6 +1202,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
              parseInt(comissao_meses) || 12,
              observacoes || null,
              senha_hash || (senha ? crypto.createHash('sha256').update(String(senha)).digest('hex') : null))
+      marcarDirty()
       send(res, 200, { ok: true, id: r.lastInsertRowid, codigo })
     } catch (e) { send(res, 500, { error: 'Falha ao criar indicador: ' + e.message }) }
     return true
@@ -1235,6 +1237,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     values.push(id)
     try {
       db.prepare(`UPDATE indicadores SET ${fields.join(',')} WHERE id=?`).run(...values)
+      marcarDirty()
       send(res, 200, { ok: true })
     } catch (e) { send(res, 500, { error: 'Falha ao atualizar: ' + e.message }) }
     return true
@@ -1254,6 +1257,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (lc?.n > 0) { send(res, 400, { error: `Indicador tem ${lc.n} lead(s) convertido(s). Desative em vez de deletar.` }); return true }
     try {
       db.prepare('DELETE FROM indicadores WHERE id=?').run(id)
+      marcarDirty()
       send(res, 200, { ok: true })
     } catch (e) { send(res, 500, { error: 'Falha ao deletar: ' + e.message }) }
     return true
@@ -1307,6 +1311,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     values.push(id)
     try {
       db.prepare(`UPDATE leads_indicacao SET ${fields.join(',')} WHERE id=?`).run(...values)
+      marcarDirty()
       sseBroadcast(`indicador-rt:${lead.indicador_id}`, 'indicador:LEAD_UPDATE', { id })
       send(res, 200, { ok: true })
     } catch (e) { send(res, 500, { error: 'Falha ao atualizar: ' + e.message }) }
@@ -1371,6 +1376,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         geradas++
       } catch (e) { log('⚠️', `[comissao] erro lead ${l.lead_id}:`, e.message) }
     }
+    if (geradas > 0) marcarDirty()
     send(res, 200, { ok: true, geradas, ignoradas, mes })
     return true
   }
@@ -1398,6 +1404,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     try {
       const atual = db.prepare('SELECT indicador_id FROM comissoes WHERE id=?').get(id)
       db.prepare(`UPDATE comissoes SET ${fields.join(',')} WHERE id=?`).run(...values)
+      marcarDirty()
       if (atual?.indicador_id) sseBroadcast(`indicador-rt:${atual.indicador_id}`, 'indicador:COMISSAO_UPDATE', { id })
       send(res, 200, { ok: true })
     } catch (e) { send(res, 500, { error: 'Falha ao atualizar: ' + e.message }) }

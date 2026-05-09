@@ -1240,6 +1240,14 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
           <input class="form-input" id="m-ind-phone" type="tel" placeholder="(85) 99999-9999">
         </div>
       </div>
+      <div style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:11px 12px">
+        <div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:8px">ACESSO AO PAINEL</div>
+        <div>
+          <label class="form-label">Senha tempor&aacute;ria</label>
+          <input class="form-input" id="m-ind-senha" type="password" autocomplete="new-password" placeholder="Defina uma senha">
+        </div>
+        <div id="m-ind-senha-help" style="font-size:11.5px;color:var(--muted);margin-top:7px">Use o e-mail acima com esta senha. Ao editar, senha vazia mant&eacute;m a atual.</div>
+      </div>
       <div>
         <label class="form-label">Chave PIX (pra enviar comissão)</label>
         <input class="form-input" id="m-ind-pix" placeholder="CPF, e-mail, celular ou aleatória">
@@ -3101,6 +3109,7 @@ async function atualizarSaque(id, status, obs) {
 // ════════════════════════════════════════════════════════════════════════
 
 const INDICACAO_BASE_URL = location.origin + '/indicacao/';
+const INDICADOR_PAINEL_URL = location.origin + '/indicador';
 
 function indSwitchTab(tab) {
   document.querySelectorAll('.ind-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
@@ -3143,6 +3152,7 @@ async function carregarIndicadores() {
         <td><code style="background:var(--s2);padding:3px 7px;border-radius:5px;font-size:12px">${r.codigo}</code></td>
         <td>
           <button class="btn bg2 bsm" style="font-size:11px" onclick="copiarLinkIndicacao('${r.codigo}')">📋 Copiar link</button>
+          <button class="btn bg2 bsm" style="font-size:11px;margin-top:5px" onclick="copiarLinkPainelIndicador()">Painel</button>
         </td>
         <td>${r.comissao_pct}% × ${r.comissao_meses}m</td>
         <td>${r.total_leads}</td>
@@ -3164,10 +3174,16 @@ function copiarLinkIndicacao(codigo) {
   navigator.clipboard.writeText(link).then(() => toast('ok', '🔗 Link copiado: ' + link));
 }
 
+function copiarLinkPainelIndicador() {
+  navigator.clipboard.writeText(INDICADOR_PAINEL_URL).then(() => toast('ok', 'Link do painel copiado: ' + INDICADOR_PAINEL_URL));
+}
+
 function abrirModalIndicador() {
   document.getElementById('m-ind-id').value = '';
   document.getElementById('m-ind-nome').value = '';
   document.getElementById('m-ind-email').value = '';
+  document.getElementById('m-ind-senha').value = '';
+  document.getElementById('m-ind-senha-help').innerHTML = 'Use o e-mail acima com esta senha. Ao editar, senha vazia mant&eacute;m a atual.';
   document.getElementById('m-ind-phone').value = '';
   document.getElementById('m-ind-pix').value = '';
   document.getElementById('m-ind-pct').value = '30';
@@ -3182,6 +3198,8 @@ function editarIndicador(r) {
   document.getElementById('m-ind-id').value = r.id;
   document.getElementById('m-ind-nome').value = r.nome || '';
   document.getElementById('m-ind-email').value = r.email || '';
+  document.getElementById('m-ind-senha').value = '';
+  document.getElementById('m-ind-senha-help').innerHTML = 'Preencha somente para redefinir a senha. Vazio mant&eacute;m a senha atual.';
   document.getElementById('m-ind-phone').value = r.phone || '';
   document.getElementById('m-ind-pix').value = r.chave_pix || '';
   document.getElementById('m-ind-pct').value = r.comissao_pct;
@@ -3206,7 +3224,10 @@ async function salvarIndicador() {
     comissao_meses:  parseInt(document.getElementById('m-ind-meses').value) || 12,
     observacoes:     document.getElementById('m-ind-obs').value.trim() || null
   };
+  const senha = document.getElementById('m-ind-senha').value.trim();
+  if (senha && !payload.email) { toast('err', 'Informe o e-mail para criar acesso ao painel'); return; }
   try {
+    if (senha) payload.senha_hash = await sha256(senha);
     const url    = id ? `/api/admin/indicadores/${id}` : '/api/admin/indicadores';
     const method = id ? 'PUT' : 'POST';
     const r = await fetch(url, { method, headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
