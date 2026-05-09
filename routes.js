@@ -12,6 +12,7 @@ const fs     = require('fs')
 const path   = require('path')
 const zlib   = require('zlib')
 const crypto = require('crypto')
+const { buildOrderTrackingMessage } = require('./order-message')
 
 // ── Helper: notifica cliente quando PIX é confirmado (online ou manual) ──────
 function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
@@ -558,12 +559,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const existing = db.prepare('SELECT id FROM customers WHERE tenant_id=? AND phone=?').get(tid, phone)
       if (existing) {
         db.prepare('UPDATE customers SET name=?,email=?,birthday=?,senha_hash=? WHERE tenant_id=? AND phone=?').run(name, email || null, birthday || null, hash, tid, phone)
-        const c = db.prepare('SELECT id,name,phone,email,birthday,orders_count,total_spent,created_at FROM customers WHERE tenant_id=? AND phone=?').get(tid, phone)
+        const c = db.prepare('SELECT id,tenant_id,name,phone,email,birthday,orders_count,total_spent,created_at FROM customers WHERE tenant_id=? AND phone=?').get(tid, phone)
         send(res, 200, { ...c, token: Buffer.from(`${c.id}:${tid}:${hash.slice(0, 16)}`).toString('base64') })
         return true
       }
       const info = db.prepare('INSERT INTO customers (tenant_id,name,phone,email,birthday,senha_hash,orders_count,total_spent) VALUES (?,?,?,?,?,?,0,0)').run(tid, name, phone, email || null, birthday || null, hash)
-      const c    = db.prepare('SELECT id,name,phone,email,birthday,orders_count,total_spent,created_at FROM customers WHERE id=?').get(info.lastInsertRowid)
+      const c    = db.prepare('SELECT id,tenant_id,name,phone,email,birthday,orders_count,total_spent,created_at FROM customers WHERE id=? AND tenant_id=?').get(info.lastInsertRowid, tid)
       marcarDirty()
       send(res, 201, { ...c, token: Buffer.from(`${c.id}:${tid}:${hash.slice(0, 16)}`).toString('base64') })
     } catch (e) { send(res, 400, { error: e.message }) }
@@ -579,7 +580,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
     try {
       const hash = crypto.createHash('sha256').update(senha).digest('hex')
-      const c    = db.prepare('SELECT id,name,phone,email,birthday,orders_count,total_spent,created_at,senha_hash FROM customers WHERE tenant_id=? AND phone=?').get(tid, phone)
+      const c    = db.prepare('SELECT id,tenant_id,name,phone,email,birthday,orders_count,total_spent,created_at,senha_hash FROM customers WHERE tenant_id=? AND phone=?').get(tid, phone)
       if (!c || !c.senha_hash) { send(res, 401, { error: 'Telefone não cadastrado' }); return true }
       if (c.senha_hash !== hash) { send(res, 401, { error: 'Senha incorreta' }); return true }
       const { senha_hash: _, ...safe } = c
@@ -2615,13 +2616,17 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const phone10     = phoneNo55.slice(-10)
     const phoneNormSql = "replace(replace(replace(replace(replace(phone,'+',''),' ',''),'-',''),'(',''),')','')"
     const phoneWhere  = `(${phoneNormSql} = ? OR ${phoneNormSql} = ? OR substr(${phoneNormSql}, -10) = ?)`
-    const pedido      = db.prepare(`SELECT id,order_num,status,items,total,taxa FROM orders WHERE id=? AND tenant_id=? AND ${phoneWhere}`).get(order_id, tenant_id, phoneClean, phoneNo55, phone10)
+    const pedido      = db.prepare(`SELECT id,order_num,client,status,items,total,taxa,addr,pag,troco,created_at FROM orders WHERE id=? AND tenant_id=? AND ${phoneWhere}`).get(order_id, tenant_id, phoneClean, phoneNo55, phone10)
     if (!pedido) { send(res, 400, { ok: false }); return true }
-    const sl          = { analise: '⏳ aguardando confirmação', producao: '👨‍🍳 em preparo', pronto: '🛵 saindo para entrega', entregue: '✅ entregue', cancelado: '❌ cancelado' }
     const offset      = parseInt(cfg?.order_num_offset || 0) || 0
     const numPedido   = String(pedido.order_num || Math.max(1, pedido.id - offset)).padStart(3, '0')
-    const totalComTaxa = (parseFloat(pedido.total||0) + parseFloat(pedido.taxa||0)).toFixed(2).replace('.', ',')
-    const msg         = `🍽️ *${cfg?.store_name || 'Restaurante'}*\n\nOlá! Seu pedido *#${numPedido}* está:\n\n${sl[pedido.status] || pedido.status}\n\nTotal: R$ ${totalComTaxa}\n\nQualquer dúvida é só responder! 😊`
+    try { db.prepare("UPDATE orders SET wa_track=1 WHERE id=? AND tenant_id=? AND COALESCE(wa_track,0)=0").run(pedido.id, tenant_id) } catch {}
+    const msg         = buildOrderTrackingMessage({
+      order: pedido,
+      storeName: cfg?.store_name || 'Restaurante',
+      orderNumber: numPedido,
+      includeTrackingNote: true
+    })
     const r           = await sendWA(phone, msg, inst)
     send(res, r.ok ? 200 : 500, r)
     return true

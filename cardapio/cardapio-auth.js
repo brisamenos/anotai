@@ -4,10 +4,50 @@
 // ══════════════════════════════════════════
 function loadCustomerSession() {
   try {
-    const saved = JSON.parse(localStorage.getItem(AUTH_KEY)||'null');
-    if (saved && saved.id && saved.token) _customer = saved;
+    const saved = _loadCustomerSessionForTenant();
+    _customer = saved || null;
   } catch(e) {}
   updateProfileFab();
+}
+
+function _customerAuthKey(tid) {
+  return AUTH_KEY + '_' + (tid || _tenantId || 'default');
+}
+
+function _customerTenantFromToken(customer) {
+  try {
+    if (!customer?.token) return '';
+    return atob(customer.token).split(':')[1] || '';
+  } catch(e) { return ''; }
+}
+
+function _isCustomerFromCurrentTenant(customer) {
+  if (!customer || !customer.id || !customer.token || !_tenantId) return false;
+  return String(customer.tenant_id || _customerTenantFromToken(customer)) === String(_tenantId);
+}
+
+function _loadCustomerSessionForTenant() {
+  const key = _customerAuthKey();
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(key) || 'null'); } catch(e) {}
+  if (_isCustomerFromCurrentTenant(saved)) return saved;
+
+  // Migra sessao antiga global apenas quando o token pertence ao tenant atual.
+  try {
+    const legacy = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
+    if (_isCustomerFromCurrentTenant(legacy)) {
+      legacy.tenant_id = _tenantId;
+      localStorage.setItem(key, JSON.stringify(legacy));
+      return legacy;
+    }
+  } catch(e) {}
+  return null;
+}
+
+function _saveCustomerSession(customer) {
+  if (!customer || !_tenantId) return;
+  customer.tenant_id = customer.tenant_id || _tenantId;
+  localStorage.setItem(_customerAuthKey(), JSON.stringify(customer));
 }
 
 function updateProfileFab() {
@@ -23,12 +63,12 @@ function updateProfileFab() {
     }
     if (name) name.textContent = (_customer.name||'Eu').split(' ')[0];
   } else {
-    // Deslogado: ícone de pessoa + "Entrar"
+    // Deslogado: icone de pessoa + "Cadastro/login"
     if (av) {
       av.className = 'profile-fab-av icon';
       av.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 13.5c0-2.76 2.46-5 5.5-5s5.5 2.24 5.5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
     }
-    if (name) name.textContent = 'Entrar';
+    if (name) name.textContent = 'Cadastro/login';
   }
 }
 
@@ -138,7 +178,7 @@ async function doLogin() {
     const data = await res.json();
     if (!res.ok) { showAuthErr(data.error||'Erro ao entrar'); return; }
     _customer = data;
-    localStorage.setItem(AUTH_KEY, JSON.stringify(data));
+    _saveCustomerSession(_customer);
     updateProfileFab();
     closeAuth();
     toast('👋', `Olá, ${data.name.split(' ')[0]}!`);
@@ -183,7 +223,7 @@ async function doRegister() {
     const data = await res.json();
     if (!res.ok) { showAuthErr(data.error||'Erro ao criar conta'); return; }
     _customer = data;
-    localStorage.setItem(AUTH_KEY, JSON.stringify(data));
+    _saveCustomerSession(_customer);
     updateProfileFab();
     closeAuth();
     toast('🎉', `Bem-vindo, ${data.name.split(' ')[0]}!`);
@@ -204,7 +244,10 @@ async function doRegister() {
 
 function doLogout() {
   _customer = null;
-  localStorage.removeItem(AUTH_KEY);
+  try {
+    localStorage.removeItem(_customerAuthKey());
+    localStorage.removeItem(AUTH_KEY);
+  } catch(e) {}
   updateProfileFab();
   closeAccount();
   toast('👋','Você saiu da conta');
@@ -316,7 +359,7 @@ function saveDeliveryAddr() {
     // Atualiza cache do cliente logado para cross-device via banco
     if (_customer) {
       _customer.addr = [rua, num, a.bairro, a.compl, a.referencia ? 'Ref: ' + a.referencia : ''].filter(Boolean).join(', ');
-      try { localStorage.setItem(AUTH_KEY, JSON.stringify(_customer)); } catch(e) {}
+      try { _saveCustomerSession(_customer); } catch(e) {}
     }
   } catch(e) {}
 }
@@ -326,7 +369,7 @@ function clearSavedAddr() {
   // Limpa do cache do cliente logado também
   if (_customer) {
     _customer.addr = '';
-    try { localStorage.setItem(AUTH_KEY, JSON.stringify(_customer)); } catch(e) {}
+    try { _saveCustomerSession(_customer); } catch(e) {}
   }
   ['f-rua','f-num','f-bairro','f-compl','f-referencia'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
@@ -403,10 +446,16 @@ function openOrderTracker(orderId, orderNum) {
   closeAccount();
   _trackOrderId = orderId;
   document.getElementById('track-order-num').textContent = 'Pedido #' + String(_orderNum(orderId, orderNum)).padStart(3,'0');
-  sb.from('orders').select('id,order_num,status,items,client,addr').eq('id', orderId).single().then(({data})=>{
+  sb.from('orders').select('id,order_num,status,items,client,addr,total,taxa,pag,troco').eq('id', orderId).single().then(({data})=>{
     if (data) {
       updateTracker(data.status, data.addr);
-      renderTrackItems(Array.isArray(data.items)?data.items:[], data.client);
+      renderTrackItems(Array.isArray(data.items)?data.items:[], data.client, {
+        addr: data.addr,
+        total: data.total,
+        taxa: data.taxa,
+        pag: data.pag,
+        troco: data.troco
+      });
       // Atualiza número com order_num do banco
       document.getElementById('track-order-num').textContent = 'Pedido #' + String(_orderNum(data.id, data.order_num)).padStart(3,'0');
       document.getElementById('track-num').textContent = '#' + String(_orderNum(data.id, data.order_num)).padStart(3,'0');

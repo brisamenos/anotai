@@ -12,6 +12,7 @@ const Database = require('better-sqlite3')
 
 // ── Todas as rotas especiais em um único arquivo — edite só routes.js ──
 const handleRoutes = require('./routes')
+const { buildOrderTrackingMessage } = require('./order-message')
 
 const PORT        = process.env.PORT           || 3001
 const EVO_URL     = process.env.EVOLUTION_URL  || 'https://projeto-evolution-api.xtknqq.easypanel.host'
@@ -887,7 +888,7 @@ const TABLE_COLS = {
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
-  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','garcom_id','garcom_nome','customer_id','order_num','created_at'],
+  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','garcom_id','garcom_nome','customer_id','order_num','wa_track','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','fornecedor_id','updated_at'],
   fidelidade:   ['id','tenant_id','name','phone','birthday','pts','max_pts','orders_count','resgates','created_at'],
@@ -2225,7 +2226,7 @@ async function handleIAWebhook(req, res) {
       // ── Detecção de intenção ──
       const _msgL      = msgFull.toLowerCase()
       const _numMatch  = msgFull.match(/#\*?(\d{1,6})\*?/) || msgFull.match(/pedido\s*[*#]?\s*(\d{1,6})/i)
-      const _kwPedido  = /\b(meu\s+pedido|pedido\s+(j[aá]|saiu|chegou|t[aá]|est[aá]|ainda|atrasou|atrasado|demorando|pronto|sair[aá]|sai)|status\s+(do\s+)?pedido|cad[eê]\s+(meu|o)\s+pedido|onde\s+(est[aá]|t[aá])\s+(meu|o)\s+pedido|quanto\s+(tempo|falta)|saiu\s+(da|para|pra)\s+entrega|j[aá]\s+saiu)\b/i
+      const _kwPedido  = /\b(acompanhar\s+(meu\s+|o\s+)?pedido|rastrear\s+(meu\s+|o\s+)?pedido|rastrei?o\s+(do\s+)?pedido|meu\s+pedido|pedido\s+(j[aá]|saiu|chegou|t[aá]|est[aá]|ainda|atrasou|atrasado|demorando|pronto|sair[aá]|sai)|status\s+(do\s+)?pedido|cad[eê]\s+(meu|o)\s+pedido|onde\s+(est[aá]|t[aá])\s+(meu|o)\s+pedido|quanto\s+(tempo|falta)|saiu\s+(da|para|pra)\s+entrega|j[aá]\s+saiu)\b/i
       const _kwCupom   = /\b(cupom|cupons|promo[çc][ãa]o|promo[çc][õo]es|desconto|descontos|oferta|ofertas)\b/i
       const _kwCardapio= /\b(card[aá]pio|menu|fome|pedir|fazer\s+pedido|quero\s+pedir|tem\s+o\s+que|t[ãa]o\s+servindo|pode\s+fazer)\b/i
       const _kwHorario = /\b(hor[aá]rio|que\s+horas?|que\s+hora|abre|abrem|fecha|fecham|fechou|fecharam|fechad|abriu|abriram|t[ãa]o?\s+aberto|est[ãa]o?\s+aberto|aberto\s+(agora|hoje)|funciona|funcionam|funcionando|atendem|atendendo|trabalha|trabalham|at[eé]\s+que\s+horas?|de\s+que\s+horas?)\b/i
@@ -2288,18 +2289,15 @@ async function handleIAWebhook(req, res) {
         if (_numMatch) {
           const n = parseInt(_numMatch[1])
           const realId = n + _iaOffset
-          ped = db.prepare(`SELECT id,order_num,status,total,taxa,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} AND order_num=? ORDER BY id DESC LIMIT 1`).get(tenantId, _phoneClean, _phoneNo55, _phone10, n)
-          if (!ped) ped = db.prepare(`SELECT id,order_num,status,total,taxa,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} AND id=? AND (order_num IS NULL OR order_num=0) LIMIT 1`).get(tenantId, _phoneClean, _phoneNo55, _phone10, realId)
+          ped = db.prepare(`SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} AND order_num=? ORDER BY id DESC LIMIT 1`).get(tenantId, _phoneClean, _phoneNo55, _phone10, n)
+          if (!ped) ped = db.prepare(`SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} AND id=? AND (order_num IS NULL OR order_num=0) LIMIT 1`).get(tenantId, _phoneClean, _phoneNo55, _phone10, realId)
         } else {
           // Sem número citado — pega o pedido mais recente do cliente
-          ped = db.prepare(`SELECT id,order_num,status,total,taxa,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} ORDER BY id DESC LIMIT 1`).get(tenantId, _phoneClean, _phoneNo55, _phone10)
+          ped = db.prepare(`SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} ORDER BY id DESC LIMIT 1`).get(tenantId, _phoneClean, _phoneNo55, _phone10)
         }
         if (ped) {
           const pedNum = _iaPedNum(ped)
-          const tot = (parseFloat(ped.total||0) + parseFloat(ped.taxa||0)).toFixed(2).replace('.', ',')
           const td = _tempoDecorrido(ped.created_at)
-          const st = _statusCurto[ped.status] || ped.status
-          const sufixoTempo = td ? ` — feito ${td}` : ''
 
           // ── ATIVA TRACKING DESTE PEDIDO ────────────────────────
           // Cliente perguntou sobre o pedido (geralmente clicou no botão
@@ -2312,11 +2310,13 @@ async function handleIAWebhook(req, res) {
             db.prepare("UPDATE orders SET wa_track=1 WHERE id=? AND tenant_id=? AND COALESCE(wa_track,0)=0").run(ped.id, tenantId)
           } catch(e) { log('⚠️', '[wa_track] falha ao ativar:', e.message) }
 
-          resposta = _pickOne([
-            `Pedido *#${pedNum}*: ${st}\nTotal: R$ ${tot}${sufixoTempo}\n\n_Vou te avisar a cada novidade do seu pedido!_ ✅`,
-            `*Pedido #${pedNum}* — ${st}\nValor: R$ ${tot}${sufixoTempo}\n\n_Pode deixar que te aviso aqui quando mudar de etapa!_`,
-            `Seu pedido *#${pedNum}* está: ${st}\nTotal: R$ ${tot}${sufixoTempo}\n\n_Te aviso por aqui em cada etapa do pedido._ 🛎️`
-          ])
+          resposta = buildOrderTrackingMessage({
+            order: ped,
+            storeName: cfg?.store_name || 'Restaurante',
+            orderNumber: pedNum,
+            elapsedText: td,
+            includeTrackingNote: true
+          })
         } else {
           if (_numMatch) {
             const nInfo = String(parseInt(_numMatch[1])).padStart(3, '0')

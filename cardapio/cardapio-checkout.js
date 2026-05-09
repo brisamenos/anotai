@@ -7,10 +7,23 @@
 // ══════════════════════════════════════════
 function buildWaLink(orderId, orderNum) {
   const num = String(_orderNum(orderId, orderNum)).padStart(3, '0');
-  const msg = `Olá! Quero acompanhar meu pedido *#${num}* 🍽️`;
+  const msg = `Acompanhar pedido *#${num}*`;
   const numero = _waNumero || '';
   if (!numero) return null;
   return `https://wa.me/${numero}?text=${encodeURIComponent(msg)}`;
+}
+
+function scheduleWaTrackingRedirect(orderId, waLink) {
+  if (!waLink || selectedPay === 'pix' || selectedPay === 'cartao_mp') return;
+  const key = 'ef_wa_track_redirect_' + (_tenantId || '') + '_' + orderId;
+  try {
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, '1');
+  } catch(e) {}
+  setTimeout(() => {
+    try { window.location.href = waLink; }
+    catch(e) { try { window.open(waLink, '_blank'); } catch(_) {} }
+  }, 900);
 }
 
 function showWaToast(orderId, orderNum) {
@@ -266,7 +279,7 @@ async function _doSubmitOrder(addr, troco) {
         }).eq('id', _customer.id);
         _customer.orders_count = (_customer.orders_count||0)+1;
         _customer.total_spent  = (parseFloat(_customer.total_spent)||0)+_grossTotal;
-        localStorage.setItem(AUTH_KEY, JSON.stringify(_customer));
+        if (typeof _saveCustomerSession === 'function') _saveCustomerSession(_customer);
         updateProfileFab();
       } else {
         const { data: cl } = await sb.from('customers').select('id,orders_count,total_spent').eq('phone', phone).maybeSingle();
@@ -408,7 +421,12 @@ async function _doSubmitOrder(addr, troco) {
     const inv = document.getElementById('invite-signup');
     if (inv && !_customer) inv.style.display = 'flex';
 
-    startTracking(order.id, items, name, addr, order.status, order.order_num);
+    startTracking(order.id, items, name, addr, order.status, order.order_num, {
+      total: order.total,
+      taxa: order.taxa,
+      pag: order.pag,
+      troco: order.troco
+    });
 
     // ── PIX: gera QR Code MP ou exibe chave manual ──
     if (selectedPay === 'pix') {
@@ -423,7 +441,7 @@ async function _doSubmitOrder(addr, troco) {
     // 1. Salva no localStorage (celular próprio)
     try {
       localStorage.setItem('ef_order_' + (_tenantId||''), JSON.stringify({
-        orderId: order.id, orderNum: order.order_num, items, client: name, ts: Date.now()
+        orderId: order.id, orderNum: order.order_num, items, client: name, total: order.total, taxa: order.taxa, pag: order.pag, troco: order.troco, ts: Date.now()
       }));
     } catch(e) {}
     // 2. Coloca ?acompanhar=ID na URL (compartilhável)
@@ -437,6 +455,7 @@ async function _doSubmitOrder(addr, troco) {
     if (_tenantPlano === 'premium') {
       setTimeout(() => showWaToast(order.id, order.order_num), 1500);
     }
+    scheduleWaTrackingRedirect(order.id, waLink);
 
   } catch(e) {
     console.error('[submitOrder] falhou:', e);

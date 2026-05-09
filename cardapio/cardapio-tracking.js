@@ -43,7 +43,7 @@ function stepIndexFor(status) {
   return STEPS.findIndex(s => s.key.includes(status));
 }
 
-function startTracking(orderId, items, client, addr, initialStatus, orderNum) {
+function startTracking(orderId, items, client, addr, initialStatus, orderNum, details) {
   _trackOrderId = orderId;
   _initialOrderStatus = initialStatus || 'analise';
   const fab = document.getElementById('track-fab');
@@ -60,7 +60,7 @@ function startTracking(orderId, items, client, addr, initialStatus, orderNum) {
     })
     .subscribe();
   updateTracker(_initialOrderStatus || 'analise', addr);
-  renderTrackItems(items, client);
+  renderTrackItems(items, client, { ...(details || {}), addr });
   document.getElementById('track-order-num').textContent = 'Pedido #' + String(_orderNum(orderId, orderNum)).padStart(3,'0');
 }
 
@@ -101,14 +101,66 @@ function updateTracker(status, addr) {
   if (cancelWrap) cancelWrap.style.display = ['analise','aguardando_pix','aguardando_cartao'].includes(status) ? '' : 'none';
 }
 
-function renderTrackItems(items, client) {
+function _trackEsc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function _trackItemPrice(i) {
+  const n = Number(i?.price ?? i?.preco ?? i?.valor ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function _trackItemQty(i) {
+  const n = Number(i?.qty ?? i?.quantidade ?? 1);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+function _trackPayLabel(pag) {
+  return ({
+    dinheiro: 'Dinheiro',
+    credito: 'Cartao de credito',
+    debito: 'Cartao de debito',
+    pix: 'PIX',
+    pix_manual: 'PIX',
+    cartao_mp: 'Cartao online'
+  })[pag] || pag || '';
+}
+
+function _trackDeliveryKind(addr) {
+  const text = String(addr || '').trim();
+  const lower = text.toLowerCase();
+  if (/^mesa\b/i.test(text)) return { label: 'Mesa', detail: text };
+  if (/^retirada\b/i.test(text) || lower.includes('balc')) return { label: 'Retirada', detail: text || 'Retirada no balcao' };
+  if (text) return { label: 'Entrega', detail: text };
+  return { label: 'Retirada', detail: 'Retirada no balcao' };
+}
+
+function renderTrackItems(items, client, details) {
   const el = document.getElementById('track-items-list');
   if (!el) return;
-  el.innerHTML = items.map(i => `
+  const list = Array.isArray(items) ? items : [];
+  const subtotal = list.reduce((s, i) => s + _trackItemPrice(i) * _trackItemQty(i), 0);
+  const hasTotal = details && details.total !== undefined && details.total !== null;
+  const totalItens = hasTotal ? Number(details.total || 0) : subtotal;
+  const taxa = Number(details?.taxa || 0);
+  const desconto = Math.max(0, subtotal - totalItens);
+  const totalFinal = Math.max(0, totalItens + taxa);
+  const entrega = _trackDeliveryKind(details?.addr || '');
+  const pag = _trackPayLabel(details?.pag || '');
+  const rows = list.map(i => `
     <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--muted2)">
-      <span>${i.qty}× ${i.name}${i.obs?` <span style="color:var(--muted);font-size:11px">(${i.obs})</span>`:''}</span>
-      <span>R$ ${fmt(i.price*i.qty)}</span>
+      <span>${_trackItemQty(i)}× ${_trackEsc(i.name || i.nome || 'Item')}${i.obs?` <span style="color:var(--muted);font-size:11px">(${_trackEsc(i.obs)})</span>`:''}</span>
+      <span>R$ ${fmt(_trackItemPrice(i)*_trackItemQty(i))}</span>
     </div>`).join('');
+  el.innerHTML = (rows || '<div style="font-size:12px;color:var(--muted)">Itens do pedido</div>') + `
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--muted2)">
+      ${subtotal > 0 ? `<div style="display:flex;justify-content:space-between"><span>Subtotal dos itens</span><strong style="color:var(--text)">R$ ${fmt(subtotal)}</strong></div>` : ''}
+      ${desconto > 0.009 ? `<div style="display:flex;justify-content:space-between;color:var(--green)"><span>Descontos/Cashback</span><strong>-R$ ${fmt(desconto)}</strong></div>` : ''}
+      ${entrega.label === 'Entrega' ? `<div style="display:flex;justify-content:space-between"><span>Taxa de entrega</span><strong style="color:var(--text)">R$ ${fmt(taxa)}</strong></div>` : ''}
+      <div style="display:flex;justify-content:space-between;font-size:14px;padding-top:4px;border-top:1px solid var(--border)"><span style="font-weight:700;color:var(--text)">Total</span><strong style="color:var(--accent)">R$ ${fmt(totalFinal)}</strong></div>
+      <div style="margin-top:6px;line-height:1.45"><strong style="color:var(--text)">${_trackEsc(entrega.label)}:</strong> ${_trackEsc(entrega.detail)}</div>
+      ${pag ? `<div><strong style="color:var(--text)">Pagamento:</strong> ${_trackEsc(pag)}</div>` : ''}
+    </div>`;
 }
 
 function openTracker()  { document.getElementById('track-drawer-bg').classList.add('on'); }
@@ -128,7 +180,10 @@ async function solicitarCancelamento() {
     } catch(_) {}
     // Pega o phone do customer logado (fallback pro acesso anônimo via phone do pedido)
     let phoneFallback = '';
-    try { phoneFallback = (JSON.parse(localStorage.getItem(AUTH_KEY)||'{}').phone||'').replace(/\D/g,''); } catch(_) {}
+    try {
+      const rawCustomer = _customer || (typeof _loadCustomerSessionForTenant === 'function' ? _loadCustomerSessionForTenant() : null);
+      phoneFallback = (rawCustomer?.phone || '').replace(/\D/g,'');
+    } catch(_) {}
     const res = await fetch('/api/customer-cancel-order', {
       method: 'POST',
       headers,
@@ -174,7 +229,7 @@ window.addEventListener('load', () => {
       if (!orderId) return;
 
       // Busca pedido no servidor
-      const r = await fetch('/api/orders?id=eq.' + orderId + '&select=id,order_num,client,items,status,addr', {
+      const r = await fetch('/api/orders?id=eq.' + orderId + '&select=id,order_num,client,items,status,addr,total,taxa,pag,troco', {
         headers: { 'x-tenant-id': tid }
       });
       if (!r.ok) return;
@@ -191,7 +246,12 @@ window.addEventListener('load', () => {
       const items = Array.isArray(o.items) ? o.items
         : (typeof o.items === 'string' ? JSON.parse(o.items||'[]') : []);
 
-      startTracking(o.id, items, o.client || '', o.addr || '', o.status, o.order_num);
+      startTracking(o.id, items, o.client || '', o.addr || '', o.status, o.order_num, {
+        total: o.total,
+        taxa: o.taxa,
+        pag: o.pag,
+        troco: o.troco
+      });
 
       // Sincroniza URL
       try {
