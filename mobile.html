@@ -753,6 +753,10 @@ table { min-width: 500px !important; }
               <div style="font-weight:600;font-size:13px">Pedido Recebido</div>
               <div class="toggle on" id="auto-toggle-recebido" onclick="this.classList.toggle('on')"></div>
             </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px;padding:9px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+              <div style="font-size:11px;color:var(--muted);font-weight:600">S&oacute; enviar se o cliente solicitar acompanhamento</div>
+              <div class="toggle on" id="auto-optin-recebido" onclick="this.classList.toggle('on')"></div>
+            </div>
             <textarea class="form-input" id="auto-msg-recebido" rows="3" style="font-size:13px">✅ {nome}, seu pedido #{id} foi recebido!
 Total: R$ {total}
 Acompanhe pelo link. 🙏</textarea>
@@ -763,13 +767,34 @@ Acompanhe pelo link. 🙏</textarea>
               <div style="font-weight:600;font-size:13px">Em Produção</div>
               <div class="toggle on" id="auto-toggle-producao" onclick="this.classList.toggle('on')"></div>
             </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px;padding:9px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+              <div style="font-size:11px;color:var(--muted);font-weight:600">S&oacute; enviar se o cliente solicitar acompanhamento</div>
+              <div class="toggle on" id="auto-optin-producao" onclick="this.classList.toggle('on')"></div>
+            </div>
             <textarea class="form-input" id="auto-msg-producao" rows="3" style="font-size:13px">👨‍🍳 {nome}, estamos preparando seu pedido #{id} com muito carinho!</textarea>
+          </div>
+          <!-- Pedido pronto -->
+          <div class="card" style="padding:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+              <div style="font-weight:600;font-size:13px">Pedido Pronto</div>
+              <div class="toggle on" id="auto-toggle-pronto" onclick="this.classList.toggle('on')"></div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px;padding:9px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+              <div style="font-size:11px;color:var(--muted);font-weight:600">S&oacute; enviar se o cliente solicitar acompanhamento</div>
+              <div class="toggle on" id="auto-optin-pronto" onclick="this.classList.toggle('on')"></div>
+            </div>
+            <textarea class="form-input" id="auto-msg-pronto" rows="3" style="font-size:13px">🛎️ {nome}, seu pedido #{id} está PRONTO!
+{tipo_entrega}</textarea>
           </div>
           <!-- Saindo para entrega -->
           <div class="card" style="padding:16px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
               <div style="font-weight:600;font-size:13px">Saindo para Entrega</div>
               <div class="toggle on" id="auto-toggle-saiu" onclick="this.classList.toggle('on')"></div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px;padding:9px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+              <div style="font-size:11px;color:var(--muted);font-weight:600">S&oacute; enviar se o cliente solicitar acompanhamento</div>
+              <div class="toggle on" id="auto-optin-saiu" onclick="this.classList.toggle('on')"></div>
             </div>
             <textarea class="form-input" id="auto-msg-saiu" rows="3" style="font-size:13px">🛵 {nome}, seu pedido #{id} saiu para entrega!
 Endereço: {endereco}</textarea>

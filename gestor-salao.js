@@ -970,6 +970,17 @@ async function addCupom() {
 let _cbClienteAtual = null; // { id, name, phone, cashback_saldo }
 let _cbTodosClientes = [];  // cache de todos os clientes com saldo > 0
 
+function _cbPhoneKey(v) {
+  const clean = String(v || '').replace(/\D/g, '');
+  return clean.startsWith('55') && clean.length > 11 ? clean.slice(2) : clean;
+}
+
+function _cbPhoneMatch(a, b) {
+  const pa = _cbPhoneKey(a);
+  const pb = _cbPhoneKey(b);
+  return !!pa && !!pb && (pa === pb || pa.slice(-11) === pb.slice(-11));
+}
+
 // ─────────────────────────────────────────
 // CARTÃO FIDELIDADE (CARIMBINHO)
 // ─────────────────────────────────────────
@@ -1245,7 +1256,7 @@ async function cbBuscarCliente() {
     const saldoData = await resSaldo.json().catch(() => ({}));
 
     // Tenta achar o cliente no cache ou no banco
-    let cliente = _cbTodosClientes.find(c => (c.phone || '').replace(/\D/g, '').slice(-8) === phone.slice(-8));
+    let cliente = _cbTodosClientes.find(c => _cbPhoneMatch(c.phone, phone));
     if (!cliente) {
       const { data } = await sb.from('customers').select('id,name,phone,cashback_saldo').eq('phone', phone).maybeSingle();
       cliente = data || null;

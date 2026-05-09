@@ -921,6 +921,17 @@ const SSE_TABLES   = new Set(['orders','mesas','store_config','menu_items','cate
 
 function jsonParse(v) { if(typeof v!=='string')return v; try{return JSON.parse(v)}catch{return v} }
 
+function phoneLookupArgs(raw) {
+  const clean = String(raw || '').replace(/\D/g, '')
+  const no55 = clean.startsWith('55') && clean.length > 11 ? clean.slice(2) : clean
+  return [clean, no55, no55.slice(-11)]
+}
+
+function phoneLookupSql(col = 'phone') {
+  const c = `replace(replace(replace(replace(replace(${col},'+',''),' ',''),'-',''),'(',''),')','')`
+  return `(${c} = ? OR ${c} = ? OR substr(${c}, -11) = ?)`
+}
+
 function parseRow(table, row, opts={}) {
   if (!row) return row
   const out = { ...row }
@@ -1698,8 +1709,8 @@ async function handleOrderStatus(req, res) {
           if (total >= minPed) {
             const credito = parseFloat((total * cbCfg.pct / 100).toFixed(2))
             const phoneClean = order.phone.replace(/\D/g,'')
-            const phone8     = phoneClean.slice(-8)
-            const cust    = db.prepare("SELECT id, cashback_saldo FROM customers WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ?").get(tid, phone8)
+            const phoneSql   = phoneLookupSql('phone')
+            const cust    = db.prepare(`SELECT id, cashback_saldo FROM customers WHERE tenant_id=? AND ${phoneSql} ORDER BY id DESC LIMIT 1`).get(tid, ...phoneLookupArgs(phoneClean))
             let novoSaldo = credito  // fallback para cliente novo
             if (cust) {
               db.prepare('UPDATE customers SET cashback_saldo=COALESCE(cashback_saldo,0)+? WHERE id=?').run(credito, cust.id)
@@ -2616,7 +2627,8 @@ const server = http.createServer(async (req,res) => {
     const tid=req.headers['x-tenant-id']||params.get('tenant_id')||''
     const phone=(params.get('phone')||'').replace(/\D/g,'')
     if(!tid||!phone){send(res,400,{error:'tenant_id e phone obrigatórios'});return}
-    const cust=db.prepare('SELECT cashback_saldo FROM customers WHERE tenant_id=? AND phone LIKE ?').get(tid,`%${phone.slice(-8)}%`)
+    const phoneSql = phoneLookupSql('phone')
+    const cust=db.prepare(`SELECT cashback_saldo FROM customers WHERE tenant_id=? AND ${phoneSql} ORDER BY id DESC LIMIT 1`).get(tid,...phoneLookupArgs(phone))
     send(res,200,{saldo:parseFloat(cust?.cashback_saldo||0)});return
   }
   if(req.method==='POST'&&upath==='/api/cashback/usar'){
@@ -2625,7 +2637,8 @@ const server = http.createServer(async (req,res) => {
     const phone=(body.phone||'').replace(/\D/g,'')
     const valor=parseFloat(body.valor)||0
     if(!tid||!phone||valor<=0){send(res,400,{error:'Parâmetros inválidos'});return}
-    const cust=db.prepare('SELECT id,cashback_saldo FROM customers WHERE tenant_id=? AND phone LIKE ?').get(tid,`%${phone.slice(-8)}%`)
+    const phoneSql = phoneLookupSql('phone')
+    const cust=db.prepare(`SELECT id,cashback_saldo FROM customers WHERE tenant_id=? AND ${phoneSql} ORDER BY id DESC LIMIT 1`).get(tid,...phoneLookupArgs(phone))
     if(!cust){send(res,404,{error:'Cliente não encontrado'});return}
     // Atômico: só decrementa se o saldo ainda for >= valor (evita race condition)
     const info = db.prepare('UPDATE customers SET cashback_saldo=cashback_saldo-? WHERE id=? AND tenant_id=? AND cashback_saldo>=?').run(valor, cust.id, tid, valor)
@@ -2672,8 +2685,8 @@ const server = http.createServer(async (req,res) => {
     const row = db.prepare('SELECT stamp_config FROM store_config WHERE tenant_id=?').get(tid)
     const cfg = (() => { try { return JSON.parse(row?.stamp_config||'{}') } catch { return {} } })()
     if (!cfg.ativo || !cfg.meta_compras) { send(res, 200, { ativo: false }); return }
-    const phone8 = phone.slice(-8)
-    const prog = db.prepare('SELECT compras, ultimo_resgate FROM stamp_progress WHERE tenant_id=? AND phone LIKE ?').get(tid, `%${phone8}%`)
+    const phoneSql = phoneLookupSql('phone')
+    const prog = db.prepare(`SELECT compras, ultimo_resgate FROM stamp_progress WHERE tenant_id=? AND ${phoneSql} ORDER BY id DESC LIMIT 1`).get(tid, ...phoneLookupArgs(phone))
     const compras = prog?.compras || 0
     const ultimoResgate = prog?.ultimo_resgate || 0
     const comprasDesdeResgate = compras - ultimoResgate

@@ -705,10 +705,7 @@ function toggleUsarCashback() {
   _cbUsar = check?.checked || false;
   const msg = document.getElementById('cb-usar-msg');
   if (_cbUsar) {
-    const sub  = cartSubtotal();
-    const disc = getDiscount();
-    const net  = sub - disc;
-    const usar = Math.min(_cbSaldo, net);
+    const usar = getCashbackDesconto();
     if (msg) msg.textContent = `✅ R$ ${usar.toFixed(2).replace('.', ',')} de cashback será descontado do total.`;
   } else {
     if (msg) msg.textContent = '';

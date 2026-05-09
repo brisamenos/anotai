@@ -252,6 +252,7 @@ async function _doSubmitOrder(addr, troco) {
   // Total bruto (o que o cliente efetivamente paga — já considera cashback e cupom)
   const _grossTotal = displayTotal();
   const _cbDesconto = getCashbackDesconto();
+  const _totalSemCashback = Math.max(0, cartSubtotal() - getDiscount());
 
   try {
     let customerId = _customer?.id || null;
@@ -341,13 +342,19 @@ async function _doSubmitOrder(addr, troco) {
     if (_cbUsar && _cbSaldo > 0 && _cbDesconto > 0) {
       try {
         const tid = _tenantId || '';
-        await fetch('/api/cashback/usar', {
+        const cbResp = await fetch('/api/cashback/usar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
           body: JSON.stringify({ phone: phone.replace(/\D/g,''), valor: _cbDesconto })
         });
+        const cbData = await cbResp.json().catch(() => ({}));
+        if (!cbResp.ok || !cbData.ok) throw new Error(cbData.error || 'Cashback nao aplicado');
       } catch(e) {
-        toast('⚠️','Cashback não pôde ser debitado. Fale com o restaurante.');
+        try {
+          await sb.from('orders').update({ total: _totalSemCashback }).eq('id', order.id);
+          order.total = _totalSemCashback;
+        } catch(_) {}
+        toast('⚠️','Cashback não pôde ser debitado. O pedido seguirá sem esse desconto.');
       }
       _resetCashbackUI();
     }
