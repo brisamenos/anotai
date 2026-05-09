@@ -450,6 +450,76 @@ module.exports = async function handleRoutes(req, res, ctx) {
       LIMIT 1
     `).get(raw, raw)
   }
+  const slugifyTenant = (value) => String(value || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+  const criarTenantGestorPadrao = (body, opts = {}) => {
+    const nome = String(body.nome || body.nome_estabelecimento || '').trim()
+    const gestorNome = String(body.nomeGestor || body.nome_gestor || body.gestor_nome || '').trim()
+    const email = String(body.email || '').trim().toLowerCase()
+    const rawSenhaHash = String(body.senha_hash || '').trim()
+    const rawSenha = body.senha ? String(body.senha) : ''
+    const senhaHash = /^[a-f0-9]{64}$/i.test(rawSenhaHash)
+      ? rawSenhaHash.toLowerCase()
+      : rawSenha ? crypto.createHash('sha256').update(rawSenha).digest('hex') : ''
+    const slugPedido = slugifyTenant(body.slug || nome)
+    const plano = ['basic', 'pro', 'premium'].includes(body.plano) ? body.plano : 'pro'
+    const segmento = ['restaurante', 'acougue'].includes(body.segmento) ? body.segmento : 'restaurante'
+    const expiresAt = opts.expiresAt || body.expires_at || null
+
+    const fail = (status, message) => {
+      const err = new Error(message)
+      err.status = status
+      throw err
+    }
+    if (!nome || !slugPedido || !gestorNome || !email || !senhaHash) fail(400, 'Estabelecimento, slug, responsável, e-mail e senha são obrigatórios.')
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail(400, 'E-mail inválido.')
+    if (db.prepare('SELECT id FROM sys_users WHERE lower(email)=lower(?) LIMIT 1').get(email)) fail(400, `E-mail "${email}" já cadastrado.`)
+
+    let slugFinal = slugPedido
+    let suffix = 2
+    while (db.prepare('SELECT id FROM tenants WHERE slug=?').get(slugFinal)) slugFinal = `${slugPedido}-${suffix++}`
+    if (body.slug && slugFinal !== slugPedido) fail(400, `Slug "${slugPedido}" já em uso. Sugerimos: "${slugFinal}".`)
+
+    const catInsert = db.prepare("INSERT INTO categories (tenant_id,name,label,type,emoji,sort_order,ativo) VALUES (?,?,?,?,?,?,1)")
+    const result = db.transaction(() => {
+      db.prepare('INSERT INTO tenants (nome, plano, slug, segmento, expires_at) VALUES (?,?,?,?,?)')
+        .run(nome, plano, slugFinal, segmento, expiresAt)
+      const tenant = db.prepare('SELECT id, nome, slug, plano, segmento, expires_at FROM tenants WHERE slug=?').get(slugFinal)
+      db.prepare('INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)').run(tenant.id)
+      const maxOrderId = db.prepare('SELECT COALESCE(MAX(id),0) as m FROM orders').get()?.m || 0
+      db.prepare('UPDATE store_config SET order_num_offset=? WHERE tenant_id=?').run(maxOrderId, tenant.id)
+      db.prepare('INSERT INTO sys_users (nome, email, senha_hash, role, tenant_id, ativo) VALUES (?, ?, ?, ?, ?, 1)')
+        .run(gestorNome, email, senhaHash, opts.role || 'gestor', tenant.id)
+      if (segmento === 'acougue') {
+        [
+          ['bovinos', 'Bovinos', '\uD83D\uDC04', 1],
+          ['suinos', 'Suínos', '\uD83D\uDC37', 2],
+          ['aves', 'Aves', '\uD83D\uDC14', 3],
+          ['ovinos', 'Ovinos', '\uD83D\uDC11', 4],
+          ['embutidos', 'Embutidos', '\uD83C\uDF2D', 5],
+          ['kits', 'Kits & Combos', '\uD83D\uDCE6', 6],
+          ['temperos', 'Temperos & Acompanhamentos', '\uD83E\uDDC4', 7],
+        ].forEach(c => catInsert.run(tenant.id, c[0], c[1], 'Itens principais', c[2], c[3]))
+        db.prepare('UPDATE store_config SET store_tema=?, store_cor=? WHERE tenant_id=?').run('tropical', '#b45309', tenant.id)
+      } else {
+        [
+          ['entradas', 'Entradas', '\uD83E\uDD57', 1],
+          ['pratos', 'Pratos', '\uD83C\uDF7D\uFE0F', 2],
+          ['bebidas', 'Bebidas', '\uD83E\uDD64', 3],
+          ['sobremesas', 'Sobremesas', '\uD83C\uDF70', 4],
+        ].forEach(c => catInsert.run(tenant.id, c[0], c[1], 'Itens principais', c[2], c[3]))
+      }
+      const usuario = db.prepare('SELECT id, nome, email, role, tenant_id FROM sys_users WHERE lower(email)=lower(?)').get(email)
+      return { tenant, usuario }
+    })()
+    marcarDirty()
+    setTimeout(() => fazerBackup(true), 2000)
+    return result
+  }
 
   // ── Inicia job de recuperação de PIX na primeira requisição ───────────────
   // O job resolve o token MP por tenant em cada iteração — pagamentos de
@@ -1185,19 +1255,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'GET' && upath === '/api/indicador/clientes') {
     const sess = validarSessaoIndicador(req)
     if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
-    const ind = indicadorComPermissaoGestor(sess)
-    if (!ind || ind.ativo !== 1) { send(res, 401, { error: 'Indicador inativo' }); return true }
-    if (ind.pode_criar_gestor !== 1) { send(res, 403, { error: 'Função não liberada para este indicador.' }); return true }
-    const rows = db.prepare(`
-      SELECT id, nome, slug, plano, ativo
-      FROM tenants
-      WHERE ativo=1
-        AND id NOT IN ('system','_global')
-        AND COALESCE(slug,'') NOT IN ('admin','_global')
-      ORDER BY lower(nome) ASC, slug ASC
-      LIMIT 1000
-    `).all()
-    send(res, 200, rows)
+    send(res, 410, { error: 'Listagem de clientes não disponível no painel do indicador.' })
     return true
   }
 
@@ -1209,43 +1267,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (ind.pode_criar_gestor !== 1) { send(res, 403, { error: 'Função não liberada para este indicador.' }); return true }
 
     const body = await readBody(req)
-    const tenantRef = String(body.tenant_ref || body.tenant_id || body.slug || '').trim()
-    const nome = String(body.nome || body.nome_gestor || '').trim()
-    const email = String(body.email || '').trim().toLowerCase()
-    const rawSenhaHash = String(body.senha_hash || '').trim()
-    const rawSenha = body.senha ? String(body.senha) : ''
-    const senhaHash = /^[a-f0-9]{64}$/i.test(rawSenhaHash)
-      ? rawSenhaHash.toLowerCase()
-      : rawSenha ? crypto.createHash('sha256').update(rawSenha).digest('hex') : ''
-
-    if (!tenantRef || !nome || !email || !senhaHash) {
-      send(res, 400, { error: 'Cliente, nome, e-mail e senha são obrigatórios.' })
-      return true
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      send(res, 400, { error: 'E-mail inválido.' })
-      return true
-    }
-    const tenant = tenantDisponivelParaGestor(tenantRef)
-    if (!tenant) {
-      send(res, 404, { error: 'Cliente não encontrado ou inativo. Use o ID ou slug do cliente cadastrado.' })
-      return true
-    }
-    const jaExiste = db.prepare('SELECT id FROM sys_users WHERE lower(email)=lower(?) LIMIT 1').get(email)
-    if (jaExiste) {
-      send(res, 400, { error: `E-mail "${email}" já cadastrado para outro usuário.` })
-      return true
-    }
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
     try {
-      db.prepare(`
-        INSERT INTO sys_users (nome, email, senha_hash, role, tenant_id, ativo)
-        VALUES (?, ?, ?, 'gestor', ?, 1)
-      `).run(nome, email, senhaHash, tenant.id)
-      const user = db.prepare('SELECT id, nome, email, role, tenant_id FROM sys_users WHERE lower(email)=lower(?)').get(email)
-      marcarDirty()
-      send(res, 200, { ok: true, usuario: user, tenant })
+      const criado = criarTenantGestorPadrao(body, { expiresAt, role: 'gestor' })
+      send(res, 201, { ok: true, ...criado, expires_at: expiresAt, dias: 30 })
     } catch (e) {
-      send(res, 500, { error: 'Falha ao criar login do gestor: ' + e.message })
+      send(res, e.status || 500, { error: (e.status ? '' : 'Falha ao criar cliente: ') + e.message })
     }
     return true
   }

@@ -106,6 +106,7 @@ body{
 .pix-feedback.ok{color:var(--success)}.pix-feedback.err{display:block;background:transparent;border:0;padding:0;margin-bottom:0;color:var(--danger)}
 .access-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .access-form .full{grid-column:1/-1}
+.access-form select.input{width:100%;margin-bottom:14px}
 .access-actions{display:flex;align-items:center;gap:8px;justify-content:flex-end;margin-top:2px}
 .access-feedback{font-size:12px;color:var(--muted);min-height:17px;margin-top:9px}
 .access-feedback.ok{color:var(--success)}.access-feedback.bad{color:var(--danger)}
@@ -293,19 +294,36 @@ select.input{width:auto;margin:0;min-width:150px}
     <section id="panel-acessos" style="display:none">
       <div class="toolbar">
         <div>
-          <div class="top-title">Criar login do gestor</div>
-          <div class="top-sub">Use esta area apenas para clientes cadastrados na plataforma</div>
+          <div class="top-title">Criar cliente com gestor</div>
+          <div class="top-sub">O acesso do cliente fica ativo por 30 dias a partir da criaÃ§Ã£o</div>
         </div>
       </div>
       <div class="card" style="box-shadow:none">
         <div class="access-form">
-          <div class="full">
-            <label class="label">Cliente</label>
-            <input class="input" id="gestor-tenant" list="gestor-tenant-list" placeholder="Digite o ID ou slug do cliente">
-            <datalist id="gestor-tenant-list"></datalist>
+          <div>
+            <label class="label">Estabelecimento</label>
+            <input class="input" id="gestor-estabelecimento" placeholder="Nome do estabelecimento" oninput="syncGestorSlug()">
           </div>
           <div>
-            <label class="label">Nome do gestor</label>
+            <label class="label">Slug</label>
+            <input class="input" id="gestor-slug" placeholder="nome-do-cliente" oninput="this.dataset.touched='1';this.value=slugifyCliente(this.value)">
+          </div>
+          <div>
+            <label class="label">Plano</label>
+            <select class="input" id="gestor-plano">
+              <option value="pro">Pro - Sem robo</option>
+              <option value="premium">Premium - Com robo IA</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Segmento</label>
+            <select class="input" id="gestor-segmento">
+              <option value="restaurante">Restaurante / Pizzaria / Lanchonete</option>
+              <option value="acougue">Acougue / Frigorifico</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Nome do responsavel</label>
             <input class="input" id="gestor-nome" placeholder="Nome do responsavel">
           </div>
           <div>
@@ -313,11 +331,11 @@ select.input{width:auto;margin:0;min-width:150px}
             <input class="input" id="gestor-email" type="email" autocomplete="off" placeholder="gestor@cliente.com">
           </div>
           <div>
-            <label class="label">Senha temporaria</label>
+            <label class="label">Senha inicial</label>
             <input class="input" id="gestor-senha" type="password" autocomplete="new-password" placeholder="Defina uma senha">
           </div>
           <div class="access-actions">
-            <button class="btn" id="gestor-save-btn" onclick="criarGestorCliente(this)">Criar acesso</button>
+            <button class="btn" id="gestor-save-btn" onclick="criarGestorCliente(this)">Criar cliente</button>
           </div>
         </div>
         <div class="access-feedback" id="gestor-feedback"></div>
@@ -360,7 +378,6 @@ let refreshTimer = null;
 let rtSource = null;
 let tutorialData = { videos: [], total: 0, concluidos: 0, progresso_pct: 0, current_id: null };
 let tutorialAtualId = null;
-let clientesGestor = [];
 
 function authHeader() {
   return session?.token ? { 'Authorization': 'Bearer ' + session.token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
@@ -424,9 +441,7 @@ async function loadAll() {
   try {
     const ready = await loadMe();
     if (ready === false) return;
-    const loads = [loadLeads(), loadComissoes(), loadTutorial()];
-    if (Number(me?.pode_criar_gestor || 0) === 1) loads.push(loadClientesGestor());
-    await Promise.all(loads);
+    await Promise.all([loadLeads(), loadComissoes(), loadTutorial()]);
   } catch(e) {
     showAppError(e.message || 'Erro ao carregar painel.');
   }
@@ -616,34 +631,40 @@ async function concluirTutorialAtual(btn) {
   }
 }
 
-async function loadClientesGestor() {
-  const list = document.getElementById('gestor-tenant-list');
-  if (!list || Number(me?.pode_criar_gestor || 0) !== 1) return;
-  try {
-    const r = await fetch('/api/indicador/clientes', { headers: authHeader() });
-    if (!r.ok) throw new Error('Erro ao carregar clientes.');
-    clientesGestor = await r.json();
-    list.innerHTML = clientesGestor.map(c => {
-      const value = c.slug || c.id;
-      const label = `${c.nome || 'Cliente'}${c.slug ? ' - ' + c.slug : ''} (${c.id})`;
-      return `<option value="${escapeHtml(value)}" label="${escapeHtml(label)}"></option>`;
-    }).join('');
-  } catch(e) {
-    clientesGestor = [];
-  }
+function slugifyCliente(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function syncGestorSlug() {
+  const slug = document.getElementById('gestor-slug');
+  if (!slug || slug.dataset.touched === '1') return;
+  slug.value = slugifyCliente(document.getElementById('gestor-estabelecimento').value);
 }
 
 async function criarGestorCliente(btn) {
-  const tenantRef = document.getElementById('gestor-tenant').value.trim();
-  const nome = document.getElementById('gestor-nome').value.trim();
+  const estabelecimento = document.getElementById('gestor-estabelecimento').value.trim();
+  const slug = document.getElementById('gestor-slug').value.trim();
+  const plano = document.getElementById('gestor-plano').value;
+  const segmento = document.getElementById('gestor-segmento').value;
+  const nomeGestor = document.getElementById('gestor-nome').value.trim();
   const email = document.getElementById('gestor-email').value.trim().toLowerCase();
   const senha = document.getElementById('gestor-senha').value;
   const feedback = document.getElementById('gestor-feedback');
   feedback.className = 'access-feedback';
   feedback.textContent = '';
-  if (!tenantRef || !nome || !email || !senha) {
+  if (!estabelecimento || !slug || !nomeGestor || !email || !senha) {
     feedback.classList.add('bad');
-    feedback.textContent = 'Preencha cliente, nome, e-mail e senha.';
+    feedback.textContent = 'Preencha estabelecimento, slug, responsavel, e-mail e senha.';
+    return;
+  }
+  if (senha.length < 6) {
+    feedback.classList.add('bad');
+    feedback.textContent = 'A senha precisa ter pelo menos 6 caracteres.';
     return;
   }
   const old = btn.textContent;
@@ -654,18 +675,24 @@ async function criarGestorCliente(btn) {
     const r = await fetch('/api/indicador/gestor-login', {
       method: 'POST',
       headers: authHeader(),
-      body: JSON.stringify({ tenant_ref: tenantRef, nome, email, senha_hash })
+      body: JSON.stringify({ nome: estabelecimento, slug, plano, segmento, nomeGestor, email, senha_hash })
     });
     const d = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(d.error || 'Nao foi possivel criar o acesso.');
+    if (!r.ok) throw new Error(d.error || 'Nao foi possivel criar o cliente.');
     feedback.classList.add('ok');
-    feedback.textContent = `Acesso criado para ${d.tenant?.nome || tenantRef}.`;
+    const expira = d.expires_at ? new Date(d.expires_at + 'T00:00:00').toLocaleDateString('pt-BR') : '30 dias';
+    feedback.textContent = `Cliente criado. Acesso ativo ate ${expira}.`;
+    document.getElementById('gestor-estabelecimento').value = '';
+    document.getElementById('gestor-slug').value = '';
+    document.getElementById('gestor-slug').dataset.touched = '';
+    document.getElementById('gestor-plano').value = 'pro';
+    document.getElementById('gestor-segmento').value = 'restaurante';
     document.getElementById('gestor-nome').value = '';
     document.getElementById('gestor-email').value = '';
     document.getElementById('gestor-senha').value = '';
   } catch(e) {
     feedback.classList.add('bad');
-    feedback.textContent = e.message || 'Erro ao criar acesso.';
+    feedback.textContent = e.message || 'Erro ao criar cliente.';
   } finally {
     btn.disabled = false;
     btn.textContent = old;
@@ -696,7 +723,6 @@ function switchTab(tab) {
   document.getElementById('panel-comissoes').style.display = tab === 'comissoes' ? '' : 'none';
   document.getElementById('panel-acessos').style.display = tab === 'acessos' ? '' : 'none';
   document.getElementById('panel-tutorial').style.display = tab === 'tutorial' ? '' : 'none';
-  if (tab === 'acessos') loadClientesGestor();
   if (tab === 'tutorial') loadTutorial();
 }
 
