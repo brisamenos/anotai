@@ -2610,11 +2610,16 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const inst        = cfg?.evo_instance || EVO_INST
     const ia          = cfg?.ia_config ? JSON.parse(cfg.ia_config) : {}
     if (!ia.ativo && !ia.resp_rastreio_manual) { send(res, 200, { ok: false, msg: 'IA inativa' }); return true }
-    const pedido      = db.prepare('SELECT id,status,items,total,taxa FROM orders WHERE id=? AND tenant_id=?').get(order_id, tenant_id)
+    const phoneClean  = String(phone).replace(/\D/g, '')
+    const phoneNo55   = phoneClean.startsWith('55') && phoneClean.length > 11 ? phoneClean.slice(2) : phoneClean
+    const phone10     = phoneNo55.slice(-10)
+    const phoneNormSql = "replace(replace(replace(replace(replace(phone,'+',''),' ',''),'-',''),'(',''),')','')"
+    const phoneWhere  = `(${phoneNormSql} = ? OR ${phoneNormSql} = ? OR substr(${phoneNormSql}, -10) = ?)`
+    const pedido      = db.prepare(`SELECT id,order_num,status,items,total,taxa FROM orders WHERE id=? AND tenant_id=? AND ${phoneWhere}`).get(order_id, tenant_id, phoneClean, phoneNo55, phone10)
     if (!pedido) { send(res, 400, { ok: false }); return true }
     const sl          = { analise: '⏳ aguardando confirmação', producao: '👨‍🍳 em preparo', pronto: '🛵 saindo para entrega', entregue: '✅ entregue', cancelado: '❌ cancelado' }
     const offset      = parseInt(cfg?.order_num_offset || 0) || 0
-    const numPedido   = String(Math.max(1, pedido.id - offset)).padStart(3, '0')
+    const numPedido   = String(pedido.order_num || Math.max(1, pedido.id - offset)).padStart(3, '0')
     const totalComTaxa = (parseFloat(pedido.total||0) + parseFloat(pedido.taxa||0)).toFixed(2).replace('.', ',')
     const msg         = `🍽️ *${cfg?.store_name || 'Restaurante'}*\n\nOlá! Seu pedido *#${numPedido}* está:\n\n${sl[pedido.status] || pedido.status}\n\nTotal: R$ ${totalComTaxa}\n\nQualquer dúvida é só responder! 😊`
     const r           = await sendWA(phone, msg, inst)

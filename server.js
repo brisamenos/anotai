@@ -1150,6 +1150,47 @@ async function handleREST(req, res, table, params, body) {
       }
       if (SSE_TABLES.has(table)) emit(tenantId||payload.tenant_id, table, parsedForEmit||payload, 'INSERT')
 
+      // Notificacao "Pedido Recebido" na criacao do pedido.
+      // Para pix_manual, o bloco pix_cobranca abaixo ja envia a comanda com itens/total
+      // junto da chave PIX; aqui evitamos duplicar e tratamos os demais pagamentos.
+      if (table === 'orders' && rawForEmit && rawForEmit.phone && rawForEmit.pag !== 'pix_manual') {
+        const _ord = rawForEmit
+        const _tid = _ord.tenant_id
+        setImmediate(async () => {
+          try {
+            const cfg   = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(_tid)
+            const inst  = cfg?.evo_instance || EVO_INST
+            const auto  = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
+            const recAuto = auto['recebido'] || {}
+            if (recAuto.on === false) { log('⏭️','Automacao recebido desligada'); return }
+            const requerOptIn = recAuto.requer_optin !== false
+            const trackingAtivo = parseInt(_ord.wa_track || 0) === 1
+            if (requerOptIn && !trackingAtivo) {
+              log('🔕', `[anti-ban] Pulando comanda do pedido #${_ord.id} — cliente não ativou tracking via WhatsApp`)
+              return
+            }
+            const offset = parseInt(cfg?.order_num_offset) || 0
+            const idStr  = String(_ord.order_num || Math.max(1, _ord.id - offset)).padStart(3,'0')
+            const nome   = _ord.client || 'Cliente'
+            const items  = (() => {
+              try {
+                return (JSON.parse(_ord.items) || []).map(i => {
+                  const base = `${i.qty || 1}x ${i.name || 'Item'}`
+                  return i.obs ? `${base} (${i.obs})` : base
+                }).join('\n')
+              } catch { return '' }
+            })()
+            const total = (parseFloat(_ord.total||0) + parseFloat(_ord.taxa||0)).toFixed(2).replace('.',',')
+            const loja  = cfg?.store_name || 'Restaurante'
+            const msgPadrao = `🏪 *${loja}*\n${'-'.repeat(20)}\n\n📥 *Pedido #${idStr} recebido!*\n\nOlá, *${nome.split(' ')[0]}*! Recebemos seu pedido certinho.\n\n*Itens:*\n${items || 'Itens do pedido'}\n\n💰 *Total: R$ ${total}*\n\nEm breve confirmaremos por aqui.`
+            const msgFinal = recAuto.msg ? fillVars(recAuto.msg, { nome, id: idStr, itens: items, total, loja, endereco: _ord.addr || '', mesa: String(_ord.mesa_num || '') }) : msgPadrao
+            const r = await sendWA(_ord.phone, msgFinal, inst, _autoDelayMs())
+            if (r.ok) log('📤', `Comanda recebido enviada → ${_ord.phone} pedido #${idStr}`)
+            else      log('⚠️', `Comanda recebido falhou WA → ${_ord.phone}`)
+          } catch(e) { log('❌','Erro notif recebido:', e.message) }
+        })
+      }
+
       // ── Notificação WhatsApp para PIX manual ─────────────────────────────
       if (table === 'orders' && rawForEmit && rawForEmit.pag === 'pix_manual') {
         const _ord = rawForEmit
@@ -1160,6 +1201,13 @@ async function handleREST(req, res, table, params, body) {
             const inst   = cfg?.evo_instance || EVO_INST
             const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
             const ia     = (() => { try { return JSON.parse(cfg?.ia_config||'{}') } catch { return {} } })()
+            const recAuto = auto['recebido'] || {}
+            const requerOptIn = recAuto.requer_optin !== false
+            const trackingAtivo = parseInt(_ord.wa_track || 0) === 1
+            if (requerOptIn && !trackingAtivo) {
+              log('🔕', `[anti-ban] Pulando comanda PIX manual do pedido #${_ord.id} — cliente não ativou tracking via WhatsApp`)
+              return
+            }
             const pixAuto = auto['pix_cobranca'] || {}
             if (pixAuto.on === false) { log('⏭️','Automação pix_cobranca desligada'); return }
             const offset  = parseInt(cfg?.order_num_offset) || 0
@@ -2136,7 +2184,11 @@ async function handleIAWebhook(req, res) {
       const _offsetCfg = db.prepare("SELECT order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
       const _iaOffset  = parseInt(_offsetCfg?.order_num_offset) || 0
       const _iaPedNum  = (p) => String(p.order_num || Math.max(1, p.id - _iaOffset)).padStart(3, '0')
-      const _phone8    = phone.replace(/\D/g, '').slice(-8)
+      const _phoneClean = phone.replace(/\D/g, '')
+      const _phoneNo55  = _phoneClean.startsWith('55') && _phoneClean.length > 11 ? _phoneClean.slice(2) : _phoneClean
+      const _phone10    = _phoneNo55.slice(-10)
+      const _phoneNormSql = "replace(replace(replace(replace(replace(phone,'+',''),' ',''),'-',''),'(',''),')','')"
+      const _phoneWhere = `(${_phoneNormSql} = ? OR ${_phoneNormSql} = ? OR substr(${_phoneNormSql}, -10) = ?)`
       const _tempoDecorrido = (ts) => {
         if (!ts) return ''
         const t = new Date(String(ts).includes('Z') ? ts : ts.replace(' ','T')+'Z').getTime()
@@ -2225,12 +2277,11 @@ async function handleIAWebhook(req, res) {
         if (_numMatch) {
           const n = parseInt(_numMatch[1])
           const realId = n + _iaOffset
-          ped = db.prepare("SELECT id,order_num,status,total,taxa,created_at FROM orders WHERE tenant_id=? AND id=?").get(tenantId, realId)
-          if (!ped) ped = db.prepare("SELECT id,order_num,status,total,taxa,created_at FROM orders WHERE tenant_id=? AND order_num=?").get(tenantId, n)
-          if (!ped) ped = db.prepare("SELECT id,order_num,status,total,taxa,created_at FROM orders WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ? ORDER BY id DESC LIMIT 1").get(tenantId, _phone8)
+          ped = db.prepare(`SELECT id,order_num,status,total,taxa,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} AND order_num=? ORDER BY id DESC LIMIT 1`).get(tenantId, _phoneClean, _phoneNo55, _phone10, n)
+          if (!ped) ped = db.prepare(`SELECT id,order_num,status,total,taxa,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} AND id=? AND (order_num IS NULL OR order_num=0) LIMIT 1`).get(tenantId, _phoneClean, _phoneNo55, _phone10, realId)
         } else {
           // Sem número citado — pega o pedido mais recente do cliente
-          ped = db.prepare("SELECT id,order_num,status,total,taxa,created_at FROM orders WHERE tenant_id=? AND substr(replace(replace(phone,'+',''),' ',''), -8) = ? ORDER BY id DESC LIMIT 1").get(tenantId, _phone8)
+          ped = db.prepare(`SELECT id,order_num,status,total,taxa,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} ORDER BY id DESC LIMIT 1`).get(tenantId, _phoneClean, _phoneNo55, _phone10)
         }
         if (ped) {
           const pedNum = _iaPedNum(ped)
@@ -2256,11 +2307,20 @@ async function handleIAWebhook(req, res) {
             `Seu pedido *#${pedNum}* está: ${st}\nTotal: R$ ${tot}${sufixoTempo}\n\n_Te aviso por aqui em cada etapa do pedido._ 🛎️`
           ])
         } else {
+          if (_numMatch) {
+            const nInfo = String(parseInt(_numMatch[1])).padStart(3, '0')
+            resposta = _pickOne([
+              `Nao localizei o pedido *#${nInfo}* para este WhatsApp. Confira o numero do pedido ou fale com a loja.`,
+              `Nao encontrei o pedido *#${nInfo}* vinculado a este WhatsApp. Se precisar, um atendente pode conferir pra voce.`,
+              `Esse pedido *#${nInfo}* nao apareceu para este WhatsApp. Confere o numero e me chama de novo.`
+            ])
+          } else {
           resposta = _pickOne([
             `Não localizei seu pedido. Pra fazer um novo: ${linkCardapio}`,
             `Não achei pedido recente seu. Confira o cardápio: ${linkCardapio}`,
             `Não encontrei pedido seu por aqui. Cardápio: ${linkCardapio}`
           ])
+          }
         }
       }
       // [2] CUPONS / PROMOÇÕES ─────────────────────────────────
