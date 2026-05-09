@@ -1278,6 +1278,10 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
           <input class="form-input" id="m-ind-senha" type="password" autocomplete="new-password" placeholder="Defina uma senha">
         </div>
         <div id="m-ind-senha-help" style="font-size:11.5px;color:var(--muted);margin-top:7px">Use o e-mail acima com esta senha. Ao editar, senha vazia mant&eacute;m a atual.</div>
+        <label style="display:flex;align-items:flex-start;gap:8px;margin-top:12px;font-size:12.5px;color:var(--text-2);line-height:1.35">
+          <input type="checkbox" id="m-ind-pode-gestor" style="margin-top:2px">
+          <span><b>Permitir criar login de gestor</b><br><span style="color:var(--muted)">Quando ativo, o indicador poder&aacute; criar acesso do painel gestor para clientes cadastrados.</span></span>
+        </label>
       </div>
       <div>
         <label class="form-label">Chave PIX (pra enviar comissão)</label>
@@ -1323,9 +1327,10 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
         <div style="font-weight:600" id="m-conv-estab">—</div>
       </div>
       <div>
-        <label class="form-label">Tenant ID *</label>
-        <input class="form-input" id="m-conv-tenant-id" placeholder="Ex: pizzaria-do-joao">
-        <div style="font-size:11px;color:var(--muted);margin-top:4px">ID do tenant que foi criado pra esse cliente</div>
+        <label class="form-label">Cliente / tenant *</label>
+        <input class="form-input" id="m-conv-tenant-id" list="m-conv-tenant-list" placeholder="Digite o ID ou slug do cliente">
+        <datalist id="m-conv-tenant-list"></datalist>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Aceita o ID interno ou o slug do cliente cadastrado</div>
       </div>
       <div>
         <label class="form-label">Valor do plano (R$)</label>
@@ -3282,7 +3287,7 @@ async function carregarIndicadores() {
     tbody.innerHTML = rows.map(r => {
       const link = INDICACAO_BASE_URL + r.codigo;
       return `<tr>
-        <td><b>${escapeHtml(r.nome)}</b>${r.email ? `<div style="font-size:11px;color:var(--muted)">${escapeHtml(r.email)}</div>` : ''}</td>
+        <td><b>${escapeHtml(r.nome)}</b>${r.email ? `<div style="font-size:11px;color:var(--muted)">${escapeHtml(r.email)}</div>` : ''}${r.pode_criar_gestor ? '<div style="font-size:11px;color:#22c55e;font-weight:600;margin-top:3px">Cria logins gestor</div>' : ''}</td>
         <td><code style="background:var(--s2);padding:3px 7px;border-radius:5px;font-size:12px">${r.codigo}</code></td>
         <td>
           <button class="btn bg2 bsm" style="font-size:11px" onclick="copiarLinkIndicacao('${r.codigo}')">📋 Copiar link</button>
@@ -3318,6 +3323,7 @@ function abrirModalIndicador() {
   document.getElementById('m-ind-email').value = '';
   document.getElementById('m-ind-senha').value = '';
   document.getElementById('m-ind-senha-help').innerHTML = 'Use o e-mail acima com esta senha. Ao editar, senha vazia mant&eacute;m a atual.';
+  document.getElementById('m-ind-pode-gestor').checked = false;
   document.getElementById('m-ind-phone').value = '';
   document.getElementById('m-ind-pix').value = '';
   document.getElementById('m-ind-pct').value = '30';
@@ -3334,6 +3340,7 @@ function editarIndicador(r) {
   document.getElementById('m-ind-email').value = r.email || '';
   document.getElementById('m-ind-senha').value = '';
   document.getElementById('m-ind-senha-help').innerHTML = 'Preencha somente para redefinir a senha. Vazio mant&eacute;m a senha atual.';
+  document.getElementById('m-ind-pode-gestor').checked = Number(r.pode_criar_gestor || 0) === 1;
   document.getElementById('m-ind-phone').value = r.phone || '';
   document.getElementById('m-ind-pix').value = r.chave_pix || '';
   document.getElementById('m-ind-pct').value = r.comissao_pct;
@@ -3356,6 +3363,7 @@ async function salvarIndicador() {
     chave_pix:       document.getElementById('m-ind-pix').value.trim() || null,
     comissao_pct:    parseFloat(document.getElementById('m-ind-pct').value) || 30,
     comissao_meses:  parseInt(document.getElementById('m-ind-meses').value) || 12,
+    pode_criar_gestor: document.getElementById('m-ind-pode-gestor').checked,
     observacoes:     document.getElementById('m-ind-obs').value.trim() || null
   };
   const senha = document.getElementById('m-ind-senha').value.trim();
@@ -3441,6 +3449,16 @@ async function carregarLeadsIndicacao() {
 }
 
 let _leadConvertendo = null;
+function preencherSugestoesTenantConversao() {
+  const dl = document.getElementById('m-conv-tenant-list');
+  if (!dl) return;
+  const rows = (_clientes || []).filter(c => c && c.id && !['_global', 'system'].includes(c.id) && !['_global', 'admin'].includes(c.slug));
+  dl.innerHTML = rows.map(c => {
+    const label = `${c.nome || c.id}${c.slug ? ' /' + c.slug : ''}`;
+    return `<option value="${escapeHtml(c.id)}" label="${escapeHtml(label)}"></option>${c.slug ? `<option value="${escapeHtml(c.slug)}" label="${escapeHtml(label)}"></option>` : ''}`;
+  }).join('');
+}
+
 function mudarStatusLead(id, novoStatus, statusAnterior, ev) {
   ev = ev || event; // fallback pra navegadores antigos / chamadas inline
   if (novoStatus === 'convertido' && statusAnterior !== 'convertido') {
@@ -3454,6 +3472,7 @@ function mudarStatusLead(id, novoStatus, statusAnterior, ev) {
     document.getElementById('m-conv-estab').textContent = estab;
     document.getElementById('m-conv-tenant-id').value = '';
     document.getElementById('m-conv-valor').value = '99.90';
+    preencherSugestoesTenantConversao();
     document.getElementById('m-converter-lead').classList.add('on');
     // Reverte o select pro status anterior. Se usuário confirmar, a lista
     // será recarregada via atualizarStatusLead → carregarLeadsIndicacao.

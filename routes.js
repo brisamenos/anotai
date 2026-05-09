@@ -429,6 +429,27 @@ module.exports = async function handleRoutes(req, res, ctx) {
     }
     return s
   }
+  const indicadorComPermissaoGestor = (sess) => {
+    if (!sess) return null
+    return db.prepare(`
+      SELECT id, ativo, pode_criar_gestor
+      FROM indicadores
+      WHERE id=?
+    `).get(sess.indicador_id)
+  }
+  const tenantDisponivelParaGestor = (ref) => {
+    const raw = String(ref || '').trim()
+    if (!raw) return null
+    return db.prepare(`
+      SELECT id, nome, slug, plano, ativo
+      FROM tenants
+      WHERE ativo=1
+        AND id NOT IN ('system','_global')
+        AND COALESCE(slug,'') NOT IN ('admin','_global')
+        AND (id=? OR slug=?)
+      LIMIT 1
+    `).get(raw, raw)
+  }
 
   // ── Inicia job de recuperação de PIX na primeira requisição ───────────────
   // O job resolve o token MP por tenant em cada iteração — pagamentos de
@@ -1115,7 +1136,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const sess = validarSessaoIndicador(req)
     if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
     const ind = db.prepare(`
-      SELECT id, nome, email, phone, chave_pix, codigo, comissao_pct, comissao_meses, ativo, ultimo_acesso
+      SELECT id, nome, email, phone, chave_pix, codigo, comissao_pct, comissao_meses, ativo, pode_criar_gestor, ultimo_acesso
       FROM indicadores WHERE id=?
     `).get(sess.indicador_id)
     if (!ind || !ind.ativo) { send(res, 401, { error: 'Indicador inativo' }); return true }
@@ -1157,6 +1178,74 @@ module.exports = async function handleRoutes(req, res, ctx) {
       send(res, 200, { ok: true, chave_pix: chavePix })
     } catch (e) {
       send(res, 500, { error: 'Falha ao salvar PIX: ' + e.message })
+    }
+    return true
+  }
+
+  if (req.method === 'GET' && upath === '/api/indicador/clientes') {
+    const sess = validarSessaoIndicador(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const ind = indicadorComPermissaoGestor(sess)
+    if (!ind || ind.ativo !== 1) { send(res, 401, { error: 'Indicador inativo' }); return true }
+    if (ind.pode_criar_gestor !== 1) { send(res, 403, { error: 'Função não liberada para este indicador.' }); return true }
+    const rows = db.prepare(`
+      SELECT id, nome, slug, plano, ativo
+      FROM tenants
+      WHERE ativo=1
+        AND id NOT IN ('system','_global')
+        AND COALESCE(slug,'') NOT IN ('admin','_global')
+      ORDER BY lower(nome) ASC, slug ASC
+      LIMIT 1000
+    `).all()
+    send(res, 200, rows)
+    return true
+  }
+
+  if (req.method === 'POST' && upath === '/api/indicador/gestor-login') {
+    const sess = validarSessaoIndicador(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const ind = indicadorComPermissaoGestor(sess)
+    if (!ind || ind.ativo !== 1) { send(res, 401, { error: 'Indicador inativo' }); return true }
+    if (ind.pode_criar_gestor !== 1) { send(res, 403, { error: 'Função não liberada para este indicador.' }); return true }
+
+    const body = await readBody(req)
+    const tenantRef = String(body.tenant_ref || body.tenant_id || body.slug || '').trim()
+    const nome = String(body.nome || body.nome_gestor || '').trim()
+    const email = String(body.email || '').trim().toLowerCase()
+    const rawSenhaHash = String(body.senha_hash || '').trim()
+    const rawSenha = body.senha ? String(body.senha) : ''
+    const senhaHash = /^[a-f0-9]{64}$/i.test(rawSenhaHash)
+      ? rawSenhaHash.toLowerCase()
+      : rawSenha ? crypto.createHash('sha256').update(rawSenha).digest('hex') : ''
+
+    if (!tenantRef || !nome || !email || !senhaHash) {
+      send(res, 400, { error: 'Cliente, nome, e-mail e senha são obrigatórios.' })
+      return true
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      send(res, 400, { error: 'E-mail inválido.' })
+      return true
+    }
+    const tenant = tenantDisponivelParaGestor(tenantRef)
+    if (!tenant) {
+      send(res, 404, { error: 'Cliente não encontrado ou inativo. Use o ID ou slug do cliente cadastrado.' })
+      return true
+    }
+    const jaExiste = db.prepare('SELECT id FROM sys_users WHERE lower(email)=lower(?) LIMIT 1').get(email)
+    if (jaExiste) {
+      send(res, 400, { error: `E-mail "${email}" já cadastrado para outro usuário.` })
+      return true
+    }
+    try {
+      db.prepare(`
+        INSERT INTO sys_users (nome, email, senha_hash, role, tenant_id, ativo)
+        VALUES (?, ?, ?, 'gestor', ?, 1)
+      `).run(nome, email, senhaHash, tenant.id)
+      const user = db.prepare('SELECT id, nome, email, role, tenant_id FROM sys_users WHERE lower(email)=lower(?)').get(email)
+      marcarDirty()
+      send(res, 200, { ok: true, usuario: user, tenant })
+    } catch (e) {
+      send(res, 500, { error: 'Falha ao criar login do gestor: ' + e.message })
     }
     return true
   }
@@ -1256,7 +1345,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
     const rows = db.prepare(`
       SELECT i.id, i.codigo, i.nome, i.email, i.phone, i.chave_pix,
-        i.comissao_pct, i.comissao_meses, i.ativo, i.observacoes,
+        i.comissao_pct, i.comissao_meses, i.ativo, i.pode_criar_gestor, i.observacoes,
         i.created_at, i.ultimo_acesso,
         (SELECT COUNT(*) FROM leads_indicacao l WHERE l.indicador_id=i.id) AS total_leads,
         (SELECT COUNT(*) FROM leads_indicacao l WHERE l.indicador_id=i.id AND l.status='convertido') AS total_convertidos,
@@ -1272,7 +1361,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'POST' && upath === '/api/admin/indicadores') {
     if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
     const body = await readBody(req)
-    const { nome, email, phone, chave_pix, comissao_pct, comissao_meses, observacoes, senha, senha_hash } = body
+    const { nome, email, phone, chave_pix, comissao_pct, comissao_meses, observacoes, senha, senha_hash, pode_criar_gestor } = body
     if (!nome) { send(res, 400, { error: 'Nome é obrigatório' }); return true }
     if (email && db.prepare('SELECT id FROM indicadores WHERE lower(email)=lower(?)').get(String(email).trim())) {
       send(res, 400, { error: `E-mail "${email}" já cadastrado para outro indicador.` }); return true
@@ -1288,8 +1377,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
     while (db.prepare('SELECT 1 FROM indicadores WHERE codigo=?').get(codigo) && tries < 20)
     try {
       const r = db.prepare(`INSERT INTO indicadores
-        (codigo, nome, email, phone, chave_pix, comissao_pct, comissao_meses, observacoes, senha_hash)
-        VALUES (?,?,?,?,?,?,?,?,?)`)
+        (codigo, nome, email, phone, chave_pix, comissao_pct, comissao_meses, observacoes, senha_hash, pode_criar_gestor)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`)
         .run(codigo, String(nome).trim(),
              email ? String(email).toLowerCase().trim() : null,
              phone ? String(phone).replace(/\D/g, '') : null,
@@ -1297,7 +1386,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
              parseFloat(comissao_pct) || 30.0,
              parseInt(comissao_meses) || 12,
              observacoes || null,
-             senha_hash || (senha ? crypto.createHash('sha256').update(String(senha)).digest('hex') : null))
+             senha_hash || (senha ? crypto.createHash('sha256').update(String(senha)).digest('hex') : null),
+             pode_criar_gestor ? 1 : 0)
       marcarDirty()
       send(res, 200, { ok: true, id: r.lastInsertRowid, codigo })
     } catch (e) { send(res, 500, { error: 'Falha ao criar indicador: ' + e.message }) }
@@ -1315,7 +1405,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (body.email && db.prepare('SELECT id FROM indicadores WHERE lower(email)=lower(?) AND id<>?').get(String(body.email).trim(), id)) {
       send(res, 400, { error: `E-mail "${body.email}" já cadastrado para outro indicador.` }); return true
     }
-    const allowed = ['nome', 'email', 'phone', 'chave_pix', 'comissao_pct', 'comissao_meses', 'ativo', 'observacoes']
+    const allowed = ['nome', 'email', 'phone', 'chave_pix', 'comissao_pct', 'comissao_meses', 'ativo', 'pode_criar_gestor', 'observacoes']
     for (const k of allowed) if (body[k] !== undefined) {
       let v = body[k]
       if (k === 'phone' && v) v = String(v).replace(/\D/g, '')
@@ -1323,6 +1413,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (k === 'comissao_pct')   v = parseFloat(v) || 30.0
       if (k === 'comissao_meses') v = parseInt(v) || 12
       if (k === 'ativo')           v = v ? 1 : 0
+      if (k === 'pode_criar_gestor') v = v ? 1 : 0
       fields.push(`${k}=?`); values.push(v)
     }
     if (body.senha || body.senha_hash) {
@@ -1395,7 +1486,17 @@ module.exports = async function handleRoutes(req, res, ctx) {
       }
     }
     if (body.tenant_id_convertido !== undefined) {
-      fields.push('tenant_id_convertido=?'); values.push(body.tenant_id_convertido || null)
+      let tenantConvertido = null
+      const rawTenant = String(body.tenant_id_convertido || '').trim()
+      if (rawTenant) {
+        const tConv = db.prepare('SELECT id FROM tenants WHERE id=? OR slug=? LIMIT 1').get(rawTenant, rawTenant)
+        if (!tConv?.id) {
+          send(res, 400, { error: `Cliente/tenant "${rawTenant}" não encontrado. Use o ID ou slug de um cliente cadastrado.` })
+          return true
+        }
+        tenantConvertido = tConv.id
+      }
+      fields.push('tenant_id_convertido=?'); values.push(tenantConvertido)
     }
     if (body.valor_plano !== undefined) {
       fields.push('valor_plano=?'); values.push(parseFloat(body.valor_plano) || 99.90)

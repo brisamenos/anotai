@@ -568,6 +568,9 @@ const MIGRATIONS = [
      )`,
     `CREATE INDEX IF NOT EXISTS idx_ind_tut_prog_ind ON indicador_tutorial_progress(indicador_id, video_id)`
   ] },
+  { version:49, description:'Permissao do indicador criar login gestor', up:
+    `ALTER TABLE indicadores ADD COLUMN pode_criar_gestor INTEGER DEFAULT 0`
+  },
 ]
 
 function runMigrations() {
