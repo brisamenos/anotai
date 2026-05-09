@@ -389,7 +389,6 @@ async function openAccount() {
   document.getElementById('acc-name').textContent    = _customer.name;
   document.getElementById('acc-meta').textContent    = [_customer.phone, _customer.email].filter(Boolean).join(' · ');
   document.getElementById('acc-pedidos').textContent = _customer.orders_count || 0;
-  document.getElementById('acc-gasto').textContent   = 'R$ ' + fmt(_customer.total_spent || 0);
   document.getElementById('account-overlay').classList.add('on');
   loadMyOrders();
 }
@@ -401,8 +400,10 @@ async function loadMyOrders() {
   const list = document.getElementById('acc-orders-list');
   list.innerHTML = '<div style="padding:20px;text-align:center"><div style="font-size:28px">⏳</div></div>';
   try {
+    const headers = {'x-tenant-id':_tenantId};
+    if (_customer?.token) headers.Authorization = 'Bearer ' + _customer.token;
     const res    = await fetch(`/api/customer-orders?customer_id=${_customer.id}`, {
-      headers:{'x-tenant-id':_tenantId}
+      headers
     });
     const orders = await res.json();
     if (!orders.length) {
@@ -411,7 +412,7 @@ async function loadMyOrders() {
     }
     const SL = {analise:'Aguardando',producao:'Preparando',pronto:'Pronto',saiu:'A caminho',entregue:'Entregue',cancelado:'Cancelado'};
     list.innerHTML = orders.map(o => {
-      const itemsTxt = Array.isArray(o.items) ? o.items.map(i=>`${i.qty}× ${i.name}`).join(', ') : '';
+      const itemsTxt = Array.isArray(o.items) ? o.items.map(i=>`${parseInt(i.qty)||1}× ${i.name || i.nome || 'Item'}`).join(', ') : '';
       const d = new Date(o.created_at);
       const dateStr = isNaN(d) ? '' : d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
       const isActive = ['analise','producao','pronto','saiu'].includes(o.status);
@@ -528,13 +529,13 @@ async function usarEnderecoSalvo(id) {
       d.style.background  = parseInt(d.dataset.id) === id ? 'rgba(var(--accent-rgb,249,115,22),.06)' : '';
     });
     if (typeof renderTotals === 'function') renderTotals();
-    if (typeof toast === 'function') toast('📍 Endereço carregado');
+    if (typeof toast === 'function') toast('info', 'Endereço carregado');
   } catch (e) { console.error('usarEnderecoSalvo:', e); }
 }
 
 async function abrirCadastrarEndereco() {
   if (!_customer || !_customer.id) {
-    if (typeof toast === 'function') toast('⚠ Faça login para salvar endereços');
+    if (typeof toast === 'function') toast('warn', 'Faça login para salvar endereços');
     return;
   }
   const cep = (document.getElementById('f-cep')?.value || '').trim();
@@ -544,7 +545,7 @@ async function abrirCadastrarEndereco() {
   const compl  = (document.getElementById('f-compl')?.value || '').trim();
   const ref    = (document.getElementById('f-referencia')?.value || '').trim();
   if (!rua || !num) {
-    if (typeof toast === 'function') toast('⚠ Preencha rua e número antes de salvar');
+    if (typeof toast === 'function') toast('warn', 'Preencha rua e número antes de salvar');
     return;
   }
   const label = prompt('Dê um nome a este endereço (ex: Casa, Trabalho):', '') || '';
@@ -556,10 +557,10 @@ async function abrirCadastrarEndereco() {
       is_default: 0
     });
     if (error) throw error;
-    if (typeof toast === 'function') toast('✅ Endereço salvo!');
+    if (typeof toast === 'function') toast('ok', 'Endereço salvo!');
     await carregarEnderecosSalvos();
   } catch (e) {
-    if (typeof toast === 'function') toast('❌ Erro ao salvar: ' + (e.message || ''));
+    if (typeof toast === 'function') toast('err', 'Erro ao salvar: ' + (e.message || ''));
   }
 }
 
@@ -568,10 +569,10 @@ async function excluirEnderecoSalvo(id) {
   try {
     const { error } = await sb.from('customer_enderecos').delete().eq('id', id);
     if (error) throw error;
-    if (typeof toast === 'function') toast('🗑 Removido');
+    if (typeof toast === 'function') toast('ok', 'Removido');
     await carregarEnderecosSalvos();
   } catch (e) {
-    if (typeof toast === 'function') toast('❌ Erro: ' + (e.message || ''));
+    if (typeof toast === 'function') toast('err', 'Erro: ' + (e.message || ''));
   }
 }
 
@@ -580,21 +581,64 @@ async function excluirEnderecoSalvo(id) {
 // finalizado. Cruza com allItems pra pegar preço e disponibilidade atuais.
 // Itens pausados/removidos são pulados com aviso.
 // ══════════════════════════════════════════════════════════════════════
+function _repeatNormName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function _findMenuItemForRepeat(savedItem) {
+  const menu = Array.isArray(allItems) ? allItems : [];
+  if (!menu.length || !savedItem) return null;
+
+  const savedId = Number(savedItem.id || savedItem.item_id || savedItem.menu_item_id || 0);
+  if (savedId) {
+    const byId = menu.find(x => Number(x.id) === savedId);
+    if (byId) return byId;
+  }
+
+  const savedName = _repeatNormName(savedItem.name || savedItem.nome);
+  if (!savedName) return null;
+
+  const savedPrice = Number(savedItem.price || savedItem.preco || savedItem.valor || 0);
+  const exact = menu.filter(x => _repeatNormName(x.name) === savedName);
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1 && savedPrice > 0) {
+    return exact.find(x => Math.abs(Number(x.price || 0) - savedPrice) < 0.01) || exact[0];
+  }
+
+  const partial = menu
+    .map(x => ({ item: x, name: _repeatNormName(x.name) }))
+    .filter(x => x.name && (savedName.includes(x.name) || x.name.includes(savedName)))
+    .sort((a, b) => b.name.length - a.name.length);
+  if (!partial.length) return null;
+  if (savedPrice > 0) {
+    const byPrice = partial.find(x => Math.abs(Number(x.item.price || 0) - savedPrice) < 0.01);
+    if (byPrice) return byPrice.item;
+  }
+  return partial[0].item;
+}
+
 async function repetirPedido(orderId) {
   if (!_customer || !_customer.id) {
-    if (typeof toast === 'function') toast('⚠ Faça login para repetir pedidos');
+    if (typeof toast === 'function') toast('warn', 'Faça login para repetir pedidos');
     return;
   }
   try {
     // Busca pedido completo (snapshot dos itens guardados em items JSON)
-    const { data, error } = await sb.from('orders').select('items,addr,total').eq('id', orderId).single();
+    const { data, error } = await sb.from('orders').select('items,addr,total')
+      .eq('id', orderId)
+      .eq('customer_id', _customer.id)
+      .single();
     if (error || !data) {
-      if (typeof toast === 'function') toast('❌ Pedido não encontrado');
+      if (typeof toast === 'function') toast('err', 'Pedido não encontrado');
       return;
     }
     const itensSalvos = Array.isArray(data.items) ? data.items : (() => { try { return JSON.parse(data.items || '[]'); } catch { return []; } })();
     if (!itensSalvos.length) {
-      if (typeof toast === 'function') toast('⚠ Pedido sem itens válidos');
+      if (typeof toast === 'function') toast('warn', 'Pedido sem itens válidos');
       return;
     }
 
@@ -606,9 +650,8 @@ async function repetirPedido(orderId) {
     let adicionados = 0;
     for (const it of itensSalvos) {
       // Resolve item atual pelo id (preço pode ter mudado, item pode estar pausado/removido)
-      const atual = (typeof allItems !== 'undefined' && Array.isArray(allItems))
-        ? allItems.find(x => Number(x.id) === Number(it.id))
-        : null;
+      // Pedidos antigos podem nao ter id do produto; tenta nome/preco tambem.
+      const atual = _findMenuItemForRepeat(it);
       if (!atual) {
         // Item não disponível (pausado, removido ou de outra loja) — pula
         pulados++;
@@ -634,7 +677,7 @@ async function repetirPedido(orderId) {
     }
 
     if (!adicionados) {
-      if (typeof toast === 'function') toast('❌ Nenhum item desse pedido está disponível agora');
+      if (typeof toast === 'function') toast('err', 'Nenhum item desse pedido está disponível agora');
       return;
     }
 
@@ -650,13 +693,14 @@ async function repetirPedido(orderId) {
     if (typeof openCart === 'function') openCart();
 
     if (typeof toast === 'function') {
+      const itemTxt = adicionados > 1 ? 'itens adicionados' : 'item adicionado';
       const msg = pulados > 0
-        ? `🔁 ${adicionados} item${adicionados>1?'ns':''} adicionado${adicionados>1?'s':''} (${pulados} indisponíve${pulados>1?'is':'l'} pulado${pulados>1?'s':''})`
-        : `🔁 ${adicionados} item${adicionados>1?'ns':''} adicionado${adicionados>1?'s':''} ao carrinho`;
-      toast(msg);
+        ? `🔁 ${adicionados} ${itemTxt} (${pulados} indisponíve${pulados>1?'is':'l'} pulado${pulados>1?'s':''})`
+        : `🔁 ${adicionados} ${itemTxt} ao carrinho`;
+      toast('cart', msg);
     }
   } catch (e) {
     console.error('repetirPedido:', e);
-    if (typeof toast === 'function') toast('❌ Erro ao repetir pedido');
+    if (typeof toast === 'function') toast('err', 'Erro ao repetir pedido');
   }
 }
