@@ -1101,6 +1101,7 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
           <button class="ind-tab on" data-tab="indicadores" onclick="indSwitchTab('indicadores')">👥 Indicadores</button>
           <button class="ind-tab"    data-tab="leads"        onclick="indSwitchTab('leads')">🎯 Leads</button>
           <button class="ind-tab"    data-tab="comissoes"    onclick="indSwitchTab('comissoes')">💰 Comissões</button>
+          <button class="ind-tab"    data-tab="tutoriais"    onclick="indSwitchTab('tutoriais')">Curso</button>
         </div>
 
         <!-- TAB: INDICADORES -->
@@ -1169,6 +1170,36 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
                 <tr><th>Mês</th><th>Indicador</th><th>Estabelecimento</th><th>Plano</th><th>Comissão</th><th>Chave PIX</th><th>Status</th><th></th></tr>
               </thead>
               <tbody id="com-tbody"><tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TAB: CURSO / TUTORIAIS -->
+        <div id="ind-tab-tutoriais" class="ind-tab-content" style="display:none">
+          <div class="card" style="padding:14px;margin-bottom:12px">
+            <div class="card-title" style="margin-bottom:10px">Mini curso para indicadores</div>
+            <input type="hidden" id="tut-id">
+            <div style="display:grid;grid-template-columns:1.4fr 1.8fr .5fr;gap:10px;margin-bottom:10px">
+              <input class="minput" id="tut-titulo" placeholder="Título do vídeo">
+              <input class="minput" id="tut-url" placeholder="Link do vídeo (YouTube, Vimeo...)">
+              <input class="minput" id="tut-ordem" type="number" placeholder="Ordem">
+            </div>
+            <textarea class="minput" id="tut-desc" rows="2" placeholder="Descrição curta do que o indicador vai aprender"></textarea>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+              <button class="btn bg bsm" onclick="salvarTutorialIndicador()">Salvar vídeo</button>
+              <button class="btn bg2 bsm" onclick="limparFormTutorialIndicador()">Limpar</button>
+            </div>
+          </div>
+          <div class="tw">
+            <div class="tmeta">
+              <div class="card-title">Aulas cadastradas</div>
+              <span class="badge bg-gray" id="tut-list-count">—</span>
+            </div>
+            <table>
+              <thead>
+                <tr><th>Ordem</th><th>Título</th><th>Link</th><th>Status</th><th></th></tr>
+              </thead>
+              <tbody id="tut-tbody"><tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr></tbody>
             </table>
           </div>
         </div>
@@ -3118,6 +3149,7 @@ function indSwitchTab(tab) {
   if (tab === 'indicadores') carregarIndicadores();
   if (tab === 'leads')       carregarLeadsIndicacao();
   if (tab === 'comissoes')   carregarComissoes();
+  if (tab === 'tutoriais')   carregarTutoriaisIndicador();
 }
 
 async function carregarResumoIndicacoes() {
@@ -3134,6 +3166,108 @@ async function carregarResumoIndicacoes() {
 }
 
 // ── INDICADORES ─────────────────────────────────────────
+let _tutoriaisIndicador = [];
+
+function limparFormTutorialIndicador() {
+  document.getElementById('tut-id').value = '';
+  document.getElementById('tut-titulo').value = '';
+  document.getElementById('tut-url').value = '';
+  document.getElementById('tut-ordem').value = '';
+  document.getElementById('tut-desc').value = '';
+}
+
+async function carregarTutoriaisIndicador() {
+  const tbody = document.getElementById('tut-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr>';
+  try {
+    const r = await fetch('/api/admin/indicador-tutoriais', { headers: adminAuthHeader() });
+    const rows = await r.json();
+    if (!r.ok) throw new Error(rows.error || 'Falha ao carregar tutoriais');
+    _tutoriaisIndicador = rows;
+    document.getElementById('tut-list-count').textContent = rows.length + ' vídeos';
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">Nenhum vídeo cadastrado ainda.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(v => `
+      <tr>
+        <td><b>${v.sort_order || 0}</b></td>
+        <td><b>${escapeHtml(v.titulo)}</b>${v.descricao ? `<div style="font-size:11px;color:var(--muted)">${escapeHtml(v.descricao)}</div>` : ''}</td>
+        <td><a href="${escapeHtml(v.video_url)}" target="_blank" rel="noopener" style="font-size:12px">Abrir vídeo</a></td>
+        <td><span class="ind-status-badge ind-status-${v.ativo ? 'pago' : 'cancelado'}">${v.ativo ? 'Ativo' : 'Inativo'}</span></td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px" onclick="editarTutorialIndicador(${v.id})">Editar</button>
+          <button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px" onclick="toggleTutorialIndicador(${v.id}, ${v.ativo ? 0 : 1})">${v.ativo ? 'Desativar' : 'Ativar'}</button>
+          <button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px;color:#ef4444" onclick="deletarTutorialIndicador(${v.id})">Excluir</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:#ef4444">Erro: ' + e.message + '</td></tr>';
+  }
+}
+
+function editarTutorialIndicador(id) {
+  const v = _tutoriaisIndicador.find(x => x.id === id);
+  if (!v) return;
+  document.getElementById('tut-id').value = v.id;
+  document.getElementById('tut-titulo').value = v.titulo || '';
+  document.getElementById('tut-url').value = v.video_url || '';
+  document.getElementById('tut-ordem').value = v.sort_order || 0;
+  document.getElementById('tut-desc').value = v.descricao || '';
+}
+
+async function salvarTutorialIndicador() {
+  const id = document.getElementById('tut-id').value;
+  const payload = {
+    titulo: document.getElementById('tut-titulo').value.trim(),
+    video_url: document.getElementById('tut-url').value.trim(),
+    sort_order: document.getElementById('tut-ordem').value.trim(),
+    descricao: document.getElementById('tut-desc').value.trim()
+  };
+  if (!payload.titulo) { toast('err', 'Título é obrigatório'); return; }
+  if (!payload.video_url) { toast('err', 'Link do vídeo é obrigatório'); return; }
+  try {
+    const r = await fetch(id ? `/api/admin/indicador-tutoriais/${id}` : '/api/admin/indicador-tutoriais', {
+      method: id ? 'PUT' : 'POST',
+      headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Falha ao salvar vídeo');
+    toast('ok', id ? 'Vídeo atualizado' : 'Vídeo cadastrado');
+    limparFormTutorialIndicador();
+    carregarTutoriaisIndicador();
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+async function toggleTutorialIndicador(id, ativo) {
+  try {
+    const r = await fetch(`/api/admin/indicador-tutoriais/${id}`, {
+      method: 'PUT',
+      headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ativo })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'Falha');
+    toast('ok', ativo ? 'Vídeo ativado' : 'Vídeo desativado');
+    carregarTutoriaisIndicador();
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+async function deletarTutorialIndicador(id) {
+  if (!confirm('Excluir este vídeo do curso? O progresso dele também será removido.')) return;
+  try {
+    const r = await fetch(`/api/admin/indicador-tutoriais/${id}`, { method: 'DELETE', headers: adminAuthHeader() });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'Falha ao excluir');
+    toast('ok', 'Vídeo removido');
+    limparFormTutorialIndicador();
+    carregarTutoriaisIndicador();
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
 async function carregarIndicadores() {
   const tbody = document.getElementById('ind-tbody');
   tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr>';

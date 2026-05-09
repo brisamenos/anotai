@@ -31,7 +31,15 @@ body{
   color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;letter-spacing:.2px;
 }
 .login-mark{margin-bottom:18px}
+.login-logo-wrap{display:flex;align-items:center;justify-content:center;margin-bottom:18px}
+.login-logo{
+  width:156px;height:156px;object-fit:contain;display:block;
+  filter:drop-shadow(0 12px 28px rgba(15,23,42,.15));
+  animation:logoIn .6s cubic-bezier(.16,1,.3,1);
+}
+@keyframes logoIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
 .brand{font-weight:850;font-size:23px;margin-bottom:6px;letter-spacing:-.2px}
+.login-card .brand,.login-card .sub{text-align:center}
 .sub{font-size:13.5px;color:var(--muted);margin-bottom:24px}
 .label{font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.55px;text-transform:uppercase;margin-bottom:7px;display:block}
 .input{width:100%;border:1px solid var(--line);background:#fff;border-radius:10px;padding:11px 12px;font-size:14px;margin-bottom:14px;outline:none;transition:border-color .18s,box-shadow .18s,background .18s}
@@ -90,6 +98,28 @@ body{
 .link-note{font-size:13px;color:var(--muted);max-width:560px}
 .copy-box{display:flex;gap:8px;margin-top:14px;min-width:min(100%,520px)}
 .copy-box input{flex:1;margin:0;background:var(--panel-soft);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;color:#334155}
+.pix-panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,520px);gap:18px;align-items:end;margin-bottom:18px}
+.pix-panel .stat-label{margin-bottom:7px}
+.pix-box{display:flex;gap:8px}
+.pix-box input{flex:1;margin:0;background:var(--panel-soft)}
+.pix-feedback{font-size:12px;color:var(--muted);min-height:17px;margin-top:7px}
+.pix-feedback.ok{color:var(--success)}.pix-feedback.err{color:var(--danger)}
+.course-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px}
+.course-progress{min-width:210px}
+.course-progress-label{font-size:11px;color:var(--muted);font-weight:850;text-transform:uppercase;letter-spacing:.48px;margin-bottom:7px}
+.course-progress-bar{height:8px;background:#e9eef6;border-radius:999px;overflow:hidden}
+.course-progress-fill{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .25s}
+.course-grid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:16px}
+.lesson-list{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+.lesson-item{width:100%;border:0;border-bottom:1px solid #edf1f6;background:#fff;text-align:left;padding:13px 14px;cursor:pointer;color:var(--text)}
+.lesson-item:last-child{border-bottom:0}.lesson-item:hover{background:#f8fafc}.lesson-item.on{background:#eff6ff}
+.lesson-item.locked{opacity:.55;cursor:not-allowed}.lesson-item.done .lesson-title{color:var(--success)}
+.lesson-kicker{font-size:10.5px;color:var(--muted);font-weight:850;text-transform:uppercase;letter-spacing:.48px;margin-bottom:4px}
+.lesson-title{font-size:13px;font-weight:850;line-height:1.25}.lesson-state{font-size:11.5px;color:var(--muted);margin-top:4px}
+.video-shell{background:#0f172a;border-radius:12px;overflow:hidden;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center}
+.video-shell iframe,.video-shell video{width:100%;height:100%;border:0;display:block}
+.video-empty{color:rgba(255,255,255,.74);font-size:13px;padding:22px;text-align:center}
+.course-actions{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}.course-desc{color:var(--muted);font-size:13px;margin-top:8px}
 .tabs{display:inline-flex;gap:4px;background:#e9eef6;border:1px solid var(--line);border-radius:12px;padding:4px;margin:6px 0 14px}
 .tab{background:transparent;color:var(--muted);border:0;border-radius:9px;padding:9px 14px;font-weight:850;cursor:pointer;min-height:36px}
 .tab.on{color:var(--text);background:#fff;box-shadow:0 6px 14px rgba(17,24,39,.07)}
@@ -116,7 +146,8 @@ select.input{width:auto;margin:0;min-width:150px}
   .top-actions{width:100%}.top-actions .btn{flex:1}
   .content{padding:16px 12px 80px}.hero{flex-direction:column;padding:22px}
   .hero-actions{align-items:stretch;width:100%}.stats{grid-template-columns:1fr 1fr}
-  .link-panel{grid-template-columns:1fr}.copy-box{flex-direction:column}.copy-box .btn{width:100%}
+  .link-panel,.pix-panel{grid-template-columns:1fr}.copy-box,.pix-box{flex-direction:column}.copy-box .btn,.pix-box .btn{width:100%}
+  .course-head{align-items:flex-start;flex-direction:column}.course-progress{width:100%}.course-grid{grid-template-columns:1fr}
 }
 @media (max-width:560px){
   .stats{grid-template-columns:1fr}.hero h1{font-size:24px}
@@ -127,7 +158,9 @@ select.input{width:auto;margin:0;min-width:150px}
 <body>
 <div id="login" class="login-wrap">
   <div class="login-card">
-    <div class="login-mark">ID</div>
+    <div class="login-logo-wrap">
+      <img src="https://i.ibb.co/TxxdXcKk/IMG-8056-1.png" alt="Estima Food" class="login-logo">
+    </div>
     <div class="brand">Painel do Indicador</div>
     <div class="sub">Acompanhe seus leads, conversões e comissões.</div>
     <div id="login-err" class="err"></div>
@@ -186,9 +219,24 @@ select.input{width:auto;margin:0;min-width:150px}
       </div>
     </section>
 
+    <section class="card pix-panel">
+      <div>
+        <div class="stat-label">PIX para comissões</div>
+        <div class="top-sub">Chave salva para pagamento das suas comissões</div>
+      </div>
+      <div>
+        <div class="pix-box">
+          <input class="input" id="pix-chave" placeholder="CPF, e-mail, celular ou chave aleatória">
+          <button class="btn" id="pix-save-btn" onclick="salvarPix(this)">Salvar PIX</button>
+        </div>
+        <div class="pix-feedback" id="pix-feedback"></div>
+      </div>
+    </section>
+
     <div class="tabs">
       <button class="tab on" id="tab-leads" onclick="switchTab('leads')">Leads</button>
       <button class="tab" id="tab-comissoes" onclick="switchTab('comissoes')">Comissões</button>
+      <button class="tab" id="tab-tutorial" onclick="switchTab('tutorial')">Tutorial</button>
     </div>
 
     <section id="panel-leads">
@@ -234,6 +282,33 @@ select.input{width:auto;margin:0;min-width:150px}
         </table>
       </div>
     </section>
+
+    <section id="panel-tutorial" style="display:none">
+      <div class="course-head">
+        <div>
+          <div class="top-title">Mini curso do sistema</div>
+          <div class="top-sub">Assista em sequência para entender a ferramenta que você está vendendo</div>
+        </div>
+        <div class="course-progress">
+          <div class="course-progress-label" id="tutorial-progress-label">0% concluído</div>
+          <div class="course-progress-bar"><div class="course-progress-fill" id="tutorial-progress-fill"></div></div>
+        </div>
+      </div>
+      <div class="course-grid">
+        <div class="lesson-list" id="tutorial-list">
+          <div class="empty">Carregando aulas...</div>
+        </div>
+        <div class="card" style="padding:16px">
+          <div class="video-shell" id="tutorial-video"><div class="video-empty">Selecione uma aula para começar.</div></div>
+          <div class="top-title" id="tutorial-title" style="margin-top:14px">Tutorial</div>
+          <div class="course-desc" id="tutorial-desc"></div>
+          <div class="course-actions">
+            <button class="btn" id="tutorial-complete-btn" onclick="concluirTutorialAtual(this)" disabled>Marcar como assistido</button>
+            <a class="btn secondary" id="tutorial-open-link" href="#" target="_blank" rel="noopener" style="display:none">Abrir em nova aba</a>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -242,6 +317,8 @@ let session = null;
 let me = null;
 let refreshTimer = null;
 let rtSource = null;
+let tutorialData = { videos: [], total: 0, concluidos: 0, progresso_pct: 0, current_id: null };
+let tutorialAtualId = null;
 
 function authHeader() {
   return session?.token ? { 'Authorization': 'Bearer ' + session.token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
@@ -305,7 +382,7 @@ async function loadAll() {
   try {
     const ready = await loadMe();
     if (ready === false) return;
-    await Promise.all([loadLeads(), loadComissoes()]);
+    await Promise.all([loadLeads(), loadComissoes(), loadTutorial()]);
   } catch(e) {
     showAppError(e.message || 'Erro ao carregar painel.');
   }
@@ -326,6 +403,8 @@ async function loadMe() {
   document.getElementById('st-pagar').textContent = money(me.resumo?.a_pagar);
   document.getElementById('st-pago').textContent = money(me.resumo?.pago_total);
   document.getElementById('link-indicacao').value = location.origin + '/indicacao/' + me.codigo;
+  const pixInput = document.getElementById('pix-chave');
+  if (pixInput && document.activeElement !== pixInput) pixInput.value = me.chave_pix || '';
   connectRealtime();
   return true;
 }
@@ -378,6 +457,116 @@ async function loadComissoes() {
   }
 }
 
+function tutorialEmbedUrl(url) {
+  const raw = String(url || '').trim();
+  try {
+    const u = new URL(raw);
+    const host = u.hostname.replace(/^www\./, '');
+    if (host === 'youtu.be') return 'https://www.youtube.com/embed/' + encodeURIComponent(u.pathname.replace('/', '').split('/')[0]);
+    if (host.includes('youtube.com')) {
+      const id = u.searchParams.get('v') || u.pathname.split('/').filter(Boolean).pop();
+      if (id) return 'https://www.youtube.com/embed/' + encodeURIComponent(id);
+    }
+    if (host.includes('vimeo.com')) {
+      const id = u.pathname.split('/').filter(Boolean).pop();
+      if (id) return 'https://player.vimeo.com/video/' + encodeURIComponent(id);
+    }
+  } catch(e) {}
+  return raw;
+}
+
+function renderTutorial() {
+  const list = document.getElementById('tutorial-list');
+  const fill = document.getElementById('tutorial-progress-fill');
+  const label = document.getElementById('tutorial-progress-label');
+  const videos = tutorialData.videos || [];
+  const pct = tutorialData.progresso_pct || 0;
+  if (fill) fill.style.width = pct + '%';
+  if (label) label.textContent = `${pct}% concluído (${tutorialData.concluidos || 0}/${tutorialData.total || 0})`;
+  if (!videos.length) {
+    list.innerHTML = '<div class="empty">Nenhuma aula cadastrada ainda.</div>';
+    renderTutorialVideo(null);
+    return;
+  }
+  if (!tutorialAtualId || !videos.find(v => v.id === tutorialAtualId && !v.locked)) {
+    tutorialAtualId = tutorialData.current_id || videos.find(v => !v.locked)?.id || videos[0].id;
+  }
+  list.innerHTML = videos.map((v, idx) => `
+    <button class="lesson-item ${v.id === tutorialAtualId ? 'on' : ''} ${v.locked ? 'locked' : ''} ${v.concluido ? 'done' : ''}" onclick="selecionarTutorial(${v.id})" ${v.locked ? 'disabled' : ''}>
+      <div class="lesson-kicker">Aula ${idx + 1}</div>
+      <div class="lesson-title">${escapeHtml(v.titulo)}</div>
+      <div class="lesson-state">${v.concluido ? 'Assistido' : v.locked ? 'Bloqueado' : 'Disponível'}</div>
+    </button>
+  `).join('');
+  renderTutorialVideo(videos.find(v => v.id === tutorialAtualId));
+}
+
+function renderTutorialVideo(video) {
+  const box = document.getElementById('tutorial-video');
+  const title = document.getElementById('tutorial-title');
+  const desc = document.getElementById('tutorial-desc');
+  const btn = document.getElementById('tutorial-complete-btn');
+  const link = document.getElementById('tutorial-open-link');
+  if (!video) {
+    box.innerHTML = '<div class="video-empty">Selecione uma aula para começar.</div>';
+    title.textContent = 'Tutorial';
+    desc.textContent = '';
+    btn.disabled = true;
+    link.style.display = 'none';
+    return;
+  }
+  const src = tutorialEmbedUrl(video.video_url);
+  box.innerHTML = `<iframe src="${escapeHtml(src)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy"></iframe>`;
+  title.textContent = video.titulo || 'Tutorial';
+  desc.textContent = video.descricao || '';
+  btn.disabled = video.locked || video.concluido;
+  btn.textContent = video.concluido ? 'Aula concluída' : 'Marcar como assistido';
+  link.href = video.video_url;
+  link.style.display = 'inline-flex';
+}
+
+function selecionarTutorial(id) {
+  const video = (tutorialData.videos || []).find(v => v.id === id);
+  if (!video || video.locked) return;
+  tutorialAtualId = id;
+  renderTutorial();
+}
+
+async function loadTutorial() {
+  const list = document.getElementById('tutorial-list');
+  if (!list) return;
+  try {
+    const r = await fetch('/api/indicador/tutorial', { headers: authHeader() });
+    if (!r.ok) throw new Error('Erro ao carregar tutorial.');
+    tutorialData = await r.json();
+    renderTutorial();
+  } catch(e) {
+    list.innerHTML = '<div class="empty">Erro ao carregar tutorial.</div>';
+  }
+}
+
+async function concluirTutorialAtual(btn) {
+  const video = (tutorialData.videos || []).find(v => v.id === tutorialAtualId);
+  if (!video || video.locked || video.concluido) return;
+  const old = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Salvando...';
+  try {
+    const r = await fetch(`/api/indicador/tutorial/${video.id}/progresso`, {
+      method: 'PUT',
+      headers: authHeader(),
+      body: JSON.stringify({ concluido: true })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'Falha ao salvar progresso.');
+    await loadTutorial();
+  } catch(e) {
+    showAppError(e.message || 'Falha ao salvar progresso.');
+    btn.disabled = false;
+    btn.textContent = old;
+  }
+}
+
 function showAppError(msg) {
   const el = document.getElementById('app-err');
   if (!el) return;
@@ -395,8 +584,11 @@ function clearAppError() {
 function switchTab(tab) {
   document.getElementById('tab-leads').classList.toggle('on', tab === 'leads');
   document.getElementById('tab-comissoes').classList.toggle('on', tab === 'comissoes');
+  document.getElementById('tab-tutorial').classList.toggle('on', tab === 'tutorial');
   document.getElementById('panel-leads').style.display = tab === 'leads' ? '' : 'none';
   document.getElementById('panel-comissoes').style.display = tab === 'comissoes' ? '' : 'none';
+  document.getElementById('panel-tutorial').style.display = tab === 'tutorial' ? '' : 'none';
+  if (tab === 'tutorial') loadTutorial();
 }
 
 function connectRealtime() {
@@ -418,6 +610,42 @@ function copiarLink(btn) {
   navigator.clipboard.writeText(link).then(() => {
     if (btn) { const old = btn.textContent; btn.textContent = 'Copiado'; setTimeout(()=>btn.textContent = old, 1400); }
   });
+}
+
+async function salvarPix(btn) {
+  const input = document.getElementById('pix-chave');
+  const feedback = document.getElementById('pix-feedback');
+  const chave_pix = input.value.trim();
+  feedback.className = 'pix-feedback';
+  feedback.textContent = '';
+  if (!chave_pix) {
+    feedback.classList.add('err');
+    feedback.textContent = 'Informe uma chave PIX.';
+    return;
+  }
+  const oldText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Salvando...';
+  try {
+    const r = await fetch('/api/indicador/pix', {
+      method: 'PUT',
+      headers: authHeader(),
+      body: JSON.stringify({ chave_pix })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'Não foi possível salvar o PIX.');
+    me = { ...(me || {}), chave_pix: d.chave_pix || chave_pix };
+    feedback.classList.add('ok');
+    feedback.textContent = 'PIX salvo.';
+    btn.textContent = 'Salvo';
+    setTimeout(() => { btn.textContent = oldText; }, 1400);
+  } catch(e) {
+    feedback.classList.add('err');
+    feedback.textContent = e.message || 'Erro ao salvar PIX.';
+    btn.textContent = oldText;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 window.addEventListener('DOMContentLoaded', () => {

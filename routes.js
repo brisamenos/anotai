@@ -1067,6 +1067,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
   // ── PÚBLICO: Captura lead via link de indicação ─────
   // Não precisa auth — cliente preenche e envia
+  const _tutorialUrlValida = (url) => /^https?:\/\//i.test(String(url || '').trim())
+
   if (req.method === 'GET' && upath.startsWith('/api/indicacao/info/')) {
     const codigo = upath.replace('/api/indicacao/info/', '').trim()
     if (!codigo) { send(res, 400, { error: 'Código obrigatório' }); return true }
@@ -1137,6 +1139,100 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (status) { sql += ' AND status=?'; vals.push(status) }
     sql += ' ORDER BY created_at DESC LIMIT 500'
     send(res, 200, db.prepare(sql).all(...vals))
+    return true
+  }
+
+  if (req.method === 'PUT' && upath === '/api/indicador/pix') {
+    const sess = validarSessaoIndicador(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    const chavePix = String(body.chave_pix || '').trim()
+    if (!chavePix) { send(res, 400, { error: 'Chave PIX obrigatória' }); return true }
+    if (chavePix.length > 180) { send(res, 400, { error: 'Chave PIX muito longa' }); return true }
+    const ind = db.prepare('SELECT id, ativo FROM indicadores WHERE id=?').get(sess.indicador_id)
+    if (!ind || !ind.ativo) { send(res, 401, { error: 'Indicador inativo' }); return true }
+    try {
+      db.prepare('UPDATE indicadores SET chave_pix=? WHERE id=?').run(chavePix, sess.indicador_id)
+      marcarDirty()
+      send(res, 200, { ok: true, chave_pix: chavePix })
+    } catch (e) {
+      send(res, 500, { error: 'Falha ao salvar PIX: ' + e.message })
+    }
+    return true
+  }
+
+  if (req.method === 'GET' && upath === '/api/indicador/tutorial') {
+    const sess = validarSessaoIndicador(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const videos = db.prepare(`
+      SELECT id, titulo, descricao, video_url, sort_order
+      FROM indicador_tutorial_videos
+      WHERE ativo=1
+      ORDER BY sort_order ASC, id ASC
+    `).all()
+    const progRows = db.prepare(`
+      SELECT video_id, concluido, completed_at
+      FROM indicador_tutorial_progress
+      WHERE indicador_id=?
+    `).all(sess.indicador_id)
+    const prog = new Map(progRows.map(p => [p.video_id, p]))
+    let previousComplete = true
+    const items = videos.map(v => {
+      const p = prog.get(v.id)
+      const concluido = p?.concluido === 1
+      const locked = !previousComplete
+      if (!concluido) previousComplete = false
+      return { ...v, concluido, locked, completed_at: p?.completed_at || null }
+    })
+    const concluidos = items.filter(v => v.concluido).length
+    const current = items.find(v => !v.locked && !v.concluido) || items.find(v => !v.locked) || null
+    send(res, 200, {
+      videos: items,
+      total: items.length,
+      concluidos,
+      progresso_pct: items.length ? Math.round((concluidos / items.length) * 100) : 0,
+      current_id: current?.id || null
+    })
+    return true
+  }
+
+  if (req.method === 'PUT' && upath.startsWith('/api/indicador/tutorial/') && upath.endsWith('/progresso')) {
+    const sess = validarSessaoIndicador(req)
+    if (!sess) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const id = parseInt(upath.replace('/api/indicador/tutorial/', '').split('/')[0])
+    if (!id) { send(res, 400, { error: 'ID inválido' }); return true }
+    const video = db.prepare('SELECT id, sort_order, ativo FROM indicador_tutorial_videos WHERE id=?').get(id)
+    if (!video || video.ativo !== 1) { send(res, 404, { error: 'Vídeo não encontrado' }); return true }
+    const anterior = db.prepare(`
+      SELECT id FROM indicador_tutorial_videos
+      WHERE ativo=1 AND (sort_order < ? OR (sort_order = ? AND id < ?))
+      ORDER BY sort_order DESC, id DESC
+      LIMIT 1
+    `).get(video.sort_order || 0, video.sort_order || 0, id)
+    if (anterior) {
+      const prevOk = db.prepare(`
+        SELECT concluido FROM indicador_tutorial_progress
+        WHERE indicador_id=? AND video_id=?
+      `).get(sess.indicador_id, anterior.id)
+      if (prevOk?.concluido !== 1) {
+        send(res, 409, { error: 'Assista o vídeo anterior antes de continuar.' })
+        return true
+      }
+    }
+    try {
+      db.prepare(`
+        INSERT INTO indicador_tutorial_progress (indicador_id, video_id, concluido, completed_at, updated_at)
+        VALUES (?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(indicador_id, video_id) DO UPDATE SET
+          concluido=1,
+          completed_at=COALESCE(completed_at, CURRENT_TIMESTAMP),
+          updated_at=CURRENT_TIMESTAMP
+      `).run(sess.indicador_id, id)
+      marcarDirty()
+      send(res, 200, { ok: true, video_id: id })
+    } catch (e) {
+      send(res, 500, { error: 'Falha ao salvar progresso: ' + e.message })
+    }
     return true
   }
 
@@ -1432,6 +1528,82 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
 
   // ── Gera cobrança PIX via Mercado Pago ───────────────
+  if (req.method === 'GET' && upath === '/api/admin/indicador-tutoriais') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const rows = db.prepare(`
+      SELECT id, titulo, descricao, video_url, sort_order, ativo, created_at, updated_at
+      FROM indicador_tutorial_videos
+      ORDER BY sort_order ASC, id ASC
+    `).all()
+    send(res, 200, rows)
+    return true
+  }
+
+  if (req.method === 'POST' && upath === '/api/admin/indicador-tutoriais') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body = await readBody(req)
+    const titulo = String(body.titulo || '').trim()
+    const videoUrl = String(body.video_url || '').trim()
+    const descricao = String(body.descricao || '').trim() || null
+    if (!titulo) { send(res, 400, { error: 'Título obrigatório' }); return true }
+    if (!videoUrl || !_tutorialUrlValida(videoUrl)) { send(res, 400, { error: 'Link do vídeo inválido' }); return true }
+    const proxOrdem = db.prepare('SELECT COALESCE(MAX(sort_order),0)+10 AS n FROM indicador_tutorial_videos').get()?.n || 10
+    const sortOrder = body.sort_order === undefined || body.sort_order === '' ? proxOrdem : (parseInt(body.sort_order) || proxOrdem)
+    try {
+      const r = db.prepare(`
+        INSERT INTO indicador_tutorial_videos (titulo, descricao, video_url, sort_order, ativo, updated_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).run(titulo, descricao, videoUrl, sortOrder, body.ativo === false ? 0 : 1)
+      marcarDirty()
+      send(res, 200, { ok: true, id: r.lastInsertRowid })
+    } catch (e) { send(res, 500, { error: 'Falha ao criar vídeo: ' + e.message }) }
+    return true
+  }
+
+  if (req.method === 'PUT' && upath.startsWith('/api/admin/indicador-tutoriais/')) {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const id = parseInt(upath.replace('/api/admin/indicador-tutoriais/', '').split('/')[0])
+    if (!id) { send(res, 400, { error: 'ID inválido' }); return true }
+    const body = await readBody(req)
+    const fields = []
+    const values = []
+    if (body.titulo !== undefined) {
+      const titulo = String(body.titulo || '').trim()
+      if (!titulo) { send(res, 400, { error: 'Título obrigatório' }); return true }
+      fields.push('titulo=?'); values.push(titulo)
+    }
+    if (body.video_url !== undefined) {
+      const videoUrl = String(body.video_url || '').trim()
+      if (!videoUrl || !_tutorialUrlValida(videoUrl)) { send(res, 400, { error: 'Link do vídeo inválido' }); return true }
+      fields.push('video_url=?'); values.push(videoUrl)
+    }
+    if (body.descricao !== undefined) { fields.push('descricao=?'); values.push(String(body.descricao || '').trim() || null) }
+    if (body.sort_order !== undefined) { fields.push('sort_order=?'); values.push(parseInt(body.sort_order) || 0) }
+    if (body.ativo !== undefined) { fields.push('ativo=?'); values.push(body.ativo ? 1 : 0) }
+    if (!fields.length) { send(res, 400, { error: 'Nada a atualizar' }); return true }
+    fields.push('updated_at=CURRENT_TIMESTAMP')
+    values.push(id)
+    try {
+      db.prepare(`UPDATE indicador_tutorial_videos SET ${fields.join(',')} WHERE id=?`).run(...values)
+      marcarDirty()
+      send(res, 200, { ok: true })
+    } catch (e) { send(res, 500, { error: 'Falha ao atualizar vídeo: ' + e.message }) }
+    return true
+  }
+
+  if (req.method === 'DELETE' && upath.startsWith('/api/admin/indicador-tutoriais/')) {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const id = parseInt(upath.replace('/api/admin/indicador-tutoriais/', '').split('/')[0])
+    if (!id) { send(res, 400, { error: 'ID inválido' }); return true }
+    try {
+      db.prepare('DELETE FROM indicador_tutorial_progress WHERE video_id=?').run(id)
+      db.prepare('DELETE FROM indicador_tutorial_videos WHERE id=?').run(id)
+      marcarDirty()
+      send(res, 200, { ok: true })
+    } catch (e) { send(res, 500, { error: 'Falha ao deletar vídeo: ' + e.message }) }
+    return true
+  }
+
   if (req.method === 'POST' && upath === '/api/pix/criar') {
     const tid = req.headers['x-tenant-id']
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }

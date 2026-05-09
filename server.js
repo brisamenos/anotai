@@ -546,6 +546,28 @@ const MIGRATIONS = [
        ts INTEGER NOT NULL
      )`
   ] },
+  { version:48, description:'Tutorial dos indicadores com progresso', up:[
+    `CREATE TABLE IF NOT EXISTS indicador_tutorial_videos (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       titulo TEXT NOT NULL,
+       descricao TEXT,
+       video_url TEXT NOT NULL,
+       sort_order INTEGER DEFAULT 0,
+       ativo INTEGER DEFAULT 1,
+       created_at TEXT DEFAULT (datetime('now')),
+       updated_at TEXT
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_ind_tut_videos_order ON indicador_tutorial_videos(ativo, sort_order, id)`,
+    `CREATE TABLE IF NOT EXISTS indicador_tutorial_progress (
+       indicador_id INTEGER NOT NULL REFERENCES indicadores(id) ON DELETE CASCADE,
+       video_id INTEGER NOT NULL REFERENCES indicador_tutorial_videos(id) ON DELETE CASCADE,
+       concluido INTEGER DEFAULT 0,
+       completed_at TEXT,
+       updated_at TEXT DEFAULT (datetime('now')),
+       PRIMARY KEY (indicador_id, video_id)
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_ind_tut_prog_ind ON indicador_tutorial_progress(indicador_id, video_id)`
+  ] },
 ]
 
 function runMigrations() {
@@ -593,7 +615,7 @@ try {
 // ════════════════════════════════════════════════════════
 const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_items',
   'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress',
-  'indicadores','leads_indicacao','comissoes']
+  'indicadores','leads_indicacao','comissoes','indicador_tutorial_videos','indicador_tutorial_progress']
   // wa_messages excluída — pode conter muita mídia e estourar JSON.stringify
 
 let _dirty = false
