@@ -1900,11 +1900,12 @@ async function handleOrderStatus(req, res) {
           // Plus: PIX e recompensas (rodam em outro fluxo, não passam aqui).
           const _trackingAtivo = parseInt(order.wa_track || 0) === 1
           const _statusOptIn = ['analise', 'producao', 'pronto', 'saiu', 'entregue']
+          const _requerOptIn = ct.requer_optin !== false
 
-          if (!_trackingAtivo && _statusOptIn.includes(new_status)) {
+          if (ct.on===false) { log('⏭️',`Automação "${tipoAuto}" desligada`) }
+          else if (_requerOptIn && !_trackingAtivo && _statusOptIn.includes(new_status)) {
             log('🔕', `[anti-ban] Pulando "${new_status}" do pedido #${idStr} — cliente não ativou tracking via WhatsApp`)
           }
-          else if (ct.on===false) { log('⏭️',`Automação "${tipoAuto}" desligada`) }
           else if (ct.on&&ct.msg) { msgFinal=fillVars(ct.msg,vars) }
           else { msgFinal=msgPadrao[new_status]||null }
           if (msgFinal) {

@@ -390,12 +390,27 @@ function _iniciarSchedulerAniversario() {
 
 async function evoSalvarAutomacoes() {
   const tipos = ['pix_cobranca','pix_copia_cola','pix_confirmado','recebido','confirmado','pronto','entrega','cancelado','aniversario','boasvindas','avaliacao','retorno','pedido_perdido','promocao','pontos','cashback','carimbinho','conta'];
-  const data = {};
+  const optinTipos = new Set(['recebido','confirmado','pronto','entrega']);
+  const aliases = { confirmado: 'producao', entrega: 'saiu' };
+  let data = {};
+  try {
+    const { data: atual } = await sb.from('store_config').select('evo_automacoes').single();
+    data = atual?.evo_automacoes || {};
+    if (typeof data === 'string') data = JSON.parse(data || '{}');
+  } catch(e) {
+    data = {};
+  }
   tipos.forEach(tipo => {
-    data[tipo] = {
-      on:  document.getElementById(`auto-toggle-${tipo}`)?.classList.contains('on'),
-      msg: document.getElementById(`auto-msg-${tipo}`)?.value
-    };
+    const alias = aliases[tipo];
+    const toggle = document.getElementById(`auto-toggle-${tipo}`) || (alias ? document.getElementById(`auto-toggle-${alias}`) : null);
+    const msgEl = document.getElementById(`auto-msg-${tipo}`) || (alias ? document.getElementById(`auto-msg-${alias}`) : null);
+    const optEl = document.getElementById(`auto-optin-${tipo}`) || (alias ? document.getElementById(`auto-optin-${alias}`) : null);
+    if (!toggle && !msgEl && !optEl) return;
+    const atualTipo = data[tipo] && typeof data[tipo] === 'object' ? data[tipo] : {};
+    data[tipo] = { ...atualTipo };
+    if (toggle) data[tipo].on = toggle.classList.contains('on');
+    if (msgEl) data[tipo].msg = msgEl.value;
+    if (optinTipos.has(tipo)) data[tipo].requer_optin = optEl ? optEl.classList.contains('on') : data[tipo].requer_optin !== false;
   });
   data._aniv_hora = document.getElementById('auto-aniv-hora')?.value || '09:00';
   try {
@@ -410,13 +425,21 @@ async function evoSalvarAutomacoes() {
 async function evoCarregarAutomacoesSalvas() {
   try {
     const { data } = await sb.from('store_config').select('evo_automacoes').single();
-    const cfg = data?.evo_automacoes || {};
+    let cfg = data?.evo_automacoes || {};
+    if (typeof cfg === 'string') cfg = JSON.parse(cfg || '{}');
+    const aliases = { confirmado: 'producao', entrega: 'saiu' };
     Object.entries(cfg).forEach(([tipo, val]) => {
       if (tipo.startsWith('_')) return;
-      const t = document.getElementById(`auto-toggle-${tipo}`);
-      const m = document.getElementById(`auto-msg-${tipo}`);
-      if (t) { val.on ? t.classList.add('on') : t.classList.remove('on'); }
-      if (m && val.msg) m.value = val.msg;
+      if (!val || typeof val !== 'object') val = {};
+      const ids = [tipo, aliases[tipo]].filter(Boolean);
+      ids.forEach(id => {
+        const t = document.getElementById(`auto-toggle-${id}`);
+        const m = document.getElementById(`auto-msg-${id}`);
+        const o = document.getElementById(`auto-optin-${id}`);
+        if (t) { val.on ? t.classList.add('on') : t.classList.remove('on'); }
+        if (m && val.msg) m.value = val.msg;
+        if (o) { val.requer_optin === false ? o.classList.remove('on') : o.classList.add('on'); }
+      });
     });
     if (cfg._aniv_hora) {
       const h = document.getElementById('auto-aniv-hora');

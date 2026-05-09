@@ -1105,9 +1105,13 @@ Seu pedido está sendo preparado. Obrigado! 🎉</textarea>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
             <div style="display:flex;align-items:center;gap:10px">
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(139,92,246,.15);display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M5 2h6v6a3 3 0 0 1-6 0V2z" stroke="currentColor" stroke-width="1.4"/><path d="M2 2h3M11 2h3M2 5H5M11 5h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 8v4M5.5 14h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
-              <div><div style="font-weight:600;font-size:13.5px">Pedido Recebido <span style="display:inline-block;font-size:10px;background:rgba(249,115,22,.15);color:#f97316;padding:2px 7px;border-radius:6px;font-weight:600;margin-left:4px;vertical-align:middle">📱 SÓ SE CLIENTE OPT-IN</span></div><div style="font-size:11.5px;color:var(--muted)">Enviado SOMENTE se o cliente clicou em "Acompanhar pedido pelo WhatsApp" no cardápio (proteção anti-ban — loja não inicia conversa).</div></div>
+              <div><div style="font-weight:600;font-size:13.5px">Pedido Recebido <span style="display:inline-block;font-size:10px;background:rgba(249,115,22,.15);color:#f97316;padding:2px 7px;border-radius:6px;font-weight:600;margin-left:4px;vertical-align:middle">OPT-IN CONFIGURAVEL</span></div><div style="font-size:11.5px;color:var(--muted)">Use a opcao abaixo para exigir que o cliente solicite acompanhamento antes do envio.</div></div>
             </div>
             <div style="display:flex;align-items:center;gap:8px"><button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="abrirModelosModal('recebido')">📋 Modelos</button><div class="toggle on" id="auto-toggle-recebido" onclick="this.classList.toggle('on')"></div></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+            <div style="font-size:11.5px;color:var(--muted);font-weight:600">S&oacute; enviar se o cliente solicitar acompanhamento</div>
+            <div class="toggle on" id="auto-optin-recebido" onclick="this.classList.toggle('on')"></div>
           </div>
           <textarea class="form-input" id="auto-msg-recebido" rows="4" style="font-size:12.5px">📥 Olá {nome}! Recebemos seu pedido #{id} com sucesso! 🎉
 🛒 {itens}
@@ -1120,9 +1124,13 @@ Seu pedido está sendo preparado. Obrigado! 🎉</textarea>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
             <div style="display:flex;align-items:center;gap:10px">
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(59,130,246,.15);display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-              <div><div style="font-weight:600;font-size:13.5px">Pedido Confirmado <span style="display:inline-block;font-size:10px;background:rgba(249,115,22,.15);color:#f97316;padding:2px 7px;border-radius:6px;font-weight:600;margin-left:4px;vertical-align:middle">📱 SÓ SE CLIENTE OPT-IN</span></div><div style="font-size:11.5px;color:var(--muted)">Enviado SOMENTE se o cliente clicou em "Acompanhar pedido pelo WhatsApp" no cardápio (proteção anti-ban — loja não inicia conversa).</div></div>
+              <div><div style="font-weight:600;font-size:13.5px">Pedido Confirmado <span style="display:inline-block;font-size:10px;background:rgba(249,115,22,.15);color:#f97316;padding:2px 7px;border-radius:6px;font-weight:600;margin-left:4px;vertical-align:middle">OPT-IN CONFIGURAVEL</span></div><div style="font-size:11.5px;color:var(--muted)">Use a opcao abaixo para exigir que o cliente solicite acompanhamento antes do envio.</div></div>
             </div>
             <div style="display:flex;align-items:center;gap:8px"><button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="abrirModelosModal('confirmado')">📋 Modelos</button><div class="toggle on" id="auto-toggle-confirmado" onclick="this.classList.toggle('on')"></div></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+            <div style="font-size:11.5px;color:var(--muted);font-weight:600">S&oacute; enviar se o cliente solicitar acompanhamento</div>
+            <div class="toggle on" id="auto-optin-confirmado" onclick="this.classList.toggle('on')"></div>
           </div>
           <textarea class="form-input" id="auto-msg-confirmado" rows="3" style="font-size:12.5px">✅ Olá {nome}! Seu pedido #{id} foi confirmado e está sendo preparado com carinho! 🍕
 Itens: {itens}
@@ -1135,9 +1143,13 @@ Tempo estimado: 30-40 min ⏱️</textarea>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
             <div style="display:flex;align-items:center;gap:10px">
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(34,197,94,.15);display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="3" y="2" width="10" height="13" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M6 6h4M6 9h3M6 12h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
-              <div><div style="font-weight:600;font-size:13.5px">Pedido Pronto <span style="display:inline-block;font-size:10px;background:rgba(249,115,22,.15);color:#f97316;padding:2px 7px;border-radius:6px;font-weight:600;margin-left:4px;vertical-align:middle">📱 SÓ SE CLIENTE OPT-IN</span></div><div style="font-size:11.5px;color:var(--muted)">Enviado SOMENTE se o cliente clicou em "Acompanhar pedido pelo WhatsApp" no cardápio (proteção anti-ban — loja não inicia conversa).</div></div>
+              <div><div style="font-weight:600;font-size:13.5px">Pedido Pronto <span style="display:inline-block;font-size:10px;background:rgba(249,115,22,.15);color:#f97316;padding:2px 7px;border-radius:6px;font-weight:600;margin-left:4px;vertical-align:middle">OPT-IN CONFIGURAVEL</span></div><div style="font-size:11.5px;color:var(--muted)">Use a opcao abaixo para exigir que o cliente solicite acompanhamento antes do envio.</div></div>
             </div>
             <div style="display:flex;align-items:center;gap:8px"><button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="abrirModelosModal('pronto')">📋 Modelos</button><div class="toggle on" id="auto-toggle-pronto" onclick="this.classList.toggle('on')"></div></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+            <div style="font-size:11.5px;color:var(--muted);font-weight:600">S&oacute; enviar se o cliente solicitar acompanhamento</div>
+            <div class="toggle on" id="auto-optin-pronto" onclick="this.classList.toggle('on')"></div>
           </div>
           <textarea class="form-input" id="auto-msg-pronto" rows="3" style="font-size:12.5px">🛎️ {nome}, seu pedido #{id} está PRONTO!
 {tipo_entrega}
@@ -1149,9 +1161,13 @@ Qualquer dúvida, estamos aqui! 😊</textarea>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
             <div style="display:flex;align-items:center;gap:10px">
               <div style="width:36px;height:36px;border-radius:9px;background:rgba(249,115,22,.15);display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="4" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="13" r="1.5" stroke="currentColor" stroke-width="1.4"/></svg></div>
-              <div><div style="font-weight:600;font-size:13.5px">Saiu para Entrega <span style="display:inline-block;font-size:10px;background:rgba(249,115,22,.15);color:#f97316;padding:2px 7px;border-radius:6px;font-weight:600;margin-left:4px;vertical-align:middle">📱 SÓ SE CLIENTE OPT-IN</span></div><div style="font-size:11.5px;color:var(--muted)">Enviado SOMENTE se o cliente clicou em "Acompanhar pedido pelo WhatsApp" no cardápio (proteção anti-ban — loja não inicia conversa).</div></div>
+              <div><div style="font-weight:600;font-size:13.5px">Saiu para Entrega <span style="display:inline-block;font-size:10px;background:rgba(249,115,22,.15);color:#f97316;padding:2px 7px;border-radius:6px;font-weight:600;margin-left:4px;vertical-align:middle">OPT-IN CONFIGURAVEL</span></div><div style="font-size:11.5px;color:var(--muted)">Use a opcao abaixo para exigir que o cliente solicite acompanhamento antes do envio.</div></div>
             </div>
             <div style="display:flex;align-items:center;gap:8px"><button class="btn bg" style="font-size:11px;padding:3px 10px" onclick="abrirModelosModal('entrega')">📋 Modelos</button><div class="toggle on" id="auto-toggle-entrega" onclick="this.classList.toggle('on')"></div></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+            <div style="font-size:11.5px;color:var(--muted);font-weight:600">S&oacute; enviar se o cliente solicitar acompanhamento</div>
+            <div class="toggle on" id="auto-optin-entrega" onclick="this.classList.toggle('on')"></div>
           </div>
           <textarea class="form-input" id="auto-msg-entrega" rows="3" style="font-size:12.5px">🛵 {nome}, seu pedido #{id} saiu para entrega!
 Endereço: {endereco}
