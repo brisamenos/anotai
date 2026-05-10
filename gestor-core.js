@@ -1138,6 +1138,11 @@ function _adminAnnStyle(a) {
   return css.join(';');
 }
 
+function _adminAnnTextStyle(a) {
+  const tx = _adminAnnColor(a.text_color);
+  return tx ? `color:${tx}` : '';
+}
+
 function _renderAdminAnnouncements() {
   const el = document.getElementById('admin-announcements-strip');
   if (!el) return;
@@ -1150,8 +1155,8 @@ function _renderAdminAnnouncements() {
   const visible = _adminAnnouncements.slice(0, 3);
   el.innerHTML = visible.map(a => `
     <div class="admin-ann-card" data-tipo="${_adminAnnEscape(a.tipo || 'aviso')}" style="${_adminAnnEscape(_adminAnnStyle(a))}" title="${_adminAnnEscape((a.titulo ? a.titulo + ': ' : '') + a.mensagem)}">
-      <span class="admin-ann-type">${_adminAnnTipoLabel(a.tipo)}</span>
-      <span class="admin-ann-text">${a.titulo ? `<strong>${_adminAnnEscape(a.titulo)}</strong>` : ''}${_adminAnnEscape(a.mensagem || '')}</span>
+      <span class="admin-ann-type" style="${_adminAnnEscape(_adminAnnTextStyle(a))}">${_adminAnnTipoLabel(a.tipo)}</span>
+      <span class="admin-ann-text" style="${_adminAnnEscape(_adminAnnTextStyle(a))}">${a.titulo ? `<strong style="${_adminAnnEscape(_adminAnnTextStyle(a))}">${_adminAnnEscape(a.titulo)}</strong>` : ''}${_adminAnnEscape(a.mensagem || '')}</span>
     </div>
   `).join('') + (_adminAnnouncements.length > visible.length ? `<span class="admin-ann-more">+${_adminAnnouncements.length - visible.length}</span>` : '');
 }
