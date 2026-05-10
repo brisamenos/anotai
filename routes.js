@@ -441,6 +441,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!row) return row
     return {
       ...row,
+      bg_color: String(row.bg_color || '').trim(),
+      text_color: String(row.text_color || '').trim(),
+      font_family: String(row.font_family || '').trim() || 'outfit',
       target_all: row.target_all === 1 || row.target_all === true,
       ativo: row.ativo === 1 || row.ativo === true,
       target_tenants: _safeJson(row.target_tenants, [])
@@ -463,10 +466,18 @@ module.exports = async function handleRoutes(req, res, ctx) {
   }
   const _normalizeAdminAlertInput = (body) => {
     const tipos = new Set(['aviso', 'promocao', 'alerta', 'novidade'])
+    const fontes = new Set(['outfit', 'dm-sans', 'plus-jakarta', 'inter', 'system', 'serif', 'mono'])
+    const color = (v, fallback = '') => {
+      const s = String(v || '').trim()
+      return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(s) ? s : fallback
+    }
     const tipo = tipos.has(String(body.tipo || '').toLowerCase()) ? String(body.tipo).toLowerCase() : 'aviso'
     const titulo = String(body.titulo || '').trim().slice(0, 80)
     const mensagem = String(body.mensagem || '').trim().slice(0, 280)
     if (!mensagem) throw new Error('Mensagem obrigatória')
+    const bgColor = color(body.bg_color)
+    const textColor = color(body.text_color)
+    const fontFamily = fontes.has(String(body.font_family || '').toLowerCase()) ? String(body.font_family).toLowerCase() : 'outfit'
     const targetAll = body.target_all === false || body.target_all === 0 || body.target_all === '0' ? 0 : 1
     let targetTenants = Array.isArray(body.target_tenants) ? body.target_tenants.map(String).filter(Boolean) : []
     if (!targetAll) {
@@ -482,7 +493,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       expiresAt = expiresAt.replace('T', ' ')
       if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(expiresAt)) expiresAt += ':00'
     }
-    return { tipo, titulo, mensagem, targetAll, targetTenants, ativo, expiresAt }
+    return { tipo, titulo, mensagem, bgColor, textColor, fontFamily, targetAll, targetTenants, ativo, expiresAt }
   }
   const indicadorComPermissaoGestor = (sess) => {
     if (!sess) return null
@@ -858,7 +869,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const tid = getTenantId(req, params)
     if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
     const rows = db.prepare(`
-      SELECT id,tipo,titulo,mensagem,target_all,target_tenants,ativo,created_at,updated_at,expires_at
+      SELECT id,tipo,titulo,mensagem,bg_color,text_color,font_family,target_all,target_tenants,ativo,created_at,updated_at,expires_at
       FROM admin_alerts
       WHERE ativo=1
       ORDER BY created_at DESC
@@ -878,7 +889,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const adm = validarSessaoAdmin(req)
     if (!adm) { send(res, 401, { error: 'Sessão admin inválida' }); return true }
     const rows = db.prepare(`
-      SELECT id,tipo,titulo,mensagem,target_all,target_tenants,ativo,created_by,created_at,updated_at,expires_at
+      SELECT id,tipo,titulo,mensagem,bg_color,text_color,font_family,target_all,target_tenants,ativo,created_by,created_at,updated_at,expires_at
       FROM admin_alerts
       ORDER BY created_at DESC
       LIMIT 200
@@ -894,9 +905,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const body = await readBody(req)
       const data = _normalizeAdminAlertInput(body)
       const info = db.prepare(`
-        INSERT INTO admin_alerts (tipo,titulo,mensagem,target_all,target_tenants,ativo,created_by,expires_at,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?, ?, datetime('now'), datetime('now'))
-      `).run(data.tipo, data.titulo, data.mensagem, data.targetAll, JSON.stringify(data.targetTenants), data.ativo, adm.nome || adm.email || adm.user_id, data.expiresAt)
+        INSERT INTO admin_alerts (tipo,titulo,mensagem,bg_color,text_color,font_family,target_all,target_tenants,ativo,created_by,expires_at,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?, datetime('now'), datetime('now'))
+      `).run(data.tipo, data.titulo, data.mensagem, data.bgColor, data.textColor, data.fontFamily, data.targetAll, JSON.stringify(data.targetTenants), data.ativo, adm.nome || adm.email || adm.user_id, data.expiresAt)
       const row = db.prepare('SELECT * FROM admin_alerts WHERE id=?').get(info.lastInsertRowid)
       marcarDirty()
       _broadcastAdminAlerts(row, 'insert')
@@ -916,9 +927,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const data = _normalizeAdminAlertInput(body)
       db.prepare(`
         UPDATE admin_alerts
-        SET tipo=?, titulo=?, mensagem=?, target_all=?, target_tenants=?, ativo=?, expires_at=?, updated_at=datetime('now')
+        SET tipo=?, titulo=?, mensagem=?, bg_color=?, text_color=?, font_family=?, target_all=?, target_tenants=?, ativo=?, expires_at=?, updated_at=datetime('now')
         WHERE id=?
-      `).run(data.tipo, data.titulo, data.mensagem, data.targetAll, JSON.stringify(data.targetTenants), data.ativo, data.expiresAt, id)
+      `).run(data.tipo, data.titulo, data.mensagem, data.bgColor, data.textColor, data.fontFamily, data.targetAll, JSON.stringify(data.targetTenants), data.ativo, data.expiresAt, id)
       const row = db.prepare('SELECT * FROM admin_alerts WHERE id=?').get(id)
       marcarDirty()
       _broadcastAdminAlerts(row, 'update', prev)

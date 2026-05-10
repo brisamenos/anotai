@@ -1112,6 +1112,32 @@ function _adminAnnTipoLabel(tipo) {
   return ({ aviso:'Aviso', promocao:'Promo', alerta:'Alerta', novidade:'Novo' })[tipo] || 'Aviso';
 }
 
+function _adminAnnColor(value) {
+  const s = String(value || '').trim();
+  return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(s) ? s : '';
+}
+
+function _adminAnnFont(value) {
+  return ({
+    'outfit':'Outfit, sans-serif',
+    'dm-sans':'DM Sans, sans-serif',
+    'plus-jakarta':'Plus Jakarta Sans, sans-serif',
+    'inter':'Inter, sans-serif',
+    'system':'Arial, Helvetica, sans-serif',
+    'serif':'Georgia, serif',
+    'mono':'Courier New, monospace'
+  })[value] || 'Outfit, sans-serif';
+}
+
+function _adminAnnStyle(a) {
+  const css = [`font-family:${_adminAnnFont(a.font_family)}`];
+  const bg = _adminAnnColor(a.bg_color);
+  const tx = _adminAnnColor(a.text_color);
+  if (bg) css.push(`background:${bg}`);
+  if (tx) css.push(`color:${tx}`);
+  return css.join(';');
+}
+
 function _renderAdminAnnouncements() {
   const el = document.getElementById('admin-announcements-strip');
   if (!el) return;
@@ -1123,7 +1149,7 @@ function _renderAdminAnnouncements() {
   el.classList.remove('is-empty');
   const visible = _adminAnnouncements.slice(0, 3);
   el.innerHTML = visible.map(a => `
-    <div class="admin-ann-card" data-tipo="${_adminAnnEscape(a.tipo || 'aviso')}" title="${_adminAnnEscape((a.titulo ? a.titulo + ': ' : '') + a.mensagem)}">
+    <div class="admin-ann-card" data-tipo="${_adminAnnEscape(a.tipo || 'aviso')}" style="${_adminAnnEscape(_adminAnnStyle(a))}" title="${_adminAnnEscape((a.titulo ? a.titulo + ': ' : '') + a.mensagem)}">
       <span class="admin-ann-type">${_adminAnnTipoLabel(a.tipo)}</span>
       <span class="admin-ann-text">${a.titulo ? `<strong>${_adminAnnEscape(a.titulo)}</strong>` : ''}${_adminAnnEscape(a.mensagem || '')}</span>
     </div>

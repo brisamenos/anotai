@@ -214,6 +214,9 @@ db.exec(`
     tipo TEXT DEFAULT 'aviso',
     titulo TEXT,
     mensagem TEXT NOT NULL,
+    bg_color TEXT DEFAULT '',
+    text_color TEXT DEFAULT '',
+    font_family TEXT DEFAULT '',
     target_all INTEGER DEFAULT 1,
     target_tenants TEXT DEFAULT '[]',
     ativo INTEGER DEFAULT 1,
@@ -597,6 +600,9 @@ const MIGRATIONS = [
       tipo TEXT DEFAULT 'aviso',
       titulo TEXT,
       mensagem TEXT NOT NULL,
+      bg_color TEXT DEFAULT '',
+      text_color TEXT DEFAULT '',
+      font_family TEXT DEFAULT '',
       target_all INTEGER DEFAULT 1,
       target_tenants TEXT DEFAULT '[]',
       ativo INTEGER DEFAULT 1,
@@ -606,6 +612,11 @@ const MIGRATIONS = [
       expires_at TEXT
     )`,
     `CREATE INDEX IF NOT EXISTS idx_admin_alerts_ativo ON admin_alerts(ativo, created_at)`
+  ] },
+  { version:52, description:'estilo visual dos comunicados admin', up:[
+    `ALTER TABLE admin_alerts ADD COLUMN bg_color TEXT DEFAULT ''`,
+    `ALTER TABLE admin_alerts ADD COLUMN text_color TEXT DEFAULT ''`,
+    `ALTER TABLE admin_alerts ADD COLUMN font_family TEXT DEFAULT ''`
   ] },
 ]
 
@@ -936,7 +947,7 @@ const TABLE_COLS = {
   contas_pagar: ['id','tenant_id','descricao','valor','vencimento','categoria','fornecedor_id','recorrente','recorrencia','status','pago_em','obs','created_at'],
   faturas:      ['id','tenant_id','plano','valor','meses','metodo','status','link_pagamento','mp_payment_id','mp_external_ref','qr_code','qr_code_base64','vence_em','pago_em','cancelado_em','obs','created_at'],
   admin_audit_log: ['id','admin_id','admin_nome','admin_email','acao','alvo_tipo','alvo_id','alvo_nome','detalhes','ip','user_agent','created_at'],
-  admin_alerts: ['id','tipo','titulo','mensagem','target_all','target_tenants','ativo','created_by','created_at','updated_at','expires_at'],
+  admin_alerts: ['id','tipo','titulo','mensagem','bg_color','text_color','font_family','target_all','target_tenants','ativo','created_by','created_at','updated_at','expires_at'],
 }
 // Colunas que NUNCA aparecem na resposta GET — mas ainda funcionam como filtro WHERE e em escrita
 const STRIP_FROM_OUTPUT = {
