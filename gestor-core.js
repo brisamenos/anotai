@@ -1118,29 +1118,30 @@ function _adminAnnColor(value) {
 }
 
 function _adminAnnFont(value) {
+  value = String(value || '').toLowerCase();
   return ({
-    'outfit':'Outfit, sans-serif',
-    'dm-sans':'DM Sans, sans-serif',
-    'plus-jakarta':'Plus Jakarta Sans, sans-serif',
-    'inter':'Inter, sans-serif',
+    'outfit':'"Outfit", sans-serif',
+    'dm-sans':'"DM Sans", sans-serif',
+    'plus-jakarta':'"Plus Jakarta Sans", sans-serif',
+    'inter':'"Inter", sans-serif',
     'system':'Arial, Helvetica, sans-serif',
     'serif':'Georgia, serif',
-    'mono':'Courier New, monospace'
-  })[value] || 'Outfit, sans-serif';
+    'mono':'"Courier New", monospace'
+  })[value] || '"Outfit", sans-serif';
 }
 
 function _adminAnnStyle(a) {
-  const css = [`font-family:${_adminAnnFont(a.font_family)}`];
+  const css = [`font-family:${_adminAnnFont(a.font_family)}!important`];
   const bg = _adminAnnColor(a.bg_color);
-  const tx = _adminAnnColor(a.text_color);
-  if (bg) css.push(`background:${bg}`);
-  if (tx) css.push(`color:${tx}`);
+  const tx = _adminAnnColor(a.text_color) || '#ffffff';
+  if (bg) css.push(`background:${bg}!important`);
+  css.push(`color:${tx}!important`);
   return css.join(';');
 }
 
 function _adminAnnTextStyle(a) {
-  const tx = _adminAnnColor(a.text_color);
-  return tx ? `color:${tx}` : '';
+  const tx = _adminAnnColor(a.text_color) || '#ffffff';
+  return `color:${tx}!important`;
 }
 
 function _renderAdminAnnouncements() {

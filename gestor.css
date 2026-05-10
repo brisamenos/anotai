@@ -121,7 +121,10 @@ body{
 .admin-ann-text strong{font-weight:900;margin-right:4px}
 .admin-ann-card .admin-ann-text,
 .admin-ann-card .admin-ann-text strong,
-.admin-ann-card .admin-ann-type{color:inherit}
+.admin-ann-card .admin-ann-type{
+  color:inherit!important;
+  -webkit-text-fill-color:currentColor!important;
+}
 .admin-ann-card[data-tipo="promocao"]{background:linear-gradient(135deg,rgba(168,85,247,.26),rgba(14,165,233,.18))}
 .admin-ann-card[data-tipo="alerta"]{background:linear-gradient(135deg,rgba(239,68,68,.26),rgba(245,158,11,.16))}
 .admin-ann-card[data-tipo="novidade"]{background:linear-gradient(135deg,rgba(16,185,129,.25),rgba(14,165,233,.16))}
