@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0d1117">
+<meta name="theme-color" content="#09588c">
 <script>
 // ── Altura real do viewport — fix Safari mobile (barra do browser encolhe) ──
 function setVH(){var h=(window.visualViewport?window.visualViewport.height:window.innerHeight);document.documentElement.style.setProperty('--vh',h*0.01+'px');}
@@ -21,18 +21,21 @@ if(window.visualViewport){window.visualViewport.addEventListener('resize',setVH)
 <link rel="stylesheet" href="/gestor.css">
   <script src="/api-client.js"></script>
 <script>
-// ══ TEMA OCEANO PROFUNDO v2 — aplicado antes do gestor.js ══
+// Tema visual profissional aplicado antes do gestor.js
 (function(){
   var r = document.documentElement;
   var dark = {
-    '--bg':'#0b0e14','--surface':'#12161e','--surface2':'#1a1f2a','--surface3':'#222834',
-    '--border':'rgba(255,255,255,.07)','--border2':'rgba(255,255,255,.14)',
-    '--accent':'#0ea5e9','--accent2':'#67e8f9','--accent3':'#fbbf24',
-    '--accent-dim':'rgba(14,165,233,.10)','--accent-glow':'rgba(14,165,233,.20)',
-    '--success':'#34d399','--danger':'#fb7185','--purple':'#a78bfa',
-    '--pink':'#f0abfc','--orange':'#f0a060',
-    '--text':'#e2e8f0','--muted':'#64748b','--muted2':'#94a3b8',
-    '--sidebar-bg':'#080b11','--topnav-bg':'#060910','--sfoot-bg':'rgba(6,9,16,.8)'
+    '--bg':'#eef4fa','--surface':'#ffffff','--surface2':'#f5f9fc','--surface3':'#dbe8f3',
+    '--s1':'#ffffff','--s2':'#f5f9fc','--s3':'#eef4fa',
+    '--border':'rgba(15,48,80,.12)','--border2':'rgba(15,48,80,.22)',
+    '--accent':'#1397e8','--accent2':'#4fb8ff','--accent3':'#ffc44d',
+    '--accent-dim':'rgba(19,151,232,.10)','--accent-glow':'rgba(19,151,232,.22)',
+    '--success':'#25a85a','--danger':'#f0441f','--purple':'#667eea',
+    '--pink':'#e65aa0','--orange':'#f5a400',
+    '--text':'#173047','--muted':'#6e7f91','--muted2':'#465b6d',
+    '--sidebar-bg':'#06496f','--topnav-bg':'#09588c','--sfoot-bg':'rgba(3,59,91,.96)',
+    '--kanban-analise':'#ff6f61','--kanban-producao':'#ffa600','--kanban-pronto':'#49ad70',
+    '--kanban-saiu':'#2f8fb8','--kanban-entregue':'#6875d9'
   };
   // Apaga chaves antigas de tema
   try { ['ef_tema_modo','ef_tema_v2','tema','theme'].forEach(function(k){ localStorage.removeItem(k); }); } catch(e){}
@@ -6415,6 +6418,192 @@ function _escapeAttr(s) {
   _hookNav();
 })();
 </script>
+
+<style id="gestor-final-theme-overrides">
+/* Last-mile theme overrides for inline/body styles */
+#radio-panel-gestor,
+#modal-ajuste-peso-bg > div,
+#modal-resposta-wa-bg > div,
+#auto-modelos-overlay > div{
+  background:#fff!important;
+  border-color:#d8e3ee!important;
+  color:var(--text)!important;
+  box-shadow:0 24px 70px rgba(9,32,49,.20)!important;
+}
+
+#modal-ajuste-peso-bg,
+#modal-resposta-wa-bg,
+#auto-modelos-overlay,
+#m-bd{
+  background:rgba(9,32,49,.42)!important;
+  backdrop-filter:blur(8px)!important;
+  -webkit-backdrop-filter:blur(8px)!important;
+}
+
+#modal-order-detail .modal.order-detail{
+  background:#fff!important;
+  border:1px solid #d8e3ee!important;
+  color:var(--text)!important;
+  box-shadow:0 24px 70px rgba(9,32,49,.22)!important;
+}
+
+.od-header{
+  border-bottom:1px solid #d8e3ee!important;
+}
+
+.od-id{
+  font-family:'Outfit',sans-serif!important;
+  color:var(--text)!important;
+  background:none!important;
+  -webkit-text-fill-color:var(--text)!important;
+}
+
+.badge-analise{
+  background:#fff1f0!important;
+  color:#c92f23!important;
+  border-color:#ffd2cc!important;
+  box-shadow:none!important;
+}
+
+.badge-producao{
+  background:#fff6dc!important;
+  color:#9b6700!important;
+  border-color:#f5d58f!important;
+  box-shadow:none!important;
+}
+
+.badge-pronto{
+  background:#e8f7ee!important;
+  color:#13723d!important;
+  border-color:#bde8cf!important;
+  box-shadow:none!important;
+}
+
+.od-timer,
+.od-action-btn{
+  background:#f5f9fc!important;
+  border:1px solid #d8e3ee!important;
+  color:#52687b!important;
+}
+
+.od-action-btn:hover{
+  background:#eaf4ff!important;
+  border-color:#c8e7fb!important;
+  color:var(--accent)!important;
+}
+
+.od-item-row,
+.od-info-card{
+  background:#f8fbfe!important;
+  border:1px solid #d8e3ee!important;
+  box-shadow:none!important;
+}
+
+.od-item-row:hover,
+.od-info-card:hover{
+  background:#f0f7fd!important;
+  border-color:#c8e7fb!important;
+}
+
+.od-item-qty,
+.od-item-obs{
+  background:#eaf4ff!important;
+  border-color:#c8e7fb!important;
+  color:#0f6fa8!important;
+}
+
+.od-item-price{
+  color:var(--accent)!important;
+}
+
+.od-subtotal-row{
+  border-bottom:1px solid #e6eef5!important;
+}
+
+.od-info-card-title,
+.od-info-card-sub{
+  color:var(--muted)!important;
+}
+
+.od-info-card-val,
+.od-item-name{
+  color:var(--text)!important;
+}
+
+#od-delivery-addr-block{
+  background:#eaf4ff!important;
+  border-color:#c8e7fb!important;
+}
+
+#od-pix-block{
+  background:#e8f7ee!important;
+  border-color:#bde8cf!important;
+}
+
+#modal-order-detail [style*="border-top:1px solid rgba(255,255,255,.06)"]{
+  border-top-color:#d8e3ee!important;
+}
+
+#modal-resposta-wa-bg #btn-cliente-recusou{
+  background:#fff1f0!important;
+  color:#c92f23!important;
+  border-color:#ffd2cc!important;
+}
+
+.no-dtab-btn:hover:not(.on){
+  background:#eef7ff!important;
+  border-color:#b7dff7!important;
+  color:var(--accent)!important;
+}
+
+@media(max-width:900px){
+  #m-nav > div{
+    background:#fff!important;
+    border-top:1px solid #d8e3ee!important;
+    box-shadow:0 -10px 24px rgba(15,48,80,.12)!important;
+  }
+
+  #m-nav > div:last-child{
+    background:#fff!important;
+  }
+
+  #m-nav .m-tab{
+    color:#52687b!important;
+  }
+
+  #m-nav .m-tab.on,
+  #m-nav .m-tab:hover{
+    color:var(--accent)!important;
+  }
+
+  #m-badge{
+    border-color:#fff!important;
+  }
+
+  #m-mais{
+    background:#fff!important;
+    border-top:1px solid #d8e3ee!important;
+    box-shadow:0 -18px 40px rgba(15,48,80,.18)!important;
+  }
+
+  #m-mais > div:first-child{
+    background:#c8d7e5!important;
+  }
+
+  .m-mi{
+    background:#f5f9fc!important;
+    border:1px solid #d8e3ee!important;
+    color:#42576a!important;
+  }
+
+  .m-mi.hi,
+  .m-mi:hover{
+    background:#eaf4ff!important;
+    border-color:#c8e7fb!important;
+    color:#0f6fa8!important;
+  }
+}
+</style>
 
 </body>
 </html>
