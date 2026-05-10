@@ -357,6 +357,54 @@ table{min-width:760px}
 #sec-clientes table,#sec-indicacoes table,#sec-auditoria table{min-width:980px}
 #sec-faturamento table,#sec-saques table,#sec-backup table,#sec-planos table{min-width:860px}
 th,td{overflow-wrap:normal}
+.admin-table{table-layout:auto}
+.tw table th:last-child,
+.tw table td:last-child{
+  position:sticky;right:0;z-index:2;
+  background:linear-gradient(90deg,rgba(13,21,38,.72),var(--s1) 20%);
+  box-shadow:-10px 0 16px rgba(7,11,20,.28);
+}
+.tw table thead th:last-child{z-index:4;background:linear-gradient(90deg,rgba(17,24,39,.72),var(--s2) 20%)}
+.clients-table{min-width:1040px}
+.clients-table th,.clients-table td{padding-top:11px;padding-bottom:11px}
+.clients-table .client-main{min-width:210px}
+.clients-table .client-manager{min-width:250px}
+.clients-table .client-actions-col{
+  position:sticky;right:0;z-index:3;
+  min-width:244px;width:244px;
+  background:linear-gradient(90deg,rgba(13,21,38,.78),var(--s1) 18%);
+  box-shadow:-12px 0 18px rgba(7,11,20,.34);
+}
+.clients-table thead .client-actions-col{z-index:4;background:linear-gradient(90deg,rgba(17,24,39,.78),var(--s2) 18%)}
+.clients-table .client-actions{
+  display:grid;grid-template-columns:repeat(7,30px);
+  gap:5px;justify-content:end;align-items:center;
+}
+.clients-table .client-actions .btn-icon{width:30px;height:30px}
+.clients-table tbody tr{height:auto}
+#sec-clientes .tw table{min-width:1040px;height:auto!important}
+#sec-clientes .tw th:last-child,
+#sec-clientes .tw td:last-child{
+  position:sticky;right:0;z-index:3;
+  min-width:244px;width:244px;
+  background:linear-gradient(90deg,rgba(13,21,38,.78),var(--s1) 18%);
+  box-shadow:-12px 0 18px rgba(7,11,20,.34);
+}
+#sec-clientes .tw thead th:last-child{z-index:4;background:linear-gradient(90deg,rgba(17,24,39,.78),var(--s2) 18%)}
+#sec-clientes .tw tbody td{padding-top:10px;padding-bottom:10px}
+#sec-clientes .tw tbody td:last-child>div{
+  display:grid!important;grid-template-columns:repeat(7,30px);
+  gap:5px;justify-content:end;align-items:center;
+}
+#sec-clientes .tw tbody td:last-child .btn-icon{width:30px;height:30px}
+#sec-clientes .tw tbody{height:auto!important}
+#sec-clientes .tw tbody tr{height:72px}
+.client-name,.client-sub,.manager-name,.manager-email{
+  display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.client-name{font-weight:800;font-size:13.5px;color:var(--text)}
+.client-sub,.manager-email{font-size:11.5px;color:#7384a1}
+.manager-name{font-size:13px;color:#dbe7fb}
 .topbar-title,.card-title,.sec-head-title,.sb-user-name{overflow:hidden;text-overflow:ellipsis}
 .sb-user-name{white-space:nowrap}
 .topbar-title{max-width:100%}
@@ -427,6 +475,188 @@ th,td{overflow-wrap:normal}
   .btn{white-space:normal;line-height:1.25}
   table{min-width:680px}
   td,thead th{padding-left:12px;padding-right:12px}
+}
+
+/* Premium console pass */
+:root{
+  --bg:#05070d;
+  --s1:#0a101d;
+  --s2:#0f1726;
+  --s3:#162238;
+  --surface:#0c1422;
+  --surface-2:#111b2d;
+  --border:rgba(148,163,184,.14);
+  --border-hover:rgba(148,163,184,.28);
+  --accent:#4f8cff;
+  --accent-dim:rgba(79,140,255,.13);
+  --success:#24c57a;
+  --orange:#f5a524;
+  --danger:#f05252;
+  --purple:#a78bfa;
+  --text:#f8fafc;
+  --text-2:#b6c2d6;
+  --muted:#75839a;
+  --sb-w:286px;
+}
+html,body{background:var(--bg)}
+body{
+  background:
+    linear-gradient(180deg,rgba(79,140,255,.055),transparent 260px),
+    radial-gradient(circle at 100% 0,rgba(36,197,122,.07),transparent 360px),
+    var(--bg);
+}
+#painel{background:transparent}
+.sidebar{
+  background:linear-gradient(180deg,#0d1422 0%,#09101d 100%);
+  border-right:1px solid rgba(148,163,184,.13);
+  box-shadow:18px 0 42px rgba(0,0,0,.22);
+}
+.sb-logo{padding:26px 20px 24px;border-bottom-color:rgba(148,163,184,.1)}
+.sb-logo-icon,.sb-av{
+  border-radius:10px;background:linear-gradient(135deg,#38bdf8,#4f46e5);
+  box-shadow:0 14px 34px rgba(79,140,255,.28);
+}
+.sb-logo-name{font-size:19px;letter-spacing:-.35px}
+.sb-logo-tag{
+  background:linear-gradient(135deg,#f97316,#facc15);
+  color:#fff;border-radius:6px;padding:3px 8px;font-size:9px;
+}
+.sb-nav{padding:18px 10px}
+.sb-sec{padding:14px 12px 7px;color:#7890b5;font-size:10px}
+.sb-item{
+  border-radius:8px;margin-bottom:4px;padding:10px 12px;color:#91a3c2;
+  font-size:14px;font-weight:600;
+}
+.sb-item .sb-icon{
+  width:36px;height:36px;border-radius:8px;background:rgba(148,163,184,.08);
+  font-size:15px;border:1px solid rgba(148,163,184,.08);
+}
+.sb-item:hover{background:rgba(148,163,184,.08);color:#e8eefc}
+.sb-item.on{
+  color:#7ab0ff;background:linear-gradient(135deg,rgba(79,140,255,.2),rgba(79,140,255,.08));
+  box-shadow:inset 3px 0 0 #4f8cff;
+}
+.sb-item.on .sb-icon{background:rgba(79,140,255,.2);border-color:rgba(79,140,255,.16)}
+.sb-foot{padding:14px 12px;border-top-color:rgba(148,163,184,.1)}
+.sb-user{border-radius:8px;padding:10px 12px}
+.sb-user-name{font-size:13.5px;color:var(--text)}
+.sb-user-role{font-size:11.5px;color:#7f8ea8}
+.main{background:transparent}
+.topbar{
+  min-height:70px;height:auto;padding:14px 30px;
+  background:rgba(5,7,13,.76);border-bottom:1px solid rgba(148,163,184,.12);
+  backdrop-filter:blur(18px);
+}
+.topbar-title{font-size:22px;letter-spacing:-.45px}
+.topbar-tools{display:flex;align-items:center;gap:10px;margin-left:auto;min-width:0}
+.admin-global-search{
+  width:300px;max-width:34vw;height:38px;display:flex;align-items:center;gap:8px;
+  padding:0 12px;border:1px solid rgba(148,163,184,.16);border-radius:8px;
+  background:rgba(15,23,38,.74);color:var(--muted);
+}
+.admin-global-search:focus-within{border-color:rgba(79,140,255,.55);box-shadow:0 0 0 3px rgba(79,140,255,.12)}
+.admin-global-search input{
+  width:100%;min-width:0;background:transparent;border:0;outline:0;color:var(--text);
+  font:600 12.5px 'DM Sans',sans-serif;
+}
+.admin-global-search input::placeholder{color:#6f7f99}
+.admin-status-pill{
+  height:30px;display:inline-flex;align-items:center;gap:7px;padding:0 10px;border-radius:8px;
+  background:rgba(36,197,122,.09);border:1px solid rgba(36,197,122,.16);
+  color:#86efac;font-size:11.5px;font-weight:700;white-space:nowrap;
+}
+.admin-status-pill::before{content:'';width:6px;height:6px;border-radius:50%;background:#24c57a;box-shadow:0 0 14px #24c57a}
+.content{padding:26px 30px 36px}
+.sec-head{
+  margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid rgba(148,163,184,.1);
+}
+.sec-head-title{font-size:24px;letter-spacing:-.55px}
+.sec-head-sub{font-size:13px;color:#8290a8}
+.stats-grid{gap:12px;margin-bottom:18px}
+.stat-card,.card,.tw,.modal{
+  border-radius:8px;border-color:rgba(148,163,184,.14);
+  background:linear-gradient(180deg,rgba(15,23,38,.96),rgba(10,16,29,.96));
+  box-shadow:0 18px 36px rgba(0,0,0,.22);
+}
+.stat-card{padding:16px 18px}
+.stat-card:hover,.card:hover{border-color:rgba(148,163,184,.22);transform:none}
+.stat-card::before{height:3px;border-radius:8px 8px 0 0}
+.stat-card-label{font-size:10.5px;color:#8190aa}
+.stat-card-val{font-size:27px;letter-spacing:-.8px}
+.stat-card-sub{font-size:11.5px;color:#7d8ba4}
+.card{padding:18px;margin-bottom:16px}
+.card-head{margin-bottom:14px}
+.card-title{font-size:14px;letter-spacing:-.1px}
+.card-sub{font-size:12.5px;color:#7f8ea8}
+.tw{margin-bottom:16px}
+.tmeta{
+  padding:14px 18px;background:rgba(15,23,38,.62);
+  border-bottom-color:rgba(148,163,184,.12);
+}
+thead th{
+  padding:12px 16px;background:#111a2a;color:#7f94bc;
+  font-size:10px;letter-spacing:1px;
+}
+tbody tr{background:rgba(10,16,29,.78)}
+tbody tr:hover{background:rgba(79,140,255,.045)}
+td{padding:12px 16px;color:#dce6f7}
+.badge{border-radius:8px;padding:4px 9px;font-size:11px;border:1px solid transparent}
+.bg-green{background:rgba(36,197,122,.12);border-color:rgba(36,197,122,.16);color:#86efac}
+.bg-red{background:rgba(240,82,82,.12);border-color:rgba(240,82,82,.16);color:#fca5a5}
+.bg-blue{background:rgba(79,140,255,.13);border-color:rgba(79,140,255,.16);color:#8bb8ff}
+.bg-orange{background:rgba(245,165,36,.13);border-color:rgba(245,165,36,.16);color:#fcd58d}
+.bg-purple{background:rgba(167,139,250,.13);border-color:rgba(167,139,250,.16);color:#c4b5fd}
+.bg-gray{background:rgba(148,163,184,.1);border-color:rgba(148,163,184,.13);color:#a8b5cb}
+.btn{
+  border-radius:8px;font-weight:700;min-height:34px;
+  border:1px solid transparent;box-shadow:none;
+}
+.bp{background:linear-gradient(135deg,#4f8cff,#2563eb);box-shadow:0 10px 24px rgba(37,99,235,.22)}
+.bp:hover{transform:none;box-shadow:0 12px 30px rgba(37,99,235,.32)}
+.bg2{background:rgba(15,23,38,.82);border-color:rgba(148,163,184,.16);color:#bfcaDD}
+.bg2:hover{background:rgba(22,34,56,.95);border-color:rgba(148,163,184,.28)}
+.bd{background:rgba(240,82,82,.1);border-color:rgba(240,82,82,.16);color:#fca5a5}
+.btn-icon{border-radius:8px}
+.minput,.f-input{
+  background:rgba(15,23,38,.9);border-color:rgba(148,163,184,.16);border-radius:8px;
+}
+.minput:focus,.f-input:focus{
+  border-color:rgba(79,140,255,.58);box-shadow:0 0 0 3px rgba(79,140,255,.12);
+}
+.sbox{background:rgba(15,23,38,.9);border-color:rgba(148,163,184,.16);border-radius:8px}
+.modal-bg{background:rgba(2,6,14,.74)}
+.modal-bg.on{padding:18px}
+.modal{box-shadow:0 30px 90px rgba(0,0,0,.54)}
+.modal h2{padding-right:36px}
+.modal-x{border-radius:8px}
+.empty-state{padding:34px 20px;color:#7f8ea8}
+.empty-state .es-icon{
+  width:46px;height:46px;margin:0 auto 12px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(148,163,184,.08);font-size:22px;opacity:1;
+}
+.empty-state .es-msg{font-weight:700;color:#9eabc1}
+.infobox{border-radius:8px}
+.plan-card{border-radius:8px}
+.ind-tab{border-radius:8px 8px 0 0}
+.ind-tab.on{background:rgba(79,140,255,.08)}
+
+@media (max-width:1180px){
+  .admin-global-search{width:240px;max-width:28vw}
+  .admin-status-pill{display:none}
+}
+@media (max-width:900px){
+  .topbar-tools{margin-left:0;width:100%;flex:1}
+  .admin-global-search{display:none}
+  .topbar{align-items:center}
+}
+@media (max-width:560px){
+  .topbar-tools>.btn{padding:7px 10px;font-size:11.5px}
+  #sec-clientes .tw th:last-child,
+  #sec-clientes .tw td:last-child{min-width:218px;width:218px}
+  #sec-clientes .tw tbody td:last-child>div{grid-template-columns:repeat(7,28px);gap:3px}
+  #sec-clientes .tw tbody td:last-child .btn-icon{width:28px;height:28px}
+  .modal-bg.on{padding:10px}
 }
 </style>
 <script src="/api-client.js"></script>
@@ -519,10 +749,17 @@ th,td{overflow-wrap:normal}
       <div class="topbar-left">
         <div class="topbar-title" id="topbar-title">Dashboard</div>
       </div>
-      <button class="btn bg2 bsm" onclick="loadAll()">
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M13.5 8A5.5 5.5 0 1 1 3 5.5M2.5 2.5v3h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Atualizar
-      </button>
+      <div class="topbar-tools">
+        <div class="admin-global-search">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><circle cx="7" cy="7" r="4.6" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <input id="adm-global-q" placeholder="Buscar cliente..." oninput="adminGlobalSearch(this.value)">
+        </div>
+        <div class="admin-status-pill">Sistema online</div>
+        <button class="btn bg2 bsm" onclick="loadAll()">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M13.5 8A5.5 5.5 0 1 1 3 5.5M2.5 2.5v3h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Atualizar
+        </button>
+      </div>
     </div>
     <div class="content">
 
@@ -611,7 +848,7 @@ th,td{overflow-wrap:normal}
       <!-- ════ CLIENTES ════ -->
       <div id="sec-clientes" style="display:none" class="sec-page">
         <div class="sec-head">
-          <div>
+          <div style="min-width:0">
             <div class="sec-head-title">🏢 Clientes &amp; Restaurantes</div>
             <div class="sec-head-sub">Gerencie todos os restaurantes cadastrados na plataforma</div>
           </div>
@@ -1744,6 +1981,29 @@ document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape') toggleAdminNav(false);
 });
 
+let _adminGlobalSearchTimer = null;
+function adminGlobalSearch(value) {
+  clearTimeout(_adminGlobalSearchTimer);
+  _adminGlobalSearchTimer = setTimeout(() => {
+    const q = String(value || '').trim();
+    const cliQ = document.getElementById('cli-q');
+    if (!q) {
+      if (document.getElementById('sec-clientes')?.style.display !== 'none' && cliQ) {
+        cliQ.value = '';
+        _cliPag = 1;
+        renderClientes();
+      }
+      return;
+    }
+    if (document.getElementById('sec-clientes')?.style.display === 'none') navTo('clientes');
+    if (cliQ) {
+      cliQ.value = q;
+      _cliPag = 1;
+      renderClientes();
+    }
+  }, 180);
+}
+
 function navTo(id) {
   ['dash','clientes','ia','backup','saques','planos','faturamento','indicacoes','auditoria'].forEach(s => {
     const sec = document.getElementById('sec-'+s);
@@ -2080,21 +2340,21 @@ function renderClientes() {
         <div class="av-row">
           <div class="av" style="border-radius:9px;cursor:pointer" onclick="abrirSaudeCliente('${c.id}')" title="Ver saúde">${c.nome.charAt(0).toUpperCase()}</div>
           <div>
-            <div style="font-weight:600;font-size:13px">${c.nome}</div>
-            <div style="font-size:11px;color:var(--muted)">/${c.slug}</div>
+            <div class="client-name">${c.nome}</div>
+            <div class="client-sub">/${c.slug}</div>
           </div>
         </div>
       </td>
       <td>
-        <div style="font-size:13px">${gestor?.nome||'—'}</div>
-        <div style="font-size:11px;color:var(--muted)">${gestor?.email||c.email||'—'}</div>
+        <div class="manager-name">${gestor?.nome||'—'}</div>
+        <div class="manager-email">${gestor?.email||c.email||'—'}</div>
       </td>
       <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${planoLabel[c.plano]||c.plano}</span></td>
       <td><span class="badge ${(c.segmento||'restaurante')==='acougue'?'bg-orange':'bg-blue'}">${(c.segmento||'restaurante')==='acougue'?'🥩 Açougue':'🍔 Restaurante'}</span></td>
       <td style="font-size:12.5px;color:${expOk?(expSoon?'var(--orange)':'var(--text-2)'):'var(--danger)'}">${c.expires_at ? new Date(c.expires_at).toLocaleDateString('pt-BR') : '—'}${expSoon?' ⚠️':''}</td>
       <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">● ${c.ativo?'Ativo':'Inativo'}</span></td>
       <td>
-        <div style="display:flex;gap:4px;flex-wrap:wrap">
+        <div class="client-actions">
           <button class="btn bg2 bsm btn-icon" title="Saúde do cliente" onclick="abrirSaudeCliente('${c.id}')">📊</button>
           <button class="btn bg2 bsm btn-icon" title="Editar" onclick="editarCliente('${c.id}')">✏️</button>
           <button class="btn bg2 bsm btn-icon" title="${uCount} usuário(s)" onclick="abrirUsuariosCliente('${c.id}')">👥</button>
