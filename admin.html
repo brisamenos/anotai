@@ -564,6 +564,14 @@ td{padding:12px 16px;color:#dce6f7}
 .plan-card{border-radius:8px}
 .ind-tab{border-radius:8px 8px 0 0}
 .ind-tab.on{background:rgba(79,140,255,.08)}
+.tutorial-grid{display:grid;grid-template-columns:minmax(280px,420px) minmax(0,1fr);gap:16px;align-items:start}
+.tutorial-form-card{position:sticky;top:88px}
+.tutorial-form-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.tutorial-video-link{color:#8bb8ff;text-decoration:none;font-weight:700;max-width:260px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tutorial-order{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--muted)}
+.indicator-access-box{border:1px solid rgba(79,140,255,.16);background:rgba(79,140,255,.07);border-radius:8px;padding:12px}
+.indicator-check{display:flex;align-items:flex-start;gap:9px;font-size:12.5px;color:var(--text-2);font-weight:700;line-height:1.35}
+.indicator-check input{margin-top:2px;accent-color:var(--accent)}
 
 @media (max-width:1180px){
   .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -607,6 +615,8 @@ td{padding:12px 16px;color:#dce6f7}
   .minput[style*="width:auto"]{width:100%!important}
   table{min-width:720px}
   .modal{width:calc(100vw - 24px)!important;max-width:calc(100vw - 24px);padding:22px;max-height:calc(100dvh - 24px)}
+  .tutorial-grid{grid-template-columns:1fr}
+  .tutorial-form-card{position:static}
   #toast{left:12px;right:12px;bottom:12px;align-items:stretch}
   .ti{min-width:0;max-width:none;width:100%}
 }
@@ -1423,11 +1433,12 @@ td{padding:12px 16px;color:#dce6f7}
           </div>
         </div>
 
-        <!-- Sub-tabs: Indicadores | Leads | Comissões -->
+        <!-- Sub-tabs: Indicadores | Leads | Comissões | Aulas -->
         <div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0">
           <button class="ind-tab on" data-tab="indicadores" onclick="indSwitchTab('indicadores')">👥 Indicadores</button>
           <button class="ind-tab"    data-tab="leads"        onclick="indSwitchTab('leads')">🎯 Leads</button>
           <button class="ind-tab"    data-tab="comissoes"    onclick="indSwitchTab('comissoes')">💰 Comissões</button>
+          <button class="ind-tab"    data-tab="aulas"        onclick="indSwitchTab('aulas')">Aulas</button>
         </div>
 
         <!-- TAB: INDICADORES -->
@@ -1497,6 +1508,66 @@ td{padding:12px 16px;color:#dce6f7}
               </thead>
               <tbody id="com-tbody"><tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr></tbody>
             </table>
+          </div>
+        </div>
+
+        <!-- TAB: AULAS -->
+        <div id="ind-tab-aulas" class="ind-tab-content" style="display:none">
+          <div class="tutorial-grid">
+            <div class="card tutorial-form-card">
+              <div class="card-head">
+                <div>
+                  <div class="card-title" id="tut-form-title">Nova aula</div>
+                  <div class="card-sub">Vídeos exibidos no painel do indicador</div>
+                </div>
+              </div>
+              <input type="hidden" id="tut-id">
+              <div class="form-group">
+                <label class="form-label">Título *</label>
+                <input class="minput" id="tut-titulo" placeholder="Ex: Como indicar restaurantes">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Link do vídeo *</label>
+                <input class="minput" id="tut-video-url" placeholder="YouTube, Vimeo ou MP4">
+                <div class="form-hint">Aceita YouTube, Vimeo ou link direto para vídeo.</div>
+              </div>
+              <div class="mrow2">
+                <div class="form-group">
+                  <label class="form-label">Ordem</label>
+                  <input class="minput" id="tut-ordem" type="number" placeholder="Auto">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Status</label>
+                  <select class="minput" id="tut-ativo">
+                    <option value="1">Ativa</option>
+                    <option value="0">Oculta</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Descrição</label>
+                <textarea class="minput" id="tut-descricao" rows="4" placeholder="Resumo curto da aula"></textarea>
+              </div>
+              <div class="tutorial-form-actions">
+                <button class="btn bg2 bsm" onclick="limparTutorialIndicador()">Limpar</button>
+                <button class="btn bp bsm" onclick="salvarTutorialIndicador()">Salvar aula</button>
+              </div>
+            </div>
+            <div class="tw">
+              <div class="tmeta">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div class="card-title">Aulas do indicador</div>
+                  <span class="badge bg-gray" id="tut-count">—</span>
+                </div>
+                <button class="btn bg2 bsm" onclick="carregarTutoriaisIndicador()">Atualizar</button>
+              </div>
+              <table>
+                <thead>
+                  <tr><th>Ordem</th><th>Aula</th><th>Vídeo</th><th>Status</th><th>Atualizado</th><th></th></tr>
+                </thead>
+                <tbody id="tut-tbody"><tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr></tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -1571,6 +1642,23 @@ td{padding:12px 16px;color:#dce6f7}
         <label class="form-label">Chave PIX (pra enviar comissão)</label>
         <input class="form-input" id="m-ind-pix" placeholder="CPF, e-mail, celular ou aleatória">
       </div>
+      <div class="indicator-access-box">
+        <div style="font-size:11px;color:var(--muted);font-weight:800;letter-spacing:.5px;text-transform:uppercase;margin-bottom:9px">Acesso ao painel do indicador</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label class="form-label">Login do painel</label>
+            <input class="form-input" id="m-ind-login-email" type="email" placeholder="mesmo e-mail do indicador">
+          </div>
+          <div>
+            <label class="form-label">Senha de acesso</label>
+            <input class="form-input" id="m-ind-senha" type="password" placeholder="Definir ou trocar senha">
+          </div>
+        </div>
+        <label class="indicator-check" style="margin-top:10px">
+          <input type="checkbox" id="m-ind-pode-gestor">
+          <span>Permitir que este indicador crie acesso de gestor pelo painel dele</span>
+        </label>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div>
           <label class="form-label">% Comissão</label>
@@ -1588,6 +1676,8 @@ td{padding:12px 16px;color:#dce6f7}
       <div id="m-ind-codigo-row" style="display:none;background:var(--s2);padding:10px 12px;border-radius:8px;font-size:12.5px">
         <div style="color:var(--muted);font-size:11px;margin-bottom:3px">CÓDIGO / LINK DE INDICAÇÃO</div>
         <div style="font-weight:600" id="m-ind-codigo-show">—</div>
+        <div style="color:var(--muted);font-size:11px;margin:8px 0 3px">PAINEL DO INDICADOR</div>
+        <div style="font-weight:600" id="m-ind-painel-show">—</div>
       </div>
     </div>
     <div class="modal-foot">
@@ -3594,6 +3684,7 @@ function indSwitchTab(tab) {
   if (tab === 'indicadores') carregarIndicadores();
   if (tab === 'leads')       carregarLeadsIndicacao();
   if (tab === 'comissoes')   carregarComissoes();
+  if (tab === 'aulas')       carregarTutoriaisIndicador();
 }
 
 async function carregarResumoIndicacoes() {
@@ -3655,6 +3746,9 @@ function abrirModalIndicador() {
   document.getElementById('m-ind-email').value = '';
   document.getElementById('m-ind-phone').value = '';
   document.getElementById('m-ind-pix').value = '';
+  document.getElementById('m-ind-login-email').value = '';
+  document.getElementById('m-ind-senha').value = '';
+  document.getElementById('m-ind-pode-gestor').checked = false;
   document.getElementById('m-ind-pct').value = '30';
   document.getElementById('m-ind-meses').value = '12';
   document.getElementById('m-ind-obs').value = '';
@@ -3669,10 +3763,14 @@ function editarIndicador(r) {
   document.getElementById('m-ind-email').value = r.email || '';
   document.getElementById('m-ind-phone').value = r.phone || '';
   document.getElementById('m-ind-pix').value = r.chave_pix || '';
+  document.getElementById('m-ind-login-email').value = r.email || '';
+  document.getElementById('m-ind-senha').value = '';
+  document.getElementById('m-ind-pode-gestor').checked = Number(r.pode_criar_gestor || 0) === 1;
   document.getElementById('m-ind-pct').value = r.comissao_pct;
   document.getElementById('m-ind-meses').value = r.comissao_meses;
   document.getElementById('m-ind-obs').value = r.observacoes || '';
   document.getElementById('m-ind-codigo-show').textContent = INDICACAO_BASE_URL + r.codigo;
+  document.getElementById('m-ind-painel-show').textContent = location.origin + '/indicador';
   document.getElementById('m-ind-codigo-row').style.display = 'block';
   document.getElementById('m-ind-title').textContent = '✏️ Editar indicador';
   document.getElementById('m-indicador').classList.add('on');
@@ -3681,16 +3779,21 @@ function editarIndicador(r) {
 async function salvarIndicador() {
   const id    = document.getElementById('m-ind-id').value;
   const nome  = document.getElementById('m-ind-nome').value.trim();
+  const senha = document.getElementById('m-ind-senha').value;
   if (!nome) { toast('err', 'Nome é obrigatório'); return; }
   const payload = {
     nome,
-    email:           document.getElementById('m-ind-email').value.trim() || null,
+    email:           document.getElementById('m-ind-login-email').value.trim() || document.getElementById('m-ind-email').value.trim() || null,
     phone:           document.getElementById('m-ind-phone').value.trim() || null,
     chave_pix:       document.getElementById('m-ind-pix').value.trim() || null,
     comissao_pct:    parseFloat(document.getElementById('m-ind-pct').value) || 30,
     comissao_meses:  parseInt(document.getElementById('m-ind-meses').value) || 12,
+    pode_criar_gestor: document.getElementById('m-ind-pode-gestor').checked ? 1 : 0,
     observacoes:     document.getElementById('m-ind-obs').value.trim() || null
   };
+  if (senha) payload.senha = senha;
+  if (!id && !payload.email) { toast('err', 'Informe o e-mail de login do indicador'); return; }
+  if (!id && !senha) { toast('err', 'Defina uma senha inicial para o indicador'); return; }
   try {
     const url    = id ? `/api/admin/indicadores/${id}` : '/api/admin/indicadores';
     const method = id ? 'PUT' : 'POST';
@@ -3892,6 +3995,123 @@ async function marcarComissaoPaga(id) {
     toast('ok', '✅ Comissão marcada como paga');
     carregarComissoes();
     carregarResumoIndicacoes();
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+// ── AULAS / VÍDEOS DO INDICADOR ─────────────────────────
+let _tutoriaisIndicador = [];
+
+function limparTutorialIndicador() {
+  document.getElementById('tut-id').value = '';
+  document.getElementById('tut-titulo').value = '';
+  document.getElementById('tut-video-url').value = '';
+  document.getElementById('tut-ordem').value = '';
+  document.getElementById('tut-ativo').value = '1';
+  document.getElementById('tut-descricao').value = '';
+  document.getElementById('tut-form-title').textContent = 'Nova aula';
+}
+
+function editarTutorialIndicador(v) {
+  document.getElementById('tut-id').value = v.id || '';
+  document.getElementById('tut-titulo').value = v.titulo || '';
+  document.getElementById('tut-video-url').value = v.video_url || '';
+  document.getElementById('tut-ordem').value = v.sort_order ?? '';
+  document.getElementById('tut-ativo').value = Number(v.ativo) === 1 ? '1' : '0';
+  document.getElementById('tut-descricao').value = v.descricao || '';
+  document.getElementById('tut-form-title').textContent = 'Editar aula';
+}
+
+async function carregarTutoriaisIndicador() {
+  const tbody = document.getElementById('tut-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr>';
+  try {
+    const r = await fetch('/api/admin/indicador-tutoriais', { headers: adminAuthHeader() });
+    const rows = await r.json();
+    if (!r.ok) throw new Error(rows.error || 'Falha ao carregar aulas');
+    _tutoriaisIndicador = Array.isArray(rows) ? rows : [];
+    document.getElementById('tut-count').textContent = _tutoriaisIndicador.length + ' aulas';
+    if (!_tutoriaisIndicador.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">Nenhuma aula cadastrada ainda.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = _tutoriaisIndicador.map(v => {
+      const safe = JSON.stringify(v).replace(/'/g, '&#39;');
+      const updated = v.updated_at || v.created_at;
+      return `<tr>
+        <td><span class="tutorial-order">${v.sort_order ?? '—'}</span></td>
+        <td>
+          <b>${escapeHtml(v.titulo)}</b>
+          ${v.descricao ? `<div style="font-size:11.5px;color:var(--muted);max-width:360px;white-space:normal">${escapeHtml(v.descricao)}</div>` : ''}
+        </td>
+        <td><a class="tutorial-video-link" href="${escapeHtml(v.video_url)}" target="_blank">${escapeHtml(v.video_url)}</a></td>
+        <td><span class="ind-status-badge ind-status-${Number(v.ativo) === 1 ? 'pago' : 'cancelado'}">${Number(v.ativo) === 1 ? 'Ativa' : 'Oculta'}</span></td>
+        <td style="font-size:11.5px;color:var(--muted)">${updated ? new Date(updated).toLocaleString('pt-BR') : '—'}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px" onclick='editarTutorialIndicador(${safe})'>Editar</button>
+          <button class="btn bg2 bsm" style="font-size:11px;padding:4px 8px" onclick="toggleTutorialIndicador(${v.id}, ${Number(v.ativo) === 1 ? 0 : 1})">${Number(v.ativo) === 1 ? 'Ocultar' : 'Ativar'}</button>
+          <button class="btn bd bsm" style="font-size:11px;padding:4px 8px" onclick='deletarTutorialIndicador(${v.id}, ${JSON.stringify(v.titulo).replace(/'/g, '&#39;')})'>Excluir</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:#ef4444">Erro: ' + e.message + '</td></tr>';
+  }
+}
+
+async function salvarTutorialIndicador() {
+  const id = document.getElementById('tut-id').value;
+  const titulo = document.getElementById('tut-titulo').value.trim();
+  const videoUrl = document.getElementById('tut-video-url').value.trim();
+  const ordem = document.getElementById('tut-ordem').value;
+  if (!titulo) { toast('err', 'Título é obrigatório'); return; }
+  if (!videoUrl) { toast('err', 'Link do vídeo é obrigatório'); return; }
+  const payload = {
+    titulo,
+    video_url: videoUrl,
+    descricao: document.getElementById('tut-descricao').value.trim() || null,
+    ativo: document.getElementById('tut-ativo').value === '1',
+    sort_order: ordem === '' ? '' : parseInt(ordem)
+  };
+  try {
+    const url = id ? `/api/admin/indicador-tutoriais/${id}` : '/api/admin/indicador-tutoriais';
+    const method = id ? 'PUT' : 'POST';
+    const r = await fetch(url, {
+      method,
+      headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Falha ao salvar aula');
+    toast('ok', id ? 'Aula atualizada' : 'Aula cadastrada');
+    limparTutorialIndicador();
+    carregarTutoriaisIndicador();
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+async function toggleTutorialIndicador(id, ativo) {
+  try {
+    const r = await fetch(`/api/admin/indicador-tutoriais/${id}`, {
+      method: 'PUT',
+      headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ativo: !!ativo })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Falha');
+    toast('ok', ativo ? 'Aula ativada' : 'Aula ocultada');
+    carregarTutoriaisIndicador();
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+async function deletarTutorialIndicador(id, titulo) {
+  if (!confirm(`Excluir a aula "${titulo}"? O progresso dos indicadores nessa aula também será removido.`)) return;
+  try {
+    const r = await fetch(`/api/admin/indicador-tutoriais/${id}`, { method: 'DELETE', headers: adminAuthHeader() });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Falha');
+    toast('ok', 'Aula removida');
+    limparTutorialIndicador();
+    carregarTutoriaisIndicador();
   } catch(e) { toast('err', 'Erro: ' + e.message); }
 }
 
