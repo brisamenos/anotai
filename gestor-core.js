@@ -395,7 +395,7 @@ async function loadAllData(silent = false) {
       if (dot)  dot.style.background  = stOpen ? 'var(--success)' : 'var(--danger)';
       if (pill) { pill.style.background = stOpen ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'; pill.style.borderColor = stOpen ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'; pill.style.color = stOpen ? 'var(--success)' : 'var(--danger)'; }
       // Aplica tema salvo no banco
-      const modoSalvo = cfgRes.data.gestor_tema || 'escuro';
+      const modoSalvo = cfgRes.data.gestor_tema || 'claro';
       if (typeof temaAplicarCompleto === 'function') {
         temaAplicarCompleto(modoSalvo);
       } else {

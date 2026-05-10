@@ -44,40 +44,48 @@ const GESTOR_TEMAS = [
   },
   {
     key: 'claro',
-    nome: 'Modo Claro',
-    desc: 'Branco limpo com azul Anotai',
+    nome: 'Padrão Profissional',
+    desc: 'Gestor claro com azul Anotai e kanban colorido',
     emoji: '☀️',
     tipo: 'light',
     preview: {
-      bg:'#f4f6f9', sidebar:'#0c1322', accent:'#0ea5e9',
-      card:'#ffffff', cardBorder:'rgba(0,0,0,.08)',
-      text:'#1e293b', muted:'#64748b',
-      kol1:'rgba(245,158,11,.06)', kol2:'rgba(14,165,233,.06)', kol3:'rgba(16,185,129,.06)',
-      kolT1:'#b45309', kolT2:'#0284c7', kolT3:'#047857'
+      bg:'#eef4fa', sidebar:'#06496f', accent:'#1397e8',
+      card:'#ffffff', cardBorder:'rgba(15,48,80,.12)',
+      text:'#173047', muted:'#6e7f91',
+      kol1:'#ff6f61', kol2:'#ffa600', kol3:'#49ad70',
+      kolT1:'#ffffff', kolT2:'#ffffff', kolT3:'#ffffff'
     },
     vars: {
-      '--bg':'#f4f6f9',
+      '--bg':'#eef4fa',
       '--surface':'#ffffff',
-      '--surface2':'#edf0f5',
-      '--surface3':'#e2e6ed',
-      '--border':'rgba(0,0,0,.08)',
-      '--border2':'rgba(0,0,0,.14)',
-      '--accent':'#0ea5e9',
-      '--accent2':'#06b6d4',
-      '--accent3':'#f59e0b',
-      '--accent-dim':'rgba(14,165,233,.10)',
-      '--accent-glow':'rgba(14,165,233,.18)',
-      '--success':'#10b981',
-      '--danger':'#ef4444',
-      '--purple':'#8b5cf6',
-      '--pink':'#ec4899',
-      '--orange':'#f97316',
-      '--text':'#1e293b',
-      '--muted':'#64748b',
-      '--muted2':'#475569',
-      '--sidebar-bg':'#0c1322',
-      '--topnav-bg':'#070d1a',
-      '--sfoot-bg':'rgba(7,13,26,.85)'
+      '--surface2':'#f5f9fc',
+      '--surface3':'#dbe8f3',
+      '--s1':'#ffffff',
+      '--s2':'#f5f9fc',
+      '--s3':'#eef4fa',
+      '--border':'rgba(15,48,80,.12)',
+      '--border2':'rgba(15,48,80,.22)',
+      '--accent':'#1397e8',
+      '--accent2':'#4fb8ff',
+      '--accent3':'#ffc44d',
+      '--accent-dim':'rgba(19,151,232,.10)',
+      '--accent-glow':'rgba(19,151,232,.22)',
+      '--success':'#25a85a',
+      '--danger':'#f0441f',
+      '--purple':'#667eea',
+      '--pink':'#e65aa0',
+      '--orange':'#f5a400',
+      '--text':'#173047',
+      '--muted':'#6e7f91',
+      '--muted2':'#465b6d',
+      '--sidebar-bg':'#06496f',
+      '--topnav-bg':'#09588c',
+      '--sfoot-bg':'rgba(3,59,91,.96)',
+      '--kanban-analise':'#ff6f61',
+      '--kanban-producao':'#ffa600',
+      '--kanban-pronto':'#49ad70',
+      '--kanban-saiu':'#2f8fb8',
+      '--kanban-entregue':'#6875d9'
     }
   },
   {
@@ -376,6 +384,112 @@ function _aplicarOverrideClaro(vars) {
     .modal .btn.bp,.modal button.bp{color:#fff!important}
     .modal .bp{background:${acc}!important;color:#fff!important}
 
+    /* ── Padrão profissional: topo, sidebar e kanban ── */
+    .topnav{
+      background:var(--topnav-bg)!important;
+      border-bottom:0!important;
+      box-shadow:0 2px 12px rgba(6,58,92,.18)!important;
+      color:#fff!important;
+    }
+    .topnav *{color:inherit!important}
+    .logo,.logo *{color:#fff!important}
+    .tnr .ibtn,.tbadge,.tnav-pill{
+      background:#fff!important;
+      border-color:rgba(255,255,255,.65)!important;
+      color:#496477!important;
+      box-shadow:0 1px 6px rgba(2,44,70,.12)!important;
+    }
+    .tnav-pill.on,
+    .ibtn:hover,
+    .tnr .ibtn:hover{
+      background:#eef8ff!important;
+      color:var(--accent)!important;
+      border-color:rgba(255,255,255,.9)!important;
+    }
+    .caixa-btn{
+      background:var(--accent)!important;
+      color:#fff!important;
+      border-color:transparent!important;
+      box-shadow:0 6px 14px rgba(19,151,232,.22)!important;
+    }
+    .sidebar{
+      background:linear-gradient(180deg,#075985 0%,#06496f 48%,#043b5b 100%)!important;
+      border-right:0!important;
+      box-shadow:6px 0 24px rgba(3,35,56,.14)!important;
+    }
+    .si{color:#d7edf8!important}
+    .si svg{color:currentColor!important;opacity:1!important}
+    .si:hover{background:rgba(255,255,255,.10)!important;color:#fff!important}
+    .si.on{
+      background:#0d75b1!important;
+      color:#fff!important;
+      box-shadow:inset 3px 0 0 #30c6ff,0 8px 18px rgba(3,41,64,.16)!important;
+    }
+    .shead{color:rgba(214,235,248,.72)!important}
+    .sfoot{background:var(--sfoot-bg)!important;border-color:rgba(255,255,255,.12)!important}
+    .main,.page,.app,body{background:var(--bg)!important;color:var(--text)!important}
+    .ph{
+      background:#fff!important;
+      border:1px solid #d8e3ee!important;
+      box-shadow:0 4px 14px rgba(15,48,80,.06)!important;
+      border-radius:10px!important;
+    }
+    .kanban{
+      gap:0!important;
+      background:#fff!important;
+      border:1px solid #d8e3ee!important;
+      border-radius:10px!important;
+      overflow:hidden!important;
+      box-shadow:0 8px 24px rgba(15,48,80,.08)!important;
+    }
+    .kanban.kanban-4cols{grid-template-columns:repeat(4,minmax(220px,1fr))!important}
+    .kol{
+      border:0!important;
+      border-right:1px solid rgba(255,255,255,.22)!important;
+      border-radius:0!important;
+      box-shadow:none!important;
+    }
+    .kol-analise{background:var(--kanban-analise,#ff6f61)!important}
+    .kol-producao,.kol-preparando{background:var(--kanban-producao,#ffa600)!important}
+    .kol-pronto,.kol-servido{background:var(--kanban-pronto,#49ad70)!important}
+    .kol-saiu{background:var(--kanban-saiu,#2f8fb8)!important}
+    .kol-entregue{background:var(--kanban-entregue,#6875d9)!important}
+    .kol-head{
+      min-height:42px!important;
+      padding:0 14px!important;
+      background:rgba(0,0,0,.08)!important;
+      border-bottom:0!important;
+      color:#fff!important;
+    }
+    .kol-title,
+    .kol-analise .kol-title,
+    .kol-producao .kol-title,
+    .kol-pronto .kol-title,
+    .kol-saiu .kol-title,
+    .kol-entregue .kol-title{
+      color:#fff!important;
+      font-size:13px!important;
+      font-weight:800!important;
+      letter-spacing:0!important;
+      text-transform:none!important;
+    }
+    .kol-cnt{
+      background:rgba(255,255,255,.20)!important;
+      color:#fff!important;
+      border-radius:7px!important;
+      min-width:24px!important;
+      width:auto!important;
+      height:22px!important;
+      padding:0 7px!important;
+    }
+    .kol-empty,
+    .kol-empty *{
+      color:#fff!important;
+      opacity:.92!important;
+      font-weight:800!important;
+      text-shadow:0 1px 2px rgba(0,0,0,.16)!important;
+    }
+
     /* ── Scrollbar ── */
     ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12)!important;border-radius:99px!important}
     ::-webkit-scrollbar-track{background:transparent!important}
@@ -422,7 +536,7 @@ function temaAplicarCompleto(key) {
     'claro':'claro', 'light':'claro', 'artico':'claro', 'classico':'claro', 'minimalista':'claro',
     'noturno':'noturno'
   };
-  const resolved = mapa[key] || 'escuro';
+  const resolved = mapa[key] || 'claro';
   const tema = GESTOR_TEMAS.find(t => t.key === resolved) || GESTOR_TEMAS[0];
 
   _aplicarVars(tema.vars);
@@ -454,7 +568,7 @@ function temaAplicarModo(key) {
 // ── Atualiza seleção visual dos cards ──
 function temaUpdateCardSelection() {
   const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
-  let ativo = 'escuro';
+  let ativo = 'claro';
   for (const t of GESTOR_TEMAS) {
     if (t.vars['--bg'] === bg) { ativo = t.key; break; }
   }
@@ -523,7 +637,7 @@ function initTemaPage() {
 function temaGetCurrent() { return {}; }
 function temaSalvarStorage() {}
 function temaCarregarStorage() {}
-function temaReset() { temaAplicarModo('escuro'); }
+function temaReset() { temaAplicarModo('claro'); }
 async function temaSalvar() { sbToast('ok','Tema aplicado!'); }
 function temaBuildPresets() {}
 function temaBuildFields() {}
