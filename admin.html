@@ -342,6 +342,92 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
 
 /* ══ PAGE TRANSITION ══ */
 .sec-page{animation:fadeUp .2s ease}
+
+/* Admin layout hardening */
+#painel,.main,.content,.sec-page,.card,.tw,.tmeta,.sec-head{min-width:0}
+.main{width:calc(100% - var(--sb-w))}
+.content{width:100%;overflow-x:hidden}
+.stats-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+.grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.stat-card,.card:not(.plan-card){min-width:0}
+.tw{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
+.card:not(.plan-card){overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{min-width:760px}
+#sec-clientes table,#sec-indicacoes table,#sec-auditoria table{min-width:980px}
+#sec-faturamento table,#sec-saques table,#sec-backup table,#sec-planos table{min-width:860px}
+th,td{overflow-wrap:normal}
+.topbar-title,.card-title,.sec-head-title,.sb-user-name{overflow:hidden;text-overflow:ellipsis}
+.sb-user-name{white-space:nowrap}
+.topbar-title{max-width:100%}
+.sbox{min-width:0}
+.sbox input{min-width:0;width:100%}
+.btn,.badge,.minput{max-width:100%}
+.ind-tab{white-space:nowrap;flex:0 0 auto}
+.ind-tabs-bar{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.admin-nav-backdrop{display:none}
+.nav-toggle{
+  display:none;width:34px;height:34px;padding:0;border-radius:9px;
+  border:1px solid var(--border);background:var(--s2);color:var(--text);
+  align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
+}
+.nav-toggle:hover{border-color:var(--border-hover);background:var(--s3)}
+
+@media (max-width:1180px){
+  .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .grid-3{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+@media (max-width:900px){
+  body{display:block;overflow-x:hidden}
+  .nav-toggle{display:inline-flex}
+  .sidebar{
+    width:280px;max-width:86vw;transform:translateX(-105%);
+    transition:transform .22s ease;box-shadow:24px 0 60px rgba(0,0,0,.45)
+  }
+  body.admin-nav-open .sidebar{transform:translateX(0)}
+  .admin-nav-backdrop{
+    position:fixed;inset:0;background:rgba(0,0,0,.55);
+    z-index:45;backdrop-filter:blur(2px)
+  }
+  body.admin-nav-open .admin-nav-backdrop{display:block}
+  .main{margin-left:0;width:100%;max-width:none}
+  .topbar{padding:10px 14px;min-height:56px;height:auto;gap:10px}
+  .topbar-left{flex:1 1 auto}
+  .topbar-title{white-space:normal;line-height:1.2}
+  .content{padding:16px}
+  .stats-grid,.grid-2,.grid-3,.mrow2{grid-template-columns:1fr!important}
+  [style*="grid-template-columns:1fr 1fr"],
+  [style*="grid-template-columns:1.4fr"],
+  [style*="grid-template-columns:repeat(3"],
+  [style*="grid-template-columns:repeat(auto-fit"]{grid-template-columns:1fr!important}
+  .card{padding:16px}
+  .sec-head{gap:12px;margin-bottom:16px}
+  .sec-head>div{min-width:0}
+  .sec-head .btn{width:100%}
+  .tmeta{align-items:stretch}
+  .tmeta>*{width:100%}
+  .sbox{width:100%}
+  .minput[style*="width:auto"]{width:100%!important}
+  table{min-width:720px}
+  .modal{width:calc(100vw - 24px)!important;max-width:calc(100vw - 24px);padding:22px;max-height:calc(100dvh - 24px)}
+  #toast{left:12px;right:12px;bottom:12px;align-items:stretch}
+  .ti{min-width:0;max-width:none;width:100%}
+}
+
+@media (max-width:560px){
+  .content{padding:12px}
+  .topbar{padding:8px 10px}
+  .topbar>.btn{padding:7px 10px;font-size:11.5px}
+  .stat-card{padding:16px}
+  .stat-card-val{font-size:25px}
+  .sec-head-title{font-size:18px}
+  .card-head{align-items:flex-start}
+  .card-head .btn{width:100%}
+  .btn{white-space:normal;line-height:1.25}
+  table{min-width:680px}
+  td,thead th{padding-left:12px;padding-right:12px}
+}
 </style>
 <script src="/api-client.js"></script>
 </head>
@@ -422,10 +508,14 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
       </div>
     </div>
   </aside>
+  <div class="admin-nav-backdrop" onclick="toggleAdminNav(false)"></div>
 
   <!-- ── Main ── -->
   <main class="main">
     <div class="topbar">
+      <button class="nav-toggle" type="button" onclick="toggleAdminNav()" aria-label="Abrir menu">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2.5 4h11M2.5 8h11M2.5 12h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
       <div class="topbar-left">
         <div class="topbar-title" id="topbar-title">Dashboard</div>
       </div>
@@ -1097,7 +1187,7 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
         </div>
 
         <!-- Sub-tabs: Indicadores | Leads | Comissões -->
-        <div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0">
+        <div class="ind-tabs-bar" style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0">
           <button class="ind-tab on" data-tab="indicadores" onclick="indSwitchTab('indicadores')">👥 Indicadores</button>
           <button class="ind-tab"    data-tab="leads"        onclick="indSwitchTab('leads')">🎯 Leads</button>
           <button class="ind-tab"    data-tab="comissoes"    onclick="indSwitchTab('comissoes')">💰 Comissões</button>
@@ -1646,6 +1736,14 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ── NAVEGAÇÃO ──────────────────────────────────────────
+function toggleAdminNav(force) {
+  const next = typeof force === 'boolean' ? force : !document.body.classList.contains('admin-nav-open');
+  document.body.classList.toggle('admin-nav-open', next);
+}
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape') toggleAdminNav(false);
+});
+
 function navTo(id) {
   ['dash','clientes','ia','backup','saques','planos','faturamento','indicacoes','auditoria'].forEach(s => {
     const sec = document.getElementById('sec-'+s);
@@ -1654,6 +1752,7 @@ function navTo(id) {
   });
   const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA', backup:'Backup & Restore', saques:'Saques PIX', planos:'Planos & Leads', faturamento:'Faturamento', indicacoes:'Indicações', auditoria:'Auditoria' };
   document.getElementById('topbar-title').textContent = titles[id] || id;
+  toggleAdminNav(false);
   if (id==='ia')          { iaAdminCarregar(); }
   if (id==='backup')      { renderBackupList(); }
   if (id==='saques')      { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); carregarCobrancaWA(); conectarAdminSSE(); }
