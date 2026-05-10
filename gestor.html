@@ -333,11 +333,11 @@ function nav(id) {
     <div class="kol kol-analise">
       <div class="kol-head">
         <div class="kol-title">Em análise <div class="kol-cnt" id="cnt-analise">2</div></div>
-        <button class="btn" style="font-size:10.5px;padding:3px 8px;background:rgba(0,0,0,.2);color:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.1)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M4 4l1 1M11 11l1 1M4 12l1-1M11 5l1-1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Configurar</button>
+        <button class="btn" onclick="abrirModalTemposPedido()" style="font-size:10.5px;padding:3px 8px;background:rgba(0,0,0,.2);color:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.1)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M4 4l1 1M11 11l1 1M4 12l1-1M11 5l1-1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Configurar</button>
       </div>
       <div class="kol-config">
-        <strong>Balcão: 30 a 40 min &nbsp; Delivery: Não informado</strong>
-        <span style="color:var(--accent);cursor:pointer;font-size:11px" onclick="sbToast('ok','Editando tempos de entrega...')">Editar</span><br>
+        <strong>Retirada: <span id="tempo-retirada-kanban">30 a 40 min</span> &nbsp; Delivery: <span id="tempo-delivery-kanban">Não informado</span></strong>
+        <span style="color:var(--accent);cursor:pointer;font-size:11px" onclick="abrirModalTemposPedido()">Editar</span><br>
         <label style="display:flex;align-items:center;gap:7px;margin-top:6px;cursor:pointer">
           <div class="toggle" id="auto-accept" onclick="toggleAutoAccept(this)"></div>
           <span style="font-size:11.5px">Aceitar os pedidos automaticamente</span>
@@ -372,6 +372,49 @@ function nav(id) {
         <div class="kol-title">Entregue <div class="kol-cnt" id="cnt-entregue">0</div></div>
       </div>
       <div class="kol-body" id="col-entregue"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: tempos por tipo de pedido -->
+<div class="modal-bg" id="modal-tempos-pedido">
+  <div class="modal" style="max-width:520px">
+    <button class="modal-close" onclick="closeModal('modal-tempos-pedido')"></button>
+    <h2>Tempos do Pedido</h2>
+    <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:-8px 0 18px">
+      Configure os minutos separadamente para retirada e delivery. Esses valores ficam salvos apenas para este tenant.
+    </div>
+    <div class="tempo-pedido-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface2)">
+        <div style="font-size:13px;font-weight:800;margin-bottom:10px">Retirada</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <label class="form-label">Min.</label>
+            <input class="form-input" id="tempo-retirada-min" type="number" min="0" max="999" step="1" placeholder="30">
+          </div>
+          <div>
+            <label class="form-label">Max.</label>
+            <input class="form-input" id="tempo-retirada-max" type="number" min="0" max="999" step="1" placeholder="40">
+          </div>
+        </div>
+      </div>
+      <div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface2)">
+        <div style="font-size:13px;font-weight:800;margin-bottom:10px">Delivery</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <label class="form-label">Min.</label>
+            <input class="form-input" id="tempo-delivery-min" type="number" min="0" max="999" step="1" placeholder="45">
+          </div>
+          <div>
+            <label class="form-label">Max.</label>
+            <input class="form-input" id="tempo-delivery-max" type="number" min="0" max="999" step="1" placeholder="60">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-tempos-pedido')">Cancelar</button>
+      <button class="btn bp" id="btn-salvar-tempos-pedido" style="flex:1;justify-content:center" onclick="salvarTemposPedido()">Salvar tempos</button>
     </div>
   </div>
 </div>

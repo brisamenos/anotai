@@ -1386,6 +1386,12 @@ td:first-child{padding-left:18px}
   white-space: nowrap;
 }
 
+@media(max-width:560px){
+  .tempo-pedido-grid{
+    grid-template-columns:1fr!important;
+  }
+}
+
 /* Gestor visual refresh: professional light workspace + Anota-like kanban */
 :root{
   --bg:#eef4fa;

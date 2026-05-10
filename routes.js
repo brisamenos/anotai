@@ -597,8 +597,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const tid = getTenantId(req, params)
     if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
     try {
-      const cfg = db.prepare('SELECT store_tempo_entrega FROM store_config WHERE tenant_id=?').get(tid)
-      const baseStr = (cfg?.store_tempo_entrega || '').trim()
+      const cfg = db.prepare('SELECT store_tempo_entrega,store_tempo_retirada FROM store_config WHERE tenant_id=?').get(tid)
+      const tipoTempo = params.get('tipo') === 'retirada' ? 'retirada' : 'delivery'
+      const baseStr = ((tipoTempo === 'retirada' ? cfg?.store_tempo_retirada : cfg?.store_tempo_entrega) || '').trim()
 
       // Extrai range numérico da string (ex: "30-45 min", "30 min", "45")
       // Suporta ambos os hífens (- e –) e formatos "30 a 45"
@@ -609,10 +610,14 @@ module.exports = async function handleRoutes(req, res, ctx) {
         hi = parseInt(m[2] || m[1]) || lo + 15
       }
 
-      // Conta backlog: pedidos delivery em produção
-      const backlog = db.prepare(
-        "SELECT COUNT(*) as n FROM orders WHERE tenant_id=? AND status IN ('analise','producao','pronto') AND addr IS NOT NULL AND addr NOT LIKE 'Mesa%' AND addr NOT LIKE 'Retirada%'"
-      ).get(tid)?.n || 0
+      // Conta backlog: delivery considera entrega; retirada considera balcão/retirada
+      const backlog = tipoTempo === 'retirada'
+        ? (db.prepare(
+            "SELECT COUNT(*) as n FROM orders WHERE tenant_id=? AND status IN ('analise','producao','pronto') AND (addr LIKE 'Retirada%' OR addr LIKE 'Balcão%' OR addr LIKE 'Balcao%')"
+          ).get(tid)?.n || 0)
+        : (db.prepare(
+            "SELECT COUNT(*) as n FROM orders WHERE tenant_id=? AND status IN ('analise','producao','pronto') AND addr IS NOT NULL AND addr NOT LIKE 'Mesa%' AND addr NOT LIKE 'Retirada%' AND addr NOT LIKE 'Balcão%' AND addr NOT LIKE 'Balcao%'"
+          ).get(tid)?.n || 0)
 
       // Heurística: cada 3 pedidos de backlog adiciona +5 min
       // Limita a +30 min de overhead pra não assustar
@@ -623,6 +628,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
       send(res, 200, {
         base: baseStr,
+        tipo: tipoTempo,
         backlog,
         overhead_min: overhead,
         tempo_estimado: `${finalLo}-${finalHi} min`,

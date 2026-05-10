@@ -280,7 +280,7 @@ async function loadAllData(silent = false) {
       safe(sb.from('mesas').select('*').order('num')),
       safe(sb.from('estoque').select('*').order('id')),
       safe(sb.from('fidelidade').select('*').order('pts',{ascending:false})),
-      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema,order_num_offset,taxa_servico_pct').single()),
+      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema,order_num_offset,taxa_servico_pct,store_tempo_entrega,store_tempo_retirada').single()),
       safe(sb.from('orders').select('*').eq('status','mesa_aberta').order('id',{ascending:false}))
     ]);
 
@@ -363,6 +363,10 @@ async function loadAllData(silent = false) {
     if (cfgRes.data) {
       _orderNumOffset = parseInt(cfgRes.data.order_num_offset) || 0;
       _taxaServicoPct = parseFloat(cfgRes.data.taxa_servico_pct) || 0;
+      _setTemposPedidoConfig({
+        retirada: cfgRes.data.store_tempo_retirada ?? '30-40 min',
+        delivery: cfgRes.data.store_tempo_entrega ?? ''
+      });
 
       // ── Auto-corrige offset para tenants novos ──────────────
       // Se offset = 0 e este tenant ainda não tem pedido nenhum,
@@ -2211,10 +2215,92 @@ let categories   = [];
 let ordersKanban = [];
 let _orderNumOffset = 0;   // offset salvo em store_config (fallback para pedidos antigos sem order_num)
 let _taxaServicoPct = 0;   // % taxa de serviço do garçom (opcional no fechamento de mesa)
+let _tempoRetiradaPedido = '30-40 min';
+let _tempoDeliveryPedido = '';
 function _orderNum(id, orderNum) {
   // Prefere order_num do servidor (sequencial por tenant), fallback para id - offset
   if (orderNum) return Number(orderNum);
   return Math.max(1, Number(id) - Number(_orderNumOffset));
+}
+
+function _tempoPedidoDisplay(v) {
+  const txt = String(v || '').trim();
+  return txt || 'Não informado';
+}
+
+function _tempoPedidoRangeFromText(txt) {
+  const nums = String(txt || '').match(/\d+/g) || [];
+  return {
+    min: nums[0] ? parseInt(nums[0], 10) : '',
+    max: nums[1] ? parseInt(nums[1], 10) : ''
+  };
+}
+
+function _tempoPedidoTextFromInputs(prefix) {
+  const min = Math.max(0, parseInt(document.getElementById(prefix + '-min')?.value, 10) || 0);
+  const max = Math.max(0, parseInt(document.getElementById(prefix + '-max')?.value, 10) || 0);
+  if (!min && !max) return '';
+  if (min && max && max !== min) {
+    const lo = Math.min(min, max);
+    const hi = Math.max(min, max);
+    return `${lo} a ${hi} min`;
+  }
+  return `${min || max} min`;
+}
+
+function _setTemposPedidoConfig(cfg = {}) {
+  _tempoRetiradaPedido = Object.prototype.hasOwnProperty.call(cfg, 'retirada')
+    ? String(cfg.retirada || '').trim()
+    : '30-40 min';
+  _tempoDeliveryPedido = Object.prototype.hasOwnProperty.call(cfg, 'delivery')
+    ? String(cfg.delivery || '').trim()
+    : '';
+  _renderTemposPedidoKanban();
+}
+
+function _renderTemposPedidoKanban() {
+  const ret = document.getElementById('tempo-retirada-kanban');
+  const del = document.getElementById('tempo-delivery-kanban');
+  if (ret) ret.textContent = _tempoPedidoDisplay(_tempoRetiradaPedido);
+  if (del) del.textContent = _tempoPedidoDisplay(_tempoDeliveryPedido);
+}
+
+function abrirModalTemposPedido() {
+  const r = _tempoPedidoRangeFromText(_tempoRetiradaPedido);
+  const d = _tempoPedidoRangeFromText(_tempoDeliveryPedido);
+  const rMin = document.getElementById('tempo-retirada-min');
+  const rMax = document.getElementById('tempo-retirada-max');
+  const dMin = document.getElementById('tempo-delivery-min');
+  const dMax = document.getElementById('tempo-delivery-max');
+  if (rMin) rMin.value = r.min;
+  if (rMax) rMax.value = r.max;
+  if (dMin) dMin.value = d.min;
+  if (dMax) dMax.value = d.max;
+  openModal('modal-tempos-pedido');
+}
+
+async function salvarTemposPedido() {
+  const tid = _sessao?.tenant_id;
+  if (!tid) return sbToast('err', 'Sessão inválida. Faça login novamente.');
+  const retirada = _tempoPedidoTextFromInputs('tempo-retirada');
+  const delivery = _tempoPedidoTextFromInputs('tempo-delivery');
+  const btn = document.getElementById('btn-salvar-tempos-pedido');
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+  try {
+    const { error } = await sb.from('store_config').upsert({
+      tenant_id: tid,
+      store_tempo_retirada: retirada,
+      store_tempo_entrega: delivery
+    });
+    if (error) throw error;
+    _setTemposPedidoConfig({ retirada, delivery });
+    closeModal('modal-tempos-pedido');
+    sbToast('ok', 'Tempos salvos para este tenant.');
+  } catch(e) {
+    sbToast('err', 'Erro ao salvar tempos: ' + (e?.message || e));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Salvar tempos'; }
+  }
 }
 
 // Retorna true se o pedido contém APENAS bebidas industrializadas (não imprime na cozinha)
