@@ -2076,3 +2076,101 @@ tbody tr:hover{
     background:#c8d7e5!important;
   }
 }
+
+/* Mobile gestor: topbar compacta e kanban sem corte */
+@media(max-width:900px){
+  .topnav,
+  .modo-acougue .topnav{
+    overflow:hidden!important;
+    align-items:center!important;
+    padding:0 8px!important;
+    gap:6px!important;
+  }
+
+  .logo{
+    flex:0 0 36px!important;
+    width:36px!important;
+    min-width:36px!important;
+    max-width:36px!important;
+    height:40px!important;
+    justify-content:center!important;
+    gap:0!important;
+    padding:0!important;
+    overflow:hidden!important;
+    font-size:0!important;
+    line-height:0!important;
+  }
+
+  .logo-img{
+    width:32px!important;
+    height:32px!important;
+    margin:0!important;
+    padding:2px!important;
+    flex:0 0 32px!important;
+  }
+
+  .admin-announcements-strip{
+    display:none!important;
+  }
+
+  .tnr{
+    flex:1 1 auto!important;
+    min-width:0!important;
+    margin-left:auto!important;
+    justify-content:flex-end!important;
+    gap:4px!important;
+    overflow:hidden!important;
+  }
+
+  .tnr .ibtn,
+  .caixa-btn{
+    width:34px!important;
+    min-width:34px!important;
+    height:34px!important;
+    flex:0 0 34px!important;
+  }
+
+  #page-pedidos.on{
+    height:100%!important;
+    min-height:0!important;
+    padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px))!important;
+  }
+
+  #page-pedidos .ph{
+    flex:0 0 auto!important;
+    gap:8px!important;
+    margin-bottom:8px!important;
+  }
+
+  #page-pedidos .ph > div:last-child{
+    flex-wrap:nowrap!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    -webkit-overflow-scrolling:touch!important;
+    padding-bottom:2px!important;
+  }
+
+  #page-pedidos .ph > div:last-child > *{
+    flex:0 0 auto!important;
+  }
+
+  #page-pedidos .kanban{
+    flex:1 1 auto!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    width:100%!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+  }
+
+  #page-pedidos .kol{
+    height:100%!important;
+    min-height:0!important;
+  }
+
+  #page-pedidos .kol-body{
+    flex:1 1 auto!important;
+    min-height:0!important;
+  }
+}
