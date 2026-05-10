@@ -2255,6 +2255,12 @@ function _setTemposPedidoConfig(cfg = {}) {
   _tempoDeliveryPedido = Object.prototype.hasOwnProperty.call(cfg, 'delivery')
     ? String(cfg.delivery || '').trim()
     : '';
+  try {
+    localStorage.setItem('printTempoRetirada', _tempoRetiradaPedido);
+    localStorage.setItem('printTempoEntrega', _tempoDeliveryPedido);
+    if (typeof _printTempoRetirada !== 'undefined') _printTempoRetirada = _tempoRetiradaPedido;
+    if (typeof _printTempoEntrega !== 'undefined') _printTempoEntrega = _tempoDeliveryPedido;
+  } catch(e) { console.warn('[tempos-pedido] sync local falhou:', e?.message || e); }
   _renderTemposPedidoKanban();
 }
 

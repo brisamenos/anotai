@@ -29,7 +29,7 @@ fs.mkdirSync(path.dirname(DB_PATH), { recursive: true })
 fs.mkdirSync(UPLOADS_DIR, { recursive: true })
 
 function log(emoji, msg, data) {
-  const t = new Date().toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' })
+  const t = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
   console.log(`[${t}] ${emoji}  ${msg}`, data ? JSON.stringify(data) : '')
 }
 
@@ -1519,7 +1519,7 @@ async function checarAniv() {
       if (!cfg) continue
       const auto = jsonParse(cfg.evo_automacoes)||{}, ca=auto['aniversario']||{}
       if (ca.on===false) continue
-      const now   = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Fortaleza'}))
+      const now   = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}))
       const today = `${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
       const hora  = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
       if (_anivLast.get(t.id)===today||cfg.evo_aniv_last===today) continue
@@ -2165,13 +2165,13 @@ async function handleIAWebhook(req, res) {
       }
 
       // ── Detecção: primeira msg do dia e saudação avulsa ──
-      const _hoje = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Fortaleza'})).toISOString().split('T')[0]
+      const _hoje = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'})).toISOString().split('T')[0]
       const _dayKey = `${tenantId}:${phone}`
       const _isPrimeiraMsgDia = _lastDayMsg.get(_dayKey) !== _hoje
       _lastDayMsg.set(_dayKey, _hoje)
       const _saudacaoRegex = /^\s*(oi|olá|ola|hey|hi|hello|bom\s*dia|boa\s*(tarde|noite)|e\s*a[ií]|eai|opa|salve|fala|alo|alô|tudo\s*bem|td\s*bem|blz|beleza)\s*[!.,?☺😊🙂👋🤗]*\s*$/i
       const _isSoSaudacao = _saudacaoRegex.test(msgFull.trim())
-      const _horaAtual = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Fortaleza'})).getHours()
+      const _horaAtual = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'})).getHours()
       const _saudacaoHora = _horaAtual >= 5 && _horaAtual < 12 ? 'Bom dia' : _horaAtual >= 12 && _horaAtual < 18 ? 'Boa tarde' : 'Boa noite'
       // ════════════════════════════════════════════════════════════════
       // ROTEADOR DETERMINÍSTICO (sem OpenAI)
@@ -2195,7 +2195,7 @@ async function handleIAWebhook(req, res) {
       const tenantRow=db.prepare("SELECT slug FROM tenants WHERE id=?").get(tenantId)
       const proto=req.headers['x-forwarded-proto']||'https', host=req.headers['host']||''
       const linkCardapio=`${proto}://${host}/index.html?slug=${tenantRow?.slug||tenantId}`
-      const agora=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Fortaleza'})), diasSemana=['dom','seg','ter','qua','qui','sex','sab'], diaHoje=diasSemana[agora.getDay()], horaMin=agora.getHours()*60+agora.getMinutes()
+      const agora=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'})), diasSemana=['dom','seg','ter','qua','qui','sex','sab'], diaHoje=diasSemana[agora.getDay()], horaMin=agora.getHours()*60+agora.getMinutes()
       // ── Helpers para pedido ──
       const _offsetCfg = db.prepare("SELECT order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
       const _iaOffset  = parseInt(_offsetCfg?.order_num_offset) || 0

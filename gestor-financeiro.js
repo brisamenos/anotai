@@ -825,7 +825,7 @@ function imprimirViaCliente() {
   const itensEl  = document.getElementById('modal-pag-itens');
   const itens    = itensEl?.dataset.ordersJson ? JSON.parse(itensEl.dataset.ordersJson) : [];
   const nome     = _sessao?.nome || 'Estabelecimento';
-  const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' });
+  const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   const _formaAddSel = document.getElementById('modal-pag-forma-add')?.value || '';
   const formaLabel = ((_pagFormasList||[]).length > 0)
     ? _pagFormasList.map(f => `${f.forma} R$${f.valor.toFixed(2).replace('.',',')}`).join(' + ')
@@ -1175,7 +1175,7 @@ function abrirComprovantesMesa(num, totalVal, forma, time, ordensPreSalvas, taxa
   const itens = Object.values(itemMap);
 
   const nome  = _sessao?.nome || 'Estima Food';
-  const dataHora = new Date().toLocaleString('pt-BR', {timeZone:'America/Fortaleza'});
+  const dataHora = new Date().toLocaleString('pt-BR', {timeZone:'America/Sao_Paulo'});
   const formaLabel = {dinheiro:'💵 Dinheiro', pix:'💠 PIX', credito:'💳 Crédito', debito:'💳 Débito', voucher:'🎫 Voucher'}[forma] || forma;
 
   const itensHtml = itens.map(i =>

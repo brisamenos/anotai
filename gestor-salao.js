@@ -2250,7 +2250,7 @@ async function gestorImprimirContaMesa() {
   if (!itens.length) { sbToast('err', 'Sem itens para imprimir'); return; }
 
   const nome = _sessao?.nome || 'RESTAURANTE';
-  const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' });
+  const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 
   const renderItem = i =>
     `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${i.name.toUpperCase()}<span style="float:right">R$ ${i.total.toFixed(2).replace('.',',')}</span></div></div>`;

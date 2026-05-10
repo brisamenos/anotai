@@ -1500,7 +1500,7 @@ async function relImprimirCaixa() {
     const iniISO  = _toSQLite(range.inicio);
     const fimISO  = _toSQLite(range.fim);
     const nomeLoja = _sessao?.nome || 'Estabelecimento';
-    const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' });
+    const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 
     // ── Busca dados ──────────────────────────────────────
     const [
@@ -1559,7 +1559,7 @@ async function relImprimirCaixa() {
       if (!mesaMap[m]) mesaMap[m] = { total: 0, pedidos: 0, ultimo: '' };
       mesaMap[m].total   += parseFloat(o.total||0) + parseFloat(o.taxa||0);
       mesaMap[m].pedidos++;
-      const d = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR',{timeZone:'America/Fortaleza',hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}) : '';
+      const d = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}) : '';
       if (!mesaMap[m].ultimo || o.created_at > mesaMap[m].ultimo) mesaMap[m].ultimo = d;
     });
 
@@ -2301,6 +2301,7 @@ let _printRodape = localStorage.getItem('printRodape') || '';
 // público). Sincronizado em loadStoreTempoEntrega() pra que a comanda mostre
 // SEMPRE o mesmo tempo que o cliente vê no cardápio na hora do pedido.
 let _printTempoEntrega = localStorage.getItem('printTempoEntrega') || '';
+let _printTempoRetirada = localStorage.getItem('printTempoRetirada') || '';
 
 // Carrega tempo de entrega do banco (mesma fonte usada pelo cardápio público).
 // Chamado no boot e quando a config é alterada.
@@ -2308,15 +2309,30 @@ async function loadStoreTempoEntrega() {
   try {
     const tid = (typeof _sessao !== 'undefined' && _sessao?.tenant_id) || window._tenantId || null;
     if (!tid) return;
-    const { data } = await window.AppAPI.from('store_config').select('store_tempo_entrega').eq('tenant_id', tid).single();
-    if (data?.store_tempo_entrega) {
-      _printTempoEntrega = String(data.store_tempo_entrega).trim();
-      localStorage.setItem('printTempoEntrega', _printTempoEntrega);
-    }
+    const { data } = await window.AppAPI.from('store_config').select('store_tempo_entrega,store_tempo_retirada').eq('tenant_id', tid).single();
+    if (!data) return;
+    _printTempoEntrega = String(data.store_tempo_entrega || '').trim();
+    _printTempoRetirada = String(data.store_tempo_retirada || '').trim();
+    localStorage.setItem('printTempoEntrega', _printTempoEntrega);
+    localStorage.setItem('printTempoRetirada', _printTempoRetirada);
   } catch {}
 }
 // Inicia o load no boot (não-bloqueante)
 setTimeout(() => { loadStoreTempoEntrega(); }, 1500);
+
+function _printOrderType(order) {
+  if (typeof window !== 'undefined' && typeof window._detectOrderType === 'function') {
+    const tipo = window._detectOrderType(order);
+    if (tipo === 'mesa') return 'mesa';
+    if (tipo === 'balcao') return 'retirada';
+    return 'delivery';
+  }
+  const addr = String(order?.addr || '').trim();
+  const lower = addr.toLowerCase();
+  if (order?._isMesa || (order?.mesa_num && Number(order.mesa_num) > 0) || /^Mesa\b/i.test(addr)) return 'mesa';
+  if (/^retirada\b/i.test(lower) || lower.startsWith('balcao') || lower.startsWith('balcão') || lower.includes('balcao') || lower.includes('balcão')) return 'retirada';
+  return 'delivery';
+}
 
 // ── Salva config de impressão no servidor (sincroniza entre dispositivos) ──
 async function savePrintConfigServer(cfg) {
@@ -2441,15 +2457,19 @@ function _getPrintConfig() {
   // Antes lia só o input — se a impressão acontecesse fora da tela do branding,
   // sempre caía em '30-45 min' fixo, sem nenhuma relação com a config real.
   const tempoEl = document.getElementById('cp-tempo');
+  const tempoDeliveryAtual = (typeof _tempoDeliveryPedido !== 'undefined') ? _tempoDeliveryPedido : '';
+  const tempoRetiradaAtual = (typeof _tempoRetiradaPedido !== 'undefined') ? _tempoRetiradaPedido : '';
   const tempoEntrega = (tempoEl && tempoEl.value && tempoEl.value.trim())
     ? tempoEl.value.trim()
-    : (_printTempoEntrega || localStorage.getItem('printTempoEntrega') || '30-45 min');
+    : (tempoDeliveryAtual || _printTempoEntrega || localStorage.getItem('printTempoEntrega') || '');
+  const tempoRetirada = tempoRetiradaAtual || _printTempoRetirada || localStorage.getItem('printTempoRetirada') || '';
   return {
     nome, sub, rodape,
     addr: document.getElementById('toggle-print-addr')?.classList.contains('on') ?? true,
     pag:  document.getElementById('toggle-print-pag')?.classList.contains('on') ?? true,
     fontSize: fs,
     tempoEntrega,
+    tempoRetirada,
   };
 }
 
@@ -2664,10 +2684,12 @@ function _buildTicketHtml(order, cfg) {
     if (single) { const v = parseInt(single[1]); return [v, v + 15]; }
     return [30, 45];
   };
-  const [_tmin, _tmax] = _parseTempoEntrega(cfg.tempoEntrega);
-  const _ini = new Date(_orderDate.getTime() + _tmin*60000);
-  const _fim = new Date(_orderDate.getTime() + _tmax*60000);
-  const janelaEntregaTxt = `${_hhmmBR(_ini)} - ${_hhmmBR(_fim)}`;
+  const _calcJanelaPedido = (tempoTxt) => {
+    const [_tmin, _tmax] = _parseTempoEntrega(tempoTxt);
+    const _ini = new Date(_orderDate.getTime() + _tmin*60000);
+    const _fim = new Date(_orderDate.getTime() + _tmax*60000);
+    return `${_hhmmBR(_ini)} - ${_hhmmBR(_fim)}`;
+  };
 
   // ── Helpers de HTML ─────────────────────────────────────
   const H  = (...parts) => parts.join('');                              // concatena
@@ -2689,12 +2711,15 @@ function _buildTicketHtml(order, cfg) {
   const SECTION = (label) => D('font-weight:bold;font-size:1.1em;margin:6px 0 4px', label);
 
   // ── Tipo de entrega ─────────────────────────────────────
-  const _addr    = (order.addr || '').toLowerCase();
-  const isMesa   = !!(order.mesa_num || (order.addr || '').startsWith('Mesa'));
-  const isRetira = !isMesa && !!(_addr.includes('retirada') || _addr.includes('balcão') || _addr.includes('balcao') || _addr.includes('retirar'));
+  const _tipoPedido = _printOrderType(order);
+  const isMesa   = _tipoPedido === 'mesa';
+  const isRetira = _tipoPedido === 'retirada';
   const tipoTxt  = isMesa ? 'MESA ' + (order.mesa_num || '') : isRetira ? 'PARA RETIRADA' : 'PARA ENTREGA';
   const tipoIcon = isMesa ? '🪑' : isRetira ? '🏃' : '🛵';
   const tipoBg   = isMesa ? '#1a3a5c' : isRetira ? '#2d4a1e' : '#7a2020';
+  const tempoPedidoTxt = isMesa ? '' : (isRetira ? (cfg.tempoRetirada || '') : (cfg.tempoEntrega || ''));
+  const janelaPedidoTxt = tempoPedidoTxt ? _calcJanelaPedido(tempoPedidoTxt) : '';
+  const tempoPedidoLabel = isRetira ? 'Retirada prevista: ' : 'Entrega prevista: ';
   // Cabeçalho do tipo (estilo Anota: pequeno, simples)
   const tipoHeader = CENTER(tipoTxt, 'font-weight:bold;font-size:0.95em;letter-spacing:0.5px;margin-bottom:2px');
 
@@ -2928,7 +2953,7 @@ function _buildTicketHtml(order, cfg) {
       // ── 1) Topo: tipo + data + janela + nome da loja ──
       tipoHeader,
       CENTER(dataHoraTxt, 'font-size:0.9em;margin-bottom:1px'),
-      (!isMesa && !isRetira) ? CENTER('Entrega prevista: ' + janelaEntregaTxt, 'font-size:0.9em;margin-bottom:2px') : '',
+      (!isMesa && tempoPedidoTxt) ? CENTER(tempoPedidoLabel + janelaPedidoTxt, 'font-size:0.9em;margin-bottom:2px') : '',
       CENTER(cfg.nome, 'font-size:0.95em;font-weight:bold;margin-bottom:4px'),
       HR(),
 
@@ -3068,6 +3093,7 @@ function _buildTicketHtml(order, cfg) {
           CENTER('PEDIDO ' + orderNum, 'font-size:1.5em;font-weight:bold;letter-spacing:1px;margin:4px 0'),
           HR(),
           D('margin-bottom:1px', 'Data: ' + now),
+          (!isMesa && tempoPedidoTxt) ? D('margin-bottom:1px;font-weight:bold', tempoPedidoLabel + janelaPedidoTxt) : '',
           D('margin-bottom:1px', 'Cliente: ' + (order.client || '—')),
           order.addr ? D('word-break:break-word;margin-top:2px', '📍 ' + _addrParts.full) : '',
           _addrParts.referencia ? D('word-break:break-word;margin-top:1px', 'Ref: ' + _addrParts.referencia) : '',
@@ -3294,18 +3320,23 @@ function _buildEscPos(order, cfg, cols = 32) {
     if (single) { const v = parseInt(single[1]); return [v, v + 15]; }
     return [30, 45];
   };
-  const [_tmin, _tmax] = _parseTempoEntrega(cfg.tempoEntrega);
-  const _ini = new Date(_orderDate.getTime() + _tmin*60000);
-  const _fim = new Date(_orderDate.getTime() + _tmax*60000);
-  const janelaTxt = `${_hhmmBR(_ini)} - ${_hhmmBR(_fim)}`;
+  const _calcJanelaEsc = (tempoTxt) => {
+    const [_tmin, _tmax] = _parseTempoEntrega(tempoTxt);
+    const _ini = new Date(_orderDate.getTime() + _tmin*60000);
+    const _fim = new Date(_orderDate.getTime() + _tmax*60000);
+    return `${_hhmmBR(_ini)} - ${_hhmmBR(_fim)}`;
+  };
 
   // ── Tipo de entrega ────────────────────────────────────
-  const _escAddr = (order.addr || '').toLowerCase();
-  const _escIsMesa     = !!(order.mesa_num || (order.addr || '').startsWith('Mesa'));
-  const _escIsRetirada = !_escIsMesa && !!(_escAddr.includes('retirada') || _escAddr.includes('balcão') || _escAddr.includes('balcao') || _escAddr.includes('retirar'));
+  const _escTipoPedido = _printOrderType(order);
+  const _escIsMesa     = _escTipoPedido === 'mesa';
+  const _escIsRetirada = _escTipoPedido === 'retirada';
   const _escTipoLabel  = _escIsMesa
     ? 'MESA ' + (order.mesa_num || '')
     : _escIsRetirada ? 'PARA RETIRADA' : 'PARA ENTREGA';
+  const _escTempoPedido = _escIsMesa ? '' : (_escIsRetirada ? (cfg.tempoRetirada || '') : (cfg.tempoEntrega || ''));
+  const _escJanelaTxt = _escTempoPedido ? _calcJanelaEsc(_escTempoPedido) : '';
+  const _escTempoLabel = _escIsRetirada ? 'Retirada prevista: ' : 'Entrega prevista: ';
 
   // ── Endereço estruturado (extrai referência) ───────────
   const _splitAddrEsc = (addrStr) => {
@@ -3330,7 +3361,7 @@ function _buildEscPos(order, cfg, cols = 32) {
   push(_escTipoLabel + '\n');
   bytes(0x1B, 0x45, 0x00);
   push(dataHoraTxt + '\n');
-  if (!_escIsMesa && !_escIsRetirada) push('Entrega prevista: ' + janelaTxt + '\n');
+  if (!_escIsMesa && _escTempoPedido) push(_escTempoLabel + _escJanelaTxt + '\n');
   bytes(0x1B, 0x45, 0x01);
   push(cfg.nome + '\n');
   bytes(0x1B, 0x45, 0x00);
