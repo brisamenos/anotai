@@ -209,9 +209,23 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now')),
     paid_at TEXT
   );
+  CREATE TABLE IF NOT EXISTS admin_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT DEFAULT 'aviso',
+    titulo TEXT,
+    mensagem TEXT NOT NULL,
+    target_all INTEGER DEFAULT 1,
+    target_tenants TEXT DEFAULT '[]',
+    ativo INTEGER DEFAULT 1,
+    created_by TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    expires_at TEXT
+  );
   CREATE INDEX IF NOT EXISTS idx_pix_tenant    ON pagamentos_pix(tenant_id);
   CREATE INDEX IF NOT EXISTS idx_pix_status    ON pagamentos_pix(tenant_id, status);
   CREATE INDEX IF NOT EXISTS idx_saques_tenant ON saques(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_admin_alerts_ativo ON admin_alerts(ativo, created_at);
   CREATE INDEX IF NOT EXISTS idx_orders_tenant     ON orders(tenant_id);
   CREATE INDEX IF NOT EXISTS idx_orders_status     ON orders(tenant_id, status);
   CREATE INDEX IF NOT EXISTS idx_orders_phone      ON orders(tenant_id, phone);
@@ -577,6 +591,22 @@ const MIGRATIONS = [
   { version:50, description:'tempo separado de retirada em store_config', up:
     `ALTER TABLE store_config ADD COLUMN store_tempo_retirada TEXT DEFAULT '30-40 min'`
   },
+  { version:51, description:'comunicados do admin para gestores', up:[
+    `CREATE TABLE IF NOT EXISTS admin_alerts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tipo TEXT DEFAULT 'aviso',
+      titulo TEXT,
+      mensagem TEXT NOT NULL,
+      target_all INTEGER DEFAULT 1,
+      target_tenants TEXT DEFAULT '[]',
+      ativo INTEGER DEFAULT 1,
+      created_by TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      expires_at TEXT
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_admin_alerts_ativo ON admin_alerts(ativo, created_at)`
+  ] },
 ]
 
 function runMigrations() {
@@ -624,7 +654,7 @@ try {
 // ════════════════════════════════════════════════════════
 const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_items',
   'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress',
-  'indicadores','leads_indicacao','comissoes','indicador_tutorial_videos','indicador_tutorial_progress']
+  'indicadores','leads_indicacao','comissoes','indicador_tutorial_videos','indicador_tutorial_progress','admin_alerts']
   // wa_messages excluída — pode conter muita mídia e estourar JSON.stringify
 
 let _dirty = false
@@ -906,6 +936,7 @@ const TABLE_COLS = {
   contas_pagar: ['id','tenant_id','descricao','valor','vencimento','categoria','fornecedor_id','recorrente','recorrencia','status','pago_em','obs','created_at'],
   faturas:      ['id','tenant_id','plano','valor','meses','metodo','status','link_pagamento','mp_payment_id','mp_external_ref','qr_code','qr_code_base64','vence_em','pago_em','cancelado_em','obs','created_at'],
   admin_audit_log: ['id','admin_id','admin_nome','admin_email','acao','alvo_tipo','alvo_id','alvo_nome','detalhes','ip','user_agent','created_at'],
+  admin_alerts: ['id','tipo','titulo','mensagem','target_all','target_tenants','ativo','created_by','created_at','updated_at','expires_at'],
 }
 // Colunas que NUNCA aparecem na resposta GET — mas ainda funcionam como filtro WHERE e em escrita
 const STRIP_FROM_OUTPUT = {
@@ -915,14 +946,15 @@ const STRIP_FROM_OUTPUT = {
   store_config: new Set([]),
 }
 
-const NO_TENANT_FILTER = new Set(['tenants','sys_users','admin_audit_log'])
+const NO_TENANT_FILTER = new Set(['tenants','sys_users','admin_audit_log','admin_alerts'])
 const JSON_FIELDS = {
   orders:       new Set(['items']),
   menu_items:   new Set(['days','ingredients','custom_groups']),
   store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config','cashback_config','tipos_entrega','stamp_config']),
   admin_audit_log: new Set(['detalhes']),
+  admin_alerts: new Set(['target_tenants']),
 }
-const BOOL_FIELDS  = new Set(['ativo','store_open','caixa_open','destaque'])
+const BOOL_FIELDS  = new Set(['ativo','store_open','caixa_open','destaque','target_all'])
 const SSE_TABLES   = new Set(['orders','mesas','store_config','menu_items','categories','garcons','customers','addons_esgotados'])
 
 function jsonParse(v) { if(typeof v!=='string')return v; try{return JSON.parse(v)}catch{return v} }

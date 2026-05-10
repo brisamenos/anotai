@@ -1097,6 +1097,84 @@ function _subscribeOrdersSSE() {
   };
 }
 
+// ══ COMUNICADOS DO ADMIN → GESTOR ═══════════════════════
+let _adminAnnouncements = [];
+let _adminAnnouncementsSseTenant = null;
+let _adminAnnouncementsSseAll = null;
+let _adminAnnouncementsRefreshTimer = null;
+
+function _adminAnnEscape(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function _adminAnnTipoLabel(tipo) {
+  return ({ aviso:'Aviso', promocao:'Promo', alerta:'Alerta', novidade:'Novo' })[tipo] || 'Aviso';
+}
+
+function _renderAdminAnnouncements() {
+  const el = document.getElementById('admin-announcements-strip');
+  if (!el) return;
+  if (!_adminAnnouncements.length) {
+    el.classList.add('is-empty');
+    el.innerHTML = '';
+    return;
+  }
+  el.classList.remove('is-empty');
+  const visible = _adminAnnouncements.slice(0, 3);
+  el.innerHTML = visible.map(a => `
+    <div class="admin-ann-card" data-tipo="${_adminAnnEscape(a.tipo || 'aviso')}" title="${_adminAnnEscape((a.titulo ? a.titulo + ': ' : '') + a.mensagem)}">
+      <span class="admin-ann-type">${_adminAnnTipoLabel(a.tipo)}</span>
+      <span class="admin-ann-text">${a.titulo ? `<strong>${_adminAnnEscape(a.titulo)}</strong>` : ''}${_adminAnnEscape(a.mensagem || '')}</span>
+    </div>
+  `).join('') + (_adminAnnouncements.length > visible.length ? `<span class="admin-ann-more">+${_adminAnnouncements.length - visible.length}</span>` : '');
+}
+
+async function carregarAdminAnnouncementsGestor() {
+  const tid = _sessao?.tenant_id;
+  if (!tid) return;
+  try {
+    const r = await fetch('/api/gestor/comunicados', { headers: { 'x-tenant-id': tid } });
+    const rows = r.ok ? await r.json() : [];
+    _adminAnnouncements = Array.isArray(rows) ? rows : [];
+    _renderAdminAnnouncements();
+  } catch(e) {
+    console.warn('[admin-alerts] erro:', e?.message || e);
+  }
+}
+
+function _scheduleAdminAnnouncementsRefresh() {
+  clearTimeout(_adminAnnouncementsRefreshTimer);
+  _adminAnnouncementsRefreshTimer = setTimeout(carregarAdminAnnouncementsGestor, 180);
+}
+
+function _subscribeAdminAnnouncements() {
+  const tid = _sessao?.tenant_id;
+  if (!tid) return;
+  try { _adminAnnouncementsSseTenant?.close(); } catch {}
+  try { _adminAnnouncementsSseAll?.close(); } catch {}
+  _adminAnnouncementsSseTenant = new EventSource(`/sse/admin-alerts:${tid}`);
+  _adminAnnouncementsSseAll = new EventSource('/sse/admin-alerts:all');
+  const onRefresh = () => _scheduleAdminAnnouncementsRefresh();
+  _adminAnnouncementsSseTenant.addEventListener('admin_alerts:REFRESH', onRefresh);
+  _adminAnnouncementsSseAll.addEventListener('admin_alerts:REFRESH', onRefresh);
+  _adminAnnouncementsSseTenant.onerror = () => {
+    try { _adminAnnouncementsSseTenant.close(); } catch {}
+    _adminAnnouncementsSseTenant = null;
+    setTimeout(_subscribeAdminAnnouncements, 5000);
+  };
+  _adminAnnouncementsSseAll.onerror = () => {
+    try { _adminAnnouncementsSseAll.close(); } catch {}
+    _adminAnnouncementsSseAll = null;
+    setTimeout(_subscribeAdminAnnouncements, 5000);
+  };
+}
+
+function initAdminAnnouncementsGestor() {
+  carregarAdminAnnouncementsGestor();
+  _subscribeAdminAnnouncements();
+}
+
 function _base64ToBlob(b64, mime) {
   const bin = atob(b64); const a = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
@@ -1371,6 +1449,7 @@ setInterval(async () => {
 // Registra SW e pede permissão de notificação ao carregar
 requestNotifPermission();
 registerSW();
+initAdminAnnouncementsGestor();
 
 // ── Generic toast for Supabase ops ───────────────────
 const _ICON_OK  = `<svg width='13' height='13' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'><circle cx='8' cy='8' r='6' stroke='currentColor' stroke-width='1.4'/><path d='M5.5 8l2 2 3-3' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/></svg>`;

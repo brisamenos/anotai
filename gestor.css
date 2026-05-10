@@ -95,7 +95,34 @@ body{
   border-color:rgba(52,211,153,.3);
   color:#6ee7b7;
 }
-.tnr{display:flex;align-items:center;gap:8px;margin-left:auto}
+.tnr{display:flex;align-items:center;gap:8px;margin-left:0}
+.admin-announcements-strip{
+  flex:1 1 auto;min-width:0;height:100%;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  padding:0 10px;overflow:hidden;
+}
+.admin-announcements-strip.is-empty{pointer-events:none}
+.admin-ann-card{
+  min-width:0;max-width:min(330px,32vw);
+  display:flex;align-items:center;gap:8px;
+  padding:6px 10px;border-radius:10px;
+  border:1px solid rgba(255,255,255,.18);
+  background:rgba(255,255,255,.12);
+  color:#fff;box-shadow:0 8px 22px rgba(0,0,0,.12);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+.admin-ann-card:nth-child(n+4){display:none}
+.admin-ann-type{
+  flex-shrink:0;border-radius:999px;padding:2px 7px;
+  font-size:9px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.4px;background:rgba(255,255,255,.16);
+}
+.admin-ann-text{min-width:0;font-size:11.5px;font-weight:700;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.admin-ann-text strong{font-weight:900;margin-right:4px}
+.admin-ann-card[data-tipo="promocao"]{background:linear-gradient(135deg,rgba(168,85,247,.26),rgba(14,165,233,.18))}
+.admin-ann-card[data-tipo="alerta"]{background:linear-gradient(135deg,rgba(239,68,68,.26),rgba(245,158,11,.16))}
+.admin-ann-card[data-tipo="novidade"]{background:linear-gradient(135deg,rgba(16,185,129,.25),rgba(14,165,233,.16))}
+.admin-ann-more{font-size:10px;font-weight:800;color:#fff;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.16);border-radius:999px;padding:4px 7px;white-space:nowrap}
 .caixa-btn{
   display:flex;align-items:center;gap:6px;
   background:linear-gradient(135deg,var(--success),#059669);
@@ -134,6 +161,15 @@ body{
   font-size:8px;font-weight:700;
   display:flex;align-items:center;justify-content:center;
   border:1.5px solid var(--bg);padding:0 3px;
+}
+
+@media(max-width:1100px){
+  .admin-ann-card{max-width:260px}
+  .admin-ann-card:nth-child(n+3){display:none}
+}
+@media(max-width:760px){
+  .admin-announcements-strip{display:none}
+  .tnr{margin-left:auto}
 }
 
 /* ══ LAYOUT ═══════════════════════════════════════════════ */

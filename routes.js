@@ -431,6 +431,59 @@ module.exports = async function handleRoutes(req, res, ctx) {
     }
     return s
   }
+  const _safeJson = (v, fallback) => {
+    try {
+      if (Array.isArray(v) || (v && typeof v === 'object')) return v
+      return v ? JSON.parse(v) : fallback
+    } catch { return fallback }
+  }
+  const _parseAdminAlert = (row) => {
+    if (!row) return row
+    return {
+      ...row,
+      target_all: row.target_all === 1 || row.target_all === true,
+      ativo: row.ativo === 1 || row.ativo === true,
+      target_tenants: _safeJson(row.target_tenants, [])
+    }
+  }
+  const _alertTargetIds = (row) => {
+    const ids = _safeJson(row?.target_tenants, [])
+    return Array.isArray(ids) ? ids.map(String).filter(Boolean) : []
+  }
+  const _brNowWallClockMs = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })).getTime()
+  const _brWallClockMs = (value) => {
+    const t = new Date(String(value || '').replace(' ', 'T')).getTime()
+    return Number.isFinite(t) ? t : null
+  }
+  const _broadcastAdminAlerts = (row, action = 'refresh', previous = null) => {
+    const payload = { id: row?.id || previous?.id || null, action, ts: Date.now() }
+    if (row?.target_all || previous?.target_all) sseBroadcast('admin-alerts:all', 'admin_alerts:REFRESH', payload)
+    const ids = new Set([..._alertTargetIds(row), ..._alertTargetIds(previous)])
+    ids.forEach(tid => sseBroadcast(`admin-alerts:${tid}`, 'admin_alerts:REFRESH', payload))
+  }
+  const _normalizeAdminAlertInput = (body) => {
+    const tipos = new Set(['aviso', 'promocao', 'alerta', 'novidade'])
+    const tipo = tipos.has(String(body.tipo || '').toLowerCase()) ? String(body.tipo).toLowerCase() : 'aviso'
+    const titulo = String(body.titulo || '').trim().slice(0, 80)
+    const mensagem = String(body.mensagem || '').trim().slice(0, 280)
+    if (!mensagem) throw new Error('Mensagem obrigatória')
+    const targetAll = body.target_all === false || body.target_all === 0 || body.target_all === '0' ? 0 : 1
+    let targetTenants = Array.isArray(body.target_tenants) ? body.target_tenants.map(String).filter(Boolean) : []
+    if (!targetAll) {
+      const valid = new Set(db.prepare("SELECT id FROM tenants WHERE slug <> '_global'").all().map(t => String(t.id)))
+      targetTenants = [...new Set(targetTenants.filter(id => valid.has(id)))]
+      if (!targetTenants.length) throw new Error('Selecione pelo menos um cliente')
+    } else {
+      targetTenants = []
+    }
+    const ativo = body.ativo === false || body.ativo === 0 || body.ativo === '0' ? 0 : 1
+    let expiresAt = String(body.expires_at || '').trim() || null
+    if (expiresAt) {
+      expiresAt = expiresAt.replace('T', ' ')
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(expiresAt)) expiresAt += ':00'
+    }
+    return { tipo, titulo, mensagem, targetAll, targetTenants, ativo, expiresAt }
+  }
   const indicadorComPermissaoGestor = (sess) => {
     if (!sess) return null
     return db.prepare(`
@@ -796,6 +849,93 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const auth  = req.headers['authorization'] || ''
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
     if (token) db.prepare('DELETE FROM admin_sessions WHERE token=?').run(token)
+    send(res, 200, { ok: true })
+    return true
+  }
+
+  // ── Comunicados do admin exibidos no topo do gestor ─────
+  if (req.method === 'GET' && upath === '/api/gestor/comunicados') {
+    const tid = getTenantId(req, params)
+    if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    const rows = db.prepare(`
+      SELECT id,tipo,titulo,mensagem,target_all,target_tenants,ativo,created_at,updated_at,expires_at
+      FROM admin_alerts
+      WHERE ativo=1
+      ORDER BY created_at DESC
+      LIMIT 50
+    `).all()
+    const nowBr = _brNowWallClockMs()
+    const out = rows
+      .map(_parseAdminAlert)
+      .filter(a => !a.expires_at || (_brWallClockMs(a.expires_at) || 0) >= nowBr)
+      .filter(a => a.target_all || (Array.isArray(a.target_tenants) && a.target_tenants.includes(tid)))
+      .slice(0, 6)
+    send(res, 200, out)
+    return true
+  }
+
+  if (req.method === 'GET' && upath === '/api/admin/comunicados') {
+    const adm = validarSessaoAdmin(req)
+    if (!adm) { send(res, 401, { error: 'Sessão admin inválida' }); return true }
+    const rows = db.prepare(`
+      SELECT id,tipo,titulo,mensagem,target_all,target_tenants,ativo,created_by,created_at,updated_at,expires_at
+      FROM admin_alerts
+      ORDER BY created_at DESC
+      LIMIT 200
+    `).all().map(_parseAdminAlert)
+    send(res, 200, rows)
+    return true
+  }
+
+  if (req.method === 'POST' && upath === '/api/admin/comunicados') {
+    const adm = validarSessaoAdmin(req)
+    if (!adm) { send(res, 401, { error: 'Sessão admin inválida' }); return true }
+    try {
+      const body = await readBody(req)
+      const data = _normalizeAdminAlertInput(body)
+      const info = db.prepare(`
+        INSERT INTO admin_alerts (tipo,titulo,mensagem,target_all,target_tenants,ativo,created_by,expires_at,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?, ?, datetime('now'), datetime('now'))
+      `).run(data.tipo, data.titulo, data.mensagem, data.targetAll, JSON.stringify(data.targetTenants), data.ativo, adm.nome || adm.email || adm.user_id, data.expiresAt)
+      const row = db.prepare('SELECT * FROM admin_alerts WHERE id=?').get(info.lastInsertRowid)
+      marcarDirty()
+      _broadcastAdminAlerts(row, 'insert')
+      send(res, 200, _parseAdminAlert(row))
+    } catch(e) { send(res, 400, { error: e.message }) }
+    return true
+  }
+
+  if (req.method === 'PUT' && upath.startsWith('/api/admin/comunicados/')) {
+    const adm = validarSessaoAdmin(req)
+    if (!adm) { send(res, 401, { error: 'Sessão admin inválida' }); return true }
+    const id = parseInt(upath.replace('/api/admin/comunicados/', '').split('/')[0])
+    const prev = db.prepare('SELECT * FROM admin_alerts WHERE id=?').get(id)
+    if (!prev) { send(res, 404, { error: 'Comunicado não encontrado' }); return true }
+    try {
+      const body = await readBody(req)
+      const data = _normalizeAdminAlertInput(body)
+      db.prepare(`
+        UPDATE admin_alerts
+        SET tipo=?, titulo=?, mensagem=?, target_all=?, target_tenants=?, ativo=?, expires_at=?, updated_at=datetime('now')
+        WHERE id=?
+      `).run(data.tipo, data.titulo, data.mensagem, data.targetAll, JSON.stringify(data.targetTenants), data.ativo, data.expiresAt, id)
+      const row = db.prepare('SELECT * FROM admin_alerts WHERE id=?').get(id)
+      marcarDirty()
+      _broadcastAdminAlerts(row, 'update', prev)
+      send(res, 200, _parseAdminAlert(row))
+    } catch(e) { send(res, 400, { error: e.message }) }
+    return true
+  }
+
+  if (req.method === 'DELETE' && upath.startsWith('/api/admin/comunicados/')) {
+    const adm = validarSessaoAdmin(req)
+    if (!adm) { send(res, 401, { error: 'Sessão admin inválida' }); return true }
+    const id = parseInt(upath.replace('/api/admin/comunicados/', '').split('/')[0])
+    const prev = db.prepare('SELECT * FROM admin_alerts WHERE id=?').get(id)
+    if (!prev) { send(res, 404, { error: 'Comunicado não encontrado' }); return true }
+    db.prepare('DELETE FROM admin_alerts WHERE id=?').run(id)
+    marcarDirty()
+    _broadcastAdminAlerts(null, 'delete', prev)
     send(res, 200, { ok: true })
     return true
   }

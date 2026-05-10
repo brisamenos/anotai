@@ -716,6 +716,9 @@ td{padding:12px 16px;color:#dce6f7}
       <button class="sb-item" id="nav-planos" onclick="navTo('planos')">
         <span class="sb-icon">💳</span> Planos &amp; Leads
       </button>
+      <button class="sb-item" id="nav-comunicados" onclick="navTo('comunicados')">
+        <span class="sb-icon">!</span> Comunicados
+      </button>
       <button class="sb-item" id="nav-saques" onclick="navTo('saques')">
         <span class="sb-icon">💰</span> Saques PIX
       </button>
@@ -937,6 +940,81 @@ td{padding:12px 16px;color:#dce6f7}
       </div>
 
       <!-- ════ PLANOS & LEADS ════ -->
+      <!-- COMUNICADOS -->
+      <div id="sec-comunicados" style="display:none" class="sec-page">
+        <div class="sec-head">
+          <div>
+            <div class="sec-head-title">Comunicados</div>
+            <div class="sec-head-sub">Envie alertas, promoções e avisos para o topo do painel dos gestores em tempo real</div>
+          </div>
+          <button class="btn bp" onclick="salvarComunicadoAdmin()" id="com-save-btn">Enviar comunicado</button>
+        </div>
+
+        <div class="grid-2" style="align-items:start">
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <div class="card-title">Novo comunicado</div>
+                <div class="card-sub">Aparece no espaço azul ao lado da logo no gestor</div>
+              </div>
+              <button class="btn bg2 bsm" onclick="limparComunicadoAdmin()">Limpar</button>
+            </div>
+            <input type="hidden" id="com-id">
+            <div style="display:grid;grid-template-columns:160px 1fr;gap:12px;margin-bottom:12px">
+              <div>
+                <label class="f-label">Tipo</label>
+                <select id="com-tipo" class="minput">
+                  <option value="aviso">Aviso</option>
+                  <option value="promocao">Promoção</option>
+                  <option value="alerta">Alerta</option>
+                  <option value="novidade">Novidade</option>
+                </select>
+              </div>
+              <div>
+                <label class="f-label">Título</label>
+                <input id="com-titulo" class="minput" maxlength="80" placeholder="Ex: Promoção de Maio">
+              </div>
+            </div>
+            <label class="f-label">Texto do card</label>
+            <textarea id="com-mensagem" class="minput" maxlength="280" rows="4" placeholder="Escreva uma mensagem curta para aparecer no painel do gestor..." style="resize:vertical;min-height:96px"></textarea>
+
+            <div style="display:grid;grid-template-columns:1fr 180px;gap:12px;margin-top:12px">
+              <div>
+                <label class="f-label">Destino</label>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <label class="badge bg-blue" style="cursor:pointer"><input type="radio" name="com-target" value="all" checked onchange="toggleComunicadoTargetAdmin()" style="margin-right:6px">Todos</label>
+                  <label class="badge bg-gray" style="cursor:pointer"><input type="radio" name="com-target" value="selected" onchange="toggleComunicadoTargetAdmin()" style="margin-right:6px">Selecionar clientes</label>
+                </div>
+              </div>
+              <div>
+                <label class="f-label">Expira em</label>
+                <input id="com-expires" class="minput" type="datetime-local">
+              </div>
+            </div>
+
+            <div id="com-target-box" style="display:none;margin-top:12px;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+              <div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center">
+                <input id="com-target-q" class="minput" placeholder="Buscar cliente..." oninput="renderComunicadoTargetsAdmin()" style="height:34px">
+                <button class="btn bg2 bsm" onclick="marcarTodosComunicadoAdmin(true)">Todos</button>
+                <button class="btn bg2 bsm" onclick="marcarTodosComunicadoAdmin(false)">Nenhum</button>
+              </div>
+              <div id="com-target-list" style="max-height:250px;overflow:auto;padding:8px"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <div class="card-title">Comunicados ativos e recentes</div>
+                <div class="card-sub">Editar, pausar ou remover mensagens já publicadas</div>
+              </div>
+              <button class="btn bg2 bsm" onclick="carregarComunicadosAdmin()">Atualizar</button>
+            </div>
+            <div id="com-list"></div>
+          </div>
+        </div>
+      </div>
+
       <div id="sec-planos" style="display:none" class="sec-page">
         <div class="sec-head">
           <div>
@@ -2093,6 +2171,7 @@ function polishAdminUI(root = document) {
     'nav-dash':'dashboard',
     'nav-clientes':'clients',
     'nav-planos':'card',
+    'nav-comunicados':'mail',
     'nav-saques':'wallet',
     'nav-faturamento':'invoice',
     'nav-indicacoes':'target',
@@ -2178,17 +2257,19 @@ function polishAdminUI(root = document) {
 window.addEventListener('DOMContentLoaded', () => polishAdminUI());
 
 function navTo(id) {
-  ['dash','clientes','ia','backup','saques','planos','faturamento','indicacoes','auditoria'].forEach(s => {
+  ['dash','clientes','ia','backup','saques','planos','comunicados','faturamento','indicacoes','auditoria'].forEach(s => {
     const sec = document.getElementById('sec-'+s);
     if (sec) sec.style.display = s===id ? 'block' : 'none';
     document.getElementById('nav-'+s)?.classList.toggle('on', s===id);
   });
   const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA', backup:'Backup & Restore', saques:'Saques PIX', planos:'Planos & Leads', faturamento:'Faturamento', indicacoes:'Indicações', auditoria:'Auditoria' };
+  titles.comunicados = 'Comunicados';
   document.getElementById('topbar-title').textContent = titles[id] || id;
   if (id==='ia')          { iaAdminCarregar(); }
   if (id==='backup')      { renderBackupList(); }
   if (id==='saques')      { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); carregarCobrancaWA(); conectarAdminSSE(); }
   if (id==='planos')      { carregarPrecosPlanos(); carregarAdminPhone(); carregarLeads(); }
+  if (id==='comunicados') { renderComunicadoTargetsAdmin(); carregarComunicadosAdmin(); }
   if (id==='faturamento') { carregarFaturamento(); }
   if (id==='indicacoes')  { carregarResumoIndicacoes(); carregarIndicadores(); }
   if (id==='auditoria')   { carregarAuditoria(); }
@@ -2197,6 +2278,222 @@ function navTo(id) {
 }
 
 // ── PLANOS ─────────────────────────────────────────────
+// ── COMUNICADOS PARA GESTORES ─────────────────────────
+let _comunicadosAdmin = [];
+let _comTargetSelected = new Set();
+
+const _COM_TIPOS = {
+  aviso:    { label:'Aviso',    cls:'bg-blue' },
+  promocao: { label:'Promoção', cls:'bg-purple' },
+  alerta:   { label:'Alerta',   cls:'bg-red' },
+  novidade: { label:'Novidade', cls:'bg-green' }
+};
+
+function _comTipoInfo(tipo) {
+  return _COM_TIPOS[tipo] || _COM_TIPOS.aviso;
+}
+
+function _comSelecionados() {
+  return Array.from(_comTargetSelected);
+}
+
+function _comToggleTargetSelected(el) {
+  if (!el) return;
+  if (el.checked) _comTargetSelected.add(String(el.value));
+  else _comTargetSelected.delete(String(el.value));
+}
+
+function toggleComunicadoTargetAdmin() {
+  const mode = document.querySelector('input[name="com-target"]:checked')?.value || 'all';
+  const box = document.getElementById('com-target-box');
+  if (box) box.style.display = mode === 'selected' ? 'block' : 'none';
+  if (mode === 'selected') renderComunicadoTargetsAdmin();
+}
+
+function renderComunicadoTargetsAdmin() {
+  const box = document.getElementById('com-target-list');
+  if (!box) return;
+  const q = (document.getElementById('com-target-q')?.value || '').toLowerCase().trim();
+  const selected = _comTargetSelected;
+  const clientes = _clientes
+    .filter(c => c.slug !== '_global')
+    .filter(c => !q || String(c.nome || '').toLowerCase().includes(q) || String(c.slug || '').toLowerCase().includes(q));
+  if (!clientes.length) {
+    box.innerHTML = '<div style="padding:18px;text-align:center;color:var(--muted);font-size:12px">Nenhum cliente encontrado</div>';
+    return;
+  }
+  box.innerHTML = clientes.map(c => `
+    <label style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;cursor:pointer">
+      <input class="com-target-check" type="checkbox" value="${c.id}" ${selected.has(String(c.id)) ? 'checked' : ''} onchange="_comToggleTargetSelected(this)">
+      <span style="width:28px;height:28px;border-radius:8px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-weight:800">${escapeHtml((c.nome || '?').charAt(0).toUpperCase())}</span>
+      <span style="min-width:0">
+        <span style="display:block;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(c.nome || 'Sem nome')}</span>
+        <span style="display:block;font-size:11px;color:var(--muted)">/${escapeHtml(c.slug || '')} · ${escapeHtml(c.plano || 'plano')}</span>
+      </span>
+    </label>
+  `).join('');
+}
+
+function marcarTodosComunicadoAdmin(on) {
+  document.querySelectorAll('.com-target-check').forEach(i => {
+    i.checked = !!on;
+    if (on) _comTargetSelected.add(String(i.value));
+    else _comTargetSelected.delete(String(i.value));
+  });
+}
+
+function limparComunicadoAdmin() {
+  document.getElementById('com-id').value = '';
+  document.getElementById('com-tipo').value = 'aviso';
+  document.getElementById('com-titulo').value = '';
+  document.getElementById('com-mensagem').value = '';
+  document.getElementById('com-expires').value = '';
+  const all = document.querySelector('input[name="com-target"][value="all"]');
+  if (all) all.checked = true;
+  _comTargetSelected = new Set();
+  marcarTodosComunicadoAdmin(false);
+  toggleComunicadoTargetAdmin();
+  const btn = document.getElementById('com-save-btn');
+  if (btn) btn.textContent = 'Enviar comunicado';
+}
+
+async function carregarComunicadosAdmin() {
+  const list = document.getElementById('com-list');
+  if (list) list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)">Carregando...</div>';
+  try {
+    const r = await fetch('/api/admin/comunicados', { headers: adminAuthHeader() });
+    if (r.status === 401) { toast('err','Sessão expirada'); setTimeout(doLogout,1500); return; }
+    const rows = await r.json();
+    if (!r.ok) throw new Error(rows.error || 'Falha ao carregar');
+    _comunicadosAdmin = Array.isArray(rows) ? rows : [];
+    renderComunicadosAdmin();
+  } catch(e) {
+    if (list) list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--danger)">Erro: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function _comDestinoLabel(c) {
+  if (c.target_all) return 'Todos os clientes';
+  const ids = Array.isArray(c.target_tenants) ? c.target_tenants : [];
+  if (!ids.length) return 'Nenhum cliente';
+  const nomes = ids.map(id => _clientes.find(x => String(x.id) === String(id))?.nome || id);
+  return nomes.slice(0, 3).join(', ') + (nomes.length > 3 ? ` +${nomes.length - 3}` : '');
+}
+
+function renderComunicadosAdmin() {
+  const list = document.getElementById('com-list');
+  if (!list) return;
+  if (!_comunicadosAdmin.length) {
+    list.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Nenhum comunicado criado ainda</div>';
+    return;
+  }
+  list.innerHTML = _comunicadosAdmin.map(c => {
+    const tipo = _comTipoInfo(c.tipo);
+    const ativo = c.ativo !== false;
+    const exp = c.expires_at ? new Date(String(c.expires_at).replace(' ', 'T')).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : 'Sem expiração';
+    return `<div style="border:1px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:10px;background:${ativo ? 'var(--s1)' : 'rgba(148,163,184,.06)'}">
+      <div style="display:flex;align-items:center;gap:8px;justify-content:space-between">
+        <div style="min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap">
+            <span class="badge ${tipo.cls}">${tipo.label}</span>
+            <span class="badge ${ativo ? 'bg-green' : 'bg-gray'}">${ativo ? 'Ativo' : 'Pausado'}</span>
+            <span style="font-size:11px;color:var(--muted)">${escapeHtml(exp)}</span>
+          </div>
+          <div style="font-size:15px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(c.titulo || 'Comunicado')}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn bg2 bsm" onclick="editarComunicadoAdmin(${c.id})">Editar</button>
+          <button class="btn bg2 bsm" onclick="toggleComunicadoAdmin(${c.id}, ${ativo ? 0 : 1})">${ativo ? 'Pausar' : 'Ativar'}</button>
+          <button class="btn bd bsm" onclick="deletarComunicadoAdmin(${c.id})">Excluir</button>
+        </div>
+      </div>
+      <div style="font-size:13px;color:var(--text-2);margin-top:8px;line-height:1.45">${escapeHtml(c.mensagem)}</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:9px">Destino: ${escapeHtml(_comDestinoLabel(c))}</div>
+    </div>`;
+  }).join('');
+}
+
+function editarComunicadoAdmin(id) {
+  const c = _comunicadosAdmin.find(x => Number(x.id) === Number(id));
+  if (!c) return;
+  document.getElementById('com-id').value = c.id;
+  document.getElementById('com-tipo').value = c.tipo || 'aviso';
+  document.getElementById('com-titulo').value = c.titulo || '';
+  document.getElementById('com-mensagem').value = c.mensagem || '';
+  document.getElementById('com-expires').value = c.expires_at ? String(c.expires_at).replace(' ', 'T').slice(0, 16) : '';
+  const mode = c.target_all ? 'all' : 'selected';
+  const radio = document.querySelector(`input[name="com-target"][value="${mode}"]`);
+  if (radio) radio.checked = true;
+  const ids = new Set(Array.isArray(c.target_tenants) ? c.target_tenants.map(String) : []);
+  _comTargetSelected = ids;
+  toggleComunicadoTargetAdmin();
+  document.querySelectorAll('.com-target-check').forEach(i => { i.checked = ids.has(String(i.value)); });
+  const btn = document.getElementById('com-save-btn');
+  if (btn) btn.textContent = 'Salvar alterações';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function salvarComunicadoAdmin() {
+  const id = document.getElementById('com-id')?.value || '';
+  const targetAll = (document.querySelector('input[name="com-target"]:checked')?.value || 'all') === 'all';
+  const body = {
+    tipo: document.getElementById('com-tipo')?.value || 'aviso',
+    titulo: document.getElementById('com-titulo')?.value || '',
+    mensagem: document.getElementById('com-mensagem')?.value || '',
+    target_all: targetAll,
+    target_tenants: targetAll ? [] : _comSelecionados(),
+    ativo: true,
+    expires_at: document.getElementById('com-expires')?.value || ''
+  };
+  const btn = document.getElementById('com-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = id ? 'Salvando...' : 'Enviando...'; }
+  try {
+    const r = await fetch(id ? `/api/admin/comunicados/${id}` : '/api/admin/comunicados', {
+      method: id ? 'PUT' : 'POST',
+      headers: adminAuthHeader(),
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (r.status === 401) { toast('err','Sessão expirada'); setTimeout(doLogout,1500); return; }
+    if (!r.ok) throw new Error(d.error || 'Falha ao salvar');
+    toast('ok', id ? 'Comunicado atualizado em tempo real' : 'Comunicado enviado em tempo real');
+    limparComunicadoAdmin();
+    carregarComunicadosAdmin();
+  } catch(e) {
+    toast('err', 'Erro: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = id ? 'Salvar alterações' : 'Enviar comunicado'; }
+  }
+}
+
+async function toggleComunicadoAdmin(id, ativo) {
+  const c = _comunicadosAdmin.find(x => Number(x.id) === Number(id));
+  if (!c) return;
+  try {
+    const r = await fetch(`/api/admin/comunicados/${id}`, {
+      method: 'PUT',
+      headers: adminAuthHeader(),
+      body: JSON.stringify({ ...c, ativo: !!ativo })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Falha');
+    toast('ok', ativo ? 'Comunicado ativado' : 'Comunicado pausado');
+    carregarComunicadosAdmin();
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+async function deletarComunicadoAdmin(id) {
+  if (!confirm('Excluir este comunicado? Ele some do gestor em tempo real.')) return;
+  try {
+    const r = await fetch(`/api/admin/comunicados/${id}`, { method: 'DELETE', headers: adminAuthHeader() });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Falha');
+    toast('ok', 'Comunicado removido');
+    limparComunicadoAdmin();
+    carregarComunicadosAdmin();
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
 async function carregarPrecosPlanos() {
   try {
     const res = await fetch('/api/planos/precos');
@@ -2328,6 +2625,7 @@ async function loadAll() {
 
   calcularFinanceiro();
   renderDash(); renderClientes();
+  if (document.getElementById('sec-comunicados')?.style.display !== 'none') renderComunicadoTargetsAdmin();
   carregarPixStatus();
 }
 
