@@ -13,6 +13,7 @@ const Database = require('better-sqlite3')
 // ── Todas as rotas especiais em um único arquivo — edite só routes.js ──
 const handleRoutes = require('./routes')
 const { buildOrderTrackingMessage } = require('./order-message')
+const phoneUtils = require('./phone-utils')
 
 const PORT        = process.env.PORT           || 3001
 const EVO_URL     = process.env.EVOLUTION_URL  || 'https://projeto-evolution-api.xtknqq.easypanel.host'
@@ -923,14 +924,11 @@ const SSE_TABLES   = new Set(['orders','mesas','store_config','menu_items','cate
 function jsonParse(v) { if(typeof v!=='string')return v; try{return JSON.parse(v)}catch{return v} }
 
 function phoneLookupArgs(raw) {
-  const clean = String(raw || '').replace(/\D/g, '')
-  const no55 = clean.startsWith('55') && clean.length > 11 ? clean.slice(2) : clean
-  return [clean, no55, no55.slice(-11)]
+  return phoneUtils.phoneLookupArgs(raw)
 }
 
 function phoneLookupSql(col = 'phone') {
-  const c = `replace(replace(replace(replace(replace(${col},'+',''),' ',''),'-',''),'(',''),')','')`
-  return `(${c} = ? OR ${c} = ? OR substr(${c}, -11) = ?)`
+  return phoneUtils.phoneLookupSql(col)
 }
 
 function parseRow(table, row, opts={}) {
@@ -2060,12 +2058,13 @@ async function handleIAWebhook(req, res) {
   tenantId = tenantId||req.headers['x-tenant-id']||null
   try {
     const msg    = body?.data?.message?.conversation||body?.data?.message?.extendedTextMessage?.text||''
-    const from   = body?.data?.key?.remoteJid||''
+    const data   = body?.data || {}
+    const from   = [data?.key?.remoteJid, data?.key?.participant, data?.participant, data?.sender].find(j => phoneUtils.cleanWhatsappJid(j)) || data?.key?.remoteJid || ''
     const fromMe = body?.data?.key?.fromMe||false
     const msgId  = body?.data?.key?.id || null  // usado pra marcar como lida (visto azul)
     // Se mensagem foi enviada pelo próprio gestor via WhatsApp, registra pausa da IA
     if (fromMe && from && tenantId) {
-      const phone = from.replace('@s.whatsapp.net','').replace('@c.us','')
+      const phone = phoneUtils.cleanWhatsappJid(from)
       if (phone) {
         const cfg2   = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id=?").get(tenantId)
         const ia2    = jsonParse(cfg2?.ia_config)||{}
@@ -2080,7 +2079,8 @@ async function handleIAWebhook(req, res) {
       send(res,200,{ok:true}); return
     }
     if (!msg||!from) { send(res,200,{ok:true}); return }
-    const phone = from.replace('@s.whatsapp.net','').replace('@c.us','')
+    const phone = phoneUtils.cleanWhatsappJid(from)
+    if (!phone) { send(res,200,{ok:true}); return }
     if (!tenantId) { send(res,200,{ok:true}); return }
     const cfg = db.prepare("SELECT ia_config,evo_instance,store_name,store_descricao,store_whatsapp,store_tempo_entrega,delivery_fee_config,horarios_config,store_open FROM store_config WHERE tenant_id=?").get(tenantId)
     if (!cfg) { send(res,200,{ok:true}); return }
@@ -2196,11 +2196,8 @@ async function handleIAWebhook(req, res) {
       const _offsetCfg = db.prepare("SELECT order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
       const _iaOffset  = parseInt(_offsetCfg?.order_num_offset) || 0
       const _iaPedNum  = (p) => String(p.order_num || Math.max(1, p.id - _iaOffset)).padStart(3, '0')
-      const _phoneClean = phone.replace(/\D/g, '')
-      const _phoneNo55  = _phoneClean.startsWith('55') && _phoneClean.length > 11 ? _phoneClean.slice(2) : _phoneClean
-      const _phone10    = _phoneNo55.slice(-10)
-      const _phoneNormSql = "replace(replace(replace(replace(replace(phone,'+',''),' ',''),'-',''),'(',''),')','')"
-      const _phoneWhere = `(${_phoneNormSql} = ? OR ${_phoneNormSql} = ? OR substr(${_phoneNormSql}, -10) = ?)`
+      const _phoneArgs  = phoneLookupArgs(phone)
+      const _phoneWhere = phoneLookupSql('phone')
       const _tempoDecorrido = (ts) => {
         if (!ts) return ''
         const t = new Date(String(ts).includes('Z') ? ts : ts.replace(' ','T')+'Z').getTime()
@@ -2225,7 +2222,8 @@ async function handleIAWebhook(req, res) {
 
       // ── Detecção de intenção ──
       const _msgL      = msgFull.toLowerCase()
-      const _numMatch  = msgFull.match(/#\*?(\d{1,6})\*?/) || msgFull.match(/pedido\s*[*#]?\s*(\d{1,6})/i)
+      const _msgNum    = msgFull.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      const _numMatch  = msgFull.match(/#\s*\*?\s*(\d{1,6})\s*\*?/) || _msgNum.match(/pedido\s*(?:n(?:umero|ro|o)?\.?\s*)?[*#:]?\s*(\d{1,6})/i) || _msgNum.match(/numero\s*(?:do\s+pedido)?\s*[*#:]?\s*(\d{1,6})/i)
       const _kwPedido  = /\b(acompanhar\s+(meu\s+|o\s+)?pedido|rastrear\s+(meu\s+|o\s+)?pedido|rastrei?o\s+(do\s+)?pedido|meu\s+pedido|pedido\s+(j[aá]|saiu|chegou|t[aá]|est[aá]|ainda|atrasou|atrasado|demorando|pronto|sair[aá]|sai)|status\s+(do\s+)?pedido|cad[eê]\s+(meu|o)\s+pedido|onde\s+(est[aá]|t[aá])\s+(meu|o)\s+pedido|quanto\s+(tempo|falta)|saiu\s+(da|para|pra)\s+entrega|j[aá]\s+saiu)\b/i
       const _kwCupom   = /\b(cupom|cupons|promo[çc][ãa]o|promo[çc][õo]es|desconto|descontos|oferta|ofertas)\b/i
       const _kwCardapio= /\b(card[aá]pio|menu|fome|pedir|fazer\s+pedido|quero\s+pedir|tem\s+o\s+que|t[ãa]o\s+servindo|pode\s+fazer)\b/i
@@ -2289,11 +2287,11 @@ async function handleIAWebhook(req, res) {
         if (_numMatch) {
           const n = parseInt(_numMatch[1])
           const realId = n + _iaOffset
-          ped = db.prepare(`SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} AND order_num=? ORDER BY id DESC LIMIT 1`).get(tenantId, _phoneClean, _phoneNo55, _phone10, n)
-          if (!ped) ped = db.prepare(`SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} AND id=? AND (order_num IS NULL OR order_num=0) LIMIT 1`).get(tenantId, _phoneClean, _phoneNo55, _phone10, realId)
+          ped = db.prepare(`SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} AND order_num=? ORDER BY id DESC LIMIT 1`).get(tenantId, ..._phoneArgs, n)
+          if (!ped) ped = db.prepare(`SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} AND id=? AND (order_num IS NULL OR order_num=0) LIMIT 1`).get(tenantId, ..._phoneArgs, realId)
         } else {
           // Sem número citado — pega o pedido mais recente do cliente
-          ped = db.prepare(`SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} ORDER BY id DESC LIMIT 1`).get(tenantId, _phoneClean, _phoneNo55, _phone10)
+          ped = db.prepare(`SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at FROM orders WHERE tenant_id=? AND ${_phoneWhere} ORDER BY id DESC LIMIT 1`).get(tenantId, ..._phoneArgs)
         }
         if (ped) {
           const pedNum = _iaPedNum(ped)

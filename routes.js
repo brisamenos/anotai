@@ -13,6 +13,7 @@ const path   = require('path')
 const zlib   = require('zlib')
 const crypto = require('crypto')
 const { buildOrderTrackingMessage } = require('./order-message')
+const { phoneLookupArgs, phoneLookupSql } = require('./phone-utils')
 
 // ── Helper: notifica cliente quando PIX é confirmado (online ou manual) ──────
 function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
@@ -2611,12 +2612,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const inst        = cfg?.evo_instance || EVO_INST
     const ia          = cfg?.ia_config ? JSON.parse(cfg.ia_config) : {}
     if (!ia.ativo && !ia.resp_rastreio_manual) { send(res, 200, { ok: false, msg: 'IA inativa' }); return true }
-    const phoneClean  = String(phone).replace(/\D/g, '')
-    const phoneNo55   = phoneClean.startsWith('55') && phoneClean.length > 11 ? phoneClean.slice(2) : phoneClean
-    const phone10     = phoneNo55.slice(-10)
-    const phoneNormSql = "replace(replace(replace(replace(replace(phone,'+',''),' ',''),'-',''),'(',''),')','')"
-    const phoneWhere  = `(${phoneNormSql} = ? OR ${phoneNormSql} = ? OR substr(${phoneNormSql}, -10) = ?)`
-    const pedido      = db.prepare(`SELECT id,order_num,client,status,items,total,taxa,addr,pag,troco,created_at FROM orders WHERE id=? AND tenant_id=? AND ${phoneWhere}`).get(order_id, tenant_id, phoneClean, phoneNo55, phone10)
+    const phoneWhere  = phoneLookupSql('phone')
+    const pedido      = db.prepare(`SELECT id,order_num,client,status,items,total,taxa,addr,pag,troco,created_at FROM orders WHERE id=? AND tenant_id=? AND ${phoneWhere}`).get(order_id, tenant_id, ...phoneLookupArgs(phone))
     if (!pedido) { send(res, 400, { ok: false }); return true }
     const offset      = parseInt(cfg?.order_num_offset || 0) || 0
     const numPedido   = String(pedido.order_num || Math.max(1, pedido.id - offset)).padStart(3, '0')
