@@ -67,6 +67,16 @@ body{
   letter-spacing:-.2px;
 }
 .logo svg{width:26px;height:26px;flex-shrink:0}
+.logo-img{
+  width:34px;
+  height:34px;
+  border-radius:8px;
+  object-fit:contain;
+  flex-shrink:0;
+  background:#fff;
+  padding:3px;
+  box-shadow:0 6px 14px rgba(2,44,70,.18);
+}
 .tnav-pill{
   display:flex;align-items:center;gap:6px;
   padding:5px 13px;border-radius:99px;
@@ -940,6 +950,7 @@ td:first-child{padding-left:18px}
   }
   .logo{min-width:auto!important;font-size:14px!important;gap:7px!important}
   .logo svg{width:22px!important;height:22px!important}
+  .logo-img{width:30px!important;height:30px!important;border-radius:7px!important;padding:2px!important}
   .tnav-pill,.tbadge{display:none!important}
   .caixa-btn span{display:none!important}
   .caixa-btn{width:34px!important;height:34px!important;padding:0!important;border-radius:50%!important;justify-content:center!important;flex-shrink:0}
