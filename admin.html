@@ -658,6 +658,97 @@ td{padding:12px 16px;color:#dce6f7}
   #sec-clientes .tw tbody td:last-child .btn-icon{width:28px;height:28px}
   .modal-bg.on{padding:10px}
 }
+
+/* Collapsible desktop sidebar */
+@media (min-width:901px){
+  :root{--sb-w:76px;--sb-w-open:286px}
+  .sidebar{
+    width:var(--sb-w);
+    transition:width .22s ease,box-shadow .22s ease;
+  }
+  .sidebar:hover,.sidebar:focus-within{
+    width:var(--sb-w-open);
+    box-shadow:24px 0 58px rgba(0,0,0,.38);
+  }
+  .main{
+    margin-left:var(--sb-w);
+    width:calc(100% - var(--sb-w));
+    max-width:calc(100vw - var(--sb-w));
+  }
+  .sb-logo{
+    justify-content:center;
+    padding:22px 14px;
+    gap:0;
+  }
+  .sidebar:hover .sb-logo,.sidebar:focus-within .sb-logo{
+    justify-content:flex-start;
+    padding:26px 20px 24px;
+    gap:11px;
+  }
+  .sb-logo>div:not(.sb-logo-icon),
+  .sb-user-info,
+  .sb-user>svg{
+    opacity:0;
+    width:0;
+    overflow:hidden;
+    pointer-events:none;
+    transform:translateX(-6px);
+    transition:opacity .16s ease,transform .16s ease,width .16s ease;
+    white-space:nowrap;
+  }
+  .sidebar:hover .sb-logo>div:not(.sb-logo-icon),
+  .sidebar:focus-within .sb-logo>div:not(.sb-logo-icon),
+  .sidebar:hover .sb-user-info,
+  .sidebar:focus-within .sb-user-info,
+  .sidebar:hover .sb-user>svg,
+  .sidebar:focus-within .sb-user>svg{
+    opacity:1;
+    width:auto;
+    transform:none;
+    pointer-events:auto;
+  }
+  .sb-nav{padding:16px 10px}
+  .sb-sec{
+    height:1px;
+    margin:12px 12px 8px;
+    padding:0;
+    border-top:1px solid rgba(148,163,184,.12);
+    color:transparent;
+    font-size:0;
+  }
+  .sidebar:hover .sb-sec,.sidebar:focus-within .sb-sec{
+    height:auto;
+    margin:6px 0 0;
+    padding:14px 12px 7px;
+    border-top:0;
+    color:#7890b5;
+    font-size:10px;
+  }
+  .sb-item{
+    justify-content:center;
+    gap:0;
+    padding:10px;
+    font-size:0;
+  }
+  .sb-item .sb-icon{font-size:15px}
+  .sidebar:hover .sb-item,.sidebar:focus-within .sb-item{
+    justify-content:flex-start;
+    gap:9px;
+    padding:10px 12px;
+    font-size:14px;
+  }
+  .sb-foot{padding:14px 10px}
+  .sb-user{
+    justify-content:center;
+    gap:0;
+    padding:10px;
+  }
+  .sidebar:hover .sb-user,.sidebar:focus-within .sb-user{
+    justify-content:flex-start;
+    gap:9px;
+    padding:10px 12px;
+  }
+}
 </style>
 <script src="/api-client.js"></script>
 </head>
