@@ -318,6 +318,7 @@ function renderEstoque() {
     sel.innerHTML = '<option value="">Selecione...</option>' +
       estoqueItems.map(e => `<option value="${e.id}">${e.name} (${e.qty} ${e.unit})</option>`).join('');
   }
+  renderReceitaEstoque();
 
   const list = document.getElementById('estoque-list');
   if (!list) return;
@@ -376,6 +377,126 @@ function renderEstoque() {
         </tbody>
       </table>
     </div>`;
+}
+
+function estEsc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+}
+
+function estFmtQtd(v) {
+  const n = parseFloat(v) || 0;
+  return n.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+}
+
+function estProdutosReceita() {
+  return (typeof items !== 'undefined' ? items : []).filter(i => i && i.id);
+}
+
+function estReceitasLista() {
+  if (typeof estoqueReceitas === 'undefined') return [];
+  return Array.isArray(estoqueReceitas) ? estoqueReceitas : [];
+}
+
+function renderReceitaEstoque() {
+  const selProduto = document.getElementById('est-receita-item');
+  const selIng = document.getElementById('est-receita-ingrediente');
+  const list = document.getElementById('est-receita-list');
+  if (!selProduto || !selIng || !list) return;
+
+  const produtos = estProdutosReceita();
+  const prevProduto = parseInt(selProduto.value) || 0;
+  const produtoIds = new Set(produtos.map(p => parseInt(p.id)));
+  const produtoId = produtoIds.has(prevProduto) ? prevProduto : (produtos[0]?.id || 0);
+
+  selProduto.innerHTML = produtos.length
+    ? produtos.map(p => `<option value="${p.id}">${estEsc(p.name)}</option>`).join('')
+    : '<option value="">Nenhum produto</option>';
+  if (produtoId) selProduto.value = String(produtoId);
+
+  const prevIng = parseInt(selIng.value) || 0;
+  const ingIds = new Set(estoqueItems.map(e => parseInt(e.id)));
+  const ingId = ingIds.has(prevIng) ? prevIng : (estoqueItems[0]?.id || 0);
+  selIng.innerHTML = estoqueItems.length
+    ? estoqueItems.map(e => `<option value="${e.id}">${estEsc(e.name)} (${estEsc(e.unit || 'un')})</option>`).join('')
+    : '<option value="">Nenhum ingrediente</option>';
+  if (ingId) selIng.value = String(ingId);
+
+  if (!produtoId || !estoqueItems.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:10px 0">Cadastre produtos e ingredientes para montar fichas tecnicas.</div>';
+    return;
+  }
+
+  const receitas = estReceitasLista().filter(r =>
+    parseInt(r.item_id) === parseInt(produtoId) && r.ativo !== false && r.ativo !== 0
+  );
+  if (!receitas.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:10px 0">Nenhum ingrediente vinculado a este produto.</div>';
+    return;
+  }
+
+  list.innerHTML = `
+    <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      ${receitas.map(r => {
+        const ing = estoqueItems.find(e => parseInt(e.id) === parseInt(r.estoque_id));
+        return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid var(--border)">
+          <div style="min-width:0">
+            <div style="font-size:12.5px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${estEsc(ing?.name || 'Ingrediente')}</div>
+            <div style="font-size:11px;color:var(--muted)">Estoque: ${estFmtQtd(ing?.qty || 0)} ${estEsc(ing?.unit || r.unit || '')}</div>
+          </div>
+          <div style="font-size:12px;font-weight:800;color:var(--success);white-space:nowrap">${estFmtQtd(r.qty)} ${estEsc(r.unit || ing?.unit || '')}</div>
+          <button class="btn bd" style="font-size:11px;padding:5px 8px" onclick="deleteReceitaEstoque(${r.id})">Remover</button>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+async function saveReceitaEstoque() {
+  const itemId = parseInt(document.getElementById('est-receita-item')?.value || '0');
+  const estoqueId = parseInt(document.getElementById('est-receita-ingrediente')?.value || '0');
+  const qtyRaw = String(document.getElementById('est-receita-qty')?.value || '').replace(',', '.');
+  const qty = parseFloat(qtyRaw) || 0;
+  if (!itemId) { sbToast('err', 'Selecione o produto'); return; }
+  if (!estoqueId) { sbToast('err', 'Selecione o ingrediente'); return; }
+  if (!(qty > 0)) { sbToast('err', 'Informe a quantidade'); return; }
+
+  const ing = estoqueItems.find(e => parseInt(e.id) === estoqueId);
+  const payload = { item_id: itemId, estoque_id: estoqueId, qty, unit: ing?.unit || '', ativo: 1, updated_at: new Date().toISOString() };
+  const receitas = estReceitasLista();
+  let existing = receitas.find(r => parseInt(r.item_id) === itemId && parseInt(r.estoque_id) === estoqueId);
+
+  sbLoading(true);
+  let error = null;
+  let data = null;
+  if (existing) {
+    const res = await sb.from('estoque_receitas').update(payload).eq('id', existing.id);
+    error = res.error;
+  } else {
+    const res = await sb.from('estoque_receitas').insert(payload).select().single();
+    error = res.error;
+    data = res.data;
+  }
+  sbLoading(false);
+  if (error) { sbToast('err', 'Erro ao salvar ficha: ' + error.message); return; }
+
+  if (existing) Object.assign(existing, payload, { ativo: true });
+  else receitas.push({ id: data?.id, ...payload, ativo: true });
+  const input = document.getElementById('est-receita-qty');
+  if (input) input.value = '';
+  renderReceitaEstoque();
+  sbToast('ok', 'Ficha tecnica atualizada!');
+}
+
+async function deleteReceitaEstoque(id) {
+  const row = estReceitasLista().find(r => parseInt(r.id) === parseInt(id));
+  if (!row) return;
+  if (!confirm('Remover ingrediente da ficha tecnica?')) return;
+  sbLoading(true);
+  const { error } = await sb.from('estoque_receitas').delete().eq('id', id);
+  sbLoading(false);
+  if (error) { sbToast('err', 'Erro ao remover'); return; }
+  estoqueReceitas = estReceitasLista().filter(r => parseInt(r.id) !== parseInt(id));
+  renderReceitaEstoque();
+  sbToast('ok', 'Ingrediente removido da ficha.');
 }
 
 async function saveIngrediente() {

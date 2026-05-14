@@ -61,7 +61,7 @@ function _mpValor(raw) {
   return Math.round(n * 100) / 100
 }
 
-function _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN_ENV) {
+function _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN_ENV, aplicarBaixaEstoquePedido) {
   if (_pixJobIniciado) return
   _pixJobIniciado = true
   log('🔄', 'PIX recovery job iniciado (intervalo: 60s)')
@@ -123,6 +123,9 @@ function _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN_ENV) {
                 db.prepare("UPDATE orders SET status='producao', pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, tenantId)
                 if (podeRessurreicao) log('🔄', `PEDIDO RESSUSCITADO (recovery): pagamento PIX chegou após cancelamento — id=${row.order_id} tenant=${tenantId}`)
                 const pedFull = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(row.order_id, tenantId)
+                if (typeof aplicarBaixaEstoquePedido === 'function' && pedFull) {
+                  aplicarBaixaEstoquePedido(tenantId, pedFull, 'pix-recovery')
+                }
                 const items   = pedFull && typeof pedFull.items === 'string'
                   ? (() => { try { return JSON.parse(pedFull.items) } catch { return [] } })()
                   : (pedFull?.items || [])
@@ -407,7 +410,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
   const { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
           validarSessaoAdmin, criarSessaoAdmin, fazerBackup, restaurarBackup, getTenantId,
           MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
-          EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano } = ctx
+          EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano,
+          aplicarBaixaEstoquePedido } = ctx
 
   const INDICADOR_SESSION_TTL = 8 * 60 * 60 * 1000
   const criarSessaoIndicador = (ind) => {
@@ -463,6 +467,305 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (row?.target_all || previous?.target_all) sseBroadcast('admin-alerts:all', 'admin_alerts:REFRESH', payload)
     const ids = new Set([..._alertTargetIds(row), ..._alertTargetIds(previous)])
     ids.forEach(tid => sseBroadcast(`admin-alerts:${tid}`, 'admin_alerts:REFRESH', payload))
+  }
+
+  const _parseOrderItemsDelivery = (items) => {
+    if (Array.isArray(items)) return items
+    try { return items ? JSON.parse(items) : [] } catch { return [] }
+  }
+  const _isDeliveryOrder = (order) => {
+    if (!order) return false
+    if (order.mesa_num && Number(order.mesa_num) > 0) return false
+    const addr = String(order.addr || '').trim()
+    if (/^Mesa\b/i.test(addr)) return false
+    if (/^Retirada\b/i.test(addr)) return false
+    const lower = addr.toLowerCase()
+    if (lower.includes('balcao') || lower.includes('balcão')) return false
+    return !!addr
+  }
+  const _orderTotalDelivery = (order) => {
+    return parseFloat(order?.total || 0) + parseFloat(order?.taxa || 0)
+  }
+  const _valorReceberEntrega = (order) => {
+    const pag = String(order?.pag || '').toLowerCase()
+    const momento = String(order?.pag_momento || '').toLowerCase()
+    const online = momento === 'online' || ['pix','pix_mp','pix_manual','cartao_mp'].includes(pag)
+    return online ? 0 : _orderTotalDelivery(order)
+  }
+  const _comissaoEntrega = (entregador, order) => {
+    const valor = parseFloat(entregador?.comissao_valor || 0)
+    if (!valor) return 0
+    if (String(entregador?.comissao_tipo || '') === 'percent') {
+      return Math.round(_orderTotalDelivery(order) * valor) / 100
+    }
+    return valor
+  }
+  const _bairroEntrega = (addr) => {
+    const parts = String(addr || '').split(',').map(p => p.trim()).filter(Boolean)
+    return parts[2] || parts[1] || ''
+  }
+  const _orderOutDelivery = (row) => {
+    if (!row) return row
+    return { ...row, items: _parseOrderItemsDelivery(row.items) }
+  }
+  const _emitOrderDelivery = (tid, order) => {
+    if (!tid || !order) return
+    sseBroadcast(`orders-rt:${tid}`, 'orders:UPDATE', _orderOutDelivery(order))
+  }
+  const _emitEntregas = (tid, event, payload) => {
+    if (!tid) return
+    sseBroadcast(`entregas-rt:${tid}`, event, payload || { ts: Date.now() })
+  }
+  const _statusHistDelivery = (tid, orderId, oldStatus, newStatus, meta = {}) => {
+    if (!tid || !orderId || !newStatus || oldStatus === newStatus) return
+    try {
+      db.prepare(`INSERT INTO order_status_history
+        (tenant_id, order_id, old_status, new_status, actor_type, actor_id, actor_name, origem, note)
+        VALUES (?,?,?,?,?,?,?,?,?)`).run(
+          tid, orderId, oldStatus || null, newStatus,
+          meta.actor_type || 'entregas',
+          meta.actor_id || null,
+          meta.actor_name || null,
+          meta.origem || 'entregas',
+          meta.note || null
+        )
+      marcarDirty()
+    } catch(e) { log('⚠️', 'historico entrega status:', e.message) }
+  }
+  const _recalcularRotaEntrega = (tid, rotaId) => {
+    if (!tid || !rotaId) return null
+    const stats = db.prepare(`
+      SELECT COUNT(*) as pedidos_count,
+             COALESCE(SUM(valor_pedido),0) as total_pedidos,
+             COALESCE(SUM(valor_receber),0) as dinheiro_previsto,
+             COALESCE(SUM(comissao),0) as comissao_total
+      FROM entregas
+      WHERE tenant_id=? AND rota_id=?
+    `).get(tid, rotaId)
+    db.prepare(`UPDATE rotas_entrega
+      SET pedidos_count=?, total_pedidos=?, dinheiro_previsto=?, comissao_total=?, updated_at=datetime('now')
+      WHERE id=? AND tenant_id=?`).run(
+        stats?.pedidos_count || 0,
+        stats?.total_pedidos || 0,
+        stats?.dinheiro_previsto || 0,
+        stats?.comissao_total || 0,
+        rotaId,
+        tid
+      )
+    return db.prepare('SELECT * FROM rotas_entrega WHERE id=? AND tenant_id=?').get(rotaId, tid)
+  }
+
+  const _deliveryDashboard = (tid) => {
+    const entregadores = db.prepare('SELECT * FROM entregadores WHERE tenant_id=? ORDER BY ativo DESC, nome ASC').all(tid)
+    const pedidosRows = db.prepare(`
+      SELECT o.*,
+             e.id as entrega_id, e.status as entrega_status, e.entregador_id, e.rota_id,
+             e.valor_receber, e.comissao, e.assigned_at, e.saiu_at, e.entregue_at, e.problema,
+             d.nome as entregador_nome, d.telefone as entregador_telefone,
+             l.lat as entregador_lat, l.lng as entregador_lng, l.accuracy as entregador_accuracy, l.updated_at as entregador_gps_at
+      FROM orders o
+      LEFT JOIN entregas e ON e.tenant_id=o.tenant_id AND e.order_id=o.id
+      LEFT JOIN entregadores d ON d.id=e.entregador_id
+      LEFT JOIN entregador_locations l ON l.tenant_id=o.tenant_id AND l.entregador_id=e.entregador_id
+      WHERE o.tenant_id=? AND o.status IN ('pronto','saiu')
+      ORDER BY o.created_at ASC
+    `).all(tid).filter(_isDeliveryOrder)
+    const fila = pedidosRows
+      .filter(o => o.status === 'pronto' && (!o.entrega_status || ['pendente','cancelada','retornada'].includes(o.entrega_status)))
+      .map(o => ({ ..._orderOutDelivery(o), bairro: _bairroEntrega(o.addr), total_pedido: _orderTotalDelivery(o), valor_receber_calc: _valorReceberEntrega(o) }))
+    const ativas = pedidosRows
+      .filter(o => o.entrega_status && ['atribuida','em_rota','problema'].includes(o.entrega_status))
+      .map(o => ({ ..._orderOutDelivery(o), bairro: _bairroEntrega(o.addr), total_pedido: _orderTotalDelivery(o) }))
+    const semEntregador = pedidosRows
+      .filter(o => o.status === 'saiu' && !o.entrega_status)
+      .map(o => ({ ..._orderOutDelivery(o), bairro: _bairroEntrega(o.addr), total_pedido: _orderTotalDelivery(o), valor_receber_calc: _valorReceberEntrega(o) }))
+    const concluidasHoje = db.prepare(`
+      SELECT e.*, o.order_num, o.client, o.phone, o.addr, o.total, o.taxa, o.pag, d.nome as entregador_nome
+      FROM entregas e
+      LEFT JOIN orders o ON o.id=e.order_id
+      LEFT JOIN entregadores d ON d.id=e.entregador_id
+      WHERE e.tenant_id=? AND e.status='entregue' AND date(e.entregue_at)=date('now')
+      ORDER BY e.entregue_at DESC
+      LIMIT 80
+    `).all(tid).map(r => ({ ...r, bairro: _bairroEntrega(r.addr), total_pedido: _orderTotalDelivery(r) }))
+    const rotas = db.prepare(`
+      SELECT r.*, d.nome as entregador_nome
+      FROM rotas_entrega r
+      LEFT JOIN entregadores d ON d.id=r.entregador_id
+      WHERE r.tenant_id=? AND r.status IN ('aberta','em_rota')
+      ORDER BY r.created_at DESC
+      LIMIT 30
+    `).all(tid)
+    const resumo = {
+      prontos: fila.length + semEntregador.length,
+      em_rota: ativas.filter(e => e.entrega_status === 'em_rota').length,
+      atribuidas: ativas.filter(e => e.entrega_status === 'atribuida').length,
+      problemas: ativas.filter(e => e.entrega_status === 'problema').length,
+      entregues_hoje: concluidasHoje.length,
+      dinheiro_rua: ativas.reduce((s,e) => s + parseFloat(e.valor_receber || 0), 0),
+      comissao_aberta: ativas.reduce((s,e) => s + parseFloat(e.comissao || 0), 0)
+    }
+    return { entregadores, fila, ativas, sem_entregador: semEntregador, concluidas_hoje: concluidasHoje, rotas, resumo }
+  }
+
+  if (req.method === 'POST' && upath === '/api/entregadores/salvar') {
+    const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
+    if (!tid) { send(res, 400, { error: 'Sessao sem tenant. Recarregue o gestor.' }); return true }
+    const body = await readBody(req)
+    const id = parseInt(body.id || '0')
+    const nome = String(body.nome || '').trim()
+    const telefone = String(body.telefone || '').trim()
+    const comissaoTipo = ['fixa', 'percent'].includes(String(body.comissao_tipo || '')) ? String(body.comissao_tipo) : 'fixa'
+    const comissaoValor = parseFloat(body.comissao_valor || 0) || 0
+    const ativo = body.ativo === undefined ? 1 : (body.ativo ? 1 : 0)
+    try {
+      if (id) {
+        const atual = db.prepare('SELECT * FROM entregadores WHERE id=? AND tenant_id=?').get(id, tid)
+        if (!atual) { send(res, 404, { error: 'Entregador nao encontrado' }); return true }
+        const novoNome = nome || atual.nome
+        if (!novoNome) { send(res, 400, { error: 'Informe o nome do entregador' }); return true }
+        db.prepare(`UPDATE entregadores
+          SET nome=?, telefone=?, comissao_tipo=?, comissao_valor=?, ativo=?
+          WHERE id=? AND tenant_id=?`)
+          .run(
+            novoNome,
+            body.telefone === undefined ? (atual.telefone || '') : telefone,
+            body.comissao_tipo === undefined ? (atual.comissao_tipo || 'fixa') : comissaoTipo,
+            body.comissao_valor === undefined ? (parseFloat(atual.comissao_valor || 0) || 0) : comissaoValor,
+            body.ativo === undefined ? (Number(atual.ativo) !== 0 ? 1 : 0) : ativo,
+            id,
+            tid
+          )
+        const row = db.prepare('SELECT * FROM entregadores WHERE id=? AND tenant_id=?').get(id, tid)
+        _emitEntregas(tid, 'entregadores:UPDATE', row)
+        marcarDirty()
+        send(res, 200, { ok: true, entregador: row })
+        return true
+      }
+      if (!nome) { send(res, 400, { error: 'Informe o nome do entregador' }); return true }
+      const info = db.prepare(`INSERT INTO entregadores
+        (tenant_id, nome, telefone, comissao_tipo, comissao_valor, ativo)
+        VALUES (?,?,?,?,?,?)`)
+        .run(tid, nome, telefone, comissaoTipo, comissaoValor, ativo)
+      const row = db.prepare('SELECT * FROM entregadores WHERE id=? AND tenant_id=?').get(info.lastInsertRowid, tid)
+      _emitEntregas(tid, 'entregadores:INSERT', row)
+      marcarDirty()
+      send(res, 201, { ok: true, entregador: row })
+    } catch(e) {
+      log('ERRO', '/api/entregadores/salvar:', e.message)
+      send(res, 400, { error: e.message })
+    }
+    return true
+  }
+
+  const ENTREGADOR_SESSION_TTL = 14 * 24 * 60 * 60 * 1000
+  const _digits = (v) => String(v || '').replace(/\D/g, '')
+  const _driverToken = (req) => {
+    const auth = req.headers['authorization'] || ''
+    if (auth.startsWith('Bearer ')) return auth.slice(7).trim()
+    return String(req.headers['x-entregador-token'] || '').trim()
+  }
+  const _validarEntregador = (req) => {
+    const token = _driverToken(req)
+    if (!token) return null
+    const sess = db.prepare('SELECT * FROM entregador_sessions WHERE token=?').get(token)
+    if (!sess) return null
+    if (Date.now() - Number(sess.ts || 0) > ENTREGADOR_SESSION_TTL) {
+      db.prepare('DELETE FROM entregador_sessions WHERE token=?').run(token)
+      return null
+    }
+    const entregador = db.prepare('SELECT * FROM entregadores WHERE id=? AND tenant_id=? AND ativo=1').get(sess.entregador_id, sess.tenant_id)
+    if (!entregador) return null
+    return { ...sess, entregador }
+  }
+  const _driverOrderNum = (order) => order?.order_num || order?.id || order?.order_id || ''
+  const _driverEntregaRow = (row) => {
+    if (!row) return row
+    return {
+      ...row,
+      items: _parseOrderItemsDelivery(row.items),
+      bairro: _bairroEntrega(row.addr),
+      total_pedido: _orderTotalDelivery(row)
+    }
+  }
+  let _entregasSequenciaReady = false
+  const _ensureEntregaSequencia = () => {
+    if (_entregasSequenciaReady) return
+    const cols = new Set(db.prepare("PRAGMA table_info(entregas)").all().map(c => c.name))
+    if (!cols.has('sequencia')) {
+      try {
+        db.exec("ALTER TABLE entregas ADD COLUMN sequencia INTEGER")
+      } catch(e) {
+        if (!/duplicate column name/i.test(String(e?.message || ''))) throw e
+      }
+    }
+    db.exec("CREATE INDEX IF NOT EXISTS idx_entregas_rota_seq ON entregas(tenant_id, entregador_id, status, sequencia)")
+    _entregasSequenciaReady = true
+  }
+  const _driverEntregas = (tid, entregadorId) => {
+    _ensureEntregaSequencia()
+    const abertas = db.prepare(`
+      SELECT e.*, o.order_num, o.client, o.phone, o.addr, o.items, o.total, o.taxa, o.pag, o.pag_momento, o.troco,
+             o.status as order_status, o.created_at as order_created_at,
+             l.lat as entregador_lat, l.lng as entregador_lng, l.accuracy as entregador_accuracy, l.updated_at as entregador_gps_at
+      FROM entregas e
+      JOIN orders o ON o.id=e.order_id AND o.tenant_id=e.tenant_id
+      LEFT JOIN entregador_locations l ON l.tenant_id=e.tenant_id AND l.entregador_id=e.entregador_id
+      WHERE e.tenant_id=? AND e.entregador_id=? AND e.status IN ('atribuida','em_rota','problema')
+      ORDER BY COALESCE(e.sequencia, 999999) ASC, COALESCE(e.saiu_at,e.assigned_at,e.created_at) ASC, e.id ASC
+    `).all(tid, entregadorId).map(_driverEntregaRow)
+    const concluidas = db.prepare(`
+      SELECT e.*, o.order_num, o.client, o.phone, o.addr, o.items, o.total, o.taxa, o.pag, o.pag_momento, o.troco,
+             o.status as order_status, o.created_at as order_created_at
+      FROM entregas e
+      JOIN orders o ON o.id=e.order_id AND o.tenant_id=e.tenant_id
+      WHERE e.tenant_id=? AND e.entregador_id=? AND e.status='entregue' AND date(e.entregue_at)=date('now')
+      ORDER BY e.entregue_at DESC
+      LIMIT 30
+    `).all(tid, entregadorId).map(_driverEntregaRow)
+    const location = db.prepare('SELECT * FROM entregador_locations WHERE tenant_id=? AND entregador_id=?').get(tid, entregadorId) || null
+    return { abertas, concluidas, location }
+  }
+  const _driverDisponiveis = (tid) => {
+    return db.prepare(`
+      SELECT o.*,
+             e.id as entrega_id, e.status as entrega_status, e.entregador_id, e.rota_id
+      FROM orders o
+      LEFT JOIN entregas e ON e.tenant_id=o.tenant_id AND e.order_id=o.id
+      WHERE o.tenant_id=? AND o.status='pronto'
+      ORDER BY o.created_at ASC, o.id ASC
+    `).all(tid)
+      .filter(_isDeliveryOrder)
+      .filter(o => !o.entrega_status || ['pendente','cancelada','retornada'].includes(String(o.entrega_status || '')))
+      .map(o => ({
+        ..._orderOutDelivery(o),
+        bairro: _bairroEntrega(o.addr),
+        total_pedido: _orderTotalDelivery(o),
+        valor_receber_calc: _valorReceberEntrega(o)
+      }))
+  }
+  const _driverNextSeq = (tid, entregadorId) => {
+    _ensureEntregaSequencia()
+    const row = db.prepare(`
+      SELECT COALESCE(MAX(sequencia), 0) as max_seq
+      FROM entregas
+      WHERE tenant_id=? AND entregador_id=? AND status IN ('atribuida','em_rota','problema')
+    `).get(tid, entregadorId)
+    return (parseInt(row?.max_seq || 0) || 0) + 1
+  }
+  const _driverMensagem = (tipo, order, entregador, custom) => {
+    const nome = String(order?.client || 'Cliente').split(' ')[0] || 'Cliente'
+    const pedido = _driverOrderNum(order)
+    const loja = 'Pedido #' + pedido
+    const presets = {
+      a_caminho: `Ola, ${nome}! Seu ${loja} saiu para entrega. Estou indo ate voce agora.`,
+      cheguei: `Ola, ${nome}! Ja cheguei com seu ${loja}. Pode me receber, por favor?`,
+      nao_achei: `Ola, ${nome}! Estou proximo com seu ${loja}, mas nao estou encontrando o endereco. Pode me mandar uma referencia?`,
+      atraso: `Ola, ${nome}! Estou a caminho com seu ${loja}, mas peguei um pequeno atraso na rota. Chego em alguns minutos.`,
+      retorno: `Ola, ${nome}! Tentei entregar seu ${loja}, mas nao consegui contato. Vou avisar a loja para orientar o proximo passo.`
+    }
+    if (tipo === 'custom') return String(custom || '').trim().slice(0, 320)
+    return presets[tipo] || presets.cheguei
   }
   const _normalizeAdminAlertInput = (body) => {
     const tipos = new Set(['aviso', 'promocao', 'alerta', 'novidade'])
@@ -590,10 +893,612 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // ── Inicia job de recuperação de PIX na primeira requisição ───────────────
   // O job resolve o token MP por tenant em cada iteração — pagamentos de
   // pedidos do tenant X consultam a conta MP do tenant X (com fallback global).
-  _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN)
+  _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN, aplicarBaixaEstoquePedido)
 
   // ── Inicia job de auto-cobrança SaaS (uma vez) ────────────────────────────
   _iniciarAutoCobrancaJob(ctx)
+
+  if (req.method === 'POST' && upath === '/api/entregador-login') {
+    const body = await readBody(req)
+    const ref = String(body.tenant_id || body.tenant || body.slug || req.headers['x-tenant-id'] || '').trim()
+    const phone = _digits(body.telefone || body.phone || '')
+    if (!ref || !phone) { send(res, 400, { error: 'Loja e telefone obrigatorios' }); return true }
+    try {
+      const tenant = db.prepare('SELECT id,nome,slug FROM tenants WHERE id=? OR slug=? LIMIT 1').get(ref, ref)
+      if (!tenant) { send(res, 404, { error: 'Loja nao encontrada' }); return true }
+      const entregadores = db.prepare('SELECT * FROM entregadores WHERE tenant_id=? AND ativo=1').all(tenant.id)
+      const driver = entregadores.find(d => {
+        const dPhone = _digits(d.telefone || '')
+        return dPhone && (dPhone === phone || dPhone.slice(-8) === phone.slice(-8))
+      })
+      if (!driver) { send(res, 401, { error: 'Entregador nao encontrado ou inativo' }); return true }
+      const token = crypto.randomBytes(32).toString('hex')
+      const ts = Date.now()
+      db.prepare('DELETE FROM entregador_sessions WHERE ts < ?').run(ts - ENTREGADOR_SESSION_TTL)
+      db.prepare('INSERT OR REPLACE INTO entregador_sessions (token,tenant_id,entregador_id,ts) VALUES (?,?,?,?)')
+        .run(token, tenant.id, driver.id, ts)
+      send(res, 200, {
+        ok: true,
+        token,
+        tenant: { id: tenant.id, nome: tenant.nome, slug: tenant.slug },
+        entregador: { id: driver.id, nome: driver.nome, telefone: driver.telefone }
+      })
+    } catch(e) {
+      log('ERRO', '/api/entregador-login:', e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  if (req.method === 'GET' && upath === '/api/entregador/me') {
+    const sess = _validarEntregador(req)
+    if (!sess) { send(res, 401, { error: 'Sessao invalida' }); return true }
+    const tenant = db.prepare('SELECT id,nome,slug FROM tenants WHERE id=?').get(sess.tenant_id)
+    send(res, 200, {
+      tenant,
+      entregador: {
+        id: sess.entregador.id,
+        nome: sess.entregador.nome,
+        telefone: sess.entregador.telefone,
+        comissao_tipo: sess.entregador.comissao_tipo,
+        comissao_valor: sess.entregador.comissao_valor
+      }
+    })
+    return true
+  }
+
+  if (req.method === 'GET' && upath === '/api/entregador/entregas') {
+    const sess = _validarEntregador(req)
+    if (!sess) { send(res, 401, { error: 'Sessao invalida' }); return true }
+    try {
+      send(res, 200, _driverEntregas(sess.tenant_id, sess.entregador_id))
+    } catch(e) {
+      log('ERRO', '/api/entregador/entregas:', e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  if (req.method === 'GET' && upath === '/api/entregador/disponiveis') {
+    const sess = _validarEntregador(req)
+    if (!sess) { send(res, 401, { error: 'Sessao invalida' }); return true }
+    try {
+      send(res, 200, { disponiveis: _driverDisponiveis(sess.tenant_id) })
+    } catch(e) {
+      log('ERRO', '/api/entregador/disponiveis:', e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  if (req.method === 'POST' && upath === '/api/entregador/adicionar-entregas') {
+    const sess = _validarEntregador(req)
+    if (!sess) { send(res, 401, { error: 'Sessao invalida' }); return true }
+    const body = await readBody(req)
+    const orderIds = [...new Set((Array.isArray(body.order_ids) ? body.order_ids : [body.order_id || body.id])
+      .map(id => parseInt(id || '0')).filter(Boolean))]
+    if (!orderIds.length) { send(res, 400, { error: 'Selecione pelo menos uma entrega' }); return true }
+    try {
+      const entregador = sess.entregador
+      const entregas = db.transaction(() => {
+        let seq = _driverNextSeq(sess.tenant_id, sess.entregador_id)
+        const created = []
+        for (const orderId of orderIds) {
+          const order = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(orderId, sess.tenant_id)
+          if (!order) throw new Error(`Pedido ${orderId} nao encontrado`)
+          if (!_isDeliveryOrder(order)) throw new Error(`Pedido ${orderId} nao e delivery`)
+          if (String(order.status || '') !== 'pronto') throw new Error(`Pedido ${orderId} ainda nao esta pronto para entrega`)
+          const atual = db.prepare('SELECT * FROM entregas WHERE tenant_id=? AND order_id=?').get(sess.tenant_id, orderId)
+          const atualStatus = String(atual?.status || '')
+          if (atual && ['atribuida','em_rota','problema','entregue'].includes(atualStatus)) {
+            if (Number(atual.entregador_id) === Number(sess.entregador_id) && atualStatus !== 'entregue') {
+              if (!atual.sequencia) {
+                db.prepare("UPDATE entregas SET sequencia=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?")
+                  .run(seq++, atual.id, sess.tenant_id)
+              }
+              created.push(db.prepare('SELECT * FROM entregas WHERE id=? AND tenant_id=?').get(atual.id, sess.tenant_id))
+              continue
+            }
+            throw new Error(`Pedido ${_driverOrderNum(order)} ja foi assumido por outro entregador`)
+          }
+          const valorPedido = _orderTotalDelivery(order)
+          const valorReceber = _valorReceberEntrega(order)
+          const comissao = _comissaoEntrega(entregador, order)
+          db.prepare(`INSERT INTO entregas
+            (tenant_id, order_id, entregador_id, status, sequencia, taxa_entrega, valor_pedido, valor_receber, comissao, assigned_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+            ON CONFLICT(tenant_id, order_id) DO UPDATE SET
+              entregador_id=excluded.entregador_id,
+              rota_id=NULL,
+              status=excluded.status,
+              sequencia=excluded.sequencia,
+              taxa_entrega=excluded.taxa_entrega,
+              valor_pedido=excluded.valor_pedido,
+              valor_receber=excluded.valor_receber,
+              comissao=excluded.comissao,
+              assigned_at=COALESCE(entregas.assigned_at, datetime('now')),
+              updated_at=datetime('now')`)
+            .run(sess.tenant_id, orderId, sess.entregador_id, 'atribuida', seq++, parseFloat(order.taxa || 0), valorPedido, valorReceber, comissao)
+          created.push(db.prepare('SELECT * FROM entregas WHERE tenant_id=? AND order_id=?').get(sess.tenant_id, orderId))
+        }
+        return created
+      })()
+      for (const entrega of entregas) {
+        _emitEntregas(sess.tenant_id, 'entregas:UPDATE', { entrega, order_id: entrega.order_id })
+      }
+      marcarDirty()
+      send(res, 200, { ok: true, entregas, ..._driverEntregas(sess.tenant_id, sess.entregador_id), disponiveis: _driverDisponiveis(sess.tenant_id) })
+    } catch(e) {
+      send(res, 409, { error: e.message })
+    }
+    return true
+  }
+
+  if (req.method === 'POST' && upath === '/api/entregador/entregas/ordem') {
+    const sess = _validarEntregador(req)
+    if (!sess) { send(res, 401, { error: 'Sessao invalida' }); return true }
+    const body = await readBody(req)
+    const requestedRaw = Array.isArray(body.entrega_ids) ? body.entrega_ids : (Array.isArray(body.order_ids) ? body.order_ids : [])
+    const requested = [...new Set(requestedRaw
+      .map(id => parseInt(id || '0')).filter(Boolean))]
+    if (!requested.length) { send(res, 400, { error: 'Informe a sequencia da rota' }); return true }
+    try {
+      _ensureEntregaSequencia()
+      const abertas = db.prepare(`
+        SELECT id
+        FROM entregas
+        WHERE tenant_id=? AND entregador_id=? AND status IN ('atribuida','em_rota','problema')
+        ORDER BY COALESCE(sequencia, 999999) ASC, id ASC
+      `).all(sess.tenant_id, sess.entregador_id).map(r => Number(r.id))
+      const abertasSet = new Set(abertas)
+      for (const id of requested) {
+        if (!abertasSet.has(Number(id))) { send(res, 403, { error: 'A sequencia contem entrega que nao pertence a este entregador' }); return true }
+      }
+      const finalOrder = requested.concat(abertas.filter(id => !requested.includes(id)))
+      db.transaction(() => {
+        finalOrder.forEach((id, idx) => {
+          db.prepare("UPDATE entregas SET sequencia=?, updated_at=datetime('now') WHERE id=? AND tenant_id=? AND entregador_id=?")
+            .run(idx + 1, id, sess.tenant_id, sess.entregador_id)
+        })
+      })()
+      _emitEntregas(sess.tenant_id, 'entregas:UPDATE', { entregador_id: sess.entregador_id, sequencia: finalOrder })
+      marcarDirty()
+      send(res, 200, { ok: true, ..._driverEntregas(sess.tenant_id, sess.entregador_id) })
+    } catch(e) {
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  if (req.method === 'POST' && upath === '/api/entregador/localizacao') {
+    const sess = _validarEntregador(req)
+    if (!sess) { send(res, 401, { error: 'Sessao invalida' }); return true }
+    const body = await readBody(req)
+    const lat = parseFloat(body.lat)
+    const lng = parseFloat(body.lng)
+    const accuracy = parseFloat(body.accuracy || 0) || 0
+    const entregaId = parseInt(body.entrega_id || '0') || null
+    if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+      send(res, 400, { error: 'Localizacao invalida' }); return true
+    }
+    if (entregaId) {
+      const own = db.prepare('SELECT id FROM entregas WHERE id=? AND tenant_id=? AND entregador_id=?').get(entregaId, sess.tenant_id, sess.entregador_id)
+      if (!own) { send(res, 403, { error: 'Entrega nao pertence a este entregador' }); return true }
+    }
+    db.prepare(`INSERT INTO entregador_locations
+      (tenant_id, entregador_id, entrega_id, lat, lng, accuracy, updated_at)
+      VALUES (?,?,?,?,?,?,datetime('now'))
+      ON CONFLICT(tenant_id, entregador_id) DO UPDATE SET
+        entrega_id=excluded.entrega_id,
+        lat=excluded.lat,
+        lng=excluded.lng,
+        accuracy=excluded.accuracy,
+        updated_at=datetime('now')`)
+      .run(sess.tenant_id, sess.entregador_id, entregaId, lat, lng, accuracy)
+    const location = db.prepare('SELECT * FROM entregador_locations WHERE tenant_id=? AND entregador_id=?').get(sess.tenant_id, sess.entregador_id)
+    _emitEntregas(sess.tenant_id, 'entregador_locations:UPDATE', { location })
+    marcarDirty()
+    send(res, 200, { ok: true, location })
+    return true
+  }
+
+  if (req.method === 'POST' && upath === '/api/entregador/status') {
+    const sess = _validarEntregador(req)
+    if (!sess) { send(res, 401, { error: 'Sessao invalida' }); return true }
+    const body = await readBody(req)
+    const entregaId = parseInt(body.entrega_id || body.id || '0')
+    const status = String(body.status || '').trim()
+    const allowed = new Set(['em_rota','entregue','problema','retornada'])
+    if (!entregaId || !allowed.has(status)) { send(res, 400, { error: 'Entrega ou status invalido' }); return true }
+    try {
+      const entrega = db.prepare('SELECT * FROM entregas WHERE id=? AND tenant_id=? AND entregador_id=?').get(entregaId, sess.tenant_id, sess.entregador_id)
+      if (!entrega) { send(res, 404, { error: 'Entrega nao encontrada' }); return true }
+      const order = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(entrega.order_id, sess.tenant_id)
+      const problema = status === 'problema' || body.problema
+        ? String(body.problema || '').trim().slice(0, 280)
+        : null
+      const recebido = body.recebido === undefined || body.recebido === null || body.recebido === ''
+        ? parseFloat(entrega.recebido || 0)
+        : parseFloat(body.recebido || 0)
+      db.prepare(`UPDATE entregas SET
+          status=?,
+          problema=?,
+          recebido=?,
+          saiu_at=CASE WHEN ?='em_rota' THEN COALESCE(saiu_at, datetime('now')) ELSE saiu_at END,
+          entregue_at=CASE WHEN ?='entregue' THEN COALESCE(entregue_at, datetime('now')) ELSE entregue_at END,
+          updated_at=datetime('now')
+        WHERE id=? AND tenant_id=?`)
+        .run(status, problema, isFinite(recebido) ? recebido : 0, status, status, entrega.id, sess.tenant_id)
+      if (status === 'em_rota' && order && !['saiu','entregue','finalizado','cancelado'].includes(order.status)) {
+        db.prepare("UPDATE orders SET status='saiu' WHERE id=? AND tenant_id=?").run(order.id, sess.tenant_id)
+        _statusHistDelivery(sess.tenant_id, order.id, order.status, 'saiu', {
+          actor_type: 'entregador',
+          actor_id: String(sess.entregador_id),
+          actor_name: sess.entregador.nome,
+          origem: 'app-entregador',
+          note: 'Entrega iniciada pelo app'
+        })
+      }
+      if (status === 'entregue' && order && !['entregue','finalizado','cancelado'].includes(order.status)) {
+        db.prepare("UPDATE orders SET status='entregue' WHERE id=? AND tenant_id=?").run(order.id, sess.tenant_id)
+        _statusHistDelivery(sess.tenant_id, order.id, order.status, 'entregue', {
+          actor_type: 'entregador',
+          actor_id: String(sess.entregador_id),
+          actor_name: sess.entregador.nome,
+          origem: 'app-entregador',
+          note: 'Entrega concluida pelo app'
+        })
+      }
+      if (entrega.rota_id) _recalcularRotaEntrega(sess.tenant_id, entrega.rota_id)
+      const updatedEntrega = db.prepare('SELECT * FROM entregas WHERE id=? AND tenant_id=?').get(entrega.id, sess.tenant_id)
+      const updatedOrder = order ? db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(order.id, sess.tenant_id) : null
+      if (updatedOrder) _emitOrderDelivery(sess.tenant_id, updatedOrder)
+      _emitEntregas(sess.tenant_id, 'entregas:UPDATE', { entrega: updatedEntrega, order_id: updatedEntrega.order_id })
+      marcarDirty()
+      send(res, 200, { ok: true, entrega: updatedEntrega, order: _orderOutDelivery(updatedOrder) })
+    } catch(e) {
+      log('ERRO', '/api/entregador/status:', e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  if (req.method === 'POST' && upath === '/api/entregador/mensagem') {
+    const sess = _validarEntregador(req)
+    if (!sess) { send(res, 401, { error: 'Sessao invalida' }); return true }
+    const body = await readBody(req)
+    const entregaId = parseInt(body.entrega_id || '0')
+    const tipo = String(body.tipo || 'cheguei').trim()
+    if (!entregaId) { send(res, 400, { error: 'entrega_id obrigatorio' }); return true }
+    try {
+      const entrega = db.prepare('SELECT * FROM entregas WHERE id=? AND tenant_id=? AND entregador_id=?').get(entregaId, sess.tenant_id, sess.entregador_id)
+      if (!entrega) { send(res, 404, { error: 'Entrega nao encontrada' }); return true }
+      const order = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(entrega.order_id, sess.tenant_id)
+      if (!order?.phone) { send(res, 400, { error: 'Pedido sem telefone do cliente' }); return true }
+      const msg = _driverMensagem(tipo, order, sess.entregador, body.message)
+      if (!msg) { send(res, 400, { error: 'Mensagem vazia' }); return true }
+      const cfg = db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(sess.tenant_id)
+      const wantsLocalTest = req.headers['x-local-test'] === '1' || req.headers['x-local-dry-run'] === '1'
+      const localTest = wantsLocalTest && (
+        String(sess.tenant_id || '').startsWith('test_entregador_') ||
+        process.env.ALLOW_LOCAL_TEST_MESSAGES === '1'
+      )
+      const r = localTest
+        ? { ok: true, data: { local_test: true } }
+        : await sendWA(order.phone, msg, cfg?.evo_instance || EVO_INST, 900)
+      db.prepare(`INSERT INTO entrega_mensagens
+        (tenant_id, entrega_id, order_id, entregador_id, tipo, message, ok, error, lat, lng)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`)
+        .run(sess.tenant_id, entrega.id, order.id, sess.entregador_id, tipo, msg, r.ok ? 1 : 0, r.ok ? null : String(r.error || JSON.stringify(r.data || {})).slice(0, 300), body.lat || null, body.lng || null)
+      const row = db.prepare('SELECT * FROM entrega_mensagens WHERE id=last_insert_rowid()').get()
+      _emitEntregas(sess.tenant_id, 'entrega_mensagens:INSERT', { mensagem: row, entrega_id: entrega.id, order_id: order.id })
+      marcarDirty()
+      send(res, 200, { ok: !!r.ok, message: msg })
+    } catch(e) {
+      log('ERRO', '/api/entregador/mensagem:', e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  if (req.method === 'GET' && upath === '/api/entregas/dashboard') {
+    const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    try {
+      send(res, 200, _deliveryDashboard(tid))
+    } catch(e) {
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  if (req.method === 'GET' && upath === '/api/order-status-history') {
+    const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
+    const orderId = parseInt(params.get('order_id') || '0')
+    if (!tid || !orderId) { send(res, 400, { error: 'tenant_id e order_id obrigatorios' }); return true }
+    try {
+      const rows = db.prepare(`
+        SELECT *
+        FROM order_status_history
+        WHERE tenant_id=? AND order_id=?
+        ORDER BY created_at ASC, id ASC
+      `).all(tid, orderId)
+      send(res, 200, rows)
+    } catch(e) {
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  if (req.method === 'POST' && upath === '/api/entregas/atribuir') {
+    const tid = req.headers['x-tenant-id'] || ''
+    const body = await readBody(req)
+    const orderId = parseInt(body.order_id || body.id || '0')
+    const entregadorId = parseInt(body.entregador_id || '0')
+    const rotaId = parseInt(body.rota_id || '0') || null
+    const iniciar = !!body.iniciar_rota || body.status === 'em_rota'
+    if (!tid || !orderId || !entregadorId) {
+      send(res, 400, { error: 'order_id e entregador_id obrigatorios' }); return true
+    }
+    try {
+      const order = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(orderId, tid)
+      if (!order) { send(res, 404, { error: 'Pedido nao encontrado' }); return true }
+      if (!_isDeliveryOrder(order)) { send(res, 400, { error: 'Pedido nao e delivery' }); return true }
+      if (!['pronto','saiu'].includes(String(order.status || ''))) {
+        send(res, 409, { error: 'Pedido precisa estar pronto ou em rota' }); return true
+      }
+      const entregador = db.prepare('SELECT * FROM entregadores WHERE id=? AND tenant_id=? AND ativo=1').get(entregadorId, tid)
+      if (!entregador) { send(res, 404, { error: 'Entregador nao encontrado ou inativo' }); return true }
+      if (rotaId) {
+        const rota = db.prepare('SELECT * FROM rotas_entrega WHERE id=? AND tenant_id=?').get(rotaId, tid)
+        if (!rota || rota.status === 'finalizada' || rota.status === 'cancelada') {
+          send(res, 404, { error: 'Rota nao encontrada ou encerrada' }); return true
+        }
+        if (parseInt(rota.entregador_id || 0) !== entregadorId) {
+          send(res, 400, { error: 'Rota pertence a outro entregador' }); return true
+        }
+      }
+      const status = iniciar ? 'em_rota' : 'atribuida'
+      const valorPedido = _orderTotalDelivery(order)
+      const valorReceber = _valorReceberEntrega(order)
+      const comissao = _comissaoEntrega(entregador, order)
+      _ensureEntregaSequencia()
+      const sequencia = parseInt(body.sequencia || '0') || _driverNextSeq(tid, entregadorId)
+      db.prepare(`INSERT INTO entregas
+        (tenant_id, order_id, entregador_id, rota_id, status, sequencia, taxa_entrega, valor_pedido, valor_receber, comissao, assigned_at, saiu_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'),${iniciar ? "datetime('now')" : "NULL"},datetime('now'))
+        ON CONFLICT(tenant_id, order_id) DO UPDATE SET
+          entregador_id=excluded.entregador_id,
+          rota_id=excluded.rota_id,
+          status=excluded.status,
+          sequencia=excluded.sequencia,
+          taxa_entrega=excluded.taxa_entrega,
+          valor_pedido=excluded.valor_pedido,
+          valor_receber=excluded.valor_receber,
+          comissao=excluded.comissao,
+          assigned_at=COALESCE(entregas.assigned_at, datetime('now')),
+          saiu_at=CASE WHEN excluded.status='em_rota' THEN COALESCE(entregas.saiu_at, datetime('now')) ELSE entregas.saiu_at END,
+          updated_at=datetime('now')`)
+        .run(tid, orderId, entregadorId, rotaId, status, sequencia, parseFloat(order.taxa || 0), valorPedido, valorReceber, comissao)
+      if (iniciar && order.status !== 'saiu') {
+        db.prepare("UPDATE orders SET status='saiu' WHERE id=? AND tenant_id=?").run(orderId, tid)
+        _statusHistDelivery(tid, orderId, order.status, 'saiu', {
+          actor_type: 'entregador',
+          actor_id: String(entregadorId),
+          actor_name: entregador.nome,
+          origem: 'entregas',
+          note: 'Entrega saiu para rota'
+        })
+      }
+      if (rotaId) _recalcularRotaEntrega(tid, rotaId)
+      const entrega = db.prepare('SELECT * FROM entregas WHERE tenant_id=? AND order_id=?').get(tid, orderId)
+      const updatedOrder = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(orderId, tid)
+      _emitOrderDelivery(tid, updatedOrder)
+      _emitEntregas(tid, 'entregas:UPDATE', { entrega, order_id: orderId })
+      marcarDirty()
+      send(res, 200, { ok: true, entrega, order: _orderOutDelivery(updatedOrder) })
+    } catch(e) {
+      log('ERRO', '/api/entregas/atribuir:', e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  if (req.method === 'POST' && upath === '/api/entregas/status') {
+    const tid = req.headers['x-tenant-id'] || ''
+    const body = await readBody(req)
+    const entregaId = parseInt(body.entrega_id || body.id || '0')
+    const orderId = parseInt(body.order_id || '0')
+    const status = String(body.status || '').trim()
+    const allowed = new Set(['pendente','atribuida','em_rota','entregue','problema','retornada','cancelada'])
+    if (!tid || !status || !allowed.has(status)) { send(res, 400, { error: 'status invalido' }); return true }
+    try {
+      const entrega = entregaId
+        ? db.prepare('SELECT * FROM entregas WHERE id=? AND tenant_id=?').get(entregaId, tid)
+        : db.prepare('SELECT * FROM entregas WHERE order_id=? AND tenant_id=?').get(orderId, tid)
+      if (!entrega) { send(res, 404, { error: 'Entrega nao encontrada' }); return true }
+      const order = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(entrega.order_id, tid)
+      const entregador = entrega.entregador_id
+        ? db.prepare('SELECT * FROM entregadores WHERE id=? AND tenant_id=?').get(entrega.entregador_id, tid)
+        : null
+      const problema = status === 'problema' || body.problema
+        ? String(body.problema || '').trim().slice(0, 280)
+        : null
+      const recebido = body.recebido === undefined || body.recebido === null || body.recebido === ''
+        ? parseFloat(entrega.recebido || 0)
+        : parseFloat(body.recebido || 0)
+      db.prepare(`UPDATE entregas SET
+          status=?,
+          problema=?,
+          recebido=?,
+          saiu_at=CASE WHEN ?='em_rota' THEN COALESCE(saiu_at, datetime('now')) ELSE saiu_at END,
+          entregue_at=CASE WHEN ?='entregue' THEN COALESCE(entregue_at, datetime('now')) ELSE entregue_at END,
+          updated_at=datetime('now')
+        WHERE id=? AND tenant_id=?`)
+        .run(status, problema, isFinite(recebido) ? recebido : 0, status, status, entrega.id, tid)
+      if (status === 'em_rota' && order && !['saiu','finalizado','cancelado'].includes(order.status)) {
+        db.prepare("UPDATE orders SET status='saiu' WHERE id=? AND tenant_id=?").run(order.id, tid)
+        _statusHistDelivery(tid, order.id, order.status, 'saiu', {
+          actor_type: 'entregador',
+          actor_id: entrega.entregador_id ? String(entrega.entregador_id) : null,
+          actor_name: entregador?.nome || null,
+          origem: 'entregas',
+          note: 'Entrega saiu para rota'
+        })
+      }
+      if (entrega.rota_id) _recalcularRotaEntrega(tid, entrega.rota_id)
+      const updatedEntrega = db.prepare('SELECT * FROM entregas WHERE id=? AND tenant_id=?').get(entrega.id, tid)
+      const updatedOrder = order ? db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(order.id, tid) : null
+      if (updatedOrder) _emitOrderDelivery(tid, updatedOrder)
+      _emitEntregas(tid, 'entregas:UPDATE', { entrega: updatedEntrega, order_id: updatedEntrega.order_id })
+      marcarDirty()
+      send(res, 200, { ok: true, entrega: updatedEntrega, order: _orderOutDelivery(updatedOrder) })
+    } catch(e) {
+      log('ERRO', '/api/entregas/status:', e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  if (req.method === 'POST' && upath === '/api/rotas-entrega/criar') {
+    const tid = req.headers['x-tenant-id'] || ''
+    const body = await readBody(req)
+    const entregadorId = parseInt(body.entregador_id || '0')
+    const orderIds = [...new Set((Array.isArray(body.order_ids) ? body.order_ids : [])
+      .map(id => parseInt(id || '0')).filter(Boolean))]
+    const iniciar = !!body.iniciar_rota
+    if (!tid || !entregadorId || !orderIds.length) {
+      send(res, 400, { error: 'entregador_id e order_ids obrigatorios' }); return true
+    }
+    try {
+      _ensureEntregaSequencia()
+      const entregador = db.prepare('SELECT * FROM entregadores WHERE id=? AND tenant_id=? AND ativo=1').get(entregadorId, tid)
+      if (!entregador) { send(res, 404, { error: 'Entregador nao encontrado ou inativo' }); return true }
+      const orders = []
+      for (const id of orderIds) {
+        const order = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(id, tid)
+        if (!order) { send(res, 404, { error: `Pedido ${id} nao encontrado` }); return true }
+        if (!_isDeliveryOrder(order)) { send(res, 400, { error: `Pedido ${id} nao e delivery` }); return true }
+        if (!['pronto','saiu'].includes(String(order.status || ''))) {
+          send(res, 409, { error: `Pedido ${id} precisa estar pronto ou em rota` }); return true
+        }
+        orders.push(order)
+      }
+      const rotaId = db.transaction(() => {
+        const info = db.prepare(`INSERT INTO rotas_entrega
+          (tenant_id, entregador_id, status, iniciado_em, obs, updated_at)
+          VALUES (?,?,?,${iniciar ? "datetime('now')" : "NULL"},?,datetime('now'))`)
+          .run(tid, entregadorId, iniciar ? 'em_rota' : 'aberta', String(body.obs || '').trim().slice(0, 280) || null)
+        const rid = info.lastInsertRowid
+        const statusEntrega = iniciar ? 'em_rota' : 'atribuida'
+        for (let idx = 0; idx < orders.length; idx++) {
+          const order = orders[idx]
+          const valorPedido = _orderTotalDelivery(order)
+          db.prepare(`INSERT INTO entregas
+            (tenant_id, order_id, entregador_id, rota_id, status, sequencia, taxa_entrega, valor_pedido, valor_receber, comissao, assigned_at, saiu_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'),${iniciar ? "datetime('now')" : "NULL"},datetime('now'))
+            ON CONFLICT(tenant_id, order_id) DO UPDATE SET
+              entregador_id=excluded.entregador_id,
+              rota_id=excluded.rota_id,
+              status=excluded.status,
+              sequencia=excluded.sequencia,
+              taxa_entrega=excluded.taxa_entrega,
+              valor_pedido=excluded.valor_pedido,
+              valor_receber=excluded.valor_receber,
+              comissao=excluded.comissao,
+              assigned_at=COALESCE(entregas.assigned_at, datetime('now')),
+              saiu_at=CASE WHEN excluded.status='em_rota' THEN COALESCE(entregas.saiu_at, datetime('now')) ELSE entregas.saiu_at END,
+              updated_at=datetime('now')`)
+            .run(tid, order.id, entregadorId, rid, statusEntrega, idx + 1, parseFloat(order.taxa || 0), valorPedido, _valorReceberEntrega(order), _comissaoEntrega(entregador, order))
+          if (iniciar && order.status !== 'saiu') {
+            db.prepare("UPDATE orders SET status='saiu' WHERE id=? AND tenant_id=?").run(order.id, tid)
+            _statusHistDelivery(tid, order.id, order.status, 'saiu', {
+              actor_type: 'entregador',
+              actor_id: String(entregadorId),
+              actor_name: entregador.nome,
+              origem: 'rotas-entrega',
+              note: 'Rota iniciada'
+            })
+          }
+        }
+        return rid
+      })()
+      const rota = _recalcularRotaEntrega(tid, rotaId)
+      const entregas = db.prepare('SELECT * FROM entregas WHERE tenant_id=? AND rota_id=? ORDER BY id ASC').all(tid, rotaId)
+      for (const order of orders) {
+        const updatedOrder = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(order.id, tid)
+        _emitOrderDelivery(tid, updatedOrder)
+      }
+      _emitEntregas(tid, 'rotas_entrega:INSERT', { rota, entregas })
+      marcarDirty()
+      send(res, 200, { ok: true, rota, entregas })
+    } catch(e) {
+      log('ERRO', '/api/rotas-entrega/criar:', e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  if (req.method === 'POST' && upath === '/api/rotas-entrega/status') {
+    const tid = req.headers['x-tenant-id'] || ''
+    const body = await readBody(req)
+    const rotaId = parseInt(body.rota_id || body.id || '0')
+    const status = String(body.status || '').trim()
+    const allowed = new Set(['aberta','em_rota','finalizada','cancelada'])
+    if (!tid || !rotaId || !allowed.has(status)) { send(res, 400, { error: 'rota_id ou status invalido' }); return true }
+    try {
+      const rota = db.prepare('SELECT * FROM rotas_entrega WHERE id=? AND tenant_id=?').get(rotaId, tid)
+      if (!rota) { send(res, 404, { error: 'Rota nao encontrada' }); return true }
+      const entregador = db.prepare('SELECT * FROM entregadores WHERE id=? AND tenant_id=?').get(rota.entregador_id, tid)
+      db.transaction(() => {
+        db.prepare(`UPDATE rotas_entrega SET
+            status=?,
+            iniciado_em=CASE WHEN ?='em_rota' THEN COALESCE(iniciado_em, datetime('now')) ELSE iniciado_em END,
+            finalizado_em=CASE WHEN ? IN ('finalizada','cancelada') THEN COALESCE(finalizado_em, datetime('now')) ELSE finalizado_em END,
+            updated_at=datetime('now')
+          WHERE id=? AND tenant_id=?`)
+          .run(status, status, status, rotaId, tid)
+        if (status === 'em_rota') {
+          db.prepare(`UPDATE entregas SET status='em_rota', saiu_at=COALESCE(saiu_at, datetime('now')), updated_at=datetime('now')
+            WHERE tenant_id=? AND rota_id=? AND status IN ('pendente','atribuida')`).run(tid, rotaId)
+          const rows = db.prepare(`
+            SELECT e.order_id, o.status as order_status
+            FROM entregas e
+            JOIN orders o ON o.id=e.order_id AND o.tenant_id=e.tenant_id
+            WHERE e.tenant_id=? AND e.rota_id=?
+          `).all(tid, rotaId)
+          for (const r of rows) {
+            if (!['saiu','finalizado','cancelado'].includes(r.order_status)) {
+              db.prepare("UPDATE orders SET status='saiu' WHERE id=? AND tenant_id=?").run(r.order_id, tid)
+              _statusHistDelivery(tid, r.order_id, r.order_status, 'saiu', {
+                actor_type: 'entregador',
+                actor_id: rota.entregador_id ? String(rota.entregador_id) : null,
+                actor_name: entregador?.nome || null,
+                origem: 'rotas-entrega',
+                note: 'Rota iniciada'
+              })
+            }
+          }
+        } else if (status === 'cancelada') {
+          db.prepare(`UPDATE entregas SET status='cancelada', updated_at=datetime('now')
+            WHERE tenant_id=? AND rota_id=? AND status NOT IN ('entregue','retornada')`).run(tid, rotaId)
+        }
+      })()
+      const rotaAtual = _recalcularRotaEntrega(tid, rotaId)
+      const entregaRows = db.prepare('SELECT order_id FROM entregas WHERE tenant_id=? AND rota_id=?').all(tid, rotaId)
+      for (const r of entregaRows) {
+        const updatedOrder = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(r.order_id, tid)
+        _emitOrderDelivery(tid, updatedOrder)
+      }
+      _emitEntregas(tid, 'rotas_entrega:UPDATE', { rota: rotaAtual })
+      marcarDirty()
+      send(res, 200, { ok: true, rota: rotaAtual })
+    } catch(e) {
+      log('ERRO', '/api/rotas-entrega/status:', e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
 
   // ═══════════════════════════════════════════════════════
   // Download do App Desktop
@@ -1094,7 +1999,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         // Lista deve casar com a do backup pra que o restore consiga restaurar tudo.
         // Antes faltavam pagamentos_pix, saques, pagamentos_cartao e stamp_progress —
         // se o backup tivesse essas tabelas, eram silenciosamente descartadas no restore.
-        const TABS = ['tenants', 'sys_users', 'store_config', 'categories', 'menu_items', 'cupons', 'mesas', 'garcons', 'orders', 'movimentos', 'estoque', 'fidelidade', 'customers', 'pagamentos_pix', 'saques', 'pagamentos_cartao', 'stamp_progress', 'ratings']
+        const TABS = ['tenants', 'sys_users', 'store_config', 'categories', 'menu_items', 'cupons', 'mesas', 'garcons', 'orders', 'movimentos', 'estoque', 'estoque_receitas', 'estoque_movimentos', 'fidelidade', 'customers', 'pagamentos_pix', 'saques', 'pagamentos_cartao', 'stamp_progress', 'ratings', 'entregadores', 'entregas', 'rotas_entrega', 'entregador_locations', 'entrega_mensagens']
         let totalOk = 0, totalFail = 0
         for (const t of TABS) {
           const rows = body.tabelas?.[t]; if (!rows?.length) continue
@@ -1125,7 +2030,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     // Comprime com gzip pra reduzir tráfego (backup pode passar de 50MB sem compressão).
     if (req.method === 'GET' && upath === '/api/admin-backup-global-imagens') {
       try {
-        const TABS = ['tenants','sys_users','store_config','categories','menu_items','cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress','ratings']
+        const TABS = ['tenants','sys_users','store_config','categories','menu_items','cupons','mesas','garcons','orders','movimentos','estoque','estoque_receitas','estoque_movimentos','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress','ratings','entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens']
         const snapshot = { ts: new Date().toISOString(), tipo: 'global', tabelas: {}, imagens: {} }
         let totalRegs = 0
         for (const t of TABS) {
@@ -1204,7 +2109,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tid)
         if (!tenant) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
         // Tabelas que têm tenant_id (todas exceto a tabela tenants em si)
-        const TABS = ['sys_users','store_config','categories','menu_items','cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress','ratings']
+        const TABS = ['sys_users','store_config','categories','menu_items','cupons','mesas','garcons','orders','movimentos','estoque','estoque_receitas','estoque_movimentos','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress','ratings','entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens']
         const snapshot = {
           ts: new Date().toISOString(),
           tipo: 'tenant',
@@ -1273,7 +2178,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const tenant = db.prepare('SELECT id,nome,slug FROM tenants WHERE id=?').get(tid)
     if (!tenant) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
     try {
-      const TABS     = ['sys_users', 'store_config', 'categories', 'menu_items', 'cupons', 'mesas', 'garcons', 'orders', 'movimentos', 'estoque', 'fidelidade', 'customers', 'ratings']
+      const TABS     = ['sys_users', 'store_config', 'categories', 'menu_items', 'cupons', 'mesas', 'garcons', 'orders', 'movimentos', 'estoque', 'estoque_receitas', 'estoque_movimentos', 'fidelidade', 'customers', 'ratings', 'entregadores', 'entregas', 'rotas_entrega', 'entregador_locations', 'entrega_mensagens']
       const snapshot = { ts: new Date().toISOString(), tenant_id: tid, tenant_nome: tenant.nome, tabelas: { tenants: [tenant] }, imagens: {} }
       for (const t of TABS) { try { snapshot.tabelas[t] = db.prepare(`SELECT * FROM "${t}" WHERE tenant_id=?`).all(tid) } catch { snapshot.tabelas[t] = [] } }
       const imageUrls = new Set()
@@ -2078,6 +2983,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
           // O pagamento já foi validado, não precisa de aceite manual.
           db.prepare("UPDATE orders SET status='producao', pag='pix_mp' WHERE id=? AND tenant_id=?").run(rowAtual.order_id, rowAtual.tenant_id)
           const _fo1 = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(rowAtual.order_id, rowAtual.tenant_id)
+          if (typeof aplicarBaixaEstoquePedido === 'function' && _fo1) {
+            aplicarBaixaEstoquePedido(rowAtual.tenant_id, _fo1, 'pix-status')
+          }
           const _it1 = _fo1 && typeof _fo1.items==='string' ? (() => { try{return JSON.parse(_fo1.items)}catch{return []} })() : (_fo1?.items||[])
           sseBroadcast(`orders-rt:${rowAtual.tenant_id}`, `orders:UPDATE`, _fo1 ? {..._fo1, items:_it1, status:'producao', pag:'pix_mp', _pixOnlineConfirmado: true} : { id: rowAtual.order_id, status: 'producao', pag: 'pix_mp', _pixOnlineConfirmado: true })
           _notificarPixConfirmado(rowAtual.tenant_id, _fo1, sendWA, fillVars, EVO_INST, db)
@@ -2218,6 +3126,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
             }
             const _ns4 = (eraAguardando || podeRessurreicao) ? 'producao' : pedAtual?.status
             const _fo4 = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(row.order_id, row.tenant_id)
+            if ((eraAguardando || podeRessurreicao) && typeof aplicarBaixaEstoquePedido === 'function' && _fo4) {
+              aplicarBaixaEstoquePedido(row.tenant_id, _fo4, 'pix-webhook')
+            }
             const _it4 = _fo4 && typeof _fo4.items==='string' ? (() => { try{return JSON.parse(_fo4.items)}catch{return []} })() : (_fo4?.items||[])
             // Marca _pixOnlineConfirmado para o frontend reconhecer e imprimir automático
             sseBroadcast(`orders-rt:${row.tenant_id}`, `orders:UPDATE`, _fo4 ? {..._fo4, items:_it4, status:_ns4, pag:'pix_mp', _pixOnlineConfirmado: (eraAguardando || podeRessurreicao)} : { id: row.order_id, status: _ns4, pag: 'pix_mp', _pixOnlineConfirmado: (eraAguardando || podeRessurreicao) })

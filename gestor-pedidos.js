@@ -19,6 +19,7 @@ function nav(id) {
   if (sn) sn.classList.add('on');
   closeNotif();
   if (id === 'pedidos') renderKanban();
+  if (id === 'entregas' && typeof renderEntregas === 'function') renderEntregas();
   if (id === 'pedidos-mesa') renderMesasPage();
   if (id === 'gestor' || id === 'gestor-main') renderGestor();
   if (id === 'edicao') renderTable();
@@ -563,12 +564,15 @@ function openOrderDetail(id) {
   // Bloco de endereço delivery (destacado)
   const addrBlock = document.getElementById('od-delivery-addr-block');
   const addrText  = document.getElementById('od-delivery-addr-text');
+  const mapLink   = document.getElementById('od-delivery-map-link');
   if (addrBlock && addrText) {
     if (isDelivery && o.addr) {
       addrText.textContent = o.addr;
+      if (mapLink) mapLink.href = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(o.addr);
       addrBlock.style.display = '';
     } else {
       addrBlock.style.display = 'none';
+      if (mapLink) mapLink.href = '#';
     }
   }
 
@@ -609,7 +613,111 @@ function openOrderDetail(id) {
     window._detailMesaNum = o.mesa_num || null;
   }
 
+  odRenderStatusTimeline(o, [], true);
+  odLoadStatusTimeline(o);
   openModal('modal-order-detail');
+}
+
+function odEsc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function odStatusLabel(status) {
+  return ({
+    criado: 'Pedido criado',
+    aguardando_pix: 'Aguardando PIX',
+    aguardando_cartao: 'Aguardando cartao',
+    analise: 'Em analise',
+    producao: 'Em producao',
+    pronto: 'Pronto',
+    saiu: 'Saiu para entrega',
+    entregue: 'Entregue',
+    finalizado: 'Finalizado',
+    cancelado: 'Cancelado',
+    mesa_aberta: 'Mesa aberta'
+  })[status] || status || 'Status';
+}
+
+function odDateTime(value) {
+  if (!value) return '';
+  try {
+    const d = new Date(String(value).replace(' ', 'T'));
+    if (isNaN(d.getTime())) return String(value).slice(0, 16);
+    return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return String(value).slice(0, 16);
+  }
+}
+
+function odTimelineFallback(order, note) {
+  const rows = [];
+  if (order?.created_at) {
+    rows.push({
+      new_status: 'criado',
+      created_at: order.created_at,
+      note: 'Pedido recebido no sistema'
+    });
+  }
+  rows.push({
+    new_status: order?.status || 'analise',
+    created_at: '',
+    note: note || 'Status atual'
+  });
+  return rows;
+}
+
+function odRenderStatusTimeline(order, historyRows, loading = false, fallbackNote = '') {
+  const box = document.getElementById('od-status-timeline');
+  if (!box) return;
+  const rows = loading
+    ? [{ new_status: 'criado', created_at: '', note: 'Carregando historico...' }]
+    : (Array.isArray(historyRows) && historyRows.length ? historyRows : odTimelineFallback(order, fallbackNote));
+
+  box.innerHTML = `
+    <div class="od-timeline-box">
+      <div class="od-timeline-title">Historico do pedido</div>
+      <div class="od-timeline-list">
+        ${rows.map(r => {
+          const status = r.new_status || r.status || 'criado';
+          const before = r.old_status ? `Antes: ${odStatusLabel(r.old_status)}` : '';
+          const actor = r.actor_name || r.origem || r.actor_type || '';
+          const details = [r.note, before, actor].filter(Boolean).join(' - ');
+          return `
+            <div class="od-timeline-item">
+              <span class="od-timeline-dot"></span>
+              <div class="od-timeline-main">
+                <div class="od-timeline-status">${odEsc(odStatusLabel(status))}</div>
+                ${details ? `<div class="od-timeline-note">${odEsc(details)}</div>` : ''}
+              </div>
+              <div class="od-timeline-time">${odEsc(odDateTime(r.created_at))}</div>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+async function odLoadStatusTimeline(order) {
+  const id = Number(order?.id || window._currentDetailId || 0);
+  const tid = _sessao?.tenant_id || '';
+  if (!id || !tid) {
+    odRenderStatusTimeline(order, [], false, 'Historico disponivel apenas com sessao ativa');
+    return;
+  }
+  try {
+    const res = await fetch('/api/order-status-history?order_id=' + encodeURIComponent(id), {
+      headers: { 'x-tenant-id': tid }
+    });
+    const data = await res.json().catch(() => []);
+    if (!res.ok) throw new Error(data?.error || 'Erro ao carregar historico');
+    if (Number(window._currentDetailId) !== id) return;
+    odRenderStatusTimeline(order, Array.isArray(data) ? data : [], false);
+  } catch(e) {
+    console.warn('[ORDER HISTORY]', e.message);
+    if (Number(window._currentDetailId) !== id) return;
+    odRenderStatusTimeline(order, [], false, 'Historico ainda nao disponivel para este pedido');
+  }
 }
 
 // ── Fechar mesa a partir do modal de detalhe do pedido ──
@@ -893,7 +1001,7 @@ async function _odConfirmarItemExistente(itemId) {
     finalQty = 1;
   }
 
-  const newItem      = { qty: finalQty, name, price, obs, emoji: it.emoji || '' };
+  const newItem      = { id: it.id || null, qty: finalQty, name, price, obs, emoji: it.emoji || '' };
   const currentItems = Array.isArray(o.items) ? [...o.items] : [];
   const existing     = !isKg && currentItems.find(c => c.name === name && (c.obs || '') === obs);
   if (existing) existing.qty += finalQty;

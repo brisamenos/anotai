@@ -1720,7 +1720,7 @@ async function submitGarcomOrder() {
     // 1. Itens de cozinha → kanban (analise/producao)
     if (itensCozinha.length > 0) {
       if (!_sessao?.tenant_id) throw new Error('Sessão sem tenant');
-      const itemsArr = itensCozinha.map(c => ({ qty: c.qty, name: c.name, price: c.price, obs: c.obs || '' }));
+      const itemsArr = itensCozinha.map(c => ({ id: c.id || null, qty: c.qty, name: c.name, price: c.price, obs: c.obs || '' }));
       const { data: orderData, error: oErr } = await sb.from('orders').insert({
         tenant_id: _sessao.tenant_id,
         client: `Mesa ${garcomMesa}`, phone: '', addr: `Mesa ${garcomMesa}`,
@@ -1735,7 +1735,7 @@ async function submitGarcomOrder() {
     // 2. Itens imediatos (bebidas, etc) → direto como entregue (só billing, não vão ao kanban)
     if (itensImediatos.length > 0) {
       if (!_sessao?.tenant_id) throw new Error('Sessão sem tenant');
-      const itemsArrImediato = itensImediatos.map(c => ({ qty: c.qty, name: c.name, price: c.price, obs: c.obs || '' }));
+      const itemsArrImediato = itensImediatos.map(c => ({ id: c.id || null, qty: c.qty, name: c.name, price: c.price, obs: c.obs || '' }));
       const { data: billingData, error: bErr } = await sb.from('orders').insert({
         tenant_id: _sessao.tenant_id,
         client: `Mesa ${garcomMesa}`, phone: '', addr: `Mesa ${garcomMesa}`,

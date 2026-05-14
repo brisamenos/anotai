@@ -1,0 +1,36 @@
+{
+  "name": "Anotai - Entregador",
+  "short_name": "Entregador",
+  "description": "App do entregador para montar rotas, acompanhar pedidos e finalizar entregas.",
+  "id": "/entregador",
+  "start_url": "/entregador",
+  "scope": "/entregador",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "background_color": "#f4f7fb",
+  "theme_color": "#101820",
+  "orientation": "portrait-primary",
+  "categories": ["food", "business", "productivity"],
+  "icons": [
+    {
+      "src": "/entregador-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon-entregador.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Minha rota",
+      "short_name": "Rota",
+      "url": "/entregador",
+      "icons": [{ "src": "/favicon-entregador.png", "sizes": "512x512", "type": "image/png" }]
+    }
+  ]
+}

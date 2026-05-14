@@ -16,13 +16,14 @@ const { buildOrderTrackingMessage } = require('./order-message')
 const phoneUtils = require('./phone-utils')
 
 const PORT        = process.env.PORT           || 3001
-const EVO_URL     = process.env.EVOLUTION_URL  || 'https://projeto-evolution-api.xtknqq.easypanel.host'
+const EVO_URL     = (process.env.EVOLUTION_URL || 'https://projeto-evolution-api.xtknqq.easypanel.host').replace(/\/+$/,'')
 const EVO_KEY     = process.env.EVOLUTION_KEY  || '429683C4C977415CAAFCCE10F7D57E11'
 const EVO_INST    = process.env.EVOLUTION_INST || 'estima-food'
-const DB_PATH     = process.env.DB_PATH        || '/app/data/estima.db'
+const LOCAL_DATA_DIR = path.join(__dirname, '.dev-data')
+const DB_PATH     = process.env.DB_PATH        || (process.platform === 'win32' ? path.join(LOCAL_DATA_DIR, 'estima.db') : '/app/data/estima.db')
 const MP_TOKEN    = process.env.MP_ACCESS_TOKEN || ''   // Token do Mercado Pago (prod ou test)
 const TAXA_PIX    = parseFloat(process.env.TAXA_PIX || '1.00')  // R$1,00 fixo por pagamento
-const UPLOADS_DIR = process.env.UPLOADS_DIR    || '/app/data/uploads'
+const UPLOADS_DIR = process.env.UPLOADS_DIR    || (process.platform === 'win32' ? path.join(LOCAL_DATA_DIR, 'uploads') : '/app/data/uploads')
 const BACKUP_PATH = path.join(path.dirname(DB_PATH), 'backup.json')
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true })
@@ -618,6 +619,142 @@ const MIGRATIONS = [
     `ALTER TABLE admin_alerts ADD COLUMN text_color TEXT DEFAULT ''`,
     `ALTER TABLE admin_alerts ADD COLUMN font_family TEXT DEFAULT ''`
   ] },
+  { version:53, description:'modulo de entregas, rotas e historico de status', up:[
+    `CREATE TABLE IF NOT EXISTS entregadores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      nome TEXT NOT NULL,
+      telefone TEXT,
+      comissao_tipo TEXT DEFAULT 'fixa',
+      comissao_valor REAL DEFAULT 0,
+      ativo INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_entregadores_tenant ON entregadores(tenant_id, ativo)`,
+    `CREATE TABLE IF NOT EXISTS rotas_entrega (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      entregador_id INTEGER REFERENCES entregadores(id),
+      status TEXT DEFAULT 'aberta',
+      pedidos_count INTEGER DEFAULT 0,
+      total_pedidos REAL DEFAULT 0,
+      dinheiro_previsto REAL DEFAULT 0,
+      comissao_total REAL DEFAULT 0,
+      iniciado_em TEXT,
+      finalizado_em TEXT,
+      obs TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_rotas_entrega_tenant ON rotas_entrega(tenant_id, status)`,
+    `CREATE TABLE IF NOT EXISTS entregas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      entregador_id INTEGER REFERENCES entregadores(id),
+      rota_id INTEGER REFERENCES rotas_entrega(id),
+      status TEXT DEFAULT 'pendente',
+      taxa_entrega REAL DEFAULT 0,
+      valor_pedido REAL DEFAULT 0,
+      valor_receber REAL DEFAULT 0,
+      comissao REAL DEFAULT 0,
+      recebido REAL DEFAULT 0,
+      problema TEXT,
+      assigned_at TEXT,
+      saiu_at TEXT,
+      entregue_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, order_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_entregas_tenant_status ON entregas(tenant_id, status)`,
+    `CREATE INDEX IF NOT EXISTS idx_entregas_order ON entregas(order_id)`,
+    `CREATE TABLE IF NOT EXISTS order_status_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      old_status TEXT,
+      new_status TEXT NOT NULL,
+      actor_type TEXT DEFAULT 'sistema',
+      actor_id TEXT,
+      actor_name TEXT,
+      origem TEXT,
+      note TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_order_status_history_order ON order_status_history(tenant_id, order_id, created_at)`
+  ] },
+  { version:54, description:'ficha tecnica e movimentos de estoque por pedido', up:[
+    `CREATE TABLE IF NOT EXISTS estoque_receitas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      item_id INTEGER NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
+      estoque_id INTEGER NOT NULL REFERENCES estoque(id) ON DELETE CASCADE,
+      qty REAL NOT NULL DEFAULT 0,
+      unit TEXT,
+      ativo INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, item_id, estoque_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_estoque_receitas_item ON estoque_receitas(tenant_id, item_id, ativo)`,
+    `CREATE TABLE IF NOT EXISTS estoque_movimentos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      estoque_id INTEGER NOT NULL REFERENCES estoque(id) ON DELETE CASCADE,
+      order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL,
+      item_id INTEGER REFERENCES menu_items(id) ON DELETE SET NULL,
+      tipo TEXT NOT NULL,
+      qty REAL NOT NULL DEFAULT 0,
+      saldo_antes REAL DEFAULT 0,
+      saldo_depois REAL DEFAULT 0,
+      origem TEXT,
+      note TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, estoque_id, order_id, item_id, tipo)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_estoque_movimentos_tenant ON estoque_movimentos(tenant_id, estoque_id, created_at)`
+  ] },
+  { version:55, description:'app do entregador com sessao gps e mensagens', up:[
+    `CREATE TABLE IF NOT EXISTS entregador_sessions (
+      token TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      entregador_id INTEGER NOT NULL REFERENCES entregadores(id) ON DELETE CASCADE,
+      ts INTEGER NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_entregador_sessions_driver ON entregador_sessions(tenant_id, entregador_id, ts)`,
+    `CREATE TABLE IF NOT EXISTS entregador_locations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      entregador_id INTEGER NOT NULL REFERENCES entregadores(id) ON DELETE CASCADE,
+      entrega_id INTEGER REFERENCES entregas(id) ON DELETE SET NULL,
+      lat REAL NOT NULL,
+      lng REAL NOT NULL,
+      accuracy REAL DEFAULT 0,
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, entregador_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_entregador_locations_tenant ON entregador_locations(tenant_id, entregador_id, updated_at)`,
+    `CREATE TABLE IF NOT EXISTS entrega_mensagens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      entrega_id INTEGER REFERENCES entregas(id) ON DELETE SET NULL,
+      order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL,
+      entregador_id INTEGER REFERENCES entregadores(id) ON DELETE SET NULL,
+      tipo TEXT,
+      message TEXT NOT NULL,
+      ok INTEGER DEFAULT 0,
+      error TEXT,
+      lat REAL,
+      lng REAL,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_entrega_mensagens_entrega ON entrega_mensagens(tenant_id, entrega_id, created_at)`
+  ] },
+  { version:56, description:'sequencia editavel no app do entregador', up:[
+    `ALTER TABLE entregas ADD COLUMN sequencia INTEGER`,
+    `CREATE INDEX IF NOT EXISTS idx_entregas_rota_seq ON entregas(tenant_id, entregador_id, status, sequencia)`
+  ] },
 ]
 
 function runMigrations() {
@@ -664,7 +801,8 @@ try {
 // BACKUP / RESTORE
 // ════════════════════════════════════════════════════════
 const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_items',
-  'cupons','mesas','garcons','orders','movimentos','estoque','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress',
+  'cupons','mesas','garcons','orders','movimentos','estoque','estoque_receitas','estoque_movimentos','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress',
+  'entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens','order_status_history',
   'indicadores','leads_indicacao','comissoes','indicador_tutorial_videos','indicador_tutorial_progress','admin_alerts']
   // wa_messages excluída — pode conter muita mídia e estourar JSON.stringify
 
@@ -902,7 +1040,15 @@ const TABLE_CHANNELS = {
   garcons:          (tid) => [`orders-rt:${tid}`],
   saques:           (tid) => [`saques-rt:${tid}`, `saques-admin`],
   customers:        (tid) => [`customers-rt:${tid}`],
+  estoque:          (tid) => [`estoque-rt:${tid}`],
+  estoque_receitas: (tid) => [`estoque-rt:${tid}`],
+  estoque_movimentos:(tid) => [`estoque-rt:${tid}`],
   addons_esgotados: (tid) => [`menu-rt:${tid}`],
+  entregadores:     (tid) => [`entregas-rt:${tid}`],
+  entregas:         (tid) => [`entregas-rt:${tid}`],
+  rotas_entrega:    (tid) => [`entregas-rt:${tid}`],
+  entregador_locations:(tid) => [`entregas-rt:${tid}`],
+  entrega_mensagens:(tid) => [`entregas-rt:${tid}`],
 }
 const GARCOM_PREFIXES = ['garcom-mesas-', 'garcom-orders-']
 
@@ -937,12 +1083,20 @@ const TABLE_COLS = {
   orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','garcom_id','garcom_nome','customer_id','order_num','wa_track','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','fornecedor_id','updated_at'],
+  estoque_receitas: ['id','tenant_id','item_id','estoque_id','qty','unit','ativo','created_at','updated_at'],
+  estoque_movimentos: ['id','tenant_id','estoque_id','order_id','item_id','tipo','qty','saldo_antes','saldo_depois','origem','note','created_at'],
   fidelidade:   ['id','tenant_id','name','phone','birthday','pts','max_pts','orders_count','resgates','created_at'],
   customers:    ['id','tenant_id','name','phone','addr','orders_count','total_spent','last_order_at','email','birthday','senha_hash','cashback_saldo','created_at'],
   customer_enderecos: ['id','tenant_id','customer_id','label','cep','rua','numero','bairro','complemento','referencia','is_default','created_at'],
   ratings:      ['id','tenant_id','order_id','client','phone','nota','comentario','created_at'],
   pagamentos_cartao: ['id','tenant_id','order_id','mp_payment_id','mp_external_ref','valor','status','status_detail','payer_name','payer_email','last_four_digits','payment_method_id','created_at','paid_at','mp_source'],
   stamp_progress: ['id','tenant_id','phone','compras','ultimo_resgate'],
+  entregadores: ['id','tenant_id','nome','telefone','comissao_tipo','comissao_valor','ativo','created_at'],
+  entregas: ['id','tenant_id','order_id','entregador_id','rota_id','sequencia','status','taxa_entrega','valor_pedido','valor_receber','comissao','recebido','problema','assigned_at','saiu_at','entregue_at','created_at','updated_at'],
+  rotas_entrega: ['id','tenant_id','entregador_id','status','pedidos_count','total_pedidos','dinheiro_previsto','comissao_total','iniciado_em','finalizado_em','obs','created_at','updated_at'],
+  entregador_locations: ['id','tenant_id','entregador_id','entrega_id','lat','lng','accuracy','updated_at'],
+  entrega_mensagens: ['id','tenant_id','entrega_id','order_id','entregador_id','tipo','message','ok','error','lat','lng','created_at'],
+  order_status_history: ['id','tenant_id','order_id','old_status','new_status','actor_type','actor_id','actor_name','origem','note','created_at'],
   fornecedores: ['id','tenant_id','nome','contato','telefone','email','cnpj','endereco','obs','ativo','created_at'],
   contas_pagar: ['id','tenant_id','descricao','valor','vencimento','categoria','fornecedor_id','recorrente','recorrencia','status','pago_em','obs','created_at'],
   faturas:      ['id','tenant_id','plano','valor','meses','metodo','status','link_pagamento','mp_payment_id','mp_external_ref','qr_code','qr_code_base64','vence_em','pago_em','cancelado_em','obs','created_at'],
@@ -966,7 +1120,7 @@ const JSON_FIELDS = {
   admin_alerts: new Set(['target_tenants']),
 }
 const BOOL_FIELDS  = new Set(['ativo','store_open','caixa_open','destaque','target_all'])
-const SSE_TABLES   = new Set(['orders','mesas','store_config','menu_items','categories','garcons','customers','addons_esgotados'])
+const SSE_TABLES   = new Set(['orders','mesas','store_config','menu_items','categories','garcons','customers','estoque','estoque_receitas','estoque_movimentos','addons_esgotados','entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens'])
 
 function jsonParse(v) { if(typeof v!=='string')return v; try{return JSON.parse(v)}catch{return v} }
 
@@ -1200,6 +1354,7 @@ async function handleREST(req, res, table, params, body) {
 
       const rawForEmit = db.prepare(`SELECT * FROM "${table}" WHERE rowid=?`).get(info.lastInsertRowid)
       const parsedForEmit = rawForEmit ? parseRow(table, rawForEmit) : null
+      if (table === 'orders' && rawForEmit) aplicarBaixaEstoquePedido(tenantId || payload.tenant_id, rawForEmit, 'order-create')
       let inserted = null
       if (returnRep) {
         if (table==='sys_users'&&rawForEmit) { const t=db.prepare('SELECT nome,plano,ativo,expires_at FROM tenants WHERE id=?').get(rawForEmit.tenant_id); inserted=parseRow(table,{...rawForEmit,tenants:t?{nome:t.nome,plano:t.plano,ativo:t.ativo===1,expires_at:t.expires_at}:null}) }
@@ -1333,16 +1488,36 @@ async function handleREST(req, res, table, params, body) {
       const _idsAntes = SSE_TABLES.has(table) && cols.includes('id')
         ? db.prepare(`SELECT "id" FROM "${table}" ${WHERE}`).all(...vals).map(r => r.id)
         : [];
+      const _statusAntes = (table === 'orders' && Object.prototype.hasOwnProperty.call(payload, 'status') && cols.includes('id'))
+        ? db.prepare(`SELECT id,status FROM "${table}" ${WHERE}`).all(...vals)
+        : [];
+      const _statusAntesMap = new Map(_statusAntes.map(r => [r.id, r.status]))
+      const _reavaliarEstoque = table === 'orders' && (
+        Object.prototype.hasOwnProperty.call(payload, 'status') ||
+        Object.prototype.hasOwnProperty.call(payload, 'items')
+      )
       db.prepare(`UPDATE "${table}" SET ${keys.map(k=>`"${k}"=?`).join(', ')} ${WHERE}`).run(...keys.map(k=>sanitize(payload[k])),...vals)
+      if (_statusAntes.length) {
+        for (const r of _statusAntes) {
+          registrarStatusPedido(tenantId || payload.tenant_id, r.id, r.status, payload.status, {
+            actor_type: 'sistema',
+            origem: 'rest-patch'
+          })
+        }
+      }
       if (SSE_TABLES.has(table) && _idsAntes.length) {
         // Emite SSE para cada row atualizada com dados completos
         for (const _rid of _idsAntes) {
           const updatedRow = db.prepare(`SELECT * FROM "${table}" WHERE "id"=?`).get(_rid);
-          if (updatedRow) emit(tenantId||payload.tenant_id, table, parseRow(table, updatedRow), 'UPDATE');
+          if (updatedRow) {
+            if (_reavaliarEstoque) aplicarBaixaEstoquePedido(updatedRow.tenant_id || tenantId || payload.tenant_id, updatedRow, _statusAntesMap.has(_rid) ? 'rest-patch' : 'rest-patch-items')
+            emit(tenantId||payload.tenant_id, table, parseRow(table, updatedRow), 'UPDATE');
+          }
         }
       } else if (SSE_TABLES.has(table)) {
         // Fallback: tenta re-SELECT com WHERE original
         const updatedRow = db.prepare(`SELECT * FROM "${table}" ${WHERE} LIMIT 1`).get(...vals);
+        if (updatedRow && _reavaliarEstoque) aplicarBaixaEstoquePedido(updatedRow.tenant_id || tenantId || payload.tenant_id, updatedRow, 'rest-patch')
         emit(tenantId||payload.tenant_id, table, updatedRow?parseRow(table,updatedRow):payload, 'UPDATE');
       }
 
@@ -1507,16 +1682,15 @@ async function sendWA(phone, text, inst, delayMs) {
   const num      = phone.replace(/\D/g,'')
   const number   = num.startsWith('55') ? num : `55${num}`
   const headers  = { 'Content-Type':'application/json', apikey: EVO_KEY }
-  // delayMs opcional: se passado, controla quanto tempo o WhatsApp mostra
-  // "digitando..." antes de entregar a mensagem. Default 1000ms (legado).
   const delay    = typeof delayMs === 'number' ? Math.max(0, delayMs) : 1000
-  const body     = { number, text, options: { delay, presence:'composing' } }
+  const body     = { number, text, delay, linkPreview: false }
   try {
     const r = await fetch(`${EVO_URL}/message/sendText/${instance}`, { method:'POST', headers, body:JSON.stringify(body) })
     const data = await r.json().catch(()=>({}))
     log('📬', `sendWA [${r.status}]:`, JSON.stringify(data).slice(0,200))
     if (r.ok) { log('📤',`Enviado para ${number}`); return { ok:true, data } }
-    const r2   = await fetch(`${EVO_URL}/message/sendText/${instance}`, { method:'POST', headers, body:JSON.stringify({number,text}) })
+    const legacyBody = { number, textMessage: { text }, options: { delay, presence:'composing', linkPreview:false } }
+    const r2   = await fetch(`${EVO_URL}/message/sendText/${instance}`, { method:'POST', headers, body:JSON.stringify(legacyBody) })
     const data2 = await r2.json().catch(()=>({}))
     if (r2.ok) { log('📤',`Enviado para ${number} (retry)`); return { ok:true, data:data2 } }
     return { ok:false, data:data2 }
@@ -1666,6 +1840,172 @@ async function checarPedidoPerdido() {
 
 const processed = new Set()
 setInterval(() => { if (processed.size > 5000) processed.clear() }, 60 * 60 * 1000)
+
+function registrarStatusPedido(tid, orderId, oldStatus, newStatus, meta = {}) {
+  if (!tid || !orderId || !newStatus || oldStatus === newStatus) return
+  try {
+    db.prepare(`INSERT INTO order_status_history
+      (tenant_id, order_id, old_status, new_status, actor_type, actor_id, actor_name, origem, note)
+      VALUES (?,?,?,?,?,?,?,?,?)`).run(
+        tid,
+        orderId,
+        oldStatus || null,
+        newStatus,
+        meta.actor_type || 'gestor',
+        meta.actor_id || null,
+        meta.actor_name || null,
+        meta.origem || 'order-status',
+        meta.note || null
+      )
+    marcarDirty()
+  } catch(e) {
+    log('⚠️', 'Historico de status falhou:', e.message)
+  }
+}
+
+const STATUS_BAIXA_ESTOQUE = new Set(['producao','pronto','saiu','entregue','finalizado'])
+
+function _estoqueNum(v, fallback = 0) {
+  const n = typeof v === 'string' ? parseFloat(v.replace(',', '.')) : parseFloat(v)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function _estoqueRound(v) {
+  return Math.round((_estoqueNum(v) + Number.EPSILON) * 10000) / 10000
+}
+
+function _parseOrderItemsEstoque(items) {
+  if (Array.isArray(items)) return items
+  try {
+    const parsed = items ? JSON.parse(items) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function _estoqueNormName(v) {
+  return String(v || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function _orderItemProductId(item) {
+  const raw = item?.menu_item_id ?? item?.product_id ?? item?.produto_id ?? item?.id ?? null
+  const s = String(raw ?? '').trim()
+  if (!/^\d+$/.test(s)) return null
+  const n = parseInt(s, 10)
+  return n > 0 ? n : null
+}
+
+function aplicarBaixaEstoquePedido(tid, order, origem = 'pedido') {
+  if (!tid || !order?.id || !STATUS_BAIXA_ESTOQUE.has(String(order.status || ''))) {
+    return { baixados: 0, ignorado: true }
+  }
+  try {
+    const rawItems = _parseOrderItemsEstoque(order.items)
+      .filter(i => i && !i.cancelado && i.status !== 'cancelado' && i.item_status !== 'cancelado')
+    if (!rawItems.length) return { baixados: 0 }
+
+    const qtyByProduct = new Map()
+    const qtyByName = new Map()
+    for (const item of rawItems) {
+      const qty = _estoqueNum(item.qty ?? item.quantity ?? item.qtd ?? 1, 1)
+      if (!(qty > 0)) continue
+      const productId = _orderItemProductId(item)
+      if (productId) {
+        qtyByProduct.set(productId, _estoqueRound((qtyByProduct.get(productId) || 0) + qty))
+        continue
+      }
+      const nameKey = _estoqueNormName(item.name || item.nome)
+      if (nameKey) qtyByName.set(nameKey, _estoqueRound((qtyByName.get(nameKey) || 0) + qty))
+    }
+
+    if (qtyByName.size) {
+      const products = db.prepare('SELECT id,name FROM menu_items WHERE tenant_id=?').all(tid)
+      const nameToId = new Map()
+      for (const p of products) {
+        const key = _estoqueNormName(p.name)
+        if (!key) continue
+        if (nameToId.has(key)) nameToId.set(key, null)
+        else nameToId.set(key, p.id)
+      }
+      for (const [nameKey, qty] of qtyByName) {
+        const productId = nameToId.get(nameKey)
+        if (productId) qtyByProduct.set(productId, _estoqueRound((qtyByProduct.get(productId) || 0) + qty))
+      }
+    }
+
+    const productIds = [...qtyByProduct.keys()].filter(Boolean)
+    if (!productIds.length) return { baixados: 0 }
+
+    const placeholders = productIds.map(() => '?').join(',')
+    const receitas = db.prepare(`
+      SELECT r.item_id, r.estoque_id, r.qty, r.unit, e.name AS estoque_name
+      FROM estoque_receitas r
+      JOIN estoque e ON e.id = r.estoque_id AND e.tenant_id = r.tenant_id
+      WHERE r.tenant_id=? AND r.ativo=1 AND COALESCE(r.qty,0) > 0
+        AND r.item_id IN (${placeholders})
+    `).all(tid, ...productIds)
+    if (!receitas.length) return { baixados: 0 }
+
+    const movimentos = []
+    for (const r of receitas) {
+      const productQty = qtyByProduct.get(r.item_id) || 0
+      const consumo = _estoqueRound(productQty * _estoqueNum(r.qty))
+      if (!(consumo > 0)) continue
+      movimentos.push({
+        tenant_id: tid,
+        estoque_id: r.estoque_id,
+        order_id: order.id,
+        item_id: r.item_id,
+        tipo: 'saida',
+        qty: consumo,
+        origem: origem || 'pedido',
+        note: `Pedido #${order.order_num || order.id}`
+      })
+    }
+    if (!movimentos.length) return { baixados: 0 }
+
+    const tx = db.transaction((rows) => {
+      const stockStmt = db.prepare('SELECT id,qty FROM estoque WHERE id=? AND tenant_id=?')
+      const updateStmt = db.prepare("UPDATE estoque SET qty=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?")
+      const insertStmt = db.prepare(`INSERT OR IGNORE INTO estoque_movimentos
+        (tenant_id, estoque_id, order_id, item_id, tipo, qty, saldo_antes, saldo_depois, origem, note)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      const updatedStocks = []
+      const newMovs = []
+      for (const m of rows) {
+        const stock = stockStmt.get(m.estoque_id, m.tenant_id)
+        if (!stock) continue
+        const before = _estoqueRound(stock.qty)
+        const after = _estoqueRound(before - m.qty)
+        const ins = insertStmt.run(m.tenant_id, m.estoque_id, m.order_id, m.item_id, m.tipo, m.qty, before, after, m.origem, m.note)
+        if (!ins.changes) continue
+        updateStmt.run(after, m.estoque_id, m.tenant_id)
+        const updated = db.prepare('SELECT * FROM estoque WHERE id=? AND tenant_id=?').get(m.estoque_id, m.tenant_id)
+        const mov = db.prepare('SELECT * FROM estoque_movimentos WHERE id=?').get(ins.lastInsertRowid)
+        if (updated) updatedStocks.push(updated)
+        if (mov) newMovs.push(mov)
+      }
+      return { updatedStocks, newMovs }
+    })
+
+    const result = tx(movimentos)
+    if (result.newMovs.length) {
+      marcarDirty()
+      for (const stock of result.updatedStocks) emit(tid, 'estoque', parseRow('estoque', stock), 'UPDATE')
+      for (const mov of result.newMovs) emit(tid, 'estoque_movimentos', parseRow('estoque_movimentos', mov), 'INSERT')
+    }
+    return { baixados: result.newMovs.length }
+  } catch(e) {
+    log('âš ï¸', 'Baixa automatica de estoque falhou:', e.message)
+    return { baixados: 0, error: e.message }
+  }
+}
+
 async function handleOrderStatus(req, res) {
   const body = await readBody(req)
   const { order_id, new_status } = body
@@ -1676,7 +2016,15 @@ async function handleOrderStatus(req, res) {
     if (!order) return send(res,404,{ok:false,error:'Pedido não encontrado'})
     const oldStatus = order.status
     db.prepare("UPDATE orders SET status=? WHERE id=? AND tenant_id=?").run(new_status,order_id,tid)
+    registrarStatusPedido(tid, order_id, oldStatus, new_status, {
+      actor_type: body.actor_type || 'gestor',
+      actor_id: body.actor_id || null,
+      actor_name: body.actor_name || null,
+      origem: body.origem || 'kanban',
+      note: body.note || null
+    })
     const updated = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(order_id,tid)
+    aplicarBaixaEstoquePedido(tid, updated, body.origem || 'kanban')
     emit(tid,'orders',parseRow('orders',updated),'UPDATE')
     send(res,200,{ok:true,order:parseRow('orders',updated)})
 
@@ -2614,8 +2962,40 @@ const server = http.createServer(async (req,res) => {
     const orders=db.prepare(`SELECT id,order_num,client,phone,addr,items,total,taxa,pag,status,mesa_num,garcom_nome,created_at FROM orders WHERE tenant_id=? AND created_at>=? AND created_at<=? ORDER BY created_at ASC`).all(tid,de,ate+'T23:59:59.999Z')
     const movs=db.prepare(`SELECT id,description,tipo,val,pag,time,created_at FROM movimentos WHERE tenant_id=? AND created_at>=? AND created_at<=? ORDER BY created_at ASC`).all(tid,de,ate+'T23:59:59.999Z')
     const contas=db.prepare(`SELECT id,descricao,valor,vencimento,categoria,status,pago_em FROM contas_pagar WHERE tenant_id=? AND vencimento>=? AND vencimento<=? ORDER BY vencimento ASC`).all(tid,de,ate)
+    const entregas=db.prepare(`
+      SELECT e.id,e.order_id,e.status,e.valor_pedido,e.valor_receber,e.comissao,e.recebido,e.problema,
+             e.assigned_at,e.saiu_at,e.entregue_at,e.created_at,
+             o.order_num,o.client,o.phone,o.addr,o.pag,
+             d.nome as entregador_nome
+      FROM entregas e
+      LEFT JOIN orders o ON o.id=e.order_id AND o.tenant_id=e.tenant_id
+      LEFT JOIN entregadores d ON d.id=e.entregador_id AND d.tenant_id=e.tenant_id
+      WHERE e.tenant_id=? AND e.created_at>=? AND e.created_at<=?
+      ORDER BY e.created_at ASC
+    `).all(tid,de,ate+'T23:59:59.999Z')
+    const rotas=db.prepare(`
+      SELECT r.id,r.status,r.pedidos_count,r.total_pedidos,r.dinheiro_previsto,r.comissao_total,
+             r.iniciado_em,r.finalizado_em,r.obs,r.created_at,
+             d.nome as entregador_nome
+      FROM rotas_entrega r
+      LEFT JOIN entregadores d ON d.id=r.entregador_id AND d.tenant_id=r.tenant_id
+      WHERE r.tenant_id=? AND r.created_at>=? AND r.created_at<=?
+      ORDER BY r.created_at ASC
+    `).all(tid,de,ate+'T23:59:59.999Z')
+    const estoqueMovs=db.prepare(`
+      SELECT m.id,m.tipo,m.qty,m.saldo_antes,m.saldo_depois,m.origem,m.note,m.created_at,
+             e.name as ingrediente,e.unit,
+             mi.name as produto,
+             o.order_num,o.client
+      FROM estoque_movimentos m
+      LEFT JOIN estoque e ON e.id=m.estoque_id AND e.tenant_id=m.tenant_id
+      LEFT JOIN menu_items mi ON mi.id=m.item_id AND mi.tenant_id=m.tenant_id
+      LEFT JOIN orders o ON o.id=m.order_id AND o.tenant_id=m.tenant_id
+      WHERE m.tenant_id=? AND m.created_at>=? AND m.created_at<=?
+      ORDER BY m.created_at ASC
+    `).all(tid,de,ate+'T23:59:59.999Z')
     orders.forEach(r=>{try{r.items=JSON.parse(r.items)}catch{}})
-    send(res,200,{orders,movimentos:movs,contas_pagar:contas})
+    send(res,200,{orders,movimentos:movs,contas_pagar:contas,entregas,rotas_entrega:rotas,estoque_movimentos:estoqueMovs})
     return
   }
 
@@ -2844,7 +3224,8 @@ const server = http.createServer(async (req,res) => {
   const _routeCtx = { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
     validarSessaoAdmin, criarSessaoAdmin, fazerBackup, restaurarBackup, getTenantId,
     MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
-    EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano }
+    EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano,
+    aplicarBaixaEstoquePedido }
   try {
     if (await handleRoutes(req, res, _routeCtx)) return
   } catch(e) {
@@ -2855,7 +3236,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/exportar-relatorio'])
+  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return
@@ -2890,6 +3271,11 @@ const server = http.createServer(async (req,res) => {
 
   if(req.method==='GET'&&(upath==='/indicador'||upath==='/indicador/')){
     const fpath=path.join(__dirname,'indicador.html')
+    if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}
+  }
+
+  if(req.method==='GET'&&(upath==='/entregador'||upath==='/entregador/')){
+    const fpath=path.join(__dirname,'entregador.html')
     if(fs.existsSync(fpath)){serveStatic(req,res,fpath,'.html');return}
   }
 

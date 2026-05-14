@@ -178,7 +178,7 @@
       };
 
       ['INSERT', 'UPDATE', 'DELETE'].forEach(evType => {
-        ['orders', 'mesas', 'menu_items', 'categories', 'store_config', 'garcons', 'customers', 'addons_esgotados'].forEach(tbl => {
+        ['orders', 'mesas', 'menu_items', 'categories', 'store_config', 'garcons', 'customers', 'estoque', 'estoque_receitas', 'estoque_movimentos', 'addons_esgotados', 'entregadores', 'entregas', 'rotas_entrega', 'entregador_locations', 'entrega_mensagens'].forEach(tbl => {
           self._sse.addEventListener(`${tbl}:${evType}`, handle);
         });
       });

@@ -257,7 +257,7 @@ async function loadAllData(silent = false) {
 
     const [
       itemsRes, catsRes, ordersRes, ordersEntregueRes, movsRes,
-      cuponsRes, mesasRes, estoqueRes, fidRes, cfgRes, mesaAbertaRes
+      cuponsRes, mesasRes, estoqueRes, receitasRes, fidRes, cfgRes, mesaAbertaRes
     ] = await Promise.all([
       safe(sb.from('menu_items').select('*').order('sort_order').order('id')),
       safe(sb.from('categories').select('*').order('sort_order')),
@@ -279,6 +279,7 @@ async function loadAllData(silent = false) {
       safe(sb.from('cupons').select('*').order('id')),
       safe(sb.from('mesas').select('*').order('num')),
       safe(sb.from('estoque').select('*').order('id')),
+      safe(sb.from('estoque_receitas').select('*').order('id')),
       safe(sb.from('fidelidade').select('*').order('pts',{ascending:false})),
       safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema,order_num_offset,taxa_servico_pct,store_tempo_entrega,store_tempo_retirada').single()),
       safe(sb.from('orders').select('*').eq('status','mesa_aberta').order('id',{ascending:false}))
@@ -329,6 +330,11 @@ async function loadAllData(silent = false) {
       id:e.id, name:e.name, unit:e.unit||'un', qty:parseFloat(e.qty)||0,
       min_qty:parseFloat(e.min_qty)||0, custo:parseFloat(e.cost)||0,
       updated_at:e.updated_at||null
+    }));
+    if (Array.isArray(receitasRes.data)) estoqueReceitas = receitasRes.data.map(r => ({
+      id:r.id, item_id:parseInt(r.item_id)||0, estoque_id:parseInt(r.estoque_id)||0,
+      qty:parseFloat(r.qty)||0, unit:r.unit||'', ativo:r.ativo !== false && r.ativo !== 0,
+      updated_at:r.updated_at||null
     }));
     if (fidRes.data?.length)      fidClients    = fidRes.data.map(f => ({
       id:f.id, name:f.name, phone:f.phone||'', pts:f.pts||0,
@@ -941,13 +947,43 @@ function subscribeOrders() {
     })
     .subscribe();
 
+  const chEstoque = sb.channel('estoque-rt')
+    .on('postgres_changes', {event:'*', schema:'public', table:'estoque'}, p => {
+      const row = p.new || {};
+      if (!row.id) return;
+      const mapped = {
+        id: row.id, name: row.name, unit: row.unit || 'un', qty: parseFloat(row.qty) || 0,
+        min_qty: parseFloat(row.min_qty) || 0, custo: parseFloat(row.cost) || 0,
+        updated_at: row.updated_at || null
+      };
+      const idx = estoqueItems.findIndex(e => e.id === mapped.id);
+      if (idx >= 0) estoqueItems[idx] = mapped;
+      else estoqueItems.push(mapped);
+      if (typeof renderEstoque === 'function') renderEstoque();
+      if (typeof estAtualizarDisponivel === 'function') estAtualizarDisponivel();
+    })
+    .on('postgres_changes', {event:'*', schema:'public', table:'estoque_receitas'}, p => {
+      const row = p.new || {};
+      if (!row.id) return;
+      const mapped = {
+        id: row.id, item_id: parseInt(row.item_id) || 0, estoque_id: parseInt(row.estoque_id) || 0,
+        qty: parseFloat(row.qty) || 0, unit: row.unit || '',
+        ativo: row.ativo !== false && row.ativo !== 0, updated_at: row.updated_at || null
+      };
+      const idx = estoqueReceitas.findIndex(r => r.id === mapped.id);
+      if (idx >= 0) estoqueReceitas[idx] = mapped;
+      else estoqueReceitas.push(mapped);
+      if (typeof renderReceitaEstoque === 'function') renderReceitaEstoque();
+    })
+    .subscribe();
+
   // Heartbeat: mantém WS vivo em background (a cada 25s)
   _heartbeat = setInterval(() => {
     try { sb.channel('orders-rt').send({ type:'broadcast', event:'ping', payload:{} }); }
     catch(e){}
   }, 25000);
 
-  _rtChannels = [chOrders, chMesas, chConfig];
+  _rtChannels = [chOrders, chMesas, chConfig, chEstoque];
 
   // ── Rádio garçom → gestor (push-to-talk via SSE) ──────────────
   _subscribeRadio();
@@ -2433,6 +2469,7 @@ let fidClients   = [];
 let cliData      = [];  // customers carregados
 let _cliTab      = 'todos';
 let estoqueItems = [];
+let estoqueReceitas = [];
 let cartItems    = [];
 let filters      = {search:'', cat:'', status:''};
 let chatInitialized = false;

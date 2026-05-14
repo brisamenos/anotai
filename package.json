@@ -4,10 +4,13 @@
   "description": "Estima Food — Sistema Multi-Tenant",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test:entregador": "node scripts/test-entregador-local.js",
+    "demo:delivery": "node scripts/seed-delivery-demo.js",
+    "demo:delivery:clean": "node scripts/seed-delivery-demo.js --clean"
   },
   "dependencies": {
-    "better-sqlite3": "^9.4.3",
+    "better-sqlite3": "^12.9.0",
     "puppeteer": "^22.0.0"
   },
   "engines": {

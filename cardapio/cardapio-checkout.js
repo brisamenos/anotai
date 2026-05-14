@@ -5,12 +5,71 @@
 // ══════════════════════════════════════════
 //  WHATSAPP — gera link com mensagem pré-pronta
 // ══════════════════════════════════════════
-function buildWaLink(orderId, orderNum) {
+function normalizeWaNumero(numero) {
+  let n = String(numero || '').replace(/\D/g, '');
+  if (!n) return '';
+  if (n.length <= 11) n = '55' + n;
+  return n;
+}
+
+async function ensureWaNumero() {
+  const current = normalizeWaNumero(_waNumero);
+  if (current) {
+    _waNumero = current;
+    return current;
+  }
+  if (!_tenantId || !sb?.from) return '';
+  try {
+    const { data } = await sb.from('store_config').select('store_whatsapp').single();
+    const cfg = Array.isArray(data) ? data[0] : data;
+    const found = normalizeWaNumero(cfg?.store_whatsapp);
+    if (found) _waNumero = found;
+    return found;
+  } catch(e) {
+    return '';
+  }
+}
+
+function buildWaLink(orderId, orderNum, numeroOverride) {
   const num = String(_orderNum(orderId, orderNum)).padStart(3, '0');
   const msg = `Acompanhar pedido *#${num}*`;
-  const numero = _waNumero || '';
+  const numero = normalizeWaNumero(numeroOverride || _waNumero);
   if (!numero) return null;
+  _waNumero = numero;
   return `https://wa.me/${numero}?text=${encodeURIComponent(msg)}`;
+}
+
+function configureSuccessWaButton(order, waLink) {
+  const waBtnEl  = document.getElementById('success-wa-btn');
+  const waLblEl  = document.getElementById('success-wa-label');
+  const waHintEl = document.getElementById('success-wa-hint');
+  const numFormatado = '#' + String(_orderNum(order.id, order.order_num)).padStart(3,'0');
+  if (!waBtnEl) return;
+
+  if (waLink) {
+    waBtnEl.classList.remove('success-wa-btn-hidden');
+    waBtnEl.classList.add('show');
+    waBtnEl.href = waLink;
+    if (waLblEl)  waLblEl.textContent = `Acompanhar pedido ${numFormatado} pelo WhatsApp`;
+    if (waHintEl) waHintEl.style.display = 'block';
+    return;
+  }
+
+  waBtnEl.classList.add('success-wa-btn-hidden');
+  waBtnEl.classList.remove('show');
+  waBtnEl.href = '#';
+  if (waHintEl) waHintEl.style.display = 'none';
+}
+
+async function renderSuccessWaButton(order) {
+  let waLink = buildWaLink(order.id, order.order_num);
+  configureSuccessWaButton(order, waLink);
+  if (!waLink) {
+    const numero = await ensureWaNumero();
+    waLink = buildWaLink(order.id, order.order_num, numero);
+    configureSuccessWaButton(order, waLink);
+  }
+  return waLink;
 }
 
 function scheduleWaTrackingRedirect(orderId, waLink) {
@@ -400,22 +459,7 @@ async function _doSubmitOrder(addr, troco) {
     document.getElementById('success-num').textContent = numFormatado;
 
     // Botão WhatsApp — aparece sempre que houver número configurado
-    const waLink   = buildWaLink(order.id, order.order_num);
-    const waBtnEl  = document.getElementById('success-wa-btn');
-    const waLblEl  = document.getElementById('success-wa-label');
-    const waHintEl = document.getElementById('success-wa-hint');
-    if (waBtnEl) {
-      waBtnEl.classList.remove('success-wa-btn-hidden');
-      if (waLink) {
-        waBtnEl.classList.add('show');
-        waBtnEl.href = waLink;
-        if (waLblEl)  waLblEl.textContent = `Acompanhar pedido ${numFormatado} pelo WhatsApp`;
-        if (waHintEl) waHintEl.style.display = 'block';
-      } else {
-        waBtnEl.classList.remove('show');
-        if (waHintEl) waHintEl.style.display = 'none';
-      }
-    }
+    const waLink = await renderSuccessWaButton(order);
 
     // Convite de cadastro para não-logados
     const inv = document.getElementById('invite-signup');
@@ -951,7 +995,9 @@ function resetCart() {
   if (inv) inv.style.display = 'none';
   // Reseta botão WA para próximo pedido
   const waBtn = document.getElementById('success-wa-btn');
-  if (waBtn) { waBtn.classList.remove('show'); waBtn.href = '#'; }
+  if (waBtn) { waBtn.classList.add('success-wa-btn-hidden'); waBtn.classList.remove('show'); waBtn.href = '#'; }
+  const waHint = document.getElementById('success-wa-hint');
+  if (waHint) waHint.style.display = 'none';
   renderTotals();
   closeCart();
 }

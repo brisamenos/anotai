@@ -536,6 +536,7 @@ async function relExportarCompleto() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
+    const clean = v => String(v || '').replace(/[;\r\n]+/g, ' ');
 
     // ── CSV de Pedidos ──
     let csv = 'SEP=;\n';
@@ -570,6 +571,30 @@ async function relExportarCompleto() {
       csv += `Descrição;Valor;Vencimento;Categoria;Status;Pago em\n`;
       data.contas_pagar.forEach(c => {
         csv += `${(c.descricao||'').replace(/;/g,' ')};${parseFloat(c.valor||0).toFixed(2)};${c.vencimento};${c.categoria||''};${c.status};${c.pago_em||''}\n`;
+      });
+    }
+
+    if (data.entregas?.length) {
+      csv += `\nENTREGAS\n`;
+      csv += `Pedido;Cliente;Telefone;Entregador;Status;Endereco;Valor pedido;Valor receber;Recebido;Comissao;Problema;Criada;Saiu;Entregue\n`;
+      data.entregas.forEach(e => {
+        csv += `${e.order_num||e.order_id};${clean(e.client)};${clean(e.phone)};${clean(e.entregador_nome)};${clean(e.status)};${clean(e.addr)};${parseFloat(e.valor_pedido||0).toFixed(2)};${parseFloat(e.valor_receber||0).toFixed(2)};${parseFloat(e.recebido||0).toFixed(2)};${parseFloat(e.comissao||0).toFixed(2)};${clean(e.problema)};${e.created_at||''};${e.saiu_at||''};${e.entregue_at||''}\n`;
+      });
+    }
+
+    if (data.rotas_entrega?.length) {
+      csv += `\nROTAS DE ENTREGA\n`;
+      csv += `Rota;Entregador;Status;Pedidos;Total pedidos;Dinheiro previsto;Comissao;Criada;Iniciada;Finalizada;Obs\n`;
+      data.rotas_entrega.forEach(r => {
+        csv += `${r.id};${clean(r.entregador_nome)};${clean(r.status)};${r.pedidos_count||0};${parseFloat(r.total_pedidos||0).toFixed(2)};${parseFloat(r.dinheiro_previsto||0).toFixed(2)};${parseFloat(r.comissao_total||0).toFixed(2)};${r.created_at||''};${r.iniciado_em||''};${r.finalizado_em||''};${clean(r.obs)}\n`;
+      });
+    }
+
+    if (data.estoque_movimentos?.length) {
+      csv += `\nMOVIMENTOS DE ESTOQUE\n`;
+      csv += `Data;Tipo;Ingrediente;Produto;Pedido;Cliente;Qtd;Unidade;Saldo antes;Saldo depois;Origem;Obs\n`;
+      data.estoque_movimentos.forEach(m => {
+        csv += `${m.created_at||''};${clean(m.tipo)};${clean(m.ingrediente)};${clean(m.produto)};${m.order_num||''};${clean(m.client)};${parseFloat(m.qty||0).toFixed(3)};${clean(m.unit)};${parseFloat(m.saldo_antes||0).toFixed(3)};${parseFloat(m.saldo_depois||0).toFixed(3)};${clean(m.origem)};${clean(m.note)}\n`;
       });
     }
 
