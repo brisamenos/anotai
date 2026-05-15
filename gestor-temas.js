@@ -39,7 +39,12 @@ const GESTOR_TEMAS = [
       '--muted2':'#94a3b8',
       '--sidebar-bg':'#080b11',
       '--topnav-bg':'#060910',
-      '--sfoot-bg':'rgba(6,9,16,.8)'
+      '--sfoot-bg':'rgba(6,9,16,.8)',
+      '--kanban-analise':'rgba(14,165,233,.08)',
+      '--kanban-producao':'rgba(255,255,255,.06)',
+      '--kanban-pronto':'rgba(52,211,153,.06)',
+      '--kanban-saiu':'rgba(245,158,11,.08)',
+      '--kanban-entregue':'rgba(99,102,241,.06)'
     }
   },
   {
@@ -123,7 +128,12 @@ const GESTOR_TEMAS = [
       '--muted2':'#50506a',
       '--sidebar-bg':'#04040c',
       '--topnav-bg':'#020205',
-      '--sfoot-bg':'rgba(2,2,5,.9)'
+      '--sfoot-bg':'rgba(2,2,5,.9)',
+      '--kanban-analise':'rgba(14,165,233,.06)',
+      '--kanban-producao':'rgba(255,255,255,.05)',
+      '--kanban-pronto':'rgba(52,211,153,.06)',
+      '--kanban-saiu':'rgba(245,158,11,.07)',
+      '--kanban-entregue':'rgba(99,102,241,.06)'
     }
   }
 ];

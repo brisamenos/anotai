@@ -2249,3 +2249,291 @@ tbody tr:hover{
     min-height:0!important;
   }
 }
+
+/* Dark theme repair: the professional light refresh above is intentionally bright.
+   When the gestor theme is dark, restore the dark workspace and subtle kanban. */
+:root[data-gestor-theme-type="dark"],
+:root[data-gestor-theme-type="dark"] body{
+  color-scheme:dark!important;
+}
+
+:root[data-gestor-theme-type="dark"] body,
+:root[data-gestor-theme-type="dark"] .app,
+:root[data-gestor-theme-type="dark"] .main,
+:root[data-gestor-theme-type="dark"] .page,
+:root[data-gestor-theme-type="dark"] #page-pedidos.on{
+  background:var(--bg)!important;
+  color:var(--text)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .topnav,
+:root[data-gestor-theme-type="dark"] .modo-acougue .topnav{
+  background:var(--topnav-bg)!important;
+  border-bottom:1px solid var(--border)!important;
+  box-shadow:0 1px 0 rgba(255,255,255,.03)!important;
+  color:var(--text)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .logo,
+:root[data-gestor-theme-type="dark"] .logo *{
+  color:var(--text)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .tnr .ibtn,
+:root[data-gestor-theme-type="dark"] .tbadge,
+:root[data-gestor-theme-type="dark"] .tnav-pill{
+  background:var(--surface)!important;
+  border-color:var(--border)!important;
+  color:var(--muted2)!important;
+  box-shadow:none!important;
+}
+
+:root[data-gestor-theme-type="dark"] .ibtn:hover,
+:root[data-gestor-theme-type="dark"] .tnr .ibtn:hover,
+:root[data-gestor-theme-type="dark"] .tnav-pill:hover{
+  background:var(--surface2)!important;
+  border-color:var(--border2)!important;
+  color:var(--text)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .sidebar{
+  background:var(--sidebar-bg)!important;
+  border-right:1px solid var(--border)!important;
+  box-shadow:1px 0 30px rgba(0,0,0,.4)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .si{
+  color:var(--muted2)!important;
+  box-shadow:none!important;
+}
+
+:root[data-gestor-theme-type="dark"] .si:hover{
+  background:var(--surface2)!important;
+  color:var(--text)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .si.on{
+  background:var(--accent-dim)!important;
+  color:var(--accent)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .si.on::before{
+  display:block!important;
+}
+
+:root[data-gestor-theme-type="dark"] .shead,
+:root[data-gestor-theme-type="dark"] .ssub{
+  color:var(--muted)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .sfoot{
+  background:var(--sfoot-bg)!important;
+  border-color:var(--border)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .ph,
+:root[data-gestor-theme-type="dark"] #page-pedidos .ph{
+  background:var(--surface)!important;
+  border:1px solid var(--border)!important;
+  color:var(--text)!important;
+  box-shadow:0 8px 24px rgba(0,0,0,.18)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .pt,
+:root[data-gestor-theme-type="dark"] .card-title,
+:root[data-gestor-theme-type="dark"] .sv{
+  color:var(--text)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .ps,
+:root[data-gestor-theme-type="dark"] .muted,
+:root[data-gestor-theme-type="dark"] .form-label{
+  color:var(--muted2)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .bg,
+:root[data-gestor-theme-type="dark"] .btn.bg,
+:root[data-gestor-theme-type="dark"] .card,
+:root[data-gestor-theme-type="dark"] .tw,
+:root[data-gestor-theme-type="dark"] .tabs,
+:root[data-gestor-theme-type="dark"] .sbox,
+:root[data-gestor-theme-type="dark"] .sw select,
+:root[data-gestor-theme-type="dark"] .form-input,
+:root[data-gestor-theme-type="dark"] .map-placeholder,
+:root[data-gestor-theme-type="dark"] input,
+:root[data-gestor-theme-type="dark"] textarea,
+:root[data-gestor-theme-type="dark"] select{
+  background:var(--surface)!important;
+  border-color:var(--border)!important;
+  color:var(--text)!important;
+  box-shadow:none!important;
+}
+
+:root[data-gestor-theme-type="dark"] .bg:hover,
+:root[data-gestor-theme-type="dark"] .btn.bg:hover,
+:root[data-gestor-theme-type="dark"] .card:hover{
+  background:var(--surface2)!important;
+  border-color:var(--border2)!important;
+  color:var(--text)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .sbox input,
+:root[data-gestor-theme-type="dark"] .sbox input::placeholder,
+:root[data-gestor-theme-type="dark"] .form-input::placeholder{
+  color:var(--muted2)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kanban,
+:root[data-gestor-theme-type="dark"] #page-pedidos .kanban{
+  gap:16px!important;
+  background:transparent!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  overflow:visible!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kanban.kanban-4cols{
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kanban.kanban-5cols{
+  grid-template-columns:repeat(5,minmax(0,1fr))!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kol{
+  border:1px solid var(--border)!important;
+  border-radius:14px!important;
+  box-shadow:none!important;
+  overflow:hidden!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kol-analise{
+  background:rgba(14,165,233,.08)!important;
+  border-color:rgba(14,165,233,.18)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kol-producao,
+:root[data-gestor-theme-type="dark"] .kol-preparando{
+  background:rgba(255,255,255,.06)!important;
+  border-color:rgba(255,255,255,.14)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kol-pronto,
+:root[data-gestor-theme-type="dark"] .kol-servido{
+  background:rgba(52,211,153,.06)!important;
+  border-color:rgba(52,211,153,.14)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kol-saiu{
+  background:rgba(245,158,11,.08)!important;
+  border-color:rgba(245,158,11,.20)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kol-entregue{
+  background:rgba(99,102,241,.06)!important;
+  border-color:rgba(99,102,241,.14)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kol-head{
+  min-height:auto!important;
+  padding:13px 16px!important;
+  background:transparent!important;
+  border-bottom:0!important;
+  color:var(--text)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kol-title,
+:root[data-gestor-theme-type="dark"] .kol-preparando .kol-title,
+:root[data-gestor-theme-type="dark"] .kol-servido .kol-title{
+  font-size:11px!important;
+  font-weight:700!important;
+  text-transform:uppercase!important;
+  color:var(--muted2)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kol-analise .kol-title,
+:root[data-gestor-theme-type="dark"] .kol-producao .kol-title{
+  color:#7dd3fc!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kol-pronto .kol-title{
+  color:#6ee7b7!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kol-saiu .kol-title{
+  color:#fbbf24!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kol-entregue .kol-title{
+  color:#a78bfa!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kol-cnt{
+  width:20px!important;
+  min-width:20px!important;
+  height:20px!important;
+  padding:0!important;
+  background:rgba(255,255,255,.15)!important;
+  color:var(--text)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kol-empty{
+  color:var(--muted2)!important;
+  opacity:.55!important;
+  font-weight:700!important;
+  text-shadow:none!important;
+}
+
+:root[data-gestor-theme-type="dark"] .kol-config,
+:root[data-gestor-theme-type="dark"] .order-card{
+  background:var(--surface)!important;
+  border:1px solid var(--border)!important;
+  color:var(--text)!important;
+  box-shadow:0 1px 3px rgba(0,0,0,.2)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .order-card:hover{
+  background:var(--surface2)!important;
+  border-color:var(--accent)!important;
+  box-shadow:0 6px 20px var(--accent-glow)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .oc-id,
+:root[data-gestor-theme-type="dark"] .oc-client,
+:root[data-gestor-theme-type="dark"] .oc-total{
+  color:var(--text)!important;
+}
+
+:root[data-gestor-theme-type="dark"] .oc-items,
+:root[data-gestor-theme-type="dark"] .oc-time,
+:root[data-gestor-theme-type="dark"] .oc-addr{
+  color:var(--muted2)!important;
+}
+
+:root[data-gestor-theme-type="dark"] #kanban-hist-results{
+  background:var(--surface)!important;
+  border-color:var(--border)!important;
+  color:var(--text)!important;
+  box-shadow:0 8px 24px rgba(0,0,0,.16)!important;
+}
+
+@media(max-width:900px){
+  :root[data-gestor-theme-type="dark"] #page-pedidos .ph{
+    background:var(--surface)!important;
+    border-color:var(--border)!important;
+  }
+
+  :root[data-gestor-theme-type="dark"] .kanban,
+  :root[data-gestor-theme-type="dark"] #page-pedidos .kanban{
+    gap:10px!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+  }
+
+  :root[data-gestor-theme-type="dark"] .kol{
+    border-radius:10px!important;
+    min-width:78vw!important;
+    max-width:78vw!important;
+  }
+}

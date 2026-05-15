@@ -1,9 +1,9 @@
-[15/05/2026, 00:11:24] 💾  Banco: C:\Users\IGOR BORGES\Desktop\anotai-main\.dev-data\estima.db 
-[15/05/2026, 00:11:24] ✅  Banco existente encontrado — dados preservados 
-[15/05/2026, 00:11:24] 📁  Uploads: C:\Users\IGOR BORGES\Desktop\anotai-main\.dev-data\uploads 
-[15/05/2026, 00:11:24] ✅  Schema ok (v56) 
-[15/05/2026, 00:11:24] 🚀  Servidor rodando na porta 3001 
-[15/05/2026, 00:11:24] 🏢  Multi-tenant · SQLite 
-[15/05/2026, 00:11:34] 💾  Backup salvo (7 registros) 
-[15/05/2026, 00:11:39] 🔄  PIX recovery job iniciado (intervalo: 60s) 
-[15/05/2026, 00:11:39] 🔄  Auto-cobrança job iniciado (intervalo: 6h) 
+[15/05/2026, 01:24:13] 💾  Banco: C:\Users\IGOR BORGES\Desktop\anotai-main\.dev-data\estima.db 
+[15/05/2026, 01:24:13] ✅  Banco existente encontrado — dados preservados 
+[15/05/2026, 01:24:13] 📁  Uploads: C:\Users\IGOR BORGES\Desktop\anotai-main\.dev-data\uploads 
+[15/05/2026, 01:24:14] ✅  Schema ok (v56) 
+[15/05/2026, 01:24:14] 🚀  Servidor rodando na porta 3001 
+[15/05/2026, 01:24:14] 🏢  Multi-tenant · SQLite 
+[15/05/2026, 01:24:24] 💾  Backup salvo (7 registros) 
+[15/05/2026, 01:24:30] 🔄  PIX recovery job iniciado (intervalo: 60s) 
+[15/05/2026, 01:24:30] 🔄  Auto-cobrança job iniciado (intervalo: 6h) 
