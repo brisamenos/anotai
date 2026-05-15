@@ -404,10 +404,17 @@ async function loadAllData(silent = false) {
       if (st)   st.textContent = stOpen ? 'Online' : 'Offline';
       if (dot)  dot.style.background  = stOpen ? 'var(--success)' : 'var(--danger)';
       if (pill) { pill.style.background = stOpen ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'; pill.style.borderColor = stOpen ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'; pill.style.color = stOpen ? 'var(--success)' : 'var(--danger)'; }
-      // Aplica tema salvo no banco
-      const modoSalvo = cfgRes.data.gestor_tema || 'claro';
+      // Aplica tema salvo no banco, com fallback local para quem trocou offline/antes do sync.
+      let modoSalvo = cfgRes.data.gestor_tema || '';
+      if (!modoSalvo) {
+        try { modoSalvo = localStorage.getItem('gestor_tema_atual') || ''; } catch(e) {}
+      }
+      modoSalvo = modoSalvo || 'claro';
       if (typeof temaAplicarCompleto === 'function') {
         temaAplicarCompleto(modoSalvo);
+        if (!cfgRes.data.gestor_tema && modoSalvo !== 'claro') {
+          sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, gestor_tema: modoSalvo }).then(()=>{}).catch(()=>{});
+        }
       } else {
         _aplicarVars(modoSalvo === 'claro' ? MODO_CLARO : MODO_ESCURO);
         if (modoSalvo === 'claro') {

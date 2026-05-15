@@ -128,6 +128,83 @@ const GESTOR_TEMAS = [
   }
 ];
 
+const GESTOR_TEMA_STORAGE_KEY = 'gestor_tema_atual';
+let _gestorTemaAtual = 'claro';
+
+function temaNormalizarKey(key) {
+  const mapa = {
+    'escuro':'escuro', 'dark':'escuro', 'oceano':'escuro', 'cobre':'escuro',
+    'cafe':'escuro', 'lavanda':'escuro', 'cereja':'escuro', 'crepusculo':'escuro', 'esmeralda':'escuro',
+    'claro':'claro', 'light':'claro', 'artico':'claro', 'classico':'claro', 'minimalista':'claro',
+    'noturno':'noturno'
+  };
+  return mapa[key] || 'claro';
+}
+
+function temaEncontrar(key) {
+  const resolved = temaNormalizarKey(key);
+  return GESTOR_TEMAS.find(t => t.key === resolved) || GESTOR_TEMAS[1];
+}
+
+function temaLerCache() {
+  try { return localStorage.getItem(GESTOR_TEMA_STORAGE_KEY) || ''; }
+  catch(e) { return ''; }
+}
+
+function temaSalvarCache(key) {
+  try { localStorage.setItem(GESTOR_TEMA_STORAGE_KEY, key); }
+  catch(e) {}
+}
+
+function temaGetAtivoKey() {
+  return _gestorTemaAtual
+    || document.documentElement.dataset.gestorTheme
+    || temaLerCache()
+    || 'claro';
+}
+
+function temaSetBusy(busy) {
+  document.querySelectorAll('.gt-card,.tema-mode-btn').forEach(el => {
+    el.style.pointerEvents = busy ? 'none' : '';
+    el.style.opacity = busy ? '.68' : '';
+  });
+}
+
+function temaUpdateTopButton() {
+  const btn = document.getElementById('tema-topbtn');
+  if (!btn) return;
+  const tema = temaEncontrar(temaGetAtivoKey());
+  const isDark = tema.tipo === 'dark';
+  btn.setAttribute('aria-label', isDark ? 'Mudar para tema claro' : 'Mudar para tema escuro');
+  btn.title = isDark ? 'Mudar para tema claro' : 'Mudar para tema escuro';
+  btn.innerHTML = isDark
+    ? '<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v1.4M8 13.1v1.4M1.5 8h1.4M13.1 8h1.4M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>'
+    : '<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M13.2 10.3A5.5 5.5 0 0 1 5.7 2.8a5.8 5.8 0 1 0 7.5 7.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+}
+
+function temaRenderStatusPanel() {
+  const panel = document.getElementById('tema-status-panel');
+  if (!panel) return;
+  const ativo = temaEncontrar(temaGetAtivoKey());
+  panel.innerHTML = `
+    <div class="tema-status-main">
+      <div>
+        <div class="tema-status-kicker">Tema atual</div>
+        <div class="tema-status-title">${ativo.nome}</div>
+        <div class="tema-status-desc">${ativo.desc}</div>
+      </div>
+      <div class="tema-mode-actions" role="group" aria-label="Alternar tema do gestor">
+        ${GESTOR_TEMAS.map(t => `
+          <button type="button" class="tema-mode-btn ${t.key === ativo.key ? 'on' : ''}" onclick="temaAplicarModo('${t.key}')" aria-pressed="${t.key === ativo.key}">
+            <span>${t.emoji}</span>
+            <span>${t.tipo === 'light' ? 'Claro' : (t.key === 'noturno' ? 'Noturno' : 'Escuro')}</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
 // ── Aplica variáveis CSS ──
 function _aplicarVars(vars) {
   const r = document.documentElement;
@@ -529,17 +606,20 @@ function _aplicarOverrideModal(vars) {
 
 // ── Aplica tema completo (chamado pelo gestor-core ao carregar dados) ──
 function temaAplicarCompleto(key) {
-  // Normaliza chaves antigas para os dois modos
-  const mapa = {
-    'escuro':'escuro', 'dark':'escuro', 'oceano':'escuro', 'cobre':'escuro',
-    'cafe':'escuro', 'lavanda':'escuro', 'cereja':'escuro', 'crepusculo':'escuro', 'esmeralda':'escuro',
-    'claro':'claro', 'light':'claro', 'artico':'claro', 'classico':'claro', 'minimalista':'claro',
-    'noturno':'noturno'
-  };
-  const resolved = mapa[key] || 'claro';
-  const tema = GESTOR_TEMAS.find(t => t.key === resolved) || GESTOR_TEMAS[0];
+  const tema = temaEncontrar(key);
+  const resolved = tema.key;
+  const root = document.documentElement;
 
   _aplicarVars(tema.vars);
+  _gestorTemaAtual = resolved;
+  window._gestorTemaAtual = resolved;
+  root.dataset.gestorTheme = resolved;
+  root.dataset.gestorThemeType = tema.tipo;
+  root.style.colorScheme = tema.tipo === 'light' ? 'light' : 'dark';
+  temaSalvarCache(resolved);
+
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  if (metaTheme) metaTheme.content = tema.vars['--topnav-bg'] || tema.vars['--bg'] || '#0b0e14';
 
   // Remove overrides antigos
   ['tema-light-override','tema-modal-override'].forEach(id => {
@@ -552,32 +632,53 @@ function temaAplicarCompleto(key) {
   } else {
     _aplicarOverrideModal(tema.vars);
   }
+  temaUpdateCardSelection();
+  temaRenderStatusPanel();
+  temaUpdateTopButton();
+  return tema;
 }
 
 // ── Aplica tema + salva no banco ──
-function temaAplicarModo(key) {
-  temaAplicarCompleto(key);
-  if (typeof sb !== 'undefined' && typeof _sessao !== 'undefined') {
-    sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, gestor_tema: key }).then(()=>{}).catch(()=>{});
+async function temaAplicarModo(key) {
+  const tema = temaAplicarCompleto(key);
+  temaSetBusy(true);
+  try {
+    if (typeof sb === 'undefined') throw new Error('API indisponivel');
+    const tenantId = (typeof _sessao !== 'undefined' && _sessao?.tenant_id) ? _sessao.tenant_id : '';
+    const payload = { gestor_tema: tema.key };
+    if (tenantId) payload.tenant_id = tenantId;
+    const res = await sb.from('store_config').upsert(payload);
+    if (res?.error) throw new Error(res.error.message || 'Falha ao salvar');
+    sbToast('ok', `${tema.nome} ativado e salvo!`);
+  } catch(e) {
+    sbToast('err', `${tema.nome} aplicado neste dispositivo, mas nao foi salvo no banco.`);
+  } finally {
+    temaSetBusy(false);
+    temaUpdateCardSelection();
+    temaRenderStatusPanel();
   }
-  temaUpdateCardSelection();
-  const tema = GESTOR_TEMAS.find(t => t.key === key);
-  sbToast('ok', tema ? `${tema.nome} ativado!` : 'Tema aplicado!');
+}
+
+function temaToggleRapido() {
+  const atual = temaEncontrar(temaGetAtivoKey());
+  temaAplicarModo(atual.tipo === 'dark' ? 'claro' : 'escuro');
 }
 
 // ── Atualiza seleção visual dos cards ──
 function temaUpdateCardSelection() {
-  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
-  let ativo = 'claro';
-  for (const t of GESTOR_TEMAS) {
-    if (t.vars['--bg'] === bg) { ativo = t.key; break; }
-  }
+  const ativo = temaEncontrar(temaGetAtivoKey()).key;
   document.querySelectorAll('.gt-card').forEach(card => {
     const isOn = card.dataset.tema === ativo;
     card.style.borderColor = isOn ? 'var(--accent)' : 'var(--border)';
     card.style.boxShadow   = isOn ? '0 0 0 3px var(--accent-glow)' : 'none';
+    card.setAttribute('aria-pressed', isOn ? 'true' : 'false');
     const check = card.querySelector('.gt-check');
     if (check) check.style.display = isOn ? 'flex' : 'none';
+  });
+  document.querySelectorAll('.tema-mode-btn').forEach(btn => {
+    const isOn = btn.getAttribute('onclick')?.includes(`'${ativo}'`);
+    btn.classList.toggle('on', !!isOn);
+    btn.setAttribute('aria-pressed', isOn ? 'true' : 'false');
   });
 }
 
@@ -612,10 +713,11 @@ function _temaPreviewHTML(p) {
 
 // ── Constrói grid de temas na page-tema ──
 function initTemaPage() {
+  temaRenderStatusPanel();
   const grid = document.getElementById('temas-grid');
   if (!grid) return;
   grid.innerHTML = GESTOR_TEMAS.map(t => `
-    <div class="gt-card" data-tema="${t.key}" onclick="temaAplicarModo('${t.key}')"
+    <div class="gt-card" data-tema="${t.key}" role="button" tabindex="0" onclick="temaAplicarModo('${t.key}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();temaAplicarModo('${t.key}')}"
          style="cursor:pointer;border-radius:14px;border:2px solid var(--border);padding:18px;transition:all .2s;background:var(--surface);position:relative;max-width:320px">
       ${_temaPreviewHTML(t.preview)}
       <div style="display:flex;align-items:center;gap:10px">
@@ -635,6 +737,7 @@ function initTemaPage() {
 
 // ── Stubs de compatibilidade ──
 function temaGetCurrent() { return {}; }
+function temaGetCurrentKey() { return temaGetAtivoKey(); }
 function temaSalvarStorage() {}
 function temaCarregarStorage() {}
 function temaReset() { temaAplicarModo('claro'); }

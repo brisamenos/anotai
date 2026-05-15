@@ -926,6 +926,78 @@ td:first-child{padding-left:18px}
 #page-robo.on{display:flex!important;flex-direction:column}
 #page-tema.on,#page-cardapio-publico.on{display:flex!important}
 
+.tema-status-panel{
+  max-width:1000px;
+  margin:0 0 16px;
+}
+.tema-status-main{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:16px;
+  box-shadow:0 8px 24px rgba(0,0,0,.08);
+}
+.tema-status-kicker{
+  color:var(--muted);
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.8px;
+  text-transform:uppercase;
+  margin-bottom:4px;
+}
+.tema-status-title{
+  color:var(--text);
+  font-size:17px;
+  font-weight:800;
+}
+.tema-status-desc{
+  color:var(--muted);
+  font-size:12px;
+  margin-top:3px;
+}
+.tema-mode-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+.tema-mode-btn{
+  min-height:38px;
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:var(--surface2);
+  color:var(--muted2);
+  padding:0 12px;
+  font-family:'Outfit',sans-serif;
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+  transition:all .16s ease;
+}
+.tema-mode-btn:hover{
+  color:var(--text);
+  border-color:var(--border2);
+}
+.tema-mode-btn.on{
+  background:var(--accent);
+  border-color:var(--accent);
+  color:#fff;
+  box-shadow:0 8px 18px var(--accent-glow);
+}
+.gt-card:focus-visible,
+.tema-mode-btn:focus-visible,
+#tema-topbtn:focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:3px;
+}
+
 /* ══ SIDEBAR HOVER-EXPAND ═════════════════════════════════
    Colapsado: 52px (só ícones)   Expandido: 224px (hover/pinned)
 ═════════════════════════════════════════════════════════════ */
@@ -1135,6 +1207,9 @@ td:first-child{padding-left:18px}
   .ph>div:last-child{display:flex;flex-wrap:wrap;gap:8px;width:100%}
   .ph>div:last-child .btn{flex:1;min-width:100px;justify-content:center;min-height:40px}
   .pt{font-size:19px!important}
+  .tema-status-main{flex-direction:column!important;align-items:stretch!important}
+  .tema-mode-actions{justify-content:stretch!important}
+  .tema-mode-btn{flex:1;justify-content:center;min-width:92px}
   .form-row-2{grid-template-columns:1fr!important}
   .quality-pills{display:none!important}
   .search-bar{flex-wrap:wrap}

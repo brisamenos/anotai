@@ -1304,10 +1304,13 @@ const TEMAS_PRONTOS = GESTOR_TEMAS.map(t => ({ nome: t.nome, vars: t.vars }));
 // Stub legado
 function temaApply(vars, save) { _aplicarVars(vars); }
 
-// Aplica tema escuro imediatamente (antes do banco carregar)
+// Aplica o tema em cache imediatamente (antes do banco carregar)
 (function(){
   try { ['ef_tema_modo','ef_tema_v2','tema','theme'].forEach(k=>localStorage.removeItem(k)); } catch(e){}
-  _aplicarVars(MODO_ESCURO);
+  let inicial = 'claro';
+  try { inicial = localStorage.getItem('gestor_tema_atual') || document.documentElement.dataset.gestorTheme || 'claro'; } catch(e){}
+  if (typeof temaAplicarCompleto === 'function') temaAplicarCompleto(inicial);
+  else _aplicarVars(inicial === 'claro' ? MODO_CLARO : MODO_ESCURO);
 })();
 
 // ── Registra webhook na Evolution API automaticamente ──
