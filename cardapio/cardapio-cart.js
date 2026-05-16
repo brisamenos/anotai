@@ -3,6 +3,87 @@
 //  Estima Food — Cardápio
 // ══════════════════════════════════════════
 
+const CART_DRAFT_TTL_MS = 72 * 60 * 60 * 1000;
+
+function _cartDraftKey() {
+  return 'ef_cart_draft_' + (_tenantId || '');
+}
+
+function _cartDraftItem(i) {
+  return {
+    id: Number(i.id) || null,
+    qty: Math.max(1, parseInt(i.qty || 1, 10)),
+    name: String(i.name || ''),
+    price: parseFloat(i.price || 0),
+    obs: String(i.obs || ''),
+    emoji: i.emoji || '',
+    image_url: i.image_url || '',
+    _grupos: i._grupos || null
+  };
+}
+
+function saveCartDraft() {
+  if (!_tenantId) return;
+  try {
+    const key = _cartDraftKey();
+    if (!cart.length) {
+      localStorage.removeItem(key);
+      return;
+    }
+    localStorage.setItem(key, JSON.stringify({
+      tenant_id: _tenantId,
+      ts: Date.now(),
+      items: cart.map(_cartDraftItem)
+    }));
+  } catch(e) {}
+}
+
+function clearCartDraft() {
+  try { if (_tenantId) localStorage.removeItem(_cartDraftKey()); } catch(e) {}
+}
+
+function restoreCartDraft() {
+  if (!_tenantId || !Array.isArray(allItems) || !allItems.length || cart.length) return;
+  try {
+    const raw = localStorage.getItem(_cartDraftKey());
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (!data || data.tenant_id !== _tenantId || !Array.isArray(data.items)) {
+      clearCartDraft();
+      return;
+    }
+    if (Date.now() - parseInt(data.ts || 0, 10) > CART_DRAFT_TTL_MS) {
+      clearCartDraft();
+      return;
+    }
+
+    const restored = [];
+    data.items.forEach(saved => {
+      const live = allItems.find(i => Number(i.id) === Number(saved.id));
+      if (!live || live.status === 'pausado' || live.status === 'esgotado') return;
+      restored.push({
+        ...live,
+        qty: Math.max(1, parseInt(saved.qty || 1, 10)),
+        name: saved.name || live.name,
+        price: Number.isFinite(parseFloat(saved.price)) ? parseFloat(saved.price) : parseFloat(live.price || 0),
+        obs: saved.obs || '',
+        emoji: saved.emoji || live.emoji || '',
+        image_url: saved.image_url || live.image_url || '',
+        _grupos: saved._grupos || null
+      });
+    });
+
+    if (!restored.length) {
+      clearCartDraft();
+      return;
+    }
+    cart = restored;
+    updateCartFloat();
+  } catch(e) {
+    clearCartDraft();
+  }
+}
+
 // Normaliza string pra comparação: remove acentos, espaços extras, caso.
 // Antes o match exigia digitação exata — qualquer diferença (acento, maiúscula,
 // espaço duplo) dava "fora da área". Agora bate mesmo com pequenas variações.
@@ -242,6 +323,7 @@ function displayTotal() {
 }
 
 function updateCartFloat() {
+  saveCartDraft();
   const qty = cart.reduce((s,i) => s+i.qty, 0);
   document.getElementById('cart-float').classList.toggle('show', cart.length > 0);
   document.getElementById('cart-badge').textContent = qty;
@@ -503,7 +585,7 @@ function renderCartDrawer() {
     list.innerHTML = cart.map(i => `
       <div class="ci">
         <div class="ci-thumb">
-          ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}">` : i.emoji||'🍽️'}
+          ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">` : i.emoji||'🍽️'}
         </div>
         <div class="ci-info">
           <div class="ci-name">${i.name}</div>

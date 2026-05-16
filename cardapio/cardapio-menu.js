@@ -26,7 +26,7 @@ function buildCats() {
       b.dataset.key = c.name;
       b.onclick = () => filterCat(b, c.name);
       const iconHtml = c.image_url
-        ? `<img src="${c.image_url}" alt="${c.label||c.name}">`
+        ? `<img src="${c.image_url}" alt="${c.label||c.name}" loading="lazy" decoding="async">`
         : (c.emoji ? `<span style="font-size:16px;line-height:1">${c.emoji}</span>` : _catSvg);
       b.innerHTML = `<div class="cat-btn-icon">${iconHtml}</div>${c.label || c.name}`;
       scroll.appendChild(b);
@@ -45,7 +45,7 @@ function buildCats() {
       b.dataset.key = c.name;
       b.onclick = () => filterCat(b, c.name);
       const iconHtml = c.image_url
-        ? `<img src="${c.image_url}" alt="${c.label||c.name}">`
+        ? `<img src="${c.image_url}" alt="${c.label||c.name}" loading="lazy" decoding="async">`
         : (c.emoji ? `<span style="font-size:16px;line-height:1">${c.emoji}</span>` : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="13" y="3" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="13" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="13" y="13" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/></svg>`);
       b.innerHTML = `<div class="cat-btn-icon">${iconHtml}</div>${c.label || c.name}`;
       scroll.appendChild(b);
@@ -118,7 +118,7 @@ function renderPreparoFilterSection() {
   el.style.display = '';
   let cards = '';
   allPreparos.forEach((nome, id) => {
-    const icon = _preparoImgMap[id] ? `<img src="${_preparoImgMap[id]}" alt="${nome}">` : `<svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M10 22c-2-2-3-5-1.5-8s5-4.5 8-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M22 10c2 1 3 4 1.5 7S19 21 16 20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="16" cy="16" r="3" stroke="currentColor" stroke-width="1.4"/></svg>`;
+    const icon = _preparoImgMap[id] ? `<img src="${_preparoImgMap[id]}" alt="${nome}" loading="lazy" decoding="async">` : `<svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M10 22c-2-2-3-5-1.5-8s5-4.5 8-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M22 10c2 1 3 4 1.5 7S19 21 16 20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="16" cy="16" r="3" stroke="currentColor" stroke-width="1.4"/></svg>`;
     const isOn = _filterPreparo === id;
     cards += `<div class="preparo-filter-card${isOn ? ' on' : ''}" onclick="setFilterPreparo('${id}')">
       <div class="preparo-filter-card-icon">${icon}</div>
@@ -199,7 +199,7 @@ function renderMenu() {
         html += `
         <div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}>
           <div class="dest-img">
-            ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" >` : `<span>${''}</span>`}
+            ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`}
             <span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span>
           </div>
           <div class="dest-body">
@@ -220,7 +220,7 @@ function renderMenu() {
     const nomePrep = _getPreparoFilterNome(_filterPreparo);
     const iconPrep = _preparoImgMap[_filterPreparo];
     const iconHtml = iconPrep
-      ? `<div class="preparo-filter-active-banner-icon"><img src="${iconPrep}" alt="${nomePrep}"></div>`
+      ? `<div class="preparo-filter-active-banner-icon"><img src="${iconPrep}" alt="${nomePrep}" loading="lazy" decoding="async"></div>`
       : '';
     const totalFiltrado = normalItems.length;
     html += `<div class="preparo-filter-active-banner" id="preparo-active-banner">
@@ -263,7 +263,7 @@ function renderMenu() {
       html += `<div class="destaques-wrap"><div class="section-label">Mais Pedidos</div><div class="destaques-scroll">`;
       destItems.forEach(i => {
         const esg = i.status === 'esgotado';
-        html += `<div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}><div class="dest-img">${i.image_url?`<img src="${i.image_url}" alt="${i.name}">`:''}<span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span></div><div class="dest-body"><div class="dest-name">${i.name}</div><div class="dest-prices">${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}<span class="dest-price">R$ ${fmt(i.price)}</span></div></div></div>`;
+        html += `<div class="dest-card" ${esg?'':'onclick="openItemModal('+i.id+')"'}><div class="dest-img">${i.image_url?`<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">`:''}<span class="dest-promo-badge">${i.price_old?'OFERTA':'PROMO'}</span></div><div class="dest-body"><div class="dest-name">${i.name}</div><div class="dest-prices">${i.price_old?`<span class="dest-price-old">R$ ${fmt(i.price_old)}</span>`:''}<span class="dest-price">R$ ${fmt(i.price)}</span></div></div></div>`;
       });
       html += `</div></div>`;
     }
@@ -471,7 +471,7 @@ function itemCard(i) {
       ${porcaoBadge}
     </div>
     <div class="item-img">
-      ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" >` : `<span>${''}</span>`}
+      ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`}
       ${i.promo||i.price_old ? '<span class="item-promo-badge">PROMO</span>' : ''}
       ${esg ? '<div class="item-esgotado-overlay">Esgotado</div>' : ''}
     </div>

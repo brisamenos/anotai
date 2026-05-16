@@ -29,6 +29,36 @@ function setFavicon(url) {
   test.src = url;
 }
 
+function upsertMeta(selectorAttr, selectorValue, content) {
+  if (!content) return;
+  let el = document.querySelector(`meta[${selectorAttr}="${selectorValue}"]`);
+  if (!el) {
+    el = document.createElement('meta');
+    el.setAttribute(selectorAttr, selectorValue);
+    document.head.appendChild(el);
+  }
+  el.setAttribute('content', content);
+}
+
+function applyShareMeta(branding, nome) {
+  const title = branding?.store_name || nome || 'Cardapio';
+  const desc = branding?.store_descricao || 'Faca seu pedido online.';
+  const img = branding?.store_logo_url || branding?.store_banner_url || '';
+  upsertMeta('property', 'og:type', 'website');
+  upsertMeta('property', 'og:title', title);
+  upsertMeta('property', 'og:description', desc);
+  upsertMeta('property', 'og:url', location.href);
+  upsertMeta('name', 'description', desc);
+  upsertMeta('name', 'twitter:card', img ? 'summary_large_image' : 'summary');
+  upsertMeta('name', 'twitter:title', title);
+  upsertMeta('name', 'twitter:description', desc);
+  if (img) {
+    const url = (img.startsWith('http') || img.startsWith('data:')) ? img : location.origin + img;
+    upsertMeta('property', 'og:image', url);
+    upsertMeta('name', 'twitter:image', url);
+  }
+}
+
 async function resolveTenant() {
   const p    = new URLSearchParams(location.search);
   const slug = p.get('slug') || p.get('t');
@@ -141,6 +171,7 @@ function applyTema(tema, accentCor) {
 function applyBranding(b, nome) {
   const n = b?.store_name || nome || 'Cardápio';
   document.title = n;
+  applyShareMeta(b, n);
   document.getElementById('hero-name').textContent = n;
   if (b?.store_descricao) document.getElementById('hero-desc').textContent = b.store_descricao;
   const cor = b?.store_cor || '#f97316';
@@ -169,6 +200,7 @@ function applyBranding(b, nome) {
     const img = document.createElement('img');
     img.src = b.store_logo_url;
     img.alt = n;
+    img.decoding = 'async';
     img.className = 'hero-logo-img';
     img.onerror = () => { logoWrap.innerHTML = '<span id="hero-emoji">🍽️</span>'; };
     logoWrap.innerHTML = '';
@@ -197,6 +229,8 @@ function applyBranding(b, nome) {
     const bannerImg   = document.getElementById('store-banner-img');
     if (bannerBelow && bannerImg) {
       bannerImg.src = url;
+      bannerImg.loading = 'lazy';
+      bannerImg.decoding = 'async';
       bannerImg.onerror = () => { bannerBelow.classList.remove('show'); };
       bannerBelow.classList.add('show');
       // Após 5.5s (animação completa), remove máscara e boneco
@@ -560,6 +594,7 @@ async function init() {
     setupPlanFeatures();
     applyTiposEntrega();
     applyDeliveryInfo();
+    if (typeof restoreCartDraft === 'function') restoreCartDraft();
     setInterval(() => applyStatus(undefined, undefined), 60000);
     // ── Polling de adicionais esgotados (defesa contra realtime indisponível) ──
     // A cada 30s recarrega a lista. Se mudou e o modal está aberto, re-renderiza.
@@ -655,6 +690,7 @@ async function onAddonsEsgotadosChanged() {
 // Diferente de applyBranding(): não recria elementos, atualiza os existentes
 function applyBrandingLive(cfg) {
   if (!cfg) return;
+  applyShareMeta(cfg, cfg.store_name || document.getElementById('hero-name')?.textContent || 'Cardapio');
 
   // Nome e descrição
   if (cfg.store_name) {
@@ -705,7 +741,7 @@ function applyBrandingLive(cfg) {
       const url = (cfg.store_banner_url.startsWith('http') || cfg.store_banner_url.startsWith('data:'))
         ? cfg.store_banner_url
         : location.origin + cfg.store_banner_url;
-      bannerEl.innerHTML = `<img src="${url}" alt="banner" onerror="this.parentElement.classList.remove('show');this.parentElement.style.display='none'">`;
+      bannerEl.innerHTML = `<img src="${url}" alt="banner" loading="lazy" decoding="async" onerror="this.parentElement.classList.remove('show');this.parentElement.style.display='none'">`;
       bannerEl.classList.add('show');
       bannerEl.style.display = 'block';
     }

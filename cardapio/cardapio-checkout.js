@@ -2,6 +2,50 @@
 //  CHECKOUT — submitOrder, PIX, cartão MP, troco, WhatsApp
 //  Estima Food — Cardápio
 // ══════════════════════════════════════════
+
+const _checkoutScriptLoads = {};
+
+function _loadCheckoutScript(src, globalName) {
+  if (globalName && window[globalName]) return Promise.resolve(window[globalName]);
+  if (_checkoutScriptLoads[src]) return _checkoutScriptLoads[src];
+
+  _checkoutScriptLoads[src] = new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    const done = () => resolve(globalName ? window[globalName] : true);
+    const fail = () => {
+      delete _checkoutScriptLoads[src];
+      reject(new Error('Falha ao carregar recurso de pagamento.'));
+    };
+
+    if (existing) {
+      if (!globalName || window[globalName]) return done();
+      existing.addEventListener('load', done, { once: true });
+      existing.addEventListener('error', fail, { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = done;
+    script.onerror = fail;
+    document.head.appendChild(script);
+  });
+
+  return _checkoutScriptLoads[src];
+}
+
+async function _ensureQRCodeLib() {
+  await _loadCheckoutScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js', 'QRCode');
+  if (!window.QRCode) throw new Error('QR Code indisponivel.');
+  return window.QRCode;
+}
+
+async function _ensureMercadoPagoLib() {
+  await _loadCheckoutScript('https://sdk.mercadopago.com/js/v2', 'MercadoPago');
+  if (!window.MercadoPago) throw new Error('Mercado Pago indisponivel.');
+  return window.MercadoPago;
+}
 // ══════════════════════════════════════════
 //  WHATSAPP — gera link com mensagem pré-pronta
 // ══════════════════════════════════════════
@@ -635,9 +679,10 @@ async function _iniciarFluxoPix(order) {
       return;
     }
     if (pd?.qr_code) {
+      const QRCodeLib = await _ensureQRCodeLib();
       const qrEl = document.getElementById('pix-qr-img');
       qrEl.innerHTML = '';
-      new QRCode(qrEl, { text: pd.qr_code, width: 180, height: 180, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+      new QRCodeLib(qrEl, { text: pd.qr_code, width: 180, height: 180, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCodeLib.CorrectLevel.M });
       document.getElementById('pix-qr-wrap').style.display = '';
       document.getElementById('pix-copy-code').value = pd.qr_code;
       document.getElementById('pix-status-label').textContent = '⏳ Aguardando pagamento...';
@@ -816,7 +861,8 @@ async function _initMpCardForm(valor) {
   });
 
   if (!_mpInstance) {
-    _mpInstance = new MercadoPago(_mpPublicKey, { locale: 'pt-BR' });
+    const MercadoPagoLib = await _ensureMercadoPagoLib();
+    _mpInstance = new MercadoPagoLib(_mpPublicKey, { locale: 'pt-BR' });
   }
 
   // Preenche e-mail oculto (MP exige payer.email para tokenização)
@@ -981,7 +1027,15 @@ async function _iniciarFluxoCartao(order) {
   if (form) form.style.display = '';
   if (res)  res.style.display  = 'none';
   if (erro) { erro.style.display = 'none'; erro.textContent = ''; }
-  await _initMpCardForm(parseFloat(order.total) + parseFloat(order.taxa || 0));
+  try {
+    await _initMpCardForm(parseFloat(order.total) + parseFloat(order.taxa || 0));
+  } catch(e) {
+    console.warn('[cartao] init falhou:', e);
+    if (erro) {
+      erro.textContent = 'Nao foi possivel carregar o pagamento online. Verifique a internet e tente novamente.';
+      erro.style.display = '';
+    }
+  }
 }
 
 function resetCart() {
