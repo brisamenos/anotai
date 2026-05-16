@@ -554,6 +554,12 @@ async function _doSubmitOrder(addr, troco) {
     window._lastOrderNum = order.order_num; // para o modal de avaliação
     document.getElementById('success-num').textContent = numFormatado;
 
+    // PIX manual precisa aparecer imediatamente; WhatsApp/rastreio podem esperar.
+    let pixFlowPromise = null;
+    if (selectedPay === 'pix') {
+      pixFlowPromise = _iniciarFluxoPix(order).catch(e => console.error('_iniciarFluxoPix:', e));
+    }
+
     // Botão WhatsApp — aparece sempre que houver número configurado
     const waLink = await renderSuccessWaButton(order);
 
@@ -569,9 +575,7 @@ async function _doSubmitOrder(addr, troco) {
     });
 
     // ── PIX: gera QR Code MP ou exibe chave manual ──
-    if (selectedPay === 'pix') {
-      await _iniciarFluxoPix(order);
-    }
+    if (pixFlowPromise) await pixFlowPromise;
 
     // ── Cartão de Crédito MP ──
     if (selectedPay === 'cartao_mp') {
@@ -675,6 +679,13 @@ async function _iniciarFluxoPix(order) {
   const errWrap = document.getElementById('pix-error-wrap');
   if (errWrap) errWrap.style.display = 'none';
 
+  const _showPixManual = () => {
+    document.getElementById('pix-manual-success-wrap').style.display = '';
+    document.getElementById('pix-manual-key-show').value             = _pixKeyManual;
+    document.getElementById('pix-manual-banco-lbl').textContent      = _pixKeyManualBanco ? `🏦 ${_pixKeyManualBanco}` : '';
+    document.getElementById('pix-manual-valor-show').textContent     = 'R$ ' + fmt(parseFloat(order.total) + parseFloat(order.taxa || 0));
+  };
+
   // Mostra fallback: se tem chave manual configurada, usa ela; senão, mostra bloco de erro com retry
   const _marcarPixManualFallback = async () => {
     if (!order?.id || order.pag === 'pix_manual') return;
@@ -689,12 +700,10 @@ async function _iniciarFluxoPix(order) {
 
   const _showFallback = async (msg) => {
     if (_pixKeyManual) {
-      await _marcarPixManualFallback();
-      document.getElementById('pix-manual-success-wrap').style.display = '';
-      document.getElementById('pix-manual-key-show').value             = _pixKeyManual;
-      document.getElementById('pix-manual-banco-lbl').textContent      = _pixKeyManualBanco ? `🏦 ${_pixKeyManualBanco}` : '';
-      document.getElementById('pix-manual-valor-show').textContent     = 'R$ ' + fmt(parseFloat(order.total) + parseFloat(order.taxa || 0));
+      _showPixManual();
+      _marcarPixManualFallback();
       return;
+      document.getElementById('pix-manual-banco-lbl').textContent      = _pixKeyManualBanco ? `🏦 ${_pixKeyManualBanco}` : '';
     }
     if (errWrap) {
       errWrap.style.display = '';
@@ -712,6 +721,8 @@ async function _iniciarFluxoPix(order) {
     if (!_pixAtivoGestor) {
       // PIX MP não está ativo — usa só chave manual (se configurada)
       if (_pixKeyManual) {
+        _showPixManual();
+        return;
         document.getElementById('pix-manual-success-wrap').style.display = '';
         document.getElementById('pix-manual-key-show').value             = _pixKeyManual;
         document.getElementById('pix-manual-banco-lbl').textContent      = _pixKeyManualBanco ? `🏦 ${_pixKeyManualBanco}` : '';
