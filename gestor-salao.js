@@ -1843,68 +1843,6 @@ async function submitGarcomOrder() {
   } finally { sbLoading(false); }
 }
 
-// ─────────────────────────────────────────
-// KDS
-// ─────────────────────────────────────────
-// ─────────────────────────────────────────
-// KDS COMPLETO
-// ─────────────────────────────────────────
-let kdsFilter = 'todos';
-let kdsTimers = {}; // id → { startTs, extra }
-let _kdsInterval = null;
-let _kdsFullscreen = false;
-
-function kdsSetFilter(f) {
-  kdsFilter = f;
-  ['todos', 'mesa', 'delivery', 'balcao'].forEach(k => {
-    const el = document.getElementById('kds-f-' + k);
-    if (el) el.classList.toggle('on', k === f);
-  });
-  renderKDS();
-}
-
-function kdsToggleFullscreen() {
-  const inner = document.getElementById('kds-inner');
-  if (!inner) return;
-  _kdsFullscreen = !_kdsFullscreen;
-  if (_kdsFullscreen) {
-    inner.classList.add('kds-fullscreen');
-    document.body.style.overflow = 'hidden';
-  } else {
-    inner.classList.remove('kds-fullscreen');
-    document.body.style.overflow = '';
-  }
-}
-
-function _kdsOrderType(o) {
-  const addr = (o.addr || '').toLowerCase();
-  if (o.mesa_num || addr.includes('mesa')) return 'mesa';
-  if (addr.includes('balcão') || addr.includes('balcao') || addr.includes('pdv')) return 'balcao';
-  return 'delivery';
-}
-
-function _kdsElapsed(o) {
-  const t = kdsTimers[o.id];
-  const extra = t?.extra || 0;
-  // Usa created_at do pedido para tempo real desde criação; fallback no startTs local
-  const startMs = o.created_at
-    ? new Date(o.created_at).getTime()
-    : (t?.startTs || Date.now());
-  return Math.floor((Date.now() - startMs) / 1000) + extra;
-}
-
-function _kdsFormatTime(secs) {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return m + ':' + String(s).padStart(2, '0');
-}
-
-function kdsAddTime(id, extra = 300) {
-  if (!kdsTimers[id]) kdsTimers[id] = { startTs: Date.now(), extra: 0 };
-  kdsTimers[id].extra -= extra; // subtrai para "ganhar" mais tempo
-  renderKDS();
-}
-
 // ══════════════════════════════════════════════════════════════════════════════
 // MODAL DETALHE DA MESA — Ver itens, cancelar, adicionar, imprimir conta
 // ══════════════════════════════════════════════════════════════════════════════

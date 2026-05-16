@@ -579,8 +579,20 @@ async function _iniciarFluxoPix(order) {
   if (errWrap) errWrap.style.display = 'none';
 
   // Mostra fallback: se tem chave manual configurada, usa ela; senão, mostra bloco de erro com retry
-  const _showFallback = (msg) => {
+  const _marcarPixManualFallback = async () => {
+    if (!order?.id || order.pag === 'pix_manual') return;
+    try {
+      const { error } = await sb.from('orders').update({ pag: 'pix_manual' }).eq('id', order.id);
+      if (!error) order.pag = 'pix_manual';
+      else console.warn('[pix] fallback manual nao sincronizado:', error.message || error);
+    } catch(e) {
+      console.warn('[pix] fallback manual nao sincronizado:', e.message || e);
+    }
+  };
+
+  const _showFallback = async (msg) => {
     if (_pixKeyManual) {
+      await _marcarPixManualFallback();
       document.getElementById('pix-manual-success-wrap').style.display = '';
       document.getElementById('pix-manual-key-show').value             = _pixKeyManual;
       document.getElementById('pix-manual-banco-lbl').textContent      = _pixKeyManualBanco ? `🏦 ${_pixKeyManualBanco}` : '';
@@ -619,7 +631,7 @@ async function _iniciarFluxoPix(order) {
     if (!pr.ok) {
       const msg = pd?.error ? `Erro: ${pd.error}` : `Erro do servidor (${pr.status}).`;
       console.error('[pix/criar]', pr.status, pd);
-      _showFallback(msg);
+      await _showFallback(msg);
       return;
     }
     if (pd?.qr_code) {
@@ -634,10 +646,10 @@ async function _iniciarFluxoPix(order) {
       return;
     }
     // Resposta OK mas sem qr_code (caso raro)
-    _showFallback('Resposta inesperada do servidor. Tente novamente.');
+    await _showFallback('Resposta inesperada do servidor. Tente novamente.');
   } catch(e) {
     console.error('_iniciarFluxoPix:', e);
-    _showFallback('Sem conexão com o servidor. Verifique sua internet.');
+    await _showFallback('Sem conexão com o servidor. Verifique sua internet.');
   }
 }
 

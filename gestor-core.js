@@ -237,6 +237,7 @@ function mapOrder(o) {
     _statusReal: o.status || 'analise',
     time: _formatTimeBR(rawTime),
     created_at: o.created_at || '',
+    updated_at: o.updated_at || '',
     addr: o.addr || '',
     pag: o.pag || '',
     troco: o.troco != null ? parseFloat(o.troco) : null,
@@ -291,7 +292,7 @@ async function loadAllData(silent = false) {
       type: c.type||'Itens principais', promo:!!c.promo, open:false
     }));
     // Merge pedidos ativos + pedidos entregue recentes
-    const _ativos   = (ordersRes?.data || []);
+    const _ativos   = (ordersRes?.data || []).filter(o => !(o.status === 'aguardando_pix' && o.pag !== 'pix_manual'));
     const _entreg   = (ordersEntregueRes?.data || []);
     const _todosPed = [..._ativos, ..._entreg];
     // FORÇA: PIX online (pix_mp) NUNCA pode estar em análise no kanban. Sempre produção.
@@ -754,8 +755,6 @@ function subscribeOrders() {
             if (_onlyNew.length) { const _clone = Object.assign({}, _mapped, { items: _onlyNew }); printOrder(_clone); }
           }
         }
-        const kpg = document.getElementById('page-kds');
-        if (kpg && kpg.classList.contains('on')) renderKDS();
         renderKanban();
         return;
       }
@@ -782,9 +781,6 @@ function subscribeOrders() {
         }
         // Auto-impressão se modo automático estiver ativo (bebidas não imprimem)
         if ((window._printMode || _printMode) === 'auto') printOrder(mapOrder(p.new));
-        // Atualiza KDS se estiver aberto
-        const kpg = document.getElementById('page-kds');
-        if (kpg && kpg.classList.contains('on')) renderKDS();
       }
       // Atualiza cache de mesa e rerenderiza SEM nova query ao banco
       if (p.new.mesa_num) {
@@ -812,24 +808,28 @@ function subscribeOrders() {
       // PIX manual (pix_manual) ou legado (pix): vai para 'analise' (precisa aceite)
       if (idx === -1 && (
             (p.new.status === 'producao' && p.new.pag === 'pix_mp') ||
-            (p.new.status === 'analise' && (p.new.pag === 'pix_manual' || p.new.pag === 'pix'))
+            (p.new.status === 'analise' && (p.new.pag === 'pix_manual' || p.new.pag === 'pix' || p.new.pag === 'cartao_mp')) ||
+            (p.new.status === 'aguardando_pix' && p.new.pag === 'pix_manual')
           )) {
-        ordersKanban.unshift(mapOrder(p.new));
+        const mapped = mapOrder(p.new);
+        const isPixManualPendente = mapped._pixPendente === true;
+        ordersKanban.unshift(mapped);
         renderKanban();
         playOrderSound();
         if (!p.new.mesa_num) _startPersistentAlert();
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display='flex'; nc.textContent = parseInt(nc.textContent||0)+1; }
         const items = Array.isArray(p.new.items) ? p.new.items.map(i=>`${i.qty}x ${i.name}`).join(', ') : '';
-        showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg>', `PIX confirmado! Pedido #${_orderNum(p.new.id, p.new.order_num)} — ${p.new.client}`);
-        sendBrowserNotif(`PIX confirmado! #${_orderNum(p.new.id, p.new.order_num)}`, `${p.new.client} — ${items}`);
+        const tituloPagamento = p.new.pag === 'cartao_mp' ? 'Cartao aprovado!' : (isPixManualPendente ? 'PIX manual pendente!' : 'PIX confirmado!');
+        showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg>', `${tituloPagamento} Pedido #${_orderNum(p.new.id, p.new.order_num)} — ${p.new.client}`);
+        sendBrowserNotif(`${tituloPagamento} #${_orderNum(p.new.id, p.new.order_num)}`, `${p.new.client} — ${items}`);
         // PIX online: pagamento já confirmado, imprime sempre (independe do modo de impressão e do toggle de auto-aceite)
         // PIX manual: respeita _autoAcceptOn e _printMode normalmente
         if (p.new.pag === 'pix_mp') {
-          printOrder(mapOrder(p.new));
+          printOrder(mapped);
         } else {
-          if (_autoAcceptOn) setTimeout(() => advanceOrderById(p.new.id), 800);
-          if ((window._printMode || _printMode) === 'auto') printOrder(mapOrder(p.new));
+          if (_autoAcceptOn && !isPixManualPendente) setTimeout(() => advanceOrderById(p.new.id), 800);
+          if ((window._printMode || _printMode) === 'auto' && !isPixManualPendente) printOrder(mapped);
         }
         return;
       }
@@ -890,12 +890,6 @@ function subscribeOrders() {
         renderKanban();
       }
       _syncSwState();
-      // Atualiza KDS se aberto — pula se acabamos de renderizar manualmente (kdsMarkMesaPronto)
-      if (window._kdsSkipSseRender && Date.now() - window._kdsSkipSseRender < 800) {
-        window._kdsSkipSseRender = 0; // consome o flag
-      } else {
-        const kpg = document.getElementById('page-kds'); if (kpg && kpg.classList.contains('on')) renderKDS();
-      }
     })
     .on('postgres_changes', {event:'DELETE', schema:'public', table:'orders'}, p => {
       ordersKanban = ordersKanban.filter(o => o.id !== p.old.id);
@@ -1081,25 +1075,29 @@ function _subscribeOrdersSSE() {
       // PIX manual (pix_manual) e legado (pix): continuam indo para 'analise' (precisam aceite)
       if (idx === -1 && (
             (order.status === 'producao' && order.pag === 'pix_mp') ||
-            (order.status === 'analise' && (order.pag === 'pix_manual' || order.pag === 'pix'))
+            (order.status === 'analise' && (order.pag === 'pix_manual' || order.pag === 'pix' || order.pag === 'cartao_mp')) ||
+            (order.status === 'aguardando_pix' && order.pag === 'pix_manual')
           )) {
         const items = typeof order.items === 'string' ? (() => { try { return JSON.parse(order.items); } catch { return []; } })() : (order.items || []);
-        ordersKanban.unshift(mapOrder({ ...order, items }));
+        const mapped = mapOrder({ ...order, items });
+        const isPixManualPendente = mapped._pixPendente === true;
+        ordersKanban.unshift(mapped);
         renderKanban();
         playOrderSound();
         if (!order.mesa_num) _startPersistentAlert();
         const nc = document.getElementById('notif-count');
         if (nc) { nc.style.display = 'flex'; nc.textContent = parseInt(nc.textContent || 0) + 1; }
         const itemsList = Array.isArray(items) ? items.map(i => `${i.qty}x ${i.name}`).join(', ') : '';
-        showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg>', `PIX confirmado! Pedido #${order.id} — ${order.client}`);
-        sendBrowserNotif(`PIX confirmado! #${order.id}`, `${order.client} — ${itemsList}`);
+        const tituloPagamento = order.pag === 'cartao_mp' ? 'Cartao aprovado!' : (isPixManualPendente ? 'PIX manual pendente!' : 'PIX confirmado!');
+        showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg>', `${tituloPagamento} Pedido #${order.id} — ${order.client}`);
+        sendBrowserNotif(`${tituloPagamento} #${order.id}`, `${order.client} — ${itemsList}`);
         // PIX online: pagamento já confirmado pelo MP, imprime automático sempre (independe do toggle/_printMode)
         // PIX manual: respeita _autoAcceptOn e _printMode normalmente
         if (order.pag === 'pix_mp') {
-          printOrder(mapOrder({ ...order, items }));
+          printOrder(mapped);
         } else {
-          if (_autoAcceptOn) setTimeout(() => advanceOrderById(order.id), 800);
-          if ((window._printMode || _printMode) === 'auto') printOrder(mapOrder({ ...order, items }));
+          if (_autoAcceptOn && !isPixManualPendente) setTimeout(() => advanceOrderById(order.id), 800);
+          if ((window._printMode || _printMode) === 'auto' && !isPixManualPendente) printOrder(mapped);
         }
         return;
       }
@@ -1425,6 +1423,9 @@ setInterval(async () => {
         let houveMudanca = false;
         for (const o of novos) {
           if (!ordersKanban.find(x => x.id === o.id)) {
+            // PIX online Mercado Pago ainda nao pago: nao entra no gestor, nao alerta e nao imprime.
+            // Ele aparece quando o MP confirmar e o servidor mudar para status='producao', pag='pix_mp'.
+            if (o.status === 'aguardando_pix' && o.pag !== 'pix_manual') continue;
             // Pedidos de mesa que acabaram de ser pagos (entregue) não devem entrar no kanban
             // nem disparar notificação — são comandas finalizadas, não pedidos novos
             if (o.status === 'entregue' && o.mesa_num) { if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id; continue; }
@@ -1466,7 +1467,7 @@ setInterval(async () => {
     if (ordersKanban.length) {
       const ids = ordersKanban.map(o => o.id);
       const { data: atuais } = await sb.from('orders')
-        .select('id,status')
+        .select('id,status,pag')
         .in('id', ids.slice(0, 50)); // limita para não sobrecarregar
 
       if (atuais?.length) {
@@ -1477,7 +1478,9 @@ setInterval(async () => {
             // Usa _statusReal para comparar — pedidos pix_manual têm status='analise' no kanban
             // mas 'aguardando_pix' no banco, então não devem ser removidos por isso
             const statusNoCanban = ordersKanban[idx]._statusReal || ordersKanban[idx].status;
-            if (statusNoCanban !== a.status) {
+            const pagNoKanban = ordersKanban[idx].pag || '';
+            const pagAtual = a.pag || '';
+            if (statusNoCanban !== a.status || pagNoKanban !== pagAtual) {
               if (['finalizado','cancelado'].includes(a.status)) {
                 // finalizado/cancelado → remove do kanban
                 ordersKanban.splice(idx, 1);
@@ -1485,12 +1488,17 @@ setInterval(async () => {
                 // entregue não aparece no kanban → remove (mesa, delivery, balcão, açougue)
                 ordersKanban.splice(idx, 1);
               } else if (a.status === 'aguardando_pix') {
+                ordersKanban[idx].pag = pagAtual;
+                ordersKanban[idx]._statusReal = a.status;
+                ordersKanban[idx]._pixPendente = pagAtual === 'pix_manual';
+                ordersKanban[idx].status = pagAtual === 'pix_manual' ? 'analise' : 'aguardando_pix';
                 // continua como analise no kanban — é pix_manual pendente
               } else {
                 // analise/producao/pronto/saiu → atualiza e mantém visível
                 ordersKanban[idx].status   = a.status;
                 ordersKanban[idx]._statusReal = a.status;
                 ordersKanban[idx]._pixPendente = false;
+                ordersKanban[idx].pag = pagAtual;
               }
               houveMudanca = true;
             }
@@ -1885,6 +1893,7 @@ async function advanceOrderById(id) {
   if (o.status === 'analise') setTimeout(_checkStopAlert, 200);
   // UI otimista: atualiza imediatamente para resposta instantânea
   o.status = newStatus;
+  if (newStatus === 'saiu') o.updated_at = new Date().toISOString();
   playOrderSound();
   renderKanban();
   sbToast('ok', `Pedido #${_orderNum(id, o?.order_num)} avançado!`);

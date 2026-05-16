@@ -37,7 +37,6 @@ function nav(id) {
   if (id === 'cupom') { renderCupons(); loadCashbackConfig(); loadStampConfig(); }
   if (id === 'fidelidade') renderFidelidade();
   if (id === 'garcom') { renderGarcom(); loadGarcons(); }
-  if (id === 'kds') renderKDS();
   if (id === 'estoque') renderEstoque();
   if (id === 'desempenho') { setDesempPrd(_desempPrd); }
   if (id === 'relatorios') { setRelPeriodo(_relPeriodo); }
@@ -194,7 +193,7 @@ function renderKanban() {
         if (o._isMesa) {
           // Comanda de mesa — ações por item_status
           if (st === 'producao') {
-            actionBtn = '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();kdsMarkMesaPronto(' + o.id + ')">✅ Pronto p/ servir!</button>' + '<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById(' + o.id + ')">🖨️</button>';
+            actionBtn = '<button class="oc-btn oc-btn-ok" onclick="event.stopPropagation();kanbanMesaPronto(' + o.id + ')">✅ Pronto p/ servir!</button>' + '<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById(' + o.id + ')">🖨️</button>';
           } else if (st === 'pronto') {
             actionBtn = '<button class="oc-btn oc-btn-fin" onclick="event.stopPropagation();kanbanMesaServido(' + o.id + ')">🍽️ Servido!</button>' + '<button class="oc-btn" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.25)" onclick="event.stopPropagation();printOrderById(' + o.id + ')">🖨️</button>' + '<button class="oc-btn" style="width:100%;margin-top:4px;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-weight:700;border:none" onclick="event.stopPropagation();cobrarMesaDireta(' + o.mesa_num + ')">💰 Fechar Mesa</button>';
           }
@@ -297,7 +296,10 @@ function renderKanban() {
       e.preventDefault();
       const id = parseInt(e.dataTransfer.getData('orderId'));
       const o = ordersKanban.find(x => x.id === id);
-      if (o) o.status = st;
+      if (o) {
+        o.status = st;
+        if (st === 'saiu') o.updated_at = new Date().toISOString();
+      }
       renderKanban();
     });
   });
@@ -3044,6 +3046,30 @@ async function importarCardapio(inputEl) {
 }
 
 // ─────────────────────────────────────────
+
+async function kanbanMesaPronto(orderId) {
+  const order = mesaOrdersCache.find(o => o.id === orderId);
+  if (!order) return;
+  const updatedItems = (order.items || []).map(i =>
+    i.item_status === 'producao' ? { ...i, item_status: 'pronto' } : i
+  );
+  const idx = mesaOrdersCache.findIndex(o => o.id === orderId);
+  if (idx !== -1) mesaOrdersCache[idx] = { ...mesaOrdersCache[idx], items: updatedItems };
+  renderKanban();
+  _renderMesaPageFromCache();
+  sbToast('ok', 'Mesa ' + order.mesa_num + ' - itens prontos');
+  try {
+    const { error } = await sb.from('orders')
+      .update({ items: updatedItems, updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+    if (error) {
+      if (idx !== -1) mesaOrdersCache[idx] = { ...mesaOrdersCache[idx], items: order.items };
+      renderKanban();
+      _renderMesaPageFromCache();
+      throw error;
+    }
+  } catch(e) { sbToast('err', 'Erro ao marcar pronto: ' + (e?.message || e)); }
+}
 
 async function kanbanMesaServido(orderId) {
   const order = mesaOrdersCache.find(o => o.id === orderId);

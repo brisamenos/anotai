@@ -300,24 +300,6 @@ textarea.inp{resize:vertical;min-height:80px}
 .pdv-total-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0 0;font-size:15px;font-weight:700}
 
 /* ═══════════════════════════════════════════════════
-   KDS — Cozinha
-═══════════════════════════════════════════════════ */
-.kds-grid{display:flex;flex-direction:column;gap:10px}
-.kds-card{background:var(--s2);border:1px solid var(--bd);border-radius:14px;padding:14px;position:relative;overflow:hidden}
-.kds-card::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:var(--ca,var(--warn))}
-.kds-card.pronto{--ca:var(--ok)}
-.kds-card.producao{--ca:var(--ac)}
-.kds-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.kds-num{font-size:12px;font-weight:700;color:var(--ac);background:var(--ac-dim);padding:2px 8px;border-radius:99px}
-.kds-time{font-size:11px;color:var(--mu);margin-left:auto}
-.kds-timer{font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(245,158,11,.12);color:var(--warn)}
-.kds-timer.urgent{background:rgba(239,68,68,.12);color:var(--err)}
-.kds-items{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
-.kds-item{font-size:13px;padding:4px 0;border-bottom:1px solid var(--bd);display:flex;gap:6px}
-.kds-item:last-child{border-bottom:none}
-.kds-item-qty{font-weight:700;color:var(--ac);min-width:20px}
-
-/* ═══════════════════════════════════════════════════
    ESTOQUE
 ═══════════════════════════════════════════════════ */
 .estq-item{background:var(--s2);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px}
@@ -795,22 +777,6 @@ textarea.inp{resize:vertical;min-height:80px}
 </div>
 
 <!-- ─────────────────────────────────
-     PAGE: KDS — COZINHA
-───────────────────────────────── -->
-<div class="page" id="p-kds">
-  <div class="ph row" style="justify-content:space-between">
-    <div><div class="pt">Cozinha</div><div class="ps" id="kds-subtitle">KDS — Tela da produção</div></div>
-    <button class="btn btn-g" onclick="carregarKDS()">↻ Atualizar</button>
-  </div>
-  <div class="ktabs" style="margin-bottom:12px">
-    <button class="ktab on" onclick="switchKdsTab('producao',this)">Em produção <span class="kcnt" id="kds-cnt-prod">0</span></button>
-    <button class="ktab" onclick="switchKdsTab('analise',this)">Em análise <span class="kcnt" id="kds-cnt-anal">0</span></button>
-    <button class="ktab" onclick="switchKdsTab('pronto',this)">Prontos <span class="kcnt" id="kds-cnt-pron">0</span></button>
-  </div>
-  <div class="kds-grid" id="kds-board"></div>
-</div>
-
-<!-- ─────────────────────────────────
      PAGE: ESTOQUE
 ───────────────────────────────── -->
 <div class="page" id="p-estoque">
@@ -1196,7 +1162,6 @@ textarea.inp{resize:vertical;min-height:80px}
 
   <div class="dsec">Vendas</div>
   <button class="ditem" onclick="drawerNav('pdv')"><div class="dico">🛒</div>PDV — Balcão<div class="dtag new">NOVO</div></button>
-  <button class="ditem" onclick="drawerNav('kds')"><div class="dico">👨‍🍳</div>Cozinha (KDS)</button>
   <button class="ditem" onclick="drawerNav('carteira')"><div class="dico">💳</div>Carteira &amp; Saques</button>
 
   <div class="dsep"></div>
@@ -1500,7 +1465,7 @@ const pageMap = {
   'pedidos':'p-pedidos','mesas':'p-mesas','cardapio':'p-cardapio','robo':'p-robo',
   'relatorios':'p-relatorios','desempenho':'p-desempenho','cupons':'p-cupons',
   'fidelidade':'p-fidelidade','carteira':'p-carteira','cardapio-pub':'p-cardapio-pub',
-  'pdv':'p-pdv','kds':'p-kds','estoque':'p-estoque','clientes':'p-clientes',
+  'pdv':'p-pdv','estoque':'p-estoque','clientes':'p-clientes',
   'taxa':'p-taxa','garcom':'p-garcom','impressao':'p-impressao','satisfacao':'p-satisfacao',
   'potencializador':'p-potencializador','imagens':'p-imagens','edicao-massa':'p-edicao-massa',
   'tema':'p-tema','meu-plano':'p-meu-plano','configuracoes':'p-configuracoes'
@@ -1534,7 +1499,6 @@ function onPageEnter(name) {
   if (name === 'cardapio-pub') carregarConfigPub();
   if (name === 'robo') { evoCheck(); carregarAutos(); carregarIA(); }
   if (name === 'pdv') carregarPDV();
-  if (name === 'kds') carregarKDS();
   if (name === 'estoque') carregarEstoque();
   if (name === 'clientes') carregarClientes();
   if (name === 'taxa') carregarTaxa();
@@ -2329,74 +2293,6 @@ async function pdvConfirmar() {
   document.getElementById('pdv-mesa').value = '';
   pdvRenderCart();
   toast('✅ Venda registrada! ' + R(total));
-}
-
-// ═══════════════════════════════════════════════════════
-// KDS — COZINHA
-// ═══════════════════════════════════════════════════════
-let _kdsTab = 'producao';
-
-function switchKdsTab(tab, btn) {
-  _kdsTab = tab;
-  document.querySelectorAll('.ktab').forEach(b => b.classList.remove('on'));
-  btn.classList.add('on');
-  renderKDS();
-}
-
-async function carregarKDS() {
-  const { data } = await sb.from('orders').select('*').in('status', ['analise','producao','pronto']).order('id', { ascending: true });
-  const all = (data || []).map(o => {
-    const items = typeof o.items === 'string' ? (() => { try { return JSON.parse(o.items); } catch { return []; } })() : (o.items || []);
-    return { id: o.id, num: ordNum(o.id), client: o.client || '', items, status: o.status, time: o.created_at };
-  });
-  document.getElementById('kds-cnt-prod').textContent = all.filter(o => o.status === 'producao').length;
-  document.getElementById('kds-cnt-anal').textContent = all.filter(o => o.status === 'analise').length;
-  document.getElementById('kds-cnt-pron').textContent = all.filter(o => o.status === 'pronto').length;
-  window._kdsOrders = all;
-  renderKDS();
-}
-
-function renderKDS() {
-  const board = document.getElementById('kds-board');
-  const ords = (window._kdsOrders || []).filter(o => o.status === _kdsTab);
-  if (!ords.length) { board.innerHTML = '<div class="empty">Nenhum pedido aqui</div>'; return; }
-  board.innerHTML = ords.map(o => {
-    const elapsed = Math.round((Date.now() - new Date(o.time)) / 60000);
-    const urgent = elapsed >= 20;
-    const nextAct = o.status === 'analise' ? `onclick="kdsAvancar(${o.id})" style="flex:1;justify-content:center"` : o.status === 'producao' ? `onclick="kdsAvancar(${o.id})" style="flex:1;justify-content:center"` : `onclick="kdsAvancar(${o.id})" style="flex:1;justify-content:center"`;
-    const nextTxt = o.status === 'analise' ? '→ Aceitar' : o.status === 'producao' ? '✓ Pronto' : '✅ Finalizar';
-    return `<div class="kds-card ${o.status}">
-      <div class="kds-head">
-        <span class="kds-num">#${o.num}</span>
-        <span style="font-size:13px;font-weight:600">${o.client}</span>
-        <span class="kds-time">${fmtHora(o.time)}</span>
-        <span class="kds-timer ${urgent ? 'urgent' : ''}">${elapsed}min</span>
-      </div>
-      <div class="kds-items">
-        ${(Array.isArray(o.items)?o.items:[]).map(i => `<div class="kds-item"><span class="kds-item-qty">${i.qty||1}×</span><span>${i.name}</span></div>`).join('')}
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-p" ${nextAct}>${nextTxt}</button>
-        <button class="btn btn-d" onclick="cancelarPedido(${o.id})" style="flex:0 0 auto">✕</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-async function kdsAvancar(id) {
-  const o = (window._kdsOrders || []).find(x => x.id === id);
-  if (!o) return;
-  const map = { analise: 'producao', producao: 'pronto', pronto: 'entregue' };
-  const next = map[o.status];
-  if (!next) return;
-  await sb.from('orders').update({ status: next }).eq('id', id);
-  if (next === 'entregue') window._kdsOrders = (window._kdsOrders || []).filter(x => x.id !== id);
-  else { const idx = (window._kdsOrders || []).findIndex(x => x.id === id); if (idx >= 0) window._kdsOrders[idx].status = next; }
-  document.getElementById('kds-cnt-prod').textContent = (window._kdsOrders || []).filter(o => o.status === 'producao').length;
-  document.getElementById('kds-cnt-anal').textContent = (window._kdsOrders || []).filter(o => o.status === 'analise').length;
-  document.getElementById('kds-cnt-pron').textContent = (window._kdsOrders || []).filter(o => o.status === 'pronto').length;
-  renderKDS();
-  toast(next === 'entregue' ? '✅ Pedido finalizado!' : '⬆️ Pedido avançado!');
 }
 
 // ═══════════════════════════════════════════════════════

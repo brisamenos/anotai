@@ -1141,31 +1141,6 @@ Entre em contato para mais informações.</textarea>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════
-     PÁGINA: KDS / COZINHA
-══════════════════════════════════════════════════════════════ -->
-<div class="mob-page" id="page-kds" style="padding:0">
-  <div id="kds-inner" class="kds-page" style="height:100%;overflow:auto">
-    <div class="kds-topbar" style="flex-wrap:wrap;gap:8px;padding:12px 14px">
-      <div><div class="pt" data-label-restaurante="Cozinha" data-label-acougue="Fila de Corte">Cozinha</div></div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap">
-        <button class="kds-filter-btn on" id="kds-f-todos" onclick="kdsSetFilter('todos')">Todos</button>
-        <button class="kds-filter-btn" data-hide-acougue id="kds-f-mesa" onclick="kdsSetFilter('mesa')">Mesa</button>
-        <button class="kds-filter-btn" id="kds-f-delivery" onclick="kdsSetFilter('delivery')">Delivery</button>
-        <button class="kds-filter-btn" id="kds-f-balcao" onclick="kdsSetFilter('balcao')">Balcão</button>
-        <button class="btn bg" style="font-size:12px" onclick="renderKDS()">↺</button>
-      </div>
-    </div>
-    <div class="kds-stats" style="padding:0 14px 10px">
-      <div class="kds-stat"><div class="kds-stat-val" id="kds-cnt-total" style="color:var(--accent)">0</div><div class="kds-stat-lbl">Em preparo</div></div>
-      <div class="kds-stat"><div class="kds-stat-val" id="kds-cnt-new"   style="color:var(--orange)">0</div><div class="kds-stat-lbl">Novos</div></div>
-      <div class="kds-stat"><div class="kds-stat-val" id="kds-cnt-late"  style="color:var(--danger)">0</div><div class="kds-stat-lbl">Atrasados</div></div>
-      <div class="kds-stat"><div class="kds-stat-val" id="kds-avg-time"  style="color:var(--success)">—</div><div class="kds-stat-lbl">Tempo médio</div></div>
-    </div>
-    <div class="kds-cols" id="kds-grid" style="padding:0 14px 14px"></div>
-  </div>
-</div>
-
 </main><!-- fim mob-main -->
 
 <!-- ══ BOTTOM NAVIGATION ═════════════════════════════════════ -->
@@ -1220,10 +1195,6 @@ Entre em contato para mais informações.</textarea>
       <button class="mob-mais-item" onclick="mobNav('taxa');mobCloseMais()">
         <svg viewBox="0 0 16 16" fill="none"><path d="M1 9V5h9v8H1v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 6h3l2 3v3h-5V6z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         <span>Taxas</span>
-      </button>
-      <button class="mob-mais-item" onclick="mobNav('kds');mobCloseMais()">
-        <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M5 15h6M8 12v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        <span data-label-restaurante="Cozinha" data-label-acougue="Fila Corte">Cozinha</span>
       </button>
     </div>
   </div>
@@ -1699,7 +1670,6 @@ function mobNav(id) {
   if (id === 'cupom') { if (typeof renderCupons === 'function') setTimeout(renderCupons, 100); }
   if (id === 'gestor') { if (typeof renderGestor === 'function') setTimeout(renderGestor, 100); }
   if (id === 'pdv') { setTimeout(function(){ if(typeof renderPDV==='function') renderPDV(); mobSyncPDVCats(); }, 100); }
-  if (id === 'kds') { if (typeof renderKDS === 'function') setTimeout(renderKDS, 100); }
   if (id === 'taxa') { if (typeof renderTaxaPage === 'function') setTimeout(renderTaxaPage, 100); }
   if (id === 'robo') { if (typeof evoCheckStatus === 'function') setTimeout(evoCheckStatus, 100); }
 }
@@ -1713,7 +1683,7 @@ function mobNav(id) {
     // Páginas com mob-page: usa mobNav
     var mobPages = ['pedidos','pdv','pdv-balcao','gestor','gestor-main','imagens','edicao',
       'taxa','robo','caixa','estoque','cupom','fidelidade','saques','relatorios',
-      'desempenho','configuracoes','kds'];
+      'desempenho','configuracoes'];
     if (mobPages.indexOf(id) >= 0) { mobNav(id); return; }
     // Outras: chama original
     _orig(id);

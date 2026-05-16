@@ -132,7 +132,8 @@ db.exec(`
     total REAL DEFAULT 0, taxa REAL DEFAULT 0, pag TEXT DEFAULT 'dinheiro',
     troco REAL, status TEXT DEFAULT 'analise', mesa_num INTEGER,
     garcom_id INTEGER, garcom_nome TEXT, customer_id INTEGER,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
   );
   CREATE TABLE IF NOT EXISTS movimentos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -755,6 +756,10 @@ const MIGRATIONS = [
     `ALTER TABLE entregas ADD COLUMN sequencia INTEGER`,
     `CREATE INDEX IF NOT EXISTS idx_entregas_rota_seq ON entregas(tenant_id, entregador_id, status, sequencia)`
   ] },
+  { version:57, description:'updated_at em orders para automacao de pedidos em rota', up:[
+    `ALTER TABLE orders ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))`,
+    `UPDATE orders SET updated_at = created_at WHERE updated_at IS NULL`
+  ] },
 ]
 
 function runMigrations() {
@@ -928,18 +933,18 @@ setInterval(() => {
 
 // Cleanup de pedidos abandonados em pagamento online — marca como 'cancelado' após 30 min.
 // Cliente abandonou o checkout (fechou a aba sem pagar) → não polui kanban nem relatórios.
-// Roda a cada 5 min. Pedidos 'aguardando_pix'/'aguardando_cartao' mais velhos que 30min viram 'cancelado'.
+// Roda a cada 5 min. Cancela pendencias online antigas; PIX manual fica para o gestor confirmar.
 setInterval(() => {
   try {
     const rows = db.prepare(
       `SELECT id, tenant_id FROM orders
-       WHERE status IN ('aguardando_pix','aguardando_cartao')
+       WHERE (status='aguardando_cartao' OR (status='aguardando_pix' AND COALESCE(pag,'')!='pix_manual'))
        AND created_at < datetime('now','-30 minutes')`
     ).all()
     if (rows.length) {
       db.prepare(
         `UPDATE orders SET status='cancelado'
-         WHERE status IN ('aguardando_pix','aguardando_cartao')
+         WHERE (status='aguardando_cartao' OR (status='aguardando_pix' AND COALESCE(pag,'')!='pix_manual'))
          AND created_at < datetime('now','-30 minutes')`
       ).run()
       log('🧹', `[CLEANUP] ${rows.length} pedido(s) pendente(s) abandonado(s) foram cancelados`)
@@ -958,6 +963,70 @@ setInterval(() => {
     }
   } catch(e) { log('⚠️','[CLEANUP] erro:', e.message) }
 }, 5 * 60 * 1000)
+
+function numeroPedidoServidor(tid, order) {
+  if (order?.order_num) return Number(order.order_num)
+  const cfg = db.prepare("SELECT order_num_offset FROM store_config WHERE tenant_id=?").get(tid)
+  return Math.max(1, Number(order?.id || 0) - Number(cfg?.order_num_offset || 0))
+}
+
+function registrarMovimentoFinalizacaoAuto(tid, order) {
+  if (!tid || !order) return
+  const num = numeroPedidoServidor(tid, order)
+  const existe = db.prepare(
+    "SELECT id FROM movimentos WHERE tenant_id=? AND tipo='entrada' AND description LIKE ? LIMIT 1"
+  ).get(tid, `Pedido #${num} %`)
+  if (existe) return
+  const total = (parseFloat(order.total || 0) || 0) + (parseFloat(order.taxa || 0) || 0)
+  const time = new Date().toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Fortaleza'
+  })
+  db.prepare(
+    "INSERT INTO movimentos (tenant_id,description,tipo,val,pag,time) VALUES (?,?,?,?,?,?)"
+  ).run(tid, `Pedido #${num} - ${order.client || 'Cliente'}`, 'entrada', total, order.pag || 'PIX', time)
+}
+
+function finalizarPedidosSaiuAntigos() {
+  try {
+    const rows = db.prepare(
+      `SELECT * FROM orders
+       WHERE status='saiu'
+       AND datetime(COALESCE(updated_at, created_at)) < datetime('now','-8 hours')`
+    ).all()
+    if (!rows.length) return
+
+    const tx = db.transaction((orders) => {
+      for (const order of orders) {
+        registrarMovimentoFinalizacaoAuto(order.tenant_id, order)
+        db.prepare(
+          "UPDATE orders SET status='finalizado', updated_at=datetime('now') WHERE id=? AND tenant_id=? AND status='saiu'"
+        ).run(order.id, order.tenant_id)
+        registrarStatusPedido(order.tenant_id, order.id, 'saiu', 'finalizado', {
+          actor_type: 'system',
+          actor_name: 'Auto finalizacao',
+          origem: 'auto-finalizar-saiu',
+          note: 'Pedido auto-finalizado apos 8h em saiu pra entrega'
+        })
+      }
+    })
+    tx(rows)
+
+    log('🧹', `[CLEANUP] ${rows.length} pedido(s) em "saiu pra entrega" há >8h foram auto-finalizados`)
+    marcarDirty()
+    for (const order of rows) {
+      sseBroadcast(`orders-rt:${order.tenant_id}`, 'orders:UPDATE', {
+        id: order.id,
+        tenant_id: order.tenant_id,
+        status: 'finalizado'
+      })
+    }
+  } catch(e) { log('⚠️','[CLEANUP saiu] erro:', e.message) }
+}
+
+setTimeout(finalizarPedidosSaiuAntigos, 15 * 1000)
+setInterval(finalizarPedidosSaiuAntigos, 5 * 60 * 1000)
 
 // Cleanup de pedidos em 'entregue' abandonados — finaliza automaticamente após 6 horas.
 // Motivo: o novo fluxo de delivery (saiu → entregue → finalizado) exige clique em "Finalizar"
@@ -2015,7 +2084,7 @@ async function handleOrderStatus(req, res) {
     const order = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(order_id,tid)
     if (!order) return send(res,404,{ok:false,error:'Pedido não encontrado'})
     const oldStatus = order.status
-    db.prepare("UPDATE orders SET status=? WHERE id=? AND tenant_id=?").run(new_status,order_id,tid)
+    db.prepare("UPDATE orders SET status=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?").run(new_status,order_id,tid)
     registrarStatusPedido(tid, order_id, oldStatus, new_status, {
       actor_type: body.actor_type || 'gestor',
       actor_id: body.actor_id || null,
