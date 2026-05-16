@@ -865,6 +865,47 @@ function validarSessaoAdmin(req) {
   return s
 }
 
+const FINANCE_AUTH_TTL = 30 * 60 * 1000
+const financeAuthTokens = new Map()
+function limparFinanceAuthExpirado() {
+  const now = Date.now()
+  for (const [token, sess] of financeAuthTokens) {
+    if (!sess || sess.expires_at <= now) financeAuthTokens.delete(token)
+  }
+}
+function validarFinanceAccess(req, tidArg) {
+  limparFinanceAuthExpirado()
+  const tid = String(tidArg || req.headers['x-tenant-id'] || '')
+  const token = String(req.headers['x-finance-auth'] || '')
+  if (!tid || !token) return null
+  const sess = financeAuthTokens.get(token)
+  if (!sess || sess.expires_at <= Date.now()) {
+    if (token) financeAuthTokens.delete(token)
+    return null
+  }
+  if (String(sess.tenant_id) !== tid) return null
+  const reqUser = String(req.headers['x-user-id'] || '')
+  if (reqUser && sess.session_user_id && String(sess.session_user_id) !== reqUser) return null
+  return sess
+}
+function sendFinanceLocked(res) {
+  send(res, 403, { error: 'FINANCE_LOCKED', message: 'Area financeira bloqueada. Informe a senha do gestor.' })
+}
+function criarFinanceAccess(row, sessionUserId) {
+  limparFinanceAuthExpirado()
+  const token = crypto.randomBytes(32).toString('hex')
+  const expires_at = Date.now() + FINANCE_AUTH_TTL
+  financeAuthTokens.set(token, {
+    token,
+    tenant_id: String(row.tenant_id),
+    authorized_user_id: String(row.id),
+    authorized_user_nome: row.nome || '',
+    session_user_id: sessionUserId ? String(sessionUserId) : '',
+    expires_at
+  })
+  return { token, expires_at, ttl_ms: FINANCE_AUTH_TTL }
+}
+
 function fazerBackup(forcar = false) {
   if (!forcar && !_dirty) return
   _dirty = false
@@ -1203,6 +1244,12 @@ const STRIP_FROM_OUTPUT = {
 }
 
 const NO_TENANT_FILTER = new Set(['tenants','sys_users','admin_audit_log','admin_alerts'])
+const FINANCE_REST_RULES = {
+  movimentos:   new Set(['GET','PATCH','DELETE']),
+  contas_pagar: new Set(['GET','POST','PATCH','DELETE']),
+  fornecedores: new Set(['GET','POST','PATCH','DELETE']),
+  faturas:      new Set(['GET','POST','PATCH','DELETE']),
+}
 const JSON_FIELDS = {
   orders:       new Set(['items']),
   menu_items:   new Set(['days','ingredients','custom_groups']),
@@ -1289,6 +1336,9 @@ async function handleREST(req, res, table, params, body) {
   const cols = TABLE_COLS[table]
   if (!cols) return send(res, 404, { error: 'Tabela não encontrada' })
   const tenantId        = getTenantId(req, params)
+  if (FINANCE_REST_RULES[table]?.has(req.method) && !validarFinanceAccess(req, tenantId)) {
+    return sendFinanceLocked(res)
+  }
   const { WHERE, vals } = buildWhere(params, cols, tenantId, table)
   const isSingle        = req.headers['prefer']?.includes('single') || params.get('_single') === 'true'
 
@@ -2985,7 +3035,7 @@ const server = http.createServer(async (req,res) => {
   res.req = req
   res.setHeader('Access-Control-Allow-Origin','*')
   res.setHeader('Access-Control-Allow-Methods','GET,POST,PATCH,DELETE,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers','Content-Type,Prefer,apikey,Authorization,x-tenant-id')
+  res.setHeader('Access-Control-Allow-Headers','Content-Type,Prefer,apikey,Authorization,x-tenant-id,x-finance-auth,x-user-id')
   if(req.method==='OPTIONS'){res.writeHead(200);res.end();return}
 
   const url    = new URL(req.url,`http://localhost:${PORT}`)
@@ -2994,6 +3044,27 @@ const server = http.createServer(async (req,res) => {
 
   if(upath.startsWith('/sse/')){sseSubscribe(decodeURIComponent(upath.slice(5)),res);return}
   if(req.method==='GET'&&upath==='/api/tenant-info'){const info=handleTenantInfo(params);send(res,info.error?404:200,info);return}
+
+  if(req.method==='POST'&&upath==='/api/finance-auth/verify'){
+    const tid=req.headers['x-tenant-id']||''
+    if(!tid){send(res,400,{error:'x-tenant-id obrigatorio'});return}
+    const body=await readBody(req)
+    const senha=String(body.senha||'')
+    if(!senha){send(res,400,{error:'Informe a senha'});return}
+    const senhaHash=crypto.createHash('sha256').update(senha).digest('hex')
+    const user=db.prepare(`
+      SELECT id,nome,email,role,tenant_id
+      FROM sys_users
+      WHERE tenant_id=? AND senha_hash=? AND ativo=1
+        AND role IN ('gestor','admin','superadmin')
+      ORDER BY CASE role WHEN 'gestor' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END
+      LIMIT 1
+    `).get(tid,senhaHash)
+    if(!user){send(res,401,{error:'Senha do gestor incorreta'});return}
+    const access=criarFinanceAccess(user, body.user_id || req.headers['x-user-id'] || '')
+    send(res,200,{ok:true,token:access.token,expires_at:access.expires_at,ttl_ms:access.ttl_ms,authorized_by:user.nome||'Gestor'})
+    return
+  }
 
   // ── Manifest PWA dinâmico para o garçom (por tenant) ──
   if(req.method==='GET'&&upath==='/api/manifest-garcom'){
@@ -3048,6 +3119,7 @@ const server = http.createServer(async (req,res) => {
   if(req.method==='GET'&&upath==='/api/exportar-relatorio'){
     const tid=req.headers['x-tenant-id']||params.get('tenant_id')||''
     if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
+    if(!validarFinanceAccess(req,tid)){sendFinanceLocked(res);return}
     const de=params.get('de')||'', ate=params.get('ate')||''
     if(!de||!ate){send(res,400,{error:'Informe de e ate'});return}
     const orders=db.prepare(`SELECT id,order_num,client,phone,addr,items,total,taxa,pag,status,mesa_num,garcom_nome,created_at FROM orders WHERE tenant_id=? AND created_at>=? AND created_at<=? ORDER BY created_at ASC`).all(tid,de,ate+'T23:59:59.999Z')
@@ -3313,7 +3385,7 @@ const server = http.createServer(async (req,res) => {
 
   // ── Rotas especiais — todas em routes.js ───────────────────────────────────
   const _routeCtx = { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
-    validarSessaoAdmin, criarSessaoAdmin, fazerBackup, restaurarBackup, getTenantId,
+    validarSessaoAdmin, criarSessaoAdmin, validarFinanceAccess, fazerBackup, restaurarBackup, getTenantId,
     MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
     EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano,
     aplicarBaixaEstoquePedido }

@@ -83,10 +83,182 @@ function _verificarSessao() {
 function confirmarLogout() {
   if (confirm('Sair do sistema?')) {
     sessionStorage.removeItem('sys_session');
+    sessionStorage.removeItem('finance_auth');
     // Remove sessão salva no Electron (sem auto-login na próxima abertura)
     if (window.ElectronPrint?.clearSession) window.ElectronPrint.clearSession().catch(()=>{});
     window.location.href = 'login.html';
   }
+}
+
+const FINANCE_LOCKED_PAGES = new Set(['caixa','saques','relatorios','dre','contas-pagar','fornecedores']);
+
+function financeGetAuth() {
+  try {
+    const fin = JSON.parse(sessionStorage.getItem('finance_auth') || '{}');
+    const sess = JSON.parse(sessionStorage.getItem('sys_session') || '{}');
+    if (!fin?.token || !fin.expires_at || fin.expires_at <= Date.now()) {
+      sessionStorage.removeItem('finance_auth');
+      return null;
+    }
+    if (sess.tenant_id && fin.tenant_id !== sess.tenant_id) {
+      sessionStorage.removeItem('finance_auth');
+      return null;
+    }
+    return fin;
+  } catch(e) {
+    sessionStorage.removeItem('finance_auth');
+    return null;
+  }
+}
+
+function financeIsUnlocked() {
+  return !!financeGetAuth();
+}
+
+function financeAuthHeaders() {
+  const fin = financeGetAuth();
+  if (!fin) return {};
+  let userId = '';
+  try { userId = JSON.parse(sessionStorage.getItem('sys_session') || '{}').id || ''; } catch(e) {}
+  return {
+    'x-finance-auth': fin.token,
+    ...(userId ? { 'x-user-id': String(userId) } : {})
+  };
+}
+
+function financeMergeHeaders(headers) {
+  const h = new Headers(headers || {});
+  const extra = financeAuthHeaders();
+  Object.entries(extra).forEach(([k, v]) => { if (v && !h.has(k)) h.set(k, v); });
+  return h;
+}
+
+let _financeRealtimePaused = false;
+
+function financePauseRealtime() {
+  if (_financeRealtimePaused) return;
+  _financeRealtimePaused = true;
+  try { if (typeof unsubscribeAll === 'function') unsubscribeAll(); } catch(e) {}
+  try { _ordersSSE?.close(); _ordersSSE = null; } catch(e) {}
+  try { _adminAnnouncementsSseTenant?.close(); _adminAnnouncementsSseTenant = null; } catch(e) {}
+  try { _adminAnnouncementsSseAll?.close(); _adminAnnouncementsSseAll = null; } catch(e) {}
+  try { if (window.WA?.sseConn) { window.WA.sseConn.close(); window.WA.sseConn = null; } } catch(e) {}
+  try { _rtConnected = false; setRtStatus(false); } catch(e) {}
+}
+
+function financeResumeRealtime() {
+  if (!_financeRealtimePaused) return;
+  _financeRealtimePaused = false;
+  setTimeout(() => {
+    try { if (typeof subscribeOrders === 'function' && !_rtConnected) subscribeOrders(); } catch(e) {}
+    try { if (typeof initAdminAnnouncementsGestor === 'function') initAdminAnnouncementsGestor(); } catch(e) {}
+    try { if (typeof waConnectSSE === 'function') waConnectSSE(); } catch(e) {}
+  }, 600);
+}
+
+(function patchFinanceFetchHeaders(){
+  if (window.__financeFetchPatched) return;
+  window.__financeFetchPatched = true;
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = function(input, init) {
+    try {
+      const url = typeof input === 'string' ? input : (input?.url || '');
+      const apiUrl = url.startsWith('/api/') || url.startsWith(location.origin + '/api/');
+      if (apiUrl && !url.includes('/api/finance-auth/verify')) {
+        init = init || {};
+        init.headers = financeMergeHeaders(init.headers || (typeof input !== 'string' ? input.headers : undefined));
+      }
+    } catch(e) {}
+    return nativeFetch(input, init);
+  };
+})();
+
+function financeCloseModal(opts = {}) {
+  document.getElementById('finance-auth-modal')?.remove();
+  if (!opts.keepRealtimePaused) financeResumeRealtime();
+}
+
+function financeOpenUnlockModal(afterUnlock) {
+  const old = document.getElementById('finance-auth-modal');
+  if (old) old.remove();
+  financePauseRealtime();
+
+  const wrap = document.createElement('div');
+  wrap.id = 'finance-auth-modal';
+  wrap.style.cssText = 'position:fixed;inset:0;background:rgba(2,6,23,.72);z-index:10050;display:flex;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(4px)';
+  wrap.innerHTML = `
+    <div style="width:min(420px,94vw);background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;box-shadow:0 24px 80px rgba(0,0,0,.45)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px">
+        <div>
+          <div style="font-size:16px;font-weight:800;color:var(--text)">Area financeira bloqueada</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.35">Digite a senha do gestor para liberar esta area por 30 minutos.</div>
+        </div>
+        <button type="button" id="finance-auth-close" style="width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;font-size:18px;line-height:1">x</button>
+      </div>
+      <label class="form-label" for="finance-auth-pass">Senha do gestor</label>
+      <input class="form-input" id="finance-auth-pass" type="password" autocomplete="current-password" placeholder="Digite a senha" style="width:100%;margin-bottom:10px">
+      <div id="finance-auth-error" style="display:none;color:#ef4444;font-size:12px;margin:0 0 10px"></div>
+      <button class="btn bp" id="finance-auth-submit" type="button" style="width:100%;justify-content:center">Liberar financeiro</button>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+
+  const pass = document.getElementById('finance-auth-pass');
+  const err = document.getElementById('finance-auth-error');
+  const btn = document.getElementById('finance-auth-submit');
+  const close = document.getElementById('finance-auth-close');
+  close.onclick = financeCloseModal;
+  wrap.addEventListener('click', e => { if (e.target === wrap) financeCloseModal(); });
+  pass.focus();
+
+  const submit = async () => {
+    const senha = pass.value || '';
+    if (!senha.trim()) {
+      err.style.display = 'block';
+      err.textContent = 'Informe a senha.';
+      return;
+    }
+    let sess = {};
+    try { sess = JSON.parse(sessionStorage.getItem('sys_session') || '{}'); } catch(e) {}
+    btn.disabled = true;
+    btn.textContent = 'Validando...';
+    err.style.display = 'none';
+    try {
+      const r = await fetch('/api/finance-auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'x-tenant-id': sess.tenant_id || '', 'x-user-id': sess.id || '' },
+        body: JSON.stringify({ senha, user_id: sess.id || '' })
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.token) throw new Error(data.error || 'Senha incorreta');
+      sessionStorage.setItem('finance_auth', JSON.stringify({
+        token: data.token,
+        expires_at: data.expires_at,
+        tenant_id: sess.tenant_id || '',
+        user_id: sess.id || ''
+      }));
+      financeCloseModal({ keepRealtimePaused: true });
+      sbToast('ok', 'Financeiro liberado por 30 minutos.');
+      try { if (typeof loadAllData === 'function') await loadAllData(true); } catch(e) {}
+      if (typeof afterUnlock === 'function') afterUnlock();
+      financeResumeRealtime();
+    } catch(e) {
+      err.style.display = 'block';
+      err.textContent = e.message || 'Senha incorreta.';
+      btn.disabled = false;
+      btn.textContent = 'Liberar financeiro';
+      pass.select();
+    }
+  };
+  btn.onclick = submit;
+  pass.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+}
+
+function financeGateNav(id) {
+  if (!FINANCE_LOCKED_PAGES.has(id)) return false;
+  if (financeIsUnlocked()) return false;
+  financeOpenUnlockModal(() => nav(id));
+  return true;
 }
 
 if (!_verificarSessao()) { /* redireciona */ }

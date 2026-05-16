@@ -24,6 +24,13 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   const ext = url.pathname.split('.').pop().toLowerCase();
 
+  // APIs e metodos de escrita sempre passam direto pela rede.
+  // Evita que POST/PATCH/DELETE fiquem presos em fallback de cache.
+  if (event.request.method !== 'GET' || url.pathname.startsWith('/api/') || url.pathname.startsWith('/rest/v1/')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   // JS, HTML e CSS sempre da rede — nunca do cache
   if (['js', 'html', 'css'].includes(ext)) {
     event.respondWith(fetch(event.request));

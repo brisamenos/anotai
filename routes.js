@@ -408,7 +408,7 @@ function _iniciarAutoCobrancaJob(ctx) {
 
 module.exports = async function handleRoutes(req, res, ctx) {
   const { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
-          validarSessaoAdmin, criarSessaoAdmin, fazerBackup, restaurarBackup, getTenantId,
+          validarSessaoAdmin, criarSessaoAdmin, validarFinanceAccess, fazerBackup, restaurarBackup, getTenantId,
           MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
           EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano,
           aplicarBaixaEstoquePedido } = ctx
@@ -434,6 +434,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
       return null
     }
     return s
+  }
+  const requireFinanceAccess = (tid) => {
+    if (typeof validarFinanceAccess === 'function' && validarFinanceAccess(req, tid)) return true
+    send(res, 403, { error: 'FINANCE_LOCKED', message: 'Area financeira bloqueada. Informe a senha do gestor.' })
+    return false
   }
   const _safeJson = (v, fallback) => {
     try {
@@ -3260,6 +3265,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'GET' && upath === '/api/carteira') {
     const tid = req.headers['x-tenant-id']
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    if (!requireFinanceAccess(tid)) return true
     try {
       // PIX aprovados
       const pixRecebido  = db.prepare("SELECT COALESCE(SUM(valor_liquido),0) as v FROM pagamentos_pix WHERE tenant_id=? AND status='aprovado'").get(tid)?.v || 0
@@ -3320,6 +3326,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'POST' && upath === '/api/saques/solicitar') {
     const tid = req.headers['x-tenant-id']
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    if (!requireFinanceAccess(tid)) return true
     // Blindagem: se tenant tem MP próprio, dinheiro cai direto na conta dele
     // — não passa pela carteira interna, então saque não faz sentido.
     const _mpResolvSaq = _resolveMpForTenant(db, tid, MP_TOKEN)
@@ -3382,6 +3389,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'GET' && upath === '/api/saques/meus') {
     const tid = req.headers['x-tenant-id']
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    if (!requireFinanceAccess(tid)) return true
     try {
       const saques = db.prepare('SELECT * FROM saques WHERE tenant_id=? ORDER BY created_at DESC').all(tid)
       send(res, 200, saques)
@@ -3463,6 +3471,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       send(res, 400, { error: 'x-tenant-id obrigatório' })
       return true
     }
+    if (!requireFinanceAccess(tid)) return true
     try {
       const row = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
       const ia  = row?.ia_config ? JSON.parse(row.ia_config) : {}
@@ -3497,6 +3506,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       send(res, 400, { error: 'x-tenant-id obrigatório' })
       return true
     }
+    if (!requireFinanceAccess(tid)) return true
     const body = await readBody(req)
     const { mp_token, mp_public_key, limpar } = body
     try {

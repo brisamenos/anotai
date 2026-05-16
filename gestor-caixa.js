@@ -20,6 +20,10 @@ function setCaixaState(aberto) {
 }
 
 async function toggleCaixa() {
+  if (typeof financeIsUnlocked === 'function' && !financeIsUnlocked()) {
+    if (typeof financeOpenUnlockModal === 'function') financeOpenUnlockModal(() => toggleCaixa());
+    return;
+  }
   if (_caixaAberto) await fecharCaixa();
   else await abrirCaixa();
 }

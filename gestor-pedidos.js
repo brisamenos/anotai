@@ -8,6 +8,7 @@ function nav(id) {
       return; // Não navega
     }
   }
+  if (typeof financeGateNav === 'function' && financeGateNav(id)) return;
   document.querySelectorAll('.page').forEach(p => { p.classList.remove('on'); p.style.display = ''; });
   document.querySelectorAll('.si').forEach(s => s.classList.remove('on'));
   // Fecha sidebar no mobile ao navegar
