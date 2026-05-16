@@ -757,7 +757,7 @@ const MIGRATIONS = [
     `CREATE INDEX IF NOT EXISTS idx_entregas_rota_seq ON entregas(tenant_id, entregador_id, status, sequencia)`
   ] },
   { version:57, description:'updated_at em orders para automacao de pedidos em rota', up:[
-    `ALTER TABLE orders ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))`,
+    `ALTER TABLE orders ADD COLUMN updated_at TEXT`,
     `UPDATE orders SET updated_at = created_at WHERE updated_at IS NULL`
   ] },
 ]
@@ -801,7 +801,7 @@ function garantirColuna(table, column, definition, afterAddSql = null) {
 const HAS_ORDERS_UPDATED_AT = garantirColuna(
   'orders',
   'updated_at',
-  "TEXT DEFAULT (datetime('now'))",
+  "TEXT",
   "UPDATE orders SET updated_at = created_at WHERE updated_at IS NULL"
 )
 
