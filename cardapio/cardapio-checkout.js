@@ -641,6 +641,57 @@ function _stopPixPoll() {
   if (_pixPollTimer) { clearInterval(_pixPollTimer); _pixPollTimer = null; }
   _pixMpId = null;
 }
+function _setPixPagoConfirmado(confirmado) {
+  const wrap    = document.getElementById('pix-qr-wrap');
+  const waiting = document.getElementById('pix-waiting-wrap');
+  const paid    = document.getElementById('pix-paid-wrap');
+  const lbl     = document.getElementById('pix-status-label');
+
+  if (wrap) wrap.classList.toggle('pix-paid', !!confirmado);
+  if (waiting) waiting.style.display = confirmado ? 'none' : '';
+  if (paid) paid.style.display = confirmado ? 'flex' : 'none';
+  if (lbl) {
+    lbl.style.display = confirmado ? 'none' : '';
+    if (!confirmado) lbl.textContent = '⏳ Aguardando pagamento...';
+  }
+}
+function _mostrarPixGerandoQRCode() {
+  const wrap = document.getElementById('pix-qr-wrap');
+  const qrEl = document.getElementById('pix-qr-img');
+  const codeActions = document.getElementById('pix-code-actions');
+  const codeInput = document.getElementById('pix-copy-code');
+  const lbl = document.getElementById('pix-status-label');
+
+  if (wrap) wrap.style.display = '';
+  _setPixPagoConfirmado(false);
+  if (qrEl) {
+    qrEl.innerHTML = '<div class="pix-qr-loading"><div class="spin"></div><span>Gerando QR Code PIX...</span></div>';
+  }
+  if (codeActions) codeActions.style.display = 'none';
+  if (codeInput) codeInput.value = '';
+  if (lbl) lbl.textContent = 'Gerando QR Code PIX...';
+}
+async function _renderPixQRCode(pd) {
+  const qrEl = document.getElementById('pix-qr-img');
+  if (!qrEl) return;
+  qrEl.innerHTML = '';
+
+  if (pd?.qr_code_base64) {
+    const qrB64 = String(pd.qr_code_base64 || '').replace(/[\r\n\s"]/g, '');
+    const qrSrc = qrB64.startsWith('data:image/') ? qrB64 : `data:image/png;base64,${qrB64}`;
+    qrEl.innerHTML = `<img src="${qrSrc}" alt="QR Code PIX">`;
+  } else {
+    const QRCodeLib = await _ensureQRCodeLib();
+    new QRCodeLib(qrEl, { text: pd.qr_code, width: 180, height: 180, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCodeLib.CorrectLevel.M });
+  }
+
+  const codeInput = document.getElementById('pix-copy-code');
+  const codeActions = document.getElementById('pix-code-actions');
+  const lbl = document.getElementById('pix-status-label');
+  if (codeInput) codeInput.value = pd.qr_code || '';
+  if (codeActions) codeActions.style.display = 'flex';
+  if (lbl) lbl.textContent = '⏳ Aguardando pagamento...';
+}
 function _startPixPoll(mpId, orderId) {
   _stopPixPoll();
   _pixMpId = mpId;
@@ -651,10 +702,8 @@ function _startPixPoll(mpId, orderId) {
       });
       const d = await r.json();
       const lbl = document.getElementById('pix-status-label');
-      const ap  = document.getElementById('pix-aprovado-msg');
       if (d.status === 'aprovado') {
-        if (lbl) lbl.style.display = 'none';
-        if (ap)  ap.style.display = '';
+        _setPixPagoConfirmado(true);
         _stopPixPoll();
         try {
           await fetch('/api/pix/vincular', {
@@ -664,6 +713,7 @@ function _startPixPoll(mpId, orderId) {
           });
         } catch(e) {}
       } else if (d.status === 'rejeitado' || d.status === 'cancelado') {
+        _setPixPagoConfirmado(false);
         if (lbl) lbl.textContent = '❌ Pagamento não realizado. Tente outra forma.';
         _stopPixPoll();
       }
@@ -676,10 +726,14 @@ async function _iniciarFluxoPix(order) {
   sec.style.display = '';
   document.getElementById('pix-qr-wrap').style.display            = 'none';
   document.getElementById('pix-manual-success-wrap').style.display = 'none';
+  _setPixPagoConfirmado(false);
   const errWrap = document.getElementById('pix-error-wrap');
   if (errWrap) errWrap.style.display = 'none';
 
   const _showPixManual = () => {
+    document.getElementById('pix-qr-wrap').style.display = 'none';
+    const errWrap = document.getElementById('pix-error-wrap');
+    if (errWrap) errWrap.style.display = 'none';
     document.getElementById('pix-manual-success-wrap').style.display = '';
     document.getElementById('pix-manual-key-show').value             = _pixKeyManual;
     document.getElementById('pix-manual-banco-lbl').textContent      = _pixKeyManualBanco ? `🏦 ${_pixKeyManualBanco}` : '';
@@ -706,6 +760,7 @@ async function _iniciarFluxoPix(order) {
       document.getElementById('pix-manual-banco-lbl').textContent      = _pixKeyManualBanco ? `🏦 ${_pixKeyManualBanco}` : '';
     }
     if (errWrap) {
+      document.getElementById('pix-qr-wrap').style.display = 'none';
       errWrap.style.display = '';
       const msgEl = document.getElementById('pix-error-msg');
       if (msgEl) msgEl.textContent = msg || 'Verifique sua conexão e tente novamente.';
@@ -730,6 +785,7 @@ async function _iniciarFluxoPix(order) {
       } else { sec.style.display = 'none'; }
       return;
     }
+    _mostrarPixGerandoQRCode();
     const pr = await fetch('/api/pix/criar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
@@ -743,14 +799,9 @@ async function _iniciarFluxoPix(order) {
       return;
     }
     if (pd?.qr_code) {
-      const QRCodeLib = await _ensureQRCodeLib();
-      const qrEl = document.getElementById('pix-qr-img');
-      qrEl.innerHTML = '';
-      new QRCodeLib(qrEl, { text: pd.qr_code, width: 180, height: 180, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCodeLib.CorrectLevel.M });
       document.getElementById('pix-qr-wrap').style.display = '';
-      document.getElementById('pix-copy-code').value = pd.qr_code;
-      document.getElementById('pix-status-label').textContent = '⏳ Aguardando pagamento...';
-      document.getElementById('pix-aprovado-msg').style.display = 'none';
+      _setPixPagoConfirmado(false);
+      await _renderPixQRCode(pd);
       _startPixPoll(pd.mp_payment_id, order.id);
       return;
     }
@@ -1107,6 +1158,7 @@ function resetCart() {
   _resetCashbackUI();
   const ps = document.getElementById('pix-section');
   if (ps) ps.style.display = 'none';
+  _setPixPagoConfirmado(false);
   // Reset cartão
   const cs = document.getElementById('cartao-section');
   if (cs) cs.style.display = 'none';

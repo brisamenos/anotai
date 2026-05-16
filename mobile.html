@@ -757,9 +757,13 @@ table { min-width: 500px !important; }
               <div style="font-size:11px;color:var(--muted);font-weight:600">S&oacute; enviar se o cliente solicitar acompanhamento</div>
               <div class="toggle on" id="auto-optin-recebido" onclick="this.classList.toggle('on')"></div>
             </div>
-            <textarea class="form-input" id="auto-msg-recebido" rows="3" style="font-size:13px">✅ {nome}, seu pedido #{id} foi recebido!
-Total: R$ {total}
-Acompanhe pelo link. 🙏</textarea>
+            <textarea class="form-input" id="auto-msg-recebido" rows="8" style="font-size:13px">📥 *Pedido recebido - #{id}*
+
+Olá, {nome}! Recebemos seu pedido.
+
+*Total:* R$ {total}
+
+Em breve confirmaremos por aqui.</textarea>
           </div>
           <!-- Em produção -->
           <div class="card" style="padding:16px">
@@ -771,7 +775,13 @@ Acompanhe pelo link. 🙏</textarea>
               <div style="font-size:11px;color:var(--muted);font-weight:600">S&oacute; enviar se o cliente solicitar acompanhamento</div>
               <div class="toggle on" id="auto-optin-producao" onclick="this.classList.toggle('on')"></div>
             </div>
-            <textarea class="form-input" id="auto-msg-producao" rows="3" style="font-size:13px">👨‍🍳 {nome}, estamos preparando seu pedido #{id} com muito carinho!</textarea>
+            <textarea class="form-input" id="auto-msg-producao" rows="8" style="font-size:13px">✅ *Pedido confirmado - #{id}*
+
+Olá, {nome}! Seu pedido já está em preparo.
+
+*Total:* R$ {total}
+
+{tipo_entrega}</textarea>
           </div>
           <!-- Pedido pronto -->
           <div class="card" style="padding:16px">
@@ -783,8 +793,13 @@ Acompanhe pelo link. 🙏</textarea>
               <div style="font-size:11px;color:var(--muted);font-weight:600">S&oacute; enviar se o cliente solicitar acompanhamento</div>
               <div class="toggle on" id="auto-optin-pronto" onclick="this.classList.toggle('on')"></div>
             </div>
-            <textarea class="form-input" id="auto-msg-pronto" rows="3" style="font-size:13px">🛎️ {nome}, seu pedido #{id} está PRONTO!
-{tipo_entrega}</textarea>
+            <textarea class="form-input" id="auto-msg-pronto" rows="7" style="font-size:13px">🔔 *Pedido pronto - #{id}*
+
+{nome}, seu pedido está pronto.
+
+{tipo_entrega}
+
+Qualquer dúvida, é só responder esta mensagem.</textarea>
           </div>
           <!-- Saindo para entrega -->
           <div class="card" style="padding:16px">
@@ -796,8 +811,14 @@ Acompanhe pelo link. 🙏</textarea>
               <div style="font-size:11px;color:var(--muted);font-weight:600">S&oacute; enviar se o cliente solicitar acompanhamento</div>
               <div class="toggle on" id="auto-optin-saiu" onclick="this.classList.toggle('on')"></div>
             </div>
-            <textarea class="form-input" id="auto-msg-saiu" rows="3" style="font-size:13px">🛵 {nome}, seu pedido #{id} saiu para entrega!
-Endereço: {endereco}</textarea>
+            <textarea class="form-input" id="auto-msg-saiu" rows="8" style="font-size:13px">🛵 *Saiu para entrega - #{id}*
+
+{nome}, seu pedido está a caminho.
+
+*Endereço*
+{endereco}
+
+Fique de olho por aí.</textarea>
           </div>
           <!-- Conta da mesa (oculto no açougue) -->
           <div class="card" data-hide-acougue style="padding:16px">
@@ -805,8 +826,11 @@ Endereço: {endereco}</textarea>
               <div style="font-weight:600;font-size:13px">Conta da Mesa Pronta</div>
               <div class="toggle on" id="auto-toggle-conta" onclick="this.classList.toggle('on')"></div>
             </div>
-            <textarea class="form-input" id="auto-msg-conta" rows="3" style="font-size:13px">💰 {nome}, sua conta da Mesa {mesa} está pronta!
-Total: R$ {total}</textarea>
+            <textarea class="form-input" id="auto-msg-conta" rows="6" style="font-size:13px">💳 *Conta da mesa {mesa}*
+
+{nome}, sua conta está pronta.
+
+*Total:* R$ {total}</textarea>
           </div>
           <!-- Cancelamento -->
           <div class="card" style="padding:16px">
@@ -814,8 +838,11 @@ Total: R$ {total}</textarea>
               <div style="font-weight:600;font-size:13px">Pedido Cancelado</div>
               <div class="toggle on" id="auto-toggle-cancelado" onclick="this.classList.toggle('on')"></div>
             </div>
-            <textarea class="form-input" id="auto-msg-cancelado" rows="3" style="font-size:13px">😔 {nome}, seu pedido #{id} foi cancelado.
-Entre em contato para mais informações.</textarea>
+            <textarea class="form-input" id="auto-msg-cancelado" rows="5" style="font-size:13px">⚠️ *Pedido cancelado - #{id}*
+
+Olá, {nome}. Infelizmente seu pedido foi cancelado.
+
+Se tiver alguma dúvida, responda esta mensagem que vamos ajudar.</textarea>
           </div>
         </div>
         <!-- Variáveis -->

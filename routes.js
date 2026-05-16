@@ -31,7 +31,7 @@ function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
       const nome   = order.client || 'Cliente'
       const items  = (()=>{ try{ return (JSON.parse(order.items)||[]).map(i=>`• ${i.qty}x ${i.name}`).join('\n') }catch{ return '' } })()
       const total  = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
-      const msgPad = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento PIX confirmado!*\n\nOlá, *${nome}*! Recebemos seu pagamento do pedido *#${idStr}* com sucesso.\n\n*Itens:*\n${items}\n\n💰 *Total: R$ ${total}*\n\n📦 Seu pedido está sendo preparado. Obrigado! 🎉\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
+      const msgPad = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento confirmado*\n\nOlá, *${nome}*! Recebemos o PIX do pedido *#${idStr}*.\n\n*Itens*\n${items}\n\n*Total:* R$ ${total}\n\nSeu pedido já entrou em preparo.`
       const msgFin = pixConf.msg ? fillVars(pixConf.msg, { nome, id: idStr, itens: items, total, loja }) : msgPad
       await sendWA(order.phone, msgFin, inst)
     } catch(e) { /* silencia erros de notificação */ }
@@ -2936,7 +2936,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
             const fmtVal = parseFloat(valor).toFixed(2).replace('.',',')
             // Mensagem 1: texto com instruções (customizável pelo gestor, sem o código)
             const nomeLoja  = cfgWa?.store_name || 'Restaurante'
-            const msgPadTxt = `🏪 *${nomeLoja}*\n${'─'.repeat(20)}\n\n💠 *PIX — Pedido #${idStr}*\n\nOlá, *${nome}*! Para confirmar seu pedido, realize o pagamento via PIX Copia e Cola.\n\n💰 *Valor: R$ ${fmtVal}*\n\nO código PIX chegará na próxima mensagem — só copiar e colar no app! 👇`
+            const msgPadTxt = `🏪 *${nomeLoja}*\n${'─'.repeat(20)}\n\n💠 *PIX - Pedido #${idStr}*\n\nOlá, *${nome}*! Para confirmar seu pedido, use o PIX Copia e Cola.\n\n*Valor:* R$ ${fmtVal}\n\nO código será enviado na próxima mensagem.`
             const msgTxt = pixCop.msg ? fillVars(pixCop.msg.replace('{codigo_pix}', '').trim(), { nome, id: idStr, total: fmtVal, codigo_pix: '' }).trim() : msgPadTxt
             await sendWA(body.phone, msgTxt, inst)
             // Mensagem 2: só o código (separado para facilitar cópia)
@@ -3181,7 +3181,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
                   const idStr  = String(_foC.order_num || Math.max(1, _foC.id - offset)).padStart(3,'0')
                   const nome   = (_foC.client || 'Cliente').split(' ')[0]
                   const total  = (parseFloat(_foC.total||0)+parseFloat(_foC.taxa||0)).toFixed(2).replace('.',',')
-                  const msg    = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento confirmado!*\n\nOlá, *${nome}*! Recebemos seu pagamento do pedido *#${idStr}* no cartão. 💳\n\n💰 *Total: R$ ${total}*\n\n📦 Seu pedido está sendo preparado! 🎉\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
+                  const msg    = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento confirmado*\n\nOlá, *${nome}*! Recebemos o pagamento no cartão do pedido *#${idStr}*.\n\n*Total:* R$ ${total}\n\nSeu pedido já entrou em preparo.`
                   await sendWA(_foC.phone, msg, inst)
                 } catch(e) { log('❌','Erro notif cartão:', e.message) }
               })
@@ -3238,7 +3238,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
                 const valorTxt  = parseFloat(rowF.valor).toFixed(2).replace('.', ',')
                 const venceTxt  = novaExp.toLocaleDateString('pt-BR')
                 const msg = [
-                  `✅ *Pagamento confirmado!*`,
+                  `✅ *Pagamento confirmado*`,
                   ``,
                   `Recebemos seu pagamento do plano *${planoNome}*.`,
                   ``,
@@ -3666,13 +3666,27 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const tid  = tenant_id || req.headers['x-tenant-id']
     const cfgP = tid ? db.prepare('SELECT evo_instance FROM store_config WHERE tenant_id=?').get(tid) : null
     const instP = cfgP?.evo_instance || EVO_INST
+    const baseUrl = String(process.env.PUBLIC_BASE_URL || process.env.APP_URL || process.env.BASE_URL || '').replace(/\/+$/,'') || (() => {
+      const proto = String(req.headers['x-forwarded-proto'] || (req.socket?.encrypted ? 'https' : 'http')).split(',')[0].trim()
+      const host = String(req.headers['x-forwarded-host'] || req.headers.host || 'estimafood.evocrm.sbs').split(',')[0].trim()
+      return `${proto || 'https'}://${host || 'estimafood.evocrm.sbs'}`
+    })()
+    const slugP = tid ? db.prepare('SELECT slug FROM tenants WHERE id=?').get(tid)?.slug : ''
+    const linkCardapio = tid
+      ? `${baseUrl}/index.html?${slugP ? `slug=${encodeURIComponent(slugP)}` : `tenant=${encodeURIComponent(tid)}`}`
+      : `${baseUrl}/index.html`
     let cl = db.prepare('SELECT * FROM fidelidade WHERE phone IS NOT NULL' + (tid ? ' AND tenant_id=?' : '')).all(...(tid ? [tid] : []))
     if (destino === 'com_pedido') cl = cl.filter(c => c.orders_count > 0)
     if (!cl.length) { send(res, 200, { ok: true, enviados: 0 }); return true }
     send(res, 200, { ok: true, total: cl.length, msg: 'Envio iniciado' })
     ;(async () => {
       let ok = 0, fail = 0
-      for (const c of cl) { const r = await sendWA(c.phone, fillVars(msg, { nome: c.name }), instP); r.ok ? ok++ : fail++; await sleep(1500) }
+      for (const c of cl) {
+        const texto = fillVars(msg, { nome: c.name, link: linkCardapio, link_cardapio: linkCardapio, cardapio_link: linkCardapio })
+        const r = await sendWA(c.phone, texto, instP)
+        r.ok ? ok++ : fail++
+        await sleep(1500)
+      }
       log('📢', `Promoção: ${ok} ok, ${fail} fail`)
     })()
     return true
@@ -4140,7 +4154,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
               const idStr  = String(_fo.order_num || Math.max(1, _fo.id - offset)).padStart(3,'0')
               const nome   = (_fo.client || 'Cliente').split(' ')[0]
               const total  = (parseFloat(_fo.total||0)+parseFloat(_fo.taxa||0)).toFixed(2).replace('.',',')
-              const msg    = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento confirmado!*\n\nOlá, *${nome}*! Recebemos seu pagamento do pedido *#${idStr}* no cartão. 💳\n\n💰 *Total: R$ ${total}*\n\n📦 Seu pedido está sendo preparado! 🎉\n\n_Dúvidas? É só responder esta mensagem!_ 😊`
+              const msg    = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento confirmado*\n\nOlá, *${nome}*! Recebemos o pagamento no cartão do pedido *#${idStr}*.\n\n*Total:* R$ ${total}\n\nSeu pedido já entrou em preparo.`
               await sendWA(_fo.phone, msg, inst)
             } catch(e) { log('❌','Erro notif cartão (poll):', e.message) }
           })

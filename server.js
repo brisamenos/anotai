@@ -1684,7 +1684,7 @@ async function handleREST(req, res, table, params, body) {
             })()
             const total = (parseFloat(_ord.total||0) + parseFloat(_ord.taxa||0)).toFixed(2).replace('.',',')
             const loja  = cfg?.store_name || 'Restaurante'
-            const msgPadrao = `🏪 *${loja}*\n${'-'.repeat(20)}\n\n📥 *Pedido #${idStr} recebido!*\n\nOlá, *${nome.split(' ')[0]}*! Recebemos seu pedido certinho.\n\n*Itens:*\n${items || 'Itens do pedido'}\n\n💰 *Total: R$ ${total}*\n\nEm breve confirmaremos por aqui.`
+            const msgPadrao = `🏪 *${loja}*\n${'-'.repeat(20)}\n\n📥 *Pedido recebido - #${idStr}*\n\nOlá, *${nome.split(' ')[0]}*! Recebemos seu pedido.\n\n*Itens*\n${items || 'Itens do pedido'}\n\n*Total:* R$ ${total}\n\nEm breve confirmaremos por aqui.`
             const msgFinal = recAuto.msg ? fillVars(recAuto.msg, { nome, id: idStr, itens: items, total, loja, endereco: _ord.addr || '', mesa: String(_ord.mesa_num || '') }) : msgPadrao
             const r = await sendWA(_ord.phone, msgFinal, inst, _autoDelayMs())
             if (r.ok) log('📤', `Comanda recebido enviada → ${_ord.phone} pedido #${idStr}`)
@@ -1726,12 +1726,7 @@ async function handleREST(req, res, table, params, body) {
             const _tntP    = db.prepare("SELECT segmento FROM tenants WHERE id=?").get(_tid)
             const _segP    = _tntP?.segmento || 'restaurante'
             const _emP     = detectarCategoriaPedido(items, _segP).lojaEmoji
-            const _pixVars = [
-              `${_emP} *${lojaP}*\n${'-'.repeat(20)}\n\n💠 *PIX — Pedido #${idStr}*\n\nOi, *${_nomeP}*! 👋 Seu pedido chegou pra gente.\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\nPague via PIX pra confirmar:\n🔑 *Tipo:* ${tipoChave}\n📋 *Chave:* ${chavePix}\n\nAssim que o pagamento cair, a gente começa a preparar! ✅\n\n_Dúvidas? É só chamar! 😊_`,
-              `${_emP} *${lojaP}*\n${'-'.repeat(20)}\n\n✅ *Pedido #${idStr} recebido!*\n\n*${_nomeP}*, que ótimo ter você por aqui! Seu pedido já está na nossa fila.\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\nSó falta o pagamento via PIX:\n🔑 ${tipoChave}: *${chavePix}*\n\nApós confirmar, partimos pra produção! 🚀\n\n_Qualquer dúvida é só responder! 😄_`,
-              `${_emP} *${lojaP}*\n${'-'.repeat(20)}\n\n🎯 *Quase lá, ${_nomeP}!*\n\nRecebemos seu pedido *#${idStr}*. Agora é só pagar via PIX!\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\n📋 Chave PIX (${tipoChave}): *${chavePix}*\n\nAssim que o pagamento for identificado, você receberá confirmação. 🤝\n\n_Dúvidas? Estamos aqui! 😊_`,
-            ]
-            const msgPadrao = _pixVars[Math.floor(Math.random() * _pixVars.length)]
+            const msgPadrao = `${_emP} *${lojaP}*\n${'-'.repeat(20)}\n\n💠 *PIX manual - Pedido #${idStr}*\n\nOlá, *${_nomeP}*! Recebemos seu pedido.\n\n*Itens*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n*Total:* R$ ${total}\n\nPara confirmar, faça o PIX:\n*Tipo:* ${tipoChave}\n*Chave:* ${chavePix}\n\nAssim que o pagamento for confirmado, seguimos com o preparo.`
             const msgFinal  = pixAuto.msg ? fillVars(pixAuto.msg, { nome, id: idStr, itens: items, total, chave_pix: chavePix, tipo_chave: tipoChave }) : msgPadrao
             const r = await sendWA(_ord.phone, msgFinal, inst, _autoDelayMs())
             if (r.ok) log('📤', `PIX manual notificado → ${_ord.phone} pedido #${idStr}`)
@@ -2375,15 +2370,8 @@ async function handleOrderStatus(req, res) {
           const _nomePOk = nome.split(' ')[0]
           // Emojis baseados nos itens reais (açaí/pizza/etc.) em vez de fixo 🍳
           const _categPix    = detectarCategoriaPedido(items, _seg)
-          const _emPrep      = _categPix.emojis[0]    // ex: 🍧 pra açaí, 🍕 pra pizza
-          const _emProducao  = _categPix.emojis[1] || '🔥'
           const _emHeader    = _categPix.lojaEmoji
-              const _pixOkVars = [
-                `${_emHeader} *${lojaC}*\n${'-'.repeat(20)}\n\n✅ *PIX confirmado, ${_nomePOk}!*\n\nRecebemos seu pagamento do pedido *#${idStr}*! 🎉\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\n${_emPrep} Já estamos preparando tudo com muito carinho!\n\n_Dúvidas? Estamos aqui! 😊_`,
-                `${_emHeader} *${lojaC}*\n${'-'.repeat(20)}\n\n💚 *Pagamento recebido!*\n\nOi, *${_nomePOk}*! Seu PIX do pedido *#${idStr}* chegou certinho. Obrigado! 🙏\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\n${_emProducao} A equipe já colocou a mão na massa!\n\n_Qualquer dúvida é só chamar! 😄_`,
-                `${_emHeader} *${lojaC}*\n${'-'.repeat(20)}\n\n🚀 *Bora, ${_nomePOk}!*\n\nPagamento do pedido *#${idStr}* confirmado com sucesso! ✅\n\n*Itens:*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n💰 *Total: R$ ${total}*\n\n🔥 Seu pedido já entrou em produção. Em breve te avisamos quando estiver pronto!\n\n_Dúvidas? Responde aqui! 😊_`,
-              ]
-              const msgPad = _pixOkVars[Math.floor(Math.random() * _pixOkVars.length)]
+              const msgPad = `${_emHeader} *${lojaC}*\n${'-'.repeat(20)}\n\n✅ *Pagamento confirmado*\n\nOlá, *${_nomePOk}*! Recebemos o PIX do pedido *#${idStr}*.\n\n*Itens*\n${(items||'').split(', ').map(i=>'• '+i).join('\n')}\n\n*Total:* R$ ${total}\n\nSeu pedido já entrou em preparo.`
           const msgFin = pixConf.msg ? fillVars(pixConf.msg, { nome, id: idStr, itens: items, total }) : msgPad
           const r = await sendWA(order.phone, msgFin, inst, _autoDelayMs())
           if (r.ok) log('📤', `PIX manual confirmado notificado → ${order.phone} #${idStr}`)
@@ -2447,7 +2435,7 @@ async function handleOrderStatus(req, res) {
             if (cbAuto.on !== false) {
               _recompensas.push({
                 tipo: 'cashback',
-                linha: `💰 *R$ ${credito.toFixed(2).replace('.',',')}* de cashback (saldo: R$ ${novoSaldo.toFixed(2).replace('.',',')})`
+                linha: `💰 *Cashback:* R$ ${credito.toFixed(2).replace('.',',')}\n*Saldo atual:* R$ ${novoSaldo.toFixed(2).replace('.',',')}`
               })
             }
             marcarDirty()
@@ -2484,8 +2472,8 @@ async function handleOrderStatus(req, res) {
                 _recompensas.push({
                   tipo: 'pontos',
                   linha: faltam > 0
-                    ? `⭐ *${ptosGanhos} pontos* de fidelidade (total: ${novosPts} — faltam ${faltam} pra recompensa)`
-                    : `⭐ *${ptosGanhos} pontos* — 🎁 *Recompensa desbloqueada!* Resgate no próximo pedido`
+                    ? `⭐ *Pontos:* +${ptosGanhos}\n*Saldo atual:* ${novosPts} pontos\n*Faltam:* ${faltam} pontos para a recompensa`
+                    : `⭐ *Pontos:* +${ptosGanhos}\n🎁 *Recompensa desbloqueada*\nResgate no próximo pedido`
                 })
               }
             }
@@ -2521,8 +2509,8 @@ async function handleOrderStatus(req, res) {
             _recompensas.push({
               tipo: 'carimbo',
               linha: elegivel
-                ? `🎉 *Cartão fidelidade COMPLETO!* (${desdeResgate}/${meta}) — Você ganhou ${recompensaTxt}`
-                : `🃏 *${desdeResgate}/${meta} carimbos* (faltam ${faltam} pra ganhar ${recompensaTxt})`
+                ? `🎟️ *Cartão fidelidade completo*\n*Progresso:* ${desdeResgate}/${meta}\nVocê ganhou ${recompensaTxt}`
+                : `🎟️ *Carimbos:* ${desdeResgate}/${meta}\n*Faltam:* ${faltam} para ganhar ${recompensaTxt}`
             })
           }
         }
@@ -2533,8 +2521,8 @@ async function handleOrderStatus(req, res) {
           const lojaNome  = cfg?.store_name || 'Restaurante'
           const linhasRec = _recompensas.map(r => r.linha).join('\n')
           const msgFinal  = _recompensas.length === 1
-            ? `${_lojaEmojiB} *${lojaNome}*\n\n🎉 *${nome}*, você ganhou:\n\n${linhasRec}\n\n_Use no próximo pedido!_ 🛍️`
-            : `${_lojaEmojiB} *${lojaNome}*\n\n🎉 *${nome}*, seu pedido foi finalizado!\n\nVocê ganhou:\n${linhasRec}\n\n_Tudo isso pra usar no próximo pedido!_ 🛍️`
+            ? `${_lojaEmojiB} *${lojaNome}*\n\n🎉 *${nome}, você ganhou uma recompensa!*\n\n${linhasRec}\n\nUse no próximo pedido.`
+            : `${_lojaEmojiB} *${lojaNome}*\n\n🎉 *${nome}, seu pedido foi finalizado!*\n\nVocê ganhou:\n\n${linhasRec}\n\nUse no próximo pedido.`
           setImmediate(async () => {
             try {
               // Delay humanizado pra evitar padrão de bot (rajada de 1s fixo).
@@ -2612,52 +2600,22 @@ async function handleOrderStatus(req, res) {
           const _categ      = detectarCategoriaPedido(items, _seg)
           const _lojaEmoji  = _categ.lojaEmoji
           const cab = `${_lojaEmoji} *${loja}*\n${'-'.repeat(20)}`
-          const rod = '\n\n_Dúvidas? É só responder esta mensagem!_ 😊'
-          const _emojisComida = _categ.emojis
-          const _ec = () => _emojisComida[Math.floor(Math.random() * _emojisComida.length)]
-          // Variações humanizadas — escolhe uma aleatoriamente
-          const _v = arr => arr[Math.floor(Math.random() * arr.length)]
           const _primeiroNome = nome.split(' ')[0]
           const _tipoLocal = isDelivery==='🛵 Entrega'
             ? '🛵 Seu pedido sairá para entrega em breve!'
             : isDelivery==='🪴 Mesa'
             ? '🪴 Pode ficar à vontade, logo trazemos até você!'
             : '🏪 Pode retirar no balcão quando quiser!'
-          const msgPadrao = {
-            analise: _v([
-              `${cab}\n\n📥 *Pedido #${idStr} recebido!*\n\nOi, *${_primeiroNome}*! 👋 Recebemos seu pedido e já estamos verificando.\n\n*Itens:*\n${items}\n\n💰 *Total: R$ ${total}*\n\n⏱️ Em breve confirmaremos por aqui!${rod}`,
-              `${cab}\n\n✅ *Chegou, ${_primeiroNome}!*\n\nSeu pedido *#${idStr}* entrou na nossa fila. Obrigado por escolher a gente! 🙌\n\n*Itens:*\n${items}\n\n💰 *Total: R$ ${total}*\n\nVou te avisar assim que confirmarmos!${rod}`,
-              `${cab}\n\n🎯 *Pedido #${idStr} anotado!*\n\n*${_primeiroNome}*, que ótimo ter você aqui! Recebemos seu pedido certinho.\n\n*Itens:*\n${items}\n\n💰 *Total: R$ ${total}*\n\n⏳ Aguarda só um instante que confirmamos logo!${rod}`,
-            ]),
-            producao: _v([
-              `${cab}\n\n${_ec()} *Mãos à obra, ${_primeiroNome}!*\n\nSeu pedido *#${idStr}* foi confirmado e já está sendo preparado com muito carinho! ❤️\n\n*Itens:*\n${items}\n\n💰 *Total: R$ ${total}*\n\n${_tipoLocal}${rod}`,
-              `${cab}\n\n${_ec()} *Pedido #${idStr} confirmado!*\n\nOi, *${_primeiroNome}*! Nossa equipe já começou a preparar tudo pra você.\n\n*Itens:*\n${items}\n\n💰 *Total: R$ ${total}*\n\n${_tipoLocal}${rod}`,
-              `${cab}\n\n✅ *Confirmado, ${_primeiroNome}!*\n\nPedido *#${idStr}* na produção agora. A gente capricha pra você! ${_ec()}\n\n*Itens:*\n${items}\n\n💰 *Total: R$ ${total}*${rod}`,
-            ]),
-            pronto: _v([
-              `${cab}\n\n${_ec()} *Ficou incrível, ${_primeiroNome}!*\n\nSeu pedido *#${idStr}* está prontinho! ✅\n\n${_tipoLocal}${rod}`,
-              `${cab}\n\n🎉 *Pedido #${idStr} pronto!*\n\n*${_primeiroNome}*, ficou ótimo e está te esperando! ${_ec()}\n\n${_tipoLocal}${rod}`,
-              `${cab}\n\n${_ec()} *Tá na hora, ${_primeiroNome}!*\n\nSeu pedido *#${idStr}* foi preparado com capricho e está pronto!\n\n${_tipoLocal}${rod}`,
-            ]),
-            saiu: _v([
-              `${cab}\n\n🛵 *Pedido #${idStr} a caminho!*\n\n*${_primeiroNome}*, seu pedido saiu agora e logo chega aí! 🚀\n\n📍 *Endereço:* ${order.addr||''}\n\nFique de olho, hein! 😉${rod}`,
-              `${cab}\n\n🛵 *Saiu, ${_primeiroNome}!*\n\nSeu pedido *#${idStr}* está na estrada. Chegaremos em breve!\n\n📍 *Destino:* ${order.addr||''}${rod}`,
-              `${cab}\n\n🏃 *A caminho, ${_primeiroNome}!*\n\nPedido *#${idStr}* saiu pra entrega. O nosso entregador está indo até você agora! 🛵\n\n📍 ${order.addr||''}${rod}`,
-            ]),
-            entregue: _v([
-              `${cab}\n\n😊 *${_primeiroNome}, muito obrigado pela preferência!*\n\nFoi um prazer atender você no pedido *#${idStr}*. Esperamos que tudo esteja do jeitinho que você gosta! ❤️\n\nVolte sempre, viu? Estamos aqui pra você! 🤗${rod}`,
-              `${cab}\n\n🙏 *Obrigado por escolher a gente, ${_primeiroNome}!*\n\nSeu pedido *#${idStr}* foi entregue com todo o carinho. Nada melhor do que saber que você confia no nosso trabalho! 💛\n\nQualquer coisa, pode contar com a gente. Volte sempre! 😊${rod}`,
-              `${cab}\n\n❤️ *${_primeiroNome}, que bom ter você como cliente!*\n\nPedido *#${idStr}* entregue! Preparamos tudo com muito cuidado especialmente pra você. 😊\n\nA gente fica feliz demais com a sua confiança. Até a próxima! 🤝${rod}`,
-            ]),
-            cancelado: _v([
-              `${cab}\n\n😔 *Pedido #${idStr} cancelado*\n\n*${_primeiroNome}*, sentimos muito pelo inconveniente. Infelizmente seu pedido precisou ser cancelado.\n\nEstamos à disposição se quiser fazer um novo pedido ou esclarecer qualquer dúvida.${rod}`,
-              `${cab}\n\n⚠️ *Aviso sobre o pedido #${idStr}*\n\nOi, *${_primeiroNome}*. Lamentamos informar que seu pedido foi cancelado.\n\nQualquer dúvida, é só responder aqui — vamos resolver juntos! 🤝${rod}`,
-            ]),
-            finalizado: _v([
-              `${cab}\n\n🎉 *Obrigado, ${_primeiroNome}!*\n\nSeu pedido *#${idStr}* foi finalizado. Foi um prazer te atender!\n\n⭐ Que tal nos avaliar? Leva só 5 segundos e nos ajuda muito!${rod}`,
-              `${cab}\n\n🙏 *Até a próxima, ${_primeiroNome}!*\n\nPedido *#${idStr}* concluído. Obrigado por escolher a ${loja}!\n\n⭐ Adoraríamos saber sua opinião. Pode falar!${rod}`,
-              `${cab}\n\n✨ *Missão cumprida, ${_primeiroNome}!*\n\nPedido *#${idStr}* finalizado com sucesso. Esperamos que tenha gostado! 😊\n\n⭐ Sua avaliação é muito importante para continuarmos melhorando!${rod}`,
-            ]),
+          const msgPadrao = {}
+          const rodLimpo = '\n\n_Dúvidas? É só responder esta mensagem._'
+          const msgPadraoOrganizado = {
+            analise: `${cab}\n\n📥 *Pedido recebido - #${idStr}*\n\nOlá, *${_primeiroNome}*! Recebemos seu pedido.\n\n*Itens*\n${items}\n\n*Total:* R$ ${total}\n\nEm breve confirmaremos por aqui.${rodLimpo}`,
+            producao: `${cab}\n\n✅ *Pedido confirmado - #${idStr}*\n\nOlá, *${_primeiroNome}*! Seu pedido já está em preparo.\n\n*Itens*\n${items}\n\n*Total:* R$ ${total}\n\n${_tipoLocal}${rodLimpo}`,
+            pronto: `${cab}\n\n🔔 *Pedido pronto - #${idStr}*\n\n*${_primeiroNome}*, seu pedido está pronto.\n\n${_tipoLocal}${rodLimpo}`,
+            saiu: `${cab}\n\n🛵 *Saiu para entrega - #${idStr}*\n\n*${_primeiroNome}*, seu pedido está a caminho.\n\n*Endereço*\n${order.addr || ''}\n\nFique de olho por aí.${rodLimpo}`,
+            entregue: `${cab}\n\n✅ *Pedido entregue - #${idStr}*\n\n*${_primeiroNome}*, obrigado pela preferência.\n\nEsperamos que tenha gostado. Até a próxima!`,
+            cancelado: `${cab}\n\n⚠️ *Pedido cancelado - #${idStr}*\n\nOlá, *${_primeiroNome}*. Infelizmente seu pedido foi cancelado.\n\nSe tiver alguma dúvida, responda esta mensagem que vamos ajudar.`,
+            finalizado: `${cab}\n\n⭐ *Pedido finalizado - #${idStr}*\n\n*${_primeiroNome}*, obrigado por escolher a ${loja}.\n\nSua opinião ajuda muito a gente melhorar.`,
           }
           let msgFinal = null
           // ── ENVIO DE STATUS — opt-in via WhatsApp ─────────────
@@ -2687,7 +2645,7 @@ async function handleOrderStatus(req, res) {
             log('🔕', `[anti-ban] Pulando "${new_status}" do pedido #${idStr} — cliente não ativou tracking via WhatsApp`)
           }
           else if (ct.on&&ct.msg) { msgFinal=fillVars(ct.msg,vars) }
-          else { msgFinal=msgPadrao[new_status]||null }
+          else { msgFinal=msgPadraoOrganizado[new_status]||msgPadrao[new_status]||null }
           if (msgFinal) {
             const _pkey = `${order.id}_${new_status}`
             if (new_status==='finalizado') {

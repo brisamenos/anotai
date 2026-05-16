@@ -599,11 +599,17 @@ async function evoEnviarPromocao() {
   if (res) { res.style.display='block'; res.innerHTML='<span style="color:var(--muted)">Iniciando envio no servidor...</span>'; }
   sbLoading(true);
   try {
+    const tid = _sessao?.tenant_id || '';
+    const linkCardapio = await _evoCardapioLinkAtual();
+    const msgFinal = _evoAplicarLinkCardapio(String(msg || ''), linkCardapio)
+      .replaceAll('{link}', linkCardapio)
+      .replaceAll('{link_cardapio}', linkCardapio)
+      .replaceAll('{cardapio_link}', linkCardapio);
     // Chama a Edge Function — roda no servidor Supabase, não no browser
     const r = await fetch(`${WA_SERVER}/promocao`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ destino, msg })
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify({ destino, msg: msgFinal, tenant_id: tid })
     });
     const data = await r.json().catch(() => ({}));
     sbLoading(false);
@@ -1406,52 +1412,53 @@ function cpParseGmapsLink() {
 // ═══════════════════════════════════════
 // MODELOS DE MENSAGEM — Templates editáveis pelo gestor
 // ═══════════════════════════════════════
+const _autoMsg = linhas => linhas.join('\n');
 const _AUTO_MODELOS = {
   recebido: [
-    { label: 'Modelo 1 — Direto',    msg: '📥 Olá *{nome}*! Recebemos seu pedido *#{id}* com sucesso! 🎉\n\n🛒 *Itens:*\n{itens}\n\n💰 *Total: R$ {total}*\n\n⏱️ Em breve confirmaremos por aqui!\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
-    { label: 'Modelo 2 — Animado',   msg: '✅ Chegou, *{nome}*!\n\nSeu pedido *#{id}* entrou na nossa fila. Obrigado por escolher a gente! 🙌\n\n🛒 *Itens:*\n{itens}\n\n💰 *Total: R$ {total}*\n\nVou te avisar assim que confirmarmos!\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
-    { label: 'Modelo 3 — Acolhedor', msg: '🎯 *Pedido #{id} anotado!*\n\n*{nome}*, que ótimo ter você aqui! Recebemos seu pedido certinho.\n\n🛒 *Itens:*\n{itens}\n\n💰 *Total: R$ {total}*\n\n⏳ Aguarda só um instante que confirmamos logo!\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+    { label: 'Modelo 1 - Direto', msg: _autoMsg(['📥 *Pedido recebido - #{id}*', '', 'Olá, {nome}! Recebemos seu pedido.', '', '*Itens*', '{itens}', '', '*Total:* R$ {total}', '', 'Em breve confirmaremos por aqui.']) },
+    { label: 'Modelo 2 - Simples', msg: _autoMsg(['✅ *Pedido anotado*', '', '{nome}, seu pedido #{id} chegou certinho.', '', '*Itens*', '{itens}', '', '*Total:* R$ {total}', '', 'Vamos confirmar em instantes.']) },
+    { label: 'Modelo 3 - Acolhedor', msg: _autoMsg(['📥 *Recebemos seu pedido, {nome}!*', '', 'Pedido #{id} registrado com sucesso.', '', '*Itens*', '{itens}', '', '*Total:* R$ {total}', '', 'Se precisar falar com a gente, responda esta mensagem.']) },
   ],
   confirmado: [
-    { label: 'Modelo 1 — Direto',    msg: '✅ Olá *{nome}*! Seu pedido *#{id}* foi confirmado e está sendo preparado! 🍽️\n\n🛒 *Itens:*\n{itens}\n\n💰 *Total: R$ {total}*\n\n{tipo_entrega}\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
-    { label: 'Modelo 2 — Animado',   msg: '🔥 *Mãos à obra, {nome}!*\n\nSeu pedido *#{id}* foi confirmado e já está sendo preparado com muito carinho! ❤️\n\n🛒 *Itens:*\n{itens}\n\n💰 *Total: R$ {total}*\n\n{tipo_entrega}\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
-    { label: 'Modelo 3 — Simples',   msg: '✅ *Confirmado, {nome}!*\n\nPedido *#{id}* na produção agora. A gente capricha pra você!\n\n🛒 *Itens:*\n{itens}\n\n💰 *Total: R$ {total}*\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+    { label: 'Modelo 1 - Direto', msg: _autoMsg(['✅ *Pedido confirmado - #{id}*', '', 'Olá, {nome}! Seu pedido já está em preparo.', '', '*Itens*', '{itens}', '', '*Total:* R$ {total}', '', '{tipo_entrega}']) },
+    { label: 'Modelo 2 - Produção', msg: _autoMsg(['✅ *Confirmado, {nome}!*', '', 'O pedido #{id} entrou em produção.', '', '*Itens*', '{itens}', '', '*Total:* R$ {total}', '', '{tipo_entrega}']) },
+    { label: 'Modelo 3 - Leve', msg: _autoMsg(['🍽️ *Tudo certo por aqui*', '', '{nome}, confirmamos o pedido #{id}.', '', 'Já estamos preparando com cuidado.', '', '{tipo_entrega}']) },
   ],
   pronto: [
-    { label: 'Modelo 1 — Direto',    msg: '🛎️ *{nome}*, seu pedido *#{id}* está PRONTO! ✅\n\n{tipo_entrega}\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
-    { label: 'Modelo 2 — Animado',   msg: '🎉 *Pedido #{id} pronto!*\n\n*{nome}*, ficou ótimo e está te esperando!\n\n{tipo_entrega}\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
-    { label: 'Modelo 3 — Caprichado',msg: '🔥 *Tá na hora, {nome}!*\n\nSeu pedido *#{id}* foi preparado com capricho e está pronto!\n\n{tipo_entrega}\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+    { label: 'Modelo 1 - Direto', msg: _autoMsg(['🔔 *Pedido pronto - #{id}*', '', '{nome}, seu pedido está pronto.', '', '{tipo_entrega}', '', 'Qualquer dúvida, é só responder esta mensagem.']) },
+    { label: 'Modelo 2 - Retirada', msg: _autoMsg(['🔔 *Pronto para retirada*', '', '{nome}, o pedido #{id} já está pronto.', '', '{tipo_entrega}', '', 'Estamos te aguardando.']) },
+    { label: 'Modelo 3 - Simples', msg: _autoMsg(['✅ *Pedido #{id} pronto*', '', '{nome}, finalizamos seu pedido.', '', '{tipo_entrega}']) },
   ],
   entrega: [
-    { label: 'Modelo 1 — Direto',    msg: '🛵 *{nome}*, seu pedido *#{id}* saiu para entrega!\n\n📍 *Endereço:* {endereco}\n\nFique de olho, hein! 😉\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
-    { label: 'Modelo 2 — Animado',   msg: '🛵 *Saiu, {nome}!*\n\nSeu pedido *#{id}* está na estrada. Chegaremos em breve!\n\n📍 *Destino:* {endereco}\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
-    { label: 'Modelo 3 — Urgente',   msg: '🏃 *A caminho, {nome}!*\n\nPedido *#{id}* saiu para entrega. O nosso entregador está indo até você agora! 🛵\n\n📍 {endereco}\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
+    { label: 'Modelo 1 - Direto', msg: _autoMsg(['🛵 *Saiu para entrega - #{id}*', '', '{nome}, seu pedido está a caminho.', '', '*Endereço*', '{endereco}', '', 'Fique de olho por aí.']) },
+    { label: 'Modelo 2 - A caminho', msg: _autoMsg(['🛵 *A caminho, {nome}!*', '', 'O pedido #{id} saiu para entrega.', '', '*Endereço*', '{endereco}', '', 'Em breve chega até você.']) },
+    { label: 'Modelo 3 - Curto', msg: _autoMsg(['🛵 *Pedido #{id} saiu*', '', '{nome}, seu pedido saiu para entrega.', '', '{endereco}']) },
   ],
   cancelado: [
-    { label: 'Modelo 1 — Padrão',  msg: '😔 *Pedido #{id} cancelado*\n\n*{nome}*, sentimos muito pelo inconveniente. Infelizmente seu pedido precisou ser cancelado.\n\nEstamos à disposição se quiser fazer um novo pedido ou esclarecer qualquer dúvida.\n\n_Dúvidas? É só responder esta mensagem!_ 😊' },
-    { label: 'Modelo 2 — Cordial', msg: '⚠️ *Aviso sobre o pedido #{id}*\n\nOi, *{nome}*. Lamentamos informar que seu pedido foi cancelado.\n\nQualquer dúvida, é só responder aqui — vamos resolver juntos! 🤝' },
+    { label: 'Modelo 1 - Padrão', msg: _autoMsg(['⚠️ *Pedido cancelado - #{id}*', '', 'Olá, {nome}. Infelizmente seu pedido foi cancelado.', '', 'Se tiver alguma dúvida, responda esta mensagem que vamos ajudar.']) },
+    { label: 'Modelo 2 - Cordial', msg: _autoMsg(['⚠️ *Aviso sobre o pedido #{id}*', '', '{nome}, precisamos cancelar este pedido.', '', 'Fale com a gente por aqui se quiser entender melhor ou refazer o pedido.']) },
   ],
   aniversario: [
-    { label: 'Modelo 1 — Clássico', msg: '🎉 Feliz aniversário, *{nome}*! 🥳\nQue seu dia seja incrível e cheio de coisas boas!\nDesejamos tudo de melhor pra você! 🎂❤️' },
-    { label: 'Modelo 2 — Animado',  msg: '🎂 *Hoje é dia de festa, {nome}!*\n\nA nossa equipe toda te deseja um aniversário muito especial! Que venham muitos momentos felizes. 🥳✨' },
-    { label: 'Modelo 3 — Simples',  msg: '🎈 *Feliz aniversário, {nome}!*\n\nEsperamos que hoje seja um dia muito especial para você. Conte sempre com a gente! 😊❤️' },
+    { label: 'Modelo 1 - Clássico', msg: _autoMsg(['🎉 *Feliz aniversário, {nome}!*', '', 'Desejamos um dia leve, feliz e cheio de coisas boas.', '', 'Com carinho,', 'nossa equipe.']) },
+    { label: 'Modelo 2 - Carinhoso', msg: _autoMsg(['🎉 *Hoje é seu dia, {nome}!*', '', 'Que seu aniversário seja especial e cheio de bons momentos.', '', 'A nossa equipe te deseja muitas felicidades.']) },
+    { label: 'Modelo 3 - Simples', msg: _autoMsg(['🎂 *Feliz aniversário, {nome}!*', '', 'Que seu dia seja muito feliz.', '', 'Conte sempre com a gente.']) },
   ],
   boasvindas: [
-    { label: 'Modelo 1 — Acolhedor', msg: '👋 Olá *{nome}*, seja muito bem-vindo(a)! 🎉\nFicamos felizes com seu primeiro pedido!\nEm caso de dúvidas, é só chamar aqui. 😊' },
-    { label: 'Modelo 2 — Animado',   msg: '🌟 Seja bem-vindo(a), *{nome}*!\n\nQue alegria ter você como cliente! Esperamos que goste de tudo. Estamos aqui pra que sua experiência seja incrível! 🙌' },
+    { label: 'Modelo 1 - Acolhedor', msg: _autoMsg(['👋 *Bem-vindo(a), {nome}!*', '', 'Ficamos felizes com seu primeiro pedido.', '', 'Sempre que precisar, é só chamar por aqui.']) },
+    { label: 'Modelo 2 - Simples', msg: _autoMsg(['👋 *Olá, {nome}!*', '', 'Seja muito bem-vindo(a).', '', 'Obrigado pelo primeiro pedido. Estamos por aqui se precisar.']) },
   ],
   avaliacao: [
-    { label: 'Modelo 1 — Direto',   msg: '⭐ *{nome}*, esperamos que tenha curtido seu pedido *#{id}*!\nConta pra gente como foi — sua opinião é muito importante!\n\nAvalie agora: {link_avaliacao}' },
-    { label: 'Modelo 2 — Caloroso', msg: '🙏 *Obrigado pela preferência, {nome}!*\n\nFoi um prazer te atender no pedido *#{id}*. O que achou?\n\nSua avaliação nos ajuda muito a melhorar! ⭐\n{link_avaliacao}' },
+    { label: 'Modelo 1 - Direto', msg: _autoMsg(['⭐ *Como foi seu pedido, {nome}?*', '', 'Esperamos que tenha gostado do pedido #{id}.', '', 'Sua opinião ajuda muito a gente melhorar:', '{link_avaliacao}']) },
+    { label: 'Modelo 2 - Agradecimento', msg: _autoMsg(['⭐ *Obrigado pelo pedido, {nome}!*', '', 'Foi um prazer te atender no pedido #{id}.', '', 'Conta pra gente como foi:', '{link_avaliacao}']) },
   ],
   retorno: [
-    { label: 'Modelo 1 — Saudade',  msg: '😋 *{nome}*, sentimos sua falta!\nQue tal pedir hoje? Temos novidades no cardápio te esperando! 🍽️' },
-    { label: 'Modelo 2 — Animado',  msg: '👋 Oi *{nome}*! Há alguns dias não te vemos por aqui...\n\nTemos novidades esperando por você! Que tal voltar? 😊' },
+    { label: 'Modelo 1 - Saudade', msg: _autoMsg(['😋 *Sentimos sua falta, {nome}!*', '', 'Tem novidade esperando por você no cardápio.', '', 'Acesse:', '{link_cardapio}']) },
+    { label: 'Modelo 2 - Convite', msg: _autoMsg(['👋 *Oi, {nome}!*', '', 'Passando para te convidar a pedir com a gente de novo.', '', 'Cardápio:', '{link_cardapio}']) },
   ],
   pedido_perdido: [
-    { label: 'Modelo 1 — Cordial',  msg: '👋 Oi *{nome}*! Passei aqui pra saber se você ainda está interessado(a) em fazer seu pedido.\n\nQualquer dúvida sobre o cardápio, é só chamar! 🍽️' },
-    { label: 'Modelo 2 — Direto',   msg: '🤔 *{nome}*, vi que você ficou por aqui mas ainda não finalizou o pedido.\n\nPosso te ajudar com alguma coisa? 😊' },
-    { label: 'Modelo 3 — Incentivo', msg: '🔥 *{nome}*, seu pedido está quase lá!\n\nFinalize agora e garanta seu sabor favorito antes que acabe! 🍕\n\n_Precisa de ajuda? É só responder aqui!_' },
+    { label: 'Modelo 1 - Cordial', msg: _autoMsg(['👋 *Oi, {nome}!*', '', 'Vi que você passou por aqui e ainda não finalizou o pedido.', '', 'Se precisar de ajuda, é só responder esta mensagem.', '', 'Cardápio:', '{link_cardapio}']) },
+    { label: 'Modelo 2 - Ajuda', msg: _autoMsg(['👋 *Olá, {nome}!*', '', 'Percebi que seu pedido ficou pendente.', '', 'Posso ajudar com alguma dúvida?', '', 'Acesse:', '{link_cardapio}']) },
+    { label: 'Modelo 3 - Direto', msg: _autoMsg(['🛒 *Seu pedido ficou quase pronto*', '', '{nome}, falta só finalizar pelo cardápio.', '', 'Se precisar, chama a gente por aqui.', '', '{link_cardapio}']) },
   ],
 };
 
