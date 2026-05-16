@@ -1315,6 +1315,7 @@ let _adminAnnouncements = [];
 let _adminAnnouncementsSseTenant = null;
 let _adminAnnouncementsSseAll = null;
 let _adminAnnouncementsRefreshTimer = null;
+let _adminAnnPopupDismissed = new Set();
 
 function _adminAnnEscape(s) {
   if (s == null) return '';
@@ -1386,7 +1387,7 @@ function _adminAnnPopupKey(a) {
 }
 
 function _adminAnnPopupSeen(a) {
-  try { return localStorage.getItem(_adminAnnPopupKey(a)) === '1'; } catch(e) { return false; }
+  return _adminAnnPopupDismissed.has(_adminAnnPopupKey(a));
 }
 
 function fecharAdminAnnouncementPopup() {
@@ -1394,7 +1395,7 @@ function fecharAdminAnnouncementPopup() {
   const id = el?.dataset?.alertId;
   const alert = _adminAnnouncements.find(a => String(a.id) === String(id));
   if (alert) {
-    try { localStorage.setItem(_adminAnnPopupKey(alert), '1'); } catch(e) {}
+    _adminAnnPopupDismissed.add(_adminAnnPopupKey(alert));
   }
   el?.remove();
 }
@@ -1417,15 +1418,15 @@ function _renderAdminAnnouncementPopup() {
   wrap.dataset.alertId = String(popup.id);
   wrap.style.cssText = 'position:fixed;inset:0;z-index:10090;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,23,42,.62);backdrop-filter:blur(7px)';
   wrap.innerHTML = `
-    <div style="width:min(540px,94vw);background:var(--surface);border:1px solid var(--border);border-radius:22px;box-shadow:0 28px 90px rgba(2,6,23,.48);overflow:hidden;font-family:${font}">
-      <div style="position:relative;padding:22px 24px 20px;background:${bg};color:${tx}">
+    <div style="width:min(540px,94vw);max-height:min(86vh,760px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:22px;box-shadow:0 28px 90px rgba(2,6,23,.48);overflow:hidden;font-family:${font}">
+      <div style="position:relative;padding:22px 24px 20px;background:${bg};color:${tx};flex-shrink:0">
         <button type="button" id="admin-ann-popup-close" aria-label="Fechar comunicado" style="position:absolute;right:14px;top:14px;width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.38);background:rgba(255,255,255,.16);color:${tx};cursor:pointer;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center">x</button>
         <div style="display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.32);background:rgba(255,255,255,.14);border-radius:999px;padding:6px 10px;font-size:11px;font-weight:900;text-transform:uppercase;margin-bottom:14px;color:${tx}">
           ${_adminAnnEscape(_adminAnnTipoLabel(popup.tipo))}
         </div>
         <div style="font-size:24px;font-weight:900;line-height:1.12;padding-right:42px;color:${tx}">${_adminAnnEscape(popup.titulo || 'Comunicado')}</div>
       </div>
-      <div style="padding:22px 24px 24px;background:var(--surface);color:var(--text)">
+      <div style="padding:22px 24px 24px;background:var(--surface);color:var(--text);overflow:auto">
         <div style="font-size:15px;line-height:1.58;color:var(--text);white-space:pre-wrap">${_adminAnnEscape(popup.mensagem || '')}</div>
         <div style="display:flex;justify-content:flex-end;margin-top:22px">
           <button type="button" id="admin-ann-popup-ok" class="btn bp" style="min-width:120px;justify-content:center">Entendi</button>

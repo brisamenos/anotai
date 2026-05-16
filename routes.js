@@ -784,7 +784,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const tipo = tipos.has(String(body.tipo || '').toLowerCase()) ? String(body.tipo).toLowerCase() : 'aviso'
     const displayMode = modos.has(String(body.display_mode || '').toLowerCase()) ? String(body.display_mode).toLowerCase() : 'banner'
     const titulo = String(body.titulo || '').trim().slice(0, 80)
-    const mensagem = String(body.mensagem || '').trim().slice(0, 280)
+    const mensagem = String(body.mensagem || '').trim().slice(0, 5000)
     if (!mensagem) throw new Error('Mensagem obrigatória')
     const bgColor = color(body.bg_color)
     const textColor = color(body.text_color)
