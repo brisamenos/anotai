@@ -886,6 +886,210 @@ function cpSetCor(hex) {
 }
 
 // ── Seleção de tema do cardápio público ──────────────────
+const _CP_CARDAPIO_TEMAS = [
+  {
+    key:'classico', group:'essenciais', nome:'Classico', desc:'Claro e direto para qualquer loja.',
+    tags:['Geral','Limpo'], accent:'#f97316', swatches:['#f97316','#0ea5e9','#16a34a'],
+    colors:{ bg:'#f8f9fb', surface:'#ffffff', soft:'#e4e8ef', text:'#0f1117', muted:'#6b7280', border:'rgba(0,0,0,.08)' }
+  },
+  {
+    key:'delivery_pro', group:'essenciais', nome:'Delivery Pro', desc:'Visual moderno para operacao diaria.',
+    tags:['Delivery','Moderno'], accent:'#2563eb', swatches:['#2563eb','#f97316','#10b981'],
+    colors:{ bg:'#f6f7fb', surface:'#ffffff', soft:'#d8e0ec', text:'#132032', muted:'#617089', border:'rgba(15,23,42,.08)' }
+  },
+  {
+    key:'minimalista', group:'essenciais', nome:'Minimalista', desc:'Muito limpo, com foco nos produtos.',
+    tags:['Clean','Premium'], accent:'#111111', swatches:['#111111','#64748b','#ea580c'],
+    colors:{ bg:'#ffffff', surface:'#fafafa', soft:'#e5e5e5', text:'#111111', muted:'#737373', border:'rgba(0,0,0,.07)' }
+  },
+  {
+    key:'premium_clean', group:'essenciais', nome:'Premium Clean', desc:'Neutro sofisticado para marcas fortes.',
+    tags:['Premium','Neutro'], accent:'#18181b', swatches:['#18181b','#be123c','#2563eb'],
+    colors:{ bg:'#f7f7f5', surface:'#ffffff', soft:'#deded8', text:'#18181b', muted:'#71717a', border:'rgba(24,24,27,.08)' }
+  },
+  {
+    key:'tropical', group:'lanches', nome:'Tropical', desc:'Quente e chamativo para lanches.',
+    tags:['Lanche','Quente'], accent:'#ea580c', swatches:['#ea580c','#dc2626','#f59e0b'],
+    colors:{ bg:'#fef9f0', surface:'#fff7ed', soft:'#fed7aa', text:'#431407', muted:'#92400e', border:'rgba(234,88,12,.15)' }
+  },
+  {
+    key:'burger_red', group:'lanches', nome:'Burger Red', desc:'Forte para hamburgueria e fast food.',
+    tags:['Burger','Fast food'], accent:'#dc2626', swatches:['#dc2626','#f97316','#facc15'],
+    colors:{ bg:'#fff6ed', surface:'#fffaf5', soft:'#fbc891', text:'#3b1606', muted:'#9a3412', border:'rgba(194,65,12,.14)' }
+  },
+  {
+    key:'pizzaria_italia', group:'lanches', nome:'Pizzaria Italia', desc:'Tradicional, bom para pizzas e massas.',
+    tags:['Pizza','Massas'], accent:'#dc2626', swatches:['#dc2626','#15803d','#b45309'],
+    colors:{ bg:'#fbf7ef', surface:'#ffffff', soft:'#f8d8b3', text:'#332014', muted:'#7d5a3a', border:'rgba(127,29,29,.12)' }
+  },
+  {
+    key:'noite_delivery', group:'lanches', nome:'Noite Delivery', desc:'Escuro, pratico e forte para madrugada.',
+    tags:['Delivery','Noite'], accent:'#22c55e', swatches:['#22c55e','#f97316','#38bdf8'],
+    colors:{ bg:'#0e1118', surface:'#161b24', soft:'#293244', text:'#f8fafc', muted:'#9aa4b2', border:'rgba(255,255,255,.08)' }
+  },
+  {
+    key:'verde', group:'naturais', nome:'Verde Natural', desc:'Leve para comida saudavel.',
+    tags:['Saudavel','Natural'], accent:'#16a34a', swatches:['#16a34a','#0f766e','#84cc16'],
+    colors:{ bg:'#f0faf2', surface:'#ffffff', soft:'#d1ecda', text:'#0d2b18', muted:'#3a7a52', border:'rgba(34,120,60,.12)' }
+  },
+  {
+    key:'fresh_verde', group:'naturais', nome:'Fresh Verde', desc:'Fresco para saladas, marmitas e fit.',
+    tags:['Fit','Fresh'], accent:'#10b981', swatches:['#10b981','#22c55e','#0284c7'],
+    colors:{ bg:'#f4fbf6', surface:'#ffffff', soft:'#cfeade', text:'#10291d', muted:'#3f7459', border:'rgba(22,101,52,.10)' }
+  },
+  {
+    key:'mercado_azul', group:'naturais', nome:'Mercado Azul', desc:'Organizado para mercado e conveniencia.',
+    tags:['Mercado','Confiavel'], accent:'#2563eb', swatches:['#2563eb','#0891b2','#16a34a'],
+    colors:{ bg:'#f3f8ff', surface:'#ffffff', soft:'#c8defa', text:'#10243c', muted:'#46637f', border:'rgba(37,99,235,.10)' }
+  },
+  {
+    key:'acougue', group:'segmentos', nome:'Acougue', desc:'Escuro e robusto para carnes.',
+    tags:['Carnes','Churrasco'], accent:'#dc2626', swatches:['#dc2626','#991b1b','#f97316'],
+    colors:{ bg:'#1a0a05', surface:'#2a100a', soft:'#4a2018', text:'#f5e6e0', muted:'#c9a090', border:'rgba(220,80,30,.2)' }
+  },
+  {
+    key:'acai_berry', group:'segmentos', nome:'Acai Berry', desc:'Vivo para acai, sorvetes e sobremesas.',
+    tags:['Acai','Sobremesa'], accent:'#a21caf', swatches:['#a21caf','#be185d','#7c3aed'],
+    colors:{ bg:'#fff7fb', surface:'#ffffff', soft:'#edc4dc', text:'#351123', muted:'#8a3a63', border:'rgba(134,25,80,.12)' }
+  },
+  {
+    key:'sushi_black', group:'segmentos', nome:'Sushi Black', desc:'Escuro elegante para sushi e oriental.',
+    tags:['Sushi','Oriental'], accent:'#06b6d4', swatches:['#06b6d4','#ef4444','#22c55e'],
+    colors:{ bg:'#070b0c', surface:'#101719', soft:'#203437', text:'#edfafa', muted:'#93b5b8', border:'rgba(125,211,252,.10)' }
+  },
+  {
+    key:'padaria_gold', group:'segmentos', nome:'Padaria Gold', desc:'Aconchegante para padaria e cafe.',
+    tags:['Padaria','Cafe'], accent:'#d97706', swatches:['#d97706','#b45309','#78350f'],
+    colors:{ bg:'#fff8ee', surface:'#fffdf8', soft:'#f5d29a', text:'#352411', muted:'#815c2b', border:'rgba(180,83,9,.12)' }
+  },
+  {
+    key:'rose', group:'segmentos', nome:'Rose', desc:'Delicado para doces, cafes e presentes.',
+    tags:['Doces','Cafe'], accent:'#e11d48', swatches:['#e11d48','#db2777','#f97316'],
+    colors:{ bg:'#fff5f7', surface:'#ffffff', soft:'#ffc9d5', text:'#3d0a14', muted:'#a03050', border:'rgba(220,60,90,.12)' }
+  },
+  {
+    key:'dark', group:'premium', nome:'Dark Luxo', desc:'Escuro premium para restaurantes.',
+    tags:['Escuro','Luxo'], accent:'#3b82f6', swatches:['#3b82f6','#f97316','#a855f7'],
+    colors:{ bg:'#0f1117', surface:'#181b24', soft:'#242840', text:'#e5e7eb', muted:'#9ca3af', border:'rgba(255,255,255,.08)' }
+  },
+  {
+    key:'noturno', group:'premium', nome:'Noturno', desc:'Profundo para bares e operacao noturna.',
+    tags:['Bar','Noite'], accent:'#8b5cf6', swatches:['#8b5cf6','#22c55e','#f97316'],
+    colors:{ bg:'#080810', surface:'#0f0f1c', soft:'#1e1e30', text:'#eeedf6', muted:'#7878a0', border:'rgba(255,255,255,.07)' }
+  },
+  {
+    key:'oceano', group:'premium', nome:'Oceano', desc:'Azul profundo para frutos do mar.',
+    tags:['Peixes','Sushi'], accent:'#0ea5e9', swatches:['#0ea5e9','#14b8a6','#2563eb'],
+    colors:{ bg:'#0a1628', surface:'#0f1f38', soft:'#1c3558', text:'#e0ecf8', muted:'#6890b0', border:'rgba(56,189,248,.10)' }
+  },
+  {
+    key:'dourado', group:'premium', nome:'Dourado', desc:'Luxuoso para churrascarias e restaurantes.',
+    tags:['Premium','Luxo'], accent:'#d4a574', swatches:['#d4a574','#f59e0b','#ef4444'],
+    colors:{ bg:'#0f0d08', surface:'#1a1610', soft:'#2e2820', text:'#f0e8d8', muted:'#a09070', border:'rgba(212,165,116,.12)' }
+  }
+];
+
+const _CP_TEMA_GRUPOS = [
+  { key:'essenciais', titulo:'Essenciais', desc:'Bases seguras para quase todo cardapio.' },
+  { key:'lanches', titulo:'Lanches e delivery', desc:'Mais energia visual para pedido rapido.' },
+  { key:'naturais', titulo:'Naturais e mercado', desc:'Cores leves para rotinas de compra.' },
+  { key:'segmentos', titulo:'Segmentos', desc:'Temas prontos para nichos especificos.' },
+  { key:'premium', titulo:'Escuros e premium', desc:'Visual mais marcante para marcas fortes.' },
+];
+
+function cpTemaPreviewHtml(t) {
+  const c = t.colors || {};
+  const accent = t.accent || '#f97316';
+  return `
+    <div class="cp-theme-preview" style="background:${c.bg || '#f8f9fb'}">
+      <div class="cp-theme-hero-mini" style="background:${c.surface || '#fff'};border-color:${c.border || 'rgba(0,0,0,.08)'}">
+        <span style="background:${c.text || '#111'}"></span>
+        <span style="background:${c.muted || '#777'}"></span>
+      </div>
+      <div class="cp-theme-products-mini">
+        <div style="background:${c.surface || '#fff'};border-color:${c.border || 'rgba(0,0,0,.08)'}">
+          <i style="background:${c.soft || '#e5e7eb'}"></i>
+          <b style="background:${c.text || '#111'}"></b>
+          <em style="background:${accent}"></em>
+        </div>
+        <div style="background:${c.surface || '#fff'};border-color:${c.border || 'rgba(0,0,0,.08)'}">
+          <i style="background:${c.soft || '#e5e7eb'}"></i>
+          <b style="background:${c.text || '#111'}"></b>
+          <em style="background:${accent}"></em>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function cpTemaSwatchesHtml(t) {
+  return (t.swatches || [t.accent || '#f97316']).map(cor => `
+    <button type="button" class="cp-theme-swatch" style="background:${cor}" title="Usar cor ${cor}"
+      onclick="event.stopPropagation();cpSetCor('${cor}');cpSelecionarTema('${t.key}')"></button>
+  `).join('');
+}
+
+function cpTemaCardHtml(t) {
+  const tags = (t.tags || []).map(tag => `<span class="cp-theme-tag">${tag}</span>`).join('');
+  return `
+    <button type="button" class="cp-tema-card cp-theme-card" data-tema="${t.key}"
+      onclick="cpSelecionarTema('${t.key}')" title="${t.desc}">
+      ${cpTemaPreviewHtml(t)}
+      <div class="cp-theme-info">
+        <div class="cp-theme-title-row">
+          <div>
+            <strong>${t.nome}</strong>
+            <small>${t.desc}</small>
+          </div>
+          <span class="cp-tema-check" aria-hidden="true">
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+        </div>
+        <div class="cp-theme-tags">${tags}</div>
+        <div class="cp-theme-swatches">${cpTemaSwatchesHtml(t)}</div>
+      </div>
+    </button>
+  `;
+}
+
+function cpUpdateTemaSelection(tema) {
+  document.querySelectorAll('.cp-tema-card').forEach(card => {
+    const isSelected = card.dataset.tema === tema;
+    card.style.borderColor = isSelected ? 'var(--accent)' : 'var(--border)';
+    card.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+    const check = card.querySelector('.cp-tema-check');
+    if (check) check.style.display = isSelected ? 'flex' : 'none';
+  });
+}
+
+function cpRenderTemasGrid() {
+  const grid = document.getElementById('cp-temas-grid');
+  if (!grid) return;
+
+  document.body.classList.add('cp-theme-rendered');
+  grid.className = 'cp-theme-grid';
+  grid.style.cssText = 'display:flex;flex-direction:column;gap:14px';
+
+  grid.innerHTML = _CP_TEMA_GRUPOS.map(grupo => {
+    const temas = _CP_CARDAPIO_TEMAS.filter(t => t.group === grupo.key);
+    if (!temas.length) return '';
+    return `
+      <section class="cp-theme-group">
+        <div class="cp-theme-group-head">
+          <div>
+            <strong>${grupo.titulo}</strong>
+            <span>${grupo.desc}</span>
+          </div>
+        </div>
+        <div class="cp-theme-list">${temas.map(cpTemaCardHtml).join('')}</div>
+      </section>
+    `;
+  }).join('');
+
+  const selected = document.getElementById('cp-tema-value')?.value || 'classico';
+  cpUpdateTemaSelection(selected);
+}
+
 function cpSetCorTexto(cor) {
   const el = document.getElementById('cp-cor-texto');
   if (el && cor) el.value = cor;
@@ -901,13 +1105,9 @@ function cpToggleCatsCarrossel(on) {
 }
 
 function cpSelecionarTema(tema) {
+  if (!document.querySelector('#cp-temas-grid .cp-theme-card')) cpRenderTemasGrid();
   // Atualiza borda visual de cada card
-  document.querySelectorAll('.cp-tema-card').forEach(card => {
-    const isSelected = card.dataset.tema === tema;
-    card.style.borderColor = isSelected ? 'var(--accent)' : 'transparent';
-    const check = card.querySelector('.cp-tema-check');
-    if (check) check.style.display = isSelected ? 'flex' : 'none';
-  });
+  cpUpdateTemaSelection(tema);
   // Armazena tema selecionado no input oculto
   let inp = document.getElementById('cp-tema-value');
   if (!inp) {
