@@ -1360,19 +1360,83 @@ function _adminAnnTextStyle(a) {
 function _renderAdminAnnouncements() {
   const el = document.getElementById('admin-announcements-strip');
   if (!el) return;
-  if (!_adminAnnouncements.length) {
+  const banners = _adminAnnouncements.filter(a => {
+    const mode = String(a.display_mode || 'banner').toLowerCase();
+    return mode === 'banner' || mode === 'both';
+  });
+  if (!banners.length) {
     el.classList.add('is-empty');
     el.innerHTML = '';
     return;
   }
   el.classList.remove('is-empty');
-  const visible = _adminAnnouncements.slice(0, 3);
+  const visible = banners.slice(0, 3);
   el.innerHTML = visible.map(a => `
     <div class="admin-ann-card" data-tipo="${_adminAnnEscape(a.tipo || 'aviso')}" style="${_adminAnnEscape(_adminAnnStyle(a))}" title="${_adminAnnEscape((a.titulo ? a.titulo + ': ' : '') + a.mensagem)}">
       <span class="admin-ann-type" style="${_adminAnnEscape(_adminAnnTextStyle(a))}">${_adminAnnTipoLabel(a.tipo)}</span>
       <span class="admin-ann-text" style="${_adminAnnEscape(_adminAnnTextStyle(a))}">${a.titulo ? `<strong style="${_adminAnnEscape(_adminAnnTextStyle(a))}">${_adminAnnEscape(a.titulo)}</strong>` : ''}${_adminAnnEscape(a.mensagem || '')}</span>
     </div>
-  `).join('') + (_adminAnnouncements.length > visible.length ? `<span class="admin-ann-more">+${_adminAnnouncements.length - visible.length}</span>` : '');
+  `).join('') + (banners.length > visible.length ? `<span class="admin-ann-more">+${banners.length - visible.length}</span>` : '');
+}
+
+function _adminAnnPopupKey(a) {
+  const tid = _sessao?.tenant_id || 'tenant';
+  const ver = String(a.updated_at || a.created_at || '');
+  return `admin_popup_seen:${tid}:${a.id}:${ver}`;
+}
+
+function _adminAnnPopupSeen(a) {
+  try { return localStorage.getItem(_adminAnnPopupKey(a)) === '1'; } catch(e) { return false; }
+}
+
+function fecharAdminAnnouncementPopup() {
+  const el = document.getElementById('admin-ann-popup');
+  const id = el?.dataset?.alertId;
+  const alert = _adminAnnouncements.find(a => String(a.id) === String(id));
+  if (alert) {
+    try { localStorage.setItem(_adminAnnPopupKey(alert), '1'); } catch(e) {}
+  }
+  el?.remove();
+}
+
+function _renderAdminAnnouncementPopup() {
+  const popup = _adminAnnouncements.find(a => {
+    const mode = String(a.display_mode || 'banner').toLowerCase();
+    return (mode === 'popup' || mode === 'both') && !_adminAnnPopupSeen(a);
+  });
+  const current = document.getElementById('admin-ann-popup');
+  if (!popup) { current?.remove(); return; }
+  if (current?.dataset?.alertId === String(popup.id)) return;
+  current?.remove();
+
+  const bg = _adminAnnColor(popup.bg_color) || '#0ea5e9';
+  const tx = _adminAnnColor(popup.text_color) || '#ffffff';
+  const font = _adminAnnFont(popup.font_family);
+  const wrap = document.createElement('div');
+  wrap.id = 'admin-ann-popup';
+  wrap.dataset.alertId = String(popup.id);
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:10090;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,23,42,.62);backdrop-filter:blur(7px)';
+  wrap.innerHTML = `
+    <div style="width:min(540px,94vw);background:var(--surface);border:1px solid var(--border);border-radius:22px;box-shadow:0 28px 90px rgba(2,6,23,.48);overflow:hidden;font-family:${font}">
+      <div style="position:relative;padding:22px 24px 20px;background:${bg};color:${tx}">
+        <button type="button" id="admin-ann-popup-close" aria-label="Fechar comunicado" style="position:absolute;right:14px;top:14px;width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.38);background:rgba(255,255,255,.16);color:${tx};cursor:pointer;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center">x</button>
+        <div style="display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.32);background:rgba(255,255,255,.14);border-radius:999px;padding:6px 10px;font-size:11px;font-weight:900;text-transform:uppercase;margin-bottom:14px;color:${tx}">
+          ${_adminAnnEscape(_adminAnnTipoLabel(popup.tipo))}
+        </div>
+        <div style="font-size:24px;font-weight:900;line-height:1.12;padding-right:42px;color:${tx}">${_adminAnnEscape(popup.titulo || 'Comunicado')}</div>
+      </div>
+      <div style="padding:22px 24px 24px;background:var(--surface);color:var(--text)">
+        <div style="font-size:15px;line-height:1.58;color:var(--text);white-space:pre-wrap">${_adminAnnEscape(popup.mensagem || '')}</div>
+        <div style="display:flex;justify-content:flex-end;margin-top:22px">
+          <button type="button" id="admin-ann-popup-ok" class="btn bp" style="min-width:120px;justify-content:center">Entendi</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+  document.getElementById('admin-ann-popup-close')?.addEventListener('click', fecharAdminAnnouncementPopup);
+  document.getElementById('admin-ann-popup-ok')?.addEventListener('click', fecharAdminAnnouncementPopup);
+  wrap.addEventListener('click', e => { if (e.target === wrap) fecharAdminAnnouncementPopup(); });
 }
 
 async function carregarAdminAnnouncementsGestor() {
@@ -1383,6 +1447,7 @@ async function carregarAdminAnnouncementsGestor() {
     const rows = r.ok ? await r.json() : [];
     _adminAnnouncements = Array.isArray(rows) ? rows : [];
     _renderAdminAnnouncements();
+    _renderAdminAnnouncementPopup();
   } catch(e) {
     console.warn('[admin-alerts] erro:', e?.message || e);
   }

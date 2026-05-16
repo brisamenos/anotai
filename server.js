@@ -216,6 +216,7 @@ db.exec(`
     tipo TEXT DEFAULT 'aviso',
     titulo TEXT,
     mensagem TEXT NOT NULL,
+    display_mode TEXT DEFAULT 'banner',
     bg_color TEXT DEFAULT '',
     text_color TEXT DEFAULT '',
     font_family TEXT DEFAULT '',
@@ -602,6 +603,7 @@ const MIGRATIONS = [
       tipo TEXT DEFAULT 'aviso',
       titulo TEXT,
       mensagem TEXT NOT NULL,
+      display_mode TEXT DEFAULT 'banner',
       bg_color TEXT DEFAULT '',
       text_color TEXT DEFAULT '',
       font_family TEXT DEFAULT '',
@@ -760,6 +762,9 @@ const MIGRATIONS = [
     `ALTER TABLE orders ADD COLUMN updated_at TEXT`,
     `UPDATE orders SET updated_at = created_at WHERE updated_at IS NULL`
   ] },
+  { version:58, description:'modo popup para comunicados admin', up:
+    `ALTER TABLE admin_alerts ADD COLUMN display_mode TEXT DEFAULT 'banner'`
+  },
 ]
 
 function runMigrations() {
@@ -804,6 +809,8 @@ const HAS_ORDERS_UPDATED_AT = garantirColuna(
   "TEXT",
   "UPDATE orders SET updated_at = created_at WHERE updated_at IS NULL"
 )
+
+garantirColuna('admin_alerts', 'display_mode', "TEXT DEFAULT 'banner'")
 
 // ── Backfill order_num para pedidos existentes ────────────────────────────
 try {
@@ -1233,7 +1240,7 @@ const TABLE_COLS = {
   contas_pagar: ['id','tenant_id','descricao','valor','vencimento','categoria','fornecedor_id','recorrente','recorrencia','status','pago_em','obs','created_at'],
   faturas:      ['id','tenant_id','plano','valor','meses','metodo','status','link_pagamento','mp_payment_id','mp_external_ref','qr_code','qr_code_base64','vence_em','pago_em','cancelado_em','obs','created_at'],
   admin_audit_log: ['id','admin_id','admin_nome','admin_email','acao','alvo_tipo','alvo_id','alvo_nome','detalhes','ip','user_agent','created_at'],
-  admin_alerts: ['id','tipo','titulo','mensagem','bg_color','text_color','font_family','target_all','target_tenants','ativo','created_by','created_at','updated_at','expires_at'],
+  admin_alerts: ['id','tipo','titulo','mensagem','display_mode','bg_color','text_color','font_family','target_all','target_tenants','ativo','created_by','created_at','updated_at','expires_at'],
 }
 // Colunas que NUNCA aparecem na resposta GET — mas ainda funcionam como filtro WHERE e em escrita
 const STRIP_FROM_OUTPUT = {

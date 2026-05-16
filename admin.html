@@ -945,7 +945,7 @@ td{padding:12px 16px;color:#dce6f7}
         <div class="sec-head">
           <div>
             <div class="sec-head-title">Comunicados</div>
-            <div class="sec-head-sub">Envie alertas, promoções e avisos para o topo do painel dos gestores em tempo real</div>
+            <div class="sec-head-sub">Envie alertas, promoções e avisos no topo ou em popup ao abrir o gestor</div>
           </div>
           <button class="btn bp" onclick="salvarComunicadoAdmin()" id="com-save-btn">Enviar comunicado</button>
         </div>
@@ -955,12 +955,12 @@ td{padding:12px 16px;color:#dce6f7}
             <div class="card-head">
               <div>
                 <div class="card-title">Novo comunicado</div>
-                <div class="card-sub">Aparece no espaço azul ao lado da logo no gestor</div>
+                <div class="card-sub">Escolha se aparece no topo, em popup ao abrir, ou nos dois lugares</div>
               </div>
               <button class="btn bg2 bsm" onclick="limparComunicadoAdmin()">Limpar</button>
             </div>
             <input type="hidden" id="com-id">
-            <div style="display:grid;grid-template-columns:160px 1fr;gap:12px;margin-bottom:12px">
+            <div style="display:grid;grid-template-columns:150px 180px 1fr;gap:12px;margin-bottom:12px">
               <div>
                 <label class="f-label">Tipo</label>
                 <select id="com-tipo" class="minput">
@@ -968,6 +968,14 @@ td{padding:12px 16px;color:#dce6f7}
                   <option value="promocao">Promoção</option>
                   <option value="alerta">Alerta</option>
                   <option value="novidade">Novidade</option>
+                </select>
+              </div>
+              <div>
+                <label class="f-label">Exibição</label>
+                <select id="com-display-mode" class="minput">
+                  <option value="banner">Topo do gestor</option>
+                  <option value="popup">Popup ao abrir</option>
+                  <option value="both">Topo + popup</option>
                 </select>
               </div>
               <div>
@@ -2320,6 +2328,11 @@ const _COM_FONT_LABELS = {
   'serif':'Serifada',
   'mono':'Mono'
 };
+const _COM_DISPLAY_LABELS = {
+  banner: 'Topo',
+  popup: 'Popup',
+  both: 'Topo + popup'
+};
 
 function _comTipoInfo(tipo) {
   return _COM_TIPOS[tipo] || _COM_TIPOS.aviso;
@@ -2327,6 +2340,10 @@ function _comTipoInfo(tipo) {
 
 function _comFontLabel(font) {
   return _COM_FONT_LABELS[font] || _COM_FONT_LABELS.outfit;
+}
+
+function _comDisplayLabel(mode) {
+  return _COM_DISPLAY_LABELS[mode] || _COM_DISPLAY_LABELS.banner;
 }
 
 function _comSelecionados() {
@@ -2381,6 +2398,7 @@ function marcarTodosComunicadoAdmin(on) {
 function limparComunicadoAdmin() {
   document.getElementById('com-id').value = '';
   document.getElementById('com-tipo').value = 'aviso';
+  document.getElementById('com-display-mode').value = 'banner';
   document.getElementById('com-titulo').value = '';
   document.getElementById('com-mensagem').value = '';
   document.getElementById('com-bg-color').value = '#0ea5e9';
@@ -2437,6 +2455,7 @@ function renderComunicadosAdmin() {
         <div style="min-width:0">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap">
             <span class="badge ${tipo.cls}">${tipo.label}</span>
+            <span class="badge bg-gray">${_comDisplayLabel(c.display_mode || 'banner')}</span>
             <span class="badge ${ativo ? 'bg-green' : 'bg-gray'}">${ativo ? 'Ativo' : 'Pausado'}</span>
             <span style="font-size:11px;color:var(--muted)">${escapeHtml(exp)}</span>
           </div>
@@ -2464,6 +2483,7 @@ function editarComunicadoAdmin(id) {
   if (!c) return;
   document.getElementById('com-id').value = c.id;
   document.getElementById('com-tipo').value = c.tipo || 'aviso';
+  document.getElementById('com-display-mode').value = c.display_mode || 'banner';
   document.getElementById('com-titulo').value = c.titulo || '';
   document.getElementById('com-mensagem').value = c.mensagem || '';
   document.getElementById('com-bg-color').value = c.bg_color || '#0ea5e9';
@@ -2487,6 +2507,7 @@ async function salvarComunicadoAdmin() {
   const targetAll = (document.querySelector('input[name="com-target"]:checked')?.value || 'all') === 'all';
   const body = {
     tipo: document.getElementById('com-tipo')?.value || 'aviso',
+    display_mode: document.getElementById('com-display-mode')?.value || 'banner',
     titulo: document.getElementById('com-titulo')?.value || '',
     mensagem: document.getElementById('com-mensagem')?.value || '',
     bg_color: document.getElementById('com-bg-color')?.value || '',
