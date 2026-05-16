@@ -784,6 +784,27 @@ function runMigrations() {
 }
 runMigrations()
 
+function garantirColuna(table, column, definition, afterAddSql = null) {
+  try {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name)
+    if (cols.includes(column)) return true
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+    if (afterAddSql) db.exec(afterAddSql)
+    log('✅', `Schema guard: coluna ${table}.${column} criada`)
+    return true
+  } catch(e) {
+    log('⚠️', `Schema guard falhou para ${table}.${column}:`, e.message)
+    return false
+  }
+}
+
+const HAS_ORDERS_UPDATED_AT = garantirColuna(
+  'orders',
+  'updated_at',
+  "TEXT DEFAULT (datetime('now'))",
+  "UPDATE orders SET updated_at = created_at WHERE updated_at IS NULL"
+)
+
 // ── Backfill order_num para pedidos existentes ────────────────────────────
 try {
   const _needsBackfill = db.prepare('SELECT COUNT(*) as cnt FROM orders WHERE order_num IS NULL').get()
@@ -990,6 +1011,7 @@ function registrarMovimentoFinalizacaoAuto(tid, order) {
 
 function finalizarPedidosSaiuAntigos() {
   try {
+    if (!HAS_ORDERS_UPDATED_AT) return
     const rows = db.prepare(
       `SELECT * FROM orders
        WHERE status='saiu'
