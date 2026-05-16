@@ -278,6 +278,14 @@
 
   async _run() {
     const url = `${API_BASE}/${this._table}${this._params.toString() ? "?" + this._params.toString() : ""}`;
+    if (this._method === 'POST' && this._table === 'orders' && this._body && typeof this._body === 'object' && !Array.isArray(this._body) && !this._body.client_request_id) {
+      let reqId = '';
+      try {
+        if (window.crypto?.randomUUID) reqId = 'ord_' + window.crypto.randomUUID();
+      } catch(e) {}
+      if (!reqId) reqId = 'ord_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 12);
+      this._body = { ...this._body, client_request_id: reqId };
+    }
     const hdrs = defaultHeaders(this._headers);
     if (this._single) hdrs['Prefer'] = (hdrs['Prefer'] ? hdrs['Prefer'] + ',' : '') + 'single';
 

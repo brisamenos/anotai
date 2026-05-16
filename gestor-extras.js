@@ -59,12 +59,12 @@ async function _histBuscar() {
     const statusMap = {
       analise:'⏳ Análise', producao:'👨‍🍳 Produção', pronto:'✅ Pronto',
       entregue:'📦 Entregue', finalizado:'✅ Finalizado', cancelado:'❌ Cancelado',
-      mesa_aberta:'🍽️ Mesa aberta', aguardando_pix:'💠 Aguard. PIX'
+      mesa_aberta:'🍽️ Mesa aberta', aguardando_pix:'💠 Aguard. PIX', aguardando_cartao:'Aguard. cartao'
     };
     const statusColor = {
       analise:'var(--accent3)', producao:'var(--accent)', pronto:'var(--success)',
       entregue:'var(--success)', finalizado:'var(--success)', cancelado:'var(--danger)',
-      mesa_aberta:'var(--purple)', aguardando_pix:'var(--accent3)'
+      mesa_aberta:'var(--purple)', aguardando_pix:'var(--accent3)', aguardando_cartao:'var(--accent3)'
     };
 
     list.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">

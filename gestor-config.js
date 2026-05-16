@@ -77,8 +77,75 @@ async function confirmarZerarPedidos() {
 }
 
 // ── Configurações ─────────────────────────────────────
+function _resetDiarioDataLabel(iso) {
+  const parts = String(iso || '').split('-');
+  if (parts.length === 3 && parts[0].length === 4) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return 'ainda nao executado';
+}
+
+function _renderResetDiarioConfig() {
+  const toggle = document.getElementById('cfg-reset-diario-toggle');
+  const status = document.getElementById('cfg-reset-diario-status');
+  const badge  = document.getElementById('cfg-reset-diario-badge');
+  const ativo  = !!_orderAutoResetDaily;
+
+  if (toggle) {
+    if ('checked' in toggle) toggle.checked = ativo;
+    else toggle.classList.toggle('on', ativo);
+    toggle.setAttribute('aria-pressed', ativo ? 'true' : 'false');
+  }
+  if (status) {
+    status.textContent = ativo
+      ? `Ativo. Vai zerar automaticamente todo dia as 00:00 (horario de Brasilia). Ultimo reset: ${_resetDiarioDataLabel(_orderAutoResetLastDate)}.`
+      : 'Desativado por padrao. Ao ativar, zera no proximo 00:00 (horario de Brasilia).';
+  }
+  if (badge) {
+    badge.textContent = ativo ? 'Ativo' : 'Desativado';
+    badge.style.background = ativo ? 'rgba(34,197,94,.12)' : 'rgba(148,163,184,.14)';
+    badge.style.borderColor = ativo ? 'rgba(34,197,94,.28)' : 'rgba(148,163,184,.24)';
+    badge.style.color = ativo ? 'var(--success)' : 'var(--muted)';
+  }
+}
+
+async function toggleResetDiarioPedidos(input) {
+  const isCheckbox = !!input && 'checked' in input;
+  const ativar = isCheckbox ? !!input.checked : !input?.classList?.contains('on');
+  if (input && !isCheckbox) input.classList.toggle('on', ativar);
+  if (input) {
+    input.disabled = true;
+    input.style.pointerEvents = 'none';
+    input.style.opacity = '.65';
+  }
+  try {
+    const { error } = await sb.from('store_config')
+      .update({ order_auto_reset_daily: ativar ? 1 : 0 })
+      .eq('tenant_id', _sessao.tenant_id);
+    if (error) throw error;
+
+    _orderAutoResetDaily = ativar;
+    _renderResetDiarioConfig();
+    sbToast('ok', ativar
+      ? 'Reset diario ativado. Vai zerar no proximo 00:00 de Brasilia.'
+      : 'Reset diario desativado.');
+  } catch(e) {
+    if (input) {
+      if (isCheckbox) input.checked = !ativar;
+      else input.classList.toggle('on', !ativar);
+    }
+    sbToast('err', 'Erro ao salvar reset diario: ' + (e?.message || e || 'Tente novamente'));
+    _renderResetDiarioConfig();
+  } finally {
+    if (input) {
+      input.disabled = false;
+      input.style.pointerEvents = '';
+      input.style.opacity = '';
+    }
+  }
+}
+
 async function _renderConfiguracoes() {
   renderSoundConfig();
+  _renderResetDiarioConfig();
   const el = document.getElementById('cfg-prox-pedido');
   if (!el) return;
   try {

@@ -4894,6 +4894,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         db.prepare('UPDATE store_config SET order_num_offset=? WHERE tenant_id=?').run(offset, tid)
       })()
       marcarDirty()
+      sseBroadcast(`store-config-rt:${tid}`, 'store_config:UPDATE', { tenant_id: tid, order_num_offset: offset })
       sseBroadcast(`orders-rt:${tid}`, 'store_config:UPDATE', { tenant_id: tid, order_num_offset: offset })
       send(res, 200, { ok: true, order_num_offset: offset, next_order_num: 1 })
     } catch (e) {

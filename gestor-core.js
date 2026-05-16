@@ -435,7 +435,7 @@ async function loadAllData(silent = false) {
       safe(sb.from('menu_items').select('*').order('sort_order').order('id')),
       safe(sb.from('categories').select('*').order('sort_order')),
       // Status ativos (análise até saiu) — sem limite, todos entram no kanban
-      safe(sb.from('orders').select('*').in('status',['aguardando_pix','analise','producao','pronto','saiu']).order('id',{ascending:false})),
+      safe(sb.from('orders').select('*').in('status',['aguardando_pix','aguardando_cartao','analise','producao','pronto','saiu']).order('id',{ascending:false})),
       // Status "entregue" — sempre busca (limitado a 30 mais recentes de hoje).
       // No açougue, aparecem na coluna "Entregue".
       // No restaurante, ficam no array mas a coluna está oculta — não é problema (custo de memória é pequeno).
@@ -454,7 +454,7 @@ async function loadAllData(silent = false) {
       safe(sb.from('estoque').select('*').order('id')),
       safe(sb.from('estoque_receitas').select('*').order('id')),
       safe(sb.from('fidelidade').select('*').order('pts',{ascending:false})),
-      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema,order_num_offset,taxa_servico_pct,store_tempo_entrega,store_tempo_retirada').single()),
+      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema,order_num_offset,order_auto_reset_daily,order_auto_reset_last_date,taxa_servico_pct,store_tempo_entrega,store_tempo_retirada').single()),
       safe(sb.from('orders').select('*').eq('status','mesa_aberta').order('id',{ascending:false}))
     ]);
 
@@ -464,7 +464,9 @@ async function loadAllData(silent = false) {
       type: c.type||'Itens principais', promo:!!c.promo, open:false
     }));
     // Merge pedidos ativos + pedidos entregue recentes
-    const _ativos   = (ordersRes?.data || []).filter(o => !(o.status === 'aguardando_pix' && o.pag !== 'pix_manual'));
+    const _ordersAtivosRaw = ordersRes?.data || [];
+    pendingOnlineOrders = _ordersAtivosRaw.filter(o => o.status === 'aguardando_cartao' || (o.status === 'aguardando_pix' && o.pag !== 'pix_manual'));
+    const _ativos   = _ordersAtivosRaw.filter(o => o.status !== 'aguardando_cartao' && !(o.status === 'aguardando_pix' && o.pag !== 'pix_manual'));
     const _entreg   = (ordersEntregueRes?.data || []);
     const _todosPed = [..._ativos, ..._entreg];
     // FORÇA: PIX online (pix_mp) NUNCA pode estar em análise no kanban. Sempre produção.
@@ -541,6 +543,8 @@ async function loadAllData(silent = false) {
     // Aplica estado do caixa e loja
     if (cfgRes.data) {
       _orderNumOffset = parseInt(cfgRes.data.order_num_offset) || 0;
+      _orderAutoResetDaily = cfgRes.data.order_auto_reset_daily === true || cfgRes.data.order_auto_reset_daily === 1 || cfgRes.data.order_auto_reset_daily === '1';
+      _orderAutoResetLastDate = cfgRes.data.order_auto_reset_last_date || '';
       _taxaServicoPct = parseFloat(cfgRes.data.taxa_servico_pct) || 0;
       _setTemposPedidoConfig({
         retirada: cfgRes.data.store_tempo_retirada ?? '30-40 min',
@@ -905,8 +909,12 @@ function subscribeOrders() {
     .on('postgres_changes', {event:'INSERT', schema:'public', table:'orders'}, p => {
       // Pedido aguardando cartão não entra no kanban — só após pagamento online confirmado
       // PIX manual entra no kanban na coluna "analise" para o gestor confirmar o recebimento
-      if (p.new.status === 'aguardando_cartao') return;
-      if (p.new.status === 'aguardando_pix' && p.new.pag !== 'pix_manual') return;
+      if (p.new.status === 'aguardando_cartao' || (p.new.status === 'aguardando_pix' && p.new.pag !== 'pix_manual')) {
+        pendingOnlineOrders = [p.new, ...pendingOnlineOrders.filter(o => o.id !== p.new.id)];
+        if (p.new.id > _maxKnownOrderId) { _maxKnownOrderId = p.new.id; _saveMaxKnownOrderId(); }
+        if (typeof renderPendingPaymentsAlert === 'function') renderPendingPaymentsAlert();
+        return;
+      }
       if (p.new.status === 'entregue') return; // bebidas de mesa já entregues não entram no kanban
       if (p.new.status === 'mesa_aberta') {
         // Comanda única de mesa — vai ao cache do salão, não ao kanban
@@ -962,6 +970,13 @@ function subscribeOrders() {
       _syncSwState();
     })
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'orders'}, p => {
+      const _stillPendingOnline = p.new.status === 'aguardando_cartao' || (p.new.status === 'aguardando_pix' && p.new.pag !== 'pix_manual');
+      if (_stillPendingOnline) {
+        pendingOnlineOrders = [p.new, ...pendingOnlineOrders.filter(o => o.id !== p.new.id)];
+      } else {
+        pendingOnlineOrders = pendingOnlineOrders.filter(o => o.id !== p.new.id);
+      }
+      if (typeof renderPendingPaymentsAlert === 'function') renderPendingPaymentsAlert();
       // FORÇA: PIX online (pix_mp) NUNCA pode ficar em análise. Sempre produção.
       if (p.new.pag === 'pix_mp' && p.new.status === 'analise') {
         p.new.status = 'producao';
@@ -1112,11 +1127,16 @@ function subscribeOrders() {
 
   const chConfig = sb.channel('store-config-rt')
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'store_config'}, p => {
-      const st = document.getElementById('status-txt');
-      if (!st) return;
-      const open = p.new.store_open;
-      st.style.color = open ? 'var(--success)' : 'var(--danger)';
-      st.textContent = open ? 'Online' : 'Offline';
+      const cfg = p.new || {};
+      if (Object.prototype.hasOwnProperty.call(cfg, 'store_open')) {
+        const st = document.getElementById('status-txt');
+        const open = cfg.store_open;
+        if (st) {
+          st.style.color = open ? 'var(--success)' : 'var(--danger)';
+          st.textContent = open ? 'Online' : 'Offline';
+        }
+      }
+      _applyStoreConfigUpdate(cfg);
     })
     .subscribe();
 
@@ -1302,6 +1322,12 @@ function _subscribeOrdersSSE() {
         renderKanban();
       }
     } catch(err) { console.error('[ORDERS-SSE] error:', err); }
+  });
+
+  _ordersSSE.addEventListener('store_config:UPDATE', (e) => {
+    try {
+      _applyStoreConfigUpdate(JSON.parse(e.data) || {});
+    } catch(err) { console.error('[STORE-CONFIG-SSE] error:', err); }
   });
 
   _ordersSSE.onerror = () => {
@@ -1651,7 +1677,7 @@ setInterval(async () => {
     {
       const q = sb.from('orders')
         .select('*')
-        .in('status', ['aguardando_pix','analise','producao','pronto','saiu','entregue'])
+        .in('status', ['aguardando_pix','aguardando_cartao','analise','producao','pronto','saiu','entregue'])
         .order('id', {ascending:false});
       // Quando _maxKnownOrderId > 0 usa filtro eficiente; quando 0 varre todos os ativos
       if (_maxKnownOrderId > 0) q.gt('id', _maxKnownOrderId);
@@ -1663,7 +1689,12 @@ setInterval(async () => {
           if (!ordersKanban.find(x => x.id === o.id)) {
             // PIX online Mercado Pago ainda nao pago: nao entra no gestor, nao alerta e nao imprime.
             // Ele aparece quando o MP confirmar e o servidor mudar para status='producao', pag='pix_mp'.
-            if (o.status === 'aguardando_pix' && o.pag !== 'pix_manual') continue;
+            if (o.status === 'aguardando_cartao' || (o.status === 'aguardando_pix' && o.pag !== 'pix_manual')) {
+              pendingOnlineOrders = [o, ...pendingOnlineOrders.filter(p => p.id !== o.id)];
+              if (typeof renderPendingPaymentsAlert === 'function') renderPendingPaymentsAlert();
+              if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id;
+              continue;
+            }
             // Pedidos de mesa que acabaram de ser pagos (entregue) não devem entrar no kanban
             // nem disparar notificação — são comandas finalizadas, não pedidos novos
             if (o.status === 'entregue' && o.mesa_num) { if (o.id > _maxKnownOrderId) _maxKnownOrderId = o.id; continue; }
@@ -2614,10 +2645,36 @@ let editingId=null, garcomCart=[], garcomMesa='';
 let items        = [];
 let categories   = [];
 let ordersKanban = [];
+let pendingOnlineOrders = [];
 let _orderNumOffset = 0;   // offset salvo em store_config (fallback para pedidos antigos sem order_num)
+let _orderAutoResetDaily = false;
+let _orderAutoResetLastDate = '';
 let _taxaServicoPct = 0;   // % taxa de serviço do garçom (opcional no fechamento de mesa)
 let _tempoRetiradaPedido = '30-40 min';
 let _tempoDeliveryPedido = '';
+
+function _applyStoreConfigUpdate(cfg = {}) {
+  let remapOrders = false;
+  if (Object.prototype.hasOwnProperty.call(cfg, 'order_num_offset')) {
+    _orderNumOffset = parseInt(cfg.order_num_offset) || 0;
+    remapOrders = true;
+  }
+  if (Object.prototype.hasOwnProperty.call(cfg, 'order_auto_reset_daily')) {
+    _orderAutoResetDaily = cfg.order_auto_reset_daily === true || cfg.order_auto_reset_daily === 1 || cfg.order_auto_reset_daily === '1';
+  }
+  if (Object.prototype.hasOwnProperty.call(cfg, 'order_auto_reset_last_date')) {
+    _orderAutoResetLastDate = cfg.order_auto_reset_last_date || '';
+  }
+  if (Object.prototype.hasOwnProperty.call(cfg, 'taxa_servico_pct')) {
+    _taxaServicoPct = parseFloat(cfg.taxa_servico_pct) || 0;
+  }
+  if (remapOrders) {
+    ordersKanban = ordersKanban.map(o => ({ ...o, num: _orderNum(o.id, o.order_num) }));
+    if (typeof renderKanban === 'function') renderKanban();
+  }
+  if (typeof _renderConfiguracoes === 'function') _renderConfiguracoes();
+}
+
 function _orderNum(id, orderNum) {
   // Prefere order_num do servidor (sequencial por tenant), fallback para id - offset
   if (orderNum) return Number(orderNum);

@@ -117,7 +117,41 @@ function _buildMesaKanbanOrders() {
   return result;
 }
 
+function renderPendingPaymentsAlert() {
+  const box = document.getElementById('pending-payments-alert');
+  if (!box) return;
+  const allRows = (typeof pendingOnlineOrders !== 'undefined' ? pendingOnlineOrders : [])
+    .filter(o => o && (o.status === 'aguardando_cartao' || (o.status === 'aguardando_pix' && o.pag !== 'pix_manual')));
+  const rows = allRows.slice(0, 5);
+  if (!rows.length) {
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  box.style.display = '';
+  const count = allRows.length;
+  const label = count === 1 ? '1 pedido aguardando pagamento online' : `${count} pedidos aguardando pagamento online`;
+  const items = rows.map(o => {
+    const num = String(typeof _orderNum === 'function' ? _orderNum(o.id, o.order_num) : (o.order_num || o.id)).padStart(3, '0');
+    const pay = o.status === 'aguardando_cartao' ? 'cartao' : 'PIX';
+    const client = String(o.client || 'Cliente').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+    const total = (parseFloat(o.total || 0) + parseFloat(o.taxa || 0)).toFixed(2).replace('.', ',');
+    return `<button onclick="document.getElementById('kanban-search-num').value='${num}';renderKanban()" style="display:inline-flex;align-items:center;gap:6px;margin:6px 6px 0 0;padding:6px 9px;border-radius:8px;border:1px solid rgba(245,158,11,.24);background:rgba(245,158,11,.08);color:var(--text);font:inherit;font-size:12px;cursor:pointer">#${num} - ${pay} - ${client} - R$ ${total}</button>`;
+  }).join('');
+  box.innerHTML = `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div>
+      <div style="font-size:12.5px;font-weight:800;color:#fbbf24">${label}</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:2px">Eles ficam fora do Kanban ate o pagamento confirmar, mas continuam no historico.</div>
+      <div>${items}</div>
+    </div>
+    <button class="btn bg" style="font-size:11px;padding:5px 10px" onclick="nav('historico');document.getElementById('hist-status').value='';histFiltrar()">Ver historico</button>
+  </div>`;
+}
+
 function renderKanban() {
+  renderPendingPaymentsAlert();
   // Layout: SEMPRE 4 colunas — fluxo unificado para restaurante e açougue.
   //   analise → producao → pronto → saiu pra entrega (delivery)
   //   Pedidos de balcão: clicar "Retirado!" finaliza direto do pronto.
@@ -357,12 +391,12 @@ async function _kanbanHistSearch(numQ, clientQ) {
     const statusMap = {
       analise: '⏳ Análise', producao: '👨‍🍳 Produção', pronto: '✅ Pronto',
       entregue: '📦 Entregue', finalizado: '✅ Finalizado', cancelado: '❌ Cancelado',
-      mesa_aberta: '🍽️ Mesa', aguardando_pix: '💠 PIX'
+      mesa_aberta: '🍽️ Mesa', aguardando_pix: '💠 PIX', aguardando_cartao: 'Cartao'
     };
     const statusColor = {
       analise: 'var(--accent3)', producao: 'var(--accent)', pronto: 'var(--success)',
       entregue: 'var(--success)', finalizado: 'var(--success)', cancelado: 'var(--danger)',
-      mesa_aberta: 'var(--purple)', aguardando_pix: 'var(--accent3)'
+      mesa_aberta: 'var(--purple)', aguardando_pix: 'var(--accent3)', aguardando_cartao: 'var(--accent3)'
     };
 
     list.innerHTML = _kanbanHistData.map(o => {

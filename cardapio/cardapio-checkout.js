@@ -223,6 +223,42 @@ function showWaToast(orderId, orderNum) {
 // ══════════════════════════════════════════
 //  SUBMIT
 // ══════════════════════════════════════════
+function _orderRequestStorageKey() {
+  return 'ef_pending_order_req_' + (_tenantId || 'global');
+}
+
+function _newOrderRequestId() {
+  try {
+    if (window.crypto?.randomUUID) return 'ord_' + window.crypto.randomUUID();
+  } catch(e) {}
+  return 'ord_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 12);
+}
+
+function _getOrderRequestId(signature) {
+  const key = _orderRequestStorageKey();
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(key) || 'null');
+    if (saved?.id && saved?.signature === signature) return saved.id;
+    const id = _newOrderRequestId();
+    sessionStorage.setItem(key, JSON.stringify({ id, signature, ts: Date.now() }));
+    return id;
+  } catch(e) {
+    return _newOrderRequestId();
+  }
+}
+
+function _clearOrderRequestId() {
+  try { sessionStorage.removeItem(_orderRequestStorageKey()); } catch(e) {}
+}
+
+function _buildOrderRequestSignature(data) {
+  try {
+    return JSON.stringify(data);
+  } catch(e) {
+    return String(Date.now());
+  }
+}
+
 async function submitOrder() {
   const name  = document.getElementById('f-name').value.trim();
   const phone = document.getElementById('f-phone').value.trim();
@@ -369,6 +405,21 @@ async function _doSubmitOrder(addr, troco) {
   const _grossTotal = displayTotal();
   const _cbDesconto = getCashbackDesconto();
   const _totalSemCashback = Math.max(0, cartSubtotal() - getDiscount());
+  const _clientRequestId = _getOrderRequestId(_buildOrderRequestSignature({
+    tenant_id: _tenantId,
+    client: name,
+    phone,
+    addr,
+    deliveryType,
+    selectedPay,
+    pag: selectedPay === 'pix' && !_pixAtivoGestor ? 'pix_manual' : selectedPay,
+    items,
+    total: grandTotal(),
+    taxa: getTaxa(),
+    troco: troco || null,
+    cupom: appliedCupom?.code || '',
+    cashback: _cbUsar ? _cbDesconto : 0
+  }));
 
   try {
     let customerId = _customer?.id || null;
@@ -437,6 +488,7 @@ async function _doSubmitOrder(addr, troco) {
 
     const { data: order, error } = await sb.from('orders').insert({
       tenant_id: _tenantId,
+      client_request_id: _clientRequestId,
       client: name, phone, addr,
       items, total: grandTotal(), taxa: getTaxa(),
       status: selectedPay === 'pix' ? 'aguardando_pix'
@@ -538,6 +590,7 @@ async function _doSubmitOrder(addr, troco) {
       u.searchParams.set('acompanhar', order.id);
       window.history.replaceState({}, '', u.toString());
     } catch(e) {}
+    _clearOrderRequestId();
 
     // Toast WhatsApp (apenas premium) — aparece 1.5s após confirmação
     if (_tenantPlano === 'premium') {

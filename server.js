@@ -80,7 +80,9 @@ db.exec(`
     store_tempo_entrega TEXT DEFAULT '30-45 min',
     store_tempo_retirada TEXT DEFAULT '30-40 min',
     store_avaliacao TEXT DEFAULT '5.0',
-    store_whatsapp TEXT, gestor_tema TEXT
+    store_whatsapp TEXT, gestor_tema TEXT,
+    order_auto_reset_daily INTEGER DEFAULT 0,
+    order_auto_reset_last_date TEXT
   );
   CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,6 +134,7 @@ db.exec(`
     total REAL DEFAULT 0, taxa REAL DEFAULT 0, pag TEXT DEFAULT 'dinheiro',
     troco REAL, status TEXT DEFAULT 'analise', mesa_num INTEGER,
     garcom_id INTEGER, garcom_nome TEXT, customer_id INTEGER,
+    client_request_id TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
   );
@@ -765,6 +768,14 @@ const MIGRATIONS = [
   { version:58, description:'modo popup para comunicados admin', up:
     `ALTER TABLE admin_alerts ADD COLUMN display_mode TEXT DEFAULT 'banner'`
   },
+  { version:59, description:'idempotencia na criacao de pedidos', up:[
+    `ALTER TABLE orders ADD COLUMN client_request_id TEXT`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_client_request ON orders(tenant_id, client_request_id) WHERE client_request_id IS NOT NULL`
+  ] },
+  { version:60, description:'reset diario automatico da numeracao de pedidos', up:[
+    `ALTER TABLE store_config ADD COLUMN order_auto_reset_daily INTEGER DEFAULT 0`,
+    `ALTER TABLE store_config ADD COLUMN order_auto_reset_last_date TEXT`
+  ] },
 ]
 
 function runMigrations() {
@@ -810,6 +821,15 @@ const HAS_ORDERS_UPDATED_AT = garantirColuna(
   "UPDATE orders SET updated_at = created_at WHERE updated_at IS NULL"
 )
 
+garantirColuna('orders', 'client_request_id', "TEXT")
+try {
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_client_request ON orders(tenant_id, client_request_id) WHERE client_request_id IS NOT NULL")
+} catch(e) {
+  log('⚠️', 'Schema guard falhou para indice orders.client_request_id:', e.message)
+}
+
+garantirColuna('store_config', 'order_auto_reset_daily', "INTEGER DEFAULT 0")
+garantirColuna('store_config', 'order_auto_reset_last_date', "TEXT")
 garantirColuna('admin_alerts', 'display_mode', "TEXT DEFAULT 'banner'")
 
 // ── Backfill order_num para pedidos existentes ────────────────────────────
@@ -1210,16 +1230,103 @@ function emit(tenantId, table, record, type) {
 // ════════════════════════════════════════════════════════
 // REST ENGINE
 // ════════════════════════════════════════════════════════
+const BRASILIA_TZ = 'America/Sao_Paulo'
+let _resetDiarioPedidosTimer = null
+
+function brasiliaParts(date = new Date()) {
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: BRASILIA_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+  const out = {}
+  for (const part of fmt.formatToParts(date)) {
+    if (part.type !== 'literal') out[part.type] = part.value
+  }
+  if (out.hour === '24') out.hour = '00'
+  return out
+}
+
+function brasiliaDateString(date = new Date()) {
+  const p = brasiliaParts(date)
+  return `${p.year}-${p.month}-${p.day}`
+}
+
+function msUntilNextBrasiliaMidnight(now = new Date()) {
+  const p = brasiliaParts(now)
+  let targetUtc = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day) + 1, 3, 0, 5)
+  while (targetUtc <= now.getTime()) targetUtc += 24 * 60 * 60 * 1000
+  return Math.max(1000, targetUtc - now.getTime())
+}
+
+function executarResetDiarioPedidos() {
+  const hoje = brasiliaDateString()
+  const tenants = db.prepare(`
+    SELECT tenant_id
+      FROM store_config
+     WHERE COALESCE(order_auto_reset_daily,0)=1
+       AND COALESCE(order_auto_reset_last_date,'')<>?
+  `).all(hoje)
+  if (!tenants.length) return 0
+
+  const offset = db.prepare('SELECT COALESCE(MAX(id),0) as max_id FROM orders').get()?.max_id || 0
+  const updateCfg = db.prepare(`
+    UPDATE store_config
+       SET order_num_offset=?,
+           order_auto_reset_last_date=?
+     WHERE tenant_id=?
+  `)
+
+  db.transaction(() => {
+    for (const row of tenants) updateCfg.run(offset, hoje, row.tenant_id)
+  })()
+
+  marcarDirty()
+  for (const row of tenants) {
+    const payload = {
+      tenant_id: row.tenant_id,
+      order_num_offset: offset,
+      order_auto_reset_daily: true,
+      order_auto_reset_last_date: hoje,
+    }
+    sseBroadcast(`store-config-rt:${row.tenant_id}`, 'store_config:UPDATE', payload)
+    sseBroadcast(`orders-rt:${row.tenant_id}`, 'store_config:UPDATE', payload)
+  }
+  log('INFO', `Reset diario de pedidos executado para ${tenants.length} tenant(s); offset=${offset}`)
+  return tenants.length
+}
+
+function agendarResetDiarioPedidos() {
+  if (_resetDiarioPedidosTimer) clearTimeout(_resetDiarioPedidosTimer)
+  const ms = msUntilNextBrasiliaMidnight()
+  _resetDiarioPedidosTimer = setTimeout(() => {
+    try {
+      executarResetDiarioPedidos()
+    } catch (e) {
+      log('WARN', 'Reset diario de pedidos falhou:', e.message)
+    } finally {
+      agendarResetDiarioPedidos()
+    }
+  }, ms)
+}
+
+agendarResetDiarioPedidos()
+
 const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
-  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses'],
+  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
-  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','garcom_id','garcom_nome','customer_id','order_num','wa_track','created_at'],
+  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','garcom_id','garcom_nome','customer_id','client_request_id','order_num','wa_track','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','fornecedor_id','updated_at'],
   estoque_receitas: ['id','tenant_id','item_id','estoque_id','qty','unit','ativo','created_at','updated_at'],
@@ -1264,7 +1371,7 @@ const JSON_FIELDS = {
   admin_audit_log: new Set(['detalhes']),
   admin_alerts: new Set(['target_tenants']),
 }
-const BOOL_FIELDS  = new Set(['ativo','store_open','caixa_open','destaque','target_all'])
+const BOOL_FIELDS  = new Set(['ativo','store_open','caixa_open','order_auto_reset_daily','destaque','target_all'])
 const SSE_TABLES   = new Set(['orders','mesas','store_config','menu_items','categories','garcons','customers','estoque','estoque_receitas','estoque_movimentos','addons_esgotados','entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens'])
 
 function jsonParse(v) { if(typeof v!=='string')return v; try{return JSON.parse(v)}catch{return v} }
@@ -1395,6 +1502,25 @@ async function handleREST(req, res, table, params, body) {
         payload.tenant_id = tenantId
       }
 
+      let orderReqId = ''
+      if (table === 'orders') {
+        const rawReqId = String(payload.client_request_id || '').trim()
+        if (/^[A-Za-z0-9._:-]{12,128}$/.test(rawReqId)) {
+          orderReqId = rawReqId
+          payload.client_request_id = orderReqId
+          const orderReqTid = tenantId || payload.tenant_id
+          if (orderReqTid) {
+            const existing = db.prepare('SELECT * FROM orders WHERE tenant_id=? AND client_request_id=?').get(orderReqTid, orderReqId)
+            if (existing) {
+              log('↩️', `Pedido idempotente reutilizado tenant=${existing.tenant_id} order_id=${existing.id} order_num=${existing.order_num || ''}`)
+              return send(res, 200, returnRep ? parseRow(table, existing) : { id: existing.id })
+            }
+          }
+        } else {
+          delete payload.client_request_id
+        }
+      }
+
       // ── Validação server-side para orders ────────────────────────────────
       // Previne: (a) bypass de bairros_bloqueados via API direta;
       //          (b) downgrade de taxa fixa via cliente malicioso;
@@ -1475,7 +1601,22 @@ async function handleREST(req, res, table, params, body) {
       } else {
         stmt = db.prepare(`INSERT INTO "${table}" (${keys.map(k=>`"${k}"`).join(',')}) VALUES (${keys.map(()=>'?').join(',')})`)
       }
-      const info = stmt.run(...keys.map(k=>sanitize(payload[k])))
+      let info
+      try {
+        info = stmt.run(...keys.map(k=>sanitize(payload[k])))
+      } catch(e) {
+        if (table === 'orders' && orderReqId && /UNIQUE constraint failed/i.test(e.message || '')) {
+          const orderReqTid = tenantId || payload.tenant_id
+          if (orderReqTid) {
+            const existing = db.prepare('SELECT * FROM orders WHERE tenant_id=? AND client_request_id=?').get(orderReqTid, orderReqId)
+            if (existing) {
+              log('↩️', `Pedido idempotente reutilizado apos corrida tenant=${existing.tenant_id} order_id=${existing.id} order_num=${existing.order_num || ''}`)
+              return send(res, 200, returnRep ? parseRow(table, existing) : { id: existing.id })
+            }
+          }
+        }
+        throw e
+      }
 
       // ── Auto-assign order_num sequencial por tenant (atômico via transação) ──
       // Race: 2 pedidos simultâneos podem ler o mesmo MAX e gerar order_num duplicado.

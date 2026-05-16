@@ -385,6 +385,7 @@ function temaToggleRapido() {
     </div>
     <div id="kanban-hist-list" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto"></div>
   </div>
+  <div id="pending-payments-alert" style="display:none;margin:0 0 12px;padding:13px 16px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.22);border-radius:12px"></div>
   <div class="kanban" id="kanban-board">
     <!-- Em análise -->
     <div class="kol kol-analise">
@@ -2776,7 +2777,7 @@ Use no seu próximo pedido 🛍️</textarea>
   <div class="card" style="padding:16px;margin-bottom:16px">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
       <div style="flex:1;min-width:180px"><label class="form-label">Buscar</label><input class="form-input" id="hist-search" placeholder="Nome, telefone ou #pedido" onkeydown="if(event.key==='Enter')histFiltrar()"></div>
-      <div style="min-width:120px"><label class="form-label">Status</label><select class="form-input" id="hist-status"><option value="">Todos</option><option value="entregue">Entregue</option><option value="finalizado">Finalizado</option><option value="pronto">Pronto</option><option value="cancelado">Cancelado</option><option value="mesa_aberta">Mesa aberta</option></select></div>
+      <div style="min-width:120px"><label class="form-label">Status</label><select class="form-input" id="hist-status"><option value="">Todos</option><option value="aguardando_pix">Aguardando PIX</option><option value="aguardando_cartao">Aguardando cartao</option><option value="entregue">Entregue</option><option value="finalizado">Finalizado</option><option value="pronto">Pronto</option><option value="cancelado">Cancelado</option><option value="mesa_aberta">Mesa aberta</option></select></div>
       <div><label class="form-label">De</label><input class="form-input" id="hist-de" type="date"></div>
       <div><label class="form-label">Até</label><input class="form-input" id="hist-ate" type="date"></div>
       <button class="btn bp" style="padding:8px 16px" onclick="histFiltrar()">Buscar</button>
@@ -4830,6 +4831,16 @@ Use no seu próximo pedido 🛍️</textarea>
         style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:var(--danger);font-weight:700;white-space:nowrap">
         🔄 Zerar contagem de pedidos
       </button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:14px;background:var(--surface2);border:1px solid rgba(239,68,68,.15);border-radius:10px;margin-top:10px">
+      <div style="min-width:220px;flex:1">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+          <div style="font-size:12.5px;font-weight:600">Zerar automaticamente as 00h</div>
+          <span id="cfg-reset-diario-badge" style="font-size:10.5px;font-weight:800;border:1px solid rgba(148,163,184,.24);background:rgba(148,163,184,.14);color:var(--muted);border-radius:999px;padding:2px 7px">Desativado</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--muted);line-height:1.45" id="cfg-reset-diario-status">Desativado por padrao. Ao ativar, zera no proximo 00:00 (horario de Brasilia).</div>
+      </div>
+      <div class="toggle" id="cfg-reset-diario-toggle" role="switch" aria-pressed="false" title="Ativar reset diario de pedidos" onclick="toggleResetDiarioPedidos(this)"></div>
     </div>
   </div>
 </div>

@@ -1138,6 +1138,16 @@ Entre em contato para mais informações.</textarea>
       </div>
       <button class="btn" onclick="abrirModalZerarPedidos()" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:var(--danger);font-weight:700;white-space:nowrap;font-size:12px">🔄 Zerar</button>
     </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;background:var(--surface2);border:1px solid rgba(239,68,68,.15);border-radius:10px;margin-top:10px">
+      <div style="min-width:0;flex:1">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:3px;flex-wrap:wrap">
+          <div style="font-size:12.5px;font-weight:600">Zerar automaticamente as 00h</div>
+          <span id="cfg-reset-diario-badge" style="font-size:10px;font-weight:800;border:1px solid rgba(148,163,184,.24);background:rgba(148,163,184,.14);color:var(--muted);border-radius:999px;padding:2px 7px">Desativado</span>
+        </div>
+        <div style="font-size:11.2px;color:var(--muted);line-height:1.45" id="cfg-reset-diario-status">Desativado por padrao. Ao ativar, zera no proximo 00:00 (horario de Brasilia).</div>
+      </div>
+      <div class="toggle" id="cfg-reset-diario-toggle" role="switch" aria-pressed="false" title="Ativar reset diario de pedidos" onclick="toggleResetDiarioPedidos(this)"></div>
+    </div>
   </div>
 </div>
 
