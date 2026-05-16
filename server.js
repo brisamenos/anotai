@@ -19,6 +19,7 @@ const PORT        = process.env.PORT           || 3001
 const EVO_URL     = (process.env.EVOLUTION_URL || 'https://projeto-evolution-api.xtknqq.easypanel.host').replace(/\/+$/,'')
 const EVO_KEY     = process.env.EVOLUTION_KEY  || '429683C4C977415CAAFCCE10F7D57E11'
 const EVO_INST    = process.env.EVOLUTION_INST || 'estima-food'
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || process.env.APP_URL || process.env.BASE_URL || 'https://estimafood.evocrm.sbs').replace(/\/+$/,'')
 const LOCAL_DATA_DIR = path.join(__dirname, '.dev-data')
 const DB_PATH     = process.env.DB_PATH        || (process.platform === 'win32' ? path.join(LOCAL_DATA_DIR, 'estima.db') : '/app/data/estima.db')
 const MP_TOKEN    = process.env.MP_ACCESS_TOKEN || ''   // Token do Mercado Pago (prod ou test)
@@ -1910,6 +1911,43 @@ function handleUpload(req, res) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 function fillVars(tpl, vars) { let t=tpl; for(const[k,v]of Object.entries(vars))t=t.replaceAll(`{${k}}`,v??''); return t }
 
+function linkCardapioTenant(tid) {
+  let slug = ''
+  try {
+    const row = db.prepare('SELECT slug FROM tenants WHERE id=?').get(tid)
+    slug = row?.slug || ''
+  } catch {}
+  const param = slug
+    ? `slug=${encodeURIComponent(slug)}`
+    : `tenant=${encodeURIComponent(tid || '')}`
+  return `${PUBLIC_BASE_URL}/index.html?${param}`
+}
+
+function aplicarLinkCardapioMensagem(text, linkCardapio) {
+  let out = String(text || '')
+  const hosts = new Set(['estimafood.evocrm.sbs'])
+  try {
+    const host = new URL(PUBLIC_BASE_URL).host
+    if (host) hosts.add(host)
+  } catch {}
+  for (const host of hosts) {
+    const esc = host.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    out = out.replace(new RegExp(`https?://${esc}(?:/(?:index\\.html)?)?(?:\\?(?:slug|tenant)=[A-Za-z0-9._~-]+)?`, 'gi'), linkCardapio)
+    out = out.replace(new RegExp(`(^|[^/])\\b${esc}(?:/(?:index\\.html)?)?(?:\\?(?:slug|tenant)=[A-Za-z0-9._~-]+)?`, 'gi'), (_, prefix) => `${prefix}${linkCardapio}`)
+  }
+  return out
+}
+
+function fillVarsComLinkCardapio(tpl, tid, vars = {}) {
+  const linkCardapio = linkCardapioTenant(tid)
+  return aplicarLinkCardapioMensagem(fillVars(tpl, {
+    ...vars,
+    link: linkCardapio,
+    link_cardapio: linkCardapio,
+    cardapio_link: linkCardapio,
+  }), linkCardapio)
+}
+
 // ══════════════════════════════════════════════════════════════
 // Emojis por contexto do pedido — detecta categoria pelos itens
 // ══════════════════════════════════════════════════════════════
@@ -2107,7 +2145,7 @@ async function checarPedidoPerdido() {
         // Envia
         const nomeRow = db.prepare("SELECT name FROM customers WHERE tenant_id=? AND phone=? ORDER BY id DESC LIMIT 1").get(t.id, phone)
         const nome = (nomeRow?.name || '').split(' ')[0] || 'tudo bem'
-        const texto = fillVars(pp.msg, { nome })
+        const texto = fillVarsComLinkCardapio(pp.msg, t.id, { nome })
         const r2 = await sendWA(phone, texto, inst)
         // Marca como enviado mesmo em falha pra não ficar tentando infinitamente
         try {

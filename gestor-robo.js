@@ -281,6 +281,37 @@ async function evoTestarEnvio() {
   }
 }
 
+let _evoCardapioLinkCache = '';
+
+async function _evoCardapioLinkAtual() {
+  if (_evoCardapioLinkCache) return _evoCardapioLinkCache;
+  const tid = _sessao?.tenant_id || '';
+  let slug = '';
+  try {
+    const res = await fetch('/api/tenant-slug', { headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid } }).catch(()=>null);
+    if (res?.ok) slug = (await res.json().catch(()=>({}))).slug || '';
+  } catch(e) {}
+  _evoCardapioLinkCache = slug
+    ? `${window.location.origin}/index.html?slug=${encodeURIComponent(slug)}`
+    : `${window.location.origin}/index.html?tenant=${encodeURIComponent(tid)}`;
+  return _evoCardapioLinkCache;
+}
+
+function _evoAplicarLinkCardapio(text, linkCardapio) {
+  let out = String(text || '');
+  const hosts = new Set(['estimafood.evocrm.sbs']);
+  try {
+    const host = new URL(window.location.origin).host;
+    if (host) hosts.add(host);
+  } catch(e) {}
+  hosts.forEach(host => {
+    const esc = host.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(new RegExp(`https?://${esc}(?:/(?:index\\.html)?)?(?:\\?(?:slug|tenant)=[A-Za-z0-9._~-]+)?`, 'gi'), linkCardapio);
+    out = out.replace(new RegExp(`(^|[^/])\\b${esc}(?:/(?:index\\.html)?)?(?:\\?(?:slug|tenant)=[A-Za-z0-9._~-]+)?`, 'gi'), (_, prefix) => `${prefix}${linkCardapio}`);
+  });
+  return out;
+}
+
 async function evoEnviarMensagem(phone, tipo, vars={}) {
   // Verifica se o toggle da automação está ativo
   const toggle = document.getElementById(`auto-toggle-${tipo}`);
@@ -288,7 +319,10 @@ async function evoEnviarMensagem(phone, tipo, vars={}) {
   const msgEl = document.getElementById(`auto-msg-${tipo}`);
   if (!msgEl) return false;
   let text = msgEl.value;
+  const linkCardapio = await _evoCardapioLinkAtual();
+  vars = { ...vars, link: linkCardapio, link_cardapio: linkCardapio, cardapio_link: linkCardapio };
   Object.entries(vars).forEach(([k,v])=>{ text=text.replaceAll(`{${k}}`,v||''); });
+  text = _evoAplicarLinkCardapio(text, linkCardapio);
   const r = await EVO.sendText(phone, text);
   console.log(`[EVO AUTO] tipo=${tipo} para=${phone}`, r.ok ? '✅' : '❌', r);
   evoMsgHistory.unshift({
