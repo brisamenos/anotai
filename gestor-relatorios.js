@@ -2568,14 +2568,16 @@ function _buildTicketHtml(order, cfg) {
   // Detecta se o pedido já foi pago. Cobre 3 cenários:
   //   1. pag='pix_mp' / 'cartao_mp'  → pagamento online MP confirmado pelo webhook (servidor já atualizou pag).
   //      Esse é o sinal mais confiável: o servidor SÓ grava 'pix_mp'/'cartao_mp' quando o pagamento foi aprovado.
-  //   2. pag='pix_manual' E status já saiu de 'aguardando_pix' → gestor confirmou recebimento manualmente
-  //   3. pag_momento='agora' → legado (versão antiga do app gravava assim quando o pagamento era online)
+  //   2. pag='pix' E status ja saiu de 'aguardando_pix' -> fallback para corrida/legado de PIX online
+  //   3. pag='pix_manual' E status ja saiu de 'aguardando_pix' -> gestor confirmou recebimento manualmente
+  //   4. pag_momento='agora' -> legado (versao antiga do app gravava assim quando o pagamento era online)
   // IMPORTANTE: pag_momento='online' SOZINHO não é prova de pagamento — esse campo é gravado na criação
   // do pedido, antes do PIX ser confirmado. Por isso ele NÃO entra na detecção.
   const _statusPago = order.status && !['aguardando_pix','aguardando_cartao'].includes(order.status);
   const jaPago   = order.pag === 'pix_mp'
                 || order.pag === 'cartao_mp'
                 || order.pag_momento === 'agora'
+                || (order.pag === 'pix' && _statusPago)
                 || (order.pag === 'pix_manual' && _statusPago);
 
   // ── Detecta bebidas INDUSTRIALIZADAS (prontas, não precisam preparo) ──
@@ -3354,6 +3356,7 @@ function _buildEscPos(order, cfg, cols = 32) {
   const _escJaPago  = order.pag === 'pix_mp'
                    || order.pag === 'cartao_mp'
                    || order.pag_momento === 'agora'
+                   || (order.pag === 'pix' && _escStatusPago)
                    || (order.pag === 'pix_manual' && _escStatusPago);
   push('Forma de Pagamento: ' + _escPagNome + '\n');
 
@@ -3536,7 +3539,34 @@ function _isPrintAgentReady() {
   return isElectronApp || agentActive;
 }
 
+async function _syncOrderPaymentBeforePrint(order) {
+  const pag = order?.pag || '';
+  const shouldSync = order?.id
+    && _sessao?.tenant_id
+    && (pag === 'pix' || order.pag_momento === 'online' || order.status === 'aguardando_pix');
+  if (!shouldSync || pag === 'pix_mp' || pag === 'cartao_mp') return order;
+  try {
+    const r = await fetch(`/api/pix/order-sync?order_id=${encodeURIComponent(order.id)}`, {
+      headers: { 'x-tenant-id': _sessao.tenant_id }
+    });
+    if (!r.ok) return order;
+    const d = await r.json().catch(() => null);
+    if (!d?.order) return order;
+    return {
+      ...order,
+      ...d.order,
+      num: order.num || d.order.order_num || d.order.id,
+      time: order.time,
+      items: Array.isArray(d.order.items) ? d.order.items : (order.items || [])
+    };
+  } catch(e) {
+    console.warn('[PRINT] Falha ao sincronizar pagamento antes da impressao:', e.message);
+    return order;
+  }
+}
+
 async function printOrder(order) {
+  order = await _syncOrderPaymentBeforePrint(order);
   const cfg    = _getPrintConfig();
   const fmt    = localStorage.getItem('printFormat') || _printFormat || '80mm';
 

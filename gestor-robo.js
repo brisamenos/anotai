@@ -444,7 +444,10 @@ async function evoSalvarAutomacoes() {
     data[tipo] = { ...atualTipo };
     if (toggle) data[tipo].on = toggle.classList.contains('on');
     if (msgEl) data[tipo].msg = msgEl.value;
-    if (optinTipos.has(tipo)) data[tipo].requer_optin = optEl ? optEl.classList.contains('on') : data[tipo].requer_optin !== false;
+    if (optinTipos.has(tipo)) {
+      data[tipo].requer_optin = true;
+      if (optEl) optEl.classList.add('on');
+    }
   });
   data._aniv_hora = document.getElementById('auto-aniv-hora')?.value || '09:00';
   try {
@@ -461,6 +464,13 @@ async function evoCarregarAutomacoesSalvas() {
     const { data } = await sb.from('store_config').select('evo_automacoes').single();
     let cfg = data?.evo_automacoes || {};
     if (typeof cfg === 'string') cfg = JSON.parse(cfg || '{}');
+    ['recebido','confirmado','producao','pronto','entrega','saiu'].forEach(id => {
+      const o = document.getElementById(`auto-optin-${id}`);
+      if (!o) return;
+      o.classList.add('on');
+      o.style.pointerEvents = 'none';
+      o.title = 'Obrigatorio para evitar banimento: so envia quando o cliente solicita acompanhamento.';
+    });
     const aliases = { confirmado: 'producao', entrega: 'saiu' };
     Object.entries(cfg).forEach(([tipo, val]) => {
       if (tipo.startsWith('_')) return;
@@ -472,7 +482,11 @@ async function evoCarregarAutomacoesSalvas() {
         const o = document.getElementById(`auto-optin-${id}`);
         if (t) { val.on ? t.classList.add('on') : t.classList.remove('on'); }
         if (m && val.msg) m.value = val.msg;
-        if (o) { val.requer_optin === false ? o.classList.remove('on') : o.classList.add('on'); }
+        if (o) {
+          o.classList.add('on');
+          o.style.pointerEvents = 'none';
+          o.title = 'Obrigatorio para evitar banimento: so envia quando o cliente solicita acompanhamento.';
+        }
       });
     });
     if (cfg._aniv_hora) {

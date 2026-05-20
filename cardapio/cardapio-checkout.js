@@ -116,19 +116,6 @@ async function renderSuccessWaButton(order) {
   return waLink;
 }
 
-function scheduleWaTrackingRedirect(orderId, waLink) {
-  if (!waLink || selectedPay === 'pix' || selectedPay === 'cartao_mp') return;
-  const key = 'ef_wa_track_redirect_' + (_tenantId || '') + '_' + orderId;
-  try {
-    if (sessionStorage.getItem(key)) return;
-    sessionStorage.setItem(key, '1');
-  } catch(e) {}
-  setTimeout(() => {
-    try { window.location.href = waLink; }
-    catch(e) { try { window.open(waLink, '_blank'); } catch(_) {} }
-  }, 900);
-}
-
 function showWaToast(orderId, orderNum) {
   if (!_waNumero) return;
   const link = buildWaLink(orderId, orderNum);
@@ -600,8 +587,6 @@ async function _doSubmitOrder(addr, troco) {
     if (_tenantPlano === 'premium') {
       setTimeout(() => showWaToast(order.id, order.order_num), 1500);
     }
-    scheduleWaTrackingRedirect(order.id, waLink);
-
   } catch(e) {
     console.error('[submitOrder] falhou:', e);
     // Mensagem específica baseada no tipo de erro

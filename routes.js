@@ -18,6 +18,7 @@ const { phoneLookupArgs, phoneLookupSql } = require('./phone-utils')
 // ── Helper: notifica cliente quando PIX é confirmado (online ou manual) ──────
 function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
   if (!order?.phone) return
+  if (parseInt(order.wa_track || 0) !== 1) return
   setImmediate(async () => {
     try {
       const cfg    = db.prepare('SELECT evo_instance, evo_automacoes, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(tid)
@@ -61,6 +62,47 @@ function _mpValor(raw) {
   return Math.round(n * 100) / 100
 }
 
+function _emitOrderUpdate(db, sseBroadcast, tenantId, order, extra = {}) {
+  if (!order) return
+  const items = typeof order.items === 'string'
+    ? (() => { try { return JSON.parse(order.items) } catch { return [] } })()
+    : (order.items || [])
+  sseBroadcast(`orders-rt:${tenantId}`, 'orders:UPDATE', { ...order, items, ...extra })
+}
+
+function _sincronizarPedidoPixAprovado(db, log, sseBroadcast, aplicarBaixaEstoquePedido, orderId, tenantId, origem = 'pix-sync') {
+  if (!orderId || !tenantId) return null
+  const pix = db.prepare(`
+    SELECT 1
+    FROM pagamentos_pix
+    WHERE tenant_id=? AND order_id=? AND status='aprovado'
+    LIMIT 1
+  `).get(tenantId, orderId)
+  if (!pix) return null
+
+  const antes = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(orderId, tenantId)
+  if (!antes) return null
+
+  const jaOnline = antes.pag === 'pix_mp'
+  const precisaLiberar = ['aguardando_pix', 'analise'].includes(antes.status)
+    || (antes.status === 'cancelado' && antes.pag !== 'pix_mp' && antes.pag !== 'cartao_mp')
+  const novoStatus = precisaLiberar ? 'producao' : antes.status
+  const mudou = !jaOnline || antes.status !== novoStatus
+  if (!mudou) return antes
+
+  db.prepare("UPDATE orders SET pag='pix_mp', status=? WHERE id=? AND tenant_id=?").run(novoStatus, orderId, tenantId)
+  const depois = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(orderId, tenantId)
+
+  if (precisaLiberar && typeof aplicarBaixaEstoquePedido === 'function' && depois) {
+    aplicarBaixaEstoquePedido(tenantId, depois, origem)
+  }
+  if (depois) {
+    log('✅', `[PIX SYNC] Pedido #${orderId} normalizado como pix_mp/status=${novoStatus} (${origem})`)
+    _emitOrderUpdate(db, sseBroadcast, tenantId, depois, { status: novoStatus, pag: 'pix_mp', _pixOnlineConfirmado: true })
+  }
+  return depois
+}
+
 function _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN_ENV, aplicarBaixaEstoquePedido) {
   if (_pixJobIniciado) return
   _pixJobIniciado = true
@@ -70,12 +112,12 @@ function _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN_ENV, aplicarBaix
     try {
       // Busca pagamentos pendentes criados nas últimas 24h que ainda têm pedido aguardando
       const pendentes = db.prepare(`
-        SELECT p.mp_payment_id, p.order_id, p.tenant_id, p.valor, p.mp_source
+        SELECT p.mp_payment_id, p.order_id, p.tenant_id, p.valor, p.mp_source, p.status
         FROM pagamentos_pix p
         LEFT JOIN orders o ON o.id = p.order_id
-        WHERE p.status = 'pendente'
+        WHERE p.status IN ('pendente','aprovado')
           AND p.order_id IS NOT NULL
-          AND (o.status = 'aguardando_pix' OR o.status IS NULL)
+          AND (o.status = 'aguardando_pix' OR o.status IS NULL OR COALESCE(o.pag,'') != 'pix_mp')
           AND p.created_at > datetime('now', '-24 hours')
       `).all()
 
@@ -93,6 +135,11 @@ function _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN_ENV, aplicarBaix
         let liberados = 0, rejeitados = 0
 
         for (const row of pagamentos) {
+          if (row.status === 'aprovado') {
+            const synced = _sincronizarPedidoPixAprovado(db, log, sseBroadcast, aplicarBaixaEstoquePedido, row.order_id, tenantId, 'pix-recovery-aprovado')
+            if (synced) liberados++
+            continue
+          }
           // Resolve token POR PAGAMENTO usando mp_source gravado.
           // Pagamentos diferentes do mesmo tenant podem ter usado contas
           // diferentes se o gestor mudou a config entre eles.
@@ -2930,7 +2977,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
             if (pixCop.on === false) return
             const offset = parseInt(cfgWa?.order_num_offset) || 0
             // Usa order_num sequencial do tenant quando disponível; senão fallback p/ id - offset
-            const _ord   = body.order_id ? db.prepare('SELECT id, order_num FROM orders WHERE id=? AND tenant_id=?').get(body.order_id, tid) : null
+            const _ord   = body.order_id ? db.prepare('SELECT id, order_num, wa_track FROM orders WHERE id=? AND tenant_id=?').get(body.order_id, tid) : null
+            if (body.order_id && parseInt(_ord?.wa_track || 0) !== 1) return
             const idStr  = String(_ord?.order_num || Math.max(1, (body.order_id || 0) - offset)).padStart(3,'0')
             const nome   = client || 'Cliente'
             const fmtVal = parseFloat(valor).toFixed(2).replace('.',',')
@@ -2998,6 +3046,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           sseBroadcast(`orders-rt:${rowAtual.tenant_id}`, `orders:UPDATE`, _fo1 ? {..._fo1, items:_it1, status:'producao', pag:'pix_mp', _pixOnlineConfirmado: true} : { id: rowAtual.order_id, status: 'producao', pag: 'pix_mp', _pixOnlineConfirmado: true })
           _notificarPixConfirmado(rowAtual.tenant_id, _fo1, sendWA, fillVars, EVO_INST, db)
         }
+        _sincronizarPedidoPixAprovado(db, log, sseBroadcast, aplicarBaixaEstoquePedido, rowAtual.order_id, rowAtual.tenant_id, 'pix-status-sync')
       }
       send(res, 200, { status: novoStatus, mp_status: pd.status })
     } catch (e) { send(res, 500, { error: e.message }) }
@@ -3005,6 +3054,21 @@ module.exports = async function handleRoutes(req, res, ctx) {
   }
 
   // ── Vincula PIX ao pedido ────────────────────────────
+  if (req.method === 'GET' && upath === '/api/pix/order-sync') {
+    const tid = req.headers['x-tenant-id'] || ''
+    const orderId = parseInt(params.get('order_id') || '0', 10)
+    if (!tid || !orderId) { send(res, 400, { error: 'tenant/order obrigatorios' }); return true }
+    const own = db.prepare('SELECT id FROM orders WHERE id=? AND tenant_id=?').get(orderId, tid)
+    if (!own) { send(res, 404, { error: 'Pedido nao encontrado' }); return true }
+    const synced = _sincronizarPedidoPixAprovado(db, log, sseBroadcast, aplicarBaixaEstoquePedido, orderId, tid, 'pix-print-sync')
+    const order = synced || db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(orderId, tid)
+    const items = order && typeof order.items === 'string'
+      ? (() => { try { return JSON.parse(order.items) } catch { return [] } })()
+      : (order?.items || [])
+    send(res, 200, { ok: true, order: order ? { ...order, items } : null })
+    return true
+  }
+
   if (req.method === 'POST' && upath === '/api/pix/vincular') {
     const tid = req.headers['x-tenant-id']
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
@@ -3022,7 +3086,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     db.prepare('UPDATE pagamentos_pix SET order_id=? WHERE mp_payment_id=? AND tenant_id=?').run(ordId, mpId, tid)
     // Só marca como pago se o pagamento estiver realmente aprovado
     if (pixRow.status === 'aprovado') {
-      db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=? AND tenant_id=?").run(ordId, tid)
+      _sincronizarPedidoPixAprovado(db, log, sseBroadcast, aplicarBaixaEstoquePedido, ordId, tid, 'pix-vincular')
     }
     marcarDirty()
     send(res, 200, { ok: true, aprovado: pixRow.status === 'aprovado' })
@@ -3145,6 +3209,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
           }
         }
       }
+      if (row && novoStatus === 'aprovado' && row.order_id) {
+        _sincronizarPedidoPixAprovado(db, log, sseBroadcast, aplicarBaixaEstoquePedido, row.order_id, row.tenant_id, 'pix-webhook-sync')
+      }
 
       // ── Rota 2: Cartão online (pagamentos_cartao) ────────────────────────
       const rowC = db.prepare('SELECT status,valor,tenant_id,order_id FROM pagamentos_cartao WHERE mp_payment_id=?').get(String(mpId))
@@ -3171,7 +3238,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
             const _itC = _foC && typeof _foC.items==='string' ? (() => { try{return JSON.parse(_foC.items)}catch{return []} })() : (_foC?.items||[])
             sseBroadcast(`orders-rt:${rowC.tenant_id}`, `orders:UPDATE`, _foC ? {..._foC, items:_itC, status:_nsC, pag:'cartao_mp'} : { id: rowC.order_id, status: _nsC, pag: 'cartao_mp' })
             // Notifica cliente: cartão confirmado
-            if ((eraAguardandoC || podeRessurreicaoC) && _foC?.phone) {
+            if ((eraAguardandoC || podeRessurreicaoC) && _foC?.phone && parseInt(_foC.wa_track || 0) === 1) {
               setImmediate(async () => {
                 try {
                   const cfg    = db.prepare('SELECT evo_instance, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(rowC.tenant_id)
@@ -4144,7 +4211,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         const _it = _fo && typeof _fo.items === 'string' ? (() => { try { return JSON.parse(_fo.items) } catch { return [] } })() : (_fo?.items || [])
         sseBroadcast(`orders-rt:${rowBefore.tenant_id}`, 'orders:UPDATE', _fo ? { ..._fo, items: _it, status: _ns, pag: 'cartao_mp' } : { id: rowBefore.order_id, status: _ns, pag: 'cartao_mp' })
         // Notifica cliente
-        if ((eraAguardando || podeRessurreicao) && _fo?.phone) {
+        if ((eraAguardando || podeRessurreicao) && _fo?.phone && parseInt(_fo.wa_track || 0) === 1) {
           setImmediate(async () => {
             try {
               const cfg    = db.prepare('SELECT evo_instance, order_num_offset, store_name FROM store_config WHERE tenant_id=?').get(rowBefore.tenant_id)

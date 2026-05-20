@@ -1385,6 +1385,49 @@ function phoneLookupSql(col = 'phone') {
   return phoneUtils.phoneLookupSql(col)
 }
 
+function waInboundOptInHours() {
+  const n = parseInt(process.env.WA_INBOUND_OPTIN_HOURS || '24', 10)
+  return Math.min(72, Math.max(1, Number.isFinite(n) ? n : 24))
+}
+
+function clienteIniciouWhatsappRecentemente(tenantId, phone) {
+  if (!tenantId || !phone) return false
+  const variants = phoneUtils.phoneLookupVariants(phone)
+    .map(v => String(v || '').replace(/\D/g, ''))
+    .filter(v => v.length >= 8)
+  if (!variants.length) return false
+
+  const jids = [...new Set(variants.flatMap(v => [
+    `${v}@s.whatsapp.net`,
+    `${v}@c.us`
+  ]))]
+  if (!jids.length) return false
+
+  const hours = waInboundOptInHours()
+  const since = Math.floor(Date.now() / 1000) - hours * 3600
+  const q = jids.map(() => '?').join(',')
+
+  try {
+    const row = db.prepare(`
+      SELECT id, ts
+      FROM wa_messages
+      WHERE tenant_id=?
+        AND from_me=0
+        AND remote_jid IN (${q})
+        AND (
+          (ts > 0 AND ts >= ?)
+          OR (ts = 0 AND created_at >= datetime('now', ?))
+        )
+      ORDER BY ts DESC, created_at DESC
+      LIMIT 1
+    `).get(tenantId, ...jids, since, `-${hours} hours`)
+    return !!row
+  } catch(e) {
+    log('⚠️', '[wa_track] falha ao checar conversa recente:', e.message)
+    return false
+  }
+}
+
 function parseRow(table, row, opts={}) {
   if (!row) return row
   const out = { ...row }
@@ -1513,12 +1556,26 @@ async function handleREST(req, res, table, params, body) {
           if (orderReqTid) {
             const existing = db.prepare('SELECT * FROM orders WHERE tenant_id=? AND client_request_id=?').get(orderReqTid, orderReqId)
             if (existing) {
+              if (parseInt(existing.wa_track || 0) !== 1 && clienteIniciouWhatsappRecentemente(orderReqTid, existing.phone || payload.phone)) {
+                try {
+                  db.prepare('UPDATE orders SET wa_track=1 WHERE id=? AND tenant_id=?').run(existing.id, orderReqTid)
+                  existing.wa_track = 1
+                  log('✅', `[wa_track] Pedido #${existing.id} ativado por conversa recente no WhatsApp`)
+                } catch(e) { log('⚠️', '[wa_track] falha ao ativar pedido existente:', e.message) }
+              }
               log('↩️', `Pedido idempotente reutilizado tenant=${existing.tenant_id} order_id=${existing.id} order_num=${existing.order_num || ''}`)
               return send(res, 200, returnRep ? parseRow(table, existing) : { id: existing.id })
             }
           }
         } else {
           delete payload.client_request_id
+        }
+
+        const orderTid = tenantId || payload.tenant_id
+        const autoTrack = clienteIniciouWhatsappRecentemente(orderTid, payload.phone)
+        payload.wa_track = autoTrack ? 1 : 0
+        if (autoTrack) {
+          log('✅', `[wa_track] Novo pedido será acompanhado: cliente iniciou conversa no WhatsApp nas últimas ${waInboundOptInHours()}h`)
         }
       }
 
@@ -1665,9 +1722,8 @@ async function handleREST(req, res, table, params, body) {
             const auto  = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
             const recAuto = auto['recebido'] || {}
             if (recAuto.on === false) { log('⏭️','Automacao recebido desligada'); return }
-            const requerOptIn = recAuto.requer_optin !== false
             const trackingAtivo = parseInt(_ord.wa_track || 0) === 1
-            if (requerOptIn && !trackingAtivo) {
+            if (!trackingAtivo) {
               log('🔕', `[anti-ban] Pulando comanda do pedido #${_ord.id} — cliente não ativou tracking via WhatsApp`)
               return
             }
@@ -1703,10 +1759,8 @@ async function handleREST(req, res, table, params, body) {
             const inst   = cfg?.evo_instance || EVO_INST
             const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
             const ia     = (() => { try { return JSON.parse(cfg?.ia_config||'{}') } catch { return {} } })()
-            const recAuto = auto['recebido'] || {}
-            const requerOptIn = recAuto.requer_optin !== false
             const trackingAtivo = parseInt(_ord.wa_track || 0) === 1
-            if (requerOptIn && !trackingAtivo) {
+            if (!trackingAtivo) {
               log('🔕', `[anti-ban] Pulando comanda PIX manual do pedido #${_ord.id} — cliente não ativou tracking via WhatsApp`)
               return
             }
@@ -2361,6 +2415,10 @@ async function handleOrderStatus(req, res) {
           const auto   = (() => { try { return JSON.parse(cfg?.evo_automacoes||'{}') } catch { return {} } })()
           const pixConf = auto['pix_confirmado'] || {}
           if (pixConf.on === false) { log('⏭️','Automação pix_confirmado desligada'); return }
+          if (parseInt(order.wa_track || 0) !== 1) {
+            log('🔕', `[anti-ban] Pulando pix_confirmado do pedido #${order.id} — cliente não ativou tracking via WhatsApp`)
+            return
+          }
           const offset = parseInt(cfg?.order_num_offset) || 0
           const idStr  = String(order.order_num || Math.max(1, order.id - offset)).padStart(3,'0')
           const nome   = order.client || 'Cliente'
@@ -2518,6 +2576,11 @@ async function handleOrderStatus(req, res) {
         // ── ENVIO CONSOLIDADO ─────────────────────────
         // 1 mensagem só, com tudo que o cliente ganhou. Substitui as 3 antigas.
         if (_recompensas.length > 0 && order.phone) {
+          const trackingAtivo = parseInt(order.wa_track || 0) === 1
+          if (!trackingAtivo) {
+            log('🔕', `[anti-ban] Pulando recompensas do pedido #${order_id} — cliente não ativou tracking via WhatsApp`)
+            return
+          }
           const lojaNome  = cfg?.store_name || 'Restaurante'
           const linhasRec = _recompensas.map(r => r.linha).join('\n')
           const msgFinal  = _recompensas.length === 1
@@ -2619,29 +2682,19 @@ async function handleOrderStatus(req, res) {
           }
           let msgFinal = null
           // ── ENVIO DE STATUS — opt-in via WhatsApp ─────────────
-          // Estratégia anti-ban: a loja só envia atualizações de status
-          // (analise, producao, pronto, saiu, entregue) se o cliente ATIVOU
-          // o tracking. O fluxo é:
-          //   1) Cliente faz pedido → na tela de sucesso clica em
-          //      "Acompanhar pedido pelo WhatsApp"
-          //   2) WhatsApp abre com msg pré-pronta "Quero acompanhar #N"
-          //   3) Cliente envia → IA detecta intenção de pedido → marca
-          //      o pedido com wa_track=1 no banco
-          //   4) A partir daí, qualquer mudança de status dispara
-          //      notificação automática
+          // Estrategia anti-ban: a loja so envia atualizacao de pedido se o
+          // pedido tiver wa_track=1. Isso acontece quando:
+          //   1) o cliente clicou em "Acompanhar pedido pelo WhatsApp" e enviou
+          //      a mensagem; ou
+          //   2) o cliente iniciou conversa com a loja no WhatsApp nas ultimas
+          //      horas e depois fez o pedido com o mesmo telefone.
           //
-          // Se cliente NÃO clicar no botão (não ativar tracking), pulamos
-          // toda atualização de status. Loja não inicia conversa.
-          //
-          // Status que SEMPRE vão (independente de tracking — cliente PRECISA
-          // saber): cancelado, finalizado.
-          // Plus: PIX e recompensas (rodam em outro fluxo, não passam aqui).
+          // Nenhum status fura a trava. Sem contexto iniciado pelo cliente, a
+          // loja nao inicia conversa pelo WhatsApp.
           const _trackingAtivo = parseInt(order.wa_track || 0) === 1
-          const _statusOptIn = ['analise', 'producao', 'pronto', 'saiu', 'entregue']
-          const _requerOptIn = ct.requer_optin !== false
 
           if (ct.on===false) { log('⏭️',`Automação "${tipoAuto}" desligada`) }
-          else if (_requerOptIn && !_trackingAtivo && _statusOptIn.includes(new_status)) {
+          else if (!_trackingAtivo) {
             log('🔕', `[anti-ban] Pulando "${new_status}" do pedido #${idStr} — cliente não ativou tracking via WhatsApp`)
           }
           else if (ct.on&&ct.msg) { msgFinal=fillVars(ct.msg,vars) }
