@@ -150,9 +150,10 @@ function addToCart(id) {
     return;
   }
   // Sem adicionais — adiciona direto
-  const ci = cartItems.find(c => c.id === id && !c.obs);
+  const obsKit = (typeof _pedidoObsComKit === 'function') ? _pedidoObsComKit(it, '') : '';
+  const ci = cartItems.find(c => c.id === id && (c.obs || '') === obsKit);
   if (ci) ci.qty++;
-  else cartItems.push({ ...it, qty: 1, obs: '', _grupos: [] });
+  else cartItems.push({ ...it, qty: 1, obs: obsKit, _grupos: [] });
   renderCart();
   showToast('🛒', `${it.name} adicionado!`);
 }
@@ -315,7 +316,8 @@ function _pdvConfirmar(itemId) {
     extra += parseFloat(inp.dataset.preco || 0);
     opcs.push(inp.dataset.nome);
   });
-  const obs = [opcs.join(', '), document.getElementById('pdv-obs-input')?.value.trim()].filter(Boolean).join(' | ');
+  let obs = [opcs.join(', '), document.getElementById('pdv-obs-input')?.value.trim()].filter(Boolean).join(' | ');
+  if (typeof _pedidoObsComKit === 'function') obs = _pedidoObsComKit(it, obs);
   let price = parseFloat(it.price || 0) + extra;
   let name = it.name;
 
@@ -1662,8 +1664,9 @@ function garcomAddItem(id, el) {
   }
 
   // Sem customização → adiciona direto
-  const ci = garcomCart.find(c => c.id === id && !c.obs);
-  if (ci) ci.qty++; else garcomCart.push({ ...it, qty: 1, obs: '' });
+  const obsKit = (typeof _pedidoObsComKit === 'function') ? _pedidoObsComKit(it, '') : '';
+  const ci = garcomCart.find(c => c.id === id && (c.obs || '') === obsKit);
+  if (ci) ci.qty++; else garcomCart.push({ ...it, qty: 1, obs: obsKit });
   el.style.borderColor = 'var(--accent)'; el.dataset.sel = '1'; el.style.background = 'rgba(59,130,246,.1)';
   _garcomUpdatePreview();
   sbToast('ok', `${it.name} adicionado!`);

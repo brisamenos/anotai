@@ -420,35 +420,76 @@ function applyDeliveryInfo() {
 // ══════════════════════════════════════════
 //  STATUS
 // ══════════════════════════════════════════
-function isLojaAberta(horarios, store_open) {
-  if (store_open === false) return false;
-  if (!horarios) return store_open !== false;
+function _storeOpenAtivo(store_open) {
+  if (store_open === false || store_open === 0) return false;
+  if (typeof store_open === 'string') {
+    const v = store_open.trim().toLowerCase();
+    if (v === 'false' || v === '0' || v === 'fechado') return false;
+  }
+  return true;
+}
+
+function _parseHorariosConfig(horarios) {
+  if (!horarios) return null;
+  if (typeof horarios === 'object') return horarios;
   try {
-    const h = typeof horarios === 'string' ? JSON.parse(horarios) : horarios;
-    const dias = ['dom','seg','ter','qua','qui','sex','sab'];
-    const hoje = h[dias[new Date().getDay()]];
-    if (!hoje || !hoje.ativo) return false;
-
-    const parseHora = (str) => {
-      const match = (str || '').trim().match(/^(\d{1,2}):(\d{2})$/);
-      if (!match) return null;
-      const h = parseInt(match[1], 10);
-      const m = parseInt(match[2], 10);
-      if (h < 0 || h > 23 || m < 0 || m > 59) return null;
-      return h * 60 + m;
-    };
-
-    const aberturaMinutos = parseHora(hoje.abertura) ?? 0;
-    const fechamentoMinutos = parseHora(hoje.fechamento) ?? 1439;
-    const now = new Date().getHours() * 60 + new Date().getMinutes();
-
-    return now >= aberturaMinutos && now < fechamentoMinutos;
+    const parsed = JSON.parse(horarios);
+    return parsed && typeof parsed === 'object' ? parsed : null;
   } catch(e) {
-    return false;
+    return null;
   }
 }
 
+function _horarioAtivo(cfg) {
+  if (!cfg) return false;
+  if (cfg.ativo === true || cfg.ativo === 1) return true;
+  if (typeof cfg.ativo === 'string') {
+    const v = cfg.ativo.trim().toLowerCase();
+    return v === 'true' || v === '1' || v === 'sim';
+  }
+  return false;
+}
+
+function _horaParaMinutos(valor) {
+  const raw = String(valor || '').trim().toLowerCase().replace(/\s+/g, '');
+  const match = raw.match(/^(\d{1,2})(?:(?::|h)(\d{1,2}))?h?$/);
+  if (!match) return null;
+  const h = parseInt(match[1], 10);
+  const m = match[2] === undefined ? 0 : parseInt(match[2], 10);
+  if (h === 24 && m === 0) return 1440;
+  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return h * 60 + m;
+}
+
+function _horarioAbertoNoMinuto(cfg, minutoAtual, usandoDiaAnterior) {
+  if (!_horarioAtivo(cfg)) return false;
+  const abertura = _horaParaMinutos(cfg.abertura) ?? 0;
+  const fechamento = _horaParaMinutos(cfg.fechamento) ?? 1439;
+  if (abertura === fechamento) return true;
+
+  if (fechamento > abertura) {
+    return !usandoDiaAnterior && minutoAtual >= abertura && minutoAtual < fechamento;
+  }
+
+  return usandoDiaAnterior ? minutoAtual < fechamento : minutoAtual >= abertura;
+}
+
+function isLojaAberta(horarios, store_open) {
+  if (!_storeOpenAtivo(store_open)) return false;
+  const h = _parseHorariosConfig(horarios);
+  if (!h || !Object.keys(h).length) return true;
+
+  const agora = new Date();
+  const dias = ['dom','seg','ter','qua','qui','sex','sab'];
+  const idxHoje = agora.getDay();
+  const minutoAtual = agora.getHours() * 60 + agora.getMinutes();
+
+  return _horarioAbertoNoMinuto(h[dias[idxHoje]], minutoAtual, false)
+      || _horarioAbertoNoMinuto(h[dias[(idxHoje + 6) % 7]], minutoAtual, true);
+}
+
 let _cachedHorarios = null;
+let _cachedStoreOpen = undefined;
 
 // ── Modal info da loja ────────────────────────────────
 function openStoreInfoModal() {
@@ -487,7 +528,7 @@ function openStoreInfoModal() {
   const rows = ordem.map(d => {
     const cfg    = h[d] || {};
     const isHoje = d === hoje;
-    const aberto = cfg.ativo;
+    const aberto = _horarioAtivo(cfg);
     const badge  = isHoje ? `<span style="font-size:10px;background:#f97316;color:#fff;border-radius:4px;padding:1px 6px;margin-left:6px;font-weight:800">hoje</span>` : '';
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-radius:10px;background:${isHoje?'rgba(var(--accent-rgb,249,115,22),.07)':'#f8f9fb'};border:1.5px solid ${isHoje?'rgba(var(--accent-rgb,249,115,22),.2)':'transparent'}">
       <span style="font-size:13px;font-weight:${isHoje?'700':'500'};color:${isHoje?'#f97316':'#374151'};display:flex;align-items:center">${diasNome[d]}${badge}</span>
@@ -534,8 +575,9 @@ function initScrollSpy() {
 }
 
 function applyStatus(store_open, horarios) {
-  if (horarios !== undefined) _cachedHorarios = horarios;
-  _lojaAberta = isLojaAberta(_cachedHorarios, store_open);
+  if (horarios !== undefined) _cachedHorarios = _parseHorariosConfig(horarios);
+  if (store_open !== undefined) _cachedStoreOpen = store_open;
+  _lojaAberta = isLojaAberta(_cachedHorarios, _cachedStoreOpen);
   const dot  = document.getElementById('status-dot');
   const txt  = document.getElementById('status-txt');
   const badge= document.getElementById('status-badge');

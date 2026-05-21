@@ -3113,15 +3113,54 @@ async function handleIAWebhook(req, res) {
       // ── Loja aberta? + próximo horário de abertura ──
       const horariosCfg = jsonParse(cfg.horarios_config) || {}
       const diaConfig = horariosCfg[diaHoje]
-      let lojaAbertaAgora = cfg.store_open !== false
+      const _flagAberto = (v) => {
+        if (v === false || v === 0) return false
+        if (typeof v === 'string') {
+          const s = v.trim().toLowerCase()
+          if (s === 'false' || s === '0' || s === 'fechado') return false
+        }
+        return true
+      }
+      const _horarioAtivoCfg = (dc) => {
+        if (!dc) return false
+        if (dc.ativo === true || dc.ativo === 1) return true
+        if (typeof dc.ativo === 'string') {
+          const s = dc.ativo.trim().toLowerCase()
+          return s === 'true' || s === '1' || s === 'sim'
+        }
+        return false
+      }
+      const _horaMinCfg = (v) => {
+        const raw = String(v || '').trim().toLowerCase().replace(/\s+/g, '')
+        const m = raw.match(/^(\d{1,2})(?:(?::|h)(\d{1,2}))?h?$/)
+        if (!m) return null
+        const hh = parseInt(m[1], 10)
+        const mm = m[2] === undefined ? 0 : parseInt(m[2], 10)
+        if (hh === 24 && mm === 0) return 1440
+        if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null
+        return hh * 60 + mm
+      }
+      const _horarioAbertoCfg = (dc, minAtual, deOntem) => {
+        if (!_horarioAtivoCfg(dc)) return false
+        const abertura = _horaMinCfg(dc.abertura) ?? 0
+        const fechamento = _horaMinCfg(dc.fechamento) ?? 1439
+        if (abertura === fechamento) return true
+        if (fechamento > abertura) return !deOntem && minAtual >= abertura && minAtual < fechamento
+        return deOntem ? minAtual < fechamento : minAtual >= abertura
+      }
+      let lojaAbertaAgora = _flagAberto(cfg.store_open)
       let horarioHojeStr = null  // ex: "das 18h às 23h"
-      if (diaConfig) {
-        if (!diaConfig.ativo) lojaAbertaAgora = false
-        else {
-          const [ah, am] = (diaConfig.abertura||'00:00').split(':').map(Number)
-          const [fh, fm] = (diaConfig.fechamento||'23:59').split(':').map(Number)
-          lojaAbertaAgora = horaMin >= ah*60+am && horaMin <= fh*60+fm
-          horarioHojeStr = `das ${diaConfig.abertura} às ${diaConfig.fechamento}`
+      if (_horarioAtivoCfg(diaConfig)) {
+        horarioHojeStr = `das ${diaConfig.abertura} às ${diaConfig.fechamento}`
+      }
+      if (lojaAbertaAgora && Object.keys(horariosCfg).length) {
+        const idxAgora = agora.getDay()
+        const hojeAberto = _horarioAbertoCfg(horariosCfg[diasSemana[idxAgora]], horaMin, false)
+        const ontemAberto = _horarioAbertoCfg(horariosCfg[diasSemana[(idxAgora + 6) % 7]], horaMin, true)
+        lojaAbertaAgora = hojeAberto || ontemAberto
+        if (!horarioHojeStr && ontemAberto) {
+          const dcOntem = horariosCfg[diasSemana[(idxAgora + 6) % 7]]
+          horarioHojeStr = `das ${dcOntem.abertura} às ${dcOntem.fechamento}`
         }
       }
 
@@ -3136,9 +3175,8 @@ async function handleIAWebhook(req, res) {
           const idx = (idxHoje + i) % 7
           const dia = diasSemana[idx]
           const dc = horariosCfg[dia]
-          if (!dc || !dc.ativo) continue
-          const [ah, am] = (dc.abertura||'00:00').split(':').map(Number)
-          const aberturaMin = ah*60 + am
+          if (!_horarioAtivoCfg(dc)) continue
+          const aberturaMin = _horaMinCfg(dc.abertura) ?? 0
           if (i === 0) {
             // Hoje — só conta se ainda não passou da abertura
             if (horaMin < aberturaMin) { proxAberturaStr = `hoje às ${dc.abertura}`; break }
@@ -3243,7 +3281,7 @@ async function handleIAWebhook(req, res) {
             `Hoje atendemos ${horarioHojeStr}. Aberto agora ✅\nCardápio: ${linkCardapio}`,
             `Horário de hoje: ${horarioHojeStr}. Aberto agora ✅\n${linkCardapio}`
           ])
-        } else if (horarioHojeStr && diaConfig?.ativo) {
+        } else if (horarioHojeStr && _horarioAtivoCfg(diaConfig)) {
           // Hoje atende mas está fora do horário (já fechou ou ainda não abriu)
           const fechSuffix = proxAberturaStr ? `\nNo momento estamos fechados — abrimos ${proxAberturaStr}.` : '\nNo momento estamos fechados.'
           resposta = _pickOne([

@@ -498,6 +498,58 @@ function _pedidoWaFindChatByPhone(phone) {
   }) || null;
 }
 
+function _pedidoItemGroups(item) {
+  const raw = item?.customGroups ?? item?.custom_groups;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch(e) {}
+  }
+  return [];
+}
+
+function _pedidoKitValorLabel(v) {
+  if (typeof v === 'string') return v.trim();
+  if (!v || typeof v !== 'object') return '';
+  const nome = v.nome || v.name || v.label || v.id || '';
+  const qtd = v.qtd || v.qty || v.quantidade || v.peso || '';
+  return [qtd, nome].filter(Boolean).join(' ').trim();
+}
+
+function _pedidoKitObs(item) {
+  const grupos = _pedidoItemGroups(item);
+  const partes = [];
+  const kitGrp = grupos.find(g => g?.tipo === 'kit_itens');
+  const kitItens = (kitGrp?.itens || kitGrp?.items || kitGrp?.valores || kitGrp?.opcoes || [])
+    .map(_pedidoKitValorLabel)
+    .filter(Boolean);
+  if (kitItens.length) partes.push('Kit: ' + kitItens.join(' · '));
+
+  const infoLabels = {
+    preparos: 'Forma de preparo',
+    ocasiao: 'Tipo de ocasião',
+    armazenamento: 'Armazenamento'
+  };
+  Object.keys(infoLabels).forEach(tipo => {
+    const grp = grupos.find(g => g?.tipo === tipo);
+    const valores = (grp?.opcoes || grp?.valores || [])
+      .map(_pedidoKitValorLabel)
+      .filter(Boolean);
+    if (valores.length) partes.push(infoLabels[tipo] + ': ' + valores.join(', '));
+  });
+
+  return partes.join(' | ');
+}
+
+function _pedidoObsComKit(item, obs) {
+  const atual = String(obs || '').trim();
+  const kitObs = _pedidoKitObs(item);
+  if (!kitObs || /(^|\|\s*)Kit:/i.test(atual)) return atual;
+  return [kitObs, atual].filter(Boolean).join(' | ');
+}
+
 async function abrirChatPedidoWA(id) {
   const o = _pedidoWaFindOrder(id);
   if (!o) {
@@ -1139,7 +1191,7 @@ async function _odConfirmarItemExistente(itemId) {
   let price    = parseFloat(it.price || 0) + extra;
   let name     = it.name;
   const obsLivre = modal.querySelector('#pdvb-obs-input')?.value?.trim() || '';
-  let obs      = _noFmtObsAdicionais(modal, grupos, obsLivre);
+  let obs      = _pedidoObsComKit(it, _noFmtObsAdicionais(modal, grupos, obsLivre));
   let finalQty = qty;
 
   if (isKg) {
@@ -1366,7 +1418,7 @@ function noAddItem(itemId) {
     return;
   }
   // Sem adicionais — adiciona direto
-  noAddToCartDireto(item, item.name, parseFloat(item.price || 0), '', []);
+  noAddToCartDireto(item, item.name, parseFloat(item.price || 0), _pedidoObsComKit(item, ''), []);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -1866,7 +1918,7 @@ function noConfirmarAdicionais(itemId) {
   const obsLivre = document.getElementById('no-obs-input')?.value.trim() || '';
 
   // Monta obs no formato esperado pelo parser de impressão (com nome do grupo)
-  const obs = _noFmtObsAdicionais(modal, grupos, obsLivre);
+  const obs = _pedidoObsComKit(item, _noFmtObsAdicionais(modal, grupos, obsLivre));
 
   if (isKg) {
     const kg = parseFloat(document.getElementById('no-kg-input')?.value || 1);
