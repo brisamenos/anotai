@@ -1540,11 +1540,15 @@ function _usarVariacoesAuto() {
 }
 
 buildEmojiGrid();
-initSidebarState();
-requestNotifPermission();
-loadAllData();
+if (typeof isBillingLocked === 'function' && isBillingLocked()) {
+  if (typeof billingApplyLockUI === 'function') billingApplyLockUI();
+} else {
+  initSidebarState();
+  requestNotifPermission();
+  loadAllData();
+  setTimeout(_iniciarSchedulerAniversario, 3000);
+}
 // Inicia scheduler automático de aniversário
-setTimeout(_iniciarSchedulerAniversario, 3000);
 
 // ════════════════════════════════════════════════════════
 // TEMA — Delegado ao gestor-temas.js

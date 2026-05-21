@@ -2730,6 +2730,81 @@ async function handleOrderStatus(req, res) {
 // AGENTE IA
 // ════════════════════════════════════════════════════════
 const _msgBuffer   = new Map()
+const _iaLoopGuard = new Map()
+
+function _iaNormBotText(text) {
+  return String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/https?:\/\/\S+/g, ' link ')
+    .replace(/[^\p{L}\p{N}\s#]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function _iaLooksLikeAutoReply(text) {
+  const raw = String(text || '').trim()
+  const n = _iaNormBotText(raw)
+  if (!n) return false
+
+  const patterns = [
+    /\bpor favor selecione (a )?opcao (desejada|desejado)\b/,
+    /\bselecione (uma|a) opcao\b/,
+    /\bescolha (uma|a) opcao\b/,
+    /\bdigite (uma|a|o numero da) opcao\b/,
+    /\binforme (uma|a) opcao\b/,
+    /\bqual opcao deseja\b/,
+    /\bopcao (invalida|nao reconhecida|incorreta)\b/,
+    /\bresponda (com|informando) (o )?(numero|opcao)\b/,
+    /\bpara continuar (digite|escolha|selecione)\b/,
+    /\bmenu (principal|inicial|de atendimento)\b/,
+    /\batendimento (automatico|eletronico|virtual)\b/,
+    /\bassistente virtual\b/,
+    /\bsou (um )?(bot|robo|atendente virtual)\b/,
+    /\bnao entendi (sua )?(resposta|mensagem)\b/,
+    /\bopcoes? disponiveis\b/
+  ]
+  if (patterns.some(re => re.test(n))) return true
+
+  const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean)
+  const numbered = lines.filter(s => /^(\d+|[*)-])[\).\-\s]/.test(s)).length
+  return numbered >= 2 && /\b(menu|opcao|opcoes|escolha|selecione|digite)\b/.test(n)
+}
+
+function _iaAutoLoopDecision(tenantId, phone, text) {
+  const now = Date.now()
+  const key = `ia-loop:${tenantId}:${phone}`
+  const prev = _iaLoopGuard.get(key)
+  if (prev?.muteUntil && prev.muteUntil > now) {
+    return { ignore: true, pause: false, reason: 'anti-loop ativo' }
+  }
+
+  const norm = _iaNormBotText(text)
+  const botLike = _iaLooksLikeAutoReply(text)
+  const sameRecent = !!(prev && prev.norm === norm && now - prev.lastAt < 20 * 60 * 1000)
+  const burstRecent = !!(prev && now - prev.lastAt < 90 * 1000)
+  const count = sameRecent ? (prev.count || 1) + 1 : 1
+  const burst = burstRecent ? (prev.burst || 1) + 1 : 1
+  const repeatedAutoLoop = sameRecent && count >= 3 && norm.length >= 10
+  const burstLoop = burst >= 5
+  const shouldPause = botLike || repeatedAutoLoop || burstLoop
+
+  _iaLoopGuard.set(key, {
+    norm,
+    count,
+    burst,
+    lastAt: now,
+    muteUntil: shouldPause ? now + 60 * 60 * 1000 : 0
+  })
+
+  if (!shouldPause) return { ignore: false }
+  return {
+    ignore: true,
+    pause: true,
+    reason: botLike ? 'mensagem automatica detectada' : repeatedAutoLoop ? 'mensagem repetida em loop' : 'rajada de mensagens'
+  }
+}
 // Pausa da IA — agora persistente no banco (ia_pausa) pra sobreviver
 // a reinícios do servidor. A interface é compatível com Map (.set/.get/.keys/.size)
 // pra não quebrar o resto do código que já usa essa variável.
@@ -2830,10 +2905,20 @@ async function handleIAWebhook(req, res) {
     log('🔍', `[PAUSA-DEBUG] Webhook — pausaAt encontrado: ${pausaAt || 'NÃO ENCONTRADO'} | pausaMin config: ${pausaMin}min`)
     log('🔍', `[PAUSA-DEBUG] Webhook — chaves ativas no _pausaHumano: [${[..._pausaHumano.keys()].join(', ')||'nenhuma'}]`)
     if (pausaAt&&(Date.now()-pausaAt)<pausaMin*60*1000) { log('🔇',`IA bloqueada (humano ativo) — ${phone} [${tenantId}]`); send(res,200,{ok:true}); return }
+    const bufKey=`buf:${tenantId}:${phone}`
+    const loopGuard = _iaAutoLoopDecision(tenantId, phone, msg)
+    if (loopGuard.ignore) {
+      if (_msgBuffer.has(bufKey)) {
+        try { clearTimeout(_msgBuffer.get(bufKey).timer) } catch {}
+        _msgBuffer.delete(bufKey)
+      }
+      if (loopGuard.pause) _pausaHumano.set(pausaKey, Date.now())
+      log('[IA]', `[anti-loop] Silenciando ${phone} [${tenantId}] - ${loopGuard.reason}: "${String(msg).slice(0, 120)}"`)
+      send(res,200,{ok:true, ignored:true, reason:loopGuard.reason}); return
+    }
     const histKey=`conv:${tenantId}:${phone}:hist`
     if (!_msgBuffer.has(histKey)) _msgBuffer.set(histKey,[])
     const convHist = _msgBuffer.get(histKey)
-    const bufKey=`buf:${tenantId}:${phone}`
     if (_msgBuffer.has(bufKey)) clearTimeout(_msgBuffer.get(bufKey).timer)
     const msgs    = _msgBuffer.has(bufKey) ? _msgBuffer.get(bufKey).msgs    : []
     const msgIds  = _msgBuffer.has(bufKey) ? _msgBuffer.get(bufKey).msgIds  : []
@@ -2957,7 +3042,7 @@ async function handleIAWebhook(req, res) {
       const _msgL      = msgFull.toLowerCase()
       const _msgNum    = msgFull.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       const _numMatch  = msgFull.match(/#\s*\*?\s*(\d{1,6})\s*\*?/) || _msgNum.match(/pedido\s*(?:n(?:umero|ro|o)?\.?\s*)?[*#:]?\s*(\d{1,6})/i) || _msgNum.match(/numero\s*(?:do\s+pedido)?\s*[*#:]?\s*(\d{1,6})/i)
-      const _kwPedido  = /\b(acompanhar\s+(meu\s+|o\s+)?pedido|rastrear\s+(meu\s+|o\s+)?pedido|rastrei?o\s+(do\s+)?pedido|meu\s+pedido|pedido\s+(j[aá]|saiu|chegou|t[aá]|est[aá]|ainda|atrasou|atrasado|demorando|pronto|sair[aá]|sai)|status\s+(do\s+)?pedido|cad[eê]\s+(meu|o)\s+pedido|onde\s+(est[aá]|t[aá])\s+(meu|o)\s+pedido|quanto\s+(tempo|falta)|saiu\s+(da|para|pra)\s+entrega|j[aá]\s+saiu)\b/i
+      const _kwPedido  = /\b(acompanhar\s+(meu\s+|o\s+)?pedido|rastrear\s+(meu\s+|o\s+)?pedido|rastrei?o\s+(do\s+)?pedido|meu\s+pedido|fiz\s+(um\s+)?pedido|acabei\s+de\s+(fazer|pedir)|j[aá]\s+(fiz|pedi)\s+(meu\s+|um\s+)?pedido|pedido\s+(j[aá]|saiu|chegou|t[aá]|est[aá]|ainda|atrasou|atrasado|demorando|pronto|sair[aá]|sai)|me\s+avisa\s+(quando\s+)?(estiver|tiver|ficar)\s+pronto|me\s+avise\s+(quando\s+)?(estiver|tiver|ficar)\s+pronto|avis(a|e)\s+(quando\s+)?(estiver|tiver|ficar)\s+pronto|quando\s+(estiver|tiver|ficar)\s+pronto|status\s+(do\s+)?pedido|cad[eê]\s+(meu|o)\s+pedido|onde\s+(est[aá]|t[aá])\s+(meu|o)\s+pedido|quanto\s+(tempo|falta)|saiu\s+(da|para|pra)\s+entrega|j[aá]\s+saiu)\b/i
       const _kwCupom   = /\b(cupom|cupons|promo[çc][ãa]o|promo[çc][õo]es|desconto|descontos|oferta|ofertas)\b/i
       const _kwCardapio= /\b(card[aá]pio|menu|fome|pedir|fazer\s+pedido|quero\s+pedir|tem\s+o\s+que|t[ãa]o\s+servindo|pode\s+fazer)\b/i
       const _kwHorario = /\b(hor[aá]rio|que\s+horas?|que\s+hora|abre|abrem|fecha|fecham|fechou|fecharam|fechad|abriu|abriram|t[ãa]o?\s+aberto|est[ãa]o?\s+aberto|aberto\s+(agora|hoje)|funciona|funcionam|funcionando|atendem|atendendo|trabalha|trabalham|at[eé]\s+que\s+horas?|de\s+que\s+horas?)\b/i

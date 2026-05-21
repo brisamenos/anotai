@@ -1,6 +1,7 @@
 // NAV
 // ─────────────────────────────────────────
 function nav(id) {
+  if (typeof billingGateNav === 'function' && billingGateNav(id)) return;
   // ── Bloqueio do Robô para plano Pro ──────────────────
   if (id === 'robo') {
     if (_planoAtual !== 'premium') {

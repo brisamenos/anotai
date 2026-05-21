@@ -317,7 +317,7 @@ const sb = window.AppAPI;
   try {
     const s = JSON.parse(sessionStorage.getItem('sys_session') || 'null');
     if (s && s.tenant_id && Date.now() - s.ts < 8*60*60*1000) {
-      window.location.href = 'gestor.html';
+      window.location.href = s.billing_locked ? 'gestor.html?billing=1' : 'gestor.html';
     }
   } catch(e) {}
 })();
@@ -408,6 +408,8 @@ async function doLogin() {
     }
 
     const tenant = u.tenants;
+    let billingLocked = false;
+    let billingExpiredAt = null;
 
     if (tenant && !tenant.ativo) {
       showErr('Acesso suspenso. Entre em contato com o suporte.');
@@ -420,11 +422,11 @@ async function doLogin() {
       const agora   = new Date();
       const diffDias= Math.ceil((exp - agora) / (1000*60*60*24));
       if (diffDias < 0) {
-        showErr(`Acesso expirado em ${exp.toLocaleDateString('pt-BR')}. Renove com o administrador.`);
-        restoreBtn();
-        return;
+        billingLocked = true;
+        billingExpiredAt = tenant.expires_at;
+        showWarn(`Mensalidade vencida em ${exp.toLocaleDateString('pt-BR')}. Voce entrara apenas para renovar o plano.`);
       }
-      if (diffDias <= 7) {
+      if (!billingLocked && diffDias <= 7) {
         showWarn(`Seu acesso expira em ${diffDias} dia(s) (${exp.toLocaleDateString('pt-BR')}). Renove com o administrador.`);
       }
     }
@@ -436,12 +438,17 @@ async function doLogin() {
       role:      u.role,
       tenant_id: u.tenant_id,
       plano:     tenant?.plano || 'pro',
+      tenant_ativo: tenant?.ativo !== false,
+      tenant_expires_at: tenant?.expires_at || null,
+      billing_locked: billingLocked,
+      billing_reason: billingLocked ? 'expired' : null,
+      billing_expired_at: billingExpiredAt,
       ts:        Date.now()
     }));
 
     await sb.from('sys_users').update({ ultimo_acesso: new Date().toISOString() }).eq('id', u.id);
 
-    window.location.href = 'gestor.html';
+    window.location.href = billingLocked ? 'gestor.html?billing=1' : 'gestor.html';
 
   } catch(e) {
     showErr('Erro de conexão. Tente novamente.');

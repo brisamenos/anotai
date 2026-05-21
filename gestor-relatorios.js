@@ -1972,6 +1972,7 @@ function iniciarPollingPixPlano(mpId) {
         setTimeout(() => {
           fecharModalPagPlano();
           renderMeuPlano();
+          if (typeof billingRefreshLockStatus === 'function') billingRefreshLockStatus({ reload: true });
         }, 2000);
       }
     } catch(e) {}
@@ -2101,6 +2102,7 @@ async function processarPagamentoCartao() {
       sbToast('ok', 'Pagamento aprovado! Seu plano foi renovado.');
       fecharModalPagPlano();
       renderMeuPlano();
+      if (typeof billingRefreshLockStatus === 'function') billingRefreshLockStatus({ reload: true });
     } else if (data.status === 'pendente') {
       sbToast('ok', 'Pagamento em analise. Aguarde confirmacao.');
     } else {

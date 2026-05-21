@@ -18,9 +18,163 @@ const sb = window.AppAPI;
 
 // ── Autenticação ──────────────────────────────────────
 let _sessao = null;
+let _billingLocked = false;
 let _planoAtual = 'pro'; // padrão conservador; atualizado via servidor em _carregarPlano()
 
 // Busca o plano real do tenant no servidor (não depende da sessão salva)
+function billingIsDateExpired(expiresAt) {
+  const raw = String(expiresAt || '').trim();
+  if (!raw) return false;
+  const exp = new Date(raw.includes('T') ? raw : raw + 'T00:00:00');
+  if (isNaN(exp.getTime())) return false;
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const expDia = new Date(exp);
+  expDia.setHours(0, 0, 0, 0);
+  return expDia < hoje;
+}
+
+function billingIsLocked() {
+  return !!(_billingLocked || _sessao?.billing_locked);
+}
+window.isBillingLocked = billingIsLocked;
+
+function billingSaveSessionPatch(patch) {
+  try {
+    const sess = JSON.parse(sessionStorage.getItem('sys_session') || '{}');
+    Object.assign(sess, patch);
+    sessionStorage.setItem('sys_session', JSON.stringify(sess));
+    _sessao = sess;
+    _billingLocked = !!sess.billing_locked;
+    if (window.ElectronPrint?.saveSession) window.ElectronPrint.saveSession(sess).catch(()=>{});
+  } catch(e) {}
+}
+
+function billingSetLocked(expiresAt) {
+  billingSaveSessionPatch({
+    billing_locked: true,
+    billing_reason: 'expired',
+    billing_expired_at: expiresAt || _sessao?.billing_expired_at || _sessao?.tenant_expires_at || null,
+    tenant_expires_at: expiresAt || _sessao?.tenant_expires_at || null
+  });
+}
+
+function billingClearLock(opts = {}) {
+  billingSaveSessionPatch({
+    billing_locked: false,
+    billing_reason: null,
+    billing_expired_at: null
+  });
+  document.body?.classList.remove('billing-locked');
+  if (opts.reload) {
+    window.location.href = 'gestor.html';
+  }
+}
+
+function billingForcePlanoPage() {
+  document.querySelectorAll('.page').forEach(p => {
+    p.classList.remove('on');
+    p.style.display = '';
+  });
+  document.querySelectorAll('.si').forEach(s => s.classList.remove('on'));
+  const pg = document.getElementById('page-meu-plano');
+  if (pg) pg.classList.add('on');
+  const sn = document.getElementById('sn-meu-plano');
+  if (sn) sn.classList.add('on');
+  const main = document.querySelector('.main');
+  if (main) main.scrollTop = 0;
+}
+
+function billingApplyLockUI() {
+  if (!billingIsLocked()) return;
+  document.body?.classList.add('billing-locked');
+
+  if (!document.getElementById('billing-lock-style')) {
+    const style = document.createElement('style');
+    style.id = 'billing-lock-style';
+    style.textContent = `
+      body.billing-locked #caixa-btn,
+      body.billing-locked .topnav .ibtn,
+      body.billing-locked #rt-badge { display:none!important; }
+      body.billing-locked .sidebar .shead:not(#sh-sistema),
+      body.billing-locked .sidebar .sidebar-group:not(#sg-sistema),
+      body.billing-locked .sidebar .si:not(#sn-meu-plano) { display:none!important; }
+    `;
+    document.head.appendChild(style);
+  }
+
+  document.querySelectorAll('.si').forEach(btn => {
+    if (btn.id === 'sn-meu-plano') {
+      btn.style.display = '';
+      btn.removeAttribute('aria-disabled');
+    } else {
+      btn.classList.remove('on');
+      btn.style.display = 'none';
+      btn.setAttribute('aria-disabled', 'true');
+    }
+  });
+
+  const page = document.getElementById('page-meu-plano');
+  if (page && !document.getElementById('billing-lock-banner')) {
+    page.insertAdjacentHTML('afterbegin', `
+      <div id="billing-lock-banner" style="display:flex;align-items:flex-start;gap:12px;margin:0 0 18px;padding:14px 16px;border:1px solid rgba(239,68,68,.28);background:rgba(239,68,68,.08);border-radius:12px;color:var(--text)">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="none" style="color:var(--danger);flex-shrink:0;margin-top:1px">
+          <path d="M8 2L14 13H2L8 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+          <path d="M8 6v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          <circle cx="8" cy="11" r=".6" fill="currentColor"/>
+        </svg>
+        <div>
+          <div style="font-weight:800;font-size:14px;color:var(--danger);margin-bottom:3px">Assinatura vencida</div>
+          <div style="font-size:12.5px;color:var(--muted);line-height:1.45">O acesso esta liberado apenas para renovar o plano. Assim que o pagamento for confirmado, o gestor volta ao normal automaticamente.</div>
+        </div>
+      </div>
+    `);
+  }
+  billingForcePlanoPage();
+}
+window.billingApplyLockUI = billingApplyLockUI;
+
+function billingGateNav(id) {
+  if (!billingIsLocked()) return false;
+  if (id === 'meu-plano') return false;
+  billingApplyLockUI();
+  if (typeof sbToast === 'function') sbToast('err', 'Assinatura vencida. Renove o plano para liberar o sistema.');
+  return true;
+}
+window.billingGateNav = billingGateNav;
+
+function billingSyncFromTenant(data, opts = {}) {
+  const ativo = data?.ativo !== false && data?.ativo !== 0;
+  const expired = billingIsDateExpired(data?.expires_at);
+  if (ativo && expired) {
+    billingSetLocked(data.expires_at || null);
+    billingApplyLockUI();
+    if (opts.reload) window.location.href = 'gestor.html?billing=1';
+    return true;
+  }
+  if (ativo && billingIsLocked() && !expired) {
+    billingClearLock({ reload: opts.reload !== false });
+    return false;
+  }
+  return billingIsLocked();
+}
+
+async function billingRefreshLockStatus(opts = {}) {
+  try {
+    const tid = _sessao?.tenant_id;
+    if (!tid) return false;
+    const res = await fetch('/api/tenant-info-gestor', {
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid }
+    });
+    if (!res.ok) return billingIsLocked();
+    const data = await res.json();
+    return billingSyncFromTenant(data, opts);
+  } catch(e) {
+    return billingIsLocked();
+  }
+}
+window.billingRefreshLockStatus = billingRefreshLockStatus;
+
 async function _carregarPlano() {
   try {
     const tid = _sessao?.tenant_id;
@@ -30,6 +184,7 @@ async function _carregarPlano() {
     });
     if (!res.ok) return;
     const data = await res.json();
+    billingSyncFromTenant(data);
     const plano = (data?.plano || 'pro').toLowerCase();
     _planoAtual = plano;
 
@@ -53,6 +208,10 @@ function _verificarSessao() {
     const raw = sessionStorage.getItem('sys_session');
     if (!raw) { window.location.href = 'login.html'; return false; }
     _sessao = JSON.parse(raw);
+    _billingLocked = !!_sessao.billing_locked;
+    if (!_billingLocked && billingIsDateExpired(_sessao.tenant_expires_at)) {
+      billingSetLocked(_sessao.tenant_expires_at);
+    }
     if (Date.now() - _sessao.ts > 8 * 60 * 60 * 1000) {
       sessionStorage.removeItem('sys_session');
       // No Electron a sessão é renovada automaticamente — não expirar aqui
@@ -262,7 +421,22 @@ function financeGateNav(id) {
 }
 
 if (!_verificarSessao()) { /* redireciona */ }
-else { _carregarPlano(); _carregarSegmento(); } // Busca plano e segmento do servidor
+else {
+  if (billingIsLocked()) {
+    billingApplyLockUI();
+    let billingPlanoTries = 0;
+    setTimeout(function waitBillingPlano() {
+      billingApplyLockUI();
+      if (typeof renderMeuPlano === 'function') {
+        try { renderMeuPlano(); } catch(e) {}
+        return;
+      }
+      if (billingPlanoTries++ < 80) setTimeout(waitBillingPlano, 100);
+    }, 50);
+  }
+  _carregarPlano();
+  if (!billingIsLocked()) _carregarSegmento();
+} // Busca plano e segmento do servidor
 
 // ── Tenant injetado automaticamente pelo api-client.js ────
 // O shim lê tenant_id da sessionStorage e envia x-tenant-id em cada request.
@@ -423,6 +597,10 @@ function mapOrder(o) {
 // ── Load all data ────────────────────────────────────
 async function loadAllData(silent = false) {
   console.log('[LOAD] loadAllData chamado | silent:', silent, '| tenant:', _sessao?.tenant_id);
+  if (billingIsLocked()) {
+    billingApplyLockUI();
+    return;
+  }
   if (!silent) sbLoading(true);
   try {
     // Run all queries independently so one failure doesn't block others
@@ -903,6 +1081,10 @@ async function _printComandaMesa(mesaNum, mesaData) {
 }
 
 function subscribeOrders() {
+  if (billingIsLocked()) {
+    unsubscribeAll();
+    return;
+  }
   unsubscribeAll();
 
   const chOrders = sb.channel('orders-rt')
@@ -1643,6 +1825,10 @@ setInterval(() => {
 // Sync ao voltar para a aba
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
+    if (billingIsLocked()) {
+      billingApplyLockUI();
+      return;
+    }
     loadAllData(true);
     if (!_rtConnected) subscribeOrders();
   }
@@ -1669,6 +1855,10 @@ function _saveMaxKnownOrderId() {
 // mesmo que o SSE falhe ou tenha problemas de canal
 setInterval(async () => {
   if (document.visibilityState !== 'visible') return;
+  if (billingIsLocked()) {
+    billingApplyLockUI();
+    return;
+  }
 
   try {
     // 1. Busca pedidos novos (ID maior que o último conhecido)
@@ -1799,9 +1989,13 @@ setInterval(async () => {
 }, 5000);
 
 // Registra SW e pede permissão de notificação ao carregar
-requestNotifPermission();
-registerSW();
-initAdminAnnouncementsGestor();
+if (!billingIsLocked()) {
+  requestNotifPermission();
+  registerSW();
+  initAdminAnnouncementsGestor();
+} else {
+  billingApplyLockUI();
+}
 
 // ── Generic toast for Supabase ops ───────────────────
 const _ICON_OK  = `<svg width='13' height='13' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'><circle cx='8' cy='8' r='6' stroke='currentColor' stroke-width='1.4'/><path d='M5.5 8l2 2 3-3' stroke='currentColor' stroke-width='1.4' stroke-linecap='round'/></svg>`;
