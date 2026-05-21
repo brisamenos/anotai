@@ -464,6 +464,40 @@ function _pedidoWaNumber(phone) {
   return digits;
 }
 
+function _pedidoWaNumberVariants(phone) {
+  const full = _pedidoWaNumber(phone);
+  if (!full) return [];
+  const set = new Set([full]);
+  if (full.startsWith('55')) set.add(full.slice(2));
+  const br = full.startsWith('55') ? full : (full.length === 10 || full.length === 11 ? '55' + full : '');
+  if (br.length >= 12 && br.startsWith('55')) {
+    const prefix = br.slice(0, 4);
+    const rest = br.slice(4);
+    if (rest.length === 9 && rest[0] === '9') {
+      const semNono = prefix + rest.slice(1);
+      set.add(semNono);
+      set.add(semNono.slice(2));
+    } else if (rest.length === 8) {
+      const comNono = prefix + '9' + rest;
+      set.add(comNono);
+      set.add(comNono.slice(2));
+    }
+  }
+  return Array.from(set).filter(Boolean);
+}
+
+function _pedidoWaFindChatByPhone(phone) {
+  if (typeof WA === 'undefined' || !Array.isArray(WA.chats)) return null;
+  const alvo = new Set(_pedidoWaNumberVariants(phone));
+  if (!alvo.size) return null;
+  return WA.chats.find(c => {
+    const jid = c?._jid || c?.remoteJid || c?.id || '';
+    const num = (typeof waNum === 'function') ? waNum(jid) : String(jid).replace(/@.*/, '').replace(/\D/g, '');
+    if (!num) return false;
+    return _pedidoWaNumberVariants(num).some(v => alvo.has(v));
+  }) || null;
+}
+
 async function abrirChatPedidoWA(id) {
   const o = _pedidoWaFindOrder(id);
   if (!o) {
@@ -492,14 +526,24 @@ async function abrirChatPedidoWA(id) {
     return;
   }
 
-  const jid = number + '@s.whatsapp.net';
+  waOpenPanel();
+  await new Promise(resolve => setTimeout(resolve, 120));
+
+  let chat = _pedidoWaFindChatByPhone(number);
+  if (!chat && typeof waLoadChats === 'function') {
+    try {
+      await waLoadChats();
+      chat = _pedidoWaFindChatByPhone(number);
+    } catch(e) {}
+  }
+
+  const jid = chat?._jid || (number + '@s.whatsapp.net');
+  const nome = chat?._name || o.client || number;
   try {
-    if (typeof WA !== 'undefined' && WA?.nameCache) WA.nameCache[jid] = o.client || number;
+    if (typeof WA !== 'undefined' && WA?.nameCache) WA.nameCache[jid] = nome;
   } catch(e) {}
 
-  waOpenPanel();
-  await new Promise(resolve => setTimeout(resolve, 80));
-  await waOpenConv(jid, o.client || number);
+  await waOpenConv(jid, nome);
   setTimeout(() => {
     const inp = document.getElementById('wa-msg-input');
     if (inp) {
