@@ -133,13 +133,16 @@ function renderPendingPaymentsAlert() {
   const count = allRows.length;
   const label = count === 1 ? '1 pedido aguardando pagamento online' : `${count} pedidos aguardando pagamento online`;
   const items = rows.map(o => {
-    const num = String(typeof _orderNum === 'function' ? _orderNum(o.id, o.order_num) : (o.order_num || o.id)).padStart(3, '0');
+    const hasNum = !!o.order_num;
+    const num = hasNum ? String(o.order_num).padStart(3, '0') : '';
     const pay = o.status === 'aguardando_cartao' ? 'cartao' : 'PIX';
     const client = String(o.client || 'Cliente').replace(/[&<>"']/g, c => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[c]));
     const total = (parseFloat(o.total || 0) + parseFloat(o.taxa || 0)).toFixed(2).replace('.', ',');
-    return `<button onclick="document.getElementById('kanban-search-num').value='${num}';renderKanban()" style="display:inline-flex;align-items:center;gap:6px;margin:6px 6px 0 0;padding:6px 9px;border-radius:8px;border:1px solid rgba(245,158,11,.24);background:rgba(245,158,11,.08);color:var(--text);font:inherit;font-size:12px;cursor:pointer">#${num} - ${pay} - ${client} - R$ ${total}</button>`;
+    const labelNum = hasNum ? `#${num}` : 'Sem numero';
+    const click = hasNum ? `document.getElementById('kanban-search-num').value='${num}';renderKanban()` : `nav('historico');document.getElementById('hist-status').value='';histFiltrar()`;
+    return `<button onclick="${click}" style="display:inline-flex;align-items:center;gap:6px;margin:6px 6px 0 0;padding:6px 9px;border-radius:8px;border:1px solid rgba(245,158,11,.24);background:rgba(245,158,11,.08);color:var(--text);font:inherit;font-size:12px;cursor:pointer">${labelNum} - ${pay} - ${client} - R$ ${total}</button>`;
   }).join('');
   box.innerHTML = `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
     <div>
@@ -301,6 +304,9 @@ function renderKanban() {
         const _acougueBtn = _temItemKg
           ? '<button class="oc-btn oc-btn-acougue-peso" title="Ajustar peso disponível" onclick="event.stopPropagation();abrirModalAjustePeso(' + o.id + ')">⚠️</button>'
           : '';
+        const _waBtn = o.phone
+          ? '<button class="oc-btn oc-btn-wa" title="Abrir chat WhatsApp" onclick="event.stopPropagation();abrirChatPedidoWA(' + o.id + ')" style="display:inline-flex;align-items:center;justify-content:center;gap:5px;background:rgba(37,211,102,.12);color:#16a34a;border:1px solid rgba(37,211,102,.28)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><path d="M13.5 8a5.5 5.5 0 1 1-9.2-4.1L3 2l2 .9A5.5 5.5 0 0 1 13.5 8Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6.2 6.1c.2 1.4 1.7 3 3.1 3.4l.6-.5c.2-.1.4-.1.6 0l1 .8c.2.2.2.5 0 .7-.7.7-2 .8-3.2.1-1.3-.7-2.5-2-3-3.4-.4-1.2-.1-2.3.5-2.8.2-.2.5-.2.7 0l.8 1c.1.2.1.4 0 .6l-.5.6Z" fill="currentColor"/></svg><span>WhatsApp</span></button>'
+          : '';
 
         // Notificação de resposta WA do cliente
         const _waNotif = o._waResposta
@@ -323,7 +329,7 @@ function renderKanban() {
           (o.addr && !isMesa ? '<span class="oc-addr">' + o.addr + '</span>' : '') +
           '</div>' +
           _pagBadge +
-          '<div class="oc-actions">' + actionBtn + '</div>' +
+          '<div class="oc-actions">' + _waBtn + actionBtn + '</div>' +
           '</div>';
       }).join('');
     }
@@ -404,11 +410,11 @@ async function _kanbanHistSearch(numQ, clientQ) {
       const items = Array.isArray(o.items) ? o.items : [];
       const itensStr = items.map(i => `${i.qty}x ${i.name}`).join(', ');
       const dt = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) : '';
-      const num = o.order_num || o.id;
+      const num = o.order_num ? '#' + String(o.order_num).padStart(3, '0') : 'Sem numero';
       const total = (parseFloat(o.total || 0) + parseFloat(o.taxa || 0)).toFixed(2).replace('.', ',');
       const sc = statusColor[o.status] || 'var(--muted)';
       return `<div onclick="kanbanHistOpenDetail(${o.id})" style="display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;padding:10px 14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;cursor:pointer;transition:all .15s" onmouseenter="this.style.borderColor='rgba(14,165,233,.3)';this.style.background='rgba(14,165,233,.04)'" onmouseleave="this.style.borderColor='rgba(255,255,255,.06)';this.style.background='rgba(255,255,255,.03)'">
-        <div style="font-weight:800;color:var(--accent);font-size:13px;min-width:50px">#${num}</div>
+        <div style="font-weight:800;color:var(--accent);font-size:13px;min-width:74px">${num}</div>
         <div style="min-width:0">
           <div style="font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${o.client || '—'}${o.mesa_num ? ' <span style="color:var(--purple);font-size:11px">Mesa ' + o.mesa_num + '</span>' : ''}</div>
           <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px">${itensStr || '—'}</div>
@@ -441,6 +447,66 @@ function kanbanHistOpenDetail(id) {
     }
     histDetalhe(id);
   }
+}
+
+function _pedidoWaFindOrder(id) {
+  const oid = Number(id);
+  return (ordersKanban || []).find(x => Number(x.id) === oid)
+    || ((typeof mesaOrdersCache !== 'undefined' ? mesaOrdersCache : []) || []).find(x => Number(x.id) === oid)
+    || null;
+}
+
+function _pedidoWaNumber(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('55')) return digits;
+  if (digits.length === 10 || digits.length === 11) return '55' + digits;
+  return digits;
+}
+
+async function abrirChatPedidoWA(id) {
+  const o = _pedidoWaFindOrder(id);
+  if (!o) {
+    if (typeof sbToast === 'function') sbToast('err', 'Pedido nao encontrado.');
+    return;
+  }
+  const number = _pedidoWaNumber(o.phone);
+  if (!number || number.length < 12) {
+    if (typeof sbToast === 'function') sbToast('err', 'Pedido sem telefone valido.');
+    return;
+  }
+
+  try {
+    if (typeof evoCarregarInstancia === 'function') await evoCarregarInstancia();
+  } catch(e) {}
+
+  const inst = (typeof EVO !== 'undefined' && EVO && EVO.instance)
+    ? EVO.instance
+    : (document.getElementById('evo-instance')?.value || '').trim();
+  if (!inst) {
+    if (typeof sbToast === 'function') sbToast('err', 'Configure a instancia da Evolution API no Robo WA.');
+    return;
+  }
+  if (typeof waOpenPanel !== 'function' || typeof waOpenConv !== 'function') {
+    if (typeof sbToast === 'function') sbToast('err', 'Chat WhatsApp ainda nao carregou.');
+    return;
+  }
+
+  const jid = number + '@s.whatsapp.net';
+  try {
+    if (typeof WA !== 'undefined' && WA?.nameCache) WA.nameCache[jid] = o.client || number;
+  } catch(e) {}
+
+  waOpenPanel();
+  await new Promise(resolve => setTimeout(resolve, 80));
+  await waOpenConv(jid, o.client || number);
+  setTimeout(() => {
+    const inp = document.getElementById('wa-msg-input');
+    if (inp) {
+      inp.focus();
+      if (typeof waOnTyping === 'function') waOnTyping(inp);
+    }
+  }, 120);
 }
 
 

@@ -323,6 +323,8 @@ function _aplicarOverrideClaro(vars) {
     .oc-btn-no:hover{background:rgba(239,68,68,.12)!important}
     .oc-btn-fin{background:rgba(14,165,233,.08)!important;color:#0284c7!important;border-color:rgba(14,165,233,.18)!important;font-weight:600!important}
     .oc-btn-fin:hover{background:rgba(14,165,233,.15)!important}
+    .oc-btn-wa{background:rgba(37,211,102,.10)!important;color:#128c4a!important;border-color:rgba(37,211,102,.25)!important;font-weight:700!important}
+    .oc-btn-wa:hover{background:rgba(37,211,102,.18)!important}
 
     /* ── Filtros ── */
     .kf-btn,.filter-btn{background:${sur2}!important;color:${muted}!important;border-color:${bord}!important}

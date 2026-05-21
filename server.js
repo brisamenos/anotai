@@ -777,6 +777,37 @@ const MIGRATIONS = [
     `ALTER TABLE store_config ADD COLUMN order_auto_reset_daily INTEGER DEFAULT 0`,
     `ALTER TABLE store_config ADD COLUMN order_auto_reset_last_date TEXT`
   ] },
+  { version:61, description:'assinatura recorrente de planos SaaS', up:[
+    `CREATE TABLE IF NOT EXISTS plano_assinaturas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      plano TEXT NOT NULL,
+      valor REAL NOT NULL,
+      status TEXT DEFAULT 'pending',
+      mp_preapproval_id TEXT UNIQUE,
+      mp_external_ref TEXT UNIQUE,
+      payer_email TEXT,
+      payment_method_id TEXT,
+      last_authorized_payment_id TEXT,
+      last_payment_id TEXT,
+      last_payment_status TEXT,
+      next_payment_at TEXT,
+      started_at TEXT,
+      canceled_at TEXT,
+      updated_at TEXT DEFAULT (datetime('now')),
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_plano_ass_tenant ON plano_assinaturas(tenant_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_plano_ass_status ON plano_assinaturas(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_plano_ass_extref ON plano_assinaturas(mp_external_ref)`,
+    `CREATE INDEX IF NOT EXISTS idx_plano_ass_preapproval ON plano_assinaturas(mp_preapproval_id)`
+  ] },
+  { version:62, description:'pedidos online pendentes sem numero publico', up:
+    `UPDATE orders
+     SET order_num=NULL
+     WHERE status='aguardando_cartao'
+        OR (status='aguardando_pix' AND COALESCE(pag,'')!='pix_manual')`
+  },
 ]
 
 function runMigrations() {
@@ -835,12 +866,13 @@ garantirColuna('admin_alerts', 'display_mode', "TEXT DEFAULT 'banner'")
 
 // ── Backfill order_num para pedidos existentes ────────────────────────────
 try {
-  const _needsBackfill = db.prepare('SELECT COUNT(*) as cnt FROM orders WHERE order_num IS NULL').get()
+  const _backfillWhere = "order_num IS NULL AND NOT (status='aguardando_cartao' OR (status='aguardando_pix' AND COALESCE(pag,'')!='pix_manual'))"
+  const _needsBackfill = db.prepare(`SELECT COUNT(*) as cnt FROM orders WHERE ${_backfillWhere}`).get()
   if (_needsBackfill?.cnt > 0) {
     log('🔄', `Backfill order_num: ${_needsBackfill.cnt} pedidos sem número sequencial`)
-    const _tenants = db.prepare('SELECT DISTINCT tenant_id FROM orders WHERE order_num IS NULL').all()
+    const _tenants = db.prepare(`SELECT DISTINCT tenant_id FROM orders WHERE ${_backfillWhere}`).all()
     for (const { tenant_id } of _tenants) {
-      const _nullOrders = db.prepare('SELECT id FROM orders WHERE tenant_id=? AND order_num IS NULL ORDER BY id ASC').all(tenant_id)
+      const _nullOrders = db.prepare(`SELECT id FROM orders WHERE tenant_id=? AND ${_backfillWhere} ORDER BY id ASC`).all(tenant_id)
       const _existingMax = db.prepare('SELECT COALESCE(MAX(order_num),0) as mx FROM orders WHERE tenant_id=? AND order_num IS NOT NULL').get(tenant_id)
       let _seq = _existingMax?.mx || 0
       const _upd = db.prepare('UPDATE orders SET order_num=? WHERE id=?')
@@ -857,7 +889,7 @@ try {
 const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_items',
   'cupons','mesas','garcons','orders','movimentos','estoque','estoque_receitas','estoque_movimentos','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress',
   'entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens','order_status_history',
-  'indicadores','leads_indicacao','comissoes','indicador_tutorial_videos','indicador_tutorial_progress','admin_alerts']
+  'indicadores','leads_indicacao','comissoes','indicador_tutorial_videos','indicador_tutorial_progress','admin_alerts','plano_assinaturas']
   // wa_messages excluída — pode conter muita mídia e estourar JSON.stringify
 
 let _dirty = false
@@ -1053,6 +1085,33 @@ setInterval(() => {
     }
   } catch(e) { log('⚠️','[CLEANUP] erro:', e.message) }
 }, 5 * 60 * 1000)
+
+function pedidoOnlineAguardandoPagamento(order) {
+  const status = String(order?.status || '').toLowerCase()
+  const pag = String(order?.pag || '').toLowerCase()
+  return status === 'aguardando_cartao'
+    || (status === 'aguardando_pix' && pag !== 'pix_manual')
+}
+
+function atribuirOrderNumSeNecessario(tid, orderId) {
+  if (!tid || !orderId) return null
+  const txFn = db.transaction((tenantId, id) => {
+    const atual = db.prepare('SELECT id, order_num FROM orders WHERE id=? AND tenant_id=?').get(id, tenantId)
+    if (!atual) return null
+    if (atual.order_num) return Number(atual.order_num)
+    const cfg = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tenantId)
+    const offset = parseInt(cfg?.order_num_offset) || 0
+    const row = db.prepare(`
+      SELECT COALESCE(MAX(order_num),0) as mx
+      FROM orders
+      WHERE tenant_id=? AND id>? AND order_num IS NOT NULL
+    `).get(tenantId, offset)
+    const next = (row?.mx || 0) + 1
+    db.prepare('UPDATE orders SET order_num=? WHERE id=? AND tenant_id=? AND order_num IS NULL').run(next, id, tenantId)
+    return next
+  })
+  return txFn(tid, orderId)
+}
 
 function numeroPedidoServidor(tid, order) {
   if (order?.order_num) return Number(order.order_num)
@@ -1347,6 +1406,7 @@ const TABLE_COLS = {
   fornecedores: ['id','tenant_id','nome','contato','telefone','email','cnpj','endereco','obs','ativo','created_at'],
   contas_pagar: ['id','tenant_id','descricao','valor','vencimento','categoria','fornecedor_id','recorrente','recorrencia','status','pago_em','obs','created_at'],
   faturas:      ['id','tenant_id','plano','valor','meses','metodo','status','link_pagamento','mp_payment_id','mp_external_ref','qr_code','qr_code_base64','vence_em','pago_em','cancelado_em','obs','created_at'],
+  plano_assinaturas: ['id','tenant_id','plano','valor','status','mp_preapproval_id','mp_external_ref','payer_email','payment_method_id','last_authorized_payment_id','last_payment_id','last_payment_status','next_payment_at','started_at','canceled_at','updated_at','created_at'],
   admin_audit_log: ['id','admin_id','admin_nome','admin_email','acao','alvo_tipo','alvo_id','alvo_nome','detalhes','ip','user_agent','created_at'],
   admin_alerts: ['id','tipo','titulo','mensagem','display_mode','bg_color','text_color','font_family','target_all','target_tenants','ativo','created_by','created_at','updated_at','expires_at'],
 }
@@ -1683,7 +1743,7 @@ async function handleREST(req, res, table, params, body) {
       // esperam uma a outra — sem duplicação.
       if (table === 'orders' && info.lastInsertRowid) {
         const _tid = tenantId || payload.tenant_id
-        if (_tid) {
+        if (_tid && !pedidoOnlineAguardandoPagamento(payload)) {
           try {
             const txFn = db.transaction((tenantId, rowid) => {
               const cfg = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tenantId)
@@ -1712,7 +1772,7 @@ async function handleREST(req, res, table, params, body) {
       // Notificacao "Pedido Recebido" na criacao do pedido.
       // Para pix_manual, o bloco pix_cobranca abaixo ja envia a comanda com itens/total
       // junto da chave PIX; aqui evitamos duplicar e tratamos os demais pagamentos.
-      if (table === 'orders' && rawForEmit && rawForEmit.phone && rawForEmit.pag !== 'pix_manual') {
+      if (table === 'orders' && rawForEmit && rawForEmit.phone && rawForEmit.pag !== 'pix_manual' && !pedidoOnlineAguardandoPagamento(rawForEmit)) {
         const _ord = rawForEmit
         const _tid = _ord.tenant_id
         setImmediate(async () => {
@@ -2392,6 +2452,9 @@ async function handleOrderStatus(req, res) {
     if (!order) return send(res,404,{ok:false,error:'Pedido não encontrado'})
     const oldStatus = order.status
     db.prepare("UPDATE orders SET status=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?").run(new_status,order_id,tid)
+    if (!pedidoOnlineAguardandoPagamento({ ...order, status: new_status }) && !order.order_num) {
+      try { atribuirOrderNumSeNecessario(tid, order_id) } catch(e) { log('âš ï¸', 'order_num ao mudar status falhou:', e.message) }
+    }
     registrarStatusPedido(tid, order_id, oldStatus, new_status, {
       actor_type: body.actor_type || 'gestor',
       actor_id: body.actor_id || null,

@@ -75,8 +75,8 @@ async function ensureWaNumero() {
 }
 
 function buildWaLink(orderId, orderNum, numeroOverride) {
-  const num = String(_orderNum(orderId, orderNum)).padStart(3, '0');
-  const msg = `Acompanhar pedido *#${num}*`;
+  const num = orderNum ? String(orderNum).padStart(3, '0') : '';
+  const msg = num ? `Acompanhar pedido *#${num}*` : 'Quero acompanhar meu pedido';
   const numero = normalizeWaNumero(numeroOverride || _waNumero);
   if (!numero) return null;
   _waNumero = numero;
@@ -87,14 +87,14 @@ function configureSuccessWaButton(order, waLink) {
   const waBtnEl  = document.getElementById('success-wa-btn');
   const waLblEl  = document.getElementById('success-wa-label');
   const waHintEl = document.getElementById('success-wa-hint');
-  const numFormatado = '#' + String(_orderNum(order.id, order.order_num)).padStart(3,'0');
+  const numFormatado = order.order_num ? '#' + String(order.order_num).padStart(3,'0') : '';
   if (!waBtnEl) return;
 
   if (waLink) {
     waBtnEl.classList.remove('success-wa-btn-hidden');
     waBtnEl.classList.add('show');
     waBtnEl.href = waLink;
-    if (waLblEl)  waLblEl.textContent = `Acompanhar pedido ${numFormatado} pelo WhatsApp`;
+    if (waLblEl)  waLblEl.textContent = numFormatado ? `Acompanhar pedido ${numFormatado} pelo WhatsApp` : 'Acompanhar pelo WhatsApp';
     if (waHintEl) waHintEl.style.display = 'block';
     return;
   }
@@ -120,7 +120,8 @@ function showWaToast(orderId, orderNum) {
   if (!_waNumero) return;
   const link = buildWaLink(orderId, orderNum);
   if (!link) return;
-  const num  = String(_orderNum(orderId, orderNum)).padStart(3,'0');
+  const num  = orderNum ? String(orderNum).padStart(3,'0') : '';
+  const pedidoTxt = num ? `Pedido <strong style="color:#fff">#${num}</strong> confirmado!` : 'Seu pedido esta aguardando pagamento.';
 
   // Remove toast anterior se existir
   const prev = document.getElementById('wa-track-toast');
@@ -156,7 +157,7 @@ function showWaToast(orderId, orderNum) {
         Acompanhar pelo WhatsApp
       </div>
       <div style="font-size:12.5px;color:rgba(255,255,255,.75);line-height:1.4;">
-        Pedido <strong style="color:#fff">#${num}</strong> confirmado! Toque para receber atualizações em tempo real.
+        ${pedidoTxt} Toque para receber atualizações em tempo real.
       </div>
     </div>
     <div style="
@@ -537,7 +538,7 @@ async function _doSubmitOrder(addr, troco) {
     // ── Tela de sucesso ──
     document.getElementById('cart-content').style.display = 'none';
     document.getElementById('success-screen').classList.add('on');
-    const numFormatado = '#' + String(_orderNum(order.id, order.order_num)).padStart(3,'0');
+    const numFormatado = order.order_num ? '#' + String(order.order_num).padStart(3,'0') : 'Aguardando pagamento';
     window._lastOrderNum = order.order_num; // para o modal de avaliação
     document.getElementById('success-num').textContent = numFormatado;
 

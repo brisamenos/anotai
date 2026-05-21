@@ -70,6 +70,26 @@ function _emitOrderUpdate(db, sseBroadcast, tenantId, order, extra = {}) {
   sseBroadcast(`orders-rt:${tenantId}`, 'orders:UPDATE', { ...order, items, ...extra })
 }
 
+function _atribuirOrderNumSeNecessario(db, tenantId, orderId) {
+  if (!tenantId || !orderId) return null
+  const txFn = db.transaction((tid, id) => {
+    const atual = db.prepare('SELECT id, order_num FROM orders WHERE id=? AND tenant_id=?').get(id, tid)
+    if (!atual) return null
+    if (atual.order_num) return Number(atual.order_num)
+    const cfg = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tid)
+    const offset = parseInt(cfg?.order_num_offset) || 0
+    const row = db.prepare(`
+      SELECT COALESCE(MAX(order_num),0) as mx
+      FROM orders
+      WHERE tenant_id=? AND id>? AND order_num IS NOT NULL
+    `).get(tid, offset)
+    const next = (row?.mx || 0) + 1
+    db.prepare('UPDATE orders SET order_num=? WHERE id=? AND tenant_id=? AND order_num IS NULL').run(next, id, tid)
+    return next
+  })
+  return txFn(tenantId, orderId)
+}
+
 function _sincronizarPedidoPixAprovado(db, log, sseBroadcast, aplicarBaixaEstoquePedido, orderId, tenantId, origem = 'pix-sync') {
   if (!orderId || !tenantId) return null
   const pix = db.prepare(`
@@ -88,9 +108,16 @@ function _sincronizarPedidoPixAprovado(db, log, sseBroadcast, aplicarBaixaEstoqu
     || (antes.status === 'cancelado' && antes.pag !== 'pix_mp' && antes.pag !== 'cartao_mp')
   const novoStatus = precisaLiberar ? 'producao' : antes.status
   const mudou = !jaOnline || antes.status !== novoStatus
-  if (!mudou) return antes
+  if (!mudou) {
+    if (!antes.order_num) {
+      _atribuirOrderNumSeNecessario(db, tenantId, orderId)
+      return db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(orderId, tenantId) || antes
+    }
+    return antes
+  }
 
   db.prepare("UPDATE orders SET pag='pix_mp', status=? WHERE id=? AND tenant_id=?").run(novoStatus, orderId, tenantId)
+  _atribuirOrderNumSeNecessario(db, tenantId, orderId)
   const depois = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(orderId, tenantId)
 
   if (precisaLiberar && typeof aplicarBaixaEstoquePedido === 'function' && depois) {
@@ -168,6 +195,7 @@ function _iniciarPixRecoveryJob(db, log, sseBroadcast, MP_TOKEN_ENV, aplicarBaix
                 // PIX online confirmado pelo MP → entra direto em produção (pula análise)
                 // O pagamento já foi validado, não precisa de aceite manual.
                 db.prepare("UPDATE orders SET status='producao', pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, tenantId)
+                _atribuirOrderNumSeNecessario(db, tenantId, row.order_id)
                 if (podeRessurreicao) log('🔄', `PEDIDO RESSUSCITADO (recovery): pagamento PIX chegou após cancelamento — id=${row.order_id} tenant=${tenantId}`)
                 const pedFull = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(row.order_id, tenantId)
                 if (typeof aplicarBaixaEstoquePedido === 'function' && pedFull) {
@@ -323,6 +351,146 @@ function _resolveMpGlobal(db, MP_TOKEN_ENV) {
     if (g.mp_token) return g.mp_token
   } catch {}
   return MP_TOKEN_ENV || ''
+}
+
+function _ensurePlanoAssinaturas(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS plano_assinaturas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      plano TEXT NOT NULL,
+      valor REAL NOT NULL,
+      status TEXT DEFAULT 'pending',
+      mp_preapproval_id TEXT UNIQUE,
+      mp_external_ref TEXT UNIQUE,
+      payer_email TEXT,
+      payment_method_id TEXT,
+      last_authorized_payment_id TEXT,
+      last_payment_id TEXT,
+      last_payment_status TEXT,
+      next_payment_at TEXT,
+      started_at TEXT,
+      canceled_at TEXT,
+      updated_at TEXT DEFAULT (datetime('now')),
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_plano_ass_tenant ON plano_assinaturas(tenant_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_plano_ass_status ON plano_assinaturas(status);
+    CREATE INDEX IF NOT EXISTS idx_plano_ass_extref ON plano_assinaturas(mp_external_ref);
+    CREATE INDEX IF NOT EXISTS idx_plano_ass_preapproval ON plano_assinaturas(mp_preapproval_id);
+  `)
+}
+
+function _planoSaasLabel(plano) {
+  return plano === 'premium' ? 'Premium' : 'Essencial'
+}
+
+function _baseUrlFromReq(req) {
+  const rawHost = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim()
+  if (!rawHost) return ''
+  const rawProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim()
+  const proto = rawProto || (/^(localhost|127\.0\.0\.1)(:|$)/i.test(rawHost) ? 'http' : 'https')
+  return `${proto}://${rawHost}`
+}
+
+function _assinaturaAtiva(status) {
+  const s = String(status || '').toLowerCase()
+  return ['authorized', 'pending', 'paused'].includes(s)
+}
+
+function _renovarPlanoSaas(db, tenantId, plano, meses = 1) {
+  const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId)
+  if (!tenant) return null
+  const hoje = new Date()
+  hoje.setHours(0,0,0,0)
+  const atual = tenant.expires_at ? new Date(tenant.expires_at) : null
+  const base = atual && !Number.isNaN(atual.getTime()) && atual > hoje ? atual : hoje
+  const novaExpira = new Date(base)
+  novaExpira.setDate(novaExpira.getDate() + (parseInt(meses) || 1) * 30)
+  const novaExpISO = novaExpira.toISOString().slice(0, 10)
+  const planoNovo = ['premium','essencial','pro'].includes(plano) ? plano : (tenant.plano || 'essencial')
+  db.prepare("UPDATE tenants SET plano=?, expires_at=?, ativo=1, updated_at=datetime('now') WHERE id=?")
+    .run(planoNovo, novaExpISO, tenantId)
+  return { tenant, plano: planoNovo, expires_at: novaExpISO }
+}
+
+function _upsertAssinaturaPreapproval(db, tenantId, plano, valor, pre, extRef, email, paymentMethodId) {
+  _ensurePlanoAssinaturas(db)
+  const preId = pre?.id ? String(pre.id) : ''
+  const status = pre?.status || 'pending'
+  const nextPayment = pre?.next_payment_date || pre?.auto_recurring?.start_date || null
+  const metodo = pre?.payment_method_id || paymentMethodId || ''
+  const existente = preId
+    ? db.prepare('SELECT id FROM plano_assinaturas WHERE mp_preapproval_id=?').get(preId)
+    : null
+  if (existente) {
+    db.prepare(`UPDATE plano_assinaturas
+      SET plano=?, valor=?, status=?, mp_external_ref=?, payer_email=?, payment_method_id=?,
+          next_payment_at=?, started_at=COALESCE(started_at, ?), updated_at=datetime('now')
+      WHERE id=?`)
+      .run(plano, valor, status, extRef || pre?.external_reference || '', email || pre?.payer_email || '',
+        metodo, nextPayment, pre?.date_created || new Date().toISOString(), existente.id)
+    return db.prepare('SELECT * FROM plano_assinaturas WHERE id=?').get(existente.id)
+  }
+  const info = db.prepare(`INSERT INTO plano_assinaturas
+    (tenant_id, plano, valor, status, mp_preapproval_id, mp_external_ref, payer_email,
+     payment_method_id, next_payment_at, started_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`)
+    .run(tenantId, plano, valor, status, preId, extRef || pre?.external_reference || '', email || pre?.payer_email || '',
+      metodo, nextPayment, pre?.date_created || new Date().toISOString())
+  return db.prepare('SELECT * FROM plano_assinaturas WHERE id=?').get(info.lastInsertRowid)
+}
+
+function _localizarAssinaturaMp(db, { preapprovalId = '', externalRef = '' } = {}) {
+  _ensurePlanoAssinaturas(db)
+  let row = null
+  if (preapprovalId) {
+    row = db.prepare('SELECT * FROM plano_assinaturas WHERE mp_preapproval_id=?').get(String(preapprovalId))
+  }
+  if (!row && externalRef) {
+    row = db.prepare('SELECT * FROM plano_assinaturas WHERE mp_external_ref=?').get(String(externalRef))
+  }
+  return row
+}
+
+function _processarCobrancaAssinatura(db, log, marcarDirty, ass, paymentId, paymentStatus, paymentDate, authorizedPaymentId = '') {
+  if (!ass) return null
+  const statusRaw = String(paymentStatus || '').toLowerCase()
+  const aprovado = statusRaw === 'approved' || statusRaw === 'aprovado'
+  const idPagamento = paymentId ? String(paymentId) : ''
+
+  if (!aprovado || !idPagamento) {
+    db.prepare(`UPDATE plano_assinaturas
+      SET last_authorized_payment_id=COALESCE(?, last_authorized_payment_id),
+          last_payment_id=COALESCE(?, last_payment_id),
+          last_payment_status=?,
+          updated_at=datetime('now')
+      WHERE id=?`)
+      .run(authorizedPaymentId || null, idPagamento || null, statusRaw || '', ass.id)
+    marcarDirty()
+    return { renewed: false, status: statusRaw }
+  }
+  if (ass.last_payment_id && String(ass.last_payment_id) === idPagamento) {
+    return { renewed: false, status: statusRaw, duplicate: true }
+  }
+
+  db.prepare(`UPDATE plano_assinaturas
+    SET last_authorized_payment_id=COALESCE(?, last_authorized_payment_id),
+        last_payment_status=?,
+        updated_at=datetime('now')
+    WHERE id=?`)
+    .run(authorizedPaymentId || null, statusRaw || '', ass.id)
+
+  const renovado = _renovarPlanoSaas(db, ass.tenant_id, ass.plano, 1)
+  if (!renovado) return { renewed: false, status: statusRaw }
+  db.prepare(`UPDATE plano_assinaturas
+    SET status=CASE WHEN status='pending' THEN 'authorized' ELSE status END,
+        last_payment_id=?, last_payment_status='approved', updated_at=datetime('now')
+    WHERE id=?`)
+    .run(idPagamento, ass.id)
+  marcarDirty()
+  log('OK', `ASSINATURA PLANO PAGA: tenant=${ass.tenant_id} plano=${renovado.plano} vencimento=${renovado.expires_at} mp_payment=${idPagamento}`)
+  return { renewed: true, status: statusRaw, expires_at: renovado.expires_at, plano: renovado.plano }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2054,7 +2222,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         // Lista deve casar com a do backup pra que o restore consiga restaurar tudo.
         // Antes faltavam pagamentos_pix, saques, pagamentos_cartao e stamp_progress —
         // se o backup tivesse essas tabelas, eram silenciosamente descartadas no restore.
-        const TABS = ['tenants', 'sys_users', 'store_config', 'categories', 'menu_items', 'cupons', 'mesas', 'garcons', 'orders', 'movimentos', 'estoque', 'estoque_receitas', 'estoque_movimentos', 'fidelidade', 'customers', 'pagamentos_pix', 'saques', 'pagamentos_cartao', 'stamp_progress', 'ratings', 'entregadores', 'entregas', 'rotas_entrega', 'entregador_locations', 'entrega_mensagens']
+        const TABS = ['tenants', 'sys_users', 'store_config', 'categories', 'menu_items', 'cupons', 'mesas', 'garcons', 'orders', 'movimentos', 'estoque', 'estoque_receitas', 'estoque_movimentos', 'fidelidade', 'customers', 'pagamentos_pix', 'saques', 'pagamentos_cartao', 'plano_assinaturas', 'stamp_progress', 'ratings', 'entregadores', 'entregas', 'rotas_entrega', 'entregador_locations', 'entrega_mensagens']
         let totalOk = 0, totalFail = 0
         for (const t of TABS) {
           const rows = body.tabelas?.[t]; if (!rows?.length) continue
@@ -2085,7 +2253,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     // Comprime com gzip pra reduzir tráfego (backup pode passar de 50MB sem compressão).
     if (req.method === 'GET' && upath === '/api/admin-backup-global-imagens') {
       try {
-        const TABS = ['tenants','sys_users','store_config','categories','menu_items','cupons','mesas','garcons','orders','movimentos','estoque','estoque_receitas','estoque_movimentos','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress','ratings','entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens']
+        const TABS = ['tenants','sys_users','store_config','categories','menu_items','cupons','mesas','garcons','orders','movimentos','estoque','estoque_receitas','estoque_movimentos','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','plano_assinaturas','stamp_progress','ratings','entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens']
         const snapshot = { ts: new Date().toISOString(), tipo: 'global', tabelas: {}, imagens: {} }
         let totalRegs = 0
         for (const t of TABS) {
@@ -2164,7 +2332,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tid)
         if (!tenant) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
         // Tabelas que têm tenant_id (todas exceto a tabela tenants em si)
-        const TABS = ['sys_users','store_config','categories','menu_items','cupons','mesas','garcons','orders','movimentos','estoque','estoque_receitas','estoque_movimentos','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress','ratings','entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens']
+        const TABS = ['sys_users','store_config','categories','menu_items','cupons','mesas','garcons','orders','movimentos','estoque','estoque_receitas','estoque_movimentos','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','plano_assinaturas','stamp_progress','ratings','entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens']
         const snapshot = {
           ts: new Date().toISOString(),
           tipo: 'tenant',
@@ -2917,7 +3085,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
         body: JSON.stringify({
           transaction_amount: _valorMp,
-          description: `Pedido #${order_id || '?'} - ${client || 'Cliente'}`,
+          description: `Pedido online - ${client || 'Cliente'}`,
           payment_method_id: 'pix',
           external_reference: extRef,
           payer: { email, first_name: client || 'Cliente', last_name: '' },
@@ -2979,12 +3147,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
             // Usa order_num sequencial do tenant quando disponível; senão fallback p/ id - offset
             const _ord   = body.order_id ? db.prepare('SELECT id, order_num, wa_track FROM orders WHERE id=? AND tenant_id=?').get(body.order_id, tid) : null
             if (body.order_id && parseInt(_ord?.wa_track || 0) !== 1) return
-            const idStr  = String(_ord?.order_num || Math.max(1, (body.order_id || 0) - offset)).padStart(3,'0')
+            const idStr  = _ord?.order_num ? String(_ord.order_num).padStart(3,'0') : ''
             const nome   = client || 'Cliente'
             const fmtVal = parseFloat(valor).toFixed(2).replace('.',',')
             // Mensagem 1: texto com instruções (customizável pelo gestor, sem o código)
             const nomeLoja  = cfgWa?.store_name || 'Restaurante'
-            const msgPadTxt = `🏪 *${nomeLoja}*\n${'─'.repeat(20)}\n\n💠 *PIX - Pedido #${idStr}*\n\nOlá, *${nome}*! Para confirmar seu pedido, use o PIX Copia e Cola.\n\n*Valor:* R$ ${fmtVal}\n\nO código será enviado na próxima mensagem.`
+            const tituloPix = idStr ? `PIX - Pedido #${idStr}` : 'PIX do seu pedido'
+            const msgPadTxt = `🏪 *${nomeLoja}*\n${'─'.repeat(20)}\n\n💠 *${tituloPix}*\n\nOlá, *${nome}*! Para confirmar seu pedido, use o PIX Copia e Cola.\n\n*Valor:* R$ ${fmtVal}\n\nO código será enviado na próxima mensagem.`
             const msgTxt = pixCop.msg ? fillVars(pixCop.msg.replace('{codigo_pix}', '').trim(), { nome, id: idStr, total: fmtVal, codigo_pix: '' }).trim() : msgPadTxt
             await sendWA(body.phone, msgTxt, inst)
             // Mensagem 2: só o código (separado para facilitar cópia)
@@ -3038,6 +3207,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           // PIX online confirmado pelo MP → entra direto em produção (pula análise)
           // O pagamento já foi validado, não precisa de aceite manual.
           db.prepare("UPDATE orders SET status='producao', pag='pix_mp' WHERE id=? AND tenant_id=?").run(rowAtual.order_id, rowAtual.tenant_id)
+          _atribuirOrderNumSeNecessario(db, rowAtual.tenant_id, rowAtual.order_id)
           const _fo1 = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(rowAtual.order_id, rowAtual.tenant_id)
           if (typeof aplicarBaixaEstoquePedido === 'function' && _fo1) {
             aplicarBaixaEstoquePedido(rowAtual.tenant_id, _fo1, 'pix-status')
@@ -3169,6 +3339,46 @@ module.exports = async function handleRoutes(req, res, ctx) {
     }
     if (!mpToken) { send(res, 200, { ok: true }); return true }
     try {
+      const whType = String(body?.type || body?.topic || body?.action || '').toLowerCase()
+      if (whType.includes('subscription_authorized_payment') || whType.includes('authorized_payment')) {
+        const ar = await fetch(`https://api.mercadopago.com/authorized_payments/${mpId}`, { headers: { 'Authorization': `Bearer ${mpToken}` } })
+        const ap = await ar.json()
+        if (ar.ok) {
+          const preId = ap.preapproval_id || ap.preapproval?.id || ap.subscription_id || ''
+          const extRef = ap.external_reference || ap.preapproval?.external_reference || ap.metadata?.external_reference || ''
+          const ass = _localizarAssinaturaMp(db, { preapprovalId: preId, externalRef: extRef })
+          if (ass) {
+            const paymentId = ap.payment?.id || ap.payment_id || ap.mp_payment_id || ''
+            const paymentStatus = ap.payment?.status || ap.status || ''
+            const paymentDate = ap.payment?.date_approved || ap.date_created || null
+            _processarCobrancaAssinatura(db, log, marcarDirty, ass, paymentId, paymentStatus, paymentDate, String(ap.id || mpId))
+          }
+        }
+        send(res, 200, { ok: true })
+        return true
+      }
+
+      if (whType.includes('subscription_preapproval') || whType === 'preapproval') {
+        const pr = await fetch(`https://api.mercadopago.com/preapproval/${mpId}`, { headers: { 'Authorization': `Bearer ${mpToken}` } })
+        const pre = await pr.json()
+        if (pr.ok) {
+          const ass = _localizarAssinaturaMp(db, { preapprovalId: pre.id || mpId, externalRef: pre.external_reference || '' })
+          if (ass) {
+            const statusPre = pre.status || ass.status || 'pending'
+            const nextPayment = pre.next_payment_date || pre.auto_recurring?.start_date || ass.next_payment_at || null
+            const cancelado = ['cancelled', 'canceled'].includes(String(statusPre).toLowerCase())
+            db.prepare(`UPDATE plano_assinaturas
+              SET status=?, next_payment_at=?, canceled_at=CASE WHEN ? THEN COALESCE(canceled_at, ?) ELSE canceled_at END,
+                  updated_at=datetime('now')
+              WHERE id=?`)
+              .run(statusPre, nextPayment, cancelado ? 1 : 0, new Date().toISOString(), ass.id)
+            marcarDirty()
+          }
+        }
+        send(res, 200, { ok: true })
+        return true
+      }
+
       const r = await fetch(`https://api.mercadopago.com/v1/payments/${mpId}`, { headers: { 'Authorization': `Bearer ${mpToken}` } })
       const pd = await r.json()
       if (!r.ok) { send(res, 200, { ok: true }); return true }
@@ -3192,9 +3402,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
               // PIX online confirmado pelo MP → entra direto em produção (pula análise)
               // O pagamento já foi validado pelo Mercado Pago, não precisa de aceite manual.
               db.prepare("UPDATE orders SET status='producao', pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, row.tenant_id)
+              _atribuirOrderNumSeNecessario(db, row.tenant_id, row.order_id)
               if (podeRessurreicao) log('🔄', `PEDIDO RESSUSCITADO (webhook): pagamento PIX chegou após cancelamento — id=${row.order_id} tenant=${row.tenant_id}`)
             } else if (pedAtual) {
               db.prepare("UPDATE orders SET pag='pix_mp' WHERE id=? AND tenant_id=?").run(row.order_id, row.tenant_id)
+              _atribuirOrderNumSeNecessario(db, row.tenant_id, row.order_id)
             }
             const _ns4 = (eraAguardando || podeRessurreicao) ? 'producao' : pedAtual?.status
             const _fo4 = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(row.order_id, row.tenant_id)
@@ -3229,9 +3441,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
             if (eraAguardandoC || podeRessurreicaoC) {
               db.prepare("UPDATE orders SET status='analise', pag='cartao_mp' WHERE id=? AND tenant_id=?").run(rowC.order_id, rowC.tenant_id)
+              _atribuirOrderNumSeNecessario(db, rowC.tenant_id, rowC.order_id)
               if (podeRessurreicaoC) log('🔄', `PEDIDO RESSUSCITADO (cartão): pagamento chegou após cancelamento — id=${rowC.order_id} tenant=${rowC.tenant_id}`)
             } else if (pedAtualC) {
               db.prepare("UPDATE orders SET pag='cartao_mp' WHERE id=? AND tenant_id=?").run(rowC.order_id, rowC.tenant_id)
+              _atribuirOrderNumSeNecessario(db, rowC.tenant_id, rowC.order_id)
             }
             const _nsC = (eraAguardandoC || podeRessurreicaoC) ? 'analise' : pedAtualC?.status
             const _foC = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(rowC.order_id, rowC.tenant_id)
@@ -3259,6 +3473,16 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
       // ── Rota 3: Fatura SaaS (assinatura mensal do restaurante) ───────────
       // Tenta casar por mp_payment_id (PIX) ou external_reference (cartão preference)
+      const assPg = _localizarAssinaturaMp(db, {
+        preapprovalId: pd.metadata?.preapproval_id || pd.preapproval_id || '',
+        externalRef: pd.external_reference || pd.metadata?.external_reference || ''
+      })
+      if (assPg) {
+        _processarCobrancaAssinatura(db, log, marcarDirty, assPg, String(mpId), pd.status, pd.date_approved || pd.date_created || null, '')
+        send(res, 200, { ok: true })
+        return true
+      }
+
       let rowF = db.prepare('SELECT * FROM faturas WHERE mp_payment_id=?').get(String(mpId))
       if (!rowF && pd.external_reference) {
         rowF = db.prepare('SELECT * FROM faturas WHERE mp_external_ref=?').get(pd.external_reference)
@@ -4098,7 +4322,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const mpBody = {
         transaction_amount: _valorMpC,
         token:              card_token,
-        description:        `Pedido #${order_id || '?'} - ${client || 'Cliente'}`,
+        description:        `Pedido online - ${client || 'Cliente'}`,
         installments:       1,
         payment_method_id,
         external_reference: extRef,
@@ -4145,6 +4369,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       // Se aprovado, atualiza o pedido para 'analise'
       if (novoStatus === 'aprovado' && order_id) {
         db.prepare("UPDATE orders SET status='analise', pag='cartao_mp' WHERE id=? AND tenant_id=? AND status='aguardando_cartao'").run(order_id, tid)
+        _atribuirOrderNumSeNecessario(db, tid, order_id)
         marcarDirty()
         const ord = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(order_id, tid)
         if (ord) {
@@ -4201,9 +4426,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
           && pedAtual?.pag !== 'pix_mp' && pedAtual?.pag !== 'cartao_mp'
         if (eraAguardando || podeRessurreicao) {
           db.prepare("UPDATE orders SET status='analise', pag='cartao_mp' WHERE id=? AND tenant_id=?").run(rowBefore.order_id, rowBefore.tenant_id)
+          _atribuirOrderNumSeNecessario(db, rowBefore.tenant_id, rowBefore.order_id)
           if (podeRessurreicao) log('🔄', `PEDIDO RESSUSCITADO (cartão poll): id=${rowBefore.order_id} tenant=${rowBefore.tenant_id}`)
         } else if (pedAtual) {
           db.prepare("UPDATE orders SET pag='cartao_mp' WHERE id=? AND tenant_id=?").run(rowBefore.order_id, rowBefore.tenant_id)
+          _atribuirOrderNumSeNecessario(db, rowBefore.tenant_id, rowBefore.order_id)
         }
         marcarDirty()
         const _ns = (eraAguardando || podeRessurreicao) ? 'analise' : pedAtual?.status
@@ -4420,6 +4647,156 @@ module.exports = async function handleRoutes(req, res, ctx) {
   }
   
   // ── Obter Public Key MP para frontend ────────────────
+  // Consultar assinatura automatica do plano
+  if (req.method === 'GET' && upath === '/api/planos/assinatura') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    try {
+      _ensurePlanoAssinaturas(db)
+      let ass = db.prepare(`
+        SELECT * FROM plano_assinaturas
+        WHERE tenant_id=? AND lower(status) IN ('authorized','pending','paused')
+        ORDER BY datetime(created_at) DESC, id DESC
+        LIMIT 1
+      `).get(tid)
+      if (!ass) ass = db.prepare(`
+        SELECT * FROM plano_assinaturas
+        WHERE tenant_id=?
+        ORDER BY datetime(created_at) DESC, id DESC
+        LIMIT 1
+      `).get(tid)
+      send(res, 200, { ok: true, assinatura: ass || null })
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // Criar assinatura automatica via cartao (Mercado Pago preapproval)
+  if (req.method === 'POST' && upath === '/api/planos/assinatura-cartao') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    const body = await readBody(req)
+    const { plano, valor, card_token, payment_method_id, payer_email } = body
+    const planoOk = ['essencial', 'premium'].includes(String(plano || '').toLowerCase())
+    if (!planoOk) { send(res, 400, { error: 'Plano invalido' }); return true }
+    const planoNorm = String(plano).toLowerCase()
+    const _valorMpPA = _mpValor(valor)
+    if (_valorMpPA === null) { send(res, 400, { error: 'Valor invalido' }); return true }
+    if (!card_token) { send(res, 400, { error: 'card_token obrigatorio' }); return true }
+    const email = String(payer_email || '').trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      send(res, 400, { error: 'E-mail valido obrigatorio para assinatura automatica' })
+      return true
+    }
+
+    const tenant = db.prepare('SELECT id,nome FROM tenants WHERE id=?').get(tid)
+    if (!tenant) { send(res, 404, { error: 'Tenant nao encontrado' }); return true }
+
+    _ensurePlanoAssinaturas(db)
+    const ativa = db.prepare(`
+      SELECT * FROM plano_assinaturas
+      WHERE tenant_id=? AND lower(status) IN ('authorized','pending','paused')
+      ORDER BY datetime(created_at) DESC, id DESC
+      LIMIT 1
+    `).get(tid)
+    if (ativa) {
+      send(res, 409, { error: 'Ja existe uma assinatura automatica ativa ou pendente. Cancele antes de criar outra.', assinatura: ativa })
+      return true
+    }
+
+    const mpToken = _resolveMpGlobal(db, MP_TOKEN)
+    if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago global nao configurado.' }); return true }
+
+    const extRef = `assinatura-${tid.slice(0,8)}-${planoNorm}-${Date.now()}`
+    const baseUrl = _baseUrlFromReq(req)
+    const payload = {
+      reason: `Assinatura Plano ${_planoSaasLabel(planoNorm)} - ${tenant.nome || 'Cliente'}`,
+      external_reference: extRef,
+      payer_email: email,
+      card_token_id: card_token,
+      auto_recurring: {
+        frequency: 1,
+        frequency_type: 'months',
+        transaction_amount: _valorMpPA,
+        currency_id: 'BRL'
+      },
+      status: 'authorized'
+    }
+    if (baseUrl) payload.back_url = `${baseUrl}/gestor.html?billing=1`
+
+    try {
+      const mp = await fetch('https://api.mercadopago.com/preapproval', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
+        body: JSON.stringify(payload)
+      })
+      const mpData = await mp.json()
+      if (!mp.ok) {
+        log('WARN', 'MP assinatura plano erro:', mpData)
+        send(res, 400, { error: mpData.message || mpData.error || mpData.cause?.[0]?.description || 'Erro ao criar assinatura automatica' })
+        return true
+      }
+
+      const ass = _upsertAssinaturaPreapproval(db, tid, planoNorm, _valorMpPA, mpData, extRef, email, payment_method_id || '')
+      marcarDirty()
+      log('OK', `Assinatura plano criada: tenant=${tid} plano=${planoNorm} status=${ass.status} preapproval=${ass.mp_preapproval_id}`)
+      send(res, 200, {
+        ok: true,
+        status: ass.status,
+        assinatura: ass,
+        renovado: false,
+        aguardando_cobranca: true,
+        message: 'Assinatura criada. A renovacao sera aplicada quando o Mercado Pago aprovar a cobranca.'
+      })
+    } catch (e) {
+      log('WARN', 'Assinatura plano fetch erro:', { error: e.message })
+      send(res, 500, { error: 'Erro ao criar assinatura: ' + e.message })
+    }
+    return true
+  }
+
+  // Cancelar assinatura automatica do plano
+  if (req.method === 'POST' && upath === '/api/planos/assinatura-cancelar') {
+    const tid = req.headers['x-tenant-id']
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    _ensurePlanoAssinaturas(db)
+    const ass = db.prepare(`
+      SELECT * FROM plano_assinaturas
+      WHERE tenant_id=? AND lower(status) IN ('authorized','pending','paused')
+      ORDER BY datetime(created_at) DESC, id DESC
+      LIMIT 1
+    `).get(tid)
+    if (!ass) {
+      send(res, 404, { error: 'Nenhuma assinatura automatica ativa encontrada.' })
+      return true
+    }
+
+    const mpToken = _resolveMpGlobal(db, MP_TOKEN)
+    if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago global nao configurado.' }); return true }
+
+    try {
+      if (ass.mp_preapproval_id) {
+        const mp = await fetch(`https://api.mercadopago.com/preapproval/${ass.mp_preapproval_id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}` },
+          body: JSON.stringify({ status: 'canceled' })
+        })
+        const mpData = await mp.json().catch(() => ({}))
+        if (!mp.ok && mp.status !== 404) {
+          send(res, 400, { error: mpData.message || mpData.error || 'Nao foi possivel cancelar no Mercado Pago' })
+          return true
+        }
+      }
+
+      db.prepare(`UPDATE plano_assinaturas
+        SET status='canceled', canceled_at=COALESCE(canceled_at, ?), updated_at=datetime('now')
+        WHERE id=?`)
+        .run(new Date().toISOString(), ass.id)
+      marcarDirty()
+      send(res, 200, { ok: true, status: 'canceled' })
+    } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
   if (req.method === 'GET' && upath === '/api/planos/mp-public-key') {
     try {
       const cfgMp = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()

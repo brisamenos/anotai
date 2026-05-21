@@ -48,12 +48,18 @@ function startTracking(orderId, items, client, addr, initialStatus, orderNum, de
   _initialOrderStatus = initialStatus || 'analise';
   const fab = document.getElementById('track-fab');
   fab.classList.add('show');
-  document.getElementById('track-num').textContent = '#' + String(_orderNum(orderId, orderNum)).padStart(3,'0');
+  const numLabel = orderNum ? '#' + String(orderNum).padStart(3,'0') : 'Pagamento pendente';
+  document.getElementById('track-num').textContent = numLabel;
   if (_trackChannel) { try { sb.removeChannel(_trackChannel); } catch(e){} }
   _trackChannel = sb.channel('orders-rt')
     .on('postgres_changes',{event:'UPDATE',table:'orders'}, p => {
       if (Number(p.new.id) === orderId) {
         updateTracker(p.new.status);
+        if (p.new.order_num) {
+          const novoNum = '#' + String(p.new.order_num).padStart(3,'0');
+          document.getElementById('track-num').textContent = novoNum;
+          document.getElementById('track-order-num').textContent = 'Pedido ' + novoNum;
+        }
         const dot = document.getElementById('track-dot');
         if (dot) dot.classList.toggle('done', ['entregue','finalizado'].includes(p.new.status));
       }
@@ -61,7 +67,7 @@ function startTracking(orderId, items, client, addr, initialStatus, orderNum, de
     .subscribe();
   updateTracker(_initialOrderStatus || 'analise', addr);
   renderTrackItems(items, client, { ...(details || {}), addr });
-  document.getElementById('track-order-num').textContent = 'Pedido #' + String(_orderNum(orderId, orderNum)).padStart(3,'0');
+  document.getElementById('track-order-num').textContent = orderNum ? 'Pedido ' + numLabel : 'Pedido aguardando pagamento';
 }
 
 function updateTracker(status, addr) {

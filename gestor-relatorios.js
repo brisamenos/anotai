@@ -1690,6 +1690,7 @@ async function renderMeuPlano() {
   
   // Carregar precos dos planos
   carregarPrecosPlanos();
+  carregarAssinaturaPlano();
 
   try {
     const tid = _sessao?.tenant_id;
@@ -1850,6 +1851,8 @@ let _planoSelecionado = 'premium';
 let _formaPagPlano = 'pix';
 let _precosPlanos = { essencial: 79.99, premium: 99.90 };
 let _pixPlanoInterval = null;
+let _cartaoPlanoModo = 'avulso';
+let _assinaturaPlanoAtual = null;
 
 async function carregarPrecosPlanos() {
   try {
@@ -1863,6 +1866,88 @@ async function carregarPrecosPlanos() {
       if (elPre) elPre.textContent = _precosPlanos.premium.toFixed(2).replace('.', ',');
     }
   } catch(e) { console.error('carregarPrecosPlanos:', e); }
+}
+
+async function carregarAssinaturaPlano() {
+  const box = document.getElementById('plano-assinatura-status');
+  if (!box) return;
+  try {
+    const tid = _sessao?.tenant_id;
+    if (!tid) return;
+    const res = await fetch('/api/planos/assinatura', {
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid }
+    });
+    if (!res.ok) throw new Error('Erro HTTP ' + res.status);
+    const data = await res.json();
+    _assinaturaPlanoAtual = data.assinatura || null;
+    renderAssinaturaPlano(_assinaturaPlanoAtual);
+  } catch(e) {
+    console.error('carregarAssinaturaPlano:', e);
+    box.style.display = 'none';
+  }
+}
+
+function renderAssinaturaPlano(ass) {
+  const box = document.getElementById('plano-assinatura-status');
+  if (!box) return;
+  const status = String(ass?.status || '').toLowerCase();
+  const ativa = ['authorized', 'pending', 'paused'].includes(status);
+  if (!ass || !ativa) {
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+
+  const planoLabel = ass.plano === 'premium' ? 'Premium' : 'Essencial';
+  const valor = Number(ass.valor || 0).toFixed(2).replace('.', ',');
+  const statusLabel = status === 'authorized' ? 'Ativa'
+    : status === 'paused' ? 'Pausada'
+    : 'Aguardando cobranca';
+  const statusColor = status === 'authorized' ? 'var(--success)'
+    : status === 'paused' ? 'var(--warning,#f59e0b)'
+    : 'var(--accent)';
+  const last = String(ass.last_payment_status || '').toLowerCase();
+  const lastTxt = last === 'approved' ? 'Ultima cobranca aprovada'
+    : last ? `Ultima cobranca: ${last}` : 'Primeira cobranca pendente';
+
+  box.style.display = 'block';
+  box.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+      background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.22);border-radius:12px;padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:12px;min-width:220px">
+        <div style="width:38px;height:38px;border-radius:9px;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--accent);flex-shrink:0">
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M8 2v2M8 12v2M3.8 3.8l1.4 1.4M10.8 10.8l1.4 1.4M2 8h2M12 8h2M3.8 12.2l1.4-1.4M10.8 5.2l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.4"/></svg>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:800">Pagamento automatico ${statusLabel.toLowerCase()}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">Plano ${planoLabel} - R$ ${valor}/mes. ${lastTxt}.</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;font-weight:800;color:${statusColor};background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:5px 9px">${statusLabel}</span>
+        <button class="btn bg2" style="font-size:11px;padding:7px 10px" onclick="cancelarAssinaturaPlano()">Cancelar</button>
+      </div>
+    </div>`;
+}
+
+async function cancelarAssinaturaPlano() {
+  if (!_assinaturaPlanoAtual) return;
+  if (!confirm('Cancelar o pagamento automatico deste plano?')) return;
+  try {
+    const tid = _sessao?.tenant_id;
+    const res = await fetch('/api/planos/assinatura-cancelar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify({})
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Erro ao cancelar assinatura');
+    sbToast('ok', 'Pagamento automatico cancelado.');
+    _assinaturaPlanoAtual = null;
+    renderAssinaturaPlano(null);
+  } catch(e) {
+    sbToast('err', e.message);
+  }
 }
 
 function selecionarPlano(plano) {
@@ -1895,13 +1980,25 @@ function selecionarFormaPagPlano(forma) {
   _formaPagPlano = forma;
   const optPix = document.getElementById('pag-opt-pix');
   const optCartao = document.getElementById('pag-opt-cartao');
-  if (forma === 'pix') {
-    if (optPix) { optPix.style.background = 'rgba(59,130,246,.08)'; optPix.style.borderColor = 'var(--accent)'; }
-    if (optCartao) { optCartao.style.background = 'var(--surface)'; optCartao.style.borderColor = 'var(--border)'; }
-  } else {
-    if (optPix) { optPix.style.background = 'var(--surface)'; optPix.style.borderColor = 'var(--border)'; }
-    if (optCartao) { optCartao.style.background = 'rgba(59,130,246,.08)'; optCartao.style.borderColor = 'var(--accent)'; }
-  }
+  const optAuto = document.getElementById('pag-opt-automatico');
+  const radio = document.querySelector(`input[name="forma-pag-plano"][value="${forma}"]`);
+  if (radio) radio.checked = true;
+  const setOpt = (el, on) => {
+    if (!el) return;
+    el.style.background = on ? 'rgba(59,130,246,.08)' : 'var(--surface)';
+    el.style.borderColor = on ? 'var(--accent)' : 'var(--border)';
+  };
+  setOpt(optPix, forma === 'pix');
+  setOpt(optCartao, forma === 'cartao');
+  setOpt(optAuto, forma === 'automatico');
+  atualizarBotaoPlano();
+}
+
+function atualizarBotaoPlano() {
+  const btn = document.getElementById('btn-pagar-plano');
+  if (!btn || btn.disabled) return;
+  const texto = _formaPagPlano === 'automatico' ? 'Ativar pagamento automatico' : 'Renovar Plano';
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> ${texto}`;
 }
 
 async function iniciarPagamentoPlano() {
@@ -1941,13 +2038,21 @@ async function iniciarPagamentoPlano() {
       sbToast('err', e.message);
     }
   } else {
-    // Cartao
+    _cartaoPlanoModo = _formaPagPlano === 'automatico' ? 'assinatura' : 'avulso';
     document.getElementById('cartao-plano-titulo').textContent = planoNome;
     document.getElementById('cartao-plano-valor').textContent = 'R$ ' + valor.toFixed(2).replace('.', ',');
+    const lbl = document.getElementById('cartao-plano-modo-label');
+    const info = document.getElementById('cartao-plano-modo-info');
+    const btnCartao = document.getElementById('btn-pagar-cartao-plano');
+    if (lbl) lbl.textContent = _cartaoPlanoModo === 'assinatura' ? 'Pagamento automatico' : 'Pagamento via Cartao';
+    if (info) info.style.display = _cartaoPlanoModo === 'assinatura' ? 'block' : 'none';
+    if (btnCartao) btnCartao.innerHTML = _cartaoPlanoModo === 'assinatura'
+      ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Ativar automatico'
+      : '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Pagar agora';
     document.getElementById('modal-pag-cartao-plano').classList.add('on');
   }
   
-  if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Renovar Plano'; }
+  if (btn) { btn.disabled = false; atualizarBotaoPlano(); }
 }
 
 function iniciarPollingPixPlano(mpId) {
@@ -2044,13 +2149,17 @@ async function processarPagamentoCartao() {
   const cvv = document.getElementById('cartao-cvv').value;
   const nome = document.getElementById('cartao-nome').value;
   const cpf = document.getElementById('cartao-cpf').value.replace(/\D/g, '');
-  const email = document.getElementById('cartao-email')?.value || 'cliente@email.com';
+  const email = (document.getElementById('cartao-email')?.value || '').trim();
   
   if (!numero || numero.length < 13) { sbToast('err', 'Numero do cartao invalido'); return; }
   if (!validade || validade.length < 5) { sbToast('err', 'Validade invalida'); return; }
   if (!cvv || cvv.length < 3) { sbToast('err', 'CVV invalido'); return; }
   if (!nome) { sbToast('err', 'Nome no cartao obrigatorio'); return; }
   if (!cpf || cpf.length < 11) { sbToast('err', 'CPF invalido'); return; }
+  if (_cartaoPlanoModo === 'assinatura' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    sbToast('err', 'Informe um e-mail valido para ativar o pagamento automatico');
+    return;
+  }
   
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processando...'; }
   
@@ -2083,7 +2192,10 @@ async function processarPagamentoCartao() {
     } catch {}
     
     const tid = _sessao?.tenant_id;
-    const res = await fetch('/api/planos/pagar-cartao', {
+    const endpoint = _cartaoPlanoModo === 'assinatura'
+      ? '/api/planos/assinatura-cartao'
+      : '/api/planos/pagar-cartao';
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
       body: JSON.stringify({
@@ -2091,12 +2203,23 @@ async function processarPagamentoCartao() {
         valor: _precosPlanos[_planoSelecionado],
         card_token: cardToken.id,
         payment_method_id: paymentMethodId,
-        payer_email: email,
+        payer_email: email || 'cliente@email.com',
         payer_cpf: cpf
       })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erro ao processar pagamento');
+
+    if (_cartaoPlanoModo === 'assinatura') {
+      sbToast('ok', data.message || 'Pagamento automatico ativado. Aguarde a confirmacao da primeira cobranca.');
+      fecharModalPagPlano();
+      renderMeuPlano();
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Ativar automatico';
+      }
+      return;
+    }
     
     if (data.status === 'aprovado') {
       sbToast('ok', 'Pagamento aprovado! Seu plano foi renovado.');
@@ -2112,12 +2235,18 @@ async function processarPagamentoCartao() {
     sbToast('err', e.message);
   }
   
-  if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Pagar agora'; }
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = _cartaoPlanoModo === 'assinatura'
+      ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Ativar automatico'
+      : '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Pagar agora';
+  }
 }
 
 // Inicializar selecao padrao
 setTimeout(() => {
   selecionarPlano('premium');
+  selecionarFormaPagPlano('pix');
   carregarPrecosPlanos();
 }, 100);
 

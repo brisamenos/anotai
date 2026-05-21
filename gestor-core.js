@@ -1463,8 +1463,9 @@ function _subscribeOrdersSSE() {
         if (nc) { nc.style.display = 'flex'; nc.textContent = parseInt(nc.textContent || 0) + 1; }
         const itemsList = Array.isArray(items) ? items.map(i => `${i.qty}x ${i.name}`).join(', ') : '';
         const tituloPagamento = order.pag === 'cartao_mp' ? 'Cartao aprovado!' : (isPixManualPendente ? 'PIX manual pendente!' : 'PIX confirmado!');
-        showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg>', `${tituloPagamento} Pedido #${order.id} — ${order.client}`);
-        sendBrowserNotif(`${tituloPagamento} #${order.id}`, `${order.client} — ${itemsList}`);
+        const numPedido = order.order_num ? _orderNum(order.id, order.order_num) : order.id;
+        showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg>', `${tituloPagamento} Pedido #${numPedido} — ${order.client}`);
+        sendBrowserNotif(`${tituloPagamento} #${numPedido}`, `${order.client} — ${itemsList}`);
         // PIX online: pagamento já confirmado pelo MP, imprime automático sempre (independe do toggle/_printMode)
         // PIX manual: respeita _autoAcceptOn e _printMode normalmente
         if (order.pag === 'pix_mp') {
