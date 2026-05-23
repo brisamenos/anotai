@@ -457,6 +457,11 @@ function itemCard(i) {
   const porcaoBadge = (porcaoRef > 0 && i.price > 0)
     ? `<div class="item-porcao-ref">${porcaoRef}g · R$ ${fmt(i.price * porcaoRef / 1000)}</div>`
     : '';
+  const hasPizzaSizes = typeof _pizzaHasSizePricing === 'function' && _pizzaHasSizePricing(i);
+  const isKg = i.item_type === 'kg';
+  const priceText = hasPizzaSizes
+    ? `A partir de R$ ${fmt(_pizzaMinPrice(i))}`
+    : `R$ ${fmt(i.price)}${isKg ? '<span style="font-size:10px;font-weight:400;color:var(--muted)">/kg</span>' : ''}`;
 
   return `
   <div class="item-card" ${click} style="${esg?'opacity:.55;cursor:not-allowed':''}">
@@ -465,7 +470,7 @@ function itemCard(i) {
       ${i.description ? `<div class="item-desc">${i.description}</div>` : ''}
       <div class="item-foot">
         ${i.price_old ? `<span class="item-price-old">R$ ${fmt(i.price_old)}</span>` : ''}
-        <span class="item-price${i.promo||i.price_old?' item-price-promo':''}">R$ ${fmt(i.price)}<span style="font-size:10px;font-weight:400;color:var(--muted)">/kg</span></span>
+        <span class="item-price${i.promo||i.price_old?' item-price-promo':''}">${priceText}</span>
         <button class="item-add-btn" ${esg?'disabled':''} onclick="event.stopPropagation();openItemModal(${i.id})">+</button>
       </div>
       ${porcaoBadge}
