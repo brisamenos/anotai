@@ -3813,6 +3813,29 @@ Use no seu próximo pedido.</textarea>
         </div>
         <input type="hidden" id="new-max-flavors" value="1">
       </div>
+      <div style="margin-top:14px;border-top:1px solid rgba(245,158,11,.18);padding-top:12px">
+        <label class="form-label" style="margin-bottom:6px">Precos por tamanho</label>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);font-weight:700">
+            Pequena
+            <input class="form-input" id="new-pizza-price-p" type="number" step="0.01" min="0" placeholder="P" oninput="syncPizzaBasePrice('new')">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);font-weight:700">
+            Media
+            <input class="form-input" id="new-pizza-price-m" type="number" step="0.01" min="0" placeholder="M" oninput="syncPizzaBasePrice('new')">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);font-weight:700">
+            Grande
+            <input class="form-input" id="new-pizza-price-g" type="number" step="0.01" min="0" placeholder="G" oninput="syncPizzaBasePrice('new')">
+          </label>
+        </div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:6px;line-height:1.35">Se preencher, o cliente escolhe o tamanho antes do sabor e das bordas.</div>
+        <label class="form-label" style="margin:10px 0 6px">Meio a meio</label>
+        <select class="form-input" id="new-pizza-half-rule" style="width:100%">
+          <option value="maior">Cobrar o maior valor dos sabores</option>
+          <option value="media">Cobrar a media dos sabores</option>
+        </select>
+      </div>
     </div>
 
 
@@ -3994,6 +4017,29 @@ Use no seu próximo pedido.</textarea>
           <button type="button" class="pz-max-btn" data-val="4" onclick="setPizzaMax('edit',4,this)">4 sabores</button>
         </div>
         <input type="hidden" id="edit-max-flavors" value="1">
+      </div>
+      <div style="margin-top:14px;border-top:1px solid rgba(245,158,11,.18);padding-top:12px">
+        <label class="form-label" style="margin-bottom:6px">Precos por tamanho</label>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);font-weight:700">
+            Pequena
+            <input class="form-input" id="edit-pizza-price-p" type="number" step="0.01" min="0" placeholder="P" oninput="syncPizzaBasePrice('edit')">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);font-weight:700">
+            Media
+            <input class="form-input" id="edit-pizza-price-m" type="number" step="0.01" min="0" placeholder="M" oninput="syncPizzaBasePrice('edit')">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);font-weight:700">
+            Grande
+            <input class="form-input" id="edit-pizza-price-g" type="number" step="0.01" min="0" placeholder="G" oninput="syncPizzaBasePrice('edit')">
+          </label>
+        </div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:6px;line-height:1.35">Se preencher, o cliente escolhe o tamanho antes do sabor e das bordas.</div>
+        <label class="form-label" style="margin:10px 0 6px">Meio a meio</label>
+        <select class="form-input" id="edit-pizza-half-rule" style="width:100%">
+          <option value="maior">Cobrar o maior valor dos sabores</option>
+          <option value="media">Cobrar a media dos sabores</option>
+        </select>
       </div>
     </div>
 

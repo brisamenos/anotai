@@ -174,7 +174,7 @@ function _renderImGruposNow(item) {
     _acouguePesos  = (grupos.find(g => g.tipo === 'pesos')?.valores) || [];
     _renderAcougueGrupos(item, wrap, grupos);
     // Renderiza grupos genéricos (radio/checkbox) após os grupos de açougue
-    const _ACOUGUE_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
+    const _ACOUGUE_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens','pizza_sizes'];
     const genericGrupos  = grupos.filter(g => !_ACOUGUE_TIPOS.includes(g.tipo));
     if (genericGrupos.length) {
       wrap.innerHTML += genericGrupos.map(g => {
@@ -224,7 +224,7 @@ function _renderImGruposNow(item) {
     // (ex: "TEMPERADO", "ACOMPANHAMENTOS") que o gestor cadastrou. Antes ficavam
     // invisíveis no kit — cliente não conseguia selecionar e a comanda saía
     // sem os adicionais escolhidos.
-    const _KIT_INFO_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
+    const _KIT_INFO_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens','pizza_sizes'];
     const genericGruposKit = grupos.filter(g => !_KIT_INFO_TIPOS.includes(g.tipo));
     if (genericGruposKit.length) {
       // Reaproveita o mesmo HTML do modo normal abaixo — em vez de duplicar,
@@ -243,8 +243,9 @@ function _renderImGruposNow(item) {
 
   // ── Modo normal (pizza/restaurante) ─────────────────────
   // Filtra grupos açougue/kit para não aparecerem no modo normal
-  const _ACOUGUE_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
-  const genericGrupos  = grupos.filter(g => !_ACOUGUE_TIPOS.includes(g.tipo));
+  const _ACOUGUE_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens','pizza_sizes'];
+  const hasPizzaSizes = typeof _pizzaHasSizePricing === 'function' && _pizzaHasSizePricing(item);
+  const genericGrupos  = grupos.filter(g => !_ACOUGUE_TIPOS.includes(g.tipo) && !(hasPizzaSizes && (g.nome||'').toLowerCase().trim() === 'tamanho'));
   if (!genericGrupos.length) { wrap.innerHTML = ''; return; }
 
   // ── Detecta padrão de borda por tamanho ──
@@ -253,6 +254,9 @@ function _renderImGruposNow(item) {
   const _bordaTamRegex = /^(.+)\s*\((P|M|G)\)\s*$/i;
 
   wrap.innerHTML = _renderGenericGruposHtml(genericGrupos);
+  if (hasPizzaSizes && typeof _applyPizzaSizeToBordas === 'function' && typeof _pizzaSizeKey !== 'undefined' && _pizzaSizeKey) {
+    _applyPizzaSizeToBordas(_pizzaSizeKey);
+  }
 }
 
 // Gera o HTML dos grupos de customização genéricos (Adicionais, Temperos,
@@ -982,7 +986,12 @@ function grpQty(grupoNome, optNome, preco, delta) {
 function _calcGruposExtra(item) {
   let extra = 0;
   const grupos = item.custom_groups || [];
+  const hasPizzaSizes = typeof _pizzaHasSizePricing === 'function' && _pizzaHasSizePricing(item);
+  const isPizza = typeof isPizzaItem === 'function' && isPizzaItem(item);
   for (const g of grupos) {
+    if (g?.tipo === 'pizza_sizes') continue;
+    if (hasPizzaSizes && (g.nome||'').toLowerCase().trim() === 'tamanho') continue;
+    if (isPizza && typeof _pizzaShouldSkipSizedGroup === 'function' && _pizzaShouldSkipSizedGroup(g)) continue;
     const sel = _imGruposState[g.nome] || [];
     for (const o of sel) extra += (o.preco||0) * (o.qty||1);
   }
@@ -992,7 +1001,12 @@ function _calcGruposExtra(item) {
 function _buildGruposDesc(item) {
   const grupos = item.custom_groups || [];
   const parts = [];
+  const hasPizzaSizes = typeof _pizzaHasSizePricing === 'function' && _pizzaHasSizePricing(item);
+  const isPizza = typeof isPizzaItem === 'function' && isPizzaItem(item);
   for (const g of grupos) {
+    if (g?.tipo === 'pizza_sizes') continue;
+    if (hasPizzaSizes && (g.nome||'').toLowerCase().trim() === 'tamanho') continue;
+    if (isPizza && typeof _pizzaShouldSkipSizedGroup === 'function' && _pizzaShouldSkipSizedGroup(g)) continue;
     const sel = _imGruposState[g.nome] || [];
     if (sel.length) {
       const names = sel.map(o => {
@@ -1012,9 +1026,12 @@ function _updateImPrice() {
   const i = allItems.find(x => x.id === _imItemId);
   if (!i) return;
   const extra = _calcGruposExtra(i);
+  const isPizza = typeof isPizzaItem === 'function' && isPizzaItem(i);
 
   // Para açougue: preço proporcional ao peso selecionado
-  let basePrice = i.price + extra;
+  let basePrice = (isPizza && typeof _pizzaCurrentBasePrice === 'function')
+    ? _pizzaCurrentBasePrice(i, (typeof _halfItem !== 'undefined' ? _halfItem : null)) + extra
+    : i.price + extra;
   if (_isAcougueItem(i)) {
     const totalPeso = Object.values(_acougueCortes).reduce((s, v) => s + (v.peso || 0), 0);
     if (totalPeso > 0) {
@@ -1025,7 +1042,14 @@ function _updateImPrice() {
   const total = basePrice * _imQty;
   const btn = document.getElementById('im-add-btn');
   const priceEl = document.getElementById('im-price');
-  if (priceEl) priceEl.textContent = 'R$ ' + fmt(basePrice);
+  if (priceEl) {
+    const awaitingPizzaSize = isPizza && typeof _pizzaHasSizePricing === 'function' && _pizzaHasSizePricing(i) && (typeof _pizzaSizeKey === 'undefined' || !_pizzaSizeKey);
+    priceEl.textContent = (awaitingPizzaSize ? 'A partir de R$ ' : 'R$ ') + fmt(awaitingPizzaSize && typeof _pizzaMinPrice === 'function' ? _pizzaMinPrice(i) : basePrice);
+  }
+  if (isPizza && typeof updateImAddBtn === 'function') {
+    updateImAddBtn();
+    return;
+  }
   if (btn && _lojaAberta) btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> Adicionar · R$ ${fmt(total)}`;
 }
 
