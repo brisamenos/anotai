@@ -561,6 +561,11 @@ async function _doSubmitOrder(addr, troco) {
       pag: order.pag,
       troco: order.troco
     });
+    if (typeof efChatStart === 'function') {
+      try {
+        efChatStart({ orderId: order.id, orderNum: order.order_num, phone, client: name });
+      } catch(e) {}
+    }
 
     // ── PIX: gera QR Code MP ou exibe chave manual ──
     if (pixFlowPromise) await pixFlowPromise;
@@ -573,7 +578,7 @@ async function _doSubmitOrder(addr, troco) {
     // 1. Salva no localStorage (celular próprio)
     try {
       localStorage.setItem('ef_order_' + (_tenantId||''), JSON.stringify({
-        orderId: order.id, orderNum: order.order_num, items, client: name, total: order.total, taxa: order.taxa, pag: order.pag, troco: order.troco, ts: Date.now()
+        orderId: order.id, orderNum: order.order_num, items, client: name, phone, total: order.total, taxa: order.taxa, pag: order.pag, troco: order.troco, ts: Date.now()
       }));
     } catch(e) {}
     // 2. Coloca ?acompanhar=ID na URL (compartilhável)
