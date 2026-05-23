@@ -19,6 +19,7 @@
     ready: false,
     storeName: '',
     quickSelections: {},
+    pendingSuggestion: '',
     payment: null,
     follow: null
   };
@@ -26,6 +27,7 @@
   let audioCtx = null;
   let soundUnlockInstalled = false;
   let viewportHandlingInstalled = false;
+  let nudgeTimer = null;
 
   function esc(v) {
     return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({
@@ -208,11 +210,17 @@
       .efc-bubble:hover{transform:translateY(-2px);box-shadow:0 16px 36px rgba(0,0,0,.32)}
       .efc-badge{position:absolute;right:-3px;top:-4px;min-width:19px;height:19px;border-radius:99px;background:#ef4444;color:#fff;font-size:11px;font-weight:800;display:none;align-items:center;justify-content:center;border:2px solid #fff;padding:0 5px}
       .efc-badge.on{display:flex}
-      .efc-nudge{position:absolute;right:64px;bottom:5px;width:230px;border:none;border-radius:14px;background:#fff;color:#111827;text-align:left;padding:10px 12px;box-shadow:0 14px 40px rgba(15,23,42,.22);border:1px solid rgba(15,23,42,.1);display:none;cursor:pointer}
-      .efc-nudge:after{content:"";position:absolute;right:-7px;bottom:18px;width:14px;height:14px;background:#fff;border-right:1px solid rgba(15,23,42,.1);border-bottom:1px solid rgba(15,23,42,.1);transform:rotate(-45deg)}
-      .efc-nudge strong{display:block;font-size:12.5px;font-weight:900;line-height:1.15;margin-bottom:2px;color:#0f172a}
-      .efc-nudge span{display:block;font-size:11.2px;font-weight:650;line-height:1.28;color:#64748b}
-      #ef-chat-root.efc-show-nudge .efc-nudge{display:block;animation:efNudgeIn .34s cubic-bezier(.2,.9,.22,1)}
+      .efc-nudges{position:absolute;right:64px;bottom:0;width:min(268px,calc(100vw - 92px));display:none;flex-direction:column;align-items:flex-end;gap:7px;pointer-events:none}
+      .efc-nudge{position:relative;width:100%;border:none;border-radius:15px;background:#fff;color:#111827;text-align:left;padding:10px 12px 10px 13px;box-shadow:0 14px 40px rgba(15,23,42,.22);border:1px solid rgba(15,23,42,.1);cursor:pointer;pointer-events:auto;overflow:visible}
+      .efc-nudge:after{content:"";display:none;position:absolute;right:-7px;bottom:18px;width:14px;height:14px;background:#fff;border-right:1px solid rgba(15,23,42,.1);border-bottom:1px solid rgba(15,23,42,.1);transform:rotate(-45deg)}
+      .efc-nudge:last-child:after{display:block}
+      .efc-nudge strong{display:block;font-size:12.5px;font-weight:900;line-height:1.15;margin-bottom:2px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .efc-nudge span{display:block;font-size:11.2px;font-weight:650;line-height:1.28;color:#64748b;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+      .efc-nudge.promo{border-color:rgba(var(--accent-rgb,249,115,22),.24);background:linear-gradient(135deg,#fff,#fff7ed)}
+      .efc-nudge.promo strong{color:var(--accent,#f97316)}
+      .efc-nudge.item{background:linear-gradient(135deg,#fff,#eff6ff);border-color:rgba(14,165,233,.22)}
+      .efc-nudge.ai{background:linear-gradient(135deg,#fff,#ecfeff);border-color:rgba(6,182,212,.2)}
+      #ef-chat-root.efc-show-nudge .efc-nudges{display:flex;animation:efNudgeIn .34s cubic-bezier(.2,.9,.22,1)}
       .efc-panel{position:absolute;right:0;bottom:66px;width:min(360px,calc(100vw - 24px));height:min(520px,calc(var(--efc-vh,100vh) - 126px));background:#fff;color:#111827;border:1px solid rgba(15,23,42,.12);border-radius:18px;box-shadow:0 22px 70px rgba(15,23,42,.28);display:none;overflow:hidden;flex-direction:column}
       .efc-panel.on{display:flex}
       .efc-head{height:58px;background:#111827;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 14px 0 16px;gap:10px}
@@ -259,8 +267,8 @@
       .efc-pay-status{font-size:12px;font-weight:800;color:#64748b;margin-top:2px}
       .efc-pay-status.ok{color:#16a34a}
       .efc-pay-status.err{color:#dc2626}
-      .efc-form{display:flex;gap:8px;padding:10px;border-top:1px solid #e5e7eb;background:#fff;flex-shrink:0}
-      .efc-input{flex:1;min-width:0;height:40px;border:1px solid #d1d5db;border-radius:12px;padding:0 12px;font:500 13px 'DM Sans',system-ui,sans-serif;outline:none;color:#111827;background:#fff}
+      .efc-form{display:flex;align-items:flex-end;gap:8px;padding:10px;border-top:1px solid #e5e7eb;background:#fff;flex-shrink:0}
+      .efc-input{flex:1;min-width:0;min-height:40px;height:40px;max-height:112px;border:1px solid #d1d5db;border-radius:12px;padding:10px 12px;font:500 13px/1.35 'DM Sans',system-ui,sans-serif;outline:none;color:#111827;background:#fff;resize:none;overflow-y:auto;white-space:pre-wrap}
       .efc-input:focus{border-color:var(--accent,#f97316);box-shadow:0 0 0 3px rgba(var(--accent-rgb,249,115,22),.12)}
       .efc-send{width:42px;height:40px;border:none;border-radius:12px;background:var(--accent,#f97316);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
       .efc-send:disabled{opacity:.45;cursor:not-allowed}
@@ -289,10 +297,13 @@
         #ef-chat-root{right:10px;bottom:calc(14px + env(safe-area-inset-bottom,0px))}
         #ef-chat-root.efc-cart-on{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
         .efc-bubble{width:52px;height:52px}
-        .efc-nudge{right:60px;bottom:2px;width:min(236px,calc(100vw - 88px));padding:9px 10px}
+        .efc-nudges{right:60px;bottom:2px;width:min(244px,calc(100vw - 88px))}
+        .efc-nudge{padding:9px 10px}
+        .efc-nudge:nth-child(n+2){display:none}
+        .efc-nudge:after{display:block}
         .efc-nudge strong{font-size:12px}
         .efc-nudge span{font-size:10.8px}
-        .efc-panel{position:fixed;left:0;right:0;bottom:0;width:100vw;height:calc(var(--efc-vh,100vh) - 8px);max-height:none;border-left:none;border-right:none;border-bottom:none;border-radius:18px 18px 0 0}
+        .efc-panel{position:fixed;left:0;right:0;bottom:calc(var(--efc-kb,0px) + env(safe-area-inset-bottom,0px));width:100vw;height:calc(var(--efc-vh,100vh) - 8px - env(safe-area-inset-bottom,0px));max-height:none;border-left:none;border-right:none;border-bottom:none;border-radius:18px 18px 0 0}
         .efc-head{height:54px;padding-left:14px;padding-right:12px}
         .efc-sub{max-width:100%}
         .efc-order{padding:9px 12px;font-size:11.8px}
@@ -308,7 +319,7 @@
         .efc-card-actions .efc-pay-btn{flex:1;min-width:132px}
         .efc-pay-code input{font-size:12px}
         .efc-form{padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px));gap:7px}
-        .efc-input{height:44px;border-radius:12px;font-size:16px}
+        .efc-input{min-height:46px;height:46px;max-height:118px;border-radius:12px;font-size:16px;padding:11px 12px}
         .efc-send{width:44px;height:44px;border-radius:12px}
         .ef-follow-layer{align-items:flex-end;padding:12px}
         .ef-follow-card{grid-template-columns:58px minmax(0,1fr);gap:10px;padding:14px}
@@ -330,8 +341,13 @@
       const vv = window.visualViewport;
       const h = Math.max(320, Math.round(vv?.height || window.innerHeight || document.documentElement.clientHeight || 0));
       const w = Math.max(280, Math.round(vv?.width || window.innerWidth || document.documentElement.clientWidth || 0));
+      const layoutH = Math.max(h, Math.round(window.innerHeight || document.documentElement.clientHeight || h));
+      const offsetTop = Math.max(0, Math.round(vv?.offsetTop || 0));
+      const keyboard = Math.max(0, layoutH - h - offsetTop);
       document.documentElement.style.setProperty('--efc-vh', h + 'px');
       document.documentElement.style.setProperty('--efc-vw', w + 'px');
+      document.documentElement.style.setProperty('--efc-kb', keyboard + 'px');
+      document.documentElement.style.setProperty('--efc-vv-top', offsetTop + 'px');
     } catch(e) {}
   }
 
@@ -370,6 +386,189 @@
     });
   }
 
+  function autoSizeChatInput() {
+    const input = document.getElementById('ef-chat-input');
+    if (!input) return;
+    const min = window.matchMedia && window.matchMedia('(max-width:520px)').matches ? 46 : 40;
+    const max = window.matchMedia && window.matchMedia('(max-width:520px)').matches ? 118 : 112;
+    input.style.height = min + 'px';
+    const next = Math.max(min, Math.min(input.scrollHeight || min, max));
+    input.style.height = next + 'px';
+    input.style.overflowY = (input.scrollHeight || 0) > max ? 'auto' : 'hidden';
+    if (state.open) scrollMessagesToBottom(40);
+  }
+
+  function handleInputKeydown(ev) {
+    if (ev.key !== 'Enter' || ev.shiftKey || ev.isComposing) return;
+    ev.preventDefault();
+    const form = document.getElementById('ef-chat-form');
+    if (form?.requestSubmit) form.requestSubmit();
+    else form?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+  }
+
+  function compactName(name, max) {
+    const text = String(name || '').replace(/\s+/g, ' ').trim();
+    if (!text || text.length <= max) return text;
+    return text.slice(0, max - 1).trim() + '...';
+  }
+
+  function readMenuItems() {
+    try {
+      if (typeof allItems !== 'undefined' && Array.isArray(allItems)) return allItems;
+    } catch(e) {}
+    return Array.isArray(window._cardapioItems) ? window._cardapioItems : [];
+  }
+
+  function readCoupons() {
+    try {
+      if (typeof allCupons !== 'undefined' && Array.isArray(allCupons)) return allCupons;
+    } catch(e) {}
+    return Array.isArray(window._cardapioCupons) ? window._cardapioCupons : [];
+  }
+
+  function readCats() {
+    try {
+      if (typeof allCats !== 'undefined' && Array.isArray(allCats)) return allCats;
+    } catch(e) {}
+    return Array.isArray(window._cardapioCats) ? window._cardapioCats : [];
+  }
+
+  function nudgePriceText(item) {
+    const price = parseFloat(item?.price || 0) || 0;
+    return price > 0 ? ' por R$ ' + fmtMoney(price) : '';
+  }
+
+  function buildSmartNudges() {
+    const items = readMenuItems()
+      .filter(i => i && i.name && i.status !== 'esgotado')
+      .slice(0, 80);
+    const coupons = readCoupons().filter(c => c && c.codigo);
+    const cats = readCats().filter(c => c && (c.label || c.name)).slice(0, 4);
+    const nudges = [];
+    const seen = new Set();
+    const add = (n) => {
+      const key = normText((n.title || '') + '|' + (n.text || ''));
+      if (!n.title || !n.text || seen.has(key)) return;
+      seen.add(key);
+      nudges.push(n);
+    };
+
+    items
+      .filter(i => i.promo || i.price_old)
+      .slice(0, 2)
+      .forEach(i => add({
+        kind: 'promo',
+        title: 'Promocao disponivel',
+        text: compactName(i.name, 34) + nudgePriceText(i) + '. Posso montar para voce.',
+        prompt: 'quero ' + i.name
+      }));
+
+    items
+      .filter(i => i.destaque && !(i.promo || i.price_old))
+      .slice(0, 1)
+      .forEach(i => add({
+        kind: 'item',
+        title: 'Sugestao da loja',
+        text: compactName(i.name, 34) + nudgePriceText(i) + '. Toque para pedir com ajuda da IA.',
+        prompt: 'quero ' + i.name
+      }));
+
+    const regular = items.find(i => !(i.promo || i.price_old || i.destaque));
+    if (regular) {
+      add({
+        kind: 'item',
+        title: 'Que tal hoje?',
+        text: compactName(regular.name, 34) + nudgePriceText(regular) + '. A EstimaIA adiciona ao pedido.',
+        prompt: 'quero ' + regular.name
+      });
+    }
+
+    if (coupons.length) {
+      add({
+        kind: 'promo',
+        title: 'Cupom ativo',
+        text: 'Existe cupom disponivel para usar antes de finalizar o pedido.',
+        prompt: 'quero aproveitar uma promocao'
+      });
+    }
+
+    if (items.length && cats.length) {
+      const cat = cats[0].label || cats[0].name;
+      add({
+        kind: 'ai',
+        title: 'Quer uma recomendacao?',
+        text: 'A EstimaIA encontra opcoes de ' + compactName(cat, 20) + ' e monta seu pedido.',
+        prompt: 'me recomende um item'
+      });
+    }
+
+    if (items.length) {
+      add({
+        kind: 'ai',
+        title: 'Peca pelo chat',
+        text: 'Escolha entre ' + items.length + ' itens do cardapio com ajuda da EstimaIA.',
+        prompt: 'cardapio'
+      });
+    }
+
+    add({
+      kind: 'ai',
+      title: 'Monte seu pedido com a EstimaIA',
+      text: 'A IA ajuda voce a escolher itens e finalizar com mais agilidade.',
+      prompt: 'quero fazer um pedido'
+    });
+
+    return nudges.slice(0, 6);
+  }
+
+  function renderNudges() {
+    const wrap = document.getElementById('ef-chat-nudges');
+    if (!wrap) return 0;
+    const nudges = buildSmartNudges();
+    const total = nudges.length;
+    if (!total) {
+      wrap.innerHTML = '';
+      return 0;
+    }
+    const start = total ? (state.nudgeIndex % total) : 0;
+    const ordered = nudges.slice(start).concat(nudges.slice(0, start));
+    const visible = ordered.slice(0, Math.min(3, ordered.length));
+    wrap.innerHTML = visible.map(n => `
+      <button class="efc-nudge ${esc(n.kind || 'ai')}" type="button" data-nudge-prompt="${esc(n.prompt || '')}">
+        <strong>${esc(n.title)}</strong>
+        <span>${esc(n.text)}</span>
+      </button>`).join('');
+    return total;
+  }
+
+  function installNudgeRotation() {
+    if (nudgeTimer) return;
+    nudgeTimer = setInterval(() => {
+      if (!document.getElementById('ef-chat-root')) return;
+      if (state.open || state.phone) return;
+      state.nudgeIndex = (state.nudgeIndex + 1) % 20;
+      renderNudges();
+    }, 6500);
+  }
+
+  function updateStartText() {
+    const el = document.getElementById('ef-chat-start-text');
+    if (!el) return;
+    if (state.pendingSuggestion) {
+      el.textContent = 'Informe seu nome e WhatsApp. Em seguida, a EstimaIA ja continua com: "' + compactName(state.pendingSuggestion, 58) + '".';
+      return;
+    }
+    el.textContent = 'Informe seu nome e WhatsApp. Para entrega, a EstimaIA pedira o endereco completo; para retirada ou mesa, esses dados bastam para iniciar.';
+  }
+
+  function handleNudgeClick(ev) {
+    const btn = ev.target.closest('[data-nudge-prompt]');
+    if (!btn) return;
+    state.pendingSuggestion = String(btn.getAttribute('data-nudge-prompt') || '').trim();
+    openPanel();
+    updateStartText();
+  }
+
   function ensureDom() {
     if (document.getElementById('ef-chat-root')) {
       installViewportHandling();
@@ -380,10 +579,7 @@
     const root = document.createElement('div');
     root.id = 'ef-chat-root';
     root.innerHTML = `
-      <button class="efc-nudge" id="ef-chat-nudge" type="button">
-        <strong>Monte seu pedido com a EstimaIA</strong>
-        <span>A IA ajuda voce a escolher itens e finalizar com mais agilidade.</span>
-      </button>
+      <div class="efc-nudges" id="ef-chat-nudges"></div>
       <button class="efc-bubble" id="ef-chat-bubble" type="button" title="Pedir com a EstimaIA" aria-label="Pedir com a EstimaIA">
         <svg width="25" height="25" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 3v2.2M8.2 5.4l-.9-1.5M15.8 5.4l.9-1.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
@@ -408,7 +604,7 @@
         <div class="efc-order" id="ef-chat-order"></div>
         <form class="efc-start" id="ef-chat-start">
           <div class="efc-start-title">Pedido com EstimaIA</div>
-          <div class="efc-start-text">Informe seu nome e WhatsApp. Para entrega, a EstimaIA pedira o endereco completo; para retirada ou mesa, esses dados bastam para iniciar.</div>
+          <div class="efc-start-text" id="ef-chat-start-text">Informe seu nome e WhatsApp. Para entrega, a EstimaIA pedira o endereco completo; para retirada ou mesa, esses dados bastam para iniciar.</div>
           <div class="efc-start-row">
             <input id="ef-chat-start-name" autocomplete="name" enterkeyhint="next" placeholder="Seu nome">
             <input id="ef-chat-start-phone" autocomplete="tel" inputmode="tel" enterkeyhint="done" placeholder="WhatsApp">
@@ -417,20 +613,23 @@
         </form>
         <div class="efc-msgs" id="ef-chat-msgs"></div>
         <form class="efc-form" id="ef-chat-form">
-          <input class="efc-input" id="ef-chat-input" maxlength="1000" autocomplete="off" enterkeyhint="send" placeholder="Mensagem para a loja">
+          <textarea class="efc-input" id="ef-chat-input" maxlength="1000" autocomplete="off" enterkeyhint="send" rows="1" placeholder="Mensagem para a loja"></textarea>
           <button class="efc-send" id="ef-chat-send" type="submit" title="Enviar" aria-label="Enviar">
             <svg width="17" height="17" viewBox="0 0 18 18" fill="none"><path d="M2 9l13-6-3.4 12-2.5-5.1L2 9Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
           </button>
         </form>
       </div>`;
     document.body.appendChild(root);
-    document.getElementById('ef-chat-nudge').addEventListener('click', openPanel);
+    document.getElementById('ef-chat-nudges').addEventListener('click', handleNudgeClick);
     document.getElementById('ef-chat-bubble').addEventListener('click', openPanel);
     document.getElementById('ef-chat-close').addEventListener('click', closePanel);
     document.getElementById('ef-chat-form').addEventListener('submit', sendMessage);
+    document.getElementById('ef-chat-input').addEventListener('input', autoSizeChatInput);
+    document.getElementById('ef-chat-input').addEventListener('keydown', handleInputKeydown);
     document.getElementById('ef-chat-start').addEventListener('submit', startChat);
     document.getElementById('ef-chat-msgs').addEventListener('click', handleQuickReplyClick);
     state.ready = true;
+    installNudgeRotation();
     renderTitle();
   }
 
@@ -797,6 +996,8 @@
     const form = document.getElementById('ef-chat-form');
     const hasTenant = !!(state.tid || tid());
     const hasSession = !!(state.phone && (state.orderId != null || state.thread?.id || state.threadId));
+    const nudgeCount = renderNudges();
+    updateStartText();
     bubble.classList.toggle('on', hasTenant || hasSession);
     panel.classList.toggle('on', state.open && (hasTenant || hasSession));
     root.classList.toggle('efc-cart-on', !!document.getElementById('cart-float')?.classList.contains('show'));
@@ -804,7 +1005,7 @@
     const unread = Math.max(0, Number(state.unread || state.thread?.unread_client || 0));
     badge.textContent = unread > 9 ? '9+' : String(unread);
     badge.classList.toggle('on', unread > 0);
-    root.classList.toggle('efc-show-nudge', !!hasTenant && !state.open && !hasSession && unread === 0);
+    root.classList.toggle('efc-show-nudge', !!hasTenant && !state.open && !hasSession && unread === 0 && nudgeCount > 0);
 
     const order = state.order || state.thread?.order || {};
     const num = state.orderNum || order.order_num || order.num || state.orderId;
@@ -839,6 +1040,7 @@
     }).join('');
     msgs.innerHTML = messageHtml + extras;
     renderPaymentQrFallback();
+    autoSizeChatInput();
     scrollMessagesToBottom();
   }
 
@@ -904,6 +1106,7 @@
       if (typeof toast === 'function') toast('Atencao', 'Informe seu WhatsApp para iniciar.');
       return;
     }
+    const pendingSuggestion = String(state.pendingSuggestion || '').trim();
     try {
       const r = await api('/api/chat/start', {
         method: 'POST',
@@ -921,10 +1124,14 @@
       state.messages = [];
       mergeMessages(data.messages || []);
       state.open = true;
+      state.pendingSuggestion = '';
       saveSession();
       connectSSE();
       render();
       markRead();
+      if (pendingSuggestion) {
+        setTimeout(() => sendChatText(pendingSuggestion), 220);
+      }
     } catch(e) {
       if (typeof toast === 'function') toast('Erro', e?.message || 'Nao foi possivel iniciar o chat.');
     }
@@ -966,7 +1173,10 @@
     const input = document.getElementById('ef-chat-input');
     const btn = document.getElementById('ef-chat-send');
     const ok = await sendChatText(input?.value || '', btn);
-    if (ok && input) input.value = '';
+    if (ok && input) {
+      input.value = '';
+      autoSizeChatInput();
+    }
   }
 
   function sendQuickReply(value, btn) {
@@ -1206,6 +1416,11 @@
   window.efChatSetTenant = setTenantId;
   window.efChatSetStoreName = setStoreName;
   window.efChatShowFollowPrompt = showFollowPrompt;
+  window.efChatRefreshNudges = function() {
+    ensureDom();
+    renderNudges();
+    render();
+  };
 
   function bootFromStorage() {
     state.tid = tid();

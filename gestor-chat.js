@@ -51,8 +51,10 @@
   function renderTitle() {
     const name = storeName();
     const title = document.getElementById('gc-title');
+    const subtitle = document.getElementById('gc-subtitle');
     const fab = document.getElementById('gc-fab');
     if (title) title.textContent = name;
+    if (subtitle) subtitle.textContent = 'Atendimento em tempo real';
     if (fab) {
       fab.title = 'Chats de ' + name;
       fab.setAttribute('aria-label', 'Chats de ' + name);
@@ -117,54 +119,98 @@
     const style = document.createElement('style');
     style.id = 'gestor-chat-style';
     style.textContent = `
-      #gestor-chat-root{position:fixed;right:22px;bottom:22px;z-index:6500;font-family:'DM Sans',system-ui,sans-serif}
-      .gc-fab{width:52px;height:52px;border-radius:50%;border:1px solid rgba(14,165,233,.32);background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 14px 36px rgba(2,8,23,.32);cursor:pointer;position:relative}
-      .gc-fab-badge{position:absolute;right:-4px;top:-5px;min-width:20px;height:20px;border-radius:99px;background:#ef4444;color:#fff;font-size:11px;font-weight:900;display:none;align-items:center;justify-content:center;border:2px solid var(--surface,#0f1117);padding:0 5px}
+      #gestor-chat-root{--gc-bg:#08111f;--gc-surface:#0f1b2d;--gc-surface-2:#142238;--gc-surface-3:#1a2b43;--gc-line:rgba(148,163,184,.17);--gc-line-strong:rgba(125,211,252,.28);--gc-text:#eef6ff;--gc-muted:#9fb0c7;--gc-soft:#d7e5f5;--gc-accent:#08b6d8;--gc-accent-2:#2563eb;--gc-success:#22c55e;--gc-danger:#ef4444;position:fixed;right:18px;bottom:18px;z-index:6500;font-family:'DM Sans',system-ui,sans-serif;color:var(--gc-text)}
+      .gc-fab{width:56px;height:56px;border-radius:18px;border:1px solid rgba(125,211,252,.42);background:linear-gradient(135deg,#08b6d8,#2563eb);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 18px 44px rgba(8,17,31,.46);cursor:pointer;position:relative;transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}
+      .gc-fab:hover{transform:translateY(-2px);box-shadow:0 22px 54px rgba(8,17,31,.56);filter:saturate(1.08)}
+      .gc-fab:active{transform:translateY(0) scale(.98)}
+      .gc-fab svg{filter:drop-shadow(0 5px 10px rgba(15,23,42,.22))}
+      .gc-fab-badge{position:absolute;right:-6px;top:-7px;min-width:21px;height:21px;border-radius:99px;background:var(--gc-danger);color:#fff;font-size:11px;font-weight:900;display:none;align-items:center;justify-content:center;border:2px solid #eef6ff;padding:0 5px;box-shadow:0 8px 18px rgba(239,68,68,.35)}
       .gc-fab-badge.on{display:flex}
-      .gc-panel{position:absolute;right:0;bottom:64px;width:min(900px,calc(100vw - 36px));height:min(620px,calc(100vh - 112px));background:var(--surface,#111827);color:var(--text,#f8fafc);border:1px solid var(--border,rgba(255,255,255,.1));border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.42);display:none;overflow:hidden}
-      .gc-panel.on{display:grid;grid-template-rows:56px 1fr}
-      .gc-head{display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--border,rgba(255,255,255,.1));background:rgba(255,255,255,.03)}
-      .gc-title{font-size:14px;font-weight:850}
-      .gc-close{width:32px;height:32px;border:none;border-radius:50%;background:var(--surface2,rgba(255,255,255,.08));color:var(--text,#fff);display:flex;align-items:center;justify-content:center;cursor:pointer}
-      .gc-body{min-height:0;display:grid;grid-template-columns:300px minmax(0,1fr)}
-      .gc-list-wrap{border-right:1px solid var(--border,rgba(255,255,255,.1));min-width:0;display:flex;flex-direction:column;background:rgba(255,255,255,.02)}
-      .gc-search{padding:10px;border-bottom:1px solid var(--border,rgba(255,255,255,.08))}
-      .gc-search input{width:100%;height:36px;border:1px solid var(--border,rgba(255,255,255,.12));border-radius:10px;background:var(--surface2,rgba(255,255,255,.06));color:var(--text,#fff);padding:0 11px;font:500 12.5px 'DM Sans',system-ui,sans-serif;outline:none}
-      .gc-list{flex:1;overflow-y:auto}
-      .gc-item{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;padding:11px 12px;border-bottom:1px solid rgba(148,163,184,.08);cursor:pointer;align-items:center}
-      .gc-item:hover{background:rgba(14,165,233,.08)}
-      .gc-item.on{background:rgba(14,165,233,.13);border-left:3px solid #0ea5e9;padding-left:9px}
-      .gc-avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#e0f2fe,#bfdbfe);color:#075985;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900}
+      .gc-panel{position:fixed;right:18px;top:72px;bottom:18px;width:min(860px,calc(100vw - 112px));min-width:min(700px,calc(100vw - 112px));background:var(--gc-bg);color:var(--gc-text);border:1px solid var(--gc-line-strong);border-radius:20px;box-shadow:0 32px 100px rgba(2,8,23,.55);display:none;overflow:hidden;isolation:isolate}
+      .gc-panel::before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 82% 8%,rgba(14,165,233,.16),transparent 32%),linear-gradient(180deg,rgba(255,255,255,.035),transparent 22%);z-index:0}
+      .gc-panel.on{display:grid;grid-template-rows:66px minmax(0,1fr);animation:gcPanelIn .18s ease-out}
+      @keyframes gcPanelIn{from{opacity:0;transform:translateY(8px) scale(.992)}to{opacity:1;transform:none}}
+      .gc-head,.gc-body{position:relative;z-index:1}
+      .gc-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:0 16px 0 18px;border-bottom:1px solid var(--gc-line);background:rgba(15,27,45,.92);backdrop-filter:blur(16px)}
+      .gc-head-main{min-width:0;display:flex;flex-direction:column;gap:2px}
+      .gc-title{font-size:15px;font-weight:900;line-height:1.12;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff}
+      .gc-subtitle{font-size:11.5px;font-weight:700;color:var(--gc-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .gc-head-actions{display:flex;align-items:center;gap:9px;flex-shrink:0}
+      .gc-head-count{height:30px;display:flex;align-items:center;border:1px solid rgba(125,211,252,.22);background:rgba(8,182,216,.09);color:#b9ecff;border-radius:999px;padding:0 11px;font-size:11.5px;font-weight:850;white-space:nowrap}
+      .gc-back,.gc-close{width:34px;height:34px;border:1px solid rgba(148,163,184,.18);border-radius:12px;background:rgba(255,255,255,.06);color:var(--gc-text);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .16s ease,border-color .16s ease,transform .16s ease}
+      .gc-back{display:none;flex-shrink:0}
+      .gc-close:hover,.gc-back:hover{background:rgba(14,165,233,.14);border-color:rgba(125,211,252,.36)}
+      .gc-close:active,.gc-back:active{transform:scale(.96)}
+      .gc-body{min-height:0;display:grid;grid-template-columns:310px minmax(0,1fr)}
+      .gc-list-wrap{border-right:1px solid var(--gc-line);min-width:0;display:flex;flex-direction:column;background:rgba(15,27,45,.72)}
+      .gc-search{padding:13px;border-bottom:1px solid var(--gc-line)}
+      .gc-search input{width:100%;height:40px;border:1px solid rgba(148,163,184,.18);border-radius:12px;background:rgba(8,17,31,.72);color:var(--gc-text);padding:0 13px;font:700 12.5px 'DM Sans',system-ui,sans-serif;outline:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.035)}
+      .gc-search input::placeholder{color:#7588a3}
+      .gc-search input:focus{border-color:rgba(8,182,216,.7);box-shadow:0 0 0 3px rgba(8,182,216,.14)}
+      .gc-list{flex:1;overflow-y:auto;padding:8px}
+      .gc-list::-webkit-scrollbar,.gc-msgs::-webkit-scrollbar{width:8px}
+      .gc-list::-webkit-scrollbar-thumb,.gc-msgs::-webkit-scrollbar-thumb{background:rgba(148,163,184,.26);border-radius:999px}
+      .gc-item{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:11px;padding:10px;border:1px solid transparent;border-radius:14px;cursor:pointer;align-items:center;color:var(--gc-text);transition:background .16s ease,border-color .16s ease,transform .16s ease}
+      .gc-item+.gc-item{margin-top:5px}
+      .gc-item:hover{background:rgba(255,255,255,.045);border-color:rgba(148,163,184,.12)}
+      .gc-item.on{background:linear-gradient(135deg,rgba(8,182,216,.2),rgba(37,99,235,.12));border-color:rgba(125,211,252,.34);box-shadow:0 12px 32px rgba(2,8,23,.2)}
+      .gc-avatar{width:42px;height:42px;border-radius:14px;background:linear-gradient(135deg,#d9f99d,#67e8f9 52%,#93c5fd);color:#082f49;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:950;letter-spacing:0}
       .gc-meta{min-width:0}
-      .gc-name{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .gc-prev{font-size:11.5px;color:var(--muted,#94a3b8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
-      .gc-side{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:5px}
-      .gc-time{font-size:10.5px;color:var(--muted,#94a3b8)}
-      .gc-unread{min-width:19px;height:19px;border-radius:99px;background:#ef4444;color:#fff;font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center;padding:0 5px}
-      .gc-chat{min-width:0;min-height:0;display:grid;grid-template-rows:auto 1fr auto;background:var(--bg,#0f172a)}
-      .gc-context{padding:12px 14px;border-bottom:1px solid var(--border,rgba(255,255,255,.1));background:rgba(255,255,255,.03)}
-      .gc-context-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
-      .gc-order-title{font-size:14px;font-weight:850}
-      .gc-status{font-size:11px;font-weight:800;color:#38bdf8;border:1px solid rgba(56,189,248,.25);background:rgba(56,189,248,.1);border-radius:99px;padding:3px 8px;white-space:nowrap}
-      .gc-order-sub{font-size:11.5px;color:var(--muted,#94a3b8);margin-top:4px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-      .gc-msgs{min-height:0;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px;background:linear-gradient(180deg,rgba(15,23,42,.55),rgba(15,23,42,.85))}
-      .gc-empty{margin:auto;color:var(--muted,#94a3b8);font-size:13px;text-align:center}
-      .gc-msg{max-width:78%;padding:9px 11px;border-radius:14px;font-size:13px;line-height:1.35;word-break:break-word}
-      .gc-msg.client{align-self:flex-start;background:var(--surface,#111827);border:1px solid var(--border,rgba(255,255,255,.1));color:var(--text,#fff);border-bottom-left-radius:5px}
-      .gc-msg.store{align-self:flex-end;background:#0ea5e9;color:#fff;border-bottom-right-radius:5px}
-      .gc-msg.system{align-self:center;background:rgba(14,165,233,.1);border:1px solid rgba(14,165,233,.22);color:#7dd3fc;text-align:center;font-size:12px;border-radius:10px}
-      .gc-msg-time{font-size:10px;opacity:.72;margin-top:4px;text-align:right}
-      .gc-form{display:flex;gap:8px;padding:11px;border-top:1px solid var(--border,rgba(255,255,255,.1));background:rgba(255,255,255,.03)}
-      .gc-input{flex:1;min-width:0;height:40px;border:1px solid var(--border,rgba(255,255,255,.12));border-radius:12px;background:var(--surface,#111827);color:var(--text,#fff);padding:0 12px;font:500 13px 'DM Sans',system-ui,sans-serif;outline:none}
-      .gc-send{width:42px;height:40px;border:none;border-radius:12px;background:#0ea5e9;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
-      .gc-send:disabled{opacity:.45;cursor:not-allowed}
+      .gc-name{font-size:13px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#f8fbff}
+      .gc-prev{font-size:11.5px;color:var(--gc-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px;line-height:1.25}
+      .gc-side{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+      .gc-time{font-size:10.5px;color:#7f93ad;font-weight:800}
+      .gc-unread{min-width:20px;height:20px;border-radius:99px;background:linear-gradient(135deg,#fb7185,#ef4444);color:#fff;font-size:10px;font-weight:950;display:flex;align-items:center;justify-content:center;padding:0 6px;box-shadow:0 8px 18px rgba(239,68,68,.26)}
+      .gc-chat{min-width:0;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:#0a1322}
+      .gc-context{padding:14px 16px;border-bottom:1px solid var(--gc-line);background:linear-gradient(180deg,rgba(20,34,56,.86),rgba(15,27,45,.72))}
+      .gc-context-top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+      .gc-order-main{min-width:0}
+      .gc-order-title{font-size:14px;font-weight:950;color:#fff;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .gc-order-sub{font-size:11.8px;color:var(--gc-muted);margin-top:5px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+      .gc-status{font-size:11px;font-weight:900;color:#a7f3d0;border:1px solid rgba(34,197,94,.24);background:rgba(34,197,94,.1);border-radius:999px;padding:5px 9px;white-space:nowrap;max-width:190px;overflow:hidden;text-overflow:ellipsis}
+      .gc-msgs{min-height:0;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:9px;background:linear-gradient(180deg,rgba(10,19,34,.86),rgba(8,17,31,.98))}
+      .gc-empty{margin:auto;color:var(--gc-muted);font-size:13px;text-align:center;line-height:1.45;max-width:280px;padding:18px}
+      .gc-list .gc-empty{margin:24px auto}
+      .gc-msg{max-width:76%;padding:10px 12px;border-radius:16px;font-size:13px;line-height:1.38;word-break:break-word;white-space:pre-wrap;box-shadow:0 10px 26px rgba(2,8,23,.14)}
+      .gc-msg.client{align-self:flex-start;background:#f8fafc;color:#172033;border:1px solid rgba(226,232,240,.92);border-bottom-left-radius:6px}
+      .gc-msg.store{align-self:flex-end;background:linear-gradient(135deg,#09a9d1,#2563eb);color:#fff;border-bottom-right-radius:6px}
+      .gc-msg.system{align-self:center;background:rgba(14,165,233,.12);border:1px solid rgba(14,165,233,.24);color:#b9ecff;text-align:center;font-size:12px;border-radius:12px;max-width:82%;box-shadow:none}
+      .gc-msg-time{font-size:10px;opacity:.68;margin-top:5px;text-align:right;font-weight:800}
+      .gc-form{display:flex;gap:9px;padding:13px;border-top:1px solid var(--gc-line);background:rgba(15,27,45,.92)}
+      .gc-input{flex:1;min-width:0;height:44px;border:1px solid rgba(148,163,184,.2);border-radius:14px;background:#f8fafc;color:#172033;padding:0 14px;font:700 14px 'DM Sans',system-ui,sans-serif;outline:none}
+      .gc-input::placeholder{color:#6b7b91}
+      .gc-input:focus{border-color:rgba(8,182,216,.75);box-shadow:0 0 0 3px rgba(8,182,216,.16)}
+      .gc-input:disabled{opacity:.58;background:#dbe5ef}
+      .gc-send{width:46px;height:44px;border:none;border-radius:14px;background:linear-gradient(135deg,#08b6d8,#2563eb);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 12px 28px rgba(14,165,233,.24);transition:transform .16s ease,filter .16s ease,opacity .16s ease}
+      .gc-send:hover{filter:saturate(1.1);transform:translateY(-1px)}
+      .gc-send:active{transform:scale(.97)}
+      .gc-send:disabled{opacity:.45;cursor:not-allowed;transform:none;filter:none}
+      @media(max-width:1040px){
+        .gc-panel{left:78px;right:12px;width:auto;min-width:0}
+        .gc-body{grid-template-columns:310px minmax(0,1fr)}
+      }
       @media(max-width:760px){
-        #gestor-chat-root{right:12px;bottom:12px}
-        .gc-panel{position:fixed;left:8px;right:8px;top:68px;bottom:8px;width:auto;height:auto}
+        #gestor-chat-root{right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px))}
+        .gc-fab{width:54px;height:54px;border-radius:18px}
+        .gc-panel{position:fixed;left:8px;right:8px;top:58px;bottom:calc(8px + env(safe-area-inset-bottom,0px));width:auto;min-width:0;border-radius:18px;grid-template-rows:62px minmax(0,1fr)}
+        .gc-head{padding:0 10px 0 12px;gap:9px}
+        .gc-head-count{display:none}
+        .gc-back{display:flex}
+        .gc-panel.list-mode .gc-back{display:none}
         .gc-body{grid-template-columns:1fr}
-        .gc-list-wrap{display:none}
+        .gc-list-wrap{display:none;border-right:0}
         .gc-panel.list-mode .gc-list-wrap{display:flex}
         .gc-panel.list-mode .gc-chat{display:none}
+        .gc-list{padding:8px}
+        .gc-chat{grid-template-rows:auto minmax(0,1fr) auto}
+        .gc-context{padding:12px}
+        .gc-context-top{display:block}
+        .gc-status{display:inline-flex;margin-top:8px;max-width:100%}
+        .gc-msgs{padding:12px;gap:8px}
+        .gc-msg{max-width:88%;font-size:13px}
+        .gc-form{padding:10px;gap:8px}
+        .gc-input{height:46px;font-size:16px}
+        .gc-send{height:46px;width:48px;flex-shrink:0}
       }`;
     document.head.appendChild(style);
   }
@@ -181,10 +227,19 @@
       </button>
       <div class="gc-panel" id="gc-panel">
         <div class="gc-head">
-          <div class="gc-title" id="gc-title">Chat clientes</div>
-          <button class="gc-close" id="gc-close" type="button" title="Fechar" aria-label="Fechar">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <button class="gc-back" id="gc-back" type="button" title="Voltar para conversas" aria-label="Voltar para conversas">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3 5 8l5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
+          <div class="gc-head-main">
+            <div class="gc-title" id="gc-title">Chat clientes</div>
+            <div class="gc-subtitle" id="gc-subtitle">Atendimento em tempo real</div>
+          </div>
+          <div class="gc-head-actions">
+            <div class="gc-head-count" id="gc-count">0 conversas</div>
+            <button class="gc-close" id="gc-close" type="button" title="Fechar" aria-label="Fechar">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+          </div>
         </div>
         <div class="gc-body">
           <div class="gc-list-wrap">
@@ -195,7 +250,7 @@
             <div class="gc-context" id="gc-context"></div>
             <div class="gc-msgs" id="gc-msgs"></div>
             <form class="gc-form" id="gc-form">
-              <input class="gc-input" id="gc-input" maxlength="1000" autocomplete="off" placeholder="Responder cliente">
+              <input class="gc-input" id="gc-input" maxlength="1000" autocomplete="off" enterkeyhint="send" placeholder="Responder cliente">
               <button class="gc-send" id="gc-send" type="submit" title="Enviar" aria-label="Enviar">
                 <svg width="17" height="17" viewBox="0 0 18 18" fill="none"><path d="M2 9l13-6-3.4 12-2.5-5.1L2 9Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
               </button>
@@ -206,6 +261,11 @@
     document.body.appendChild(root);
     document.getElementById('gc-fab').addEventListener('click', () => openPanel());
     document.getElementById('gc-close').addEventListener('click', closePanel);
+    document.getElementById('gc-back').addEventListener('click', () => {
+      GCHAT.active = null;
+      GCHAT.messages = [];
+      renderAll();
+    });
     document.getElementById('gc-search').addEventListener('input', ev => {
       GCHAT.search = ev.target.value || '';
       renderList();
@@ -266,9 +326,16 @@
   function renderBadge() {
     const total = GCHAT.threads.reduce((s,t) => s + Number(t.unread_store || 0), 0);
     const badge = document.getElementById('gc-fab-badge');
-    if (!badge) return;
-    badge.textContent = total > 9 ? '9+' : String(total);
-    badge.classList.toggle('on', total > 0);
+    const count = document.getElementById('gc-count');
+    if (badge) {
+      badge.textContent = total > 9 ? '9+' : String(total);
+      badge.classList.toggle('on', total > 0);
+    }
+    if (count) {
+      const totalThreads = GCHAT.threads.length;
+      const label = totalThreads === 1 ? '1 conversa' : `${totalThreads} conversas`;
+      count.textContent = total > 0 ? `${label} | ${total} nova${total > 1 ? 's' : ''}` : label;
+    }
   }
 
   function renderList() {
@@ -311,7 +378,13 @@
     const send = document.getElementById('gc-send');
     const t = GCHAT.active;
     if (!t) {
-      ctx.innerHTML = '<div class="gc-order-title">Selecione um chat</div>';
+      ctx.innerHTML = `
+        <div class="gc-context-top">
+          <div class="gc-order-main">
+            <div class="gc-order-title">Selecione uma conversa</div>
+            <div class="gc-order-sub">Escolha um cliente na lista para responder, acompanhar o pedido e assumir o atendimento quando precisar.</div>
+          </div>
+        </div>`;
       msgs.innerHTML = '<div class="gc-empty">As conversas dos pedidos ficam aqui.</div>';
       if (input) input.disabled = true;
       if (send) send.disabled = true;
@@ -322,9 +395,9 @@
     const order = t.order || {};
     ctx.innerHTML = `
       <div class="gc-context-top">
-        <div>
+        <div class="gc-order-main">
           <div class="gc-order-title">${esc(orderNum(t) ? ('Pedido #' + orderNum(t)) : 'Pedido pelo chat')} - ${esc(t.client || order.client || 'Cliente')}</div>
-          <div class="gc-order-sub">${esc(t.phone || order.phone || '')}${order.items_text ? ' | ' + esc(order.items_text) : ''}</div>
+          <div class="gc-order-sub">${esc(t.phone || order.phone || 'Sem telefone')}${order.items_text ? ' | ' + esc(order.items_text) : ''}</div>
         </div>
         <div class="gc-status">${esc(order.status_label || order.status || 'Atendimento')}</div>
       </div>`;
@@ -348,6 +421,7 @@
     if (panel) {
       panel.classList.toggle('on', GCHAT.open);
       panel.classList.toggle('list-mode', GCHAT.open && !GCHAT.active);
+      panel.classList.toggle('has-active', !!GCHAT.active);
     }
     renderList();
     renderActive();

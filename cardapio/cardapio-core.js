@@ -675,6 +675,13 @@ async function init() {
       return true;
     });
 
+    try {
+      window._cardapioItems = allItems;
+      window._cardapioCats = allCats;
+      window._cardapioCupons = allCupons;
+      if (typeof window.efChatRefreshNudges === 'function') window.efChatRefreshNudges();
+    } catch(e) {}
+
     if (cfgR.data) {
       const c = cfgR.data;
       applyStatus(c.store_open, c.horarios_config);
@@ -979,6 +986,11 @@ async function reloadMenu() {
     destaque: !!x.destaque
   }));
   allCats  = (catsR.data  || []);
+  try {
+    window._cardapioItems = allItems;
+    window._cardapioCats = allCats;
+    if (typeof window.efChatRefreshNudges === 'function') window.efChatRefreshNudges();
+  } catch(e) {}
   await loadAddonsEsgotados();
   buildCats();
   renderPreparoFilterSection();
