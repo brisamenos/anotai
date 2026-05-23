@@ -257,6 +257,11 @@
     style.id = 'ef-chat-style';
     style.textContent = `
       #ef-chat-root{position:fixed;right:16px;bottom:calc(22px + env(safe-area-inset-bottom,0px));z-index:370;font-family:'DM Sans',system-ui,sans-serif}
+      #ef-chat-root.efc-open{inset:0;right:0;bottom:0;z-index:2147483000;pointer-events:none}
+      #ef-chat-root.efc-open .efc-panel{pointer-events:auto;z-index:2147483001}
+      #ef-chat-root.efc-open .efc-bubble,#ef-chat-root.efc-open .efc-nudges{display:none!important}
+      body.ef-chat-open #track-fab,body.ef-chat-open .track-fab,body.ef-chat-open #track-drawer-bg{display:none!important;pointer-events:none!important;visibility:hidden!important}
+      body.ef-chat-open #cart-float{pointer-events:none}
       #ef-chat-root.efc-cart-on{bottom:calc(86px + env(safe-area-inset-bottom,0px))}
       .efc-bubble{width:54px;height:54px;border:none;border-radius:50%;background:var(--accent,#f97316);color:#fff;display:none;align-items:center;justify-content:center;box-shadow:0 12px 30px rgba(0,0,0,.28);cursor:pointer;position:relative;transition:transform .18s,box-shadow .18s}
       .efc-bubble.on{display:flex}
@@ -274,13 +279,13 @@
       .efc-nudge.item{background:linear-gradient(135deg,#fff,#eff6ff);border-color:rgba(14,165,233,.22)}
       .efc-nudge.ai{background:linear-gradient(135deg,#fff,#ecfeff);border-color:rgba(6,182,212,.2)}
       #ef-chat-root.efc-show-nudge .efc-nudges{display:flex;animation:efNudgeIn .34s cubic-bezier(.2,.9,.22,1)}
-      .efc-panel{position:absolute;right:0;bottom:66px;width:min(360px,calc(100vw - 24px));height:min(520px,calc(var(--efc-vh,100vh) - 126px));background:#fff;color:#111827;border:1px solid rgba(15,23,42,.12);border-radius:18px;box-shadow:0 22px 70px rgba(15,23,42,.28);display:none;overflow:hidden;flex-direction:column}
+      .efc-panel{position:absolute;right:0;bottom:66px;width:min(360px,calc(100vw - 24px));height:min(520px,calc(var(--efc-vh,100vh) - 126px));background:#fff;color:#111827;border:1px solid rgba(15,23,42,.12);border-radius:18px;box-shadow:0 22px 70px rgba(15,23,42,.28);display:none;overflow:hidden;flex-direction:column;z-index:2}
       .efc-panel.on{display:flex}
       .efc-head{height:58px;background:#111827;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 14px 0 16px;gap:10px}
       .efc-head>div{min-width:0;flex:1}
       .efc-title{font-size:14px;font-weight:850;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .efc-sub{display:block;font-size:11.5px;color:rgba(255,255,255,.72);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-      .efc-close{width:32px;height:32px;border:none;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 32px;position:relative;z-index:2}
+      .efc-close{width:32px;height:32px;border:none;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 32px;position:relative;z-index:20}
       .efc-order{padding:10px 14px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#475569;line-height:1.35}
       .efc-order strong{color:#111827}
       .efc-start{display:none;padding:14px;background:#fff;border-bottom:1px solid #e5e7eb}
@@ -357,7 +362,10 @@
         .efc-nudge strong{font-size:12px}
         .efc-nudge span{font-size:10.8px}
         .efc-panel{position:fixed;left:0;right:0;bottom:calc(var(--efc-kb,0px) + env(safe-area-inset-bottom,0px));width:100vw;height:calc(var(--efc-vh,100vh) - 8px - env(safe-area-inset-bottom,0px));max-height:none;border-left:none;border-right:none;border-bottom:none;border-radius:18px 18px 0 0}
-        .efc-head{height:54px;padding-left:14px;padding-right:12px}
+        #ef-chat-root.efc-open .efc-panel{top:0!important;left:0!important;right:0!important;bottom:calc(var(--efc-kb,0px) + env(safe-area-inset-bottom,0px))!important;width:100vw!important;height:auto!important;border-radius:0!important}
+        .efc-head{height:54px;padding-left:14px;padding-right:12px;position:relative;z-index:4}
+        #ef-chat-root.efc-open .efc-head{height:calc(56px + env(safe-area-inset-top,0px));padding-top:env(safe-area-inset-top,0px)}
+        .efc-close{width:38px;height:38px;flex-basis:38px}
         .efc-sub{max-width:100%}
         .efc-order{padding:9px 12px;font-size:11.8px}
         .efc-start{padding:12px}
@@ -411,6 +419,43 @@
     };
     if (delay) setTimeout(run, delay);
     else requestAnimationFrame(run);
+  }
+
+  function setTrackingSuppressed(on) {
+    try {
+      const fab = document.getElementById('track-fab');
+      if (fab) {
+        if (on) {
+          fab.dataset.efChatSuppressed = '1';
+          fab.style.setProperty('display', 'none', 'important');
+          fab.style.setProperty('visibility', 'hidden', 'important');
+          fab.style.setProperty('pointer-events', 'none', 'important');
+        } else if (fab.dataset.efChatSuppressed === '1') {
+          delete fab.dataset.efChatSuppressed;
+          fab.style.removeProperty('display');
+          fab.style.removeProperty('visibility');
+          fab.style.removeProperty('pointer-events');
+        }
+      }
+      const drawer = document.getElementById('track-drawer-bg');
+      if (drawer) {
+        if (on) drawer.classList.remove('on');
+        drawer.style.pointerEvents = on ? 'none' : '';
+        drawer.style.visibility = on ? 'hidden' : '';
+      }
+    } catch(e) {}
+  }
+
+  function guardTrackingOverlay(ev) {
+    if (!state.open) return;
+    const target = ev?.target;
+    if (!target?.closest) return;
+    if (target.closest('#track-fab,.track-fab,#track-drawer-bg')) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+      closePanel();
+    }
   }
 
   function installViewportHandling() {
@@ -676,6 +721,8 @@
     document.getElementById('ef-chat-nudges').addEventListener('click', handleNudgeClick);
     document.getElementById('ef-chat-bubble').addEventListener('click', openPanel);
     document.getElementById('ef-chat-close').addEventListener('click', closePanel);
+    document.addEventListener('pointerdown', guardTrackingOverlay, true);
+    document.addEventListener('click', guardTrackingOverlay, true);
     document.getElementById('ef-chat-form').addEventListener('submit', sendMessage);
     document.getElementById('ef-chat-input').addEventListener('input', autoSizeChatInput);
     document.getElementById('ef-chat-input').addEventListener('keydown', handleInputKeydown);
@@ -1074,9 +1121,13 @@
     const hasTenant = !!(state.tid || tid());
     const hasSession = !!(state.phone && (state.orderId != null || state.thread?.id || state.threadId));
     const nudgeCount = renderNudges();
+    const panelOpen = state.open && (hasTenant || hasSession);
     updateStartText();
     bubble.classList.toggle('on', hasTenant || hasSession);
-    panel.classList.toggle('on', state.open && (hasTenant || hasSession));
+    panel.classList.toggle('on', panelOpen);
+    root.classList.toggle('efc-open', panelOpen);
+    document.body.classList.toggle('ef-chat-open', panelOpen);
+    setTrackingSuppressed(panelOpen);
     root.classList.toggle('efc-cart-on', !!document.getElementById('cart-float')?.classList.contains('show'));
 
     const unread = Math.max(0, Number(state.unread || state.thread?.unread_client || 0));
@@ -1135,6 +1186,8 @@
 
   function openPanel() {
     state.open = true;
+    try { document.getElementById('track-drawer-bg')?.classList.remove('on'); } catch(e) {}
+    setTrackingSuppressed(true);
     updateViewportVars();
     saveSession();
     render();
@@ -1151,6 +1204,9 @@
 
   function closePanel() {
     state.open = false;
+    try { document.body.classList.remove('ef-chat-open'); } catch(e) {}
+    try { document.getElementById('ef-chat-root')?.classList.remove('efc-open'); } catch(e) {}
+    setTrackingSuppressed(false);
     saveSession();
     render();
   }
