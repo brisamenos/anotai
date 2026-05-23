@@ -194,6 +194,23 @@ db.exec(`
     kind TEXT DEFAULT 'text',
     created_at TEXT DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS order_chat_drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    thread_id INTEGER NOT NULL REFERENCES order_chat_threads(id) ON DELETE CASCADE,
+    phone TEXT NOT NULL,
+    client TEXT,
+    items TEXT DEFAULT '[]',
+    delivery_type TEXT,
+    addr TEXT,
+    pag TEXT,
+    step TEXT DEFAULT 'items',
+    status TEXT DEFAULT 'draft',
+    meta TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(tenant_id, thread_id)
+  );
   CREATE TABLE IF NOT EXISTS movimentos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -298,6 +315,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_order_chat_threads_order ON order_chat_threads(tenant_id, order_id);
   CREATE INDEX IF NOT EXISTS idx_order_chat_threads_phone ON order_chat_threads(tenant_id, phone);
   CREATE INDEX IF NOT EXISTS idx_order_chat_messages_thread ON order_chat_messages(tenant_id, thread_id, id);
+  CREATE INDEX IF NOT EXISTS idx_order_chat_drafts_thread ON order_chat_drafts(tenant_id, thread_id);
   CREATE INDEX IF NOT EXISTS idx_menu_tenant       ON menu_items(tenant_id);
   CREATE INDEX IF NOT EXISTS idx_mesas_tenant      ON mesas(tenant_id);
   CREATE INDEX IF NOT EXISTS idx_fidelidade_tenant ON fidelidade(tenant_id);
@@ -955,6 +973,26 @@ const MIGRATIONS = [
     `CREATE INDEX IF NOT EXISTS idx_order_chat_threads_phone ON order_chat_threads(tenant_id, phone)`,
     `CREATE INDEX IF NOT EXISTS idx_order_chat_messages_thread ON order_chat_messages(tenant_id, thread_id, id)`
   ] },
+  { version:65, description:'rascunho de pedido guiado no chat interno', up:[
+    `CREATE TABLE IF NOT EXISTS order_chat_drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      thread_id INTEGER NOT NULL REFERENCES order_chat_threads(id) ON DELETE CASCADE,
+      phone TEXT NOT NULL,
+      client TEXT,
+      items TEXT DEFAULT '[]',
+      delivery_type TEXT,
+      addr TEXT,
+      pag TEXT,
+      step TEXT DEFAULT 'items',
+      status TEXT DEFAULT 'draft',
+      meta TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, thread_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_order_chat_drafts_thread ON order_chat_drafts(tenant_id, thread_id)`
+  ] },
 ]
 
 function runMigrations() {
@@ -1102,10 +1140,28 @@ function garantirSchemaChatPedido() {
     kind TEXT DEFAULT 'text',
     created_at TEXT DEFAULT (datetime('now'))
   )`)
+  execSafe(`CREATE TABLE IF NOT EXISTS order_chat_drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    thread_id INTEGER NOT NULL REFERENCES order_chat_threads(id) ON DELETE CASCADE,
+    phone TEXT NOT NULL,
+    client TEXT,
+    items TEXT DEFAULT '[]',
+    delivery_type TEXT,
+    addr TEXT,
+    pag TEXT,
+    step TEXT DEFAULT 'items',
+    status TEXT DEFAULT 'draft',
+    meta TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(tenant_id, thread_id)
+  )`)
   execSafe('CREATE INDEX IF NOT EXISTS idx_order_chat_threads_tenant_last ON order_chat_threads(tenant_id, last_at)')
   execSafe('CREATE INDEX IF NOT EXISTS idx_order_chat_threads_order ON order_chat_threads(tenant_id, order_id)')
   execSafe('CREATE INDEX IF NOT EXISTS idx_order_chat_threads_phone ON order_chat_threads(tenant_id, phone)')
   execSafe('CREATE INDEX IF NOT EXISTS idx_order_chat_messages_thread ON order_chat_messages(tenant_id, thread_id, id)')
+  execSafe('CREATE INDEX IF NOT EXISTS idx_order_chat_drafts_thread ON order_chat_drafts(tenant_id, thread_id)')
 }
 garantirSchemaChatPedido()
 
@@ -1134,7 +1190,7 @@ try {
 const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_items',
   'cupons','mesas','garcons','orders','movimentos','estoque','estoque_receitas','estoque_movimentos','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress',
   'entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens','order_status_history',
-  'chat_threads','chat_messages','order_chat_threads','order_chat_messages',
+  'chat_threads','chat_messages','order_chat_threads','order_chat_messages','order_chat_drafts',
   'indicadores','leads_indicacao','comissoes','indicador_tutorial_videos','indicador_tutorial_progress','admin_alerts','plano_assinaturas']
   // wa_messages excluída — pode conter muita mídia e estourar JSON.stringify
 
@@ -2675,6 +2731,28 @@ function chatEnsureThreadFromOrder(order, override = {}) {
   return db.prepare('SELECT * FROM order_chat_threads WHERE tenant_id=? AND order_id=?').get(order.tenant_id, order.id)
 }
 
+function chatEnsureThreadFromLead(tenantId, override = {}) {
+  const tid = String(tenantId || '').trim()
+  const phone = chatNormalizePhone(override.phone)
+  if (!tid || !phone) return null
+  const client = String(override.client || '').trim()
+  const existing = db.prepare(`SELECT * FROM order_chat_threads
+    WHERE tenant_id=? AND order_id=0 AND phone=?
+    ORDER BY id DESC LIMIT 1`).get(tid, phone)
+  if (existing) {
+    db.prepare(`UPDATE order_chat_threads
+      SET client=CASE WHEN ?!='' THEN ? ELSE client END,
+          updated_at=datetime('now')
+      WHERE id=? AND tenant_id=?`)
+      .run(client, client, existing.id, tid)
+    return db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(existing.id, tid)
+  }
+  const ins = db.prepare(`INSERT INTO order_chat_threads
+    (tenant_id, order_id, order_num, client, phone, status, updated_at)
+    VALUES (?,0,NULL,?,?, 'open', datetime('now'))`).run(tid, client, phone)
+  return db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(ins.lastInsertRowid, tid)
+}
+
 function chatBroadcastMessage(thread, message, order = null) {
   if (!thread || !message) return
   const payload = {
@@ -2685,7 +2763,10 @@ function chatBroadcastMessage(thread, message, order = null) {
   const tid = thread.tenant_id
   sseBroadcast(`chat-rt:${tid}`, 'chat:message', payload)
   const phone = chatNormalizePhone(thread.phone)
-  if (phone) sseBroadcast(`chat-client:${tid}:${thread.order_id}:${phone}`, 'chat:message', payload)
+  if (phone) {
+    sseBroadcast(`chat-client:${tid}:${thread.order_id || 0}:${phone}`, 'chat:message', payload)
+    if (Number(thread.order_id || 0) !== 0) sseBroadcast(`chat-client:${tid}:0:${phone}`, 'chat:message', payload)
+  }
 }
 
 function chatAddMessageFromOrder(order, opts = {}) {
@@ -2718,6 +2799,44 @@ function chatAddMessageFromOrder(order, opts = {}) {
       WHERE id=? AND tenant_id=?`)
       .run(msg.body, sender, incStore, incClient, thread.id, order.tenant_id)
     const updatedThread = db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(thread.id, order.tenant_id)
+    marcarDirty()
+    chatBroadcastMessage(updatedThread, msg, order)
+    return { thread: updatedThread, message: msg }
+  } catch(e) {
+    log('WARN', 'Chat interno falhou:', e.message)
+    return null
+  }
+}
+
+function chatAddMessageToThread(thread, opts = {}, order = null) {
+  if (!thread?.tenant_id || !thread?.id) return null
+  const body = String(opts.body || '').trim()
+  if (!body) return null
+  try {
+    const sender = ['client','store','system'].includes(opts.sender) ? opts.sender : 'system'
+    const kind = ['text','status','system','assistant'].includes(opts.kind) ? opts.kind : 'text'
+    if (opts.skipDuplicate) {
+      const dup = db.prepare(`SELECT id FROM order_chat_messages
+        WHERE tenant_id=? AND thread_id=? AND sender=? AND kind=? AND body=?
+        ORDER BY id DESC LIMIT 1`).get(thread.tenant_id, thread.id, sender, kind, body)
+      if (dup) return null
+    }
+    const author = String(opts.author_name || '').trim()
+    const orderId = parseInt(thread.order_id || order?.id || 0, 10) || 0
+    const ins = db.prepare(`INSERT INTO order_chat_messages
+      (tenant_id, thread_id, order_id, sender, author_name, body, kind)
+      VALUES (?,?,?,?,?,?,?)`)
+      .run(thread.tenant_id, thread.id, orderId, sender, author, body.slice(0, 1200), kind)
+    const msg = db.prepare('SELECT * FROM order_chat_messages WHERE id=?').get(ins.lastInsertRowid)
+    const incStore = sender === 'client' ? 1 : 0
+    const incClient = sender === 'client' ? 0 : 1
+    db.prepare(`UPDATE order_chat_threads
+      SET last_message=?, last_sender=?, last_at=datetime('now'), updated_at=datetime('now'),
+          unread_store=COALESCE(unread_store,0)+?,
+          unread_client=COALESCE(unread_client,0)+?
+      WHERE id=? AND tenant_id=?`)
+      .run(msg.body, sender, incStore, incClient, thread.id, thread.tenant_id)
+    const updatedThread = db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(thread.id, thread.tenant_id)
     marcarDirty()
     chatBroadcastMessage(updatedThread, msg, order)
     return { thread: updatedThread, message: msg }
@@ -4224,7 +4343,8 @@ const server = http.createServer(async (req,res) => {
     EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano,
     aplicarBaixaEstoquePedido,
     chatNormalizePhone, chatPhoneMatches, chatStatusLabel, chatOrderPublic, chatThreadPublic, chatMessagePublic,
-    chatEnsureThreadFromOrder, chatAddMessageFromOrder }
+    chatEnsureThreadFromOrder, chatEnsureThreadFromLead, chatAddMessageFromOrder, chatAddMessageToThread,
+    emit }
   try {
     if (await handleRoutes(req, res, _routeCtx)) return
   } catch(e) {

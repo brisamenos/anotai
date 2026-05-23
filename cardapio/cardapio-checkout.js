@@ -83,6 +83,26 @@ function buildWaLink(orderId, orderNum, numeroOverride) {
   return `https://wa.me/${numero}?text=${encodeURIComponent(msg)}`;
 }
 
+function buildWaProofLink(orderId, orderNum, numeroOverride) {
+  const num = orderNum ? String(orderNum).padStart(3, '0') : '';
+  const msg = num
+    ? `Ola, segue o comprovante do PIX manual do pedido *#${num}*.`
+    : 'Ola, segue o comprovante do PIX manual do meu pedido.';
+  const numero = normalizeWaNumero(numeroOverride || _waNumero);
+  if (!numero) return null;
+  _waNumero = numero;
+  return `https://wa.me/${numero}?text=${encodeURIComponent(msg)}`;
+}
+
+async function resolveOrderWaLinks(order) {
+  let numero = normalizeWaNumero(_waNumero);
+  if (!numero) numero = await ensureWaNumero();
+  return {
+    waLink: buildWaLink(order.id, order.order_num, numero),
+    proofWaLink: buildWaProofLink(order.id, order.order_num, numero)
+  };
+}
+
 function configureSuccessWaButton(order, waLink) {
   const waBtnEl  = document.getElementById('success-wa-btn');
   const waLblEl  = document.getElementById('success-wa-label');
@@ -245,6 +265,59 @@ function _buildOrderRequestSignature(data) {
   } catch(e) {
     return String(Date.now());
   }
+}
+
+function _restoreConfirmButton() {
+  const btn = document.getElementById('confirm-btn');
+  if (!btn) return;
+  btn.disabled = false;
+  btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar Pedido';
+}
+
+function _orderPayAmount(order) {
+  return (parseFloat(order?.total || 0) || 0) + (parseFloat(order?.taxa || 0) || 0);
+}
+
+function _openPostOrderChat(order, payload) {
+  payload = payload || {};
+  if (typeof efChatShowOrderCreated === 'function') {
+    efChatShowOrderCreated({
+      orderId: order.id,
+      orderNum: order.order_num,
+      phone: order.phone || document.getElementById('f-phone')?.value || '',
+      client: order.client || document.getElementById('f-name')?.value || '',
+      storeName: _storeName,
+      waLink: payload.waLink || ''
+    }, { open: true });
+  } else if (typeof efChatStart === 'function') {
+    efChatStart({
+      orderId: order.id,
+      orderNum: order.order_num,
+      phone: order.phone || document.getElementById('f-phone')?.value || '',
+      client: order.client || document.getElementById('f-name')?.value || '',
+      storeName: _storeName
+    }, { open: true });
+  }
+}
+
+function _emitPixPaymentToChat(order, extra) {
+  if (typeof efChatShowPayment !== 'function') return;
+  extra = extra || {};
+  const amount = _orderPayAmount(order);
+  efChatShowPayment(Object.assign({
+    orderId: order.id,
+    orderNum: order.order_num,
+    phone: order.phone || document.getElementById('f-phone')?.value || '',
+    client: order.client || document.getElementById('f-name')?.value || '',
+    storeName: _storeName,
+    amount,
+    amountText: 'R$ ' + fmt(amount),
+    pix_key: _pixKeyManual || '',
+    pix_key_tipo: _pixKeyManualTipo || '',
+    bank: _pixKeyManualBanco || '',
+    waLink: buildWaLink(order.id, order.order_num),
+    proofWaLink: buildWaProofLink(order.id, order.order_num)
+  }, extra));
 }
 
 async function submitOrder() {
@@ -536,11 +609,19 @@ async function _doSubmitOrder(addr, troco) {
     document.getElementById('cupom-msg').innerHTML = '';
 
     // ── Tela de sucesso ──
-    document.getElementById('cart-content').style.display = 'none';
-    document.getElementById('success-screen').classList.add('on');
+    const waLinks = await resolveOrderWaLinks(order);
+    const waLink = waLinks.waLink;
+    const usarTelaPagamento = selectedPay === 'cartao_mp';
+    document.getElementById('cart-content').style.display = usarTelaPagamento ? 'none' : '';
+    document.getElementById('success-screen').classList.toggle('on', usarTelaPagamento);
     const numFormatado = order.order_num ? '#' + String(order.order_num).padStart(3,'0') : 'Aguardando pagamento';
     window._lastOrderNum = order.order_num; // para o modal de avaliação
     document.getElementById('success-num').textContent = numFormatado;
+    if (!usarTelaPagamento) {
+      closeCart();
+      _restoreConfirmButton();
+    }
+    _openPostOrderChat(order, waLinks);
 
     // PIX manual precisa aparecer imediatamente; WhatsApp/rastreio podem esperar.
     let pixFlowPromise = null;
@@ -549,11 +630,11 @@ async function _doSubmitOrder(addr, troco) {
     }
 
     // Botão WhatsApp — aparece sempre que houver número configurado
-    const waLink = await renderSuccessWaButton(order);
+    if (usarTelaPagamento) configureSuccessWaButton(order, waLink);
 
     // Convite de cadastro para não-logados
     const inv = document.getElementById('invite-signup');
-    if (inv && !_customer) inv.style.display = 'flex';
+    if (inv && !_customer) inv.style.display = usarTelaPagamento ? 'flex' : 'none';
 
     startTracking(order.id, items, name, addr, order.status, order.order_num, {
       total: order.total,
@@ -561,12 +642,6 @@ async function _doSubmitOrder(addr, troco) {
       pag: order.pag,
       troco: order.troco
     });
-    if (typeof efChatStart === 'function') {
-      try {
-        efChatStart({ orderId: order.id, orderNum: order.order_num, phone, client: name, storeName: _storeName });
-      } catch(e) {}
-    }
-
     // ── PIX: gera QR Code MP ou exibe chave manual ──
     if (pixFlowPromise) await pixFlowPromise;
 
@@ -589,21 +664,9 @@ async function _doSubmitOrder(addr, troco) {
     } catch(e) {}
     _clearOrderRequestId();
 
-    setTimeout(() => {
-      if (typeof efChatShowFollowPrompt === 'function') {
-        efChatShowFollowPrompt({
-          orderId: order.id,
-          orderNum: order.order_num,
-          phone,
-          client: name,
-          storeName: _storeName,
-          waLink,
-          whatsappEnabled: !!waLink
-        });
-      } else if (_tenantPlano === 'premium') {
-        showWaToast(order.id, order.order_num);
-      }
-    }, 900);
+    if (!usarTelaPagamento && !window.efChatShowOrderCreated && _tenantPlano === 'premium') {
+      showWaToast(order.id, order.order_num);
+    }
   } catch(e) {
     console.error('[submitOrder] falhou:', e);
     // Mensagem específica baseada no tipo de erro
@@ -706,6 +769,9 @@ function _startPixPoll(mpId, orderId) {
       const lbl = document.getElementById('pix-status-label');
       if (d.status === 'aprovado') {
         _setPixPagoConfirmado(true);
+        if (typeof efChatUpdatePayment === 'function') {
+          efChatUpdatePayment({ orderId, status: 'paid' });
+        }
         _stopPixPoll();
         try {
           await fetch('/api/pix/vincular', {
@@ -717,6 +783,9 @@ function _startPixPoll(mpId, orderId) {
       } else if (d.status === 'rejeitado' || d.status === 'cancelado') {
         _setPixPagoConfirmado(false);
         if (lbl) lbl.textContent = '❌ Pagamento não realizado. Tente outra forma.';
+        if (typeof efChatUpdatePayment === 'function') {
+          efChatUpdatePayment({ orderId, status: d.status === 'cancelado' ? 'cancelado' : 'failed' });
+        }
         _stopPixPoll();
       }
     } catch(e) {}
@@ -740,6 +809,7 @@ async function _iniciarFluxoPix(order) {
     document.getElementById('pix-manual-key-show').value             = _pixKeyManual;
     document.getElementById('pix-manual-banco-lbl').textContent      = _pixKeyManualBanco ? `🏦 ${_pixKeyManualBanco}` : '';
     document.getElementById('pix-manual-valor-show').textContent     = 'R$ ' + fmt(parseFloat(order.total) + parseFloat(order.taxa || 0));
+    _emitPixPaymentToChat(order, { mode: 'manual', status: 'waiting' });
   };
 
   // Mostra fallback: se tem chave manual configurada, usa ela; senão, mostra bloco de erro com retry
@@ -768,8 +838,10 @@ async function _iniciarFluxoPix(order) {
       if (msgEl) msgEl.textContent = msg || 'Verifique sua conexão e tente novamente.';
       const btn = document.getElementById('pix-retry-btn');
       if (btn) btn.onclick = () => _iniciarFluxoPix(order);
+      _emitPixPaymentToChat(order, { mode: 'online', status: 'failed', pix_key: '' });
     } else {
       sec.style.display = 'none';
+      _emitPixPaymentToChat(order, { mode: 'online', status: 'failed', pix_key: '' });
       toast('❌', msg || 'Erro ao gerar PIX. Entre em contato com o restaurante.');
     }
   };
@@ -787,6 +859,7 @@ async function _iniciarFluxoPix(order) {
       } else { sec.style.display = 'none'; }
       return;
     }
+    _emitPixPaymentToChat(order, { mode: 'online', status: 'loading', pix_key: '' });
     _mostrarPixGerandoQRCode();
     const pr = await fetch('/api/pix/criar', {
       method: 'POST',
@@ -804,6 +877,14 @@ async function _iniciarFluxoPix(order) {
       document.getElementById('pix-qr-wrap').style.display = '';
       _setPixPagoConfirmado(false);
       await _renderPixQRCode(pd);
+      _emitPixPaymentToChat(order, {
+        mode: 'online',
+        status: 'waiting',
+        pix_key: '',
+        qr_code: pd.qr_code || '',
+        qr_code_base64: pd.qr_code_base64 || '',
+        mp_payment_id: pd.mp_payment_id || ''
+      });
       _startPixPoll(pd.mp_payment_id, order.id);
       return;
     }

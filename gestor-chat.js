@@ -235,7 +235,14 @@
   }
 
   function orderNum(thread) {
-    return thread?.order?.order_num || thread?.order_num || thread?.order?.num || thread?.order_id || '';
+    const n = thread?.order?.order_num || thread?.order_num || thread?.order?.num || '';
+    if (n) return n;
+    return Number(thread?.order_id || 0) > 0 ? thread.order_id : '';
+  }
+
+  function threadLabel(thread) {
+    const n = orderNum(thread);
+    return n ? ('#' + n) : 'Novo pedido';
   }
 
   function upsertThread(thread) {
@@ -284,7 +291,7 @@
       return `<div class="gc-item${active ? ' on' : ''}" data-id="${esc(t.id)}">
         <div class="gc-avatar">${esc(initials(t.client || t.phone))}</div>
         <div class="gc-meta">
-          <div class="gc-name">${esc(t.client || t.phone || 'Cliente')} - #${esc(orderNum(t))}</div>
+          <div class="gc-name">${esc(t.client || t.phone || 'Cliente')} - ${esc(threadLabel(t))}</div>
           <div class="gc-prev">${esc(t.last_message || t.order?.items_text || '')}</div>
         </div>
         <div class="gc-side">
@@ -316,10 +323,10 @@
     ctx.innerHTML = `
       <div class="gc-context-top">
         <div>
-          <div class="gc-order-title">Pedido #${esc(orderNum(t))} - ${esc(t.client || order.client || 'Cliente')}</div>
+          <div class="gc-order-title">${esc(orderNum(t) ? ('Pedido #' + orderNum(t)) : 'Pedido pelo chat')} - ${esc(t.client || order.client || 'Cliente')}</div>
           <div class="gc-order-sub">${esc(t.phone || order.phone || '')}${order.items_text ? ' | ' + esc(order.items_text) : ''}</div>
         </div>
-        <div class="gc-status">${esc(order.status_label || order.status || 'Status')}</div>
+        <div class="gc-status">${esc(order.status_label || order.status || 'Atendimento')}</div>
       </div>`;
     if (!GCHAT.messages.length) {
       msgs.innerHTML = '<div class="gc-empty">Nenhuma mensagem ainda.</div>';
@@ -440,7 +447,7 @@
     try {
       const r = await api('/api/chat/send', {
         method: 'POST',
-        body: JSON.stringify({ order_id: GCHAT.active.order_id, sender: 'store', body: text })
+        body: JSON.stringify({ thread_id: GCHAT.active.id, order_id: GCHAT.active.order_id || 0, sender: 'store', body: text })
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok || !data.ok) throw new Error(data.error || 'Falha ao enviar');

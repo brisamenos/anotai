@@ -627,8 +627,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
           MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
           EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano,
           aplicarBaixaEstoquePedido,
-          chatNormalizePhone, chatPhoneMatches, chatOrderPublic, chatThreadPublic, chatMessagePublic,
-          chatEnsureThreadFromOrder, chatAddMessageFromOrder } = ctx
+          chatNormalizePhone, chatPhoneMatches, chatStatusLabel, chatOrderPublic, chatThreadPublic, chatMessagePublic,
+          chatEnsureThreadFromOrder, chatEnsureThreadFromLead, chatAddMessageFromOrder, chatAddMessageToThread,
+          emit } = ctx
 
   const INDICADOR_SESSION_TTL = 8 * 60 * 60 * 1000
   const criarSessaoIndicador = (ind) => {
@@ -724,6 +725,530 @@ module.exports = async function handleRoutes(req, res, ctx) {
   const _chatMessageOut = (msg) => typeof chatMessagePublic === 'function'
     ? chatMessagePublic(msg)
     : msg
+  const _chatNorm = (v) => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\w\s]/g,' ').replace(/\s+/g,' ').trim()
+  const _chatFmt = (v) => (parseFloat(v || 0)).toFixed(2).replace('.', ',')
+  const _chatJson = (v, fallback) => {
+    try {
+      if (Array.isArray(v) || (v && typeof v === 'object')) return v
+      return v ? JSON.parse(v) : fallback
+    } catch { return fallback }
+  }
+  const _chatShortNum = (order) => String(order?.order_num || order?.id || '').padStart(3, '0')
+  const _chatPauseKey = (tid, phone) => `pausa:${tid}:${_chatDigits(phone)}`
+  const _chatPauseMinutes = (tid) => {
+    try {
+      const cfg = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+      const ia = _chatJson(cfg?.ia_config, {})
+      return Math.max(5, parseInt(ia?.pausa_min || ia?.pausaMin || 30, 10) || 30)
+    } catch { return 30 }
+  }
+  const _chatBotPaused = (tid, phone) => {
+    const p = _chatDigits(phone)
+    if (!tid || !p || !_pausaHumano?.get) return false
+    const at = _pausaHumano.get(_chatPauseKey(tid, p))
+    return !!(at && (Date.now() - Number(at)) < _chatPauseMinutes(tid) * 60 * 1000)
+  }
+  const _chatPauseBot = (tid, phone) => {
+    const p = _chatDigits(phone)
+    if (tid && p && _pausaHumano?.set) _pausaHumano.set(_chatPauseKey(tid, p), Date.now())
+  }
+  const _chatLeadThread = (tid, phone, client = '') => {
+    if (typeof chatEnsureThreadFromLead === 'function') return chatEnsureThreadFromLead(tid, { phone, client })
+    const p = _chatDigits(phone)
+    if (!tid || !p) return null
+    const existing = db.prepare('SELECT * FROM order_chat_threads WHERE tenant_id=? AND order_id=0 AND phone=? ORDER BY id DESC LIMIT 1').get(tid, p)
+    if (existing) return existing
+    const ins = db.prepare(`INSERT INTO order_chat_threads (tenant_id,order_id,client,phone,updated_at) VALUES (?,0,?,?,datetime('now'))`).run(tid, client, p)
+    return db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(ins.lastInsertRowid, tid)
+  }
+  const _chatDraftRow = (tid, thread) => {
+    if (!tid || !thread?.id) return null
+    let row = db.prepare('SELECT * FROM order_chat_drafts WHERE tenant_id=? AND thread_id=?').get(tid, thread.id)
+    if (!row) {
+      db.prepare(`INSERT INTO order_chat_drafts
+        (tenant_id, thread_id, phone, client, items, step, status, meta, updated_at)
+        VALUES (?,?,?,?, '[]', 'items', 'draft', '{}', datetime('now'))`)
+        .run(tid, thread.id, _chatDigits(thread.phone), thread.client || '')
+      row = db.prepare('SELECT * FROM order_chat_drafts WHERE tenant_id=? AND thread_id=?').get(tid, thread.id)
+    }
+    return row
+  }
+  const _chatDraft = (tid, thread) => {
+    const row = _chatDraftRow(tid, thread)
+    if (!row) return null
+    return {
+      ...row,
+      items: _chatJson(row.items, []),
+      meta: _chatJson(row.meta, {})
+    }
+  }
+  const _chatSaveDraft = (draft) => {
+    if (!draft?.tenant_id || !draft?.thread_id) return
+    db.prepare(`UPDATE order_chat_drafts
+      SET phone=?, client=?, items=?, delivery_type=?, addr=?, pag=?, step=?, status=?, meta=?, updated_at=datetime('now')
+      WHERE tenant_id=? AND thread_id=?`)
+      .run(_chatDigits(draft.phone), draft.client || '', JSON.stringify(draft.items || []),
+        draft.delivery_type || null, draft.addr || null, draft.pag || null,
+        draft.step || 'items', draft.status || 'draft', JSON.stringify(draft.meta || {}),
+        draft.tenant_id, draft.thread_id)
+    marcarDirty()
+  }
+  const _chatClearDraft = (draft) => {
+    if (!draft) return
+    draft.items = []
+    draft.delivery_type = null
+    draft.addr = null
+    draft.pag = null
+    draft.step = 'items'
+    draft.status = 'draft'
+    draft.meta = {}
+    _chatSaveDraft(draft)
+  }
+  const _chatMenuRows = (tid) => db.prepare(`SELECT id,name,description,price,item_type,custom_groups,status
+    FROM menu_items WHERE tenant_id=? AND COALESCE(status,'ativo')!='pausado'
+    ORDER BY sort_order IS NULL, sort_order, id LIMIT 300`).all(tid)
+  const _chatPizzaSizes = (item) => {
+    const groups = _chatJson(item?.custom_groups, [])
+    const g = (groups || []).find(x => x && x.tipo === 'pizza_sizes' && Array.isArray(x.tamanhos))
+    if (!g) return null
+    return {
+      regra: String(g.regra_meio || 'maior').toLowerCase(),
+      tamanhos: g.tamanhos.map(t => ({
+        key: String(t.key || '').toUpperCase(),
+        nome: String(t.nome || t.key || ''),
+        preco: parseFloat(t.preco || 0) || 0
+      })).filter(t => t.key && t.preco >= 0)
+    }
+  }
+  const _chatSizeFromText = (text) => {
+    const n = _chatNorm(text)
+    if (/\b(g|grande|familia|familia)\b/.test(n)) return 'G'
+    if (/\b(m|media|medio)\b/.test(n)) return 'M'
+    if (/\b(p|pequena|pequeno)\b/.test(n)) return 'P'
+    return ''
+  }
+  const _chatSizePrice = (item, sizeKey) => {
+    const cfg = _chatPizzaSizes(item)
+    if (!cfg) return { price: parseFloat(item.price || 0) || 0, label: '', cfg: null }
+    const found = cfg.tamanhos.find(t => t.key === sizeKey) || null
+    return { price: parseFloat(found?.preco || item.price || 0) || 0, label: found?.nome || sizeKey, cfg }
+  }
+  const _chatAddonEsgSet = (tid) => {
+    try {
+      return new Set(db.prepare('SELECT nome_norm FROM addons_esgotados WHERE tenant_id=?').all(tid).map(r => String(r.nome_norm || '')))
+    } catch { return new Set() }
+  }
+  const _chatAddonNorm = (v) => String(v || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+  const _chatGroupSizeKey = (name) => (String(name || '').match(/\((P|M|G)\)\s*$/i)?.[1] || '').toUpperCase()
+  const _chatAddonGroups = (tid, item, sizeKey = '') => {
+    const groups = _chatJson(item?.custom_groups, [])
+    const esg = _chatAddonEsgSet(tid)
+    const excluded = new Set(['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens','pizza_sizes'])
+    const hasPizzaSizes = !!_chatPizzaSizes(item)
+    return (groups || [])
+      .filter(g => g && !excluded.has(g.tipo))
+      .filter(g => !(hasPizzaSizes && _chatNorm(g.nome) === 'tamanho'))
+      .filter(g => {
+        const gSize = _chatGroupSizeKey(g.nome)
+        return !gSize || !sizeKey || gSize === String(sizeKey || '').toUpperCase()
+      })
+      .map(g => {
+        const opts = (g.opcoes || []).map(o => ({
+          nome: String(o.nome || o.name || '').trim(),
+          preco: parseFloat(o.preco ?? o.price ?? o.valor ?? 0) || 0
+        })).filter(o => o.nome && !esg.has(_chatAddonNorm(o.nome)))
+        const tipo = g.tipo === 'checkbox' ? 'checkbox' : 'radio'
+        const max = tipo === 'checkbox' ? Math.max(1, parseInt(g.max || 1, 10) || 1) : 1
+        const min = g.required ? Math.max(1, parseInt(g.min || 1, 10) || 1) : Math.max(0, parseInt(g.min || 0, 10) || 0)
+        return { nome: String(g.nome || 'Adicionais').trim(), tipo, required: !!g.required || min > 0, min, max, opcoes: opts }
+      })
+      .filter(g => g.opcoes.length)
+  }
+  const _chatAddonDesc = (item) => {
+    const addons = item?.addons || {}
+    const parts = []
+    for (const [grupo, ops] of Object.entries(addons)) {
+      if (!Array.isArray(ops) || !ops.length) continue
+      const names = ops.map(o => `${o.qty > 1 ? `${o.qty}x ` : ''}${o.nome}${o.preco > 0 ? ` (+R$ ${_chatFmt(o.preco * (o.qty || 1))})` : ''}`)
+      parts.push(`${grupo}: ${names.join(', ')}`)
+    }
+    return parts.join(' | ')
+  }
+  const _chatRecalcItem = (item) => {
+    const base = parseFloat(item?.base_price ?? item?.price ?? 0) || 0
+    const extra = Object.values(item?.addons || {}).flat().reduce((s,o)=>s+(parseFloat(o.preco || 0) * (parseInt(o.qty || 1, 10) || 1)),0)
+    item.price = base + extra
+    const addonDesc = _chatAddonDesc(item)
+    item.obs = [item.base_obs || '', addonDesc].filter(Boolean).join(' | ')
+    return item
+  }
+  const _chatAddonPrompt = (draft, tid) => {
+    const pend = draft?.meta?.pending_addons
+    const item = draft?.items?.[pend?.itemIndex]
+    if (!pend || !item) return ''
+    const groups = _chatAddonGroups(tid, item._source || item, item.sizeKey)
+    const group = groups[pend.groupIndex || 0]
+    if (!group) return ''
+    const opts = group.opcoes.map((o, idx) => `${idx + 1}. ${o.nome}${o.preco > 0 ? ` + R$ ${_chatFmt(o.preco)}` : ' gratis'}`).join('\n')
+    const tipo = group.tipo === 'checkbox'
+      ? `Escolha ate ${group.max}${group.min ? ` (minimo ${group.min})` : ''}.`
+      : 'Escolha uma opcao.'
+    const skip = group.required ? '' : '\nResponda "sem" para seguir sem esse adicional.'
+    return `${group.nome}\n${tipo}\n${opts}${skip}`
+  }
+  const _chatParseAddonSelection = (text, group) => {
+    const n = _chatNorm(text)
+    if (/\b(sem|nenhum|nenhuma|nao|não|pular|dispenso)\b/.test(n)) return []
+    const selected = []
+    const nums = Array.from(n.matchAll(/\b(\d{1,2})\b/g)).map(m => parseInt(m[1], 10)).filter(Boolean)
+    for (const num of nums) {
+      const opt = group.opcoes[num - 1]
+      if (opt && !selected.find(s => s.nome === opt.nome)) selected.push({ ...opt, qty: 1 })
+    }
+    for (const opt of group.opcoes) {
+      const on = _chatNorm(opt.nome)
+      if (on && n.includes(on) && !selected.find(s => s.nome === opt.nome)) selected.push({ ...opt, qty: 1 })
+    }
+    return selected.slice(0, group.max || 1)
+  }
+  const _chatStartAddonFlow = (tid, draft, itemIndex, thread, order = null) => {
+    const item = draft.items[itemIndex]
+    const groups = _chatAddonGroups(tid, item._source || item, item.sizeKey)
+    if (!groups.length) return false
+    draft.meta = draft.meta || {}
+    draft.meta.pending_addons = { itemIndex, groupIndex: 0 }
+    _chatSaveDraft(draft)
+    _chatAddBot(thread, `Antes de finalizar esse item, escolha os adicionais:\n\n${_chatAddonPrompt(draft, tid)}`, order)
+    return true
+  }
+  const _chatHandlePendingAddons = (tid, thread, draft, text, order = null) => {
+    const pend = draft?.meta?.pending_addons
+    if (!pend) return false
+    const item = draft.items?.[pend.itemIndex]
+    if (!item) { delete draft.meta.pending_addons; _chatSaveDraft(draft); return false }
+    const groups = _chatAddonGroups(tid, item._source || item, item.sizeKey)
+    const group = groups[pend.groupIndex || 0]
+    if (!group) {
+      delete draft.meta.pending_addons
+      _chatSaveDraft(draft)
+      return false
+    }
+    const selected = _chatParseAddonSelection(text, group)
+    if (selected.length < group.min) {
+      _chatAddBot(thread, `${group.required ? 'Esse grupo e obrigatorio.' : 'Selecione ao menos ' + group.min + '.'}\n\n${_chatAddonPrompt(draft, tid)}`, order)
+      return true
+    }
+    if (selected.length) {
+      item.addons = item.addons || {}
+      item.addons[group.nome] = selected
+      _chatRecalcItem(item)
+    }
+    pend.groupIndex = (pend.groupIndex || 0) + 1
+    if (groups[pend.groupIndex]) {
+      draft.meta.pending_addons = pend
+      _chatSaveDraft(draft)
+      _chatAddBot(thread, _chatAddonPrompt(draft, tid), order)
+      return true
+    }
+    delete draft.meta.pending_addons
+    _chatSaveDraft(draft)
+    _chatAddBot(thread, `${item.name} ficou assim:\n${_chatDraftSummary(draft)}\n\nDeseja adicionar mais algum item ou finalizar?`, order)
+    return true
+  }
+  const _chatItemMatches = (rows, text) => {
+    const n = _chatNorm(text)
+    return rows.map(row => {
+      const rn = _chatNorm(row.name)
+      let score = 0
+      if (n === rn) score = 100
+      else if (n.includes(rn)) score = 80 + Math.min(15, rn.length / 3)
+      else {
+        const parts = rn.split(' ').filter(w => w.length > 2)
+        const hits = parts.filter(w => n.includes(w)).length
+        if (hits) score = 20 + hits * 10
+      }
+      return { row, score }
+    }).filter(x => x.score > 0).sort((a,b) => b.score - a.score)
+  }
+  const _chatQtyFromText = (text) => {
+    const n = _chatNorm(text)
+    const m = n.match(/\b(\d{1,2})\s*(x|un|unidade|unidades)?\b/)
+    if (m) return Math.max(1, Math.min(20, parseInt(m[1], 10) || 1))
+    if (/\bduas\b/.test(n)) return 2
+    if (/\btres\b/.test(n)) return 3
+    return 1
+  }
+  const _chatListMenu = (tid) => {
+    const rows = _chatMenuRows(tid).slice(0, 8)
+    if (!rows.length) return 'No momento nao encontrei itens ativos no cardapio. Vou chamar a loja para te ajudar.'
+    return 'Algumas opcoes do cardapio:\n' + rows.map((i, idx) => `${idx + 1}. ${i.name} - R$ ${_chatFmt(i.price)}`).join('\n') + '\n\nEscreva o nome do item que deseja adicionar.'
+  }
+  const _chatDraftSummary = (draft) => {
+    const items = draft?.items || []
+    if (!items.length) return 'Carrinho vazio.'
+    const linhas = items.map(i => `${i.qty || 1}x ${i.name} - R$ ${_chatFmt((i.price || 0) * (i.qty || 1))}${i.obs ? `\n   ${i.obs}` : ''}`)
+    const subtotal = items.reduce((s,i)=>s+(parseFloat(i.price||0)*(parseInt(i.qty||1)||1)),0)
+    return `${linhas.join('\n')}\nSubtotal: R$ ${_chatFmt(subtotal)}`
+  }
+  const _chatDeliveryFromText = (text) => {
+    const n = _chatNorm(text)
+    if (/\b(retirada|retirar|balcao|balcao)\b/.test(n)) return 'retirada'
+    if (/\b(entrega|delivery|entregar|casa|endereco)\b/.test(n)) return 'delivery'
+    if (/\b(mesa)\b/.test(n)) return 'mesa'
+    return ''
+  }
+  const _chatPayFromText = (text) => {
+    const n = _chatNorm(text)
+    if (/\bpix\b/.test(n)) return 'pix_manual'
+    if (/\b(dinheiro|troco)\b/.test(n)) return 'dinheiro'
+    if (/\b(credito|cartao credito|cartao)\b/.test(n)) return 'credito'
+    if (/\b(debito)\b/.test(n)) return 'debito'
+    return ''
+  }
+  const _chatDeliveryFee = (tid, deliveryType, addr) => {
+    if (deliveryType !== 'delivery') return 0
+    try {
+      const cfgRow = db.prepare('SELECT delivery_fee_config FROM store_config WHERE tenant_id=?').get(tid)
+      const cfg = _chatJson(cfgRow?.delivery_fee_config, {})
+      if (cfg?.delivery_pausado) return null
+      if (cfg?.tipo === 'fixo') return parseFloat(cfg.valor || 0) || 0
+      if (cfg?.tipo === 'por_bairro' && Array.isArray(cfg.bairros)) {
+        const a = _chatNorm(addr)
+        const found = cfg.bairros.find(b => b?.bairro && a.includes(_chatNorm(b.bairro)))
+        if (found) return parseFloat(found.taxa || 0) || 0
+      }
+    } catch {}
+    return 0
+  }
+  const _chatCreateOrderFromDraft = (tid, thread, draft) => {
+    const items = (draft.items || []).filter(i => i && i.name && (parseInt(i.qty || 1) > 0))
+    if (!items.length) throw new Error('Carrinho vazio')
+    const deliveryType = draft.delivery_type || 'retirada'
+    const addr = deliveryType === 'delivery'
+      ? String(draft.addr || '').trim()
+      : deliveryType === 'mesa'
+        ? ('Mesa ' + String(draft.addr || '').replace(/\D/g,''))
+        : 'Retirada no balcao'
+    if (deliveryType === 'delivery' && !addr) throw new Error('Endereco obrigatorio')
+    const taxa = _chatDeliveryFee(tid, deliveryType, addr)
+    if (taxa === null) throw new Error('Delivery pausado pela loja')
+    const subtotal = items.reduce((s,i)=>s+(parseFloat(i.price||0)*(parseInt(i.qty||1)||1)),0)
+    const total = subtotal + (parseFloat(taxa || 0) || 0)
+    const pag = draft.pag || 'dinheiro'
+    const time = new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })
+    const reqId = `chat:${thread.id}:${Date.now()}`
+    const insert = db.prepare(`INSERT INTO orders
+      (tenant_id, client, phone, addr, items, total, taxa, pag, pag_momento, status, time, client_request_id, wa_track)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0)`)
+    const info = insert.run(tid, draft.client || thread.client || 'Cliente', _chatDigits(draft.phone || thread.phone), addr,
+      JSON.stringify(items.map(i => ({ id: i.id || null, qty: i.qty || 1, name: i.name, price: i.price || 0, obs: i.obs || '' }))),
+      total, taxa || 0, pag, 'entrega', 'analise', time, reqId)
+    const orderId = info.lastInsertRowid
+    try {
+      const txFn = db.transaction((tenantId, rowid) => {
+        const cfg = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tenantId)
+        const offset = parseInt(cfg?.order_num_offset) || 0
+        const row = db.prepare('SELECT COALESCE(MAX(order_num),0) as mx FROM orders WHERE tenant_id=? AND id>?').get(tenantId, offset)
+        const next = (row?.mx || 0) + 1
+        db.prepare('UPDATE orders SET order_num=? WHERE rowid=?').run(next, rowid)
+      })
+      txFn(tid, orderId)
+    } catch(e) { log('WARN', '[chat-order] order_num falhou:', e.message) }
+    const order = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(orderId, tid)
+    try { if (typeof aplicarBaixaEstoquePedido === 'function') aplicarBaixaEstoquePedido(tid, order, 'chat-order-create') } catch(e) {}
+    try { if (typeof emit === 'function') emit(tid, 'orders', order, 'INSERT') } catch(e) {}
+    db.prepare(`UPDATE order_chat_threads
+      SET order_id=?, order_num=?, updated_at=datetime('now')
+      WHERE id=? AND tenant_id=?`).run(order.id, order.order_num || null, thread.id, tid)
+    db.prepare(`UPDATE order_chat_drafts
+      SET status='submitted', step='done', updated_at=datetime('now')
+      WHERE tenant_id=? AND thread_id=?`).run(tid, thread.id)
+    marcarDirty()
+    return db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(order.id, tid)
+  }
+  const _chatAddBot = (thread, body, order = null, kind = 'assistant') => {
+    if (!thread || !body) return null
+    if (typeof chatAddMessageToThread === 'function') {
+      return chatAddMessageToThread(thread, {
+        sender: 'store',
+        kind,
+        author_name: 'EstimaIA',
+        body
+      }, order)
+    }
+    return null
+  }
+  const _chatOrderAnswer = (order) => {
+    if (!order) return ''
+    const itens = (() => {
+      try { return chatOrderPublic(order)?.items_text || '' } catch { return '' }
+    })()
+    return `Seu pedido #${_chatShortNum(order)} esta ${chatOrderPublic(order)?.status_label || order.status || 'em andamento'}.\n${itens ? `Itens: ${itens}\n` : ''}Total: R$ ${_chatFmt(order.total)}.`
+  }
+  const _chatAssistant = (tid, thread, incomingText, order = null) => {
+    const text = String(incomingText || '').trim()
+    if (!tid || !thread || !text) return
+    const phone = _chatDigits(thread.phone)
+    if (_chatBotPaused(tid, phone)) return
+    const n = _chatNorm(text)
+    if (/\b(atendente|humano|pessoa|loja|responsavel|falar com)\b/.test(n)) {
+      _chatPauseBot(tid, phone)
+      _chatAddBot(thread, 'Certo, vou deixar a loja assumir por aqui. Em instantes alguem da equipe responde voce.', order)
+      return
+    }
+    if (order && /\b(status|situacao|pedido|demora|saiu|pronto|preparo|entrega|acompanhar)\b/.test(n) && !/\b(quero|pedir|adicionar|mais)\b/.test(n)) {
+      _chatAddBot(thread, _chatOrderAnswer(order), order)
+      return
+    }
+
+    const draft = _chatDraft(tid, thread)
+    if (!draft) return
+    draft.phone = phone
+    draft.client = draft.client || thread.client || ''
+    if (draft.meta?.pending_addons && _chatHandlePendingAddons(tid, thread, draft, text, order)) return
+    if (/\b(cancelar|limpar|recomecar|zerar)\b/.test(n)) {
+      _chatClearDraft(draft)
+      _chatAddBot(thread, 'Combinado, zerei o pedido guiado. Me diga o item que deseja adicionar ou escreva "cardapio".', order)
+      return
+    }
+    if (/\b(cardapio|menu|opcoes|opcoes)\b/.test(n)) {
+      _chatAddBot(thread, _chatListMenu(tid), order)
+      return
+    }
+
+    const delivery = _chatDeliveryFromText(text)
+    if (delivery) {
+      draft.delivery_type = delivery
+      draft.step = delivery === 'delivery' ? 'addr' : 'payment'
+      if (delivery === 'mesa') {
+        const mesa = n.match(/\bmesa\s*(\d+)\b/)
+        if (mesa) draft.addr = mesa[1]
+      }
+      _chatSaveDraft(draft)
+      if (delivery === 'delivery') _chatAddBot(thread, 'Perfeito. Me envie o endereco completo com rua, numero, bairro e referencia.', order)
+      else _chatAddBot(thread, 'Certo. Qual sera a forma de pagamento? Pode ser Pix, dinheiro, credito ou debito.', order)
+      return
+    }
+
+    const pay = _chatPayFromText(text)
+    if (pay) {
+      draft.pag = pay
+      draft.step = 'confirm'
+      _chatSaveDraft(draft)
+      _chatAddBot(thread, `${_chatDraftSummary(draft)}\n\nForma de pagamento: ${pay === 'pix_manual' ? 'Pix' : pay}.\nPara enviar para a loja, responda "confirmar pedido".`, order)
+      return
+    }
+
+    if ((draft.step === 'addr' || draft.delivery_type === 'delivery') && draft.items.length && !draft.addr && text.length >= 8) {
+      draft.addr = text.slice(0, 240)
+      draft.step = 'payment'
+      _chatSaveDraft(draft)
+      _chatAddBot(thread, 'Endereco anotado. Qual sera a forma de pagamento? Pode ser Pix, dinheiro, credito ou debito.', order)
+      return
+    }
+
+    if (/\b(confirmar|finalizar|enviar pedido|pode enviar|fechar pedido|concluir)\b/.test(n)) {
+      if (!draft.items.length) {
+        _chatAddBot(thread, 'Ainda nao tenho itens no carrinho. Me diga o que deseja pedir ou escreva "cardapio".', order)
+        return
+      }
+      if (!draft.delivery_type) {
+        draft.step = 'delivery'
+        _chatSaveDraft(draft)
+        _chatAddBot(thread, `${_chatDraftSummary(draft)}\n\nVai ser entrega ou retirada?`, order)
+        return
+      }
+      if (draft.delivery_type === 'delivery' && !draft.addr) {
+        draft.step = 'addr'
+        _chatSaveDraft(draft)
+        _chatAddBot(thread, 'Me envie o endereco completo para finalizar o pedido.', order)
+        return
+      }
+      if (!draft.pag) {
+        draft.step = 'payment'
+        _chatSaveDraft(draft)
+        _chatAddBot(thread, 'Qual sera a forma de pagamento? Pode ser Pix, dinheiro, credito ou debito.', order)
+        return
+      }
+      try {
+        const newOrder = _chatCreateOrderFromDraft(tid, thread, draft)
+        const updatedThread = db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(thread.id, tid)
+        _chatAddBot(updatedThread, `Pedido #${_chatShortNum(newOrder)} enviado para a loja.\nA equipe recebeu no gestor e vai acompanhar por aqui.`, newOrder, 'status')
+      } catch(e) {
+        _chatAddBot(thread, `Nao consegui finalizar automaticamente: ${e.message}. Vou chamar a loja para conferir.`, order)
+      }
+      return
+    }
+
+    const rows = _chatMenuRows(tid)
+    const sizeKey = _chatSizeFromText(text)
+    const isHalf = /\b(meia|meio|metade)\b/.test(n)
+    if (isHalf) {
+      const pizzas = rows.filter(r => _chatPizzaSizes(r))
+      const hits = _chatItemMatches(pizzas, text).slice(0, 2).map(x => x.row)
+      if (hits.length >= 2 && sizeKey) {
+        const p1 = _chatSizePrice(hits[0], sizeKey)
+        const p2 = _chatSizePrice(hits[1], sizeKey)
+        const regra = p1.cfg?.regra || p2.cfg?.regra || 'maior'
+        const price = regra === 'media' ? ((p1.price + p2.price) / 2) : Math.max(p1.price, p2.price)
+        const label = p1.label || p2.label || sizeKey
+        draft.items.push({
+          id: hits[0].id,
+          qty: 1,
+          name: `Pizza ${label} meia ${hits[0].name} / meia ${hits[1].name}`,
+          price,
+          base_price: price,
+          base_obs: `Tamanho: ${label}. Meio a meio.`,
+          obs: `Tamanho: ${label}. Meio a meio.`,
+          sizeKey,
+          addons: {},
+          _source: hits[0]
+        })
+        draft.step = 'items'
+        _chatSaveDraft(draft)
+        if (_chatStartAddonFlow(tid, draft, draft.items.length - 1, thread, order)) return
+        _chatAddBot(thread, `${draft.items[draft.items.length - 1].name} adicionada ao carrinho.\n${_chatDraftSummary(draft)}\n\nDeseja adicionar mais algum item ou finalizar?`, order)
+        return
+      }
+      if (!sizeKey) {
+        _chatAddBot(thread, 'Para pizza meio a meio, me diga tambem o tamanho: pequena, media ou grande. Exemplo: pizza grande meia calabresa meia frango.', order)
+        return
+      }
+    }
+
+    const matches = _chatItemMatches(rows, text)
+    if (matches.length) {
+      const item = matches[0].row
+      const qty = _chatQtyFromText(text)
+      const pizzaCfg = _chatPizzaSizes(item)
+      let price = parseFloat(item.price || 0) || 0
+      let obs = ''
+      let name = item.name
+      if (pizzaCfg) {
+        if (!sizeKey) {
+          const opts = pizzaCfg.tamanhos.map(t => `${t.nome || t.key} (R$ ${_chatFmt(t.preco)})`).join(', ')
+          _chatAddBot(thread, `Qual tamanho da pizza ${item.name}? Opcoes: ${opts}.`, order)
+          return
+        }
+        const sized = _chatSizePrice(item, sizeKey)
+        price = sized.price
+        obs = `Tamanho: ${sized.label || sizeKey}.`
+        name = `Pizza ${sized.label || sizeKey} ${item.name}`
+      }
+      draft.items.push({ id: item.id, qty, name, price, base_price: price, base_obs: obs, obs, sizeKey: sizeKey || '', addons: {}, _source: item })
+      draft.step = 'items'
+      _chatSaveDraft(draft)
+      if (_chatStartAddonFlow(tid, draft, draft.items.length - 1, thread, order)) return
+      _chatAddBot(thread, `${qty}x ${name} adicionado ao carrinho.\n${_chatDraftSummary(draft)}\n\nDeseja adicionar mais algum item ou finalizar?`, order)
+      return
+    }
+
+    if (!draft.items.length) {
+      _chatAddBot(thread, 'Posso montar seu pedido por aqui. Escreva o nome do item que deseja ou mande "cardapio" para ver algumas opcoes.', order)
+    } else {
+      _chatAddBot(thread, 'Nao encontrei esse item com seguranca. Voce pode escrever "cardapio", adicionar outro item ou responder "confirmar pedido".', order)
+    }
+  }
 
   if (upath.startsWith('/api/chat/')) {
     const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
@@ -743,12 +1268,35 @@ module.exports = async function handleRoutes(req, res, ctx) {
         return true
       }
 
+      if (req.method === 'POST' && upath === '/api/chat/start') {
+        const body = await readBody(req)
+        const phone = _chatDigits(body.phone || '')
+        const client = String(body.client || body.name || '').trim().slice(0, 120)
+        if (!phone) { send(res, 400, { error: 'Telefone obrigatorio' }); return true }
+        const thread = _chatLeadThread(tid, phone, client)
+        if (!thread) { send(res, 500, { error: 'Nao foi possivel iniciar o chat' }); return true }
+        const messagesBefore = _chatMessages(tid, thread.id, 0)
+        if (!messagesBefore.length) {
+          _chatAddBot(thread, 'Ola! Sou a EstimaIA. Posso consultar seu pedido ou montar um novo pedido por aqui. Escreva o item que deseja ou mande "cardapio".', null)
+        }
+        const updated = db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(thread.id, tid)
+        const messages = _chatMessages(tid, updated.id, 0).map(_chatMessageOut)
+        send(res, 200, { ok: true, thread: _chatThreadOut(updated, null), messages, order: null })
+        return true
+      }
+
       if (req.method === 'GET' && upath === '/api/chat/bootstrap') {
         const orderId = parseInt(params.get('order_id') || '0', 10)
         const phone = _chatDigits(params.get('phone') || '')
         const role = String(params.get('role') || '').toLowerCase()
         const storeMode = role === 'store'
-        if (!orderId) { send(res, 400, { error: 'order_id obrigatorio' }); return true }
+        if (!orderId && !phone) { send(res, 400, { error: 'order_id ou telefone obrigatorio' }); return true }
+        if (!orderId && phone) {
+          const thread = _chatLeadThread(tid, phone, params.get('client') || '')
+          const messages = _chatMessages(tid, thread.id, parseInt(params.get('after_id') || '0', 10) || 0).map(_chatMessageOut)
+          send(res, 200, { ok: true, thread: _chatThreadOut(thread, null), messages, order: null })
+          return true
+        }
         if (storeMode && !_chatRequireStore()) return true
         const order = _chatOrder(tid, orderId)
         if (!order) { send(res, 404, { error: 'Pedido nao encontrado' }); return true }
@@ -769,7 +1317,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         const storeMode = role === 'store'
         if (storeMode && !_chatRequireStore()) return true
         let thread = threadId ? db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(threadId, tid) : null
-        let order = thread ? _chatOrder(tid, thread.order_id) : null
+        let order = thread && Number(thread.order_id || 0) > 0 ? _chatOrder(tid, thread.order_id) : null
         if (!thread && orderId) {
           order = _chatOrder(tid, orderId)
           if (!order) { send(res, 404, { error: 'Pedido nao encontrado' }); return true }
@@ -786,25 +1334,49 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (req.method === 'POST' && upath === '/api/chat/send') {
         const body = await readBody(req)
         const orderId = parseInt(body.order_id || '0', 10)
+        const threadId = parseInt(body.thread_id || '0', 10)
         const sender = body.sender === 'store' ? 'store' : 'client'
         const phone = _chatDigits(body.phone || '')
         const text = String(body.body || body.message || '').trim().slice(0, 1000)
-        if (!orderId || !text) { send(res, 400, { error: 'order_id e mensagem obrigatorios' }); return true }
+        if ((!orderId && !threadId) || !text) { send(res, 400, { error: 'chat e mensagem obrigatorios' }); return true }
         if (sender === 'store' && !_chatRequireStore()) return true
-        const order = _chatOrder(tid, orderId)
-        if (!order) { send(res, 404, { error: 'Pedido nao encontrado' }); return true }
-        if (sender === 'client' && !_chatMatches(order.phone, phone)) { send(res, 403, { error: 'Telefone nao confere com o pedido' }); return true }
+        let thread = threadId ? db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(threadId, tid) : null
+        let order = null
+        if (orderId) {
+          order = _chatOrder(tid, orderId)
+          if (!order) { send(res, 404, { error: 'Pedido nao encontrado' }); return true }
+          if (sender === 'client' && !_chatMatches(order.phone, phone)) { send(res, 403, { error: 'Telefone nao confere com o pedido' }); return true }
+          thread = thread || chatEnsureThreadFromOrder(order, { phone: phone || order.phone, client: order.client })
+        }
+        if (!thread && !orderId && sender === 'client') thread = _chatLeadThread(tid, phone, body.client || '')
+        if (!thread) { send(res, 404, { error: 'Chat nao encontrado' }); return true }
+        if (sender === 'client' && !_chatMatches(thread.phone, phone)) { send(res, 403, { error: 'Telefone nao confere com o chat' }); return true }
+        if (!order && Number(thread.order_id || 0) > 0) order = _chatOrder(tid, thread.order_id)
         const author = sender === 'store'
           ? String(body.author_name || req.headers['x-user-id'] || 'Loja')
-          : String(order.client || body.client || 'Cliente')
-        const result = chatAddMessageFromOrder(order, {
+          : String(order?.client || thread.client || body.client || 'Cliente')
+        const result = order
+          ? chatAddMessageFromOrder(order, {
+              sender,
+              kind: 'text',
+              body: text,
+              author_name: author,
+              phone: phone || order.phone
+            })
+          : chatAddMessageToThread(thread, {
           sender,
           kind: 'text',
           body: text,
           author_name: author,
-          phone: phone || order.phone
-        })
+        }, null)
         if (!result) { send(res, 500, { error: 'Nao foi possivel enviar a mensagem' }); return true }
+        if (sender === 'store') _chatPauseBot(tid, thread.phone || order?.phone)
+        if (sender === 'client') {
+          try {
+            const latestThread = db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(result.thread.id, tid)
+            _chatAssistant(tid, latestThread || result.thread, text, order)
+          } catch(e) { log('WARN', '[chat-assistant] falhou:', e.message) }
+        }
         send(res, 200, {
           ok: true,
           thread: _chatThreadOut(result.thread, order),
@@ -829,10 +1401,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
         db.prepare(`UPDATE order_chat_threads SET ${field}=0, updated_at=datetime('now') WHERE id=? AND tenant_id=?`).run(thread.id, tid)
         marcarDirty()
         const updated = db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(thread.id, tid)
-        const order = _chatOrder(tid, updated.order_id)
+        const order = Number(updated.order_id || 0) > 0 ? _chatOrder(tid, updated.order_id) : null
         sseBroadcast(`chat-rt:${tid}`, 'chat:read', { thread: _chatThreadOut(updated, order), viewer })
         const p = _chatDigits(updated.phone)
-        if (p) sseBroadcast(`chat-client:${tid}:${updated.order_id}:${p}`, 'chat:read', { thread: _chatThreadOut(updated, order), viewer })
+        if (p) {
+          sseBroadcast(`chat-client:${tid}:${updated.order_id || 0}:${p}`, 'chat:read', { thread: _chatThreadOut(updated, order), viewer })
+          if (Number(updated.order_id || 0) !== 0) sseBroadcast(`chat-client:${tid}:0:${p}`, 'chat:read', { thread: _chatThreadOut(updated, order), viewer })
+        }
         send(res, 200, { ok: true, thread: _chatThreadOut(updated, order) })
         return true
       }
