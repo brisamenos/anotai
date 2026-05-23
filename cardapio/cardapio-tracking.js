@@ -87,6 +87,10 @@ function updateTracker(status, addr) {
     try { localStorage.removeItem('ef_order_' + (_tenantId||'')); } catch(e) {}
     return;
   }
+  if (status === 'finalizado') {
+    try { localStorage.removeItem('ef_order_' + (_tenantId||'')); } catch(e) {}
+    try { const u = new URL(window.location.href); u.searchParams.delete('acompanhar'); window.history.replaceState({}, '', u.toString()); } catch(e) {}
+  }
   tl.innerHTML = steps.map((s, i) => {
     const isDone   = i < curIdx;
     const isActive = i === curIdx;
@@ -244,7 +248,7 @@ window.addEventListener('load', () => {
       if (!o) return;
 
       // Só mostra se pedido ainda está em andamento
-      if (['entregue','finalizado','cancelado'].includes(o.status)) {
+      if (['finalizado','cancelado'].includes(o.status)) {
         localStorage.removeItem('ef_order_' + tid);
         return;
       }

@@ -136,6 +136,58 @@
     return String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   }
 
+  function statusKey(v) {
+    return normText(v).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  }
+
+  function isFinalOrderStatus(status) {
+    const key = statusKey(status);
+    return key === 'finalizado' || key === 'cancelado';
+  }
+
+  function isFinalOrder(order) {
+    return !!order && isFinalOrderStatus(order.status);
+  }
+
+  function activeOrderFromState() {
+    const order = state.order || state.thread?.order || null;
+    return isFinalOrder(order) ? null : order;
+  }
+
+  function stripThreadOrder(thread) {
+    if (!thread) return thread;
+    const clean = Object.assign({}, thread);
+    clean.order_id = 0;
+    clean.order_num = null;
+    clean.order = null;
+    return clean;
+  }
+
+  function clearOrderTrackingStorage() {
+    try { localStorage.removeItem(orderStorageKey()); } catch(e) {}
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.delete('acompanhar');
+      window.history.replaceState({}, '', u.toString());
+    } catch(e) {}
+  }
+
+  function resetOrderContextForNextOrder() {
+    state.order = null;
+    state.orderId = 0;
+    state.orderNum = null;
+    state.payment = null;
+    state.follow = null;
+    if (state.thread) state.thread = stripThreadOrder(state.thread);
+    clearOrderTrackingStorage();
+  }
+
+  function applyFinalOrderReset(order) {
+    if (!isFinalOrder(order)) return false;
+    resetOrderContextForNextOrder();
+    return true;
+  }
+
   function cachedMessages() {
     return (state.messages || []).slice(-80).map(m => ({
       id: m.id,
@@ -166,6 +218,7 @@
         orderId: state.orderId,
         threadId: state.thread?.id || state.threadId || null,
         orderNum: state.orderNum,
+        orderStatus: activeOrderFromState()?.status || '',
         phone: state.phone,
         client: state.client,
         storeName: state.storeName || storeName(),
@@ -1031,7 +1084,7 @@
     badge.classList.toggle('on', unread > 0);
     root.classList.toggle('efc-show-nudge', !!hasTenant && !state.open && !hasSession && unread === 0 && nudgeCount > 0);
 
-    const order = state.order || state.thread?.order || {};
+    const order = activeOrderFromState() || {};
     const num = state.orderNum || order.order_num || order.num || state.orderId;
     const label = order.status_label || '';
     sub.textContent = num ? ('Pedido #' + num) : 'EstimaIA';
@@ -1183,8 +1236,9 @@
       if (data.order) state.order = data.order;
       if (data.order?.id) state.orderId = data.order.id;
       if (data.message) mergeMessages([data.message]);
+      const finalReset = applyFinalOrderReset(data.order || data.thread?.order || null);
       saveSession();
-      if (Number(state.orderId || 0) !== Number(oldOrderId || 0)) connectSSE();
+      if (finalReset || Number(state.orderId || 0) !== Number(oldOrderId || 0)) connectSSE();
       render();
       return true;
     } catch(e) {
@@ -1304,7 +1358,9 @@
           if (!alreadyHad && data.message.sender !== 'client') playChatSound();
           if (!state.open && data.message.sender !== 'client') state.unread = Math.max(state.unread || 0, Number(state.thread?.unread_client || 0));
         }
+        const finalReset = applyFinalOrderReset(data.order || data.thread?.order || null);
         saveSession();
+        if (finalReset) connectSSE();
         render();
       } catch(e) {}
     });
@@ -1314,6 +1370,9 @@
         if (state.thread?.id && data?.thread?.id && Number(data.thread.id) !== Number(state.thread.id)) return;
         if (data.thread) state.thread = data.thread;
         state.unread = Number(state.thread?.unread_client || 0);
+        const finalReset = applyFinalOrderReset(data.thread?.order || null);
+        if (finalReset) saveSession();
+        if (finalReset) connectSSE();
         render();
       } catch(e) {}
     });
@@ -1340,14 +1399,19 @@
       }
       const data = await r.json().catch(() => ({}));
       if (!r.ok || !data.ok) throw new Error(data.error || 'Chat indisponivel');
+      const serverOrder = data.order || data.thread?.order || null;
       state.thread = data.thread || null;
       state.threadId = state.thread?.id || state.threadId || null;
-      state.order = data.order || data.thread?.order || null;
+      state.order = serverOrder;
       state.orderId = data.order?.id || data.thread?.order_id || state.orderId || 0;
       state.orderNum = data.order?.order_num || data.thread?.order_num || state.orderNum;
       state.unread = Number(state.thread?.unread_client || 0);
-      state.messages = [];
-      mergeMessages(data.messages || []);
+      const incoming = Array.isArray(data.messages) ? data.messages : [];
+      if (incoming.length || !state.messages.length) {
+        state.messages = [];
+        mergeMessages(incoming);
+      }
+      applyFinalOrderReset(serverOrder);
       saveSession();
       connectSSE();
       if (openAfter) state.open = true;
