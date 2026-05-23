@@ -244,7 +244,7 @@
       mergeMessages([data.message]);
       render();
     } catch(e) {
-      if (typeof toast === 'function') toast('Erro', 'Nao foi possivel enviar a mensagem.');
+      if (typeof toast === 'function') toast('Erro', e?.message || 'Nao foi possivel enviar a mensagem.');
     } finally {
       if (btn) btn.disabled = false;
     }

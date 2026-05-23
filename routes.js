@@ -710,11 +710,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
   }
   const _chatThreadByOrder = (tid, orderId) => {
     if (!tid || !orderId) return null
-    return db.prepare('SELECT * FROM chat_threads WHERE tenant_id=? AND order_id=?').get(tid, orderId)
+    return db.prepare('SELECT * FROM order_chat_threads WHERE tenant_id=? AND order_id=?').get(tid, orderId)
   }
   const _chatMessages = (tid, threadId, afterId = 0) => {
     if (!tid || !threadId) return []
-    return db.prepare(`SELECT * FROM chat_messages
+    return db.prepare(`SELECT * FROM order_chat_messages
       WHERE tenant_id=? AND thread_id=? AND id>?
       ORDER BY id ASC LIMIT 300`).all(tid, threadId, afterId)
   }
@@ -733,7 +733,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (req.method === 'GET' && upath === '/api/chat/threads') {
         if (!_chatRequireStore()) return true
         const limit = Math.min(200, Math.max(1, parseInt(params.get('limit') || '100', 10) || 100))
-        const rows = db.prepare(`SELECT * FROM chat_threads
+        const rows = db.prepare(`SELECT * FROM order_chat_threads
           WHERE tenant_id=?
           ORDER BY datetime(COALESCE(last_at, updated_at, created_at)) DESC, id DESC
           LIMIT ?`).all(tid, limit)
@@ -768,7 +768,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         const role = String(params.get('role') || '').toLowerCase()
         const storeMode = role === 'store'
         if (storeMode && !_chatRequireStore()) return true
-        let thread = threadId ? db.prepare('SELECT * FROM chat_threads WHERE id=? AND tenant_id=?').get(threadId, tid) : null
+        let thread = threadId ? db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(threadId, tid) : null
         let order = thread ? _chatOrder(tid, thread.order_id) : null
         if (!thread && orderId) {
           order = _chatOrder(tid, orderId)
@@ -821,14 +821,14 @@ module.exports = async function handleRoutes(req, res, ctx) {
         const orderId = parseInt(body.order_id || '0', 10)
         const phone = _chatDigits(body.phone || '')
         if (viewer === 'store' && !_chatRequireStore()) return true
-        let thread = threadId ? db.prepare('SELECT * FROM chat_threads WHERE id=? AND tenant_id=?').get(threadId, tid) : null
+        let thread = threadId ? db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(threadId, tid) : null
         if (!thread && orderId) thread = _chatThreadByOrder(tid, orderId)
         if (!thread) { send(res, 404, { error: 'Chat nao encontrado' }); return true }
         if (viewer === 'client' && !_chatMatches(thread.phone, phone)) { send(res, 403, { error: 'Telefone nao confere com o chat' }); return true }
         const field = viewer === 'store' ? 'unread_store' : 'unread_client'
-        db.prepare(`UPDATE chat_threads SET ${field}=0, updated_at=datetime('now') WHERE id=? AND tenant_id=?`).run(thread.id, tid)
+        db.prepare(`UPDATE order_chat_threads SET ${field}=0, updated_at=datetime('now') WHERE id=? AND tenant_id=?`).run(thread.id, tid)
         marcarDirty()
-        const updated = db.prepare('SELECT * FROM chat_threads WHERE id=? AND tenant_id=?').get(thread.id, tid)
+        const updated = db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(thread.id, tid)
         const order = _chatOrder(tid, updated.order_id)
         sseBroadcast(`chat-rt:${tid}`, 'chat:read', { thread: _chatThreadOut(updated, order), viewer })
         const p = _chatDigits(updated.phone)
