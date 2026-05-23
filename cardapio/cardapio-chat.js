@@ -34,7 +34,15 @@
   }
 
   function digits(v) { return String(v || '').replace(/\D/g, ''); }
-  function tid() { return window._tenantId || ''; }
+  function tid() {
+    try { if (window._tenantId) return String(window._tenantId); } catch(e) {}
+    try { if (typeof _tenantId !== 'undefined' && _tenantId) return String(_tenantId); } catch(e) {}
+    try {
+      const s = JSON.parse(sessionStorage.getItem('cardapio_session') || 'null');
+      if (s?.tenant_id) return String(s.tenant_id);
+    } catch(e) {}
+    return '';
+  }
   function storageKey() { return 'ef_chat_' + (state.tid || tid() || ''); }
   function orderStorageKey() { return 'ef_order_' + (state.tid || tid() || ''); }
 
@@ -60,9 +68,18 @@
     const bubble = document.getElementById('ef-chat-bubble');
     if (title) title.textContent = name;
     if (bubble) {
-      bubble.title = 'Chat ' + name;
-      bubble.setAttribute('aria-label', 'Chat ' + name);
+      bubble.title = 'Pedir com a EstimaIA - ' + name;
+      bubble.setAttribute('aria-label', 'Pedir com a EstimaIA - ' + name);
     }
+  }
+
+  function setTenantId(id) {
+    const value = String(id || '').trim();
+    if (!value) return;
+    state.tid = value;
+    try { window._tenantId = value; } catch(e) {}
+    ensureDom();
+    render();
   }
 
   function getAudioCtx() {
@@ -367,10 +384,14 @@
         <strong>Monte seu pedido com a EstimaIA</strong>
         <span>A IA ajuda voce a escolher itens e finalizar com mais agilidade.</span>
       </button>
-      <button class="efc-bubble" id="ef-chat-bubble" type="button" title="Chat da loja" aria-label="Chat da loja">
-        <svg width="23" height="23" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M5 6.5A4.5 4.5 0 0 1 9.5 2h5A4.5 4.5 0 0 1 19 6.5v3A4.5 4.5 0 0 1 14.5 14H11l-4.2 3.2c-.7.5-1.8 0-1.8-.9V14A4.5 4.5 0 0 1 1 9.5v-3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-          <path d="M9 7h6M9 10h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      <button class="efc-bubble" id="ef-chat-bubble" type="button" title="Pedir com a EstimaIA" aria-label="Pedir com a EstimaIA">
+        <svg width="25" height="25" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 3v2.2M8.2 5.4l-.9-1.5M15.8 5.4l.9-1.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          <rect x="4.2" y="6" width="15.6" height="13" rx="5" stroke="currentColor" stroke-width="1.7"/>
+          <circle cx="9.2" cy="12.2" r="1.15" fill="currentColor"/>
+          <circle cx="14.8" cy="12.2" r="1.15" fill="currentColor"/>
+          <path d="M9.2 16h5.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          <path d="M19.8 11h1.4M2.8 11h1.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
         </svg>
         <span class="efc-badge" id="ef-chat-badge"></span>
       </button>
@@ -1182,6 +1203,7 @@
     render();
   };
   window.efChatOpen = openPanel;
+  window.efChatSetTenant = setTenantId;
   window.efChatSetStoreName = setStoreName;
   window.efChatShowFollowPrompt = showFollowPrompt;
 

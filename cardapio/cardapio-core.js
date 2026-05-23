@@ -628,6 +628,10 @@ async function init() {
       hideSplash(); return;
     }
     _tenantId = info.id;
+    try {
+      window._tenantId = _tenantId;
+      if (typeof efChatSetTenant === 'function') efChatSetTenant(_tenantId);
+    } catch(e) {}
     _tenantPlano = (info.plano || 'pro').toLowerCase();
     // Sempre grava cardapio_session (chave dedicada, não conflita com gestor)
     sessionStorage.setItem('cardapio_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
