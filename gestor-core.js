@@ -734,25 +734,8 @@ async function loadAllData(silent = false) {
         delivery: cfgRes.data.store_tempo_entrega ?? ''
       });
 
-      // ── Auto-corrige offset para tenants novos ──────────────
-      // Se offset = 0 e este tenant ainda não tem pedido nenhum,
-      // define offset = MAX(id) global para que o 1º pedido seja #1
-      if (_orderNumOffset === 0 && ordersKanban.length === 0) {
-        try {
-          // Busca MAX(id) global (sem filtro de tenant) via endpoint dedicado
-          const resp = await fetch('/api/orders/global-max-id', { headers: { 'x-tenant-id': _sessao.tenant_id } });
-          const { max_id } = await resp.json();
-          const globalMax = Number(max_id) || 0;
-          // Verifica se este tenant tem algum pedido histórico (filtrado por tenant via API)
-          const { data: tenantHist } = await sb.from('orders').select('id').limit(1);
-          const temHistorico = tenantHist && tenantHist.length > 0;
-          if (!temHistorico && globalMax > 0) {
-            await sb.from('store_config').update({ order_num_offset: globalMax }).eq('tenant_id', _sessao.tenant_id);
-            _orderNumOffset = globalMax;
-          }
-        } catch(e) { console.warn('[gestor-core] silent error:', e?.message || e); }
-      }
-      // ────────────────────────────────────────────────────────
+      // Offset de numeracao nao deve ser alterado automaticamente no carregamento.
+      // Ele so pode mudar por acao explicita de reset para evitar saltos inesperados.
 
       // Re-mapeia pedidos já carregados com o offset correto
       ordersKanban = ordersKanban.map(o => ({ ...o, num: _orderNum(o.id, o.order_num) }));
