@@ -1024,10 +1024,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const items = (draft.items || []).filter(i => i && i.name && (parseInt(i.qty || 1) > 0))
     if (!items.length) throw new Error('Carrinho vazio')
     const deliveryType = draft.delivery_type || 'retirada'
+    const mesaNum = String(draft.addr || '').replace(/\D/g,'')
     const addr = deliveryType === 'delivery'
       ? String(draft.addr || '').trim()
       : deliveryType === 'mesa'
-        ? ('Mesa ' + String(draft.addr || '').replace(/\D/g,''))
+        ? (mesaNum ? ('Mesa ' + mesaNum) : 'Mesa')
         : 'Retirada no balcao'
     if (deliveryType === 'delivery' && !addr) throw new Error('Endereco obrigatorio')
     const taxa = _chatDeliveryFee(tid, deliveryType, addr)
@@ -1155,7 +1156,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (!draft.delivery_type) {
         draft.step = 'delivery'
         _chatSaveDraft(draft)
-        _chatAddBot(thread, `${_chatDraftSummary(draft)}\n\nVai ser entrega ou retirada?`, order)
+        _chatAddBot(thread, `${_chatDraftSummary(draft)}\n\nVai ser entrega, retirada ou mesa?`, order)
         return
       }
       if (draft.delivery_type === 'delivery' && !draft.addr) {
@@ -1277,7 +1278,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         if (!thread) { send(res, 500, { error: 'Nao foi possivel iniciar o chat' }); return true }
         const messagesBefore = _chatMessages(tid, thread.id, 0)
         if (!messagesBefore.length) {
-          _chatAddBot(thread, 'Ola! Sou a EstimaIA. Posso consultar seu pedido ou montar um novo pedido por aqui. Escreva o item que deseja ou mande "cardapio".', null)
+        _chatAddBot(thread, 'Ola! Sou a EstimaIA. Posso montar seu pedido por aqui e acompanhar tudo em tempo real. Para entrega, vou pedir o endereco completo; para retirada ou mesa, seu nome e WhatsApp ja bastam para iniciar. Escreva o item desejado ou mande "cardapio".', null)
         }
         const updated = db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(thread.id, tid)
         const messages = _chatMessages(tid, updated.id, 0).map(_chatMessageOut)

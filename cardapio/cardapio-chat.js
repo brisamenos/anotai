@@ -117,6 +117,29 @@
     return String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   }
 
+  function cachedMessages() {
+    return (state.messages || []).slice(-80).map(m => ({
+      id: m.id,
+      sender: m.sender,
+      body: m.body,
+      created_at: m.created_at,
+      author_name: m.author_name,
+      kind: m.kind
+    })).filter(m => m.body);
+  }
+
+  function restoreCachedState(data) {
+    if (!data) return;
+    if (data.storeName) state.storeName = data.storeName;
+    if (Array.isArray(data.messages) && data.messages.length) {
+      state.messages = [];
+      mergeMessages(data.messages);
+    }
+    if (data.payment) state.payment = data.payment;
+    if (data.follow) state.follow = data.follow;
+    if (typeof data.open === 'boolean') state.open = data.open;
+  }
+
   function saveSession() {
     if (!state.tid || !state.phone || !(state.orderId != null || state.thread?.id || state.threadId)) return;
     try {
@@ -126,6 +149,11 @@
         orderNum: state.orderNum,
         phone: state.phone,
         client: state.client,
+        storeName: state.storeName || storeName(),
+        open: !!state.open,
+        messages: cachedMessages(),
+        payment: state.payment || null,
+        follow: state.follow || null,
         ts: Date.now()
       }));
     } catch(e) {}
@@ -163,12 +191,18 @@
       .efc-bubble:hover{transform:translateY(-2px);box-shadow:0 16px 36px rgba(0,0,0,.32)}
       .efc-badge{position:absolute;right:-3px;top:-4px;min-width:19px;height:19px;border-radius:99px;background:#ef4444;color:#fff;font-size:11px;font-weight:800;display:none;align-items:center;justify-content:center;border:2px solid #fff;padding:0 5px}
       .efc-badge.on{display:flex}
+      .efc-nudge{position:absolute;right:64px;bottom:5px;width:230px;border:none;border-radius:14px;background:#fff;color:#111827;text-align:left;padding:10px 12px;box-shadow:0 14px 40px rgba(15,23,42,.22);border:1px solid rgba(15,23,42,.1);display:none;cursor:pointer}
+      .efc-nudge:after{content:"";position:absolute;right:-7px;bottom:18px;width:14px;height:14px;background:#fff;border-right:1px solid rgba(15,23,42,.1);border-bottom:1px solid rgba(15,23,42,.1);transform:rotate(-45deg)}
+      .efc-nudge strong{display:block;font-size:12.5px;font-weight:900;line-height:1.15;margin-bottom:2px;color:#0f172a}
+      .efc-nudge span{display:block;font-size:11.2px;font-weight:650;line-height:1.28;color:#64748b}
+      #ef-chat-root.efc-show-nudge .efc-nudge{display:block;animation:efNudgeIn .34s cubic-bezier(.2,.9,.22,1)}
       .efc-panel{position:absolute;right:0;bottom:66px;width:min(360px,calc(100vw - 24px));height:min(520px,calc(var(--efc-vh,100vh) - 126px));background:#fff;color:#111827;border:1px solid rgba(15,23,42,.12);border-radius:18px;box-shadow:0 22px 70px rgba(15,23,42,.28);display:none;overflow:hidden;flex-direction:column}
       .efc-panel.on{display:flex}
       .efc-head{height:58px;background:#111827;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 14px 0 16px;gap:10px}
-      .efc-title{font-size:14px;font-weight:850;line-height:1.1}
-      .efc-sub{font-size:11.5px;color:rgba(255,255,255,.72);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:250px}
-      .efc-close{width:32px;height:32px;border:none;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+      .efc-head>div{min-width:0;flex:1}
+      .efc-title{font-size:14px;font-weight:850;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .efc-sub{display:block;font-size:11.5px;color:rgba(255,255,255,.72);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+      .efc-close{width:32px;height:32px;border:none;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 32px;position:relative;z-index:2}
       .efc-order{padding:10px 14px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:12px;color:#475569;line-height:1.35}
       .efc-order strong{color:#111827}
       .efc-start{display:none;padding:14px;background:#fff;border-bottom:1px solid #e5e7eb}
@@ -230,6 +264,7 @@
       .ef-follow-btn{height:38px;border:none;border-radius:12px;padding:0 13px;font:800 12.5px 'DM Sans',system-ui,sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
       .ef-follow-btn.primary{background:var(--accent,#f97316);color:#fff}
       .ef-follow-btn.wa{background:#128c7e;color:#fff}
+      @keyframes efNudgeIn{from{opacity:0;transform:translateX(14px) scale(.97)}to{opacity:1;transform:translateX(0) scale(1)}}
       @keyframes efFollowIn{from{opacity:0;transform:translateY(42px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
       @keyframes efBotFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
       @keyframes efBotBlink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.18)}}
@@ -237,9 +272,12 @@
         #ef-chat-root{right:10px;bottom:calc(14px + env(safe-area-inset-bottom,0px))}
         #ef-chat-root.efc-cart-on{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
         .efc-bubble{width:52px;height:52px}
+        .efc-nudge{right:60px;bottom:2px;width:min(236px,calc(100vw - 88px));padding:9px 10px}
+        .efc-nudge strong{font-size:12px}
+        .efc-nudge span{font-size:10.8px}
         .efc-panel{position:fixed;left:0;right:0;bottom:0;width:100vw;height:calc(var(--efc-vh,100vh) - 8px);max-height:none;border-left:none;border-right:none;border-bottom:none;border-radius:18px 18px 0 0}
         .efc-head{height:54px;padding-left:14px;padding-right:12px}
-        .efc-sub{max-width:210px}
+        .efc-sub{max-width:100%}
         .efc-order{padding:9px 12px;font-size:11.8px}
         .efc-start{padding:12px}
         .efc-start-row{grid-template-columns:1fr}
@@ -325,6 +363,10 @@
     const root = document.createElement('div');
     root.id = 'ef-chat-root';
     root.innerHTML = `
+      <button class="efc-nudge" id="ef-chat-nudge" type="button">
+        <strong>Monte seu pedido com a EstimaIA</strong>
+        <span>A IA ajuda voce a escolher itens e finalizar com mais agilidade.</span>
+      </button>
       <button class="efc-bubble" id="ef-chat-bubble" type="button" title="Chat da loja" aria-label="Chat da loja">
         <svg width="23" height="23" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M5 6.5A4.5 4.5 0 0 1 9.5 2h5A4.5 4.5 0 0 1 19 6.5v3A4.5 4.5 0 0 1 14.5 14H11l-4.2 3.2c-.7.5-1.8 0-1.8-.9V14A4.5 4.5 0 0 1 1 9.5v-3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
@@ -344,8 +386,8 @@
         </div>
         <div class="efc-order" id="ef-chat-order"></div>
         <form class="efc-start" id="ef-chat-start">
-          <div class="efc-start-title">Atendimento EstimaIA</div>
-          <div class="efc-start-text">Informe seu nome e WhatsApp para conversar com a loja e montar pedido pelo chat.</div>
+          <div class="efc-start-title">Pedido com EstimaIA</div>
+          <div class="efc-start-text">Informe seu nome e WhatsApp. Para entrega, a EstimaIA pedira o endereco completo; para retirada ou mesa, esses dados bastam para iniciar.</div>
           <div class="efc-start-row">
             <input id="ef-chat-start-name" autocomplete="name" enterkeyhint="next" placeholder="Seu nome">
             <input id="ef-chat-start-phone" autocomplete="tel" inputmode="tel" enterkeyhint="done" placeholder="WhatsApp">
@@ -361,6 +403,7 @@
         </form>
       </div>`;
     document.body.appendChild(root);
+    document.getElementById('ef-chat-nudge').addEventListener('click', openPanel);
     document.getElementById('ef-chat-bubble').addEventListener('click', openPanel);
     document.getElementById('ef-chat-close').addEventListener('click', closePanel);
     document.getElementById('ef-chat-form').addEventListener('submit', sendMessage);
@@ -443,10 +486,11 @@
       return { type: multi ? 'multi' : 'single', buttons: opts };
     }
 
-    if (/vai ser entrega ou retirada|entrega ou retirada/i.test(n)) {
+    if (/vai ser entrega ou retirada|entrega ou retirada|entrega, retirada ou mesa|retirada ou mesa/i.test(n)) {
       return { type: 'single', buttons: [
         { label: 'Entrega', value: 'entrega' },
-        { label: 'Retirada', value: 'retirada' }
+        { label: 'Retirada', value: 'retirada' },
+        { label: 'Mesa', value: 'mesa' }
       ] };
     }
 
@@ -669,11 +713,13 @@
         const link = state.follow?.waLink || '';
         if (link) window.open(link, '_blank', 'noopener');
         if (state.follow) state.follow.chosen = 'wa';
+        saveSession();
         render();
         return;
       }
       if (choice === 'chat') {
         if (state.follow) state.follow.chosen = 'chat';
+        saveSession();
         render();
         await sendChatText('Acompanhar pela EstimaIA');
         return;
@@ -737,6 +783,7 @@
     const unread = Math.max(0, Number(state.unread || state.thread?.unread_client || 0));
     badge.textContent = unread > 9 ? '9+' : String(unread);
     badge.classList.toggle('on', unread > 0);
+    root.classList.toggle('efc-show-nudge', !!hasTenant && !state.open && !hasSession && unread === 0);
 
     const order = state.order || state.thread?.order || {};
     const num = state.orderNum || order.order_num || order.num || state.orderId;
@@ -789,6 +836,7 @@
   function openPanel() {
     state.open = true;
     updateViewportVars();
+    saveSession();
     render();
     fillStartFromProfile();
     markRead();
@@ -803,6 +851,7 @@
 
   function closePanel() {
     state.open = false;
+    saveSession();
     render();
   }
 
@@ -1129,6 +1178,7 @@
     const orderId = Number(payload.orderId || payload.order_id || 0);
     if (orderId && state.payment.orderId && Number(state.payment.orderId) !== orderId) return;
     state.payment = Object.assign({}, state.payment, normalizePaymentPayload(Object.assign({}, state.payment, payload)));
+    saveSession();
     render();
   };
   window.efChatOpen = openPanel;
@@ -1145,7 +1195,9 @@
     state.orderNum = data.orderNum || null;
     state.phone = digits(data.phone);
     state.client = data.client || '';
-    bootstrap(false);
+    restoreCachedState(data);
+    render();
+    bootstrap(state.open);
     return true;
   }
 
