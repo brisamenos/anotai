@@ -15,8 +15,12 @@
     unread: 0,
     sse: null,
     booting: false,
-    ready: false
+    ready: false,
+    storeName: ''
   };
+
+  let audioCtx = null;
+  let soundUnlockInstalled = false;
 
   function esc(v) {
     return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({
@@ -28,6 +32,77 @@
   function tid() { return window._tenantId || ''; }
   function storageKey() { return 'ef_chat_' + (state.tid || tid() || ''); }
   function orderStorageKey() { return 'ef_order_' + (state.tid || tid() || ''); }
+
+  function storeName() {
+    return String(
+      state.storeName ||
+      window._storeName ||
+      document.getElementById('hero-name')?.textContent ||
+      'Loja'
+    ).trim() || 'Loja';
+  }
+
+  function setStoreName(name) {
+    const value = String(name || '').trim();
+    if (!value) return;
+    state.storeName = value;
+    renderTitle();
+  }
+
+  function renderTitle() {
+    const name = storeName();
+    const title = document.getElementById('ef-chat-title');
+    const bubble = document.getElementById('ef-chat-bubble');
+    if (title) title.textContent = name;
+    if (bubble) {
+      bubble.title = 'Chat ' + name;
+      bubble.setAttribute('aria-label', 'Chat ' + name);
+    }
+  }
+
+  function getAudioCtx() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!audioCtx) audioCtx = new AC();
+    return audioCtx;
+  }
+
+  function unlockSound() {
+    try {
+      const ctx = getAudioCtx();
+      if (ctx?.state === 'suspended') ctx.resume().catch(() => {});
+    } catch(e) {}
+  }
+
+  function installSoundUnlock() {
+    if (soundUnlockInstalled) return;
+    soundUnlockInstalled = true;
+    ['pointerdown','keydown','touchstart'].forEach(evt => {
+      window.addEventListener(evt, unlockSound, { once: true, passive: true });
+    });
+  }
+
+  function playChatSound() {
+    try {
+      const ctx = audioCtx;
+      if (!ctx || ctx.state === 'suspended') return;
+      const now = ctx.currentTime + 0.01;
+      [660, 880].forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const start = now + idx * 0.11;
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, start);
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.055, start + 0.018);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.13);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.15);
+      });
+    } catch(e) {}
+  }
 
   function readJson(key) {
     try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; }
@@ -98,10 +173,36 @@
       .efc-input:focus{border-color:var(--accent,#f97316);box-shadow:0 0 0 3px rgba(var(--accent-rgb,249,115,22),.12)}
       .efc-send{width:42px;height:40px;border:none;border-radius:12px;background:var(--accent,#f97316);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
       .efc-send:disabled{opacity:.45;cursor:not-allowed}
+      .ef-follow-layer{position:fixed;inset:0;z-index:3900;display:flex;align-items:flex-end;justify-content:center;padding:18px;pointer-events:none}
+      .ef-follow-card{width:min(430px,calc(100vw - 28px));background:#fff;color:#111827;border:1px solid rgba(15,23,42,.12);border-radius:20px;box-shadow:0 24px 80px rgba(15,23,42,.28);display:grid;grid-template-columns:74px minmax(0,1fr);gap:14px;padding:16px;position:relative;pointer-events:auto;animation:efFollowIn .42s cubic-bezier(.2,.9,.22,1)}
+      .ef-follow-close{position:absolute;right:10px;top:10px;width:28px;height:28px;border:none;border-radius:50%;background:#f1f5f9;color:#475569;display:flex;align-items:center;justify-content:center;cursor:pointer}
+      .ef-follow-bot{width:64px;height:64px;border-radius:20px;background:linear-gradient(145deg,#e0f2fe,#ecfeff);border:1px solid #bae6fd;box-shadow:inset 0 -8px 18px rgba(14,165,233,.12);position:relative;align-self:center;animation:efBotFloat 2.4s ease-in-out infinite}
+      .ef-follow-bot:before{content:"";position:absolute;left:29px;top:-12px;width:6px;height:14px;border-radius:99px;background:#0ea5e9}
+      .ef-follow-bot:after{content:"";position:absolute;left:24px;top:-18px;width:16px;height:8px;border-radius:99px;background:#22c55e;box-shadow:0 0 14px rgba(34,197,94,.45)}
+      .ef-follow-eye{position:absolute;top:25px;width:9px;height:9px;border-radius:50%;background:#0f172a;animation:efBotBlink 4s infinite}
+      .ef-follow-eye.left{left:18px}
+      .ef-follow-eye.right{right:18px}
+      .ef-follow-mouth{position:absolute;left:22px;right:22px;bottom:18px;height:4px;border-radius:99px;background:#38bdf8}
+      .ef-follow-kicker{font-size:11px;font-weight:900;color:var(--accent,#f97316);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+      .ef-follow-title{font-size:16px;font-weight:900;line-height:1.2;padding-right:22px}
+      .ef-follow-text{font-size:12.5px;color:#64748b;line-height:1.42;margin-top:5px}
+      .ef-follow-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+      .ef-follow-btn{height:38px;border:none;border-radius:12px;padding:0 13px;font:800 12.5px 'DM Sans',system-ui,sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+      .ef-follow-btn.primary{background:var(--accent,#f97316);color:#fff}
+      .ef-follow-btn.wa{background:#128c7e;color:#fff}
+      @keyframes efFollowIn{from{opacity:0;transform:translateY(42px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+      @keyframes efBotFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+      @keyframes efBotBlink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.18)}}
       @media(max-width:520px){
         #ef-chat-root{right:12px;bottom:18px}
         #ef-chat-root.efc-cart-on{bottom:82px}
         .efc-panel{position:fixed;left:8px;right:8px;bottom:8px;width:auto;height:min(74vh,560px);border-radius:20px}
+        .ef-follow-layer{align-items:flex-end;padding:12px}
+        .ef-follow-card{grid-template-columns:58px minmax(0,1fr);gap:10px;padding:14px}
+        .ef-follow-bot{width:54px;height:54px;border-radius:18px}
+        .ef-follow-eye{top:22px}
+        .ef-follow-eye.left{left:15px}
+        .ef-follow-eye.right{right:15px}
       }`;
     document.head.appendChild(style);
   }
@@ -122,7 +223,7 @@
       <div class="efc-panel" id="ef-chat-panel">
         <div class="efc-head">
           <div>
-            <div class="efc-title">Chat da loja</div>
+            <div class="efc-title" id="ef-chat-title">Chat da loja</div>
             <div class="efc-sub" id="ef-chat-sub">Pedido</div>
           </div>
           <button class="efc-close" id="ef-chat-close" type="button" title="Fechar" aria-label="Fechar">
@@ -143,6 +244,7 @@
     document.getElementById('ef-chat-close').addEventListener('click', closePanel);
     document.getElementById('ef-chat-form').addEventListener('submit', sendMessage);
     state.ready = true;
+    renderTitle();
   }
 
   function messageTime(m) {
@@ -164,6 +266,7 @@
 
   function render() {
     ensureDom();
+    renderTitle();
     const root = document.getElementById('ef-chat-root');
     const bubble = document.getElementById('ef-chat-bubble');
     const panel = document.getElementById('ef-chat-panel');
@@ -265,7 +368,9 @@
         if (data.thread) state.thread = data.thread;
         if (data.order) state.order = data.order;
         if (data.message) {
+          const alreadyHad = state.messages.some(m => Number(m.id) === Number(data.message.id));
           mergeMessages([data.message]);
+          if (!alreadyHad && data.message.sender !== 'client') playChatSound();
           if (!state.open && data.message.sender !== 'client') state.unread = Math.max(state.unread || 0, Number(state.thread?.unread_client || 0));
         }
         render();
@@ -312,6 +417,96 @@
     }
   }
 
+  function closeFollowPrompt() {
+    const el = document.getElementById('ef-follow-prompt');
+    if (el) el.remove();
+  }
+
+  function whatsappLinkFromPayload(payload) {
+    payload = payload || {};
+    if (payload.waLink) return payload.waLink;
+    const btn = document.getElementById('success-wa-btn');
+    if (btn?.href && !btn.href.endsWith('#')) return btn.href;
+    try {
+      if (typeof buildWaLink === 'function') {
+        return buildWaLink(payload.orderId || payload.id || state.orderId, payload.orderNum || payload.order_num || state.orderNum);
+      }
+    } catch(e) {}
+    return '';
+  }
+
+  function normalizeFollowPayload(payload) {
+    payload = payload || {};
+    return {
+      orderId: payload.orderId || payload.id || state.orderId,
+      orderNum: payload.orderNum || payload.order_num || state.orderNum,
+      phone: digits(payload.phone || state.phone),
+      client: payload.client || state.client || '',
+      storeName: payload.storeName || payload.store_name || storeName()
+    };
+  }
+
+  function showFollowPrompt(payload) {
+    payload = payload || {};
+    ensureDom();
+    const data = normalizeFollowPayload(payload);
+    if (data.storeName) setStoreName(data.storeName);
+    if (data.orderId && data.phone) {
+      state.tid = tid();
+      state.orderId = data.orderId;
+      state.orderNum = data.orderNum;
+      state.phone = data.phone;
+      state.client = data.client;
+      saveSession();
+      bootstrap(false);
+    }
+
+    closeFollowPrompt();
+    const link = whatsappLinkFromPayload(payload);
+    const showWa = !!link && payload.whatsappEnabled !== false;
+    const loja = storeName();
+    const layer = document.createElement('div');
+    layer.id = 'ef-follow-prompt';
+    layer.className = 'ef-follow-layer';
+    layer.innerHTML = `
+      <div class="ef-follow-card" role="dialog" aria-live="polite" aria-label="Acompanhar pedido">
+        <button class="ef-follow-close" type="button" data-ef-follow-close title="Fechar" aria-label="Fechar">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <div class="ef-follow-bot" aria-hidden="true">
+          <span class="ef-follow-eye left"></span>
+          <span class="ef-follow-eye right"></span>
+          <span class="ef-follow-mouth"></span>
+        </div>
+        <div>
+          <div class="ef-follow-kicker">Acompanhe seu pedido</div>
+          <div class="ef-follow-title">Pedido recebido</div>
+          <div class="ef-follow-text">Escolha por onde deseja acompanhar as atualizações em tempo real da ${esc(loja)}.</div>
+          <div class="ef-follow-actions">
+            ${showWa ? '<button class="ef-follow-btn wa" type="button" data-ef-follow-wa>WhatsApp</button>' : ''}
+            <button class="ef-follow-btn primary" type="button" data-ef-follow-chat>EstimaIA</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(layer);
+    layer.addEventListener('click', ev => {
+      if (ev.target === layer || ev.target.closest('[data-ef-follow-close]')) closeFollowPrompt();
+    });
+    layer.querySelector('[data-ef-follow-chat]')?.addEventListener('click', () => {
+      closeFollowPrompt();
+      if (typeof window.efChatStart === 'function') window.efChatStart(data, { open: true });
+      else openPanel();
+    });
+    layer.querySelector('[data-ef-follow-wa]')?.addEventListener('click', () => {
+      closeFollowPrompt();
+      if (link) window.open(link, '_blank', 'noopener');
+    });
+    window.setTimeout(() => {
+      const cur = document.getElementById('ef-follow-prompt');
+      if (cur === layer) closeFollowPrompt();
+    }, 35000);
+  }
+
   window.efChatStart = function(payload, opts) {
     payload = payload || {};
     state.tid = tid();
@@ -319,10 +514,14 @@
     state.orderNum = payload.orderNum || payload.order_num || state.orderNum;
     state.phone = digits(payload.phone || state.phone);
     state.client = payload.client || state.client || '';
+    setStoreName(payload.storeName || payload.store_name || window._storeName || state.storeName);
     state.open = !!(opts && opts.open);
     saveSession();
     bootstrap(state.open);
   };
+  window.efChatOpen = openPanel;
+  window.efChatSetStoreName = setStoreName;
+  window.efChatShowFollowPrompt = showFollowPrompt;
 
   function bootFromStorage() {
     state.tid = tid();
@@ -337,8 +536,11 @@
     return true;
   }
 
+  installSoundUnlock();
+
   document.addEventListener('DOMContentLoaded', () => {
     ensureDom();
+    installSoundUnlock();
     let tries = 0;
     const timer = setInterval(() => {
       tries++;

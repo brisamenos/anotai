@@ -11,9 +11,13 @@
     sse: null,
     ready: false,
     loading: false,
-    search: ''
+    search: '',
+    storeName: ''
   };
   window.GCHAT = GCHAT;
+
+  let gcAudioCtx = null;
+  let soundUnlockInstalled = false;
 
   function esc(v) {
     return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({
@@ -30,6 +34,73 @@
     GCHAT.tid = s.tenant_id || GCHAT.tid || '';
     GCHAT.userId = s.id || GCHAT.userId || 'gestor';
     return !!GCHAT.tid;
+  }
+
+  function storeName() {
+    const inputName = document.getElementById('cp-nome')?.value || '';
+    return String(GCHAT.storeName || window._tenantStoreName || inputName || 'Loja').trim() || 'Loja';
+  }
+
+  function setStoreName(name) {
+    const value = String(name || '').trim();
+    if (!value) return;
+    GCHAT.storeName = value;
+    renderTitle();
+  }
+
+  function renderTitle() {
+    const name = storeName();
+    const title = document.getElementById('gc-title');
+    const fab = document.getElementById('gc-fab');
+    if (title) title.textContent = name;
+    if (fab) {
+      fab.title = 'Chats de ' + name;
+      fab.setAttribute('aria-label', 'Chats de ' + name);
+    }
+  }
+
+  function getAudioCtx() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!gcAudioCtx) gcAudioCtx = new AC();
+    return gcAudioCtx;
+  }
+
+  function unlockSound() {
+    try {
+      const ctx = getAudioCtx();
+      if (ctx?.state === 'suspended') ctx.resume().catch(() => {});
+    } catch(e) {}
+  }
+
+  function installSoundUnlock() {
+    if (soundUnlockInstalled) return;
+    soundUnlockInstalled = true;
+    ['pointerdown','keydown','touchstart'].forEach(evt => {
+      window.addEventListener(evt, unlockSound, { once: true, passive: true });
+    });
+  }
+
+  function playChatSound() {
+    try {
+      const ctx = gcAudioCtx;
+      if (!ctx || ctx.state === 'suspended') return;
+      const now = ctx.currentTime + 0.01;
+      [523.25, 783.99, 1046.5].forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const start = now + idx * 0.075;
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, start);
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.05, start + 0.014);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.11);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.13);
+      });
+    } catch(e) {}
   }
 
   function api(path, opts) {
@@ -110,7 +181,7 @@
       </button>
       <div class="gc-panel" id="gc-panel">
         <div class="gc-head">
-          <div class="gc-title">Chat clientes</div>
+          <div class="gc-title" id="gc-title">Chat clientes</div>
           <button class="gc-close" id="gc-close" type="button" title="Fechar" aria-label="Fechar">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           </button>
@@ -148,6 +219,7 @@
     });
     document.getElementById('gc-form').addEventListener('submit', sendMessage);
     GCHAT.ready = true;
+    renderTitle();
   }
 
   function whenText(t) {
@@ -264,6 +336,7 @@
   }
 
   function renderAll() {
+    renderTitle();
     const panel = document.getElementById('gc-panel');
     if (panel) {
       panel.classList.toggle('on', GCHAT.open);
@@ -395,6 +468,7 @@
     es.addEventListener('chat:message', ev => {
       try {
         const data = JSON.parse(ev.data || '{}');
+        const alreadyHad = data.message ? GCHAT.messages.some(m => Number(m.id) === Number(data.message.id)) : false;
         if (data.thread) upsertThread(data.thread);
         const active = GCHAT.active && data.thread && Number(GCHAT.active.id) === Number(data.thread.id);
         if (active) {
@@ -402,6 +476,7 @@
           mergeMessages([data.message]);
           if (GCHAT.open) markRead(GCHAT.active);
         }
+        if (!alreadyHad && data.message?.sender === 'client') playChatSound();
         renderAll();
       } catch(e) {}
     });
@@ -421,9 +496,14 @@
 
   window.gestorChatOpenOrder = openOrder;
   window.gestorChatOpenPanel = openPanel;
+  window.gestorChatSetStoreName = setStoreName;
+
+  installSoundUnlock();
 
   document.addEventListener('DOMContentLoaded', () => {
     ensureDom();
+    installSoundUnlock();
+    setStoreName(window._tenantStoreName || '');
     let tries = 0;
     const timer = setInterval(() => {
       tries++;

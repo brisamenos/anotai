@@ -15,6 +15,8 @@ if (typeof window._printMode === 'undefined') {
 // URL do servidor de automações — carregada do banco
 let WA_SERVER = '';
 const sb = window.AppAPI;
+let _tenantStoreName = '';
+window._tenantStoreName = '';
 
 // ── Autenticação ──────────────────────────────────────
 let _sessao = null;
@@ -632,7 +634,7 @@ async function loadAllData(silent = false) {
       safe(sb.from('estoque').select('*').order('id')),
       safe(sb.from('estoque_receitas').select('*').order('id')),
       safe(sb.from('fidelidade').select('*').order('pts',{ascending:false})),
-      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema,order_num_offset,order_auto_reset_daily,order_auto_reset_last_date,taxa_servico_pct,store_tempo_entrega,store_tempo_retirada').single()),
+      safe(sb.from('store_config').select('caixa_open,store_open,gestor_tema,order_num_offset,order_auto_reset_daily,order_auto_reset_last_date,taxa_servico_pct,store_tempo_entrega,store_tempo_retirada,store_name').single()),
       safe(sb.from('orders').select('*').eq('status','mesa_aberta').order('id',{ascending:false}))
     ]);
 
@@ -720,6 +722,9 @@ async function loadAllData(silent = false) {
 
     // Aplica estado do caixa e loja
     if (cfgRes.data) {
+      _tenantStoreName = cfgRes.data.store_name || _tenantStoreName || '';
+      window._tenantStoreName = _tenantStoreName;
+      try { if (typeof gestorChatSetStoreName === 'function') gestorChatSetStoreName(_tenantStoreName); } catch(e) {}
       _orderNumOffset = parseInt(cfgRes.data.order_num_offset) || 0;
       _orderAutoResetDaily = cfgRes.data.order_auto_reset_daily === true || cfgRes.data.order_auto_reset_daily === 1 || cfgRes.data.order_auto_reset_daily === '1';
       _orderAutoResetLastDate = cfgRes.data.order_auto_reset_last_date || '';
@@ -2850,6 +2855,11 @@ let _tempoDeliveryPedido = '';
 
 function _applyStoreConfigUpdate(cfg = {}) {
   let remapOrders = false;
+  if (Object.prototype.hasOwnProperty.call(cfg, 'store_name')) {
+    _tenantStoreName = cfg.store_name || '';
+    window._tenantStoreName = _tenantStoreName;
+    try { if (typeof gestorChatSetStoreName === 'function') gestorChatSetStoreName(_tenantStoreName); } catch(e) {}
+  }
   if (Object.prototype.hasOwnProperty.call(cfg, 'order_num_offset')) {
     _orderNumOffset = parseInt(cfg.order_num_offset) || 0;
     remapOrders = true;

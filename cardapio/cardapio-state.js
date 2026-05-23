@@ -7,6 +7,7 @@ const sb = window.AppAPI;
 let _tenantId    = null;
 let _tenantPlano = 'pro';  // 'pro' | 'premium'
 let _waNumero    = null;   // WhatsApp do restaurante
+let _storeName   = '';     // Nome publico da loja
 
 // ── Dados do menu ──
 let allItems     = [];

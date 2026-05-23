@@ -563,7 +563,7 @@ async function _doSubmitOrder(addr, troco) {
     });
     if (typeof efChatStart === 'function') {
       try {
-        efChatStart({ orderId: order.id, orderNum: order.order_num, phone, client: name });
+        efChatStart({ orderId: order.id, orderNum: order.order_num, phone, client: name, storeName: _storeName });
       } catch(e) {}
     }
 
@@ -589,10 +589,21 @@ async function _doSubmitOrder(addr, troco) {
     } catch(e) {}
     _clearOrderRequestId();
 
-    // Toast WhatsApp (apenas premium) — aparece 1.5s após confirmação
-    if (_tenantPlano === 'premium') {
-      setTimeout(() => showWaToast(order.id, order.order_num), 1500);
-    }
+    setTimeout(() => {
+      if (typeof efChatShowFollowPrompt === 'function') {
+        efChatShowFollowPrompt({
+          orderId: order.id,
+          orderNum: order.order_num,
+          phone,
+          client: name,
+          storeName: _storeName,
+          waLink,
+          whatsappEnabled: !!waLink
+        });
+      } else if (_tenantPlano === 'premium') {
+        showWaToast(order.id, order.order_num);
+      }
+    }, 900);
   } catch(e) {
     console.error('[submitOrder] falhou:', e);
     // Mensagem específica baseada no tipo de erro

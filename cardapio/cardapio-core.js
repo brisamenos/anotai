@@ -291,9 +291,12 @@ function applyTema(tema, accentCor) {
 
 function applyBranding(b, nome) {
   const n = b?.store_name || nome || 'Cardápio';
+  _storeName = n;
+  window._storeName = n;
   document.title = n;
   applyShareMeta(b, n);
   document.getElementById('hero-name').textContent = n;
+  try { if (typeof efChatSetStoreName === 'function') efChatSetStoreName(n); } catch(e) {}
   if (b?.store_descricao) document.getElementById('hero-desc').textContent = b.store_descricao;
   const cor = b?.store_cor || '#f97316';
 
@@ -854,9 +857,12 @@ function applyBrandingLive(cfg) {
 
   // Nome e descrição
   if (cfg.store_name) {
+    _storeName = cfg.store_name;
+    window._storeName = cfg.store_name;
     document.title = cfg.store_name;
     const el = document.getElementById('hero-name');
     if (el) el.textContent = cfg.store_name;
+    try { if (typeof efChatSetStoreName === 'function') efChatSetStoreName(cfg.store_name); } catch(e) {}
   }
   if (cfg.store_descricao) {
     const el = document.getElementById('hero-desc');
