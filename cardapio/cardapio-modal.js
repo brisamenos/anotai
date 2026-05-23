@@ -7,7 +7,6 @@
 // ══════════════════════════════════════════
 let _imItemId = null;
 let _imQty    = 1;
-let _pizzaSizeKey = null;
 
 function openItemModal(id) {
   const i = allItems.find(x => x.id === id);
@@ -16,7 +15,6 @@ function openItemModal(id) {
   _imQty    = 1;
   _halfItem = null;
   _halfPickerOpen = false;
-  _pizzaSizeKey = null;
 
   const imgEl = document.getElementById('im-img');
   if (i.image_url) {
@@ -26,9 +24,7 @@ function openItemModal(id) {
   }
   document.getElementById('im-name').textContent = i.name;
   document.getElementById('im-desc').textContent = i.description || '';
-  const hasPizzaSizesAtOpen = _pizzaHasSizePricing(i);
-  const openPrice = hasPizzaSizesAtOpen ? _pizzaMinPrice(i) : (parseFloat(i.price) || 0);
-  document.getElementById('im-price').textContent = (hasPizzaSizesAtOpen ? 'A partir de R$ ' : 'R$ ') + fmt(openPrice) + (i.item_type === 'kg' ? '/kg' : '');
+  document.getElementById('im-price').textContent = 'R$ ' + fmt(i.price) + (i.item_type === 'kg' ? '/kg' : '');
   const old = document.getElementById('im-price-old');
   if (i.price_old) { old.textContent = 'R$ ' + fmt(i.price_old); old.style.display = ''; }
   else old.style.display = 'none';
@@ -219,156 +215,21 @@ function openItemModal(id) {
   const halfSec = document.getElementById('half-section');
   halfSec.style.display = isPizza ? '' : 'none';
   if (isPizza) {
-    renderPizzaSizePicker(i);
     updateHalfUI();
     renderHalfPicker(i);
     // Inicia visual da pizza com a metade esquerda preenchida
     _initPizzaCanvas();
     setTimeout(() => _updatePizzaVisual(), 80);
-  } else {
-    const sizeWrap = document.getElementById('pizza-size-wrap');
-    if (sizeWrap) sizeWrap.style.display = 'none';
   }
   updateImAddBtn();
 }
 
 function isPizzaItem(i) {
   // Detecta pizza por: tipo, meio_a_meio flag, ou categoria
-  if (i.meio_a_meio || i.tipo === 'pizza' || i.item_type === 'pizza' || i.is_pizza) return true;
+  if (i.meio_a_meio || i.tipo === 'pizza' || i.is_pizza) return true;
   const cat = allCats.find(c => c.name === (i.cat_key || i.cat));
   if (cat && (cat.meio_a_meio || (cat.name||'').toLowerCase().includes('pizza') || (cat.label||'').toLowerCase().includes('pizza'))) return true;
   return false;
-}
-
-function _pizzaSizesGroup(item) {
-  const groups = item?.custom_groups || [];
-  return groups.find(g => g && (g.tipo === 'pizza_sizes' || g.tipo === 'tamanhos_pizza') && Array.isArray(g.tamanhos)) || null;
-}
-
-function _pizzaSizeOptions(item) {
-  const group = _pizzaSizesGroup(item);
-  return (group?.tamanhos || [])
-    .map(s => ({
-      key: String(s.key || '').toUpperCase(),
-      nome: s.nome || s.label || s.key || '',
-      preco: parseFloat(s.preco ?? s.price ?? s.valor)
-    }))
-    .filter(s => s.key && s.preco > 0);
-}
-
-function _pizzaHasSizePricing(item) {
-  return _pizzaSizeOptions(item).length > 0;
-}
-
-function _pizzaMinPrice(item) {
-  const prices = _pizzaSizeOptions(item).map(s => s.preco).filter(p => p > 0);
-  return prices.length ? Math.min(...prices) : (parseFloat(item?.price) || 0);
-}
-
-function _pizzaPriceForSize(item, key) {
-  const k = String(key || '').toUpperCase();
-  const found = _pizzaSizeOptions(item).find(s => s.key === k);
-  return found ? found.preco : (parseFloat(item?.price) || 0);
-}
-
-function _pizzaHalfRule(item) {
-  const rule = (_pizzaSizesGroup(item)?.regra_meio || _pizzaSizesGroup(item)?.regra || '').toLowerCase();
-  return rule === 'media' ? 'media' : 'maior';
-}
-
-function _pizzaCurrentBasePrice(item, halfItem) {
-  const hasSizes = _pizzaHasSizePricing(item);
-  const sizeKey = hasSizes ? (_pizzaSizeKey || _pizzaSizeOptions(item)[0]?.key) : '';
-  const base = hasSizes ? _pizzaPriceForSize(item, sizeKey) : (parseFloat(item?.price) || 0);
-  if (!isPizzaItem(item) || !halfItem) return base;
-  if (_isWholeFlavorSelected()) return base;
-
-  const half = hasSizes ? _pizzaPriceForSize(halfItem, sizeKey) : (parseFloat(halfItem?.price) || 0);
-  if (hasSizes && _pizzaHalfRule(item) === 'maior') return Math.max(base, half);
-  return (base + half) / 2;
-}
-
-function _pizzaSizeLabel(item) {
-  const opt = _pizzaSizeOptions(item).find(s => s.key === _pizzaSizeKey);
-  return opt ? `${opt.nome} (${opt.key})` : '';
-}
-
-function _pizzaAttr(s) {
-  return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-}
-
-function renderPizzaSizePicker(item) {
-  const wrap = document.getElementById('pizza-size-wrap');
-  const grid = document.getElementById('pizza-size-grid');
-  const hint = document.getElementById('pizza-size-hint');
-  if (!wrap || !grid) return;
-
-  const sizes = _pizzaSizeOptions(item);
-  if (!sizes.length) {
-    wrap.style.display = 'none';
-    grid.innerHTML = '';
-    if (hint) hint.textContent = '';
-    return;
-  }
-
-  wrap.style.display = '';
-  grid.innerHTML = sizes.map(size => {
-    const on = _pizzaSizeKey === size.key ? ' on' : '';
-    return `<button type="button" class="pizza-size-btn${on}" onclick="selectPizzaSize('${_pizzaAttr(size.key)}')">
-      <span class="pizza-size-name">${size.nome}</span>
-      <span class="pizza-size-price">R$ ${fmt(size.preco)}</span>
-    </button>`;
-  }).join('');
-  if (hint) hint.textContent = _pizzaSizeKey
-    ? 'As bordas aparecem conforme o tamanho escolhido.'
-    : 'Escolha Pequena, Media ou Grande para liberar as bordas certas.';
-}
-
-function selectPizzaSize(key) {
-  const baseItem = allItems.find(x => x.id === _imItemId);
-  if (!baseItem) return;
-  _pizzaSizeKey = String(key || '').toUpperCase();
-  renderPizzaSizePicker(baseItem);
-  _applyPizzaSizeToBordas(_pizzaSizeKey);
-  renderHalfPicker(baseItem);
-  updateHalfUI();
-  updateImAddBtn();
-  if (typeof _updateImPrice === 'function') _updateImPrice();
-}
-
-function _applyPizzaSizeToBordas(sizeKey) {
-  const key = String(sizeKey || '').toUpperCase();
-  document.querySelectorAll('.grp-section[data-borda-tamanho]').forEach(sec => {
-    const bordaTam = String(sec.dataset.bordaTamanho || '').toUpperCase();
-    if (bordaTam === key) {
-      sec.style.display = '';
-    } else {
-      sec.style.display = 'none';
-      const nomeGrp = sec.dataset.bordaGrupo;
-      if (nomeGrp && typeof _imGruposState !== 'undefined' && _imGruposState[nomeGrp]) {
-        delete _imGruposState[nomeGrp];
-        sec.querySelectorAll('.grp-opt-item.on').forEach(e => e.classList.remove('on'));
-      }
-    }
-  });
-}
-
-function _pizzaSelectedSizeKeyFromState() {
-  if (_pizzaSizeKey) return _pizzaSizeKey;
-  const tamanhoKey = Object.keys(_imGruposState || {}).find(k => (k || '').toLowerCase().trim() === 'tamanho');
-  const optName = tamanhoKey ? (_imGruposState[tamanhoKey]?.[0]?.nome || '') : '';
-  return (optName.match(/\(([PMG])\)/i)?.[1] || '').toUpperCase();
-}
-
-function _pizzaSizedGroupKey(groupName) {
-  return (String(groupName || '').match(/\((P|M|G)\)\s*$/i)?.[1] || '').toUpperCase();
-}
-
-function _pizzaShouldSkipSizedGroup(g) {
-  const groupSize = _pizzaSizedGroupKey(g?.nome);
-  if (!groupSize) return false;
-  const selectedSize = _pizzaSelectedSizeKeyFromState();
-  return !selectedSize || groupSize !== selectedSize;
 }
 
 function getPizzaSiblings(item) {
@@ -395,7 +256,6 @@ function selectHalfWhole() {
   renderHalfPicker(base);
   updateHalfUI();
   updateImAddBtn();
-  if (typeof _updateImPrice === 'function') _updateImPrice();
   _updatePizzaVisual();
 }
 
@@ -422,16 +282,11 @@ function renderHalfPicker(baseItem) {
       ? `<img src="${s.image_url}" alt="${s.name}" style="width:100%;height:100%;object-fit:cover;border-radius:7px">`
       : `<span>$<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l9 18H3L12 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 14h8M10 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>`;
     const check = (_halfItem && _halfItem.id === s.id && !_isWholeFlavorSelected()) ? '✓' : '';
-    const hasSizes = _pizzaHasSizePricing(baseItem);
-    const price = hasSizes
-      ? (_pizzaSizeKey ? _pizzaPriceForSize(s, _pizzaSizeKey) : _pizzaMinPrice(s))
-      : (parseFloat(s.price) || 0);
-    const pricePrefix = hasSizes && !_pizzaSizeKey ? 'A partir de ' : '';
     return `
     <div class="half-opt${on}" onclick="selectHalf(${s.id})">
       <div class="half-opt-emoji">${thumbInner}</div>
       <span class="half-opt-name">${s.name}</span>
-      <span class="half-opt-price">${pricePrefix}R$ ${fmt(price)}</span>
+      <span class="half-opt-price">R$ ${fmt(s.price)}</span>
       <div class="half-opt-check">${check}</div>
     </div>`;
   }).join('');
@@ -445,7 +300,6 @@ function selectHalf(id) {
   if (baseItem) renderHalfPicker(baseItem);
   updateHalfUI();
   updateImAddBtn();
-  if (typeof _updateImPrice === 'function') _updateImPrice();
   // Atualiza visual animado da pizza
   _updatePizzaVisual();
 }
@@ -477,7 +331,7 @@ function updateHalfUI() {
     return;
   }
 
-  const halfPrice = base ? _pizzaCurrentBasePrice(base, _halfItem) : (parseFloat(_halfItem.price) || 0);
+  const avgPrice = base ? (parseFloat(base.price) + parseFloat(_halfItem.price)) / 2 : parseFloat(_halfItem.price);
   // Emoji/img da 2ª metade
   const emoEl = document.getElementById('half-sel-emoji');
   if (_halfItem.image_url) {
@@ -487,10 +341,7 @@ function updateHalfUI() {
   }
   document.getElementById('half-sel-name').textContent = _halfItem.name;
   document.getElementById('half-sel-hint').textContent = 'Toque para trocar';
-  const note = base && _pizzaHasSizePricing(base) && _pizzaHalfRule(base) === 'maior'
-    ? 'Meio a meio cobra o maior valor: '
-    : 'Preco medio das metades: ';
-  document.getElementById('half-price-note').textContent = note + `R$ ${fmt(halfPrice)}`;
+  document.getElementById('half-price-note').textContent = `Preço médio das metades: R$ ${fmt(avgPrice)}`;
 }
 
 function toggleHalfPicker() {
@@ -511,14 +362,11 @@ function updateImAddBtn() {
       price = (base + parseFloat(_halfItem.price)) / 2;
     }
   }
-  const needsSize = isPizza && _pizzaHasSizePricing(i) && !_pizzaSizeKey;
-  const extra = (typeof _calcGruposExtra === 'function') ? _calcGruposExtra(i) : 0;
-  price = (isPizza ? _pizzaCurrentBasePrice(i, _halfItem) : (parseFloat(i.price) || 0)) + extra;
-  const disabled = !_lojaAberta || needsSize || (isPizza && !_halfItem);
+  const disabled = !_lojaAberta || (isPizza && !_halfItem);
   document.getElementById('im-add-btn').disabled = disabled;
-  const label = needsSize ? 'Escolha o tamanho da pizza' : (isPizza && !_halfItem
+  const label = isPizza && !_halfItem
     ? 'Escolha como quer sua pizza acima'
-    : `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> Adicionar · R$ ${fmt(price * _imQty)}`);
+    : `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> Adicionar · R$ ${fmt(price * _imQty)}`;
   document.getElementById('im-add-btn').innerHTML = label;
 }
 
@@ -1114,14 +962,9 @@ function toggleIngr(chip) {
 function imConfirm() {
   const i   = allItems.find(x => x.id === _imItemId);
   if (!i) return;
-  const isPizza = isPizzaItem(i);
 
   // Validate required grupos
-  const grupos = (i.custom_groups || []).filter(g =>
-    g?.tipo !== 'pizza_sizes' &&
-    !(_pizzaHasSizePricing(i) && (g.nome||'').toLowerCase().trim() === 'tamanho') &&
-    !(isPizza && _pizzaShouldSkipSizedGroup(g))
-  );
+  const grupos = i.custom_groups || [];
   for (const g of grupos) {
     if (g.required === true) {
       const sel = _imGruposState[g.nome] || [];
@@ -1131,6 +974,7 @@ function imConfirm() {
   }
 
   const obs = document.getElementById('im-obs').value.trim();
+  const isPizza = isPizzaItem(i);
 
   const selectedIngrs = [...document.querySelectorAll('#im-ingr-grid .im-ingr-chip.on')]
     .map(c => c.querySelector('span')?.textContent?.trim())
@@ -1146,12 +990,6 @@ function imConfirm() {
   }
 
   // Pizza meio a meio — precisa de 2ª metade
-  if (isPizza && _pizzaHasSizePricing(i) && !_pizzaSizeKey) {
-    toast('warn', 'Escolha o tamanho da pizza!');
-    document.getElementById('pizza-size-wrap')?.scrollIntoView({behavior:'smooth',block:'center'});
-    return;
-  }
-
   if (isPizza && !_halfItem) {
     toast('warn', 'Escolha como quer sua pizza!');
     document.getElementById('half-section').scrollIntoView({behavior:'smooth',block:'center'});
@@ -1159,7 +997,7 @@ function imConfirm() {
   }
 
   let cartName  = i.name;
-  let cartPrice = isPizza ? _pizzaCurrentBasePrice(i, _halfItem) : parseFloat(i.price);
+  let cartPrice = parseFloat(i.price);
   let cartObs   = obsComIngr;
   let cartEmoji = i.emoji;
   let cartImg   = i.image_url;
@@ -1168,20 +1006,16 @@ function imConfirm() {
     if (_isWholeFlavorSelected()) {
       // Inteira com mesmo sabor — preço normal
       cartName  = i.name;
-      cartPrice = _pizzaCurrentBasePrice(i, _halfItem);
+      cartPrice = parseFloat(i.price);
       cartObs   = obsComIngr ? `Pizza inteira · ${obsComIngr}` : 'Pizza inteira';
       cartImg   = i.image_url || null;
     } else {
+      const avgPrice = (parseFloat(i.price) + parseFloat(_halfItem.price)) / 2;
       cartName  = `${i.name} / ${_halfItem.name}`;
-      cartPrice = _pizzaCurrentBasePrice(i, _halfItem);
+      cartPrice = avgPrice;
       cartObs   = obsComIngr ? `Meio a meio · ${obsComIngr}` : 'Meio a meio';
       cartImg   = i.image_url || null;
     }
-  }
-
-  if (isPizza && _pizzaSizeKey) {
-    const sizeLabel = _pizzaSizeLabel(i);
-    if (sizeLabel) cartObs = [`Tamanho: ${sizeLabel}`, cartObs].filter(Boolean).join(' · ');
   }
 
   // ── Açougue: valida e monta descrição (só para kg, não kit) ──

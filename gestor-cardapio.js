@@ -1314,65 +1314,6 @@ function setPizzaMax(ctx, val, el) {
   // Auto-sync meio-a-meio: if max >= 2, suggest enabling it
 }
 
-const PIZZA_SIZE_DEFS = [
-  { key: 'P', nome: 'Pequena' },
-  { key: 'M', nome: 'Media' },
-  { key: 'G', nome: 'Grande' }
-];
-
-function _pizzaSizeInputId(ctx, key) {
-  return `${ctx}-pizza-price-${String(key || '').toLowerCase()}`;
-}
-
-function readPizzaSizePrices(ctx) {
-  const tamanhos = PIZZA_SIZE_DEFS.map(def => {
-    const el = document.getElementById(_pizzaSizeInputId(ctx, def.key));
-    const raw = String(el?.value || '').replace(',', '.');
-    const preco = parseFloat(raw);
-    return preco > 0 ? { key: def.key, nome: def.nome, preco } : null;
-  }).filter(Boolean);
-
-  if (!tamanhos.length) return null;
-
-  const ruleEl = document.getElementById(`${ctx}-pizza-half-rule`);
-  return {
-    tipo: 'pizza_sizes',
-    regra_meio: ruleEl?.value || 'maior',
-    tamanhos
-  };
-}
-
-function fillPizzaSizePrices(ctx, customGroups) {
-  PIZZA_SIZE_DEFS.forEach(def => {
-    const el = document.getElementById(_pizzaSizeInputId(ctx, def.key));
-    if (el) el.value = '';
-  });
-  const ruleEl = document.getElementById(`${ctx}-pizza-half-rule`);
-  if (ruleEl) ruleEl.value = 'maior';
-
-  const group = (customGroups || []).find(g => g?.tipo === 'pizza_sizes');
-  if (!group) return;
-  (group.tamanhos || []).forEach(size => {
-    const key = String(size.key || '').toUpperCase();
-    const el = document.getElementById(_pizzaSizeInputId(ctx, key));
-    const preco = parseFloat(size.preco);
-    if (el && preco > 0) el.value = preco.toFixed(2);
-  });
-  if (ruleEl && group.regra_meio) ruleEl.value = group.regra_meio;
-}
-
-function pizzaMinPriceFromGroup(group) {
-  const prices = (group?.tamanhos || []).map(s => parseFloat(s.preco)).filter(p => p > 0);
-  return prices.length ? Math.min(...prices) : 0;
-}
-
-function syncPizzaBasePrice(ctx) {
-  const group = readPizzaSizePrices(ctx);
-  const minPrice = pizzaMinPriceFromGroup(group);
-  const priceEl = document.getElementById(`${ctx}-price`);
-  if (priceEl && minPrice > 0) priceEl.value = minPrice.toFixed(2);
-}
-
 function togglePizzaOptions(ctx) {
   const typeEl    = document.getElementById(ctx+'-item-type');
   const pizzaBox  = document.getElementById(ctx+'-pizza-options');
@@ -1511,7 +1452,7 @@ async function addItem() {
   console.log('[ADD-ITEM] chamado | nome:', name);
   if (!name) { sbToast('err', 'Informe o nome do item'); return; }
 
-  let price      = parseFloat(document.getElementById('new-price').value) || 0;
+  const price    = parseFloat(document.getElementById('new-price').value) || 0;
   const priceOld = parseFloat(document.getElementById('new-price-old').value) || null;
   const catEl    = document.getElementById('new-cat');
   const catKey   = catEl ? catEl.value : '';
@@ -1526,18 +1467,8 @@ async function addItem() {
   const maxFlavors   = itemType === 'pizza' ? (parseInt(document.getElementById('new-max-flavors')?.value) || 1) : 1;
   const status       = document.getElementById('new-status').value || 'active';
   const destaque     = document.getElementById('new-destaque')?.classList.contains('on') || false;
-  const _AC_TIPOS_F  = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens','pizza_sizes'];
-  let customGroups = readGrupos('new').filter(g => !_AC_TIPOS_F.includes(g.tipo));
-
-  if (itemType === 'pizza') {
-    const pizzaSizeGroup = readPizzaSizePrices('new');
-    if (pizzaSizeGroup) {
-      customGroups = customGroups.filter(g => g.tipo !== 'pizza_sizes');
-      customGroups.unshift(pizzaSizeGroup);
-      const minPizzaPrice = pizzaMinPriceFromGroup(pizzaSizeGroup);
-      if (minPizzaPrice > 0) price = minPizzaPrice;
-    }
-  }
+  const _AC_TIPOS_F  = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
+  const customGroups = readGrupos('new').filter(g => !_AC_TIPOS_F.includes(g.tipo));
 
   // Açougue: adiciona cortes/preparos/pesos ao custom_groups (kg = tudo; kit = só info)
   const itemTypeNew = document.getElementById('new-item-type').value || 'normal';
@@ -1627,7 +1558,6 @@ async function addItem() {
   const ns = document.getElementById('new-status');            if(ns) ns.value = 'active';
   const nd = document.getElementById('new-destaque');          if(nd) nd.classList.remove('on');
   const ng = document.getElementById('new-grupos-list');       if(ng) ng.innerHTML = '';
-  fillPizzaSizePrices('new', []);
   // Limpa listas dinâmicas de açougue
   ['cortes','preparos','ocasiao','armazenamento'].forEach(t => {
     _acListState[`new-${t}`] = [];
@@ -1664,7 +1594,6 @@ function openEditItem(id) {
   document.querySelectorAll('#edit-pizza-options .pz-max-btn').forEach(b => {
     b.classList.toggle('on', parseInt(b.dataset.val) === mf);
   });
-  fillPizzaSizePrices('edit', it.customGroups || []);
 
   // Reset image file state and show existing image
   _editItemImageFile = null;
@@ -1689,7 +1618,7 @@ function openEditItem(id) {
   if (_desel) _desel.classList.toggle('on', !!it.destaque);
 
   // Tipos exclusivos do açougue — não devem aparecer como grupos genéricos
-  const _ACOUGUE_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens','pizza_sizes'];
+  const _ACOUGUE_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref'];
   const genericGroups = (it.customGroups || []).filter(g => !_ACOUGUE_TIPOS.includes(g.tipo));
   renderGrupos('edit', genericGroups);
 
@@ -1750,22 +1679,8 @@ async function saveEditItem() {
   it.maxFlavors  = it.itemType === 'pizza' ? (parseInt(document.getElementById('edit-max-flavors')?.value) || 1) : 1;
   it.destaque    = document.getElementById('edit-destaque')?.classList.contains('on') || false;
   // readGrupos retorna só grupos genéricos (radio/checkbox) — filtra resíduos de tipos açougue
-  const _AC_TIPOS_FILTER = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens','pizza_sizes'];
+  const _AC_TIPOS_FILTER = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
   it.customGroups = readGrupos('edit').filter(g => !_AC_TIPOS_FILTER.includes(g.tipo));
-
-  if (it.itemType === 'pizza') {
-    const pizzaSizeGroup = readPizzaSizePrices('edit');
-    if (pizzaSizeGroup) {
-      it.customGroups = it.customGroups.filter(g => g.tipo !== 'pizza_sizes');
-      it.customGroups.unshift(pizzaSizeGroup);
-      const minPizzaPrice = pizzaMinPriceFromGroup(pizzaSizeGroup);
-      if (minPizzaPrice > 0) {
-        it.price = minPizzaPrice;
-        const editPriceEl = document.getElementById('edit-price');
-        if (editPriceEl) editPriceEl.value = minPizzaPrice.toFixed(2);
-      }
-    }
-  }
 
   // Açougue: adiciona cortes/preparos/pesos (kg = tudo; kit = só info)
   if (it.itemType === 'kg' || it.itemType === 'kit') {
@@ -2138,7 +2053,7 @@ async function aplicarGruposEmLote() {
   if (!confirm(msg)) return;
 
   // Tipos exclusivos do açougue — nunca copiamos esses grupos em lote
-  const _AC_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens','pizza_sizes'];
+  const _AC_TIPOS = ['cortes','preparos','ocasiao','armazenamento','pesos','porcao_ref','kit_itens'];
   const gruposCopiaveis = grupos.filter(g => !_AC_TIPOS.includes(g.tipo));
   if (!gruposCopiaveis.length) {
     sbToast('err','Os grupos selecionados são exclusivos do açougue e não podem ser copiados em lote.');

@@ -307,9 +307,6 @@ function renderKanban() {
         const _waBtn = o.phone
           ? '<button class="oc-btn oc-btn-wa" title="Abrir chat WhatsApp" onclick="event.stopPropagation();abrirChatPedidoWA(' + o.id + ')" style="display:inline-flex;align-items:center;justify-content:center;gap:5px;background:rgba(37,211,102,.12);color:#16a34a;border:1px solid rgba(37,211,102,.28)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><path d="M13.5 8a5.5 5.5 0 1 1-9.2-4.1L3 2l2 .9A5.5 5.5 0 0 1 13.5 8Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6.2 6.1c.2 1.4 1.7 3 3.1 3.4l.6-.5c.2-.1.4-.1.6 0l1 .8c.2.2.2.5 0 .7-.7.7-2 .8-3.2.1-1.3-.7-2.5-2-3-3.4-.4-1.2-.1-2.3.5-2.8.2-.2.5-.2.7 0l.8 1c.1.2.1.4 0 .6l-.5.6Z" fill="currentColor"/></svg><span>WhatsApp</span></button>'
           : '';
-        const _chatBtn = o.phone
-          ? '<button class="oc-btn oc-btn-chat" title="Abrir chat do pedido" onclick="event.stopPropagation();if(window.gestorChatOpenOrder)gestorChatOpenOrder(' + o.id + ')" style="display:inline-flex;align-items:center;justify-content:center;gap:5px;background:rgba(14,165,233,.12);color:#0ea5e9;border:1px solid rgba(14,165,233,.28)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><path d="M3 4.5A2.5 2.5 0 0 1 5.5 2h5A2.5 2.5 0 0 1 13 4.5v3A2.5 2.5 0 0 1 10.5 10H8l-3.2 2.4c-.5.4-1.3 0-1.3-.7V10A2.5 2.5 0 0 1 1 7.5v-3Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 5.2h6M5 7.4h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg><span>Chat</span></button>'
-          : '';
 
         // Notificação de resposta WA do cliente
         const _waNotif = o._waResposta
@@ -332,7 +329,7 @@ function renderKanban() {
           (o.addr && !isMesa ? '<span class="oc-addr">' + o.addr + '</span>' : '') +
           '</div>' +
           _pagBadge +
-          '<div class="oc-actions">' + _chatBtn + _waBtn + actionBtn + '</div>' +
+          '<div class="oc-actions">' + _waBtn + actionBtn + '</div>' +
           '</div>';
       }).join('');
     }
@@ -754,8 +751,6 @@ function openOrderDetail(id) {
   const setEl = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v || ''; };
   setEl('od-client-name', o.client || 'Não informado');
   setEl('od-client-phone', o.phone || '');
-  const _odChatAction = document.getElementById('od-chat-action');
-  if (_odChatAction) _odChatAction.style.display = o.phone ? 'flex' : 'none';
 
   // Tipo de entrega (helper unificado)
   const _tipoDet = (window._detectOrderType ? window._detectOrderType(o) : 'delivery');

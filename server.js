@@ -139,34 +139,6 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
   );
-  CREATE TABLE IF NOT EXISTS chat_threads (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    order_id INTEGER NOT NULL,
-    order_num INTEGER,
-    client TEXT,
-    phone TEXT NOT NULL,
-    status TEXT DEFAULT 'open',
-    last_message TEXT,
-    last_sender TEXT,
-    last_at TEXT DEFAULT (datetime('now')),
-    unread_store INTEGER DEFAULT 0,
-    unread_client INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
-    UNIQUE(tenant_id, order_id)
-  );
-  CREATE TABLE IF NOT EXISTS chat_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    thread_id INTEGER NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
-    order_id INTEGER NOT NULL,
-    sender TEXT NOT NULL,
-    author_name TEXT,
-    body TEXT NOT NULL,
-    kind TEXT DEFAULT 'text',
-    created_at TEXT DEFAULT (datetime('now'))
-  );
   CREATE TABLE IF NOT EXISTS movimentos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -267,10 +239,6 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_orders_tenant     ON orders(tenant_id);
   CREATE INDEX IF NOT EXISTS idx_orders_status     ON orders(tenant_id, status);
   CREATE INDEX IF NOT EXISTS idx_orders_phone      ON orders(tenant_id, phone);
-  CREATE INDEX IF NOT EXISTS idx_chat_threads_tenant_last ON chat_threads(tenant_id, last_at);
-  CREATE INDEX IF NOT EXISTS idx_chat_threads_order ON chat_threads(tenant_id, order_id);
-  CREATE INDEX IF NOT EXISTS idx_chat_threads_phone ON chat_threads(tenant_id, phone);
-  CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages(tenant_id, thread_id, id);
   CREATE INDEX IF NOT EXISTS idx_menu_tenant       ON menu_items(tenant_id);
   CREATE INDEX IF NOT EXISTS idx_mesas_tenant      ON mesas(tenant_id);
   CREATE INDEX IF NOT EXISTS idx_fidelidade_tenant ON fidelidade(tenant_id);
@@ -840,40 +808,6 @@ const MIGRATIONS = [
      WHERE status='aguardando_cartao'
         OR (status='aguardando_pix' AND COALESCE(pag,'')!='pix_manual')`
   },
-  { version:63, description:'chat interno por pedido e tenant', up:[
-    `CREATE TABLE IF NOT EXISTS chat_threads (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-      order_id INTEGER NOT NULL,
-      order_num INTEGER,
-      client TEXT,
-      phone TEXT NOT NULL,
-      status TEXT DEFAULT 'open',
-      last_message TEXT,
-      last_sender TEXT,
-      last_at TEXT DEFAULT (datetime('now')),
-      unread_store INTEGER DEFAULT 0,
-      unread_client INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
-      UNIQUE(tenant_id, order_id)
-    )`,
-    `CREATE TABLE IF NOT EXISTS chat_messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-      thread_id INTEGER NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
-      order_id INTEGER NOT NULL,
-      sender TEXT NOT NULL,
-      author_name TEXT,
-      body TEXT NOT NULL,
-      kind TEXT DEFAULT 'text',
-      created_at TEXT DEFAULT (datetime('now'))
-    )`,
-    `CREATE INDEX IF NOT EXISTS idx_chat_threads_tenant_last ON chat_threads(tenant_id, last_at)`,
-    `CREATE INDEX IF NOT EXISTS idx_chat_threads_order ON chat_threads(tenant_id, order_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_chat_threads_phone ON chat_threads(tenant_id, phone)`,
-    `CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages(tenant_id, thread_id, id)`
-  ] },
 ]
 
 function runMigrations() {
@@ -955,7 +889,6 @@ try {
 const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_items',
   'cupons','mesas','garcons','orders','movimentos','estoque','estoque_receitas','estoque_movimentos','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress',
   'entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens','order_status_history',
-  'chat_threads','chat_messages',
   'indicadores','leads_indicacao','comissoes','indicador_tutorial_videos','indicador_tutorial_progress','admin_alerts','plano_assinaturas']
   // wa_messages excluída — pode conter muita mídia e estourar JSON.stringify
 
@@ -1835,7 +1768,6 @@ async function handleREST(req, res, table, params, body) {
         else inserted = parsedForEmit
       }
       if (SSE_TABLES.has(table)) emit(tenantId||payload.tenant_id, table, parsedForEmit||payload, 'INSERT')
-      if (table === 'orders' && rawForEmit) chatNotifyOrderCreated(rawForEmit)
 
       // Notificacao "Pedido Recebido" na criacao do pedido.
       // Para pix_manual, o bloco pix_cobranca abaixo ja envia a comanda com itens/total
@@ -1978,9 +1910,6 @@ async function handleREST(req, res, table, params, body) {
           const updatedRow = db.prepare(`SELECT * FROM "${table}" WHERE "id"=?`).get(_rid);
           if (updatedRow) {
             if (_reavaliarEstoque) aplicarBaixaEstoquePedido(updatedRow.tenant_id || tenantId || payload.tenant_id, updatedRow, _statusAntesMap.has(_rid) ? 'rest-patch' : 'rest-patch-items')
-            if (table === 'orders' && _statusAntesMap.has(_rid) && _statusAntesMap.get(_rid) !== updatedRow.status) {
-              chatNotifyOrderStatus(updatedRow.tenant_id || tenantId || payload.tenant_id, updatedRow, _statusAntesMap.get(_rid), updatedRow.status)
-            }
             emit(tenantId||payload.tenant_id, table, parseRow(table, updatedRow), 'UPDATE');
           }
         }
@@ -1988,9 +1917,6 @@ async function handleREST(req, res, table, params, body) {
         // Fallback: tenta re-SELECT com WHERE original
         const updatedRow = db.prepare(`SELECT * FROM "${table}" ${WHERE} LIMIT 1`).get(...vals);
         if (updatedRow && _reavaliarEstoque) aplicarBaixaEstoquePedido(updatedRow.tenant_id || tenantId || payload.tenant_id, updatedRow, 'rest-patch')
-        if (table === 'orders' && updatedRow && Object.prototype.hasOwnProperty.call(payload, 'status')) {
-          chatNotifyOrderStatus(updatedRow.tenant_id || tenantId || payload.tenant_id, updatedRow, null, updatedRow.status)
-        }
         emit(tenantId||payload.tenant_id, table, updatedRow?parseRow(table,updatedRow):payload, 'UPDATE');
       }
 
@@ -2373,197 +2299,6 @@ function registrarStatusPedido(tid, orderId, oldStatus, newStatus, meta = {}) {
   }
 }
 
-function chatNormalizePhone(value) {
-  return String(value || '').replace(/\D/g, '')
-}
-
-function chatPhoneMatches(saved, incoming) {
-  const a = chatNormalizePhone(saved)
-  const b = chatNormalizePhone(incoming)
-  if (!a || !b) return false
-  return a === b || a.slice(-8) === b.slice(-8)
-}
-
-function chatStatusLabel(status) {
-  return ({
-    aguardando_pix: 'Aguardando PIX',
-    aguardando_cartao: 'Aguardando cartao',
-    analise: 'Em analise',
-    producao: 'Em preparo',
-    pronto: 'Pedido pronto',
-    saiu: 'Saiu para entrega',
-    entregue: 'Entregue',
-    finalizado: 'Finalizado',
-    cancelado: 'Cancelado',
-    mesa_aberta: 'Mesa aberta'
-  })[String(status || '')] || String(status || 'Status')
-}
-
-function chatOrderItemsText(order) {
-  try {
-    const items = Array.isArray(order?.items) ? order.items : JSON.parse(order?.items || '[]')
-    return (items || [])
-      .filter(i => i && i.item_status !== 'cancelado' && i.status !== 'cancelado')
-      .map(i => {
-        const qty = i.qty || i.quantity || 1
-        const name = i.name || i.nome || 'Item'
-        const obs = String(i.obs || '').trim()
-        return obs ? `${qty}x ${name} (${obs})` : `${qty}x ${name}`
-      })
-      .join(', ')
-  } catch {
-    return ''
-  }
-}
-
-function chatOrderPublic(order) {
-  if (!order) return null
-  const num = order.order_num || order.id
-  return {
-    id: order.id,
-    order_num: order.order_num || null,
-    num,
-    client: order.client || '',
-    phone: order.phone || '',
-    addr: order.addr || '',
-    status: order.status || '',
-    status_label: chatStatusLabel(order.status),
-    pag: order.pag || '',
-    total: parseFloat(order.total || 0),
-    taxa: parseFloat(order.taxa || 0),
-    items_text: chatOrderItemsText(order),
-    created_at: order.created_at || null,
-    updated_at: order.updated_at || null
-  }
-}
-
-function chatThreadPublic(thread, order = null) {
-  if (!thread) return null
-  return {
-    id: thread.id,
-    tenant_id: thread.tenant_id,
-    order_id: thread.order_id,
-    order_num: thread.order_num || null,
-    client: thread.client || '',
-    phone: thread.phone || '',
-    status: thread.status || 'open',
-    last_message: thread.last_message || '',
-    last_sender: thread.last_sender || '',
-    last_at: thread.last_at || thread.updated_at || thread.created_at || null,
-    unread_store: parseInt(thread.unread_store || 0),
-    unread_client: parseInt(thread.unread_client || 0),
-    created_at: thread.created_at || null,
-    updated_at: thread.updated_at || null,
-    order: order ? chatOrderPublic(order) : null
-  }
-}
-
-function chatMessagePublic(row) {
-  if (!row) return null
-  return {
-    id: row.id,
-    tenant_id: row.tenant_id,
-    thread_id: row.thread_id,
-    order_id: row.order_id,
-    sender: row.sender,
-    author_name: row.author_name || '',
-    body: row.body || '',
-    kind: row.kind || 'text',
-    created_at: row.created_at || null
-  }
-}
-
-function chatEnsureThreadFromOrder(order, override = {}) {
-  if (!order?.tenant_id || !order?.id) return null
-  const phone = chatNormalizePhone(override.phone || order.phone)
-  if (!phone) return null
-  const client = String(override.client || order.client || '').trim()
-  db.prepare(`INSERT INTO chat_threads
-    (tenant_id, order_id, order_num, client, phone, updated_at)
-    VALUES (?,?,?,?,?,datetime('now'))
-    ON CONFLICT(tenant_id, order_id) DO UPDATE SET
-      order_num=COALESCE(excluded.order_num, chat_threads.order_num),
-      client=CASE WHEN excluded.client!='' THEN excluded.client ELSE chat_threads.client END,
-      phone=CASE WHEN excluded.phone!='' THEN excluded.phone ELSE chat_threads.phone END,
-      updated_at=datetime('now')`)
-    .run(order.tenant_id, order.id, order.order_num || null, client, phone)
-  return db.prepare('SELECT * FROM chat_threads WHERE tenant_id=? AND order_id=?').get(order.tenant_id, order.id)
-}
-
-function chatBroadcastMessage(thread, message, order = null) {
-  if (!thread || !message) return
-  const payload = {
-    thread: chatThreadPublic(thread, order),
-    message: chatMessagePublic(message),
-    order: chatOrderPublic(order)
-  }
-  const tid = thread.tenant_id
-  sseBroadcast(`chat-rt:${tid}`, 'chat:message', payload)
-  const phone = chatNormalizePhone(thread.phone)
-  if (phone) sseBroadcast(`chat-client:${tid}:${thread.order_id}:${phone}`, 'chat:message', payload)
-}
-
-function chatAddMessageFromOrder(order, opts = {}) {
-  if (!order?.tenant_id || !order?.id) return null
-  const body = String(opts.body || '').trim()
-  if (!body) return null
-  try {
-    const thread = chatEnsureThreadFromOrder(order, opts)
-    if (!thread) return null
-    const sender = ['client','store','system'].includes(opts.sender) ? opts.sender : 'system'
-    const kind = ['text','status','system'].includes(opts.kind) ? opts.kind : 'text'
-    if (opts.skipDuplicate) {
-      const dup = db.prepare(`SELECT id FROM chat_messages
-        WHERE tenant_id=? AND order_id=? AND sender=? AND kind=? AND body=?
-        ORDER BY id DESC LIMIT 1`).get(order.tenant_id, order.id, sender, kind, body)
-      if (dup) return null
-    }
-    const author = String(opts.author_name || '').trim()
-    const ins = db.prepare(`INSERT INTO chat_messages
-      (tenant_id, thread_id, order_id, sender, author_name, body, kind)
-      VALUES (?,?,?,?,?,?,?)`)
-      .run(order.tenant_id, thread.id, order.id, sender, author, body.slice(0, 1200), kind)
-    const msg = db.prepare('SELECT * FROM chat_messages WHERE id=?').get(ins.lastInsertRowid)
-    const incStore = sender === 'client' ? 1 : 0
-    const incClient = sender === 'client' ? 0 : 1
-    db.prepare(`UPDATE chat_threads
-      SET last_message=?, last_sender=?, last_at=datetime('now'), updated_at=datetime('now'),
-          unread_store=COALESCE(unread_store,0)+?,
-          unread_client=COALESCE(unread_client,0)+?
-      WHERE id=? AND tenant_id=?`)
-      .run(msg.body, sender, incStore, incClient, thread.id, order.tenant_id)
-    const updatedThread = db.prepare('SELECT * FROM chat_threads WHERE id=? AND tenant_id=?').get(thread.id, order.tenant_id)
-    marcarDirty()
-    chatBroadcastMessage(updatedThread, msg, order)
-    return { thread: updatedThread, message: msg }
-  } catch(e) {
-    log('WARN', 'Chat interno falhou:', e.message)
-    return null
-  }
-}
-
-function chatNotifyOrderCreated(order) {
-  if (!order?.phone) return null
-  const num = order.order_num || order.id
-  return chatAddMessageFromOrder(order, {
-    sender: 'system',
-    kind: 'status',
-    body: `Pedido #${num} recebido pela loja.`,
-    skipDuplicate: true
-  })
-}
-
-function chatNotifyOrderStatus(tid, order, oldStatus, newStatus) {
-  if (!order?.phone || !newStatus || oldStatus === newStatus) return null
-  const num = order.order_num || order.id
-  return chatAddMessageFromOrder({ ...order, tenant_id: order.tenant_id || tid, status: newStatus }, {
-    sender: 'system',
-    kind: 'status',
-    body: `Pedido #${num} atualizado: ${chatStatusLabel(newStatus)}.`,
-    skipDuplicate: true
-  })
-}
-
 const STATUS_BAIXA_ESTOQUE = new Set(['producao','pronto','saiu','entregue','finalizado'])
 
 function _estoqueNum(v, fallback = 0) {
@@ -2729,7 +2464,6 @@ async function handleOrderStatus(req, res) {
     })
     const updated = db.prepare("SELECT * FROM orders WHERE id=? AND tenant_id=?").get(order_id,tid)
     aplicarBaixaEstoquePedido(tid, updated, body.origem || 'kanban')
-    chatNotifyOrderStatus(tid, updated, oldStatus, new_status)
     emit(tid,'orders',parseRow('orders',updated),'UPDATE')
     send(res,200,{ok:true,order:parseRow('orders',updated)})
 
@@ -4037,9 +3771,7 @@ const server = http.createServer(async (req,res) => {
     validarSessaoAdmin, criarSessaoAdmin, validarFinanceAccess, fazerBackup, restaurarBackup, getTenantId,
     MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
     EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano,
-    aplicarBaixaEstoquePedido,
-    chatNormalizePhone, chatPhoneMatches, chatStatusLabel, chatOrderPublic, chatThreadPublic, chatMessagePublic,
-    chatEnsureThreadFromOrder, chatAddMessageFromOrder }
+    aplicarBaixaEstoquePedido }
   try {
     if (await handleRoutes(req, res, _routeCtx)) return
   } catch(e) {
