@@ -1430,6 +1430,44 @@ function _subscribeOrdersSSE() {
 
   _ordersSSE = new EventSource(`/sse/orders-rt:${tid}`);
 
+  _ordersSSE.addEventListener('orders:INSERT', (e) => {
+    try {
+      const order = JSON.parse(e.data);
+      if (!order || !order.id) return;
+      if (order.status === 'aguardando_cartao' || (order.status === 'aguardando_pix' && order.pag !== 'pix_manual')) {
+        pendingOnlineOrders = [order, ...pendingOnlineOrders.filter(o => o.id !== order.id)];
+        if (order.id > _maxKnownOrderId) { _maxKnownOrderId = order.id; _saveMaxKnownOrderId(); }
+        if (typeof renderPendingPaymentsAlert === 'function') renderPendingPaymentsAlert();
+        return;
+      }
+      if (order.status === 'entregue') return;
+      const items = typeof order.items === 'string' ? (() => { try { return JSON.parse(order.items); } catch { return []; } })() : (order.items || []);
+      if (order.status === 'mesa_aberta') {
+        const mappedMesa = mapOrder({ ...order, items });
+        _patchOrderInCache(mappedMesa);
+        _renderMesaPageFromCache();
+        renderKanban();
+        return;
+      }
+      if (!ordersKanban.find(x => x.id === order.id)) {
+        const mapped = mapOrder({ ...order, items });
+        if (mapped.status === 'aguardando_pix') mapped._pixPendente = true;
+        ordersKanban.unshift(mapped);
+        if (order.id > _maxKnownOrderId) { _maxKnownOrderId = order.id; _saveMaxKnownOrderId(); }
+        renderKanban();
+        playOrderSound();
+        if (!order.mesa_num) _startPersistentAlert();
+        const nc = document.getElementById('notif-count');
+        if (nc) { nc.style.display = 'flex'; nc.textContent = parseInt(nc.textContent || 0) + 1; }
+        const itemsList = Array.isArray(items) ? items.map(i => `${i.qty}x ${i.name}`).join(', ') : '';
+        showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 2a5 5 0 0 1 5 5v3l1 2H2l1-2V7a5 5 0 0 1 5-5z" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.4"/></svg>', `Novo pedido #${_orderNum(order.id, order.order_num)} - ${order.client}`);
+        sendBrowserNotif(`Novo pedido #${_orderNum(order.id, order.order_num)}`, `${order.client} - ${itemsList}`);
+        if (_autoAcceptOn && mapped.status === 'analise') setTimeout(() => advanceOrderById(order.id), 800);
+        if ((window._printMode || _printMode) === 'auto') printOrder(mapped);
+      }
+    } catch(err) { console.error('[ORDERS-SSE INSERT] error:', err); }
+  });
+
   _ordersSSE.addEventListener('orders:UPDATE', (e) => {
     try {
       const order = JSON.parse(e.data);

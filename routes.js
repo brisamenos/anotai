@@ -1005,17 +1005,188 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (/\b(debito)\b/.test(n)) return 'debito'
     return ''
   }
-  const _chatDeliveryFee = (tid, deliveryType, addr) => {
-    if (deliveryType !== 'delivery') return 0
+  const _chatDeliveryCfg = (tid) => {
     try {
       const cfgRow = db.prepare('SELECT delivery_fee_config FROM store_config WHERE tenant_id=?').get(tid)
-      const cfg = _chatJson(cfgRow?.delivery_fee_config, {})
+      return _chatJson(cfgRow?.delivery_fee_config, {})
+    } catch { return {} }
+  }
+  const _chatLev = (a, b) => {
+    a = _chatNorm(a); b = _chatNorm(b)
+    const m = Array.from({ length: a.length + 1 }, (_, i) => [i])
+    for (let j = 1; j <= b.length; j++) m[0][j] = j
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        m[i][j] = a[i - 1] === b[j - 1]
+          ? m[i - 1][j - 1]
+          : Math.min(m[i - 1][j - 1] + 1, m[i][j - 1] + 1, m[i - 1][j] + 1)
+      }
+    }
+    return m[a.length][b.length]
+  }
+  const _chatAddrCandidates = (text) => {
+    const raw = String(text || '')
+    const parts = raw.split(/[,;\n]/).map(s => s.trim()).filter(Boolean)
+    const out = [...parts]
+    const bairro = raw.match(/\bbairro\s+([^,;\n]+)/i)
+    if (bairro) out.unshift(bairro[1].trim())
+    return [...new Set(out.concat(raw.trim()).filter(Boolean))]
+  }
+  const _chatMatchBairro = (text, bairrosLista) => {
+    if (!text || !Array.isArray(bairrosLista) || !bairrosLista.length) return null
+    const full = _chatNorm(text)
+    for (const b of bairrosLista) {
+      const bn = _chatNorm(b?.bairro || b)
+      if (bn && new RegExp(`(^|\\s)${bn.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}(\\s|$)`).test(full)) return b
+    }
+    const cands = _chatAddrCandidates(text)
+    for (const cand of cands) {
+      const cn = _chatNorm(cand)
+      const exact = bairrosLista.find(b => _chatNorm(b?.bairro || b) === cn)
+      if (exact) return exact
+      const subset = bairrosLista.filter(b => {
+        const bn = _chatNorm(b?.bairro || b)
+        return bn && (bn.includes(cn) || cn.includes(bn))
+      })
+      if (subset.length === 1) return subset[0]
+    }
+    const scored = []
+    for (const cand of cands) {
+      const cn = _chatNorm(cand)
+      if (!cn || cn.length < 4) continue
+      bairrosLista.forEach(b => scored.push({ b, d: _chatLev(cn, b?.bairro || b) }))
+    }
+    scored.sort((a,b) => a.d - b.d)
+    const best = scored[0], second = scored[1]
+    if (best) {
+      const size = Math.min(_chatNorm(best.b?.bairro || best.b).length, Math.max(...cands.map(c => _chatNorm(c).length)))
+      const tol = size >= 5 ? 2 : 1
+      if (best.d <= tol && (!second || second.d > best.d)) return best.b
+    }
+    return null
+  }
+  const _chatBairroSuggestions = (text, bairrosLista) => {
+    if (!Array.isArray(bairrosLista) || !bairrosLista.length) return ''
+    const cands = _chatAddrCandidates(text)
+    const base = cands[cands.length - 1] || text
+    return bairrosLista
+      .map(b => ({ nome: b?.bairro || String(b || ''), d: _chatLev(base, b?.bairro || b) }))
+      .filter(x => x.nome)
+      .sort((a,b) => a.d - b.d)
+      .slice(0, 3)
+      .map(x => x.nome)
+      .join(', ')
+  }
+  const _chatHasNumber = (text) => /\b(n|num|numero|nº|no)?\s*\d{1,6}[a-z]?\b/i.test(String(text || ''))
+  const _chatHasReference = (text) => /\b(ref|referencia|ponto|perto|proximo|proxima|ao lado|em frente|casa|apto|apartamento|bloco|condominio|portao|esquina)\b/i.test(_chatNorm(text))
+  const _chatGeoFromText = (text) => {
+    const raw = String(text || '')
+    const lat = raw.match(/latitude:\s*(-?\d+(?:[\.,]\d+)?)/i)
+    const lng = raw.match(/longitude:\s*(-?\d+(?:[\.,]\d+)?)/i)
+    if (!lat || !lng) return null
+    const dist = raw.match(/distancia da loja:\s*([\d\.,]+)/i)
+    const addr = raw.match(/endereco aproximado:\s*([^\n]+)/i)
+    return {
+      lat: parseFloat(lat[1].replace(',', '.')),
+      lng: parseFloat(lng[1].replace(',', '.')),
+      dist: dist ? parseFloat(dist[1].replace(',', '.')) : null,
+      approx: addr ? addr[1].trim().slice(0, 180) : ''
+    }
+  }
+  const _chatKmTaxa = (cfg, dist) => {
+    const faixas = Array.isArray(cfg?.faixas) ? cfg.faixas : []
+    if (!faixas.length || !(dist >= 0)) return { ok: false, taxa: 0, msg: 'Nao consegui calcular a distancia. Toque em "Enviar localizacao" para confirmar.' }
+    const sorted = faixas.slice().sort((a,b) => (parseFloat(a.ate_km || 0) || 0) - (parseFloat(b.ate_km || 0) || 0))
+    const found = sorted.find(f => dist <= (parseFloat(f.ate_km || 0) || 0) + 0.001)
+    if (!found) {
+      const max = parseFloat(sorted[sorted.length - 1]?.ate_km || 0) || 0
+      return { ok: false, taxa: 0, msg: `A localizacao ficou a ${String(dist.toFixed(1)).replace('.', ',')} km, fora da area de entrega da loja (ate ${String(max).replace('.', ',')} km).` }
+    }
+    return { ok: true, taxa: parseFloat(found.taxa || 0) || 0, faixa: found }
+  }
+  const _chatAddressPrompt = (tid) => {
+    const cfg = _chatDeliveryCfg(tid)
+    if (cfg?.tipo === 'por_km') {
+      return 'Para calcular a entrega por distancia, toque em "Enviar localizacao". Depois me envie numero da casa/apto e ponto de referencia. Se a rua nao vier automaticamente, envie tambem a rua.'
+    }
+    if (cfg?.tipo === 'por_bairro') {
+      const bairros = Array.isArray(cfg.bairros) ? cfg.bairros.map(b => b.bairro).filter(Boolean).slice(0, 6).join(', ') : ''
+      return `Me envie rua, numero, bairro e ponto de referencia. Vou conferir o bairro cadastrado para aplicar a taxa correta.${bairros ? '\nBairros atendidos: ' + bairros + (cfg.bairros.length > 6 ? ', ...' : '') : ''}`
+    }
+    return 'Me envie o endereco completo com rua, numero, bairro e ponto de referencia.'
+  }
+  const _chatValidateDeliveryAddress = (tid, text, draft) => {
+    const cfg = _chatDeliveryCfg(tid)
+    let raw = String(text || '').trim().slice(0, 260)
+    draft.meta = draft.meta || {}
+    if (draft.meta.pending_addr_raw && raw && !_chatHasNumber(raw) && raw.length <= 80) {
+      raw = `${draft.meta.pending_addr_raw}, Bairro: ${raw}`.slice(0, 260)
+      draft.meta.pending_addr_raw = null
+    }
+    if (cfg?.delivery_pausado) return { ok: false, ask: 'Delivery esta temporariamente pausado pela loja. Posso seguir como retirada ou mesa?' }
+
+    const bloqueados = Array.isArray(cfg?.bairros_bloqueados) ? cfg.bairros_bloqueados : []
+    const rawNorm = _chatNorm(raw)
+    const blocked = bloqueados.find(b => {
+      const bn = _chatNorm(b)
+      return bn && new RegExp(`(^|\\s)${bn.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}(\\s|$)`).test(rawNorm)
+    })
+    if (blocked) return { ok: false, ask: `Infelizmente a loja nao atende o bairro ${blocked}. Posso mudar para retirada ou mesa?` }
+
+    if (cfg?.tipo === 'por_km') {
+      const geo = _chatGeoFromText(raw)
+      if (geo) {
+        draft.meta.geo = geo
+        const km = _chatKmTaxa(cfg, geo.dist)
+        if (!km.ok) return { ok: false, ask: km.msg }
+        draft.meta.delivery_taxa = km.taxa
+        return { ok: false, ask: `Localizacao recebida. Distancia: ${String((geo.dist || 0).toFixed(1)).replace('.', ',')} km. Taxa: R$ ${_chatFmt(km.taxa)}.\nAgora envie numero da casa/apto e ponto de referencia. Exemplo: "numero 123, casa azul, perto da praca".` }
+      }
+      if (!draft.meta.geo) return { ok: false, ask: _chatAddressPrompt(tid) }
+      if (!_chatHasNumber(raw)) return { ok: false, ask: 'Falta o numero da casa/apto. Envie o numero para eu completar o endereco.' }
+      if (!_chatHasReference(raw)) return { ok: false, ask: 'Falta um ponto de referencia. Envie uma referencia para a entrega chegar certinha.' }
+      const approx = draft.meta.geo.approx || ''
+      const addr = [approx, raw, draft.meta.geo.dist != null ? `GPS: ${String(draft.meta.geo.dist.toFixed(1)).replace('.', ',')} km` : 'GPS confirmado'].filter(Boolean).join(', ')
+      return { ok: true, addr: addr.slice(0, 260), taxa: parseFloat(draft.meta.delivery_taxa || 0) || 0 }
+    }
+
+    if (!_chatHasNumber(raw)) return { ok: false, ask: 'Falta o numero. Me envie rua, numero, bairro e ponto de referencia.' }
+    if (!_chatHasReference(raw)) return { ok: false, ask: 'Falta o ponto de referencia. Envie uma referencia para evitar erro na entrega.' }
+
+    if (cfg?.tipo === 'por_bairro') {
+      const bairros = Array.isArray(cfg.bairros) ? cfg.bairros : []
+      if (bairros.length) {
+        const match = _chatMatchBairro(raw, bairros)
+        if (!match) {
+          draft.meta.pending_addr_raw = raw
+          const sug = _chatBairroSuggestions(raw, bairros)
+          return { ok: false, ask: sug ? `Nao encontrei esse bairro na area da loja. Voce quis dizer: ${sug}? Envie o endereco com o bairro correto.` : 'Nao encontrei esse bairro na area da loja. Confira o nome do bairro ou fale com a loja.' }
+        }
+        draft.meta.pending_addr_raw = null
+        draft.meta.delivery_bairro = match.bairro || ''
+        draft.meta.delivery_taxa = parseFloat(match.taxa || 0) || 0
+        const bn = _chatNorm(match.bairro || '')
+        const addr = bn && !_chatNorm(raw).includes(bn) ? `${raw}, Bairro: ${match.bairro}` : raw
+        return { ok: true, addr: addr.slice(0, 260), taxa: parseFloat(match.taxa || 0) || 0, bairro: match.bairro || '' }
+      }
+    }
+
+    return { ok: true, addr: raw, taxa: cfg?.tipo === 'fixo' ? (parseFloat(cfg.valor || 0) || 0) : 0 }
+  }
+  const _chatDeliveryFee = (tid, deliveryType, addr, draft = null) => {
+    if (deliveryType !== 'delivery') return 0
+    try {
+      if (draft?.meta?.delivery_taxa != null) return parseFloat(draft.meta.delivery_taxa || 0) || 0
+      const cfg = _chatDeliveryCfg(tid)
       if (cfg?.delivery_pausado) return null
       if (cfg?.tipo === 'fixo') return parseFloat(cfg.valor || 0) || 0
       if (cfg?.tipo === 'por_bairro' && Array.isArray(cfg.bairros)) {
-        const a = _chatNorm(addr)
-        const found = cfg.bairros.find(b => b?.bairro && a.includes(_chatNorm(b.bairro)))
+        const found = _chatMatchBairro(addr, cfg.bairros)
         if (found) return parseFloat(found.taxa || 0) || 0
+      }
+      if (cfg?.tipo === 'por_km' && draft?.meta?.geo?.dist != null) {
+        const km = _chatKmTaxa(cfg, parseFloat(draft.meta.geo.dist || 0))
+        return km.ok ? km.taxa : null
       }
     } catch {}
     return 0
@@ -1025,13 +1196,22 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!items.length) throw new Error('Carrinho vazio')
     const deliveryType = draft.delivery_type || 'retirada'
     const mesaNum = String(draft.addr || '').replace(/\D/g,'')
-    const addr = deliveryType === 'delivery'
+    let addr = deliveryType === 'delivery'
       ? String(draft.addr || '').trim()
       : deliveryType === 'mesa'
         ? (mesaNum ? ('Mesa ' + mesaNum) : 'Mesa')
         : 'Retirada no balcao'
     if (deliveryType === 'delivery' && !addr) throw new Error('Endereco obrigatorio')
-    const taxa = _chatDeliveryFee(tid, deliveryType, addr)
+    if (deliveryType === 'delivery') {
+      const checked = _chatValidateDeliveryAddress(tid, addr, draft)
+      if (!checked.ok) throw new Error(checked.ask || 'Endereco incompleto')
+      addr = checked.addr || addr
+      if (checked.taxa != null) {
+        draft.meta = draft.meta || {}
+        draft.meta.delivery_taxa = checked.taxa
+      }
+    }
+    const taxa = _chatDeliveryFee(tid, deliveryType, addr, draft)
     if (taxa === null) throw new Error('Delivery pausado pela loja')
     const subtotal = items.reduce((s,i)=>s+(parseFloat(i.price||0)*(parseInt(i.qty||1)||1)),0)
     const total = subtotal + (parseFloat(taxa || 0) || 0)
@@ -1062,7 +1242,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       SET order_id=?, order_num=?, updated_at=datetime('now')
       WHERE id=? AND tenant_id=?`).run(order.id, order.order_num || null, thread.id, tid)
     db.prepare(`UPDATE order_chat_drafts
-      SET status='submitted', step='done', updated_at=datetime('now')
+      SET items='[]', delivery_type=NULL, addr=NULL, pag=NULL, step='items', status='draft', meta='{}', updated_at=datetime('now')
       WHERE tenant_id=? AND thread_id=?`).run(tid, thread.id)
     marcarDirty()
     return db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(order.id, tid)
@@ -1106,6 +1286,20 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!draft) return
     draft.phone = phone
     draft.client = draft.client || thread.client || ''
+    if (/\b(alterar|mudar|trocar|corrigir|editar)\b.*\b(endereco|bairro|localizacao|localizacao|entrega)\b/.test(n)) {
+      if (order && !draft.items.length) {
+        _chatPauseBot(tid, phone)
+        _chatAddBot(thread, 'Para alterar endereco de um pedido ja enviado, vou deixar a loja confirmar por aqui para evitar erro na entrega.', order)
+        return
+      }
+      draft.delivery_type = 'delivery'
+      draft.addr = null
+      draft.step = 'addr'
+      draft.meta = Object.assign({}, draft.meta || {}, { delivery_taxa: null, delivery_bairro: null, geo: null })
+      _chatSaveDraft(draft)
+      _chatAddBot(thread, _chatAddressPrompt(tid), order)
+      return
+    }
     if (draft.meta?.pending_addons && _chatHandlePendingAddons(tid, thread, draft, text, order)) return
     if (/\b(cancelar|limpar|recomecar|zerar)\b/.test(n)) {
       _chatClearDraft(draft)
@@ -1126,7 +1320,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         if (mesa) draft.addr = mesa[1]
       }
       _chatSaveDraft(draft)
-      if (delivery === 'delivery') _chatAddBot(thread, 'Perfeito. Me envie o endereco completo com rua, numero, bairro e referencia.', order)
+      if (delivery === 'delivery') _chatAddBot(thread, _chatAddressPrompt(tid), order)
       else _chatAddBot(thread, 'Certo. Qual sera a forma de pagamento? Pode ser Pix, dinheiro, credito ou debito.', order)
       return
     }
@@ -1140,11 +1334,21 @@ module.exports = async function handleRoutes(req, res, ctx) {
       return
     }
 
-    if ((draft.step === 'addr' || draft.delivery_type === 'delivery') && draft.items.length && !draft.addr && text.length >= 8) {
-      draft.addr = text.slice(0, 240)
+    if ((draft.step === 'addr' || draft.delivery_type === 'delivery') && draft.items.length && !draft.addr && text.length >= 4) {
+      const checked = _chatValidateDeliveryAddress(tid, text, draft)
+      _chatSaveDraft(draft)
+      if (!checked.ok) {
+        _chatAddBot(thread, checked.ask || _chatAddressPrompt(tid), order)
+        return
+      }
+      draft.addr = checked.addr || text.slice(0, 240)
+      draft.meta = draft.meta || {}
+      if (checked.taxa != null) draft.meta.delivery_taxa = checked.taxa
+      if (checked.bairro) draft.meta.delivery_bairro = checked.bairro
       draft.step = 'payment'
       _chatSaveDraft(draft)
-      _chatAddBot(thread, 'Endereco anotado. Qual sera a forma de pagamento? Pode ser Pix, dinheiro, credito ou debito.', order)
+      const taxaMsg = checked.taxa != null ? ` Taxa de entrega: R$ ${_chatFmt(checked.taxa)}.` : ''
+      _chatAddBot(thread, `Endereco confirmado.${taxaMsg}\nQual sera a forma de pagamento? Pode ser Pix, dinheiro, credito ou debito.`, order)
       return
     }
 
@@ -1162,7 +1366,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (draft.delivery_type === 'delivery' && !draft.addr) {
         draft.step = 'addr'
         _chatSaveDraft(draft)
-        _chatAddBot(thread, 'Me envie o endereco completo para finalizar o pedido.', order)
+        _chatAddBot(thread, _chatAddressPrompt(tid), order)
         return
       }
       if (!draft.pag) {
@@ -1174,7 +1378,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       try {
         const newOrder = _chatCreateOrderFromDraft(tid, thread, draft)
         const updatedThread = db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(thread.id, tid)
-        _chatAddBot(updatedThread, `Pedido #${_chatShortNum(newOrder)} enviado para a loja.\nA equipe recebeu no gestor e vai acompanhar por aqui.`, newOrder, 'status')
+        _chatAddBot(updatedThread, `Pedido #${_chatShortNum(newOrder)} enviado para a loja.\nA equipe recebeu no gestor e vai acompanhar por aqui.\n\nSeu cadastro ficou salvo neste chat. Para fazer outro pedido, basta me enviar o item desejado ou escrever "cardapio".`, newOrder, 'status')
       } catch(e) {
         _chatAddBot(thread, `Nao consegui finalizar automaticamente: ${e.message}. Vou chamar a loja para conferir.`, order)
       }
@@ -1372,17 +1576,21 @@ module.exports = async function handleRoutes(req, res, ctx) {
         }, null)
         if (!result) { send(res, 500, { error: 'Nao foi possivel enviar a mensagem' }); return true }
         if (sender === 'store') _chatPauseBot(tid, thread.phone || order?.phone)
+        let responseThread = result.thread
+        let responseOrder = order
         if (sender === 'client') {
           try {
             const latestThread = db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(result.thread.id, tid)
             _chatAssistant(tid, latestThread || result.thread, text, order)
+            responseThread = db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(result.thread.id, tid) || latestThread || result.thread
+            if (Number(responseThread?.order_id || 0) > 0) responseOrder = _chatOrder(tid, responseThread.order_id) || order
           } catch(e) { log('WARN', '[chat-assistant] falhou:', e.message) }
         }
         send(res, 200, {
           ok: true,
-          thread: _chatThreadOut(result.thread, order),
+          thread: _chatThreadOut(responseThread, responseOrder),
           message: _chatMessageOut(result.message),
-          order: chatOrderPublic(order)
+          order: chatOrderPublic(responseOrder)
         })
         return true
       }

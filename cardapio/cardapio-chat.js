@@ -683,6 +683,24 @@
     const n = normText(body);
     const buttons = [];
 
+    if (/localizacao|gps|distancia|distancia|enviar localizacao/i.test(n)) {
+      return {
+        type: 'single',
+        buttons: [
+          { label: 'Enviar localizacao', value: 'localizacao', action: 'location', primary: true },
+          { label: 'Digitar endereco', value: 'vou digitar o endereco', ghost: true }
+        ]
+      };
+    }
+
+    const bairroSug = body.match(/Voce quis dizer:\s*([^?]+)\?/i) || body.match(/Você quis dizer:\s*([^?]+)\?/i);
+    if (bairroSug) {
+      const opts = bairroSug[1].split(',').map(x => x.trim()).filter(Boolean).slice(0, 3);
+      if (opts.length) {
+        return { type: 'single', buttons: opts.map(x => ({ label: x, value: x })) };
+      }
+    }
+
     const sizeAsk = body.match(/Qual tamanho da pizza\s+(.+?)\?/i);
     if (sizeAsk) {
       const pizza = sizeAsk[1].trim();
@@ -757,7 +775,7 @@
     const chips = cfg.buttons.map((b, idx) => {
       const on = selected.includes(b.value) ? ' on' : '';
       const cls = 'efc-chip' + on + (b.primary ? ' primary' : '') + (b.ghost ? ' ghost' : '');
-      return `<button type="button" class="${cls}" data-quick-mid="${esc(mid)}" data-quick-type="${esc(cfg.type)}" data-quick-value="${esc(b.value)}">${esc(b.label)}</button>`;
+      return `<button type="button" class="${cls}" data-quick-mid="${esc(mid)}" data-quick-type="${esc(cfg.type)}" data-quick-value="${esc(b.value)}" ${b.action ? `data-quick-action="${esc(b.action)}"` : ''}>${esc(b.label)}</button>`;
     }).join('');
     const send = cfg.type === 'multi'
       ? `<button type="button" class="efc-chip primary" data-quick-send="${esc(mid)}" ${selected.length ? '' : 'disabled'}>Enviar escolhas</button>`
@@ -962,7 +980,13 @@
     const mid = btn.getAttribute('data-quick-mid');
     const type = btn.getAttribute('data-quick-type') || 'single';
     const value = String(btn.getAttribute('data-quick-value') || '').trim();
+    const action = String(btn.getAttribute('data-quick-action') || '').trim();
     if (!mid || !value) return;
+
+    if (action === 'location') {
+      await sendCurrentLocation(btn);
+      return;
+    }
 
     if (type === 'multi') {
       const current = state.quickSelections[mid] || [];
@@ -1125,6 +1149,9 @@
       mergeMessages(data.messages || []);
       state.open = true;
       state.pendingSuggestion = '';
+      try {
+        localStorage.setItem('ef_profile_' + (state.tid || tid() || ''), JSON.stringify({ name: client, phone, ts: Date.now() }));
+      } catch(e) {}
       saveSession();
       connectSSE();
       render();
@@ -1181,6 +1208,78 @@
 
   function sendQuickReply(value, btn) {
     return sendChatText(value, btn);
+  }
+
+  function chatReadGlobal(name) {
+    try {
+      if (name === '_storeLat' && typeof _storeLat !== 'undefined') return _storeLat;
+      if (name === '_storeLng' && typeof _storeLng !== 'undefined') return _storeLng;
+    } catch(e) {}
+    return window[name];
+  }
+
+  function chatDistKm(lat1, lon1, lat2, lon2) {
+    const toRad = v => Number(v) * Math.PI / 180;
+    const R = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  async function reverseGeoForChat(lat, lng) {
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&zoom=18&addressdetails=1&accept-language=pt-BR`, {
+        headers: { 'Accept': 'application/json' }
+      });
+      const data = await r.json().catch(() => ({}));
+      const a = data?.address || {};
+      const rua = a.road || a.pedestrian || a.footway || a.path || '';
+      const bairro = a.suburb || a.neighbourhood || a.quarter || a.city_district || a.village || '';
+      const cidade = a.city || a.town || a.municipality || '';
+      return [rua, bairro, cidade].filter(Boolean).join(', ');
+    } catch(e) {
+      return '';
+    }
+  }
+
+  async function sendCurrentLocation(btn) {
+    if (!navigator.geolocation) {
+      if (typeof toast === 'function') toast('Erro', 'Este aparelho nao permite enviar localizacao.');
+      return false;
+    }
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Obtendo...';
+    }
+    try {
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
+      });
+      const lat = Number(pos.coords.latitude);
+      const lng = Number(pos.coords.longitude);
+      const storeLat = Number(chatReadGlobal('_storeLat') || 0);
+      const storeLng = Number(chatReadGlobal('_storeLng') || 0);
+      const dist = storeLat && storeLng ? chatDistKm(storeLat, storeLng, lat, lng) : null;
+      const approx = await reverseGeoForChat(lat, lng);
+      const linhas = [
+        'Localizacao confirmada pelo cliente.',
+        'Latitude: ' + lat.toFixed(6),
+        'Longitude: ' + lng.toFixed(6),
+        dist != null ? 'Distancia da loja: ' + dist.toFixed(2) + ' km' : '',
+        approx ? 'Endereco aproximado: ' + approx : ''
+      ].filter(Boolean);
+      return sendChatText(linhas.join('\n'), btn);
+    } catch(e) {
+      const msg = e?.code === 1 ? 'Permissao de localizacao negada.' : 'Nao foi possivel obter a localizacao.';
+      if (typeof toast === 'function') toast('Localizacao', msg);
+      return false;
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Enviar localizacao';
+      }
+    }
   }
 
   function connectSSE() {
