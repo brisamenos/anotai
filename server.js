@@ -1421,6 +1421,15 @@ function numeroPedidoServidor(tid, order) {
   return Math.max(1, Number(order?.id || 0) - Number(cfg?.order_num_offset || 0))
 }
 
+function numeroPedidoChat(order, opts = {}) {
+  if (!order) return ''
+  if (order.order_num) return Number(order.order_num)
+  if (opts.fallback && !pedidoOnlineAguardandoPagamento(order)) {
+    return numeroPedidoServidor(order.tenant_id, order)
+  }
+  return ''
+}
+
 function registrarMovimentoFinalizacaoAuto(tid, order) {
   if (!tid || !order) return
   const num = numeroPedidoServidor(tid, order)
@@ -2634,6 +2643,37 @@ function chatStatusLabel(status) {
   })[String(status || '')] || String(status || 'Status')
 }
 
+function chatBrasiliaTime(dateLike) {
+  const raw = String(dateLike || '').trim()
+  const iso = raw ? raw.replace(' ', 'T') : ''
+  const d = iso ? new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + 'Z') : new Date()
+  const valid = Number.isFinite(d.getTime()) ? d : new Date()
+  return valid.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Sao_Paulo'
+  })
+}
+
+function chatStatusClientText(order, status) {
+  const label = chatStatusLabel(status)
+  const num = numeroPedidoChat({ ...order, status }, { fallback: true })
+  const prefix = num ? `Pedido #${num}` : 'Seu pedido'
+  const when = chatBrasiliaTime()
+  const details = ({
+    aguardando_pix: 'Estamos aguardando a confirmacao do pagamento via PIX para seguir com o pedido.',
+    aguardando_cartao: 'Estamos aguardando a confirmacao do pagamento no cartao para seguir com o pedido.',
+    analise: 'Recebemos seu pedido e a loja ja vai conferir as informacoes.',
+    producao: 'Seu pedido foi confirmado e ja esta em preparo.',
+    pronto: 'Seu pedido esta pronto. Se for retirada, pode se dirigir a loja; se for entrega, ele seguira para o envio.',
+    saiu: 'Seu pedido saiu para entrega. Fique atento ao telefone e ao endereco informado.',
+    entregue: 'Seu pedido foi marcado como entregue. Obrigado pela preferencia.',
+    finalizado: 'Seu pedido foi finalizado. Agradecemos pela preferencia.',
+    cancelado: 'Seu pedido foi cancelado. Se tiver qualquer duvida, fale com a loja por aqui.'
+  })[String(status || '')] || `Seu pedido foi atualizado para: ${label}.`
+  return `${prefix} atualizado: ${label}.\n${details}\nAtualizado as ${when} (horario de Brasilia).`
+}
+
 function chatOrderItemsText(order) {
   try {
     const items = Array.isArray(order?.items) ? order.items : JSON.parse(order?.items || '[]')
@@ -2653,11 +2693,11 @@ function chatOrderItemsText(order) {
 
 function chatOrderPublic(order) {
   if (!order) return null
-  const num = order.order_num || order.id
+  const num = numeroPedidoChat(order, { fallback: true })
   return {
     id: order.id,
     order_num: order.order_num || null,
-    num,
+    num: num || null,
     client: order.client || '',
     phone: order.phone || '',
     addr: order.addr || '',
@@ -2673,28 +2713,47 @@ function chatOrderPublic(order) {
 }
 
 function chatThreadPublic(thread, order = null) {
+  const publicOrder = order ? chatOrderPublic(order) : null
+  let lastMessage = thread?.last_message || ''
+  const publicNum = publicOrder?.num || ''
+  const internalId = Number(order?.id || thread?.order_id || 0)
+  if (publicNum && internalId && Number(publicNum) !== internalId) {
+    lastMessage = String(lastMessage).replace(new RegExp(`(Pedido\\s*#)${internalId}(\\b)`, 'gi'), `$1${publicNum}$2`)
+  }
   if (!thread) return null
   return {
     id: thread.id,
     tenant_id: thread.tenant_id,
     order_id: thread.order_id,
-    order_num: thread.order_num || null,
+    order_num: thread.order_num || publicOrder?.order_num || null,
     client: thread.client || '',
     phone: thread.phone || '',
     status: thread.status || 'open',
-    last_message: thread.last_message || '',
+    last_message: lastMessage,
     last_sender: thread.last_sender || '',
     last_at: thread.last_at || thread.updated_at || thread.created_at || null,
     unread_store: parseInt(thread.unread_store || 0),
     unread_client: parseInt(thread.unread_client || 0),
     created_at: thread.created_at || null,
     updated_at: thread.updated_at || null,
-    order: order ? chatOrderPublic(order) : null
+    order: publicOrder
   }
 }
 
-function chatMessagePublic(row) {
+function chatMessagePublic(row, order = null) {
   if (!row) return null
+  let body = row.body || ''
+  let publicNum = order ? numeroPedidoChat(order, { fallback: true }) : ''
+  const orderId = Number(order?.id || row.order_id || 0)
+  if (!publicNum && orderId && row.tenant_id) {
+    try {
+      const msgOrder = db.prepare('SELECT id,tenant_id,order_num,status,pag FROM orders WHERE id=? AND tenant_id=?').get(orderId, row.tenant_id)
+      publicNum = numeroPedidoChat(msgOrder, { fallback: true })
+    } catch {}
+  }
+  if (publicNum && orderId && Number(publicNum) !== orderId) {
+    body = String(body).replace(new RegExp(`(Pedido\\s*#)${orderId}(\\b)`, 'gi'), `$1${publicNum}$2`)
+  }
   return {
     id: row.id,
     tenant_id: row.tenant_id,
@@ -2702,7 +2761,7 @@ function chatMessagePublic(row) {
     order_id: row.order_id,
     sender: row.sender,
     author_name: row.author_name || '',
-    body: row.body || '',
+    body,
     kind: row.kind || 'text',
     created_at: row.created_at || null
   }
@@ -2757,7 +2816,7 @@ function chatBroadcastMessage(thread, message, order = null) {
   if (!thread || !message) return
   const payload = {
     thread: chatThreadPublic(thread, order),
-    message: chatMessagePublic(message),
+    message: chatMessagePublic(message, order),
     order: chatOrderPublic(order)
   }
   const tid = thread.tenant_id
@@ -2848,22 +2907,25 @@ function chatAddMessageToThread(thread, opts = {}, order = null) {
 
 function chatNotifyOrderCreated(order) {
   if (!order?.phone) return null
-  const num = order.order_num || order.id
+  const num = numeroPedidoChat(order, { fallback: true })
+  const body = num
+    ? `Pedido #${num} recebido pela loja.`
+    : 'Pedido recebido pela loja. Aguardando confirmacao do pagamento.'
   return chatAddMessageFromOrder(order, {
     sender: 'system',
     kind: 'status',
-    body: `Pedido #${num} recebido pela loja.`,
+    body,
     skipDuplicate: true
   })
 }
 
 function chatNotifyOrderStatus(tid, order, oldStatus, newStatus) {
   if (!order?.phone || !newStatus || oldStatus === newStatus) return null
-  const num = order.order_num || order.id
+  const withTid = { ...order, tenant_id: order.tenant_id || tid, status: newStatus }
   return chatAddMessageFromOrder({ ...order, tenant_id: order.tenant_id || tid, status: newStatus }, {
     sender: 'system',
     kind: 'status',
-    body: `Pedido #${num} atualizado: ${chatStatusLabel(newStatus)}.`,
+    body: chatStatusClientText(withTid, newStatus),
     skipDuplicate: true
   })
 }
@@ -2969,7 +3031,7 @@ function aplicarBaixaEstoquePedido(tid, order, origem = 'pedido') {
         tipo: 'saida',
         qty: consumo,
         origem: origem || 'pedido',
-        note: `Pedido #${order.order_num || order.id}`
+        note: `Pedido #${numeroPedidoChat(order, { fallback: true }) || order.id}`
       })
     }
     if (!movimentos.length) return { baixados: 0 }

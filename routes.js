@@ -733,7 +733,19 @@ module.exports = async function handleRoutes(req, res, ctx) {
       return v ? JSON.parse(v) : fallback
     } catch { return fallback }
   }
-  const _chatShortNum = (order) => String(order?.order_num || order?.id || '').padStart(3, '0')
+  const _chatPendingNumber = (order) => {
+    const status = String(order?.status || '').toLowerCase()
+    const pag = String(order?.pag || '').toLowerCase()
+    return status === 'aguardando_cartao' || (status === 'aguardando_pix' && pag !== 'pix_manual')
+  }
+  const _chatShortNum = (order) => {
+    if (order?.order_num) return String(order.order_num).padStart(3, '0')
+    if (!order?.id || !order?.tenant_id || _chatPendingNumber(order)) return ''
+    try {
+      const cfg = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(order.tenant_id)
+      return String(Math.max(1, Number(order.id) - (parseInt(cfg?.order_num_offset, 10) || 0))).padStart(3, '0')
+    } catch { return '' }
+  }
   const _chatPauseKey = (tid, phone) => `pausa:${tid}:${_chatDigits(phone)}`
   const _chatPauseMinutes = (tid) => {
     try {
@@ -1261,26 +1273,64 @@ module.exports = async function handleRoutes(req, res, ctx) {
   }
   const _chatOrderAnswer = (order) => {
     if (!order) return ''
-    const itens = (() => {
-      try { return chatOrderPublic(order)?.items_text || '' } catch { return '' }
+    const pub = (() => { try { return chatOrderPublic(order) || {} } catch { return {} } })()
+    const itens = pub.items_text || ''
+    const num = _chatShortNum(order)
+    const status = pub.status_label || order.status || 'em andamento'
+    const total = (parseFloat(order.total || 0) || 0) + (parseFloat(order.taxa || 0) || 0)
+    const pag = String(order.pag || '').replace(/_/g, ' ') || ''
+    const addr = String(order.addr || '').trim()
+    const when = (() => {
+      try {
+        const raw = String(order.updated_at || order.created_at || '').trim()
+        const iso = raw ? raw.replace(' ', 'T') : ''
+        const d = iso ? new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + 'Z') : new Date()
+        return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+      } catch { return new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) }
     })()
-    return `Seu pedido #${_chatShortNum(order)} esta ${chatOrderPublic(order)?.status_label || order.status || 'em andamento'}.\n${itens ? `Itens: ${itens}\n` : ''}Total: R$ ${_chatFmt(order.total)}.`
+    const linhas = [
+      `Claro. Seu pedido${num ? ' #' + num : ''} esta ${status}.`,
+      itens ? `Itens: ${itens}.` : '',
+      `Total: R$ ${_chatFmt(total)}.`,
+      pag ? `Pagamento: ${pag}.` : '',
+      addr ? `Endereco/retirada: ${addr}.` : '',
+      `Atualizado as ${when} (horario de Brasilia).`,
+      'Se precisar de algo especifico sobre este pedido, pode me perguntar por aqui.'
+    ].filter(Boolean)
+    return linhas.join('\n')
   }
   const _chatAssistant = (tid, thread, incomingText, order = null) => {
     const text = String(incomingText || '').trim()
     if (!tid || !thread || !text) return
     const phone = _chatDigits(thread.phone)
-    if (_chatBotPaused(tid, phone)) return
     const n = _chatNorm(text)
+    const statusIntent = /\b(status|situacao|andamento|acompanhar|rastrear|rastreamento|pedido|meu pedido|cad[eê]|cade|demora|demorando|atrasou|atrasado|tempo|previsao|quanto falta|saiu|pronto|preparo|preparando|entrega|entregador|chega|chegar|onde esta|como esta)\b/.test(n)
+      && !/\b(pedir|adicionar|mais|comprar|novo pedido|fazer pedido)\b/.test(n)
+    const sensitiveIntent = /\b(cancelar|alterar|mudar|trocar|corrigir|endereco|problema|reclamacao|reembolso|devolver|errado|faltou|faltando)\b/.test(n)
+    if (_chatBotPaused(tid, phone) && !(order && statusIntent)) return
     if (/\b(atendente|humano|pessoa|loja|responsavel|falar com)\b/.test(n)) {
       _chatPauseBot(tid, phone)
       _chatAddBot(thread, 'Certo, vou deixar a loja assumir por aqui. Em instantes alguem da equipe responde voce.', order)
       return
     }
-    if (order && /\b(status|situacao|pedido|demora|saiu|pronto|preparo|entrega|acompanhar)\b/.test(n) && !/\b(quero|pedir|adicionar|mais)\b/.test(n)) {
+    if (order && sensitiveIntent) {
+      _chatPauseBot(tid, phone)
+      _chatAddBot(thread, 'Entendi. Para evitar qualquer erro neste pedido, vou deixar a loja assumir por aqui. Em instantes alguem da equipe responde voce. Enquanto isso, o acompanhamento atual e:\n\n' + _chatOrderAnswer(order), order)
+      return
+    }
+    if (order && statusIntent) {
       _chatAddBot(thread, _chatOrderAnswer(order), order)
       return
     }
+    const trackingOnlyMsg = order
+      ? 'Este chat e apenas para acompanhar este pedido. Para fazer um novo pedido, use o cardapio da loja. Se precisar de ajuda com este pedido, a equipe responde por aqui.'
+      : 'Este chat fica disponivel apenas depois que um pedido e realizado. Para pedir, use o cardapio da loja.'
+    if (!order || /\b(cardapio|menu|opcoes|pedir|pedido novo|novo pedido|adicionar|mais|confirmar|finalizar|fechar pedido|concluir|entrega|retirada|mesa|pix|dinheiro|credito|debito|comprar|produto|item|sabor|borda|adicional)\b/.test(n)) {
+      _chatAddBot(thread, trackingOnlyMsg, order)
+      return
+    }
+    _chatAddBot(thread, `${_chatOrderAnswer(order)}\n\nSe precisar falar com a loja sobre este pedido, envie sua mensagem por aqui.`, order)
+    return
 
     const draft = _chatDraft(tid, thread)
     if (!draft) return
@@ -1464,7 +1514,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         if (!_chatRequireStore()) return true
         const limit = Math.min(200, Math.max(1, parseInt(params.get('limit') || '100', 10) || 100))
         const rows = db.prepare(`SELECT * FROM order_chat_threads
-          WHERE tenant_id=?
+          WHERE tenant_id=? AND COALESCE(order_id,0)>0
           ORDER BY datetime(COALESCE(last_at, updated_at, created_at)) DESC, id DESC
           LIMIT ?`).all(tid, limit)
         const getOrder = db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?')
@@ -1474,19 +1524,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       }
 
       if (req.method === 'POST' && upath === '/api/chat/start') {
-        const body = await readBody(req)
-        const phone = _chatDigits(body.phone || '')
-        const client = String(body.client || body.name || '').trim().slice(0, 120)
-        if (!phone) { send(res, 400, { error: 'Telefone obrigatorio' }); return true }
-        const thread = _chatLeadThread(tid, phone, client)
-        if (!thread) { send(res, 500, { error: 'Nao foi possivel iniciar o chat' }); return true }
-        const messagesBefore = _chatMessages(tid, thread.id, 0)
-        if (!messagesBefore.length) {
-        _chatAddBot(thread, 'Ola! Sou a EstimaIA. Posso montar seu pedido por aqui e acompanhar tudo em tempo real. Para entrega, vou pedir o endereco completo; para retirada ou mesa, seu nome e WhatsApp ja bastam para iniciar. Escreva o item desejado ou mande "cardapio".', null)
-        }
-        const updated = db.prepare('SELECT * FROM order_chat_threads WHERE id=? AND tenant_id=?').get(thread.id, tid)
-        const messages = _chatMessages(tid, updated.id, 0).map(_chatMessageOut)
-        send(res, 200, { ok: true, thread: _chatThreadOut(updated, null), messages, order: null })
+        send(res, 400, { error: 'Chat disponivel apenas para acompanhar pedidos ja realizados.' })
         return true
       }
 
@@ -1497,9 +1535,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         const storeMode = role === 'store'
         if (!orderId && !phone) { send(res, 400, { error: 'order_id ou telefone obrigatorio' }); return true }
         if (!orderId && phone) {
-          const thread = _chatLeadThread(tid, phone, params.get('client') || '')
-          const messages = _chatMessages(tid, thread.id, parseInt(params.get('after_id') || '0', 10) || 0).map(_chatMessageOut)
-          send(res, 200, { ok: true, thread: _chatThreadOut(thread, null), messages, order: null })
+          send(res, 400, { error: 'Chat disponivel apenas para acompanhar pedidos ja realizados.' })
           return true
         }
         if (storeMode && !_chatRequireStore()) return true
@@ -1553,27 +1589,27 @@ module.exports = async function handleRoutes(req, res, ctx) {
           if (sender === 'client' && !_chatMatches(order.phone, phone)) { send(res, 403, { error: 'Telefone nao confere com o pedido' }); return true }
           thread = thread || chatEnsureThreadFromOrder(order, { phone: phone || order.phone, client: order.client })
         }
-        if (!thread && !orderId && sender === 'client') thread = _chatLeadThread(tid, phone, body.client || '')
+        if (!thread && !orderId && sender === 'client') {
+          send(res, 400, { error: 'Chat disponivel apenas para acompanhar pedidos ja realizados.' })
+          return true
+        }
         if (!thread) { send(res, 404, { error: 'Chat nao encontrado' }); return true }
         if (sender === 'client' && !_chatMatches(thread.phone, phone)) { send(res, 403, { error: 'Telefone nao confere com o chat' }); return true }
         if (!order && Number(thread.order_id || 0) > 0) order = _chatOrder(tid, thread.order_id)
+        if (!order) {
+          send(res, 400, { error: 'Chat disponivel apenas para acompanhar pedidos ja realizados.' })
+          return true
+        }
         const author = sender === 'store'
           ? String(body.author_name || req.headers['x-user-id'] || 'Loja')
           : String(order?.client || thread.client || body.client || 'Cliente')
-        const result = order
-          ? chatAddMessageFromOrder(order, {
-              sender,
-              kind: 'text',
-              body: text,
-              author_name: author,
-              phone: phone || order.phone
-            })
-          : chatAddMessageToThread(thread, {
+        const result = chatAddMessageFromOrder(order, {
           sender,
           kind: 'text',
           body: text,
           author_name: author,
-        }, null)
+          phone: phone || order.phone
+        })
         if (!result) { send(res, 500, { error: 'Nao foi possivel enviar a mensagem' }); return true }
         if (sender === 'store') _chatPauseBot(tid, thread.phone || order?.phone)
         let responseThread = result.thread
@@ -2871,7 +2907,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         try {
           const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
           const valor = parseFloat(order.total||0) + parseFloat(order.taxa||0)
-          const numStr = String(order.order_num || order.id)
+          const numStr = _chatShortNum(order) || String(order.id)
           // Descrição compatível com o padrão do finishOrderById ("Pedido #N – Cliente")
           db.prepare(`INSERT INTO movimentos (tenant_id, description, tipo, val, pag, time)
                       VALUES (?, ?, 'saida', ?, ?, ?)`)

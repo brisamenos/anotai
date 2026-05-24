@@ -70,8 +70,8 @@
     const bubble = document.getElementById('ef-chat-bubble');
     if (title) title.textContent = name;
     if (bubble) {
-      bubble.title = 'Pedir com a EstimaIA - ' + name;
-      bubble.setAttribute('aria-label', 'Pedir com a EstimaIA - ' + name);
+      bubble.title = 'Acompanhar pedido - ' + name;
+      bubble.setAttribute('aria-label', 'Acompanhar pedido - ' + name);
     }
   }
 
@@ -95,6 +95,14 @@
     try {
       const ctx = getAudioCtx();
       if (ctx?.state === 'suspended') ctx.resume().catch(() => {});
+      ensureNotificationPermission();
+    } catch(e) {}
+  }
+
+  function ensureNotificationPermission() {
+    try {
+      if (!('Notification' in window)) return;
+      if (Notification.permission === 'default') Notification.requestPermission().catch(() => {});
     } catch(e) {}
   }
 
@@ -111,20 +119,37 @@
       const ctx = audioCtx;
       if (!ctx || ctx.state === 'suspended') return;
       const now = ctx.currentTime + 0.01;
-      [660, 880].forEach((freq, idx) => {
+      [740, 988, 1318].forEach((freq, idx) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        const start = now + idx * 0.11;
-        osc.type = 'sine';
+        const start = now + idx * 0.08;
+        osc.type = 'triangle';
         osc.frequency.setValueAtTime(freq, start);
         gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(0.055, start + 0.018);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.13);
+        gain.gain.exponentialRampToValueAtTime(0.22, start + 0.018);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.18);
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.start(start);
-        osc.stop(start + 0.15);
+        osc.stop(start + 0.2);
       });
+    } catch(e) {}
+  }
+
+  function showBrowserNotification(title, body) {
+    try {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+      const n = new Notification(title || storeName(), {
+        body: String(body || '').slice(0, 180),
+        icon: '/favicon.ico',
+        badge: '/favicon.ico',
+        tag: 'ef-chat-' + (state.thread?.id || state.orderId || Date.now()),
+        renotify: true
+      });
+      n.onclick = () => {
+        try { window.focus(); openPanel(); } catch(e) {}
+        try { n.close(); } catch(e) {}
+      };
     } catch(e) {}
   }
 
@@ -154,6 +179,14 @@
     return isFinalOrder(order) ? null : order;
   }
 
+  function trackingOrderId() {
+    return Number(state.orderId || state.order?.id || state.thread?.order_id || 0) || 0;
+  }
+
+  function hasTrackingContext() {
+    return !!(state.phone && trackingOrderId() > 0);
+  }
+
   function stripThreadOrder(thread) {
     if (!thread) return thread;
     const clean = Object.assign({}, thread);
@@ -165,6 +198,7 @@
 
   function clearOrderTrackingStorage() {
     try { localStorage.removeItem(orderStorageKey()); } catch(e) {}
+    try { localStorage.removeItem(storageKey()); } catch(e) {}
     try {
       const u = new URL(window.location.href);
       u.searchParams.delete('acompanhar');
@@ -212,7 +246,7 @@
   }
 
   function saveSession() {
-    if (!state.tid || !state.phone || !(state.orderId != null || state.thread?.id || state.threadId)) return;
+    if (!state.tid || !hasTrackingContext()) return;
     try {
       localStorage.setItem(storageKey(), JSON.stringify({
         orderId: state.orderId,
@@ -235,7 +269,7 @@
     const k = storageKey();
     let data = readJson(k);
     if (!data) data = readJson(orderStorageKey());
-    if (!data || (!data.orderId && !data.threadId) || !data.phone) return null;
+    if (!data || !data.orderId || !data.phone) return null;
     if (data.ts && Date.now() - data.ts > CHAT_TTL_MS) {
       try { localStorage.removeItem(k); } catch(e) {}
       return null;
@@ -537,86 +571,7 @@
   }
 
   function buildSmartNudges() {
-    const items = readMenuItems()
-      .filter(i => i && i.name && i.status !== 'esgotado')
-      .slice(0, 80);
-    const coupons = readCoupons().filter(c => c && c.codigo);
-    const cats = readCats().filter(c => c && (c.label || c.name)).slice(0, 4);
-    const nudges = [];
-    const seen = new Set();
-    const add = (n) => {
-      const key = normText((n.title || '') + '|' + (n.text || ''));
-      if (!n.title || !n.text || seen.has(key)) return;
-      seen.add(key);
-      nudges.push(n);
-    };
-
-    items
-      .filter(i => i.promo || i.price_old)
-      .slice(0, 2)
-      .forEach(i => add({
-        kind: 'promo',
-        title: 'Promocao disponivel',
-        text: compactName(i.name, 34) + nudgePriceText(i) + '. Posso montar para voce.',
-        prompt: 'quero ' + i.name
-      }));
-
-    items
-      .filter(i => i.destaque && !(i.promo || i.price_old))
-      .slice(0, 1)
-      .forEach(i => add({
-        kind: 'item',
-        title: 'Sugestao da loja',
-        text: compactName(i.name, 34) + nudgePriceText(i) + '. Toque para pedir com ajuda da IA.',
-        prompt: 'quero ' + i.name
-      }));
-
-    const regular = items.find(i => !(i.promo || i.price_old || i.destaque));
-    if (regular) {
-      add({
-        kind: 'item',
-        title: 'Que tal hoje?',
-        text: compactName(regular.name, 34) + nudgePriceText(regular) + '. A EstimaIA adiciona ao pedido.',
-        prompt: 'quero ' + regular.name
-      });
-    }
-
-    if (coupons.length) {
-      add({
-        kind: 'promo',
-        title: 'Cupom ativo',
-        text: 'Existe cupom disponivel para usar antes de finalizar o pedido.',
-        prompt: 'quero aproveitar uma promocao'
-      });
-    }
-
-    if (items.length && cats.length) {
-      const cat = cats[0].label || cats[0].name;
-      add({
-        kind: 'ai',
-        title: 'Quer uma recomendacao?',
-        text: 'A EstimaIA encontra opcoes de ' + compactName(cat, 20) + ' e monta seu pedido.',
-        prompt: 'me recomende um item'
-      });
-    }
-
-    if (items.length) {
-      add({
-        kind: 'ai',
-        title: 'Peca pelo chat',
-        text: 'Escolha entre ' + items.length + ' itens do cardapio com ajuda da EstimaIA.',
-        prompt: 'cardapio'
-      });
-    }
-
-    add({
-      kind: 'ai',
-      title: 'Monte seu pedido com a EstimaIA',
-      text: 'A IA ajuda voce a escolher itens e finalizar com mais agilidade.',
-      prompt: 'quero fazer um pedido'
-    });
-
-    return nudges.slice(0, 6);
+    return [];
   }
 
   function renderNudges() {
@@ -652,19 +607,11 @@
   function updateStartText() {
     const el = document.getElementById('ef-chat-start-text');
     if (!el) return;
-    if (state.pendingSuggestion) {
-      el.textContent = 'Informe seu nome e WhatsApp. Em seguida, a EstimaIA ja continua com: "' + compactName(state.pendingSuggestion, 58) + '".';
-      return;
-    }
-    el.textContent = 'Informe seu nome e WhatsApp. Para entrega, a EstimaIA pedira o endereco completo; para retirada ou mesa, esses dados bastam para iniciar.';
+    el.textContent = 'O chat fica disponivel para acompanhar um pedido ja realizado.';
   }
 
   function handleNudgeClick(ev) {
-    const btn = ev.target.closest('[data-nudge-prompt]');
-    if (!btn) return;
-    state.pendingSuggestion = String(btn.getAttribute('data-nudge-prompt') || '').trim();
-    openPanel();
-    updateStartText();
+    ev.preventDefault();
   }
 
   function ensureDom() {
@@ -678,7 +625,7 @@
     root.id = 'ef-chat-root';
     root.innerHTML = `
       <div class="efc-nudges" id="ef-chat-nudges"></div>
-      <button class="efc-bubble" id="ef-chat-bubble" type="button" title="Pedir com a EstimaIA" aria-label="Pedir com a EstimaIA">
+      <button class="efc-bubble" id="ef-chat-bubble" type="button" title="Acompanhar pedido" aria-label="Acompanhar pedido">
         <svg width="25" height="25" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 3v2.2M8.2 5.4l-.9-1.5M15.8 5.4l.9-1.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
           <rect x="4.2" y="6" width="15.6" height="13" rx="5" stroke="currentColor" stroke-width="1.7"/>
@@ -701,13 +648,13 @@
         </div>
         <div class="efc-order" id="ef-chat-order"></div>
         <form class="efc-start" id="ef-chat-start">
-          <div class="efc-start-title">Pedido com EstimaIA</div>
-          <div class="efc-start-text" id="ef-chat-start-text">Informe seu nome e WhatsApp. Para entrega, a EstimaIA pedira o endereco completo; para retirada ou mesa, esses dados bastam para iniciar.</div>
+          <div class="efc-start-title">Chat de acompanhamento</div>
+          <div class="efc-start-text" id="ef-chat-start-text">O chat fica disponivel para acompanhar um pedido ja realizado.</div>
           <div class="efc-start-row">
             <input id="ef-chat-start-name" autocomplete="name" enterkeyhint="next" placeholder="Seu nome">
             <input id="ef-chat-start-phone" autocomplete="tel" inputmode="tel" enterkeyhint="done" placeholder="WhatsApp">
           </div>
-          <button type="submit">Comecar atendimento</button>
+          <button type="submit">Acompanhar pedido</button>
         </form>
         <div class="efc-msgs" id="ef-chat-msgs"></div>
         <form class="efc-form" id="ef-chat-form">
@@ -736,16 +683,23 @@
   function messageTime(m) {
     try {
       if (!m.created_at) return '';
-      return new Date(String(m.created_at).replace(' ', 'T')).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const iso = String(m.created_at).replace(' ', 'T');
+      const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + 'Z');
+      return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
     } catch { return ''; }
   }
 
   function mergeMessages(rows) {
-    const seen = new Set(state.messages.map(m => Number(m.id)));
+    const byId = new Map(state.messages.map((m, idx) => [Number(m.id), idx]));
     (rows || []).forEach(m => {
-      if (!m || seen.has(Number(m.id))) return;
+      if (!m) return;
+      const id = Number(m.id);
+      if (byId.has(id)) {
+        state.messages[byId.get(id)] = Object.assign({}, state.messages[byId.get(id)], m);
+        return;
+      }
       state.messages.push(m);
-      seen.add(Number(m.id));
+      byId.set(id, state.messages.length - 1);
     });
     state.messages.sort((a,b) => Number(a.id || 0) - Number(b.id || 0));
   }
@@ -781,6 +735,9 @@
     if (!isAssistantMessage(m)) return null;
     const body = String(m.body || '');
     const n = normText(body);
+    if (/pedido guiado|adicionad[ao]|adicional|qual tamanho da pizza|forma de pagamento|confirmar pedido|finalizar pedido|ver cardapio|mande "?cardapio"?|escreva o nome do item|entrega ou retirada|retirada ou mesa/i.test(n)) {
+      return null;
+    }
     const buttons = [];
 
     if (/localizacao|gps|distancia|distancia|enviar localizacao/i.test(n)) {
@@ -975,10 +932,10 @@
   function followCardHtml() {
     const f = state.follow;
     if (!f || f.chosen || !paymentMatches(f)) return '';
-    const num = f.orderNum ? '#' + String(f.orderNum).padStart(3, '0') : (f.orderId ? '#' + f.orderId : '');
+    const num = f.orderNum ? '#' + String(f.orderNum).padStart(3, '0') : '';
     return `<div class="efc-card">
       <div class="efc-card-kicker">Acompanhe seu pedido</div>
-      <div class="efc-card-title">Pedido ${esc(num)} recebido</div>
+      <div class="efc-card-title">${num ? 'Pedido ' + esc(num) + ' recebido' : 'Pedido recebido'}</div>
       <div class="efc-card-text">Voce pode acompanhar as atualizacoes em tempo real por aqui na EstimaIA ou ativar o acompanhamento pelo WhatsApp.</div>
       <div class="efc-card-actions">
         <button type="button" class="efc-pay-btn" data-follow-choice="chat">Acompanhar pela EstimaIA</button>
@@ -1119,11 +1076,12 @@
     const startBox = document.getElementById('ef-chat-start');
     const form = document.getElementById('ef-chat-form');
     const hasTenant = !!(state.tid || tid());
-    const hasSession = !!(state.phone && (state.orderId != null || state.thread?.id || state.threadId));
+    const hasSession = hasTrackingContext();
     const nudgeCount = renderNudges();
-    const panelOpen = state.open && (hasTenant || hasSession);
+    if (!hasSession && state.open) state.open = false;
+    const panelOpen = state.open && hasSession;
     updateStartText();
-    bubble.classList.toggle('on', hasTenant || hasSession);
+    bubble.classList.toggle('on', hasSession);
     panel.classList.toggle('on', panelOpen);
     root.classList.toggle('efc-open', panelOpen);
     document.body.classList.toggle('ef-chat-open', panelOpen);
@@ -1133,23 +1091,23 @@
     const unread = Math.max(0, Number(state.unread || state.thread?.unread_client || 0));
     badge.textContent = unread > 9 ? '9+' : String(unread);
     badge.classList.toggle('on', unread > 0);
-    root.classList.toggle('efc-show-nudge', !!hasTenant && !state.open && !hasSession && unread === 0 && nudgeCount > 0);
+    root.classList.toggle('efc-show-nudge', false);
 
     const order = activeOrderFromState() || {};
-    const num = state.orderNum || order.order_num || order.num || state.orderId;
+    const num = state.orderNum || order.order_num || order.num || '';
     const label = order.status_label || '';
-    sub.textContent = num ? ('Pedido #' + num) : 'EstimaIA';
+    sub.textContent = num ? ('Pedido #' + num) : (hasSession ? 'Pedido em acompanhamento' : 'EstimaIA');
     if (hasSession) {
       orderBox.innerHTML = num
         ? `<strong>Pedido #${esc(num || '')}</strong>${label ? ' - ' + esc(label) : ''}${order.items_text ? '<br>' + esc(order.items_text) : ''}`
-        : '<strong>Pedido pelo chat</strong><br>Monte seu pedido ou fale com a loja.';
+        : '<strong>Pedido em acompanhamento</strong><br>O numero publico sera exibido assim que estiver disponivel.';
     } else {
-      orderBox.innerHTML = '<strong>Comece pelo chat</strong><br>A EstimaIA ajuda a montar seu pedido e chama a loja quando precisar.';
+      orderBox.innerHTML = '<strong>Chat de acompanhamento</strong><br>O chat fica disponivel depois que o pedido e realizado.';
     }
-    if (startBox) startBox.classList.toggle('on', !hasSession);
+    if (startBox) startBox.classList.toggle('on', false);
     if (form) form.style.display = hasSession ? 'flex' : 'none';
     if (!hasSession) {
-      msgs.innerHTML = '<div class="efc-empty">Depois de iniciar, as mensagens aparecem aqui.</div>';
+      msgs.innerHTML = '<div class="efc-empty">Depois que houver um pedido, as mensagens aparecem aqui.</div>';
       return;
     }
 
@@ -1185,9 +1143,16 @@
   }
 
   function openPanel() {
+    if (!hasTrackingContext()) {
+      state.open = false;
+      if (typeof toast === 'function') toast('Chat', 'O chat fica disponivel apos realizar um pedido.');
+      render();
+      return;
+    }
     state.open = true;
     try { document.getElementById('track-drawer-bg')?.classList.remove('on'); } catch(e) {}
     setTrackingSuppressed(true);
+    ensureNotificationPermission();
     updateViewportVars();
     saveSession();
     render();
@@ -1226,56 +1191,13 @@
 
   async function startChat(ev) {
     ev.preventDefault();
-    state.tid = tid() || state.tid;
-    const nameEl = document.getElementById('ef-chat-start-name');
-    const phoneEl = document.getElementById('ef-chat-start-phone');
-    const client = String(nameEl?.value || '').trim();
-    const phone = digits(phoneEl?.value || '');
-    if (!state.tid) {
-      if (typeof toast === 'function') toast('Erro', 'Loja ainda nao carregou. Tente novamente.');
-      return;
-    }
-    if (!phone) {
-      if (typeof toast === 'function') toast('Atencao', 'Informe seu WhatsApp para iniciar.');
-      return;
-    }
-    const pendingSuggestion = String(state.pendingSuggestion || '').trim();
-    try {
-      const r = await api('/api/chat/start', {
-        method: 'POST',
-        body: JSON.stringify({ phone, client })
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok || !data.ok) throw new Error(data.error || 'Nao foi possivel iniciar o chat');
-      state.thread = data.thread || null;
-      state.threadId = state.thread?.id || null;
-      state.order = data.order || null;
-      state.orderId = data.thread?.order_id || 0;
-      state.orderNum = data.thread?.order_num || null;
-      state.phone = phone;
-      state.client = client;
-      state.messages = [];
-      mergeMessages(data.messages || []);
-      state.open = true;
-      state.pendingSuggestion = '';
-      try {
-        localStorage.setItem('ef_profile_' + (state.tid || tid() || ''), JSON.stringify({ name: client, phone, ts: Date.now() }));
-      } catch(e) {}
-      saveSession();
-      connectSSE();
-      render();
-      markRead();
-      if (pendingSuggestion) {
-        setTimeout(() => sendChatText(pendingSuggestion), 220);
-      }
-    } catch(e) {
-      if (typeof toast === 'function') toast('Erro', e?.message || 'Nao foi possivel iniciar o chat.');
-    }
+    if (typeof toast === 'function') toast('Chat', 'O chat fica disponivel apos realizar um pedido.');
+    return;
   }
 
   async function sendChatText(body, btn) {
     body = String(body || '').trim();
-    if (!body || !state.phone || !(state.orderId != null || state.thread?.id || state.threadId)) return false;
+    if (!body || !hasTrackingContext()) return false;
     const oldOrderId = state.orderId || 0;
     if (btn) btn.disabled = true;
     try {
@@ -1411,7 +1333,10 @@
         if (data.message) {
           const alreadyHad = state.messages.some(m => Number(m.id) === Number(data.message.id));
           mergeMessages([data.message]);
-          if (!alreadyHad && data.message.sender !== 'client') playChatSound();
+          if (!alreadyHad && data.message.sender !== 'client') {
+            playChatSound();
+            if (document.hidden || !state.open) showBrowserNotification(storeName(), data.message.body || 'Seu pedido foi atualizado.');
+          }
           if (!state.open && data.message.sender !== 'client') state.unread = Math.max(state.unread || 0, Number(state.thread?.unread_client || 0));
         }
         const finalReset = applyFinalOrderReset(data.order || data.thread?.order || null);
@@ -1437,7 +1362,7 @@
   }
 
   async function bootstrap(openAfter) {
-    if (state.booting || !state.tid || !state.phone || !(state.orderId != null || state.threadId)) return;
+    if (state.booting || !state.tid || !state.phone || trackingOrderId() <= 0) return;
     state.booting = true;
     ensureDom();
     render();

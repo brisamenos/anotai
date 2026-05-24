@@ -88,19 +88,19 @@
       const ctx = gcAudioCtx;
       if (!ctx || ctx.state === 'suspended') return;
       const now = ctx.currentTime + 0.01;
-      [523.25, 783.99, 1046.5].forEach((freq, idx) => {
+      [587.33, 880, 1174.66].forEach((freq, idx) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         const start = now + idx * 0.075;
-        osc.type = 'triangle';
+        osc.type = 'square';
         osc.frequency.setValueAtTime(freq, start);
         gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(0.05, start + 0.014);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.11);
+        gain.gain.exponentialRampToValueAtTime(0.2, start + 0.014);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.start(start);
-        osc.stop(start + 0.13);
+        osc.stop(start + 0.18);
       });
     } catch(e) {}
   }
@@ -315,7 +315,9 @@
   function whenText(t) {
     if (!t) return '';
     try {
-      return new Date(String(t).replace(' ', 'T')).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const iso = String(t).replace(' ', 'T');
+      const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + 'Z');
+      return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
     } catch { return ''; }
   }
 
@@ -327,7 +329,7 @@
   function orderNum(thread) {
     const n = thread?.order?.order_num || thread?.order_num || thread?.order?.num || '';
     if (n) return n;
-    return Number(thread?.order_id || 0) > 0 ? thread.order_id : '';
+    return '';
   }
 
   function threadLabel(thread) {
@@ -344,11 +346,16 @@
   }
 
   function mergeMessages(rows) {
-    const seen = new Set(GCHAT.messages.map(m => Number(m.id)));
+    const byId = new Map(GCHAT.messages.map((m, idx) => [Number(m.id), idx]));
     (rows || []).forEach(m => {
-      if (!m || seen.has(Number(m.id))) return;
+      if (!m) return;
+      const id = Number(m.id);
+      if (byId.has(id)) {
+        GCHAT.messages[byId.get(id)] = Object.assign({}, GCHAT.messages[byId.get(id)], m);
+        return;
+      }
       GCHAT.messages.push(m);
-      seen.add(Number(m.id));
+      byId.set(id, GCHAT.messages.length - 1);
     });
     GCHAT.messages.sort((a,b) => Number(a.id || 0) - Number(b.id || 0));
   }
