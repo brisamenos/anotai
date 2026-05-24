@@ -140,7 +140,7 @@ function renderPendingPaymentsAlert() {
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[c]));
     const total = (parseFloat(o.total || 0) + parseFloat(o.taxa || 0)).toFixed(2).replace('.', ',');
-    const labelNum = hasNum ? `#${num}` : 'Sem numero';
+    const labelNum = hasNum ? `#${num}` : 'Aguardando pagamento';
     const click = hasNum ? `document.getElementById('kanban-search-num').value='${num}';renderKanban()` : `nav('historico');document.getElementById('hist-status').value='';histFiltrar()`;
     return `<button onclick="${click}" style="display:inline-flex;align-items:center;gap:6px;margin:6px 6px 0 0;padding:6px 9px;border-radius:8px;border:1px solid rgba(245,158,11,.24);background:rgba(245,158,11,.08);color:var(--text);font:inherit;font-size:12px;cursor:pointer">${labelNum} - ${pay} - ${client} - R$ ${total}</button>`;
   }).join('');

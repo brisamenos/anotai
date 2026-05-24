@@ -416,7 +416,8 @@ async function loadMyOrders() {
       const d = new Date(o.created_at);
       const dateStr = isNaN(d) ? '' : d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
       const isActive = ['analise','producao','pronto','saiu'].includes(o.status);
-      const numLabel = o.order_num ? '#' + String(o.order_num).padStart(3,'0') : 'Sem numero';
+      const waitingOnlinePayment = o.status === 'aguardando_cartao' || (o.status === 'aguardando_pix' && o.pag !== 'pix_manual');
+      const numLabel = o.order_num ? '#' + String(o.order_num).padStart(3,'0') : (waitingOnlinePayment ? 'Aguardando pagamento' : 'Sem numero');
       // "Repetir pedido" disponível para pedidos finalizados (entregue/cancelado) com itens válidos
       const podeRepetir = !isActive && Array.isArray(o.items) && o.items.length > 0;
       return `

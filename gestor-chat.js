@@ -186,7 +186,7 @@
       .gc-msg-row.client .gc-msg-bubble{background:#f8fafc;color:#172033;border:1px solid rgba(226,232,240,.92);border-bottom-left-radius:5px}
       .gc-msg-row.store .gc-msg-bubble{background:linear-gradient(135deg,#09a9d1,#2563eb);color:#fff;border-bottom-right-radius:5px}
       .gc-msg-row.system .gc-msg-bubble{background:rgba(14,165,233,.1);border:1px solid rgba(14,165,233,.23);color:#b9ecff;text-align:center;font-size:11.8px;border-radius:999px;max-width:min(86%,560px);padding:6px 10px}
-      .gc-msg-text{display:block;margin:0;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+      .gc-msg-text{display:block;margin:0;min-width:0;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
       .gc-msg-time{display:block;font-size:10px;line-height:1.1;opacity:.72;margin-top:6px;text-align:right;font-weight:850;align-self:flex-end;white-space:nowrap}
       .gc-form{display:flex;gap:9px;padding:13px;border-top:1px solid var(--gc-line);background:rgba(15,27,45,.92)}
       .gc-input{flex:1;min-width:0;height:44px;border:1px solid rgba(148,163,184,.2);border-radius:14px;background:#f8fafc;color:#172033;padding:0 14px;font:700 14px 'DM Sans',system-ui,sans-serif;outline:none}
@@ -332,9 +332,24 @@
     return '';
   }
 
+  function isPendingOnlinePayment(thread) {
+    const status = String(thread?.order?.status || '').toLowerCase();
+    const pag = String(thread?.order?.pag || '').toLowerCase();
+    return status === 'aguardando_cartao' || (status === 'aguardando_pix' && pag !== 'pix_manual');
+  }
+
   function threadLabel(thread) {
     const n = orderNum(thread);
-    return n ? ('#' + n) : 'Novo pedido';
+    if (n) return '#' + n;
+    if (isPendingOnlinePayment(thread)) return 'Aguardando pagamento';
+    return 'Novo pedido';
+  }
+
+  function orderTitle(thread) {
+    const n = orderNum(thread);
+    if (n) return 'Pedido #' + n;
+    if (isPendingOnlinePayment(thread)) return 'Pedido aguardando pagamento';
+    return 'Pedido pelo chat';
   }
 
   function upsertThread(thread) {
@@ -433,7 +448,7 @@
     ctx.innerHTML = `
       <div class="gc-context-top">
         <div class="gc-order-main">
-          <div class="gc-order-title">${esc(orderNum(t) ? ('Pedido #' + orderNum(t)) : 'Pedido pelo chat')} - ${esc(t.client || order.client || 'Cliente')}</div>
+          <div class="gc-order-title">${esc(orderTitle(t))} - ${esc(t.client || order.client || 'Cliente')}</div>
           <div class="gc-order-sub">${esc(t.phone || order.phone || 'Sem telefone')}${order.items_text ? ' | ' + esc(order.items_text) : ''}</div>
         </div>
         <div class="gc-status">${esc(order.status_label || order.status || 'Atendimento')}</div>

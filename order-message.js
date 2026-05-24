@@ -118,7 +118,11 @@ function buildOrderTrackingMessage(options) {
   const taxa = Number(order.taxa || 0)
   const desconto = Math.max(0, subtotal - totalItens)
   const totalFinal = Math.max(0, totalItens + taxa)
-  const orderNumber = options?.orderNumber || String(order.order_num || order.id || '').padStart(3, '0')
+  const hasOrderNumberOption = Object.prototype.hasOwnProperty.call(options || {}, 'orderNumber')
+  const orderNumber = hasOrderNumberOption
+    ? cleanText(options.orderNumber || '')
+    : String(order.order_num || order.id || '').padStart(3, '0')
+  const orderTitle = orderNumber ? `*Pedido #${orderNumber}*` : '*Pedido aguardando pagamento*'
   const storeName = cleanText(options?.storeName || 'Restaurante')
   const elapsedText = cleanText(options?.elapsedText || '')
   const includeTrackingNote = options?.includeTrackingNote !== false
@@ -127,7 +131,7 @@ function buildOrderTrackingMessage(options) {
 
   const lines = [
     `*${storeName}*`,
-    `*Pedido #${orderNumber}*`,
+    orderTitle,
     '',
     `Status atual: ${statusLabel(order.status, delivery.kind)}${elapsedText ? ` - feito ${elapsedText}` : ''}`,
     `Progresso: ${progressLine(order.status, delivery.kind)}`,

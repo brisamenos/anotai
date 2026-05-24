@@ -75,7 +75,11 @@ function _atribuirOrderNumSeNecessario(db, tenantId, orderId) {
   const txFn = db.transaction((tid, id) => {
     const atual = db.prepare('SELECT id, order_num FROM orders WHERE id=? AND tenant_id=?').get(id, tid)
     if (!atual) return null
-    if (atual.order_num) return Number(atual.order_num)
+    if (atual.order_num) {
+      db.prepare('UPDATE order_chat_threads SET order_num=?, updated_at=datetime(\'now\') WHERE order_id=? AND tenant_id=?')
+        .run(atual.order_num, id, tid)
+      return Number(atual.order_num)
+    }
     const cfg = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tid)
     const offset = parseInt(cfg?.order_num_offset) || 0
     const row = db.prepare(`
@@ -85,6 +89,8 @@ function _atribuirOrderNumSeNecessario(db, tenantId, orderId) {
     `).get(tid, offset)
     const next = (row?.mx || 0) + 1
     db.prepare('UPDATE orders SET order_num=? WHERE id=? AND tenant_id=? AND order_num IS NULL').run(next, id, tid)
+    db.prepare('UPDATE order_chat_threads SET order_num=?, updated_at=datetime(\'now\') WHERE order_id=? AND tenant_id=?')
+      .run(next, id, tid)
     return next
   })
   return txFn(tenantId, orderId)
@@ -1271,12 +1277,43 @@ module.exports = async function handleRoutes(req, res, ctx) {
     }
     return null
   }
+  const _chatOrderItemsLines = (order, fallbackText = '') => {
+    const items = (() => {
+      try {
+        if (Array.isArray(order?.items)) return order.items
+        return JSON.parse(order?.items || '[]') || []
+      } catch { return [] }
+    })()
+    const lines = (items || [])
+      .filter(i => i && i.item_status !== 'cancelado' && i.status !== 'cancelado')
+      .map(i => {
+        const qty = i.qty || i.quantity || 1
+        const name = String(i.name || i.nome || 'Item').trim()
+        const obs = String(i.obs || i.observacao || i.note || '').trim()
+        const base = `- ${qty}x ${name || 'Item'}`
+        if (!obs) return base
+        const details = obs.split(/\s*\|\s*/).map(s => s.trim()).filter(Boolean)
+        return details.length ? `${base}\n  ${details.join('\n  ')}` : base
+      })
+    if (lines.length) return lines.join('\n')
+    return String(fallbackText || '')
+      .split(/\s*,\s*/)
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(s => `- ${s}`)
+      .join('\n')
+  }
   const _chatOrderAnswer = (order) => {
     if (!order) return ''
     const pub = (() => { try { return chatOrderPublic(order) || {} } catch { return {} } })()
     const itens = pub.items_text || ''
+    const itensLista = _chatOrderItemsLines(order, itens)
     const num = _chatShortNum(order)
     const status = pub.status_label || order.status || 'em andamento'
+    const statusRaw = String(order.status || '').toLowerCase()
+    const pagRaw = String(order.pag || '').toLowerCase()
+    const aguardandoOnline = statusRaw === 'aguardando_cartao' || (statusRaw === 'aguardando_pix' && pagRaw !== 'pix_manual')
+    const titulo = num ? `Pedido #${num}` : (aguardandoOnline ? 'Pedido aguardando pagamento' : 'Seu pedido')
     const total = (parseFloat(order.total || 0) || 0) + (parseFloat(order.taxa || 0) || 0)
     const pag = String(order.pag || '').replace(/_/g, ' ') || ''
     const addr = String(order.addr || '').trim()
@@ -1288,16 +1325,16 @@ module.exports = async function handleRoutes(req, res, ctx) {
         return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
       } catch { return new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) }
     })()
-    const linhas = [
-      `Claro. Seu pedido${num ? ' #' + num : ''} esta ${status}.`,
-      itens ? `Itens: ${itens}.` : '',
-      `Total: R$ ${_chatFmt(total)}.`,
-      pag ? `Pagamento: ${pag}.` : '',
-      addr ? `Endereco/retirada: ${addr}.` : '',
-      `Atualizado as ${when} (horario de Brasilia).`,
-      'Se precisar de algo especifico sobre este pedido, pode me perguntar por aqui.'
+    const blocos = [
+      `Claro. ${titulo} esta ${status}.`,
+      itensLista ? `Itens\n${itensLista}` : '',
+      `Valores\nTotal: R$ ${_chatFmt(total)}`,
+      pag ? `Pagamento\n${pag}` : '',
+      addr ? `Endereco/retirada\n${addr}` : '',
+      `Atualizacao\n${when} (horario de Brasilia)`,
+      'Mensagem\nPara falar com a loja sobre este pedido, envie sua mensagem por aqui.'
     ].filter(Boolean)
-    return linhas.join('\n')
+    return blocos.join('\n\n')
   }
   const _chatAssistant = (tid, thread, incomingText, order = null) => {
     const text = String(incomingText || '').trim()
@@ -1329,7 +1366,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       _chatAddBot(thread, trackingOnlyMsg, order)
       return
     }
-    _chatAddBot(thread, `${_chatOrderAnswer(order)}\n\nSe precisar falar com a loja sobre este pedido, envie sua mensagem por aqui.`, order)
+    _chatAddBot(thread, _chatOrderAnswer(order), order)
     return
 
     const draft = _chatDraft(tid, thread)
@@ -4978,7 +5015,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const pedido      = db.prepare(`SELECT id,order_num,client,status,items,total,taxa,addr,pag,troco,created_at FROM orders WHERE id=? AND tenant_id=? AND ${phoneWhere}`).get(order_id, tenant_id, ...phoneLookupArgs(phone))
     if (!pedido) { send(res, 400, { ok: false }); return true }
     const offset      = parseInt(cfg?.order_num_offset || 0) || 0
-    const numPedido   = String(pedido.order_num || Math.max(1, pedido.id - offset)).padStart(3, '0')
+    const statusPix   = String(pedido.status || '').toLowerCase()
+    const pagPix      = String(pedido.pag || '').toLowerCase()
+    const pendenteOnline = statusPix === 'aguardando_cartao' || (statusPix === 'aguardando_pix' && pagPix !== 'pix_manual')
+    const numPedido   = pedido.order_num
+      ? String(pedido.order_num).padStart(3, '0')
+      : (pendenteOnline ? '' : String(Math.max(1, pedido.id - offset)).padStart(3, '0'))
     try { db.prepare("UPDATE orders SET wa_track=1 WHERE id=? AND tenant_id=? AND COALESCE(wa_track,0)=0").run(pedido.id, tenant_id) } catch {}
     const msg         = buildOrderTrackingMessage({
       order: pedido,

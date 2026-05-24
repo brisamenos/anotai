@@ -1400,7 +1400,11 @@ function atribuirOrderNumSeNecessario(tid, orderId) {
   const txFn = db.transaction((tenantId, id) => {
     const atual = db.prepare('SELECT id, order_num FROM orders WHERE id=? AND tenant_id=?').get(id, tenantId)
     if (!atual) return null
-    if (atual.order_num) return Number(atual.order_num)
+    if (atual.order_num) {
+      db.prepare('UPDATE order_chat_threads SET order_num=?, updated_at=datetime(\'now\') WHERE order_id=? AND tenant_id=?')
+        .run(atual.order_num, id, tenantId)
+      return Number(atual.order_num)
+    }
     const cfg = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tenantId)
     const offset = parseInt(cfg?.order_num_offset) || 0
     const row = db.prepare(`
@@ -1410,6 +1414,8 @@ function atribuirOrderNumSeNecessario(tid, orderId) {
     `).get(tenantId, offset)
     const next = (row?.mx || 0) + 1
     db.prepare('UPDATE orders SET order_num=? WHERE id=? AND tenant_id=? AND order_num IS NULL').run(next, id, tenantId)
+    db.prepare('UPDATE order_chat_threads SET order_num=?, updated_at=datetime(\'now\') WHERE order_id=? AND tenant_id=?')
+      .run(next, id, tenantId)
     return next
   })
   return txFn(tid, orderId)
@@ -2719,13 +2725,15 @@ function chatThreadPublic(thread, order = null) {
   const internalId = Number(order?.id || thread?.order_id || 0)
   if (publicNum && internalId && Number(publicNum) !== internalId) {
     lastMessage = String(lastMessage).replace(new RegExp(`(Pedido\\s*#)${internalId}(\\b)`, 'gi'), `$1${publicNum}$2`)
+  } else if (!publicNum && internalId) {
+    lastMessage = String(lastMessage).replace(new RegExp(`Pedido\\s*#${internalId}\\b`, 'gi'), 'Pedido')
   }
   if (!thread) return null
   return {
     id: thread.id,
     tenant_id: thread.tenant_id,
     order_id: thread.order_id,
-    order_num: thread.order_num || publicOrder?.order_num || null,
+    order_num: order ? (publicOrder?.order_num || null) : (thread.order_num || null),
     client: thread.client || '',
     phone: thread.phone || '',
     status: thread.status || 'open',
@@ -2753,6 +2761,8 @@ function chatMessagePublic(row, order = null) {
   }
   if (publicNum && orderId && Number(publicNum) !== orderId) {
     body = String(body).replace(new RegExp(`(Pedido\\s*#)${orderId}(\\b)`, 'gi'), `$1${publicNum}$2`)
+  } else if (!publicNum && orderId) {
+    body = String(body).replace(new RegExp(`Pedido\\s*#${orderId}\\b`, 'gi'), 'Pedido')
   }
   return {
     id: row.id,
@@ -2772,20 +2782,23 @@ function chatEnsureThreadFromOrder(order, override = {}) {
   const phone = chatNormalizePhone(override.phone || order.phone)
   if (!phone) return null
   const client = String(override.client || order.client || '').trim()
+  const hasOrderNumField = Object.prototype.hasOwnProperty.call(order, 'order_num')
+  const incomingOrderNum = hasOrderNumField ? (order.order_num || null) : undefined
   const existing = db.prepare('SELECT * FROM order_chat_threads WHERE tenant_id=? AND order_id=? ORDER BY id DESC LIMIT 1').get(order.tenant_id, order.id)
   if (existing) {
+    const threadOrderNum = hasOrderNumField ? incomingOrderNum : (existing.order_num || null)
     db.prepare(`UPDATE order_chat_threads
-      SET order_num=COALESCE(?, order_num),
+      SET order_num=?,
           client=CASE WHEN ?!='' THEN ? ELSE client END,
           phone=CASE WHEN ?!='' THEN ? ELSE phone END,
           updated_at=datetime('now')
       WHERE id=? AND tenant_id=?`)
-      .run(order.order_num || null, client, client, phone, phone, existing.id, order.tenant_id)
+      .run(threadOrderNum, client, client, phone, phone, existing.id, order.tenant_id)
   } else {
     db.prepare(`INSERT INTO order_chat_threads
       (tenant_id, order_id, order_num, client, phone, updated_at)
       VALUES (?,?,?,?,?,datetime('now'))`)
-      .run(order.tenant_id, order.id, order.order_num || null, client, phone)
+      .run(order.tenant_id, order.id, incomingOrderNum || null, client, phone)
   }
   return db.prepare('SELECT * FROM order_chat_threads WHERE tenant_id=? AND order_id=?').get(order.tenant_id, order.id)
 }
@@ -3708,7 +3721,13 @@ async function handleIAWebhook(req, res) {
       // ── Helpers para pedido ──
       const _offsetCfg = db.prepare("SELECT order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
       const _iaOffset  = parseInt(_offsetCfg?.order_num_offset) || 0
-      const _iaPedNum  = (p) => String(p.order_num || Math.max(1, p.id - _iaOffset)).padStart(3, '0')
+      const _iaPedNum  = (p) => {
+        const status = String(p?.status || '').toLowerCase()
+        const pag = String(p?.pag || '').toLowerCase()
+        if (p?.order_num) return String(p.order_num).padStart(3, '0')
+        if (status === 'aguardando_cartao' || (status === 'aguardando_pix' && pag !== 'pix_manual')) return ''
+        return String(Math.max(1, Number(p?.id || 0) - _iaOffset)).padStart(3, '0')
+      }
       const _phoneArgs  = phoneLookupArgs(phone)
       const _phoneWhere = phoneLookupSql('phone')
       const _tempoDecorrido = (ts) => {
