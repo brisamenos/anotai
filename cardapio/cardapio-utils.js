@@ -58,6 +58,73 @@ function fmt(n) {
   return Number(n||0).toFixed(2).replace('.',',');
 }
 
+// Som compartilhado do cardapio: toque curto e suave para chat/acompanhamento.
+(function(){
+  let notifyCtx = null;
+  function getNotifyCtx() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!notifyCtx) notifyCtx = new AC();
+    return notifyCtx;
+  }
+  function note(ctx, freq, start, dur, vol) {
+    const t0 = ctx.currentTime + start;
+    const out = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(3600, t0);
+    out.connect(filter);
+    filter.connect(ctx.destination);
+    out.gain.setValueAtTime(0.0001, t0);
+    out.gain.exponentialRampToValueAtTime(vol, t0 + 0.018);
+    out.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+    const main = ctx.createOscillator();
+    main.type = 'sine';
+    main.frequency.setValueAtTime(freq, t0);
+    main.connect(out);
+    main.start(t0);
+    main.stop(t0 + dur + 0.02);
+
+    const shine = ctx.createOscillator();
+    const shineGain = ctx.createGain();
+    shine.type = 'triangle';
+    shine.frequency.setValueAtTime(freq * 2, t0);
+    shineGain.gain.setValueAtTime(0.18, t0);
+    shine.connect(shineGain);
+    shineGain.connect(out);
+    shine.start(t0);
+    shine.stop(t0 + dur * 0.72);
+  }
+  function unlockNotifySound() {
+    try {
+      const ctx = getNotifyCtx();
+      if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+    } catch(e) {}
+  }
+  function playNotifySound(kind) {
+    try {
+      const ctx = getNotifyCtx();
+      if (!ctx) return false;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+        return false;
+      }
+      const base = kind === 'status' ? [659.25, 880] : [587.33, 783.99];
+      note(ctx, base[0], 0.01, 0.44, 0.12);
+      note(ctx, base[1], 0.13, 0.54, 0.105);
+      return true;
+    } catch(e) {
+      return false;
+    }
+  }
+  window.efUnlockNotifySound = unlockNotifySound;
+  window.efPlayNotifySound = playNotifySound;
+  ['pointerdown','keydown','touchstart','click'].forEach(evt => {
+    window.addEventListener(evt, unlockNotifySound, { once: true, passive: true });
+  });
+})();
+
 // ══════════════════════════════════════════
 //  MODAL DE AVALIAÇÃO (link ?rate=ID)
 // ══════════════════════════════════════════
@@ -148,4 +215,3 @@ async function submitRating() {
     });
   }
 })();
-

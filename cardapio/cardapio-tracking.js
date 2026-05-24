@@ -43,9 +43,18 @@ function stepIndexFor(status) {
   return STEPS.findIndex(s => s.key.includes(status));
 }
 
+function notifyTrackUpdate(status, previousStatus) {
+  if (!status || status === previousStatus) return;
+  try {
+    if (typeof window.efPlayNotifySound === 'function') window.efPlayNotifySound('status');
+    if (navigator.vibrate) navigator.vibrate(70);
+  } catch(e) {}
+}
+
 function startTracking(orderId, items, client, addr, initialStatus, orderNum, details) {
   _trackOrderId = orderId;
   _initialOrderStatus = initialStatus || 'analise';
+  _trackCurrentStatus = _initialOrderStatus;
   const fab = document.getElementById('track-fab');
   fab.classList.add('show');
   const numLabel = orderNum ? '#' + String(orderNum).padStart(3,'0') : 'Pagamento pendente';
@@ -54,7 +63,11 @@ function startTracking(orderId, items, client, addr, initialStatus, orderNum, de
   _trackChannel = sb.channel('orders-rt')
     .on('postgres_changes',{event:'UPDATE',table:'orders'}, p => {
       if (Number(p.new.id) === orderId) {
-        updateTracker(p.new.status);
+        const nextStatus = p.new.status || _trackCurrentStatus || _initialOrderStatus;
+        const previousStatus = _trackCurrentStatus || _initialOrderStatus;
+        updateTracker(nextStatus);
+        notifyTrackUpdate(nextStatus, previousStatus);
+        _trackCurrentStatus = nextStatus;
         if (p.new.order_num) {
           const novoNum = '#' + String(p.new.order_num).padStart(3,'0');
           document.getElementById('track-num').textContent = novoNum;

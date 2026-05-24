@@ -49,6 +49,7 @@ let _lojaAberta  = true;
 let _trackOrderId= null;
 let _trackChannel= null;
 let _initialOrderStatus = 'analise';
+let _trackCurrentStatus = '';
 let _waOptIn     = false;  // reservado para uso futuro
 
 // ── Numeração de pedidos ──

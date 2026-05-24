@@ -93,6 +93,7 @@
 
   function unlockSound() {
     try {
+      if (typeof window.efUnlockNotifySound === 'function') window.efUnlockNotifySound();
       const ctx = getAudioCtx();
       if (ctx?.state === 'suspended') ctx.resume().catch(() => {});
       ensureNotificationPermission();
@@ -115,23 +116,24 @@
   }
 
   function playChatSound() {
+    if (typeof window.efPlayNotifySound === 'function' && window.efPlayNotifySound('chat')) return;
     try {
       const ctx = audioCtx;
       if (!ctx || ctx.state === 'suspended') return;
       const now = ctx.currentTime + 0.01;
-      [740, 988, 1318].forEach((freq, idx) => {
+      [587.33, 783.99].forEach((freq, idx) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        const start = now + idx * 0.08;
-        osc.type = 'triangle';
+        const start = now + idx * 0.12;
+        osc.type = 'sine';
         osc.frequency.setValueAtTime(freq, start);
         gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(0.22, start + 0.018);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.18);
+        gain.gain.exponentialRampToValueAtTime(0.12, start + 0.018);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.42);
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.start(start);
-        osc.stop(start + 0.2);
+        osc.stop(start + 0.45);
       });
     } catch(e) {}
   }
@@ -332,7 +334,8 @@
       .efc-start button{height:38px;border:none;border-radius:11px;background:var(--accent,#f97316);color:#fff;font:850 12.5px 'DM Sans',system-ui,sans-serif;cursor:pointer;width:100%}
       .efc-msgs{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:14px 12px;background:#f3f4f6;display:flex;flex-direction:column;gap:8px}
       .efc-empty{margin:auto;text-align:center;color:#64748b;font-size:12.5px;line-height:1.35;max-width:230px}
-      .efc-msg{max-width:86%;padding:9px 11px;border-radius:14px;font-size:13px;line-height:1.35;word-break:break-word;box-shadow:0 1px 1px rgba(15,23,42,.06)}
+      .efc-msg{max-width:86%;padding:9px 11px;border-radius:14px;font-size:13px;line-height:1.35;word-break:break-word;overflow-wrap:anywhere;box-shadow:0 1px 1px rgba(15,23,42,.06)}
+      .efc-msg-body{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
       .efc-msg.client{align-self:flex-end;background:var(--accent,#f97316);color:#fff;border-bottom-right-radius:5px}
       .efc-msg.store{align-self:flex-start;background:#fff;color:#111827;border-bottom-left-radius:5px}
       .efc-msg.system{align-self:center;background:#e0f2fe;color:#075985;border:1px solid #bae6fd;box-shadow:none;font-size:12px;text-align:center;border-radius:10px}
@@ -850,6 +853,12 @@
     return Number(state.orderId || state.thread?.order_id || state.order?.id || 0);
   }
 
+  function isPendingOnlinePayment(order) {
+    const status = String(order?.status || '').toLowerCase();
+    const pag = String(order?.pag || '').toLowerCase();
+    return status === 'aguardando_cartao' || (status === 'aguardando_pix' && pag !== 'pix_manual');
+  }
+
   function normalizePaymentPayload(payload) {
     payload = payload || {};
     const orderId = Number(payload.orderId || payload.order_id || payload.id || state.orderId || 0);
@@ -1096,11 +1105,14 @@
     const order = activeOrderFromState() || {};
     const num = state.orderNum || order.order_num || order.num || '';
     const label = order.status_label || '';
-    sub.textContent = num ? ('Pedido #' + num) : (hasSession ? 'Pedido em acompanhamento' : 'EstimaIA');
+    const pendingOnline = isPendingOnlinePayment(order);
+    sub.textContent = num ? ('Pedido #' + num) : (hasSession ? (pendingOnline ? 'Aguardando pagamento' : 'Pedido em acompanhamento') : 'EstimaIA');
     if (hasSession) {
       orderBox.innerHTML = num
         ? `<strong>Pedido #${esc(num || '')}</strong>${label ? ' - ' + esc(label) : ''}${order.items_text ? '<br>' + esc(order.items_text) : ''}`
-        : '<strong>Pedido em acompanhamento</strong><br>O numero publico sera exibido assim que estiver disponivel.';
+        : (pendingOnline
+          ? '<strong>Pedido aguardando pagamento</strong><br>O numero publico sera exibido depois da confirmacao.'
+          : '<strong>Pedido em acompanhamento</strong><br>O numero publico sera exibido assim que estiver disponivel.');
     } else {
       orderBox.innerHTML = '<strong>Chat de acompanhamento</strong><br>O chat fica disponivel depois que o pedido e realizado.';
     }
@@ -1120,7 +1132,7 @@
     const messageHtml = state.messages.map(m => {
       const cls = m.sender === 'client' ? 'client' : (m.sender === 'system' ? 'system' : 'store');
       return `<div class="efc-msg ${cls}">
-        <div>${esc(m.body)}</div>
+        <div class="efc-msg-body">${esc(m.body)}</div>
         ${m.sender !== 'system' ? `<div class="efc-time">${esc(messageTime(m))}</div>` : ''}
       </div>${quickRepliesHtml(m, lastQuickId)}`;
     }).join('');
