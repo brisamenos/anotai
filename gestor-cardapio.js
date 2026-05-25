@@ -1921,10 +1921,17 @@ function renderImagens() {
       <div style="padding:10px">
         <div style="font-weight:600;font-size:12.5px">${i.name}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:1px">${i.cat}</div>
-        <button class="btn bg" style="width:100%;justify-content:center;font-size:11px;margin-top:7px;padding:4px"
-          onclick="event.stopPropagation();triggerImageUpload(${i.id},'${i.name.replace(/'/g,'')}')">
-          ${_ICON_IMG} ${i.imageUrl ? 'Alterar foto' : 'Adicionar foto'}
-        </button>
+        <div style="display:grid;grid-template-columns:${i.imageUrl ? '1fr 1fr' : '1fr'};gap:6px;margin-top:7px">
+          <button class="btn bg" style="justify-content:center;font-size:11px;padding:4px"
+            onclick="event.stopPropagation();triggerImageUpload(${i.id},'${i.name.replace(/'/g,'')}')">
+            ${_ICON_IMG} ${i.imageUrl ? 'Alterar' : 'Adicionar foto'}
+          </button>
+          ${i.imageUrl ? `<button class="btn bo" style="justify-content:center;font-size:11px;padding:4px"
+            onclick="event.stopPropagation();openReplicarImagemModal(${i.id})">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M6 3H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 4h3a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 8h6M9 6l2 2-2 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Replicar
+          </button>` : ''}
+        </div>
       </div>
     </div>`).join('');
 }
@@ -2196,40 +2203,94 @@ let _riItensSelecionados = new Set();
 let _riSourceItem = null;
 let _riAllItensCache = [];
 
-function openReplicarImagemModal() {
-  // Pega o item que está sendo editado (variável global do gestor-cardapio.js)
-  const _id = (typeof editingId !== 'undefined' && editingId) ? editingId : (window._editItemId || null);
-  if (!_id) { sbToast('err', 'Salve o item antes de replicar a imagem.'); return; }
+function _riIsValidImageUrl(url) {
+  const clean = String(url || '').trim();
+  return !!clean && clean !== window.location.href && !clean.endsWith('#') && !clean.startsWith('blob:');
+}
 
-  // Pega URL da imagem (preferindo o que está em memória — pode ser nova upload ainda não salva)
-  const sourceUrl = (typeof _editItemImageUrl !== 'undefined' && _editItemImageUrl)
-                 || window._editItemImageUrl
-                 || document.getElementById('edit-img-thumb')?.src
-                 || null;
+function _riSetSourcePreview(url, name) {
+  const thumb = document.getElementById('ri-thumb');
+  const empty = document.getElementById('ri-no-img');
+  const title = document.getElementById('ri-source-name');
+  if (thumb) {
+    thumb.src = url;
+    thumb.style.display = 'block';
+  }
+  if (empty) empty.style.display = 'none';
+  if (title) title.textContent = name || 'Produto atual';
+}
 
-  if (!sourceUrl || sourceUrl === window.location.href || sourceUrl.endsWith('#')) {
-    sbToast('err', 'Esse item ainda não tem imagem. Envie uma foto antes de replicar.');
+async function _riResolveSourceImage(itemId, sourceItem, explicitSource) {
+  if (explicitSource) return sourceItem?.imageUrl || null;
+
+  const selectedGalleryUrl = (typeof _editItemImageUrl !== 'undefined' && _editItemImageUrl) ? _editItemImageUrl : null;
+  const selectedFile = (typeof _editItemImageFile !== 'undefined' && _editItemImageFile) ? _editItemImageFile : null;
+
+  if (selectedFile) {
+    sbLoading(true);
+    try {
+      const url = await uploadItemImage(selectedFile, itemId);
+      const { error } = await sb.from('menu_items').update({ image_url: url }).eq('id', itemId);
+      if (error) throw error;
+      _editItemImageFile = null;
+      _editItemImageUrl = url;
+      if (sourceItem) sourceItem.imageUrl = url;
+      const thumb = document.getElementById('edit-img-thumb');
+      if (thumb) thumb.src = url;
+      return url;
+    } catch(e) {
+      sbToast('err', 'Erro ao preparar a foto para replicar.');
+      return null;
+    } finally {
+      sbLoading(false);
+    }
+  }
+
+  if (selectedGalleryUrl) {
+    try {
+      const { error } = await sb.from('menu_items').update({ image_url: selectedGalleryUrl }).eq('id', itemId);
+      if (error) throw error;
+      if (sourceItem) sourceItem.imageUrl = selectedGalleryUrl;
+    } catch(e) {
+      sbToast('err', 'Erro ao salvar a foto do produto atual.');
+      return null;
+    }
+    return selectedGalleryUrl;
+  }
+
+  return sourceItem?.imageUrl
+      || document.getElementById('edit-img-thumb')?.getAttribute('src')
+      || document.getElementById('edit-img-thumb')?.src
+      || null;
+}
+
+async function openReplicarImagemModal(sourceItemId = null) {
+  if (!document.getElementById('modal-replicar-imagem')) {
+    sbToast('err', 'Atalho de replicar imagem indisponível.');
     return;
   }
 
-  // Acha o item de origem nos dados em memória
-  const allItems = (typeof items !== 'undefined' && items) ? items : [];
-  _riSourceItem = allItems.find(it => it.id === _id) || { id: _id, name: 'Item atual', imageUrl: sourceUrl, cat: '' };
-  // Sobrescreve imageUrl com a URL atual (pode ter sido trocada antes de salvar)
-  _riSourceItem.imageUrl = sourceUrl;
+  const allItems = (typeof items !== 'undefined' && Array.isArray(items)) ? items : [];
+  const explicitId = sourceItemId ? Number(sourceItemId) : null;
+  const _id = explicitId || ((typeof editingId !== 'undefined' && editingId) ? Number(editingId) : Number(window._editItemId || 0));
+  if (!_id) { sbToast('err', 'Salve o item antes de replicar a imagem.'); return; }
 
-  // Atualiza preview
-  document.getElementById('ri-thumb').src = sourceUrl;
-  document.getElementById('ri-thumb').style.display = 'block';
-  document.getElementById('ri-no-img').style.display = 'none';
-  document.getElementById('ri-source-name').textContent = _riSourceItem.name || 'Item atual';
+  const sourceItem = allItems.find(it => Number(it.id) === Number(_id)) || { id: _id, name: 'Item atual', imageUrl: null, cat: '', catKey: '' };
+  const sourceUrl = await _riResolveSourceImage(_id, sourceItem, !!explicitId);
 
-  // Cache de todos os itens (exceto o de origem)
-  _riAllItensCache = allItems.filter(it => it.id !== _id);
+  if (!_riIsValidImageUrl(sourceUrl)) {
+    sbToast('err', 'Esse item ainda não tem imagem salva. Envie uma foto antes de replicar.');
+    return;
+  }
+
+  _riSourceItem = { ...sourceItem, imageUrl: sourceUrl };
+  _riAllItensCache = allItems.filter(it => Number(it.id) !== Number(_id));
   _riItensSelecionados = new Set();
 
+  const busca = document.getElementById('ri-busca-item');
+  if (busca) busca.value = '';
+  _riSetSourcePreview(sourceUrl, _riSourceItem.name);
   riRender('');
-  document.getElementById('ri-busca-item').value = '';
   openModal('modal-replicar-imagem');
 }
 
@@ -2241,7 +2302,8 @@ function riRender(filtro) {
   const filtered = _riAllItensCache.filter(it => {
     if (!term) return true;
     return (it.name || '').toLowerCase().includes(term)
-        || (it.cat || '').toLowerCase().includes(term);
+        || (it.cat || '').toLowerCase().includes(term)
+        || (it.catKey || '').toLowerCase().includes(term);
   });
 
   if (!filtered.length) {
@@ -2271,7 +2333,7 @@ function riRender(filtro) {
         ? `<span style="font-size:9.5px;color:#fbbf24;margin-left:auto">já tem imagem</span>`
         : `<span style="font-size:9.5px;color:#86efac;margin-left:auto">sem imagem</span>`;
       html += `
-        <label style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface);border-radius:6px;cursor:pointer;border:1px solid ${checked ? 'var(--accent)' : 'transparent'}" onmouseenter="this.style.background='var(--surface3)'" onmouseleave="this.style.background='var(--surface)'">
+        <label data-ri-id="${it.id}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface);border-radius:6px;cursor:pointer;border:1px solid ${checked ? 'var(--accent)' : 'transparent'}" onmouseenter="this.style.background='var(--surface3)'" onmouseleave="this.style.background='var(--surface)'">
           <input type="checkbox" ${checked ? 'checked' : ''} onchange="riToggleItem(${it.id}, this.checked)" style="accent-color:var(--accent);flex-shrink:0">
           ${thumb}
           <span style="font-size:12px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(it.name || '')}</span>
@@ -2290,12 +2352,8 @@ function riToggleItem(id, checked) {
   // Atualiza só a borda do label clicado, sem re-render completo (mais performático)
   const list = document.getElementById('ri-itens-list');
   if (!list) return;
-  list.querySelectorAll('label').forEach(lbl => {
-    const cb = lbl.querySelector('input[type=checkbox]');
-    if (cb && cb.getAttribute('onchange')?.includes(`riToggleItem(${id},`)) {
-      lbl.style.border = '1px solid ' + (checked ? 'var(--accent)' : 'transparent');
-    }
-  });
+  const lbl = list.querySelector(`label[data-ri-id="${id}"]`);
+  if (lbl) lbl.style.border = '1px solid ' + (checked ? 'var(--accent)' : 'transparent');
 }
 
 function riAtualizarContagem() {
@@ -2314,7 +2372,8 @@ function riSelecionarTodos(marcar) {
     const filtered = _riAllItensCache.filter(it => {
       if (!term) return true;
       return (it.name || '').toLowerCase().includes(term)
-          || (it.cat || '').toLowerCase().includes(term);
+          || (it.cat || '').toLowerCase().includes(term)
+          || (it.catKey || '').toLowerCase().includes(term);
     });
     filtered.forEach(it => _riItensSelecionados.add(it.id));
   }
@@ -2324,10 +2383,11 @@ function riSelecionarTodos(marcar) {
 
 function riMesmaCategoria() {
   if (!_riSourceItem) return;
-  const cat = _riSourceItem.cat;
+  const catKey = _riSourceItem.catKey || _riSourceItem.cat || '';
+  const catLabel = _riSourceItem.cat || '';
   _riItensSelecionados = new Set();
   _riAllItensCache.forEach(it => {
-    if (it.cat === cat) _riItensSelecionados.add(it.id);
+    if ((it.catKey || it.cat || '') === catKey || (catLabel && it.cat === catLabel)) _riItensSelecionados.add(it.id);
   });
   const term = document.getElementById('ri-busca-item')?.value || '';
   riRender(term);
@@ -2349,13 +2409,17 @@ function riFiltrar(term) {
 async function replicarImagemEmLote() {
   const ids = Array.from(_riItensSelecionados);
   if (!ids.length) { sbToast('err', 'Selecione pelo menos 1 produto.'); return; }
-  if (!_riSourceItem || !_riSourceItem.imageUrl) {
-    const url = window._editItemImageUrl || document.getElementById('edit-img-thumb')?.src || null;
-    if (!url) { sbToast('err', 'Imagem não encontrada.'); return; }
-    if (_riSourceItem) _riSourceItem.imageUrl = url;
-  }
 
-  const url = _riSourceItem.imageUrl;
+  const url = _riSourceItem?.imageUrl || null;
+  if (!_riIsValidImageUrl(url)) { sbToast('err', 'Imagem não encontrada.'); return; }
+
+  const allItems = (typeof items !== 'undefined' && Array.isArray(items)) ? items : [];
+  const sobrescritas = ids.filter(id => {
+    const it = allItems.find(x => Number(x.id) === Number(id));
+    return it?.imageUrl && it.imageUrl !== url;
+  }).length;
+  if (sobrescritas && !confirm(`Isso vai substituir a imagem atual de ${sobrescritas} ${sobrescritas===1?'produto':'produtos'}. Continuar?`)) return;
+
   const btn = document.getElementById('ri-btn-aplicar');
   if (btn) { btn.disabled = true; btn.textContent = `Aplicando em ${ids.length}...`; }
 
@@ -2367,8 +2431,7 @@ async function replicarImagemEmLote() {
       if (error) { falhas++; continue; }
       sucesso++;
       // Atualiza cache em memória pra refletir na UI sem reload
-      const allItems = (typeof items !== 'undefined' && items) ? items : [];
-      const it = allItems.find(x => x.id === id);
+      const it = allItems.find(x => Number(x.id) === Number(id));
       if (it) it.imageUrl = url;
     } catch (e) {
       falhas++;
@@ -2378,12 +2441,10 @@ async function replicarImagemEmLote() {
   if (btn) { btn.disabled = false; btn.textContent = 'Replicar imagem'; }
   closeModal('modal-replicar-imagem');
 
-  // Re-render do cardápio se a função existir
-  if (typeof renderCardapio === 'function') {
-    try { renderCardapio(); } catch(_) {}
-  } else if (typeof renderCardapioGestor === 'function') {
-    try { renderCardapioGestor(); } catch(_) {}
-  }
+  try { if (typeof renderImagens === 'function') renderImagens(); } catch(_) {}
+  try { if (typeof renderGestor === 'function') renderGestor(); } catch(_) {}
+  try { if (typeof renderTable === 'function') renderTable(); } catch(_) {}
+  try { if (typeof renderPDV === 'function') renderPDV(); } catch(_) {}
 
   if (sucesso && !falhas) sbToast('ok', `✅ Imagem replicada em ${sucesso} ${sucesso===1?'produto':'produtos'}!`);
   else if (sucesso && falhas) sbToast('ok', `Replicada em ${sucesso}. ${falhas} ${falhas===1?'falhou':'falharam'}.`);
