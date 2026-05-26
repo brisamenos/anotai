@@ -2002,20 +2002,20 @@ td{padding:12px 16px;color:#dce6f7}
 
     <div class="modal-sec-title">Adicionar período</div>
     <div class="mrow2" style="margin-bottom:12px">
-      <button class="btn bg2" style="justify-content:center;padding:12px;flex-direction:column;gap:2px;height:auto" onclick="renovarDias(30)">
-        <span style="font-size:15px;font-weight:700">+30 dias</span>
+      <button class="btn bg2" style="justify-content:center;padding:12px;flex-direction:column;gap:2px;height:auto" onclick="renovarMeses(1)">
+        <span style="font-size:15px;font-weight:700">+1 mes</span>
         <span style="font-size:11px;color:var(--muted);font-weight:400">1 mês</span>
       </button>
-      <button class="btn bg2" style="justify-content:center;padding:12px;flex-direction:column;gap:2px;height:auto" onclick="renovarDias(90)">
-        <span style="font-size:15px;font-weight:700">+90 dias</span>
+      <button class="btn bg2" style="justify-content:center;padding:12px;flex-direction:column;gap:2px;height:auto" onclick="renovarMeses(3)">
+        <span style="font-size:15px;font-weight:700">+3 meses</span>
         <span style="font-size:11px;color:var(--muted);font-weight:400">3 meses</span>
       </button>
-      <button class="btn bg2" style="justify-content:center;padding:12px;flex-direction:column;gap:2px;height:auto" onclick="renovarDias(180)">
-        <span style="font-size:15px;font-weight:700">+180 dias</span>
+      <button class="btn bg2" style="justify-content:center;padding:12px;flex-direction:column;gap:2px;height:auto" onclick="renovarMeses(6)">
+        <span style="font-size:15px;font-weight:700">+6 meses</span>
         <span style="font-size:11px;color:var(--muted);font-weight:400">6 meses</span>
       </button>
-      <button class="btn bp" style="justify-content:center;padding:12px;flex-direction:column;gap:2px;height:auto" onclick="renovarDias(365)">
-        <span style="font-size:15px;font-weight:700">+365 dias</span>
+      <button class="btn bp" style="justify-content:center;padding:12px;flex-direction:column;gap:2px;height:auto" onclick="renovarMeses(12)">
+        <span style="font-size:15px;font-weight:700">+12 meses</span>
         <span style="font-size:11px;opacity:.8;font-weight:400">1 ano</span>
       </button>
     </div>
@@ -2072,6 +2072,31 @@ function getAdminToken() {
 function adminAuthHeader() {
   const t = getAdminToken();
   return t ? { 'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+}
+function adminParseDateOnly(value) {
+  if (!value) return null;
+  const [y, m, d] = String(value).slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+function adminDateISO(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+function adminFormatDate(value) {
+  const dt = adminParseDateOnly(value);
+  return dt ? dt.toLocaleDateString('pt-BR') : '';
+}
+function adminAddMonths(date, months) {
+  const base = date instanceof Date && !Number.isNaN(date.getTime()) ? date : new Date();
+  const day = base.getDate();
+  const target = new Date(base.getFullYear(), base.getMonth() + months, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(day, lastDay));
+  return target;
 }
 async function sha256(t) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
@@ -2768,7 +2793,7 @@ function renderDash() {
     const pro      = _clientes.filter(c=>c.plano==='pro').length;
     const expiring = _clientes.filter(c=>{
       if(!c.expires_at) return false;
-      const d = new Date(c.expires_at), now = new Date();
+      const d = adminParseDateOnly(c.expires_at), now = new Date();
       return (d - now) < 7*24*3600*1000 && d > now;
     });
     ov.innerHTML = `
@@ -2793,7 +2818,7 @@ function renderDash() {
         <div style="margin-top:4px">
           <div class="infobox infobox-orange" style="font-size:12px">
             <div style="font-weight:700;color:var(--orange);margin-bottom:4px">⚠️ Expirando em 7 dias (${expiring.length})</div>
-            ${expiring.map(c=>`<div style="color:var(--text-2)">• ${c.nome} — ${new Date(c.expires_at).toLocaleDateString('pt-BR')}</div>`).join('')}
+            ${expiring.map(c=>`<div style="color:var(--text-2)">• ${c.nome} — ${adminFormatDate(c.expires_at)}</div>`).join('')}
           </div>
         </div>` : `<div style="padding:10px 0;font-size:12.5px;color:var(--muted)">✅ Nenhum plano expirando nos próximos 7 dias</div>`}
       </div>`;
@@ -2832,7 +2857,7 @@ function renderClientes() {
     if (fPlano && c.plano !== fPlano) return false;
     if (fSeg && (c.segmento||'restaurante') !== fSeg) return false;
     if (fStatus) {
-      const expDate = c.expires_at ? new Date(c.expires_at).getTime() : null;
+      const expDate = c.expires_at ? adminParseDateOnly(c.expires_at)?.getTime() : null;
       if (fStatus === 'ativo'     && !c.ativo) return false;
       if (fStatus === 'inativo'   &&  c.ativo) return false;
       if (fStatus === 'expirando' && (!expDate || expDate <= agora || expDate - agora > SETE_DIAS)) return false;
@@ -2846,8 +2871,8 @@ function renderClientes() {
     if (sortBy === 'nome')    return a.nome.localeCompare(b.nome,'pt-BR');
     if (sortBy === 'antigos') return new Date(a.created_at) - new Date(b.created_at);
     if (sortBy === 'expira') {
-      const da = a.expires_at ? new Date(a.expires_at).getTime() : Infinity;
-      const db = b.expires_at ? new Date(b.expires_at).getTime() : Infinity;
+      const da = a.expires_at ? adminParseDateOnly(a.expires_at)?.getTime() : Infinity;
+      const db = b.expires_at ? adminParseDateOnly(b.expires_at)?.getTime() : Infinity;
       return da - db;
     }
     return new Date(b.created_at) - new Date(a.created_at); // recentes
@@ -2878,8 +2903,9 @@ function renderClientes() {
     const users  = _usuarios.filter(u=>u.tenant_id===c.id);
     const gestor = users.find(u=>u.role==='gestor')||users[0];
     const uCount = users.length;
-    const expOk  = c.expires_at ? new Date(c.expires_at) > new Date() : true;
-    const expSoon = c.expires_at && (new Date(c.expires_at).getTime() - agora) < SETE_DIAS && expOk;
+    const expDate = adminParseDateOnly(c.expires_at);
+    const expOk  = expDate ? expDate > new Date() : true;
+    const expSoon = expDate && (expDate.getTime() - agora) < SETE_DIAS && expOk;
     return `<tr>
       <td>
         <div class="av-row">
@@ -2896,7 +2922,7 @@ function renderClientes() {
       </td>
       <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${planoLabel[c.plano]||c.plano}</span></td>
       <td><span class="badge ${(c.segmento||'restaurante')==='acougue'?'bg-orange':'bg-blue'}">${(c.segmento||'restaurante')==='acougue'?'🥩 Açougue':'🍔 Restaurante'}</span></td>
-      <td style="font-size:12.5px;color:${expOk?(expSoon?'var(--orange)':'var(--text-2)'):'var(--danger)'}">${c.expires_at ? new Date(c.expires_at).toLocaleDateString('pt-BR') : '—'}${expSoon?' ⚠️':''}</td>
+      <td style="font-size:12.5px;color:${expOk?(expSoon?'var(--orange)':'var(--text-2)'):'var(--danger)'}">${c.expires_at ? adminFormatDate(c.expires_at) : '—'}${expSoon?' ⚠️':''}</td>
       <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">● ${c.ativo?'Ativo':'Inativo'}</span></td>
       <td>
         <div class="client-actions">
@@ -2935,13 +2961,16 @@ async function _abrirModalClienteAsync(id) {
   document.getElementById('cli-gestor-section').style.display = id ? 'none' : '';
   document.getElementById('cli-ia-key').value = '';
   document.getElementById('cli-ia-status').textContent = '';
+  if (!id) {
+    document.getElementById('cli-expira').value = adminDateISO(adminAddMonths(new Date(), 1));
+  }
   if (id) {
     const c = _clientes.find(x=>x.id===id);
     if (c) {
       document.getElementById('cli-nome').value   = c.nome;
       document.getElementById('cli-slug').value   = c.slug;
       document.getElementById('cli-plano').value  = c.plano;
-      document.getElementById('cli-expira').value = c.expires_at ? c.expires_at.slice(0,10) : '';
+      document.getElementById('cli-expira').value = c.expires_at ? String(c.expires_at).slice(0,10) : '';
       document.getElementById('cli-ativo').value    = String(c.ativo);
       document.getElementById('cli-segmento').value = c.segmento || 'restaurante';
     }
@@ -3004,7 +3033,7 @@ async function salvarCliente() {
     }
   } else {
     try {
-      const res = await fetch('/api/criar-tenant', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ nome, slug, email, senha, nomeGestor: gestorNome, plano, role:'gestor', segmento }) });
+      const res = await fetch('/api/criar-tenant', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ nome, slug, email, senha, nomeGestor: gestorNome, plano, role:'gestor', segmento, expires_at: expira }) });
       const data = await res.json();
       if (!res.ok) { error = { message: data.error || 'Erro ao criar restaurante' }; }
       else { await loadAll(); }
@@ -3075,20 +3104,41 @@ function abrirRenovar(id) {
   if (!c) return;
   document.getElementById('ren-id').value = id;
   document.getElementById('m-ren-titulo').textContent = `🔄 Renovar — ${c.nome}`;
-  const expAtual = c.expires_at ? new Date(c.expires_at).toLocaleDateString('pt-BR') : 'Sem data definida';
+  const expAtual = c.expires_at ? adminFormatDate(c.expires_at) : 'Sem data definida';
   document.getElementById('ren-info').textContent = `Vencimento atual: ${expAtual}`;
-  const hoje = new Date(), base = c.expires_at && new Date(c.expires_at) > hoje ? new Date(c.expires_at) : hoje;
-  const sug  = new Date(base); sug.setDate(sug.getDate()+30);
-  document.getElementById('ren-data').value = sug.toISOString().slice(0,10);
+  const hoje = new Date();
+  hoje.setHours(0,0,0,0);
+  const atual = adminParseDateOnly(c.expires_at);
+  const base = atual && atual > hoje ? atual : hoje;
+  document.getElementById('ren-data').value = adminDateISO(adminAddMonths(base, 1));
   abrirModal('m-renovar');
+}
+async function renovarMeses(meses) {
+  const id = document.getElementById('ren-id').value;
+  const c  = _clientes.find(x=>x.id===id);
+  if (!c) return;
+  const hoje = new Date();
+  hoje.setHours(0,0,0,0);
+  const atual = adminParseDateOnly(c.expires_at);
+  const base = atual && atual > hoje ? atual : hoje;
+  await _aplicarRenovacao(id, adminDateISO(adminAddMonths(base, meses)));
 }
 async function renovarDias(dias) {
   const id = document.getElementById('ren-id').value;
   const c  = _clientes.find(x=>x.id===id);
   if (!c) return;
-  const hoje = new Date(), base = c.expires_at && new Date(c.expires_at) > hoje ? new Date(c.expires_at) : hoje;
-  const nova = new Date(base); nova.setDate(nova.getDate() + dias);
-  await _aplicarRenovacao(id, nova.toISOString().slice(0,10));
+  const mesesPorPeriodo = { 30: 1, 90: 3, 180: 6, 365: 12 };
+  if (mesesPorPeriodo[dias]) {
+    await renovarMeses(mesesPorPeriodo[dias]);
+    return;
+  }
+  const hoje = new Date();
+  hoje.setHours(0,0,0,0);
+  const atual = adminParseDateOnly(c.expires_at);
+  const base = atual && atual > hoje ? atual : hoje;
+  const nova = new Date(base);
+  nova.setDate(nova.getDate() + dias);
+  await _aplicarRenovacao(id, adminDateISO(nova));
 }
 async function renovarData() {
   const id   = document.getElementById('ren-id').value;
@@ -3108,7 +3158,7 @@ async function _aplicarRenovacao(id, dataISO) {
   document.getElementById('st-ativos').textContent   = _clientes.filter(c=>c.ativo).length;
   document.getElementById('st-inativos').textContent = _clientes.filter(c=>!c.ativo).length;
   calcularFinanceiro();
-  toast('ok', `Acesso renovado até ${new Date(dataISO).toLocaleDateString('pt-BR')}`);
+  toast('ok', `Acesso renovado ate ${adminFormatDate(dataISO)}`);
 }
 
 // ── USUÁRIOS ───────────────────────────────────────────
@@ -3277,7 +3327,7 @@ function gerarCobrancaCliente(tenantId) {
   if (!c) return;
   _cbTenantAtual = c;
   document.getElementById('cb-titulo').textContent = `💳 Cobrar — ${c.nome}`;
-  document.getElementById('cb-info').innerHTML = `Vencimento atual: <strong>${c.expires_at?new Date(c.expires_at).toLocaleDateString('pt-BR'):'Sem data'}</strong>`;
+  document.getElementById('cb-info').innerHTML = `Vencimento atual: <strong>${c.expires_at?adminFormatDate(c.expires_at):'Sem data'}</strong>`;
   document.getElementById('cb-plano').value = (c.plano==='premium')?'premium':'essencial';
   document.getElementById('cb-meses').value = '1';
   document.getElementById('cb-metodo').value = 'pix';
@@ -3321,6 +3371,96 @@ async function cbGerar() {
 }
 
 // ── 📊 SAÚDE DO CLIENTE ────────────────────────────────
+function saudeTimelineDate(value) {
+  if (!value) return '—';
+  const raw = String(value).trim();
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(raw);
+  const dt = dateOnly ? adminParseDateOnly(raw) : new Date(raw.replace(' ', 'T'));
+  if (Number.isNaN(dt.getTime())) return '—';
+  if (dateOnly) return dt.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' });
+  return dt.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+function saudeTimelineMeta(tipo) {
+  if (tipo === 'cliente.criado') return { icon:'plus', tone:'var(--success)' };
+  if (tipo === 'cliente.renovar') return { icon:'refresh', tone:'var(--success)' };
+  if (tipo === 'cliente.ativar') return { icon:'play', tone:'var(--success)' };
+  if (tipo === 'cliente.pausar') return { icon:'pause', tone:'var(--orange)' };
+  if (tipo === 'cobranca.paga') return { icon:'check', tone:'var(--success)' };
+  if (tipo === 'cobranca.vencida' || tipo === 'cobranca.cancelada') return { icon:'invoice', tone:'var(--danger)' };
+  if ((tipo || '').startsWith('cobranca.')) return { icon:'credit', tone:'var(--accent)' };
+  if ((tipo || '').startsWith('usuario.')) return { icon:'users', tone:'var(--purple)' };
+  return { icon:'audit', tone:'var(--muted)' };
+}
+function saudeTimelineTitle(item) {
+  const map = {
+    'cliente.criado': 'Cliente cadastrado',
+    'cliente.renovar': 'Acesso renovado',
+    'cliente.ativar': 'Cliente ativado',
+    'cliente.pausar': 'Cliente pausado',
+    'cliente.deletar': 'Cliente excluido',
+    'cobranca.gerar': 'Cobranca enviada',
+    'cobranca.criada': 'Cobranca gerada',
+    'cobranca.paga': 'Pagamento confirmado',
+    'cobranca.vencida': 'Cobranca vencida',
+    'cobranca.cancelada': 'Cobranca cancelada',
+    'usuario.deletar': 'Usuario removido'
+  };
+  return map[item?.tipo] || item?.titulo || item?.tipo || 'Movimento registrado';
+}
+function saudeTimelineDetail(item) {
+  const det = item?.detalhe;
+  if (!det) return '';
+  if (typeof det === 'string') return det;
+  if (typeof det !== 'object') return '';
+  if ((item?.tipo || '').startsWith('cobranca.')) {
+    const partes = [];
+    if (det.plano) partes.push(planoLabel[det.plano] || det.plano);
+    if (det.valor != null) partes.push('R$ ' + parseFloat(det.valor || 0).toFixed(2).replace('.', ','));
+    if (det.meses) partes.push(`${det.meses} ${parseInt(det.meses) === 1 ? 'mes' : 'meses'}`);
+    if (det.metodo) partes.push(String(det.metodo).toUpperCase());
+    if (det.vence_em) partes.push('vence ' + saudeTimelineDate(det.vence_em).replace(/,?\s*\d{2}:\d{2}$/, ''));
+    return partes.join(' · ');
+  }
+  if (item?.tipo === 'cliente.renovar') {
+    const de = det.de ? adminFormatDate(det.de) : 'sem data';
+    const para = det.para ? adminFormatDate(det.para) : '';
+    return para ? `De ${de} para ${para}` : '';
+  }
+  if (item?.tipo === 'cliente.pausar' || item?.tipo === 'cliente.ativar') {
+    return det.plano ? `Plano ${planoLabel[det.plano] || det.plano}` : '';
+  }
+  if (det.total && Array.isArray(det.ids)) return `${det.total} cliente(s)`;
+  const keys = Object.keys(det).filter(k => det[k] != null && det[k] !== '').slice(0, 3);
+  return keys.map(k => `${k}: ${typeof det[k] === 'object' ? JSON.stringify(det[k]) : det[k]}`).join(' · ');
+}
+function renderSaudeTimeline(timeline) {
+  const itens = Array.isArray(timeline) ? timeline.filter(t => t?.at).slice(0, 20) : [];
+  const rows = itens.length ? itens.map(item => {
+    const meta = saudeTimelineMeta(item.tipo);
+    const detalhe = saudeTimelineDetail(item);
+    return `<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="width:28px;height:28px;border-radius:8px;background:var(--surface2);color:${meta.tone};border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        ${adminIcon(meta.icon)}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <div style="font-size:13px;font-weight:700;color:var(--text)">${escapeHtml(saudeTimelineTitle(item))}</div>
+          <div style="font-size:11px;color:var(--muted);white-space:nowrap">${escapeHtml(saudeTimelineDate(item.at))}</div>
+        </div>
+        ${detalhe ? `<div style="font-size:12px;color:var(--text-2);margin-top:3px;line-height:1.35">${escapeHtml(detalhe)}</div>` : ''}
+        ${item.admin ? `<div style="font-size:11px;color:var(--muted);margin-top:3px">por ${escapeHtml(item.admin)}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('') : '<div style="padding:14px 0;color:var(--muted);font-size:12.5px">Nenhum movimento registrado ainda.</div>';
+
+  return `<div class="card" style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700">Historico</div>
+      <div style="font-size:11px;color:var(--muted)">${itens.length} evento(s)</div>
+    </div>
+    <div style="display:flex;flex-direction:column">${rows}</div>
+  </div>`;
+}
 async function abrirSaudeCliente(tenantId) {
   const c = _clientes.find(x=>x.id===tenantId);
   if (!c) return;
@@ -3340,7 +3480,7 @@ async function abrirSaudeCliente(tenantId) {
 function renderSaude(c, d) {
   const users    = _usuarios.filter(u=>u.tenant_id===c.id);
   const gestor   = users.find(u=>u.role==='gestor')||users[0];
-  const expDate  = c.expires_at ? new Date(c.expires_at) : null;
+  const expDate  = adminParseDateOnly(c.expires_at);
   const expDias  = expDate ? Math.ceil((expDate - new Date())/(24*3600*1000)) : null;
   const criado   = c.created_at ? new Date(c.created_at) : null;
   const diasNaPlataforma = criado ? Math.floor((Date.now() - criado.getTime())/(24*3600*1000)) : 0;
@@ -3384,7 +3524,7 @@ function renderSaude(c, d) {
       <div class="card">
         <div style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:6px">Vencimento</div>
         <div style="font-size:20px;font-weight:800;color:${expDias<0?'var(--danger)':expDias<7?'var(--orange)':'var(--success)'}">
-          ${expDate ? expDate.toLocaleDateString('pt-BR') : 'Sem data'}
+          ${expDate ? adminFormatDate(c.expires_at) : 'Sem data'}
         </div>
         <div style="font-size:13px;color:var(--text-2);margin-top:4px">
           ${expDias === null ? '—' : expDias < 0 ? `Expirou há ${Math.abs(expDias)} dias` : `${expDias} dias restantes`}
@@ -3435,6 +3575,8 @@ function renderSaude(c, d) {
         </div>
       </div>
     </div>
+
+    ${renderSaudeTimeline(d?.timeline)}
 
     ${score < 50 ? `
     <div class="infobox infobox-orange" style="font-size:12.5px;margin-bottom:14px">
@@ -3533,7 +3675,7 @@ function renderFaturamento() {
 async function cobrancaEmMassa() {
   const expirando = _clientes.filter(c => {
     if (!c.expires_at) return false;
-    const dt = new Date(c.expires_at).getTime();
+    const dt = adminParseDateOnly(c.expires_at)?.getTime();
     const agora = Date.now();
     return c.ativo && dt - agora < 7*24*3600*1000 && dt > agora - 30*24*3600*1000;
   });
