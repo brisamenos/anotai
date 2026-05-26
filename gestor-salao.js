@@ -1723,7 +1723,15 @@ async function submitGarcomOrder() {
     // 1. Itens de cozinha → kanban (analise/producao)
     if (itensCozinha.length > 0) {
       if (!_sessao?.tenant_id) throw new Error('Sessão sem tenant');
-      const itemsArr = itensCozinha.map(c => ({ id: c.id || null, qty: c.qty, name: c.name, price: c.price, obs: c.obs || '' }));
+      const itemsArr = itensCozinha.map(c => ({
+        id: c.id || null,
+        qty: c.qty,
+        name: c.name,
+        price: c.price,
+        cat: c.cat || '',
+        cat_key: c.cat_key || c.catKey || c.cat || '',
+        obs: c.obs || ''
+      }));
       const { data: orderData, error: oErr } = await sb.from('orders').insert({
         tenant_id: _sessao.tenant_id,
         client: `Mesa ${garcomMesa}`, phone: '', addr: `Mesa ${garcomMesa}`,
@@ -1738,7 +1746,15 @@ async function submitGarcomOrder() {
     // 2. Itens imediatos (bebidas, etc) → direto como entregue (só billing, não vão ao kanban)
     if (itensImediatos.length > 0) {
       if (!_sessao?.tenant_id) throw new Error('Sessão sem tenant');
-      const itemsArrImediato = itensImediatos.map(c => ({ id: c.id || null, qty: c.qty, name: c.name, price: c.price, obs: c.obs || '' }));
+      const itemsArrImediato = itensImediatos.map(c => ({
+        id: c.id || null,
+        qty: c.qty,
+        name: c.name,
+        price: c.price,
+        cat: c.cat || '',
+        cat_key: c.cat_key || c.catKey || c.cat || '',
+        obs: c.obs || ''
+      }));
       const { data: billingData, error: bErr } = await sb.from('orders').insert({
         tenant_id: _sessao.tenant_id,
         client: `Mesa ${garcomMesa}`, phone: '', addr: `Mesa ${garcomMesa}`,
@@ -1766,7 +1782,16 @@ async function submitGarcomOrder() {
       const _autoPrintOn = (window._printMode || _printMode || 'auto') === 'auto';
       const _printerCaixa   = (typeof _printPrinter !== 'undefined' && _printPrinter) || localStorage.getItem('printPrinter') || '';
       const _printerCozinha = (typeof _printPrinterCozinha !== 'undefined' && _printPrinterCozinha) || localStorage.getItem('printPrinterCozinha') || '';
-      const _doisImpressoras = _printerCaixa && _printerCozinha && _printerCaixa !== _printerCozinha;
+      const _viaMode = (typeof _printViaMode !== 'undefined' && _printViaMode) || localStorage.getItem('printViaMode') || 'combinado';
+      const _temSetoresCategoria = (() => {
+        try {
+          const routes = JSON.parse(localStorage.getItem('printSetoresCategoria') || '{}');
+          return routes && typeof routes === 'object' && Object.values(routes).some(Boolean);
+        } catch (_) {
+          return false;
+        }
+      })();
+      const _doisImpressoras = _viaMode === 'separado' && (_printerCozinha || _temSetoresCategoria);
       const _fmt = localStorage.getItem('printFormat') || '80mm';
       const _pw  = _fmt === '58mm' ? 58 : 80;
       const _nomeLoja = (_sessao?.nome || 'RESTAURANTE').toUpperCase();
@@ -1794,12 +1819,20 @@ async function submitGarcomOrder() {
 
       const _htmlCozinha = _renderViaHtml('VIA DA COZINHA', itensCozinha);
       const _htmlBar     = _renderViaHtml('VIA DO BAR',     itensImediatos);
+      const _setorJobs = (typeof _buildSetorPrintJobsForItems === 'function')
+        ? _buildSetorPrintJobsForItems(
+            { client: `Mesa ${garcomMesa}`, addr: `Mesa ${garcomMesa}`, mesa_num: garcomMesa, pag: 'Mesa' },
+            { fontSize: _fontSize, rodape: 'Bom apetite!' },
+            itensCozinha,
+            { defaultPrinter: _printerCozinha, defaultTitle: 'Cozinha' }
+          )
+        : [];
 
       // Toggle "Imprimir bebida industrializada sozinha" — se desligado e o
       // pedido é só industrializada, pula a impressão. Caso contrário imprime.
       const _printBebidaSolo = localStorage.getItem('printBebidaSolo') !== '0';
       const _soBebida = !_htmlCozinha && _htmlBar;
-      console.log('[GESTOR MESA PRINT] auto:', _autoPrintOn, '| toggle bebida:', _printBebidaSolo, '| só bebida:', !!_soBebida, '| 2 impressoras:', _doisImpressoras, '| caixa:', _printerCaixa || '(padrão)', '| cozinha:', _printerCozinha || '(nenhuma)');
+      console.log('[GESTOR MESA PRINT] auto:', _autoPrintOn, '| modo vias:', _viaMode, '| toggle bebida:', _printBebidaSolo, '| só bebida:', !!_soBebida, '| 2 impressoras:', _doisImpressoras, '| caixa:', _printerCaixa || '(padrão)', '| cozinha:', _printerCozinha || '(nenhuma)');
       if (_soBebida && !_printBebidaSolo) {
         console.log('[GESTOR MESA PRINT] Pedido só de bebida e toggle desligado — não imprime.');
       }
@@ -1807,14 +1840,21 @@ async function submitGarcomOrder() {
         if (_doisImpressoras) {
           // Cozinha → printerCozinha; Bebida → printerCaixa (atendente serve)
           if (window.ElectronPrint?.printHtml) {
-            if (_htmlCozinha) await window.ElectronPrint.printHtml(_htmlCozinha, { printer: _printerCozinha, paperWidth: _pw }).catch(()=>{});
+            const cozinhaJobs = _setorJobs.length ? _setorJobs : (_htmlCozinha ? [{ html: _htmlCozinha, printer: _printerCozinha }] : []);
+            for (const job of cozinhaJobs) {
+              await window.ElectronPrint.printHtml(job.html, { printer: job.printer || _printerCozinha, paperWidth: _pw }).catch(()=>{});
+            }
             if (_htmlBar)     await window.ElectronPrint.printHtml(_htmlBar,     { printer: _printerCaixa,   paperWidth: _pw }).catch(()=>{});
           } else {
             // Print Agent fallback
             const _tid = _sessao?.tenant_id;
             if (_tid) {
               const jobs = [];
-              if (_htmlCozinha) jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ html: _htmlCozinha, format: _fmt, printer: _printerCozinha, tipo: 'cozinha' }) }));
+              if (_setorJobs.length) {
+                _setorJobs.forEach(job => jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ html: job.html, format: _fmt, printer: job.printer || undefined, tipo: job.tipo || 'cozinha' }) })));
+              } else if (_htmlCozinha) {
+                jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ html: _htmlCozinha, format: _fmt, printer: _printerCozinha, tipo: 'cozinha' }) }));
+              }
               if (_htmlBar)     jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ html: _htmlBar,     format: _fmt, printer: _printerCaixa,   tipo: 'caixa'   }) }));
               await Promise.all(jobs).catch(()=>{});
             }

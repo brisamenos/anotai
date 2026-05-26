@@ -2323,6 +2323,8 @@ async function createOrder() {
         qty: c.qty,
         name: c.name,
         price: c.price,
+        cat: c.cat || '',
+        cat_key: c.cat_key || c.catKey || c.cat || '',
         obs: c.obs || '',
         emoji: c.emoji || '',
         item_status: 'producao',
@@ -2440,6 +2442,8 @@ async function createOrder() {
     qty: c.qty,
     name: c.name,
     price: c.price,
+    cat: c.cat || '',
+    cat_key: c.cat_key || c.catKey || c.cat || '',
     obs: c.obs || '',
     emoji: c.emoji || ''
   }));

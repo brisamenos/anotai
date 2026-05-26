@@ -2259,7 +2259,21 @@ let _printFontSize = 13; // valor restaurado do servidor via loadPrintConfigServ
 let _printTarget   = localStorage.getItem('printTarget')   || 'server';
 let _printPrinter  = localStorage.getItem('printPrinter')  || '';
 let _printPrinterCozinha = localStorage.getItem('printPrinterCozinha') || '';
-let _printViaMode = localStorage.getItem('printViaMode') || 'combinado';
+const _PRINT_VIA_MODES = ['combinado', 'separado', 'somente_principal'];
+function _normalizePrintViaMode(mode) {
+  return _PRINT_VIA_MODES.includes(mode) ? mode : 'combinado';
+}
+let _printViaMode = _normalizePrintViaMode(localStorage.getItem('printViaMode'));
+function _loadPrintSetoresCategoria() {
+  try {
+    const raw = localStorage.getItem('printSetoresCategoria') || '{}';
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+let _printSetoresCategoria = _loadPrintSetoresCategoria();
 let _printFormat   = localStorage.getItem('printFormat')   || '80mm';  // padrão 80mm
 let _printMarginH  = parseInt(localStorage.getItem('printMarginH')  || '5');  // margem lateral em mm
 let _printMarginV  = parseInt(localStorage.getItem('printMarginV')  || '2');  // margem vertical em mm
@@ -2320,6 +2334,9 @@ async function savePrintConfigServer(cfg) {
 // Agora qualquer mudança nas impressoras é refletida no banco automaticamente.
 async function _syncPrintConfigServer() {
   try {
+    const viaMode = _normalizePrintViaMode(localStorage.getItem('printViaMode') || _printViaMode);
+    _printViaMode = viaMode;
+    localStorage.setItem('printViaMode', viaMode);
     const cfg = {
       printer_caixa:        localStorage.getItem('printPrinter')        || '',
       printer_cozinha:      localStorage.getItem('printPrinterCozinha') || '',
@@ -2327,12 +2344,15 @@ async function _syncPrintConfigServer() {
       printPrinterCozinha:  localStorage.getItem('printPrinterCozinha') || '',
       printMode:            localStorage.getItem('printMode')           || 'auto',
       printFormat:          localStorage.getItem('printFormat')         || '80mm',
-      printViaMode:         localStorage.getItem('printViaMode')        || 'unico',
+      printViaMode:         viaMode,
+      printSetoresCategoria:_getPrintSetoresCategoria(),
       printFontSize:        (typeof _printFontSize !== 'undefined' ? _printFontSize : null) || parseInt(localStorage.getItem('printFontSize')||'13'),
       printBebidaSolo:      localStorage.getItem('printBebidaSolo') !== '0',
       printNome:            localStorage.getItem('printNome')   || '',
       printSub:             localStorage.getItem('printSub')    || '',
       printRodape:          localStorage.getItem('printRodape') || '',
+      impressoras:          (typeof _impressoras !== 'undefined' && Array.isArray(_impressoras)) ? _impressoras : [],
+      modelos:              (typeof _modelos !== 'undefined' && Array.isArray(_modelos)) ? _modelos : [],
     };
     await savePrintConfigServer(cfg);
   } catch (e) { console.warn('[_syncPrintConfigServer] erro:', e?.message); }
@@ -2351,13 +2371,21 @@ async function loadPrintConfigServer() {
     if (cfg.printMode)    { _printMode = cfg.printMode; window._printMode = cfg.printMode; localStorage.setItem('printMode', cfg.printMode) }
     if (cfg.printFormat)  { _printFormat = cfg.printFormat; localStorage.setItem('printFormat', cfg.printFormat) }
     if (cfg.printFontSize){ _printFontSize = cfg.printFontSize }
-    if (cfg.printViaMode) { _printViaMode = cfg.printViaMode; localStorage.setItem('printViaMode', cfg.printViaMode) }
+    if (cfg.printViaMode) {
+      const viaMode = _normalizePrintViaMode(cfg.printViaMode);
+      _printViaMode = viaMode;
+      localStorage.setItem('printViaMode', viaMode);
+    }
     // Impressora caixa (salva em ambos os campos que o sistema usa)
     const _savedCaixa = cfg.printer_caixa || cfg.printer || cfg.printPrinter || ''
     if (_savedCaixa) { _printPrinter = _savedCaixa; localStorage.setItem('printPrinter', _savedCaixa) }
     // Impressora cozinha
     const _savedCoz = cfg.printer_cozinha || cfg.printPrinterCozinha || ''
     if (_savedCoz) { _printPrinterCozinha = _savedCoz; localStorage.setItem('printPrinterCozinha', _savedCoz) }
+    if (cfg.printSetoresCategoria && typeof cfg.printSetoresCategoria === 'object' && !Array.isArray(cfg.printSetoresCategoria)) {
+      _printSetoresCategoria = cfg.printSetoresCategoria;
+      _savePrintSetoresCategoria(false);
+    }
     if (cfg.printNome)   {
       _printNome = cfg.printNome; localStorage.setItem('printNome', cfg.printNome);
       const el = document.getElementById('print-nome'); if (el) el.value = cfg.printNome;
@@ -2465,6 +2493,225 @@ function _wrapTicketHtml(html, fontSize) {
 </style>
 </head><body>${html}</body></html>`;
 }
+
+function _printHtmlEscape(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+function _printNormKey(s) {
+  return String(s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function _getPrintSetoresCategoria() {
+  if (!_printSetoresCategoria || typeof _printSetoresCategoria !== 'object' || Array.isArray(_printSetoresCategoria)) {
+    _printSetoresCategoria = _loadPrintSetoresCategoria();
+  }
+  return _printSetoresCategoria;
+}
+
+function _savePrintSetoresCategoria(syncServer) {
+  const clean = {};
+  Object.entries(_getPrintSetoresCategoria()).forEach(([k, v]) => {
+    if (k && v) clean[k] = v;
+  });
+  _printSetoresCategoria = clean;
+  localStorage.setItem('printSetoresCategoria', JSON.stringify(clean));
+  if (syncServer && typeof _syncPrintConfigServer === 'function') _syncPrintConfigServer();
+}
+
+function setPrintSetorCategoria(catKey, printer) {
+  if (!catKey) return;
+  const routes = _getPrintSetoresCategoria();
+  if (printer) routes[catKey] = printer;
+  else delete routes[catKey];
+  _savePrintSetoresCategoria(true);
+  if (typeof _loadSetoresCategorias === 'function') _loadSetoresCategorias();
+}
+window.setPrintSetorCategoria = setPrintSetorCategoria;
+
+function _printAvailablePrinters(extraPrinters) {
+  const out = [];
+  const seen = new Set();
+  const add = (value, label) => {
+    value = String(value || '').trim();
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    out.push({ value, label: label || value });
+  };
+
+  (Array.isArray(extraPrinters) ? extraPrinters : []).forEach(p => add(p, p));
+  (Array.isArray(_impressoras) ? _impressoras : []).forEach(imp => {
+    const value = imp.printerName || imp.apelido || '';
+    const label = imp.apelido ? `${imp.apelido} (${imp.printerName || imp.tipo || 'impressora'})` : value;
+    add(value, label);
+  });
+  add(_printPrinter, _printPrinter);
+  add(_printPrinterCozinha, _printPrinterCozinha);
+  Object.values(_getPrintSetoresCategoria()).forEach(v => add(v, v));
+  return out;
+}
+
+function _printPrinterDisplayName(value, extraPrinters) {
+  const found = _printAvailablePrinters(extraPrinters).find(p => p.value === value);
+  return found ? found.label.replace(/\s*\([^)]*\)\s*$/, '') : (value || 'Cozinha');
+}
+
+function _printGetRoutingCategories() {
+  const out = [];
+  const seen = new Set();
+  const add = (key, label) => {
+    key = String(key || '').trim();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push({ key, label: label || key });
+  };
+
+  if (typeof categories !== 'undefined' && Array.isArray(categories)) {
+    categories.forEach(c => add(c.name || c.label, c.label || c.name));
+  }
+  if (typeof items !== 'undefined' && Array.isArray(items)) {
+    items.forEach(i => add(i.catKey || i.cat_key || i.cat, i.cat || i.catKey || i.cat_key));
+  }
+  return out;
+}
+
+function _printItemCategoryKeys(item) {
+  const keys = [item?.cat_key, item?.catKey, item?.cat].filter(Boolean).map(String);
+  if (typeof categories !== 'undefined' && Array.isArray(categories)) {
+    const normSet = new Set(keys.map(_printNormKey));
+    categories.forEach(c => {
+      if (normSet.has(_printNormKey(c.name)) || normSet.has(_printNormKey(c.label))) {
+        if (c.name) keys.push(c.name);
+        if (c.label) keys.push(c.label);
+      }
+    });
+  }
+  return [...new Set(keys.filter(Boolean))];
+}
+
+function _printResolveCategoryPrinter(item) {
+  const routes = _getPrintSetoresCategoria();
+  const keys = _printItemCategoryKeys(item);
+  for (const k of keys) {
+    if (routes[k]) return routes[k];
+  }
+  const normRoutes = {};
+  Object.entries(routes).forEach(([k, v]) => { if (v) normRoutes[_printNormKey(k)] = v; });
+  for (const k of keys) {
+    const found = normRoutes[_printNormKey(k)];
+    if (found) return found;
+  }
+  return '';
+}
+
+function _printPrinterOptionsHtml(currentVal, extraPrinters) {
+  const opts = ['<option value="">Cozinha padrao</option>'];
+  _printAvailablePrinters(extraPrinters).forEach(p => {
+    const sel = p.value === currentVal ? ' selected' : '';
+    opts.push(`<option value="${_printHtmlEscape(p.value)}"${sel}>${_printHtmlEscape(p.label)}</option>`);
+  });
+  return opts.join('');
+}
+
+function _loadSetoresCategorias(extraPrinters) {
+  const wrap = document.getElementById('print-setores-wrap');
+  if (wrap) wrap.style.display = _normalizePrintViaMode(_printViaMode) === 'separado' ? '' : 'none';
+  const list = document.getElementById('print-setores-list');
+  if (!list) return;
+
+  const cats = _printGetRoutingCategories();
+  if (!cats.length) {
+    list.innerHTML = '<div style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--muted)">Nenhuma categoria encontrada no cardapio.</div>';
+    return;
+  }
+
+  const routes = _getPrintSetoresCategoria();
+  list.innerHTML = cats.map(cat => {
+    const current = routes[cat.key] || '';
+    return `<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(170px,240px);gap:8px;align-items:center;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+      <div style="min-width:0">
+        <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_printHtmlEscape(cat.label)}</div>
+        <div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_printHtmlEscape(cat.key)}</div>
+      </div>
+      <select class="form-input" data-cat="${_printHtmlEscape(cat.key)}" onchange="setPrintSetorCategoria(this.dataset.cat,this.value)" style="height:34px;font-size:11px;padding:0 9px">
+        ${_printPrinterOptionsHtml(current, extraPrinters)}
+      </select>
+    </div>`;
+  }).join('');
+}
+window._loadSetoresCategorias = _loadSetoresCategorias;
+
+function _buildSetorHtml(order, cfg, titulo, lista) {
+  const fontSize = cfg?.fontSize || _printFontSize || 13;
+  const tipo = _printOrderType(order);
+  const orderNum = order.num || order.order_num || order.id || '';
+  const isMesa = tipo === 'mesa';
+  const tipoTxt = isMesa ? 'MESA ' + (order.mesa_num || '') : (tipo === 'retirada' ? 'RETIRADA' : 'DELIVERY');
+  const now = new Date().toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+
+  const groups = [];
+  const idx = new Map();
+  (lista || []).forEach(item => {
+    const cat = String(item.cat || item.cat_key || item.catKey || 'Outros').trim() || 'Outros';
+    if (!idx.has(cat)) {
+      idx.set(cat, groups.length);
+      groups.push({ cat, items: [] });
+    }
+    groups[idx.get(cat)].items.push(item);
+  });
+  const showCats = groups.length > 1;
+  const itemHtml = groups.map(g => {
+    const header = showCats ? `<div style="font-weight:bold;text-align:center;border-top:1px solid #000;border-bottom:1px solid #000;margin:6px 0 4px;padding:3px 0">${_printHtmlEscape(g.cat).toUpperCase()}</div>` : '';
+    return header + g.items.map(i => {
+      const obs = i.obs ? `<div style="padding-left:8px;font-size:0.9em;font-weight:bold;word-break:break-word">OBS: ${_printHtmlEscape(i.obs)}</div>` : '';
+      return `<div style="border-bottom:1px dotted #ddd;padding-bottom:4px;margin-bottom:4px">
+        <div style="font-weight:bold;font-size:1.05em;word-break:break-word">${_printHtmlEscape((i.qty || 1) + 'x ' + (i.name || '')).toUpperCase()}</div>
+        ${obs}
+      </div>`;
+    }).join('');
+  }).join('');
+
+  return `<div class="print-ticket" style="font-family:'Courier New',monospace;font-size:${fontSize}px;width:100%;box-sizing:border-box;padding:0 2px">
+    <div style="text-align:center;font-size:1.25em;font-weight:bold;margin-bottom:2px">${_printHtmlEscape(titulo || 'COZINHA').toUpperCase()}</div>
+    <div style="text-align:center;font-weight:bold;background:#111;color:#fff;padding:5px 4px;margin:5px 0">${_printHtmlEscape(tipoTxt)}</div>
+    <hr style="border:none;border-top:1px dashed #000;margin:5px 0">
+    <div style="text-align:center;font-size:1.35em;font-weight:bold;margin:4px 0">PEDIDO ${_printHtmlEscape(orderNum)}</div>
+    <hr style="border:none;border-top:1px dashed #000;margin:5px 0">
+    <div>Data: ${_printHtmlEscape(now)}</div>
+    <div>Cliente: ${_printHtmlEscape(order.client || (isMesa ? 'Mesa ' + (order.mesa_num || '') : '-'))}</div>
+    ${order.addr ? `<div style="word-break:break-word">Endereco: ${_printHtmlEscape(order.addr)}</div>` : ''}
+    <hr style="border:none;border-top:1px dashed #000;margin:5px 0">
+    ${itemHtml}
+    <hr style="border:none;border-top:1px dashed #000;margin:5px 0">
+    <div style="text-align:center;font-size:0.85em;color:#555">via ${_printHtmlEscape(titulo || 'cozinha').toLowerCase()}</div>
+  </div>`;
+}
+
+function _buildSetorPrintJobsForItems(order, cfg, lista, opts = {}) {
+  const itemsToRoute = (Array.isArray(lista) ? lista : []).filter(Boolean);
+  if (!itemsToRoute.length) return [];
+  const routes = _getPrintSetoresCategoria();
+  const hasRoutes = Object.values(routes).some(Boolean);
+  if (!hasRoutes && !opts.force) return [];
+
+  const defaultPrinter = opts.defaultPrinter !== undefined ? opts.defaultPrinter : _printPrinterCozinha;
+  const defaultTitle = opts.defaultTitle || 'Cozinha';
+  const buckets = new Map();
+  itemsToRoute.forEach(item => {
+    const printer = _printResolveCategoryPrinter(item) || defaultPrinter || '';
+    const title = printer ? _printPrinterDisplayName(printer) : defaultTitle;
+    const key = `${printer}|${title}`;
+    if (!buckets.has(key)) buckets.set(key, { printer, title, items: [] });
+    buckets.get(key).items.push(item);
+  });
+
+  return Array.from(buckets.values()).map(bucket => ({
+    html: _buildSetorHtml(order, cfg, bucket.title, bucket.items),
+    printer: bucket.printer || '',
+    tipo: 'cozinha'
+  }));
+}
+window._buildSetorPrintJobsForItems = _buildSetorPrintJobsForItems;
 
 // ══════════════════════════════════════════════════════════════
 // Parser de observações de itens (cupom/comanda)
@@ -3084,7 +3331,7 @@ function _buildTicketHtml(order, cfg) {
     ? viaPrincipal + cutLine + viaCozinha.replace(D('page-break-before:always', ''), '')
     : viaPrincipal;
 
-  return { principal: viaPrincipal, cozinha: viaCozinha, combined: viaPrincipal + viaCozinha, singleSheet };
+  return { principal: viaPrincipal, cozinha: viaCozinha, cozinhaItems: itensCozinha, combined: viaPrincipal + viaCozinha, singleSheet };
 }
 
 // ── Carrega lista de impressoras do servidor ──────────
@@ -3730,13 +3977,19 @@ async function printOrder(order) {
 
   // ── Monta jobs de impressão ────────────────────────────
   const jobs = [];
-  if (_printViaMode === 'separado' && _printPrinterCozinha && ticket.cozinha) {
+  const viaMode = _normalizePrintViaMode(_printViaMode);
+  if (viaMode === 'separado' && ticket.cozinha) {
     if (ticket.principal) jobs.push({ html: ticket.principal, printer: _printPrinter || '', tipo: 'caixa' });
-    jobs.push({ html: ticket.cozinha, printer: _printPrinterCozinha, tipo: 'cozinha' });
-  } else if (_printViaMode === 'somente_principal') {
+    const setorJobs = _buildSetorPrintJobsForItems(order, cfg, ticket.cozinhaItems || [], {
+      defaultPrinter: _printPrinterCozinha,
+      defaultTitle: 'Cozinha'
+    });
+    if (setorJobs.length) jobs.push(...setorJobs);
+    else jobs.push({ html: ticket.cozinha, printer: _printPrinterCozinha || '', tipo: 'cozinha' });
+  } else if (viaMode === 'somente_principal') {
     jobs.push({ html: ticket.principal, printer: _printPrinter || '', tipo: 'caixa' });
   } else {
-    jobs.push({ html: ticket.singleSheet, printer: _printPrinter || '' });
+    jobs.push({ html: ticket.singleSheet, printer: _printPrinter || '', tipo: 'caixa' });
   }
 
   for (const job of jobs) {
@@ -3755,8 +4008,8 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
       // Respeita o tipo do job para escolher a impressora correta
       // 'caixa' → printer_caixa | 'cozinha' → printer_cozinha | 'manual' → pergunta
       let targetPrinter = printer || '';
-      if (tipo === 'caixa')   targetPrinter = _printPrinter || printer || '';
-      if (tipo === 'cozinha') targetPrinter = _printPrinterCozinha || _printPrinter || printer || '';
+      if (tipo === 'caixa')   targetPrinter = printer || _printPrinter || '';
+      if (tipo === 'cozinha') targetPrinter = printer || _printPrinterCozinha || _printPrinter || '';
       if (tipo === 'manual' && window.ElectronPrint.showPrinterDialog) {
         const sel = await window.ElectronPrint.showPrinterDialog(targetPrinter);
         if (sel.cancelled) return;
@@ -3927,9 +4180,12 @@ function renderImpressao(skipServerLoad) {
 function _loadRoteamento() {
   const isElectron = !!window.ElectronPrint;
   const viaSel = document.getElementById('print-via-mode-select');
+  _printViaMode = _normalizePrintViaMode(_printViaMode);
   if (viaSel) viaSel.value = _printViaMode || 'combinado';
   const cozWrap = document.getElementById('print-cozinha-wrap');
   if (cozWrap) cozWrap.style.display = _printViaMode === 'separado' ? '' : 'none';
+  const setorWrap = document.getElementById('print-setores-wrap');
+  if (setorWrap) setorWrap.style.display = _printViaMode === 'separado' ? '' : 'none';
 
   const _fillSelect = (selId, currentVal) => {
     const sel = document.getElementById(selId);
@@ -3948,6 +4204,13 @@ function _loadRoteamento() {
   };
   _fillSelect('print-rota-caixa', _printPrinter);
   _fillSelect('print-rota-cozinha', _printPrinterCozinha);
+  if (isElectron && window.ElectronPrint?.getConfig) {
+    window.ElectronPrint.getConfig()
+      .then(cfg => _loadSetoresCategorias(cfg.printers || []))
+      .catch(() => _loadSetoresCategorias());
+  } else {
+    _loadSetoresCategorias();
+  }
 
   // Restaura toggle de bebida
   const bebidaToggle = document.getElementById('toggle-print-bebida');
@@ -3994,6 +4257,9 @@ function _updateUsbStatus() {
 async function salvarConfigImpressao() {
   const cfg = _getPrintConfig()
   const fmt = _printFormat || '80mm'
+  const viaMode = _normalizePrintViaMode(_printViaMode)
+  _printViaMode = viaMode
+  localStorage.setItem('printViaMode', viaMode)
   const payload = {
     printMode:     _printMode,
     printFormat:   fmt,
@@ -4001,10 +4267,11 @@ async function salvarConfigImpressao() {
     printNome:     cfg.nome,
     printSub:      cfg.sub,
     printRodape:   cfg.rodape,
-    printViaMode:        _printViaMode,
+    printViaMode:        viaMode,
     printPrinterCozinha: _printPrinterCozinha,
     printer_caixa:       _printPrinter,
     printer_cozinha:     _printPrinterCozinha,
+    printSetoresCategoria: _getPrintSetoresCategoria(),
     impressoras:         _impressoras,
     modelos:             _modelos,
   }
@@ -4026,7 +4293,8 @@ async function salvarConfigImpressao() {
       printer:         _printPrinter,
       printer_caixa:   _printPrinter,
       printer_cozinha: _printPrinterCozinha,
-      printViaMode:    _printViaMode,
+      printSetoresCategoria: _getPrintSetoresCategoria(),
+      printViaMode:    viaMode,
       printFormat:     fmt,
       printMode:       _printMode,
     }).catch(() => {})
@@ -4049,8 +4317,35 @@ async function salvarConfigImpressao() {
 }
 
 async function testPrint() {
+  const sampleItems = (() => {
+    if (typeof items !== 'undefined' && Array.isArray(items) && items.length) {
+      const chosen = [];
+      const seen = new Set();
+      items.filter(i => i && i.status !== 'esgotado').forEach(i => {
+        const key = i.cat_key || i.cat || 'Outros';
+        if (chosen.length < 3 && (!seen.has(key) || chosen.length < 1)) {
+          seen.add(key);
+          chosen.push({
+            id: i.id || null,
+            qty: 1,
+            name: i.name || 'Item teste',
+            price: parseFloat(i.price || 0) || 10,
+            cat: i.cat || '',
+            cat_key: i.cat_key || i.catKey || i.cat || '',
+            obs: ''
+          });
+        }
+      });
+      if (chosen.length) return chosen;
+    }
+    return [
+      { qty:1, name:'X-Salada', price:18, cat:'Hamburgueres', cat_key:'Hamburgueres' },
+      { qty:1, name:'Pizza Calabresa', price:35, cat:'Pizzas', cat_key:'Pizzas' },
+      { qty:1, name:'Batata Frita', price:10, cat:'Porcoes', cat_key:'Porcoes' }
+    ];
+  })();
   const ex = { id:99, client:'TESTE IMPRESSÃO', addr:'Balcão', mesa_num:null, pag:'PIX', taxa:5, total:23,
-    items:[{qty:1,name:'X-Salada',price:18},{qty:1,name:'Batata Frita',price:10}] };
+    items: sampleItems };
   await printOrder(ex);
   sbToast('ok', 'Enviando para impressora...');
 }

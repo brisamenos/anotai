@@ -1173,8 +1173,11 @@ try {
     log('🔄', `Backfill order_num: ${_needsBackfill.cnt} pedidos sem número sequencial`)
     const _tenants = db.prepare(`SELECT DISTINCT tenant_id FROM orders WHERE ${_backfillWhere}`).all()
     for (const { tenant_id } of _tenants) {
-      const _nullOrders = db.prepare(`SELECT id FROM orders WHERE tenant_id=? AND ${_backfillWhere} ORDER BY id ASC`).all(tenant_id)
-      const _existingMax = db.prepare('SELECT COALESCE(MAX(order_num),0) as mx FROM orders WHERE tenant_id=? AND order_num IS NOT NULL').get(tenant_id)
+      const _cfg = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tenant_id)
+      const _offset = parseInt(_cfg?.order_num_offset) || 0
+      const _nullOrders = db.prepare(`SELECT id FROM orders WHERE tenant_id=? AND id>? AND ${_backfillWhere} ORDER BY id ASC`).all(tenant_id, _offset)
+      if (!_nullOrders.length) continue
+      const _existingMax = db.prepare('SELECT COALESCE(MAX(order_num),0) as mx FROM orders WHERE tenant_id=? AND id>? AND order_num IS NOT NULL').get(tenant_id, _offset)
       let _seq = _existingMax?.mx || 0
       const _upd = db.prepare('UPDATE orders SET order_num=? WHERE id=?')
       db.transaction(() => { for (const r of _nullOrders) _upd.run(++_seq, r.id) })()
@@ -1421,10 +1424,21 @@ function atribuirOrderNumSeNecessario(tid, orderId) {
   return txFn(tid, orderId)
 }
 
-function numeroPedidoServidor(tid, order) {
+function numeroPedidoComOffset(order, offset = 0) {
   if (order?.order_num) return Number(order.order_num)
+  const id = Number(order?.id || 0)
+  const off = Number(offset || 0)
+  return id > off ? Math.max(1, id - off) : id
+}
+
+function numeroPedidoPad(order, offset = 0) {
+  const num = numeroPedidoComOffset(order, offset)
+  return num ? String(num).padStart(3, '0') : ''
+}
+
+function numeroPedidoServidor(tid, order) {
   const cfg = db.prepare("SELECT order_num_offset FROM store_config WHERE tenant_id=?").get(tid)
-  return Math.max(1, Number(order?.id || 0) - Number(cfg?.order_num_offset || 0))
+  return numeroPedidoComOffset(order, cfg?.order_num_offset)
 }
 
 function numeroPedidoChat(order, opts = {}) {
@@ -1692,6 +1706,12 @@ function agendarResetDiarioPedidos() {
   }, ms)
 }
 
+try {
+  const n = executarResetDiarioPedidos()
+  if (n > 0) log('INFO', `Reset diario pendente aplicado na inicializacao: ${n} tenant(s)`)
+} catch (e) {
+  log('WARN', 'Reset diario na inicializacao falhou:', e.message)
+}
 agendarResetDiarioPedidos()
 
 const TABLE_COLS = {
@@ -2018,6 +2038,11 @@ async function handleREST(req, res, table, params, body) {
       // ─────────────────────────────────────────────────────────────────────
 
       if (table === 'store_config') {
+        if (Object.prototype.hasOwnProperty.call(payload, 'order_auto_reset_daily') &&
+            !Object.prototype.hasOwnProperty.call(payload, 'order_auto_reset_last_date')) {
+          const ativoReset = payload.order_auto_reset_daily === true || payload.order_auto_reset_daily === 1 || payload.order_auto_reset_daily === '1'
+          if (ativoReset) payload.order_auto_reset_last_date = brasiliaDateString()
+        }
         const scTid = tenantId || payload.tenant_id
         if (!scTid) return send(res, 400, { error: 'tenant_id obrigatório' })
         payload.tenant_id = scTid
@@ -2106,7 +2131,7 @@ async function handleREST(req, res, table, params, body) {
               return
             }
             const offset = parseInt(cfg?.order_num_offset) || 0
-            const idStr  = String(_ord.order_num || Math.max(1, _ord.id - offset)).padStart(3,'0')
+            const idStr  = numeroPedidoPad(_ord, offset)
             const nome   = _ord.client || 'Cliente'
             const items  = (() => {
               try {
@@ -2145,7 +2170,7 @@ async function handleREST(req, res, table, params, body) {
             const pixAuto = auto['pix_cobranca'] || {}
             if (pixAuto.on === false) { log('⏭️','Automação pix_cobranca desligada'); return }
             const offset  = parseInt(cfg?.order_num_offset) || 0
-            const idStr   = String(_ord.order_num || Math.max(1, _ord.id - offset)).padStart(3,'0')
+            const idStr   = numeroPedidoPad(_ord, offset)
             const nome    = _ord.client || 'Cliente'
             const items   = (()=>{ try{ return (JSON.parse(_ord.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') }catch{ return '' } })()
             const total   = (parseFloat(_ord.total||0) + parseFloat(_ord.taxa||0)).toFixed(2).replace('.',',')
@@ -2192,6 +2217,11 @@ async function handleREST(req, res, table, params, body) {
       const keys    = Object.keys(payload).filter(k=>cols.includes(k))
       if (!keys.length) return send(res, 400, { error: 'Sem campos válidos' })
       if (table === 'store_config') {
+        if (Object.prototype.hasOwnProperty.call(payload, 'order_auto_reset_daily') &&
+            !Object.prototype.hasOwnProperty.call(payload, 'order_auto_reset_last_date')) {
+          const ativoReset = payload.order_auto_reset_daily === true || payload.order_auto_reset_daily === 1 || payload.order_auto_reset_daily === '1'
+          if (ativoReset) payload.order_auto_reset_last_date = brasiliaDateString()
+        }
         const pTid = tenantId || payload.tenant_id || vals[0] || null
         if (!pTid) return send(res, 400, { error: 'tenant_id obrigatório' })
         const upsertKeys = [...new Set([...keys,'tenant_id'])].filter(k=>cols.includes(k))
@@ -3128,7 +3158,7 @@ async function handleOrderStatus(req, res) {
             return
           }
           const offset = parseInt(cfg?.order_num_offset) || 0
-          const idStr  = String(order.order_num || Math.max(1, order.id - offset)).padStart(3,'0')
+          const idStr  = numeroPedidoPad(order, offset)
           const nome   = order.client || 'Cliente'
           const items  = (()=>{ try{ return (JSON.parse(order.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') }catch{ return '' } })()
           const total  = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
@@ -3317,7 +3347,7 @@ async function handleOrderStatus(req, res) {
           const auto  = jsonParse(cfg?.evo_automacoes)||{}
           const offset= parseInt(cfg?.order_num_offset)||0
           const loja  = cfg?.store_name || (_seg==='acougue' ? 'Açougue' : 'Restaurante')
-          const nome  = order.client||'Cliente', idStr=String(order.order_num||Math.max(1,order.id-offset)).padStart(3,'0')
+          const nome  = order.client||'Cliente', idStr=numeroPedidoPad(order, offset)
           // Formata cada item com seus adicionais (kit, meio-meio, grupos como TEMPERADO,
           // obs livre). Antes mostrava só "qty x nome" — cliente não via o que escolheu.
           // Formato do obs: "Forma de preparo: X | TEMPERADO: a, b | Kit: it1 · it2 | obs livre"
@@ -3726,7 +3756,7 @@ async function handleIAWebhook(req, res) {
         const pag = String(p?.pag || '').toLowerCase()
         if (p?.order_num) return String(p.order_num).padStart(3, '0')
         if (status === 'aguardando_cartao' || (status === 'aguardando_pix' && pag !== 'pix_manual')) return ''
-        return String(Math.max(1, Number(p?.id || 0) - _iaOffset)).padStart(3, '0')
+        return numeroPedidoPad(p, _iaOffset)
       }
       const _phoneArgs  = phoneLookupArgs(phone)
       const _phoneWhere = phoneLookupSql('phone')

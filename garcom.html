@@ -1665,7 +1665,127 @@ let _garcomFeeConfig = {}; // delivery_fee_config (carregado do store_config)
 let _garcomOrderNumOffset = 0; // offset de numeração por tenant (fallback)
 function _garcomOrderNum(id, orderNum) {
   if (orderNum) return Number(orderNum);
-  return Math.max(1, Number(id) - Number(_garcomOrderNumOffset));
+  const n = Number(id) || 0;
+  const off = Number(_garcomOrderNumOffset) || 0;
+  return n > off ? Math.max(1, n - off) : n;
+}
+
+function _garcomHtmlEscape(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+function _garcomNormPrintKey(s) {
+  return String(s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function _garcomSectorRoutes() {
+  const cfg = _garcomPrintCfg || {};
+  if (cfg.printSetoresCategoria && typeof cfg.printSetoresCategoria === 'object' && !Array.isArray(cfg.printSetoresCategoria)) {
+    return cfg.printSetoresCategoria;
+  }
+  try {
+    const parsed = JSON.parse(localStorage.getItem('printSetoresCategoria') || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function _garcomHasSectorRoutes() {
+  return Object.values(_garcomSectorRoutes()).some(Boolean);
+}
+
+function _garcomItemCategoryKeys(item) {
+  const keys = [item?.cat_key, item?.catKey, item?.cat].filter(Boolean).map(String);
+  if (Array.isArray(allCats)) {
+    const normSet = new Set(keys.map(_garcomNormPrintKey));
+    allCats.forEach(c => {
+      if (normSet.has(_garcomNormPrintKey(c.name)) || normSet.has(_garcomNormPrintKey(c.label))) {
+        if (c.name) keys.push(c.name);
+        if (c.label) keys.push(c.label);
+      }
+    });
+  }
+  return [...new Set(keys.filter(Boolean))];
+}
+
+function _garcomResolveSectorPrinter(item) {
+  const routes = _garcomSectorRoutes();
+  const keys = _garcomItemCategoryKeys(item);
+  for (const key of keys) {
+    if (routes[key]) return routes[key];
+  }
+  const normRoutes = {};
+  Object.entries(routes).forEach(([key, value]) => { if (value) normRoutes[_garcomNormPrintKey(key)] = value; });
+  for (const key of keys) {
+    const found = normRoutes[_garcomNormPrintKey(key)];
+    if (found) return found;
+  }
+  return '';
+}
+
+function _garcomPrinterLabel(printer) {
+  const cfg = _garcomPrintCfg || {};
+  const printers = Array.isArray(cfg.impressoras) ? cfg.impressoras : [];
+  const found = printers.find(p => (p.printerName || p.apelido) === printer);
+  return (found?.apelido || printer || 'Cozinha').replace(/\s*\([^)]*\)\s*$/, '');
+}
+
+function _garcomBuildSetorHtml(order, cfg, titulo, lista) {
+  const fontSize = parseInt(cfg?.fontSize) || 12;
+  const now = new Date().toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  const mesa = order?.mesa_num || activeMesa || '';
+  const orderNum = mesa ? `Mesa ${mesa}` : (order?.id ? `#${_garcomOrderNum(order.id, order.order_num)}` : '?');
+  const groups = [];
+  const idx = new Map();
+  (lista || []).forEach(item => {
+    const cat = String(item.cat || item.cat_key || item.catKey || 'Outros').trim() || 'Outros';
+    if (!idx.has(cat)) {
+      idx.set(cat, groups.length);
+      groups.push({ cat, items: [] });
+    }
+    groups[idx.get(cat)].items.push(item);
+  });
+  const showCats = groups.length > 1;
+  const itemHtml = groups.map(g => {
+    const header = showCats ? `<div style="font-weight:bold;text-align:center;border-top:1px solid #000;border-bottom:1px solid #000;margin:6px 0 4px;padding:3px 0">${_garcomHtmlEscape(g.cat).toUpperCase()}</div>` : '';
+    return header + g.items.map(i => {
+      const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em;font-weight:bold;word-break:break-word">OBS: ${_garcomHtmlEscape(i.obs)}</div>` : '';
+      return `<div style="margin-bottom:4px;border-bottom:1px dotted #ddd;padding-bottom:4px"><div style="font-weight:bold;word-break:break-word">${_garcomHtmlEscape((i.qty || 1) + 'x ' + (i.name || '')).toUpperCase()}</div>${obs}</div>`;
+    }).join('');
+  }).join('');
+
+  return `<div class="print-ticket" style="font-size:${fontSize}px">
+    <div style="text-align:center;font-size:1.1em;font-weight:900">${_garcomHtmlEscape(titulo || 'COZINHA').toUpperCase()}</div>
+    <div style="text-align:center;font-weight:bold;margin:4px 0">*** VIA DE PREPARO ***</div>
+    <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+    <div>Pedido: <b>${_garcomHtmlEscape(orderNum)}</b></div>
+    ${mesa ? `<div>Mesa: <b>${_garcomHtmlEscape(mesa)}</b></div>` : ''}
+    ${currentGarcom?.nome ? `<div>Garcom: ${_garcomHtmlEscape(currentGarcom.nome)}</div>` : ''}
+    <div>Data: ${_garcomHtmlEscape(now)}</div>
+    <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+    ${itemHtml}
+    <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
+    <div style="text-align:center;font-size:0.85em">${_garcomHtmlEscape(cfg?.rodape || 'Bom apetite!')}</div>
+  </div>`;
+}
+
+function _garcomBuildSetorJobs(order, cfg, lista, defaultPrinter) {
+  const itemsToRoute = (Array.isArray(lista) ? lista : []).filter(Boolean);
+  if (!itemsToRoute.length || !_garcomHasSectorRoutes()) return [];
+  const buckets = new Map();
+  itemsToRoute.forEach(item => {
+    const printer = _garcomResolveSectorPrinter(item) || defaultPrinter || '';
+    const title = printer ? _garcomPrinterLabel(printer) : 'Cozinha';
+    const key = `${printer}|${title}`;
+    if (!buckets.has(key)) buckets.set(key, { printer, title, items: [] });
+    buckets.get(key).items.push(item);
+  });
+  return Array.from(buckets.values()).map(bucket => ({
+    html: _garcomBuildSetorHtml(order, cfg, bucket.title, bucket.items),
+    printer: bucket.printer || '',
+    tipo: 'cozinha'
+  }));
 }
 
 // ── Impressão automática do garçom ─────────────────────
@@ -1677,14 +1797,16 @@ async function garcomPrint(order, newItems) {
     const nome     = (_garcomNomeLoja || cfg.nome || 'RESTAURANTE').toUpperCase();
     const fontSize = parseInt(cfg.fontSize) || 12;
     const rodape   = cfg.rodape || 'Bom apetite!';
-    const fmt      = cfg.format || localStorage.getItem('printFormat') || '80mm';
+    const fmt      = cfg.printFormat || cfg.format || localStorage.getItem('printFormat') || '80mm';
     // Fallback em cascata: config do banco → localStorage (caso o gestor tenha
     // salvo só local) → vazio (Electron usa padrão do Windows). Antes só lia
     // de cfg, e se estava vazia o garçom não imprimia em lugar nenhum.
-    const printerCaixa   = cfg.printer_caixa   || cfg.printer || localStorage.getItem('printPrinter')        || '';
-    const printerCozinha = cfg.printer_cozinha                || localStorage.getItem('printPrinterCozinha') || '';
-    const doisImpressoras = printerCaixa && printerCozinha && printerCaixa !== printerCozinha;
-    console.log('[GARCOM PRINT] caixa:', printerCaixa || '(padrão)', '| cozinha:', printerCozinha || '(nenhuma)', '| dois:', doisImpressoras);
+    const printerCaixa   = cfg.printer_caixa   || cfg.printer || cfg.printPrinter || localStorage.getItem('printPrinter') || '';
+    const printerCozinha = cfg.printer_cozinha || cfg.printPrinterCozinha || localStorage.getItem('printPrinterCozinha') || '';
+    const viaMode = cfg.printViaMode || localStorage.getItem('printViaMode') || 'combinado';
+    const setoresAtivos = _garcomHasSectorRoutes();
+    const doisImpressoras = viaMode === 'separado' && (printerCozinha || setoresAtivos);
+    console.log('[GARCOM PRINT] modo vias:', viaMode, '| caixa:', printerCaixa || '(padrão)', '| cozinha:', printerCozinha || '(nenhuma)', '| dois:', doisImpressoras);
     const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
     const orderNum = order.mesa_num ? `Mesa ${order.mesa_num}` : (order.id ? `#${_garcomOrderNum(order.id, order.order_num)}` : '?');
 
@@ -1723,6 +1845,7 @@ async function garcomPrint(order, newItems) {
     const itensBebida  = items.filter(i => !isCozinha(i));
     const htmlCozinha  = montarVia('VIA DA COZINHA', itensCozinha);
     const htmlBar      = montarVia('VIA DO BAR', itensBebida);
+    const setorJobs    = _garcomBuildSetorJobs(order, cfg, itensCozinha, printerCozinha);
     if (!htmlCozinha && !htmlBar) return;
 
     // ── REGRA DEFINITIVA do toggle "Imprimir bebida industrializada" ──
@@ -1750,7 +1873,10 @@ async function garcomPrint(order, newItems) {
       //   - htmlBar     → printerCaixa   (bebida pronta pega no balcão)
       if (window.ElectronPrint?.printHtml) {
         const pw = fmt === '58mm' ? 58 : 80;
-        if (htmlCozinha) await window.ElectronPrint.printHtml(htmlCozinha, { printer: printerCozinha, paperWidth: pw }).catch(()=>{});
+        const cozinhaJobs = setorJobs.length ? setorJobs : (htmlCozinha ? [{ html: htmlCozinha, printer: printerCozinha }] : []);
+        for (const job of cozinhaJobs) {
+          await window.ElectronPrint.printHtml(job.html, { printer: job.printer || printerCozinha, paperWidth: pw }).catch(()=>{});
+        }
         if (htmlBar)     await window.ElectronPrint.printHtml(htmlBar,     { printer: printerCaixa,   paperWidth: pw }).catch(()=>{});
         showToast(htmlCozinha && htmlBar ? '🖨️ Cozinha + Bar' : htmlCozinha ? '🖨️ Cozinha' : '🖨️ Bar');
         return;
@@ -1758,7 +1884,11 @@ async function garcomPrint(order, newItems) {
       // Print Agent — dois jobs separados, sem verificar status
       try {
         const jobs = [];
-        if (htmlCozinha) jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html: htmlCozinha, format: fmt, printer: printerCozinha, tipo: 'cozinha' }) }));
+        if (setorJobs.length) {
+          setorJobs.forEach(job => jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html: job.html, format: fmt, printer: job.printer || undefined, tipo: job.tipo || 'cozinha' }) })));
+        } else if (htmlCozinha) {
+          jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html: htmlCozinha, format: fmt, printer: printerCozinha, tipo: 'cozinha' }) }));
+        }
         if (htmlBar)     jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html: htmlBar,     format: fmt, printer: printerCaixa,   tipo: 'caixa'   }) }));
         if (jobs.length) { await Promise.all(jobs); showToast('🖨️ Enviado'); return; }
       } catch(e) { console.warn('[PRINT] Agent falhou:', e.message); }
@@ -1775,7 +1905,7 @@ async function garcomPrint(order, newItems) {
         if (r?.ok) { showToast('🖨️ Enviado'); return; }
       }
       try {
-        const res = await fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html: htmlTudo, format: fmt, printer: printerCaixa || undefined, tipo: 'cozinha' }) });
+        const res = await fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html: htmlTudo, format: fmt, printer: printerCaixa || undefined, tipo: 'caixa' }) });
         if (res.ok) { showToast('🖨️ Enviado'); return; }
       } catch(e) { console.warn('[PRINT] Agent falhou:', e.message); }
     }
@@ -3071,12 +3201,16 @@ async function submitPedido() {
     const _ts = Date.now();
     const newItems = [
       ...foodItems.map((i, idx) => ({
-        qty: i.qty, name: i.name, price: i.price, obs: i.obs||'',
+        id: i.id || null, qty: i.qty, name: i.name, price: i.price,
+        cat: i.cat || '', cat_key: i.cat_key || i.catKey || i.cat || '',
+        obs: i.obs||'',
         item_status: 'producao', item_id: `${_ts}_f${idx}`, added_at: new Date().toISOString(),
         garcom_id: currentGarcom?.id || null, garcom_nome: currentGarcom?.nome || ''
       })),
       ...drinkItems.map((i, idx) => ({
-        qty: i.qty, name: i.name, price: i.price, obs: i.obs||'', drink: true,
+        id: i.id || null, qty: i.qty, name: i.name, price: i.price,
+        cat: i.cat || '', cat_key: i.cat_key || i.catKey || i.cat || '',
+        obs: i.obs||'', drink: true,
         item_status: 'entregue', item_id: `${_ts}_d${idx}`, added_at: new Date().toISOString(),
         garcom_id: currentGarcom?.id || null, garcom_nome: currentGarcom?.nome || ''
       }))
@@ -3375,7 +3509,15 @@ async function npEnviarPedido() {
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px"></div> Enviando...';
 
-  const allItemsArr = _npCart.map(i => ({ qty: i.qty, name: i.name, price: i.price, obs: i.obs || '' }));
+  const allItemsArr = _npCart.map(i => ({
+    id: i.id || null,
+    qty: i.qty,
+    name: i.name,
+    price: i.price,
+    cat: i.cat || '',
+    cat_key: i.cat_key || i.catKey || i.cat || '',
+    obs: i.obs || ''
+  }));
   const tot  = _npCart.reduce((s, i) => s + i.price * i.qty, 0);
   const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const obsExtra = obs ? ` | ${obs}` : '';
@@ -3418,7 +3560,7 @@ async function npEnviarPedido() {
     document.getElementById('success-num').textContent = nome || 'Pedido enviado';
     document.getElementById('success-overlay').classList.add('on');
     // Impressão automática pedido avulso
-    garcomPrint({ id: data.id, mesa_num: null }, data.items || []);
+    garcomPrint(data, data.items || []);
   } catch(e) {
     showToast('❌ Erro ao enviar pedido');
     console.error(e);

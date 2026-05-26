@@ -28,7 +28,7 @@ function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
       const pixConf = auto['pix_confirmado'] || {}
       if (pixConf.on === false) return
       const offset = parseInt(cfg?.order_num_offset) || 0
-      const idStr  = String(order.order_num || Math.max(1, order.id - offset)).padStart(3,'0')
+      const idStr  = _numeroPedidoPad(order, offset)
       const nome   = order.client || 'Cliente'
       const items  = (()=>{ try{ return (JSON.parse(order.items)||[]).map(i=>`• ${i.qty}x ${i.name}`).join('\n') }catch{ return '' } })()
       const total  = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
@@ -45,6 +45,20 @@ function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
 // página antes do poll frontend confirmar ou webhook não chegou).
 let _pixJobIniciado = false
 
+function _brasiliaDateString(date = new Date()) {
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const parts = {}
+  for (const part of fmt.formatToParts(date)) {
+    if (part.type !== 'literal') parts[part.type] = part.value
+  }
+  return `${parts.year}-${parts.month}-${parts.day}`
+}
+
 // Normaliza valor pra MP — aceita string ("15,90", "15.90"), número, retorna
 // number com 2 casas decimais. Se inválido (NaN, <= 0), retorna null.
 // MP rejeita com erro 4037 ("Invalid transaction_amount") se vier:
@@ -52,6 +66,18 @@ let _pixJobIniciado = false
 // - <= 0
 // - mais de 2 casas decimais (ex: 15.999)
 // - string com vírgula sem conversão
+function _numeroPedidoComOffset(order, offset = 0) {
+  if (order?.order_num) return Number(order.order_num)
+  const id = Number(order?.id || 0)
+  const off = Number(offset || 0)
+  return id > off ? Math.max(1, id - off) : id
+}
+
+function _numeroPedidoPad(order, offset = 0) {
+  const num = _numeroPedidoComOffset(order, offset)
+  return num ? String(num).padStart(3, '0') : ''
+}
+
 function _mpValor(raw) {
   if (raw === null || raw === undefined || raw === '') return null
   // Aceita "15,90" → "15.90"
@@ -749,7 +775,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!order?.id || !order?.tenant_id || _chatPendingNumber(order)) return ''
     try {
       const cfg = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(order.tenant_id)
-      return String(Math.max(1, Number(order.id) - (parseInt(cfg?.order_num_offset, 10) || 0))).padStart(3, '0')
+      return _numeroPedidoPad(order, parseInt(cfg?.order_num_offset, 10) || 0)
     } catch { return '' }
   }
   const _chatPauseKey = (tid, phone) => `pausa:${tid}:${_chatDigits(phone)}`
@@ -2965,7 +2991,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           if (cfg?.store_whatsapp) {
             const inst   = cfg.evo_instance || EVO_INST
             const offset = parseInt(cfg.order_num_offset) || 0
-            const idStr  = String(order.order_num || Math.max(1, order.id - offset)).padStart(3,'0')
+            const idStr  = _numeroPedidoPad(order, offset)
             const msg    = `🔔 *Pedido cancelado pelo cliente*\n\nPedido *#${idStr}* — ${order.client}\nFoi cancelado pelo cliente via cardápio.${pagOnline ? '\n\n💰 Estorno financeiro registrado automaticamente.' : ''}`
             await sendWA(cfg.store_whatsapp, msg, inst)
           }
@@ -4472,7 +4498,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
                   const inst   = cfg?.evo_instance || EVO_INST
                   const loja   = cfg?.store_name || 'Restaurante'
                   const offset = parseInt(cfg?.order_num_offset) || 0
-                  const idStr  = String(_foC.order_num || Math.max(1, _foC.id - offset)).padStart(3,'0')
+                  const idStr  = _numeroPedidoPad(_foC, offset)
                   const nome   = (_foC.client || 'Cliente').split(' ')[0]
                   const total  = (parseFloat(_foC.total||0)+parseFloat(_foC.taxa||0)).toFixed(2).replace('.',',')
                   const msg    = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento confirmado*\n\nOlá, *${nome}*! Recebemos o pagamento no cartão do pedido *#${idStr}*.\n\n*Total:* R$ ${total}\n\nSeu pedido já entrou em preparo.`
@@ -5020,7 +5046,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const pendenteOnline = statusPix === 'aguardando_cartao' || (statusPix === 'aguardando_pix' && pagPix !== 'pix_manual')
     const numPedido   = pedido.order_num
       ? String(pedido.order_num).padStart(3, '0')
-      : (pendenteOnline ? '' : String(Math.max(1, pedido.id - offset)).padStart(3, '0'))
+      : (pendenteOnline ? '' : _numeroPedidoPad(pedido, offset))
     try { db.prepare("UPDATE orders SET wa_track=1 WHERE id=? AND tenant_id=? AND COALESCE(wa_track,0)=0").run(pedido.id, tenant_id) } catch {}
     const msg         = buildOrderTrackingMessage({
       order: pedido,
@@ -5463,7 +5489,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
               const inst   = cfg?.evo_instance || EVO_INST
               const loja   = cfg?.store_name || 'Restaurante'
               const offset = parseInt(cfg?.order_num_offset) || 0
-              const idStr  = String(_fo.order_num || Math.max(1, _fo.id - offset)).padStart(3,'0')
+              const idStr  = _numeroPedidoPad(_fo, offset)
               const nome   = (_fo.client || 'Cliente').split(' ')[0]
               const total  = (parseFloat(_fo.total||0)+parseFloat(_fo.taxa||0)).toFixed(2).replace('.',',')
               const msg    = `🏪 *${loja}*\n${'─'.repeat(20)}\n\n✅ *Pagamento confirmado*\n\nOlá, *${nome}*! Recebemos o pagamento no cartão do pedido *#${idStr}*.\n\n*Total:* R$ ${total}\n\nSeu pedido já entrou em preparo.`
@@ -6365,14 +6391,16 @@ module.exports = async function handleRoutes(req, res, ctx) {
       }
 
       const offset = db.prepare('SELECT COALESCE(MAX(id),0) as max_id FROM orders').get()?.max_id || 0
+      const hoje = _brasiliaDateString()
       db.transaction(() => {
         db.prepare('INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)').run(tid)
-        db.prepare('UPDATE store_config SET order_num_offset=? WHERE tenant_id=?').run(offset, tid)
+        db.prepare('UPDATE store_config SET order_num_offset=?, order_auto_reset_last_date=? WHERE tenant_id=?').run(offset, hoje, tid)
       })()
       marcarDirty()
-      sseBroadcast(`store-config-rt:${tid}`, 'store_config:UPDATE', { tenant_id: tid, order_num_offset: offset })
-      sseBroadcast(`orders-rt:${tid}`, 'store_config:UPDATE', { tenant_id: tid, order_num_offset: offset })
-      send(res, 200, { ok: true, order_num_offset: offset, next_order_num: 1 })
+      const payload = { tenant_id: tid, order_num_offset: offset, order_auto_reset_last_date: hoje }
+      sseBroadcast(`store-config-rt:${tid}`, 'store_config:UPDATE', payload)
+      sseBroadcast(`orders-rt:${tid}`, 'store_config:UPDATE', payload)
+      send(res, 200, { ok: true, order_num_offset: offset, order_auto_reset_last_date: hoje, next_order_num: 1 })
     } catch (e) {
       log('ERR', `reset-counter erro tenant=${tid}:`, e.message)
       send(res, 500, { error: e.message })

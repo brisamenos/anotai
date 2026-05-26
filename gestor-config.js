@@ -63,6 +63,7 @@ async function confirmarZerarPedidos() {
 
     // Atualiza localmente
     _orderNumOffset = novoOffset;
+    if (data.order_auto_reset_last_date) _orderAutoResetLastDate = data.order_auto_reset_last_date;
     ordersKanban = ordersKanban.map(o => ({ ...o, num: _orderNum(o.id, o.order_num) }));
     renderKanban();
 

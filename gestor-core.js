@@ -1489,7 +1489,7 @@ function _subscribeOrdersSSE() {
         if (nc) { nc.style.display = 'flex'; nc.textContent = parseInt(nc.textContent || 0) + 1; }
         const itemsList = Array.isArray(items) ? items.map(i => `${i.qty}x ${i.name}`).join(', ') : '';
         const tituloPagamento = order.pag === 'cartao_mp' ? 'Cartao aprovado!' : (isPixManualPendente ? 'PIX manual pendente!' : 'PIX confirmado!');
-        const numPedido = order.order_num ? _orderNum(order.id, order.order_num) : order.id;
+        const numPedido = _orderNum(order.id, order.order_num);
         showToast('<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;flex-shrink:0"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.4"/></svg>', `${tituloPagamento} Pedido #${numPedido} — ${order.client}`);
         sendBrowserNotif(`${tituloPagamento} #${numPedido}`, `${order.client} — ${itemsList}`);
         // PIX online: pagamento já confirmado pelo MP, imprime automático sempre (independe do toggle/_printMode)
@@ -2449,6 +2449,7 @@ async function cancelOrderById(id) {
 async function finishOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
   const time = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  let movimentoFalhou = false;
   sbLoading(true);
   try {
     const res = await fetch('/api/order-status', {
@@ -2460,6 +2461,7 @@ async function finishOrderById(id) {
     if (!res.ok) throw new Error(data.error || 'Erro');
     // Registra movimento financeiro
     if (o && _sessao?.tenant_id) {
+      try {
       // Fix: usa parseFloat para evitar concatenação de string quando vem do SSE/JSON
       const _totalVal = parseFloat(o.total || 0) + parseFloat(o.taxa || 0);
       await sb.from('movimentos').insert({
@@ -2468,6 +2470,10 @@ async function finishOrderById(id) {
         tipo: 'entrada', val: _totalVal, pag: o.pag || 'PIX', time
       });
       movimentos.push({ desc:`Pedido #${o.num} – ${o.client}`, tipo:'entrada', val: _totalVal, pag:o.pag||'PIX', time });
+      } catch(e) {
+        movimentoFalhou = true;
+        console.warn('[finishOrder] movimento financeiro falhou (pedido ja finalizado):', e.message);
+      }
     }
     ordersKanban = ordersKanban.filter(x => x.id !== id);
     // BUG 1 fix: adiciona pontos de fidelidade ao finalizar
@@ -2478,7 +2484,11 @@ async function finishOrderById(id) {
   }
   sbLoading(false);
   renderKanban();
-  sbToast('ok', `Pedido #${_orderNum(id, o?.order_num)} finalizado!`);
+  if (movimentoFalhou) {
+    sbToast('err', `Pedido #${_orderNum(id, o?.order_num)} finalizado, mas o financeiro nao foi registrado.`);
+  } else {
+    sbToast('ok', `Pedido #${_orderNum(id, o?.order_num)} finalizado!`);
+  }
 }
 
 // ── confirmarPagamentoPix (PIX manual) ──────────────
@@ -2904,7 +2914,9 @@ function _applyStoreConfigUpdate(cfg = {}) {
 function _orderNum(id, orderNum) {
   // Prefere order_num do servidor (sequencial por tenant), fallback para id - offset
   if (orderNum) return Number(orderNum);
-  return Math.max(1, Number(id) - Number(_orderNumOffset));
+  const n = Number(id) || 0;
+  const off = Number(_orderNumOffset) || 0;
+  return n > off ? Math.max(1, n - off) : n;
 }
 
 function _tempoPedidoDisplay(v) {

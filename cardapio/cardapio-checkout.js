@@ -460,7 +460,15 @@ async function _doSubmitOrder(addr, troco) {
   btn.disabled = true;
   btn.innerHTML = '<div class="spin"></div> Enviando…';
 
-  const items = cart.map(i => ({ id: i.id || null, qty: i.qty, name: i.name, price: i.price, obs: i.obs||'' }));
+  const items = cart.map(i => ({
+    id: i.id || null,
+    qty: i.qty,
+    name: i.name,
+    price: i.price,
+    cat: i.cat || '',
+    cat_key: i.cat_key || i.catKey || i.cat || '',
+    obs: i.obs||''
+  }));
   const time  = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   // Total bruto (o que o cliente efetivamente paga — já considera cashback e cupom)
   const _grossTotal = displayTotal();
