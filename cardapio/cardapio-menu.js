@@ -190,8 +190,8 @@ function renderMenu() {
 
   // ── Seção Destaques — açougue: acima das indicações; restaurante: posição normal ──
   if (_segmento === 'acougue' && !searchQ && !activeCat && !_filterPreparo) {
-    const destItems = normalItems.filter(i => i.destaque || i.promo || i.price_old);
-    if (destItems.length >= 2) {
+    const destItems = normalItems.filter(i => i.destaque);
+    if (destItems.length) {
       html += `<div class="destaques-wrap"><div class="section-label">Destaques</div>`;
       html += `<div class="destaques-scroll">`;
       destItems.forEach(i => {
@@ -258,8 +258,8 @@ function renderMenu() {
   // Renderiza grupos normais
   // ── Destaques para restaurante (posição original, entre filtro e grupos) ──
   if (_segmento !== 'acougue' && !searchQ && !activeCat) {
-    const destItems = normalItems.filter(i => i.destaque || i.promo || i.price_old);
-    if (destItems.length >= 2) {
+    const destItems = normalItems.filter(i => i.destaque);
+    if (destItems.length) {
       html += `<div class="destaques-wrap"><div class="section-label">Mais Pedidos</div><div class="destaques-scroll">`;
       destItems.forEach(i => {
         const esg = i.status === 'esgotado';

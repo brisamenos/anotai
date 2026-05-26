@@ -430,16 +430,38 @@ function _assinaturaAtiva(status) {
   return ['authorized', 'pending', 'paused'].includes(s)
 }
 
+function _parseDateOnlyLocal(value) {
+  if (!value) return null
+  const [y, m, d] = String(value).slice(0, 10).split('-').map(Number)
+  if (!y || !m || !d) return null
+  return new Date(y, m - 1, d)
+}
+
+function _dateOnlyISO(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return ''
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function _addCalendarMonths(date, months) {
+  const base = date instanceof Date && !Number.isNaN(date.getTime()) ? date : new Date()
+  const day = base.getDate()
+  const target = new Date(base.getFullYear(), base.getMonth() + months, 1)
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate()
+  target.setDate(Math.min(day, lastDay))
+  return target
+}
+
 function _renovarPlanoSaas(db, tenantId, plano, meses = 1) {
   const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId)
   if (!tenant) return null
   const hoje = new Date()
   hoje.setHours(0,0,0,0)
-  const atual = tenant.expires_at ? new Date(tenant.expires_at) : null
+  const atual = _parseDateOnlyLocal(tenant.expires_at)
   const base = atual && !Number.isNaN(atual.getTime()) && atual > hoje ? atual : hoje
-  const novaExpira = new Date(base)
-  novaExpira.setDate(novaExpira.getDate() + (parseInt(meses) || 1) * 30)
-  const novaExpISO = novaExpira.toISOString().slice(0, 10)
+  const novaExpISO = _dateOnlyISO(_addCalendarMonths(base, parseInt(meses) || 1))
   const planoNovo = ['premium','essencial','pro'].includes(plano) ? plano : (tenant.plano || 'essencial')
   db.prepare("UPDATE tenants SET plano=?, expires_at=?, ativo=1, updated_at=datetime('now') WHERE id=?")
     .run(planoNovo, novaExpISO, tenantId)
@@ -3147,6 +3169,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'POST' && upath === '/api/criar-tenant') {
     const body = await readBody(req)
     const { nome, plano, slug, email, senha, role, nomeGestor, segmento } = body
+    const expiresAtRaw = String(body.expires_at || '').trim()
+    const expiresAt = /^\d{4}-\d{2}-\d{2}$/.test(expiresAtRaw) ? expiresAtRaw : null
     if (!nome || !email || !senha) { send(res, 400, { error: 'nome, email e senha obrigatórios' }); return true }
     try {
       const hash     = crypto.createHash('sha256').update(senha).digest('hex')
@@ -3156,7 +3180,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (slug && slugFinal !== slug) { send(res, 400, { error: `Slug "${slug}" já em uso. Sugerimos: "${slugFinal}"` }); return true }
       if (db.prepare('SELECT id FROM sys_users WHERE email=?').get(email)) { send(res, 400, { error: `E-mail "${email}" já cadastrado.` }); return true }
       const seg = ['restaurante','acougue'].includes(segmento) ? segmento : 'restaurante'
-      db.prepare('INSERT INTO tenants (nome,plano,slug,segmento) VALUES (?,?,?,?)').run(nome, plano || 'basic', slugFinal, seg)
+      db.prepare('INSERT INTO tenants (nome,plano,slug,segmento,expires_at) VALUES (?,?,?,?,?)').run(nome, plano || 'basic', slugFinal, seg, expiresAt)
       const t = db.prepare('SELECT id FROM tenants WHERE slug=?').get(slugFinal)
       db.prepare('INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)').run(t.id)
       // Define offset = max(id) atual para que o 1º pedido deste tenant comece em #1
@@ -3194,7 +3218,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
       marcarDirty()
       setTimeout(() => fazerBackup(true), 2000)
-      send(res, 201, { ok: true, tenant_id: t.id, slug: slugFinal, segmento: seg })
+      send(res, 201, { ok: true, tenant_id: t.id, slug: slugFinal, segmento: seg, expires_at: expiresAt })
     } catch (e) { send(res, 400, { error: e.message }) }
     return true
   }
@@ -4539,12 +4563,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
           // Renova plano: soma meses ao expires_at atual (ou hoje se já expirou/sem data)
           const hoje = new Date()
-          const baseDate = (tenant.expires_at && new Date(tenant.expires_at) > hoje)
-            ? new Date(tenant.expires_at)
-            : hoje
-          const novaExp = new Date(baseDate)
-          novaExp.setDate(novaExp.getDate() + (parseInt(rowF.meses) || 1) * 30)
-          const novaExpISO = novaExp.toISOString().slice(0, 10)
+          hoje.setHours(0,0,0,0)
+          const atual = _parseDateOnlyLocal(tenant.expires_at)
+          const baseDate = atual && atual > hoje ? atual : hoje
+          const novaExpISO = _dateOnlyISO(_addCalendarMonths(baseDate, parseInt(rowF.meses) || 1))
 
           // Atualiza plano também (caso fatura tenha sido pra upgrade)
           const planoNovo = ['premium','essencial','pro'].includes(rowF.plano) ? rowF.plano : tenant.plano
@@ -4566,7 +4588,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
               if (telefone) {
                 const planoNome = planoNovo === 'premium' ? 'Premium' : 'Essencial'
                 const valorTxt  = parseFloat(rowF.valor).toFixed(2).replace('.', ',')
-                const venceTxt  = novaExp.toLocaleDateString('pt-BR')
+                const venceTxt  = _parseDateOnlyLocal(novaExpISO)?.toLocaleDateString('pt-BR') || novaExpISO
                 const msg = [
                   `✅ *Pagamento confirmado*`,
                   ``,
@@ -5613,11 +5635,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
         if (novoStatus === 'aprovado' && rowAtual.payer_name?.startsWith('PLANO:')) {
           // Renovar o plano do tenant
           const plano = rowAtual.payer_name.replace('PLANO:', '')
-          const novaExpira = new Date()
-          novaExpira.setDate(novaExpira.getDate() + 30)
-          db.prepare('UPDATE tenants SET plano=?, expires_at=?, ativo=1 WHERE id=?').run(plano, novaExpira.toISOString().slice(0,10), rowAtual.tenant_id)
+          const novaExpISO = _dateOnlyISO(_addCalendarMonths(new Date(), 1))
+          db.prepare('UPDATE tenants SET plano=?, expires_at=?, ativo=1 WHERE id=?').run(plano, novaExpISO, rowAtual.tenant_id)
           marcarDirty()
-          log('✅', `PLANO RENOVADO: ${plano} tenant=${rowAtual.tenant_id} expira=${novaExpira.toISOString().slice(0,10)}`)
+          log('✅', `PLANO RENOVADO: ${plano} tenant=${rowAtual.tenant_id} expira=${novaExpISO}`)
         }
       }
       send(res, 200, { status: novoStatus, mp_status: pd.status })
@@ -5677,11 +5698,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
       // Se aprovado, renova o plano
       if (novoStatus === 'aprovado') {
-        const novaExpira = new Date()
-        novaExpira.setDate(novaExpira.getDate() + 30)
-        db.prepare('UPDATE tenants SET plano=?, expires_at=?, ativo=1 WHERE id=?').run(plano, novaExpira.toISOString().slice(0,10), tid)
+        const novaExpISO = _dateOnlyISO(_addCalendarMonths(new Date(), 1))
+        db.prepare('UPDATE tenants SET plano=?, expires_at=?, ativo=1 WHERE id=?').run(plano, novaExpISO, tid)
         marcarDirty()
-        log('✅', `PLANO RENOVADO (Cartao): ${plano} tenant=${tid} expira=${novaExpira.toISOString().slice(0,10)}`)
+        log('✅', `PLANO RENOVADO (Cartao): ${plano} tenant=${tid} expira=${novaExpISO}`)
       }
 
       log('💳', `Cartao plano: R$${valor} plano=${plano} tenant=${tid} status=${novoStatus}`)
@@ -6613,6 +6633,67 @@ module.exports = async function handleRoutes(req, res, ctx) {
         }
       } catch { /* não-fatal */ }
 
+      const parseDetalhesAudit = (raw) => {
+        try { return raw ? JSON.parse(raw) : {} } catch { return raw || {} }
+      }
+      const timeline = []
+      if (tenant.created_at) {
+        timeline.push({
+          at: tenant.created_at,
+          tipo: 'cliente.criado',
+          titulo: 'Cliente cadastrado',
+          detalhe: `Plano ${tenant.plano || 'pro'}`,
+          origem: 'tenant'
+        })
+      }
+      try {
+        const logs = db.prepare(`
+          SELECT id, created_at, acao, admin_nome, alvo_tipo, alvo_id, alvo_nome, detalhes
+          FROM admin_audit_log
+          WHERE alvo_id=? OR detalhes LIKE ?
+          ORDER BY created_at DESC
+          LIMIT 30
+        `).all(tid, `%${tid}%`)
+        for (const l of logs) {
+          timeline.push({
+            at: l.created_at,
+            tipo: l.acao || 'admin.acao',
+            titulo: l.acao || 'Ação administrativa',
+            detalhe: parseDetalhesAudit(l.detalhes),
+            admin: l.admin_nome || 'Admin',
+            origem: 'audit',
+            id: l.id
+          })
+        }
+      } catch { /* não-fatal */ }
+      try {
+        const faturas = db.prepare(`
+          SELECT id, plano, valor, meses, metodo, status, created_at, vence_em, pago_em, cancelado_em
+          FROM faturas
+          WHERE tenant_id=?
+          ORDER BY created_at DESC
+          LIMIT 20
+        `).all(tid)
+        const faturaDetalhe = (f) => ({
+          id: f.id,
+          plano: f.plano,
+          valor: f.valor,
+          meses: f.meses,
+          metodo: f.metodo,
+          status: f.status,
+          vence_em: f.vence_em
+        })
+        for (const f of faturas) {
+          if (f.created_at) timeline.push({ at: f.created_at, tipo: 'cobranca.criada', titulo: 'Cobrança gerada', detalhe: faturaDetalhe(f), origem: 'fatura', id: f.id })
+          if (f.pago_em) timeline.push({ at: f.pago_em, tipo: 'cobranca.paga', titulo: 'Pagamento confirmado', detalhe: faturaDetalhe(f), origem: 'fatura', id: f.id })
+          if (f.cancelado_em) timeline.push({ at: f.cancelado_em, tipo: 'cobranca.cancelada', titulo: 'Cobrança cancelada', detalhe: faturaDetalhe(f), origem: 'fatura', id: f.id })
+          if (f.status === 'pendente' && f.vence_em && new Date(f.vence_em).getTime() < Date.now()) {
+            timeline.push({ at: f.vence_em, tipo: 'cobranca.vencida', titulo: 'Cobrança vencida', detalhe: faturaDetalhe(f), origem: 'fatura', id: f.id })
+          }
+        }
+      } catch { /* não-fatal */ }
+      timeline.sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime())
+
       send(res, 200, {
         pedidos_30d:     pedidos30d.cnt || 0,
         faturamento_30d: parseFloat(pedidos30d.fat || 0),
@@ -6623,6 +6704,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         plano: tenant.plano,
         ativo: !!tenant.ativo,
         expires_at: tenant.expires_at,
+        timeline: timeline.slice(0, 20),
       })
     } catch(e) { send(res, 500, { error: e.message }) }
     return true

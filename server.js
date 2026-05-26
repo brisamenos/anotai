@@ -1825,6 +1825,100 @@ function clienteIniciouWhatsappRecentemente(tenantId, phone) {
   }
 }
 
+function waTrackingTextInfo(text) {
+  const raw = String(text || '').trim()
+  const norm = raw
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s#*]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const numMatch = raw.match(/#\s*\*?\s*(\d{1,6})\s*\*?/)
+    || norm.match(/pedido\s*(?:numero|nro|no|n)?\.?\s*[*#:]?\s*(\d{1,6})/i)
+    || norm.match(/numero\s*(?:do\s+pedido)?\s*[*#:]?\s*(\d{1,6})/i)
+  const wantsTracking = /\b(acompanhar\s+(meu\s+|o\s+)?pedido|quero\s+acompanhar\s+(meu\s+)?pedido|rastrear\s+(meu\s+|o\s+)?pedido|rastreio\s+(do\s+)?pedido|meu\s+pedido|status\s+(do\s+)?pedido|cade\s+(meu|o)\s+pedido|onde\s+(esta|ta)\s+(meu|o)\s+pedido|quanto\s+(tempo|falta)|pedido\s+(saiu|chegou|ta|esta|ainda|atrasou|atrasado|demorando|pronto|saira|sai)|saiu\s+(da|para|pra)\s+entrega|ja\s+saiu|ja\s+(fiz|pedi)\s+(meu\s+|um\s+)?pedido|acabei\s+de\s+(fazer|pedir))\b/i.test(norm)
+  return {
+    number: numMatch ? parseInt(numMatch[1], 10) : null,
+    intent: !!numMatch || wantsTracking
+  }
+}
+
+async function responderAcompanhamentoWhatsapp({ tenantId, phone, text, msgIds = [], cfg = {} }) {
+  const info = waTrackingTextInfo(text)
+  if (!info.intent || !tenantId || !phone) return false
+
+  const inst = cfg?.evo_instance || EVO_INST
+  const offset = parseInt(cfg?.order_num_offset || 0) || 0
+  const phoneWhere = phoneLookupSql('phone')
+  const phoneArgs = phoneLookupArgs(phone)
+  let pedido = null
+
+  if (info.number) {
+    const realId = info.number + offset
+    pedido = db.prepare(`
+      SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at
+      FROM orders
+      WHERE tenant_id=? AND ${phoneWhere} AND order_num=?
+      ORDER BY id DESC
+      LIMIT 1
+    `).get(tenantId, ...phoneArgs, info.number)
+    if (!pedido) {
+      pedido = db.prepare(`
+        SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at
+        FROM orders
+        WHERE tenant_id=? AND ${phoneWhere} AND id=? AND (order_num IS NULL OR order_num=0)
+        LIMIT 1
+      `).get(tenantId, ...phoneArgs, realId)
+    }
+  } else {
+    pedido = db.prepare(`
+      SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at
+      FROM orders
+      WHERE tenant_id=? AND ${phoneWhere}
+      ORDER BY id DESC
+      LIMIT 1
+    `).get(tenantId, ...phoneArgs)
+  }
+
+  let resposta = ''
+  if (pedido) {
+    const statusRaw = String(pedido.status || '').toLowerCase()
+    const pagRaw = String(pedido.pag || '').toLowerCase()
+    const pendenteOnline = statusRaw === 'aguardando_cartao' || (statusRaw === 'aguardando_pix' && pagRaw !== 'pix_manual')
+    const orderNumber = pedido.order_num
+      ? String(pedido.order_num).padStart(3, '0')
+      : (pendenteOnline ? '' : numeroPedidoPad(pedido, offset))
+
+    try {
+      db.prepare("UPDATE orders SET wa_track=1 WHERE id=? AND tenant_id=? AND COALESCE(wa_track,0)=0").run(pedido.id, tenantId)
+    } catch(e) {
+      log('⚠️', '[wa_track] falha ao ativar no rastreio:', e.message)
+    }
+
+    resposta = buildOrderTrackingMessage({
+      order: pedido,
+      storeName: cfg?.store_name || 'Restaurante',
+      orderNumber,
+      includeTrackingNote: true
+    })
+    log('✅', `[wa_track] Pedido #${pedido.id} ativado por solicitação de acompanhamento no WhatsApp`)
+  } else if (info.number) {
+    resposta = `Nao localizei o pedido *#${String(info.number).padStart(3, '0')}* para este WhatsApp. Confira o numero do pedido ou fale com a loja.`
+  } else {
+    resposta = 'Nao localizei um pedido recente para este WhatsApp. Se acabou de fazer o pedido com outro numero, fale com a loja para conferir.'
+  }
+
+  try {
+    for (const id of msgIds.filter(Boolean)) await markAsRead(phone, id, inst)
+    await sleep(800 + Math.floor(Math.random() * 900))
+    await sendWA(phone, resposta, inst, Math.min(6000, 1200 + resposta.length * 32))
+  } catch(e) {
+    log('❌', '[wa_track] erro ao responder acompanhamento:', e.message)
+  }
+  return true
+}
+
 function parseRow(table, row, opts={}) {
   if (!row) return row
   const out = { ...row }
@@ -3628,8 +3722,16 @@ async function handleIAWebhook(req, res) {
     const phone = phoneUtils.cleanWhatsappJid(from)
     if (!phone) { send(res,200,{ok:true}); return }
     if (!tenantId) { send(res,200,{ok:true}); return }
-    const cfg = db.prepare("SELECT ia_config,evo_instance,store_name,store_descricao,store_whatsapp,store_tempo_entrega,store_tempo_retirada,delivery_fee_config,horarios_config,store_open FROM store_config WHERE tenant_id=?").get(tenantId)
+    const cfg = db.prepare("SELECT ia_config,evo_instance,store_name,store_descricao,store_whatsapp,store_tempo_entrega,store_tempo_retirada,delivery_fee_config,horarios_config,store_open,order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
     if (!cfg) { send(res,200,{ok:true}); return }
+    if (await responderAcompanhamentoWhatsapp({ tenantId, phone, text: msg, msgIds: msgId ? [msgId] : [], cfg })) {
+      const pendingBufKey = `buf:${tenantId}:${phone}`
+      if (_msgBuffer.has(pendingBufKey)) {
+        try { clearTimeout(_msgBuffer.get(pendingBufKey).timer) } catch {}
+        _msgBuffer.delete(pendingBufKey)
+      }
+      send(res,200,{ok:true, tracking:true}); return
+    }
     const ia = jsonParse(cfg.ia_config)||{}
     if (!ia.ativo) { send(res,200,{ok:true}); return }
     const cfgGlobal = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
