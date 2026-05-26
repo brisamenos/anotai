@@ -567,6 +567,15 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 }
 .confirm-btn:hover { filter:brightness(1.08); transform:translateY(-1px); }
 .confirm-btn:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+.confirm-btn.secondary {
+  background:var(--surface2);
+  color:var(--text);
+  border:1.5px solid var(--border);
+  box-shadow:none;
+}
+.confirm-btn.secondary:hover { border-color:rgba(129,140,248,.45); }
+.cart-action-stack { display:flex; flex-direction:column; gap:8px; }
+.cart-action-stack .confirm-btn { margin-top:0; }
 
 /* Sucesso */
 .success-overlay {
@@ -1053,10 +1062,16 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
         </button>
       </div>
       <div id="sheet-foot-cart" style="display:none">
-        <button class="confirm-btn" onclick="submitPedido()" id="submit-btn">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Enviar para cozinha
-        </button>
+        <div class="cart-action-stack">
+          <button class="confirm-btn secondary" type="button" onclick="switchSheetTab('itens')">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            Adicionar mais pedidos
+          </button>
+          <button class="confirm-btn" onclick="submitPedido()" id="submit-btn">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Enviar para cozinha
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1569,20 +1584,22 @@ function playProntoSound() {
 }
 
 // ── MODAL CONFIRMAR GENÉRICO (substitui confirm()) ──
-function garcomConfirm({ icon = '⚠️', title, msg, okLabel = 'Confirmar', okColor = 'var(--red)', okTextColor = '#fff' } = {}) {
+function garcomConfirm({ icon = '⚠️', title, msg, okLabel = 'Confirmar', cancelLabel = 'Cancelar', okColor = 'var(--red)', okTextColor = '#fff' } = {}) {
   return new Promise(resolve => {
     const bg = document.getElementById('gc-confirm-bg');
     document.getElementById('gc-confirm-icon').textContent  = icon;
     document.getElementById('gc-confirm-title').textContent = title || 'Confirmar';
     document.getElementById('gc-confirm-msg').textContent   = msg   || '';
     const okBtn = document.getElementById('gc-confirm-ok');
+    const cancelBtn = document.getElementById('gc-confirm-cancel');
     okBtn.textContent         = okLabel;
     okBtn.style.background    = okColor;
     okBtn.style.color         = okTextColor;
+    cancelBtn.textContent     = cancelLabel;
     bg.style.display = 'flex';
     const cleanup = (val) => { bg.style.display = 'none'; resolve(val); };
     okBtn.onclick     = () => cleanup(true);
-    document.getElementById('gc-confirm-cancel').onclick = () => cleanup(false);
+    cancelBtn.onclick = () => cleanup(false);
   });
 }
 
@@ -2587,9 +2604,11 @@ async function closeSheet() {
   // Confirma se há itens no carrinho (exceto modo delivery que salva o cart)
   if (cart.length && !window._npMode) {
     const ok = await garcomConfirm({
-      icon: '🛒', title: 'Descartar itens?',
-      msg: `Há ${cart.length} item(ns) no carrinho. Deseja fechar sem enviar?`,
-      okLabel: 'Fechar mesmo assim', okColor: 'var(--muted)'
+      icon: '🛒', title: 'Sair sem enviar?',
+      msg: `Há ${cart.length} item(ns) no carrinho. Se descartar, eles não vão para a cozinha.`,
+      cancelLabel: 'Voltar ao pedido',
+      okLabel: 'Descartar itens',
+      okColor: 'var(--red)'
     });
     if (!ok) return;
     cart = [];
