@@ -688,7 +688,16 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .im-img{width:100%;height:200px;background:var(--surface2);object-fit:cover;display:flex;align-items:center;justify-content:center;font-size:72px;overflow:hidden;position:relative}
 .im-img img{width:100%;height:100%;object-fit:cover}
 .im-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,.5);border:none;color:#fff;font-size:14px;display:flex;align-items:center;justify-content:center;z-index:2;cursor:pointer}
-.im-body{padding:20px 20px 28px}
+.im-body{padding:20px 20px 28px;display:flex;flex-direction:column}
+.im-name{order:1}
+.im-desc{order:2}
+.im-price-row{order:3}
+#half-section{order:4}
+#im-grupos-wrap{order:5}
+#im-ingr-section{order:6}
+#im-xsell-wrap{order:7}
+#im-obs{order:8}
+#im-add-btn{order:9}
 .im-name{font-family:'Plus Jakarta Sans',sans-serif;font-size:20px;font-weight:800;margin-bottom:6px;line-height:1.2}
 .im-desc{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:16px}
 .im-price-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
@@ -2601,16 +2610,8 @@ async function confirmarAbrirMesa() {
 }
 
 async function closeSheet() {
-  // Confirma se há itens no carrinho (exceto modo delivery que salva o cart)
+  // Fecha sem confirmar. No pedido de mesa, itens ainda nao enviados sao descartados ao sair.
   if (cart.length && !window._npMode) {
-    const ok = await garcomConfirm({
-      icon: '🛒', title: 'Sair sem enviar?',
-      msg: `Há ${cart.length} item(ns) no carrinho. Se descartar, eles não vão para a cozinha.`,
-      cancelLabel: 'Voltar ao pedido',
-      okLabel: 'Descartar itens',
-      okColor: 'var(--red)'
-    });
-    if (!ok) return;
     cart = [];
   }
   document.getElementById('sheet-pedido').classList.remove('on');
