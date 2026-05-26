@@ -979,6 +979,46 @@ function toggleCat(id){
   renderGestor();
 }
 
+function _catPrinterRoutes() {
+  if (typeof window._getPrintSetoresCategoria === 'function') return window._getPrintSetoresCategoria();
+  try {
+    const parsed = JSON.parse(localStorage.getItem('printSetoresCategoria') || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch { return {}; }
+}
+
+function _catPrinterOptionsHtml(current) {
+  const printers = typeof window._printAvailablePrinters === 'function'
+    ? window._printAvailablePrinters()
+    : [];
+  const opts = [`<option value="" ${current ? '' : 'selected'}>Cozinha padrÃ£o</option>`];
+  printers.forEach(p => {
+    const value = String(p.value || '').trim();
+    if (!value) return;
+    const label = p.label || value;
+    opts.push(`<option value="${escapeHtml(value)}" ${value === current ? 'selected' : ''}>${escapeHtml(label)}</option>`);
+  });
+  return opts.join('');
+}
+
+function _populateCatPrinterSelect(selectId, catKey) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const routes = _catPrinterRoutes();
+  const current = catKey ? (routes[catKey] || '') : '';
+  sel.innerHTML = _catPrinterOptionsHtml(current);
+}
+
+function prepareAddCategoryModal() {
+  _populateCatPrinterSelect('cat-printer-input', '');
+}
+window.prepareAddCategoryModal = prepareAddCategoryModal;
+
+function _saveCatPrinterRoute(catKey, printer) {
+  if (!catKey || typeof window.setPrintSetorCategoria !== 'function') return;
+  window.setPrintSetorCategoria(catKey, printer || '');
+}
+
 function handleCatAction(id, action) {
   if (!action) return;
   if (action === 'edit') {
@@ -987,6 +1027,7 @@ function handleCatAction(id, action) {
     document.getElementById('edit-cat-id').value   = id;
     document.getElementById('edit-cat-name').value = cat.label;
     document.getElementById('edit-cat-type').value = cat.type || 'Itens principais';
+    _populateCatPrinterSelect('edit-cat-printer', cat.name);
     openModal('modal-edit-cat');
   } else if (action === 'duplicate') {
     duplicateCategory(id);
@@ -1096,6 +1137,7 @@ async function saveEditCategory() {
   const id   = parseInt(document.getElementById('edit-cat-id').value);
   const name = document.getElementById('edit-cat-name').value.trim();
   const type = document.getElementById('edit-cat-type').value;
+  const printer = document.getElementById('edit-cat-printer')?.value || '';
   if (!name) { sbToast('err','Informe o nome'); return; }
   sbLoading(true);
   // Só atualiza 'label' e 'type' — nunca muda 'name' (chave interna usada pelo catKey dos itens)
@@ -1106,6 +1148,7 @@ async function saveEditCategory() {
   if (error) { sbToast('err','Erro ao salvar'); return; }
   const cat = categories.find(c => c.id === id);
   if (cat) { cat.label = name; cat.type = type; }
+  if (cat) _saveCatPrinterRoute(cat.name, printer);
   closeModal('modal-edit-cat');
   renderGestor();
   populateCatSelects();
@@ -1114,11 +1157,13 @@ async function saveEditCategory() {
 
 async function deleteCatById(id) {
   const catId = id || parseInt(document.getElementById('edit-cat-id').value);
+  const cat = categories.find(c => c.id === catId);
   if (!await showConfirmDialog('Excluir categoria?', 'Os itens desta categoria não serão apagados.')) return;
   sbLoading(true);
   const { error } = await sb.from('categories').delete().eq('id', catId);
   sbLoading(false);
   if (error) { sbToast('err','Erro ao excluir'); return; }
+  if (cat) _saveCatPrinterRoute(cat.name, '');
   categories = categories.filter(c => c.id !== catId);
   closeModal('modal-edit-cat');
   renderGestor();
@@ -1129,8 +1174,10 @@ async function deleteCatById(id) {
 async function addCategory() {
   const nameEl = document.getElementById('cat-name-input');
   const typeEl = document.getElementById('cat-type-input');
+  const printerEl = document.getElementById('cat-printer-input');
   const name   = nameEl ? nameEl.value.trim() : '';
   const type   = typeEl ? typeEl.value : 'Itens principais';
+  const printer = printerEl ? printerEl.value : '';
 
   console.log('[ADD-CAT] chamado | nome:', name, '| tipo:', type);
 
@@ -1169,9 +1216,11 @@ async function addCategory() {
     promo: false,
     open:  false
   });
+  if (printer) _saveCatPrinterRoute(data.name, printer);
 
   closeModal('modal-add-cat');
   if (nameEl) nameEl.value = '';
+  if (printerEl) printerEl.value = '';
   renderGestor();
   populateCatSelects();
   sbToast('ok', `Categoria "${name}" criada!`);

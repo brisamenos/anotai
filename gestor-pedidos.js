@@ -513,6 +513,22 @@ function _pedidoItemGroups(item) {
   return [];
 }
 
+function _pedidoIsKitItem(item, grupos) {
+  const tipo = String(item?.itemType || item?.item_type || item?.tipo || '').toLowerCase();
+  if (tipo === 'kit') return true;
+  const lista = Array.isArray(grupos) ? grupos : _pedidoItemGroups(item);
+  return lista.some(g => g?.tipo === 'kit_itens');
+}
+
+function _pedidoGruposSelecionaveis(item) {
+  const grupos = _pedidoItemGroups(item);
+  const ignorar = new Set(['porcao_ref', 'kit_itens']);
+  if (_pedidoIsKitItem(item, grupos)) {
+    ['preparos', 'ocasiao', 'armazenamento'].forEach(tipo => ignorar.add(tipo));
+  }
+  return grupos.filter(g => !ignorar.has(g?.tipo));
+}
+
 function _pedidoKitValorLabel(v) {
   if (typeof v === 'string') return v.trim();
   if (!v || typeof v !== 'object') return '';
@@ -525,6 +541,7 @@ function _pedidoKitObs(item) {
   const grupos = _pedidoItemGroups(item);
   const partes = [];
   const kitGrp = grupos.find(g => g?.tipo === 'kit_itens');
+  if (!_pedidoIsKitItem(item, grupos)) return '';
   const kitItens = (kitGrp?.itens || kitGrp?.items || kitGrp?.valores || kitGrp?.opcoes || [])
     .map(_pedidoKitValorLabel)
     .filter(Boolean);
@@ -1158,9 +1175,7 @@ function _odRenderCatalogGrid() {
 function _odSelecionarProduto(itemId) {
   const it = items.find(i => i.id === itemId);
   if (!it) return;
-  const _rawGruposOd = it.customGroups ?? it.custom_groups;
-  const grupos = (()=>{ try{ return Array.isArray(_rawGruposOd)?_rawGruposOd:JSON.parse(_rawGruposOd||'[]'); }catch{ return []; } })()
-    .filter(g => !['porcao_ref','kit_itens'].includes(g.tipo));
+  const grupos = _pedidoGruposSelecionaveis(it);
   const isKg = it.itemType === 'kg' || it.item_type === 'kg';
   // Abre o modal de configuração do PDV
   _pdvbAbrirModalItem(it, grupos, isKg);
@@ -1359,9 +1374,7 @@ function noFilterItems(q) {
     const price = parseFloat(item.price || 0);
     const _isKgItem = item.itemType === 'kg' || item.item_type === 'kg';
     const priceStr = 'R$ ' + price.toFixed(2).replace('.', ',') + (_isKgItem ? ' <span style="font-size:10px;opacity:.7">/kg</span>' : '');
-    const _rawGruposNR = item.customGroups ?? item.custom_groups;
-    const _allGrupos = (() => { try { return Array.isArray(_rawGruposNR) ? _rawGruposNR : JSON.parse(_rawGruposNR || '[]') } catch { return [] } })();
-    const grupos = _allGrupos.filter(g => !['porcao_ref', 'kit_itens'].includes(g.tipo));
+    const grupos = _pedidoGruposSelecionaveis(item);
     const ehPizza = _noEhPizza(item);
     const temAdicionais = grupos.length > 0 || _isKgItem || ehPizza;
     const tagAdicional = ehPizza
@@ -1412,9 +1425,7 @@ function noAddItem(itemId) {
   }
 
   // Se tem grupos de adicionais, abre modal de seleção
-  const _rawGroups = item.customGroups ?? item.custom_groups;
-  const grupos = (() => { try { return Array.isArray(_rawGroups) ? _rawGroups : JSON.parse(_rawGroups || '[]') } catch { return [] } })()
-    .filter(g => !['porcao_ref', 'kit_itens'].includes(g.tipo));
+  const grupos = _pedidoGruposSelecionaveis(item);
 
   const isKg = item.itemType === 'kg' || item.item_type === 'kg';
 

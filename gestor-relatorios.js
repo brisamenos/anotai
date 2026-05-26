@@ -2508,6 +2508,7 @@ function _getPrintSetoresCategoria() {
   }
   return _printSetoresCategoria;
 }
+window._getPrintSetoresCategoria = _getPrintSetoresCategoria;
 
 function _savePrintSetoresCategoria(syncServer) {
   const clean = {};
@@ -2550,6 +2551,7 @@ function _printAvailablePrinters(extraPrinters) {
   Object.values(_getPrintSetoresCategoria()).forEach(v => add(v, v));
   return out;
 }
+window._printAvailablePrinters = _printAvailablePrinters;
 
 function _printPrinterDisplayName(value, extraPrinters) {
   const found = _printAvailablePrinters(extraPrinters).find(p => p.value === value);
