@@ -4336,10 +4336,11 @@ async function confirmarImprimirConta() {
   const printerSel = document.getElementById('print-conta-printer-select');
   const selPrinter = (printerSel?.value || '').trim();
   if (selPrinter) localStorage.setItem('printPrinter', selPrinter);
+  const num    = _printContaMesaNum;
+  const orders = [...(_printContaOrders || [])];
   fecharModalConta();
 
-  const num    = _printContaMesaNum;
-  const orders = _printContaOrders;
+  if (!num || !orders.length) { showToast('⚠️ Dados da conta não encontrados. Abra a conta novamente.'); return; }
   // Taxa já é item da comanda — total = soma dos itens diretamente
   const total = calcularTotalMesa(orders);
 
@@ -4694,9 +4695,13 @@ function closePrintComandaModal() {
 }
 
 async function confirmarImprimirComanda() {
-  // Captura impressora selecionada ANTES de fechar o modal
+  // Captura tudo ANTES de fechar o modal, porque o fechamento limpa o estado.
   const _selPrinter = (document.getElementById('print-comanda-printer-select')?.value || '').trim();
   if (_selPrinter) localStorage.setItem('printPrinter', _selPrinter); // memoriza escolha
+  const mesaNum  = _printComandaMesaNum;
+  const pagForma = _printComandaPagForma;
+  const total    = _printComandaTotal;
+  const orders   = [...(_printComandaOrders || [])];
   closePrintComandaModal();
   try {
     const cfg      = _garcomPrintCfg || {};
@@ -4707,12 +4712,10 @@ async function confirmarImprimirComanda() {
     const printerCaixa = cfg.printer_caixa || cfg.printer || '';
     const printerLocal = _selPrinter || printerCaixa || localStorage.getItem('printPrinter') || '';
     const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-    const mesaNum  = _printComandaMesaNum;
-    const pagForma = _printComandaPagForma;
-    const total    = _printComandaTotal;
+    if (!mesaNum || !orders.length) { showToast('⚠️ Dados da conta não encontrados. Abra a conta novamente.'); return; }
 
     // Consolida itens de todos os pedidos — exclui cancelados, agrupa por nome
-    const todosItens = _printComandaOrders.flatMap(o => _parseItems(o.items))
+    const todosItens = orders.flatMap(o => _parseItems(o.items))
       .filter(i => i.item_status !== 'cancelado');
 
     if (!todosItens.length) { showToast('⚠️ Sem itens para imprimir'); return; }
