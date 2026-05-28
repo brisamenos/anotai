@@ -3945,7 +3945,146 @@ async function _syncOrderPaymentBeforePrint(order) {
   }
 }
 
-async function printOrder(order) {
+function _printHasSetorRoutesConfigured() {
+  try {
+    return Object.values(_getPrintSetoresCategoria() || {}).some(Boolean);
+  } catch (_) {
+    return false;
+  }
+}
+
+function _printBuildJobsForOrder(order, ticket, cfg, opts = {}) {
+  const jobs = [];
+  const viaMode = _normalizePrintViaMode(opts.viaMode || _printViaMode);
+  const viaOverride = opts.viaOverride || '';
+  const printerOverride = (opts.printerOverride || '').trim();
+
+  const addCaixa = () => {
+    if (ticket.principal) {
+      jobs.push({ html: ticket.principal, printer: printerOverride || _printPrinter || '', tipo: 'caixa' });
+    }
+  };
+
+  const addCozinha = () => {
+    if (!ticket.cozinha) return;
+    if (printerOverride) {
+      jobs.push({ html: ticket.cozinha, printer: printerOverride, tipo: 'cozinha' });
+      return;
+    }
+    const setorJobs = _buildSetorPrintJobsForItems(order, cfg, ticket.cozinhaItems || [], {
+      defaultPrinter: _printPrinterCozinha,
+      defaultTitle: 'Cozinha'
+    });
+    if (setorJobs.length) jobs.push(...setorJobs);
+    else jobs.push({ html: ticket.cozinha, printer: _printPrinterCozinha || '', tipo: 'cozinha' });
+  };
+
+  if (viaOverride) {
+    if (viaOverride === 'caixa') addCaixa();
+    else if (viaOverride === 'cozinha') addCozinha();
+    else if (viaOverride === 'ambas') {
+      addCaixa();
+      addCozinha();
+    }
+    return jobs;
+  }
+
+  if (viaMode === 'separado' && (ticket.cozinha || _printHasSetorRoutesConfigured() || _printPrinterCozinha)) {
+    addCozinha();
+  } else if (viaMode === 'somente_principal') {
+    addCaixa();
+  } else if (ticket.singleSheet) {
+    jobs.push({ html: ticket.singleSheet, printer: _printPrinter || '', tipo: 'caixa' });
+  }
+
+  return jobs;
+}
+
+async function _printKnownPrinters() {
+  const out = [];
+  const seen = new Set();
+  const add = (value, label) => {
+    const v = String(value || '').trim();
+    if (!v || seen.has(v)) return;
+    seen.add(v);
+    out.push({ value: v, label: label || v });
+  };
+
+  add(_printPrinter, 'Caixa - ' + _printPrinter);
+  add(_printPrinterCozinha, 'Cozinha - ' + _printPrinterCozinha);
+  try {
+    (Array.isArray(_impressoras) ? _impressoras : []).forEach(imp => {
+      const value = imp.printerName || imp.apelido || '';
+      const label = imp.apelido && imp.printerName ? `${imp.apelido} - ${imp.printerName}` : value;
+      add(value, label);
+    });
+  } catch (_) {}
+  try {
+    if (window.ElectronPrint?.getPrinters) {
+      const printers = await window.ElectronPrint.getPrinters();
+      (printers || []).forEach(p => add(p, p));
+    } else if (window.ElectronPrint?.getConfig) {
+      const cfg = await window.ElectronPrint.getConfig();
+      (cfg?.printers || []).forEach(p => add(p, p));
+    }
+  } catch (_) {}
+  return out;
+}
+
+async function _printAskReprintChoice(ticket) {
+  const printers = await _printKnownPrinters();
+  return new Promise(resolve => {
+    const existing = document.getElementById('modal-print-reprint-choice');
+    if (existing) existing.remove();
+
+    const bg = document.createElement('div');
+    bg.id = 'modal-print-reprint-choice';
+    bg.className = 'modal-bg';
+    bg.style.display = 'flex';
+    bg.innerHTML = `
+      <div class="modal" style="max-width:360px">
+        <button class="modal-close" id="print-choice-close"></button>
+        <div class="modal-header">
+          <h2>Imprimir de novo</h2>
+          <p>Escolha qual via e qual impressora deve receber essa reimpressao.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <label style="font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Via</label>
+          <select class="form-input" id="print-choice-via">
+            <option value="cozinha" ${ticket.cozinha ? '' : 'disabled'}>Cozinha</option>
+            <option value="caixa">Caixa / cliente</option>
+            <option value="ambas" ${ticket.cozinha ? '' : 'disabled'}>Cozinha + cliente</option>
+          </select>
+          <label style="font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Impressora</label>
+          <select class="form-input" id="print-choice-printer">
+            <option value="">Usar impressora configurada da via</option>
+            ${printers.map(p => `<option value="${_printHtmlEscape(p.value)}">${_printHtmlEscape(p.label)}</option>`).join('')}
+          </select>
+          <div style="display:flex;gap:10px;margin-top:6px">
+            <button class="btn bg" id="print-choice-cancel" style="flex:1;justify-content:center">Cancelar</button>
+            <button class="btn bp" id="print-choice-ok" style="flex:1.4;justify-content:center">Imprimir</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(bg);
+
+    const finish = value => {
+      try { bg.remove(); } catch (_) {}
+      resolve(value);
+    };
+    bg.addEventListener('click', e => { if (e.target === bg) finish(null); });
+    bg.querySelector('#print-choice-close')?.addEventListener('click', () => finish(null));
+    bg.querySelector('#print-choice-cancel')?.addEventListener('click', () => finish(null));
+    const viaSel = bg.querySelector('#print-choice-via');
+    if (viaSel && !ticket.cozinha) viaSel.value = 'caixa';
+    bg.querySelector('#print-choice-ok')?.addEventListener('click', () => finish({
+      viaOverride: viaSel?.value || 'caixa',
+      printerOverride: bg.querySelector('#print-choice-printer')?.value || ''
+    }));
+  });
+}
+
+async function printOrder(order, opts = {}) {
   order = await _syncOrderPaymentBeforePrint(order);
   const cfg    = _getPrintConfig();
   const fmt    = localStorage.getItem('printFormat') || _printFormat || '80mm';
@@ -3977,21 +4116,21 @@ async function printOrder(order) {
 
   const ticket = _buildTicketHtml(order, cfg);
 
-  // ── Monta jobs de impressão ────────────────────────────
-  const jobs = [];
+  let jobs = [];
   const viaMode = _normalizePrintViaMode(_printViaMode);
-  if (viaMode === 'separado' && ticket.cozinha) {
-    if (ticket.principal) jobs.push({ html: ticket.principal, printer: _printPrinter || '', tipo: 'caixa' });
-    const setorJobs = _buildSetorPrintJobsForItems(order, cfg, ticket.cozinhaItems || [], {
-      defaultPrinter: _printPrinterCozinha,
-      defaultTitle: 'Cozinha'
-    });
-    if (setorJobs.length) jobs.push(...setorJobs);
-    else jobs.push({ html: ticket.cozinha, printer: _printPrinterCozinha || '', tipo: 'cozinha' });
-  } else if (viaMode === 'somente_principal') {
-    jobs.push({ html: ticket.principal, printer: _printPrinter || '', tipo: 'caixa' });
+  const hasSeparateKitchen = viaMode === 'separado' && (ticket.cozinha || _printPrinterCozinha || _printHasSetorRoutesConfigured());
+  if (opts.manualChoice && hasSeparateKitchen) {
+    const choice = await _printAskReprintChoice(ticket);
+    if (!choice) return;
+    jobs = _printBuildJobsForOrder(order, ticket, cfg, choice);
   } else {
-    jobs.push({ html: ticket.singleSheet, printer: _printPrinter || '', tipo: 'caixa' });
+    jobs = _printBuildJobsForOrder(order, ticket, cfg);
+  }
+
+  if (!jobs.length) {
+    if (opts.manualChoice) sbToast('warn', 'Nenhuma via disponivel para imprimir.');
+    else console.log('[PRINT] Modo separado: sem itens de cozinha; caixa nao imprime producao.');
+    return;
   }
 
   for (const job of jobs) {
@@ -4140,9 +4279,9 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
   sbToast('warn', '🖨️ Imprimindo (com diálogo)...');
 }
 
-function printOrderById(id) {
+async function printOrderById(id) {
   const o = ordersKanban.find(x => x.id === id);
-  if (o) printOrder(o); else sbToast('err', 'Pedido não encontrado');
+  if (o) await printOrder(o, { manualChoice: true }); else sbToast('err', 'Pedido não encontrado');
 }
 
 let _renderImpressaoLoaded = false;

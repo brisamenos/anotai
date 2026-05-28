@@ -119,6 +119,7 @@ db.exec(`
     guests INTEGER DEFAULT 0, opened_at TEXT,
     total REAL DEFAULT 0, pag_forma TEXT,
     clientes_json TEXT DEFAULT '[]',
+    pagamentos_json TEXT DEFAULT '[]',
     updated_at TEXT DEFAULT (datetime('now')),
     UNIQUE(tenant_id, num)
   );
@@ -997,6 +998,9 @@ const MIGRATIONS = [
   { version:66, description:'clientes individuais por mesa', up:
     `ALTER TABLE mesas ADD COLUMN clientes_json TEXT DEFAULT '[]'`
   },
+  { version:67, description:'recebimentos parciais por cliente na mesa', up:
+    `ALTER TABLE mesas ADD COLUMN pagamentos_json TEXT DEFAULT '[]'`
+  },
 ]
 
 function runMigrations() {
@@ -1053,6 +1057,7 @@ garantirColuna('store_config', 'order_auto_reset_daily', "INTEGER DEFAULT 0")
 garantirColuna('store_config', 'order_auto_reset_last_date', "TEXT")
 garantirColuna('admin_alerts', 'display_mode', "TEXT DEFAULT 'banner'")
 garantirColuna('mesas', 'clientes_json', "TEXT DEFAULT '[]'")
+garantirColuna('mesas', 'pagamentos_json', "TEXT DEFAULT '[]'")
 
 function garantirSchemaChatInterno() {
   const execSafe = (sql) => {
@@ -1726,7 +1731,7 @@ const TABLE_COLS = {
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
-  mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','clientes_json','updated_at'],
+  mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','clientes_json','pagamentos_json','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
   orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','garcom_id','garcom_nome','customer_id','client_request_id','order_num','wa_track','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
@@ -1769,7 +1774,7 @@ const FINANCE_REST_RULES = {
 }
 const JSON_FIELDS = {
   orders:       new Set(['items']),
-  mesas:        new Set(['clientes_json']),
+  mesas:        new Set(['clientes_json','pagamentos_json']),
   menu_items:   new Set(['days','ingredients','custom_groups']),
   store_config: new Set(['delivery_fee_config','fid_config','evo_automacoes','sidebar_state','horarios_config','cashback_config','tipos_entrega','stamp_config']),
   admin_audit_log: new Set(['detalhes']),

@@ -26,6 +26,39 @@ function _pi(items) {
   return [];
 }
 
+function _mesaJsonArray(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function mesaPagamentos(mesa) {
+  return _mesaJsonArray(mesa?.pagamentos_json);
+}
+
+function mesaPagoTotal(mesa) {
+  return mesaPagamentos(mesa).reduce((s, p) => s + (parseFloat(p?.valor) || 0), 0);
+}
+
+function mesaPagoPorCliente(mesa, clienteRef) {
+  const key = String(clienteRef || '__mesa');
+  return mesaPagamentos(mesa)
+    .filter(p => String(p?.cliente_ref || '__mesa') === key)
+    .reduce((s, p) => s + (parseFloat(p?.valor) || 0), 0);
+}
+
+function mesaRestante(total, mesa) {
+  const bruto = parseFloat(total || 0) || 0;
+  return Math.max(0, Math.round((bruto - mesaPagoTotal(mesa)) * 100) / 100);
+}
+
 
 // ── Cálculo de total ─────────────────────────────────────────────────────────
 // Fonte canônica. gestor-financeiro.js e garcom.html delegam para cá.
@@ -97,6 +130,8 @@ function _normalizeMesa(t) {
     total: parseFloat(t.total) || 0,
     taxa_servico: parseFloat(t.taxa_servico) || 0,
     pag_forma: t.pag_forma || null,
+    clientes_json: _mesaJsonArray(t.clientes_json),
+    pagamentos_json: _mesaJsonArray(t.pagamentos_json),
     opened_at: t.opened_at || null,
     updated_at: t.updated_at || null
   };

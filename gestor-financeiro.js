@@ -537,6 +537,7 @@ async function fecharMesa(num) {
 
 // ── Pagamento misto — múltiplas formas ──────────────────────
 let _pagFormasList = []; // [{forma, valor, recebido?, troco?}]
+let _pagMesaContext = null;
 
 function _mesaMoney(v) {
   const n = Number.isFinite(parseFloat(v)) ? parseFloat(v) : 0;
@@ -550,6 +551,198 @@ function _mesaMoneyInputToNumber(v) {
   if (s.includes(',') && s.includes('.')) return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
   if (s.includes(',')) return parseFloat(s.replace(',', '.')) || 0;
   return parseFloat(s) || 0;
+}
+
+function _mesaRound2(v) {
+  return Math.round((parseFloat(v) || 0) * 100) / 100;
+}
+
+function _mesaPagamentosSafe(mesa) {
+  if (typeof mesaPagamentos === 'function') return mesaPagamentos(mesa);
+  if (Array.isArray(mesa?.pagamentos_json)) return mesa.pagamentos_json;
+  try { return JSON.parse(mesa?.pagamentos_json || '[]') || []; } catch { return []; }
+}
+
+function _mesaPagoTotalSafe(mesa) {
+  if (typeof mesaPagoTotal === 'function') return mesaPagoTotal(mesa);
+  return _mesaPagamentosSafe(mesa).reduce((s, p) => s + (parseFloat(p?.valor) || 0), 0);
+}
+
+function _mesaPagoClienteSafe(mesa, clienteRef) {
+  if (typeof mesaPagoPorCliente === 'function') return mesaPagoPorCliente(mesa, clienteRef);
+  const key = String(clienteRef || '__mesa');
+  return _mesaPagamentosSafe(mesa)
+    .filter(p => String(p?.cliente_ref || '__mesa') === key)
+    .reduce((s, p) => s + (parseFloat(p?.valor) || 0), 0);
+}
+
+function _mesaClienteKeyPagamento(item) {
+  const ref = String(item?.cliente_ref || '').trim();
+  if (ref) return ref;
+  const nome = String(item?.cliente_nome || '').trim();
+  return nome ? `nome:${nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')}` : '__mesa';
+}
+
+function _mesaClienteLabelPagamento(item) {
+  return String(item?.cliente_nome || '').trim() || 'Mesa toda';
+}
+
+function _mesaOrdersSessaoPagamento(num, mesa) {
+  const numInt = parseInt(num);
+  const openedAt = mesa?.opened_at || null;
+  const sessionStart = openedAt ? new Date(openedAt).getTime() - 5000 : 0;
+  return (mesaOrdersCache || []).filter(o => {
+    if (parseInt(o.mesa_num) !== numInt || o.status === 'cancelado') return false;
+    if (o.session_ref !== undefined && o.session_ref !== null) return o.session_ref === openedAt;
+    if (!sessionStart) return o.status !== 'entregue';
+    return new Date(o.created_at || 0).getTime() >= sessionStart;
+  });
+}
+
+function _mesaResumoClientesPagamento(orders) {
+  const grupos = new Map();
+  (orders || []).forEach(o => {
+    _parseItems(o.items).forEach(i => {
+      if ((i.item_status || 'active') === 'cancelado') return;
+      const key = _mesaClienteKeyPagamento(i);
+      const label = _mesaClienteLabelPagamento(i);
+      if (!grupos.has(key)) grupos.set(key, { key, label, total: 0, items: [] });
+      const qty = parseInt(i.qty) || 1;
+      const price = parseFloat(i.price) || 0;
+      const g = grupos.get(key);
+      g.total += price * qty;
+      g.items.push({ ...i, qty, price });
+    });
+  });
+  return [...grupos.values()].map(g => ({ ...g, total: _mesaRound2(g.total) }));
+}
+
+function _mesaMontarContextoPagamento(num, orders, totalFallback) {
+  const numInt = parseInt(num);
+  const mesa = tables.find(x => parseInt(x.num) === numInt);
+  if (!mesa) return null;
+
+  let totalMesa = calcularTotalMesa(orders || []);
+  if (!totalMesa && totalFallback) totalMesa = _mesaMoneyInputToNumber(totalFallback);
+  if (!totalMesa && mesa.total) totalMesa = _mesaMoneyInputToNumber(mesa.total);
+  totalMesa = _mesaRound2(totalMesa);
+
+  const pagamentos = _mesaPagamentosSafe(mesa);
+  const pagoMesa = _mesaRound2(_mesaPagoTotalSafe(mesa));
+  const restanteMesa = Math.max(0, _mesaRound2(totalMesa - pagoMesa));
+  let grupos = _mesaResumoClientesPagamento(orders || []);
+  if (!grupos.length && totalMesa > 0) {
+    grupos = [{ key: '__mesa', label: 'Mesa toda', total: totalMesa, items: [] }];
+  }
+
+  const temClienteNomeado = grupos.some(g => g.label !== 'Mesa toda');
+  const opcoesCliente = grupos.map(g => {
+    const pago = _mesaRound2(_mesaPagoClienteSafe(mesa, g.key));
+    return {
+      key: g.key,
+      label: g.label,
+      total: _mesaRound2(g.total),
+      pago,
+      restante: Math.max(0, _mesaRound2(g.total - pago)),
+      isMesaInteira: false
+    };
+  });
+  const opcoes = temClienteNomeado
+    ? [
+        ...opcoesCliente,
+        { key: '__mesa_total', label: 'Mesa inteira', total: totalMesa, pago: pagoMesa, restante: restanteMesa, isMesaInteira: true }
+      ]
+    : [
+        { key: '__mesa_total', label: 'Mesa inteira', total: totalMesa, pago: pagoMesa, restante: restanteMesa, isMesaInteira: true }
+      ];
+
+  const atual = document.getElementById('modal-pag-cliente')?.value || '';
+  const selecionada = opcoes.find(o => o.key === atual && o.restante > 0.005)
+    || opcoes.find(o => !o.isMesaInteira && o.restante > 0.005)
+    || opcoes.find(o => o.restante > 0.005)
+    || opcoes[0];
+
+  _pagMesaContext = { num: numInt, mesa, totalMesa, pagamentos, pagoMesa, restanteMesa, grupos, opcoes, selecionadaKey: selecionada?.key || '__mesa_total', temClienteNomeado };
+  return _pagMesaContext;
+}
+
+function _renderPagClienteBloco() {
+  const bloco = document.getElementById('modal-pag-cliente-bloco');
+  const sel = document.getElementById('modal-pag-cliente');
+  const info = document.getElementById('modal-pag-cliente-info');
+  const rec = document.getElementById('modal-pag-recebimentos');
+  if (!bloco || !sel || !_pagMesaContext) return;
+
+  const ctx = _pagMesaContext;
+  const deveMostrar = ctx.temClienteNomeado || ctx.pagamentos.length > 0;
+  bloco.style.display = deveMostrar ? 'block' : 'none';
+  if (!deveMostrar) {
+    sel.innerHTML = '';
+    return;
+  }
+
+  sel.innerHTML = ctx.opcoes.map(o => {
+    const rest = _mesaMoney(o.restante);
+    const nome = o.isMesaInteira ? `${o.label} - restante geral` : o.label;
+    return `<option value="${String(o.key).replace(/"/g, '&quot;')}">${nome} (${rest})</option>`;
+  }).join('');
+  sel.value = ctx.selecionadaKey;
+
+  if (rec) {
+    if (ctx.pagamentos.length) {
+      rec.style.display = 'block';
+      rec.innerHTML = `
+        <div style="font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Recebido até agora</div>
+        ${ctx.pagamentos.slice(-5).reverse().map(p => `
+          <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0;border-top:1px solid rgba(255,255,255,.05)">
+            <span>${p.cliente_nome || 'Mesa inteira'} · ${p.forma || 'Pagamento'}</span>
+            <strong style="color:var(--success)">${_mesaMoney(p.valor)}</strong>
+          </div>
+        `).join('')}`;
+    } else {
+      rec.style.display = 'none';
+      rec.innerHTML = '';
+    }
+  }
+
+  _pagClienteChanged();
+}
+
+function _pagClienteChanged() {
+  if (!_pagMesaContext) return;
+  const sel = document.getElementById('modal-pag-cliente');
+  const selectedKey = sel?.value || _pagMesaContext.selecionadaKey || '__mesa_total';
+  const alvo = _pagMesaContext.opcoes.find(o => o.key === selectedKey) || _pagMesaContext.opcoes[0];
+  if (!alvo) return;
+  _pagMesaContext.selecionadaKey = alvo.key;
+
+  const totalEl = document.getElementById('modal-pag-total');
+  const subEl = document.getElementById('modal-pag-subtotal');
+  const valorAddInput = document.getElementById('modal-pag-valor-add');
+  const info = document.getElementById('modal-pag-cliente-info');
+  const restante = Math.max(0, _mesaRound2(alvo.restante));
+
+  if (totalEl) totalEl.textContent = _mesaMoney(restante);
+  if (subEl) subEl.value = restante.toFixed(2);
+  if (valorAddInput) valorAddInput.value = restante > 0.005 ? restante.toFixed(2) : '';
+  if (info) {
+    info.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px">
+        <div><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Consumo</div><strong style="color:var(--text)">${_mesaMoney(alvo.total)}</strong></div>
+        <div><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Pago</div><strong style="color:var(--success)">${_mesaMoney(alvo.pago)}</strong></div>
+        <div><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Falta</div><strong style="color:var(--accent3)">${_mesaMoney(restante)}</strong></div>
+      </div>
+      <div style="margin-top:7px;color:var(--muted)">Restante da mesa inteira: <strong style="color:var(--accent3)">${_mesaMoney(_pagMesaContext.restanteMesa)}</strong></div>`;
+  }
+
+  const taxaBloco = document.getElementById('modal-taxa-bloco');
+  if (taxaBloco && _pagMesaContext.temClienteNomeado && !alvo.isMesaInteira) {
+    taxaBloco.style.display = 'none';
+    const taxaCheck = document.getElementById('modal-taxa-check');
+    if (taxaCheck) taxaCheck.checked = false;
+  }
+
+  _initFormasList(restante, '');
 }
 
 function _mesaTotalPagamentoAtual() {
@@ -726,14 +919,14 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
   const t = tables.find(x => parseInt(x.num) === parseInt(num));
   if (!t) return;
 
-  let totalVal = parseFloat(totalJaCalculado) || 0;
-  if (!totalJaCalculado) {
-    const sessionStart = t?.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
-    const sessionOrders = mesaOrdersCache
-      .filter(o => parseInt(o.mesa_num) === parseInt(num))
-      .filter(o => sessionStart ? new Date(o.created_at || 0).getTime() >= sessionStart : o.status !== 'entregue');
-    totalVal = calcularTotalMesa(sessionOrders);
-  }
+  const cacheOrdersPagamento = _mesaOrdersSessaoPagamento(num, t);
+  let totalOriginal = parseFloat(totalJaCalculado) || 0;
+  if (!totalOriginal) totalOriginal = calcularTotalMesa(cacheOrdersPagamento);
+  if (!totalOriginal && t.total) totalOriginal = _mesaMoneyInputToNumber(t.total);
+  const ctxInicial = _mesaMontarContextoPagamento(num, cacheOrdersPagamento, totalOriginal);
+  let totalVal = ctxInicial
+    ? (ctxInicial.opcoes.find(o => o.key === ctxInicial.selecionadaKey)?.restante ?? ctxInicial.restanteMesa)
+    : Math.max(0, _mesaRound2(totalOriginal - _mesaPagoTotalSafe(t)));
 
   document.getElementById('modal-pag-mesa-title').textContent = `Registrar Pagamento — Mesa ${num}`;
   document.getElementById('modal-pag-mesa-num').value = num;
@@ -743,6 +936,7 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
   const dinheiroRecebidoInput = document.getElementById('modal-pag-dinheiro-recebido');
   if (valorAddInput) valorAddInput.value = '';
   if (dinheiroRecebidoInput) dinheiroRecebidoInput.value = '';
+  _renderPagClienteBloco();
 
   // Taxa — verifica se já está como item na comanda (filtra por sessão)
   const taxaBloco = document.getElementById('modal-taxa-bloco');
@@ -869,10 +1063,19 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
     try {
       // Pedidos ficam como mesa_aberta até o gestor confirmar pagamento
       const { data: sessionOrders } = await sb.from('orders')
-        .select('items,status,created_at')
+        .select('id,total,taxa,items,status,created_at')
         .eq('mesa_num', parseInt(num))
         .in('status', ['mesa_aberta', 'analise', 'producao', 'pronto'])
         .order('id', { ascending: true });
+
+      if (!_isSplit) {
+        const ordersPagamento = (sessionOrders || []).length ? sessionOrders : cacheOrdersPagamento;
+        const ctxAtualizado = _mesaMontarContextoPagamento(num, ordersPagamento || [], totalOriginal);
+        if (ctxAtualizado) {
+          totalVal = ctxAtualizado.opcoes.find(o => o.key === ctxAtualizado.selecionadaKey)?.restante ?? ctxAtualizado.restanteMesa;
+          _renderPagClienteBloco();
+        }
+      }
 
       // Taxa agora é um item da comanda — aparece naturalmente na lista
       const itemMap = {};
@@ -881,6 +1084,7 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
           if (i.item_status === 'cancelado') return;
           const key = i.item_id || i.name;
           if (!itemMap[key]) itemMap[key] = {
+            key,
             name: i.name, qty: 0, subtotal: 0,
             isTaxa: i.item_type === 'taxa'
           };
@@ -972,6 +1176,7 @@ function imprimirViaCliente() {
 
   // Busca garçom do cache da mesa
   const mesaTd    = tables ? tables.find(x => parseInt(x.num) === num) : null;
+  const clienteAtual = _pagMesaContext?.opcoes?.find(o => o.key === _pagMesaContext.selecionadaKey);
   const garcomNome = (() => {
     const ordens = (mesaOrdersCache || []).filter(o => parseInt(o.mesa_num) === num);
     for (const o of ordens) {
@@ -1008,6 +1213,7 @@ function imprimirViaCliente() {
         <div style="font-size:16px;font-weight:900">${nome.toUpperCase()}</div>
         <div style="font-size:10px;color:#666">${dataHora}</div>
         <div style="font-size:13px;font-weight:700;margin-top:3px">Mesa ${num}</div>
+        ${clienteAtual && !clienteAtual.isMesaInteira ? `<div style="font-size:11px;color:#555;margin-top:2px">Cliente: ${clienteAtual.label}</div>` : ''}
         ${garcomNome ? `<div style="font-size:11px;color:#555;margin-top:2px">Garçom: ${garcomNome}</div>` : ''}
         <hr style="border:none;border-top:1px dashed #aaa;margin:7px 0">
       </div>
@@ -1182,6 +1388,91 @@ async function confirmarPagamentoMesa() {
     return; // sai — não executa fluxo normal
   }
 
+  const ctxPagamento = (_pagMesaContext && _pagMesaContext.num === num)
+    ? _pagMesaContext
+    : _mesaMontarContextoPagamento(num, _mesaOrdersSessaoPagamento(num, t), totalVal);
+  const alvoPagamento = ctxPagamento?.opcoes?.find(o => o.key === ctxPagamento.selecionadaKey)
+    || ctxPagamento?.opcoes?.[0]
+    || { key: '__mesa_total', label: 'Mesa inteira', total: totalVal, pago: 0, restante: totalVal, isMesaInteira: true };
+  const valorRecebido = _pagFormasList.length
+    ? _mesaRound2(_pagFormasList.reduce((s, f) => s + (parseFloat(f.valor) || 0), 0))
+    : _mesaRound2(totalVal);
+  if (valorRecebido <= 0.005) {
+    sbToast('err', 'Informe o valor recebido');
+    return;
+  }
+  if (!alvoPagamento.isMesaInteira && valorRecebido > (alvoPagamento.restante + 0.005)) {
+    sbToast('err', `${alvoPagamento.label} tem apenas ${_mesaMoney(alvoPagamento.restante)} em aberto`);
+    return;
+  }
+
+  const totalMesaOriginal = _mesaRound2(ctxPagamento?.totalMesa || totalVal);
+  const pagamentosAtuais = _mesaPagamentosSafe(t);
+  const clienteRef = alvoPagamento.isMesaInteira ? '__mesa_total' : (alvoPagamento.key || '__mesa');
+  const clienteNome = alvoPagamento.isMesaInteira ? 'Mesa inteira' : (alvoPagamento.label || 'Mesa toda');
+  const pagamentoMesa = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    created_at: new Date().toISOString(),
+    mesa_num: num,
+    cliente_ref: clienteRef,
+    cliente_nome: clienteNome,
+    valor: valorRecebido,
+    forma,
+    formas: (_pagFormasList || []).map(f => ({ ...f })),
+    saldo_mesa_antes: _mesaRound2(ctxPagamento?.restanteMesa ?? (totalMesaOriginal - _mesaPagoTotalSafe(t))),
+    saldo_mesa_depois: 0
+  };
+  const pagamentosNovos = [...pagamentosAtuais, pagamentoMesa];
+  const pagoMesaDepois = _mesaRound2(pagamentosNovos.reduce((s, p) => s + (parseFloat(p?.valor) || 0), 0));
+  const restanteMesaDepois = Math.max(0, _mesaRound2(totalMesaOriginal - pagoMesaDepois));
+  pagamentoMesa.saldo_mesa_depois = restanteMesaDepois;
+  const deveLiberarMesa = restanteMesaDepois <= 0.005;
+  const descMovimento = clienteNome && clienteNome !== 'Mesa inteira'
+    ? `Mesa ${num} — Pagamento ${clienteNome}`
+    : `Mesa ${num} — Pagamento`;
+
+  if (!deveLiberarMesa) {
+    sbLoading(true);
+    let movErr = null;
+    try {
+      const { error: mesaPagErr } = await sb.from('mesas').update({
+        status: 'waiting',
+        total: totalMesaOriginal,
+        pagamentos_json: pagamentosNovos,
+        updated_at: new Date().toISOString()
+      }).eq('num', num);
+      if (mesaPagErr) throw mesaPagErr;
+
+      const { error: movParcialErr } = await sb.from('movimentos').insert({
+        tenant_id: _sessao?.tenant_id,
+        description: descMovimento,
+        tipo: 'entrada',
+        val: valorRecebido,
+        pag: forma,
+        time
+      });
+      movErr = movParcialErr || null;
+
+      t.status = 'waiting';
+      t.total = totalMesaOriginal;
+      t.pagamentos_json = pagamentosNovos;
+      closeModal('modal-pag-mesa');
+      await refreshMesa(num);
+      _renderMesaPageFromCache();
+      renderKanban();
+      renderQR();
+      const caixaMsg = movErr ? ' (caixa não registrado)' : '';
+      sbToast('ok', `${clienteNome}: recebido ${_mesaMoney(valorRecebido)}. Falta ${_mesaMoney(restanteMesaDepois)}${caixaMsg}`);
+      setTimeout(() => openRegistrarPagamento(num, null), 450);
+    } catch(e) {
+      console.error('pagamento parcial mesa error:', e);
+      sbToast('err', 'Erro ao registrar recebimento: ' + (e?.message || e));
+    } finally {
+      sbLoading(false);
+    }
+    return;
+  }
+
   // ── IMPORTANTE: captura opened_at ANTES de qualquer await ──────────────
   // O SSE da atualização da mesa (step 2) pode disparar refreshMesa()
   // durante os awaits seguintes, nullificando t.opened_at via race condition.
@@ -1208,14 +1499,16 @@ async function confirmarPagamentoMesa() {
     // 2. Liberar mesa
     const { error: mesaErr } = await sb.from('mesas').update({
       status: 'free', total: null, pag_forma: null,
-      guests: null, opened_at: null, updated_at: new Date().toISOString()
+      guests: null, opened_at: null, clientes_json: [], pagamentos_json: [],
+      updated_at: new Date().toISOString()
     }).eq('num', num);
     if (mesaErr) { console.error('mesas update error:', mesaErr); throw mesaErr; }
 
     // 3. Registrar entrada no caixa (não-fatal — mesa libera mesmo se falhar)
     const { error: movErr } = await sb.from('movimentos').insert({
-      description: `Mesa ${num} — Pagamento`,
-      tipo: 'entrada', val: totalVal, pag: forma, time
+      tenant_id: _sessao?.tenant_id,
+      description: descMovimento,
+      tipo: 'entrada', val: valorRecebido, pag: forma, time
     });
     if (movErr) console.warn('movimentos insert warning (não-fatal):', movErr);
 
@@ -1238,7 +1531,7 @@ async function confirmarPagamentoMesa() {
       : []);
 
     // Atualizar estado local e cache — zera tudo desta mesa
-    t.status = 'free'; t.total = null; t.guests = null; t.opened_at = null; t.pag_forma = null; t.taxa_servico = 0;
+    t.status = 'free'; t.total = null; t.guests = null; t.opened_at = null; t.pag_forma = null; t.taxa_servico = 0; t.clientes_json = []; t.pagamentos_json = [];
     ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== num);
     mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== num);
     tables.sort((a,b) => parseInt(a.num) - parseInt(b.num));
@@ -1250,8 +1543,8 @@ async function confirmarPagamentoMesa() {
 
     // Monta e exibe comprovante
     const caixaMsg = movErr ? ' (caixa não registrado)' : '';
-    abrirComprovantesMesa(num, totalVal, forma, time, _ordensComprovante, _taxaVal);
-    sbToast('ok', `Mesa ${num} liberada — R$ ${totalVal.toFixed(2).replace('.',',')}${caixaMsg}`);
+    abrirComprovantesMesa(num, totalMesaOriginal, forma, time, _ordensComprovante, _taxaVal);
+    sbToast('ok', `Mesa ${num} liberada — R$ ${totalMesaOriginal.toFixed(2).replace('.',',')}${caixaMsg}`);
   } catch(e) {
     console.error('confirmarPagamentoMesa error:', e);
     const msg = e?.message || e?.details || e?.hint || JSON.stringify(e);

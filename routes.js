@@ -6327,6 +6327,16 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const info = db.prepare(
         `INSERT INTO print_jobs (tenant_id, html, format, printer, tipo) VALUES (?, ?, ?, ?, ?)`
       ).run(tid, body.html, body.format || 'A4', body.printer || null, body.tipo || null)
+      const job = {
+        id: info.lastInsertRowid,
+        tenant_id: tid,
+        html: body.html,
+        format: body.format || 'A4',
+        printer: body.printer || '',
+        tipo: body.tipo || null,
+        status: 'pending'
+      }
+      try { sseBroadcast(`print-jobs-rt:${tid}`, 'print_jobs:INSERT', job) } catch (_) {}
       send(res, 201, { ok: true, id: info.lastInsertRowid })
     } catch (e) { send(res, 500, { error: e.message }) }
     return true

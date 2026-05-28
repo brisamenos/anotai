@@ -597,6 +597,26 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   background:rgba(129,140,248,.12); color:var(--accent);
   font-size:10.5px; font-weight:800;
 }
+.cart-client-select {
+  margin-top:6px; max-width:180px; height:28px;
+  border-radius:8px; border:1px solid var(--border);
+  background:var(--surface3); color:var(--text);
+  padding:0 8px; font:inherit; font-size:11px; font-weight:800;
+  outline:none;
+}
+.cart-client-summary {
+  background:var(--surface2); border:1px solid var(--border);
+  border-radius:10px; padding:9px 11px; margin-bottom:8px;
+}
+.cart-client-summary-title {
+  font-size:10.5px; font-weight:900; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px;
+}
+.cart-client-summary-row {
+  display:flex; justify-content:space-between; gap:8px;
+  font-size:12px; padding:2px 0;
+}
+.cart-client-summary-row strong { color:var(--amber); }
 .qty-ctrl { display:flex; align-items:center; gap:6px; flex-shrink:0; }
 .qbtn { width:24px; height:24px; border-radius:7px; background:var(--surface3); border:none; color:var(--text); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .14s; }
 .qbtn:hover { background:var(--accent); color:#fff; }
@@ -1172,12 +1192,29 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
         </label>
       </div>
       <div id="finalizar-pedidos-list" style="margin-bottom:14px"></div>
-      <!-- Forma de pagamento é responsabilidade do gestor/caixa -->
+      <div id="finalizar-pagamento-row" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:12px;padding:12px;margin-bottom:12px">
+        <label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:7px">Forma de pagamento</label>
+        <select id="finalizar-pay-select" onchange="finalizarPay=this.value" style="width:100%;height:42px;border-radius:10px;background:var(--surface);border:1.5px solid var(--border);color:var(--text);font-size:13.5px;font-weight:700;padding:0 11px;outline:none">
+          <option value="">Escolher no caixa</option>
+          <option value="PIX">PIX</option>
+          <option value="Débito">Débito</option>
+          <option value="Crédito">Crédito</option>
+          <option value="Dinheiro">Dinheiro</option>
+          <option value="Cartão">Cartão</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:10px;margin-top:11px;cursor:pointer">
+          <input type="checkbox" id="finalizar-receber-check" onchange="atualizarRecebimentoFinalizar()" style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;flex-shrink:0">
+          <div>
+            <div style="font-size:13px;font-weight:800;color:var(--text)">Receber agora pelo garçom</div>
+            <div style="font-size:11.5px;color:var(--muted);line-height:1.35">Marcado: a mesa é liberada e o valor entra no caixa.</div>
+          </div>
+        </label>
+      </div>
     </div>
     <div class="sheet-foot">
-      <button class="confirm-btn" onclick="confirmarFinalizarMesa()" style="background:var(--amber);color:#000;box-shadow:0 6px 20px rgba(196,149,106,.25)">
+      <button class="confirm-btn" id="finalizar-submit-btn" onclick="confirmarFinalizarMesa()" style="background:var(--amber);color:#000;box-shadow:0 6px 20px rgba(196,149,106,.25)">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Finalizar e enviar para pagamento
+        <span id="finalizar-submit-label">Finalizar e enviar para pagamento</span>
       </button>
     </div>
   </div>
@@ -1890,6 +1927,31 @@ function _garcomPrintClientesHtml(orders) {
   }).join('');
 }
 
+function _cartClienteOptions(item) {
+  const clientes = _mesaClientes();
+  const selected = String(item?.cliente_ref || '');
+  const base = [`<option value="" ${!selected ? 'selected' : ''}>Mesa toda</option>`];
+  clientes.forEach(c => {
+    base.push(`<option value="${_garcomHtmlEscape(c.id)}" ${selected === c.id ? 'selected' : ''}>${_garcomHtmlEscape(c.nome)}</option>`);
+  });
+  if (selected && item?.cliente_nome && !clientes.some(c => c.id === selected)) {
+    base.push(`<option value="${_garcomHtmlEscape(selected)}" selected>${_garcomHtmlEscape(item.cliente_nome)}</option>`);
+  }
+  return base.join('');
+}
+
+function _cartResumoClientesHtml() {
+  const grupos = _resumoClientesMesa([{ items: cart }]);
+  if (!grupos.some(g => g.label !== 'Mesa toda')) return '';
+  return `<div class="cart-client-summary">
+    <div class="cart-client-summary-title">Valores por cliente</div>
+    ${grupos.map(g => `<div class="cart-client-summary-row">
+      <span>${_garcomHtmlEscape(g.label)}</span>
+      <strong>R$ ${g.total.toFixed(2).replace('.', ',')}</strong>
+    </div>`).join('')}
+  </div>`;
+}
+
 function _garcomNormPrintKey(s) {
   return String(s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
@@ -2082,21 +2144,17 @@ async function garcomPrint(order, newItems) {
 
     const tid = _garcomTenantId;
 
-    // ── REGRA: só separa impressoras se DUAS impressoras diferentes configuradas ──
+    // ── REGRA: com cozinha separada, produção não vai para o caixa ──
     if (doisImpressoras) {
-      // Antes: TUDO ia pra impressora da cozinha — bebidas industrializadas
-      // (água, refri, cerveja) iam errado pra cozinha em vez de pro balcão/caixa
-      // que serve bebida. Agora cada via vai pra impressora certa:
-      //   - htmlCozinha → printerCozinha (comida que precisa preparo)
-      //   - htmlBar     → printerCaixa   (bebida pronta pega no balcão)
+      // Caixa imprime fechamento/conta ou reimpressao solicitada. Pedido de
+      // producao fica restrito a cozinha/setores para nao duplicar papel.
       if (window.ElectronPrint?.printHtml) {
         const pw = fmt === '58mm' ? 58 : 80;
         const cozinhaJobs = setorJobs.length ? setorJobs : (htmlCozinha ? [{ html: htmlCozinha, printer: printerCozinha }] : []);
         for (const job of cozinhaJobs) {
           await window.ElectronPrint.printHtml(job.html, { printer: job.printer || printerCozinha, paperWidth: pw }).catch(()=>{});
         }
-        if (htmlBar)     await window.ElectronPrint.printHtml(htmlBar,     { printer: printerCaixa,   paperWidth: pw }).catch(()=>{});
-        showToast(htmlCozinha && htmlBar ? '🖨️ Cozinha + Bar' : htmlCozinha ? '🖨️ Cozinha' : '🖨️ Bar');
+        showToast(cozinhaJobs.length ? '🖨️ Cozinha' : 'ℹ️ Sem itens de cozinha para imprimir');
         return;
       }
       // Print Agent — dois jobs separados, sem verificar status
@@ -2107,8 +2165,9 @@ async function garcomPrint(order, newItems) {
         } else if (htmlCozinha) {
           jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html: htmlCozinha, format: fmt, printer: printerCozinha, tipo: 'cozinha' }) }));
         }
-        if (htmlBar)     jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html: htmlBar,     format: fmt, printer: printerCaixa,   tipo: 'caixa'   }) }));
         if (jobs.length) { await Promise.all(jobs); showToast('🖨️ Enviado'); return; }
+        showToast('ℹ️ Sem itens de cozinha para imprimir');
+        return;
       } catch(e) { console.warn('[PRINT] Agent falhou:', e.message); }
     } else {
       // UMA impressora só — tudo junto numa folha
@@ -2741,10 +2800,10 @@ async function cancelarOcupacaoMesa(num) {
   try {
     await sb.from('mesas').update({
       status: 'free', opened_at: null, total: null,
-      guests: null, clientes_json: [], updated_at: new Date().toISOString()
+      guests: null, clientes_json: [], pagamentos_json: [], updated_at: new Date().toISOString()
     }).eq('num', num);
     const mesa = tables.find(t => t.num === num);
-    if (mesa) { mesa.status = 'free'; mesa.opened_at = null; mesa.total = null; mesa.clientes_json = []; }
+    if (mesa) { mesa.status = 'free'; mesa.opened_at = null; mesa.total = null; mesa.clientes_json = []; mesa.pagamentos_json = []; }
     closeMesaDetail();
     renderMesas();
     showToast(`Mesa ${num} liberada`);
@@ -2810,10 +2869,10 @@ async function confirmarAbrirMesa() {
   const now = new Date().toISOString();
   const shouldSetOpenedAt = mesa?.status === 'free' || !mesa?.opened_at;
   const updatePayload = shouldSetOpenedAt
-    ? { status: 'busy', opened_at: now, clientes_json: [], updated_at: now }
+    ? { status: 'busy', opened_at: now, clientes_json: [], pagamentos_json: [], updated_at: now }
     : { status: 'busy', updated_at: now };
   await sb.from('mesas').update(updatePayload).eq('num', num);
-  if (mesa) { mesa.status = 'busy'; mesa.updated_at = now; if (shouldSetOpenedAt) { mesa.opened_at = now; mesa.clientes_json = []; } }
+  if (mesa) { mesa.status = 'busy'; mesa.updated_at = now; if (shouldSetOpenedAt) { mesa.opened_at = now; mesa.clientes_json = []; mesa.pagamentos_json = []; } }
   renderMesas();
   document.getElementById('sheet-pedido').classList.add('on');
 }
@@ -3379,6 +3438,9 @@ function renderCartSheet() {
       <div class="cart-row-name">
         <div class="cart-row-title">${_garcomHtmlEscape(i.name)}</div>
         ${i.cliente_nome ? `<div class="mesa-cliente-tag">${_garcomHtmlEscape(i.cliente_nome)}</div>` : ''}
+        <select class="cart-client-select" onchange="alterarClienteItemCarrinho(${idx}, this.value)">
+          ${_cartClienteOptions(i)}
+        </select>
         ${i.obs ? `<div class="cart-row-obs">Obs: ${_garcomHtmlEscape(i.obs)}</div>` : ''}
         ${_cartObsEditingIdx === idx ? `
           <div class="cart-obs-editor">
@@ -3399,8 +3461,18 @@ function renderCartSheet() {
 
   const sub = cart.reduce((s,i)=>s+i.price*i.qty,0);
   document.getElementById('cart-totals').innerHTML = `
+    ${_cartResumoClientesHtml()}
     <div class="total-row"><span>Subtotal</span><span>R$ ${sub.toFixed(2).replace('.',',')}</span></div>
     <div class="total-row big"><span>Total</span><span>R$ ${sub.toFixed(2).replace('.',',')}</span></div>`;
+}
+
+function alterarClienteItemCarrinho(idx, clienteRef) {
+  if (idx < 0 || idx >= cart.length) return;
+  const ref = String(clienteRef || '');
+  const cliente = _mesaClientes().find(c => c.id === ref);
+  cart[idx].cliente_ref = cliente ? cliente.id : '';
+  cart[idx].cliente_nome = cliente ? cliente.nome : '';
+  renderCartSheet();
 }
 
 function editarObsCarrinho(idx) {
@@ -4141,7 +4213,18 @@ async function refreshMesa(num) {
 
 // ══ FINALIZAR MESA ════════════════════════
 let finalizarMesaNum = null;
-let finalizarPay = ''; // definido pelo gestor/caixa
+let finalizarPay = '';
+
+function atualizarRecebimentoFinalizar() {
+  const receber = !!document.getElementById('finalizar-receber-check')?.checked;
+  const label = document.getElementById('finalizar-submit-label');
+  const btn = document.getElementById('finalizar-submit-btn');
+  if (label) label.textContent = receber ? 'Receber e liberar mesa' : 'Finalizar e enviar para pagamento';
+  if (btn) {
+    btn.style.background = receber ? 'var(--green)' : 'var(--amber)';
+    btn.style.color = receber ? '#052e16' : '#000';
+  }
+}
 
 // ── Variáveis para o modal de impressão da conta ──
 let _printContaMesaNum = null;
@@ -4317,6 +4400,11 @@ async function abrirFinalizarMesa(num) {
   finalizarMesaNum = num;
   finalizarPay = '';
   document.getElementById('finalizar-title').textContent = `Finalizar Mesa ${num}`;
+  const paySel = document.getElementById('finalizar-pay-select');
+  if (paySel) paySel.value = finalizarPay;
+  const receberCheck = document.getElementById('finalizar-receber-check');
+  if (receberCheck) receberCheck.checked = false;
+  atualizarRecebimentoFinalizar();
 
   // Load orders for this mesa (todos os garçons)
   let orders = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
@@ -4414,6 +4502,7 @@ async function confirmarFinalizarMesa() {
   const taxaIncluida = _garcomTaxaServicoPct > 0 && taxaCheck?.checked;
   const taxaVal = taxaIncluida ? Math.round(subtotal * _garcomTaxaServicoPct) / 100 : 0;
   const total = subtotal + taxaVal;
+  if (!_garcomTenantId) { showToast('⚠️ Loja não identificada. Recarregue o garçom.'); return; }
   try {
     // Se taxa foi selecionada, adiciona como item na comanda da mesa
     if (taxaIncluida && taxaVal > 0) {
@@ -4455,28 +4544,72 @@ async function confirmarFinalizarMesa() {
         const novosItens = [...itensSemTaxa, ...itensTaxa];
         await sb.from('orders')
           .update({ items: novosItens, total: total, updated_at: new Date().toISOString() })
-          .eq('id', comanda.id);
+          .eq('id', comanda.id)
+          .eq('tenant_id', _garcomTenantId);
         mesaOrders = mesaOrders.map(o => o.id === comanda.id ? { ...o, items: novosItens, total } : o);
       }
     }
 
-    // Mesa → aguardando pagamento
+    finalizarPay = document.getElementById('finalizar-pay-select')?.value || finalizarPay || '';
+    const _receberAgora = !!document.getElementById('finalizar-receber-check')?.checked;
+    if (_receberAgora && !finalizarPay) {
+      showToast('⚠️ Escolha a forma de pagamento para receber agora.');
+      return;
+    }
+
+    // Mesa -> aguardando pagamento, ou recebida pelo proprio garcom.
     // Se split foi definido, inclui info na pag_forma: "split:N:valorCada"
     let _pagFormaFinal = finalizarPay;
-    if (_splitN > 1 && _splitTotal > 0) {
+    if (!_receberAgora && _splitN > 1 && _splitTotal > 0) {
       const _cada = (_splitTotal + taxaVal) / _splitN;
       _pagFormaFinal = `split:${_splitN}:${_cada.toFixed(2)}`;
     }
-    await sb.from('mesas').update({
-      status: 'waiting',
-      total: total,
-      taxa_servico: taxaVal,
-      pag_forma: _pagFormaFinal,
-      updated_at: new Date().toISOString()
-    }).eq('num', finalizarMesaNum);
 
-    closeFinalizarMesa();
-    showToast('✅ Mesa ' + finalizarMesaNum + ' enviada para pagamento!');
+    if (_receberAgora) {
+      const time = new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+      await sb.from('orders')
+        .update({ status: 'entregue', updated_at: new Date().toISOString() })
+        .eq('mesa_num', finalizarMesaNum)
+        .eq('tenant_id', _garcomTenantId)
+        .in('status', ['analise','producao','pronto','mesa_aberta']);
+      await sb.from('mesas').update({
+        status: 'free',
+        total: null,
+        taxa_servico: null,
+        pag_forma: null,
+        guests: null,
+        opened_at: null,
+        clientes_json: [],
+        pagamentos_json: [],
+        updated_at: new Date().toISOString()
+      }).eq('num', finalizarMesaNum).eq('tenant_id', _garcomTenantId);
+      try {
+        await sb.from('movimentos').insert({
+          tenant_id: _garcomTenantId,
+          description: `Mesa ${finalizarMesaNum} - Recebido pelo garcom${currentGarcom?.nome ? ' - ' + currentGarcom.nome : ''}`,
+          tipo: 'entrada',
+          val: total,
+          pag: finalizarPay,
+          time
+        });
+      } catch (movErr) {
+        console.warn('[GARCOM FINALIZAR] movimento nao registrado:', movErr?.message || movErr);
+      }
+      allMesaOrders = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) !== finalizarMesaNum);
+      myOrders = myOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) !== finalizarMesaNum);
+      closeFinalizarMesa();
+      showToast('✅ Mesa ' + finalizarMesaNum + ' recebida e liberada!');
+    } else {
+      await sb.from('mesas').update({
+        status: 'waiting',
+        total: total,
+        taxa_servico: taxaVal,
+        pag_forma: _pagFormaFinal,
+        updated_at: new Date().toISOString()
+      }).eq('num', finalizarMesaNum).eq('tenant_id', _garcomTenantId);
+      closeFinalizarMesa();
+      showToast('✅ Mesa ' + finalizarMesaNum + ' enviada para pagamento!');
+    }
     const { data: mesas } = await sb.from('mesas').select('*').order('num');
     if (mesas) { tables = mesas; renderMesas(); }
     await loadPedidosDaMesa();
@@ -4486,7 +4619,7 @@ async function confirmarFinalizarMesa() {
     _printComandaOrders   = mesaOrders;
     _printComandaTotal    = total;
     _printComandaTaxaVal  = taxaVal;
-    _printComandaPagForma = finalizarPay;
+    _printComandaPagForma = _pagFormaFinal;
 
     // Só abre o modal se houver itens para imprimir
     const _itensCheck = (mesaOrders || []).flatMap(o => _parseItems(o.items));
@@ -4577,12 +4710,12 @@ async function confirmarImprimirComanda() {
     const html = `
       <div class="print-ticket" style="font-size:${fontSize}px">
         <div style="text-align:center;font-size:1.1em;font-weight:900">${nome}</div>
-        <div style="text-align:center;font-weight:bold;margin:4px 0">*** PEDIDO DE CONTA ***</div>
+        <div style="text-align:center;font-weight:bold;margin:4px 0">*** CONTA ***</div>
         <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
         <div>Mesa: <b>${mesaNum}</b></div>
         ${currentGarcom?.nome ? `<div>Garçom: ${currentGarcom.nome}</div>` : ''}
         <div>Data: ${now}</div>
-        <div>Pagamento: <b>${pagForma}</b></div>
+        ${pagForma ? `<div>Pagamento: <b>${pagForma}</b></div>` : ''}
         <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
         ${itensPorClienteHtml || itensAgrupados.map(renderItem).join('')}
         <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
@@ -4605,7 +4738,7 @@ async function confirmarImprimirComanda() {
         headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
         body: JSON.stringify({ html, format: fmt, printer: printerCaixa || undefined, tipo: 'caixa' })
       });
-      if (res.ok) { showToast('🖨️ Pedido de conta enviado ao gestor!'); return; }
+      if (res.ok) { showToast('🖨️ Conta enviada ao gestor para imprimir!'); return; }
     } catch(e) { console.warn('[PRINT COMANDA] Gestor/agent falhou:', e.message); }
 
     // Fallback local, usado somente se o envio ao gestor falhar.
@@ -4683,15 +4816,16 @@ async function confirmarTransfer(toNum) {
 
     // Marca mesa origem como livre
     const { error: errFrom } = await sb.from('mesas')
-      .update({ status: 'free', opened_at: null, total: null, clientes_json: [], updated_at: now })
+      .update({ status: 'free', opened_at: null, total: null, clientes_json: [], pagamentos_json: [], updated_at: now })
       .eq('num', fromNum);
     if (errFrom) throw errFrom;
 
     // Marca mesa destino como ocupada (herda opened_at da origem)
     const mesaOrigem = tables.find(t => t.num === fromNum);
     const clientesOrigem = _mesaClientesParse(mesaOrigem?.clientes_json);
+    const pagamentosOrigem = _mesaClientesParse(mesaOrigem?.pagamentos_json);
     const { error: errTo } = await sb.from('mesas')
-      .update({ status: 'busy', opened_at: mesaOrigem?.opened_at || now, clientes_json: clientesOrigem, updated_at: now })
+      .update({ status: 'busy', opened_at: mesaOrigem?.opened_at || now, clientes_json: clientesOrigem, pagamentos_json: pagamentosOrigem, updated_at: now })
       .eq('num', toNum);
     if (errTo) throw errTo;
 

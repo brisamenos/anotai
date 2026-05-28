@@ -1091,6 +1091,78 @@ async function _printComandaMesa(mesaNum, mesaData) {
   } catch(e) { console.warn('[PRINT CONTA] Servidor falhou:', e.message); }
 }
 
+const _printJobsEmProcesso = new Set();
+
+function _gestorImprimirJobCaixaViaNavegador(html, fmt) {
+  if (!html || !document?.body) return false;
+  const frame = document.createElement('iframe');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none';
+  const page = html.includes('<html') ? html : `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Conta</title>
+    <style>body{margin:0;padding:4px;font-family:monospace;background:#fff;color:#000} @media print{@page{margin:2mm;size:${fmt || '80mm'} auto} body{margin:0}}</style>
+    </head><body>${html}</body></html>`;
+  frame.onload = () => {
+    setTimeout(() => {
+      try {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      } catch(e) {
+        console.warn('[PRINT JOB CAIXA] navegador falhou:', e?.message || e);
+      }
+    }, 250);
+  };
+  document.body.appendChild(frame);
+  frame.srcdoc = page;
+  setTimeout(() => { try { frame.remove(); } catch {} }, 60000);
+  return true;
+}
+
+async function _gestorImprimirJobCaixa(job) {
+  if (!job?.id || !job?.html) return;
+  const tipo = String(job.tipo || 'caixa').toLowerCase();
+  if (tipo !== 'caixa') return;
+  if (_printJobsEmProcesso.has(job.id)) return;
+
+  _printJobsEmProcesso.add(job.id);
+  try {
+    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+    if (!tid) return;
+
+    // Se o Print Agent está ativo, ele é o dono da fila e evita impressão duplicada no gestor.
+    try {
+      const st = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } }).then(r => r.json());
+      if (st?.active) return;
+    } catch (_) {}
+
+    const fmt = job.format || localStorage.getItem('printFormat') || '80mm';
+    const pw  = fmt === '58mm' ? 58 : 80;
+    const printer = job.printer || localStorage.getItem('printPrinter') || '';
+    let impresso = false;
+
+    if (window.ElectronPrint?.printHtml) {
+      const r = await window.ElectronPrint.printHtml(job.html, {
+        printer,
+        paperWidth: pw,
+        landscape: false,
+        scaleFactor: 100
+      }).catch(e => ({ ok: false, error: e?.message || String(e) }));
+      impresso = !r || r.ok !== false;
+    } else {
+      impresso = _gestorImprimirJobCaixaViaNavegador(job.html, fmt);
+    }
+
+    if (impresso) {
+      await fetch(`/api/print-queue/job/${job.id}/done`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+        body: JSON.stringify({ status: 'done' })
+      }).catch(() => {});
+      sbToast?.('ok', '🖨️ Conta recebida do garçom e impressa no caixa');
+    }
+  } finally {
+    setTimeout(() => _printJobsEmProcesso.delete(job.id), 30000);
+  }
+}
+
 function subscribeOrders() {
   if (billingIsLocked()) {
     unsubscribeAll();
@@ -1318,6 +1390,12 @@ function subscribeOrders() {
       renderQR();
     }).subscribe();
 
+  const chPrintJobs = sb.channel('print-jobs-rt')
+    .on('postgres_changes', {event:'INSERT', schema:'public', table:'print_jobs'}, p => {
+      _gestorImprimirJobCaixa(p.new).catch(e => console.warn('[PRINT JOB CAIXA]', e?.message || e));
+    })
+    .subscribe();
+
   const chConfig = sb.channel('store-config-rt')
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'store_config'}, p => {
       const cfg = p.new || {};
@@ -1369,7 +1447,7 @@ function subscribeOrders() {
     catch(e){}
   }, 25000);
 
-  _rtChannels = [chOrders, chMesas, chConfig, chEstoque];
+  _rtChannels = [chOrders, chMesas, chPrintJobs, chConfig, chEstoque];
 
   // ── Rádio garçom → gestor (push-to-talk via SSE) ──────────────
   _subscribeRadio();

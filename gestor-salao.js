@@ -558,12 +558,12 @@ async function toggleMesaStatus(num) {
   const newStatus = t.status === 'free' ? 'busy' : 'free';
   const newGuests = newStatus === 'busy' ? 2 : null;
   const payload = newStatus === 'free'
-    ? { status: newStatus, guests: newGuests, total: null, clientes_json: [], updated_at: new Date().toISOString() }
-    : { status: newStatus, guests: newGuests, total: null, clientes_json: [], updated_at: new Date().toISOString() };
+    ? { status: newStatus, guests: newGuests, total: null, clientes_json: [], pagamentos_json: [], updated_at: new Date().toISOString() }
+    : { status: newStatus, guests: newGuests, total: null, clientes_json: [], pagamentos_json: [], updated_at: new Date().toISOString() };
   const { error } = await sb.from('mesas')
     .update(payload)
     .eq('num', num);
-  if (!error) { t.status = newStatus; t.guests = newGuests; t.total = null; t.clientes_json = []; }
+  if (!error) { t.status = newStatus; t.guests = newGuests; t.total = null; t.clientes_json = []; t.pagamentos_json = []; }
   renderQR();
 }
 
@@ -576,7 +576,7 @@ async function addTable() {
   }).select().single();
   sbLoading(false);
   if (error) { sbToast('err', 'Erro ao criar mesa'); return; }
-  tables.push({ num, status: 'free', guests: null, total: null, clientes_json: [] });
+  tables.push({ num, status: 'free', guests: null, total: null, clientes_json: [], pagamentos_json: [] });
   renderQR();
   sbToast('ok', `Mesa ${num} criada!`);
 }
@@ -598,7 +598,7 @@ async function saveNovaMesa() {
   const { data, error } = await sb.from('mesas').insert({ tenant_id: _sessao.tenant_id, num, status: 'free', guests }).select().single();
   sbLoading(false);
   if (error) { sbToast('err', 'Erro ao criar mesa'); return; }
-  tables.push({ num, status: 'free', guests, total: null, clientes_json: [] });
+  tables.push({ num, status: 'free', guests, total: null, clientes_json: [], pagamentos_json: [] });
   tables.sort((a, b) => a.num - b.num);
   closeModal('modal-nova-mesa');
   renderMesasPage();
@@ -843,12 +843,17 @@ function renderMesaCard(t, orders) {
       : parseFloat(t.total);
     if (!isNaN(raw) && raw > 0) displayTotal = raw;
   }
+  const displayTotalOriginal = displayTotal;
+  const pagoMesa = (typeof mesaPagoTotal === 'function') ? mesaPagoTotal(t) : 0;
+  if (isWaiting && pagoMesa > 0) {
+    displayTotal = Math.max(0, Math.round((displayTotalOriginal - pagoMesa) * 100) / 100);
+  }
 
   const actionBtn = isWaiting
     ? `<div style="display:flex;gap:8px;margin-top:4px">
         <button onclick="gestorAbrirDetalheMesa(${t.num})" style="flex:1;padding:11px;border-radius:9px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer">📋 Detalhes</button>
-        <button onclick="openRegistrarPagamento(${t.num}, ${displayTotal.toFixed(2)})" style="flex:2;padding:11px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">
-        💰 Registrar pagamento — R$ ${displayTotal.toFixed(2).replace('.', ',')}
+        <button onclick="openRegistrarPagamento(${t.num})" style="flex:2;padding:11px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--accent3),#d97706);color:#000;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">
+        💰 Receber — R$ ${displayTotal.toFixed(2).replace('.', ',')}
       </button>
       </div>
       <div style="display:flex;gap:8px;margin-top:6px">
@@ -871,11 +876,27 @@ function renderMesaCard(t, orders) {
   const clientesResumoHtml = clientesResumo.some(g => g.label !== 'Mesa toda')
     ? `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:9px 11px;margin:8px 0">
         <div style="font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Consumo por cliente</div>
-        ${clientesResumo.map(g => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:2px 0">
-          <span>${_salaoEscape(g.label)}</span>
-          <strong style="color:var(--accent3)">R$ ${g.total.toFixed(2).replace('.', ',')}</strong>
-        </div>`).join('')}
-      </div>` : '';
+        ${clientesResumo.map(g => {
+          const pagoCli = (typeof mesaPagoPorCliente === 'function') ? mesaPagoPorCliente(t, g.key) : 0;
+          const faltaCli = Math.max(0, Math.round((g.total - pagoCli) * 100) / 100);
+          const meta = pagoCli > 0.005
+            ? `<div style="font-size:10.5px;color:var(--muted)">Pago R$ ${pagoCli.toFixed(2).replace('.', ',')} · Falta R$ ${faltaCli.toFixed(2).replace('.', ',')}</div>`
+            : '';
+          return `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:2px 0">
+            <span>${_salaoEscape(g.label)}${meta}</span>
+            <strong style="color:var(--accent3)">R$ ${g.total.toFixed(2).replace('.', ',')}</strong>
+          </div>`;
+        }).join('')}
+        ${pagoMesa > 0.005 ? `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:5px 0 0;margin-top:4px;border-top:1px solid var(--border)">
+          <span style="color:var(--success);font-weight:700">Recebido</span>
+          <strong style="color:var(--success)">R$ ${pagoMesa.toFixed(2).replace('.', ',')}</strong>
+        </div>` : ''}
+      </div>` : (pagoMesa > 0.005 ? `<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:9px;padding:9px 11px;margin:8px 0">
+        <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px">
+          <span style="color:var(--success);font-weight:700">Recebido</span>
+          <strong style="color:var(--success)">R$ ${pagoMesa.toFixed(2).replace('.', ',')}</strong>
+        </div>
+      </div>` : '');
 
   return `<div style="background:var(--surface);border:1.5px solid ${bordColor};border-radius:14px;padding:16px;margin-bottom:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -1894,13 +1915,13 @@ async function submitGarcomOrder() {
       }
       if (_autoPrintOn && !(_soBebida && !_printBebidaSolo) && (_htmlCozinha || _htmlBar)) {
         if (_doisImpressoras) {
-          // Cozinha → printerCozinha; Bebida → printerCaixa (atendente serve)
+          // Com cozinha separada, producao nao vai para o caixa.
+          // Caixa fica para fechamento/conta ou impressao solicitada pelo cliente.
           if (window.ElectronPrint?.printHtml) {
             const cozinhaJobs = _setorJobs.length ? _setorJobs : (_htmlCozinha ? [{ html: _htmlCozinha, printer: _printerCozinha }] : []);
             for (const job of cozinhaJobs) {
               await window.ElectronPrint.printHtml(job.html, { printer: job.printer || _printerCozinha, paperWidth: _pw }).catch(()=>{});
             }
-            if (_htmlBar)     await window.ElectronPrint.printHtml(_htmlBar,     { printer: _printerCaixa,   paperWidth: _pw }).catch(()=>{});
           } else {
             // Print Agent fallback
             const _tid = _sessao?.tenant_id;
@@ -1911,7 +1932,6 @@ async function submitGarcomOrder() {
               } else if (_htmlCozinha) {
                 jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ html: _htmlCozinha, format: _fmt, printer: _printerCozinha, tipo: 'cozinha' }) }));
               }
-              if (_htmlBar)     jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ html: _htmlBar,     format: _fmt, printer: _printerCaixa,   tipo: 'caixa'   }) }));
               await Promise.all(jobs).catch(()=>{});
             }
           }
@@ -1966,7 +1986,7 @@ async function cancelarMesaCompleta(num) {
     // Libera a mesa
     await sb.from('mesas').update({
       status: 'free', total: null, pag_forma: null,
-      guests: null, opened_at: null, taxa_servico: null, clientes_json: [],
+      guests: null, opened_at: null, taxa_servico: null, clientes_json: [], pagamentos_json: [],
       updated_at: new Date().toISOString()
     }).eq('num', numInt);
 
@@ -1974,7 +1994,7 @@ async function cancelarMesaCompleta(num) {
     mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== numInt);
     ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== numInt);
     const t = tables.find(x => parseInt(x.num) === numInt);
-    if (t) { t.status = 'free'; t.total = null; t.opened_at = null; t.taxa_servico = 0; t.clientes_json = []; }
+    if (t) { t.status = 'free'; t.total = null; t.opened_at = null; t.taxa_servico = 0; t.clientes_json = []; t.pagamentos_json = []; }
 
     renderKanban();
     _renderMesaPageFromCache();

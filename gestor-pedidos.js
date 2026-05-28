@@ -2502,12 +2502,11 @@ async function createOrder() {
   }
 }
 
-function printOrderDetail() {
+async function printOrderDetail() {
   const id = window._currentDetailId;
   const o = ordersKanban.find(x => x.id === id);
   if (!o) return;
-  printOrder(o);
-  sbToast('ok', 'Imprimindo comanda do Pedido #' + o.num);
+  await printOrder(o, { manualChoice: true });
 }
 
 // ─────────────────────────────────────────
