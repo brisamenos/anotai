@@ -6435,17 +6435,24 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const body = await readBody(req)
       const categorias = body?.categorias
       if (!Array.isArray(categorias)) { send(res, 400, { error: 'categorias[] obrigatório' }); return true }
+      const substituir = body?.substituir === true || body?.replace === true || body?.limpar === true
+      const tenant = db.prepare('SELECT id FROM tenants WHERE id=? AND ativo=1').get(tid)
+      if (!tenant) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
 
-      const JSON_FIELDS_MI = new Set(['days','ingredients','custom_groups'])
-      const COLS_MI = ['tenant_id','name','description','price','price_old','cat','cat_key','emoji',
+      const COLS_MI = ['tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url',
                        'item_type','allow_half','max_flavors','promo','destaque','status',
                        'days','ingredients','custom_groups','sort_order']
-      const COLS_CAT = ['tenant_id','name','label','type','promo','sort_order']
+      const COLS_CAT = ['tenant_id','name','label','type','promo','emoji','sort_order']
 
-      let catsCriadas = 0, itensCriados = 0, erros = 0
+      let catsCriadas = 0, itensCriados = 0, erros = 0, catsRemovidas = 0, itensRemovidos = 0
       const catIds = {}  // name → id
 
       const doImport = db.transaction(() => {
+        if (substituir) {
+          itensRemovidos = db.prepare('DELETE FROM menu_items WHERE tenant_id=?').run(tid).changes || 0
+          catsRemovidas = db.prepare('DELETE FROM categories WHERE tenant_id=?').run(tid).changes || 0
+        }
+
         let catOrder = db.prepare('SELECT COALESCE(MAX(sort_order),0) as mx FROM categories WHERE tenant_id=?').get(tid)?.mx || 0
 
         for (const catDef of categorias) {
@@ -6455,6 +6462,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
               tenant_id: tid, name: catDef.name, label: catDef.label,
               type: catDef.type || 'Itens principais',
               promo: catDef.promo ? 1 : 0,
+              emoji: catDef.emoji || null,
               sort_order: ++catOrder
             }
             const catKeys = Object.keys(catRow).filter(k => COLS_CAT.includes(k))
@@ -6480,9 +6488,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
                   description: itemDef.description || '',
                   price: parseFloat(itemDef.price) || 0,
                   price_old: itemDef.price_old || null,
+                  category_id: catInfo.lastInsertRowid,
                   cat: catDef.label,
                   cat_key: catDef.name,
                   emoji: itemDef.emoji || '🍽️',
+                  image_url: typeof itemDef.image_url === 'string' ? itemDef.image_url
+                    : (typeof itemDef.imageUrl === 'string' ? itemDef.imageUrl : null),
                   item_type: itemDef.item_type || 'normal',
                   allow_half: itemDef.allow_half ? 1 : 0,
                   max_flavors: itemDef.max_flavors || 1,
@@ -6506,7 +6517,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
       doImport()
       marcarDirty()
-      send(res, 200, { ok: true, catsCriadas, itensCriados, erros })
+      try {
+        emit(tid, 'categories', { tenant_id: tid, bulk: true }, 'UPDATE')
+        emit(tid, 'menu_items', { tenant_id: tid, bulk: true }, 'UPDATE')
+      } catch {}
+      send(res, 200, { ok: true, substituir, catsRemovidas, itensRemovidos, catsCriadas, itensCriados, erros })
     } catch(e) {
       send(res, 500, { error: e.message })
     }

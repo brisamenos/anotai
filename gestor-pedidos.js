@@ -2969,23 +2969,30 @@ function selecionarModelo(tipo) {
 }
 
 // ── Limpa todo o cardápio do tenant ──────────────────
+function _cardapioTenantAtual() {
+  const tid = _sessao?.tenant_id || (() => {
+    try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; }
+    catch { return ''; }
+  })();
+  if (!tid) throw new Error('Sessao sem tenant. Recarregue o gestor.');
+  return tid;
+}
+
 async function limparCardapioAtual() {
   console.log('[LIMPAR] iniciando | items:', items.length, '| categories:', categories.length);
-  if (items.length > 0) {
-    console.log('[LIMPAR] deletando menu_items...');
-    const { error: errItems } = await sb.from('menu_items').delete().neq('id', 0);
-    if (errItems) { console.error('[LIMPAR] ❌ itens:', errItems); throw new Error('Erro ao limpar itens: ' + (errItems.message || errItems)); }
-    console.log('[LIMPAR] ✅ itens deletados');
-  }
-  if (categories.length > 0) {
-    console.log('[LIMPAR] deletando categories...');
-    const { error: errCats } = await sb.from('categories').delete().neq('id', 0);
-    if (errCats) { console.error('[LIMPAR] ❌ cats:', errCats); throw new Error('Erro ao limpar categorias: ' + (errCats.message || errCats)); }
-    console.log('[LIMPAR] ✅ categorias deletadas');
-  }
+  const tid = _cardapioTenantAtual();
+  const res = await fetch('/api/importar-cardapio', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+    body: JSON.stringify({ substituir: true, categorias: [] })
+  });
+  const resultado = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(resultado?.error || 'Erro ao limpar cardapio');
   items.length = 0;
   categories.length = 0;
+  try { if (typeof _invalidateImgGalleryCache === 'function') _invalidateImgGalleryCache(); } catch(_) {}
   console.log('[LIMPAR] concluído');
+  return resultado;
 }
 
 // ── Excluir tudo com confirmação dupla ───────────────
@@ -3035,85 +3042,18 @@ async function aplicarModelo() {
   if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Aplicando...'; }
   sbLoading(true);
 
-  let catsCriadas = 0, itensCriados = 0, erros = 0;
-
   try {
-    if (substituir) {
-      console.log('[MODELO] limpando cardápio atual...');
-      await limparCardapioAtual();
-      console.log('[MODELO] cardápio limpo OK');
-    }
+    const tid = _cardapioTenantAtual();
+    const res = await fetch('/api/importar-cardapio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify({ substituir, categorias: modelo.categorias })
+    });
+    const resultado = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(resultado?.error || 'Erro no servidor');
 
-    let catSortOrder = categories.length;
-    console.log('[MODELO] iniciando inserção | categorias do modelo:', modelo.categorias.length);
-
-    for (const catDef of modelo.categorias) {
-      console.log('[MODELO] inserindo categoria:', catDef.name, catDef.label);
-
-      const { data: catData, error: catErr } = await sb.from('categories').insert({
-        name: catDef.name,
-        label: catDef.label,
-        type: catDef.type || 'Itens principais',
-        promo: false,
-        sort_order: ++catSortOrder
-      }).select().single();
-
-      if (catErr || !catData) {
-        erros++;
-        console.error('[MODELO] ❌ Erro ao criar categoria:', catDef.name, '| erro:', catErr, '| data:', catData);
-        sbToast('err', `Erro ao criar categoria "${catDef.label}": ${catErr?.message || 'resposta inválida'}`);
-        continue;
-      }
-
-      console.log('[MODELO] ✅ categoria criada:', catData.id, catData.name);
-      catsCriadas++;
-      categories.push({
-        id: catData.id,
-        name: catData.name,
-        label: catData.label || catDef.label,
-        type: catData.type || catDef.type || 'Itens principais',
-        promo: false,
-        open: false
-      });
-
-      const itensDef = catDef.itens || [];
-      console.log('[MODELO] inserindo', itensDef.length, 'itens na categoria', catData.name);
-
-      for (const itemDef of itensDef) {
-        console.log('[MODELO]   → item:', itemDef.name, '| emoji:', itemDef.emoji, '| preço:', itemDef.price);
-        if (!_sessao?.tenant_id) { erros++; continue; }
-        const { data: itemData, error: itemErr } = await sb.from('menu_items').insert({
-          tenant_id: _sessao.tenant_id,
-          emoji: itemDef.emoji || '🍽️',
-          name: itemDef.name,
-          description: itemDef.description || '',
-          price: parseFloat(itemDef.price) || 0,
-          price_old: null,
-          cat: catData.label,
-          cat_key: catData.name,
-          item_type: itemDef.item_type || 'normal',
-          allow_half: false,
-          max_flavors: 1,
-          promo: false,
-          destaque: false,
-          status: 'active',
-          days: [1, 1, 1, 1, 1, 1, 1],
-          ingredients: [],
-          custom_groups: []
-        }).select().single();
-
-        if (itemErr || !itemData) {
-          erros++;
-          console.error('[MODELO]   ❌ Erro ao criar item:', itemDef.name, '| erro:', itemErr, '| data:', itemData);
-          continue;
-        }
-
-        console.log('[MODELO]   ✅ item criado id:', itemData.id, itemData.name);
-        itensCriados++;
-        items.push(mapItem(itemData));
-      }
-    }
-
+    await loadAllData(true);
+    const { catsCriadas = 0, itensCriados = 0, erros = 0 } = resultado;
     console.log('[MODELO] FIM | cats:', catsCriadas, '| itens:', itensCriados, '| erros:', erros);
 
     closeModal('modal-modelos');
@@ -3172,6 +3112,7 @@ function exportarCardapio() {
             description: i.description || '',
             price: i.price || 0,
             price_old: i.priceOld || null,
+            image_url: i.imageUrl || null,
             status: i.status || 'active',
             item_type: i.itemType || 'normal',
             allow_half: i.allowHalf || false,
@@ -3231,14 +3172,12 @@ async function importarCardapio(inputEl) {
   sbToast('ok', `⏳ Importando ${total} itens…`);
 
   try {
-    if (substituir) await limparCardapioAtual();
-
     // ── Usa endpoint de import em lote (uma única transação no servidor) ──
-    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+    const tid = _cardapioTenantAtual();
     const res = await fetch('/api/importar-cardapio', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-      body: JSON.stringify({ categorias: parsed.categorias })
+      body: JSON.stringify({ substituir, categorias: parsed.categorias })
     });
     const resultado = await res.json();
 

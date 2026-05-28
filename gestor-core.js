@@ -607,6 +607,7 @@ async function loadAllData(silent = false) {
   try {
     // Run all queries independently so one failure doesn't block others
     const safe = q => q.then(r => r).catch(e => ({ data: null, error: e }));
+    const canReadFinance = typeof financeIsUnlocked === 'function' && financeIsUnlocked();
 
     const [
       itemsRes, catsRes, ordersRes, ordersEntregueRes, movsRes,
@@ -624,11 +625,11 @@ async function loadAllData(silent = false) {
       safe(sb.from('orders').select('*').eq('status','entregue')
         .gte('created_at', (() => { const d=new Date(); d.setHours(d.getHours()-3); return d.toISOString().split('T')[0]; })())
         .order('id',{ascending:false}).limit(30)),
-      safe(sb.from('movimentos').select('*').gte('created_at', (() => {
+      canReadFinance ? safe(sb.from('movimentos').select('*').gte('created_at', (() => {
         // Usa data local BR (UTC-3) para não perder movimentos do início do dia
         const d = new Date(); d.setHours(d.getHours() - 3);
         return d.toISOString().split('T')[0];
-      })()).order('created_at')),
+      })()).order('created_at')) : Promise.resolve({ data: [] }),
       safe(sb.from('cupons').select('*').order('id')),
       safe(sb.from('mesas').select('*').order('num')),
       safe(sb.from('estoque').select('*').order('id')),
@@ -668,7 +669,8 @@ async function loadAllData(silent = false) {
     (mesaAbertaRes?.data || []).forEach(o => {
       if (!mesaOrdersCache.find(x => x.id === o.id)) mesaOrdersCache.unshift({ ...o, items: _parseItems(o.items), num: _orderNum(o.id, o.order_num) });
     });
-    if (movsRes.data?.length)     movimentos    = movsRes.data.map(m => ({
+    if (!canReadFinance)          movimentos    = [];
+    else if (movsRes.data?.length) movimentos   = movsRes.data.map(m => ({
       id: m.id, desc: m.description||'', tipo: m.tipo,
       val: parseFloat(m.val)||0, pag: m.pag||'', time: m.time||''
     }));

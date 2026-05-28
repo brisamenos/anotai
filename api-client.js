@@ -99,16 +99,29 @@
     return s ? '?' + s : '';
   }
 
+  function tenantScopedFilePath(filePath) {
+    const raw = String(filePath || '');
+    const tid = String(getTenantId() || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!tid) return raw;
+    const parts = raw.split('/');
+    const base = (parts.pop() || 'upload.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const scopedBase = base.startsWith(`${tid}_`) ? base : `${tid}_${base}`;
+    return [...parts, scopedBase].filter(Boolean).join('/');
+  }
+
   // ── Storage (upload de imagens) ───────────────────────
   class StorageBucket {
     constructor(bucket) { this.bucket = bucket; }
     upload(filePath, file, opts = {}) {
       return new Promise(async resolve => {
         try {
+          const safePath = tenantScopedFilePath(filePath);
+          const headers = defaultHeaders({});
+          delete headers['Content-Type'];
           const formData = new FormData();
-          formData.append('file', file, filePath);
-          const res = await fetch(`${BASE}/storage/v1/object/${this.bucket}/${filePath}`, {
-            method: 'POST', body: formData
+          formData.append('file', file, safePath);
+          const res = await fetch(`${BASE}/storage/v1/object/${this.bucket}/${safePath}`, {
+            method: 'POST', headers, body: formData
           });
           const data = await res.json();
           resolve({ data, error: res.ok ? null : data });
@@ -116,7 +129,8 @@
       });
     }
     getPublicUrl(filePath) {
-      return { data: { publicUrl: `${BASE}/uploads/${filePath.split('/').pop()}` } };
+      const safePath = tenantScopedFilePath(filePath);
+      return { data: { publicUrl: `${BASE}/uploads/${safePath.split('/').pop()}` } };
     }
   }
 

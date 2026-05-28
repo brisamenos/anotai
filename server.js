@@ -1985,6 +1985,10 @@ async function handleREST(req, res, table, params, body) {
   const cols = TABLE_COLS[table]
   if (!cols) return send(res, 404, { error: 'Tabela não encontrada' })
   const tenantId        = getTenantId(req, params)
+  const tenantScoped    = cols.includes('tenant_id') && !NO_TENANT_FILTER.has(table)
+  if (tenantScoped && !tenantId && ['PATCH','DELETE'].includes(req.method)) {
+    return send(res, 400, { error: 'x-tenant-id obrigatório para alterar dados do tenant' })
+  }
   if (FINANCE_REST_RULES[table]?.has(req.method) && !validarFinanceAccess(req, tenantId)) {
     return sendFinanceLocked(res)
   }
