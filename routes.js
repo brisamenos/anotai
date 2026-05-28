@@ -6528,6 +6528,69 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ── Repara imagens antigas salvas como data URL no cardápio ─────────
+  if (req.method === 'POST' && upath === '/api/cardapio/reparar-imagens') {
+    const tid = req.headers['x-tenant-id'] || params.get('tenant_id') || ''
+    if (!tid) { send(res, 401, { error: 'x-tenant-id obrigatório' }); return true }
+    try {
+      const tenant = db.prepare('SELECT id FROM tenants WHERE id=? AND ativo=1').get(tid)
+      if (!tenant) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
+
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true })
+      const rows = db.prepare(`
+        SELECT id, image_url
+          FROM menu_items
+         WHERE tenant_id=?
+           AND image_url LIKE 'data:image/%;base64,%'
+      `).all(tid)
+
+      const extByMime = {
+        'image/jpeg': 'jpg',
+        'image/jpg': 'jpg',
+        'image/png': 'png',
+        'image/webp': 'webp',
+        'image/gif': 'gif',
+        'image/svg+xml': 'svg'
+      }
+      const safeTid = String(tid).replace(/[^a-zA-Z0-9_-]/g, '')
+      const cache = new Map()
+      const update = db.prepare('UPDATE menu_items SET image_url=? WHERE id=? AND tenant_id=?')
+      let converted = 0, files = 0, skipped = 0
+
+      for (const row of rows) {
+        const dataUrl = String(row.image_url || '')
+        let publicUrl = cache.get(crypto.createHash('sha256').update(dataUrl).digest('hex'))
+        if (!publicUrl) {
+          const m = dataUrl.match(/^data:(image\/(?:jpeg|jpg|png|webp|gif|svg\+xml));base64,([\s\S]+)$/i)
+          if (!m) { skipped++; continue }
+          const mime = m[1].toLowerCase()
+          const ext = extByMime[mime] || 'jpg'
+          const buf = Buffer.from(m[2], 'base64')
+          if (!buf.length || buf.length > 10 * 1024 * 1024) { skipped++; continue }
+          const hash = crypto.createHash('sha256').update(buf).digest('hex').slice(0, 20)
+          const fname = `${safeTid}_${hash}.${ext}`
+          const fpath = path.join(UPLOADS_DIR, fname)
+          if (!fs.existsSync(fpath)) {
+            fs.writeFileSync(fpath, buf)
+            files++
+          }
+          publicUrl = `/uploads/${fname}`
+          cache.set(crypto.createHash('sha256').update(dataUrl).digest('hex'), publicUrl)
+        }
+        converted += update.run(publicUrl, row.id, tid).changes || 0
+      }
+
+      if (converted) {
+        marcarDirty()
+        try { emit(tid, 'menu_items', { tenant_id: tid, bulk: true, image_repair: true }, 'UPDATE') } catch {}
+      }
+      send(res, 200, { ok: true, scanned: rows.length, converted, files, skipped })
+    } catch(e) {
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
   // ════════════════════════════════════════════════════════
   // ADMIN — AUDIT LOG, FATURAMENTO, COBRANÇA, SAÚDE
   // ════════════════════════════════════════════════════════

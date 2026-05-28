@@ -605,6 +605,7 @@ async function loadAllData(silent = false) {
   }
   if (!silent) sbLoading(true);
   try {
+    await ensureCardapioImageUrlsOptimized();
     // Run all queries independently so one failure doesn't block others
     const safe = q => q.then(r => r).catch(e => ({ data: null, error: e }));
     const canReadFinance = typeof financeIsUnlocked === 'function' && financeIsUnlocked();
@@ -784,6 +785,26 @@ async function loadAllData(silent = false) {
     if (!silent) sbToast('err', 'Erro ao conectar ao banco de dados');
   } finally {
     if (!silent) sbLoading(false);
+  }
+}
+
+let _cardapioImageRepairTenant = '';
+async function ensureCardapioImageUrlsOptimized() {
+  const tid = _sessao?.tenant_id || '';
+  if (!tid || _cardapioImageRepairTenant === tid) return;
+  _cardapioImageRepairTenant = tid;
+  try {
+    const res = await fetch('/api/cardapio/reparar-imagens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify({})
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || 'Falha ao reparar imagens');
+    if (data.converted) console.log('[CARDAPIO] imagens inline convertidas:', data);
+  } catch(e) {
+    _cardapioImageRepairTenant = '';
+    console.warn('[CARDAPIO] reparo de imagens pulado:', e.message || e);
   }
 }
 
@@ -2270,16 +2291,24 @@ function previewEditItemImage(inp) {
 
 // ── Upload image to Supabase Storage ─────────
 async function uploadItemImage(file, itemId) {
-  // Converte para base64 data URL — salva direto no banco, sem depender do filesystem do container
   if (file.size > 2 * 1024 * 1024) throw new Error('Imagem muito grande. Use uma imagem de até 2MB.');
-  const dataUrl = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload  = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
-    reader.readAsDataURL(file);
-  });
+  const extFromType = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif'
+  };
+  const ext = extFromType[file.type] || (String(file.name || '').split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+  const safeItem = String(itemId || 'novo').replace(/[^a-zA-Z0-9_-]/g, '');
+  const filePath = `menu-items/${safeItem}-${Date.now()}.${ext}`;
+  const bucket = sb.storage.from('menu-images');
+  const { data, error } = await bucket.upload(filePath, file, { upsert: true });
+  if (error) throw new Error(error.message || error.error || 'Falha ao enviar imagem');
+  const publicUrl = data?.publicUrl || data?.url || bucket.getPublicUrl(filePath).data.publicUrl;
+  if (!publicUrl) throw new Error('Upload sem URL pública');
   _invalidateImgGalleryCache(); // nova imagem disponível na galeria
-  return dataUrl;
+  return publicUrl;
 }
 
 function triggerImageUpload(itemId, itemName) {
