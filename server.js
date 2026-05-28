@@ -138,6 +138,7 @@ db.exec(`
     troco REAL, status TEXT DEFAULT 'analise', mesa_num INTEGER,
     garcom_id INTEGER, garcom_nome TEXT, customer_id INTEGER,
     client_request_id TEXT,
+    session_ref TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
   );
@@ -1047,6 +1048,7 @@ const HAS_ORDERS_UPDATED_AT = garantirColuna(
 )
 
 garantirColuna('orders', 'client_request_id', "TEXT")
+garantirColuna('orders', 'session_ref', "TEXT")
 try {
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_client_request ON orders(tenant_id, client_request_id) WHERE client_request_id IS NOT NULL")
 } catch(e) {
@@ -1733,7 +1735,7 @@ const TABLE_COLS = {
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','clientes_json','pagamentos_json','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
-  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','garcom_id','garcom_nome','customer_id','client_request_id','order_num','wa_track','created_at'],
+  orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','session_ref','garcom_id','garcom_nome','customer_id','client_request_id','order_num','wa_track','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
   estoque:      ['id','tenant_id','name','qty','unit','min_qty','cost','fornecedor_id','updated_at'],
   estoque_receitas: ['id','tenant_id','item_id','estoque_id','qty','unit','ativo','created_at','updated_at'],

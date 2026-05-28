@@ -459,21 +459,24 @@ async function cobrarMesaDireta(num) {
   sbLoading(true);
   try {
     const { data: activeOrders } = await sb.from('orders')
-      .select('total,taxa,items,status,created_at')
+      .select('total,taxa,items,status,created_at,session_ref')
       .eq('mesa_num', numInt)
       .in('status', ['analise', 'producao', 'pronto', 'mesa_aberta']);
 
-    const hasComanda = (activeOrders || []).some(o => o.status === 'mesa_aberta');
+    const sessionActiveOrders = (activeOrders || []).filter(o =>
+      typeof mesaOrderBelongsToSession === 'function' ? mesaOrderBelongsToSession(o, t) : true
+    );
+    const hasComanda = sessionActiveOrders.some(o => o.status === 'mesa_aberta');
     let immediateEntregues = [];
     if (!hasComanda && t?.opened_at) {
-      const sessionStart = new Date(t.opened_at).getTime() - 5000;
       const { data: entregueData } = await sb.from('orders')
-        .select('total,taxa,items,status,created_at')
-        .eq('mesa_num', numInt).eq('status', 'entregue')
-        .gte('created_at', new Date(sessionStart).toISOString());
-      immediateEntregues = entregueData || [];
+        .select('total,taxa,items,status,created_at,session_ref')
+        .eq('mesa_num', numInt).eq('status', 'entregue');
+      immediateEntregues = (entregueData || []).filter(o =>
+        typeof mesaOrderBelongsToSession === 'function' ? mesaOrderBelongsToSession(o, t) : true
+      );
     }
-    const sessionTotal = calcularTotalMesa([...(activeOrders || []), ...immediateEntregues]);
+    const sessionTotal = calcularTotalMesa([...sessionActiveOrders, ...immediateEntregues]);
 
     // Apenas marca mesa como waiting — pedidos ficam ativos até confirmar pagamento
     await sb.from('mesas').update({ status: 'waiting', total: sessionTotal, updated_at: new Date().toISOString() }).eq('num', numInt);
@@ -505,11 +508,14 @@ async function fecharMesa(num) {
     // independente do valor de opened_at.
     // Pedidos ficam como mesa_aberta até aqui — query simples e direta
     const { data: activeOrders } = await sb.from('orders')
-      .select('total,taxa,items,status,created_at')
+      .select('total,taxa,items,status,created_at,session_ref')
       .eq('mesa_num', numInt)
       .in('status', ['analise', 'producao', 'pronto', 'mesa_aberta']);
 
-    const sessionTotal = calcularTotalMesa(activeOrders || []);
+    const sessionOrders = (activeOrders || []).filter(o =>
+      typeof mesaOrderBelongsToSession === 'function' ? mesaOrderBelongsToSession(o, t) : true
+    );
+    const sessionTotal = calcularTotalMesa(sessionOrders);
 
     // Apenas marca a mesa como waiting — pedidos ficam mesa_aberta
     // igual ao fluxo do garçom. Pedidos só viram entregue ao confirmar pagamento.
@@ -593,6 +599,7 @@ function _mesaOrdersSessaoPagamento(num, mesa) {
   const sessionStart = openedAt ? new Date(openedAt).getTime() - 5000 : 0;
   return (mesaOrdersCache || []).filter(o => {
     if (parseInt(o.mesa_num) !== numInt || o.status === 'cancelado') return false;
+    if (typeof mesaOrderBelongsToSession === 'function') return mesaOrderBelongsToSession(o, mesa);
     if (o.session_ref !== undefined && o.session_ref !== null) return o.session_ref === openedAt;
     if (!sessionStart) return o.status !== 'entregue';
     return new Date(o.created_at || 0).getTime() >= sessionStart;
@@ -944,6 +951,7 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
   const _sessStart = t?.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
   const _cacheOrdersTaxa = mesaOrdersCache.filter(o => {
     if (parseInt(o.mesa_num) !== parseInt(num) || o.status === 'cancelado') return false;
+    if (typeof mesaOrderBelongsToSession === 'function') return mesaOrderBelongsToSession(o, t);
     if (o.session_ref !== undefined && o.session_ref !== null) return o.session_ref === t?.opened_at;
     if (!_sessStart) return o.status !== 'entregue';
     return new Date(o.created_at || 0).getTime() >= _sessStart;
@@ -1063,13 +1071,16 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
     try {
       // Pedidos ficam como mesa_aberta até o gestor confirmar pagamento
       const { data: sessionOrders } = await sb.from('orders')
-        .select('id,total,taxa,items,status,created_at')
+        .select('id,total,taxa,items,status,created_at,session_ref')
         .eq('mesa_num', parseInt(num))
         .in('status', ['mesa_aberta', 'analise', 'producao', 'pronto'])
         .order('id', { ascending: true });
+      const sessionOrdersFiltrados = (sessionOrders || []).filter(o =>
+        typeof mesaOrderBelongsToSession === 'function' ? mesaOrderBelongsToSession(o, t) : true
+      );
 
       if (!_isSplit) {
-        const ordersPagamento = (sessionOrders || []).length ? sessionOrders : cacheOrdersPagamento;
+        const ordersPagamento = sessionOrdersFiltrados.length ? sessionOrdersFiltrados : cacheOrdersPagamento;
         const ctxAtualizado = _mesaMontarContextoPagamento(num, ordersPagamento || [], totalOriginal);
         if (ctxAtualizado) {
           totalVal = ctxAtualizado.opcoes.find(o => o.key === ctxAtualizado.selecionadaKey)?.restante ?? ctxAtualizado.restanteMesa;
@@ -1079,7 +1090,7 @@ async function openRegistrarPagamento(num, totalJaCalculado) {
 
       // Taxa agora é um item da comanda — aparece naturalmente na lista
       const itemMap = {};
-      (sessionOrders || []).forEach(o => {
+      sessionOrdersFiltrados.forEach(o => {
         _parseItems(o.items).forEach(i => {
           if (i.item_status === 'cancelado') return;
           const key = i.item_id || i.name;
@@ -1518,6 +1529,7 @@ async function confirmarPagamentoMesa() {
     const _cacheComp = mesaOrdersCache
       .filter(o => {
         if (parseInt(o.mesa_num) !== num || o.status === 'cancelado') return false;
+        if (typeof mesaOrderBelongsToSession === 'function') return mesaOrderBelongsToSession(o, { opened_at: _savedOpenedAt });
         if (o.session_ref !== undefined && o.session_ref !== null) {
           return o.session_ref === _savedOpenedAt;
         }
@@ -1568,6 +1580,7 @@ function abrirComprovantesMesa(num, totalVal, forma, time, ordensPreSalvas, taxa
     const _oa = _mesa?.opened_at;
     sessionOrders = mesaOrdersCache.filter(o => {
       if (parseInt(o.mesa_num) !== parseInt(num) || o.status === 'cancelado') return false;
+      if (typeof mesaOrderBelongsToSession === 'function') return mesaOrderBelongsToSession(o, _mesa);
       if (o.session_ref !== undefined && o.session_ref !== null) return o.session_ref === _oa;
       if (!_oa) return o.status !== 'entregue';
       return new Date(o.created_at || 0).getTime() >= new Date(_oa).getTime() - 5000;

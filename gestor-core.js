@@ -928,16 +928,9 @@ function _renderMesaPageFromCache() {
   const sessionOrders = mesaOrdersCache.filter(o => {
     const mesa = activeTables.find(t => t.num === parseInt(o.mesa_num));
     if (!mesa) return false;
-    // Pedidos com session_ref explícita (bebidas e novos pedidos mesa_aberta):
-    // inclui apenas se a referência bate com a sessão atual da mesa.
-    // Isso resolve o race condition (created_at < opened_at) e o caso
-    // em que opened_at ainda é null quando o pedido de bebida chega.
-    if (o.session_ref !== undefined && o.session_ref !== null) {
-      return o.session_ref === mesa.opened_at;
-    }
-    // Fallback para pedidos antigos sem session_ref
-    if (!mesa.opened_at) return o.status !== 'entregue';
-    return new Date(o.created_at || 0).getTime() >= new Date(mesa.opened_at).getTime() - 5000;
+    return typeof mesaOrderBelongsToSession === 'function'
+      ? mesaOrderBelongsToSession(o, mesa)
+      : (!mesa.opened_at || new Date(o.created_at || 0).getTime() >= new Date(mesa.opened_at).getTime() - 5000);
   });
 
   // Atualização inteligente: só substitui o card da mesa que mudou
@@ -985,13 +978,9 @@ async function _printComandaMesa(mesaNum, mesaData) {
   const pedidos = mesaOrdersCache.filter(o => {
     if (parseInt(o.mesa_num) !== _mesaNum) return false;
     if (o.status === 'cancelado') return false;
-    // session_ref explícita (bebidas e novos pedidos)
-    if (o.session_ref !== undefined && o.session_ref !== null) {
-      return o.session_ref === mesa?.opened_at;
-    }
-    // Fallback por opened_at
-    if (!mesa?.opened_at) return o.status !== 'entregue';
-    return new Date(o.created_at || 0).getTime() >= new Date(mesa.opened_at).getTime() - 5000;
+    return typeof mesaOrderBelongsToSession === 'function'
+      ? mesaOrderBelongsToSession(o, mesa)
+      : (!mesa?.opened_at || new Date(o.created_at || 0).getTime() >= new Date(mesa.opened_at).getTime() - 5000);
   });
   if (!pedidos.length) return;
 

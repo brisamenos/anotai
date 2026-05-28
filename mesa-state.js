@@ -39,6 +39,33 @@ function _mesaJsonArray(raw) {
   return [];
 }
 
+function _mesaTimeMs(raw) {
+  if (!raw) return 0;
+  if (raw instanceof Date) return raw.getTime();
+  let s = String(raw).trim();
+  if (!s) return 0;
+  if (s.includes(' ') && !s.includes('T')) s = s.replace(' ', 'T');
+  if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s += 'Z';
+  const t = new Date(s).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+function _mesaSqlUtcDate(ms) {
+  const d = new Date(ms);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+}
+
+function mesaOrderBelongsToSession(order, mesa) {
+  if (!order || !mesa) return false;
+  if (order.session_ref !== undefined && order.session_ref !== null) {
+    return !mesa.opened_at || order.session_ref === mesa.opened_at;
+  }
+  if (!mesa.opened_at) return order.status !== 'entregue';
+  const sessionStart = _mesaTimeMs(mesa.opened_at) - 5000;
+  return _mesaTimeMs(order.created_at) >= sessionStart;
+}
+
 function mesaPagamentos(mesa) {
   return _mesaJsonArray(mesa?.pagamentos_json);
 }
@@ -113,9 +140,9 @@ function _patchOrderInCache(order) {
   const mesa = tables.find(t => t.num === parseInt(order.mesa_num));
   if (!mesa) return;
 
-  const orderTime = new Date(order.created_at || Date.now()).getTime();
   if (mesa.opened_at) {
-    const sessionStart = new Date(mesa.opened_at).getTime() - 5000;
+    const sessionStart = _mesaTimeMs(mesa.opened_at) - 5000;
+    const orderTime = _mesaTimeMs(order.created_at || Date.now());
     if (orderTime >= sessionStart) mesaOrdersCache.unshift(enriched);
   } else if (order.status !== 'entregue') {
     mesaOrdersCache.unshift(enriched);
@@ -140,9 +167,7 @@ function _normalizeMesa(t) {
 // Filtra os pedidos que pertencem à sessão actual de uma mesa
 function _sessionFilter(orders, mesa) {
   if (!mesa) return [];
-  if (!mesa.opened_at) return orders.filter(o => o.status !== 'entregue');
-  const sessionStart = new Date(mesa.opened_at).getTime() - 5000;
-  return orders.filter(o => new Date(o.created_at || 0).getTime() >= sessionStart);
+  return (orders || []).filter(o => mesaOrderBelongsToSession(o, mesa));
 }
 
 // ── refreshMesa(num) — atualiza UMA mesa e seus pedidos ──────────────────────
@@ -171,25 +196,22 @@ async function refreshMesa(num) {
     return;
   }
 
-  // 2. Busca pedidos desta sessão (ativos + entregues recentes)
-  const sessionStart = mesa.opened_at
-    ? new Date(new Date(mesa.opened_at).getTime() - 5000).toISOString()
-    : null;
-
+  // 2. Busca pedidos da mesa e filtra a sessão no cliente. O banco grava
+  // created_at em UTC sem "Z"; comparar direto no SQL com ISO pode misturar sessões.
   const baseQuery = sb.from('orders')
     .select('*')
     .eq('mesa_num', numInt)
     .neq('status', 'cancelado')
     .order('id', { ascending: true });
 
-  // Sem opened_at: usa janela de 6h para pegar entregue do garçom também
-  const fallbackCutoff = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
-  const { data: orders } = await baseQuery.gte('created_at', sessionStart || fallbackCutoff);
+  const { data: orders } = await baseQuery;
 
   // 3. Substitui apenas as entradas desta mesa no cache
   mesaOrdersCache = [
     ...mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== numInt),
-    ...(orders || []).map(o => ({ ...o, items: _pi(o.items), num: _orderNum(o.id, o.order_num) }))
+    ...(orders || [])
+      .filter(o => mesaOrderBelongsToSession(o, mesa))
+      .map(o => ({ ...o, items: _pi(o.items), num: _orderNum(o.id, o.order_num) }))
   ];
 }
 
@@ -222,7 +244,7 @@ async function refreshMesasState() {
     .select('*')
     .not('mesa_num', 'is', null)
     .eq('status', 'entregue')
-    .gte('created_at', new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString())
+    .gte('created_at', _mesaSqlUtcDate(Date.now() - 3 * 60 * 60 * 1000))
     .order('id', { ascending: true });
 
   // 4. Monta cache: todos os pedidos ativos + entregues recentes de mesas não-livres.
@@ -236,9 +258,7 @@ async function refreshMesasState() {
       seen.add(o.id);
       const mesa = activeTables.find(t => t.num === parseInt(o.mesa_num));
       if (!mesa) return false;
-      if (!mesa.opened_at) return true; // sem sessão definida: inclui tudo
-      const sessionStart = new Date(mesa.opened_at).getTime() - 5000;
-      return new Date(o.created_at || 0).getTime() >= sessionStart;
+      return mesaOrderBelongsToSession(o, mesa);
     })
     .map(o => ({ ...o, items: _pi(o.items), num: _orderNum(o.id, o.order_num) }));
 }

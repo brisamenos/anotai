@@ -107,9 +107,7 @@ function _kanbanMesaEmAtendimento(order) {
 
 function _kanbanOrderDentroSessaoMesa(order, mesa) {
   if (!order?.mesa_num || !mesa) return false;
-  if (order.session_ref !== undefined && order.session_ref !== null) {
-    return !mesa.opened_at || order.session_ref === mesa.opened_at;
-  }
+  if (typeof mesaOrderBelongsToSession === 'function') return mesaOrderBelongsToSession(order, mesa);
   if (!mesa.opened_at) return order.status !== 'entregue';
   return new Date(order.created_at || 0).getTime() >= new Date(mesa.opened_at).getTime() - 5000;
 }
@@ -2380,6 +2378,7 @@ async function createOrder() {
         .order('id', { ascending: false })
         .limit(5);
       const existing = (Array.isArray(existingArr) ? existingArr : []).find(o => {
+        if (typeof mesaOrderBelongsToSession === 'function') return mesaOrderBelongsToSession(o, mesaAtual);
         if (!sessionStartTs) return true;
         return new Date(o.created_at || 0).getTime() >= sessionStartTs;
       }) || null;
@@ -2414,6 +2413,7 @@ async function createOrder() {
           total: newTotal,
           taxa: 0,
           mesa_num: mesaNum,
+          session_ref: mesaAtual?.opened_at || _now,
           status: 'mesa_aberta',
           time,
           pag: pag || 'Mesa'

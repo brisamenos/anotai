@@ -718,9 +718,12 @@ function renderMesaCard(t, orders) {
   const bordColor = isWaiting ? 'var(--accent3)' : t.status === 'busy' ? 'var(--accent)' : 'var(--border)';
 
   // Com o novo modelo, o total vem da comanda única (mesa_aberta) no cache
-  const comanda = mesaOrdersCache.find(o =>
-    o.status === 'mesa_aberta' && parseInt(o.mesa_num) === parseInt(t.num)
-  );
+  const comanda = (orders || []).find(o => o.status === 'mesa_aberta')
+    || mesaOrdersCache.find(o =>
+      o.status === 'mesa_aberta' &&
+      parseInt(o.mesa_num) === parseInt(t.num) &&
+      (typeof mesaOrderBelongsToSession !== 'function' || mesaOrderBelongsToSession(o, t))
+    );
 
   const otherSessionOrders = orders.filter(o => !comanda || o.id !== comanda.id);
   const totalOutrosPedidos = otherSessionOrders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
@@ -766,10 +769,9 @@ function renderMesaCard(t, orders) {
       // Mesa aguardando pagamento: sempre mostra resumo consolidado,
       // nunca os cards individuais de pedidos anteriores
       ? (function () {
-        const sessionStart = t.opened_at ? new Date(t.opened_at).getTime() - 5000 : 0;
         const allSessionOrders = mesaOrdersCache.filter(o =>
           parseInt(o.mesa_num) === parseInt(t.num) &&
-          new Date(o.created_at || 0).getTime() >= sessionStart
+          (typeof mesaOrderBelongsToSession !== 'function' || mesaOrderBelongsToSession(o, t))
         );
         if (!allSessionOrders.length) {
           return `<div style="color:var(--muted);font-size:12.5px;text-align:center;padding:10px 0">Consumo registrado</div>`;
@@ -1813,6 +1815,7 @@ async function submitGarcomOrder() {
         tenant_id: _sessao.tenant_id,
         client: `Mesa ${garcomMesa}`, phone: '', addr: `Mesa ${garcomMesa}`,
         mesa_num: garcomMesa, items: itemsArr, total: totCozinha, taxa: 0,
+        session_ref: _mesa?.opened_at || '',
         status: mesaAutoAccept ? 'producao' : 'analise', time, pag: 'Mesa'
       }).select().single();
       if (oErr) throw oErr;
@@ -1836,6 +1839,7 @@ async function submitGarcomOrder() {
         tenant_id: _sessao.tenant_id,
         client: `Mesa ${garcomMesa}`, phone: '', addr: `Mesa ${garcomMesa}`,
         mesa_num: garcomMesa, items: itemsArrImediato, total: totImediato, taxa: 0,
+        session_ref: _mesa?.opened_at || '',
         status: 'entregue', time, pag: 'Mesa'
       }).select().single();
       if (bErr) throw bErr;
@@ -2051,7 +2055,10 @@ async function gestorAbrirDetalheMesa(num) {
       .in('status', ['mesa_aberta', 'analise', 'producao', 'pronto'])
       .order('id', { ascending: true });
 
-    _detalheMesaOrders = (data || []).map(o => ({ ...o, items: _parseItems(o.items) }));
+    const mesaAtual = tables.find(t => parseInt(t.num) === _detalheMesaNum);
+    _detalheMesaOrders = (data || [])
+      .filter(o => typeof mesaOrderBelongsToSession !== 'function' || mesaOrderBelongsToSession(o, mesaAtual))
+      .map(o => ({ ...o, items: _parseItems(o.items) }));
   } catch(e) {
     document.getElementById('mesa-detalhe-itens-list').innerHTML =
       '<div style="font-size:12px;color:var(--red);text-align:center;padding:8px">Erro ao carregar</div>';
@@ -2191,6 +2198,7 @@ async function _confirmarTransferirItem(itemIdx, mesaDestino) {
   if (!item) return;
 
   try {
+    const mesaDestinoObj = tables.find(t => parseInt(t.num) === parseInt(mesaDestino));
     // Remove da comanda origem
     const ordemOrigem = _detalheMesaOrders.find(o =>
       _parseItems(o.items).some(i => i.name === item.name && i.item_status !== 'cancelado')
@@ -2207,8 +2215,11 @@ async function _confirmarTransferirItem(itemIdx, mesaDestino) {
     }
 
     // Adiciona na comanda destino
-    const { data: comandaDestino } = await sb.from('orders')
-      .select('*').eq('mesa_num', mesaDestino).eq('status', 'mesa_aberta').single();
+    const { data: comandasDestino } = await sb.from('orders')
+      .select('*').eq('mesa_num', mesaDestino).eq('status', 'mesa_aberta').order('id', { ascending: false }).limit(5);
+    const comandaDestino = (comandasDestino || []).find(o =>
+      typeof mesaOrderBelongsToSession !== 'function' || mesaOrderBelongsToSession(o, mesaDestinoObj)
+    );
 
     if (comandaDestino) {
       const itensDestino = [..._parseItems(comandaDestino.items), { ...item, item_status: 'pronto' }];
@@ -2224,6 +2235,7 @@ async function _confirmarTransferirItem(itemIdx, mesaDestino) {
         mesa_num: mesaDestino, items: [{ ...item, item_status: 'pronto' }],
         total: (parseFloat(item.price)||0) * (parseInt(item.qty)||1),
         status: 'mesa_aberta', pag: 'Mesa',
+        session_ref: mesaDestinoObj?.opened_at || '',
         time: new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})
       });
     }

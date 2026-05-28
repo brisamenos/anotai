@@ -2154,7 +2154,7 @@ async function garcomPrint(order, newItems) {
         for (const job of cozinhaJobs) {
           await window.ElectronPrint.printHtml(job.html, { printer: job.printer || printerCozinha, paperWidth: pw }).catch(()=>{});
         }
-        showToast(cozinhaJobs.length ? '🖨️ Cozinha' : 'ℹ️ Sem itens de cozinha para imprimir');
+        if (cozinhaJobs.length) showToast('🖨️ Cozinha');
         return;
       }
       // Print Agent — dois jobs separados, sem verificar status
@@ -2166,7 +2166,6 @@ async function garcomPrint(order, newItems) {
           jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html: htmlCozinha, format: fmt, printer: printerCozinha, tipo: 'cozinha' }) }));
         }
         if (jobs.length) { await Promise.all(jobs); showToast('🖨️ Enviado'); return; }
-        showToast('ℹ️ Sem itens de cozinha para imprimir');
         return;
       } catch(e) { console.warn('[PRINT] Agent falhou:', e.message); }
     } else {
@@ -2872,6 +2871,10 @@ async function confirmarAbrirMesa() {
     ? { status: 'busy', opened_at: now, clientes_json: [], pagamentos_json: [], updated_at: now }
     : { status: 'busy', updated_at: now };
   await sb.from('mesas').update(updatePayload).eq('num', num);
+  if (shouldSetOpenedAt) {
+    allMesaOrders = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) !== Number(num));
+    myOrders = myOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) !== Number(num));
+  }
   if (mesa) { mesa.status = 'busy'; mesa.updated_at = now; if (shouldSetOpenedAt) { mesa.opened_at = now; mesa.clientes_json = []; mesa.pagamentos_json = []; } }
   renderMesas();
   document.getElementById('sheet-pedido').classList.add('on');
@@ -3538,8 +3541,10 @@ async function submitPedido() {
   const totFood    = foodItems.reduce((s,i)=>s+i.price*i.qty,0);
   const totDrink   = drinkItems.reduce((s,i)=>s+i.price*i.qty,0);
 
+  let mesaAtual = null;
+  let newItems = [];
   try {
-    const mesaAtual = tables.find(t => t.num === activeMesa);
+    mesaAtual = tables.find(t => t.num === activeMesa);
     if (mesaAtual && mesaAtual.status !== 'busy') {
       const _now = new Date().toISOString();
       await sb.from('mesas').update({ status:'busy', opened_at: _now, updated_at: _now }).eq('num', activeMesa);
@@ -3548,7 +3553,7 @@ async function submitPedido() {
 
     // Monta itens com status individual por item
     const _ts = Date.now();
-    const newItems = [
+    newItems = [
       ...foodItems.map((i, idx) => ({
         id: i.id || null, qty: i.qty, name: i.name, price: i.price,
         cat: i.cat || '', cat_key: i.cat_key || i.catKey || i.cat || '',
@@ -3581,6 +3586,7 @@ async function submitPedido() {
       .limit(5);
 
     const existing = (Array.isArray(existingArr) ? existingArr : []).find(o => {
+      if (mesaAtual) return _garcomOrderBelongsToMesaSession(o, mesaAtual);
       if (!mesaSessionStart) return true;
       return new Date(o.created_at || 0).getTime() >= mesaSessionStart;
     }) || null;
@@ -3607,7 +3613,8 @@ async function submitPedido() {
         client: `Mesa ${activeMesa}`, phone: '', addr: `Mesa ${activeMesa}`,
         items: newItems, total: newTotal, taxa: 0,
         status: 'mesa_aberta', time, pag: 'Mesa',
-        mesa_num: activeMesa, garcom_id: currentGarcom?.id, garcom_nome: currentGarcom?.nome
+        mesa_num: activeMesa, session_ref: mesaAtual?.opened_at || '',
+        garcom_id: currentGarcom?.id, garcom_nome: currentGarcom?.nome
       }).select().single();
       if (error) throw error;
       _orderId = data.id;
@@ -3631,7 +3638,8 @@ async function submitPedido() {
         client: `Mesa ${activeMesa}`, phone: '', addr: `Mesa ${activeMesa}`,
         items: newItems, total: newItems.reduce((s,i)=>s+(i.price||0)*(i.qty||1),0),
         status: 'mesa_aberta', time,
-        mesa_num: activeMesa, garcom_id: currentGarcom?.id, garcom_nome: currentGarcom?.nome
+        mesa_num: activeMesa, session_ref: mesaAtual?.opened_at || '',
+        garcom_id: currentGarcom?.id, garcom_nome: currentGarcom?.nome
       };
       _salvarPedidoOffline(pedidoOffline);
       closeSheet();
@@ -3969,11 +3977,7 @@ async function loadPedidosDaMesa() {
     // e que foram abertas APÓS a mesa abrir (evita comandas de sessões anteriores)
     allMesaOrders = (data || []).filter(o => {
       const mesa = activeMesas.find(t => Number(t.num) === Number(o.mesa_num));
-      if (!mesa) return false;
-      if (!mesa.opened_at) return true;
-      const orderTime    = new Date(o.created_at || 0).getTime();
-      const mesaOpenTime = new Date(mesa.opened_at).getTime();
-      return orderTime >= mesaOpenTime - 5000;
+      return _garcomOrderBelongsToMesaSession(o, mesa);
     });
 
     // "Meus Pedidos": apenas comandas onde ESTE garçom tem itens
@@ -4140,6 +4144,26 @@ function _parseItems(items) {
   return [];
 }
 
+function _garcomTimeMs(raw) {
+  if (!raw) return 0;
+  if (raw instanceof Date) return raw.getTime();
+  let s = String(raw).trim();
+  if (!s) return 0;
+  if (s.includes(' ') && !s.includes('T')) s = s.replace(' ', 'T');
+  if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s += 'Z';
+  const t = new Date(s).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+function _garcomOrderBelongsToMesaSession(order, mesa) {
+  if (!order || !mesa) return false;
+  if (order.session_ref !== undefined && order.session_ref !== null) {
+    return !mesa.opened_at || order.session_ref === mesa.opened_at;
+  }
+  if (!mesa.opened_at) return order.status !== 'entregue';
+  return _garcomTimeMs(order.created_at) >= _garcomTimeMs(mesa.opened_at) - 5000;
+}
+
 function calcularTotalMesa(orders) {
   let total = 0;
   (orders || []).forEach(o => {
@@ -4179,21 +4203,17 @@ async function refreshMesa(num) {
   const mesa = tables.find(t => t.num === numInt);
   if (!mesa) return;
 
-  const sessionStart = mesa.opened_at
-    ? new Date(new Date(mesa.opened_at).getTime() - 5000).toISOString()
-    : null;
-
   const q = sb.from('orders')
     .select('*')
     .eq('status', 'mesa_aberta')
     .eq('mesa_num', numInt);
 
-  const { data: orders } = await (sessionStart ? q.gte('created_at', sessionStart) : q);
+  const { data: orders } = await q;
 
   // Substitui entradas desta mesa em ambos os caches
   const _otherAll = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr || '').replace('Mesa ', '') || '0')) !== numInt);
   const _otherMy  = myOrders.filter(o => Number(o.mesa_num || parseInt((o.addr || '').replace('Mesa ', '') || '0')) !== numInt);
-  const _fetched   = orders || [];
+  const _fetched   = (orders || []).filter(o => _garcomOrderBelongsToMesaSession(o, mesa));
 
   allMesaOrders = [..._otherAll, ..._fetched];
 
@@ -4237,9 +4257,11 @@ function fecharModalConta() {
 }
 
 async function imprimirContaMesa(num) {
+  const mesaAtual = tables.find(t => Number(t.num) === Number(num));
   // 1. Tenta cache local (allMesaOrders) — items já vêm como array do Realtime
   let orders = allMesaOrders
     .filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num)
+    .filter(o => _garcomOrderBelongsToMesaSession(o, mesaAtual))
     .map(o => ({ ...o, items: _parseItems(o.items) }));
 
   // 2. Se cache vazio, busca direto do Supabase
@@ -4250,7 +4272,9 @@ async function imprimirContaMesa(num) {
         .eq('mesa_num', num)
         .in('status', ['mesa_aberta', 'analise', 'producao', 'pronto'])
         .order('id', { ascending: true });
-      orders = (data || []).map(o => ({ ...o, items: _parseItems(o.items) }));
+      orders = (data || [])
+        .filter(o => _garcomOrderBelongsToMesaSession(o, mesaAtual))
+        .map(o => ({ ...o, items: _parseItems(o.items) }));
     } catch(e) { console.warn('[imprimirContaMesa] erro:', e.message); }
   }
 
@@ -4399,6 +4423,7 @@ async function confirmarImprimirConta() {
 async function abrirFinalizarMesa(num) {
   finalizarMesaNum = num;
   finalizarPay = '';
+  const mesaAtual = tables.find(t => Number(t.num) === Number(num));
   document.getElementById('finalizar-title').textContent = `Finalizar Mesa ${num}`;
   const paySel = document.getElementById('finalizar-pay-select');
   if (paySel) paySel.value = finalizarPay;
@@ -4407,7 +4432,9 @@ async function abrirFinalizarMesa(num) {
   atualizarRecebimentoFinalizar();
 
   // Load orders for this mesa (todos os garçons)
-  let orders = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
+  let orders = allMesaOrders
+    .filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num)
+    .filter(o => _garcomOrderBelongsToMesaSession(o, mesaAtual));
 
   // Se cache vazio, busca direto do Supabase
   if (!orders.length) {
@@ -4417,7 +4444,7 @@ async function abrirFinalizarMesa(num) {
         .eq('mesa_num', num)
         .eq('status', 'mesa_aberta')
         .order('id', { ascending: false });
-      orders = data || [];
+      orders = (data || []).filter(o => _garcomOrderBelongsToMesaSession(o, mesaAtual));
     } catch(e) { console.warn('[abrirFinalizarMesa] Erro ao buscar pedidos:', e.message); }
   }
 
@@ -4482,8 +4509,11 @@ function atualizarTotalFinalizar() {
 
 async function confirmarFinalizarMesa() {
   if (!finalizarMesaNum) return;
+  const mesaAtual = tables.find(t => Number(t.num) === Number(finalizarMesaNum));
   // Soma todos os pedidos da mesa (comanda + bebidas imediatas) igual ao abrirFinalizarMesa
-  let mesaOrders = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === finalizarMesaNum);
+  let mesaOrders = allMesaOrders
+    .filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === finalizarMesaNum)
+    .filter(o => _garcomOrderBelongsToMesaSession(o, mesaAtual));
 
   // Se cache vazio, busca direto do Supabase
   if (!mesaOrders.length) {
@@ -4493,7 +4523,7 @@ async function confirmarFinalizarMesa() {
         .eq('mesa_num', finalizarMesaNum)
         .eq('status', 'mesa_aberta')
         .order('id', { ascending: false });
-      mesaOrders = data || [];
+      mesaOrders = (data || []).filter(o => _garcomOrderBelongsToMesaSession(o, mesaAtual));
     } catch(e) { console.warn('[confirmarFinalizarMesa] Erro ao buscar pedidos:', e.message); }
   }
 
