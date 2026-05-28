@@ -166,6 +166,10 @@ async function refreshMesa(num) {
 
   const mesa = tables.find(t => t.num === numInt);
   if (!mesa) return; // mesa removida — sai sem tocar o cache
+  if (mesa.status === 'free') {
+    mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== numInt);
+    return;
+  }
 
   // 2. Busca pedidos desta sessão (ativos + entregues recentes)
   const sessionStart = mesa.opened_at

@@ -1387,6 +1387,7 @@ function subscribeOrders() {
         await refreshMesasState();
       }
       _renderMesaPageFromCache();
+      if (typeof renderKanban === 'function') renderKanban();
       renderQR();
     }).subscribe();
 

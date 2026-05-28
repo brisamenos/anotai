@@ -98,11 +98,30 @@ function filterKanban(type) {
 // ─────────────────────────────────────────
 // KANBAN
 // ─────────────────────────────────────────
+function _kanbanMesaEmAtendimento(order) {
+  if (!order?.mesa_num) return true;
+  const mesaNum = parseInt(order.mesa_num);
+  const mesa = (tables || []).find(t => parseInt(t.num) === mesaNum);
+  return !!mesa && mesa.status === 'busy';
+}
+
+function _kanbanOrderDentroSessaoMesa(order, mesa) {
+  if (!order?.mesa_num || !mesa) return false;
+  if (order.session_ref !== undefined && order.session_ref !== null) {
+    return !mesa.opened_at || order.session_ref === mesa.opened_at;
+  }
+  if (!mesa.opened_at) return order.status !== 'entregue';
+  return new Date(order.created_at || 0).getTime() >= new Date(mesa.opened_at).getTime() - 5000;
+}
+
 function _buildMesaKanbanOrders() {
   // Gera objetos sintéticos a partir do cache de mesas para exibição no kanban
   const result = [];
   (mesaOrdersCache || []).forEach(o => {
     if (o.status !== 'mesa_aberta') return;
+    const mesa = (tables || []).find(t => parseInt(t.num) === parseInt(o.mesa_num));
+    if (!mesa || mesa.status !== 'busy') return;
+    if (!_kanbanOrderDentroSessaoMesa(o, mesa)) return;
     const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? (() => { try { return JSON.parse(o.items); } catch { return []; } })() : []);
     const prodItems  = items.filter(i => i.item_status === 'producao');
     const prontoItems= items.filter(i => i.item_status === 'pronto');
@@ -184,7 +203,7 @@ function renderKanban() {
     let filtered = [
       ...ordersKanban.filter(o => o.status === st),
       ...mesaKanban.filter(o => o.status === st)
-    ];
+    ].filter(_kanbanMesaEmAtendimento);
     if (_kanbanFilter === 'delivery') filtered = filtered.filter(o => (window._detectOrderType ? window._detectOrderType(o) : 'delivery') === 'delivery');
     if (_kanbanFilter === 'balcao')   filtered = filtered.filter(o => (window._detectOrderType ? window._detectOrderType(o) : 'delivery') === 'balcao');
     if (_kanbanFilter === 'mesa')     filtered = filtered.filter(o => (window._detectOrderType ? window._detectOrderType(o) : 'delivery') === 'mesa');
@@ -348,7 +367,8 @@ function renderKanban() {
       renderKanban();
     });
   });
-  document.getElementById('pedidos-badge').textContent = ordersKanban.filter(o => o.status === 'analise' || o.status === 'aguardando_pix').length || '';
+  document.getElementById('pedidos-badge').textContent = ordersKanban
+    .filter(o => _kanbanMesaEmAtendimento(o) && (o.status === 'analise' || o.status === 'aguardando_pix')).length || '';
 
   // ── Busca no histórico quando kanban não encontra ──
   const _histPanel = document.getElementById('kanban-hist-results');
