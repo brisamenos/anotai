@@ -546,7 +546,29 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   background:var(--surface2); border:1px solid var(--border);
   border-radius:10px; padding:10px 12px;
 }
-.cart-row-name { flex:1; font-size:13px; font-weight:600; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cart-row-name { flex:1; font-size:13px; font-weight:600; min-width:0; }
+.cart-row-title { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cart-row-obs { font-size:11px; color:var(--muted); margin-top:2px; line-height:1.4; white-space:normal; word-break:break-word; }
+.cart-obs-btn {
+  margin-top:6px; height:26px; padding:0 10px;
+  border-radius:8px; border:1px solid var(--border);
+  background:var(--surface3); color:var(--text);
+  font-size:11px; font-weight:800; cursor:pointer;
+}
+.cart-obs-editor { margin-top:8px; display:flex; flex-direction:column; gap:6px; }
+.cart-obs-input {
+  width:100%; min-height:54px; resize:vertical; box-sizing:border-box;
+  border-radius:8px; border:1px solid var(--border);
+  background:var(--surface); color:var(--text);
+  padding:8px 10px; font:inherit; font-size:12px; outline:none;
+}
+.cart-obs-actions { display:flex; gap:6px; flex-wrap:wrap; }
+.cart-obs-save,.cart-obs-clear {
+  height:28px; padding:0 10px; border-radius:8px;
+  font-size:11px; font-weight:800; cursor:pointer;
+}
+.cart-obs-save { background:var(--green); color:#fff; border:none; }
+.cart-obs-clear { background:transparent; color:var(--muted); border:1px solid var(--border); }
 .cart-row-price { font-size:12.5px; color:var(--amber); font-weight:700; flex-shrink:0; }
 .qty-ctrl { display:flex; align-items:center; gap:6px; flex-shrink:0; }
 .qbtn { width:24px; height:24px; border-radius:7px; background:var(--surface3); border:none; color:var(--text); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .14s; }
@@ -1556,6 +1578,7 @@ let allCats       = [];
 let myOrders      = [];
 let allMesaOrders = []; // todas as comandas (todos os garçons) — para visualização de mesa
 let cart          = [];
+let _cartObsEditingIdx = null;
 let activeMesa    = null;
 let activeCatFilter = '';
 let sheetTab      = 'itens';
@@ -3115,7 +3138,10 @@ function changeCartQty(id, delta) {
   const idx = cart.findIndex(c=>c.id===id);
   if (idx===-1) return;
   cart[idx].qty += delta;
-  if (cart[idx].qty <= 0) cart.splice(idx,1);
+  if (cart[idx].qty <= 0) {
+    cart.splice(idx,1);
+    _cartObsEditingIdx = null;
+  }
   updateCartUI();
   renderCartSheet();
   renderItemGrid();
@@ -3124,7 +3150,10 @@ function changeCartQty(id, delta) {
 function changeCartQtyByIdx(idx, delta) {
   if (idx < 0 || idx >= cart.length) return;
   cart[idx].qty += delta;
-  if (cart[idx].qty <= 0) cart.splice(idx,1);
+  if (cart[idx].qty <= 0) {
+    cart.splice(idx,1);
+    _cartObsEditingIdx = null;
+  }
   updateCartUI();
   renderCartSheet();
   renderItemGrid();
@@ -3150,6 +3179,7 @@ function updateCartUI() {
 function renderCartSheet() {
   const el = document.getElementById('cart-items-sheet');
   if (!cart.length) {
+    _cartObsEditingIdx = null;
     el.innerHTML = '<div class="empty"><div class="empty-icon" style="font-size:36px">🛒</div>Nenhum item adicionado</div>';
     document.getElementById('cart-totals').innerHTML = '';
     return;
@@ -3158,8 +3188,16 @@ function renderCartSheet() {
     <div class="cart-row">
       <div style="font-size:20px;flex-shrink:0">${i.emoji||'🍽️'}</div>
       <div class="cart-row-name">
-        ${i.name}
-        ${i.obs ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4">${i.obs}</div>` : ''}
+        <div class="cart-row-title">${_garcomHtmlEscape(i.name)}</div>
+        ${i.obs ? `<div class="cart-row-obs">Obs: ${_garcomHtmlEscape(i.obs)}</div>` : ''}
+        ${_cartObsEditingIdx === idx ? `
+          <div class="cart-obs-editor">
+            <textarea id="cart-obs-input-${idx}" class="cart-obs-input" rows="2" placeholder="Ex: sem cebola, ponto da carne, separar molho">${_garcomHtmlEscape(i.obs || '')}</textarea>
+            <div class="cart-obs-actions">
+              <button type="button" class="cart-obs-save" onclick="salvarObsCarrinho(${idx})">Salvar obs</button>
+              <button type="button" class="cart-obs-clear" onclick="limparObsCarrinho(${idx})">Limpar</button>
+            </div>
+          </div>` : `<button type="button" class="cart-obs-btn" onclick="editarObsCarrinho(${idx})">${i.obs ? 'Editar obs' : 'Obs'}</button>`}
       </div>
       <div class="qty-ctrl">
         <button class="qbtn" onclick="changeCartQtyByIdx(${idx},-1)">−</button>
@@ -3173,6 +3211,35 @@ function renderCartSheet() {
   document.getElementById('cart-totals').innerHTML = `
     <div class="total-row"><span>Subtotal</span><span>R$ ${sub.toFixed(2).replace('.',',')}</span></div>
     <div class="total-row big"><span>Total</span><span>R$ ${sub.toFixed(2).replace('.',',')}</span></div>`;
+}
+
+function editarObsCarrinho(idx) {
+  if (idx < 0 || idx >= cart.length) return;
+  _cartObsEditingIdx = _cartObsEditingIdx === idx ? null : idx;
+  renderCartSheet();
+  setTimeout(() => {
+    const input = document.getElementById(`cart-obs-input-${idx}`);
+    if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+  }, 0);
+}
+
+function salvarObsCarrinho(idx) {
+  if (idx < 0 || idx >= cart.length) return;
+  const input = document.getElementById(`cart-obs-input-${idx}`);
+  cart[idx].obs = (input?.value || '').trim();
+  _cartObsEditingIdx = null;
+  updateCartUI();
+  renderCartSheet();
+  showToast(cart[idx].obs ? 'Obs adicionada ao item' : 'Obs removida do item');
+}
+
+function limparObsCarrinho(idx) {
+  if (idx < 0 || idx >= cart.length) return;
+  cart[idx].obs = '';
+  _cartObsEditingIdx = null;
+  updateCartUI();
+  renderCartSheet();
+  showToast('Obs removida do item');
 }
 
 // ══ SUBMIT PEDIDO ════════════════════════
@@ -4251,8 +4318,8 @@ async function confirmarImprimirComanda() {
     const fontSize = parseInt(cfg.fontSize) || 12;
     const rodape   = cfg.rodape || 'Bom apetite!';
     const fmt      = cfg.format || localStorage.getItem('printFormat') || '80mm';
-    // Impressora: usa seleção do garçom > config do gestor > localStorage
-    const printer  = _selPrinter || cfg.printer_caixa || cfg.printer || localStorage.getItem('printPrinter') || '';
+    const printerCaixa = cfg.printer_caixa || cfg.printer || '';
+    const printerLocal = _selPrinter || printerCaixa || localStorage.getItem('printPrinter') || '';
     const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
     const mesaNum  = _printComandaMesaNum;
     const pagForma = _printComandaPagForma;
@@ -4274,9 +4341,10 @@ async function confirmarImprimirComanda() {
     const itensAgrupados = Object.values(itemMap);
 
     const renderItem = i => {
-      const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em">↳ ${i.obs}</div>` : '';
+      const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em">↳ ${_garcomHtmlEscape(i.obs)}</div>` : '';
+      const itemName = _garcomHtmlEscape((i.name || '').toUpperCase());
       const priceStr = `<span style="float:right">R$ ${(i.price * i.qty).toFixed(2).replace('.',',')}</span>`;
-      return `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${(i.name||'').toUpperCase()}${priceStr}</div>${obs}</div>`;
+      return `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${itemName}${priceStr}</div>${obs}</div>`;
     };
 
     // Taxa já é item da comanda — sem linha separada de taxa
@@ -4304,26 +4372,27 @@ async function confirmarImprimirComanda() {
 
     const tid = _garcomTenantId;
     const pw  = parseInt(fmt) || 80;
+    if (!tid) { showToast('⚠️ Loja não identificada para impressão.'); return; }
 
-    // 1️⃣ Electron — imprime direto na impressora do caixa (automático)
-    if (window.ElectronPrint?.printHtml) {
-      const r = await window.ElectronPrint.printHtml(html, { printer: printer || '', paperWidth: pw, landscape: false, scaleFactor: 100 }).catch(()=>({}));
-      if (r?.ok) { showToast('🖨️ Pedido de conta impresso!'); return; }
-    }
-    if (window.ElectronPrint?.printOrder) {
-      const r = await window.ElectronPrint.printOrder({ mesa_num: mesaNum, _html: html, _printer: printer }).catch(()=>({}));
-      if (r?.ok) { showToast('🖨️ Pedido de conta impresso!'); return; }
-    }
-
-    // 2️⃣ Print Agent — envia direto sem verificar status
+    // Envia primeiro para a fila do caixa/gestor, sempre amarrado ao tenant atual.
     try {
       const res = await fetch('/api/print-queue/job', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
-        body: JSON.stringify({ html, format: fmt, printer: printer || undefined, tipo: 'caixa' })
+        body: JSON.stringify({ html, format: fmt, printer: printerCaixa || undefined, tipo: 'caixa' })
       });
-      if (res.ok) { showToast('🖨️ Pedido de conta enviado!'); return; }
-    } catch(e) { console.warn('[PRINT COMANDA] Agent falhou:', e.message); }
+      if (res.ok) { showToast('🖨️ Pedido de conta enviado ao gestor!'); return; }
+    } catch(e) { console.warn('[PRINT COMANDA] Gestor/agent falhou:', e.message); }
+
+    // Fallback local, usado somente se o envio ao gestor falhar.
+    if (window.ElectronPrint?.printHtml) {
+      const r = await window.ElectronPrint.printHtml(html, { printer: printerLocal || '', paperWidth: pw, landscape: false, scaleFactor: 100 }).catch(()=>({}));
+      if (r?.ok) { showToast('🖨️ Pedido de conta impresso!'); return; }
+    }
+    if (window.ElectronPrint?.printOrder) {
+      const r = await window.ElectronPrint.printOrder({ mesa_num: mesaNum, _html: html, _printer: printerLocal }).catch(()=>({}));
+      if (r?.ok) { showToast('🖨️ Pedido de conta impresso!'); return; }
+    }
 
     showToast('⚠️ Não foi possível enviar para impressão.');
   } catch(e) {
