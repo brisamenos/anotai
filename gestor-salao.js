@@ -1,5 +1,47 @@
 // POTENCIALIZADOR
 // ─────────────────────────────────────────
+function _salaoEscape(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+function _salaoResumoClientesMesa(orders) {
+  const grupos = new Map();
+  (orders || []).forEach(o => {
+    (_parseItems(o.items)).forEach(i => {
+      if ((i?.item_status || 'active') === 'cancelado') return;
+      const label = String(i.cliente_nome || '').trim() || 'Mesa toda';
+      const key = String(i.cliente_ref || label || '__mesa');
+      if (!grupos.has(key)) grupos.set(key, { key, label, total: 0, items: [] });
+      const qty = parseInt(i.qty) || 1;
+      const price = parseFloat(i.price) || 0;
+      const g = grupos.get(key);
+      g.total += price * qty;
+      g.items.push({ ...i, qty, price });
+    });
+  });
+  return [...grupos.values()];
+}
+
+function _salaoPrintClientesHtml(orders) {
+  const grupos = _salaoResumoClientesMesa(orders);
+  if (!grupos.some(g => g.label !== 'Mesa toda')) return '';
+  return grupos.map(g => {
+    const itemMap = {};
+    g.items.forEach(i => {
+      const key = `${i.name}|${i.obs || ''}|${i.price || 0}`;
+      if (!itemMap[key]) itemMap[key] = { name: i.name, qty: 0, price: i.price || 0, obs: i.obs || '' };
+      itemMap[key].qty += (i.qty || 1);
+    });
+    const rows = Object.values(itemMap).map(i => {
+      const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em">↳ ${_salaoEscape(i.obs)}</div>` : '';
+      return `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${_salaoEscape((i.name || '').toUpperCase())}<span style="float:right">R$ ${(i.price * i.qty).toFixed(2).replace('.',',')}</span></div>${obs}</div>`;
+    }).join('');
+    return `<div style="font-weight:900;border-top:1px dashed #000;margin:6px 0 3px;padding-top:4px">${_salaoEscape(g.label).toUpperCase()}</div>
+      ${rows}
+      <div style="display:flex;justify-content:space-between;font-weight:bold;margin:2px 0 5px"><span>Subtotal ${_salaoEscape(g.label)}</span><span>R$ ${g.total.toFixed(2).replace('.',',')}</span></div>`;
+  }).join('');
+}
+
 function renderPotencializador() {
   const el = document.getElementById('pot-items');
   if (!el) return;
@@ -515,10 +557,13 @@ async function toggleMesaStatus(num) {
   if (!t) return;
   const newStatus = t.status === 'free' ? 'busy' : 'free';
   const newGuests = newStatus === 'busy' ? 2 : null;
+  const payload = newStatus === 'free'
+    ? { status: newStatus, guests: newGuests, total: null, clientes_json: [], updated_at: new Date().toISOString() }
+    : { status: newStatus, guests: newGuests, total: null, clientes_json: [], updated_at: new Date().toISOString() };
   const { error } = await sb.from('mesas')
-    .update({ status: newStatus, guests: newGuests, total: null, updated_at: new Date().toISOString() })
+    .update(payload)
     .eq('num', num);
-  if (!error) { t.status = newStatus; t.guests = newGuests; t.total = null; }
+  if (!error) { t.status = newStatus; t.guests = newGuests; t.total = null; t.clientes_json = []; }
   renderQR();
 }
 
@@ -531,7 +576,7 @@ async function addTable() {
   }).select().single();
   sbLoading(false);
   if (error) { sbToast('err', 'Erro ao criar mesa'); return; }
-  tables.push({ num, status: 'free', guests: null, total: null });
+  tables.push({ num, status: 'free', guests: null, total: null, clientes_json: [] });
   renderQR();
   sbToast('ok', `Mesa ${num} criada!`);
 }
@@ -553,7 +598,7 @@ async function saveNovaMesa() {
   const { data, error } = await sb.from('mesas').insert({ tenant_id: _sessao.tenant_id, num, status: 'free', guests }).select().single();
   sbLoading(false);
   if (error) { sbToast('err', 'Erro ao criar mesa'); return; }
-  tables.push({ num, status: 'free', guests, total: null });
+  tables.push({ num, status: 'free', guests, total: null, clientes_json: [] });
   tables.sort((a, b) => a.num - b.num);
   closeModal('modal-nova-mesa');
   renderMesasPage();
@@ -700,7 +745,7 @@ function renderMesaCard(t, orders) {
           const lbl  = { producao:'Em preparo', pronto:'Pronto', entregue:'Entregue' }[key];
           const rows = itens.map(i =>
             `<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0">
-              <span>${i.drink?'🥤':'🍴'} ${i.qty}× ${i.name}</span>
+              <span>${i.drink?'🥤':'🍴'} ${i.qty}× ${i.name}${i.cliente_nome ? ` <span style="font-size:9px;background:rgba(34,197,94,.12);color:var(--green);padding:1px 5px;border-radius:4px;font-weight:700">${_salaoEscape(i.cliente_nome)}</span>` : ''}</span>
               <span style="color:var(--accent3)">R$ ${((i.price||0)*(i.qty||1)).toFixed(2).replace('.',',')}</span>
             </div>`
           ).join('');
@@ -822,6 +867,16 @@ function renderMesaCard(t, orders) {
         <button onclick="cancelarMesaCompleta(${t.num})" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#f87171;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">🗑️ Cancelar mesa</button>
       </div>`;
 
+  const clientesResumo = _salaoResumoClientesMesa(orders);
+  const clientesResumoHtml = clientesResumo.some(g => g.label !== 'Mesa toda')
+    ? `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:9px 11px;margin:8px 0">
+        <div style="font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Consumo por cliente</div>
+        ${clientesResumo.map(g => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:2px 0">
+          <span>${_salaoEscape(g.label)}</span>
+          <strong style="color:var(--accent3)">R$ ${g.total.toFixed(2).replace('.', ',')}</strong>
+        </div>`).join('')}
+      </div>` : '';
+
   return `<div style="background:var(--surface);border:1.5px solid ${bordColor};border-radius:14px;padding:16px;margin-bottom:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:10px">
@@ -836,6 +891,7 @@ function renderMesaCard(t, orders) {
       </div>
     </div>
     ${ordersHtml}
+    ${clientesResumoHtml}
     ${actionBtn}
   </div>`;
 }
@@ -1910,7 +1966,7 @@ async function cancelarMesaCompleta(num) {
     // Libera a mesa
     await sb.from('mesas').update({
       status: 'free', total: null, pag_forma: null,
-      guests: null, opened_at: null, taxa_servico: null,
+      guests: null, opened_at: null, taxa_servico: null, clientes_json: [],
       updated_at: new Date().toISOString()
     }).eq('num', numInt);
 
@@ -1918,7 +1974,7 @@ async function cancelarMesaCompleta(num) {
     mesaOrdersCache = mesaOrdersCache.filter(o => parseInt(o.mesa_num) !== numInt);
     ordersKanban = ordersKanban.filter(o => parseInt(o.mesa_num) !== numInt);
     const t = tables.find(x => parseInt(x.num) === numInt);
-    if (t) { t.status = 'free'; t.total = null; t.opened_at = null; t.taxa_servico = 0; }
+    if (t) { t.status = 'free'; t.total = null; t.opened_at = null; t.taxa_servico = 0; t.clientes_json = []; }
 
     renderKanban();
     _renderMesaPageFromCache();
@@ -2001,6 +2057,8 @@ function _renderDetalheMesaItens() {
         qty: i.qty || 1,
         price: i.price || 0,
         obs: i.obs || '',
+        clienteNome: i.cliente_nome || '',
+        clienteRef: i.cliente_ref || '',
         status: i.item_status || 'active',
         drink: !!i.drink,
         garcomNome: i.garcom_nome || '',
@@ -2018,12 +2076,23 @@ function _renderDetalheMesaItens() {
   }
 
   let subtotal = 0;
+  const clientesResumo = _salaoResumoClientesMesa(_detalheMesaOrders);
+  const clientesHtml = clientesResumo.some(g => g.label !== 'Mesa toda')
+    ? `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:9px 11px;margin-top:10px">
+        <div style="font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Consumo por cliente</div>
+        ${clientesResumo.map(g => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:2px 0">
+          <span>${_salaoEscape(g.label)}</span>
+          <strong style="color:var(--accent3)">R$ ${g.total.toFixed(2).replace('.', ',')}</strong>
+        </div>`).join('')}
+      </div>` : '';
+
   listEl.innerHTML = itemMap.map((i, idx) => {
     const isCanceled = i.status === 'cancelado';
     const lineTotal = i.price * i.qty;
     if (!isCanceled) subtotal += lineTotal;
     const cancelStyle = isCanceled ? 'opacity:.4;text-decoration:line-through;' : '';
     const garcomTag = i.garcomNome ? ` <span style="font-size:9px;background:rgba(129,140,248,.15);color:#818cf8;padding:1px 5px;border-radius:4px">${i.garcomNome}</span>` : '';
+    const clienteTag = i.clienteNome ? ` <span style="font-size:9px;background:rgba(34,197,94,.12);color:var(--green);padding:1px 5px;border-radius:4px;font-weight:700">${_salaoEscape(i.clienteNome)}</span>` : '';
     const taxaBadge = i.isTaxa ? ` <span style="font-size:9px;background:rgba(196,149,106,.15);color:var(--amber);padding:1px 6px;border-radius:99px;font-weight:700">%</span>` : '';
     const statusIcon = i.isTaxa ? '💰' : ({ producao:'🍳', pronto:'✅', entregue:'🟢', cancelado:'❌' }[i.status] || '🔵');
     const btns = isCanceled
@@ -2037,14 +2106,14 @@ function _renderDetalheMesaItens() {
         <div>
           <span style="font-size:10px">${statusIcon}</span>
           <span style="font-size:13px;font-weight:600">${i.qty}× ${i.name}</span>
-          ${taxaBadge}${garcomTag}
+          ${taxaBadge}${clienteTag}${garcomTag}
           ${i.obs ? `<div style="font-size:11px;color:var(--muted);padding-left:16px">↳ ${i.obs}</div>` : ''}
         </div>
         <span style="font-size:13px;font-weight:700;color:var(--accent3);white-space:nowrap">R$ ${lineTotal.toFixed(2).replace('.',',')}</span>
       </div>
       ${btns}
     </div>`;
-  }).join('');
+  }).join('') + clientesHtml;
 
   _detalheMesaSubtotal = subtotal;
   document.getElementById('mesa-detalhe-subtotal').textContent = 'R$ ' + subtotal.toFixed(2).replace('.',',');
@@ -2229,12 +2298,13 @@ async function gestorImprimirContaMesa() {
   });
   const itens = Object.values(itemMap);
   if (!itens.length) { sbToast('err', 'Sem itens para imprimir'); return; }
+  const itensPorClienteHtml = _salaoPrintClientesHtml(_detalheMesaOrders);
 
   const nome = _sessao?.nome || 'RESTAURANTE';
   const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 
   const renderItem = i =>
-    `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${i.name.toUpperCase()}<span style="float:right">R$ ${i.total.toFixed(2).replace('.',',')}</span></div></div>`;
+    `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${_salaoEscape((i.name || '').toUpperCase())}<span style="float:right">R$ ${i.total.toFixed(2).replace('.',',')}</span></div></div>`;
 
   const taxaLinha = taxa > 0
     ? `<div style="display:flex;justify-content:space-between;font-size:0.9em"><span>Subtotal</span><span>R$ ${sub.toFixed(2).replace('.',',')}</span></div>
@@ -2249,7 +2319,7 @@ async function gestorImprimirContaMesa() {
       <div>Mesa: <b>${num}</b></div>
       <div>Data: ${dataHora}</div>
       <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
-      ${itens.map(renderItem).join('')}
+      ${itensPorClienteHtml || itens.map(renderItem).join('')}
       <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
       ${taxaLinha}
       <div style="display:flex;justify-content:space-between;font-weight:900;font-size:1.05em">

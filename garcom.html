@@ -570,6 +570,33 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .cart-obs-save { background:var(--green); color:#fff; border:none; }
 .cart-obs-clear { background:transparent; color:var(--muted); border:1px solid var(--border); }
 .cart-row-price { font-size:12.5px; color:var(--amber); font-weight:700; flex-shrink:0; }
+.mesa-clientes-bar {
+  display:none; gap:8px; align-items:center; overflow-x:auto;
+  padding:10px 12px; border-bottom:1px solid var(--border);
+  background:var(--surface);
+}
+.mesa-cliente-chip {
+  height:30px; padding:0 11px; border-radius:999px;
+  border:1px solid var(--border); background:var(--surface2);
+  color:var(--muted); font-size:12px; font-weight:800;
+  cursor:pointer; white-space:nowrap; flex-shrink:0;
+}
+.mesa-cliente-chip.on {
+  border-color:var(--accent); background:rgba(129,140,248,.14);
+  color:var(--text);
+}
+.mesa-cliente-add {
+  width:30px; height:30px; border-radius:50%; border:none;
+  background:var(--accent); color:#fff; font-size:16px; font-weight:900;
+  cursor:pointer; display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+.mesa-cliente-tag {
+  display:inline-flex; align-items:center; gap:4px;
+  margin-top:4px; padding:2px 7px; border-radius:999px;
+  background:rgba(129,140,248,.12); color:var(--accent);
+  font-size:10.5px; font-weight:800;
+}
 .qty-ctrl { display:flex; align-items:center; gap:6px; flex-shrink:0; }
 .qbtn { width:24px; height:24px; border-radius:7px; background:var(--surface3); border:none; color:var(--text); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .14s; }
 .qbtn:hover { background:var(--accent); color:#fff; }
@@ -1052,6 +1079,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
       <div class="sheet-title" id="sheet-title">Lançar Pedido — Mesa ?</div>
       <button class="sheet-close" onclick="closeSheet()">✕</button>
     </div>
+    <div class="mesa-clientes-bar" id="mesa-clientes-bar"></div>
     <!-- Tabs itens / carrinho -->
     <div style="display:flex;background:var(--surface2);margin:0;border-bottom:1px solid var(--border)">
       <button class="tab-btn on" id="stab-itens" style="flex:1;justify-content:center;padding:10px" onclick="switchSheetTab('itens')">
@@ -1580,6 +1608,7 @@ let allMesaOrders = []; // todas as comandas (todos os garçons) — para visual
 let cart          = [];
 let _cartObsEditingIdx = null;
 let activeMesa    = null;
+let activeMesaClienteRef = '';
 let activeCatFilter = '';
 let sheetTab      = 'itens';
 let _submitting   = false; // guard contra duplo envio
@@ -1684,7 +1713,7 @@ function doLogout() {
   stopSW();
   unsubscribeAll();
   currentGarcom = null;
-  cart = []; myOrders = []; allMesaOrders = [];
+    cart = []; myOrders = []; allMesaOrders = []; activeMesaClienteRef = '';
   localStorage.removeItem('garcom_session');
   document.getElementById('screen-app').classList.remove('show');
   document.getElementById('screen-login').style.display = 'flex';
@@ -1721,6 +1750,144 @@ function _garcomOrderNum(id, orderNum) {
 
 function _garcomHtmlEscape(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+function _mesaClientesParse(raw) {
+  const arr = Array.isArray(raw) ? raw : (() => { try { return JSON.parse(raw || '[]'); } catch { return []; } })();
+  return (Array.isArray(arr) ? arr : [])
+    .map((c, idx) => ({
+      id: String(c.id || c.ref || `cliente_${idx + 1}`),
+      nome: String(c.nome || c.name || '').trim()
+    }))
+    .filter(c => c.nome);
+}
+
+function _mesaAtualObj(num = activeMesa) {
+  return tables.find(t => Number(t.num) === Number(num)) || null;
+}
+
+function _mesaClientes(num = activeMesa) {
+  return _mesaClientesParse(_mesaAtualObj(num)?.clientes_json);
+}
+
+function _mesaClienteSelecionado() {
+  if (!activeMesaClienteRef) return null;
+  return _mesaClientes().find(c => c.id === activeMesaClienteRef) || null;
+}
+
+function _mesaClienteDecoracao() {
+  const c = _mesaClienteSelecionado();
+  return c ? { cliente_ref: c.id, cliente_nome: c.nome } : { cliente_ref: '', cliente_nome: '' };
+}
+
+function _mesaClienteLabelItem(item) {
+  return String(item?.cliente_nome || '').trim();
+}
+
+function _mesaClienteKeyItem(item) {
+  const nome = _mesaClienteLabelItem(item);
+  return String(item?.cliente_ref || nome || '__mesa');
+}
+
+function _mesaClienteAtualizaSelecao(num = activeMesa) {
+  const clientes = _mesaClientes(num);
+  if (activeMesaClienteRef && !clientes.some(c => c.id === activeMesaClienteRef)) {
+    activeMesaClienteRef = '';
+  }
+}
+
+function renderMesaClientesBar() {
+  const bar = document.getElementById('mesa-clientes-bar');
+  if (!bar) return;
+  if (!activeMesa || window._npMode) {
+    bar.style.display = 'none';
+    bar.innerHTML = '';
+    return;
+  }
+  _mesaClienteAtualizaSelecao(activeMesa);
+  const clientes = _mesaClientes(activeMesa);
+  const chips = [
+    `<button type="button" class="mesa-cliente-chip ${!activeMesaClienteRef ? 'on' : ''}" onclick="selecionarClienteMesa('')">Mesa toda</button>`,
+    ...clientes.map(c => `<button type="button" class="mesa-cliente-chip ${activeMesaClienteRef === c.id ? 'on' : ''}" onclick="selecionarClienteMesa('${_garcomHtmlEscape(c.id)}')">${_garcomHtmlEscape(c.nome)}</button>`)
+  ].join('');
+  bar.innerHTML = `${chips}<button type="button" class="mesa-cliente-add" onclick="adicionarClienteMesa()" title="Adicionar cliente">+</button>`;
+  bar.style.display = 'flex';
+}
+
+function selecionarClienteMesa(ref) {
+  activeMesaClienteRef = String(ref || '');
+  renderMesaClientesBar();
+  renderCartSheet();
+}
+
+async function adicionarClienteMesa() {
+  if (!activeMesa) return;
+  const nome = String(prompt('Nome do cliente na mesa') || '').trim();
+  if (!nome) return;
+  const mesa = _mesaAtualObj(activeMesa);
+  if (!mesa) return;
+  const clientes = _mesaClientes(activeMesa);
+  const novo = { id: `cli_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, nome: nome.slice(0, 40) };
+  const lista = [...clientes, novo];
+  try {
+    const { error } = await sb.from('mesas')
+      .update({ clientes_json: lista, updated_at: new Date().toISOString() })
+      .eq('num', activeMesa);
+    if (error) throw error;
+    mesa.clientes_json = lista;
+    activeMesaClienteRef = novo.id;
+    renderMesaClientesBar();
+    showToast('Cliente adicionado à mesa');
+  } catch(e) {
+    console.error('[adicionarClienteMesa]', e);
+    showToast('Erro ao adicionar cliente: ' + (e.message || e));
+  }
+}
+
+function _aplicarClienteAoItem(item) {
+  return { ...item, ..._mesaClienteDecoracao() };
+}
+
+function _mesmoClienteSelecionado(item) {
+  return String(item?.cliente_ref || '') === String(activeMesaClienteRef || '');
+}
+
+function _resumoClientesMesa(orders) {
+  const grupos = new Map();
+  (orders || []).forEach(o => {
+    _parseItems(o.items).forEach(i => {
+      if ((i?.item_status || 'active') === 'cancelado') return;
+      const label = _mesaClienteLabelItem(i) || 'Mesa toda';
+      const key = _mesaClienteKeyItem(i);
+      if (!grupos.has(key)) grupos.set(key, { key, label, total: 0, items: [] });
+      const g = grupos.get(key);
+      const qty = parseInt(i.qty) || 1;
+      const price = parseFloat(i.price) || 0;
+      g.total += price * qty;
+      g.items.push({ ...i, qty, price });
+    });
+  });
+  return [...grupos.values()];
+}
+
+function _garcomPrintClientesHtml(orders) {
+  const grupos = _resumoClientesMesa(orders);
+  if (!grupos.some(g => g.label !== 'Mesa toda')) return '';
+  return grupos.map(g => {
+    const itemMap = {};
+    g.items.forEach(i => {
+      const key = `${i.name}|${i.obs || ''}|${i.price || 0}`;
+      if (!itemMap[key]) itemMap[key] = { name: i.name, qty: 0, price: i.price || 0, obs: i.obs || '' };
+      itemMap[key].qty += (i.qty || 1);
+    });
+    const rows = Object.values(itemMap).map(i => {
+      const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em">↳ ${_garcomHtmlEscape(i.obs)}</div>` : '';
+      return `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${_garcomHtmlEscape((i.name || '').toUpperCase())}<span style="float:right">R$ ${(i.price * i.qty).toFixed(2).replace('.',',')}</span></div>${obs}</div>`;
+    }).join('');
+    return `<div style="font-weight:900;border-top:1px dashed #000;margin:6px 0 3px;padding-top:4px">${_garcomHtmlEscape(g.label).toUpperCase()}</div>
+      ${rows}
+      <div style="display:flex;justify-content:space-between;font-weight:bold;margin:2px 0 5px"><span>Subtotal ${_garcomHtmlEscape(g.label)}</span><span>R$ ${g.total.toFixed(2).replace('.',',')}</span></div>`;
+  }).join('');
 }
 
 function _garcomNormPrintKey(s) {
@@ -1799,8 +1966,9 @@ function _garcomBuildSetorHtml(order, cfg, titulo, lista) {
   const itemHtml = groups.map(g => {
     const header = showCats ? `<div style="font-weight:bold;text-align:center;border-top:1px solid #000;border-bottom:1px solid #000;margin:6px 0 4px;padding:3px 0">${_garcomHtmlEscape(g.cat).toUpperCase()}</div>` : '';
     return header + g.items.map(i => {
+      const cliente = i.cliente_nome ? `<div style="font-size:0.86em;font-weight:bold;word-break:break-word">CLIENTE: ${_garcomHtmlEscape(i.cliente_nome)}</div>` : '';
       const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em;font-weight:bold;word-break:break-word">OBS: ${_garcomHtmlEscape(i.obs)}</div>` : '';
-      return `<div style="margin-bottom:4px;border-bottom:1px dotted #ddd;padding-bottom:4px"><div style="font-weight:bold;word-break:break-word">${_garcomHtmlEscape((i.qty || 1) + 'x ' + (i.name || '')).toUpperCase()}</div>${obs}</div>`;
+      return `<div style="margin-bottom:4px;border-bottom:1px dotted #ddd;padding-bottom:4px"><div style="font-weight:bold;word-break:break-word">${_garcomHtmlEscape((i.qty || 1) + 'x ' + (i.name || '')).toUpperCase()}</div>${cliente}${obs}</div>`;
     }).join('');
   }).join('');
 
@@ -1871,8 +2039,9 @@ async function garcomPrint(order, newItems) {
     };
 
     const renderItem = i => {
-      const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em">↳ ${i.obs}</div>` : '';
-      return `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${(i.name||'').toUpperCase()}</div>${obs}</div>`;
+      const cliente = i.cliente_nome ? `<div style="font-size:0.86em;font-weight:bold">Cliente: ${_garcomHtmlEscape(i.cliente_nome)}</div>` : '';
+      const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em">↳ ${_garcomHtmlEscape(i.obs)}</div>` : '';
+      return `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${_garcomHtmlEscape((i.name||'').toUpperCase())}</div>${cliente}${obs}</div>`;
     };
 
     const montarVia = (titulo, lista) => lista.length === 0 ? '' : `
@@ -2384,6 +2553,15 @@ async function openMesaDetail(num) {
   } else {
     const statusLabel = { producao:'🍳 Em produção', pronto:'✅ Pronto', analise:'⏳ Aguardando' };
     const statusCls   = { producao:'producao', pronto:'pronto', analise:'analise' };
+    const clientesResumo = _resumoClientesMesa(orders);
+    const clientesHtml = clientesResumo.some(g => g.label !== 'Mesa toda')
+      ? `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-top:10px">
+          <div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Consumo por cliente</div>
+          ${clientesResumo.map(g => `<div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:3px 0">
+            <span>${_garcomHtmlEscape(g.label)}</span>
+            <strong style="color:var(--amber)">R$ ${g.total.toFixed(2).replace('.', ',')}</strong>
+          </div>`).join('')}
+        </div>` : '';
     body.innerHTML = (waiting ? `<div class="mds-waiting-banner">⏳ Mesa aguardando pagamento no caixa</div>` : '') +
       orders.map(o => {
         // Novo modelo: comanda única com item_status por item
@@ -2414,8 +2592,11 @@ async function openMesaDetail(num) {
             const garcomBadge = (item.garcom_nome && item.garcom_id !== currentGarcom?.id)
               ? ` <span style="font-size:9px;background:rgba(129,140,248,.1);color:var(--accent);padding:1px 5px;border-radius:4px;font-weight:600">${item.garcom_nome}</span>`
               : '';
+            const clienteBadge = item.cliente_nome
+              ? ` <span style="font-size:9px;background:rgba(34,197,94,.12);color:var(--green);padding:1px 5px;border-radius:4px;font-weight:700">${_garcomHtmlEscape(item.cliente_nome)}</span>`
+              : '';
             return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)">
-              <span style="font-size:13px;flex:1">${item.qty}× ${item.name}${garcomBadge}${item.obs ? ` <span style="font-size:11px;color:var(--muted)">· ${item.obs}</span>` : ''}</span>
+              <span style="font-size:13px;flex:1">${item.qty}× ${item.name}${clienteBadge}${garcomBadge}${item.obs ? ` <span style="font-size:11px;color:var(--muted)">· ${item.obs}</span>` : ''}</span>
               <span style="font-size:12px;color:var(--amber);font-weight:600;white-space:nowrap">R$ ${((item.price||0)*(item.qty||1)).toFixed(2).replace('.',',')}</span>
               ${btnCanc}
             </div>`;
@@ -2441,6 +2622,7 @@ async function openMesaDetail(num) {
           <div class="mds-order-total">R$ ${(parseFloat(o.total)||0).toFixed(2).replace('.',',')}</div>
         </div>`;
       }).join('') +
+      clientesHtml +
       `<div class="mds-total-row">
         <span class="mds-total-lbl">Total consumido</span>
         <span class="mds-total-val">R$ ${total.toFixed(2).replace('.',',')}</span>
@@ -2559,10 +2741,10 @@ async function cancelarOcupacaoMesa(num) {
   try {
     await sb.from('mesas').update({
       status: 'free', opened_at: null, total: null,
-      guests: null, updated_at: new Date().toISOString()
+      guests: null, clientes_json: [], updated_at: new Date().toISOString()
     }).eq('num', num);
     const mesa = tables.find(t => t.num === num);
-    if (mesa) { mesa.status = 'free'; mesa.opened_at = null; mesa.total = null; }
+    if (mesa) { mesa.status = 'free'; mesa.opened_at = null; mesa.total = null; mesa.clientes_json = []; }
     closeMesaDetail();
     renderMesas();
     showToast(`Mesa ${num} liberada`);
@@ -2580,6 +2762,7 @@ function openPedido(num) {
   // Mesa já ocupada → abre direto, sem pedir confirmação
   if (mesa && mesa.status !== 'free') {
     activeMesa = num;
+    activeMesaClienteRef = '';
     cart = [];
     document.getElementById('sheet-title').textContent = `Lançar Pedido — Mesa ${num}`;
     activeCatFilter = '';
@@ -2588,6 +2771,7 @@ function openPedido(num) {
     const sc = document.getElementById('cardapio-search-clear'); if (sc) sc.style.display = 'none';
     const cp = document.getElementById('cat-pills'); if (cp) cp.style.display = '';
     renderItemGrid();
+    renderMesaClientesBar();
     updateCartUI();
     switchSheetTab('itens');
     document.getElementById('sheet-pedido').classList.add('on');
@@ -2610,6 +2794,7 @@ async function confirmarAbrirMesa() {
   if (!num) return;
   fecharConfirmarMesa();
   activeMesa = num;
+  activeMesaClienteRef = '';
   cart = [];
   document.getElementById('sheet-title').textContent = `Lançar Pedido — Mesa ${num}`;
   activeCatFilter = '';
@@ -2618,16 +2803,17 @@ async function confirmarAbrirMesa() {
   const _sc = document.getElementById('cardapio-search-clear'); if (_sc) _sc.style.display = 'none';
   const _cp = document.getElementById('cat-pills'); if (_cp) _cp.style.display = '';
   renderItemGrid();
+  renderMesaClientesBar();
   updateCartUI();
   switchSheetTab('itens');
   const mesa = tables.find(t => t.num === num);
   const now = new Date().toISOString();
   const shouldSetOpenedAt = mesa?.status === 'free' || !mesa?.opened_at;
   const updatePayload = shouldSetOpenedAt
-    ? { status: 'busy', opened_at: now, updated_at: now }
+    ? { status: 'busy', opened_at: now, clientes_json: [], updated_at: now }
     : { status: 'busy', updated_at: now };
   await sb.from('mesas').update(updatePayload).eq('num', num);
-  if (mesa) { mesa.status = 'busy'; mesa.updated_at = now; if (shouldSetOpenedAt) mesa.opened_at = now; }
+  if (mesa) { mesa.status = 'busy'; mesa.updated_at = now; if (shouldSetOpenedAt) { mesa.opened_at = now; mesa.clientes_json = []; } }
   renderMesas();
   document.getElementById('sheet-pedido').classList.add('on');
 }
@@ -2637,6 +2823,8 @@ async function closeSheet() {
   if (cart.length && !window._npMode) {
     cart = [];
   }
+  activeMesaClienteRef = '';
+  renderMesaClientesBar();
   document.getElementById('sheet-pedido').classList.remove('on');
   document.body.style.overflow = '';
   // Se veio do modo delivery/retirada, salva o cart e atualiza preview
@@ -2755,8 +2943,8 @@ function addItem(id) {
     return;
   }
   // Sem customização → adiciona direto (comportamento anterior)
-  const ex = cart.find(c=>c.id===id && !c._customized);
-  if (ex) ex.qty++; else cart.push({...item, qty:1});
+  const ex = cart.find(c=>c.id===id && !c._customized && _mesmoClienteSelecionado(c));
+  if (ex) ex.qty++; else cart.push(_aplicarClienteAoItem({...item, qty:1}));
   updateCartUI();
   const tile = document.getElementById('tile-'+id);
   if (tile) {
@@ -3105,8 +3293,9 @@ function imConfirmGarcom() {
     cartObs = cartObs ? `Inteira · ${cartObs}` : '';
   }
 
-  const cartItem = { ...i, name: cartName, price: cartPrice, obs: cartObs, _grupos: JSON.parse(JSON.stringify(_imGruposState)), _customized: true };
-  const existing = cart.find(c => c.name === cartName && (c.obs||'') === (cartObs||''));
+  const clienteInfo = _mesaClienteDecoracao();
+  const cartItem = { ...i, ...clienteInfo, name: cartName, price: cartPrice, obs: cartObs, _grupos: JSON.parse(JSON.stringify(_imGruposState)), _customized: true };
+  const existing = cart.find(c => c.name === cartName && (c.obs||'') === (cartObs||'') && _mesmoClienteSelecionado(c));
   if (existing) existing.qty += _imQty;
   else cart.push({ ...cartItem, qty: _imQty });
 
@@ -3114,9 +3303,9 @@ function imConfirmGarcom() {
   for (const xid of _imXsellSelected) {
     const xi = allItems.find(x => x.id === xid);
     if (!xi) continue;
-    const xex = cart.find(c => c.id === xi.id && !c.obs);
+    const xex = cart.find(c => c.id === xi.id && !c.obs && _mesmoClienteSelecionado(c));
     if (xex) xex.qty += 1;
-    else cart.push({ ...xi, qty: 1, obs: '' });
+    else cart.push(_aplicarClienteAoItem({ ...xi, qty: 1, obs: '' }));
   }
   _imXsellSelected.clear();
 
@@ -3189,6 +3378,7 @@ function renderCartSheet() {
       <div style="font-size:20px;flex-shrink:0">${i.emoji||'🍽️'}</div>
       <div class="cart-row-name">
         <div class="cart-row-title">${_garcomHtmlEscape(i.name)}</div>
+        ${i.cliente_nome ? `<div class="mesa-cliente-tag">${_garcomHtmlEscape(i.cliente_nome)}</div>` : ''}
         ${i.obs ? `<div class="cart-row-obs">Obs: ${_garcomHtmlEscape(i.obs)}</div>` : ''}
         ${_cartObsEditingIdx === idx ? `
           <div class="cart-obs-editor">
@@ -3290,6 +3480,7 @@ async function submitPedido() {
       ...foodItems.map((i, idx) => ({
         id: i.id || null, qty: i.qty, name: i.name, price: i.price,
         cat: i.cat || '', cat_key: i.cat_key || i.catKey || i.cat || '',
+        cliente_ref: i.cliente_ref || '', cliente_nome: i.cliente_nome || '',
         obs: i.obs||'',
         item_status: 'producao', item_id: `${_ts}_f${idx}`, added_at: new Date().toISOString(),
         garcom_id: currentGarcom?.id || null, garcom_nome: currentGarcom?.nome || ''
@@ -3297,6 +3488,7 @@ async function submitPedido() {
       ...drinkItems.map((i, idx) => ({
         id: i.id || null, qty: i.qty, name: i.name, price: i.price,
         cat: i.cat || '', cat_key: i.cat_key || i.catKey || i.cat || '',
+        cliente_ref: i.cliente_ref || '', cliente_nome: i.cliente_nome || '',
         obs: i.obs||'', drink: true,
         item_status: 'entregue', item_id: `${_ts}_d${idx}`, added_at: new Date().toISOString(),
         garcom_id: currentGarcom?.id || null, garcom_nome: currentGarcom?.nome || ''
@@ -4064,9 +4256,10 @@ async function confirmarImprimirConta() {
   });
   const itens = Object.values(itemMap);
   if (!itens.length) { showToast('⚠️ Sem itens para imprimir'); return; }
+  const itensPorClienteHtml = _garcomPrintClientesHtml(orders);
 
   const renderItem = i =>
-    `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${i.name.toUpperCase()}<span style="float:right">R$ ${i.total.toFixed(2).replace('.',',')}</span></div></div>`;
+    `<div style="margin-bottom:4px"><div style="font-weight:bold;word-break:break-word">${i.qty}x ${_garcomHtmlEscape((i.name || '').toUpperCase())}<span style="float:right">R$ ${i.total.toFixed(2).replace('.',',')}</span></div></div>`;
 
   // Sem linha de taxa separada — a taxa já aparece como item na lista acima
   const taxaLinha = '';
@@ -4080,7 +4273,7 @@ async function confirmarImprimirConta() {
       ${currentGarcom?.nome ? `<div>Garçom: ${currentGarcom.nome}</div>` : ''}
       <div>Data: ${now}</div>
       <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
-      ${itens.map(renderItem).join('')}
+      ${itensPorClienteHtml || itens.map(renderItem).join('')}
       <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
       ${taxaLinha}
       <div style="display:flex;justify-content:space-between;font-weight:900;font-size:1.05em">
@@ -4160,7 +4353,16 @@ async function abrirFinalizarMesa(num) {
   }
 
   const listEl = document.getElementById('finalizar-pedidos-list');
-  listEl.innerHTML = orders.map(o => {
+  const clientesResumo = _resumoClientesMesa(orders);
+  const clientesHtml = clientesResumo.some(g => g.label !== 'Mesa toda')
+    ? `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:9px 11px;margin-bottom:8px">
+        <div style="font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Consumo por cliente</div>
+        ${clientesResumo.map(g => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:2px 0">
+          <span>${_garcomHtmlEscape(g.label)}</span>
+          <strong style="color:var(--amber)">R$ ${g.total.toFixed(2).replace('.', ',')}</strong>
+        </div>`).join('')}
+      </div>` : '';
+  listEl.innerHTML = clientesHtml + orders.map(o => {
     const items = (_parseItems(o.items)).map(i=>`${i.qty}x ${i.name}`).join(', ');
     return `<div style="padding:7px 0;border-bottom:1px solid var(--border);font-size:12.5px">
       <span style="color:var(--muted)">${items}</span>
@@ -4230,10 +4432,31 @@ async function confirmarFinalizarMesa() {
           item_type: 'taxa',
           item_id: 'taxa_servico'
         };
-        const novosItens = [...itensSemTaxa, itemTaxa];
+        const gruposClientesTaxa = _resumoClientesMesa([{ items: itensSemTaxa }]).filter(g => g.total > 0);
+        const temClienteNomeado = gruposClientesTaxa.some(g => g.label !== 'Mesa toda');
+        let itensTaxa = [itemTaxa];
+        if (temClienteNomeado && subtotal > 0) {
+          let distribuido = 0;
+          itensTaxa = gruposClientesTaxa.map((g, idx) => {
+            const share = idx === gruposClientesTaxa.length - 1
+              ? Math.max(0, Math.round((taxaVal - distribuido) * 100) / 100)
+              : Math.round((taxaVal * (g.total / subtotal)) * 100) / 100;
+            distribuido += share;
+            return {
+              ...itemTaxa,
+              name: `Taxa de Serviço (${_garcomTaxaServicoPct}%)`,
+              price: share,
+              item_id: `taxa_servico_${g.key}`,
+              cliente_ref: g.label === 'Mesa toda' ? '' : g.key,
+              cliente_nome: g.label === 'Mesa toda' ? '' : g.label
+            };
+          });
+        }
+        const novosItens = [...itensSemTaxa, ...itensTaxa];
         await sb.from('orders')
           .update({ items: novosItens, total: total, updated_at: new Date().toISOString() })
           .eq('id', comanda.id);
+        mesaOrders = mesaOrders.map(o => o.id === comanda.id ? { ...o, items: novosItens, total } : o);
       }
     }
 
@@ -4339,6 +4562,7 @@ async function confirmarImprimirComanda() {
       itemMap[key].qty += (i.qty || 1);
     });
     const itensAgrupados = Object.values(itemMap);
+    const itensPorClienteHtml = _garcomPrintClientesHtml([{ items: todosItens }]);
 
     const renderItem = i => {
       const obs = i.obs ? `<div style="padding-left:12px;font-size:0.88em">↳ ${_garcomHtmlEscape(i.obs)}</div>` : '';
@@ -4360,7 +4584,7 @@ async function confirmarImprimirComanda() {
         <div>Data: ${now}</div>
         <div>Pagamento: <b>${pagForma}</b></div>
         <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
-        ${itensAgrupados.map(renderItem).join('')}
+        ${itensPorClienteHtml || itensAgrupados.map(renderItem).join('')}
         <hr style="border:none;border-top:1px dashed #000;margin:4px 0">
         ${taxaLinhaComanda}
         <div style="display:flex;justify-content:space-between;font-weight:900;font-size:1.05em">
@@ -4459,14 +4683,15 @@ async function confirmarTransfer(toNum) {
 
     // Marca mesa origem como livre
     const { error: errFrom } = await sb.from('mesas')
-      .update({ status: 'free', opened_at: null, total: null, updated_at: now })
+      .update({ status: 'free', opened_at: null, total: null, clientes_json: [], updated_at: now })
       .eq('num', fromNum);
     if (errFrom) throw errFrom;
 
     // Marca mesa destino como ocupada (herda opened_at da origem)
     const mesaOrigem = tables.find(t => t.num === fromNum);
+    const clientesOrigem = _mesaClientesParse(mesaOrigem?.clientes_json);
     const { error: errTo } = await sb.from('mesas')
-      .update({ status: 'busy', opened_at: mesaOrigem?.opened_at || now, updated_at: now })
+      .update({ status: 'busy', opened_at: mesaOrigem?.opened_at || now, clientes_json: clientesOrigem, updated_at: now })
       .eq('num', toNum);
     if (errTo) throw errTo;
 
