@@ -1621,6 +1621,11 @@ function _subscribeOrdersSSE() {
         }
         renderKanban();
       }
+      if (order.mesa_num && typeof _patchOrderInCache === 'function') {
+        const items = typeof order.items === 'string' ? (() => { try { return JSON.parse(order.items); } catch { return []; } })() : (order.items || []);
+        _patchOrderInCache({ ...order, items });
+        _renderMesaPageFromCache();
+      }
     } catch(err) { console.error('[ORDERS-SSE] error:', err); }
   });
 

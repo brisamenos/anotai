@@ -1377,7 +1377,7 @@ async function confirmarPagamentoMesa() {
       await sb.from('orders').update({ status: 'entregue' })
         .eq('mesa_num', num).in('status', ['analise','producao','pronto','mesa_aberta']);
       await sb.from('mesas').update({
-        status: 'free', total: null, pag_forma: null,
+        status: 'free', total: null, pag_forma: null, taxa_servico: null,
         guests: null, opened_at: null, updated_at: new Date().toISOString()
       }).eq('num', num);
       t.status = 'free'; t.total = null; t.guests = null; t.opened_at = null; t.pag_forma = null;
@@ -1509,7 +1509,7 @@ async function confirmarPagamentoMesa() {
 
     // 2. Liberar mesa
     const { error: mesaErr } = await sb.from('mesas').update({
-      status: 'free', total: null, pag_forma: null,
+      status: 'free', total: null, pag_forma: null, taxa_servico: null,
       guests: null, opened_at: null, clientes_json: [], pagamentos_json: [],
       updated_at: new Date().toISOString()
     }).eq('num', num);

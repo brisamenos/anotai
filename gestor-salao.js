@@ -1815,7 +1815,7 @@ async function submitGarcomOrder() {
         tenant_id: _sessao.tenant_id,
         client: `Mesa ${garcomMesa}`, phone: '', addr: `Mesa ${garcomMesa}`,
         mesa_num: garcomMesa, items: itemsArr, total: totCozinha, taxa: 0,
-        session_ref: _mesa?.opened_at || '',
+        session_ref: _mesa?.opened_at || null,
         status: mesaAutoAccept ? 'producao' : 'analise', time, pag: 'Mesa'
       }).select().single();
       if (oErr) throw oErr;
@@ -1839,7 +1839,7 @@ async function submitGarcomOrder() {
         tenant_id: _sessao.tenant_id,
         client: `Mesa ${garcomMesa}`, phone: '', addr: `Mesa ${garcomMesa}`,
         mesa_num: garcomMesa, items: itemsArrImediato, total: totImediato, taxa: 0,
-        session_ref: _mesa?.opened_at || '',
+        session_ref: _mesa?.opened_at || null,
         status: 'entregue', time, pag: 'Mesa'
       }).select().single();
       if (bErr) throw bErr;
@@ -2235,7 +2235,7 @@ async function _confirmarTransferirItem(itemIdx, mesaDestino) {
         mesa_num: mesaDestino, items: [{ ...item, item_status: 'pronto' }],
         total: (parseFloat(item.price)||0) * (parseInt(item.qty)||1),
         status: 'mesa_aberta', pag: 'Mesa',
-        session_ref: mesaDestinoObj?.opened_at || '',
+        session_ref: mesaDestinoObj?.opened_at || null,
         time: new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})
       });
     }

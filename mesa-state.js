@@ -18,6 +18,8 @@
 var tables          = [];
 var mesaOrdersCache = [];
 
+const MESA_ORDER_STATUSES_ENCERRADOS = new Set(['cancelado', 'finalizado']);
+
 // ── Helper local — parse seguro de items ─────────────────────────────────────
 // Definido aqui (e não em gestor-core.js) porque mesa-state.js carrega primeiro.
 function _pi(items) {
@@ -58,10 +60,15 @@ function _mesaSqlUtcDate(ms) {
 
 function mesaOrderBelongsToSession(order, mesa) {
   if (!order || !mesa) return false;
-  if (order.session_ref !== undefined && order.session_ref !== null) {
-    return !mesa.opened_at || order.session_ref === mesa.opened_at;
+  const status = String(order.status || '').toLowerCase();
+  if (MESA_ORDER_STATUSES_ENCERRADOS.has(status)) return false;
+
+  const sessionRef = String(order.session_ref ?? '').trim();
+  if (sessionRef) {
+    return !mesa.opened_at || sessionRef === String(mesa.opened_at);
   }
-  if (!mesa.opened_at) return order.status !== 'entregue';
+
+  if (!mesa.opened_at) return status !== 'entregue';
   const sessionStart = _mesaTimeMs(mesa.opened_at) - 5000;
   return _mesaTimeMs(order.created_at) >= sessionStart;
 }
@@ -117,7 +124,7 @@ function calcularTotalMesa(orders) {
 function _patchOrderInCache(order) {
   const idx = mesaOrdersCache.findIndex(o => o.id === order.id);
 
-  if (order.status === 'cancelado') {
+  if (MESA_ORDER_STATUSES_ENCERRADOS.has(String(order.status || '').toLowerCase())) {
     if (idx !== -1) mesaOrdersCache.splice(idx, 1);
     return;
   }
@@ -201,7 +208,7 @@ async function refreshMesa(num) {
   const baseQuery = sb.from('orders')
     .select('*')
     .eq('mesa_num', numInt)
-    .neq('status', 'cancelado')
+    .in('status', ['analise', 'producao', 'pronto', 'mesa_aberta', 'entregue'])
     .order('id', { ascending: true });
 
   const { data: orders } = await baseQuery;

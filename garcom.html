@@ -1650,6 +1650,43 @@ let activeCatFilter = '';
 let sheetTab      = 'itens';
 let _submitting   = false; // guard contra duplo envio
 
+const GARCOM_ORDER_STATUSES_ENCERRADOS = new Set(['entregue', 'cancelado', 'finalizado']);
+
+function _garcomOrderStatus(order) {
+  return String(order?.status || '').toLowerCase();
+}
+
+function _garcomOrderEncerrado(order) {
+  return GARCOM_ORDER_STATUSES_ENCERRADOS.has(_garcomOrderStatus(order));
+}
+
+function _garcomHasMeuItemAtivo(order, garcomId = currentGarcom?.id) {
+  const gid = String(garcomId ?? '');
+  if (!gid) return false;
+  return _parseItems(order?.items).some(i =>
+    String(i?.garcom_id ?? '') === gid &&
+    (i?.item_status || 'active') !== 'cancelado'
+  );
+}
+
+function _garcomOrderDoGarcom(order, garcomId = currentGarcom?.id) {
+  if (!order || _garcomOrderEncerrado(order)) return false;
+  const gid = String(garcomId ?? '');
+  if (!gid) return false;
+
+  // Em comanda de mesa, o pedido pode ser compartilhado por varios garcons.
+  // Portanto conta para o garcom somente se ainda existe item ativo dele.
+  if (_garcomOrderStatus(order) === 'mesa_aberta' || order.mesa_num) {
+    return _garcomHasMeuItemAtivo(order, gid);
+  }
+
+  return String(order.garcom_id ?? '') === gid;
+}
+
+function _garcomMesaNumFromOrder(order) {
+  return Number(order?.mesa_num || parseInt((order?.addr || '').replace('Mesa ', '') || '0'));
+}
+
 // ── SOM DE NOTIFICAÇÃO ───────────────────────
 let _audioCtx = null;
 let _audioUnlocked = false;
@@ -2413,16 +2450,11 @@ function subscribeRealtime() {
 
   const chOrders = sb.channel('garcom-orders-' + gid)
     .on('postgres_changes', { event:'*', schema:'public', table:'orders' }, p => {
-      const _gid = currentGarcom?.id;
-      const _hasMyItems = (order) => {
-        if (order.garcom_id === _gid) return true;
-        const items = _parseItems(order.items);
-        return items.some(i => i.garcom_id === _gid && i.item_status !== 'cancelado');
-      };
+      const _hasMyItems = (order) => _garcomOrderDoGarcom(order);
 
       if (p.eventType === 'INSERT') {
         // Sempre adiciona em allMesaOrders (se mesa)
-        if (p.new.mesa_num && !allMesaOrders.find(o => o.id === p.new.id)) {
+        if (p.new.mesa_num && !_garcomOrderEncerrado(p.new) && !allMesaOrders.find(o => o.id === p.new.id)) {
           allMesaOrders.unshift(p.new);
         }
         // Só adiciona em myOrders se este garçom tem itens
@@ -2432,7 +2464,8 @@ function subscribeRealtime() {
         renderMyOrders();
       } else if (p.eventType === 'UPDATE') {
         // ── Status que indicam "pedido encerrado" — remover dos caches ──
-        const _isEncerrado = ['entregue', 'cancelado'].includes(p.new.status);
+        const _isEncerrado = _garcomOrderEncerrado(p.new);
+        const _prevCachedOrder = myOrders.find(o => o.id === p.new.id) || allMesaOrders.find(o => o.id === p.new.id);
 
         // Atualiza allMesaOrders
         const allIdx = allMesaOrders.findIndex(o => o.id === p.new.id);
@@ -2466,8 +2499,7 @@ function subscribeRealtime() {
 
         // Notifica garçom quando item fica pronto para servir
         if (p.new.status === 'mesa_aberta' && p.eventType === 'UPDATE') {
-          const prevOrder = myOrders.find(o => o.id === p.new.id) || allMesaOrders.find(o => o.id === p.new.id);
-          const prevProntos = prevOrder ? _parseItems(prevOrder.items).filter(i => i.item_status === 'pronto').length : 0;
+          const prevProntos = _prevCachedOrder ? _parseItems(_prevCachedOrder.items).filter(i => i.item_status === 'pronto').length : 0;
           const newProntos  = _parseItems(p.new.items).filter(i => i.item_status === 'pronto').length;
           if (newProntos > prevProntos) {
             const novos = _parseItems(p.new.items).filter(i => i.item_status === 'pronto').slice(-(newProntos - prevProntos));
@@ -2511,7 +2543,7 @@ setInterval(async () => {
   if (!currentGarcom || document.visibilityState !== 'visible') return;
   if (!_rtConnected) { subscribeRealtime(); return; } // reconecta se perdeu WS
   // Compara estado das mesas (leve)
-  const { data: mesasData } = await sb.from('mesas').select('num,status,updated_at').order('num');
+  const { data: mesasData } = await sb.from('mesas').select('*').order('num');
   const hash = JSON.stringify((mesasData||[]).map(m => m.num + m.status + (m.updated_at||'')));
   if (hash !== _lastGarcomHash) {
     _lastGarcomHash = hash;
@@ -2640,7 +2672,7 @@ async function openMesaDetail(num) {
           const rows = itens.map(item => {
             const itemId = item.item_id || allItens.indexOf(item);
             // Pode cancelar somente itens NÃO entregues E que pertencem a ESTE garçom
-            const isMyItem = !item.garcom_id || item.garcom_id === currentGarcom?.id;
+            const isMyItem = !item.garcom_id || String(item.garcom_id) === String(currentGarcom?.id);
             const podeCanc = item.item_status !== 'entregue' && isMyItem;
             const btnCanc  = podeCanc
               ? `<button onclick="garcomCancelarItem(${o.id},'${itemId}',${num})"
@@ -3545,10 +3577,27 @@ async function submitPedido() {
   let newItems = [];
   try {
     mesaAtual = tables.find(t => t.num === activeMesa);
+    if (!mesaAtual) {
+      const { data: mesaReload } = await sb.from('mesas').select('*').eq('num', activeMesa).single();
+      if (mesaReload) {
+        mesaAtual = mesaReload;
+        tables.push(mesaReload);
+      }
+    }
     if (mesaAtual && mesaAtual.status !== 'busy') {
       const _now = new Date().toISOString();
       await sb.from('mesas').update({ status:'busy', opened_at: _now, updated_at: _now }).eq('num', activeMesa);
       if (mesaAtual) { mesaAtual.status = 'busy'; mesaAtual.opened_at = _now; mesaAtual.updated_at = _now; }
+    } else if (mesaAtual && !mesaAtual.opened_at) {
+      const { data: abertasSemSessao } = await sb.from('orders')
+        .select('created_at,session_ref')
+        .eq('mesa_num', activeMesa)
+        .eq('status', 'mesa_aberta')
+        .order('id', { ascending: true })
+        .limit(1);
+      const _fallbackOpenedAt = String(abertasSemSessao?.[0]?.session_ref || abertasSemSessao?.[0]?.created_at || new Date().toISOString()).trim();
+      await sb.from('mesas').update({ opened_at: _fallbackOpenedAt, updated_at: new Date().toISOString() }).eq('num', activeMesa);
+      mesaAtual.opened_at = _fallbackOpenedAt;
     }
 
     // Monta itens com status individual por item
@@ -3594,7 +3643,7 @@ async function submitPedido() {
     let _orderId;
     if (existing) {
       // Acrescenta itens à comanda existente (UPDATE)
-      const updatedItems = [...(existing.items || []), ...newItems];
+      const updatedItems = [..._parseItems(existing.items), ...newItems];
       const newTotal = updatedItems
         .filter(i => i.item_status !== 'cancelado')
         .reduce((s, i) => s + (i.price||0)*(i.qty||1), 0);
@@ -3613,7 +3662,7 @@ async function submitPedido() {
         client: `Mesa ${activeMesa}`, phone: '', addr: `Mesa ${activeMesa}`,
         items: newItems, total: newTotal, taxa: 0,
         status: 'mesa_aberta', time, pag: 'Mesa',
-        mesa_num: activeMesa, session_ref: mesaAtual?.opened_at || '',
+        mesa_num: activeMesa, session_ref: mesaAtual?.opened_at || null,
         garcom_id: currentGarcom?.id, garcom_nome: currentGarcom?.nome
       }).select().single();
       if (error) throw error;
@@ -3638,7 +3687,7 @@ async function submitPedido() {
         client: `Mesa ${activeMesa}`, phone: '', addr: `Mesa ${activeMesa}`,
         items: newItems, total: newItems.reduce((s,i)=>s+(i.price||0)*(i.qty||1),0),
         status: 'mesa_aberta', time,
-        mesa_num: activeMesa, session_ref: mesaAtual?.opened_at || '',
+        mesa_num: activeMesa, session_ref: mesaAtual?.opened_at || null,
         garcom_id: currentGarcom?.id, garcom_nome: currentGarcom?.nome
       };
       _salvarPedidoOffline(pedidoOffline);
@@ -3980,15 +4029,8 @@ async function loadPedidosDaMesa() {
       return _garcomOrderBelongsToMesaSession(o, mesa);
     });
 
-    // "Meus Pedidos": apenas comandas onde ESTE garçom tem itens
-    const gid = currentGarcom?.id;
-    myOrders = allMesaOrders.filter(o => {
-      // Comanda criada por este garçom
-      if (o.garcom_id === gid) return true;
-      // Ou comanda que contém itens deste garçom
-      const items = _parseItems(o.items);
-      return items.some(i => i.garcom_id === gid && i.item_status !== 'cancelado');
-    });
+    // "Meus Pedidos": apenas comandas onde ESTE garcom ainda tem item ativo.
+    myOrders = allMesaOrders.filter(o => _garcomOrderDoGarcom(o));
 
     renderMyOrders();
   } catch(e) {
@@ -3999,6 +4041,9 @@ async function loadPedidosDaMesa() {
 }
 
 function renderMyOrders() {
+  allMesaOrders = allMesaOrders.filter(o => !_garcomOrderEncerrado(o));
+  myOrders = myOrders.filter(o => _garcomOrderDoGarcom(o));
+
   // Atualiza badge na bottom nav
   const badge = document.getElementById('pedidos-bnav-badge');
   if (badge) {
@@ -4157,10 +4202,14 @@ function _garcomTimeMs(raw) {
 
 function _garcomOrderBelongsToMesaSession(order, mesa) {
   if (!order || !mesa) return false;
-  if (order.session_ref !== undefined && order.session_ref !== null) {
-    return !mesa.opened_at || order.session_ref === mesa.opened_at;
+  if (['cancelado', 'finalizado'].includes(_garcomOrderStatus(order))) return false;
+
+  const sessionRef = String(order.session_ref ?? '').trim();
+  if (sessionRef) {
+    return !mesa.opened_at || sessionRef === String(mesa.opened_at);
   }
-  if (!mesa.opened_at) return order.status !== 'entregue';
+
+  if (!mesa.opened_at) return _garcomOrderStatus(order) !== 'entregue';
   return _garcomTimeMs(order.created_at) >= _garcomTimeMs(mesa.opened_at) - 5000;
 }
 
@@ -4202,6 +4251,14 @@ async function refreshMesa(num) {
   // 2. Atualiza as comandas desta mesa em myOrders
   const mesa = tables.find(t => t.num === numInt);
   if (!mesa) return;
+  if (mesa.status === 'free') {
+    allMesaOrders = allMesaOrders.filter(o => _garcomMesaNumFromOrder(o) !== numInt);
+    myOrders = myOrders.filter(o => _garcomMesaNumFromOrder(o) !== numInt);
+    renderMesas();
+    renderMyOrders();
+    sendSwState();
+    return;
+  }
 
   const q = sb.from('orders')
     .select('*')
@@ -4211,19 +4268,14 @@ async function refreshMesa(num) {
   const { data: orders } = await q;
 
   // Substitui entradas desta mesa em ambos os caches
-  const _otherAll = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr || '').replace('Mesa ', '') || '0')) !== numInt);
-  const _otherMy  = myOrders.filter(o => Number(o.mesa_num || parseInt((o.addr || '').replace('Mesa ', '') || '0')) !== numInt);
+  const _otherAll = allMesaOrders.filter(o => _garcomMesaNumFromOrder(o) !== numInt);
+  const _otherMy  = myOrders.filter(o => _garcomMesaNumFromOrder(o) !== numInt);
   const _fetched   = (orders || []).filter(o => _garcomOrderBelongsToMesaSession(o, mesa));
 
   allMesaOrders = [..._otherAll, ..._fetched];
 
   // myOrders: só inclui se este garçom tem itens
-  const _gid = currentGarcom?.id;
-  const _myFetched = _fetched.filter(o => {
-    if (o.garcom_id === _gid) return true;
-    const items = _parseItems(o.items);
-    return items.some(i => i.garcom_id === _gid && i.item_status !== 'cancelado');
-  });
+  const _myFetched = _fetched.filter(o => _garcomOrderDoGarcom(o));
   myOrders = [..._otherMy, ..._myFetched];
 
   renderMesas();
