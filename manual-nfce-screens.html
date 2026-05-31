@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Prints Manual NFC-e</title>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;background:#eef2f7;font-family:Inter,Arial,sans-serif;color:#111827}
+    .screen{width:1120px;height:630px;background:#fff;margin:30px auto;border-radius:14px;overflow:hidden;box-shadow:0 18px 50px rgba(15,23,42,.16);position:relative}
+    .top{height:58px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;padding:0 28px;gap:12px}
+    .brand{font-weight:900;font-size:22px}.orange{color:#f97316}.muted{color:#64748b}.tiny{font-size:12px}.btn{border:0;border-radius:999px;background:#f97316;color:#fff;font-weight:900;padding:12px 28px}
+    .plans{padding:44px 90px;display:grid;grid-template-columns:1fr 1fr;gap:26px}
+    .plan{border:1px solid #e5e7eb;border-radius:14px;padding:34px;min-height:390px;box-shadow:0 8px 24px rgba(15,23,42,.08)}
+    .price{font-size:35px;font-weight:900;margin:22px 0 14px}.price small{font-size:14px;color:#64748b;font-weight:600}
+    .check{display:flex;gap:9px;margin:11px 0;font-size:14px;color:#334155}.check:before{content:"✓";background:#f97316;color:#fff;border-radius:50%;width:17px;height:17px;display:grid;place-items:center;font-size:11px;font-weight:900;flex:0 0 auto}
+    .side{position:absolute;left:0;top:58px;bottom:0;width:205px;background:#f8fafc;border-right:1px solid #e5e7eb;padding:28px 0}
+    .nav{padding:13px 26px;color:#64748b;font-weight:700}.nav.on{background:#fff7ed;color:#f97316;border-left:5px solid #f97316}
+    .panel{margin-left:205px;padding:36px 44px}.card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:26px;box-shadow:0 2px 8px rgba(15,23,42,.06)}
+    .field{border:1px solid #cbd5e1;border-radius:5px;height:44px;padding:12px 14px;color:#64748b;margin-top:8px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}.label{font-size:12px;color:#64748b;font-weight:800;text-transform:uppercase;margin-top:18px}
+    .table{width:100%;border-collapse:collapse;margin-top:18px;font-size:14px}.table th{background:#f8fafc;color:#64748b;text-align:left;padding:13px;border-bottom:1px solid #e5e7eb}.table td{padding:14px 13px;border-bottom:1px solid #e5e7eb}
+    .pill{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;background:#dcfce7;color:#166534}.pill.warn{background:#ffedd5;color:#c2410c}
+    .dash{padding:36px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:20px 0}.stat{border:1px solid #e5e7eb;border-radius:12px;padding:17px;background:#fff}.sv{font-size:28px;font-weight:900;margin-top:5px}
+  </style>
+</head>
+<body>
+  <section class="screen" id="focus-retail">
+    <div class="top"><div class="brand"><span class="orange">Focus</span>NFe</div><div class="muted">Preços / Cupons Fiscais</div></div>
+    <div style="text-align:center;padding-top:24px;font-weight:900">Documentos Fiscais &nbsp; ◉ &nbsp; <span class="orange">Cupons Fiscais</span></div>
+    <div class="plans">
+      <div class="plan">
+        <div class="muted">Plano</div><h2 style="margin:0">Retail (NFCe)</h2>
+        <div class="muted tiny">Para empresas com 1 CNPJ</div>
+        <div class="price">R$59,90 <small>/ mês</small></div>
+        <b>O que está incluso?</b>
+        <div class="check">1 CNPJ</div>
+        <div class="check">Pacote com 500 NFCe e 100 NFe</div>
+        <div class="check">R$0,05 por NFCe adicional</div>
+        <div class="check">NFCe, CFe S@T e CFe MFe</div>
+        <div class="check">30 dias de testes</div>
+        <button class="btn" style="margin-top:18px;width:100%">Teste Grátis</button>
+      </div>
+      <div class="plan">
+        <div class="muted">Plano</div><h2 style="margin:0">Retail+ (NFCe)</h2>
+        <div class="muted tiny">Para empresas com muitos CNPJs</div>
+        <div class="price">R$629,90 <small>/ mês</small></div>
+        <b>O que está incluso?</b>
+        <div class="check">CNPJs ilimitados</div>
+        <div class="check">Pacote com 9.000 NFCe e 1.000 NFe</div>
+        <div class="check">R$0,06 por NFCe adicional</div>
+        <div class="check">NFCe, CFe S@T e CFe MFe</div>
+        <button class="btn" style="margin-top:52px;width:100%">Teste Grátis</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="focus-token">
+    <div class="top"><div class="brand"><span class="orange">Focus</span>NFe</div><div class="muted">Painel API</div></div>
+    <aside class="side">
+      <div class="nav">Requisições</div><div class="nav">Municípios</div><div class="nav on">Tokens</div><div class="nav">Webhooks</div>
+    </aside>
+    <main class="panel">
+      <h1 style="margin:0 0 6px">Tokens da empresa</h1>
+      <div class="muted">Use esses tokens para ligar o EstimaFood na conta Focus do cliente.</div>
+      <div class="card" style="margin-top:26px">
+        <div class="grid2">
+          <div><div class="label">Empresa</div><div class="field">Restaurante Exemplo LTDA</div></div>
+          <div><div class="label">CNPJ</div><div class="field">00.000.000/0001-00</div></div>
+          <div><div class="label">Token homologação</div><div class="field">•••••••••••••••••••• HMLG</div></div>
+          <div><div class="label">Token produção</div><div class="field">•••••••••••••••••••• PROD</div></div>
+        </div>
+        <div style="margin-top:22px;display:flex;justify-content:flex-end;gap:10px"><button class="btn">Copiar token</button></div>
+      </div>
+    </main>
+  </section>
+
+  <section class="screen" id="admin-uso">
+    <div class="top"><div class="brand">SaaS Admin</div><div class="muted">Uso NFC-e</div></div>
+    <main class="dash">
+      <h1 style="margin:0">Uso NFC-e</h1>
+      <div class="muted">Controle mensal do plano fiscal, limite de 500 notas e excedentes.</div>
+      <div class="stats">
+        <div class="stat"><div class="tiny muted">NFC-e no mês</div><div class="sv">482</div></div>
+        <div class="stat"><div class="tiny muted">Excedentes</div><div class="sv">37</div></div>
+        <div class="stat"><div class="tiny muted">Extra excedente</div><div class="sv">R$ 3,70</div></div>
+        <div class="stat"><div class="tiny muted">Total fiscal</div><div class="sv">R$ 163,60</div></div>
+      </div>
+      <div class="card">
+        <b>Clientes com plano fiscal</b>
+        <table class="table">
+          <thead><tr><th>Cliente</th><th>Plano</th><th>NFC-e</th><th>Excedente</th><th>Total</th><th>Status</th><th>Ação</th></tr></thead>
+          <tbody>
+            <tr><td>Restaurante Exemplo</td><td><span class="pill">Fiscal NFC-e</span></td><td>537</td><td>37</td><td>R$ 163,60</td><td><span class="pill warn">Excedente</span></td><td><button class="btn">Gerar cobrança</button></td></tr>
+            <tr><td>Pizzaria Modelo</td><td><span class="pill">Fiscal NFC-e</span></td><td>248</td><td>0</td><td>R$ 159,90</td><td><span class="pill">Dentro do limite</span></td><td><button class="btn">Gerar cobrança</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </section>
+</body>
+</html>

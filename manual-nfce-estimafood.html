@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Manual NFC-e EstimaFood + Focus NFe</title>
+  <style>
+    @page{size:A4;margin:14mm}
+    *{box-sizing:border-box}
+    body{font-family:Arial,Helvetica,sans-serif;color:#172033;margin:0;line-height:1.48;font-size:12.5px}
+    h1,h2,h3{line-height:1.18;margin:0 0 10px;color:#071326}
+    h1{font-size:30px} h2{font-size:20px;border-bottom:2px solid #f97316;padding-bottom:6px;margin-top:22px} h3{font-size:15px;margin-top:16px}
+    p{margin:7px 0}.muted{color:#64748b}.small{font-size:11px}.orange{color:#f97316}.strong{font-weight:800}.page-break{break-before:page}
+    .cover{height:250mm;display:flex;flex-direction:column;justify-content:center;background:linear-gradient(135deg,#fff7ed,#fff);padding:30px;border-radius:16px;border:1px solid #fed7aa}
+    .cover .tag{display:inline-block;background:#f97316;color:#fff;border-radius:999px;padding:7px 13px;font-weight:800;font-size:12px;margin-bottom:18px}
+    .cover h1{font-size:38px;max-width:650px}.cover .subtitle{font-size:17px;color:#334155;max-width:640px}
+    .box{border:1px solid #e2e8f0;background:#f8fafc;border-radius:12px;padding:13px 15px;margin:12px 0}
+    .warn{border-color:#fdba74;background:#fff7ed}.ok{border-color:#86efac;background:#f0fdf4}.danger{border-color:#fca5a5;background:#fef2f2}
+    ul,ol{margin:8px 0 10px 18px;padding:0}li{margin:5px 0}
+    table{width:100%;border-collapse:collapse;margin:10px 0 14px;font-size:11.5px}th,td{border:1px solid #e2e8f0;padding:7px 8px;text-align:left;vertical-align:top}th{background:#f8fafc}
+    .print{border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;margin:10px 0 16px;background:#fff;break-inside:avoid}
+    .print img{width:100%;display:block}.caption{font-size:11px;color:#64748b;padding:7px 10px;background:#f8fafc;border-top:1px solid #e2e8f0}
+    .step{display:flex;gap:10px;margin:10px 0;break-inside:avoid}.num{width:25px;height:25px;border-radius:50%;background:#f97316;color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;flex:0 0 auto}.step div:last-child{flex:1}
+    .checklist li{list-style:"☐  ";padding-left:2px}.footer-note{font-size:10.5px;color:#64748b;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:8px}
+    code{background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:1px 4px;font-family:Consolas,monospace}
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <div>
+      <span class="tag">Manual para leigo</span>
+      <h1>Configuração NFC-e no EstimaFood com Focus NFe</h1>
+      <p class="subtitle">Passo a passo completo: contratar/configurar Focus, preencher o Gestor, emitir notas por filtro de pagamento e acompanhar cobrança no Admin.</p>
+      <p class="muted" style="margin-top:26px">Atualizado em 29/05/2026 · Plano comercial sugerido: Plano Fiscal EstimaFood R$ 159,90/mês</p>
+    </div>
+  </section>
+
+  <h2>1. Visão geral simples</h2>
+  <p>Você terá dois sistemas trabalhando juntos:</p>
+  <table>
+    <tr><th>Sistema</th><th>Função</th></tr>
+    <tr><td><b>EstimaFood</b></td><td>Recebe pedidos, salva forma de pagamento, importa vendas do dia e manda emitir NFC-e.</td></tr>
+    <tr><td><b>Focus NFe</b></td><td>Recebe os dados do EstimaFood, conversa com SEFAZ e devolve status, chave, XML e DANFE.</td></tr>
+  </table>
+  <div class="box ok"><b>Regra de ouro:</b> o EstimaFood não emite direto na SEFAZ. Ele envia para a Focus NFe. A Focus faz a parte fiscal pesada.</div>
+
+  <h2>2. Plano comercial que você vai vender</h2>
+  <table>
+    <tr><th>Item</th><th>Valor</th><th>Observação</th></tr>
+    <tr><td>Plano Fiscal EstimaFood</td><td><b>R$ 159,90/mês</b></td><td>Inclui sistema + integração fiscal + até 500 NFC-e/mês.</td></tr>
+    <tr><td>Custo Focus por cliente/CNPJ</td><td><b>R$ 59,90/mês</b></td><td>Plano Retail (NFCe), para 1 CNPJ.</td></tr>
+    <tr><td>Sobra bruta para você</td><td><b>R$ 100,00/mês</b></td><td>Antes de impostos, suporte e outros custos.</td></tr>
+    <tr><td>Excedente</td><td><b>R$ 0,10 por NFC-e</b></td><td>Cobrado do cliente acima de 500 NFC-e/mês.</td></tr>
+  </table>
+  <div class="print">
+    <img src="manual-focus-retail.png" alt="Plano Retail NFCe Focus NFe">
+    <div class="caption">Print ilustrativo do plano Focus Retail (NFCe): 1 CNPJ, pacote com 500 NFC-e, valor base R$ 59,90/mês.</div>
+  </div>
+  <p class="small muted">Fonte pública consultada: https://focusnfe.com.br/precos/. Valores podem mudar no futuro; confira antes de fechar nova tabela comercial.</p>
+
+  <h2 class="page-break">3. Antes de configurar: o que pedir ao cliente/contador</h2>
+  <p>Antes de mexer na Focus ou no Gestor, separe estes dados:</p>
+  <ul class="checklist">
+    <li>CNPJ da empresa.</li>
+    <li>Razão social e nome fantasia.</li>
+    <li>Inscrição Estadual.</li>
+    <li>Regime tributário: geralmente Simples Nacional, mas confirme com o contador.</li>
+    <li>Endereço completo: CEP, rua, número, bairro, município e UF.</li>
+    <li>Certificado digital A1, normalmente arquivo <code>.pfx</code> ou <code>.p12</code>, com senha.</li>
+    <li>CSC/Token SEFAZ e ID CSC, quando necessário para NFC-e.</li>
+    <li>NCM/CFOP/CSOSN padrão para os produtos, orientado pelo contador.</li>
+  </ul>
+  <div class="box warn"><b>Ceará:</b> confirme com o contador se o cliente vai usar NFC-e, MFe/CF-e ou algum requisito estadual específico. A Focus informa suporte a NFCe, CFe SAT e CFe MFe no plano Retail.</div>
+
+  <h2>4. Criar/configurar o cliente na Focus NFe</h2>
+  <div class="step"><div class="num">1</div><div><b>Criar ou acessar sua conta Focus.</b><br>Entre no painel da Focus NFe com sua conta.</div></div>
+  <div class="step"><div class="num">2</div><div><b>Cadastrar a empresa/CNPJ do cliente.</b><br>Cada cliente com 1 CNPJ entra no plano Retail (NFCe). Se o cliente tiver mais CNPJs, cada CNPJ precisa ser tratado no plano correto.</div></div>
+  <div class="step"><div class="num">3</div><div><b>Enviar/configurar certificado digital A1.</b><br>Esse certificado geralmente vem do contador. Sem certificado válido, a emissão real não funciona.</div></div>
+  <div class="step"><div class="num">4</div><div><b>Preencher dados fiscais.</b><br>Informe CNPJ, Inscrição Estadual, endereço, regime tributário e dados exigidos pela Focus.</div></div>
+  <div class="step"><div class="num">5</div><div><b>Pegar os tokens de API.</b><br>Você usará o token de homologação para teste e o token de produção para nota real.</div></div>
+  <div class="print">
+    <img src="manual-focus-token.png" alt="Painel Focus tokens">
+    <div class="caption">Print ilustrativo: no painel da Focus, a área de Tokens é onde você copia os tokens para colocar no Gestor.</div>
+  </div>
+
+  <h2 class="page-break">5. Configurar no Gestor do EstimaFood</h2>
+  <p>No painel do cliente, entre em <b>Fiscal NFC-e</b>. A tela ficou assim:</p>
+  <div class="print">
+    <img src="fiscal-tela-atualizada.png" alt="Tela Fiscal NFC-e Gestor">
+    <div class="caption">Tela Fiscal NFC-e do Gestor: data, filtro Emitir, Importar vendas e Emitir pendentes.</div>
+  </div>
+  <h3>Campos principais</h3>
+  <table>
+    <tr><th>Campo</th><th>O que colocar</th></tr>
+    <tr><td>Ativar fiscal</td><td>Ligue quando esse cliente já estiver pronto para usar o módulo fiscal.</td></tr>
+    <tr><td>Ambiente</td><td><b>Homologação</b> para teste. <b>Produção</b> para nota real.</td></tr>
+    <tr><td>Emissão</td><td>Use <b>Fechamento da noite</b> para o cliente emitir em lote no fim do dia.</td></tr>
+    <tr><td>Token homologação Focus</td><td>Token de teste copiado da Focus.</td></tr>
+    <tr><td>Token produção Focus</td><td>Token real copiado da Focus. Use só quando estiver liberado para produção.</td></tr>
+    <tr><td>CNPJ / IE / Regime / UF</td><td>Dados fiscais da empresa. Para Ceará, UF = CE.</td></tr>
+    <tr><td>CSC/Token SEFAZ e ID CSC</td><td>Dados fiscais necessários para NFC-e. Peça ao contador se o cliente não souber.</td></tr>
+    <tr><td>NCM / CFOP / CSOSN</td><td>Padrão fiscal dos produtos. Precisa de orientação do contador.</td></tr>
+  </table>
+
+  <h2>6. Fluxo correto no final do dia</h2>
+  <div class="box ok"><b>Importante:</b> o pedido precisa estar finalizado/entregue para entrar na importação fiscal. Pedido cancelado antes de emitir não conta.</div>
+  <div class="step"><div class="num">1</div><div>O cliente escolhe a data do fechamento.</div></div>
+  <div class="step"><div class="num">2</div><div>Clica em <b>Importar vendas</b>. Isso importa todas as vendas finalizadas daquele dia, sem filtrar por pagamento.</div></div>
+  <div class="step"><div class="num">3</div><div>No seletor <b>Emitir</b>, escolhe o que quer emitir: Todas, Cartão de crédito, Cartão de débito, PIX ou Dinheiro.</div></div>
+  <div class="step"><div class="num">4</div><div>Clica em <b>Emitir pendentes</b>. Agora o sistema envia para a Focus somente as pendentes do filtro escolhido.</div></div>
+  <div class="step"><div class="num">5</div><div>Depois acompanha a lista de notas: pendente, autorizada, rejeitada ou cancelada.</div></div>
+  <div class="box warn"><b>Exemplo:</b> se importar todas as vendas e escolher “Cartão de crédito” no filtro Emitir, o sistema emite só as NFC-e pendentes de cartão de crédito.</div>
+
+  <h2 class="page-break">7. O que contabiliza no limite das 500 NFC-e?</h2>
+  <table>
+    <tr><th>Situação</th><th>Conta no limite?</th><th>Explicação</th></tr>
+    <tr><td>Pedido finalizado, mas sem NFC-e emitida</td><td>Não</td><td>Ainda é só venda no sistema.</td></tr>
+    <tr><td>NFC-e autorizada</td><td>Sim</td><td>Passou pela Focus/SEFAZ.</td></tr>
+    <tr><td>NFC-e autorizada e depois cancelada</td><td>Sim</td><td>Mesmo cancelada, ela já consumiu emissão fiscal.</td></tr>
+    <tr><td>Pedido cancelado antes de emitir</td><td>Não</td><td>Não chegou a virar nota.</td></tr>
+    <tr><td>Pedido via cardápio pago no cartão e emitido</td><td>Sim</td><td>Conta como 1 NFC-e.</td></tr>
+    <tr><td>Mesa/garçom finalizada e emitida</td><td>Sim</td><td>Conta como NFC-e emitida.</td></tr>
+  </table>
+
+  <h2>8. Acompanhamento no Admin</h2>
+  <p>No Admin, você entra em <b>Uso NFC-e</b> para saber quantas notas cada cliente usou no mês, quem passou de 500 e quanto cobrar de excedente.</p>
+  <div class="print">
+    <img src="manual-admin-uso-nfce.png" alt="Admin Uso NFC-e">
+    <div class="caption">Print ilustrativo da tela Admin: controle mensal de uso, excedente e geração de cobrança.</div>
+  </div>
+  <p>O cálculo configurado ficou assim:</p>
+  <ul>
+    <li>Base do Plano Fiscal: <b>R$ 159,90/mês</b>.</li>
+    <li>Limite incluso: <b>500 NFC-e/mês</b>.</li>
+    <li>Excedente cobrado do cliente: <b>R$ 0,10 por NFC-e acima de 500</b>.</li>
+    <li>O admin conta notas com status autorizada e cancelada.</li>
+  </ul>
+
+  <h2 class="page-break">9. Reembolso e cancelamento</h2>
+  <table>
+    <tr><th>Caso</th><th>O que fazer</th></tr>
+    <tr><td>Cliente pediu reembolso antes da NFC-e</td><td>Cancelar/estornar a venda no sistema e não emitir a NFC-e.</td></tr>
+    <tr><td>Cliente pediu reembolso depois da NFC-e</td><td>Cancelar a NFC-e pela Focus/SEFAZ, se estiver dentro do prazo permitido, e fazer o reembolso financeiro.</td></tr>
+    <tr><td>NFC-e rejeitada</td><td>Corrigir o motivo fiscal, normalmente NCM, CSC, IE, endereço, regime ou produto, e emitir novamente.</td></tr>
+  </table>
+
+  <h2>10. Problemas comuns</h2>
+  <table>
+    <tr><th>Problema</th><th>Possível causa</th><th>Solução</th></tr>
+    <tr><td>Sem token</td><td>Token da Focus não preenchido.</td><td>Copiar token correto da Focus e salvar no Gestor.</td></tr>
+    <tr><td>Nota rejeitada</td><td>Dados fiscais incorretos.</td><td>Conferir CNPJ, IE, regime, CSC, NCM e CFOP com contador.</td></tr>
+    <tr><td>Pedido não aparece para importar</td><td>Pedido não está finalizado/entregue.</td><td>Finalizar o pedido antes da importação fiscal.</td></tr>
+    <tr><td>Emitiu pagamento errado</td><td>Filtro Emitir estava em Todas ou forma errada.</td><td>Selecionar Cartão/PIX/Dinheiro antes de clicar Emitir pendentes.</td></tr>
+    <tr><td>Está em homologação</td><td>Modo de teste ativo.</td><td>Após testes, mudar para Produção com token real.</td></tr>
+  </table>
+
+  <h2>11. Checklist de implantação</h2>
+  <ul class="checklist">
+    <li>Cliente contratou Plano Fiscal EstimaFood.</li>
+    <li>CNPJ confirmado.</li>
+    <li>Contador confirmou regime, IE, CSC, NCM, CFOP e CSOSN.</li>
+    <li>Certificado A1 em mãos.</li>
+    <li>Cliente cadastrado na Focus.</li>
+    <li>Token de homologação copiado.</li>
+    <li>Token de produção copiado.</li>
+    <li>Dados fiscais preenchidos no Gestor.</li>
+    <li>Teste em homologação feito.</li>
+    <li>Ambiente produção liberado.</li>
+    <li>Cliente treinado no fluxo: Importar vendas → escolher Emitir → Emitir pendentes.</li>
+    <li>Admin conferindo Uso NFC-e mensalmente.</li>
+  </ul>
+
+  <div class="footer-note">
+    Fontes públicas consultadas em 29/05/2026: Focus NFe Preços (https://focusnfe.com.br/precos/), produto NFC-e Focus NFe e documentação API NFC-e Focus NFe. Este manual é operacional e não substitui orientação do contador.
+  </div>
+</body>
+</html>

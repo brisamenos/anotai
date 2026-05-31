@@ -355,7 +355,7 @@ td{padding:13px 16px;font-size:13px;vertical-align:middle}
 .card:not(.plan-card){overflow-x:auto;-webkit-overflow-scrolling:touch}
 table{min-width:760px}
 #sec-clientes table,#sec-indicacoes table,#sec-auditoria table{min-width:980px}
-#sec-faturamento table,#sec-saques table,#sec-backup table,#sec-planos table{min-width:860px}
+#sec-faturamento table,#sec-fiscal-uso table,#sec-saques table,#sec-backup table,#sec-planos table{min-width:860px}
 th,td{overflow-wrap:normal}
 .tw table th:last-child,
 .tw table td:last-child{
@@ -725,6 +725,9 @@ td{padding:12px 16px;color:#dce6f7}
       <button class="sb-item" id="nav-faturamento" onclick="navTo('faturamento')">
         <span class="sb-icon">🧾</span> Faturamento
       </button>
+      <button class="sb-item" id="nav-fiscal-uso" onclick="navTo('fiscal-uso')">
+        <span class="sb-icon">NFe</span> Uso NFC-e
+      </button>
       <button class="sb-item" id="nav-indicacoes" onclick="navTo('indicacoes')">
         <span class="sb-icon">🎯</span> Indicações
       </button>
@@ -889,6 +892,7 @@ td{padding:12px 16px;color:#dce6f7}
               <option value="">Todos os planos</option>
               <option value="pro">Pro / Essencial</option>
               <option value="premium">Premium</option>
+              <option value="fiscal">Fiscal NFC-e</option>
               <option value="basico">Básico</option>
             </select>
             <select id="cli-f-status" class="minput" onchange="renderClientes()" style="width:auto;padding:6px 10px;font-size:12px">
@@ -1506,6 +1510,70 @@ td{padding:12px 16px;color:#dce6f7}
         </div>
       </div>
 
+      <div id="sec-fiscal-uso" style="display:none" class="sec-page">
+        <div class="sec-head">
+          <div>
+            <div class="sec-head-title">Uso NFC-e</div>
+            <div class="sec-head-sub">Controle mensal do plano fiscal, limite de 500 notas e excedentes</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input id="nfce-mes" class="minput" type="month" style="width:auto;padding:8px 10px;font-size:12px" onchange="carregarFiscalUso()">
+            <button class="btn bg2 bsm" onclick="carregarFiscalUso()">Atualizar</button>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:20px">
+          <div class="stat-card" style="--ca:var(--accent)">
+            <div class="stat-card-label">NFC-e no mês</div>
+            <div class="stat-card-val" id="nfce-total-notas" style="color:var(--accent)">—</div>
+            <div class="stat-card-sub" id="nfce-total-clientes">— clientes fiscais</div>
+            <div class="stat-card-icon">NFe</div>
+          </div>
+          <div class="stat-card" style="--ca:var(--orange)">
+            <div class="stat-card-label">Excedentes</div>
+            <div class="stat-card-val" id="nfce-total-excedente" style="color:var(--orange)">—</div>
+            <div class="stat-card-sub">acima de 500 por cliente</div>
+            <div class="stat-card-icon">+500</div>
+          </div>
+          <div class="stat-card" style="--ca:var(--success)">
+            <div class="stat-card-label">Extra excedente</div>
+            <div class="stat-card-val" id="nfce-total-extra" style="color:var(--success);font-size:22px">R$ —</div>
+            <div class="stat-card-sub">R$ 0,10 por nota</div>
+            <div class="stat-card-icon">R$</div>
+          </div>
+          <div class="stat-card" style="--ca:var(--purple)">
+            <div class="stat-card-label">Total fiscal</div>
+            <div class="stat-card-val" id="nfce-total-cobrar" style="color:var(--purple);font-size:22px">R$ —</div>
+            <div class="stat-card-sub">plano + excedentes</div>
+            <div class="stat-card-icon">PIX</div>
+          </div>
+        </div>
+
+        <div class="tw">
+          <div class="tmeta">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="card-title">Clientes com plano fiscal</div>
+              <span class="badge bg-gray" id="nfce-uso-count">—</span>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <input id="nfce-q" class="minput" placeholder="Buscar cliente..." oninput="renderFiscalUso()" style="width:180px;padding:6px 10px;font-size:12px">
+              <select id="nfce-f-status" class="minput" onchange="renderFiscalUso()" style="width:auto;padding:6px 10px;font-size:12px">
+                <option value="">Todos</option>
+                <option value="excedente">Com excedente</option>
+                <option value="sem-excedente">Sem excedente</option>
+                <option value="ja-cobrado">Já cobrado</option>
+              </select>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Cliente</th><th>Plano</th><th>NFC-e</th><th>Excedente</th><th>Extra</th><th>Total</th><th>Status</th><th>Ações</th></tr>
+            </thead>
+            <tbody id="nfce-uso-tbody"><tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- ════ AUDITORIA ════ -->      <!-- ══════════════════════════════════════════════════════════════
            SEÇÃO INDICAÇÕES — Sistema de afiliados/referrals
            ══════════════════════════════════════════════════════════════ -->
@@ -1869,6 +1937,7 @@ td{padding:12px 16px;color:#dce6f7}
         <select class="minput" id="cb-plano">
           <option value="essencial">Essencial</option>
           <option value="premium">Premium</option>
+          <option value="fiscal">Fiscal NFC-e</option>
         </select>
       </div>
       <div class="mrow" style="margin:0">
@@ -1929,6 +1998,7 @@ td{padding:12px 16px;color:#dce6f7}
         <select class="minput" id="cli-plano">
           <option value="pro">Pro — Sem Robô</option>
           <option value="premium">Premium — Com Robô IA</option>
+          <option value="fiscal">Fiscal NFC-e</option>
         </select>
       </div>
     </div>
@@ -2248,6 +2318,7 @@ function polishAdminUI(root = document) {
     ['Backup & Restore','Backup & Restore'],
     ['Saques PIX','Saques PIX'],
     ['Faturamento','Faturamento'],
+    ['Uso NFC-e','Uso NFC-e'],
     ['Indicações','Indicações'],
     ['Auditoria','Auditoria']
   ];
@@ -2282,6 +2353,7 @@ function polishAdminUI(root = document) {
     ['carregarLeads()', 'refresh', 'Atualizar'],
     ['carregarSaquesAdmin()', 'refresh', 'Atualizar'],
     ['carregarFaturamento()', 'refresh', 'Atualizar'],
+    ['carregarFiscalUso()', 'refresh', 'Atualizar'],
     ['carregarAuditoria()', 'refresh', 'Atualizar'],
     ['abrirModalCliente()', 'plus', 'Novo cliente'],
     ['salvarAdminPhone()', 'save', 'Salvar']
@@ -2313,12 +2385,12 @@ function polishAdminUI(root = document) {
 window.addEventListener('DOMContentLoaded', () => polishAdminUI());
 
 function navTo(id) {
-  ['dash','clientes','ia','backup','saques','planos','comunicados','faturamento','indicacoes','auditoria'].forEach(s => {
+  ['dash','clientes','ia','backup','saques','planos','comunicados','faturamento','fiscal-uso','indicacoes','auditoria'].forEach(s => {
     const sec = document.getElementById('sec-'+s);
     if (sec) sec.style.display = s===id ? 'block' : 'none';
     document.getElementById('nav-'+s)?.classList.toggle('on', s===id);
   });
-  const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA', backup:'Backup & Restore', saques:'Saques PIX', planos:'Planos & Leads', faturamento:'Faturamento', indicacoes:'Indicações', auditoria:'Auditoria' };
+  const titles = { dash:'Dashboard', clientes:'Clientes', ia:'Agente IA', backup:'Backup & Restore', saques:'Saques PIX', planos:'Planos & Leads', faturamento:'Faturamento', 'fiscal-uso':'Uso NFC-e', indicacoes:'Indicações', auditoria:'Auditoria' };
   titles.comunicados = 'Comunicados';
   document.getElementById('topbar-title').textContent = titles[id] || id;
   if (id==='ia')          { iaAdminCarregar(); }
@@ -2327,6 +2399,7 @@ function navTo(id) {
   if (id==='planos')      { carregarPrecosPlanos(); carregarAdminPhone(); carregarLeads(); }
   if (id==='comunicados') { renderComunicadoTargetsAdmin(); carregarComunicadosAdmin(); }
   if (id==='faturamento') { carregarFaturamento(); }
+  if (id==='fiscal-uso')  { carregarFiscalUso(); }
   if (id==='indicacoes')  { carregarResumoIndicacoes(); carregarIndicadores(); }
   if (id==='auditoria')   { carregarAuditoria(); }
   toggleAdminNav(false);
@@ -2731,6 +2804,7 @@ async function loadAll() {
 function _precoPlano(plano) {
   const ess = parseFloat(document.getElementById('adm-preco-essencial')?.value) || 79.99;
   const pre = parseFloat(document.getElementById('adm-preco-premium')?.value)   || 99.90;
+  if (plano === 'fiscal') return 159.90;
   if (plano === 'premium') return pre;
   if (plano === 'pro' || plano === 'essencial') return ess;
   return 0; // básico/grátis
@@ -2762,8 +2836,8 @@ function calcularFinanceiro() {
 }
 
 // ── Badges de plano ────────────────────────────────────
-const planoBadge = { basico:'bg-gray', pro:'bg-blue', premium:'bg-purple' };
-const planoLabel = { basico:'Básico', pro:'Pro', premium:'⭐ Premium' };
+const planoBadge = { basico:'bg-gray', pro:'bg-blue', premium:'bg-purple', fiscal:'bg-green' };
+const planoLabel = { basico:'Básico', pro:'Pro', premium:'⭐ Premium', fiscal:'Fiscal NFC-e' };
 
 // ── DASHBOARD ──────────────────────────────────────────
 function renderDash() {
@@ -2791,6 +2865,7 @@ function renderDash() {
     const inativos = _clientes.filter(c=>!c.ativo).length;
     const premium  = _clientes.filter(c=>c.plano==='premium').length;
     const pro      = _clientes.filter(c=>c.plano==='pro').length;
+    const fiscal   = _clientes.filter(c=>c.plano==='fiscal').length;
     const expiring = _clientes.filter(c=>{
       if(!c.expires_at) return false;
       const d = adminParseDateOnly(c.expires_at), now = new Date();
@@ -2813,6 +2888,10 @@ function renderDash() {
         <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
           <span style="font-size:13px;color:var(--text-2)">💙 Plano Pro</span>
           <span style="font-weight:700;color:var(--accent)">${pro}</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+          <span style="font-size:13px;color:var(--text-2)">NFC-e Plano Fiscal</span>
+          <span style="font-weight:700;color:var(--success)">${fiscal}</span>
         </div>
         ${expiring.length ? `
         <div style="margin-top:4px">
@@ -3328,7 +3407,7 @@ function gerarCobrancaCliente(tenantId) {
   _cbTenantAtual = c;
   document.getElementById('cb-titulo').textContent = `💳 Cobrar — ${c.nome}`;
   document.getElementById('cb-info').innerHTML = `Vencimento atual: <strong>${c.expires_at?adminFormatDate(c.expires_at):'Sem data'}</strong>`;
-  document.getElementById('cb-plano').value = (c.plano==='premium')?'premium':'essencial';
+  document.getElementById('cb-plano').value = (c.plano==='premium') ? 'premium' : (c.plano==='fiscal' ? 'fiscal' : 'essencial');
   document.getElementById('cb-meses').value = '1';
   document.getElementById('cb-metodo').value = 'pix';
   cbRecalcular();
@@ -3717,6 +3796,121 @@ async function cancelarCobranca(id) {
     await auditLog('cobranca.cancelar', { tipo:'cobranca', id });
     toast('ok','Cobrança cancelada');
     carregarFaturamento();
+  } catch(e) { toast('err','Erro: '+e.message); }
+}
+
+// ── USO NFC-e ───────────────────────────────────────────
+let _nfceUso = [];
+let _nfceResumo = null;
+function fiscalMesAtual() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function fiscalMoney(v) {
+  return 'R$ ' + (parseFloat(v) || 0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+async function carregarFiscalUso() {
+  const mesEl = document.getElementById('nfce-mes');
+  if (mesEl && !mesEl.value) mesEl.value = fiscalMesAtual();
+  const tbody = document.getElementById('nfce-uso-tbody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)">Carregando...</td></tr>';
+  try {
+    const qs = new URLSearchParams({ mes: mesEl?.value || fiscalMesAtual() });
+    const r = await fetch('/api/admin/fiscal-nfce/uso?' + qs.toString(), { headers: adminAuthHeader() });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Falha ao carregar uso NFC-e');
+    _nfceResumo = d;
+    _nfceUso = Array.isArray(d.rows) ? d.rows : [];
+    document.getElementById('nfce-total-notas').textContent = d.total_notas || 0;
+    document.getElementById('nfce-total-clientes').textContent = `${d.total_clientes || 0} clientes fiscais`;
+    document.getElementById('nfce-total-excedente').textContent = d.total_excedente || 0;
+    document.getElementById('nfce-total-extra').textContent = fiscalMoney(d.total_extra);
+    document.getElementById('nfce-total-cobrar').textContent = fiscalMoney(d.total_cobrar);
+    renderFiscalUso();
+  } catch(e) {
+    _nfceUso = [];
+    _nfceResumo = null;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--danger)">Erro: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+function renderFiscalUso() {
+  const tbody = document.getElementById('nfce-uso-tbody');
+  if (!tbody) return;
+  const q = (document.getElementById('nfce-q')?.value || '').toLowerCase().trim();
+  const filtro = document.getElementById('nfce-f-status')?.value || '';
+  let lista = _nfceUso.slice();
+  if (q) lista = lista.filter(r => (r.nome||'').toLowerCase().includes(q) || (r.slug||'').toLowerCase().includes(q));
+  if (filtro === 'excedente') lista = lista.filter(r => r.excedente > 0);
+  if (filtro === 'sem-excedente') lista = lista.filter(r => !r.excedente);
+  if (filtro === 'ja-cobrado') lista = lista.filter(r => !!r.fatura_id);
+  document.getElementById('nfce-uso-count').textContent = lista.length;
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)"><div class="empty-state"><div class="es-icon">NFe</div><div class="es-msg">Nenhum uso fiscal encontrado no mês</div></div></td></tr>';
+    return;
+  }
+  const stBadge = { pago:'bg-green', pendente:'bg-orange', vencido:'bg-red', cancelado:'bg-gray' };
+  const stLabel = { pago:'Pago', pendente:'Pendente', vencido:'Vencido', cancelado:'Cancelado' };
+  tbody.innerHTML = lista.map(r => {
+    const faturaValor = parseFloat(r.fatura_valor || 0);
+    const valorAtual = parseFloat(r.valor_total || 0);
+    const precisaAtualizar = !!(r.fatura_id && r.fatura_status === 'pendente' && Math.abs(faturaValor - valorAtual) >= 0.01);
+    let status = precisaAtualizar ? `<span class="badge bg-orange">Atualizar valor</span><div style="font-size:11px;color:var(--muted);margin-top:4px">Fatura: ${fiscalMoney(faturaValor)}</div>` : r.fatura_id
+      ? `<span class="badge ${stBadge[r.fatura_status]||'bg-gray'}">${stLabel[r.fatura_status]||r.fatura_status||'Cobrado'}</span>`
+      : (r.excedente > 0 ? '<span class="badge bg-orange">Excedente</span>' : '<span class="badge bg-green">Dentro do limite</span>');
+    let acao = precisaAtualizar ? `${r.fatura_link ? `<a class="btn bg2 bsm" href="${escapeHtml(r.fatura_link)}" target="_blank">Abrir cobranca</a>` : ''}<button class="btn bp bsm" onclick="gerarCobrancaFiscal(${JSON.stringify(r.tenant_id)}, true)">Atualizar cobranca</button>` : r.fatura_id
+      ? `${r.fatura_link ? `<a class="btn bg2 bsm" href="${escapeHtml(r.fatura_link)}" target="_blank">Abrir cobrança</a>` : ''}`
+      : `<button class="btn bp bsm" onclick="gerarCobrancaFiscal(${JSON.stringify(r.tenant_id)})">Gerar cobrança</button>`;
+    return `<tr>
+      <td>
+        <div style="font-weight:600;font-size:13px">${escapeHtml(r.nome || 'Cliente')}</div>
+        <div style="font-size:11px;color:var(--muted)">/${escapeHtml(r.slug || '')}</div>
+      </td>
+      <td><span class="badge ${planoBadge[r.plano]||'bg-gray'}">${planoLabel[r.plano]||escapeHtml(r.plano||'—')}</span></td>
+      <td style="font-weight:800">${r.notas_usadas || 0}<div style="font-size:11px;color:var(--muted);font-weight:500">limite ${r.limite || 500}</div></td>
+      <td><span class="badge ${r.excedente>0?'bg-orange':'bg-gray'}">${r.excedente || 0}</span></td>
+      <td style="font-weight:700">${fiscalMoney(r.valor_extra)}</td>
+      <td style="font-weight:800">${fiscalMoney(r.valor_total)}</td>
+      <td>${status}</td>
+      <td>${acao || '—'}</td>
+    </tr>`;
+  }).join('');
+}
+async function gerarCobrancaFiscal(tenantId, atualizar = false) {
+  const row = _nfceUso.find(r => r.tenant_id === tenantId);
+  if (!row) return;
+  if (atualizar) {
+    if (!row.fatura_id) { toast('err','Nao existe fatura para atualizar'); return; }
+    if (row.fatura_status === 'pago') { toast('err','Esta cobranca ja foi paga'); return; }
+    const msgAtualizar = `Atualizar cobranca fiscal para ${row.nome}?\n\nFatura atual: ${fiscalMoney(row.fatura_valor)}\nNovo total: ${fiscalMoney(row.valor_total)}\n\nO sistema vai cancelar a fatura antiga e enviar um novo link.`;
+    if (!confirm(msgAtualizar)) return;
+    try {
+      const r = await fetch('/api/admin/fiscal-nfce/gerar-cobranca', {
+        method:'POST',
+        headers: adminAuthHeader(),
+        body: JSON.stringify({ tenant_id: tenantId, mes: _nfceResumo?.mes || document.getElementById('nfce-mes')?.value || fiscalMesAtual(), metodo:'pix', force: true })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Falha ao atualizar cobranca fiscal');
+      toast('ok','Cobranca fiscal atualizada e enviada');
+      await carregarFiscalUso();
+      if (document.getElementById('sec-faturamento')?.style.display !== 'none') carregarFaturamento();
+    } catch(e) { toast('err','Erro: '+e.message); }
+    return;
+  }
+  if (row.fatura_id) { toast('err','Este cliente já tem cobrança fiscal neste mês'); return; }
+  const msg = `Gerar cobrança fiscal para ${row.nome}?\n\nPlano fiscal: ${fiscalMoney(row.plano_valor)}\nNotas usadas: ${row.notas_usadas}\nExcedente: ${row.excedente}\nTotal: ${fiscalMoney(row.valor_total)}`;
+  if (!confirm(msg)) return;
+  try {
+    const r = await fetch('/api/admin/fiscal-nfce/gerar-cobranca', {
+      method:'POST',
+      headers: adminAuthHeader(),
+      body: JSON.stringify({ tenant_id: tenantId, mes: _nfceResumo?.mes || document.getElementById('nfce-mes')?.value || fiscalMesAtual(), metodo:'pix' })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Falha ao gerar cobrança fiscal');
+    toast('ok','Cobrança fiscal gerada e enviada');
+    await carregarFiscalUso();
+    if (document.getElementById('sec-faturamento')?.style.display !== 'none') carregarFaturamento();
   } catch(e) { toast('err','Erro: '+e.message); }
 }
 

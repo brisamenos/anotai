@@ -5156,6 +5156,79 @@ let _radioGarconsList = [];
 let _radioSSE = null;
 let _radioGarcomUnread = 0;
 
+function _radioPickMimeType() {
+  if (!window.MediaRecorder || typeof MediaRecorder.isTypeSupported !== 'function') return '';
+  const types = [
+    'audio/mp4;codecs=mp4a.40.2',
+    'audio/mp4',
+    'audio/aac',
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus'
+  ];
+  for (const type of types) {
+    try { if (MediaRecorder.isTypeSupported(type)) return type; } catch {}
+  }
+  return '';
+}
+
+function _radioBase64ToBlob(b64, mime) {
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime || 'audio/webm' });
+}
+
+function _radioShowManualPlay(url, nome) {
+  const old = document.getElementById('radio-manual-play');
+  if (old) old.remove();
+  const d = document.createElement('button');
+  d.id = 'radio-manual-play';
+  d.type = 'button';
+  d.style.cssText = 'position:fixed;left:50%;bottom:92px;transform:translateX(-50%);z-index:9999;border:0;border-radius:14px;background:#6366f1;color:#fff;padding:12px 18px;font-family:"DM Sans",sans-serif;font-size:13px;font-weight:800;box-shadow:0 8px 28px rgba(0,0,0,.28);cursor:pointer';
+  d.textContent = `Audio de ${nome || 'EstimaFone'} - toque para ouvir`;
+  let used = false;
+  d.onclick = () => {
+    used = true;
+    const audio = new Audio(url);
+    audio.volume = 1.0;
+    audio.onended = () => URL.revokeObjectURL(url);
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      showToast('Nao foi possivel reproduzir este audio neste navegador');
+    };
+    audio.play().catch(() => {
+      URL.revokeObjectURL(url);
+      showToast('Nao foi possivel reproduzir este audio neste navegador');
+    });
+    d.remove();
+  };
+  document.body.appendChild(d);
+  setTimeout(() => {
+    if (!used) URL.revokeObjectURL(url);
+    d.remove();
+  }, 15000);
+}
+
+function _radioPlayBlob(blob, nome) {
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  audio.volume = 1.0;
+  audio.onended = () => URL.revokeObjectURL(url);
+  audio.onerror = () => {
+    URL.revokeObjectURL(url);
+    showToast('Nao foi possivel reproduzir este audio neste navegador');
+  };
+  const playPromise = audio.play();
+  if (playPromise?.catch) {
+    playPromise.catch(() => {
+      audio.onended = null;
+      audio.onerror = null;
+      _radioShowManualPlay(url, nome || 'EstimaFone');
+    });
+  }
+}
+
 // ── Carrega lista de garçons ─────────────────────
 async function _radioLoadGarcons() {
   try {
@@ -5211,6 +5284,11 @@ function radioSelectDest(destino, nome) {
 async function _radioStartRecording() {
   if (_radioActive) return;
   _radioActive = true;
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    showToast('Gravacao de audio nao suportada neste navegador');
+    _radioActive = false;
+    return;
+  }
 
   const overlay = document.getElementById('radio-rec-overlay');
   document.getElementById('radio-rec-dest-name').textContent = `Para: ${_radioDestinoNome}`;
@@ -5219,34 +5297,39 @@ async function _radioStartRecording() {
   try {
     _radioStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:true, noiseSuppression:true } });
     _radioChunks = [];
-    _radioRec = new MediaRecorder(_radioStream, {
-      mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm'
-    });
+    const preferredMime = _radioPickMimeType();
+    _radioRec = preferredMime
+      ? new MediaRecorder(_radioStream, { mimeType: preferredMime })
+      : new MediaRecorder(_radioStream);
+    const recMime = _radioRec.mimeType || preferredMime || 'audio/webm';
     _radioRec.ondataavailable = e => { if (e.data.size > 0) _radioChunks.push(e.data); };
     _radioRec.onstop = async () => {
       _radioStream?.getTracks().forEach(t => t.stop());
       _radioStream = null;
       overlay.classList.remove('on');
       if (!_radioChunks.length) { _radioActive = false; return; }
-      const blob = new Blob(_radioChunks, { type: 'audio/webm' });
+      const blob = new Blob(_radioChunks, { type: recMime });
       if (blob.size < 500) { _radioActive = false; return; }
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64 = reader.result.split(',')[1];
         try {
           const tid = _garcomTenantId || JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id || '';
-          await fetch('/api/radio/send', {
+          const sendRes = await fetch('/api/radio/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
             body: JSON.stringify({
               audio: base64,
+              audio_mime: blob.type || recMime,
               garcom_nome: currentGarcom?.nome || 'Garçom',
               garcom_id: currentGarcom?.id || null,
               destino: _radioDestino
             })
           });
+          const sendData = await sendRes.json().catch(()=>({}));
+          if (!sendRes.ok) throw new Error(sendData.error || 'Erro ao enviar');
           showToast(`🎙️ Enviado para ${_radioDestinoNome}!`);
-        } catch(err) { showToast('❌ Erro ao enviar áudio'); console.error('[RADIO]', err); }
+        } catch(err) { showToast(err.message || '❌ Erro ao enviar áudio'); console.error('[RADIO]', err); }
         _radioActive = false;
       };
       reader.readAsDataURL(blob);
@@ -5285,16 +5368,8 @@ function _radioSubscribeGarcom() {
     try {
       const data = JSON.parse(e.data);
       if (!data.audio) return;
-      // Toca automaticamente
-      const bin = atob(data.audio);
-      const arr = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-      const blob = new Blob([arr], { type: 'audio/webm' });
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.volume = 1.0;
-      audio.play().catch(() => {});
-      audio.onended = () => URL.revokeObjectURL(url);
+      const blob = _radioBase64ToBlob(data.audio, data.audio_mime || 'audio/webm');
+      _radioPlayBlob(blob, data.garcom_nome);
       showToast(`🎙️ ${data.garcom_nome}: áudio recebido`);
 
       // Badge de notificação no FAB
@@ -5372,11 +5447,8 @@ async function _radioPlayHist(id) {
   try {
     const res = await fetch(`/api/radio/audio/${id}`, { headers: { 'x-tenant-id': tid } });
     const d = await res.json(); if (!d.audio) return;
-    const bin = atob(d.audio); const arr = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-    const blob = new Blob([arr], { type: 'audio/webm' });
-    const url = URL.createObjectURL(blob);
-    const a = new Audio(url); a.play(); a.onended = () => URL.revokeObjectURL(url);
+    const blob = _radioBase64ToBlob(d.audio, d.audio_mime || 'audio/webm');
+    _radioPlayBlob(blob, 'EstimaFone');
   } catch { showToast('❌ Erro ao reproduzir'); }
 }
 </script>

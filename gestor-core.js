@@ -1453,6 +1453,23 @@ let _radioGestorRec = null;
 let _radioGestorStream = null;
 let _radioGestorChunks = [];
 let _radioGestorRecording = false;
+let _radioGestorMaxTimer = null;
+
+function _radioPickMimeType() {
+  if (!window.MediaRecorder || typeof MediaRecorder.isTypeSupported !== 'function') return '';
+  const types = [
+    'audio/mp4;codecs=mp4a.40.2',
+    'audio/mp4',
+    'audio/aac',
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus'
+  ];
+  for (const type of types) {
+    try { if (MediaRecorder.isTypeSupported(type)) return type; } catch {}
+  }
+  return '';
+}
 
 function _subscribeRadio() {
   if (_radioSSE) { try { _radioSSE.close(); } catch{} }
@@ -1466,12 +1483,8 @@ function _subscribeRadio() {
       if (!data.audio) return;
 
       // Toca automaticamente
-      const blob = _base64ToBlob(data.audio, 'audio/webm');
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.volume = 1.0;
-      audio.play().catch(() => _radioShowManualPlay(url, data.garcom_nome));
-      audio.onended = () => URL.revokeObjectURL(url);
+      const blob = _base64ToBlob(data.audio, data.audio_mime || 'audio/webm');
+      _radioPlayBlob(blob, data.garcom_nome);
 
       showToast(
         '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M8 1a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 8 1z" stroke="currentColor" stroke-width="1.4"/><path d="M4 7v.5a4 4 0 0 0 8 0V7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
@@ -1823,15 +1836,52 @@ function _base64ToBlob(b64, mime) {
   return new Blob([a], { type: mime });
 }
 
+function _radioPlayBlob(blob, nome) {
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  audio.volume = 1.0;
+  audio.onended = () => URL.revokeObjectURL(url);
+  audio.onerror = () => {
+    URL.revokeObjectURL(url);
+    sbToast('err', 'Nao foi possivel reproduzir este audio neste navegador');
+  };
+  const playPromise = audio.play();
+  if (playPromise?.catch) {
+    playPromise.catch(() => {
+      audio.onended = null;
+      audio.onerror = null;
+      _radioShowManualPlay(url, nome || 'Audio');
+    });
+  }
+}
+
 function _radioShowManualPlay(url, nome) {
   const el = document.getElementById('radio-manual-banner');
   if (el) el.remove();
   const d = document.createElement('div'); d.id = 'radio-manual-banner';
   d.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:9999;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;padding:10px 20px;border-radius:12px;cursor:pointer;font-family:"DM Sans",sans-serif;font-size:13px;font-weight:700;box-shadow:0 4px 20px rgba(0,0,0,.3);display:flex;align-items:center;gap:8px';
-  d.innerHTML = `🎙️ ${nome} enviou áudio — Clique para ouvir`;
-  d.onclick = () => { new Audio(url).play(); d.remove(); };
+  d.textContent = `Audio de ${nome || 'EstimaFone'} - clique para ouvir`;
+  let used = false;
+  d.onclick = () => {
+    used = true;
+    const audio = new Audio(url);
+    audio.volume = 1.0;
+    audio.onended = () => URL.revokeObjectURL(url);
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      sbToast('err', 'Nao foi possivel reproduzir este audio neste navegador');
+    };
+    audio.play().catch(() => {
+      URL.revokeObjectURL(url);
+      sbToast('err', 'Nao foi possivel reproduzir este audio neste navegador');
+    });
+    d.remove();
+  };
   document.body.appendChild(d);
-  setTimeout(() => d.remove(), 15000);
+  setTimeout(() => {
+    if (!used) URL.revokeObjectURL(url);
+    d.remove();
+  }, 15000);
 }
 
 // ── Painel do gestor ─────────────────────────────────────
@@ -1891,9 +1941,8 @@ async function _radioPlayMsg(id) {
   try {
     const res = await fetch(`/api/radio/audio/${id}`, { headers: { 'x-tenant-id': _sessao?.tenant_id } });
     const d = await res.json(); if (!d.audio) return;
-    const blob = _base64ToBlob(d.audio, 'audio/webm');
-    const url = URL.createObjectURL(blob);
-    const a = new Audio(url); a.play(); a.onended = () => URL.revokeObjectURL(url);
+    const blob = _base64ToBlob(d.audio, d.audio_mime || 'audio/webm');
+    _radioPlayBlob(blob, 'EstimaFone');
   } catch { sbToast('err', 'Erro ao reproduzir'); }
 }
 
@@ -1901,40 +1950,63 @@ async function _radioPlayMsg(id) {
 async function _radioGestorStartRec() {
   const destId = document.getElementById('radio-gestor-dest')?.value;
   if (!destId) { sbToast('err', 'Selecione um garçom primeiro'); return; }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    sbToast('err', 'Gravacao de audio nao suportada neste navegador');
+    return;
+  }
   if (_radioGestorRecording) { _radioGestorStopRec(); return; }
   _radioGestorRecording = true;
   const btn = document.getElementById('radio-gestor-rec-btn');
-  btn.style.cssText += ';border-color:#ef4444;background:rgba(239,68,68,.15);color:#ef4444';
+  btn.style.borderColor = '#ef4444';
+  btn.style.background = 'rgba(239,68,68,.15)';
+  btn.style.color = '#ef4444';
+  btn.title = 'Gravando... clique novamente para enviar';
   try {
     _radioGestorStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true }});
     _radioGestorChunks = [];
-    _radioGestorRec = new MediaRecorder(_radioGestorStream, { mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'audio/webm' });
+    const preferredMime = _radioPickMimeType();
+    _radioGestorRec = preferredMime
+      ? new MediaRecorder(_radioGestorStream, { mimeType: preferredMime })
+      : new MediaRecorder(_radioGestorStream);
+    const recMime = _radioGestorRec.mimeType || preferredMime || 'audio/webm';
     _radioGestorRec.ondataavailable = e => { if(e.data.size>0) _radioGestorChunks.push(e.data); };
     _radioGestorRec.onstop = async () => {
       _radioGestorStream?.getTracks().forEach(t=>t.stop()); _radioGestorStream=null;
       _radioGestorRecording=false;
+      clearTimeout(_radioGestorMaxTimer); _radioGestorMaxTimer = null;
       btn.style.borderColor=''; btn.style.background=''; btn.style.color='';
+      btn.title = 'Gravar e enviar';
       if(!_radioGestorChunks.length)return;
-      const blob=new Blob(_radioGestorChunks,{type:'audio/webm'}); if(blob.size<500)return;
+      const blob=new Blob(_radioGestorChunks,{type:recMime}); if(blob.size<500)return;
       const r=new FileReader();
       r.onloadend=async()=>{
         const b64=r.result.split(',')[1];
         try{
-          await fetch('/api/radio/send',{method:'POST',headers:{'Content-Type':'application/json','x-tenant-id':_sessao?.tenant_id},
-            body:JSON.stringify({audio:b64,garcom_nome:'Gestor',garcom_id:null,destino:destId})});
+          const res = await fetch('/api/radio/send',{method:'POST',headers:{'Content-Type':'application/json','x-tenant-id':_sessao?.tenant_id},
+            body:JSON.stringify({audio:b64,audio_mime:blob.type||recMime,garcom_nome:'Gestor',garcom_id:null,destino:destId})});
+          const data = await res.json().catch(()=>({}));
+          if(!res.ok) throw new Error(data.error || 'Erro ao enviar');
           sbToast('ok','🎙️ Áudio enviado!');
           if(_radioPanelOpen) _radioLoadMessages();
-        }catch{ sbToast('err','Erro ao enviar'); }
+        }catch(e){ sbToast('err', e.message || 'Erro ao enviar'); }
       };
       r.readAsDataURL(blob);
     };
     _radioGestorRec.start();
+    clearTimeout(_radioGestorMaxTimer);
+    _radioGestorMaxTimer = setTimeout(() => _radioGestorStopRec(), 10000);
   } catch(e) {
     sbToast('err','Permita o microfone'); _radioGestorRecording=false;
+    clearTimeout(_radioGestorMaxTimer); _radioGestorMaxTimer = null;
+    _radioGestorStream?.getTracks().forEach(t=>t.stop()); _radioGestorStream=null;
     btn.style.borderColor=''; btn.style.background=''; btn.style.color='';
+    btn.title = 'Gravar e enviar';
   }
 }
-function _radioGestorStopRec() { if(_radioGestorRec?.state==='recording') _radioGestorRec.stop(); }
+function _radioGestorStopRec() {
+  clearTimeout(_radioGestorMaxTimer); _radioGestorMaxTimer = null;
+  if(_radioGestorRec?.state==='recording') _radioGestorRec.stop();
+}
 
 // ── Timer de atualização do tempo decorrido por mesa (a cada 60s) ──────
 setInterval(() => {

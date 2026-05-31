@@ -414,7 +414,151 @@ function _ensurePlanoAssinaturas(db) {
 }
 
 function _planoSaasLabel(plano) {
-  return plano === 'premium' ? 'Premium' : 'Essencial'
+  if (plano === 'premium') return 'Premium'
+  if (plano === 'fiscal') return 'Fiscal NFC-e'
+  if (plano === 'pro') return 'Pro'
+  return 'Essencial'
+}
+
+const ADMIN_FISCAL_LIMITE_PADRAO = 500
+const ADMIN_FISCAL_VALOR_EXCEDENTE_PADRAO = 0.10
+const ADMIN_FISCAL_PLANO_VALOR_PADRAO = 159.90
+
+function _adminFiscalMesAtual() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function _adminFiscalMesInfo(rawMes) {
+  const now = new Date()
+  let mes = String(rawMes || '').trim()
+  if (!/^\d{4}-\d{2}$/.test(mes)) {
+    mes = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  }
+  const [ano, mesNum] = mes.split('-').map(Number)
+  const start = `${ano}-${String(mesNum).padStart(2, '0')}-01`
+  const endDate = new Date(Date.UTC(ano, mesNum, 1))
+  const end = `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth() + 1).padStart(2, '0')}-01`
+  return { mes, start, end }
+}
+
+function _adminFiscalNum(value, fallback) {
+  const n = parseFloat(String(value ?? '').replace(',', '.'))
+  return Number.isFinite(n) ? n : fallback
+}
+
+function _adminFiscalMoney(value) {
+  return Math.round((parseFloat(value) || 0) * 100) / 100
+}
+
+function _adminFiscalUsoDb(db, opts = {}) {
+  const mesInfo = _adminFiscalMesInfo(opts.mes)
+  const limite = Math.max(0, parseInt(opts.limite ?? ADMIN_FISCAL_LIMITE_PADRAO, 10) || ADMIN_FISCAL_LIMITE_PADRAO)
+  const valorExcedente = Math.max(0, _adminFiscalNum(opts.valor_excedente, ADMIN_FISCAL_VALOR_EXCEDENTE_PADRAO))
+  const planoValor = Math.max(0, _adminFiscalNum(opts.plano_valor, ADMIN_FISCAL_PLANO_VALOR_PADRAO))
+  const rawRows = db.prepare(`
+    SELECT
+      t.id, t.nome, t.slug, t.plano, t.ativo, t.expires_at,
+      COALESCE(fc.enabled, 0) AS fiscal_enabled,
+      COUNT(n.id) AS notas_usadas,
+      COALESCE(SUM(n.total), 0) AS valor_notas
+    FROM tenants t
+    LEFT JOIN fiscal_config fc ON fc.tenant_id = t.id
+    LEFT JOIN fiscal_nfce n ON n.tenant_id = t.id
+      AND lower(COALESCE(n.status, '')) IN ('autorizado','autorizada','cancelado','cancelada')
+      AND date(COALESCE(n.emitted_at, n.created_at)) >= date(?)
+      AND date(COALESCE(n.emitted_at, n.created_at)) < date(?)
+    WHERE COALESCE(t.slug, '') NOT IN ('_admin','_global','admin','system')
+      AND COALESCE(t.id, '') NOT IN ('_admin','_global','admin','system')
+    GROUP BY t.id
+    ORDER BY notas_usadas DESC, t.nome COLLATE NOCASE ASC
+  `).all(mesInfo.start, mesInfo.end)
+  const faturas = db.prepare(`
+    SELECT id, tenant_id, valor, status, link_pagamento, vence_em, created_at, obs
+    FROM faturas
+    WHERE plano='fiscal'
+      AND COALESCE(status, '') <> 'cancelado'
+      AND COALESCE(obs, '') LIKE ?
+    ORDER BY id DESC
+  `).all(`%NFC-e ${mesInfo.mes}%`)
+  const faturaPorTenant = new Map()
+  for (const f of faturas) {
+    if (!faturaPorTenant.has(f.tenant_id)) faturaPorTenant.set(f.tenant_id, f)
+  }
+  let rows = rawRows.map(t => {
+    const notasUsadas = parseInt(t.notas_usadas || 0, 10) || 0
+    const excedente = Math.max(0, notasUsadas - limite)
+    const valorExtra = _adminFiscalMoney(excedente * valorExcedente)
+    const fiscalAtivo = t.plano === 'fiscal' || !!t.fiscal_enabled || notasUsadas > 0
+    const valorTotal = fiscalAtivo ? _adminFiscalMoney(planoValor + valorExtra) : valorExtra
+    const fatura = faturaPorTenant.get(t.id) || null
+    return {
+      tenant_id: t.id,
+      nome: t.nome,
+      slug: t.slug,
+      plano: t.plano,
+      ativo: !!t.ativo,
+      fiscal_enabled: !!t.fiscal_enabled,
+      fiscal_ativo: fiscalAtivo,
+      notas_usadas: notasUsadas,
+      valor_notas: _adminFiscalMoney(t.valor_notas),
+      limite,
+      excedente,
+      valor_excedente: valorExcedente,
+      valor_extra: valorExtra,
+      plano_valor: fiscalAtivo ? planoValor : 0,
+      valor_total: valorTotal,
+      fatura_id: fatura?.id || null,
+      fatura_status: fatura?.status || null,
+      fatura_valor: fatura ? _adminFiscalMoney(fatura.valor) : null,
+      fatura_link: fatura?.link_pagamento || null,
+      fatura_vence_em: fatura?.vence_em || null
+    }
+  }).filter(r => r.fiscal_ativo || opts.incluir_todos)
+  if (opts.tenant_id) rows = rows.filter(r => r.tenant_id === opts.tenant_id)
+  const sum = (key) => rows.reduce((s, r) => s + (parseFloat(r[key]) || 0), 0)
+  return {
+    mes: mesInfo.mes,
+    inicio: mesInfo.start,
+    fim: mesInfo.end,
+    limite,
+    valor_excedente: valorExcedente,
+    plano_valor: planoValor,
+    total_clientes: rows.length,
+    total_notas: sum('notas_usadas'),
+    total_excedente: sum('excedente'),
+    total_extra: _adminFiscalMoney(sum('valor_extra')),
+    total_cobrar: _adminFiscalMoney(sum('valor_total')),
+    rows
+  }
+}
+
+function _adminFiscalObs(uso, row, prefix = '') {
+  const partes = []
+  if (prefix) partes.push(prefix)
+  partes.push(
+    `NFC-e ${uso.mes}`,
+    `usadas=${row.notas_usadas}`,
+    `limite=${row.limite}`,
+    `excedente=${row.excedente}`,
+    `extra=${row.valor_extra.toFixed(2)}`,
+    `plano=${row.plano_valor.toFixed(2)}`,
+    `total=${row.valor_total.toFixed(2)}`
+  )
+  return partes.join(' | ')
+}
+
+function _adminFiscalCobrancaAtual(db, tenantId, opts = {}) {
+  const uso = _adminFiscalUsoDb(db, {
+    tenant_id: tenantId,
+    mes: opts.mes || _adminFiscalMesAtual(),
+    limite: opts.limite,
+    valor_excedente: opts.valor_excedente,
+    plano_valor: opts.plano_valor,
+    incluir_todos: true
+  })
+  const row = uso.rows[0] || null
+  return { uso, row, valor: row ? _adminFiscalMoney(row.valor_total) : 0, obs: row ? _adminFiscalObs(uso, row, opts.prefix || '') : '' }
 }
 
 function _baseUrlFromReq(req) {
@@ -462,7 +606,7 @@ function _renovarPlanoSaas(db, tenantId, plano, meses = 1) {
   const atual = _parseDateOnlyLocal(tenant.expires_at)
   const base = atual && !Number.isNaN(atual.getTime()) && atual > hoje ? atual : hoje
   const novaExpISO = _dateOnlyISO(_addCalendarMonths(base, parseInt(meses) || 1))
-  const planoNovo = ['premium','essencial','pro'].includes(plano) ? plano : (tenant.plano || 'essencial')
+  const planoNovo = ['premium','essencial','pro','fiscal'].includes(plano) ? plano : (tenant.plano || 'essencial')
   db.prepare("UPDATE tenants SET plano=?, expires_at=?, ativo=1, updated_at=datetime('now') WHERE id=?")
     .run(planoNovo, novaExpISO, tenantId)
   return { tenant, plano: planoNovo, expires_at: novaExpISO }
@@ -560,7 +704,7 @@ function _iniciarAutoCobrancaJob(ctx) {
   async function tick() {
     try {
       // Lê preços globais
-      let precoEss = 79.99, precoPre = 99.90
+      let precoEss = 79.99, precoPre = 99.90, precoFiscal = 159.90
       try {
         const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
         const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
@@ -588,20 +732,48 @@ function _iniciarAutoCobrancaJob(ctx) {
       for (const t of tenants) {
         // Já existe fatura pendente recente para este tenant? (evita duplicar)
         const ja = db.prepare(`
-          SELECT id FROM faturas
+          SELECT id, plano, valor FROM faturas
           WHERE tenant_id=? AND status='pendente'
             AND created_at > datetime('now','-7 days')
           LIMIT 1
         `).get(t.id)
-        if (ja) continue
+        let faturaSubstituidaAuto = null
+        if (ja) {
+          if (t.plano === 'fiscal' && ja.plano === 'fiscal') {
+            const fiscalAtual = _adminFiscalCobrancaAtual(db, t.id, {
+              mes: _adminFiscalMesAtual(),
+              plano_valor: precoFiscal
+            })
+            const valorAtual = fiscalAtual.row ? fiscalAtual.valor : precoFiscal
+            if (Math.abs((parseFloat(ja.valor) || 0) - valorAtual) >= 0.01) {
+              faturaSubstituidaAuto = ja
+            } else {
+              continue
+            }
+          } else {
+            continue
+          }
+        }
 
         try {
-          const plano = (t.plano === 'premium') ? 'premium' : 'essencial'
-          const valor = (plano === 'premium') ? precoPre : precoEss
+          const plano = (t.plano === 'premium') ? 'premium' : (t.plano === 'fiscal' ? 'fiscal' : 'essencial')
+          let valor = (plano === 'premium') ? precoPre : (plano === 'fiscal' ? precoFiscal : precoEss)
+          let obsFatura = 'Gerada automaticamente (3 dias antes do vencimento)'
+          if (plano === 'fiscal') {
+            const fiscal = _adminFiscalCobrancaAtual(db, t.id, {
+              mes: _adminFiscalMesAtual(),
+              plano_valor: precoFiscal,
+              prefix: obsFatura
+            })
+            if (fiscal.row) {
+              valor = fiscal.valor
+              obsFatura = fiscal.obs
+            }
+          }
           const _valorMp1 = _mpValor(valor)
           if (_valorMp1 === null) { log('⚠️', `Auto-cobrança ${t.id}: valor inválido (${valor})`); continue }
           const extRef = `auto-${t.id.slice(0,8)}-${plano}-${Date.now()}`
-          const descricao = `Renovação Plano ${plano === 'premium' ? 'Premium' : 'Essencial'} — ${t.nome}`
+          const descricao = `Renovação Plano ${_planoSaasLabel(plano)} — ${t.nome}`
 
           const mpResp = await fetch('https://api.mercadopago.com/v1/payments', {
             method: 'POST',
@@ -628,9 +800,16 @@ function _iniciarAutoCobrancaJob(ctx) {
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
               t.id, plano, parseFloat(valor), 1, 'pix', 'pendente',
               link, String(mpData.id), extRef, qr, qrB64, venceEm,
-              'Gerada automaticamente (3 dias antes do vencimento)'
+              obsFatura
             )
           const fatura = db.prepare('SELECT * FROM faturas WHERE id=?').get(info.lastInsertRowid)
+          if (faturaSubstituidaAuto) {
+            db.prepare(`UPDATE faturas
+              SET status='cancelado',
+                  cancelado_em=datetime('now'),
+                  obs=TRIM(COALESCE(obs, '') || ' | substituida_por=' || ?)
+              WHERE id=? AND status<>'pago'`).run(String(fatura.id), faturaSubstituidaAuto.id)
+          }
           marcarDirty()
 
           // Manda WA
@@ -641,7 +820,7 @@ function _iniciarAutoCobrancaJob(ctx) {
             if (telefone && (telefone.length === 11 || telefone.length === 10)) telefone = '55' + telefone
             if (telefone) {
               const valorTxt = parseFloat(valor).toFixed(2).replace('.', ',')
-              const planoNome = plano === 'premium' ? 'Premium' : 'Essencial'
+              const planoNome = _planoSaasLabel(plano)
               const venceEmTxt = new Date(venceEm).toLocaleDateString('pt-BR')
               const msg = [
                 `🧾 *Lembrete: sua mensalidade vence em breve*`,
@@ -745,6 +924,524 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (row?.target_all || previous?.target_all) sseBroadcast('admin-alerts:all', 'admin_alerts:REFRESH', payload)
     const ids = new Set([..._alertTargetIds(row), ..._alertTargetIds(previous)])
     ids.forEach(tid => sseBroadcast(`admin-alerts:${tid}`, 'admin_alerts:REFRESH', payload))
+  }
+
+  const _fiscalTenantId = () => req.headers['x-tenant-id'] || params.get('tenant_id') || params.get('_tenant') || ''
+  const _fiscalJson = (v, fallback) => {
+    try {
+      if (Array.isArray(v) || (v && typeof v === 'object')) return v
+      return v ? JSON.parse(v) : fallback
+    } catch { return fallback }
+  }
+  const _fiscalDigits = (v) => String(v || '').replace(/\D/g, '')
+  const _fiscalText = (v, max = 120) => String(v || '').trim().slice(0, max)
+  const _fiscalNorm = (v) => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const _fiscalMoney = (v) => Math.round((parseFloat(v) || 0) * 100) / 100
+  const _fiscalMoneyStr = (v) => _fiscalMoney(v).toFixed(2)
+  const _fiscalIsoNowBR = () => {
+    const d = new Date(Date.now() - 3 * 60 * 60 * 1000)
+    const p = (n) => String(n).padStart(2, '0')
+    return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}-03:00`
+  }
+  const _fiscalDateRange = (body = {}) => {
+    const today = _brasiliaDateString ? _brasiliaDateString() : new Date().toISOString().slice(0, 10)
+    const de = String(body.de || params.get('de') || today).slice(0, 10)
+    const ate = String(body.ate || params.get('ate') || de).slice(0, 10)
+    return { de, ate, start: `${de} 00:00:00`, end: `${ate} 23:59:59` }
+  }
+  const _fiscalPagamentoFiltro = (value) => {
+    const n = _fiscalNorm(value).replace(/[^a-z0-9_ -]/g, '').trim()
+    if (!n || n === 'todos' || n === 'all') return ''
+    if (n.includes('credito') || n === 'cartao' || n === 'cartao_credito') return 'credito'
+    if (n.includes('debito') || n === 'cartao_debito') return 'debito'
+    if (n.includes('pix')) return 'pix'
+    if (n.includes('dinheiro')) return 'dinheiro'
+    return n
+  }
+  const _fiscalPagamentoLabel = (filtro) => ({
+    credito: 'Cartao de credito',
+    debito: 'Cartao de debito',
+    pix: 'PIX',
+    dinheiro: 'Dinheiro'
+  }[filtro] || '')
+  const _fiscalOrderMatchesPagamento = (order, filtro) => {
+    if (!filtro) return true
+    const p = _fiscalNorm(order?.pag || order?.forma_pagamento || order?.payment_method || '')
+    if (filtro === 'credito') return p.includes('credito') || p.includes('cartao') || p.includes('card')
+    if (filtro === 'debito') return p.includes('debito')
+    if (filtro === 'pix') return p.includes('pix')
+    if (filtro === 'dinheiro') return p.includes('dinheiro')
+    return p === filtro
+  }
+  const _fiscalMask = (v) => {
+    const s = String(v || '')
+    if (!s) return ''
+    return s.length <= 6 ? '******' : `${'*'.repeat(Math.max(4, s.length - 4))}${s.slice(-4)}`
+  }
+  const _fiscalConfigOut = (row) => {
+    const out = { ...(row || {}) }
+    out.enabled = out.enabled === 1 || out.enabled === true
+    out.token_homologacao_set = !!out.token_homologacao
+    out.token_producao_set = !!out.token_producao
+    out.csc_token_set = !!out.csc_token
+    out.token_homologacao_mask = _fiscalMask(out.token_homologacao)
+    out.token_producao_mask = _fiscalMask(out.token_producao)
+    out.csc_token_mask = _fiscalMask(out.csc_token)
+    delete out.token_homologacao
+    delete out.token_producao
+    delete out.csc_token
+    return out
+  }
+  const _fiscalEnsureConfig = (tid) => {
+    db.prepare('INSERT OR IGNORE INTO fiscal_config (tenant_id, ambiente, emit_mode, uf_emitente, cfop_padrao, icms_origem_padrao, icms_situacao_padrao, unidade_padrao, natureza_operacao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(tid, 'homologacao', 'fechamento', 'CE', '5102', '0', '102', 'UN', 'VENDA AO CONSUMIDOR')
+    return db.prepare('SELECT * FROM fiscal_config WHERE tenant_id=?').get(tid)
+  }
+  const _fiscalNoteOut = (row) => {
+    if (!row) return row
+    const out = { ...row }
+    out.total = _fiscalMoney(out.total)
+    out.payload_json = _fiscalJson(out.payload_json, {})
+    out.response_json = _fiscalJson(out.response_json, {})
+    return out
+  }
+  const _fiscalFormaCodigo = (forma) => {
+    const n = _fiscalNorm(forma)
+    if (n.includes('dinheiro')) return '01'
+    if (n.includes('debito')) return '04'
+    if (n.includes('credito') || n.includes('cartao') || n.includes('card')) return '03'
+    if (n.includes('pix')) return '17'
+    if (n.includes('cheque')) return '02'
+    if (n.includes('alimentacao')) return '10'
+    if (n.includes('refeicao')) return '11'
+    if (n.includes('presente')) return '12'
+    if (n.includes('combustivel')) return '13'
+    return '99'
+  }
+  const _fiscalPagamentoItem = (forma, valor) => {
+    const codigo = _fiscalFormaCodigo(forma)
+    const item = {
+      forma_pagamento: codigo,
+      valor_pagamento: _fiscalMoneyStr(valor)
+    }
+    if (codigo === '03' || codigo === '04') item.tipo_integracao = '2'
+    return item
+  }
+  const _fiscalBuildPagamentos = (forma, total, formas) => {
+    if (Array.isArray(formas) && formas.length) {
+      const rows = formas
+        .map(f => _fiscalPagamentoItem(f.forma || f.label || forma || 'PIX', f.valor))
+        .filter(f => _fiscalMoney(f.valor_pagamento) > 0)
+      if (rows.length) return rows
+    }
+    return [_fiscalPagamentoItem(forma || 'PIX', total)]
+  }
+  const _fiscalOrderItems = (orders) => {
+    const out = []
+    for (const order of orders || []) {
+      const itens = _fiscalJson(order.items, [])
+      for (const item of itens) {
+        const status = String(item?.item_status || '').toLowerCase()
+        if (status === 'cancelado') continue
+        if (String(item?.item_type || '').toLowerCase() === 'taxa' || item?.isTaxa) continue
+        const qty = parseFloat(item?.qty || item?.quantidade || 1) || 1
+        const price = parseFloat(item?.price ?? item?.valor ?? item?.unit_price ?? 0) || 0
+        if (qty <= 0 || price <= 0) continue
+        out.push({
+          order_id: order.id,
+          id: item.id || item.item_id || null,
+          name: item.name || item.nome || 'Item',
+          qty,
+          price,
+          obs: item.obs || ''
+        })
+      }
+    }
+    return out
+  }
+  const _fiscalRef = (tid, tipo, origemId) => {
+    const raw = `${tipo}-${tid}-${origemId}`
+    const hash = crypto.createHash('sha1').update(raw).digest('hex').slice(0, 10)
+    return `ef-${tipo}-${String(origemId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 18)}-${hash}`.slice(0, 60)
+  }
+  const _fiscalBuildPayload = (tid, orders, cfg, opts = {}) => {
+    const cnpj = _fiscalDigits(cfg.cnpj_emitente)
+    if (!cnpj) throw new Error('Configure o CNPJ emitente no Fiscal.')
+    const itensBase = _fiscalOrderItems(orders)
+    if (!itensBase.length) throw new Error('Venda sem itens fiscais para emitir NFC-e.')
+
+    const ids = [...new Set(itensBase.map(i => parseInt(i.id)).filter(Boolean))]
+    const fiscalRows = ids.length
+      ? db.prepare(`SELECT id,fiscal_ncm,fiscal_cfop,fiscal_icms_origem,fiscal_icms_situacao,fiscal_cest,fiscal_unidade,fiscal_codigo_produto,fiscal_pis_situacao,fiscal_cofins_situacao FROM menu_items WHERE tenant_id=? AND id IN (${ids.map(()=>'?').join(',')})`).all(tid, ...ids)
+      : []
+    const fiscalMap = new Map(fiscalRows.map(r => [Number(r.id), r]))
+    const gross = itensBase.reduce((s, i) => s + i.qty * i.price, 0)
+    const orderTotal = _fiscalMoney(opts.total || (orders || []).reduce((s, o) => s + (parseFloat(o.total) || 0), 0) || gross)
+    const target = orderTotal > 0 && orderTotal <= gross + 0.02 ? orderTotal : _fiscalMoney(gross)
+    const discountTotal = Math.max(0, _fiscalMoney(gross - target))
+    const discountRate = gross > 0 ? discountTotal / gross : 0
+
+    let itemSeq = 0
+    let itemDiscountAcc = 0
+    const items = itensBase.map((it, idx) => {
+      const row = fiscalMap.get(Number(it.id)) || {}
+      const ncm = _fiscalDigits(row.fiscal_ncm || cfg.ncm_padrao)
+      if (!/^\d{8}$/.test(ncm)) {
+        throw new Error(`Produto "${it.name}" sem NCM fiscal valido. Preencha o NCM no cadastro ou o NCM padrao.`)
+      }
+      const bruto = _fiscalMoney(it.qty * it.price)
+      let desconto = _fiscalMoney(bruto * discountRate)
+      if (idx === itensBase.length - 1) desconto = _fiscalMoney(discountTotal - itemDiscountAcc)
+      itemDiscountAcc = _fiscalMoney(itemDiscountAcc + desconto)
+      const unidade = _fiscalText(row.fiscal_unidade || cfg.unidade_padrao || 'UN', 6).toUpperCase()
+      itemSeq += 1
+      const out = {
+        numero_item: String(itemSeq),
+        codigo_produto: _fiscalText(row.fiscal_codigo_produto || it.id || `EF${itemSeq}`, 60),
+        descricao: _fiscalText(it.name, 120),
+        codigo_ncm: ncm,
+        cfop: _fiscalText(row.fiscal_cfop || cfg.cfop_padrao || '5102', 4),
+        unidade_comercial: unidade,
+        unidade_tributavel: unidade,
+        quantidade_comercial: _fiscalMoneyStr(it.qty),
+        quantidade_tributavel: _fiscalMoneyStr(it.qty),
+        valor_unitario_comercial: _fiscalMoneyStr(it.price),
+        valor_unitario_tributavel: _fiscalMoneyStr(it.price),
+        valor_desconto: _fiscalMoneyStr(desconto),
+        icms_origem: _fiscalText(row.fiscal_icms_origem || cfg.icms_origem_padrao || '0', 1),
+        icms_situacao_tributaria: _fiscalText(row.fiscal_icms_situacao || cfg.icms_situacao_padrao || '102', 3),
+        valor_total_tributos: '0.00'
+      }
+      if (row.fiscal_cest) out.cest = _fiscalDigits(row.fiscal_cest)
+      if (row.fiscal_pis_situacao) out.pis_situacao_tributaria = _fiscalText(row.fiscal_pis_situacao, 2)
+      if (row.fiscal_cofins_situacao) out.cofins_situacao_tributaria = _fiscalText(row.fiscal_cofins_situacao, 2)
+      return out
+    })
+
+    const payload = {
+      cnpj_emitente: cnpj,
+      data_emissao: _fiscalIsoNowBR(),
+      indicador_inscricao_estadual_destinatario: '9',
+      modalidade_frete: '9',
+      local_destino: '1',
+      presenca_comprador: opts.presenca_comprador || (/delivery|entrega/i.test(String(orders?.[0]?.addr || '')) ? '4' : '1'),
+      natureza_operacao: _fiscalText(cfg.natureza_operacao || 'VENDA AO CONSUMIDOR', 60),
+      tipo_documento: '1',
+      finalidade_emissao: '1',
+      valor_produtos: _fiscalMoneyStr(gross),
+      valor_total: _fiscalMoneyStr(target),
+      items,
+      formas_pagamento: _fiscalBuildPagamentos(opts.forma || orders?.[0]?.pag || 'PIX', target, opts.formas)
+    }
+    const emitenteFields = [
+      'nome_emitente','nome_fantasia_emitente','telefone_emitente','logradouro_emitente','numero_emitente',
+      'bairro_emitente','municipio_emitente','uf_emitente','cep_emitente','inscricao_estadual_emitente',
+      'regime_tributario_emitente'
+    ]
+    for (const f of emitenteFields) {
+      const v = cfg[f]
+      if (!v && f !== 'uf_emitente') continue
+      payload[f] = f === 'cep_emitente' || f === 'telefone_emitente' ? _fiscalDigits(v) : _fiscalText(v, 120)
+    }
+    return { payload, total: target }
+  }
+  const _fiscalCreatePending = (tid, origemTipo, origemId, orders, opts = {}) => {
+    const existing = db.prepare('SELECT * FROM fiscal_nfce WHERE tenant_id=? AND origem_tipo=? AND origem_id=? LIMIT 1').get(tid, origemTipo, String(origemId))
+    if (existing) return { row: existing, created: false }
+    const cfg = _fiscalEnsureConfig(tid)
+    const built = _fiscalBuildPayload(tid, orders, cfg, opts)
+    const referencia = opts.referencia || _fiscalRef(tid, origemTipo, origemId)
+    db.prepare(`INSERT INTO fiscal_nfce
+      (tenant_id, origem_tipo, origem_id, order_id, mesa_num, session_ref, referencia, ambiente, status, total, forma_pagamento, payload_json)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(
+        tid, origemTipo, String(origemId), opts.order_id || null, opts.mesa_num || null, opts.session_ref || null,
+        referencia, cfg.ambiente || 'homologacao', 'pendente', built.total, opts.forma || orders?.[0]?.pag || 'PIX',
+        JSON.stringify(built.payload)
+      )
+    marcarDirty()
+    return { row: db.prepare('SELECT * FROM fiscal_nfce WHERE tenant_id=? AND referencia=?').get(tid, referencia), created: true }
+  }
+  const _fiscalFocusBase = (ambiente) => ambiente === 'producao' ? 'https://api.focusnfe.com.br' : 'https://homologacao.focusnfe.com.br'
+  const _fiscalToken = (cfg) => cfg.ambiente === 'producao' ? cfg.token_producao : cfg.token_homologacao
+  const _fiscalFocusRequest = async (cfg, method, pathFocus, body = null) => {
+    const token = _fiscalToken(cfg)
+    if (!token) throw new Error(`Token Focus ${cfg.ambiente === 'producao' ? 'producao' : 'homologacao'} nao configurado.`)
+    const resp = await fetch(_fiscalFocusBase(cfg.ambiente) + pathFocus, {
+      method,
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(`${token}:`).toString('base64'),
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: body ? JSON.stringify(body) : undefined
+    })
+    const text = await resp.text()
+    let data = null
+    try { data = text ? JSON.parse(text) : {} } catch { data = { raw: text } }
+    return { ok: resp.ok, statusCode: resp.status, data }
+  }
+  const _fiscalApplyFocusResponse = (tid, id, data, fallbackStatus = null) => {
+    const status = String(data?.status || fallbackStatus || 'erro_autorizacao')
+    const mensagem = data?.mensagem_sefaz || data?.mensagem || data?.erro || data?.error || (Array.isArray(data?.erros) ? data.erros.map(e => e.mensagem || e.message || e.codigo).filter(Boolean).join('; ') : '')
+    const chave = data?.chave_nfe || data?.chave_nfce || data?.chave || data?.chave_acesso || null
+    const xml = data?.caminho_xml_nota_fiscal || data?.caminho_xml || data?.caminho_xml_nfce || null
+    const danfe = data?.caminho_danfe || data?.caminho_danfce || data?.caminho_pdf || data?.caminho_danfe_nfce || null
+    const protocolo = data?.numero_protocolo || data?.protocolo || data?.protocolo_sefaz || null
+    db.prepare(`UPDATE fiscal_nfce SET
+      status=?, response_json=?, chave_nfe=?, numero=?, serie=?, protocolo=?, caminho_xml=?, caminho_danfe=?, qr_code=?, mensagem=?,
+      emitted_at=CASE WHEN ? IN ('autorizado','autorizada') AND emitted_at IS NULL THEN datetime('now') ELSE emitted_at END,
+      canceled_at=CASE WHEN ?='cancelado' AND canceled_at IS NULL THEN datetime('now') ELSE canceled_at END,
+      updated_at=datetime('now')
+      WHERE id=? AND tenant_id=?`)
+      .run(status, JSON.stringify(data || {}), chave, data?.numero || data?.numero_nfce || null, data?.serie || null,
+        protocolo, xml, danfe, data?.qr_code || data?.qrcode || data?.url_qrcode || null, mensagem || null,
+        status, status, id, tid)
+    marcarDirty()
+    return db.prepare('SELECT * FROM fiscal_nfce WHERE id=? AND tenant_id=?').get(id, tid)
+  }
+
+  if (upath === '/api/fiscal/config') {
+    const tid = _fiscalTenantId()
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    if (req.method === 'GET') {
+      send(res, 200, _fiscalConfigOut(_fiscalEnsureConfig(tid)))
+      return true
+    }
+    if (req.method === 'POST' || req.method === 'PATCH') {
+      const body = await readBody(req)
+      const current = _fiscalEnsureConfig(tid)
+      const allowed = [
+        'enabled','ambiente','emit_mode','cnpj_emitente','inscricao_estadual_emitente','regime_tributario_emitente',
+        'nome_emitente','nome_fantasia_emitente','telefone_emitente','logradouro_emitente','numero_emitente',
+        'bairro_emitente','municipio_emitente','uf_emitente','cep_emitente','csc_id','serie','proximo_numero',
+        'natureza_operacao','ncm_padrao','cfop_padrao','icms_origem_padrao','icms_situacao_padrao','unidade_padrao'
+      ]
+      const payload = {}
+      for (const k of allowed) {
+        if (Object.prototype.hasOwnProperty.call(body || {}, k)) payload[k] = k === 'enabled' ? (body[k] ? 1 : 0) : body[k]
+      }
+      for (const secret of ['token_homologacao','token_producao','csc_token']) {
+        const val = String(body?.[secret] || '').trim()
+        if (val && !/^\*+$/.test(val)) payload[secret] = val
+      }
+      payload.ambiente = ['homologacao','producao'].includes(String(payload.ambiente || current.ambiente)) ? (payload.ambiente || current.ambiente) : 'homologacao'
+      payload.emit_mode = ['fechamento','manual'].includes(String(payload.emit_mode || current.emit_mode)) ? (payload.emit_mode || current.emit_mode) : 'fechamento'
+      payload.updated_at = new Date().toISOString()
+      const keys = Object.keys(payload)
+      if (keys.length) {
+        db.prepare(`UPDATE fiscal_config SET ${keys.map(k => `"${k}"=?`).join(', ')} WHERE tenant_id=?`).run(...keys.map(k => payload[k]), tid)
+        marcarDirty()
+      }
+      send(res, 200, _fiscalConfigOut(_fiscalEnsureConfig(tid)))
+      return true
+    }
+  }
+
+  if (upath === '/api/fiscal/nfce' && req.method === 'GET') {
+    const tid = _fiscalTenantId()
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    const status = String(params.get('status') || '').trim()
+    const limit = Math.min(300, Math.max(1, parseInt(params.get('limit') || '100', 10)))
+    const where = ['tenant_id=?']
+    const vals = [tid]
+    if (status) { where.push('status=?'); vals.push(status) }
+    const rows = db.prepare(`SELECT * FROM fiscal_nfce WHERE ${where.join(' AND ')} ORDER BY id DESC LIMIT ?`).all(...vals, limit)
+    send(res, 200, rows.map(_fiscalNoteOut))
+    return true
+  }
+
+  if (upath === '/api/fiscal/nfce/importar-pendentes' && req.method === 'POST') {
+    const tid = _fiscalTenantId()
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    const body = await readBody(req)
+    const range = _fiscalDateRange(body)
+    const pagamentoFiltro = _fiscalPagamentoFiltro(body.pagamento || body.pagamento_tipo || body.forma_pagamento || params.get('pagamento'))
+    const rowsRaw = db.prepare(`
+      SELECT * FROM orders
+      WHERE tenant_id=?
+        AND status IN ('finalizado','entregue')
+        AND COALESCE(total,0)>0
+        AND created_at>=?
+        AND created_at<=?
+      ORDER BY id ASC
+    `).all(tid, range.start, range.end)
+    const rows = pagamentoFiltro ? rowsRaw.filter(o => _fiscalOrderMatchesPagamento(o, pagamentoFiltro)) : rowsRaw
+    const grupos = new Map()
+    for (const o of rows) {
+      const mesa = o.mesa_num ? parseInt(o.mesa_num) : null
+      const sess = String(o.session_ref || '').trim()
+      const key = mesa && sess
+        ? `mesa_session:${mesa}:${sess}${pagamentoFiltro ? ':' + pagamentoFiltro : ''}`
+        : `order:${o.id}`
+      if (!grupos.has(key)) grupos.set(key, [])
+      grupos.get(key).push(o)
+    }
+    const criadas = []
+    const existentes = []
+    const erros = []
+    for (const [key, ords] of grupos.entries()) {
+      try {
+        const first = ords[0]
+        const isMesa = key.startsWith('mesa_session:')
+        const origemTipo = isMesa ? 'mesa_session' : 'order'
+        const origemId = isMesa
+          ? crypto.createHash('sha1').update(`${first.mesa_num}:${first.session_ref}:${pagamentoFiltro || 'todos'}`).digest('hex').slice(0, 16)
+          : String(first.id)
+        const result = _fiscalCreatePending(tid, origemTipo, origemId, ords, {
+          order_id: isMesa ? null : first.id,
+          mesa_num: first.mesa_num || null,
+          session_ref: first.session_ref || null,
+          forma: body.forma || _fiscalPagamentoLabel(pagamentoFiltro) || first.pag || 'PIX'
+        })
+        ;(result.created ? criadas : existentes).push(_fiscalNoteOut(result.row))
+      } catch(e) {
+        erros.push({ origem: key, error: e.message })
+      }
+    }
+    send(res, 200, {
+      ok: true,
+      periodo: { de: range.de, ate: range.ate },
+      pagamento: pagamentoFiltro || 'todos',
+      vendas_encontradas: rows.length,
+      criadas,
+      existentes,
+      erros
+    })
+    return true
+  }
+
+  if (upath === '/api/fiscal/nfce/from-order' && req.method === 'POST') {
+    const tid = _fiscalTenantId()
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    const body = await readBody(req)
+    const orderId = parseInt(body.order_id || body.id)
+    if (!orderId) { send(res, 400, { error: 'order_id obrigatorio' }); return true }
+    const order = db.prepare('SELECT * FROM orders WHERE tenant_id=? AND id=?').get(tid, orderId)
+    if (!order) { send(res, 404, { error: 'Pedido nao encontrado' }); return true }
+    try {
+      const result = _fiscalCreatePending(tid, 'order', String(order.id), [order], { order_id: order.id, forma: body.forma || order.pag })
+      send(res, result.created ? 201 : 200, _fiscalNoteOut(result.row))
+    } catch(e) { send(res, 400, { error: e.message }) }
+    return true
+  }
+
+  if (upath === '/api/fiscal/nfce/from-mesa' && req.method === 'POST') {
+    const tid = _fiscalTenantId()
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    const body = await readBody(req)
+    const mesa = parseInt(body.mesa_num)
+    const sessionRef = String(body.session_ref || '').trim()
+    if (!mesa || !sessionRef) { send(res, 400, { error: 'mesa_num e session_ref obrigatorios' }); return true }
+    const orders = db.prepare(`
+      SELECT * FROM orders
+      WHERE tenant_id=? AND mesa_num=? AND COALESCE(session_ref,'')=? AND status IN ('entregue','finalizado','mesa_aberta','analise','producao','pronto')
+      ORDER BY id ASC
+    `).all(tid, mesa, sessionRef)
+    if (!orders.length) { send(res, 404, { error: 'Nenhuma comanda encontrada para esta mesa' }); return true }
+    try {
+      const origemId = crypto.createHash('sha1').update(`${mesa}:${sessionRef}`).digest('hex').slice(0, 16)
+      const result = _fiscalCreatePending(tid, 'mesa_session', origemId, orders, {
+        mesa_num: mesa,
+        session_ref: sessionRef,
+        forma: body.forma || orders[0].pag || 'PIX',
+        formas: body.formas || []
+      })
+      send(res, result.created ? 201 : 200, _fiscalNoteOut(result.row))
+    } catch(e) { send(res, 400, { error: e.message }) }
+    return true
+  }
+
+  const fiscalEmitMatch = upath.match(/^\/api\/fiscal\/nfce\/(\d+)\/emitir$/)
+  if (fiscalEmitMatch && req.method === 'POST') {
+    const tid = _fiscalTenantId()
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    const id = parseInt(fiscalEmitMatch[1])
+    const cfg = _fiscalEnsureConfig(tid)
+    const note = db.prepare('SELECT * FROM fiscal_nfce WHERE id=? AND tenant_id=?').get(id, tid)
+    if (!note) { send(res, 404, { error: 'NFC-e nao encontrada' }); return true }
+    try {
+      const payload = _fiscalJson(note.payload_json, {})
+      payload.data_emissao = _fiscalIsoNowBR()
+      db.prepare('UPDATE fiscal_nfce SET payload_json=?, ambiente=?, updated_at=datetime(\'now\') WHERE id=? AND tenant_id=?')
+        .run(JSON.stringify(payload), cfg.ambiente || note.ambiente || 'homologacao', id, tid)
+      const fr = await _fiscalFocusRequest(cfg, 'POST', `/v2/nfce?ref=${encodeURIComponent(note.referencia)}&completa=1`, payload)
+      const updated = _fiscalApplyFocusResponse(tid, id, fr.data, fr.ok ? null : 'erro_autorizacao')
+      send(res, fr.ok ? 200 : 422, _fiscalNoteOut(updated))
+    } catch(e) {
+      db.prepare('UPDATE fiscal_nfce SET status=?, mensagem=?, updated_at=datetime(\'now\') WHERE id=? AND tenant_id=?')
+        .run('erro_autorizacao', e.message, id, tid)
+      marcarDirty()
+      send(res, 400, { error: e.message })
+    }
+    return true
+  }
+
+  if (upath === '/api/fiscal/nfce/emitir-pendentes' && req.method === 'POST') {
+    const tid = _fiscalTenantId()
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    const body = await readBody(req)
+    const limit = Math.min(100, Math.max(1, parseInt(body.limit || 50, 10)))
+    const pagamentoFiltro = _fiscalPagamentoFiltro(body.pagamento || body.pagamento_tipo || body.forma_pagamento || params.get('pagamento'))
+    const pendentesRaw = db.prepare("SELECT id, forma_pagamento FROM fiscal_nfce WHERE tenant_id=? AND status IN ('pendente','erro_autorizacao') ORDER BY id ASC LIMIT ?")
+      .all(tid, pagamentoFiltro ? 300 : limit)
+    const pendentes = pagamentoFiltro
+      ? pendentesRaw.filter(n => _fiscalPagamentoFiltro(n.forma_pagamento) === pagamentoFiltro).slice(0, limit)
+      : pendentesRaw
+    const ok = [], erros = []
+    for (const p of pendentes) {
+      try {
+        const cfg = _fiscalEnsureConfig(tid)
+        const note = db.prepare('SELECT * FROM fiscal_nfce WHERE id=? AND tenant_id=?').get(p.id, tid)
+        const payload = _fiscalJson(note.payload_json, {})
+        payload.data_emissao = _fiscalIsoNowBR()
+        db.prepare('UPDATE fiscal_nfce SET payload_json=?, ambiente=?, updated_at=datetime(\'now\') WHERE id=? AND tenant_id=?')
+          .run(JSON.stringify(payload), cfg.ambiente || note.ambiente || 'homologacao', note.id, tid)
+        const fr = await _fiscalFocusRequest(cfg, 'POST', `/v2/nfce?ref=${encodeURIComponent(note.referencia)}&completa=1`, payload)
+        const updated = _fiscalApplyFocusResponse(tid, note.id, fr.data, fr.ok ? null : 'erro_autorizacao')
+        if (fr.ok) ok.push(_fiscalNoteOut(updated))
+        else erros.push({ id: note.id, referencia: note.referencia, error: updated.mensagem || 'Erro na autorizacao' })
+      } catch(e) {
+        erros.push({ id: p.id, error: e.message })
+      }
+    }
+    send(res, 200, { ok: true, pagamento: pagamentoFiltro || 'todos', selecionadas: pendentes.length, emitidas: ok, erros })
+    return true
+  }
+
+  const fiscalConsultarMatch = upath.match(/^\/api\/fiscal\/nfce\/(\d+)\/consultar$/)
+  if (fiscalConsultarMatch && req.method === 'POST') {
+    const tid = _fiscalTenantId()
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    const id = parseInt(fiscalConsultarMatch[1])
+    const cfg = _fiscalEnsureConfig(tid)
+    const note = db.prepare('SELECT * FROM fiscal_nfce WHERE id=? AND tenant_id=?').get(id, tid)
+    if (!note) { send(res, 404, { error: 'NFC-e nao encontrada' }); return true }
+    try {
+      const fr = await _fiscalFocusRequest(cfg, 'GET', `/v2/nfce/${encodeURIComponent(note.referencia)}?completa=1`)
+      const updated = _fiscalApplyFocusResponse(tid, id, fr.data, fr.ok ? null : 'erro_autorizacao')
+      send(res, fr.ok ? 200 : 422, _fiscalNoteOut(updated))
+    } catch(e) { send(res, 400, { error: e.message }) }
+    return true
+  }
+
+  const fiscalCancelarMatch = upath.match(/^\/api\/fiscal\/nfce\/(\d+)\/cancelar$/)
+  if (fiscalCancelarMatch && req.method === 'POST') {
+    const tid = _fiscalTenantId()
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatorio' }); return true }
+    const id = parseInt(fiscalCancelarMatch[1])
+    const body = await readBody(req)
+    const justificativa = _fiscalText(body.justificativa || 'Cancelamento solicitado pelo estabelecimento', 255)
+    if (justificativa.length < 15) { send(res, 400, { error: 'Justificativa precisa ter pelo menos 15 caracteres' }); return true }
+    const cfg = _fiscalEnsureConfig(tid)
+    const note = db.prepare('SELECT * FROM fiscal_nfce WHERE id=? AND tenant_id=?').get(id, tid)
+    if (!note) { send(res, 404, { error: 'NFC-e nao encontrada' }); return true }
+    try {
+      const fr = await _fiscalFocusRequest(cfg, 'DELETE', `/v2/nfce/${encodeURIComponent(note.referencia)}`, { justificativa })
+      const updated = _fiscalApplyFocusResponse(tid, id, fr.data, fr.ok ? 'cancelado' : 'erro_cancelamento')
+      send(res, fr.ok ? 200 : 422, _fiscalNoteOut(updated))
+    } catch(e) { send(res, 400, { error: e.message }) }
+    return true
   }
 
   const _chatDigits = (v) => typeof chatNormalizePhone === 'function'
@@ -4554,7 +5251,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           db.prepare('UPDATE faturas SET mp_payment_id=? WHERE id=?').run(String(mpId), rowF.id)
         }
       }
-      if (rowF && rowF.status !== 'pago' && novoStatus === 'aprovado') {
+      if (rowF && rowF.status !== 'pago' && rowF.status !== 'cancelado' && novoStatus === 'aprovado') {
         const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(rowF.tenant_id)
         if (tenant) {
           // Marca fatura paga
@@ -4569,7 +5266,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           const novaExpISO = _dateOnlyISO(_addCalendarMonths(baseDate, parseInt(rowF.meses) || 1))
 
           // Atualiza plano também (caso fatura tenha sido pra upgrade)
-          const planoNovo = ['premium','essencial','pro'].includes(rowF.plano) ? rowF.plano : tenant.plano
+          const planoNovo = ['premium','essencial','pro','fiscal'].includes(rowF.plano) ? rowF.plano : tenant.plano
           db.prepare('UPDATE tenants SET expires_at=?, ativo=1, plano=?, updated_at=datetime(\'now\') WHERE id=?')
             .run(novaExpISO, planoNovo, tenant.id)
 
@@ -4586,7 +5283,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
               } catch {}
               if (telefone && (telefone.length === 11 || telefone.length === 10)) telefone = '55' + telefone
               if (telefone) {
-                const planoNome = planoNovo === 'premium' ? 'Premium' : 'Essencial'
+                const planoNome = _planoSaasLabel(planoNovo)
                 const valorTxt  = parseFloat(rowF.valor).toFixed(2).replace('.', ',')
                 const venceTxt  = _parseDateOnlyLocal(novaExpISO)?.toLocaleDateString('pt-BR') || novaExpISO
                 const msg = [
@@ -5586,7 +6283,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
         body: JSON.stringify({
           transaction_amount: _valorMpP,
-          description: `Renovacao ${plano === 'premium' ? 'Plano Premium' : 'Plano Essencial'} - ${tenant?.nome || 'Cliente'}`,
+          description: `Renovacao Plano ${_planoSaasLabel(plano)} - ${tenant?.nome || 'Cliente'}`,
           payment_method_id: 'pix',
           external_reference: extRef,
           payer: { email: 'renovacao@estimafood.com', first_name: tenant?.nome || 'Cliente', last_name: '' },
@@ -5672,7 +6369,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         body: JSON.stringify({
           transaction_amount: _valorMpPC,
           token: card_token,
-          description: `Renovacao ${plano === 'premium' ? 'Plano Premium' : 'Plano Essencial'} - ${tenant?.nome || 'Cliente'}`,
+          description: `Renovacao Plano ${_planoSaasLabel(plano)} - ${tenant?.nome || 'Cliente'}`,
           installments: 1,
           payment_method_id,
           external_reference: extRef,
@@ -5880,7 +6577,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const cfgG = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
       const gCfg = cfgG?.ia_config ? JSON.parse(cfgG.ia_config) : {}
       const adminPhone = (gCfg.admin_phone || '').replace(/\D/g,'')
-      const planoLabel = plano === 'premium' ? 'Premium' : 'Essencial'
+      const planoLabel = _planoSaasLabel(plano)
       const msgAdmin = [
         `*🆕 NOVO LEAD — TESTE GRATIS*`,
         ``,
@@ -6007,20 +6704,22 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const tid  = getTenantId(req, params)
     if (!tid) { send(res, 400, { error: 'Tenant não identificado' }); return true }
     const body = await readBody(req)
-    const { audio, garcom_nome, garcom_id, destino } = body
+    const { audio, garcom_nome, garcom_id, destino, audio_mime, mime, mimeType: bodyMimeType } = body
     if (!audio) { send(res, 400, { error: 'Áudio obrigatório' }); return true }
-    if (audio.length > 500000) { send(res, 413, { error: 'Áudio muito grande (máx 10s)' }); return true }
+    if (audio.length > 2000000) { send(res, 413, { error: 'Áudio muito grande (máx 10s)' }); return true }
 
     const from_id = garcom_id ? String(garcom_id) : 'gestor'
     const to_id = (!destino || destino === 'gestor') ? 'gestor' : String(destino)
     const from_nome = garcom_nome || (from_id === 'gestor' ? 'Gestor' : 'Garçom')
+    const rawMime = String(audio_mime || mime || bodyMimeType || 'audio/webm').trim().toLowerCase()
+    const safeMime = /^audio\/[a-z0-9.+-]+(?:;\s*codecs=[a-z0-9.+-]+)?$/i.test(rawMime) ? rawMime : 'audio/webm'
 
     // Salva no banco
     try {
-      db.prepare('INSERT INTO radio_messages (tenant_id, from_id, from_nome, to_id, audio) VALUES (?,?,?,?,?)').run(tid, from_id, from_nome, to_id, audio)
+      db.prepare('INSERT INTO radio_messages (tenant_id, from_id, from_nome, to_id, audio, audio_mime) VALUES (?,?,?,?,?,?)').run(tid, from_id, from_nome, to_id, audio, safeMime)
     } catch(e) { console.warn('[RADIO] db insert:', e.message) }
 
-    const payload = { audio, garcom_nome: from_nome, garcom_id: from_id, ts: Date.now() }
+    const payload = { audio, audio_mime: safeMime, garcom_nome: from_nome, garcom_id: from_id, ts: Date.now() }
     if (to_id === 'gestor') {
       sseBroadcast(`radio-rt:${tid}`, 'radio:msg', payload)
     } else {
@@ -6038,7 +6737,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     try {
       // Retorna mensagens enviadas OU recebidas por este user nos últimos 10h (sem o blob de áudio — só metadata)
       const rows = db.prepare(`
-        SELECT id, from_id, from_nome, to_id, created_at
+        SELECT id, from_id, from_nome, to_id, COALESCE(audio_mime,'audio/webm') AS audio_mime, created_at
         FROM radio_messages
         WHERE tenant_id=? AND (from_id=? OR to_id=?)
           AND created_at >= datetime('now','-10 hours')
@@ -6055,9 +6754,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const msgId = parseInt(upath.split('/')[4]) || 0
     if (!tid || !msgId) { send(res, 400, { error: 'Parâmetros inválidos' }); return true }
     try {
-      const row = db.prepare('SELECT audio FROM radio_messages WHERE id=? AND tenant_id=?').get(msgId, tid)
+      const row = db.prepare("SELECT audio, COALESCE(audio_mime,'audio/webm') AS audio_mime FROM radio_messages WHERE id=? AND tenant_id=?").get(msgId, tid)
       if (!row) { send(res, 404, { error: 'Áudio não encontrado' }); return true }
-      send(res, 200, { audio: row.audio })
+      send(res, 200, { audio: row.audio, audio_mime: row.audio_mime || 'audio/webm' })
     } catch(e) { send(res, 500, { error: e.message }) }
     return true
   }
@@ -6814,9 +7513,128 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  const ADMIN_FISCAL_LIMITE_PADRAO = 500
+  const ADMIN_FISCAL_VALOR_EXCEDENTE_PADRAO = 0.10
+  const ADMIN_FISCAL_PLANO_VALOR_PADRAO = 159.90
+  function _adminFiscalMesInfo(rawMes) {
+    const now = new Date()
+    let mes = String(rawMes || '').trim()
+    if (!/^\d{4}-\d{2}$/.test(mes)) {
+      mes = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    }
+    const [ano, mesNum] = mes.split('-').map(Number)
+    const start = `${ano}-${String(mesNum).padStart(2, '0')}-01`
+    const endDate = new Date(Date.UTC(ano, mesNum, 1))
+    const end = `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth() + 1).padStart(2, '0')}-01`
+    return { mes, start, end }
+  }
+  function _adminFiscalNum(value, fallback) {
+    const n = parseFloat(String(value ?? '').replace(',', '.'))
+    return Number.isFinite(n) ? n : fallback
+  }
+  function _adminFiscalMoney(value) {
+    return Math.round((parseFloat(value) || 0) * 100) / 100
+  }
+  function _adminFiscalUso(opts = {}) {
+    const mesInfo = _adminFiscalMesInfo(opts.mes)
+    const limite = Math.max(0, parseInt(opts.limite ?? ADMIN_FISCAL_LIMITE_PADRAO, 10) || ADMIN_FISCAL_LIMITE_PADRAO)
+    const valorExcedente = Math.max(0, _adminFiscalNum(opts.valor_excedente, ADMIN_FISCAL_VALOR_EXCEDENTE_PADRAO))
+    const planoValor = Math.max(0, _adminFiscalNum(opts.plano_valor, ADMIN_FISCAL_PLANO_VALOR_PADRAO))
+    const rawRows = db.prepare(`
+      SELECT
+        t.id, t.nome, t.slug, t.plano, t.ativo, t.expires_at,
+        COALESCE(fc.enabled, 0) AS fiscal_enabled,
+        COUNT(n.id) AS notas_usadas,
+        COALESCE(SUM(n.total), 0) AS valor_notas
+      FROM tenants t
+      LEFT JOIN fiscal_config fc ON fc.tenant_id = t.id
+      LEFT JOIN fiscal_nfce n ON n.tenant_id = t.id
+        AND lower(COALESCE(n.status, '')) IN ('autorizado','autorizada','cancelado','cancelada')
+        AND date(COALESCE(n.emitted_at, n.created_at)) >= date(?)
+        AND date(COALESCE(n.emitted_at, n.created_at)) < date(?)
+      WHERE COALESCE(t.slug, '') NOT IN ('_admin','_global','admin','system')
+        AND COALESCE(t.id, '') NOT IN ('_admin','_global','admin','system')
+      GROUP BY t.id
+      ORDER BY notas_usadas DESC, t.nome COLLATE NOCASE ASC
+    `).all(mesInfo.start, mesInfo.end)
+    const faturas = db.prepare(`
+      SELECT id, tenant_id, valor, status, link_pagamento, vence_em, created_at, obs
+      FROM faturas
+      WHERE plano='fiscal'
+        AND COALESCE(status, '') <> 'cancelado'
+        AND COALESCE(obs, '') LIKE ?
+      ORDER BY id DESC
+    `).all(`%NFC-e ${mesInfo.mes}%`)
+    const faturaPorTenant = new Map()
+    for (const f of faturas) {
+      if (!faturaPorTenant.has(f.tenant_id)) faturaPorTenant.set(f.tenant_id, f)
+    }
+    let rows = rawRows.map(t => {
+      const notasUsadas = parseInt(t.notas_usadas || 0, 10) || 0
+      const excedente = Math.max(0, notasUsadas - limite)
+      const valorExtra = _adminFiscalMoney(excedente * valorExcedente)
+      const fiscalAtivo = t.plano === 'fiscal' || !!t.fiscal_enabled || notasUsadas > 0
+      const valorTotal = fiscalAtivo ? _adminFiscalMoney(planoValor + valorExtra) : valorExtra
+      const fatura = faturaPorTenant.get(t.id) || null
+      return {
+        tenant_id: t.id,
+        nome: t.nome,
+        slug: t.slug,
+        plano: t.plano,
+        ativo: !!t.ativo,
+        fiscal_enabled: !!t.fiscal_enabled,
+        fiscal_ativo: fiscalAtivo,
+        notas_usadas: notasUsadas,
+        valor_notas: _adminFiscalMoney(t.valor_notas),
+        limite,
+        excedente,
+        valor_excedente: valorExcedente,
+        valor_extra: valorExtra,
+        plano_valor: fiscalAtivo ? planoValor : 0,
+        valor_total: valorTotal,
+        fatura_id: fatura?.id || null,
+        fatura_status: fatura?.status || null,
+        fatura_valor: fatura ? _adminFiscalMoney(fatura.valor) : null,
+        fatura_link: fatura?.link_pagamento || null,
+        fatura_vence_em: fatura?.vence_em || null
+      }
+    }).filter(r => r.fiscal_ativo || opts.incluir_todos)
+    if (opts.tenant_id) rows = rows.filter(r => r.tenant_id === opts.tenant_id)
+    const sum = (key) => rows.reduce((s, r) => s + (parseFloat(r[key]) || 0), 0)
+    return {
+      mes: mesInfo.mes,
+      inicio: mesInfo.start,
+      fim: mesInfo.end,
+      limite,
+      valor_excedente: valorExcedente,
+      plano_valor: planoValor,
+      total_clientes: rows.length,
+      total_notas: sum('notas_usadas'),
+      total_excedente: sum('excedente'),
+      total_extra: _adminFiscalMoney(sum('valor_extra')),
+      total_cobrar: _adminFiscalMoney(sum('valor_total')),
+      rows
+    }
+  }
+
+  if (req.method === 'GET' && upath === '/api/admin/fiscal-nfce/uso') {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Nao autorizado' }); return true }
+    try {
+      const data = _adminFiscalUso({
+        mes: params.get('mes'),
+        limite: params.get('limite'),
+        valor_excedente: params.get('valor_excedente'),
+        plano_valor: params.get('plano_valor'),
+        incluir_todos: params.get('todos') === '1'
+      })
+      send(res, 200, data)
+    } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
   // ── Helper: gera cobrança PIX no Mercado Pago e retorna { fatura, link } ──
   async function _gerarCobrancaMP(tenant, opts) {
-    const { plano, valor, meses, metodo } = opts
+    const { plano, valor, meses, metodo, obs } = opts
     const _valorMpG = _mpValor(valor)
     if (_valorMpG === null) throw new Error('Valor da cobrança inválido')
 
@@ -6826,7 +7644,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
     const extRef = `fatura-${tenant.id.slice(0, 8)}-${plano}-${Date.now()}`
     const venceEm = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString() // expira em 7d
-    const descricao = `Plano ${plano === 'premium' ? 'Premium' : 'Essencial'} — ${meses} ${meses === 1 ? 'mês' : 'meses'} — ${tenant.nome}`
+    const descricao = `Plano ${_planoSaasLabel(plano)} — ${meses} ${meses === 1 ? 'mês' : 'meses'} — ${tenant.nome}`
 
     let mpData = null, qrCode = null, qrCodeBase64 = null, linkPagamento = null
 
@@ -6871,11 +7689,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
     // Salva fatura
     const info = db.prepare(`INSERT INTO faturas
-      (tenant_id, plano, valor, meses, metodo, status, link_pagamento, mp_payment_id, mp_external_ref, qr_code, qr_code_base64, vence_em)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      (tenant_id, plano, valor, meses, metodo, status, link_pagamento, mp_payment_id, mp_external_ref, qr_code, qr_code_base64, vence_em, obs)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
         tenant.id, plano, parseFloat(valor), parseInt(meses) || 1, metodo, 'pendente',
         linkPagamento, mpData.id ? String(mpData.id) : null, extRef,
-        qrCode, qrCodeBase64, venceEm
+        qrCode, qrCodeBase64, venceEm, obs || null
       )
     marcarDirty()
     const fatura = db.prepare('SELECT * FROM faturas WHERE id=?').get(info.lastInsertRowid)
@@ -6905,7 +7723,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (telefone.length === 11 || telefone.length === 10) telefone = '55' + telefone
 
       const valorTxt = parseFloat(fatura.valor).toFixed(2).replace('.', ',')
-      const planoNome = fatura.plano === 'premium' ? 'Premium' : 'Essencial'
+      const planoNome = _planoSaasLabel(fatura.plano)
       const venceEmTxt = fatura.vence_em
         ? new Date(fatura.vence_em).toLocaleDateString('pt-BR')
         : '7 dias'
@@ -6939,6 +7757,75 @@ module.exports = async function handleRoutes(req, res, ctx) {
     }
   }
 
+  if (req.method === 'POST' && upath === '/api/admin/fiscal-nfce/gerar-cobranca') {
+    const sess = validarSessaoAdmin(req)
+    if (!sess) { send(res, 401, { error: 'Nao autorizado' }); return true }
+    const body = await readBody(req)
+    const tenantId = String(body?.tenant_id || '').trim()
+    if (!tenantId) { send(res, 400, { error: 'tenant_id obrigatorio' }); return true }
+    try {
+      const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenantId)
+      if (!tenant) { send(res, 404, { error: 'Tenant nao encontrado' }); return true }
+      const uso = _adminFiscalUso({
+        tenant_id: tenantId,
+        mes: body?.mes,
+        limite: body?.limite,
+        valor_excedente: body?.valor_excedente,
+        plano_valor: body?.plano_valor,
+        incluir_todos: true
+      })
+      const row = uso.rows[0]
+      if (!row || !row.valor_total) { send(res, 400, { error: 'Sem valor fiscal para cobrar neste mes' }); return true }
+      if (row.fatura_id && row.fatura_status === 'pago') {
+        send(res, 409, { error: 'A cobranca fiscal deste mes ja foi paga', row })
+        return true
+      }
+      if (row.fatura_id && !body?.force) {
+        send(res, 409, { error: 'Ja existe cobranca fiscal para este cliente neste mes', row })
+        return true
+      }
+      const faturaSubstituidaId = row.fatura_id || null
+      const obs = _adminFiscalObs(uso, row, faturaSubstituidaId ? `Substitui fatura #${faturaSubstituidaId}` : 'Cobranca fiscal')
+      const result = await _gerarCobrancaMP(tenant, {
+        plano: 'fiscal',
+        valor: row.valor_total,
+        meses: 1,
+        metodo: body?.metodo === 'cartao' ? 'cartao' : 'pix',
+        obs
+      })
+      if (faturaSubstituidaId) {
+        db.prepare(`UPDATE faturas
+          SET status='cancelado',
+              cancelado_em=datetime('now'),
+              obs=TRIM(COALESCE(obs, '') || ' | substituida_por=' || ?)
+          WHERE id=? AND status<>'pago'`).run(String(result.fatura.id), faturaSubstituidaId)
+      }
+      result.fatura.obs = obs
+      marcarDirty()
+      const wa = await _enviarCobrancaWA(tenant, result.fatura)
+      _registrarAudit(sess, {
+        acao: 'cobranca.fiscal_nfce',
+        alvo_tipo: 'tenant', alvo_id: tenantId, alvo_nome: tenant.nome,
+        detalhes: {
+          mes: uso.mes,
+          fatura_id: result.fatura.id,
+          notas_usadas: row.notas_usadas,
+          limite: row.limite,
+          excedente: row.excedente,
+          valor_extra: row.valor_extra,
+          valor_total: row.valor_total,
+          fatura_substituida_id: faturaSubstituidaId,
+          wa_enviado: wa.enviado
+        }
+      }, req.headers)
+      send(res, 200, { ok: true, fatura: result.fatura, link: result.link, wa, uso: row })
+    } catch(e) {
+      log('❌', 'Cobrança fiscal NFC-e erro:', e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
   // ── POST /api/admin/cobranca/gerar — gera 1 cobrança e envia ──
   if (req.method === 'POST' && upath === '/api/admin/cobranca/gerar') {
     const sess = validarSessaoAdmin(req)
@@ -6948,18 +7835,36 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!tenant_id || !plano || !valor) { send(res, 400, { error: 'tenant_id, plano e valor obrigatórios' }); return true }
     try {
       const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tenant_id)
+      const planoFinal = ['essencial', 'premium', 'pro', 'fiscal'].includes(plano) ? plano : 'essencial'
+      const mesesFinal = parseInt(meses) || 1
+      let valorFinal = parseFloat(valor)
+      let obsFiscal = null
+      let fiscalRow = null
+      if (planoFinal === 'fiscal') {
+        const fiscal = _adminFiscalCobrancaAtual(db, tenant_id, {
+          mes: body?.mes || _adminFiscalMesAtual(),
+          plano_valor: _adminFiscalMoney(valorFinal * mesesFinal),
+          prefix: 'Renovacao fiscal'
+        })
+        if (fiscal.row) {
+          fiscalRow = fiscal.row
+          valorFinal = fiscal.valor
+          obsFiscal = fiscal.obs
+        }
+      }
       if (!tenant) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
       const result = await _gerarCobrancaMP(tenant, {
-        plano: ['essencial', 'premium', 'pro'].includes(plano) ? plano : 'essencial',
-        valor: parseFloat(valor),
-        meses: parseInt(meses) || 1,
-        metodo: metodo === 'cartao' ? 'cartao' : 'pix'
+        plano: planoFinal,
+        valor: valorFinal,
+        meses: mesesFinal,
+        metodo: metodo === 'cartao' ? 'cartao' : 'pix',
+        obs: obsFiscal
       })
       const wa = await _enviarCobrancaWA(tenant, result.fatura)
       _registrarAudit(sess, {
         acao: 'cobranca.gerar',
         alvo_tipo: 'tenant', alvo_id: tenant_id, alvo_nome: tenant.nome,
-        detalhes: { fatura_id: result.fatura.id, valor: result.fatura.valor, plano, meses, metodo, wa_enviado: wa.enviado }
+        detalhes: { fatura_id: result.fatura.id, valor: result.fatura.valor, plano: planoFinal, meses: mesesFinal, metodo, fiscal: fiscalRow, wa_enviado: wa.enviado }
       }, req.headers)
       send(res, 200, { ok: true, fatura: result.fatura, link: result.link, wa })
     } catch(e) {
@@ -6977,7 +7882,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const ids = Array.isArray(body?.tenant_ids) ? body.tenant_ids : []
     if (!ids.length) { send(res, 400, { error: 'tenant_ids obrigatório (array)' }); return true }
     // Lê preços dos planos
-    let precoEss = 79.99, precoPre = 99.90
+    let precoEss = 79.99, precoPre = 99.90, precoFiscal = 159.90
     try {
       const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
       const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
@@ -6991,9 +7896,21 @@ module.exports = async function handleRoutes(req, res, ctx) {
       try {
         const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(id)
         if (!tenant) { falhas++; erros.push({ id, erro: 'tenant não encontrado' }); continue }
-        const plano = (tenant.plano === 'premium') ? 'premium' : 'essencial'
-        const valor = (plano === 'premium') ? precoPre : precoEss
-        const result = await _gerarCobrancaMP(tenant, { plano, valor, meses: 1, metodo: 'pix' })
+        const plano = (tenant.plano === 'premium') ? 'premium' : (tenant.plano === 'fiscal' ? 'fiscal' : 'essencial')
+        let valor = (plano === 'premium') ? precoPre : (plano === 'fiscal' ? precoFiscal : precoEss)
+        let obsFiscal = null
+        if (plano === 'fiscal') {
+          const fiscal = _adminFiscalCobrancaAtual(db, tenant.id, {
+            mes: body?.mes || _adminFiscalMesAtual(),
+            plano_valor: precoFiscal,
+            prefix: 'Cobranca em massa fiscal'
+          })
+          if (fiscal.row) {
+            valor = fiscal.valor
+            obsFiscal = fiscal.obs
+          }
+        }
+        const result = await _gerarCobrancaMP(tenant, { plano, valor, meses: 1, metodo: 'pix', obs: obsFiscal })
         await _enviarCobrancaWA(tenant, result.fatura)
         enviadas++
       } catch(e) {

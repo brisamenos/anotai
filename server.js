@@ -102,6 +102,9 @@ db.exec(`
     allow_half INTEGER DEFAULT 0, max_flavors INTEGER DEFAULT 1,
     days TEXT DEFAULT '[1,1,1,1,1,1,1]',
     ingredients TEXT DEFAULT '[]',
+    fiscal_ncm TEXT, fiscal_cfop TEXT, fiscal_icms_origem TEXT,
+    fiscal_icms_situacao TEXT, fiscal_cest TEXT, fiscal_unidade TEXT,
+    fiscal_codigo_produto TEXT, fiscal_pis_situacao TEXT, fiscal_cofins_situacao TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   );
   CREATE TABLE IF NOT EXISTS cupons (
@@ -143,6 +146,70 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS fiscal_config (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id TEXT UNIQUE NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    enabled INTEGER DEFAULT 0,
+    ambiente TEXT DEFAULT 'homologacao',
+    emit_mode TEXT DEFAULT 'fechamento',
+    token_homologacao TEXT,
+    token_producao TEXT,
+    cnpj_emitente TEXT,
+    inscricao_estadual_emitente TEXT,
+    regime_tributario_emitente TEXT DEFAULT '1',
+    nome_emitente TEXT,
+    nome_fantasia_emitente TEXT,
+    telefone_emitente TEXT,
+    logradouro_emitente TEXT,
+    numero_emitente TEXT,
+    bairro_emitente TEXT,
+    municipio_emitente TEXT,
+    uf_emitente TEXT DEFAULT 'CE',
+    cep_emitente TEXT,
+    csc_id TEXT,
+    csc_token TEXT,
+    serie TEXT,
+    proximo_numero INTEGER,
+    natureza_operacao TEXT DEFAULT 'VENDA AO CONSUMIDOR',
+    ncm_padrao TEXT,
+    cfop_padrao TEXT DEFAULT '5102',
+    icms_origem_padrao TEXT DEFAULT '0',
+    icms_situacao_padrao TEXT DEFAULT '102',
+    unidade_padrao TEXT DEFAULT 'UN',
+    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS fiscal_nfce (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    origem_tipo TEXT DEFAULT 'order',
+    origem_id TEXT,
+    order_id INTEGER,
+    mesa_num INTEGER,
+    session_ref TEXT,
+    referencia TEXT NOT NULL,
+    ambiente TEXT DEFAULT 'homologacao',
+    status TEXT DEFAULT 'pendente',
+    total REAL DEFAULT 0,
+    forma_pagamento TEXT,
+    payload_json TEXT DEFAULT '{}',
+    response_json TEXT DEFAULT '{}',
+    chave_nfe TEXT,
+    numero TEXT,
+    serie TEXT,
+    protocolo TEXT,
+    caminho_xml TEXT,
+    caminho_danfe TEXT,
+    qr_code TEXT,
+    mensagem TEXT,
+    emitted_at TEXT,
+    canceled_at TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(tenant_id, referencia)
+  );
+  CREATE INDEX IF NOT EXISTS idx_fiscal_nfce_tenant_status ON fiscal_nfce(tenant_id, status, created_at);
+  CREATE INDEX IF NOT EXISTS idx_fiscal_nfce_origem ON fiscal_nfce(tenant_id, origem_tipo, origem_id);
   CREATE TABLE IF NOT EXISTS chat_threads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -1003,6 +1070,84 @@ const MIGRATIONS = [
   { version:67, description:'recebimentos parciais por cliente na mesa', up:
     `ALTER TABLE mesas ADD COLUMN pagamentos_json TEXT DEFAULT '[]'`
   },
+  { version:68, description:'modulo fiscal NFC-e Focus', up:[
+    `CREATE TABLE IF NOT EXISTS fiscal_config (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT UNIQUE NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      enabled INTEGER DEFAULT 0,
+      ambiente TEXT DEFAULT 'homologacao',
+      emit_mode TEXT DEFAULT 'fechamento',
+      token_homologacao TEXT,
+      token_producao TEXT,
+      cnpj_emitente TEXT,
+      inscricao_estadual_emitente TEXT,
+      regime_tributario_emitente TEXT DEFAULT '1',
+      nome_emitente TEXT,
+      nome_fantasia_emitente TEXT,
+      telefone_emitente TEXT,
+      logradouro_emitente TEXT,
+      numero_emitente TEXT,
+      bairro_emitente TEXT,
+      municipio_emitente TEXT,
+      uf_emitente TEXT DEFAULT 'CE',
+      cep_emitente TEXT,
+      csc_id TEXT,
+      csc_token TEXT,
+      serie TEXT,
+      proximo_numero INTEGER,
+      natureza_operacao TEXT DEFAULT 'VENDA AO CONSUMIDOR',
+      ncm_padrao TEXT,
+      cfop_padrao TEXT DEFAULT '5102',
+      icms_origem_padrao TEXT DEFAULT '0',
+      icms_situacao_padrao TEXT DEFAULT '102',
+      unidade_padrao TEXT DEFAULT 'UN',
+      updated_at TEXT DEFAULT (datetime('now')),
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS fiscal_nfce (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      origem_tipo TEXT DEFAULT 'order',
+      origem_id TEXT,
+      order_id INTEGER,
+      mesa_num INTEGER,
+      session_ref TEXT,
+      referencia TEXT NOT NULL,
+      ambiente TEXT DEFAULT 'homologacao',
+      status TEXT DEFAULT 'pendente',
+      total REAL DEFAULT 0,
+      forma_pagamento TEXT,
+      payload_json TEXT DEFAULT '{}',
+      response_json TEXT DEFAULT '{}',
+      chave_nfe TEXT,
+      numero TEXT,
+      serie TEXT,
+      protocolo TEXT,
+      caminho_xml TEXT,
+      caminho_danfe TEXT,
+      qr_code TEXT,
+      mensagem TEXT,
+      emitted_at TEXT,
+      canceled_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, referencia)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_fiscal_nfce_tenant_status ON fiscal_nfce(tenant_id, status, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_fiscal_nfce_origem ON fiscal_nfce(tenant_id, origem_tipo, origem_id)`,
+    `ALTER TABLE menu_items ADD COLUMN fiscal_ncm TEXT`,
+    `ALTER TABLE menu_items ADD COLUMN fiscal_cfop TEXT`,
+    `ALTER TABLE menu_items ADD COLUMN fiscal_icms_origem TEXT`,
+    `ALTER TABLE menu_items ADD COLUMN fiscal_icms_situacao TEXT`,
+    `ALTER TABLE menu_items ADD COLUMN fiscal_cest TEXT`,
+    `ALTER TABLE menu_items ADD COLUMN fiscal_unidade TEXT`,
+    `ALTER TABLE menu_items ADD COLUMN fiscal_codigo_produto TEXT`,
+    `ALTER TABLE menu_items ADD COLUMN fiscal_pis_situacao TEXT`,
+    `ALTER TABLE menu_items ADD COLUMN fiscal_cofins_situacao TEXT`
+  ] },
+  { version:69, description:'mime dos audios do EstimaFone', up:
+    `ALTER TABLE radio_messages ADD COLUMN audio_mime TEXT DEFAULT 'audio/webm'`
+  },
 ]
 
 function runMigrations() {
@@ -1059,9 +1204,90 @@ try {
 garantirColuna('store_config', 'order_auto_reset_daily', "INTEGER DEFAULT 0")
 garantirColuna('store_config', 'order_auto_reset_last_date', "TEXT")
 garantirColuna('admin_alerts', 'display_mode', "TEXT DEFAULT 'banner'")
+garantirColuna('radio_messages', 'audio_mime', "TEXT DEFAULT 'audio/webm'")
 garantirColuna('mesas', 'clientes_json', "TEXT DEFAULT '[]'")
 garantirColuna('mesas', 'pagamentos_json', "TEXT DEFAULT '[]'")
 garantirColuna('mesas', 'taxa_servico', "REAL DEFAULT 0")
+garantirColuna('menu_items', 'fiscal_ncm', "TEXT")
+garantirColuna('menu_items', 'fiscal_cfop', "TEXT")
+garantirColuna('menu_items', 'fiscal_icms_origem', "TEXT")
+garantirColuna('menu_items', 'fiscal_icms_situacao', "TEXT")
+garantirColuna('menu_items', 'fiscal_cest', "TEXT")
+garantirColuna('menu_items', 'fiscal_unidade', "TEXT")
+garantirColuna('menu_items', 'fiscal_codigo_produto', "TEXT")
+garantirColuna('menu_items', 'fiscal_pis_situacao', "TEXT")
+garantirColuna('menu_items', 'fiscal_cofins_situacao', "TEXT")
+
+function garantirSchemaFiscal() {
+  const execSafe = (sql) => {
+    try { db.exec(sql) } catch(e) { log('⚠️', 'Schema fiscal guard:', e.message) }
+  }
+  execSafe(`CREATE TABLE IF NOT EXISTS fiscal_config (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id TEXT UNIQUE NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    enabled INTEGER DEFAULT 0,
+    ambiente TEXT DEFAULT 'homologacao',
+    emit_mode TEXT DEFAULT 'fechamento',
+    token_homologacao TEXT,
+    token_producao TEXT,
+    cnpj_emitente TEXT,
+    inscricao_estadual_emitente TEXT,
+    regime_tributario_emitente TEXT DEFAULT '1',
+    nome_emitente TEXT,
+    nome_fantasia_emitente TEXT,
+    telefone_emitente TEXT,
+    logradouro_emitente TEXT,
+    numero_emitente TEXT,
+    bairro_emitente TEXT,
+    municipio_emitente TEXT,
+    uf_emitente TEXT DEFAULT 'CE',
+    cep_emitente TEXT,
+    csc_id TEXT,
+    csc_token TEXT,
+    serie TEXT,
+    proximo_numero INTEGER,
+    natureza_operacao TEXT DEFAULT 'VENDA AO CONSUMIDOR',
+    ncm_padrao TEXT,
+    cfop_padrao TEXT DEFAULT '5102',
+    icms_origem_padrao TEXT DEFAULT '0',
+    icms_situacao_padrao TEXT DEFAULT '102',
+    unidade_padrao TEXT DEFAULT 'UN',
+    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT (datetime('now'))
+  )`)
+  execSafe(`CREATE TABLE IF NOT EXISTS fiscal_nfce (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    origem_tipo TEXT DEFAULT 'order',
+    origem_id TEXT,
+    order_id INTEGER,
+    mesa_num INTEGER,
+    session_ref TEXT,
+    referencia TEXT NOT NULL,
+    ambiente TEXT DEFAULT 'homologacao',
+    status TEXT DEFAULT 'pendente',
+    total REAL DEFAULT 0,
+    forma_pagamento TEXT,
+    payload_json TEXT DEFAULT '{}',
+    response_json TEXT DEFAULT '{}',
+    chave_nfe TEXT,
+    numero TEXT,
+    serie TEXT,
+    protocolo TEXT,
+    caminho_xml TEXT,
+    caminho_danfe TEXT,
+    qr_code TEXT,
+    mensagem TEXT,
+    emitted_at TEXT,
+    canceled_at TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(tenant_id, referencia)
+  )`)
+  execSafe('CREATE INDEX IF NOT EXISTS idx_fiscal_nfce_tenant_status ON fiscal_nfce(tenant_id, status, created_at)')
+  execSafe('CREATE INDEX IF NOT EXISTS idx_fiscal_nfce_origem ON fiscal_nfce(tenant_id, origem_tipo, origem_id)')
+}
+garantirSchemaFiscal()
 
 function garantirSchemaChatInterno() {
   const execSafe = (sql) => {
@@ -1208,7 +1434,8 @@ const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_
   'cupons','mesas','garcons','orders','movimentos','estoque','estoque_receitas','estoque_movimentos','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress',
   'entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens','order_status_history',
   'chat_threads','chat_messages','order_chat_threads','order_chat_messages','order_chat_drafts',
-  'indicadores','leads_indicacao','comissoes','indicador_tutorial_videos','indicador_tutorial_progress','admin_alerts','plano_assinaturas']
+  'indicadores','leads_indicacao','comissoes','indicador_tutorial_videos','indicador_tutorial_progress','admin_alerts','plano_assinaturas',
+  'fiscal_config','fiscal_nfce']
   // wa_messages excluída — pode conter muita mídia e estourar JSON.stringify
 
 let _dirty = false
@@ -1733,7 +1960,7 @@ const TABLE_COLS = {
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
   store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
-  menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','created_at'],
+  menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','fiscal_ncm','fiscal_cfop','fiscal_icms_origem','fiscal_icms_situacao','fiscal_cest','fiscal_unidade','fiscal_codigo_produto','fiscal_pis_situacao','fiscal_cofins_situacao','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','taxa_servico','clientes_json','pagamentos_json','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
