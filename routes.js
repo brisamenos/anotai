@@ -6984,13 +6984,52 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // Mapa em memória: tenant_id → { last_seen, printer, format }
   if (!handleRoutes._agents) handleRoutes._agents = new Map()
   const _agents = handleRoutes._agents
+  const _normalizePrintAgentTipo = (tipo) => {
+    const t = String(tipo || '').trim().toLowerCase()
+    return (t === 'caixa' || t === 'cozinha') ? t : ''
+  }
+  const _getPrintAgentBucket = (tid) => {
+    const current = _agents.get(tid)
+    if (current instanceof Map) return current
+    const bucket = new Map()
+    if (current && typeof current === 'object' && current.last_seen) {
+      bucket.set(`${current.tipo || 'all'}:${current.printer || ''}`, {
+        last_seen: current.last_seen,
+        printer: current.printer || '',
+        format: current.format || 'A4',
+        tipo: _normalizePrintAgentTipo(current.tipo)
+      })
+    }
+    _agents.set(tid, bucket)
+    return bucket
+  }
+  const _activePrintAgents = (tid, tipoFilter = '') => {
+    const bucket = _getPrintAgentBucket(tid)
+    const now = Date.now()
+    const active = []
+    for (const [key, agent] of bucket.entries()) {
+      if (!agent || (now - agent.last_seen) >= 30000) {
+        if (!agent || (now - (agent.last_seen || 0)) > 120000) bucket.delete(key)
+        continue
+      }
+      if (!tipoFilter || !agent.tipo || agent.tipo === tipoFilter) active.push(agent)
+    }
+    return active
+  }
 
   // ── Heartbeat do agente (a cada 10s) ─────────────────
   if (req.method === 'POST' && upath === '/api/print-queue/heartbeat') {
     const tid  = req.headers['x-tenant-id']
     const body = await readBody(req)
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
-    _agents.set(tid, { last_seen: Date.now(), printer: body.printer || '', format: body.format || 'A4' })
+    const tipo = _normalizePrintAgentTipo(body.tipo)
+    const bucket = _getPrintAgentBucket(tid)
+    bucket.set(`${tipo || 'all'}:${body.printer || ''}`, {
+      last_seen: Date.now(),
+      printer: body.printer || '',
+      format: body.format || 'A4',
+      tipo
+    })
     send(res, 200, { ok: true })
     return true
   }
@@ -6999,9 +7038,17 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (req.method === 'GET' && upath === '/api/print-queue/status') {
     const tid = req.headers['x-tenant-id']
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
-    const agent = _agents.get(tid)
-    const active = agent && (Date.now() - agent.last_seen) < 30000
-    send(res, 200, { active: !!active, printer: agent?.printer || '', format: agent?.format || 'A4' })
+    const parsedUrl = new URL(req.url, 'http://localhost')
+    const tipoFilter = _normalizePrintAgentTipo(parsedUrl.searchParams.get('tipo') || '')
+    const activeAgents = _activePrintAgents(tid, tipoFilter)
+    const agent = activeAgents[0]
+    send(res, 200, {
+      active: activeAgents.length > 0,
+      printer: agent?.printer || '',
+      format: agent?.format || 'A4',
+      tipo: agent?.tipo || '',
+      agents: activeAgents.map(a => ({ printer: a.printer || '', format: a.format || 'A4', tipo: a.tipo || '' }))
+    })
     return true
   }
 

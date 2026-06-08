@@ -1942,12 +1942,14 @@ async function submitGarcomOrder() {
         } else {
           // Uma impressora só — junta tudo numa folha
           const _htmlTudo = [_htmlCozinha, _htmlBar].filter(Boolean).join('<div style="page-break-before:always"></div>');
+          const _printerUnica = _printerCaixa || _printerCozinha || '';
+          const _tipoUnico = (_printerCaixa || !_printerCozinha) ? 'caixa' : 'cozinha';
           if (window.ElectronPrint?.printHtml) {
-            await window.ElectronPrint.printHtml(_htmlTudo, { printer: _printerCaixa, paperWidth: _pw }).catch(()=>{});
+            await window.ElectronPrint.printHtml(_htmlTudo, { printer: _printerUnica, paperWidth: _pw }).catch(()=>{});
           } else {
             const _tid = _sessao?.tenant_id;
             if (_tid) {
-              await fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ html: _htmlTudo, format: _fmt, printer: _printerCaixa || undefined, tipo: 'caixa' }) }).catch(()=>{});
+              await fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ html: _htmlTudo, format: _fmt, printer: _printerUnica || undefined, tipo: _tipoUnico }) }).catch(()=>{});
             }
           }
         }

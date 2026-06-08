@@ -92,6 +92,7 @@ async function sendHeartbeat() {
     await request('POST', '/api/print-queue/heartbeat', {
       printer: PRINTER,
       format:  FORMAT,
+      tipo:    TIPO,
     });
     dbg('Heartbeat OK');
   } catch (e) {

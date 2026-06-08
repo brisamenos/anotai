@@ -3885,21 +3885,33 @@ async function unpairUsbPrinter() {
 let _printAgentCache = { active: false, last_seen: 0, printer: '' };
 let _printAgentInitial = null; // promessa da primeira checagem ao carregar
 
-async function _checkPrintAgent() {
+async function _checkPrintAgent(tipo = '') {
   try {
     const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
-    if (!tid) return _printAgentCache;
-    const r = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } });
+    const route = String(tipo || '').trim().toLowerCase();
+    if (!tid) return route ? { active: false, last_seen: 0, printer: '', tipo: route } : _printAgentCache;
+    const qs = route ? `?tipo=${encodeURIComponent(route)}` : '';
+    const r = await fetch('/api/print-queue/status' + qs, { headers: { 'x-tenant-id': tid } });
     const d = await r.json();
+    if (route) {
+      return {
+        active: !!d.active,
+        last_seen: d.active ? Date.now() : 0,
+        printer: d.printer || '',
+        tipo: d.tipo || route,
+        agents: d.agents || []
+      };
+    }
     if (d.active) {
-      _printAgentCache = { active: true, last_seen: Date.now(), printer: d.printer || '' };
+      _printAgentCache = { active: true, last_seen: Date.now(), printer: d.printer || '', tipo: d.tipo || '', agents: d.agents || [] };
     } else if (Date.now() - _printAgentCache.last_seen > 90000) {
       // só zera se está inativo por mais de 90s
-      _printAgentCache = { active: false, last_seen: _printAgentCache.last_seen, printer: '' };
+      _printAgentCache = { active: false, last_seen: _printAgentCache.last_seen, printer: '', tipo: '', agents: [] };
     }
   } catch (e) {
     // Se falhou a checagem mas o agent foi visto há pouco, mantém ativo
     console.warn('[PRINT] check agent erro:', e.message);
+    if (tipo) return { active: false, last_seen: 0, printer: '', tipo };
   }
   return _printAgentCache;
 }
@@ -3979,6 +3991,13 @@ function _printBuildJobsForOrder(order, ticket, cfg, opts = {}) {
     else jobs.push({ html: ticket.cozinha, printer: _printPrinterCozinha || '', tipo: 'cozinha' });
   };
 
+  const addFolhaUnica = () => {
+    if (!ticket.singleSheet) return;
+    const printer = _printPrinter || _printPrinterCozinha || '';
+    const tipo = (_printPrinter || !_printPrinterCozinha) ? 'caixa' : 'cozinha';
+    jobs.push({ html: ticket.singleSheet, printer, tipo });
+  };
+
   if (viaOverride) {
     if (viaOverride === 'caixa') addCaixa();
     else if (viaOverride === 'cozinha') addCozinha();
@@ -3993,8 +4012,8 @@ function _printBuildJobsForOrder(order, ticket, cfg, opts = {}) {
     addCozinha();
   } else if (viaMode === 'somente_principal') {
     addCaixa();
-  } else if (ticket.singleSheet) {
-    jobs.push({ html: ticket.singleSheet, printer: _printPrinter || '', tipo: 'caixa' });
+  } else {
+    addFolhaUnica();
   }
 
   return jobs;
@@ -4140,6 +4159,7 @@ async function printOrder(order, opts = {}) {
 
 // ── Cascata de impressão silenciosa (1 job) ──────────────
 async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
+  let compatibleAgentActive = false;
   // 1️⃣ Electron — usa printHtml para enviar HTML + impressora específica do job
   if (window.ElectronPrint) {
     try {
@@ -4185,10 +4205,13 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
       // Espera a primeira checagem do agent terminar (evita cair no fallback
       // web em pedidos que chegam logo após o login). Em re-imprimir/etc
       // a promessa já resolveu, então não custa quase nada.
-      try { await _printAgentInitial; } catch {}
-      // Se está em cache antigo (>30s), atualiza
-      if (Date.now() - _printAgentCache.last_seen > 30000) await _checkPrintAgent();
-      if (_printAgentCache.active) {
+      const jobTipo = String(tipo || '').trim().toLowerCase();
+      try { if (!jobTipo) await _printAgentInitial; } catch {}
+      const agentStatus = jobTipo
+        ? await _checkPrintAgent(jobTipo)
+        : (Date.now() - _printAgentCache.last_seen > 30000 ? await _checkPrintAgent() : _printAgentCache);
+      compatibleAgentActive = !!agentStatus?.active;
+      if (compatibleAgentActive) {
         await fetch('/api/print-queue/job', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
@@ -4216,7 +4239,7 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
   // Os passos 5 (server PDF + iframe) e 6 (window.print) abrem diálogos
   // ou o sistema de impressão do navegador, atrapalhando quem tem o
   // printestima rodando. Pula direto pro toast de erro.
-  if (_isPrintAgentReady()) {
+  if (compatibleAgentActive || !!window.ElectronPrint || (!tipo && _isPrintAgentReady())) {
     console.warn('[PRINT] Print Agent ativo mas falhou — não usar fallback web');
     sbToast('warn', '⚠️ Print Agent ativo mas job falhou. Verifique o app de impressão.');
     return;
