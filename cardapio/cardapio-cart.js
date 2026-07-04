@@ -197,6 +197,11 @@ function cartSubtotal() { return cart.reduce((s,i) => s + i.price * i.qty, 0); }
 function getDiscount() {
   if (!appliedCupom) return 0;
   const sub  = cartSubtotal();
+  // Pedido mínimo do cupom: revalida a cada cálculo, pois o carrinho pode
+  // mudar (itens removidos) depois que o cupom foi aplicado. Sem isso, o
+  // desconto continuava valendo mesmo com o subtotal abaixo do mínimo exigido.
+  const minOrder = parseFloat(appliedCupom.min_order ?? appliedCupom.minimo ?? 0);
+  if (minOrder > 0 && sub < minOrder) return 0;
   const tipo = appliedCupom.type || appliedCupom.tipo || '';
   const val  = parseFloat(appliedCupom.value ?? appliedCupom.val ?? 0);
   if (tipo === 'percent' || tipo === '%') return sub * val / 100;
@@ -207,7 +212,10 @@ function getDiscount() {
 
 function getTaxa() {
   if (deliveryType !== 'delivery') return 0;
-  if (appliedCupom?.tipo === 'frete' || appliedCupom?.type === 'frete') return 0;
+  if (appliedCupom?.tipo === 'frete' || appliedCupom?.type === 'frete') {
+    const minOrderFrete = parseFloat(appliedCupom.min_order ?? appliedCupom.minimo ?? 0);
+    if (!(minOrderFrete > 0 && cartSubtotal() < minOrderFrete)) return 0;
+  }
   if (feeConfig.tipo === 'por_km') {
     const faixas = feeConfig.faixas || [];
     return parseFloat(faixas[Math.min(selectedFaixa, faixas.length-1)]?.taxa) || 0;
