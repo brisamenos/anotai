@@ -1030,17 +1030,22 @@ async function addCupom() {
   const code = (document.getElementById('cupom-code').value || '').toUpperCase().trim();
   const val = parseFloat(document.getElementById('cupom-val').value) || 0;
   const tipo = document.getElementById('cupom-tipo').value.includes('%') ? '%' : 'frete';
+  const minimo = parseFloat(document.getElementById('cupom-minimo')?.value) || 0;
+  const usosInput = document.getElementById('cupom-usos')?.value;
+  const usesLeft = (usosInput === '' || usosInput === undefined || usosInput === null) ? -1 : (parseInt(usosInput) || 0);
   if (!code) { sbToast('err', 'Informe o código'); return; }
   sbLoading(true);
   if (!_sessao?.tenant_id) { sbLoading(false); sbToast('err', 'Sessão sem tenant'); return; }
   const { data, error } = await sb.from('cupons').insert({
-    tenant_id: _sessao.tenant_id, code, type: tipo === '%' ? 'percent' : 'fixed', value: val, min_order: 0, uses_left: -1, ativo: true
+    tenant_id: _sessao.tenant_id, code, type: tipo === '%' ? 'percent' : 'fixed', value: val, min_order: minimo, uses_left: usesLeft, ativo: true
   }).select().single();
   sbLoading(false);
   if (error) { sbToast('err', error.code === '23505' ? 'Código já existe' : 'Erro ao criar cupom'); return; }
-  cupons.push({ id: data.id, code, tipo, val, minimo: 0, usos: 0, ativo: true });
+  cupons.push({ id: data.id, code, tipo, val, minimo, usos: 0, ativo: true });
   closeModal('modal-add-cupom');
   document.getElementById('cupom-code').value = '';
+  if (document.getElementById('cupom-minimo')) document.getElementById('cupom-minimo').value = '';
+  if (document.getElementById('cupom-usos')) document.getElementById('cupom-usos').value = '';
   renderCupons();
   sbToast('ok', 'Cupom criado!');
 }
