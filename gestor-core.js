@@ -1521,6 +1521,13 @@ function _subscribeOrdersSSE() {
     try {
       const order = JSON.parse(e.data);
       if (!order || !order.id) return;
+      // Este canal SSE é só um reforço para pagamento online (MP), que depende
+      // de webhook e já tem proteção própria contra duplicidade (ver bloco
+      // "idx !== -1 && pix_mp" abaixo). Todo o resto do fluxo de pedidos
+      // (PIX manual, dinheiro, mesa, garçom, cartão presencial) já é tratado
+      // por completo pelo canal principal (postgres_changes) — processar de
+      // novo aqui só duplicava som, toast, auto-aceite e impressão.
+      if (order.pag !== 'pix_mp' && order.pag !== 'cartao_mp') return;
       if (order.status === 'aguardando_cartao' || (order.status === 'aguardando_pix' && order.pag !== 'pix_manual')) {
         pendingOnlineOrders = [order, ...pendingOnlineOrders.filter(o => o.id !== order.id)];
         if (order.id > _maxKnownOrderId) { _maxKnownOrderId = order.id; _saveMaxKnownOrderId(); }
@@ -1559,6 +1566,9 @@ function _subscribeOrdersSSE() {
     try {
       const order = JSON.parse(e.data);
       if (!order || !order.id) return;
+      // Mesmo motivo do handler de INSERT acima — só PIX/cartão online passam
+      // por aqui; o resto já é coberto pelo canal principal.
+      if (order.pag !== 'pix_mp' && order.pag !== 'cartao_mp') return;
 
       // FORÇA: PIX online (pix_mp) NUNCA pode ficar em análise. Sempre produção.
       if (order.pag === 'pix_mp' && order.status === 'analise') {
