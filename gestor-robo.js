@@ -712,32 +712,61 @@ const _CP_DIAS = [
   { key:'sab', label:'Sábado'  },
 ];
 
+// Normaliza o cfg de um dia numa lista de janelas [{abertura,fechamento}].
+// Compatível com o formato antigo (abertura/fechamento direto no dia = 1 janela).
+function _cpJanelasDia(h, diaKey) {
+  const ativoDefault = diaKey !== 'dom';
+  if (!h) return { ativo: ativoDefault, janelas: [{ abertura:'11:00', fechamento:'22:00' }] };
+  let janelas;
+  if (Array.isArray(h.janelas) && h.janelas.length) {
+    janelas = h.janelas.map(j => ({ abertura: j.abertura || '11:00', fechamento: j.fechamento || '22:00' }));
+  } else {
+    janelas = [{ abertura: h.abertura || '11:00', fechamento: h.fechamento || '22:00' }];
+  }
+  const ativo = h.ativo !== undefined ? (h.ativo === true || h.ativo === 1 || h.ativo === 'true' || h.ativo === '1' || h.ativo === 'sim') : ativoDefault;
+  return { ativo, janelas };
+}
+
+function _cpJanelaRowHtml(dia, idx, j, podeRemover) {
+  return `
+    <div class="cp-janela-row" id="cp-janela-${dia}-${idx}" style="display:flex;align-items:center;gap:6px">
+      <input type="time" value="${j.abertura}" id="cp-hr-ab-${dia}-${idx}"
+        style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 8px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;outline:none;width:90px"
+        oninput="cpHorarioChanged()">
+      <span style="font-size:11px;color:var(--muted)">até</span>
+      <input type="time" value="${j.fechamento}" id="cp-hr-fch-${dia}-${idx}"
+        style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 8px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;outline:none;width:90px"
+        oninput="cpHorarioChanged()">
+      ${podeRemover ? `<button type="button" onclick="cpRemoveJanela('${dia}', ${idx})" title="Remover horário" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px">✕</button>` : ''}
+    </div>`;
+}
+
 function cpRenderHorarios(horarios) {
   const container = document.getElementById('cp-horarios-list');
   if (!container) return;
   container.innerHTML = '';
   for (const d of _CP_DIAS) {
-    const h = horarios[d.key] || { ativo: d.key !== 'dom', abertura: '11:00', fechamento: '22:00' };
+    const h = _cpJanelasDia(horarios[d.key], d.key);
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;transition:opacity .15s';
+    row.style.cssText = 'display:flex;flex-direction:column;gap:6px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;transition:opacity .15s';
     row.id = `cp-hr-row-${d.key}`;
+    const janelasHtml = h.janelas.map((j, i) => _cpJanelaRowHtml(d.key, i, j, h.janelas.length > 1)).join('');
     row.innerHTML = `
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;min-width:80px">
-        <div class="toggle-wrap" onclick="cpToggleDia('${d.key}',this)" data-ativo="${h.ativo}" style="width:34px;height:18px;border-radius:9px;background:${h.ativo?'var(--success)':'var(--surface)'};border:1px solid ${h.ativo?'var(--success)':'var(--border)'};position:relative;cursor:pointer;transition:all .2s;flex-shrink:0">
-          <div style="position:absolute;top:2px;left:${h.ativo?'16px':'2px'};width:12px;height:12px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;min-width:80px">
+          <div class="toggle-wrap" onclick="cpToggleDia('${d.key}',this)" data-ativo="${h.ativo}" style="width:34px;height:18px;border-radius:9px;background:${h.ativo?'var(--success)':'var(--surface)'};border:1px solid ${h.ativo?'var(--success)':'var(--border)'};position:relative;cursor:pointer;transition:all .2s;flex-shrink:0">
+            <div style="position:absolute;top:2px;left:${h.ativo?'16px':'2px'};width:12px;height:12px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>
+          </div>
+          <span style="font-size:12px;font-weight:600;color:${h.ativo?'var(--text)':'var(--muted)'}" id="cp-hr-label-${d.key}">${d.label}</span>
+        </label>
+        <div id="cp-hr-times-${d.key}" style="display:${h.ativo?'flex':'none'};flex-direction:column;gap:6px;flex:1">
+          ${janelasHtml}
         </div>
-        <span style="font-size:12px;font-weight:600;color:${h.ativo?'var(--text)':'var(--muted)'}" id="cp-hr-label-${d.key}">${d.label}</span>
-      </label>
-      <div id="cp-hr-times-${d.key}" style="display:${h.ativo?'flex':'none'};align-items:center;gap:6px;flex:1">
-        <input type="time" value="${h.abertura||'11:00'}" id="cp-hr-ab-${d.key}"
-          style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 8px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;outline:none;width:90px"
-          oninput="cpHorarioChanged()">
-        <span style="font-size:11px;color:var(--muted)">até</span>
-        <input type="time" value="${h.fechamento||'22:00'}" id="cp-hr-fch-${d.key}"
-          style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 8px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;outline:none;width:90px"
-          oninput="cpHorarioChanged()">
+        <span id="cp-hr-fechado-${d.key}" style="display:${h.ativo?'none':'flex'};font-size:11px;color:var(--muted);font-weight:600;flex:1">Fechado</span>
       </div>
-      <span id="cp-hr-fechado-${d.key}" style="display:${h.ativo?'none':'flex'};font-size:11px;color:var(--muted);font-weight:600;flex:1">Fechado</span>
+      <div id="cp-hr-add-wrap-${d.key}" style="display:${h.ativo?'block':'none'};padding-left:90px">
+        <button type="button" onclick="cpAddJanela('${d.key}')" style="background:none;border:1px dashed var(--border);color:var(--muted);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer">+ adicionar horário (ex: almoço/jantar)</button>
+      </div>
     `;
     container.appendChild(row);
   }
@@ -747,6 +776,7 @@ function cpToggleDia(key, toggleEl) {
   const timesEl  = document.getElementById(`cp-hr-times-${key}`);
   const fechEl   = document.getElementById(`cp-hr-fechado-${key}`);
   const labelEl  = document.getElementById(`cp-hr-label-${key}`);
+  const addWrap  = document.getElementById(`cp-hr-add-wrap-${key}`);
   const knob     = toggleEl.querySelector('div');
   const isOn     = toggleEl.dataset.ativo === 'true';
   const nowOn    = !isOn;
@@ -757,6 +787,54 @@ function cpToggleDia(key, toggleEl) {
   if (timesEl)  timesEl.style.display  = nowOn ? 'flex' : 'none';
   if (fechEl)   fechEl.style.display   = nowOn ? 'none' : 'flex';
   if (labelEl)  labelEl.style.color    = nowOn ? 'var(--text)' : 'var(--muted)';
+  if (addWrap)  addWrap.style.display  = nowOn ? 'block' : 'none';
+}
+
+// Adiciona uma 2ª (ou 3ª...) janela de horário no mesmo dia — uso típico:
+// almoço 11:00–14:30 + jantar 18:00–23:00.
+function cpAddJanela(dia) {
+  const timesEl = document.getElementById(`cp-hr-times-${dia}`);
+  if (!timesEl) return;
+  const idx = timesEl.querySelectorAll('.cp-janela-row').length;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = _cpJanelaRowHtml(dia, idx, { abertura: '18:00', fechamento: '23:00' }, true);
+  timesEl.appendChild(wrap.firstElementChild);
+  _cpRefreshRemoveButtons(dia);
+  cpHorarioChanged();
+}
+
+function cpRemoveJanela(dia, idx) {
+  const el = document.getElementById(`cp-janela-${dia}-${idx}`);
+  const timesEl = document.getElementById(`cp-hr-times-${dia}`);
+  if (!el || !timesEl) return;
+  if (timesEl.querySelectorAll('.cp-janela-row').length <= 1) return; // sempre precisa de ao menos 1 janela
+  el.remove();
+  _cpRefreshRemoveButtons(dia);
+  cpHorarioChanged();
+}
+
+// Mostra/esconde o botão "✕" de cada janela conforme sobra mais de uma.
+function _cpRefreshRemoveButtons(dia) {
+  const timesEl = document.getElementById(`cp-hr-times-${dia}`);
+  if (!timesEl) return;
+  const rows = Array.from(timesEl.querySelectorAll('.cp-janela-row'));
+  rows.forEach(row => {
+    let btn = row.querySelector('button');
+    if (rows.length > 1) {
+      if (!btn) {
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.title = 'Remover horário';
+        btn.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px';
+        btn.textContent = '✕';
+        row.appendChild(btn);
+      }
+      const rid = row.id.split('-').pop();
+      btn.setAttribute('onclick', `cpRemoveJanela('${dia}', ${rid})`);
+    } else if (btn) {
+      btn.remove();
+    }
+  });
 }
 
 function cpGetHorarios() {
@@ -764,10 +842,23 @@ function cpGetHorarios() {
   for (const d of _CP_DIAS) {
     const toggleEl = document.querySelector(`#cp-hr-row-${d.key} .toggle-wrap`);
     const ativo    = toggleEl ? toggleEl.dataset.ativo === 'true' : false;
+    const timesEl  = document.getElementById(`cp-hr-times-${d.key}`);
+    const janelaRows = timesEl ? Array.from(timesEl.querySelectorAll('.cp-janela-row')) : [];
+    const janelas = janelaRows.map(row => {
+      const inputs = row.querySelectorAll('input[type="time"]');
+      return {
+        abertura:   inputs[0]?.value || '11:00',
+        fechamento: inputs[1]?.value || '22:00',
+      };
+    });
+    const janelasFinal = janelas.length ? janelas : [{ abertura: '11:00', fechamento: '22:00' }];
     out[d.key] = {
       ativo,
-      abertura:    document.getElementById(`cp-hr-ab-${d.key}`)?.value  || '11:00',
-      fechamento:  document.getElementById(`cp-hr-fch-${d.key}`)?.value || '22:00',
+      janelas: janelasFinal,
+      // Compat: mantém abertura/fechamento no nível do dia (= 1ª janela) pra
+      // qualquer trecho de código antigo que ainda espere o formato de 1 via.
+      abertura:   janelasFinal[0].abertura,
+      fechamento: janelasFinal[0].fechamento,
     };
   }
   return out;
