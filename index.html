@@ -165,6 +165,74 @@
 [data-tema="minimalista"] .splash { background:#fff; }
 
 /* ══════════════════════════════════════════
+   Tema: Moderno (inspirado no visual do iFood)
+   Fundo claro neutro, cards com sombra suave,
+   ícones de categoria redondos, botão de
+   adicionar em círculo preenchido.
+══════════════════════════════════════════ */
+[data-tema="moderno"] body { background:var(--bg); color:var(--text); }
+[data-tema="moderno"] .hero {
+  background:var(--s1);
+  border-bottom:1px solid var(--border);
+}
+[data-tema="moderno"] .hero-name { font-family:'DM Sans',sans-serif; font-weight:800; letter-spacing:-.3px; }
+[data-tema="moderno"] .sticky-bar {
+  background:var(--s1);
+  border-bottom:1px solid var(--border);
+  box-shadow:0 1px 0 var(--border);
+}
+[data-tema="moderno"] .search-input {
+  background:var(--s2); border:1px solid var(--border); color:var(--text);
+  border-radius:12px;
+}
+[data-tema="moderno"] .search-input::placeholder { color:var(--muted2); }
+[data-tema="moderno"] .cat-btn {
+  background:var(--s2); color:var(--muted); border:1px solid transparent;
+  font-weight:600; border-radius:99px;
+}
+[data-tema="moderno"] .cat-btn.on {
+  background:var(--accent); color:#fff; border-color:var(--accent);
+  box-shadow:0 3px 10px rgba(var(--accent-rgb,249,115,22),.28);
+}
+/* Ícones de categoria em círculo — estilo iFood (avatar redondo + rótulo) */
+[data-tema="moderno"] .cats-scroll.carousel .cat-btn {
+  background:transparent; border:none; padding:2px 2px 0; min-width:60px;
+  gap:5px;
+}
+[data-tema="moderno"] .cats-scroll.carousel .cat-btn .cat-btn-icon {
+  width:52px; height:52px; border-radius:50%; background:var(--s2);
+  border:1px solid var(--border); font-size:22px;
+}
+[data-tema="moderno"] .cats-scroll.carousel .cat-btn.on .cat-btn-icon {
+  background:rgba(var(--accent-rgb,249,115,22),.12); border-color:var(--accent);
+}
+[data-tema="moderno"] .cats-scroll.carousel .cat-btn.on { color:var(--accent); font-weight:700; }
+[data-tema="moderno"] .item-card {
+  background:var(--s1); border:none; border-radius:16px;
+  margin:0 16px 10px; padding:12px;
+  box-shadow:0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+}
+[data-tema="moderno"] .item-card:active { background:var(--s1); transform:scale(.99); }
+[data-tema="moderno"] .item-img { border-radius:12px; }
+[data-tema="moderno"] .item-price { font-family:'DM Sans',sans-serif; font-weight:800; color:var(--accent); }
+[data-tema="moderno"] .item-add-btn {
+  width:30px; height:30px; border:none; background:var(--accent); color:#fff;
+}
+[data-tema="moderno"] .item-add-btn:hover { background:var(--accent-d,var(--accent)); }
+[data-tema="moderno"] .item-add-btn:disabled { background:var(--s3); color:var(--muted); }
+[data-tema="moderno"] .sec-title, [data-tema="moderno"] .section-label {
+  font-family:'DM Sans',sans-serif; font-weight:800; color:var(--text);
+}
+[data-tema="moderno"] .dest-card { border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+[data-tema="moderno"] .dest-price { font-family:'DM Sans',sans-serif; color:var(--accent); }
+[data-tema="moderno"] .im-qty-btn { border-radius:50%; }
+[data-tema="moderno"] .checklist-item { border-radius:10px; }
+[data-tema="moderno"] .splash { background:var(--bg); }
+[data-tema="moderno"] .closed-banner {
+  background:#fff5f5; border-bottom:1px solid rgba(239,68,68,.15); color:#b91c1c;
+}
+
+/* ══════════════════════════════════════════
    EFEITO 3D — Cards do Açougue
    Ativo apenas quando body[data-segmento="acougue"]
 ══════════════════════════════════════════ */

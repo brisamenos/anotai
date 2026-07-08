@@ -4169,18 +4169,36 @@ async function handleIAWebhook(req, res) {
         if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null
         return hh * 60 + mm
       }
+      // Normaliza o cfg do dia numa lista de janelas [{abertura,fechamento}].
+      // Compatível com o formato antigo (abertura/fechamento direto no dia).
+      const _janelasCfg = (dc) => {
+        if (!dc) return []
+        if (Array.isArray(dc.janelas) && dc.janelas.length) return dc.janelas
+        if (dc.abertura || dc.fechamento) return [{ abertura: dc.abertura, fechamento: dc.fechamento }]
+        return []
+      }
       const _horarioAbertoCfg = (dc, minAtual, deOntem) => {
         if (!_horarioAtivoCfg(dc)) return false
-        const abertura = _horaMinCfg(dc.abertura) ?? 0
-        const fechamento = _horaMinCfg(dc.fechamento) ?? 1439
-        if (abertura === fechamento) return true
-        if (fechamento > abertura) return !deOntem && minAtual >= abertura && minAtual < fechamento
-        return deOntem ? minAtual < fechamento : minAtual >= abertura
+        const janelas = _janelasCfg(dc)
+        if (!janelas.length) return false
+        return janelas.some(j => {
+          const abertura = _horaMinCfg(j.abertura) ?? 0
+          const fechamento = _horaMinCfg(j.fechamento) ?? 1439
+          if (abertura === fechamento) return true
+          if (fechamento > abertura) return !deOntem && minAtual >= abertura && minAtual < fechamento
+          return deOntem ? minAtual < fechamento : minAtual >= abertura
+        })
+      }
+      // Texto tipo "das 11:00 às 14:30 e das 18:00 às 23:00" (junta as janelas)
+      const _horarioTxtCfg = (dc) => {
+        const janelas = _janelasCfg(dc)
+        if (!janelas.length) return null
+        return janelas.map(j => `das ${j.abertura} às ${j.fechamento}`).join(' e ')
       }
       let lojaAbertaAgora = _flagAberto(cfg.store_open)
-      let horarioHojeStr = null  // ex: "das 18h às 23h"
+      let horarioHojeStr = null  // ex: "das 11:00 às 14:30 e das 18:00 às 23:00"
       if (_horarioAtivoCfg(diaConfig)) {
-        horarioHojeStr = `das ${diaConfig.abertura} às ${diaConfig.fechamento}`
+        horarioHojeStr = _horarioTxtCfg(diaConfig)
       }
       if (lojaAbertaAgora && Object.keys(horariosCfg).length) {
         const idxAgora = agora.getDay()
@@ -4189,7 +4207,7 @@ async function handleIAWebhook(req, res) {
         lojaAbertaAgora = hojeAberto || ontemAberto
         if (!horarioHojeStr && ontemAberto) {
           const dcOntem = horariosCfg[diasSemana[(idxAgora + 6) % 7]]
-          horarioHojeStr = `das ${dcOntem.abertura} às ${dcOntem.fechamento}`
+          horarioHojeStr = _horarioTxtCfg(dcOntem)
         }
       }
 
@@ -4200,18 +4218,24 @@ async function handleIAWebhook(req, res) {
       let proxAberturaStr = null  // ex: "hoje às 18h" / "amanhã às 18h" / "sexta às 18h"
       if (Object.keys(horariosCfg).length) {
         const idxHoje = agora.getDay()
+        busca:
         for (let i = 0; i < 7; i++) {
           const idx = (idxHoje + i) % 7
           const dia = diasSemana[idx]
           const dc = horariosCfg[dia]
           if (!_horarioAtivoCfg(dc)) continue
-          const aberturaMin = _horaMinCfg(dc.abertura) ?? 0
+          const janelas = _janelasCfg(dc)
+          if (!janelas.length) continue
           if (i === 0) {
-            // Hoje — só conta se ainda não passou da abertura
-            if (horaMin < aberturaMin) { proxAberturaStr = `hoje às ${dc.abertura}`; break }
+            // Hoje — pega a primeira janela cuja abertura ainda não passou
+            // (cobre o caso de almoço/jantar: fechado às 15h, abre de novo às 18h)
+            for (const j of janelas) {
+              const aberturaMin = _horaMinCfg(j.abertura) ?? 0
+              if (horaMin < aberturaMin) { proxAberturaStr = `hoje às ${j.abertura}`; break busca }
+            }
           } else {
             const nome = i === 1 ? 'amanhã' : _diasNome[dia]
-            proxAberturaStr = `${nome} às ${dc.abertura}`
+            proxAberturaStr = `${nome} às ${janelas[0].abertura}`
             break
           }
         }

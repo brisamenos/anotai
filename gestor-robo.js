@@ -1053,6 +1053,11 @@ const _CP_CARDAPIO_TEMAS = [
     colors:{ bg:'#f7f7f5', surface:'#ffffff', soft:'#deded8', text:'#18181b', muted:'#71717a', border:'rgba(24,24,27,.08)' }
   },
   {
+    key:'moderno', group:'essenciais', nome:'Moderno', desc:'Cards com sombra e icones redondos, estilo apps de entrega.',
+    tags:['Delivery','Clean'], accent:'#f97316', swatches:['#f97316','#2563eb','#16a34a'],
+    colors:{ bg:'#f7f7f8', surface:'#ffffff', soft:'#e4e4e8', text:'#1a1a1a', muted:'#767676', border:'rgba(0,0,0,.08)' }
+  },
+  {
     key:'tropical', group:'lanches', nome:'Tropical', desc:'Quente e chamativo para lanches.',
     tags:['Lanche','Quente'], accent:'#ea580c', swatches:['#ea580c','#dc2626','#f59e0b'],
     colors:{ bg:'#fef9f0', surface:'#fff7ed', soft:'#fed7aa', text:'#431407', muted:'#92400e', border:'rgba(234,88,12,.15)' }
