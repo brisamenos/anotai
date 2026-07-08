@@ -464,17 +464,29 @@ function _horaParaMinutos(valor) {
   return h * 60 + m;
 }
 
+// Normaliza o cfg de um dia para uma lista de janelas [{abertura,fechamento}].
+// Suporta o formato novo (cfg.janelas = [...]) e o formato antigo, de
+// compatibilidade (cfg.abertura/cfg.fechamento direto no dia — 1 janela só).
+function _cpJanelasDia(cfg) {
+  if (!cfg) return [];
+  if (Array.isArray(cfg.janelas) && cfg.janelas.length) return cfg.janelas;
+  if (cfg.abertura || cfg.fechamento) return [{ abertura: cfg.abertura, fechamento: cfg.fechamento }];
+  return [];
+}
+
 function _horarioAbertoNoMinuto(cfg, minutoAtual, usandoDiaAnterior) {
   if (!_horarioAtivo(cfg)) return false;
-  const abertura = _horaParaMinutos(cfg.abertura) ?? 0;
-  const fechamento = _horaParaMinutos(cfg.fechamento) ?? 1439;
-  if (abertura === fechamento) return true;
-
-  if (fechamento > abertura) {
-    return !usandoDiaAnterior && minutoAtual >= abertura && minutoAtual < fechamento;
-  }
-
-  return usandoDiaAnterior ? minutoAtual < fechamento : minutoAtual >= abertura;
+  const janelas = _cpJanelasDia(cfg);
+  if (!janelas.length) return false;
+  return janelas.some(j => {
+    const abertura = _horaParaMinutos(j.abertura) ?? 0;
+    const fechamento = _horaParaMinutos(j.fechamento) ?? 1439;
+    if (abertura === fechamento) return true;
+    if (fechamento > abertura) {
+      return !usandoDiaAnterior && minutoAtual >= abertura && minutoAtual < fechamento;
+    }
+    return usandoDiaAnterior ? minutoAtual < fechamento : minutoAtual >= abertura;
+  });
 }
 
 function isLojaAberta(horarios, store_open) {
@@ -532,10 +544,14 @@ function openStoreInfoModal() {
     const cfg    = h[d] || {};
     const isHoje = d === hoje;
     const aberto = _horarioAtivo(cfg);
+    const janelas = _cpJanelasDia(cfg);
+    const horarioTxt = janelas.length
+      ? janelas.map(j => `${j.abertura||'?'} – ${j.fechamento||'?'}`).join(', ')
+      : '?';
     const badge  = isHoje ? `<span style="font-size:10px;background:#f97316;color:#fff;border-radius:4px;padding:1px 6px;margin-left:6px;font-weight:800">hoje</span>` : '';
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-radius:10px;background:${isHoje?'rgba(var(--accent-rgb,249,115,22),.07)':'#f8f9fb'};border:1.5px solid ${isHoje?'rgba(var(--accent-rgb,249,115,22),.2)':'transparent'}">
       <span style="font-size:13px;font-weight:${isHoje?'700':'500'};color:${isHoje?'#f97316':'#374151'};display:flex;align-items:center">${diasNome[d]}${badge}</span>
-      <span style="font-size:13px;font-weight:600;color:${aberto?'#374151':'#9ca3af'}">${aberto ? `${cfg.abertura||'?'} – ${cfg.fechamento||'?'}` : 'Fechado'}</span>
+      <span style="font-size:13px;font-weight:600;color:${aberto?'#374151':'#9ca3af'}">${aberto ? horarioTxt : 'Fechado'}</span>
     </div>`;
   }).join('');
 
