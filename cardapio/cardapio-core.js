@@ -270,6 +270,13 @@ function applyTema(tema, accentCor) {
       '--text':'#f8fafc','--muted':'#9aa4b2','--muted2':'#778295','--white':'#fff',
       '--hero-bg':'#070a10','--hero-text':'#fff','--hero-desc-color':'rgba(226,232,240,.82)',
       '--hero-overlay':'rgba(7,10,16,.72)','--sticky-bg':'#0e1118'
+    },
+    moderno: {
+      '--bg':'#f7f7f8','--s1':'#ffffff','--s2':'#f1f1f3','--s3':'#e4e4e8',
+      '--border':'rgba(0,0,0,.08)','--border2':'rgba(0,0,0,.14)',
+      '--text':'#1a1a1a','--muted':'#767676','--muted2':'#a3a3a3','--white':'#fff',
+      '--hero-bg':'','--hero-text':'#1a1a1a','--hero-desc-color':'rgba(26,26,26,.65)',
+      '--hero-overlay':'rgba(255,255,255,0)','--sticky-bg':'#ffffff'
     }
   };
 
@@ -284,7 +291,8 @@ function applyTema(tema, accentCor) {
     oceano:'#0a1628', dourado:'#0f0d08', delivery_pro:'#f6f7fb',
     fresh_verde:'#f4fbf6', burger_red:'#fff6ed', acai_berry:'#fff7fb',
     sushi_black:'#070b0c', pizzaria_italia:'#fbf7ef', padaria_gold:'#fff8ee',
-    mercado_azul:'#f3f8ff', premium_clean:'#f7f7f5', noite_delivery:'#0e1118'
+    mercado_azul:'#f3f8ff', premium_clean:'#f7f7f5', noite_delivery:'#0e1118',
+    moderno:'#f7f7f8'
   };
   if (metaTheme) metaTheme.content = bgMap[t] || '#f8f9fb';
 }

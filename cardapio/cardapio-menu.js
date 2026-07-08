@@ -5,7 +5,8 @@
 function buildCats() {
   const scroll = document.getElementById('cats-scroll');
   const isAcougue = _segmento === 'acougue';
-  const useCarrossel = isAcougue || _catsCarrossel;
+  const isModerno = document.documentElement.getAttribute('data-tema') === 'moderno';
+  const useCarrossel = isAcougue || _catsCarrossel || isModerno;
 
   scroll.classList.toggle('carousel', useCarrossel);
   scroll.innerHTML = '';
@@ -13,7 +14,25 @@ function buildCats() {
   const _catSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="13" y="3" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="13" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="13" y="13" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/></svg>`;
   const _allSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.4"/><path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
 
-  if (isAcougue) {
+  // Fallback inteligente: quando a categoria não tem emoji/imagem configurada,
+  // tenta adivinhar um emoji pelo nome em vez de mostrar o ícone genérico de
+  // quadradinhos (bem feio). Só usa o quadradinho se nada bater.
+  const _emojiPorNome = (nome) => {
+    const n = (nome || '').toLowerCase();
+    const mapa = [
+      [/pizza/, '🍕'], [/a[çc]a[íi]/, '🍧'], [/hamb[uú]rguer|burger|lanche/, '🍔'],
+      [/bebida|refri|suco|drink/, '🥤'], [/sobremesa|doce|sorvete/, '🍰'],
+      [/salada|natural|saud[aá]vel/, '🥗'], [/massa|macarr[ãa]o|lasanha/, '🍝'],
+      [/sushi|japon[eê]s|temaki/, '🍣'], [/carne|churrasco|espeto|grelhado/, '🥩'],
+      [/frango/, '🍗'], [/pastel|salgado/, '🥟'], [/caf[eé]|padaria|p[ãa]o/, '☕'],
+      [/pipoca/, '🍿'], [/vinho|cerveja|bebida.?alco[oó]lica/, '🍷'],
+      [/porç[ãa]o|petisco|entrada/, '🍟'], [/marmita|prato.?feito/, '🍱'],
+    ];
+    const achou = mapa.find(([re]) => re.test(n));
+    return achou ? achou[1] : null;
+  };
+
+  if (useCarrossel) {
     const all = document.createElement('button');
     all.className = 'cat-btn on';
     all.dataset.key = '';
@@ -25,28 +44,14 @@ function buildCats() {
       b.className = 'cat-btn';
       b.dataset.key = c.name;
       b.onclick = () => filterCat(b, c.name);
+      const emojiFallback = isModerno ? _emojiPorNome(c.label || c.name) : null;
       const iconHtml = c.image_url
         ? `<img src="${c.image_url}" alt="${c.label||c.name}" loading="lazy" decoding="async">`
-        : (c.emoji ? `<span style="font-size:16px;line-height:1">${c.emoji}</span>` : _catSvg);
-      b.innerHTML = `<div class="cat-btn-icon">${iconHtml}</div>${c.label || c.name}`;
-      scroll.appendChild(b);
-    });
-  } else if (_catsCarrossel) {
-    // Restaurante com carrossel ativado — igual açougue mas sem ícone SVG
-    const all = document.createElement('button');
-    all.className = 'cat-btn on';
-    all.dataset.key = '';
-    all.onclick = () => filterCat(all, '');
-    all.innerHTML = `<div class="cat-btn-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.4"/><path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></div>Tudo`;
-    scroll.appendChild(all);
-    allCats.forEach(c => {
-      const b = document.createElement('button');
-      b.className = 'cat-btn';
-      b.dataset.key = c.name;
-      b.onclick = () => filterCat(b, c.name);
-      const iconHtml = c.image_url
-        ? `<img src="${c.image_url}" alt="${c.label||c.name}" loading="lazy" decoding="async">`
-        : (c.emoji ? `<span style="font-size:16px;line-height:1">${c.emoji}</span>` : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="13" y="3" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="3" y="13" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="13" y="13" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/></svg>`);
+        : (c.emoji
+            ? `<span style="font-size:16px;line-height:1">${c.emoji}</span>`
+            : (emojiFallback
+                ? `<span style="font-size:20px;line-height:1">${emojiFallback}</span>`
+                : _catSvg));
       b.innerHTML = `<div class="cat-btn-icon">${iconHtml}</div>${c.label || c.name}`;
       scroll.appendChild(b);
     });
