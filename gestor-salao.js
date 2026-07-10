@@ -1771,16 +1771,23 @@ async function submitGarcomOrder() {
   if (garcomCart.length === 0) { sbToast('err', 'Selecione itens'); return; }
 
   // Separa itens: cozinha (vão ao kanban) vs imediatos (bebidas, etc — só billing)
-  // Só pula kanban para bebidas industrializadas prontas.
+  // Por padrão, só pula kanban para bebidas industrializadas prontas.
   // Sucos, vitaminas, smoothies e tudo preparado manualmente vai ao kanban.
+  // Alguns restaurantes preferem que a bebida pronta também apareça no kanban
+  // (ex: pra copa/bar separar) — isso é controlado pelo toggle
+  // "Bebida pronta também aparece no kanban" nas configs de impressão.
+  const _bebidaProntaVaiKanban = localStorage.getItem('bebidaProntaKanban') === '1';
   const _skipKanban = (c) => {
     const txt = (c.name + ' ' + (c.cat || c.catKey || c.cat_key || '')).toLowerCase();
     // Itens preparados manualmente — sempre kanban
     const preparados = /suco|vitamina|smoothie|milkshake|limonada|caipir|caldo|açaí|acai|tigela|bowl|pizza|hamburguer|hambúrguer|burger|lanche|sanduiche|sanduíche|wrap|tapioca|crepe|waffle|panqueca|prato|marmita|salada|massa|macarrão|fettuc|risoto|sushi|temaki|espeto|grelhado|assado|frito|porção|porcao|frango|carne|peixe|camarão|bife|churrasco/;
     if (preparados.test(txt)) return false;
-    // Bebidas industrializadas prontas — pula kanban
+    // Bebidas industrializadas prontas
     const industrial = /refrigerante|coca|pepsi|guarana|guaraná|fanta|sprite|soda|tônica|tonica|agua\s|água\s|^agua|^água|agua com|água com|agua sem|mineral|cerveja|chopp|brahma|skol|heineken|budweiser|corona|stella|amstel|itaipava|vinho|espumante|champagne|dose|tanque|long.neck|long neck|energetico|energético|red.bull|monster|gatorade|powerade|isot/;
-    return industrial.test(txt);
+    if (!industrial.test(txt)) return false;
+    // Restaurante configurou pra bebida pronta ir pro kanban também — não pula.
+    if (_bebidaProntaVaiKanban) return false;
+    return true;
   };
 
   const itensCozinha   = garcomCart.filter(c => !_skipKanban(c));
@@ -1861,23 +1868,17 @@ async function submitGarcomOrder() {
     playOrderSound();
 
     // ── Impressão automática do pedido recém-adicionado ─────────────
-    // Antes esse fluxo NÃO imprimia nada — pedido só ia pro banco. Bebidas
-    // industrializadas (água/refri) com status='entregue' não passavam pelo
-    // kanban e não disparavam impressão. Agora imprimimos aqui mesmo.
+    // IMPORTANTE: itens de cozinha (itensCozinha) NÃO são impressos aqui.
+    // Eles entram na tabela `orders` com status 'analise'/'producao' e já
+    // são impressos automaticamente pelo listener padrão de "novo pedido"
+    // (subscribeOrders → printOrder, em gestor-core.js). Imprimir de novo
+    // aqui causava a 2ª via duplicada mesmo com "via única" configurada.
+    // Só os itens imediatos (bebidas industrializadas, status 'entregue')
+    // precisam de impressão explícita aqui, pois esse status é ignorado
+    // pelo listener padrão e nunca dispararia impressão sozinho.
     try {
       const _autoPrintOn = (window._printMode || _printMode || 'auto') === 'auto';
-      const _printerCaixa   = (typeof _printPrinter !== 'undefined' && _printPrinter) || localStorage.getItem('printPrinter') || '';
-      const _printerCozinha = (typeof _printPrinterCozinha !== 'undefined' && _printPrinterCozinha) || localStorage.getItem('printPrinterCozinha') || '';
-      const _viaMode = (typeof _printViaMode !== 'undefined' && _printViaMode) || localStorage.getItem('printViaMode') || 'combinado';
-      const _temSetoresCategoria = (() => {
-        try {
-          const routes = JSON.parse(localStorage.getItem('printSetoresCategoria') || '{}');
-          return routes && typeof routes === 'object' && Object.values(routes).some(Boolean);
-        } catch (_) {
-          return false;
-        }
-      })();
-      const _doisImpressoras = _viaMode === 'separado' && (_printerCozinha || _temSetoresCategoria);
+      const _printerCaixa = (typeof _printPrinter !== 'undefined' && _printPrinter) || localStorage.getItem('printPrinter') || '';
       const _fmt = localStorage.getItem('printFormat') || '80mm';
       const _pw  = _fmt === '58mm' ? 58 : 80;
       const _nomeLoja = (_sessao?.nome || 'RESTAURANTE').toUpperCase();
@@ -1903,59 +1904,19 @@ async function submitGarcomOrder() {
         </div>`;
       };
 
-      const _htmlCozinha = _renderViaHtml('VIA DA COZINHA', itensCozinha);
-      const _htmlBar     = _renderViaHtml('VIA DO BAR',     itensImediatos);
-      const _setorJobs = (typeof _buildSetorPrintJobsForItems === 'function')
-        ? _buildSetorPrintJobsForItems(
-            { client: `Mesa ${garcomMesa}`, addr: `Mesa ${garcomMesa}`, mesa_num: garcomMesa, pag: 'Mesa' },
-            { fontSize: _fontSize, rodape: 'Bom apetite!' },
-            itensCozinha,
-            { defaultPrinter: _printerCozinha, defaultTitle: 'Cozinha' }
-          )
-        : [];
+      const _htmlBar = _renderViaHtml('VIA DO BAR', itensImediatos);
 
-      // Toggle "Imprimir bebida industrializada sozinha" — se desligado e o
-      // pedido é só industrializada, pula a impressão. Caso contrário imprime.
+      // Toggle "Imprimir bebida industrializada sozinha" — se desligado, pula.
       const _printBebidaSolo = localStorage.getItem('printBebidaSolo') !== '0';
-      const _soBebida = !_htmlCozinha && _htmlBar;
-      console.log('[GESTOR MESA PRINT] auto:', _autoPrintOn, '| modo vias:', _viaMode, '| toggle bebida:', _printBebidaSolo, '| só bebida:', !!_soBebida, '| 2 impressoras:', _doisImpressoras, '| caixa:', _printerCaixa || '(padrão)', '| cozinha:', _printerCozinha || '(nenhuma)');
-      if (_soBebida && !_printBebidaSolo) {
-        console.log('[GESTOR MESA PRINT] Pedido só de bebida e toggle desligado — não imprime.');
-      }
-      if (_autoPrintOn && !(_soBebida && !_printBebidaSolo) && (_htmlCozinha || _htmlBar)) {
-        if (_doisImpressoras) {
-          // Com cozinha separada, producao nao vai para o caixa.
-          // Caixa fica para fechamento/conta ou impressao solicitada pelo cliente.
-          if (window.ElectronPrint?.printHtml) {
-            const cozinhaJobs = _setorJobs.length ? _setorJobs : (_htmlCozinha ? [{ html: _htmlCozinha, printer: _printerCozinha }] : []);
-            for (const job of cozinhaJobs) {
-              await window.ElectronPrint.printHtml(job.html, { printer: job.printer || _printerCozinha, paperWidth: _pw }).catch(()=>{});
-            }
-          } else {
-            // Print Agent fallback
-            const _tid = _sessao?.tenant_id;
-            if (_tid) {
-              const jobs = [];
-              if (_setorJobs.length) {
-                _setorJobs.forEach(job => jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ html: job.html, format: _fmt, printer: job.printer || undefined, tipo: job.tipo || 'cozinha' }) })));
-              } else if (_htmlCozinha) {
-                jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ html: _htmlCozinha, format: _fmt, printer: _printerCozinha, tipo: 'cozinha' }) }));
-              }
-              await Promise.all(jobs).catch(()=>{});
-            }
-          }
+      console.log('[GESTOR MESA PRINT] auto:', _autoPrintOn, '| toggle bebida:', _printBebidaSolo, '| tem bebida:', !!_htmlBar, '| caixa:', _printerCaixa || '(padrão)');
+      if (_autoPrintOn && _htmlBar && _printBebidaSolo) {
+        const _printerUnica = _printerCaixa || '';
+        if (window.ElectronPrint?.printHtml) {
+          await window.ElectronPrint.printHtml(_htmlBar, { printer: _printerUnica, paperWidth: _pw }).catch(()=>{});
         } else {
-          // Uma impressora só — junta tudo numa folha
-          const _htmlTudo = [_htmlCozinha, _htmlBar].filter(Boolean).join('<div style="page-break-before:always"></div>');
-          const _printerUnica = _printerCaixa || _printerCozinha || '';
-          const _tipoUnico = (_printerCaixa || !_printerCozinha) ? 'caixa' : 'cozinha';
-          if (window.ElectronPrint?.printHtml) {
-            await window.ElectronPrint.printHtml(_htmlTudo, { printer: _printerUnica, paperWidth: _pw }).catch(()=>{});
-          } else {
-            const _tid = _sessao?.tenant_id;
-            if (_tid) {
-              await fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ html: _htmlTudo, format: _fmt, printer: _printerUnica || undefined, tipo: _tipoUnico }) }).catch(()=>{});
-            }
+          const _tid = _sessao?.tenant_id;
+          if (_tid) {
+            await fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ html: _htmlBar, format: _fmt, printer: _printerUnica || undefined, tipo: 'caixa' }) }).catch(()=>{});
           }
         }
       }

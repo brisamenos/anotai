@@ -2348,6 +2348,7 @@ async function _syncPrintConfigServer() {
       printSetoresCategoria:_getPrintSetoresCategoria(),
       printFontSize:        (typeof _printFontSize !== 'undefined' ? _printFontSize : null) || parseInt(localStorage.getItem('printFontSize')||'13'),
       printBebidaSolo:      localStorage.getItem('printBebidaSolo') !== '0',
+      bebidaProntaKanban:   localStorage.getItem('bebidaProntaKanban') === '1',
       printNome:            localStorage.getItem('printNome')   || '',
       printSub:             localStorage.getItem('printSub')    || '',
       printRodape:          localStorage.getItem('printRodape') || '',
@@ -2417,6 +2418,16 @@ async function loadPrintConfigServer() {
       const tog = document.getElementById('toggle-print-bebida');
       if (tog) {
         if (v === '1') tog.classList.add('on'); else tog.classList.remove('on');
+      }
+    }
+    // Toggle "bebida pronta aparece no kanban" — mesmo padrão de sincronização.
+    // Padrão (campo ausente/false): bebida industrializada NÃO entra no kanban.
+    if (cfg.bebidaProntaKanban !== undefined) {
+      const vk = cfg.bebidaProntaKanban === true || cfg.bebidaProntaKanban === '1' || cfg.bebidaProntaKanban === 1 ? '1' : '0';
+      localStorage.setItem('bebidaProntaKanban', vk);
+      const togK = document.getElementById('toggle-bebida-kanban');
+      if (togK) {
+        if (vk === '1') togK.classList.add('on'); else togK.classList.remove('on');
       }
     }
   } catch {}
@@ -4382,6 +4393,13 @@ function _loadRoteamento() {
     const printBebida = localStorage.getItem('printBebidaSolo') !== '0';
     if (printBebida) bebidaToggle.classList.add('on');
     else bebidaToggle.classList.remove('on');
+  }
+  // Restaura toggle de "bebida pronta aparece no kanban" (padrão: desligado)
+  const bebidaKanbanToggle = document.getElementById('toggle-bebida-kanban');
+  if (bebidaKanbanToggle) {
+    const bebidaKanban = localStorage.getItem('bebidaProntaKanban') === '1';
+    if (bebidaKanban) bebidaKanbanToggle.classList.add('on');
+    else bebidaKanbanToggle.classList.remove('on');
   }
 }
 
