@@ -3543,6 +3543,8 @@ function limparObsCarrinho(idx) {
 // Detecta se item é bebida (já pronto, não vai para cozinha)
 // Retorna true APENAS para bebidas industrializadas prontas (não precisam ser preparadas).
 // Tudo que é feito/montado manualmente (suco, vitamina, açaí, pizza, hambúrguer, etc.) → false → vai ao kanban.
+// Toggle "Bebida pronta também aparece no kanban" (config de impressão) permite
+// que o restaurante decida que a bebida pronta também deve ir ao kanban.
 function isDrink(item) {
   const n = (item.name + ' ' + (item.description || '') + ' ' + (item.cat || '') + ' ' + (item.cat_key || '')).toLowerCase();
 
@@ -3550,9 +3552,12 @@ function isDrink(item) {
   const preparados = /suco|vitamina|smoothie|milkshake|milk.shake|limonada|caipir|drinks|caldo|cozido|açaí|acai|tigela|bowl|pizza|hamburguer|hambúrguer|burger|smash|lanche|sanduiche|sanduíche|wrap|tapioca|crepe|waffle|panqueca|prato|marmita|quentinha|salada|massa|macarrao|macarrão|fettuc|risoto|paella|sushi|temaki|temakeria|espeto|grelhado|assado|frito|porcao|porção|frango|carne|peixe|camarão|camarao|bife|churrasco|açougue|acougue/;
   if (preparados.test(n)) return false;
 
-  // Bebidas industrializadas prontas — só registro, não vão ao kanban
+  // Bebidas industrializadas prontas — só registro, não vão ao kanban (a menos
+  // que o restaurante tenha ligado o toggle pra elas irem também)
   const industrializadas = /refrigerante|coca.cola|pepsi|guarana|guaraná|fanta|sprite|soda|schweppes|tônica|tonica|agua\s|água\s|agua$|água$|agua com|água com|agua sem|água sem|mineral|cerveja|chopp|brahma|skol|heineken|budweiser|corona|stella|amstel|itaipava|eisenbahn|vinho|wine|espumante|prosecco|champagne|sake|dose|tanque|long.neck|long neck|energetico|energético|red.bull|redbull|monster|gatorade|powerade|isotônico|isotonico|ice.tea|nescau|leite.caixinha|leite longa/;
-  return industrializadas.test(n);
+  if (!industrializadas.test(n)) return false;
+  if (localStorage.getItem('bebidaProntaKanban') === '1') return false; // restaurante quer no kanban
+  return true;
 }
 
 async function submitPedido() {
