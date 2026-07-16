@@ -81,7 +81,12 @@ async function _histBuscar() {
       ${_histData.map(o => {
         const items = Array.isArray(o.items) ? o.items : [];
         const itensStr = items.map(i => `${i.qty}x ${i.name}`).join(', ');
-        const dt = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+        // created_at vem do SQLite como "YYYY-MM-DD HH:MM:SS" em UTC, sem
+        // indicação de fuso. Sem o "Z", o navegador interpretava como
+        // horário LOCAL do dispositivo, mostrando a hora errada (não batia
+        // com Brasília). Acrescenta "Z" pra deixar explícito que é UTC, e
+        // força a exibição no fuso de Brasília independente do dispositivo.
+        const dt = o.created_at ? new Date(o.created_at.replace(' ', 'T') + 'Z').toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}) : '';
         const num = o.order_num || o.id;
         return `<tr style="border-top:1px solid var(--border)" onmouseenter="this.style.background='rgba(255,255,255,.02)'" onmouseleave="this.style.background=''">
           <td style="padding:10px 12px;font-weight:700;color:var(--accent)">#${num}</td>
@@ -91,7 +96,10 @@ async function _histBuscar() {
           <td style="padding:10px 12px;font-size:11.5px">${o.pag||'—'}</td>
           <td style="padding:10px 12px"><span style="font-size:10.5px;padding:2px 8px;border-radius:99px;font-weight:600;background:${statusColor[o.status]||'var(--muted)'}18;color:${statusColor[o.status]||'var(--muted)'};border:1px solid ${statusColor[o.status]||'var(--muted)'}30">${statusMap[o.status]||o.status}</span></td>
           <td style="padding:10px 12px;font-size:11.5px;color:var(--muted);white-space:nowrap">${dt}</td>
-          <td style="padding:10px 6px"><button class="btn bg" style="font-size:10.5px;padding:3px 8px" onclick="histDetalhe(${o.id})">Ver</button></td>
+          <td style="padding:10px 6px;white-space:nowrap">
+            <button class="btn bg" style="font-size:10.5px;padding:3px 8px" onclick="histDetalhe(${o.id})">Ver</button>
+            <button class="btn bg" style="font-size:10.5px;padding:3px 8px" title="Imprimir novamente" onclick="histReimprimir(${o.id})">🖨️</button>
+          </td>
         </tr>`;
       }).join('')}
       </tbody></table></div>`;
@@ -104,18 +112,41 @@ function histPrev() { if (_histPage > 1) { _histPage--; _histBuscar(); } }
 function histNext() { _histPage++; _histBuscar(); }
 function histFiltrar() { _histPage = 1; _histBuscar(); }
 
+// Reimprime um pedido do histórico usando o mesmo fluxo padrão de impressão
+// (respeita via única/separada, impressora configurada, formato, etc.)
+async function histReimprimir(id) {
+  const o = _histData.find(x => x.id === id);
+  if (!o) { sbToast?.('err', 'Pedido não encontrado no histórico.'); return; }
+  try {
+    if (typeof mapOrder !== 'function' || typeof printOrder !== 'function') {
+      sbToast?.('err', 'Impressão indisponível nesta tela.'); return;
+    }
+    const mapped = mapOrder({ ...o, items: o.items || [] });
+    await printOrder(mapped);
+    sbToast?.('ok', `Pedido #${o.order_num || o.id} enviado para impressão.`);
+  } catch (e) {
+    console.error('[HIST REIMPRIMIR] erro:', e);
+    sbToast?.('err', 'Erro ao reimprimir: ' + e.message);
+  }
+}
+
 function histDetalhe(id) {
   const o = _histData.find(x => x.id === id);
   if (!o) return;
   const items = Array.isArray(o.items) ? o.items : [];
   const num = o.order_num || o.id;
-  const dt = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '';
+  // Mesmo motivo do fix na listagem: "Z" garante interpretação como UTC,
+  // e timeZone força exibição em Brasília independente do dispositivo.
+  const dt = o.created_at ? new Date(o.created_at.replace(' ', 'T') + 'Z').toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}) : '';
   const subtotal = items.reduce((s,i) => s + (parseFloat(i.price||0) * (i.qty||1)), 0);
 
   const html = `<div style="padding:20px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div style="font-size:18px;font-weight:800">Pedido #${num}</div>
-      <div style="font-size:12px;color:var(--muted)">${dt}</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="font-size:12px;color:var(--muted)">${dt}</div>
+        <button class="btn bg" style="font-size:11px;padding:5px 10px" onclick="histReimprimir(${o.id})">🖨️ Imprimir novamente</button>
+      </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
       <div><div style="font-size:11px;color:var(--muted)">Cliente</div><div style="font-weight:600">${o.client||'—'}</div></div>
