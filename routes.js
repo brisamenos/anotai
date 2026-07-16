@@ -4839,6 +4839,19 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const extRef = `ef-${tid}-${order_id || Date.now()}`
     const valorLiq = Math.max(0, _valorMp - taxa)
 
+    // URL pública do servidor — necessária pra passar notification_url abaixo.
+    // Sem isso, o Mercado Pago só avisa o webhook se ele estiver configurado
+    // manualmente no painel de desenvolvedor DAQUELA conta MP específica.
+    // Quando o restaurante usa conta própria (mp_source='tenant'), é uma
+    // aplicação MP diferente da da plataforma, e ninguém configura webhook
+    // manualmente lá — por isso o aviso nunca chegava e o pedido não
+    // confirmava sozinho no gestor, mesmo com o pagamento aprovado.
+    const _mpBaseUrl = String(process.env.PUBLIC_BASE_URL || process.env.APP_URL || process.env.BASE_URL || '').replace(/\/+$/, '') || (() => {
+      const proto = String(req.headers['x-forwarded-proto'] || (req.socket?.encrypted ? 'https' : 'http')).split(',')[0].trim()
+      const host  = String(req.headers['x-forwarded-host'] || req.headers.host || 'estimafood.evocrm.sbs').split(',')[0].trim()
+      return `${proto || 'https'}://${host || 'estimafood.evocrm.sbs'}`
+    })()
+
     try {
       const mp = await fetch('https://api.mercadopago.com/v1/payments', {
         method: 'POST',
@@ -4848,6 +4861,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           description: `Pedido online - ${client || 'Cliente'}`,
           payment_method_id: 'pix',
           external_reference: extRef,
+          notification_url: `${_mpBaseUrl}/webhook/mercadopago`,
           payer: { email, first_name: client || 'Cliente', last_name: '' },
         })
       })
@@ -6080,6 +6094,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (!mpToken) { send(res, 400, { error: 'Token Mercado Pago não configurado' }); return true }
 
     const extRef = `ef-card-${tid.slice(0,8)}-${order_id || Date.now()}`
+    // Mesma correção do PIX: garante que o MP avise o webhook mesmo quando
+    // o pagamento é processado pela conta própria do restaurante.
+    const _mpBaseUrlC = String(process.env.PUBLIC_BASE_URL || process.env.APP_URL || process.env.BASE_URL || '').replace(/\/+$/, '') || (() => {
+      const proto = String(req.headers['x-forwarded-proto'] || (req.socket?.encrypted ? 'https' : 'http')).split(',')[0].trim()
+      const host  = String(req.headers['x-forwarded-host'] || req.headers.host || 'estimafood.evocrm.sbs').split(',')[0].trim()
+      return `${proto || 'https'}://${host || 'estimafood.evocrm.sbs'}`
+    })()
 
     try {
       const mpBody = {
@@ -6089,6 +6110,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         installments:       1,
         payment_method_id,
         external_reference: extRef,
+        notification_url:   `${_mpBaseUrlC}/webhook/mercadopago`,
         payer: { email, first_name: client || 'Cliente', last_name: '' },
       }
       if (issuer_id) mpBody.issuer_id = issuer_id
