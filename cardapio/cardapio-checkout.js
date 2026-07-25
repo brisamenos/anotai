@@ -629,6 +629,13 @@ async function _doSubmitOrder(addr, troco) {
       closeCart();
       _restoreConfirmButton();
     }
+    // ── Cartão de Crédito MP ──
+    // Mostra o formulário de pagamento ANTES do chat de acompanhamento, pra
+    // não competir pela atenção do cliente enquanto ele ainda não pagou.
+    if (selectedPay === 'cartao_mp') {
+      await _iniciarFluxoCartao(order);
+    }
+
     _openPostOrderChat(order, waLinks);
 
     // PIX manual precisa aparecer imediatamente; WhatsApp/rastreio podem esperar.
@@ -652,11 +659,6 @@ async function _doSubmitOrder(addr, troco) {
     });
     // ── PIX: gera QR Code MP ou exibe chave manual ──
     if (pixFlowPromise) await pixFlowPromise;
-
-    // ── Cartão de Crédito MP ──
-    if (selectedPay === 'cartao_mp') {
-      await _iniciarFluxoCartao(order);
-    }
 
     // 1. Salva no localStorage (celular próprio)
     try {
@@ -1095,7 +1097,13 @@ async function _initMpCardForm(valor) {
     },
     callbacks: {
       onFormMounted: (err) => {
-        if (err) { console.warn('[MP] CardForm mount error:', err); }
+        if (err) {
+          console.warn('[MP] CardForm mount error:', err);
+          if (_erro) {
+            _erro.textContent = 'Não foi possível carregar o formulário de pagamento. Tente novamente em instantes.';
+            _erro.style.display = '';
+          }
+        }
       },
       onPaymentMethodsReceived: (err, data) => {
         if (err || !data?.length) return;
@@ -1238,7 +1246,8 @@ async function _iniciarFluxoCartao(order) {
   } catch(e) {
     console.warn('[cartao] init falhou:', e);
     if (erro) {
-      erro.textContent = 'Nao foi possivel carregar o pagamento online. Verifique a internet e tente novamente.';
+      const detalhe = (e && e.message) ? ` (${e.message})` : '';
+      erro.textContent = 'Nao foi possivel carregar o pagamento online. Verifique a internet e tente novamente.' + detalhe;
       erro.style.display = '';
     }
   }
