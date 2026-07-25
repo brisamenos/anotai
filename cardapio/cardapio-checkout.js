@@ -278,7 +278,7 @@ function _orderPayAmount(order) {
   return (parseFloat(order?.total || 0) || 0) + (parseFloat(order?.taxa || 0) || 0);
 }
 
-function _openPostOrderChat(order, payload) {
+function _openPostOrderChat(order, payload, openChat = true) {
   payload = payload || {};
   if (typeof efChatShowOrderCreated === 'function') {
     efChatShowOrderCreated({
@@ -288,7 +288,7 @@ function _openPostOrderChat(order, payload) {
       client: order.client || document.getElementById('f-name')?.value || '',
       storeName: _storeName,
       waLink: payload.waLink || ''
-    }, { open: true });
+    }, { open: openChat });
   } else if (typeof efChatStart === 'function') {
     efChatStart({
       orderId: order.id,
@@ -296,7 +296,7 @@ function _openPostOrderChat(order, payload) {
       phone: order.phone || document.getElementById('f-phone')?.value || '',
       client: order.client || document.getElementById('f-name')?.value || '',
       storeName: _storeName
-    }, { open: true });
+    }, { open: openChat });
   }
 }
 
@@ -636,7 +636,7 @@ async function _doSubmitOrder(addr, troco) {
       await _iniciarFluxoCartao(order);
     }
 
-    _openPostOrderChat(order, waLinks);
+    _openPostOrderChat(order, waLinks, selectedPay !== 'cartao_mp');
 
     // PIX manual precisa aparecer imediatamente; WhatsApp/rastreio podem esperar.
     let pixFlowPromise = null;
@@ -1162,7 +1162,7 @@ async function _initMpCardForm(valor) {
               card_token:        token,
               payment_method_id: paymentMethodId,
               issuer_id:         issuerId,
-              valor:             order.total,
+              valor:             parseFloat(order.total) + parseFloat(order.taxa || 0),
               order_id:          order.id,
               client:            order.client,
               email:             document.getElementById('mp-cardholderEmail')?.value || 'cliente@estima.app',
