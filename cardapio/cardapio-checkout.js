@@ -1094,6 +1094,7 @@ async function _initMpCardForm(valor) {
       identificationType:  { id: 'mp-identificationType' },
       identificationNumber:{ id: 'mp-docNumber',              placeholder: '000.000.000-00' },
       installments:        { id: 'mp-installments' },
+      issuer:              { id: 'mp-issuer' },
     },
     callbacks: {
       onFormMounted: (err) => {
@@ -1104,6 +1105,20 @@ async function _initMpCardForm(valor) {
             _erro.style.display = '';
           }
         }
+      },
+      // O MP exige o campo "issuer" (banco emissor) preenchido pra tokenizar.
+      // Na maioria dos cartões só existe 1 opção — seleciona automaticamente
+      // assim que o SDK identifica a bandeira, sem precisar o cliente escolher.
+      onIssuersReceived: (err, issuers) => {
+        if (err || !issuers?.length) {
+          console.warn('[MP] onIssuersReceived erro/vazio:', err, issuers);
+          return;
+        }
+        const sel = document.getElementById('mp-issuer');
+        if (!sel) return;
+        sel.innerHTML = issuers.map(i => `<option value="${i.id}">${i.name}</option>`).join('');
+        sel.value = issuers[0].id;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
       },
       onPaymentMethodsReceived: (err, data) => {
         if (err || !data?.length) return;
