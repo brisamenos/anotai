@@ -2818,6 +2818,19 @@ input,textarea{font-family:inherit}
           <!-- Formulário de entrada — o SDK MP intercepta o submit deste form -->
           <form id="mp-card-form" style="background:var(--s2);border:1px solid var(--border);border-radius:16px;padding:20px">
             <!-- Campos ocultos exigidos pelo SDK MP CardForm -->
+            <!-- Força o iframe do MP (injetado via JS) a preencher certinho a caixa, -->
+            <!-- sem estourar o tamanho — sem isso o iframe ficava enorme e cortava o texto -->
+            <style>
+              #mp-cardNumber-container iframe,
+              #mp-expiration-container iframe,
+              #mp-securityCode-container iframe {
+                width: 100% !important;
+                height: 100% !important;
+                border: none !important;
+                display: block !important;
+                vertical-align: middle !important;
+              }
+            </style>
             <input id="mp-cardholderEmail"    type="hidden" value="">
             <select id="mp-identificationType" style="display:none"><option value="CPF" selected>CPF</option></select>
             <select id="mp-installments"       style="display:none"><option value="1"   selected>1x</option></select>
@@ -2829,16 +2842,16 @@ input,textarea{font-family:inherit}
             </div>
             <!-- Número do cartão (iframe MP) -->
             <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Número do cartão</label>
-            <div id="mp-cardNumber-container" style="background:var(--bg);border:1.5px solid var(--border);border-radius:9px;padding:11px 13px;margin-bottom:10px;min-height:42px;transition:border-color .18s"></div>
+            <div id="mp-cardNumber-container" style="background:var(--bg);border:1.5px solid var(--border);border-radius:9px;padding:11px 13px;margin-bottom:10px;height:42px;overflow:hidden;transition:border-color .18s"></div>
             <!-- Validade + CVV -->
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
               <div>
                 <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Validade</label>
-                <div id="mp-expiration-container" style="background:var(--bg);border:1.5px solid var(--border);border-radius:9px;padding:11px 13px;min-height:42px;transition:border-color .18s"></div>
+                <div id="mp-expiration-container" style="background:var(--bg);border:1.5px solid var(--border);border-radius:9px;padding:11px 13px;height:42px;overflow:hidden;transition:border-color .18s"></div>
               </div>
               <div>
                 <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">CVV</label>
-                <div id="mp-securityCode-container" style="background:var(--bg);border:1.5px solid var(--border);border-radius:9px;padding:11px 13px;min-height:42px;transition:border-color .18s"></div>
+                <div id="mp-securityCode-container" style="background:var(--bg);border:1.5px solid var(--border);border-radius:9px;padding:11px 13px;height:42px;overflow:hidden;transition:border-color .18s"></div>
               </div>
             </div>
             <!-- Nome no cartão -->
