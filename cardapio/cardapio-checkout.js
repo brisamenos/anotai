@@ -1246,7 +1246,15 @@ async function _iniciarFluxoCartao(order) {
   } catch(e) {
     console.warn('[cartao] init falhou:', e);
     if (erro) {
-      const detalhe = (e && e.message) ? ` (${e.message})` : '';
+      let detalheTxto = '';
+      try {
+        if (e && e.message) detalheTxto = e.message;
+        else if (e && e.name) detalheTxto = e.name;
+        else if (e && Array.isArray(e.cause) && e.cause.length) detalheTxto = e.cause.map(c => c.description || c.message || JSON.stringify(c)).join('; ');
+        else if (e && typeof e === 'object') detalheTxto = JSON.stringify(e).slice(0, 200);
+        else if (e) detalheTxto = String(e);
+      } catch(_) {}
+      const detalhe = detalheTxto ? ` [${detalheTxto}]` : ' [erro sem detalhe — verifique console]';
       erro.textContent = 'Nao foi possivel carregar o pagamento online. Verifique a internet e tente novamente.' + detalhe;
       erro.style.display = '';
     }
