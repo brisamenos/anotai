@@ -3590,31 +3590,51 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
   // ── Pedidos do cliente ───────────────────────────────
   if (req.method === 'GET' && upath === '/api/customer-orders') {
-    const tid = getTenantId(req, params)
-    const cid = params.get('customer_id')
-    if (!tid || !cid) { send(res, 400, { error: 'Parâmetros faltando' }); return true }
-    // Valida token Bearer se enviado — compara contra senha_hash do customer
-    const auth = req.headers['authorization'] || ''
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
-    if (token) {
-      try {
-        const decoded = Buffer.from(token, 'base64').toString()
-        const [tkCid, tkTid, tkHashPrefix] = decoded.split(':')
-        if (String(tkCid) !== String(cid) || String(tkTid) !== String(tid)) {
-          send(res, 403, { error: 'Token inválido para este cliente' }); return true
+    const tid   = getTenantId(req, params)
+    const cid   = params.get('customer_id')
+    const phone = params.get('phone')
+    if (!tid || (!cid && !phone)) { send(res, 400, { error: 'Parâmetros faltando' }); return true }
+
+    // Cliente COM conta (customer_id) — valida token Bearer se enviado.
+    if (cid) {
+      const auth = req.headers['authorization'] || ''
+      const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+      if (token) {
+        try {
+          const decoded = Buffer.from(token, 'base64').toString()
+          const [tkCid, tkTid, tkHashPrefix] = decoded.split(':')
+          if (String(tkCid) !== String(cid) || String(tkTid) !== String(tid)) {
+            send(res, 403, { error: 'Token inválido para este cliente' }); return true
+          }
+          const custRow = db.prepare('SELECT senha_hash FROM customers WHERE id=? AND tenant_id=?').get(cid, tid)
+          if (!custRow || !custRow.senha_hash || custRow.senha_hash.slice(0, 16) !== tkHashPrefix) {
+            send(res, 403, { error: 'Token inválido' }); return true
+          }
+        } catch (e) {
+          send(res, 403, { error: 'Token malformado' }); return true
         }
-        const custRow = db.prepare('SELECT senha_hash FROM customers WHERE id=? AND tenant_id=?').get(cid, tid)
-        if (!custRow || !custRow.senha_hash || custRow.senha_hash.slice(0, 16) !== tkHashPrefix) {
-          send(res, 403, { error: 'Token inválido' }); return true
-        }
-      } catch (e) {
-        send(res, 403, { error: 'Token malformado' }); return true
       }
+      // Nota: sem token, endpoint continua público para compatibilidade com pedido por URL (?acompanhar=).
+      // Para hardening total, exigir token sempre e atualizar frontend para enviar Authorization header.
+      try {
+        const rows = db.prepare('SELECT id,order_num,client,phone,addr,items,total,taxa,pag,status,created_at FROM orders WHERE tenant_id=? AND customer_id=? ORDER BY id DESC LIMIT 30').all(tid, cid)
+        send(res, 200, rows.map(r => ({ ...r, items: (() => { try { return JSON.parse(r.items) } catch { return [] } })() })))
+      } catch (e) { send(res, 400, { error: e.message }) }
+      return true
     }
-    // Nota: sem token, endpoint continua público para compatibilidade com pedido por URL (?acompanhar=).
-    // Para hardening total, exigir token sempre e atualizar frontend para enviar Authorization header.
+
+    // Cliente SEM conta (guest) — usa o telefone salvo no navegador do próprio
+    // cliente (checkout anterior) pra achar o histórico, sem exigir login.
+    // Mesmo nível de exposição de dado que o cliente já vê no seu próprio
+    // checkout (nome do prato, valor) — nada sensível tipo senha/endereço completo.
     try {
-      const rows = db.prepare('SELECT id,order_num,client,phone,addr,items,total,taxa,pag,status,created_at FROM orders WHERE tenant_id=? AND customer_id=? ORDER BY id DESC LIMIT 30').all(tid, cid)
+      const phoneWhere = phoneLookupSql('phone')
+      const phoneArgs  = phoneLookupArgs(phone)
+      const rows = db.prepare(`
+        SELECT id,order_num,client,phone,addr,items,total,taxa,pag,status,created_at
+        FROM orders WHERE tenant_id=? AND ${phoneWhere}
+        ORDER BY id DESC LIMIT 30
+      `).all(tid, ...phoneArgs)
       send(res, 200, rows.map(r => ({ ...r, items: (() => { try { return JSON.parse(r.items) } catch { return [] } })() })))
     } catch (e) { send(res, 400, { error: e.message }) }
     return true

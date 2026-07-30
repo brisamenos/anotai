@@ -2692,7 +2692,13 @@ async function openMesaDetail(num) {
             </div>`;
           }).join('');
           return `<div style="margin-bottom:8px">
-            <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px">${statusIcon[key]} ${statusLbl[key]}</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <div style="font-size:11px;font-weight:700;color:var(--muted)">${statusIcon[key]} ${statusLbl[key]}</div>
+              ${key === 'producao' ? `<button onclick="garcomMarcarPronto(${o.id},${num})"
+                style="padding:3px 9px;border-radius:7px;border:1px solid rgba(34,197,94,.35);background:rgba(34,197,94,.1);color:var(--green);font-size:10.5px;font-weight:700;cursor:pointer">✅ Marcar pronto</button>` : ''}
+              ${key === 'pronto' ? `<button onclick="garcomMarcarServido(${o.id},${num})"
+                style="padding:3px 9px;border-radius:7px;border:1px solid rgba(129,140,248,.35);background:rgba(129,140,248,.1);color:var(--accent);font-size:10.5px;font-weight:700;cursor:pointer">🟢 Marcar servido</button>` : ''}
+            </div>
             ${rows}
           </div>`;
         };
@@ -2780,6 +2786,71 @@ async function garcomCancelarPedido(orderId, mesaNum) {
     openMesaDetail(mesaNum);
   } catch(e) {
     showToast('❌ Erro ao cancelar: ' + e.message);
+  }
+}
+
+// Marca todos os itens "Em preparo" de um pedido como "Pronto p/ servir".
+// Antes só o gestor conseguia fazer isso pelo kanban — agora o garçom também
+// pode, direto pela comanda da mesa, sem precisar chamar o gestor.
+async function garcomMarcarPronto(orderId, mesaNum) {
+  const order = allMesaOrders.find(o => o.id === orderId);
+  if (!order) return;
+  const items = [..._parseItems(order.items)];
+  const temItemEmPreparo = items.some(i => i.item_status === 'producao');
+  if (!temItemEmPreparo) return;
+
+  const updatedItems = items.map(i =>
+    i.item_status === 'producao' ? { ...i, item_status: 'pronto' } : i
+  );
+
+  try {
+    const { error } = await sb.from('orders')
+      .update({ items: updatedItems, updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+    if (error) throw error;
+    // Atualiza ambos os caches
+    const ai = allMesaOrders.findIndex(o => o.id === orderId);
+    if (ai !== -1) allMesaOrders[ai] = { ...allMesaOrders[ai], items: updatedItems };
+    const mi = myOrders.findIndex(o => o.id === orderId);
+    if (mi !== -1) myOrders[mi] = { ...myOrders[mi], items: updatedItems };
+    showToast('✅ Itens marcados como prontos');
+    if (typeof mesaNum === 'number') openMesaDetail(mesaNum);
+    else if (typeof renderMyOrders === 'function') renderMyOrders();
+  } catch(e) {
+    console.error('[garcomMarcarPronto]', e);
+    showToast('❌ Erro ao marcar pronto: ' + (e.message || e));
+  }
+}
+
+// Marca todos os itens "Pronto p/ servir" de um pedido como "Entregue".
+// Complementa garcomMarcarPronto — fecha o ciclo todo (preparo → pronto →
+// entregue) direto pelo garçom, sem precisar do gestor em nenhuma etapa.
+async function garcomMarcarServido(orderId, mesaNum) {
+  const order = allMesaOrders.find(o => o.id === orderId);
+  if (!order) return;
+  const items = [..._parseItems(order.items)];
+  const temItemPronto = items.some(i => i.item_status === 'pronto');
+  if (!temItemPronto) return;
+
+  const updatedItems = items.map(i =>
+    i.item_status === 'pronto' ? { ...i, item_status: 'entregue' } : i
+  );
+
+  try {
+    const { error } = await sb.from('orders')
+      .update({ items: updatedItems, updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+    if (error) throw error;
+    const ai = allMesaOrders.findIndex(o => o.id === orderId);
+    if (ai !== -1) allMesaOrders[ai] = { ...allMesaOrders[ai], items: updatedItems };
+    const mi = myOrders.findIndex(o => o.id === orderId);
+    if (mi !== -1) myOrders[mi] = { ...myOrders[mi], items: updatedItems };
+    showToast('✅ Itens marcados como entregues');
+    if (typeof mesaNum === 'number') openMesaDetail(mesaNum);
+    else if (typeof renderMyOrders === 'function') renderMyOrders();
+  } catch(e) {
+    console.error('[garcomMarcarServido]', e);
+    showToast('❌ Erro ao marcar servido: ' + (e.message || e));
   }
 }
 
@@ -4116,7 +4187,13 @@ function renderMyOrders() {
           const lbl  = { producao:'Em preparo', pronto:'Pronto p/ servir', entregue:'Entregue' }[key];
           const cor  = { producao:'var(--accent)', pronto:'var(--green)', entregue:'var(--muted)' }[key];
           return `<div style="margin-bottom:6px">
-            <div style="font-size:10px;font-weight:700;color:${cor};margin-bottom:3px">${icon} ${lbl.toUpperCase()}</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+              <div style="font-size:10px;font-weight:700;color:${cor}">${icon} ${lbl.toUpperCase()}</div>
+              ${key === 'producao' ? `<button onclick="garcomMarcarPronto(${o.id})"
+                style="padding:2px 8px;border-radius:6px;border:1px solid rgba(34,197,94,.35);background:rgba(34,197,94,.1);color:var(--green);font-size:9.5px;font-weight:700;cursor:pointer">✅ Marcar pronto</button>` : ''}
+              ${key === 'pronto' ? `<button onclick="garcomMarcarServido(${o.id})"
+                style="padding:2px 8px;border-radius:6px;border:1px solid rgba(129,140,248,.35);background:rgba(129,140,248,.1);color:var(--accent);font-size:9.5px;font-weight:700;cursor:pointer">🟢 Marcar servido</button>` : ''}
+            </div>
             ${itens.map(i=>{
               const _gb = (i.garcom_nome && i.garcom_id !== currentGarcom?.id) ? ` <span style="font-size:9px;background:rgba(129,140,248,.1);color:var(--accent);padding:1px 5px;border-radius:4px;font-weight:600">${i.garcom_nome}</span>` : '';
               return `<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:2px 0">
