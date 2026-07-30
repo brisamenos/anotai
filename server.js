@@ -2097,22 +2097,25 @@ async function responderAcompanhamentoWhatsapp({ tenantId, phone, text, msgIds =
   let pedido = null
 
   if (info.number) {
-    const realId = info.number + offset
-    pedido = db.prepare(`
+    // IMPORTANTE: order_num só é gravado no banco sob demanda (em certas ações
+    // específicas) — um pedido novíssimo pode ainda estar com order_num NULL
+    // no momento em que o cliente pergunta pelo WhatsApp. O número que o
+    // cliente vê/digita, porém, já é calculado (id - offset) mesmo sem estar
+    // gravado. Buscar só por "order_num=?" nesse caso não acha o pedido de
+    // hoje (coluna NULL não bate) e podia devolver um pedido antigo do mesmo
+    // cliente que, por coincidência, tem esse número gravado de verdade (o
+    // contador de número reinicia todo dia, então números se repetem entre
+    // dias diferentes). Por isso comparamos o número EXIBIDO de cada pedido
+    // recente (gravado ou calculado, com a mesma fórmula usada em toda a
+    // parte) e priorizamos o mais recente que bater.
+    const candidatos = db.prepare(`
       SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at
       FROM orders
-      WHERE tenant_id=? AND ${phoneWhere} AND order_num=?
+      WHERE tenant_id=? AND ${phoneWhere}
       ORDER BY id DESC
-      LIMIT 1
-    `).get(tenantId, ...phoneArgs, info.number)
-    if (!pedido) {
-      pedido = db.prepare(`
-        SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at
-        FROM orders
-        WHERE tenant_id=? AND ${phoneWhere} AND id=? AND (order_num IS NULL OR order_num=0)
-        LIMIT 1
-      `).get(tenantId, ...phoneArgs, realId)
-    }
+      LIMIT 100
+    `).all(tenantId, ...phoneArgs)
+    pedido = candidatos.find(c => numeroPedidoComOffset(c, offset) === info.number) || null
   } else {
     pedido = db.prepare(`
       SELECT id,order_num,client,status,total,taxa,items,addr,pag,troco,created_at
