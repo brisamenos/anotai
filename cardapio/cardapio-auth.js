@@ -63,12 +63,12 @@ function updateProfileFab() {
     }
     if (name) name.textContent = (_customer.name||'Eu').split(' ')[0];
   } else {
-    // Deslogado: icone de pessoa + "Cadastro/login"
+    // Deslogado: icone de pessoa preenchido + "Entrar"
     if (av) {
       av.className = 'profile-fab-av icon';
-      av.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 13.5c0-2.76 2.46-5 5.5-5s5.5 2.24 5.5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+      av.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12.5c2.76 0 5-2.35 5-5.25S14.76 2 12 2 7 4.35 7 7.25s2.24 5.25 5 5.25Zm0 2.25c-3.6 0-8 1.83-8 5.1V22h16v-2.15c0-3.27-4.4-5.1-8-5.1Z"/></svg>';
     }
-    if (name) name.textContent = 'Cadastro/login';
+    if (name) name.textContent = 'Entrar';
   }
 }
 
@@ -183,6 +183,7 @@ async function doLogin() {
     closeAuth();
     toast('👋', `Olá, ${data.name.split(' ')[0]}!`);
     fillCartForm();
+    if (typeof loadRepeatOrderBanner === 'function') loadRepeatOrderBanner();
     // Sincroniza com programa de fidelidade (caso ainda não esteja cadastrado)
     fetch('/api/fidelidade/sync', {
       method: 'POST',
@@ -250,6 +251,8 @@ function doLogout() {
   } catch(e) {}
   updateProfileFab();
   closeAccount();
+  const banner = document.getElementById('repeat-order-banner');
+  if (banner) { banner.style.display = 'none'; banner.innerHTML = ''; }
   toast('👋','Você saiu da conta');
 }
 
@@ -632,20 +635,90 @@ function _findMenuItemForRepeat(savedItem) {
   return partial[0].item;
 }
 
+// "Peça de novo" — banner na tela principal do cardápio (não escondido dentro
+// de Meus Pedidos) pra cliente repetir com 1 toque o último pedido entregue.
+// Funciona pra cliente logado (via conta) E pra quem só fez checkout como
+// convidado (via telefone salvo no navegador de um pedido anterior).
+async function loadRepeatOrderBanner() {
+  const wrap = document.getElementById('repeat-order-banner');
+  if (!wrap) return;
+
+  let url = '';
+  const headers = { 'x-tenant-id': _tenantId };
+  if (_customer && _customer.id) {
+    url = `/api/customer-orders?customer_id=${_customer.id}`;
+    if (_customer.token) headers.Authorization = 'Bearer ' + _customer.token;
+  } else {
+    // Sem conta — usa o telefone salvo de um checkout anterior (convidado)
+    let telefoneSalvo = '';
+    try {
+      const perfil = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+      telefoneSalvo = (perfil.phone || '').replace(/\D/g, '');
+    } catch (e) {}
+    if (!telefoneSalvo) return; // nunca fez pedido nesse navegador — não mostra nada
+    url = `/api/customer-orders?phone=${encodeURIComponent(telefoneSalvo)}`;
+  }
+
+  try {
+    const res = await fetch(url, { headers });
+    const orders = await res.json();
+    if (!Array.isArray(orders) || !orders.length) return;
+    const ultimo = orders.find(o => o.status === 'entregue' && Array.isArray(o.items) && o.items.length);
+    if (!ultimo) return;
+
+    const itensTxt = ultimo.items.map(i => `${parseInt(i.qty) || 1}× ${i.name || i.nome || 'Item'}`).join(', ');
+    wrap.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;background:rgba(var(--accent-rgb,249,115,22),.07);border:1.5px solid rgba(var(--accent-rgb,249,115,22),.25);border-radius:12px;padding:10px 12px">
+        <div style="font-size:20px;line-height:1">🔁</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:700;color:var(--accent)">Peça de novo</div>
+          <div style="font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${itensTxt}</div>
+        </div>
+        <button onclick="repetirPedido(${ultimo.id})" style="flex-shrink:0;padding:7px 12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">Repetir</button>
+      </div>`;
+    wrap.style.display = '';
+  } catch (e) {
+    console.warn('[repeat-order-banner] erro:', e);
+  }
+}
+
 async function repetirPedido(orderId) {
-  if (!_customer || !_customer.id) {
-    if (typeof toast === 'function') toast('warn', 'Faça login para repetir pedidos');
-    return;
+  let query = sb.from('orders').select('items,addr,total,phone').eq('id', orderId);
+  if (_customer && _customer.id) {
+    query = query.eq('customer_id', _customer.id);
+  } else {
+    // Convidado (sem conta) — confirma que o pedido é do mesmo telefone salvo
+    // no navegador, em vez de exigir customer_id (que convidado não tem).
+    let telefoneSalvo = '';
+    try {
+      const perfil = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+      telefoneSalvo = (perfil.phone || '').replace(/\D/g, '');
+    } catch (e) {}
+    if (!telefoneSalvo) {
+      if (typeof toast === 'function') toast('warn', 'Não foi possível confirmar seu telefone.');
+      return;
+    }
   }
   try {
-    // Busca pedido completo (snapshot dos itens guardados em items JSON)
-    const { data, error } = await sb.from('orders').select('items,addr,total')
-      .eq('id', orderId)
-      .eq('customer_id', _customer.id)
-      .single();
+    const { data, error } = await query.single();
     if (error || !data) {
       if (typeof toast === 'function') toast('err', 'Pedido não encontrado');
       return;
+    }
+    // Confirmação extra pro caso de convidado: telefone do pedido tem que bater
+    // com o telefone salvo no navegador (evita repetir pedido de outra pessoa
+    // que usou o mesmo aparelho).
+    if (!(_customer && _customer.id)) {
+      let telefoneSalvo = '';
+      try {
+        const perfil = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+        telefoneSalvo = (perfil.phone || '').replace(/\D/g, '');
+      } catch (e) {}
+      const telefonePedido = (data.phone || '').replace(/\D/g, '');
+      if (!telefonePedido || telefonePedido !== telefoneSalvo) {
+        if (typeof toast === 'function') toast('err', 'Pedido não encontrado');
+        return;
+      }
     }
     const itensSalvos = Array.isArray(data.items) ? data.items : (() => { try { return JSON.parse(data.items || '[]'); } catch { return []; } })();
     if (!itensSalvos.length) {

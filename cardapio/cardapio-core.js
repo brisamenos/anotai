@@ -789,6 +789,7 @@ async function init() {
     renderMenu();
     subscribeRealtime();
     loadCustomerSession();
+    if (typeof loadRepeatOrderBanner === 'function') loadRepeatOrderBanner();
     setupPlanFeatures();
     applyTiposEntrega();
     applyDeliveryInfo();
