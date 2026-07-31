@@ -863,18 +863,18 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .half-opt.on .half-opt-check{background:var(--amber);border-color:var(--amber);color:#000}
 
 
-/* ── PRONTO BADGE NA MESA ────────────────── */
+/* ── SERVIR BADGE NA MESA (prato pronto na cozinha aguardando ser servido) ── */
 .mesa-pronto-badge {
   position: absolute; top: 7px; left: 8px;
-  background: var(--green); color: #000;
+  background: var(--red); color: #fff;
   font-size: 9px; font-weight: 800;
   padding: 2px 7px; border-radius: 99px;
   letter-spacing: .4px; text-transform: uppercase;
   animation: pronto-pulse 1.4s ease-in-out infinite;
 }
 @keyframes pronto-pulse {
-  0%,100% { box-shadow: 0 0 0 0 rgba(52,211,153,.6); }
-  50%      { box-shadow: 0 0 0 6px rgba(52,211,153,0); }
+  0%,100% { box-shadow: 0 0 0 0 rgba(251,113,133,.6); }
+  50%      { box-shadow: 0 0 0 6px rgba(251,113,133,0); }
 }
 </style>
   <script src="/api-client.js"></script>
@@ -2687,7 +2687,7 @@ function renderMesas() {
       _parseItems(o.items).some(it => it.item_status === 'pronto')
     );
     if (hasPronto) hasProntoNow = true;
-    const prontoBadge = hasPronto ? `<div class="mesa-pronto-badge">PRONTO</div>` : '';
+    const prontoBadge = hasPronto ? `<div class="mesa-pronto-badge">SERVIR</div>` : '';
 
     const onclick = free
       ? `openPedido(${t.num})`
@@ -3886,25 +3886,26 @@ async function submitPedido() {
       mesaAtual.opened_at = _fallbackOpenedAt;
     }
 
-    // Monta itens com status individual por item
+    // Monta itens com status individual por item.
+    // Cada unidade vira uma linha própria (qty:1) em vez de agrupar em "2x/3x",
+    // assim cada item pode ser cancelado/avançado de status individualmente,
+    // sem precisar cancelar o lote inteiro.
     const _ts = Date.now();
-    newItems = [
-      ...foodItems.map((i, idx) => ({
-        id: i.id || null, qty: i.qty, name: i.name, price: i.price,
+    const _expandirQty = (arr, prefix, extra) => arr.flatMap((i, idx) => {
+      const n = Math.max(1, parseInt(i.qty) || 1);
+      return Array.from({ length: n }, (_, j) => ({
+        id: i.id || null, qty: 1, name: i.name, price: i.price,
         cat: i.cat || '', cat_key: i.cat_key || i.catKey || i.cat || '',
         cliente_ref: i.cliente_ref || '', cliente_nome: i.cliente_nome || '',
         obs: i.obs||'',
-        item_status: 'producao', item_id: `${_ts}_f${idx}`, added_at: new Date().toISOString(),
+        ...extra,
+        item_id: `${_ts}_${prefix}${idx}_${j}`, added_at: new Date().toISOString(),
         garcom_id: currentGarcom?.id || null, garcom_nome: currentGarcom?.nome || ''
-      })),
-      ...drinkItems.map((i, idx) => ({
-        id: i.id || null, qty: i.qty, name: i.name, price: i.price,
-        cat: i.cat || '', cat_key: i.cat_key || i.catKey || i.cat || '',
-        cliente_ref: i.cliente_ref || '', cliente_nome: i.cliente_nome || '',
-        obs: i.obs||'', drink: true,
-        item_status: 'entregue', item_id: `${_ts}_d${idx}`, added_at: new Date().toISOString(),
-        garcom_id: currentGarcom?.id || null, garcom_nome: currentGarcom?.nome || ''
-      }))
+      }));
+    });
+    newItems = [
+      ..._expandirQty(foodItems, 'f', { item_status: 'producao' }),
+      ..._expandirQty(drinkItems, 'd', { item_status: 'entregue', drink: true })
     ];
 
     // Busca comanda ativa desta mesa (mesa_aberta)
