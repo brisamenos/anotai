@@ -1226,7 +1226,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 </div>
 
 <!-- ══ MODAL COBRANÇA PARCIAL (pagar só alguns itens da mesa) ══ -->
-<div class="sheet-bg" id="sheet-cobranca-parcial" onclick="if(event.target===this)closeCobrancaParcial()">
+<div class="sheet-bg" id="sheet-cobranca-parcial" onclick="if(event.target===this)closeCobrancaParcial()" style="z-index:9200">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div class="sheet-head">
@@ -2724,10 +2724,26 @@ async function openMesaDetail(num) {
   document.getElementById('mds-head-sub').textContent   = waiting ? 'Aguardando pagamento' : 'Mesa ocupada';
 
   // Busca pedidos desta mesa (usa allMesaOrders — todos os garçons)
-  const orders  = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
-  // Recalcula total da mesa pelos itens NÃO cancelados (o.total no banco pode estar desatualizado)
+  // Filtra pela sessão atual da mesa: só pedidos lançados desde que ela foi
+  // aberta, nunca histórico de uma ocupação anterior já fechada/paga.
+  let orders = allMesaOrders
+    .filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num)
+    .filter(o => _garcomOrderBelongsToMesaSession(o, mesa));
+  if (!orders.length) {
+    try {
+      const { data } = await sb.from('orders').select('*').eq('mesa_num', num).eq('status', 'mesa_aberta').order('id', { ascending: false });
+      orders = (data || []).filter(o => _garcomOrderBelongsToMesaSession(o, mesa));
+    } catch(e) { console.warn('[openMesaDetail]', e.message); }
+  }
+  // Recalcula total da mesa pelos itens NÃO cancelados e AINDA NÃO PAGOS
+  // (itens já cobrados via "Cobrar itens específicos" não entram no valor em aberto)
   const total   = orders.reduce((s,o) => {
-    const its = _parseItems(o.items).filter(i => (i?.item_status || 'active') !== 'cancelado');
+    const its = _parseItems(o.items).filter(i => (i?.item_status || 'active') !== 'cancelado' && !i.pago);
+    return s + its.reduce((a,i) => a + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
+  }, 0);
+  // Valor já recebido (itens pagos parcialmente), só pra exibição informativa
+  const totalPagoParcial = orders.reduce((s,o) => {
+    const its = _parseItems(o.items).filter(i => (i?.item_status || 'active') !== 'cancelado' && i.pago);
     return s + its.reduce((a,i) => a + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
   }, 0);
 
@@ -2765,12 +2781,23 @@ async function openMesaDetail(num) {
           if (!itens.length) return '';
           const rows = itens.map(item => {
             const itemId = item.item_id || allItens.indexOf(item);
-            // Pode cancelar somente itens NÃO entregues E que pertencem a ESTE garçom
             const isMyItem = !item.garcom_id || String(item.garcom_id) === String(currentGarcom?.id);
-            const podeCanc = item.item_status !== 'entregue' && isMyItem && !item.pago;
+            // Pode cancelar itens em qualquer status (inclusive já entregues),
+            // desde que sejam deste garçom e ainda não tenham sido pagos
+            const podeCanc = isMyItem && !item.pago;
             const btnCanc  = podeCanc
               ? `<button onclick="garcomCancelarItem(${o.id},'${itemId}',${num})"
                   style="padding:2px 7px;border-radius:6px;border:1px solid rgba(251,113,133,.35);background:rgba(251,113,133,.07);color:var(--red);font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">✕</button>`
+              : '';
+            // Botões de status por item individual — permite avançar cada
+            // item da comanda separadamente (ex: pizza pronta, hambúrguer ainda em preparo)
+            const btnItemPronto = (item.item_status === 'producao' && !item.pago)
+              ? `<button onclick="garcomMarcarItemPronto(${o.id},'${itemId}',${num})"
+                  style="padding:2px 7px;border-radius:6px;border:1px solid rgba(34,197,94,.35);background:rgba(34,197,94,.1);color:var(--green);font-size:10.5px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap">✅ Pronto</button>`
+              : '';
+            const btnItemServido = (item.item_status === 'pronto' && !item.pago)
+              ? `<button onclick="garcomMarcarItemServido(${o.id},'${itemId}',${num})"
+                  style="padding:2px 7px;border-radius:6px;border:1px solid rgba(129,140,248,.35);background:rgba(129,140,248,.1);color:var(--accent);font-size:10.5px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap">🟢 Servido</button>`
               : '';
             // Badge com nome do garçom (se item de outro garçom)
             const garcomBadge = (item.garcom_nome && item.garcom_id !== currentGarcom?.id)
@@ -2785,7 +2812,7 @@ async function openMesaDetail(num) {
             return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04);${item.pago ? 'opacity:.55' : ''}">
               <span style="font-size:13px;flex:1;${item.pago ? 'text-decoration:line-through' : ''}">${item.qty}× ${item.name}${clienteBadge}${garcomBadge}${pagoBadge}${item.obs ? ` <span style="font-size:11px;color:var(--muted)">· ${item.obs}</span>` : ''}</span>
               <span style="font-size:12px;color:var(--amber);font-weight:600;white-space:nowrap">R$ ${((item.price||0)*(item.qty||1)).toFixed(2).replace('.',',')}</span>
-              ${btnCanc}
+              <div style="display:flex;gap:5px;flex-shrink:0">${btnItemPronto}${btnItemServido}${btnCanc}</div>
             </div>`;
           }).join('');
           return `<div style="margin-bottom:8px">
@@ -2795,9 +2822,9 @@ async function openMesaDetail(num) {
                 ${statusLbl[key]}
               </div>
               ${key === 'producao' ? `<button onclick="garcomMarcarPronto(${o.id},${num})"
-                style="padding:3px 9px;border-radius:7px;border:1px solid rgba(34,197,94,.35);background:rgba(34,197,94,.1);color:var(--green);font-size:10.5px;font-weight:700;cursor:pointer">Marcar pronto</button>` : ''}
+                style="padding:3px 9px;border-radius:7px;border:1px solid rgba(34,197,94,.35);background:rgba(34,197,94,.1);color:var(--green);font-size:10.5px;font-weight:700;cursor:pointer">Marcar todos prontos</button>` : ''}
               ${key === 'pronto' ? `<button onclick="garcomMarcarServido(${o.id},${num})"
-                style="padding:3px 9px;border-radius:7px;border:1px solid rgba(129,140,248,.35);background:rgba(129,140,248,.1);color:var(--accent);font-size:10.5px;font-weight:700;cursor:pointer">Marcar servido</button>` : ''}
+                style="padding:3px 9px;border-radius:7px;border:1px solid rgba(129,140,248,.35);background:rgba(129,140,248,.1);color:var(--accent);font-size:10.5px;font-weight:700;cursor:pointer">Marcar todos servidos</button>` : ''}
             </div>
             ${rows}
           </div>`;
@@ -2819,8 +2846,14 @@ async function openMesaDetail(num) {
         </div>`;
       }).join('') +
       clientesHtml +
+      (totalPagoParcial > 0
+        ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 0;font-size:12px;color:var(--green)">
+            <span>✓ Já recebido</span>
+            <strong>R$ ${totalPagoParcial.toFixed(2).replace('.',',')}</strong>
+          </div>`
+        : '') +
       `<div class="mds-total-row">
-        <span class="mds-total-lbl">Total consumido</span>
+        <span class="mds-total-lbl">Total a pagar</span>
         <span class="mds-total-val">R$ ${total.toFixed(2).replace('.',',')}</span>
       </div>`;
   }
@@ -2958,6 +2991,71 @@ async function garcomMarcarServido(orderId, mesaNum) {
   }
 }
 
+// Marca UM item específico como "pronto p/ servir" (ex: só a pizza, não o
+// hambúrguer que ainda está em preparo). Complementa garcomMarcarPronto,
+// que marca todos os itens em preparo do pedido de uma vez.
+async function garcomMarcarItemPronto(orderId, itemId, mesaNum) {
+  const order = allMesaOrders.find(o => o.id === orderId);
+  if (!order) return;
+  const items = [..._parseItems(order.items)];
+  const idx = typeof itemId === 'string'
+    ? items.findIndex(i => i.item_id === itemId)
+    : parseInt(itemId);
+  if (idx < 0 || idx >= items.length) return;
+  if (items[idx].item_status !== 'producao') return;
+
+  items[idx] = { ...items[idx], item_status: 'pronto' };
+
+  try {
+    const { error } = await sb.from('orders')
+      .update({ items, updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+    if (error) throw error;
+    const ai = allMesaOrders.findIndex(o => o.id === orderId);
+    if (ai !== -1) allMesaOrders[ai] = { ...allMesaOrders[ai], items };
+    const mi = myOrders.findIndex(o => o.id === orderId);
+    if (mi !== -1) myOrders[mi] = { ...myOrders[mi], items };
+    showToast('Item marcado como pronto');
+    if (typeof mesaNum === 'number') openMesaDetail(mesaNum);
+    else if (typeof renderMyOrders === 'function') renderMyOrders();
+  } catch(e) {
+    console.error('[garcomMarcarItemPronto]', e);
+    showToast('Erro ao marcar item pronto: ' + (e.message || e));
+  }
+}
+
+// Marca UM item específico como "entregue". Complementa garcomMarcarServido,
+// que marca todos os itens prontos do pedido de uma vez.
+async function garcomMarcarItemServido(orderId, itemId, mesaNum) {
+  const order = allMesaOrders.find(o => o.id === orderId);
+  if (!order) return;
+  const items = [..._parseItems(order.items)];
+  const idx = typeof itemId === 'string'
+    ? items.findIndex(i => i.item_id === itemId)
+    : parseInt(itemId);
+  if (idx < 0 || idx >= items.length) return;
+  if (items[idx].item_status !== 'pronto') return;
+
+  items[idx] = { ...items[idx], item_status: 'entregue' };
+
+  try {
+    const { error } = await sb.from('orders')
+      .update({ items, updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+    if (error) throw error;
+    const ai = allMesaOrders.findIndex(o => o.id === orderId);
+    if (ai !== -1) allMesaOrders[ai] = { ...allMesaOrders[ai], items };
+    const mi = myOrders.findIndex(o => o.id === orderId);
+    if (mi !== -1) myOrders[mi] = { ...myOrders[mi], items };
+    showToast('Item marcado como entregue');
+    if (typeof mesaNum === 'number') openMesaDetail(mesaNum);
+    else if (typeof renderMyOrders === 'function') renderMyOrders();
+  } catch(e) {
+    console.error('[garcomMarcarItemServido]', e);
+    showToast('Erro ao marcar item entregue: ' + (e.message || e));
+  }
+}
+
 async function garcomCancelarItem(orderId, itemId, mesaNum) {
   const order = allMesaOrders.find(o => o.id === orderId);
   if (!order) return;
@@ -2975,7 +3073,15 @@ async function garcomCancelarItem(orderId, itemId, mesaNum) {
     return;
   }
 
-  if (!await garcomConfirm({ icon:'🗑️', title:'Remover item?', msg:`Remover "${item.qty}× ${item.name}" da comanda?`, okLabel:'Remover' })) return;
+  const jaServido = item.item_status === 'entregue';
+  if (!await garcomConfirm({
+    icon: '🗑️',
+    title: 'Remover item?',
+    msg: jaServido
+      ? `"${item.qty}× ${item.name}" já foi marcado como entregue. Remover mesmo assim da comanda e do valor da mesa?`
+      : `Remover "${item.qty}× ${item.name}" da comanda?`,
+    okLabel: 'Remover'
+  })) return;
 
   // Novo modelo: marca como cancelado (preserva histórico)
   items[idx] = { ...item, item_status: 'cancelado' };
