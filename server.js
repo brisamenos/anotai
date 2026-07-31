@@ -2133,7 +2133,7 @@ async function responderAcompanhamentoWhatsapp({ tenantId, phone, text, msgIds =
     const pendenteOnline = statusRaw === 'aguardando_cartao' || (statusRaw === 'aguardando_pix' && pagRaw !== 'pix_manual')
     const orderNumber = pedido.order_num
       ? String(pedido.order_num).padStart(3, '0')
-      : (pendenteOnline ? '' : numeroPedidoPad(pedido, offset))
+      : (pendenteOnline ? '' : String(atribuirOrderNumSeNecessario(tenantId, pedido.id) || numeroPedidoPad(pedido, offset)).padStart(3, '0'))
 
     try {
       db.prepare("UPDATE orders SET wa_track=1 WHERE id=? AND tenant_id=? AND COALESCE(wa_track,0)=0").run(pedido.id, tenantId)
@@ -2473,8 +2473,13 @@ async function handleREST(req, res, table, params, body) {
               log('🔕', `[anti-ban] Pulando comanda do pedido #${_ord.id} — cliente não ativou tracking via WhatsApp`)
               return
             }
-            const offset = parseInt(cfg?.order_num_offset) || 0
-            const idStr  = numeroPedidoPad(_ord, offset)
+            // Usa a mesma lógica de atribuição por tenant que o resto do
+            // sistema usa — evita o cálculo antigo (id - offset), que era
+            // GLOBAL entre todos os restaurantes da plataforma, não por
+            // tenant, e por isso mostrava número errado nessa mensagem
+            // automática (disparada antes do order_num ser gravado).
+            const numeroReal = atribuirOrderNumSeNecessario(_tid, _ord.id) || numeroPedidoPad(_ord, parseInt(cfg?.order_num_offset) || 0)
+            const idStr  = String(numeroReal).padStart(3, '0')
             const nome   = _ord.client || 'Cliente'
             const items  = (() => {
               try {
@@ -2512,8 +2517,8 @@ async function handleREST(req, res, table, params, body) {
             }
             const pixAuto = auto['pix_cobranca'] || {}
             if (pixAuto.on === false) { log('⏭️','Automação pix_cobranca desligada'); return }
-            const offset  = parseInt(cfg?.order_num_offset) || 0
-            const idStr   = numeroPedidoPad(_ord, offset)
+            const numeroRealP = atribuirOrderNumSeNecessario(_tid, _ord.id) || numeroPedidoPad(_ord, parseInt(cfg?.order_num_offset) || 0)
+            const idStr   = String(numeroRealP).padStart(3, '0')
             const nome    = _ord.client || 'Cliente'
             const items   = (()=>{ try{ return (JSON.parse(_ord.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') }catch{ return '' } })()
             const total   = (parseFloat(_ord.total||0) + parseFloat(_ord.taxa||0)).toFixed(2).replace('.',',')
@@ -3500,8 +3505,8 @@ async function handleOrderStatus(req, res) {
             log('🔕', `[anti-ban] Pulando pix_confirmado do pedido #${order.id} — cliente não ativou tracking via WhatsApp`)
             return
           }
-          const offset = parseInt(cfg?.order_num_offset) || 0
-          const idStr  = numeroPedidoPad(order, offset)
+          const numeroRealPC = atribuirOrderNumSeNecessario(tid, order.id) || numeroPedidoPad(order, parseInt(cfg?.order_num_offset) || 0)
+          const idStr  = String(numeroRealPC).padStart(3, '0')
           const nome   = order.client || 'Cliente'
           const items  = (()=>{ try{ return (JSON.parse(order.items)||[]).map(i=>`${i.qty}x ${i.name}`).join(', ') }catch{ return '' } })()
           const total  = (parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2).replace('.',',')
@@ -3690,7 +3695,8 @@ async function handleOrderStatus(req, res) {
           const auto  = jsonParse(cfg?.evo_automacoes)||{}
           const offset= parseInt(cfg?.order_num_offset)||0
           const loja  = cfg?.store_name || (_seg==='acougue' ? 'Açougue' : 'Restaurante')
-          const nome  = order.client||'Cliente', idStr=numeroPedidoPad(order, offset)
+          const numeroRealSC = atribuirOrderNumSeNecessario(tid, order.id) || numeroPedidoPad(order, offset)
+          const nome  = order.client||'Cliente', idStr=String(numeroRealSC).padStart(3, '0')
           // Formata cada item com seus adicionais (kit, meio-meio, grupos como TEMPERADO,
           // obs livre). Antes mostrava só "qty x nome" — cliente não via o que escolheu.
           // Formato do obs: "Forma de preparo: X | TEMPERADO: a, b | Kit: it1 · it2 | obs livre"
@@ -4107,7 +4113,7 @@ async function handleIAWebhook(req, res) {
         const pag = String(p?.pag || '').toLowerCase()
         if (p?.order_num) return String(p.order_num).padStart(3, '0')
         if (status === 'aguardando_cartao' || (status === 'aguardando_pix' && pag !== 'pix_manual')) return ''
-        return numeroPedidoPad(p, _iaOffset)
+        return String(atribuirOrderNumSeNecessario(tenantId, p.id) || numeroPedidoPad(p, _iaOffset)).padStart(3, '0')
       }
       const _phoneArgs  = phoneLookupArgs(phone)
       const _phoneWhere = phoneLookupSql('phone')
