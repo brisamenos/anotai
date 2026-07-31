@@ -385,7 +385,8 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   50%      { border-color: rgba(129,140,248,.15); inset: -3px; }
 }
 .mesa-block-icon {
-  position: absolute; top: 7px; right: 8px; font-size: 10px; opacity: .45;
+  position: absolute; top: 9px; right: 9px;
+  width: 8px; height: 8px; border-radius: 50%;
 }
 
 /* ══ MODAL DETALHE DA MESA ══════════════ */
@@ -988,6 +989,10 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
         </div>
       </div>
     </div>
+    <button onclick="adicionarNovaMesa()" style="display:flex;align-items:center;justify-content:center;gap:6px;width:calc(100% - 32px);margin:0 16px 10px;padding:10px;background:var(--surface2);border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      Adicionar mesa
+    </button>
     <div class="mesa-grid" id="mesa-grid">
       <div style="grid-column:span 3;text-align:center;padding:24px"><div class="spinner" style="margin:0 auto"></div></div>
     </div>
@@ -1220,6 +1225,43 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   </div>
 </div>
 
+<!-- ══ MODAL COBRANÇA PARCIAL (pagar só alguns itens da mesa) ══ -->
+<div class="sheet-bg" id="sheet-cobranca-parcial" onclick="if(event.target===this)closeCobrancaParcial()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <div class="sheet-title">Cobrar itens específicos</div>
+      <button class="sheet-close" onclick="closeCobrancaParcial()">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4">
+        Selecione os itens que esse cliente vai pagar agora. Os demais continuam em aberto na mesa.
+      </div>
+      <div id="cobranca-parcial-lista" style="margin-bottom:12px"></div>
+      <div style="background:rgba(196,149,106,.06);border:1px solid rgba(196,149,106,.15);border-radius:12px;padding:12px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:12.5px;color:var(--muted)">Total selecionado</span>
+        <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:20px;font-weight:900;color:var(--amber)" id="cobranca-parcial-total">R$ 0,00</span>
+      </div>
+      <div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:12px;padding:12px">
+        <label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:7px">Forma de pagamento</label>
+        <select id="cobranca-parcial-pay-select" style="width:100%;height:42px;border-radius:10px;background:var(--surface);border:1.5px solid var(--border);color:var(--text);font-size:13.5px;font-weight:700;padding:0 11px;outline:none">
+          <option value="PIX">PIX</option>
+          <option value="Débito">Débito</option>
+          <option value="Crédito">Crédito</option>
+          <option value="Dinheiro">Dinheiro</option>
+          <option value="Cartão">Cartão</option>
+        </select>
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <button class="confirm-btn" id="cobranca-parcial-btn" onclick="confirmarCobrancaParcial()" style="background:var(--green);color:#fff">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span id="cobranca-parcial-btn-label">Confirmar recebimento</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ MODAL IMPRIMIR COMANDA (ao finalizar mesa) ══ -->
 <div id="print-comanda-bg" onclick="if(event.target===this)closePrintComandaModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9300;align-items:center;justify-content:center;backdrop-filter:blur(5px)">
   <div style="background:var(--surface);border-radius:20px;width:calc(100% - 40px);max-width:360px;padding:0 0 20px;animation:slideUp .3s cubic-bezier(.34,1.56,.64,1)">
@@ -1386,7 +1428,12 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
     <div class="mds-head">
       <div class="mds-num-badge busy" id="mds-num-badge">1</div>
       <div class="mds-head-info">
-        <div class="mds-head-title" id="mds-head-title">Mesa 1</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="mds-head-title" id="mds-head-title">Mesa 1</div>
+          <button onclick="renomearMesa(_detailMesaNum)" title="Renomear mesa" style="background:none;border:none;padding:2px;cursor:pointer;color:var(--muted);display:flex">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M11.5 2.5l2 2L5 13l-2.7.7.7-2.7 8.5-8.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
         <div class="mds-head-sub" id="mds-head-sub">Carregando pedidos...</div>
       </div>
       <button class="mds-close" onclick="closeMesaDetail()">✕</button>
@@ -2191,7 +2238,7 @@ async function garcomPrint(order, newItems) {
         for (const job of cozinhaJobs) {
           await window.ElectronPrint.printHtml(job.html, { printer: job.printer || printerCozinha, paperWidth: pw }).catch(()=>{});
         }
-        if (cozinhaJobs.length) showToast('🖨️ Cozinha');
+        if (cozinhaJobs.length) showToast('Cozinha');
         return;
       }
       // Print Agent — dois jobs separados, sem verificar status
@@ -2202,7 +2249,7 @@ async function garcomPrint(order, newItems) {
         } else if (htmlCozinha) {
           jobs.push(fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html: htmlCozinha, format: fmt, printer: printerCozinha, tipo: 'cozinha' }) }));
         }
-        if (jobs.length) { await Promise.all(jobs); showToast('🖨️ Enviado'); return; }
+        if (jobs.length) { await Promise.all(jobs); showToast('Enviado'); return; }
         return;
       } catch(e) { console.warn('[PRINT] Agent falhou:', e.message); }
     } else {
@@ -2211,15 +2258,15 @@ async function garcomPrint(order, newItems) {
       if (window.ElectronPrint?.printHtml) {
         const pw = fmt === '58mm' ? 58 : 80;
         const r = await window.ElectronPrint.printHtml(htmlTudo, { printer: printerCaixa, paperWidth: pw }).catch(()=>({}));
-        if (r?.ok) { showToast('🖨️ Enviado'); return; }
+        if (r?.ok) { showToast('Enviado'); return; }
       }
       if (window.ElectronPrint?.printOrder) {
         const r = await window.ElectronPrint.printOrder({ ...order, items, _html: htmlTudo }).catch(()=>({}));
-        if (r?.ok) { showToast('🖨️ Enviado'); return; }
+        if (r?.ok) { showToast('Enviado'); return; }
       }
       try {
         const res = await fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':tid}, body: JSON.stringify({ html: htmlTudo, format: fmt, printer: printerCaixa || undefined, tipo: 'caixa' }) });
-        if (res.ok) { showToast('🖨️ Enviado'); return; }
+        if (res.ok) { showToast('Enviado'); return; }
       } catch(e) { console.warn('[PRINT] Agent falhou:', e.message); }
     }
   } catch(e) {
@@ -2258,7 +2305,7 @@ function _salvarPedidoOffline(pedido) {
     const fila = JSON.parse(localStorage.getItem(_OFFLINE_KEY) || '[]');
     fila.push({ ...pedido, _ts: Date.now() });
     localStorage.setItem(_OFFLINE_KEY, JSON.stringify(fila));
-    showToast('📴 Offline — pedido salvo localmente');
+    showToast('Offline — pedido salvo localmente');
   } catch(e) {}
 }
 
@@ -2289,7 +2336,7 @@ async function _sincronizarPedidosOffline() {
 
     localStorage.setItem(_OFFLINE_KEY, JSON.stringify(falhas));
     if (enviados > 0) {
-      showToast(`✅ ${enviados} pedido(s) offline sincronizados!`);
+      showToast(`${enviados} pedido(s) offline sincronizados!`);
       await loadPedidosDaMesa();
     }
   } catch(e) {}
@@ -2297,12 +2344,12 @@ async function _sincronizarPedidosOffline() {
 
 // Verifica conectividade e sincroniza ao voltar online
 window.addEventListener('online', () => {
-  showToast('🌐 Conexão restaurada!');
+  showToast('Conexão restaurada!');
   _sincronizarPedidosOffline();
 });
 
 window.addEventListener('offline', () => {
-  showToast('📴 Sem conexão — pedidos serão salvos localmente');
+  showToast('Sem conexão — pedidos serão salvos localmente');
 });
 
 // Tenta sincronizar ao carregar
@@ -2505,7 +2552,7 @@ function subscribeRealtime() {
             const novos = _parseItems(p.new.items).filter(i => i.item_status === 'pronto').slice(-(newProntos - prevProntos));
             const nomes = novos.map(i => i.name).join(', ');
             _tocarSomPronto();
-            showToast('✅', `Mesa ${p.new.mesa_num} — ${nomes} pronto(s) p/ servir!`);
+            showToast('', `Mesa ${p.new.mesa_num} — ${nomes} pronto(s) p/ servir!`);
           }
         }
       } else if (p.eventType === 'DELETE') {
@@ -2560,6 +2607,52 @@ registerSW();
 // switchTab defined in MEUS PEDIDOS section
 
 // ══ MESAS ════════════════════════════════
+// Adiciona uma nova mesa — sugere o próximo número livre automaticamente.
+async function adicionarNovaMesa() {
+  const proximoNum = tables.length ? Math.max(...tables.map(t => t.num)) + 1 : 1;
+  const numStr = String(prompt('Número da nova mesa', String(proximoNum)) || '').trim();
+  if (!numStr) return;
+  const num = parseInt(numStr);
+  if (!num || num <= 0) { showToast('Número de mesa inválido'); return; }
+  if (tables.some(t => t.num === num)) { showToast('Já existe uma mesa com esse número'); return; }
+  const nome = String(prompt('Nome da mesa (opcional — ex: "Varanda", "VIP")') || '').trim();
+
+  try {
+    const { data, error } = await sb.from('mesas').insert({
+      tenant_id: _garcomTenantId, num, status: 'free', nome: nome || null
+    }).select().single();
+    if (error) throw error;
+    tables.push(data);
+    renderMesas();
+    showToast(`Mesa ${num} adicionada`);
+  } catch(e) {
+    console.error('[adicionarNovaMesa]', e);
+    showToast('Erro ao adicionar mesa: ' + (e.message || e));
+  }
+}
+
+// Renomeia a mesa (ou remove o nome, deixando só o número padrão)
+async function renomearMesa(num) {
+  const mesa = tables.find(t => t.num === num);
+  const nomeAtual = mesa?.nome || '';
+  const novoNome = prompt('Nome da mesa (deixe vazio para usar só o número)', nomeAtual);
+  if (novoNome === null) return; // cancelou
+  const nome = novoNome.trim() || null;
+
+  try {
+    const { error } = await sb.from('mesas').update({ nome }).eq('num', num).eq('tenant_id', _garcomTenantId);
+    if (error) throw error;
+    if (mesa) mesa.nome = nome;
+    renderMesas();
+    const badgeTitle = document.getElementById('mds-head-title');
+    if (badgeTitle && _detailMesaNum === num) badgeTitle.textContent = nome ? `${nome} (Mesa ${num})` : 'Mesa ' + num;
+    showToast('Nome atualizado');
+  } catch(e) {
+    console.error('[renomearMesa]', e);
+    showToast('Erro ao renomear: ' + (e.message || e));
+  }
+}
+
 function renderMesas() {
   const g = document.getElementById('mesa-grid');
   const livres   = tables.filter(t=>t.status==='free').length;
@@ -2569,7 +2662,7 @@ function renderMesas() {
   document.getElementById('stat-total').textContent    = tables.length;
 
   if (!tables.length) {
-    g.innerHTML = '<div class="empty" style="grid-column:span 3"><div class="empty-icon">🍽️</div>Nenhuma mesa cadastrada</div>';
+    g.innerHTML = '<div class="empty" style="grid-column:span 3"><div class="empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" style="opacity:.4"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="M8 9h8M8 13h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>Nenhuma mesa cadastrada</div>';
     return;
   }
   // Detecta mesas com itens prontos p/ notificação sonora
@@ -2580,7 +2673,7 @@ function renderMesas() {
     const waiting = t.status === 'waiting';
     const cls     = free ? 'free' : (waiting ? 'waiting' : 'busy');
     const lbl     = free ? 'LIVRE' : (waiting ? 'PAGANDO' : 'OCUPADA');
-    const icon    = free ? '🟢' : (waiting ? '⏳' : '🔴');
+    const dotCor  = free ? 'var(--green)' : (waiting ? 'var(--amber)' : 'var(--red)');
 
     // Total da mesa se ocupada (mostra total de TODOS os garçons)
     const mesaOrders = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === t.num);
@@ -2594,7 +2687,7 @@ function renderMesas() {
       _parseItems(o.items).some(it => it.item_status === 'pronto')
     );
     if (hasPronto) hasProntoNow = true;
-    const prontoBadge = hasPronto ? `<div class="mesa-pronto-badge">✅ PRONTO</div>` : '';
+    const prontoBadge = hasPronto ? `<div class="mesa-pronto-badge">PRONTO</div>` : '';
 
     const onclick = free
       ? `openPedido(${t.num})`
@@ -2602,8 +2695,9 @@ function renderMesas() {
 
     return `<div class="mesa-block ${cls}" style="animation-delay:${i*.04}s" onclick="${onclick}">
       ${prontoBadge}
-      <div class="mesa-block-icon">${icon}</div>
+      <div class="mesa-block-icon" style="background:${dotCor}"></div>
       <div class="mesa-block-num">${t.num}</div>
+      ${t.nome ? `<div style="font-size:9.5px;color:var(--muted);font-weight:600;margin-top:-2px">${t.nome}</div>` : ''}
       <div class="mesa-block-label">${lbl}</div>
       ${totalHtml}
     </div>`;
@@ -2626,8 +2720,8 @@ async function openMesaDetail(num) {
   const badge = document.getElementById('mds-num-badge');
   badge.textContent = num;
   badge.className   = 'mds-num-badge ' + (waiting ? 'waiting' : 'busy');
-  document.getElementById('mds-head-title').textContent = 'Mesa ' + num;
-  document.getElementById('mds-head-sub').textContent   = waiting ? '⏳ Aguardando pagamento' : '🔴 Mesa ocupada';
+  document.getElementById('mds-head-title').textContent = mesa?.nome ? `${mesa.nome} (Mesa ${num})` : 'Mesa ' + num;
+  document.getElementById('mds-head-sub').textContent   = waiting ? 'Aguardando pagamento' : 'Mesa ocupada';
 
   // Busca pedidos desta mesa (usa allMesaOrders — todos os garçons)
   const orders  = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num);
@@ -2664,7 +2758,7 @@ async function openMesaDetail(num) {
           pronto:   allItens.filter(i => i.item_status === 'pronto'),
           entregue: allItens.filter(i => i.item_status === 'entregue'),
         };
-        const statusIcon = { producao:'🍳', pronto:'✅', entregue:'🟢' };
+        const statusDot  = { producao:'var(--amber)', pronto:'var(--green)', entregue:'var(--muted)' };
         const statusLbl  = { producao:'Em preparo', pronto:'Pronto p/ servir', entregue:'Entregue' };
 
         const renderGrupo = (key, itens) => {
@@ -2673,7 +2767,7 @@ async function openMesaDetail(num) {
             const itemId = item.item_id || allItens.indexOf(item);
             // Pode cancelar somente itens NÃO entregues E que pertencem a ESTE garçom
             const isMyItem = !item.garcom_id || String(item.garcom_id) === String(currentGarcom?.id);
-            const podeCanc = item.item_status !== 'entregue' && isMyItem;
+            const podeCanc = item.item_status !== 'entregue' && isMyItem && !item.pago;
             const btnCanc  = podeCanc
               ? `<button onclick="garcomCancelarItem(${o.id},'${itemId}',${num})"
                   style="padding:2px 7px;border-radius:6px;border:1px solid rgba(251,113,133,.35);background:rgba(251,113,133,.07);color:var(--red);font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">✕</button>`
@@ -2685,19 +2779,25 @@ async function openMesaDetail(num) {
             const clienteBadge = item.cliente_nome
               ? ` <span style="font-size:9px;background:rgba(34,197,94,.12);color:var(--green);padding:1px 5px;border-radius:4px;font-weight:700">${_garcomHtmlEscape(item.cliente_nome)}</span>`
               : '';
-            return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)">
-              <span style="font-size:13px;flex:1">${item.qty}× ${item.name}${clienteBadge}${garcomBadge}${item.obs ? ` <span style="font-size:11px;color:var(--muted)">· ${item.obs}</span>` : ''}</span>
+            const pagoBadge = item.pago
+              ? ` <span style="font-size:9px;background:rgba(34,197,94,.15);color:var(--green);padding:1px 6px;border-radius:4px;font-weight:700;letter-spacing:.3px">PAGO</span>`
+              : '';
+            return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04);${item.pago ? 'opacity:.55' : ''}">
+              <span style="font-size:13px;flex:1;${item.pago ? 'text-decoration:line-through' : ''}">${item.qty}× ${item.name}${clienteBadge}${garcomBadge}${pagoBadge}${item.obs ? ` <span style="font-size:11px;color:var(--muted)">· ${item.obs}</span>` : ''}</span>
               <span style="font-size:12px;color:var(--amber);font-weight:600;white-space:nowrap">R$ ${((item.price||0)*(item.qty||1)).toFixed(2).replace('.',',')}</span>
               ${btnCanc}
             </div>`;
           }).join('');
           return `<div style="margin-bottom:8px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-              <div style="font-size:11px;font-weight:700;color:var(--muted)">${statusIcon[key]} ${statusLbl[key]}</div>
+              <div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--muted)">
+                <span style="width:7px;height:7px;border-radius:50%;background:${statusDot[key]};flex-shrink:0"></span>
+                ${statusLbl[key]}
+              </div>
               ${key === 'producao' ? `<button onclick="garcomMarcarPronto(${o.id},${num})"
-                style="padding:3px 9px;border-radius:7px;border:1px solid rgba(34,197,94,.35);background:rgba(34,197,94,.1);color:var(--green);font-size:10.5px;font-weight:700;cursor:pointer">✅ Marcar pronto</button>` : ''}
+                style="padding:3px 9px;border-radius:7px;border:1px solid rgba(34,197,94,.35);background:rgba(34,197,94,.1);color:var(--green);font-size:10.5px;font-weight:700;cursor:pointer">Marcar pronto</button>` : ''}
               ${key === 'pronto' ? `<button onclick="garcomMarcarServido(${o.id},${num})"
-                style="padding:3px 9px;border-radius:7px;border:1px solid rgba(129,140,248,.35);background:rgba(129,140,248,.1);color:var(--accent);font-size:10.5px;font-weight:700;cursor:pointer">🟢 Marcar servido</button>` : ''}
+                style="padding:3px 9px;border-radius:7px;border:1px solid rgba(129,140,248,.35);background:rgba(129,140,248,.1);color:var(--accent);font-size:10.5px;font-weight:700;cursor:pointer">Marcar servido</button>` : ''}
             </div>
             ${rows}
           </div>`;
@@ -2749,6 +2849,10 @@ async function openMesaDetail(num) {
           Dividir
         </button>
       </div>
+      <button class="mds-btn" onclick="openCobrancaParcial(${num})" style="width:100%;margin-bottom:8px;background:rgba(34,197,94,.08);color:var(--green);border:1.5px solid rgba(34,197,94,.3)">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 5h12M2 5v6a1 1 0 001 1h10a1 1 0 001-1V5M2 5l1.5-2h9L14 5" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        Cobrar itens específicos
+      </button>
       <button class="mds-btn add" onclick="closeMesaDetail();openPedido(${num})">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="2" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         Lançar mais itens
@@ -2785,7 +2889,7 @@ async function garcomCancelarPedido(orderId, mesaNum) {
     showToast('Pedido cancelado');
     openMesaDetail(mesaNum);
   } catch(e) {
-    showToast('❌ Erro ao cancelar: ' + e.message);
+    showToast('Erro ao cancelar: ' + e.message);
   }
 }
 
@@ -2813,12 +2917,12 @@ async function garcomMarcarPronto(orderId, mesaNum) {
     if (ai !== -1) allMesaOrders[ai] = { ...allMesaOrders[ai], items: updatedItems };
     const mi = myOrders.findIndex(o => o.id === orderId);
     if (mi !== -1) myOrders[mi] = { ...myOrders[mi], items: updatedItems };
-    showToast('✅ Itens marcados como prontos');
+    showToast('Itens marcados como prontos');
     if (typeof mesaNum === 'number') openMesaDetail(mesaNum);
     else if (typeof renderMyOrders === 'function') renderMyOrders();
   } catch(e) {
     console.error('[garcomMarcarPronto]', e);
-    showToast('❌ Erro ao marcar pronto: ' + (e.message || e));
+    showToast('Erro ao marcar pronto: ' + (e.message || e));
   }
 }
 
@@ -2845,12 +2949,12 @@ async function garcomMarcarServido(orderId, mesaNum) {
     if (ai !== -1) allMesaOrders[ai] = { ...allMesaOrders[ai], items: updatedItems };
     const mi = myOrders.findIndex(o => o.id === orderId);
     if (mi !== -1) myOrders[mi] = { ...myOrders[mi], items: updatedItems };
-    showToast('✅ Itens marcados como entregues');
+    showToast('Itens marcados como entregues');
     if (typeof mesaNum === 'number') openMesaDetail(mesaNum);
     else if (typeof renderMyOrders === 'function') renderMyOrders();
   } catch(e) {
     console.error('[garcomMarcarServido]', e);
-    showToast('❌ Erro ao marcar servido: ' + (e.message || e));
+    showToast('Erro ao marcar servido: ' + (e.message || e));
   }
 }
 
@@ -2867,7 +2971,7 @@ async function garcomCancelarItem(orderId, itemId, mesaNum) {
 
   // Só pode cancelar itens que este garçom adicionou
   if (item.garcom_id && item.garcom_id !== currentGarcom?.id) {
-    showToast('❌ Só é possível remover itens que você adicionou');
+    showToast('Só é possível remover itens que você adicionou');
     return;
   }
 
@@ -2889,11 +2993,11 @@ async function garcomCancelarItem(orderId, itemId, mesaNum) {
     if (ai !== -1) allMesaOrders[ai] = { ...allMesaOrders[ai], items, total: novoTotal };
     const mi = myOrders.findIndex(o => o.id === orderId);
     if (mi !== -1) myOrders[mi] = { ...myOrders[mi], items, total: novoTotal };
-    showToast('✅ Item removido');
+    showToast('Item removido');
     openMesaDetail(mesaNum);
   } catch(e) {
     console.error('[garcomCancelarItem]', e);
-    showToast('❌ Erro ao remover item: ' + (e.message || e));
+    showToast('Erro ao remover item: ' + (e.message || e));
   }
 }
 
@@ -2911,7 +3015,7 @@ async function cancelarOcupacaoMesa(num) {
     showToast(`Mesa ${num} liberada`);
   } catch(e) {
     console.error('[cancelarOcupacaoMesa]', e);
-    showToast('❌ Erro ao liberar mesa: ' + (e.message || e));
+    showToast('Erro ao liberar mesa: ' + (e.message || e));
   }
 }
 
@@ -3119,7 +3223,7 @@ function addItem(id) {
     if (!badge) { badge = document.createElement('div'); badge.className='item-tile-badge'; tile.prepend(badge); }
     badge.textContent = qty;
   }
-  showToast('🛒 ' + item.name + ' adicionado!');
+  showToast('' + item.name + ' adicionado!');
 }
 
 // ══ MODAL DE ITEM ════════════════════════════════════════
@@ -3269,7 +3373,7 @@ function grpToggle(el, grupoNome, optNome, preco, tipo, maxSel) {
       if (qtyEl) qtyEl.classList.remove('show');
     } else {
       const totalSel = state.reduce((s,o) => s + (o.qty||1), 0);
-      if (maxSel > 1 && totalSel >= maxSel) { showToast(`⚠️ Máximo ${maxSel} para ${grupoNome}`); return; }
+      if (maxSel > 1 && totalSel >= maxSel) { showToast(`Máximo ${maxSel} para ${grupoNome}`); return; }
       state.push({ nome: optNome, preco, qty: 1 });
       el.classList.add('on');
       const qtyEl = document.getElementById(`gqty_${_slug(grupoNome)}_${_slug(optNome)}`);
@@ -3429,11 +3533,11 @@ function imConfirmGarcom() {
   // Valida grupos obrigatórios
   for (const g of (i.custom_groups || [])) {
     if (g.required === true && g.tipo === 'radio') {
-      if (!(_imGruposState[g.nome]||[]).length) { showToast(`⚠️ Escolha: ${g.nome}`); return; }
+      if (!(_imGruposState[g.nome]||[]).length) { showToast(`Escolha: ${g.nome}`); return; }
     }
     if (g.required === true && g.tipo === 'checkbox') {
       const total = (_imGruposState[g.nome]||[]).reduce((s,o)=>s+(o.qty||1),0);
-      if (total < g.min) { showToast(`⚠️ ${g.nome}: mínimo ${g.min} opção(ões)`); return; }
+      if (total < g.min) { showToast(`${g.nome}: mínimo ${g.min} opção(ões)`); return; }
     }
   }
 
@@ -3485,7 +3589,7 @@ function imConfirmGarcom() {
     if (!badge) { badge = document.createElement('div'); badge.className='item-tile-badge'; tile.prepend(badge); }
     badge.textContent = qty;
   }
-  showToast('🛒 ' + cartName + ' adicionado!');
+  showToast('' + cartName + ' adicionado!');
 }
 
 function changeCartQty(id, delta) {
@@ -3770,7 +3874,7 @@ async function submitPedido() {
       closeSheet();
       cart = [];
     } else {
-      showToast('❌ Erro ao enviar pedido: ' + (e.message || e));
+      showToast('Erro ao enviar pedido: ' + (e.message || e));
     }
   } finally {
     _submitting = false;
@@ -3953,9 +4057,9 @@ async function npEnviarPedido() {
   const phone = (document.getElementById('np-phone')?.value || '').trim();
   const pag   = document.getElementById('np-pag')?.value || 'dinheiro';
   const obs   = (document.getElementById('np-obs')?.value || '').trim();
-  if (!nome)  { showToast('⚠️ Informe o nome do cliente'); return; }
-  if (!phone) { showToast('⚠️ Informe o WhatsApp'); return; }
-  if (!_npCart.length) { showToast('⚠️ Selecione ao menos um item'); return; }
+  if (!nome)  { showToast('Informe o nome do cliente'); return; }
+  if (!phone) { showToast('Informe o WhatsApp'); return; }
+  if (!_npCart.length) { showToast('Selecione ao menos um item'); return; }
 
   // ── Troco (só relevante se pagamento = dinheiro) ──
   // null     = pagará exato / não se aplica (não-dinheiro)
@@ -3967,7 +4071,7 @@ async function npEnviarPedido() {
       const v = parseFloat(document.getElementById('np-troco-valor')?.value || '0');
       const totComTaxa = _npCart.reduce((s, i) => s + i.price * i.qty, 0) + npGetTaxa();
       if (v > 0 && v < totComTaxa) {
-        showToast('⚠️ Valor para troco menor que o total do pedido');
+        showToast('Valor para troco menor que o total do pedido');
         return;
       }
       troco = (v > 0) ? v : -1;
@@ -3980,9 +4084,9 @@ async function npEnviarPedido() {
     const num    = (document.getElementById('np-num')?.value || '').trim();
     const bairro = (document.getElementById('np-bairro')?.value || '').trim();
     const compl  = (document.getElementById('np-compl')?.value || '').trim();
-    if (!rua) { showToast('⚠️ Informe a rua'); return; }
-    if (!num) { showToast('⚠️ Informe o número'); return; }
-    if (_garcomFeeConfig?.tipo === 'por_bairro' && !bairro) { showToast('⚠️ Selecione o bairro'); return; }
+    if (!rua) { showToast('Informe a rua'); return; }
+    if (!num) { showToast('Informe o número'); return; }
+    if (_garcomFeeConfig?.tipo === 'por_bairro' && !bairro) { showToast('Selecione o bairro'); return; }
     addr = [rua, num, bairro, compl].filter(Boolean).join(', ');
   } else {
     addr = 'Retirada no balcão';
@@ -4046,7 +4150,7 @@ async function npEnviarPedido() {
     // Impressão automática pedido avulso
     garcomPrint(data, data.items || []);
   } catch(e) {
-    showToast('❌ Erro ao enviar pedido');
+    showToast('Erro ao enviar pedido');
     console.error(e);
   } finally {
     _submitting = false;
@@ -4298,18 +4402,140 @@ function _garcomOrderBelongsToMesaSession(order, mesa) {
 function calcularTotalMesa(orders) {
   let total = 0;
   (orders || []).forEach(o => {
-    const items = _parseItems(o.items).filter(i => (i?.item_status || 'active') !== 'cancelado');
+    // Exclui cancelados E itens já pagos via cobrança parcial — o valor
+    // restante deve refletir só o que ainda falta cobrar dessa mesa.
+    const items = _parseItems(o.items).filter(i => (i?.item_status || 'active') !== 'cancelado' && !i.pago);
     // Sempre recalcula pelos itens NÃO cancelados.
     // o.total no banco pode estar desatualizado após cancelamento de item.
     if (items.length) {
       total += items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
     } else {
-      // Fallback: pedido sem itens parseáveis — usa o.total como estava antes
-      total += parseFloat(o.total || 0);
+      // Fallback: pedido sem itens parseáveis (ou 100% já pago/cancelado) — sem itens restantes, não soma o.total
+      const temAlgumItem = _parseItems(o.items).length > 0;
+      if (!temAlgumItem) total += parseFloat(o.total || 0);
     }
     total += parseFloat(o.taxa || 0);
   });
   return total;
+}
+
+// ══ COBRANÇA PARCIAL — cliente paga só alguns itens da mesa ═══════════════
+let _cobrancaParcialMesaNum = null;
+let _cobrancaParcialItens   = []; // [{orderId, itemIdx, name, qty, price, selecionado}]
+
+async function openCobrancaParcial(num) {
+  _cobrancaParcialMesaNum = num;
+  const mesa = tables.find(t => Number(t.num) === Number(num));
+
+  let orders = allMesaOrders
+    .filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num)
+    .filter(o => _garcomOrderBelongsToMesaSession(o, mesa));
+
+  if (!orders.length) {
+    try {
+      const { data } = await sb.from('orders').select('*').eq('mesa_num', num).eq('status', 'mesa_aberta').order('id', { ascending: false });
+      orders = (data || []).filter(o => _garcomOrderBelongsToMesaSession(o, mesa));
+    } catch(e) { console.warn('[openCobrancaParcial]', e.message); }
+  }
+
+  _cobrancaParcialItens = [];
+  orders.forEach(o => {
+    _parseItems(o.items).forEach((it, idx) => {
+      if ((it.item_status || 'active') === 'cancelado' || it.pago) return;
+      _cobrancaParcialItens.push({
+        orderId: o.id, itemIdx: idx, name: it.name, qty: parseInt(it.qty) || 1,
+        price: parseFloat(it.price) || 0, cliente: it.cliente_ref || '', selecionado: false
+      });
+    });
+  });
+
+  if (!_cobrancaParcialItens.length) {
+    showToast('Não há itens em aberto nessa mesa para cobrar');
+    return;
+  }
+
+  renderCobrancaParcialLista();
+  document.getElementById('sheet-cobranca-parcial').classList.add('on');
+}
+
+function renderCobrancaParcialLista() {
+  const lista = document.getElementById('cobranca-parcial-lista');
+  lista.innerHTML = _cobrancaParcialItens.map((it, i) => `
+    <label style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer">
+      <input type="checkbox" ${it.selecionado ? 'checked' : ''} onchange="toggleItemCobrancaParcial(${i})"
+        style="width:19px;height:19px;accent-color:var(--green);cursor:pointer;flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600">${it.qty}× ${_garcomHtmlEscape(it.name)}</div>
+        ${it.cliente ? `<div style="font-size:11px;color:var(--muted)">${_garcomHtmlEscape(it.cliente)}</div>` : ''}
+      </div>
+      <div style="font-size:13px;font-weight:700;color:var(--amber);flex-shrink:0">R$ ${(it.price * it.qty).toFixed(2).replace('.',',')}</div>
+    </label>
+  `).join('');
+  atualizarTotalCobrancaParcial();
+}
+
+function toggleItemCobrancaParcial(i) {
+  _cobrancaParcialItens[i].selecionado = !_cobrancaParcialItens[i].selecionado;
+  atualizarTotalCobrancaParcial();
+}
+
+function atualizarTotalCobrancaParcial() {
+  const total = _cobrancaParcialItens.filter(it => it.selecionado).reduce((s, it) => s + it.price * it.qty, 0);
+  document.getElementById('cobranca-parcial-total').textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+  const btn = document.getElementById('cobranca-parcial-btn');
+  if (btn) btn.style.opacity = total > 0 ? '1' : '.5';
+}
+
+function closeCobrancaParcial() {
+  document.getElementById('sheet-cobranca-parcial').classList.remove('on');
+  _cobrancaParcialItens = [];
+}
+
+async function confirmarCobrancaParcial() {
+  const selecionados = _cobrancaParcialItens.filter(it => it.selecionado);
+  if (!selecionados.length) { showToast('Selecione ao menos um item'); return; }
+
+  const formaPagamento = document.getElementById('cobranca-parcial-pay-select')?.value || 'PIX';
+  const totalPago = selecionados.reduce((s, it) => s + it.price * it.qty, 0);
+  const num = _cobrancaParcialMesaNum;
+  const agora = new Date().toISOString();
+
+  // Agrupa itens selecionados por pedido, pra fazer 1 update por pedido afetado
+  const porPedido = {};
+  selecionados.forEach(it => { (porPedido[it.orderId] = porPedido[it.orderId] || []).push(it.itemIdx); });
+
+  try {
+    for (const orderId of Object.keys(porPedido)) {
+      const order = allMesaOrders.find(o => o.id === Number(orderId));
+      if (!order) continue;
+      const items = _parseItems(order.items);
+      porPedido[orderId].forEach(idx => {
+        if (items[idx]) items[idx] = { ...items[idx], pago: true, pago_forma: formaPagamento, pago_em: agora };
+      });
+      const { error } = await sb.from('orders').update({ items, updated_at: agora }).eq('id', Number(orderId));
+      if (error) throw error;
+      const ai = allMesaOrders.findIndex(o => o.id === Number(orderId));
+      if (ai !== -1) allMesaOrders[ai] = { ...allMesaOrders[ai], items };
+    }
+
+    // Registra o recebimento no histórico da mesa (pagamentos_json)
+    const mesa = tables.find(t => Number(t.num) === Number(num));
+    const pagamentos = _mesaClientesParse(mesa?.pagamentos_json);
+    pagamentos.push({
+      data: agora, valor: totalPago, forma: formaPagamento, garcom: currentGarcom?.nome || '',
+      itens: selecionados.map(it => `${it.qty}x ${it.name}`)
+    });
+    await sb.from('mesas').update({ pagamentos_json: pagamentos }).eq('num', num).eq('tenant_id', _garcomTenantId);
+    if (mesa) mesa.pagamentos_json = pagamentos;
+
+    showToast(`Recebido R$ ${totalPago.toFixed(2).replace('.',',')}`);
+    closeCobrancaParcial();
+    if (_detailMesaNum === num) openMesaDetail(num);
+    else renderMesas();
+  } catch(e) {
+    console.error('[confirmarCobrancaParcial]', e);
+    showToast('Erro ao registrar recebimento: ' + (e.message || e));
+  }
 }
 
 // ══ REFRESH CIRÚRGICO DE MESA ══════════════════════════════════════════════
@@ -4413,14 +4639,14 @@ async function imprimirContaMesa(num) {
   }
 
   const subtotal = calcularTotalMesa(orders);
-  if (!subtotal) { showToast('⚠️ Nenhum item na mesa'); return; }
+  if (!subtotal) { showToast('Nenhum item na mesa'); return; }
 
   // Verifica se há itens válidos (não cancelados)
   const _itemCheck = {};
   orders.forEach(o => o.items.forEach(i => {
     if (i.item_status !== 'cancelado') _itemCheck[i.name] = true;
   }));
-  if (!Object.keys(_itemCheck).length) { showToast('⚠️ Sem itens para imprimir'); return; }
+  if (!Object.keys(_itemCheck).length) { showToast('Sem itens para imprimir'); return; }
 
 
 
@@ -4474,7 +4700,7 @@ async function confirmarImprimirConta() {
   const orders = [...(_printContaOrders || [])];
   fecharModalConta();
 
-  if (!num || !orders.length) { showToast('⚠️ Dados da conta não encontrados. Abra a conta novamente.'); return; }
+  if (!num || !orders.length) { showToast('Dados da conta não encontrados. Abra a conta novamente.'); return; }
   // Taxa já é item da comanda — total = soma dos itens diretamente
   const total = calcularTotalMesa(orders);
 
@@ -4497,7 +4723,7 @@ async function confirmarImprimirConta() {
     });
   });
   const itens = Object.values(itemMap);
-  if (!itens.length) { showToast('⚠️ Sem itens para imprimir'); return; }
+  if (!itens.length) { showToast('Sem itens para imprimir'); return; }
   const itensPorClienteHtml = _garcomPrintClientesHtml(orders);
 
   const renderItem = i =>
@@ -4531,11 +4757,11 @@ async function confirmarImprimirConta() {
   // 1️⃣ Electron — imprime direto na impressora do caixa (automático, sem popup)
   if (window.ElectronPrint?.printHtml) {
     const r = await window.ElectronPrint.printHtml(html, { printer: printer || '', paperWidth: pw }).catch(()=>({}));
-    if (r?.ok) { showToast('🖨️ Conta impressa!'); return; }
+    if (r?.ok) { showToast('Conta impressa!'); return; }
   }
   if (window.ElectronPrint?.printOrder) {
     const r = await window.ElectronPrint.printOrder({ _html: html, _printer: printer }).catch(()=>({}));
-    if (r?.ok) { showToast('🖨️ Conta impressa!'); return; }
+    if (r?.ok) { showToast('Conta impressa!'); return; }
   }
 
   // 2️⃣ Print Agent — envia direto sem verificar status
@@ -4547,12 +4773,12 @@ async function confirmarImprimirConta() {
       body: JSON.stringify({ html, format: fmt, printer: printer || undefined, tipo: 'caixa' })
     });
     if (res.ok) {
-      showToast('🖨️ Conta enviada para impressão!');
+      showToast('Conta enviada para impressão!');
       return;
     }
   } catch(e) { console.warn('[PRINT CONTA]', e.message); }
 
-  showToast('⚠️ Não foi possível enviar para impressão.');
+  showToast('Não foi possível enviar para impressão.');
 }
 
 async function abrirFinalizarMesa(num) {
@@ -4667,7 +4893,7 @@ async function confirmarFinalizarMesa() {
   const taxaIncluida = _garcomTaxaServicoPct > 0 && taxaCheck?.checked;
   const taxaVal = taxaIncluida ? Math.round(subtotal * _garcomTaxaServicoPct) / 100 : 0;
   const total = subtotal + taxaVal;
-  if (!_garcomTenantId) { showToast('⚠️ Loja não identificada. Recarregue o garçom.'); return; }
+  if (!_garcomTenantId) { showToast('Loja não identificada. Recarregue o garçom.'); return; }
   try {
     // Se taxa foi selecionada, adiciona como item na comanda da mesa
     if (taxaIncluida && taxaVal > 0) {
@@ -4718,7 +4944,7 @@ async function confirmarFinalizarMesa() {
     finalizarPay = document.getElementById('finalizar-pay-select')?.value || finalizarPay || '';
     const _receberAgora = !!document.getElementById('finalizar-receber-check')?.checked;
     if (_receberAgora && !finalizarPay) {
-      showToast('⚠️ Escolha a forma de pagamento para receber agora.');
+      showToast('Escolha a forma de pagamento para receber agora.');
       return;
     }
 
@@ -4763,7 +4989,7 @@ async function confirmarFinalizarMesa() {
       allMesaOrders = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) !== finalizarMesaNum);
       myOrders = myOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) !== finalizarMesaNum);
       closeFinalizarMesa();
-      showToast('✅ Mesa ' + finalizarMesaNum + ' recebida e liberada!');
+      showToast('Mesa ' + finalizarMesaNum + ' recebida e liberada!');
     } else {
       await sb.from('mesas').update({
         status: 'waiting',
@@ -4773,7 +4999,7 @@ async function confirmarFinalizarMesa() {
         updated_at: new Date().toISOString()
       }).eq('num', finalizarMesaNum).eq('tenant_id', _garcomTenantId);
       closeFinalizarMesa();
-      showToast('✅ Mesa ' + finalizarMesaNum + ' enviada para pagamento!');
+      showToast('Mesa ' + finalizarMesaNum + ' enviada para pagamento!');
     }
     const { data: mesas } = await sb.from('mesas').select('*').order('num');
     if (mesas) { tables = mesas; renderMesas(); }
@@ -4810,7 +5036,7 @@ async function confirmarFinalizarMesa() {
     }
   } catch(e) {
     console.error('[confirmarFinalizarMesa]', e);
-    showToast('❌ Erro ao finalizar mesa: ' + (e.message || e));
+    showToast('Erro ao finalizar mesa: ' + (e.message || e));
   }
 }
 
@@ -4846,13 +5072,13 @@ async function confirmarImprimirComanda() {
     const printerCaixa = cfg.printer_caixa || cfg.printer || '';
     const printerLocal = _selPrinter || printerCaixa || localStorage.getItem('printPrinter') || '';
     const now      = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-    if (!mesaNum || !orders.length) { showToast('⚠️ Dados da conta não encontrados. Abra a conta novamente.'); return; }
+    if (!mesaNum || !orders.length) { showToast('Dados da conta não encontrados. Abra a conta novamente.'); return; }
 
     // Consolida itens de todos os pedidos — exclui cancelados, agrupa por nome
     const todosItens = orders.flatMap(o => _parseItems(o.items))
       .filter(i => i.item_status !== 'cancelado');
 
-    if (!todosItens.length) { showToast('⚠️ Sem itens para imprimir'); return; }
+    if (!todosItens.length) { showToast('Sem itens para imprimir'); return; }
 
     // Agrupa itens iguais numa linha só (sem duplicar)
     const itemMap = {};
@@ -4896,7 +5122,7 @@ async function confirmarImprimirComanda() {
 
     const tid = _garcomTenantId;
     const pw  = parseInt(fmt) || 80;
-    if (!tid) { showToast('⚠️ Loja não identificada para impressão.'); return; }
+    if (!tid) { showToast('Loja não identificada para impressão.'); return; }
 
     // Envia primeiro para a fila do caixa/gestor, sempre amarrado ao tenant atual.
     try {
@@ -4905,23 +5131,23 @@ async function confirmarImprimirComanda() {
         headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
         body: JSON.stringify({ html, format: fmt, printer: printerCaixa || undefined, tipo: 'caixa' })
       });
-      if (res.ok) { showToast('🖨️ Conta enviada ao gestor para imprimir!'); return; }
+      if (res.ok) { showToast('Conta enviada ao gestor para imprimir!'); return; }
     } catch(e) { console.warn('[PRINT COMANDA] Gestor/agent falhou:', e.message); }
 
     // Fallback local, usado somente se o envio ao gestor falhar.
     if (window.ElectronPrint?.printHtml) {
       const r = await window.ElectronPrint.printHtml(html, { printer: printerLocal || '', paperWidth: pw, landscape: false, scaleFactor: 100 }).catch(()=>({}));
-      if (r?.ok) { showToast('🖨️ Pedido de conta impresso!'); return; }
+      if (r?.ok) { showToast('Pedido de conta impresso!'); return; }
     }
     if (window.ElectronPrint?.printOrder) {
       const r = await window.ElectronPrint.printOrder({ mesa_num: mesaNum, _html: html, _printer: printerLocal }).catch(()=>({}));
-      if (r?.ok) { showToast('🖨️ Pedido de conta impresso!'); return; }
+      if (r?.ok) { showToast('Pedido de conta impresso!'); return; }
     }
 
-    showToast('⚠️ Não foi possível enviar para impressão.');
+    showToast('Não foi possível enviar para impressão.');
   } catch(e) {
     console.warn('[PRINT COMANDA] Erro:', e.message);
-    showToast('❌ Erro ao imprimir comanda.');
+    showToast('Erro ao imprimir comanda.');
   }
 }
 
@@ -4996,7 +5222,7 @@ async function confirmarTransfer(toNum) {
       .eq('num', toNum);
     if (errTo) throw errTo;
 
-    showToast(`✅ Mesa ${fromNum} transferida para Mesa ${toNum}`);
+    showToast(`Mesa ${fromNum} transferida para Mesa ${toNum}`);
 
     // Recarrega dados
     const { data: mesas } = await sb.from('mesas').select('*').order('num');
@@ -5004,7 +5230,7 @@ async function confirmarTransfer(toNum) {
     await loadPedidosDaMesa();
   } catch(e) {
     console.error('[confirmarTransfer]', e);
-    showToast('❌ Erro ao transferir mesa: ' + (e.message || e));
+    showToast('Erro ao transferir mesa: ' + (e.message || e));
   }
 }
 
@@ -5071,9 +5297,9 @@ async function imprimirDivisao() {
       headers: {'Content-Type':'application/json','x-tenant-id':tid},
       body: JSON.stringify({ html, format: fmt, tipo: 'caixa' })
     });
-    if (res.ok) { showToast('🖨️ Divisão enviada para impressão!'); closeSplit(); return; }
+    if (res.ok) { showToast('Divisão enviada para impressão!'); closeSplit(); return; }
   } catch(e) {}
-  showToast('⚠️ Impressora não disponível');
+  showToast('Impressora não disponível');
 }
 
 // ══ PIZZA SELECTOR ═══════════════════════
@@ -5208,7 +5434,7 @@ function confirmPz() {
   cart.push(pizzaItem);
   closePz();
   updateCartUI();
-  showToast('🍕 Pizza adicionada!');
+  showToast('Pizza adicionada!');
 }
 
 // ══ TOAST ════════════════════════════════
@@ -5410,7 +5636,7 @@ async function _radioStartRecording() {
           });
           const sendData = await sendRes.json().catch(()=>({}));
           if (!sendRes.ok) throw new Error(sendData.error || 'Erro ao enviar');
-          showToast(`🎙️ Enviado para ${_radioDestinoNome}!`);
+          showToast(`Enviado para ${_radioDestinoNome}!`);
         } catch(err) { showToast(err.message || '❌ Erro ao enviar áudio'); console.error('[RADIO]', err); }
         _radioActive = false;
       };
@@ -5419,7 +5645,7 @@ async function _radioStartRecording() {
     _radioRec.start();
   } catch(err) {
     console.error('[RADIO] mic error:', err);
-    showToast('❌ Permita o microfone');
+    showToast('Permita o microfone');
     _radioActive = false;
     overlay.classList.remove('on');
   }
@@ -5452,7 +5678,7 @@ function _radioSubscribeGarcom() {
       if (!data.audio) return;
       const blob = _radioBase64ToBlob(data.audio, data.audio_mime || 'audio/webm');
       _radioPlayBlob(blob, data.garcom_nome);
-      showToast(`🎙️ ${data.garcom_nome}: áudio recebido`);
+      showToast(`${data.garcom_nome}: áudio recebido`);
 
       // Badge de notificação no FAB
       _radioGarcomUnread++;
@@ -5531,7 +5757,7 @@ async function _radioPlayHist(id) {
     const d = await res.json(); if (!d.audio) return;
     const blob = _radioBase64ToBlob(d.audio, d.audio_mime || 'audio/webm');
     _radioPlayBlob(blob, 'EstimaFone');
-  } catch { showToast('❌ Erro ao reproduzir'); }
+  } catch { showToast('Erro ao reproduzir'); }
 }
 </script>
 

@@ -1148,6 +1148,9 @@ const MIGRATIONS = [
   { version:69, description:'mime dos audios do EstimaFone', up:
     `ALTER TABLE radio_messages ADD COLUMN audio_mime TEXT DEFAULT 'audio/webm'`
   },
+  { version:70, description:'nome customizado da mesa (garcom pode renomear)', up:
+    `ALTER TABLE mesas ADD COLUMN nome TEXT`
+  },
 ]
 
 function runMigrations() {
@@ -1962,7 +1965,7 @@ const TABLE_COLS = {
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','fiscal_ncm','fiscal_cfop','fiscal_icms_origem','fiscal_icms_situacao','fiscal_cest','fiscal_unidade','fiscal_codigo_produto','fiscal_pis_situacao','fiscal_cofins_situacao','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
-  mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','taxa_servico','clientes_json','pagamentos_json','updated_at'],
+  mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','taxa_servico','clientes_json','pagamentos_json','nome','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
   orders:       ['id','tenant_id','client','phone','addr','items','total','taxa','pag','pag_momento','troco','time','status','mesa_num','session_ref','garcom_id','garcom_nome','customer_id','client_request_id','order_num','wa_track','created_at'],
   movimentos:   ['id','tenant_id','description','tipo','val','pag','time','created_at'],
