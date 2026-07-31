@@ -4605,6 +4605,7 @@ async function confirmarCobrancaParcial() {
   const totalPago = selecionados.reduce((s, it) => s + it.price * it.qty, 0);
   const num = _cobrancaParcialMesaNum;
   const agora = new Date().toISOString();
+  const time  = new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
 
   // Agrupa itens selecionados por pedido, pra fazer 1 update por pedido afetado
   const porPedido = {};
@@ -4624,8 +4625,55 @@ async function confirmarCobrancaParcial() {
       if (ai !== -1) allMesaOrders[ai] = { ...allMesaOrders[ai], items };
     }
 
-    // Registra o recebimento no histórico da mesa (pagamentos_json)
+    // Registra a entrada no caixa — o valor foi de fato recebido agora pelo garçom
+    try {
+      await sb.from('movimentos').insert({
+        tenant_id: _garcomTenantId,
+        description: `Mesa ${num} - Itens específicos recebidos pelo garcom${currentGarcom?.nome ? ' - ' + currentGarcom.nome : ''}`,
+        tipo: 'entrada', val: totalPago, pag: formaPagamento, time
+      });
+    } catch (movErr) {
+      console.warn('[confirmarCobrancaParcial] movimento nao registrado:', movErr?.message || movErr);
+    }
+
     const mesa = tables.find(t => Number(t.num) === Number(num));
+
+    // Depois de marcar os itens pagos, verifica se ainda falta cobrar algo
+    // dessa mesa (mesma sessão). Se não faltar nada, a mesa se libera sozinha.
+    const ordersAtuais = allMesaOrders
+      .filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === num)
+      .filter(o => _garcomOrderBelongsToMesaSession(o, mesa));
+    const restante = calcularTotalMesa(ordersAtuais);
+
+    if (restante <= 0.005) {
+      // Nada mais a cobrar — fecha os pedidos e libera a mesa automaticamente,
+      // sem precisar passar por "Finalizar Mesa".
+      await sb.from('orders')
+        .update({ status: 'entregue', updated_at: agora })
+        .eq('mesa_num', num)
+        .eq('tenant_id', _garcomTenantId)
+        .in('status', ['analise','producao','pronto','mesa_aberta']);
+      await sb.from('mesas').update({
+        status: 'free', total: null, taxa_servico: null, pag_forma: null,
+        guests: null, opened_at: null, clientes_json: [], pagamentos_json: [],
+        updated_at: agora
+      }).eq('num', num).eq('tenant_id', _garcomTenantId);
+
+      allMesaOrders = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) !== num);
+      myOrders = myOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) !== num);
+
+      closeCobrancaParcial();
+      if (_detailMesaNum === num) closeMesaDetail();
+      showToast(`Mesa ${num} totalmente paga — liberada!`);
+
+      const { data: mesas } = await sb.from('mesas').select('*').order('num');
+      if (mesas) tables = mesas;
+      renderMesas();
+      return;
+    }
+
+    // Ainda há itens em aberto na mesa — registra o pagamento no histórico
+    // e mantém a mesa ocupada normalmente.
     const pagamentos = _mesaClientesParse(mesa?.pagamentos_json);
     pagamentos.push({
       data: agora, valor: totalPago, forma: formaPagamento, garcom: currentGarcom?.nome || '',
