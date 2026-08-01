@@ -3126,11 +3126,11 @@ async function cancelarOcupacaoMesa(num) {
         .in('status', ['mesa_aberta','analise','producao','pronto','waiting']);
     }
     await sb.from('mesas').update({
-      status: 'free', opened_at: null, total: null,
+      status: 'free', opened_at: null, total: null, nome: null,
       guests: null, clientes_json: [], pagamentos_json: [], updated_at: new Date().toISOString()
     }).eq('num', num);
     const mesa = tables.find(t => t.num === num);
-    if (mesa) { mesa.status = 'free'; mesa.opened_at = null; mesa.total = null; mesa.clientes_json = []; mesa.pagamentos_json = []; }
+    if (mesa) { mesa.status = 'free'; mesa.opened_at = null; mesa.total = null; mesa.nome = null; mesa.clientes_json = []; mesa.pagamentos_json = []; }
     allMesaOrders = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) !== Number(num));
     myOrders = myOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) !== Number(num));
     closeMesaDetail();
@@ -5145,6 +5145,7 @@ async function confirmarFinalizarMesa() {
         pag_forma: null,
         guests: null,
         opened_at: null,
+        nome: null,
         clientes_json: [],
         pagamentos_json: [],
         updated_at: new Date().toISOString()
