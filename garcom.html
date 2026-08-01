@@ -2863,12 +2863,12 @@ async function openMesaDetail(num) {
   if (waiting) {
     foot.innerHTML = `<div class="mds-waiting-banner" style="margin-bottom:0">⏳ Aguardando confirmação de pagamento no caixa</div>`;
   } else {
-    const cancelarBtn = !orders.length
-      ? `<button onclick="cancelarOcupacaoMesa(${num})"
+    const temConsumo = orders.some(o => _parseItems(o.items).some(i => (i?.item_status||'active') !== 'cancelado'));
+    const cancelarBtn = `<button onclick="cancelarOcupacaoMesa(${num})"
           style="width:100%;padding:11px;border-radius:10px;border:1.5px solid var(--danger);background:rgba(251,113,133,.08);color:#a5b4fc;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:7px">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-          Cancelar ocupação da mesa
-        </button>` : '';
+          ${temConsumo ? 'Cancelar mesa' : 'Cancelar ocupação da mesa'}
+        </button>`;
     const mesaTotalParaSplit = orders.reduce((s,o)=>s+parseFloat(o.total||0),0);
     foot.innerHTML = `
       ${cancelarBtn}
@@ -3108,17 +3108,34 @@ async function garcomCancelarItem(orderId, itemId, mesaNum) {
 }
 
 async function cancelarOcupacaoMesa(num) {
-  if (!await garcomConfirm({ icon:'🪑', title:`Cancelar Mesa ${num}?`, msg:'A mesa voltará para o status livre.', okLabel:'Liberar mesa', okColor:'var(--muted)' })) return;
+  const temPedidos = allMesaOrders.some(o =>
+    Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) === Number(num) &&
+    ['mesa_aberta','analise','producao','pronto','waiting'].includes(o.status)
+  );
+  const msg = temPedidos
+    ? 'Todos os pedidos lançados nesta mesa serão CANCELADOS e a mesa voltará para o status livre. Esta ação não pode ser desfeita.'
+    : 'A mesa voltará para o status livre.';
+  if (!await garcomConfirm({ icon:'🪑', title:`Cancelar Mesa ${num}?`, msg, okLabel: temPedidos ? 'Sim, cancelar mesa' : 'Liberar mesa', okColor: temPedidos ? 'var(--red)' : 'var(--muted)' })) return;
   try {
+    // Cancela todos os pedidos ativos da mesa (se houver), para não deixar
+    // comanda "órfã" nem valor pendente de cobrança depois de liberada.
+    if (temPedidos) {
+      await sb.from('orders')
+        .update({ status: 'cancelado', updated_at: new Date().toISOString() })
+        .eq('mesa_num', num)
+        .in('status', ['mesa_aberta','analise','producao','pronto','waiting']);
+    }
     await sb.from('mesas').update({
       status: 'free', opened_at: null, total: null,
       guests: null, clientes_json: [], pagamentos_json: [], updated_at: new Date().toISOString()
     }).eq('num', num);
     const mesa = tables.find(t => t.num === num);
     if (mesa) { mesa.status = 'free'; mesa.opened_at = null; mesa.total = null; mesa.clientes_json = []; mesa.pagamentos_json = []; }
+    allMesaOrders = allMesaOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) !== Number(num));
+    myOrders = myOrders.filter(o => Number(o.mesa_num || parseInt((o.addr||'').replace('Mesa ','')||'0')) !== Number(num));
     closeMesaDetail();
     renderMesas();
-    showToast(`Mesa ${num} liberada`);
+    showToast(`Mesa ${num} cancelada e liberada`);
   } catch(e) {
     console.error('[cancelarOcupacaoMesa]', e);
     showToast('Erro ao liberar mesa: ' + (e.message || e));
@@ -3905,7 +3922,10 @@ async function submitPedido() {
     });
     newItems = [
       ..._expandirQty(foodItems, 'f', { item_status: 'producao' }),
-      ..._expandirQty(drinkItems, 'd', { item_status: 'entregue', drink: true })
+      // Bebida pronta não precisa ir para a cozinha, mas ainda assim precisa
+      // ser confirmada como servida pelo garçom — por isso entra como 'pronto'
+      // (aparece em "Pronto p/ servir") em vez de já nascer 'entregue'.
+      ..._expandirQty(drinkItems, 'd', { item_status: 'pronto', drink: true })
     ];
 
     // Busca comanda ativa desta mesa (mesa_aberta)

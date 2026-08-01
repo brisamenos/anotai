@@ -653,7 +653,7 @@ async function renderRelatorios() {
   ['rel-line-chart','rel-hour-bar','rel-day-bar','rel-gauges','rel-platforms','rel-tipo-venda',
    'rel-areas','rel-heatmap','rel-month-bar','rel-produtos-list','rel-produtos-fat',
    'rel-cats-bar','rel-top-clients','rel-top-gastos','rel-novos-clientes',
-   'rel-entradas-list','rel-fat-pag','rel-sat-list','rel-sat-resumo'].forEach(loading);
+   'rel-entradas-list','rel-fat-pag','rel-sat-list','rel-sat-resumo','rel-mesas-list'].forEach(loading);
 
   const now      = new Date();
   const range    = _relGetRange();
@@ -695,6 +695,80 @@ async function renderRelatorios() {
     const mesPedidos = periodOrdersRaw || [];
     const mesValidos = mesPedidos.filter(o => ['pronto','entregue','finalizado'].includes(o.status));
     const allYear    = anoOrdersRaw || [];
+
+    // ─── Relatório de Mesas — horário de abertura (Brasília) e consumo ────
+    // Usa o mesmo período/filtro já buscado acima (mesPedidos), sem query extra.
+    (function renderRelMesas() {
+      const rmEl = document.getElementById('rel-mesas-list');
+      if (!rmEl) return;
+
+      const fmtDataHoraBR = ts => {
+        if (!ts) return '—';
+        try {
+          let s = String(ts).trim();
+          if (s.includes(' ') && !s.includes('T')) s = s.replace(' ', 'T');
+          if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s += 'Z';
+          const d = new Date(s);
+          if (isNaN(d.getTime())) return String(ts);
+          return d.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo' });
+        } catch(e) { return String(ts); }
+      };
+
+      const statusLbl = { mesa_aberta:'🟢 Em aberto', pronto:'🟢 Em aberto', entregue:'⚪ Fechada/paga', finalizado:'⚪ Fechada/paga' };
+      const statusCor = { mesa_aberta:'var(--success)', pronto:'var(--success)', entregue:'var(--muted)', finalizado:'var(--muted)' };
+
+      // Apenas comandas de mesa (garçom) do período, excluindo canceladas
+      const mesaSessions = mesPedidos
+        .filter(o => (o.mesa_num || (o.addr||'').startsWith('Mesa')) && o.status !== 'cancelado')
+        .slice()
+        .sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0));
+
+      if (!mesaSessions.length) {
+        rmEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center">Nenhuma mesa no período selecionado</div>';
+        return;
+      }
+
+      rmEl.innerHTML = mesaSessions.map(o => {
+        const numMesa  = o.mesa_num || (o.addr||'').replace('Mesa ','').trim();
+        const mesaInfo = (typeof tables !== 'undefined' ? tables : []).find(t => String(t.num) === String(numMesa));
+        const nomeMesa = mesaInfo?.nome ? ` · ${_printHtmlEscape(mesaInfo.nome)}` : '';
+
+        // Itens realmente consumidos (exclui cancelados), agrupados por nome
+        const itens = _parseItemsAtivos(o.items);
+        const itemMap = {};
+        itens.forEach(i => {
+          const key = i.name || '';
+          if (!itemMap[key]) itemMap[key] = { qty: 0, price: parseFloat(i.price)||0 };
+          itemMap[key].qty += parseInt(i.qty) || 1;
+        });
+        const itensHtml = Object.entries(itemMap).map(([nome, v]) => `
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0">
+            <span>${v.qty}× ${_printHtmlEscape(nome)}</span>
+            <span style="color:var(--muted)">R$ ${(v.price*v.qty).toFixed(2).replace('.',',')}</span>
+          </div>`).join('') || '<div style="font-size:11.5px;color:var(--muted)">Sem itens</div>';
+
+        const total = parseFloat(o.total||0) + parseFloat(o.taxa||0);
+        // Horário de abertura real da sessão: session_ref (quando existe) é mais preciso
+        // que created_at, pois created_at pode ser de um novo INSERT dentro da mesma sessão.
+        const abertura = fmtDataHoraBR(o.session_ref || o.created_at);
+
+        return `<div class="card" style="padding:16px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+            <div>
+              <div style="font-weight:700;font-size:13.5px">Mesa ${_printHtmlEscape(String(numMesa))}${nomeMesa}</div>
+              <div style="font-size:11.5px;color:var(--muted);margin-top:2px">
+                Aberta em ${abertura} (horário de Brasília)${o.garcom_nome ? ' · Garçom: ' + _printHtmlEscape(o.garcom_nome) : ''}
+              </div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:11px;font-weight:700;color:${statusCor[o.status]||'var(--muted)'}">${statusLbl[o.status]||o.status}</div>
+              <div style="font-size:15px;font-weight:800;color:var(--success);margin-top:2px">R$ ${total.toFixed(2).replace('.',',')}</div>
+            </div>
+          </div>
+          <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">${itensHtml}</div>
+        </div>`;
+      }).join('');
+    })();
 
     // ─── KPIs ───────────────────────────────────────────
     const fatMes    = mesValidos.reduce((s,o) => s + parseFloat(o.total||0) + parseFloat(o.taxa||0), 0);
