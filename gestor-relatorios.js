@@ -683,7 +683,7 @@ async function renderRelatorios() {
       { data: ratings },
       { data: allCustomers }
     ] = await Promise.all([
-      sb.from('orders').select('id,status,total,taxa,items,mesa_num,addr,pag,phone,customer_id,created_at')
+      sb.from('orders').select('id,status,total,taxa,items,mesa_num,addr,pag,phone,customer_id,created_at,garcom_nome,session_ref')
         .gte('created_at', iniISO).lt('created_at', fimISO).order('created_at', { ascending: true }),
       sb.from('orders').select('id,status,total,created_at')
         .gte('created_at', anoIn).order('created_at', { ascending: true }),
@@ -765,7 +765,10 @@ async function renderRelatorios() {
               <div style="font-size:15px;font-weight:800;color:var(--success);margin-top:2px">R$ ${total.toFixed(2).replace('.',',')}</div>
             </div>
           </div>
-          <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">${itensHtml}</div>
+          <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+            <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Itens pedidos nesta abertura</div>
+            ${itensHtml}
+          </div>
         </div>`;
       }).join('');
     })();
