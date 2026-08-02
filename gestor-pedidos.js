@@ -121,15 +121,16 @@ function _buildMesaKanbanOrders() {
     if (!mesa || mesa.status !== 'busy') return;
     if (!_kanbanOrderDentroSessaoMesa(o, mesa)) return;
     const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? (() => { try { return JSON.parse(o.items); } catch { return []; } })() : []);
-    const prodItems  = items.filter(i => i.item_status === 'producao');
-    const prontoItems= items.filter(i => i.item_status === 'pronto');
+    const itemsComIdx = items.map((i, idx) => ({ ...i, _origIndex: idx }));
+    const prodItems  = itemsComIdx.filter(i => i.item_status === 'producao');
+    const prontoItems= itemsComIdx.filter(i => i.item_status === 'pronto');
     if (prodItems.length) {
       result.push({ ...o, status: 'producao', _isMesa: true,
-        items: prodItems.map(i => ({ qty: i.qty, name: i.name })) });
+        items: prodItems.map(i => ({ qty: i.qty, name: i.name, _origIndex: i._origIndex })) });
     }
     if (prontoItems.length && !prodItems.length) {
       result.push({ ...o, status: 'pronto', _isMesa: true,
-        items: prontoItems.map(i => ({ qty: i.qty, name: i.name })) });
+        items: prontoItems.map(i => ({ qty: i.qty, name: i.name, _origIndex: i._origIndex })) });
     }
   });
   return result;
@@ -231,6 +232,16 @@ function renderKanban() {
       col.innerHTML = filtered.map(o => {
         const itemStr = o.items.map(i => i.qty + 'x ' + i.name).join(', ');
         const obsStr = o.items.filter(i => i.obs).map(i => '📝 ' + i.obs).join(' · ');
+
+        // ── Mesa em produção: lista de itens com botão de "pronto" individual ──
+        const itemsHtml = (o._isMesa && st === 'producao')
+          ? '<div class="oc-items-list">' + o.items.map(i =>
+              '<div class="oc-item-row-mini">' +
+                '<span class="oc-item-row-mini-txt">' + i.qty + 'x ' + i.name + '</span>' +
+                '<button class="oc-item-pronto-btn" onclick="event.stopPropagation();kanbanItemPronto(' + o.id + ',' + i._origIndex + ')">✅ Pronto</button>' +
+              '</div>'
+            ).join('') + '</div>'
+          : '<div class="oc-items">' + itemStr + '</div>';
         const total = 'R$ ' + (parseFloat(o.total || 0) + parseFloat(o.taxa || 0)).toFixed(2).replace('.', ',');
 
         // ── Tipo de entrega (via helper unificado) ───────
@@ -343,7 +354,7 @@ function renderKanban() {
           '<div class="oc-top"><span class="oc-id">#' + o.num + '</span>' + _tipoBadge + '<span class="oc-time">⏱ ' + o.time + '</span>' + _acougueBtn + '</div>' +
           _waNotif +
           '<div class="oc-client">' + o.client + (o.phone ? ' · ' + o.phone : '') + '</div>' +
-          '<div class="oc-items">' + itemStr + '</div>' +
+          itemsHtml +
           (obsStr ? '<div style="font-size:11px;color:#c4956a;font-weight:600;margin-top:3px;padding:3px 7px;background:rgba(196,149,106,.08);border-radius:5px;border:1px solid rgba(196,149,106,.12)">' + obsStr + '</div>' : '') +
           '<div class="oc-bot"><span class="oc-total">' + total + '</span>' +
           (o.addr && !isMesa ? '<span class="oc-addr">' + o.addr + '</span>' : '') +
@@ -3245,6 +3256,31 @@ async function kanbanMesaPronto(orderId) {
       throw error;
     }
   } catch(e) { sbToast('err', 'Erro ao marcar pronto: ' + (e?.message || e)); }
+}
+
+async function kanbanItemPronto(orderId, origIndex) {
+  const order = mesaOrdersCache.find(o => o.id === orderId);
+  if (!order) return;
+  const updatedItems = (order.items || []).map((i, idx) =>
+    idx === origIndex && i.item_status === 'producao' ? { ...i, item_status: 'pronto' } : i
+  );
+  const idx = mesaOrdersCache.findIndex(o => o.id === orderId);
+  if (idx !== -1) mesaOrdersCache[idx] = { ...mesaOrdersCache[idx], items: updatedItems };
+  renderKanban();
+  _renderMesaPageFromCache();
+  const itemNome = (order.items || [])[origIndex]?.name || 'Item';
+  sbToast('ok', 'Mesa ' + order.mesa_num + ' — ' + itemNome + ' pronto');
+  try {
+    const { error } = await sb.from('orders')
+      .update({ items: updatedItems, updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+    if (error) {
+      if (idx !== -1) mesaOrdersCache[idx] = { ...mesaOrdersCache[idx], items: order.items };
+      renderKanban();
+      _renderMesaPageFromCache();
+      throw error;
+    }
+  } catch(e) { sbToast('err', 'Erro ao marcar item pronto: ' + (e?.message || e)); }
 }
 
 async function kanbanMesaServido(orderId) {

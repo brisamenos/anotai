@@ -390,6 +390,11 @@ body{
 .oc-badge{display:none}
 .oc-client{font-size:12px;color:var(--muted2);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 .oc-items{font-size:11px;color:var(--muted);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.oc-items-list{margin-bottom:8px;display:flex;flex-direction:column;gap:4px}
+.oc-item-row-mini{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:11px;color:var(--muted)}
+.oc-item-row-mini-txt{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.oc-item-pronto-btn{flex-shrink:0;border:1px solid rgba(52,211,153,.25);background:rgba(52,211,153,.1);color:#6ee7b7;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .15s;white-space:nowrap}
+.oc-item-pronto-btn:hover{background:rgba(52,211,153,.22)}
 .oc-bot{display:flex;align-items:center;justify-content:space-between;gap:6px}
 .oc-total{font-weight:700;font-size:12.5px;color:var(--accent);white-space:nowrap}
 .oc-time{font-size:10px;color:var(--muted);white-space:nowrap}
@@ -1976,6 +1981,16 @@ body{
 
 .oc-btn-ok:hover,
 .oc-btn-pix-confirmar:hover{
+  background:#d7f0e2;
+}
+
+.oc-item-pronto-btn{
+  background:#e8f7ee;
+  color:#13723d;
+  border:1px solid #bde8cf;
+}
+
+.oc-item-pronto-btn:hover{
   background:#d7f0e2;
 }
 
