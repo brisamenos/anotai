@@ -2259,11 +2259,19 @@ Use no seu próximo pedido.</textarea>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:3px;align-items:center">
         <button class="rel-periodo-btn" id="rpb-diario"  onclick="setRelPeriodo('diario')"  style="padding:4px 12px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:none;color:var(--muted);transition:all .15s">Hoje</button>
+        <button class="rel-periodo-btn" id="rpb-ontem"   onclick="setRelPeriodo('ontem')"   style="padding:4px 12px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:none;color:var(--muted);transition:all .15s">Ontem</button>
         <button class="rel-periodo-btn" id="rpb-semanal" onclick="setRelPeriodo('semanal')" style="padding:4px 12px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:none;color:var(--muted);transition:all .15s">Semana</button>
         <button class="rel-periodo-btn" id="rpb-mensal"  onclick="setRelPeriodo('mensal')"  style="padding:4px 12px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:var(--accent);color:#fff;transition:all .15s">Mês</button>
         <button class="rel-periodo-btn" id="rpb-anual"   onclick="setRelPeriodo('anual')"   style="padding:4px 12px;border-radius:7px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:none;color:var(--muted);transition:all .15s">Ano</button>
         <div style="width:1px;height:16px;background:var(--border);margin:0 2px"></div>
+        <input type="date" id="rel-custom-day" onchange="if(this.value) setRelPeriodo('custom-day', this.value)" title="Escolher um dia específico" class="form-input" style="width:auto;padding:3px 8px;font-size:11px;font-family:'Outfit',sans-serif;cursor:pointer;border-radius:7px;background:transparent;border:1px dashed var(--border);color:var(--muted)">
         <input type="month" id="rel-custom-month" onchange="if(this.value) setRelPeriodo('custom-month', this.value)" title="Escolher mês específico" class="form-input" style="width:auto;padding:3px 8px;font-size:11px;font-family:'Outfit',sans-serif;cursor:pointer;border-radius:7px;background:transparent;border:1px dashed var(--border);color:var(--muted)">
+        <div style="width:1px;height:16px;background:var(--border);margin:0 2px"></div>
+        <div id="rel-custom-range-wrap" style="display:flex;align-items:center;gap:3px;padding:2px 7px;border-radius:7px;border:1px dashed var(--border)">
+          <input type="date" id="rel-custom-range-ini" onchange="_relApplyCustomRange()" title="De" class="form-input" style="width:auto;padding:1px 2px;font-size:11px;font-family:'Outfit',sans-serif;cursor:pointer;border:none;background:transparent;color:var(--muted)">
+          <span style="font-size:10px;color:var(--muted)">até</span>
+          <input type="date" id="rel-custom-range-fim" onchange="_relApplyCustomRange()" title="Até" class="form-input" style="width:auto;padding:1px 2px;font-size:11px;font-family:'Outfit',sans-serif;cursor:pointer;border:none;background:transparent;color:var(--muted)">
+        </div>
       </div>
       <span id="rel-periodo-label" style="font-size:12px;color:var(--muted)"></span>
       <button class="btn bg" onclick="relExportarCompleto()" style="font-size:12px">

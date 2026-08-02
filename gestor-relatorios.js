@@ -569,14 +569,30 @@ async function renderDesempenho() {
 // ─────────────────────────────────────────
 let _relPeriodo = 'mensal';
 let _relCustomMonth = '';
+let _relCustomDay = '';
+let _relCustomRangeIni = '';
+let _relCustomRangeFim = '';
+
+function _relApplyCustomRange() {
+  const ini = document.getElementById('rel-custom-range-ini')?.value;
+  const fim = document.getElementById('rel-custom-range-fim')?.value;
+  if (ini && fim) {
+    _relCustomRangeIni = ini;
+    _relCustomRangeFim = fim;
+    setRelPeriodo('custom-range');
+  }
+}
 
 function setRelPeriodo(p, val = '') {
   _relPeriodo = p;
   if (p === 'custom-month') {
     _relCustomMonth = val; // formato 'YYYY-MM'
   }
-  
-  ['diario','semanal','mensal','anual'].forEach(id => {
+  if (p === 'custom-day') {
+    _relCustomDay = val; // formato 'YYYY-MM-DD'
+  }
+
+  ['diario','ontem','semanal','mensal','anual'].forEach(id => {
     const btn = document.getElementById('rpb-' + id);
     if (!btn) return;
     const active = id === p;
@@ -596,6 +612,37 @@ function setRelPeriodo(p, val = '') {
       cmBtn.style.borderColor = 'var(--border)';
       cmBtn.style.background = 'transparent';
       cmBtn.value = ''; // limpa se clicar em outro
+    }
+  }
+
+  const cdBtn = document.getElementById('rel-custom-day');
+  if (cdBtn) {
+    if (p === 'custom-day') {
+      cdBtn.style.color = 'var(--text)';
+      cdBtn.style.borderColor = 'var(--accent)';
+      cdBtn.style.background = 'rgba(59,130,246,.1)';
+    } else {
+      cdBtn.style.color = 'var(--muted)';
+      cdBtn.style.borderColor = 'var(--border)';
+      cdBtn.style.background = 'transparent';
+      cdBtn.value = ''; // limpa se clicar em outro
+    }
+  }
+
+  const crWrap = document.getElementById('rel-custom-range-wrap');
+  const crIni  = document.getElementById('rel-custom-range-ini');
+  const crFim  = document.getElementById('rel-custom-range-fim');
+  if (crWrap) {
+    if (p === 'custom-range') {
+      crWrap.style.borderColor = 'var(--accent)';
+      crWrap.style.background = 'rgba(59,130,246,.1)';
+    } else {
+      crWrap.style.borderColor = 'var(--border)';
+      crWrap.style.background = 'transparent';
+      if (crIni) crIni.value = '';
+      if (crFim) crFim.value = '';
+      _relCustomRangeIni = '';
+      _relCustomRangeFim = '';
     }
   }
 
@@ -621,6 +668,25 @@ function _relGetRange() {
     inicio = brToUTC(anoB, mesB, diaB);
     fim    = brToUTC(anoB, mesB, diaB + 1);
     label  = 'Hoje, ' + new Date(inicio.getTime() + BR_OFFSET).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', timeZone:'UTC' });
+  } else if (_relPeriodo === 'ontem') {
+    inicio = brToUTC(anoB, mesB, diaB - 1);
+    fim    = brToUTC(anoB, mesB, diaB);
+    label  = 'Ontem, ' + new Date(inicio.getTime() + BR_OFFSET).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', timeZone:'UTC' });
+  } else if (_relPeriodo === 'custom-day' && _relCustomDay) {
+    const [yD, mD, dD] = _relCustomDay.split('-').map(Number);
+    inicio = brToUTC(yD, mD - 1, dD);
+    fim    = brToUTC(yD, mD - 1, dD + 1);
+    label  = new Date(inicio.getTime() + BR_OFFSET).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', year:'numeric', timeZone:'UTC' });
+  } else if (_relPeriodo === 'custom-range' && _relCustomRangeIni && _relCustomRangeFim) {
+    let iniStr = _relCustomRangeIni, fimStr = _relCustomRangeFim;
+    if (iniStr > fimStr) { const tmp = iniStr; iniStr = fimStr; fimStr = tmp; } // corrige se vier invertido
+    const [yI, mI, dI] = iniStr.split('-').map(Number);
+    const [yF, mF, dF] = fimStr.split('-').map(Number);
+    inicio = brToUTC(yI, mI - 1, dI);
+    fim    = brToUTC(yF, mF - 1, dF + 1);
+    const iniLbl = new Date(inicio.getTime() + BR_OFFSET).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', timeZone:'UTC' });
+    const fimLbl = new Date(fim.getTime() + BR_OFFSET - 1).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', timeZone:'UTC' });
+    label  = iniLbl + ' – ' + fimLbl;
   } else if (_relPeriodo === 'semanal') {
     inicio = brToUTC(anoB, mesB, diaB - diaSemB);
     fim    = brToUTC(anoB, mesB, diaB - diaSemB + 7);
@@ -662,12 +728,12 @@ async function renderRelatorios() {
   const anoIn    = _toSQLite(new Date(now.getFullYear(), 0, 1));
   const lbl30ago = _toSQLite(new Date(now - 30*86400000));
 
-  const periLabel = { diario:'hoje', semanal:'na semana', mensal:'no mês', anual:'no ano' }[_relPeriodo] || 'no período';
+  const periLabel = { diario:'hoje', ontem:'ontem', semanal:'na semana', mensal:'no mês', anual:'no ano', 'custom-day':'no dia selecionado' }[_relPeriodo] || 'no período';
   const lblEl = document.getElementById('rel-periodo-label');
   if (lblEl) lblEl.textContent = range.label;
 
   // Atualiza botões de período
-  ['diario','semanal','mensal','anual'].forEach(id => {
+  ['diario','ontem','semanal','mensal','anual'].forEach(id => {
     const btn = document.getElementById('rpb-'+id);
     if (!btn) return;
     const on = id === _relPeriodo;
