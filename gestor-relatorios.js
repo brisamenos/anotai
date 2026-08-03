@@ -846,7 +846,7 @@ async function renderRelatorios() {
     const cancelMes = mesPedidos.filter(o => o.status === 'cancelado').length;
     const pctCancel = qtdMes > 0 ? (cancelMes/qtdMes*100).toFixed(1) : '0';
 
-    elv('rel-kpi-fat',        moneyK(fatMes));
+    elv('rel-kpi-fat',        money(fatMes));
     elv('rel-kpi-fat-sub',    mesValidos.length + ' pedidos confirmados ' + periLabel);
     elv('rel-kpi-ped',        qtdMes);
     elv('rel-kpi-ped-sub',    mesValidos.length + ' confirmados · ' + cancelMes + ' cancelados');
