@@ -1209,8 +1209,8 @@ async function renderRelatorios() {
         itemMap[k].fat+=parseFloat(i.price||0)*(i.qty||1);
       });
     });
-    const sortedQty = Object.entries(itemMap).sort((a,b)=>b[1].qty-a[1].qty).slice(0,12);
-    const sortedFat = Object.entries(itemMap).sort((a,b)=>b[1].fat-a[1].fat).slice(0,12);
+    const sortedQty = Object.entries(itemMap).sort((a,b)=>b[1].qty-a[1].qty);
+    const sortedFat = Object.entries(itemMap).sort((a,b)=>b[1].fat-a[1].fat);
     const totalQty  = sortedQty.reduce((s,[,v])=>s+v.qty,0)||1;
     const totalFat  = sortedFat.reduce((s,[,v])=>s+v.fat,0)||1;
 
