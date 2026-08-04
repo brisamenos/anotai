@@ -3957,7 +3957,7 @@ async function handleIAWebhook(req, res) {
   try {
     const msg    = body?.data?.message?.conversation||body?.data?.message?.extendedTextMessage?.text||''
     const data   = body?.data || {}
-    const from   = [data?.key?.remoteJid, data?.key?.participant, data?.participant, data?.sender].find(j => phoneUtils.cleanWhatsappJid(j)) || data?.key?.remoteJid || ''
+    const from   = [data?.key?.remoteJid, data?.key?.remoteJidAlt, data?.key?.participant, data?.key?.participantAlt, data?.participant, data?.sender].find(j => phoneUtils.cleanWhatsappJid(j)) || data?.key?.remoteJid || ''
     const fromMe = body?.data?.key?.fromMe||false
     const msgId  = body?.data?.key?.id || null  // usado pra marcar como lida (visto azul)
     // Se mensagem foi enviada pelo próprio gestor via WhatsApp, registra pausa da IA
