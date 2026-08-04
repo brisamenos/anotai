@@ -382,7 +382,7 @@ body[data-segmento="acougue"] .dest-card:active {
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth;-webkit-tap-highlight-color:transparent}
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;padding-bottom:calc(64px + env(safe-area-inset-bottom,0px))}
 img{display:block;max-width:100%}
 button{font-family:inherit;cursor:pointer}
 input,textarea{font-family:inherit}
@@ -400,77 +400,64 @@ input,textarea{font-family:inherit}
 @keyframes dotPulse{0%,80%,100%{opacity:.2}40%{opacity:1}}
 
 /* ═══════════════════════════════════════
-   HERO — compact iFood-style header
+   HERO — banner + cartão flutuante (estilo Goomer)
 ═══════════════════════════════════════ */
 .hero{
-  background:var(--s1);border-bottom:1px solid var(--border);
-  padding:0;position:relative;overflow:hidden;
+  background:var(--bg);
+  padding:0;position:relative;overflow:visible;
 }
 .hero-banner{
-  width:100%;height:140px;overflow:hidden;display:none;
+  width:100%;height:190px;overflow:hidden;display:none;
   background:linear-gradient(135deg,#e8eaf0,#d1d5de);
 }
-.hero-banner{ display:none }
 .hero-banner.show{ display:block }
 .hero-banner img{ width:100%;height:100%;object-fit:cover;display:block }
 
-/* ══ HERO PREMIUM ══════════════════════════════════ */
-.hero{
-  background:linear-gradient(160deg, rgba(var(--accent-rgb,249,115,22),.12) 0%, rgba(var(--accent-rgb,249,115,22),.04) 50%, var(--bg) 100%);
-  position:relative;
-  overflow:hidden;
-}
-/* Oval arredondado no fundo do hero */
-.hero::after{
-  content:'';
-  position:absolute;
-  bottom:-40px;left:50%;
-  transform:translateX(-50%);
-  width:130%;height:80px;
-  background:var(--bg);
-  border-radius:50% 50% 0 0 / 100% 100% 0 0;
-  z-index:1;
-}
-.hero > *{ position:relative;z-index:2 }
-
-/* Faixa superior colorida com gradiente do tema */
-.hero-logo{
-  width:84px;height:84px;border-radius:20px;flex-shrink:0;overflow:hidden;
-  background:var(--s2);border:3px solid var(--border);
-  display:flex;align-items:center;justify-content:center;font-size:38px;
-  box-shadow:0 4px 16px rgba(0,0,0,.12);
-  cursor:pointer;margin-bottom:12px;
-}
-.hero-logo img,.hero-logo-img{ width:100%;height:100%;object-fit:cover;border-radius:18px;display:block }
-
-/* Área de conteúdo — padding-top acomoda metade da logo que desce */
+/* Cartão flutuante sobre a foto */
 .hero-inner{
-  display:flex;flex-direction:column;align-items:center;
-  padding:20px 20px 14px;text-align:center;gap:0;
+  position:relative;z-index:3;
+  background:var(--s1);border:1px solid var(--border);
+  border-radius:20px;
+  margin:-32px 14px 0;
+  padding:14px 16px 16px;
+  box-shadow:0 12px 32px rgba(0,0,0,.16);
 }
-.hero-info{ width:100% }
+.hero-banner:not(.show) + .hero-inner{ margin-top:16px;box-shadow:none }
+
+.hero-card-top{ display:flex;align-items:center;gap:12px }
+
+.hero-logo{
+  width:56px;height:56px;border-radius:14px;flex-shrink:0;overflow:hidden;
+  background:var(--s2);border:2px solid var(--border);
+  display:flex;align-items:center;justify-content:center;font-size:26px;
+  box-shadow:0 4px 12px rgba(0,0,0,.12);
+  cursor:pointer;
+}
+.hero-logo img,.hero-logo-img{ width:100%;height:100%;object-fit:cover;border-radius:12px;display:block }
+
+.hero-info{ flex:1;min-width:0;text-align:left }
 .hero-name{
-  font-family:'Fraunces',serif;font-size:22px;font-weight:900;
-  color:var(--text);letter-spacing:-.4px;line-height:1.2;
-  overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  font-family:'Fraunces',serif;font-size:18px;font-weight:900;
+  color:var(--text);letter-spacing:-.3px;line-height:1.2;
+  overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;
 }
 .hero-desc{
-  font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:5px;
-  overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  font-size:11.5px;color:var(--muted);line-height:1.4;margin-top:3px;
+  overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;
 }
 
 /* Endereço inline no hero */
 .hero-address-inline{
-  display:none;align-items:center;justify-content:center;gap:5px;
-  font-size:11.5px;color:var(--muted2);margin-top:6px;
+  display:none;align-items:center;justify-content:flex-start;gap:5px;
+  font-size:11px;color:var(--muted2);margin-top:8px;
 }
 .hero-address-inline.show{ display:flex }
 .hero-address-inline svg{ flex-shrink:0;opacity:.6 }
 
 /* meta row: status · tempo · avaliação */
 .hero-meta{
-  display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:0;
-  padding:6px 16px 0;font-size:12px;color:var(--muted);
+  display:flex;align-items:center;justify-content:flex-start;flex-wrap:wrap;gap:0;
+  padding:8px 0 0;font-size:12px;color:var(--muted);
 }
 .hero-meta-item{ display:flex;align-items:center;gap:4px;white-space:nowrap }
 .hero-meta-sep{ margin:0 8px;color:var(--border2);font-size:14px }
@@ -481,21 +468,21 @@ input,textarea{font-family:inherit}
 .hero-meta-status.open{ color:var(--green) }
 .hero-meta-status.closed{ color:var(--red) }
 
-/* Botão CTA principal */
+/* CTA — pílula compacta, como o "Aberta" do Goomer */
 .hero-status-btn{
-  display:flex;align-items:center;justify-content:center;gap:8px;
-  margin:14px 0 2px;padding:14px 24px;border-radius:16px;
-  background:var(--accent);color:#fff;font-size:14px;font-weight:700;
-  border:none;cursor:pointer;width:100%;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  margin:12px 0 0;padding:8px 16px;border-radius:99px;
+  background:var(--accent);color:#fff;font-size:12.5px;font-weight:700;
+  border:none;cursor:pointer;width:auto;max-width:100%;
   font-family:inherit;transition:all .18s;
-  box-shadow:0 4px 20px rgba(var(--accent-rgb,249,115,22),.35);
-  letter-spacing:.2px;
+  box-shadow:0 4px 14px rgba(var(--accent-rgb,249,115,22),.32);
+  letter-spacing:.1px;
 }
 .hero-status-btn.closed-btn{
   background:var(--s2);color:var(--muted);box-shadow:none;
   border:1.5px solid var(--border);
 }
-.hero-status-btn:active{ opacity:.88;transform:scale(.985) }
+.hero-status-btn:active{ opacity:.88;transform:scale(.97) }
 
 /* Banner abaixo das categorias */
 .store-banner-below{
@@ -564,6 +551,15 @@ input,textarea{font-family:inherit}
 .section-label{
   font-family:'Fraunces',serif;font-size:17px;font-weight:700;
   color:var(--text);margin-bottom:0;padding:18px 16px 8px;letter-spacing:-.3px;
+}
+.section-label-row{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+}
+.section-label-row .section-label{ padding-right:0 }
+.section-see-more{
+  display:flex;align-items:center;gap:2px;flex-shrink:0;margin:18px 16px 8px 0;
+  font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;
+  white-space:nowrap;
 }
 .section+.section{margin-top:8px}
 .item-grid{display:flex;flex-direction:column;gap:0}
@@ -980,8 +976,37 @@ input,textarea{font-family:inherit}
 /* ═══════════════════════════════════════
    CART FLOAT
 ═══════════════════════════════════════ */
+/* ═══════════════════════════════════════
+   BARRA DE NAVEGAÇÃO INFERIOR
+═══════════════════════════════════════ */
+.bottom-nav{
+  position:fixed;left:0;right:0;bottom:0;z-index:280;
+  display:flex;align-items:stretch;justify-content:space-around;
+  background:var(--s1);border-top:1px solid var(--border);
+  padding:7px 6px calc(7px + env(safe-area-inset-bottom,0px));
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  max-width:520px;margin:0 auto;
+}
+.bnav-item{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  background:none;border:none;color:var(--muted);font-size:10.5px;font-weight:700;
+  padding:6px 4px;border-radius:12px;transition:color .18s,background .18s;cursor:pointer;
+}
+.bnav-item:active{background:var(--s2)}
+.bnav-item.on{color:var(--accent)}
+.bnav-item .profile-fab-av{
+  width:20px;height:20px;border-radius:50%;
+  background:transparent;color:inherit;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:800;flex-shrink:0;
+}
+.bnav-item .profile-fab-av:not(.icon){background:var(--accent-g);color:#fff}
+
+/* ═══════════════════════════════════════
+   CART FLOAT
+═══════════════════════════════════════ */
 .cart-float{
-  position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:300;
+  position:fixed;bottom:calc(76px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);z-index:270;
   display:none;animation:floatIn .3s cubic-bezier(.34,1.56,.64,1);
 }
 .cart-float.show{display:block}
@@ -1205,7 +1230,7 @@ input,textarea{font-family:inherit}
 /* ═══════════════════════════════════════
    TOAST
 ═══════════════════════════════════════ */
-#toast-area{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);z-index:9000;display:flex;flex-direction:column;gap:6px;pointer-events:none;align-items:center;width:max-content;max-width:min(90vw,360px)}
+#toast-area{position:fixed;bottom:calc(150px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);z-index:9000;display:flex;flex-direction:column;gap:6px;pointer-events:none;align-items:center;width:max-content;max-width:min(90vw,360px)}
 .toast{
   background:rgba(18,18,24,.92);border:1px solid rgba(255,255,255,.09);border-radius:99px;
   padding:9px 18px 9px 14px;font-size:13px;font-weight:500;color:rgba(255,255,255,.92);
@@ -1315,31 +1340,6 @@ input,textarea{font-family:inherit}
 /* ═══════════════════════════════════════
    PROFILE HEADER (hero quando logado)
 ═══════════════════════════════════════ */
-.profile-fab{
-  position:absolute;top:12px;right:12px;z-index:8;
-  display:flex;flex-direction:row;align-items:center;gap:7px;
-  width:auto;max-width:150px;height:40px;
-  background:var(--s1);border:1px solid var(--border);
-  border-radius:999px;padding:5px 14px 5px 5px;font-size:12px;font-weight:700;
-  line-height:1.1;text-align:left;white-space:nowrap;
-  cursor:pointer;transition:all .18s;color:var(--text);
-  box-shadow:0 6px 18px rgba(15,17,23,.10);
-  backdrop-filter:blur(10px);
-  -webkit-backdrop-filter:blur(10px);
-}
-.profile-fab:hover{transform:translateY(-1px);box-shadow:0 10px 24px rgba(15,17,23,.15);border-color:rgba(var(--accent-rgb,249,115,22),.35)}
-.profile-fab:active{transform:translateY(0);box-shadow:0 4px 12px rgba(15,17,23,.10)}
-.profile-fab span:last-child{max-width:100px;overflow:hidden;text-overflow:ellipsis}
-.profile-fab-av{
-  width:30px;height:30px;border-radius:50%;
-  background:var(--accent-g);
-  display:flex;align-items:center;justify-content:center;
-  font-size:12.5px;font-weight:800;color:#fff;flex-shrink:0;
-}
-.profile-fab-av.icon{
-  background:rgba(var(--accent-rgb,249,115,22),.12);
-  color:var(--accent);
-}
 
 /* ═══════════════════════════════════════
    MINHA CONTA DRAWER
@@ -2464,27 +2464,27 @@ input,textarea{font-family:inherit}
 
 <!-- HERO -->
 <div class="hero" id="hero">
-  <button class="profile-fab" id="profile-fab" type="button" onclick="onProfileFabClick()" aria-label="Cadastro ou login">
-    <span class="profile-fab-av icon" id="profile-fab-av">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12.5c2.76 0 5-2.35 5-5.25S14.76 2 12 2 7 4.35 7 7.25s2.24 5.25 5 5.25Zm0 2.25c-3.6 0-8 1.83-8 5.1V22h16v-2.15c0-3.27-4.4-5.1-8-5.1Z"/></svg>
-    </span>
-    <span id="profile-fab-name">Entrar</span>
-  </button>
+  <!-- legado -->
+  <div id="status-badge" style="display:none"><div class="dot" id="status-dot-legacy"></div></div>
+  <div class="hero-banner" id="hero-banner"></div>
 
-  <!-- Conteúdo centralizado -->
+  <!-- Cartão flutuante -->
   <div class="hero-inner">
-    <!-- Logo -->
-    <div class="hero-logo" id="hero-logo-wrap" onclick="openStoreInfoModal()" title="Ver informações da loja">
-      <span id="hero-emoji">🍽️</span>
-    </div>
-    <div class="hero-info">
-      <div class="hero-name" id="hero-name">Carregando…</div>
-      <div class="hero-desc" id="hero-desc"></div>
-      <!-- Endereço inline elegante -->
-      <div class="hero-address-inline" id="hero-address-bar">
-        <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 1.5C5.51 1.5 3.5 3.51 3.5 6c0 3.75 4.5 8.5 4.5 8.5S12.5 9.75 12.5 6c0-2.49-2.01-4.5-4.5-4.5z" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="6" r="1.5" fill="currentColor" opacity=".5"/></svg>
-        <span id="hero-address-txt"></span>
+    <div class="hero-card-top">
+      <!-- Logo -->
+      <div class="hero-logo" id="hero-logo-wrap" onclick="openStoreInfoModal()" title="Ver informações da loja">
+        <span id="hero-emoji">🍽️</span>
       </div>
+      <div class="hero-info">
+        <div class="hero-name" id="hero-name">Carregando…</div>
+        <div class="hero-desc" id="hero-desc"></div>
+      </div>
+    </div>
+
+    <!-- Endereço inline elegante -->
+    <div class="hero-address-inline" id="hero-address-bar">
+      <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 1.5C5.51 1.5 3.5 3.51 3.5 6c0 3.75 4.5 8.5 4.5 8.5S12.5 9.75 12.5 6c0-2.49-2.01-4.5-4.5-4.5z" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="6" r="1.5" fill="currentColor" opacity=".5"/></svg>
+      <span id="hero-address-txt"></span>
     </div>
 
     <!-- Meta: status · tempo · avaliação · mínimo -->
@@ -2510,10 +2510,6 @@ input,textarea{font-family:inherit}
       <span id="hero-status-btn-txt">Verificando…</span>
     </button>
   </div>
-
-  <!-- legado -->
-  <div id="status-badge" style="display:none"><div class="dot" id="status-dot-legacy"></div></div>
-  <div class="hero-banner" id="hero-banner"></div>
 </div>
 
 <!-- BANNER LOJA FECHADA -->
@@ -2548,6 +2544,24 @@ input,textarea{font-family:inherit}
 
 <!-- MENU -->
 <div id="menu-wrap"></div>
+
+<!-- BARRA DE NAVEGAÇÃO INFERIOR -->
+<nav class="bottom-nav" id="bottom-nav">
+  <button class="bnav-item on" id="bnav-cardapio" type="button" onclick="bnavGoCardapio()">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 9.5V19a1 1 0 0 0 1 1h3v-5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5h3a1 1 0 0 0 1-1V9.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Cardápio</span>
+  </button>
+  <button class="bnav-item" id="bnav-busca" type="button" onclick="bnavGoBusca()">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.8"/><path d="M19.5 19.5 15 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>Busca</span>
+  </button>
+  <button class="bnav-item" id="profile-fab" type="button" onclick="onProfileFabClick()" aria-label="Cadastro ou login">
+    <span class="profile-fab-av icon" id="profile-fab-av">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12.5c2.76 0 5-2.35 5-5.25S14.76 2 12 2 7 4.35 7 7.25s2.24 5.25 5 5.25Zm0 2.25c-3.6 0-8 1.83-8 5.1V22h16v-2.15c0-3.27-4.4-5.1-8-5.1Z"/></svg>
+    </span>
+    <span id="profile-fab-name">Entrar</span>
+  </button>
+</nav>
 
 <!-- BOTÃO FLUTUANTE DO CARRINHO -->
 <div class="cart-float" id="cart-float">
