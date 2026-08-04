@@ -62,11 +62,9 @@ function billingSetLocked(expiresAt) {
 }
 
 function billingClearLock(opts = {}) {
-  billingSaveSessionPatch({
-    billing_locked: false,
-    billing_reason: null,
-    billing_expired_at: null
-  });
+  const patch = { billing_locked: false, billing_reason: null, billing_expired_at: null };
+  if (opts.expiresAt !== undefined) patch.tenant_expires_at = opts.expiresAt;
+  billingSaveSessionPatch(patch);
   document.body?.classList.remove('billing-locked');
   if (opts.reload) {
     window.location.href = 'gestor.html';
@@ -155,7 +153,7 @@ function billingSyncFromTenant(data, opts = {}) {
     return true;
   }
   if (ativo && billingIsLocked() && !expired) {
-    billingClearLock({ reload: opts.reload !== false });
+    billingClearLock({ reload: opts.reload !== false, expiresAt: data?.expires_at || null });
     return false;
   }
   return billingIsLocked();
@@ -211,9 +209,6 @@ function _verificarSessao() {
     if (!raw) { window.location.href = 'login.html'; return false; }
     _sessao = JSON.parse(raw);
     _billingLocked = !!_sessao.billing_locked;
-    if (!_billingLocked && billingIsDateExpired(_sessao.tenant_expires_at)) {
-      billingSetLocked(_sessao.tenant_expires_at);
-    }
     if (Date.now() - _sessao.ts > 8 * 60 * 60 * 1000) {
       sessionStorage.removeItem('sys_session');
       // No Electron a sessão é renovada automaticamente — não expirar aqui
