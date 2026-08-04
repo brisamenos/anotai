@@ -3947,7 +3947,9 @@ function _buildEscPos(order, cfg, cols = 32) {
   // Avança papel e corta
   bytes(0x0A, 0x0A, 0x0A, 0x0A);             // 4 linhas (feed extra p/ garantir que o papel passe da guilhotina)
   bytes(0x1D, 0x56, 0x42, 0x00);             // GS V B 0 — corte parcial (formato novo, Epson e compatíveis)
-  bytes(0x1D, 0x56, 0x01);                   // GS V 1 — corte parcial (formato antigo; clones genéricos que não reconhecem o formato novo)
+  bytes(0x1D, 0x56, 0x01);                   // GS V 1 — corte parcial (formato antigo)
+  bytes(0x1D, 0x56, 0x41, 0x00);             // GS V A 0 — corte total (formato novo)
+  bytes(0x1D, 0x56, 0x00);                   // GS V 0 — corte total (formato antigo; alguns modelos só têm corte total)
 
   return new Uint8Array(buf);
 }
