@@ -82,6 +82,16 @@ function filterCat(el, key) {
   renderMenu();
 }
 
+function verMaisCat(key) {
+  const btn = document.querySelector('.cats-scroll .cat-btn[data-key="' + CSS.escape(key) + '"]');
+  if (btn) {
+    filterCat(btn, key);
+    btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }
+  const bar = document.querySelector('.sticky-bar');
+  if (bar) bar.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function onSearch(val) {
   searchQ = val.trim().toLowerCase();
   renderMenu();
@@ -289,7 +299,8 @@ function renderMenu() {
       if (!catItems.length) return;
       if (_segmento === 'acougue') {
         const label = cat.label || cat.name;
-        html += `<div class="section" data-cat="${cat.name}"><div class="section-label">${label}</div><div class="item-grid carousel">${catItems.map(itemCard).join('')}</div></div>`;
+        const seeMore = catItems.length > 4 ? `<span class="section-see-more" onclick="verMaisCat('${String(cat.name).replace(/'/g,"\\'")}')">Ver mais<svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>` : '';
+        html += `<div class="section" data-cat="${cat.name}"><div class="section-label-row"><div class="section-label">${label}</div>${seeMore}</div><div class="item-grid carousel">${catItems.map(itemCard).join('')}</div></div>`;
       } else {
         html += renderChecklistSection(cat, catItems, false);
       }
@@ -298,7 +309,8 @@ function renderMenu() {
       if (!its.length) return;
       const label = cat.label || cat.name;
       const gridClass = (_segmento === 'acougue' || _catsCarrossel) ? 'item-grid carousel' : 'item-grid';
-      html += `<div class="section" data-cat="${cat.name}"><div class="section-label">${label}</div><div class="${gridClass}">${its.map(itemCard).join('')}</div></div>`;
+      const seeMore = its.length > 4 ? `<span class="section-see-more" onclick="verMaisCat('${String(cat.name).replace(/'/g,"\\'")}')">Ver mais<svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>` : '';
+      html += `<div class="section" data-cat="${cat.name}"><div class="section-label-row"><div class="section-label">${label}</div>${seeMore}</div><div class="${gridClass}">${its.map(itemCard).join('')}</div></div>`;
     }
   });
 
