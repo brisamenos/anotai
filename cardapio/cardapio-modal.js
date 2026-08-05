@@ -5,6 +5,18 @@
 // ══════════════════════════════════════════
 //  MODAL DO ITEM
 // ══════════════════════════════════════════
+// Fallback quando o vídeo do item falha ao carregar — volta pra imagem (ou ícone padrão)
+function imVideoFallback(videoEl, imgUrl, name) {
+  const wrap = videoEl.parentElement;
+  if (!wrap) return;
+  const unesc = (s) => String(s || '').replace(/%27/g, "'");
+  if (imgUrl) {
+    wrap.innerHTML = `<img src="${unesc(imgUrl)}" alt="${unesc(name)}" style="width:100%;height:100%;object-fit:cover">`;
+  } else {
+    wrap.innerHTML = `<div style="opacity:.25"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="16" stroke="currentColor" stroke-width="1.5" opacity=".3"/><path d="M16 24h16M24 16v16" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".3"/></svg></div>`;
+  }
+}
+
 let _imItemId = null;
 let _imQty    = 1;
 let _pizzaSizeKey = null;
@@ -19,7 +31,10 @@ function openItemModal(id) {
   _pizzaSizeKey = null;
 
   const imgEl = document.getElementById('im-img');
-  if (i.image_url) {
+  if (i.video_url) {
+    const fallbackImg = (i.image_url || '').replace(/'/g, '%27');
+    imgEl.innerHTML = `<video src="${i.video_url}" autoplay muted loop playsinline controls style="width:100%;height:100%;object-fit:cover" onerror="imVideoFallback(this,'${fallbackImg}','${(i.name||'').replace(/'/g,'%27')}')"></video>`;
+  } else if (i.image_url) {
     imgEl.innerHTML = `<img src="${i.image_url}" alt="${i.name}" style="width:100%;height:100%;object-fit:cover">`;
   } else {
     imgEl.innerHTML = `<div style="opacity:.25"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="16" stroke="currentColor" stroke-width="1.5" opacity=".3"/><path d="M16 24h16M24 16v16" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".3"/></svg></div>`;
@@ -1047,6 +1062,9 @@ function closeItemModal() {
   document.getElementById('item-modal-bg').classList.remove('on');
   const closeFab = document.getElementById('im-close-fab');
   if (closeFab) closeFab.style.display = 'none';
+  // Pausa o vídeo do produto ao fechar, se houver
+  const imVideo = document.querySelector('#im-img video');
+  if (imVideo) { try { imVideo.pause(); } catch(e) {} }
   _halfItem = null;
   _halfPickerOpen = false;
   const pl = document.getElementById('half-picker-list');
