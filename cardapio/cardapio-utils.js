@@ -5,21 +5,51 @@
 // ══════════════════════════════════════════
 //  FIX AUTOPLAY DE VÍDEO NO iOS/SAFARI
 // ══════════════════════════════════════════
-// No iOS, <video autoplay> inserido via innerHTML frequentemente NÃO
-// começa a tocar sozinho (mesmo com muted+playsinline), sem disparar erro.
-// Chamar isso logo após qualquer innerHTML que possa conter <video>.
+// O iOS tem um limite de vídeos autoplay tocando ao mesmo tempo (mesmo
+// mudos/inline). Numa grade de produtos, tentar tocar todos de uma vez
+// estoura esse limite e a maioria não inicia — sem erro nenhum.
+// Solução: só toca o vídeo quando o card entra na tela, pausa quando sai.
+let _iosVideoObserver = null;
+function _getIosVideoObserver() {
+  if (_iosVideoObserver) return _iosVideoObserver;
+  if (typeof IntersectionObserver === 'undefined') return null;
+  _iosVideoObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const v = entry.target;
+      if (entry.isIntersecting) {
+        try {
+          v.muted = true;
+          v.defaultMuted = true;
+          v.playsInline = true;
+          const p = v.play();
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        } catch (e) {}
+      } else {
+        try { v.pause(); } catch (e) {}
+      }
+    });
+  }, { threshold: 0.25 });
+  return _iosVideoObserver;
+}
+
+// Chamar isso logo após qualquer innerHTML que possa conter <video autoplay>.
 function fixIosVideoAutoplay(container) {
   const root = container || document;
   const vids = root.querySelectorAll ? root.querySelectorAll('video[autoplay]') : [];
+  const observer = _getIosVideoObserver();
   vids.forEach(v => {
-    try {
-      v.muted = true;
-      v.defaultMuted = true;
-      v.playsInline = true;
-      if (v.readyState === 0) { try { v.load(); } catch(e) {} }
-      const p = v.play();
-      if (p && typeof p.catch === 'function') p.catch(() => {});
-    } catch (e) {}
+    v.muted = true;
+    v.defaultMuted = true;
+    v.playsInline = true;
+    if (observer) {
+      observer.observe(v);
+    } else {
+      // fallback sem IntersectionObserver (navegador muito antigo)
+      try {
+        const p = v.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } catch (e) {}
+    }
   });
 }
 
