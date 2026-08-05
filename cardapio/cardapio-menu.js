@@ -493,10 +493,25 @@ function itemCard(i) {
       ${porcaoBadge}
     </div>
     <div class="item-img">
-      ${i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`}
+      ${i.video_url
+        ? `<video src="${i.video_url}" autoplay muted loop playsinline preload="metadata" onerror="itemCardVideoFallback(this,'${(i.image_url||'').replace(/'/g,'%27')}','${(i.name||'').replace(/'/g,'%27')}')"></video>`
+        : (i.image_url ? `<img src="${i.image_url}" alt="${i.name}" loading="lazy" decoding="async">` : `<span>${''}</span>`)}
       ${i.video_url ? `<span class="item-video-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></span>` : ''}
       ${i.promo||i.price_old ? '<span class="item-promo-badge">PROMO</span>' : ''}
       ${esg ? '<div class="item-esgotado-overlay">Esgotado</div>' : ''}
     </div>
   </div>`;
+}
+
+// Fallback quando o vídeo do card falha ao carregar — volta pra imagem (ou nada)
+function itemCardVideoFallback(videoEl, imgUrl, name) {
+  const unesc = (s) => String(s || '').replace(/%27/g, "'");
+  if (imgUrl) {
+    const img = document.createElement('img');
+    img.src = unesc(imgUrl); img.alt = unesc(name);
+    img.loading = 'lazy'; img.decoding = 'async';
+    videoEl.replaceWith(img);
+  } else {
+    videoEl.remove();
+  }
 }
