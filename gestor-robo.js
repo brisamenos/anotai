@@ -1271,6 +1271,14 @@ function cpSelecionarTema(tema) {
     document.body.appendChild(inp);
   }
   inp.value = tema;
+
+  // Cada tema tem uma paleta curada (destaque + texto) — aplica junto pra já sair
+  // com um visual completo e profissional, sem o gestor ter que ajustar cor por cor.
+  const def = _CP_CARDAPIO_TEMAS.find(t => t.key === tema);
+  if (def) {
+    if (def.accent) cpSetCor(def.accent);
+    if (def.colors?.text) cpSetCorTexto(def.colors.text);
+  }
 }
 
 // Preview agora é o iframe real — cpPreviewCor e cpAtualizarPreview não são mais necessários
