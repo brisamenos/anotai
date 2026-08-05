@@ -351,9 +351,16 @@ function applyBranding(b, nome) {
   // Favicon dinâmico — usa o logo da loja
   if (b?.store_logo_url) setFavicon(b.store_logo_url);
 
-  // Banner — aparece abaixo das categorias com animação de boneco puxando
+  // Banner — aparece no topo (atrás do cartão) e também abaixo das categorias
   if (b?.store_banner_url) {
     const url = (b.store_banner_url.startsWith('http') || b.store_banner_url.startsWith('data:')) ? b.store_banner_url : location.origin + b.store_banner_url;
+
+    const heroBanner = document.getElementById('hero-banner');
+    if (heroBanner) {
+      heroBanner.innerHTML = `<img src="${url}" alt="banner" loading="lazy" decoding="async" onerror="this.parentElement.classList.remove('show')">`;
+      heroBanner.classList.add('show');
+    }
+
     const bannerBelow = document.getElementById('store-banner-below');
     const bannerImg   = document.getElementById('store-banner-img');
     if (bannerBelow && bannerImg) {
