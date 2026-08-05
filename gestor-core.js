@@ -2450,7 +2450,9 @@ let _editItemVideoUrl   = null;
 let _editItemVideoRemove = false;
 
 function _validateItemVideoFile(file) {
-  if (!file.type.startsWith('video/')) { sbToast('err', 'Envie um arquivo de vídeo (MP4 ou WebM).'); return false; }
+  if (!file.type.startsWith('video/')) { sbToast('err', 'Envie um arquivo de vídeo em MP4.'); return false; }
+  // WebM não é reproduzido no Safari/iOS — bloqueia no upload pra não gerar vídeo "mudo" no iPhone
+  if (file.type === 'video/webm') { sbToast('err', 'Vídeos em WebM não tocam no iPhone/iPad. Envie em MP4 (H.264).'); return false; }
   if (file.size > ITEM_VIDEO_MAX_BYTES) { sbToast('err', 'Vídeo muito grande. Use um vídeo de até 10MB.'); return false; }
   return true;
 }
