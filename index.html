@@ -49,7 +49,7 @@
   --border:rgba(0,0,0,.09); --border2:rgba(0,0,0,.14);
   --text:#0f1117; --muted:#6b7280; --muted2:#9ca3af;
 }
-[data-tema="classico"] .hero { background: linear-gradient(180deg,var(--accent) 0%,var(--accent-d,#ea6c0a) 100%); }
+[data-tema="classico"] .hero { background: var(--bg); }
 [data-tema="classico"] .sticky-bar { background:var(--bg); border-bottom:1px solid var(--border); }
 [data-tema="classico"] .search-input { background:var(--s1); }
 
@@ -515,15 +515,22 @@ input,textarea{font-family:inherit}
   background:var(--bg);border-bottom:1px solid var(--border);
   padding:10px 0 0;
 }
-.search-wrap{position:relative;margin-bottom:12px}
+.search-panel{max-height:0;overflow:hidden;transition:max-height .25s ease}
+.search-panel.on{max-height:64px}
+.search-wrap{position:relative;margin:0 16px 12px}
 .search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px;pointer-events:none}
 .search-input{
   width:100%;background:var(--s2);border:1px solid var(--border);border-radius:10px;
-  padding:10px 14px 10px 36px;color:var(--text);font-size:13.5px;outline:none;
+  padding:10px 36px 10px 36px;color:var(--text);font-size:13.5px;outline:none;
   transition:border-color .18s;
 }
 .search-input:focus{border-color:rgba(var(--accent-rgb,249,115,22),.4)}
 .search-input::placeholder{color:var(--muted)}
+.search-close-btn{
+  position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  width:22px;height:22px;border-radius:50%;border:none;background:var(--s3);
+  color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer;
+}
 .cats-scroll{display:flex;gap:8px;overflow-x:auto;padding:4px 16px 8px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .cats-scroll::-webkit-scrollbar{display:none}
 .cat-btn{
@@ -2517,11 +2524,16 @@ input,textarea{font-family:inherit}
   <span style="color:var(--red);font-size:10px">●</span> Esta loja está fechada. Você pode ver o cardápio, mas pedidos não são aceitos.
 </div>
 
-<!-- STICKY: BUSCA + CATEGORIAS -->
-<div class="sticky-bar">
-  <div class="search-wrap">
-    <span class="search-icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M10 10l2.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
-    <input class="search-input" type="text" placeholder="Buscar no cardápio…" id="search-input" readonly onfocus="this.removeAttribute('readonly')" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="onSearch(this.value)">
+<!-- STICKY: BUSCA (retrátil, aberta pelo botão "Busca" do menu inferior) + CATEGORIAS -->
+<div class="sticky-bar" id="sticky-bar">
+  <div class="search-panel" id="search-panel">
+    <div class="search-wrap">
+      <span class="search-icon"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M10 10l2.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+      <input class="search-input" type="text" placeholder="Buscar no cardápio…" id="search-input" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="onSearch(this.value)">
+      <button class="search-close-btn" type="button" onclick="toggleSearchPanel(false)" aria-label="Fechar busca">
+        <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
   </div>
   <div class="cats-scroll" id="cats-scroll">
     <button class="cat-btn on" data-key="" onclick="filterCat(this,'')">Tudo</button>
@@ -2531,13 +2543,6 @@ input,textarea{font-family:inherit}
 <!-- "PEÇA DE NOVO" — banner de repetir último pedido, só aparece pra cliente -->
 <!-- logado com um pedido anterior entregue disponível pra repetir -->
 <div id="repeat-order-banner" style="display:none;margin:10px 16px 4px"></div>
-
-<!-- BANNER DA LOJA — acima da seção de preparo -->
-<div class="store-banner-below" id="store-banner-below">
-  <div class="banner-img-wrap">
-    <img id="store-banner-img" src="" alt="Banner">
-  </div>
-</div>
 
 <!-- SEÇÃO PREPARO FILTER — só açougue -->
 <div class="preparo-filter-section" id="preparo-filter-section" style="display:none"></div>
@@ -2554,6 +2559,10 @@ input,textarea{font-family:inherit}
   <button class="bnav-item" id="bnav-busca" type="button" onclick="bnavGoBusca()">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.8"/><path d="M19.5 19.5 15 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     <span>Busca</span>
+  </button>
+  <button class="bnav-item" id="bnav-pedidos" type="button" onclick="bnavGoPedidos()">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 3h1.8l2.16 9.5h9.28l1.56-6.5H6.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9.5" cy="18.5" r="1.4" fill="currentColor"/><circle cx="16" cy="18.5" r="1.4" fill="currentColor"/></svg>
+    <span>Pedidos</span>
   </button>
   <button class="bnav-item" id="profile-fab" type="button" onclick="onProfileFabClick()" aria-label="Cadastro ou login">
     <span class="profile-fab-av icon" id="profile-fab-av">
