@@ -407,11 +407,26 @@ input,textarea{font-family:inherit}
   padding:0;position:relative;overflow:visible;
 }
 .hero-banner{
-  width:100%;height:190px;overflow:hidden;display:none;
+  width:100%;height:190px;overflow:hidden;display:none;position:relative;
   background:linear-gradient(135deg,#e8eaf0,#d1d5de);
 }
 .hero-banner.show{ display:block }
 .hero-banner img{ width:100%;height:100%;object-fit:cover;display:block }
+.hero-banner-slides{ position:relative;width:100%;height:100%; }
+.hero-banner-slide{
+  position:absolute;inset:0;opacity:0;transition:opacity .5s ease;pointer-events:none;
+}
+.hero-banner-slide.active{ opacity:1;pointer-events:auto; }
+.hero-banner-slide img,.hero-banner-slide video{ width:100%;height:100%;object-fit:cover;display:block }
+.hero-banner-dots{
+  position:absolute;left:0;right:0;bottom:10px;z-index:4;
+  display:flex;align-items:center;justify-content:center;gap:5px;
+}
+.hero-banner-dot{
+  width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.5);
+  box-shadow:0 0 3px rgba(0,0,0,.3);transition:all .2s;
+}
+.hero-banner-dot.on{ width:16px;border-radius:4px;background:#fff }
 
 /* Cartão flutuante sobre a foto */
 .hero-inner{
@@ -483,22 +498,6 @@ input,textarea{font-family:inherit}
   border:1.5px solid var(--border);
 }
 .hero-status-btn:active{ opacity:.88;transform:scale(.97) }
-
-/* Banner abaixo das categorias */
-.store-banner-below{
-  width:100%;display:none;
-  position:relative;
-  margin-bottom:4px;
-}
-.store-banner-below.show{ display:block }
-
-.banner-img-wrap{
-  position:relative;overflow:hidden;
-  width:100%;
-}
-.banner-img-wrap img{
-  width:100%;display:block;object-fit:cover;max-height:180px;
-}
 
 
 

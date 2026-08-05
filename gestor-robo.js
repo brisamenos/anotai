@@ -869,10 +869,11 @@ function cpHorarioChanged() { /* placeholder para futuros listeners */ }
 
 let _cpLogoUrl   = '';
 let _cpBannerUrl = '';
+let _cpBanners   = []; // [{type:'image'|'video', url}] — até 5, formam slide no cardápio
 
 async function loadCardapioPublico() {
   const { data } = await sb.from('store_config').select(
-    'store_name,store_descricao,store_logo_url,store_banner_url,store_cor,store_tema,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega,delivery_fee_config,pickup_addresses'
+    'store_name,store_descricao,store_logo_url,store_banner_url,store_banners,store_cor,store_tema,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega,delivery_fee_config,pickup_addresses'
   ).single();
   if (!data) return;
 
@@ -959,13 +960,16 @@ async function loadCardapioPublico() {
     const pp = document.getElementById('cp-prev-logo');
     if (pp) { pp.innerHTML = ''; pp.style.backgroundImage = `url(${_cpLogoUrl})`; pp.style.backgroundSize = 'cover'; pp.style.backgroundPosition = 'center'; }
   }
-  if (data.store_banner_url) {
-    _cpBannerUrl = data.store_banner_url;
-    const prev = document.getElementById('cp-banner-preview');
-    if (prev) { prev.innerHTML = ''; prev.style.backgroundImage = `url(${_cpBannerUrl})`; }
-    const hero = document.getElementById('cp-preview-hero');
-    if (hero) hero.style.backgroundImage = `url(${_cpBannerUrl})`;
+  // Banners (novo formato: array de até 5, imagem ou vídeo) — com fallback pro campo antigo
+  try {
+    const raw = data.store_banners;
+    const arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    _cpBanners = Array.isArray(arr) && arr.length ? arr.slice(0, 5) : (data.store_banner_url ? [{ type: 'image', url: data.store_banner_url }] : []);
+  } catch(e) {
+    _cpBanners = data.store_banner_url ? [{ type: 'image', url: data.store_banner_url }] : [];
   }
+  _cpBannerUrl = (_cpBanners.find(b => b.type !== 'video') || {}).url || '';
+  cpRenderBanners();
 
   cpMontarLink();
 }
@@ -1271,7 +1275,7 @@ function cpSelecionarTema(tema) {
 
 // Preview agora é o iframe real — cpPreviewCor e cpAtualizarPreview não são mais necessários
 
-async function cpUploadImagem(input, tipo) {
+async function cpUploadImagem(input) {
   const file = input.files[0];
   if (!file) return;
 
@@ -1292,26 +1296,17 @@ async function cpUploadImagem(input, tipo) {
       reader.readAsDataURL(file);
     });
 
-    if (tipo === 'logo') {
-      _cpLogoUrl = dataUrl;
-      const prev = document.getElementById('cp-logo-preview');
-      if (prev) { prev.innerHTML = ''; prev.style.backgroundImage = `url(${dataUrl})`; prev.style.backgroundSize = 'cover'; prev.style.backgroundPosition = 'center'; }
-      const pp = document.getElementById('cp-prev-logo');
-      if (pp) { pp.innerHTML = ''; pp.style.backgroundImage = `url(${dataUrl})`; pp.style.backgroundSize = 'cover'; pp.style.backgroundPosition = 'center'; }
-    } else {
-      _cpBannerUrl = dataUrl;
-      const prev = document.getElementById('cp-banner-preview');
-      if (prev) { prev.innerHTML = ''; prev.style.backgroundImage = `url(${dataUrl})`; }
-      const hero = document.getElementById('cp-preview-hero');
-      if (hero) hero.style.backgroundImage = `url(${dataUrl})`;
-    }
+    _cpLogoUrl = dataUrl;
+    const prev = document.getElementById('cp-logo-preview');
+    if (prev) { prev.innerHTML = ''; prev.style.backgroundImage = `url(${dataUrl})`; prev.style.backgroundSize = 'cover'; prev.style.backgroundPosition = 'center'; }
+    const pp = document.getElementById('cp-prev-logo');
+    if (pp) { pp.innerHTML = ''; pp.style.backgroundImage = `url(${dataUrl})`; pp.style.backgroundSize = 'cover'; pp.style.backgroundPosition = 'center'; }
 
     // Salva data URL no banco imediatamente — persiste mesmo após reinício do container
-    const field = tipo === 'logo' ? 'store_logo_url' : 'store_banner_url';
-    const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, [field]: dataUrl });
+    const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, store_logo_url: dataUrl });
     if (error) throw new Error(error.message || JSON.stringify(error));
 
-    sbToast('ok', `${tipo === 'logo' ? 'Logo' : 'Banner'} enviado e salvo!`);
+    sbToast('ok', 'Logo enviado e salvo!');
     // Recarrega iframe para refletir a nova imagem no cardápio
     setTimeout(() => cpRecarregarIframe(), 600);
   } catch(e) {
@@ -1320,6 +1315,113 @@ async function cpUploadImagem(input, tipo) {
   } finally {
     sbLoading(false);
   }
+}
+
+// ══════════════════════════════════════════
+//  BANNERS DO CARDÁPIO — até 5, imagem ou vídeo (formam slide)
+// ══════════════════════════════════════════
+const CP_BANNER_MAX = 5;
+const CP_BANNER_IMG_MAX_BYTES   = 2  * 1024 * 1024; // 2MB
+const CP_BANNER_VIDEO_MAX_BYTES = 10 * 1024 * 1024; // 10MB
+
+function cpRenderBanners() {
+  const list = document.getElementById('cp-banners-list');
+  const addBtn = document.getElementById('cp-banner-add-btn');
+  if (list) {
+    list.innerHTML = _cpBanners.map((b, i) => `
+      <div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:8px 10px">
+        <div style="width:64px;height:44px;border-radius:6px;overflow:hidden;flex-shrink:0;background:#000;display:flex;align-items:center;justify-content:center">
+          ${b.type === 'video'
+            ? `<video src="${b.url}" style="width:100%;height:100%;object-fit:cover" muted></video>`
+            : `<img src="${b.url}" style="width:100%;height:100%;object-fit:cover">`}
+        </div>
+        <div style="flex:1;font-size:12px;color:var(--muted)">${b.type === 'video' ? '🎬 Vídeo' : '🖼️ Imagem'} ${i === 0 ? '· principal' : ''}</div>
+        <button type="button" class="btn" style="padding:5px 9px;font-size:11px" onclick="cpRemoveBanner(${i})">Remover</button>
+      </div>
+    `).join('') || `<div style="font-size:12px;color:var(--muted);text-align:center;padding:10px">Nenhum banner adicionado ainda.</div>`;
+  }
+  if (addBtn) {
+    const cheio = _cpBanners.length >= CP_BANNER_MAX;
+    addBtn.style.display = cheio ? 'none' : '';
+  }
+}
+
+async function cpAddBanner(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  if (_cpBanners.length >= CP_BANNER_MAX) {
+    sbToast('err', `Máximo de ${CP_BANNER_MAX} banners.`);
+    input.value = '';
+    return;
+  }
+
+  const isVideo = file.type.startsWith('video/');
+  const isImage = file.type.startsWith('image/');
+  if (!isVideo && !isImage) {
+    sbToast('err', 'Envie uma imagem (JPG/PNG/WebP) ou vídeo (MP4/WebM).');
+    input.value = '';
+    return;
+  }
+  if (isImage && file.size > CP_BANNER_IMG_MAX_BYTES) {
+    sbToast('err', 'Imagem muito grande. Use uma imagem de até 2MB.');
+    input.value = '';
+    return;
+  }
+  if (isVideo && file.size > CP_BANNER_VIDEO_MAX_BYTES) {
+    sbToast('err', 'Vídeo muito grande. Use um vídeo de até 10MB.');
+    input.value = '';
+    return;
+  }
+
+  sbLoading(true);
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+      reader.readAsDataURL(file);
+    });
+
+    _cpBanners.push({ type: isVideo ? 'video' : 'image', url: dataUrl });
+    cpRenderBanners();
+    await cpSalvarBanners();
+    sbToast('ok', `${isVideo ? 'Vídeo' : 'Banner'} adicionado!`);
+  } catch(e) {
+    console.error('cpAddBanner:', e);
+    sbToast('err', 'Erro ao enviar arquivo: ' + (e.message || ''));
+  } finally {
+    input.value = '';
+    sbLoading(false);
+  }
+}
+
+async function cpRemoveBanner(idx) {
+  _cpBanners.splice(idx, 1);
+  cpRenderBanners();
+  sbLoading(true);
+  try {
+    await cpSalvarBanners();
+    sbToast('ok', 'Banner removido.');
+  } catch(e) {
+    console.error('cpRemoveBanner:', e);
+    sbToast('err', 'Erro ao remover banner: ' + (e.message || ''));
+  } finally {
+    sbLoading(false);
+  }
+}
+
+async function cpSalvarBanners() {
+  // store_banner_url (legado) fica sincronizado com o 1º banner de imagem,
+  // pra manter compatibilidade com meta tags de compartilhamento (og:image).
+  _cpBannerUrl = (_cpBanners.find(b => b.type !== 'video') || {}).url || '';
+  const { error } = await sb.from('store_config').upsert({
+    tenant_id: _sessao?.tenant_id,
+    store_banners: JSON.stringify(_cpBanners),
+    store_banner_url: _cpBannerUrl,
+  });
+  if (error) throw new Error(error.message || JSON.stringify(error));
+  setTimeout(() => cpRecarregarIframe(), 600);
 }
 
 async function salvarCardapioPublico() {
@@ -1345,7 +1447,8 @@ async function salvarCardapioPublico() {
       pickup_addresses:    JSON.stringify(cpGetPickupAddresses()),
     };
     if (_cpLogoUrl)   payload.store_logo_url   = _cpLogoUrl;
-    if (_cpBannerUrl) payload.store_banner_url = _cpBannerUrl;
+    payload.store_banners    = JSON.stringify(_cpBanners);
+    payload.store_banner_url = _cpBannerUrl;
 
     const { error } = await sb.from('store_config').upsert(payload);
     if (error) throw error;
