@@ -351,7 +351,7 @@ function applyBranding(b, nome) {
   // Favicon dinâmico — usa o logo da loja
   if (b?.store_logo_url) setFavicon(b.store_logo_url);
 
-  // Banner — aparece no topo (atrás do cartão) e também abaixo das categorias
+  // Banner — aparece apenas no topo (atrás do cartão)
   if (b?.store_banner_url) {
     const url = (b.store_banner_url.startsWith('http') || b.store_banner_url.startsWith('data:')) ? b.store_banner_url : location.origin + b.store_banner_url;
 
@@ -359,23 +359,6 @@ function applyBranding(b, nome) {
     if (heroBanner) {
       heroBanner.innerHTML = `<img src="${url}" alt="banner" loading="lazy" decoding="async" onerror="this.parentElement.classList.remove('show')">`;
       heroBanner.classList.add('show');
-    }
-
-    const bannerBelow = document.getElementById('store-banner-below');
-    const bannerImg   = document.getElementById('store-banner-img');
-    if (bannerBelow && bannerImg) {
-      bannerImg.src = url;
-      bannerImg.loading = 'lazy';
-      bannerImg.decoding = 'async';
-      bannerImg.onerror = () => { bannerBelow.classList.remove('show'); };
-      bannerBelow.classList.add('show');
-      // Após 5.5s (animação completa), remove máscara e boneco
-      setTimeout(() => {
-        const mask = document.getElementById('banner-reveal-mask');
-        const dude = document.getElementById('banner-dude');
-        if (mask) mask.style.display = 'none';
-        if (dude) dude.style.display = 'none';
-      }, 5500);
     }
   }
 
@@ -1045,6 +1028,54 @@ async function loadAddonsEsgotados() {
   }
 }
 
+
+// ══════════════════════════════════════════
+//  BARRA DE NAVEGAÇÃO INFERIOR (Cardápio / Busca / Pedidos)
+// ══════════════════════════════════════════
+function setBnavActive(id) {
+  document.querySelectorAll('.bnav-item').forEach(b => b.classList.remove('on'));
+  const btn = document.getElementById(id);
+  if (btn) btn.classList.add('on');
+}
+
+function toggleSearchPanel(forceOpen) {
+  const panel = document.getElementById('search-panel');
+  const input = document.getElementById('search-input');
+  if (!panel) return;
+  const willOpen = (typeof forceOpen === 'boolean') ? forceOpen : !panel.classList.contains('on');
+  panel.classList.toggle('on', willOpen);
+  if (willOpen) {
+    setTimeout(() => input && input.focus(), 260);
+  } else if (input) {
+    input.value = '';
+    input.blur();
+    if (typeof onSearch === 'function') onSearch('');
+  }
+}
+
+function bnavGoCardapio() {
+  setBnavActive('bnav-cardapio');
+  toggleSearchPanel(false);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function bnavGoBusca() {
+  setBnavActive('bnav-busca');
+  const sticky = document.getElementById('sticky-bar');
+  toggleSearchPanel(true);
+  if (sticky) sticky.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Botão "Pedidos" — mostra os pedidos/compras do cliente (Minha Conta).
+// Sem conta/pedido nenhum ainda registrado neste navegador -> direciona pro cadastro.
+function bnavGoPedidos() {
+  setBnavActive('bnav-pedidos');
+  if (typeof _customer !== 'undefined' && _customer) {
+    openAccount();
+  } else {
+    openAuth('register');
+  }
+}
 
 // ── Bootstrap ──
 init();

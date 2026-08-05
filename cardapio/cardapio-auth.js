@@ -73,6 +73,7 @@ function updateProfileFab() {
 }
 
 function onProfileFabClick() {
+  if (typeof setBnavActive === 'function') setBnavActive('profile-fab');
   if (_customer) openAccount();
   else openAuth();
 }
@@ -84,6 +85,7 @@ function openAuth(tab) {
 }
 function closeAuth() {
   document.getElementById('auth-overlay').classList.remove('on');
+  if (typeof setBnavActive === 'function') setBnavActive('bnav-cardapio');
 }
 function switchAuthTab(tab) {
   document.getElementById('tab-login').classList.toggle('on',    tab==='login');
@@ -397,6 +399,7 @@ async function openAccount() {
 }
 function closeAccount() {
   document.getElementById('account-overlay').classList.remove('on');
+  if (typeof setBnavActive === 'function') setBnavActive('bnav-cardapio');
 }
 
 async function loadMyOrders() {
