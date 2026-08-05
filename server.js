@@ -1221,6 +1221,7 @@ garantirColuna('menu_items', 'fiscal_unidade', "TEXT")
 garantirColuna('menu_items', 'fiscal_codigo_produto', "TEXT")
 garantirColuna('menu_items', 'fiscal_pis_situacao', "TEXT")
 garantirColuna('menu_items', 'fiscal_cofins_situacao', "TEXT")
+garantirColuna('menu_items', 'video_url', "TEXT")
 
 function garantirSchemaFiscal() {
   const execSafe = (sql) => {
@@ -1964,7 +1965,7 @@ const TABLE_COLS = {
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
   store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
-  menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','fiscal_ncm','fiscal_cfop','fiscal_icms_origem','fiscal_icms_situacao','fiscal_cest','fiscal_unidade','fiscal_codigo_produto','fiscal_pis_situacao','fiscal_cofins_situacao','created_at'],
+  menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','video_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','fiscal_ncm','fiscal_cfop','fiscal_icms_origem','fiscal_icms_situacao','fiscal_cest','fiscal_unidade','fiscal_codigo_produto','fiscal_pis_situacao','fiscal_cofins_situacao','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
   mesas:        ['id','tenant_id','num','status','guests','opened_at','total','pag_forma','taxa_servico','clientes_json','pagamentos_json','nome','updated_at'],
   garcons:      ['id','tenant_id','nome','usuario','senha','ativo'],
@@ -2655,7 +2656,7 @@ function handleTenantInfo(params) {
 // UPLOAD DE IMAGENS
 // ════════════════════════════════════════════════════════
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 // 10 MB
-const ALLOWED_EXT = new Set(['.jpg','.jpeg','.png','.webp','.gif'])
+const ALLOWED_EXT = new Set(['.jpg','.jpeg','.png','.webp','.gif','.mp4','.webm'])
 
 function handleUpload(req, res) {
   return new Promise(resolve => {
@@ -2682,7 +2683,7 @@ function handleUpload(req, res) {
         // Sanitiza nome do arquivo — path.basename remove diretórios, também remove .. e barras residuais
         const urlBaseRaw = path.basename((req.url||'').split('?')[0])
         const urlBase = urlBaseRaw.replace(/[^a-zA-Z0-9._-]/g, '_') // limita charset
-        const hasExt   = /\.(jpg|jpeg|png|webp|gif)$/i.test(urlBase)
+        const hasExt   = /\.(jpg|jpeg|png|webp|gif|mp4|webm)$/i.test(urlBase)
         const _ensureAllowedExt = (n) => {
           const e = path.extname(n).toLowerCase()
           return ALLOWED_EXT.has(e)

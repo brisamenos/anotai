@@ -525,6 +525,7 @@ function mapItem(i) {
     days: _safeParseArray(i.days).length ? _safeParseArray(i.days) : [1,1,1,1,1,1,1],
     desc: i.description || '',
     imageUrl: i.image_url || null,
+    videoUrl: i.video_url || null,
     ingredients: _safeParseArray(i.ingredients),
     itemType: i.item_type || 'normal',
     allowHalf: !!i.allow_half,
@@ -2437,6 +2438,91 @@ function previewEditItemImage(inp) {
   document.getElementById('edit-img-placeholder').style.display = 'none';
   document.getElementById('edit-img-change').style.display = 'block';
   document.getElementById('edit-img-preview').style.border = '2px solid var(--accent)';
+}
+
+// ── Vídeo do item (novo/edição) — até 10MB, MP4 ou WebM ────────────────
+const ITEM_VIDEO_MAX_BYTES = 10 * 1024 * 1024;
+let _newItemVideoFile  = null;
+let _newItemVideoUrl   = null;
+let _newItemVideoRemove = false;
+let _editItemVideoFile  = null;
+let _editItemVideoUrl   = null;
+let _editItemVideoRemove = false;
+
+function _validateItemVideoFile(file) {
+  if (!file.type.startsWith('video/')) { sbToast('err', 'Envie um arquivo de vídeo (MP4 ou WebM).'); return false; }
+  if (file.size > ITEM_VIDEO_MAX_BYTES) { sbToast('err', 'Vídeo muito grande. Use um vídeo de até 10MB.'); return false; }
+  return true;
+}
+
+function previewNewItemVideo(inp) {
+  const file = inp.files[0];
+  if (!file || !_validateItemVideoFile(file)) { inp.value = ''; return; }
+  _newItemVideoFile = file;
+  _newItemVideoUrl  = null;
+  _newItemVideoRemove = false;
+  const url = URL.createObjectURL(file);
+  const thumb = document.getElementById('new-video-thumb');
+  thumb.src = url; thumb.style.display = 'block'; thumb.play?.().catch(()=>{});
+  document.getElementById('new-video-placeholder').style.display = 'none';
+  document.getElementById('new-video-change').style.display = 'block';
+  document.getElementById('new-video-remove').style.display = 'block';
+  document.getElementById('new-video-preview').style.border = '2px solid var(--accent)';
+}
+
+function removeNewItemVideo() {
+  _newItemVideoFile = null;
+  _newItemVideoUrl  = null;
+  _newItemVideoRemove = true;
+  const thumb = document.getElementById('new-video-thumb');
+  thumb.src = ''; thumb.style.display = 'none';
+  document.getElementById('new-video-placeholder').style.display = 'flex';
+  document.getElementById('new-video-change').style.display = 'none';
+  document.getElementById('new-video-remove').style.display = 'none';
+  document.getElementById('new-video-preview').style.border = '2px dashed var(--border)';
+  document.getElementById('new-video-input').value = '';
+}
+
+function previewEditItemVideo(inp) {
+  const file = inp.files[0];
+  if (!file || !_validateItemVideoFile(file)) { inp.value = ''; return; }
+  _editItemVideoFile = file;
+  _editItemVideoUrl  = null;
+  _editItemVideoRemove = false;
+  const url = URL.createObjectURL(file);
+  const thumb = document.getElementById('edit-video-thumb');
+  thumb.src = url; thumb.style.display = 'block'; thumb.play?.().catch(()=>{});
+  document.getElementById('edit-video-placeholder').style.display = 'none';
+  document.getElementById('edit-video-change').style.display = 'block';
+  document.getElementById('edit-video-remove').style.display = 'block';
+  document.getElementById('edit-video-preview').style.border = '2px solid var(--accent)';
+}
+
+function removeEditItemVideo() {
+  _editItemVideoFile = null;
+  _editItemVideoUrl  = null;
+  _editItemVideoRemove = true;
+  const thumb = document.getElementById('edit-video-thumb');
+  thumb.src = ''; thumb.style.display = 'none';
+  document.getElementById('edit-video-placeholder').style.display = 'flex';
+  document.getElementById('edit-video-change').style.display = 'none';
+  document.getElementById('edit-video-remove').style.display = 'none';
+  document.getElementById('edit-video-preview').style.border = '2px dashed var(--border)';
+  document.getElementById('edit-video-input').value = '';
+}
+
+async function uploadItemVideo(file, itemId) {
+  if (file.size > ITEM_VIDEO_MAX_BYTES) throw new Error('Vídeo muito grande. Use um vídeo de até 10MB.');
+  const extFromType = { 'video/mp4': 'mp4', 'video/webm': 'webm' };
+  const ext = extFromType[file.type] || (String(file.name || '').split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
+  const safeItem = String(itemId || 'novo').replace(/[^a-zA-Z0-9_-]/g, '');
+  const filePath = `menu-items/${safeItem}-${Date.now()}.${ext}`;
+  const bucket = sb.storage.from('menu-videos');
+  const { data, error } = await bucket.upload(filePath, file, { upsert: true });
+  if (error) throw new Error(error.message || error.error || 'Falha ao enviar vídeo');
+  const publicUrl = data?.publicUrl || data?.url || bucket.getPublicUrl(filePath).data.publicUrl;
+  if (!publicUrl) throw new Error('Upload sem URL pública');
+  return publicUrl;
 }
 
 // ── Upload image to Supabase Storage ─────────

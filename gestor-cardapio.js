@@ -1662,6 +1662,17 @@ async function addItem() {
     _newItemImageFile = null;
   }
 
+  if (_newItemVideoFile) {
+    try {
+      const vurl = await uploadItemVideo(_newItemVideoFile, data.id);
+      await sb.from('menu_items').update({ video_url: vurl }).eq('id', data.id);
+      data.video_url = vurl;
+    } catch(e) { sbToast('err', 'Item criado, mas erro ao enviar vídeo'); }
+    _newItemVideoFile = null;
+  }
+  _newItemVideoUrl = null;
+  _newItemVideoRemove = false;
+
   items.push(mapItem(data));
 
   ['new-name','new-desc','new-ingredients','new-price','new-price-old'].forEach(id => {
@@ -1672,6 +1683,7 @@ async function addItem() {
   const p2 = document.getElementById('new-img-placeholder');  if(p2) p2.style.display = 'flex';
   const c2 = document.getElementById('new-img-change');        if(c2) c2.style.display = 'none';
   const pr = document.getElementById('new-img-preview');       if(pr) pr.style.border  = '2px dashed var(--border)';
+  if (typeof removeNewItemVideo === 'function') removeNewItemVideo();
   const ni = document.getElementById('new-item-type');         if(ni) ni.value = 'normal';
   const ns = document.getElementById('new-status');            if(ns) ns.value = 'active';
   const nd = document.getElementById('new-destaque');          if(nd) nd.classList.remove('on');
@@ -1732,6 +1744,29 @@ function openEditItem(id) {
     placeholder.style.display = 'flex';
     change.style.display = 'none';
     preview.style.border = '2px dashed var(--border)';
+  }
+
+  // Reset video file state and show existing video
+  _editItemVideoFile = null;
+  _editItemVideoUrl  = null;
+  _editItemVideoRemove = false;
+  const vthumb = document.getElementById('edit-video-thumb');
+  const vplaceholder = document.getElementById('edit-video-placeholder');
+  const vchange = document.getElementById('edit-video-change');
+  const vremove = document.getElementById('edit-video-remove');
+  const vpreview = document.getElementById('edit-video-preview');
+  if (it.videoUrl) {
+    vthumb.src = it.videoUrl; vthumb.style.display = 'block';
+    vplaceholder.style.display = 'none';
+    vchange.style.display = 'block';
+    vremove.style.display = 'block';
+    vpreview.style.border = '2px solid var(--accent)';
+  } else {
+    vthumb.src = ''; vthumb.style.display = 'none';
+    vplaceholder.style.display = 'flex';
+    vchange.style.display = 'none';
+    vremove.style.display = 'none';
+    vpreview.style.border = '2px dashed var(--border)';
   }
 
   const _desel = document.getElementById('edit-destaque');
@@ -1881,6 +1916,22 @@ async function saveEditItem() {
     } catch(e) { sbToast('err', 'Item salvo, mas erro ao enviar foto'); }
     _editItemImageFile = null;
   }
+
+  // Upload / remoção de vídeo
+  if (_editItemVideoFile) {
+    try {
+      const vurl = await uploadItemVideo(_editItemVideoFile, editingId);
+      await sb.from('menu_items').update({ video_url: vurl }).eq('id', editingId);
+      it.videoUrl = vurl;
+    } catch(e) { sbToast('err', 'Item salvo, mas erro ao enviar vídeo'); }
+    _editItemVideoFile = null;
+  } else if (_editItemVideoRemove) {
+    try {
+      await sb.from('menu_items').update({ video_url: null }).eq('id', editingId);
+      it.videoUrl = null;
+    } catch(e) { sbToast('err', 'Item salvo, mas erro ao remover vídeo'); }
+  }
+  _editItemVideoRemove = false;
 
   closeModal('modal-edit-item');
   renderTable(); renderGestor(); renderPDV();
