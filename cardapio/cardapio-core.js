@@ -297,6 +297,64 @@ function applyTema(tema, accentCor) {
   if (metaTheme) metaTheme.content = bgMap[t] || '#f8f9fb';
 }
 
+// ══════════════════════════════════════════
+//  BANNER DO CARDÁPIO — imagem ou vídeo, até 5 em slide
+// ══════════════════════════════════════════
+let _heroBannerTimer = null;
+
+// Lê a lista de banners configurada no gestor (store_banners, novo)
+// com fallback pro campo antigo (store_banner_url, single) pra tenants que
+// ainda não mexeram na tela nova.
+function getBannerList(b) {
+  if (!b) return [];
+  try {
+    const raw = b.store_banners;
+    const arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (Array.isArray(arr) && arr.length) {
+      return arr.filter(x => x && x.url).slice(0, 5);
+    }
+  } catch(e) {}
+  if (b.store_banner_url) return [{ type: 'image', url: b.store_banner_url }];
+  return [];
+}
+
+function applyHeroBanners(list) {
+  const heroBanner = document.getElementById('hero-banner');
+  if (!heroBanner) return;
+  if (_heroBannerTimer) { clearInterval(_heroBannerTimer); _heroBannerTimer = null; }
+
+  const items = Array.isArray(list) ? list.slice(0, 5) : [];
+  if (!items.length) {
+    heroBanner.classList.remove('show');
+    heroBanner.innerHTML = '';
+    return;
+  }
+
+  const resolveUrl = (u) => (u.startsWith('http') || u.startsWith('data:')) ? u : location.origin + u;
+  const slidesHtml = items.map((b, i) => {
+    const url = resolveUrl(b.url);
+    if (b.type === 'video') {
+      return `<div class="hero-banner-slide${i===0?' active':''}" data-i="${i}"><video src="${url}" autoplay muted loop playsinline onerror="this.closest('.hero-banner-slide').style.display='none'"></video></div>`;
+    }
+    return `<div class="hero-banner-slide${i===0?' active':''}" data-i="${i}"><img src="${url}" alt="banner" loading="lazy" decoding="async" onerror="this.closest('.hero-banner-slide').style.display='none'"></div>`;
+  }).join('');
+  const dotsHtml = items.length > 1
+    ? `<div class="hero-banner-dots">${items.map((_,i)=>`<span class="hero-banner-dot${i===0?' on':''}" data-i="${i}"></span>`).join('')}</div>`
+    : '';
+
+  heroBanner.innerHTML = `<div class="hero-banner-slides">${slidesHtml}</div>${dotsHtml}`;
+  heroBanner.classList.add('show');
+
+  if (items.length > 1) {
+    let idx = 0;
+    _heroBannerTimer = setInterval(() => {
+      idx = (idx + 1) % items.length;
+      heroBanner.querySelectorAll('.hero-banner-slide').forEach(el => el.classList.toggle('active', Number(el.dataset.i) === idx));
+      heroBanner.querySelectorAll('.hero-banner-dot').forEach(el => el.classList.toggle('on', Number(el.dataset.i) === idx));
+    }, 5000);
+  }
+}
+
 function applyBranding(b, nome) {
   const n = b?.store_name || nome || 'Cardápio';
   _storeName = n;
@@ -351,16 +409,8 @@ function applyBranding(b, nome) {
   // Favicon dinâmico — usa o logo da loja
   if (b?.store_logo_url) setFavicon(b.store_logo_url);
 
-  // Banner — aparece apenas no topo (atrás do cartão)
-  if (b?.store_banner_url) {
-    const url = (b.store_banner_url.startsWith('http') || b.store_banner_url.startsWith('data:')) ? b.store_banner_url : location.origin + b.store_banner_url;
-
-    const heroBanner = document.getElementById('hero-banner');
-    if (heroBanner) {
-      heroBanner.innerHTML = `<img src="${url}" alt="banner" loading="lazy" decoding="async" onerror="this.parentElement.classList.remove('show')">`;
-      heroBanner.classList.add('show');
-    }
-  }
+  // Banner — aparece apenas no topo (atrás do cartão). Suporta até 5 banners em slide (imagem ou vídeo).
+  applyHeroBanners(getBannerList(b));
 
   // Tempo de entrega
   if (b?.store_tempo_entrega) {
@@ -924,17 +974,9 @@ function applyBrandingLive(cfg) {
     setFavicon(cfg.store_logo_url);
   }
 
-  // Banner
-  if (cfg.store_banner_url) {
-    const bannerEl = document.getElementById('hero-banner');
-    if (bannerEl) {
-      const url = (cfg.store_banner_url.startsWith('http') || cfg.store_banner_url.startsWith('data:'))
-        ? cfg.store_banner_url
-        : location.origin + cfg.store_banner_url;
-      bannerEl.innerHTML = `<img src="${url}" alt="banner" loading="lazy" decoding="async" onerror="this.parentElement.classList.remove('show');this.parentElement.style.display='none'">`;
-      bannerEl.classList.add('show');
-      bannerEl.style.display = 'block';
-    }
+  // Banner — aceita atualização ao vivo tanto do array novo (store_banners) quanto do legado (store_banner_url)
+  if (cfg.store_banners !== undefined || cfg.store_banner_url) {
+    applyHeroBanners(getBannerList(cfg));
   }
 
   // Tempo e avaliação
