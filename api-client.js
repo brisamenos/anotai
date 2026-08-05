@@ -132,6 +132,21 @@
       const safePath = tenantScopedFilePath(filePath);
       return { data: { publicUrl: `${BASE}/uploads/${safePath.split('/').pop()}` } };
     }
+    // Remove um arquivo do storage a partir da sua URL pública (ou path relativo)
+    remove(urls) {
+      return new Promise(async resolve => {
+        try {
+          const list = Array.isArray(urls) ? urls : [urls];
+          const headers = defaultHeaders({});
+          const results = await Promise.all(list.filter(Boolean).map(async (u) => {
+            const fname = String(u).split('/').pop().split('?')[0];
+            const res = await fetch(`${BASE}/storage/v1/object/${this.bucket}/${fname}`, { method: 'DELETE', headers });
+            return res.ok;
+          }));
+          resolve({ data: results, error: null });
+        } catch (e) { resolve({ data: null, error: { message: e.message } }); }
+      });
+    }
   }
 
   class StorageClient {

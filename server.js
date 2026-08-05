@@ -4865,6 +4865,22 @@ const server = http.createServer(async (req,res) => {
     await handleUpload(req,res); return
   }
 
+  if(req.method==='DELETE'&&upath.startsWith('/storage/v1/object/')){
+    // Exclusão definitiva do arquivo em disco — requer x-tenant-id ou sessão admin válida
+    const delTid = req.headers['x-tenant-id']
+    if (!delTid && !validarSessaoAdmin(req)) { send(res,401,{error:'Não autorizado'}); return }
+    const fname = path.basename(upath.split('?')[0]).replace(/[^a-zA-Z0-9._-]/g, '_')
+    // Segurança: um tenant só pode apagar arquivo com o próprio prefixo (ex: 7_1699999999.mp4)
+    if (delTid && !fname.startsWith(`${delTid}_`)) { send(res,403,{error:'Arquivo não pertence a este tenant'}); return }
+    try {
+      const fpath = path.join(UPLOADS_DIR, fname)
+      if (fs.existsSync(fpath)) fs.unlinkSync(fpath)
+      log('🗑️', `Upload removido: ${fname}`)
+      send(res,200,{ok:true})
+    } catch(e) { send(res,500,{error:e.message}) }
+    return
+  }
+
   if(req.method==='GET'&&(upath.startsWith('/uploads/')||upath.startsWith('/storage/v1/object/public/'))){
     const fname=path.basename(upath),fpath=path.join(UPLOADS_DIR,fname)
     if(fs.existsSync(fpath)){const ext=path.extname(fpath);res.setHeader('Content-Type',MIME[ext]||'application/octet-stream');res.setHeader('Cache-Control','public, max-age=2592000');res.writeHead(200);fs.createReadStream(fpath).pipe(res)}

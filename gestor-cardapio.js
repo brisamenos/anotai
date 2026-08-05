@@ -1917,18 +1917,21 @@ async function saveEditItem() {
     _editItemImageFile = null;
   }
 
-  // Upload / remoção de vídeo
+  // Upload / remoção de vídeo (a troca ou remoção apaga o arquivo antigo do servidor)
+  const oldVideoUrl = it.videoUrl || null;
   if (_editItemVideoFile) {
     try {
       const vurl = await uploadItemVideo(_editItemVideoFile, editingId);
       await sb.from('menu_items').update({ video_url: vurl }).eq('id', editingId);
       it.videoUrl = vurl;
+      if (oldVideoUrl && oldVideoUrl !== vurl) sb.storage.from('menu-videos').remove(oldVideoUrl).catch(()=>{});
     } catch(e) { sbToast('err', 'Item salvo, mas erro ao enviar vídeo'); }
     _editItemVideoFile = null;
   } else if (_editItemVideoRemove) {
     try {
       await sb.from('menu_items').update({ video_url: null }).eq('id', editingId);
       it.videoUrl = null;
+      if (oldVideoUrl) sb.storage.from('menu-videos').remove(oldVideoUrl).catch(()=>{});
     } catch(e) { sbToast('err', 'Item salvo, mas erro ao remover vídeo'); }
   }
   _editItemVideoRemove = false;
@@ -1951,6 +1954,8 @@ async function deleteItem() {
     console.error('[deleteItem]', error);
     return;
   }
+  // Apaga o arquivo de vídeo do servidor junto (não é compartilhado entre itens, ao contrário da foto)
+  if (it.videoUrl) sb.storage.from('menu-videos').remove(it.videoUrl).catch(()=>{});
   items = items.filter(i => i.id !== editingId);
   closeModal('modal-edit-item');
   renderTable(); renderGestor(); renderPDV();
@@ -2556,4 +2561,246 @@ if (typeof escapeHtml === 'undefined') {
   window.escapeHtml = function(s) {
     return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   };
+}
+
+// ═══════════════════════════════════════════════════════════
+// REPLICAR VÍDEO EM OUTROS PRODUTOS
+// ═══════════════════════════════════════════════════════════
+let _rvItensSelecionados = new Set();
+let _rvSourceItem = null;
+let _rvAllItensCache = [];
+
+function _rvIsValidVideoUrl(url) {
+  const clean = String(url || '').trim();
+  return !!clean && clean !== window.location.href && !clean.endsWith('#') && !clean.startsWith('blob:');
+}
+
+function _rvSetSourcePreview(url, name) {
+  const thumb = document.getElementById('rv-thumb');
+  const empty = document.getElementById('rv-no-video');
+  const title = document.getElementById('rv-source-name');
+  if (thumb) {
+    thumb.src = url;
+    thumb.style.display = 'block';
+    thumb.play?.().catch(()=>{});
+  }
+  if (empty) empty.style.display = 'none';
+  if (title) title.textContent = name || 'Produto atual';
+}
+
+// Garante que o vídeo escolhido no modal de edição já esteja salvo no servidor
+// antes de replicar (caso o usuário tenha selecionado um arquivo mas ainda não salvo o item)
+async function _rvResolveSourceVideo(itemId, sourceItem, explicitSource) {
+  if (explicitSource) return sourceItem?.videoUrl || null;
+
+  const selectedFile = (typeof _editItemVideoFile !== 'undefined' && _editItemVideoFile) ? _editItemVideoFile : null;
+
+  if (selectedFile) {
+    sbLoading(true);
+    try {
+      const url = await uploadItemVideo(selectedFile, itemId);
+      const { error } = await sb.from('menu_items').update({ video_url: url }).eq('id', itemId);
+      if (error) throw error;
+      _editItemVideoFile = null;
+      if (sourceItem) sourceItem.videoUrl = url;
+      const thumb = document.getElementById('edit-video-thumb');
+      if (thumb) thumb.src = url;
+      return url;
+    } catch(e) {
+      sbToast('err', 'Erro ao preparar o vídeo para replicar.');
+      return null;
+    } finally {
+      sbLoading(false);
+    }
+  }
+
+  return sourceItem?.videoUrl
+      || document.getElementById('edit-video-thumb')?.getAttribute('src')
+      || document.getElementById('edit-video-thumb')?.src
+      || null;
+}
+
+async function openReplicarVideoModal(sourceItemId = null) {
+  if (!document.getElementById('modal-replicar-video')) {
+    sbToast('err', 'Atalho de replicar vídeo indisponível.');
+    return;
+  }
+
+  const allItems = (typeof items !== 'undefined' && Array.isArray(items)) ? items : [];
+  const explicitId = sourceItemId ? Number(sourceItemId) : null;
+  const _id = explicitId || ((typeof editingId !== 'undefined' && editingId) ? Number(editingId) : Number(window._editItemId || 0));
+  if (!_id) { sbToast('err', 'Salve o item antes de replicar o vídeo.'); return; }
+
+  const sourceItem = allItems.find(it => Number(it.id) === Number(_id)) || { id: _id, name: 'Item atual', videoUrl: null, cat: '', catKey: '' };
+  const sourceUrl = await _rvResolveSourceVideo(_id, sourceItem, !!explicitId);
+
+  if (!_rvIsValidVideoUrl(sourceUrl)) {
+    sbToast('err', 'Esse item ainda não tem vídeo salvo. Envie um vídeo antes de replicar.');
+    return;
+  }
+
+  _rvSourceItem = { ...sourceItem, videoUrl: sourceUrl };
+  _rvAllItensCache = allItems.filter(it => Number(it.id) !== Number(_id));
+  _rvItensSelecionados = new Set();
+
+  const busca = document.getElementById('rv-busca-item');
+  if (busca) busca.value = '';
+  _rvSetSourcePreview(sourceUrl, _rvSourceItem.name);
+  rvRender('');
+  openModal('modal-replicar-video');
+}
+
+function rvRender(filtro) {
+  const list = document.getElementById('rv-itens-list');
+  if (!list) return;
+
+  const term = (filtro || '').toLowerCase().trim();
+  const filtered = _rvAllItensCache.filter(it => {
+    if (!term) return true;
+    return (it.name || '').toLowerCase().includes(term)
+        || (it.cat || '').toLowerCase().includes(term)
+        || (it.catKey || '').toLowerCase().includes(term);
+  });
+
+  if (!filtered.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px">Nenhum produto encontrado</div>';
+    rvAtualizarContagem();
+    return;
+  }
+
+  const porCategoria = {};
+  filtered.forEach(it => {
+    const cat = it.cat || 'Sem categoria';
+    if (!porCategoria[cat]) porCategoria[cat] = [];
+    porCategoria[cat].push(it);
+  });
+
+  let html = '';
+  for (const cat of Object.keys(porCategoria).sort()) {
+    html += `<div style="font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:8px;margin-bottom:4px;padding-left:4px">${escapeHtml(cat)}</div>`;
+    for (const it of porCategoria[cat]) {
+      const checked = _rvItensSelecionados.has(it.id);
+      const hasVideo = !!it.videoUrl;
+      const hasImg = !!it.imageUrl;
+      const thumb = hasImg
+        ? `<img src="${escapeHtml(it.imageUrl)}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;flex-shrink:0">`
+        : `<div style="width:32px;height:32px;background:var(--surface);border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--muted);font-size:14px">🎬</div>`;
+      const warning = hasVideo
+        ? `<span style="font-size:9.5px;color:#fbbf24;margin-left:auto">já tem vídeo</span>`
+        : `<span style="font-size:9.5px;color:#86efac;margin-left:auto">sem vídeo</span>`;
+      html += `
+        <label data-rv-id="${it.id}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface);border-radius:6px;cursor:pointer;border:1px solid ${checked ? 'var(--accent)' : 'transparent'}" onmouseenter="this.style.background='var(--surface3)'" onmouseleave="this.style.background='var(--surface)'">
+          <input type="checkbox" ${checked ? 'checked' : ''} onchange="rvToggleItem(${it.id}, this.checked)" style="accent-color:var(--accent);flex-shrink:0">
+          ${thumb}
+          <span style="font-size:12px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(it.name || '')}</span>
+          ${warning}
+        </label>`;
+    }
+  }
+  list.innerHTML = html;
+  rvAtualizarContagem();
+}
+
+function rvToggleItem(id, checked) {
+  if (checked) _rvItensSelecionados.add(id);
+  else _rvItensSelecionados.delete(id);
+  rvAtualizarContagem();
+  const list = document.getElementById('rv-itens-list');
+  if (!list) return;
+  const lbl = list.querySelector(`label[data-rv-id="${id}"]`);
+  if (lbl) lbl.style.border = '1px solid ' + (checked ? 'var(--accent)' : 'transparent');
+}
+
+function rvAtualizarContagem() {
+  const c = document.getElementById('rv-contagem');
+  if (c) {
+    const n = _rvItensSelecionados.size;
+    c.textContent = `${n} produto${n===1?'':'s'} selecionado${n===1?'':'s'}`;
+  }
+}
+
+function rvSelecionarTodos(marcar) {
+  _rvItensSelecionados = new Set();
+  if (marcar) {
+    const term = (document.getElementById('rv-busca-item')?.value || '').toLowerCase().trim();
+    const filtered = _rvAllItensCache.filter(it => {
+      if (!term) return true;
+      return (it.name || '').toLowerCase().includes(term)
+          || (it.cat || '').toLowerCase().includes(term)
+          || (it.catKey || '').toLowerCase().includes(term);
+    });
+    filtered.forEach(it => _rvItensSelecionados.add(it.id));
+  }
+  const term = document.getElementById('rv-busca-item')?.value || '';
+  rvRender(term);
+}
+
+function rvMesmaCategoria() {
+  if (!_rvSourceItem) return;
+  const catKey = _rvSourceItem.catKey || _rvSourceItem.cat || '';
+  const catLabel = _rvSourceItem.cat || '';
+  _rvItensSelecionados = new Set();
+  _rvAllItensCache.forEach(it => {
+    if ((it.catKey || it.cat || '') === catKey || (catLabel && it.cat === catLabel)) _rvItensSelecionados.add(it.id);
+  });
+  const term = document.getElementById('rv-busca-item')?.value || '';
+  rvRender(term);
+}
+
+function rvSemVideo() {
+  _rvItensSelecionados = new Set();
+  _rvAllItensCache.forEach(it => {
+    if (!it.videoUrl) _rvItensSelecionados.add(it.id);
+  });
+  const term = document.getElementById('rv-busca-item')?.value || '';
+  rvRender(term);
+}
+
+function rvFiltrar(term) {
+  rvRender(term);
+}
+
+async function replicarVideoEmLote() {
+  const ids = Array.from(_rvItensSelecionados);
+  if (!ids.length) { sbToast('err', 'Selecione pelo menos 1 produto.'); return; }
+
+  const url = _rvSourceItem?.videoUrl || null;
+  if (!_rvIsValidVideoUrl(url)) { sbToast('err', 'Vídeo não encontrado.'); return; }
+
+  const allItems = (typeof items !== 'undefined' && Array.isArray(items)) ? items : [];
+  const sobrescritas = ids.filter(id => {
+    const it = allItems.find(x => Number(x.id) === Number(id));
+    return it?.videoUrl && it.videoUrl !== url;
+  }).length;
+  if (sobrescritas && !confirm(`Isso vai substituir o vídeo atual de ${sobrescritas} ${sobrescritas===1?'produto':'produtos'} (o vídeo antigo será apagado do servidor). Continuar?`)) return;
+
+  const btn = document.getElementById('rv-btn-aplicar');
+  if (btn) { btn.disabled = true; btn.textContent = `Aplicando em ${ids.length}...`; }
+
+  let sucesso = 0, falhas = 0;
+  for (const id of ids) {
+    try {
+      const it = allItems.find(x => Number(x.id) === Number(id));
+      const oldUrl = it?.videoUrl || null;
+      const { error } = await sb.from('menu_items').update({ video_url: url }).eq('id', id);
+      if (error) { falhas++; continue; }
+      sucesso++;
+      if (it) it.videoUrl = url;
+      // Apaga o vídeo antigo que foi substituído (não fica órfão no servidor)
+      if (oldUrl && oldUrl !== url) sb.storage.from('menu-videos').remove(oldUrl).catch(()=>{});
+    } catch (e) {
+      falhas++;
+    }
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Replicar vídeo'; }
+  closeModal('modal-replicar-video');
+
+  try { if (typeof renderGestor === 'function') renderGestor(); } catch(_) {}
+  try { if (typeof renderTable === 'function') renderTable(); } catch(_) {}
+  try { if (typeof renderPDV === 'function') renderPDV(); } catch(_) {}
+
+  if (sucesso && !falhas) sbToast('ok', `✅ Vídeo replicado em ${sucesso} ${sucesso===1?'produto':'produtos'}!`);
+  else if (sucesso && falhas) sbToast('ok', `Replicado em ${sucesso}. ${falhas} ${falhas===1?'falhou':'falharam'}.`);
+  else sbToast('err', 'Nenhum produto foi atualizado. Tente novamente.');
 }
