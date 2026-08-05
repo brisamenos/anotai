@@ -344,6 +344,7 @@ function applyHeroBanners(list) {
 
   heroBanner.innerHTML = `<div class="hero-banner-slides">${slidesHtml}</div>${dotsHtml}`;
   heroBanner.classList.add('show');
+  fixIosVideoAutoplay(heroBanner);
 
   if (items.length > 1) {
     let idx = 0;

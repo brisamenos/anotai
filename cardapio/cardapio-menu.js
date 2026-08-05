@@ -266,7 +266,9 @@ function renderMenu() {
       html += renderChecklistSection(filteredChecklistCat, catItems, true);
     }
     html += '</div>';
-    document.getElementById('menu-wrap').innerHTML = html;
+    const _menuWrapEl2 = document.getElementById('menu-wrap');
+    _menuWrapEl2.innerHTML = html;
+    fixIosVideoAutoplay(_menuWrapEl2);
     return;
   }
 
@@ -325,7 +327,9 @@ function renderMenu() {
   }
 
   html += '</div>';
-  document.getElementById('menu-wrap').innerHTML = html;
+  const _menuWrapEl = document.getElementById('menu-wrap');
+  _menuWrapEl.innerHTML = html;
+  fixIosVideoAutoplay(_menuWrapEl);
   initScrollSpy();
 }
 

@@ -34,6 +34,7 @@ function openItemModal(id) {
   if (i.video_url) {
     const fallbackImg = (i.image_url || '').replace(/'/g, '%27');
     imgEl.innerHTML = `<video src="${i.video_url}" autoplay muted loop playsinline controls style="width:100%;height:100%;object-fit:cover" onerror="imVideoFallback(this,'${fallbackImg}','${(i.name||'').replace(/'/g,'%27')}')"></video>`;
+    fixIosVideoAutoplay(imgEl);
   } else if (i.image_url) {
     imgEl.innerHTML = `<img src="${i.image_url}" alt="${i.name}" style="width:100%;height:100%;object-fit:cover">`;
   } else {

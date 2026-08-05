@@ -3,6 +3,27 @@
 //  Estima Food — Cardápio
 // ══════════════════════════════════════════
 // ══════════════════════════════════════════
+//  FIX AUTOPLAY DE VÍDEO NO iOS/SAFARI
+// ══════════════════════════════════════════
+// No iOS, <video autoplay> inserido via innerHTML frequentemente NÃO
+// começa a tocar sozinho (mesmo com muted+playsinline), sem disparar erro.
+// Chamar isso logo após qualquer innerHTML que possa conter <video>.
+function fixIosVideoAutoplay(container) {
+  const root = container || document;
+  const vids = root.querySelectorAll ? root.querySelectorAll('video[autoplay]') : [];
+  vids.forEach(v => {
+    try {
+      v.muted = true;
+      v.defaultMuted = true;
+      v.playsInline = true;
+      if (v.readyState === 0) { try { v.load(); } catch(e) {} }
+      const p = v.play();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (e) {}
+  });
+}
+
+// ══════════════════════════════════════════
 //  TOAST
 // ══════════════════════════════════════════
 
