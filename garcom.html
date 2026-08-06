@@ -894,9 +894,28 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
   position: absolute; top: 7px; left: 8px;
   background: var(--amber); color: #3a2504;
   font-size: 9px; font-weight: 800;
-  padding: 2px 7px; border-radius: 99px;
+  padding: 2px 7px 2px 16px; border-radius: 99px;
   letter-spacing: .4px; text-transform: uppercase;
   opacity: .95;
+  overflow: visible;
+}
+/* fumacinha subindo do canto do badge, tipo panela no fogo */
+.mesa-pendente-badge::before,
+.mesa-pendente-badge::after {
+  content: '';
+  position: absolute;
+  bottom: 6px; left: 6px;
+  width: 4px; height: 4px;
+  background: rgba(255,255,255,.75);
+  border-radius: 50%;
+  filter: blur(1.2px);
+  animation: mesa-smoke-puff 1.7s ease-in infinite;
+}
+.mesa-pendente-badge::after { left: 10px; animation-delay: .65s; }
+@keyframes mesa-smoke-puff {
+  0%   { transform: translate(0,0) scale(.5); opacity: 0; }
+  20%  { opacity: .6; }
+  100% { transform: translate(3px,-13px) scale(1.5); opacity: 0; }
 }
 .mesa-block.pendente-led {
   border-color: rgba(245,158,11,.55);
@@ -2816,7 +2835,7 @@ function renderMesas() {
       _parseItems(o.items).some(it => it.item_status === 'producao' || it.item_status === 'analise')
     );
     const prontoBadge = hasPronto ? `<div class="mesa-pronto-badge">SERVIR</div>`
-                       : hasPendente ? `<div class="mesa-pendente-badge">PREPARANDO</div>` : '';
+                       : hasPendente ? `<div class="mesa-pendente-badge">PRODUÇÃO</div>` : '';
 
     const onclick = free
       ? `openPedido(${t.num})`
