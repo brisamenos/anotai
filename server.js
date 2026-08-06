@@ -2634,6 +2634,16 @@ async function handleREST(req, res, table, params, body) {
   if (req.method === 'DELETE') {
     if (!WHERE) return send(res, 400, { error: 'DELETE sem filtro não permitido' })
     try {
+      // "categories" tem FK em menu_items.category_id sem ON DELETE, então excluir uma
+      // categoria com itens vinculados por esse campo numérico quebra com FOREIGN KEY
+      // constraint failed. Os itens continuam existindo (por isso desvincula, não apaga).
+      if (table === 'categories') {
+        const idsParaExcluir = db.prepare(`SELECT id FROM "categories" ${WHERE}`).all(...vals).map(r => r.id)
+        if (idsParaExcluir.length) {
+          const placeholders = idsParaExcluir.map(() => '?').join(',')
+          db.prepare(`UPDATE "menu_items" SET category_id = NULL WHERE category_id IN (${placeholders})`).run(...idsParaExcluir)
+        }
+      }
       const info = db.prepare(`DELETE FROM "${table}" ${WHERE}`).run(...vals)
       if (SSE_TABLES.has(table)) emit(tenantId, table, {}, 'DELETE')
       marcarDirty(); return send(res, 200, { deleted: info.changes })
