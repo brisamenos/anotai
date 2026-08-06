@@ -940,7 +940,7 @@ function renderGestor(){
             <span class="cat-badge">${catItems.length} ite${catItems.length===1?'m':'ns'}</span>
           </div>
           <div class="cat-actions">
-            <div class="sw"><select onclick="event.stopPropagation()" style="font-size:11.5px;padding:4px 22px 4px 9px" onchange="handleCatAction(${cat.id},this.value)"><option value="">Ações ▾</option><option value="edit">Editar</option><option value="duplicate">Duplicar</option><option value="pause">Pausar</option><option value="delete">Excluir</option></select></div>
+            <div class="sw"><select onclick="event.stopPropagation()" style="font-size:11.5px;padding:4px 22px 4px 9px" onchange="handleCatAction(${cat.id},this.value,this)"><option value="">Ações ▾</option><option value="edit">Editar</option><option value="duplicate">Duplicar</option><option value="pause">Pausar</option><option value="delete">Excluir</option></select></div>
             <div class="cat-toggle${cat.open?' open':''}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
           </div>
         </div>
@@ -1019,8 +1019,9 @@ function _saveCatPrinterRoute(catKey, printer) {
   window.setPrintSetorCategoria(catKey, printer || '');
 }
 
-function handleCatAction(id, action) {
+function handleCatAction(id, action, selectEl) {
   if (!action) return;
+  if (selectEl) selectEl.value = ''; // sempre volta pro "Ações ▾", nunca fica travado num rótulo antigo
   if (action === 'edit') {
     const cat = categories.find(c => c.id === id);
     if (!cat) return;
@@ -1162,7 +1163,12 @@ async function deleteCatById(id) {
   sbLoading(true);
   const { error } = await sb.from('categories').delete().eq('id', catId);
   sbLoading(false);
-  if (error) { sbToast('err','Erro ao excluir'); return; }
+  if (error) {
+    console.error('[deleteCatById]', error);
+    const detalhe = error.message || error.details || error.hint || error.code || 'motivo desconhecido';
+    sbToast('err', 'Erro ao excluir: ' + detalhe);
+    return;
+  }
   if (cat) _saveCatPrinterRoute(cat.name, '');
   categories = categories.filter(c => c.id !== catId);
   closeModal('modal-edit-cat');
