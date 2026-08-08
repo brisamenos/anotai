@@ -6102,7 +6102,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const tid = req.headers['x-tenant-id']
     if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
     const body = await readBody(req)
-    const { card_token, payment_method_id, valor, order_id, client, email = 'cliente@email.com', issuer_id } = body
+    const { card_token, payment_method_id, valor, order_id, client, email = 'cliente@email.com', issuer_id, identification_type, identification_number } = body
     if (!card_token)         { send(res, 400, { error: 'card_token obrigatório' }); return true }
     if (!payment_method_id)  { send(res, 400, { error: 'payment_method_id obrigatório' }); return true }
     const _valorMpC = _mpValor(valor)
@@ -6132,6 +6132,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
         external_reference: extRef,
         notification_url:   `${_mpBaseUrlC}/webhook/mercadopago`,
         payer: { email, first_name: client || 'Cliente', last_name: '' },
+      }
+      // CPF do titular é exigido pelo antifraude do MP — sem isso o pagamento
+      // é recusado quase sempre, mesmo com dados de cartão corretos.
+      const _cpfLimpoC = String(identification_number || '').replace(/\D/g, '')
+      if (_cpfLimpoC) {
+        mpBody.payer.identification = { type: identification_type || 'CPF', number: _cpfLimpoC }
       }
       if (issuer_id) mpBody.issuer_id = issuer_id
 
