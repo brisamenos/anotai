@@ -697,7 +697,8 @@ function openOrderDetail(id) {
   }
   if (!o) return;
   window._currentDetailId = id;
-  window._detailKanbanOrder = o._isMesa ? null : o;
+  window._detailKanbanOrder = o;
+  window._detailIsMesa = !!o._isMesa;
 
   // Número e status
   document.getElementById('od-id').textContent = 'Pedido #' + o.num;
@@ -851,9 +852,10 @@ function openOrderDetail(id) {
       : `<span>🌐 Pedido via Cardápio Digital</span>`;
   }
 
-  // Botão de adicionar produto — todos os segmentos (exceto mesa)
+  // Botão de adicionar produto — todos os segmentos, incluindo mesa
+  // (gestor pode lançar item na comanda mesmo sem passar pelo garçom)
   const _addPanelBtn = document.getElementById('od-add-produto-btn');
-  if (_addPanelBtn) _addPanelBtn.style.display = (!o._isMesa) ? '' : 'none';
+  if (_addPanelBtn) _addPanelBtn.style.display = '';
 
   // Botão de fechar mesa — só para pedidos de mesa em status pronto
   const _fecharMesaBtn = document.getElementById('od-fechar-mesa-btn');
@@ -1250,30 +1252,67 @@ async function _odConfirmarItemExistente(itemId) {
     finalQty = 1;
   }
 
-  const newItem      = { id: it.id || null, qty: finalQty, name, price, obs, emoji: it.emoji || '' };
-  const currentItems = Array.isArray(o.items) ? [...o.items] : [];
-  const existing     = !isKg && currentItems.find(c => c.name === name && (c.obs || '') === obs);
-  if (existing) existing.qty += finalQty;
-  else currentItems.push(newItem);
-
-  const newTotal = currentItems.reduce((s, i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
+  const isMesaOrder = !!window._detailIsMesa;
 
   try {
-    const { error } = await sb.from('orders')
-      .update({ items: currentItems, total: newTotal, updated_at: new Date().toISOString() })
-      .eq('id', o.id);
-    if (error) throw error;
-    const idx = ordersKanban.findIndex(x => x.id === o.id);
-    if (idx !== -1) {
-      ordersKanban[idx] = { ...ordersKanban[idx], items: currentItems, total: newTotal };
-      window._detailKanbanOrder = ordersKanban[idx];
+    if (isMesaOrder) {
+      // ── Comanda de mesa: itens seguem o formato do garçom (item_status próprio) ──
+      const mesaOrder = mesaOrdersCache.find(x => x.id === o.id);
+      if (!mesaOrder) { modal.remove(); return; }
+      const currentItems = Array.isArray(mesaOrder.items) ? [...mesaOrder.items] : [];
+      const newItem = {
+        id: it.id || null, qty: finalQty, name, price, obs, emoji: it.emoji || '',
+        item_status: 'producao',
+        item_id: `${Date.now()}_add`,
+        added_at: new Date().toISOString(),
+        garcom_id: null,
+        garcom_nome: 'Gestor'
+      };
+      currentItems.push(newItem);
+      const newTotal = currentItems
+        .filter(i => i.item_status !== 'cancelado')
+        .reduce((s, i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
+
+      const { error } = await sb.from('orders')
+        .update({ items: currentItems, total: newTotal, updated_at: new Date().toISOString() })
+        .eq('id', o.id);
+      if (error) throw error;
+
+      const idx = mesaOrdersCache.findIndex(x => x.id === o.id);
+      if (idx !== -1) mesaOrdersCache[idx] = { ...mesaOrdersCache[idx], items: currentItems, total: newTotal };
+      window._detailMesaAllItems = currentItems;
+
+      modal.remove();
+      document.getElementById('od-catalog-overlay')?.remove();
+      closeModal('modal-order-detail');
+      setTimeout(() => openOrderDetail(o.id), 80);
+      renderKanban();
+      _renderMesaPageFromCache();
+      sbToast('ok', `${name} adicionado à mesa!`);
+    } else {
+      const currentItems = Array.isArray(o.items) ? [...o.items] : [];
+      const existing = !isKg && currentItems.find(c => c.name === name && (c.obs || '') === obs);
+      if (existing) existing.qty += finalQty;
+      else currentItems.push({ id: it.id || null, qty: finalQty, name, price, obs, emoji: it.emoji || '' });
+
+      const newTotal = currentItems.reduce((s, i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
+
+      const { error } = await sb.from('orders')
+        .update({ items: currentItems, total: newTotal, updated_at: new Date().toISOString() })
+        .eq('id', o.id);
+      if (error) throw error;
+      const idx = ordersKanban.findIndex(x => x.id === o.id);
+      if (idx !== -1) {
+        ordersKanban[idx] = { ...ordersKanban[idx], items: currentItems, total: newTotal };
+        window._detailKanbanOrder = ordersKanban[idx];
+      }
+      modal.remove();
+      document.getElementById('od-catalog-overlay')?.remove();
+      closeModal('modal-order-detail');
+      setTimeout(() => openOrderDetail(o.id), 80);
+      renderKanban();
+      sbToast('ok', `${name} adicionado ao pedido!`);
     }
-    modal.remove();
-    document.getElementById('od-catalog-overlay')?.remove();
-    closeModal('modal-order-detail');
-    setTimeout(() => openOrderDetail(o.id), 80);
-    renderKanban();
-    sbToast('ok', `${name} adicionado ao pedido!`);
   } catch(e) {
     alert('Erro ao adicionar item: ' + (e.message || e));
   }
