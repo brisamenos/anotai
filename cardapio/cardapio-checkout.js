@@ -1148,7 +1148,7 @@ async function _initMpCardForm(valor) {
 
           if (!formData) throw new Error('Não foi possível obter os dados do cartão. Verifique os campos.');
 
-          const { token, installments, paymentMethodId, issuerId, identificationNumber, cardholderName } = formData;
+          const { token, installments, paymentMethodId, issuerId, identificationType, identificationNumber, cardholderName } = formData;
 
           if (!token) throw new Error('Não foi possível processar o cartão. Verifique os dados.');
 
@@ -1159,13 +1159,15 @@ async function _initMpCardForm(valor) {
             method:  'POST',
             headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId },
             body: JSON.stringify({
-              card_token:        token,
-              payment_method_id: paymentMethodId,
-              issuer_id:         issuerId,
-              valor:             parseFloat(order.total) + parseFloat(order.taxa || 0),
-              order_id:          order.id,
-              client:            order.client,
-              email:             document.getElementById('mp-cardholderEmail')?.value || 'cliente@estima.app',
+              card_token:            token,
+              payment_method_id:     paymentMethodId,
+              issuer_id:             issuerId,
+              valor:                 parseFloat(order.total) + parseFloat(order.taxa || 0),
+              order_id:              order.id,
+              client:                order.client,
+              email:                 document.getElementById('mp-cardholderEmail')?.value || 'cliente@estima.app',
+              identification_type:   identificationType || 'CPF',
+              identification_number: cpf,
             })
           });
           const d = await res.json();
