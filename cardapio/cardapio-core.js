@@ -811,19 +811,8 @@ async function init() {
       if (pixBtn) pixBtn.style.display = 'none';
     }
 
-    // Carrega public key e mostra Cartão MP só se disponível E ativo
-    if (pixCfgR.cartao_disponivel && pixCfgR.cartao_online_ativo) {
-      fetch('/api/cartao/public-key', { headers: { 'x-tenant-id': _tenantId } })
-        .then(r => r.ok ? r.json() : {})
-        .then(d => {
-          if (d?.cartao_ativo && d?.public_key) {
-            _mpPublicKey = d.public_key;
-            _cartaoAtivo = true;
-            const btn = document.getElementById('pay-opt-cartao-mp');
-            if (btn) btn.style.display = '';
-          }
-        }).catch(() => {});
-    }
+    // Cartão online (cartao_mp) bloqueado no cardápio — fica só cartão na entrega.
+    // (bloco de ativação do cartão online desabilitado propositalmente)
 
     buildCats();
     renderPreparoFilterSection();
