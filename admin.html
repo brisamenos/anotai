@@ -1992,6 +1992,13 @@ td{padding:12px 16px;color:#dce6f7}
         <input class="minput" id="cli-valor-personalizado" type="number" step="0.01" min="0" placeholder="deixe em branco p/ usar o preço padrão">
       </div>
     </div>
+    <div class="mrow2" style="margin-top:12px" id="cli-valor-validade-row">
+      <div class="mrow" style="margin:0">
+        <label class="mlabel">Preço personalizado válido até <span style="color:var(--muted);font-weight:400">(opcional — ex: promoção de 6 meses)</span></label>
+        <input class="minput" id="cli-valor-expira" type="date">
+        <span style="font-size:11.5px;color:var(--muted)">Deixe em branco pra não expirar. Ao vencer, volta sozinho pro valor geral do plano.</span>
+      </div>
+    </div>
 
     <!-- IA (só edição) -->
     <div id="cli-ia-section" style="display:none">
@@ -2969,7 +2976,7 @@ function renderClientes() {
         <div class="manager-name">${gestor?.nome||'—'}</div>
         <div class="manager-email">${gestor?.email||c.email||'—'}</div>
       </td>
-      <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${planoLabel[c.plano]||c.plano}</span>${(c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? `<div style="font-size:11px;color:var(--success);font-weight:700;margin-top:3px">💰 R$ ${parseFloat(c.valor_mensalidade).toFixed(2)}/mês</div>` : ''}</td>
+      <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${planoLabel[c.plano]||c.plano}</span>${(c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? `<div style="font-size:11px;color:var(--success);font-weight:700;margin-top:3px">💰 R$ ${parseFloat(c.valor_mensalidade).toFixed(2)}/mês${c.valor_mensalidade_expira_em ? ` <span style="color:var(--warning,#b45309);font-weight:600">(até ${adminFormatDate(c.valor_mensalidade_expira_em)})</span>` : ''}</div>` : ''}</td>
       <td><span class="badge ${(c.segmento||'restaurante')==='acougue'?'bg-orange':'bg-blue'}">${(c.segmento||'restaurante')==='acougue'?'🥩 Açougue':'🍔 Restaurante'}</span></td>
       <td style="font-size:12.5px;color:${expOk?(expSoon?'var(--orange)':'var(--text-2)'):'var(--danger)'}">${c.expires_at ? adminFormatDate(c.expires_at) : '—'}${expSoon?' ⚠️':''}</td>
       <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">● ${c.ativo?'Ativo':'Inativo'}</span></td>
@@ -3001,7 +3008,7 @@ function autoSlug() {
 function abrirModalCliente(id) { _abrirModalClienteAsync(id); }
 async function _abrirModalClienteAsync(id) {
   document.getElementById('m-cli-titulo').textContent = id ? '✏️ Editar Cliente' : '➕ Novo Cliente';
-  ['cli-id','cli-nome','cli-slug','cli-email','cli-senha','cli-gestor-nome','cli-expira','cli-valor-personalizado'].forEach(i => { const el=document.getElementById(i); if(el) el.value=''; });
+  ['cli-id','cli-nome','cli-slug','cli-email','cli-senha','cli-gestor-nome','cli-expira','cli-valor-personalizado','cli-valor-expira'].forEach(i => { const el=document.getElementById(i); if(el) el.value=''; });
   document.getElementById('cli-plano').value    = 'premium';
   document.getElementById('cli-segmento').value = 'restaurante';
   document.getElementById('cli-ativo').value  = 'true';
@@ -3023,6 +3030,7 @@ async function _abrirModalClienteAsync(id) {
       document.getElementById('cli-ativo').value    = String(c.ativo);
       document.getElementById('cli-segmento').value = c.segmento || 'restaurante';
       document.getElementById('cli-valor-personalizado').value = (c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? c.valor_mensalidade : '';
+      document.getElementById('cli-valor-expira').value = c.valor_mensalidade_expira_em ? String(c.valor_mensalidade_expira_em).slice(0,10) : '';
     }
     try {
       const r = await fetch('/api/admin-backup/ia-config?tenant_id='+id, { headers: adminAuthHeader() });
@@ -3058,12 +3066,14 @@ async function salvarCliente() {
   const senha      = document.getElementById('cli-senha').value;
   const valorPersonalizadoRaw = document.getElementById('cli-valor-personalizado').value;
   const valorPersonalizado = valorPersonalizadoRaw === '' ? null : parseFloat(valorPersonalizadoRaw);
+  // Validade só faz sentido se houver um valor personalizado definido
+  const valorExpira = (valorPersonalizado !== null) ? (document.getElementById('cli-valor-expira').value || null) : null;
   if (!nome||!slug) { toast('err','Preencha nome e slug'); return; }
   if (!id && (!gestorNome||!email||!senha)) { toast('err','Preencha todos os dados do gestor'); return; }
   let error;
   if (id) {
-    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo, expires_at: expira, segmento, valor_mensalidade: valorPersonalizado }).eq('id',id));
-    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo,expires_at:expira,segmento,valor_mensalidade:valorPersonalizado}; }
+    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo, expires_at: expira, segmento, valor_mensalidade: valorPersonalizado, valor_mensalidade_expira_em: valorExpira }).eq('id',id));
+    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo,expires_at:expira,segmento,valor_mensalidade:valorPersonalizado,valor_mensalidade_expira_em:valorExpira}; }
     const iaKeyVal = (document.getElementById('cli-ia-key')?.value || '').trim();
     if (!error && iaKeyVal && !iaKeyVal.startsWith('•')) {
       try {
@@ -3085,7 +3095,7 @@ async function salvarCliente() {
     }
   } else {
     try {
-      const res = await fetch('/api/criar-tenant', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ nome, slug, email, senha, nomeGestor: gestorNome, plano, role:'gestor', segmento, expires_at: expira, valor_mensalidade: valorPersonalizado }) });
+      const res = await fetch('/api/criar-tenant', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ nome, slug, email, senha, nomeGestor: gestorNome, plano, role:'gestor', segmento, expires_at: expira, valor_mensalidade: valorPersonalizado, valor_mensalidade_expira_em: valorExpira }) });
       const data = await res.json();
       if (!res.ok) { error = { message: data.error || 'Erro ao criar restaurante' }; }
       else { await loadAll(); }
@@ -3379,7 +3389,7 @@ function gerarCobrancaCliente(tenantId) {
   if (!c) return;
   _cbTenantAtual = c;
   document.getElementById('cb-titulo').textContent = `💳 Cobrar — ${c.nome}`;
-  document.getElementById('cb-info').innerHTML = `Vencimento atual: <strong>${c.expires_at?adminFormatDate(c.expires_at):'Sem data'}</strong>` + ((c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? `<br><span style="color:var(--success)">💰 Preço personalizado deste cliente: R$ ${parseFloat(c.valor_mensalidade).toFixed(2)}/mês</span>` : '');
+  document.getElementById('cb-info').innerHTML = `Vencimento atual: <strong>${c.expires_at?adminFormatDate(c.expires_at):'Sem data'}</strong>` + ((c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? `<br><span style="color:var(--success)">💰 Preço personalizado deste cliente: R$ ${parseFloat(c.valor_mensalidade).toFixed(2)}/mês${c.valor_mensalidade_expira_em ? ` <span style="color:var(--warning,#b45309)">(promoção válida até ${adminFormatDate(c.valor_mensalidade_expira_em)}, depois volta ao valor geral)</span>` : ''}</span>` : '');
   document.getElementById('cb-plano').value = 'premium';
   document.getElementById('cb-meses').value = '1';
   document.getElementById('cb-metodo').value = 'pix';

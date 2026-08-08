@@ -694,6 +694,22 @@ function _processarCobrancaAssinatura(db, log, marcarDirty, ass, paymentId, paym
 // ═══════════════════════════════════════════════════════
 // CRON DIÁRIO: auto-cobrança 3 dias antes de vencer
 // ═══════════════════════════════════════════════════════
+// Preço promocional/personalizado (valor_mensalidade) com validade: quando
+// valor_mensalidade_expira_em vence, o tenant volta a pagar o valor geral do
+// plano automaticamente (silencioso, sem notificar ninguém).
+function _expirarPromocoesVencidas(db, log) {
+  try {
+    const info = db.prepare(`
+      UPDATE tenants SET valor_mensalidade=NULL, valor_mensalidade_expira_em=NULL
+      WHERE valor_mensalidade IS NOT NULL
+        AND valor_mensalidade_expira_em IS NOT NULL
+        AND date(valor_mensalidade_expira_em) < date('now')
+    `).run()
+    if (info.changes > 0) log('💰', `${info.changes} preço(s) promocional(is) vencido(s) revertido(s) para o valor geral`)
+    return info.changes
+  } catch (e) { log?.('⚠️', 'Falha ao expirar promoções vencidas:', e.message); return 0 }
+}
+
 let _autoCobrancaJobIniciado = false
 function _iniciarAutoCobrancaJob(ctx) {
   if (_autoCobrancaJobIniciado) return
@@ -703,6 +719,9 @@ function _iniciarAutoCobrancaJob(ctx) {
 
   async function tick() {
     try {
+      // Reverte preços promocionais/personalizados vencidos para o valor geral
+      _expirarPromocoesVencidas(db, log)
+
       // Lê preços globais
       let precoEss = 79.99, precoPre = 99.90, precoFiscal = 159.90
       try {
@@ -2839,9 +2858,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
     if (body.slug && slugFinal !== slugPedido) fail(400, `Slug "${slugPedido}" já em uso. Sugerimos: "${slugFinal}".`)
 
     const catInsert = db.prepare("INSERT INTO categories (tenant_id,name,label,type,emoji,sort_order,ativo) VALUES (?,?,?,?,?,?,1)")
+    // Desconto do indicador (até 10%, aplicado só na criação — vira o valor_mensalidade fixo do tenant)
+    const valorMensalidade = (opts.valorMensalidade !== undefined && opts.valorMensalidade !== null)
+      ? parseFloat(opts.valorMensalidade) : null
+
     const result = db.transaction(() => {
-      db.prepare('INSERT INTO tenants (nome, plano, slug, segmento, expires_at) VALUES (?,?,?,?,?)')
-        .run(nome, plano, slugFinal, segmento, expiresAt)
+      db.prepare('INSERT INTO tenants (nome, plano, slug, segmento, expires_at, valor_mensalidade) VALUES (?,?,?,?,?,?)')
+        .run(nome, plano, slugFinal, segmento, expiresAt, valorMensalidade)
       const tenant = db.prepare('SELECT id, nome, slug, plano, segmento, expires_at FROM tenants WHERE slug=?').get(slugFinal)
       db.prepare('INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)').run(tenant.id)
       const maxOrderId = db.prepare('SELECT COALESCE(MAX(id),0) as m FROM orders').get()?.m || 0
@@ -3894,6 +3917,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const expiresAt = /^\d{4}-\d{2}-\d{2}$/.test(expiresAtRaw) ? expiresAtRaw : null
     const valorMensalidade = (body.valor_mensalidade !== undefined && body.valor_mensalidade !== null && body.valor_mensalidade !== '')
       ? parseFloat(body.valor_mensalidade) : null
+    const valorMensalidadeExpiraRaw = String(body.valor_mensalidade_expira_em || '').trim()
+    // Validade só faz sentido junto de um preço personalizado; sem preço, ignora a data
+    const valorMensalidadeExpira = (valorMensalidade !== null && /^\d{4}-\d{2}-\d{2}$/.test(valorMensalidadeExpiraRaw))
+      ? valorMensalidadeExpiraRaw : null
     if (!nome || !email || !senha) { send(res, 400, { error: 'nome, email e senha obrigatórios' }); return true }
     try {
       const hash     = crypto.createHash('sha256').update(senha).digest('hex')
@@ -3903,7 +3930,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (slug && slugFinal !== slug) { send(res, 400, { error: `Slug "${slug}" já em uso. Sugerimos: "${slugFinal}"` }); return true }
       if (db.prepare('SELECT id FROM sys_users WHERE email=?').get(email)) { send(res, 400, { error: `E-mail "${email}" já cadastrado.` }); return true }
       const seg = ['restaurante','acougue'].includes(segmento) ? segmento : 'restaurante'
-      db.prepare('INSERT INTO tenants (nome,plano,slug,segmento,expires_at,valor_mensalidade) VALUES (?,?,?,?,?,?)').run(nome, plano || 'basic', slugFinal, seg, expiresAt, valorMensalidade)
+      db.prepare('INSERT INTO tenants (nome,plano,slug,segmento,expires_at,valor_mensalidade,valor_mensalidade_expira_em) VALUES (?,?,?,?,?,?,?)').run(nome, plano || 'basic', slugFinal, seg, expiresAt, valorMensalidade, valorMensalidadeExpira)
       const t = db.prepare('SELECT id FROM tenants WHERE slug=?').get(slugFinal)
       db.prepare('INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)').run(t.id)
       // Define offset = max(id) atual para que o 1º pedido deste tenant comece em #1
@@ -4341,9 +4368,28 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
     const body = await readBody(req)
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+    // Indicador pode dar até 10% de desconto sobre o valor geral do plano.
+    // Ele NUNCA define um valor fixo — só a % de desconto, e o limite de 10%
+    // é validado aqui no servidor (não confia no que vem do painel).
+    const descontoPctRaw = parseFloat(body.desconto_pct)
+    const descontoPct = Number.isFinite(descontoPctRaw) ? Math.min(10, Math.max(0, descontoPctRaw)) : 0
+    let valorMensalidade = null
+    if (descontoPct > 0) {
+      let precoEss = 79.99, precoPre = 99.90
+      try {
+        const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+        const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+        if (g.preco_essencial !== undefined) precoEss = parseFloat(g.preco_essencial)
+        if (g.preco_premium   !== undefined) precoPre = parseFloat(g.preco_premium)
+      } catch {}
+      const planoBase = (body.plano === 'premium') ? precoPre : precoEss
+      valorMensalidade = Math.round(planoBase * (1 - descontoPct / 100) * 100) / 100
+    }
+
     try {
-      const criado = criarTenantGestorPadrao(body, { expiresAt, role: 'gestor' })
-      send(res, 201, { ok: true, ...criado, expires_at: expiresAt, dias: 30 })
+      const criado = criarTenantGestorPadrao(body, { expiresAt, role: 'gestor', valorMensalidade })
+      send(res, 201, { ok: true, ...criado, expires_at: expiresAt, dias: 30, desconto_pct: descontoPct, valor_mensalidade: valorMensalidade })
     } catch (e) {
       send(res, e.status || 500, { error: (e.status ? '' : 'Falha ao criar cliente: ') + e.message })
     }
@@ -7982,6 +8028,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const body = await readBody(req)
     const ids = Array.isArray(body?.tenant_ids) ? body.tenant_ids : []
     if (!ids.length) { send(res, 400, { error: 'tenant_ids obrigatório (array)' }); return true }
+    _expirarPromocoesVencidas(db, log)
     // Lê preços dos planos
     let precoEss = 79.99, precoPre = 99.90, precoFiscal = 159.90
     try {

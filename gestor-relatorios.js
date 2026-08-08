@@ -1831,8 +1831,8 @@ async function renderMeuPlano() {
 
   if (elNome) elNome.textContent = 'Carregando...';
   
-  // Carregar precos dos planos
-  carregarPrecosPlanos();
+  // Carregar precos dos planos (aguarda pra já ter o valor geral quando calcular o preço deste tenant)
+  await carregarPrecosPlanos();
   carregarAssinaturaPlano();
 
   try {
@@ -1887,6 +1887,25 @@ async function renderMeuPlano() {
 
     // ── Nome do tenant ──
     if (elTenant) elTenant.textContent = data.nome || _sessao?.nome || '—';
+
+    // ── Preço deste tenant no card de renovação: personalizado (promoção) tem prioridade sobre o valor geral ──
+    const valorPersonalizado = (data.valor_mensalidade !== null && data.valor_mensalidade !== undefined && data.valor_mensalidade !== '')
+      ? parseFloat(data.valor_mensalidade) : null;
+    _valorMeuPlano = valorPersonalizado !== null ? valorPersonalizado : (isPremium ? _precosPlanos.premium : _precosPlanos.essencial);
+    _planoSelecionado = 'premium'; // plano unico — sempre este código internamente
+    const elPrecoMeuPlano = document.getElementById('preco-premium');
+    if (elPrecoMeuPlano) elPrecoMeuPlano.textContent = _valorMeuPlano.toFixed(2).replace('.', ',');
+    const elPromoNota = document.getElementById('plano-atual-promo-nota');
+    if (elPromoNota) {
+      if (valorPersonalizado !== null && data.valor_mensalidade_expira_em) {
+        const expiraPromo = new Date(String(data.valor_mensalidade_expira_em).slice(0,10) + 'T00:00:00');
+        elPromoNota.style.display = 'block';
+        elPromoNota.textContent = `Preço promocional válido até ${expiraPromo.toLocaleDateString('pt-BR')}`;
+      } else {
+        elPromoNota.style.display = 'none';
+        elPromoNota.textContent = '';
+      }
+    }
 
     // ── Status ──
     if (elStatus) {
@@ -1993,6 +2012,7 @@ async function renderMeuPlano() {
 let _planoSelecionado = 'premium';
 let _formaPagPlano = 'pix';
 let _precosPlanos = { essencial: 79.99, premium: 99.90 };
+let _valorMeuPlano = 99.90; // preço efetivo deste tenant (personalizado/promo ou valor geral)
 let _pixPlanoInterval = null;
 let _cartaoPlanoModo = 'avulso';
 let _assinaturaPlanoAtual = null;
@@ -2094,29 +2114,8 @@ async function cancelarAssinaturaPlano() {
 }
 
 function selecionarPlano(plano) {
-  _planoSelecionado = plano;
-  const cardEss = document.getElementById('plano-card-essencial');
-  const cardPre = document.getElementById('plano-card-premium');
-  const dotEss = document.getElementById('plano-dot-essencial');
-  const dotPre = document.getElementById('plano-dot-premium');
-  const checkEss = document.getElementById('plano-check-essencial');
-  const checkPre = document.getElementById('plano-check-premium');
-
-  if (plano === 'essencial') {
-    if (cardEss) { cardEss.style.borderColor = 'var(--accent)'; cardEss.style.background = 'rgba(59,130,246,.05)'; }
-    if (cardPre) { cardPre.style.borderColor = 'rgba(139,92,246,.3)'; cardPre.style.background = 'linear-gradient(135deg,rgba(139,92,246,.08),rgba(236,72,153,.05))'; }
-    if (dotEss) dotEss.style.background = 'var(--accent)';
-    if (dotPre) dotPre.style.background = 'transparent';
-    if (checkEss) checkEss.style.borderColor = 'var(--accent)';
-    if (checkPre) checkPre.style.borderColor = 'rgba(139,92,246,.5)';
-  } else {
-    if (cardEss) { cardEss.style.borderColor = 'var(--border)'; cardEss.style.background = 'var(--surface2)'; }
-    if (cardPre) { cardPre.style.borderColor = 'var(--purple)'; cardPre.style.background = 'linear-gradient(135deg,rgba(139,92,246,.12),rgba(236,72,153,.08))'; }
-    if (dotEss) dotEss.style.background = 'transparent';
-    if (dotPre) dotPre.style.background = 'var(--purple)';
-    if (checkEss) checkEss.style.borderColor = 'var(--border)';
-    if (checkPre) checkPre.style.borderColor = 'var(--purple)';
-  }
+  // Plano unico: mantido apenas por compatibilidade, não há mais seleção visual entre planos.
+  _planoSelecionado = 'premium';
 }
 
 function selecionarFormaPagPlano(forma) {
@@ -2148,8 +2147,8 @@ async function iniciarPagamentoPlano() {
   const btn = document.getElementById('btn-pagar-plano');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processando...'; }
   
-  const planoNome = _planoSelecionado === 'essencial' ? 'Plano Essencial' : 'Plano Premium';
-  const valor = _precosPlanos[_planoSelecionado];
+  const planoNome = 'Plano Premium';
+  const valor = _valorMeuPlano;
   
   if (_formaPagPlano === 'pix') {
     try {
@@ -2343,7 +2342,7 @@ async function processarPagamentoCartao() {
       headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
       body: JSON.stringify({
         plano: _planoSelecionado,
-        valor: _precosPlanos[_planoSelecionado],
+        valor: _valorMeuPlano,
         card_token: cardToken.id,
         payment_method_id: paymentMethodId,
         payer_email: email || 'cliente@email.com',
@@ -2388,7 +2387,6 @@ async function processarPagamentoCartao() {
 
 // Inicializar selecao padrao
 setTimeout(() => {
-  selecionarPlano('premium');
   selecionarFormaPagPlano('pix');
   carregarPrecosPlanos();
 }, 100);

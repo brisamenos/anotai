@@ -1155,6 +1155,9 @@ const MIGRATIONS = [
     `ALTER TABLE tenants ADD COLUMN valor_mensalidade REAL`,
     `UPDATE tenants SET plano='premium' WHERE plano != 'premium'`
   ] },
+  { version:72, description:'validade do preco promocional/personalizado do tenant (expira e volta pro valor geral automaticamente)', up:
+    `ALTER TABLE tenants ADD COLUMN valor_mensalidade_expira_em TEXT`
+  },
 ]
 
 function runMigrations() {
@@ -1965,7 +1968,7 @@ try {
 agendarResetDiarioPedidos()
 
 const TABLE_COLS = {
-  tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade'],
+  tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade','valor_mensalidade_expira_em'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
   store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
@@ -2238,6 +2241,17 @@ function getTenantId(req, params) { return req.headers['x-tenant-id'] || params.
 async function handleREST(req, res, table, params, body) {
   const cols = TABLE_COLS[table]
   if (!cols) return send(res, 404, { error: 'Tabela não encontrada' })
+  if (table === 'tenants' && req.method === 'GET') {
+    // Preço promocional/personalizado vencido volta pro valor geral antes de listar
+    try {
+      db.prepare(`
+        UPDATE tenants SET valor_mensalidade=NULL, valor_mensalidade_expira_em=NULL
+        WHERE valor_mensalidade IS NOT NULL
+          AND valor_mensalidade_expira_em IS NOT NULL
+          AND date(valor_mensalidade_expira_em) < date('now')
+      `).run()
+    } catch (e) {}
+  }
   const tenantId        = getTenantId(req, params)
   const tenantScoped    = cols.includes('tenant_id') && !NO_TENANT_FILTER.has(table)
   if (tenantScoped && !tenantId && ['PATCH','DELETE'].includes(req.method)) {
@@ -4560,7 +4574,7 @@ const server = http.createServer(async (req,res) => {
     return
   }
   if(req.method==='GET'&&upath==='/api/tenant-slug'){const tid=req.headers['x-tenant-id']||params.get('tenant_id')||'';if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return};const row=db.prepare('SELECT slug FROM tenants WHERE id=?').get(tid);send(res,200,{slug:row?.slug||''});return}
-  if(req.method==='GET'&&upath==='/api/tenant-info-gestor'){const tid=req.headers['x-tenant-id']||params.get('tenant_id')||'';if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return};const row=db.prepare('SELECT id,nome,slug,plano,ativo,expires_at FROM tenants WHERE id=?').get(tid);if(!row){send(res,404,{error:'Tenant não encontrado'});return};const cfg=db.prepare('SELECT store_name FROM store_config WHERE tenant_id=?').get(tid);send(res,200,{...row,store_name:cfg?.store_name||row.nome||''});return}
+  if(req.method==='GET'&&upath==='/api/tenant-info-gestor'){const tid=req.headers['x-tenant-id']||params.get('tenant_id')||'';if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return};const row=db.prepare('SELECT id,nome,slug,plano,ativo,expires_at,valor_mensalidade,valor_mensalidade_expira_em FROM tenants WHERE id=?').get(tid);if(!row){send(res,404,{error:'Tenant não encontrado'});return};const cfg=db.prepare('SELECT store_name FROM store_config WHERE tenant_id=?').get(tid);send(res,200,{...row,store_name:cfg?.store_name||row.nome||''});return}
 
   // ── Histórico de pedidos (busca com filtros) ──
   if(req.method==='GET'&&upath==='/api/historico-pedidos'){
