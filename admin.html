@@ -1059,48 +1059,14 @@ td{padding:12px 16px;color:#dce6f7}
           <button class="btn bp" onclick="salvarPrecosPlanos()">💾 Salvar preços</button>
         </div>
 
-        <!-- Cards dos planos -->
-        <div class="grid-2" style="margin-bottom:20px;align-items:start">
-          <!-- Plano Essencial -->
-          <div class="card plan-card" style="border:1.5px solid var(--border)">
-            <div class="plan-card-icon" style="background:rgba(59,130,246,.1)">
-              <svg width="22" height="22" viewBox="0 0 16 16" fill="none" style="color:var(--accent)"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 8h6M5 5h3M5 11h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-            </div>
-            <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:4px">Plano Essencial</div>
-            <div style="font-size:12px;color:var(--muted);margin-bottom:18px">Sem IA e automação</div>
-            <div class="plan-price-wrap">
-              <span class="plan-price-sym">R$</span>
-              <input class="minput" id="adm-preco-essencial" type="number" step="0.01" min="0" value="79.99"
-                style="font-size:28px;font-weight:800;font-family:'Syne',sans-serif;width:130px;text-align:center;padding:6px 10px;letter-spacing:-1px">
-              <span style="font-size:12px;color:var(--muted)">/mês</span>
-            </div>
-            <div class="sep"></div>
-            <div class="plan-feature">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--success);flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-              Cardápio digital ilimitado
-            </div>
-            <div class="plan-feature">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--success);flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-              Gestão de pedidos
-            </div>
-            <div class="plan-feature">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--success);flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-              Relatórios básicos
-            </div>
-            <div class="plan-feature" style="color:var(--muted)">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--muted);flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-              Sem IA / Robô WhatsApp
-            </div>
-          </div>
-
-          <!-- Plano Premium -->
+        <!-- Plano único -->
+        <div style="margin-bottom:20px;max-width:420px">
           <div class="card plan-card" style="border:1.5px solid rgba(139,92,246,.35);background:linear-gradient(135deg,rgba(139,92,246,.06),rgba(59,130,246,.03))">
-            <div style="position:absolute;top:0;right:18px;background:linear-gradient(135deg,#7c3aed,#ec4899);color:#fff;font-size:9.5px;font-weight:800;padding:4px 12px;border-radius:0 0 9px 9px;letter-spacing:.6px;text-transform:uppercase">Mais vendido</div>
             <div class="plan-card-icon" style="background:linear-gradient(135deg,rgba(139,92,246,.18),rgba(236,72,153,.1))">
               <svg width="22" height="22" viewBox="0 0 16 16" fill="none" style="color:var(--purple)"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
             </div>
-            <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:4px;color:var(--purple)">Plano Premium</div>
-            <div style="font-size:12px;color:var(--muted);margin-bottom:18px">Todas as ferramentas</div>
+            <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:4px;color:var(--purple)">Plano Anotai</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:18px">Todas as ferramentas, plano único</div>
             <div class="plan-price-wrap">
               <span class="plan-price-sym">R$</span>
               <input class="minput" id="adm-preco-premium" type="number" step="0.01" min="0" value="99.90"
@@ -1110,7 +1076,7 @@ td{padding:12px 16px;color:#dce6f7}
             <div class="sep"></div>
             <div class="plan-feature">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--success);flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-              Tudo do Essencial
+              Cardápio digital ilimitado + gestão de pedidos
             </div>
             <div class="plan-feature" style="color:var(--purple)">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="color:var(--purple);flex-shrink:0"><path d="M8 2l1.5 3.5L13 6l-2.5 2.5.6 3.5L8 10.5 4.9 12l.6-3.5L3 6l3.5-.5z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
@@ -1125,13 +1091,15 @@ td{padding:12px 16px;color:#dce6f7}
               Suporte prioritário
             </div>
           </div>
+          <!-- campo legado mantido oculto: guarda o mesmo valor do plano único no backend -->
+          <input type="hidden" id="adm-preco-essencial" value="79.99">
         </div>
 
         <div class="infobox infobox-orange" style="margin-bottom:20px;display:flex;align-items:flex-start;gap:12px">
           <div style="font-size:20px;flex-shrink:0">💡</div>
           <div>
             <div style="font-weight:700;margin-bottom:3px;color:var(--orange)">Dica: Promoções</div>
-            <div style="font-size:12.5px;color:var(--text-2)">Você pode alterar os preços a qualquer momento para criar promoções especiais. Os novos preços são aplicados imediatamente para todos os gestores que forem renovar seus planos.</div>
+            <div style="font-size:12.5px;color:var(--text-2)">Você pode alterar o preço a qualquer momento para criar promoções gerais. Para dar um desconto individual a um cliente específico, edite o cliente em "Clientes" e preencha o campo "Valor personalizado".</div>
           </div>
         </div>
 
@@ -1935,9 +1903,7 @@ td{padding:12px 16px;color:#dce6f7}
       <div class="mrow" style="margin:0">
         <label class="mlabel">Plano</label>
         <select class="minput" id="cb-plano">
-          <option value="essencial">Essencial</option>
-          <option value="premium">Premium</option>
-          <option value="fiscal">Fiscal NFC-e</option>
+          <option value="premium">Anotai — Plano único</option>
         </select>
       </div>
       <div class="mrow" style="margin:0">
@@ -1995,10 +1961,8 @@ td{padding:12px 16px;color:#dce6f7}
       </div>
       <div class="mrow" style="margin:0">
         <label class="mlabel">Plano</label>
-        <select class="minput" id="cli-plano">
-          <option value="pro">Pro — Sem Robô</option>
-          <option value="premium">Premium — Com Robô IA</option>
-          <option value="fiscal">Fiscal NFC-e</option>
+        <select class="minput" id="cli-plano" disabled style="opacity:.75;cursor:not-allowed">
+          <option value="premium">Anotai — Plano único (tudo incluso)</option>
         </select>
       </div>
     </div>
@@ -2022,6 +1986,10 @@ td{padding:12px 16px;color:#dce6f7}
           <option value="true">Ativo</option>
           <option value="false">Inativo</option>
         </select>
+      </div>
+      <div class="mrow" style="margin:0">
+        <label class="mlabel">Valor personalizado (R$)</label>
+        <input class="minput" id="cli-valor-personalizado" type="number" step="0.01" min="0" placeholder="deixe em branco p/ usar o preço padrão">
       </div>
     </div>
 
@@ -2676,19 +2644,20 @@ async function carregarPrecosPlanos() {
 }
 
 async function salvarPrecosPlanos() {
-  const essencial = parseFloat(document.getElementById('adm-preco-essencial').value) || 0;
-  const premium   = parseFloat(document.getElementById('adm-preco-premium').value)   || 0;
+  const premium = parseFloat(document.getElementById('adm-preco-premium').value) || 0;
   try {
-    const r = await fetch('/api/planos/salvar-precos', {
-      method: 'POST', headers: adminAuthHeader(),
-      body: JSON.stringify({ essencial, premium })
+    const r = await fetch('/api/admin/planos/precos', {
+      method: 'POST', headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+      // O sistema ficou com um único plano: mantém preco_essencial = preco_premium
+      // internamente por compatibilidade (colunas antigas), mas só existe um preço no painel.
+      body: JSON.stringify({ preco_essencial: premium, preco_premium: premium })
     });
     if (r.status === 401) { toast('err','Sessão expirada'); setTimeout(doLogout,1500); return; }
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
-    await auditLog('planos.alterar_precos', null, { essencial, premium });
-    toast('ok', '✅ Preços salvos com sucesso!');
-    calcularFinanceiro(); // recalcula MRR/ARR com novos preços
+    await auditLog('planos.alterar_precos', null, { premium });
+    toast('ok', '✅ Preço salvo com sucesso!');
+    calcularFinanceiro(); // recalcula MRR/ARR com o novo preço
   } catch(e) { toast('err', 'Erro: ' + e.message); }
 }
 
@@ -2801,17 +2770,18 @@ async function loadAll() {
 }
 
 // ── 💰 FINANCEIRO (MRR/ARR/Churn/Ticket) ─────────────────
-function _precoPlano(plano) {
-  const ess = parseFloat(document.getElementById('adm-preco-essencial')?.value) || 79.99;
-  const pre = parseFloat(document.getElementById('adm-preco-premium')?.value)   || 99.90;
-  if (plano === 'fiscal') return 159.90;
-  if (plano === 'premium') return pre;
-  if (plano === 'pro' || plano === 'essencial') return ess;
-  return 0; // básico/grátis
+function _precoPlano(c) {
+  const pre = parseFloat(document.getElementById('adm-preco-premium')?.value) || 99.90;
+  const plano  = (typeof c === 'string') ? c : c?.plano;
+  const custom = (c && typeof c === 'object') ? c.valor_mensalidade : null;
+  // Preço individual do cliente (promoção/desconto) tem prioridade sobre o preço do plano único
+  if (custom !== null && custom !== undefined && custom !== '') return parseFloat(custom);
+  if (plano === 'basico') return 0; // legado, sem cobrança
+  return pre; // plano único — tudo incluso (essencial/premium/fiscal antigos caem aqui)
 }
 function calcularFinanceiro() {
   const ativos = _clientes.filter(c => c.ativo);
-  const mrr = ativos.reduce((s,c) => s + _precoPlano(c.plano), 0);
+  const mrr = ativos.reduce((s,c) => s + _precoPlano(c), 0);
   const arr = mrr * 12;
   const ticket = ativos.length ? mrr / ativos.length : 0;
 
@@ -2999,7 +2969,7 @@ function renderClientes() {
         <div class="manager-name">${gestor?.nome||'—'}</div>
         <div class="manager-email">${gestor?.email||c.email||'—'}</div>
       </td>
-      <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${planoLabel[c.plano]||c.plano}</span></td>
+      <td><span class="badge ${planoBadge[c.plano]||'bg-gray'}">${planoLabel[c.plano]||c.plano}</span>${(c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? `<div style="font-size:11px;color:var(--success);font-weight:700;margin-top:3px">💰 R$ ${parseFloat(c.valor_mensalidade).toFixed(2)}/mês</div>` : ''}</td>
       <td><span class="badge ${(c.segmento||'restaurante')==='acougue'?'bg-orange':'bg-blue'}">${(c.segmento||'restaurante')==='acougue'?'🥩 Açougue':'🍔 Restaurante'}</span></td>
       <td style="font-size:12.5px;color:${expOk?(expSoon?'var(--orange)':'var(--text-2)'):'var(--danger)'}">${c.expires_at ? adminFormatDate(c.expires_at) : '—'}${expSoon?' ⚠️':''}</td>
       <td><span class="badge ${c.ativo?'bg-green':'bg-red'}">● ${c.ativo?'Ativo':'Inativo'}</span></td>
@@ -3031,8 +3001,8 @@ function autoSlug() {
 function abrirModalCliente(id) { _abrirModalClienteAsync(id); }
 async function _abrirModalClienteAsync(id) {
   document.getElementById('m-cli-titulo').textContent = id ? '✏️ Editar Cliente' : '➕ Novo Cliente';
-  ['cli-id','cli-nome','cli-slug','cli-email','cli-senha','cli-gestor-nome','cli-expira'].forEach(i => { const el=document.getElementById(i); if(el) el.value=''; });
-  document.getElementById('cli-plano').value    = 'pro';
+  ['cli-id','cli-nome','cli-slug','cli-email','cli-senha','cli-gestor-nome','cli-expira','cli-valor-personalizado'].forEach(i => { const el=document.getElementById(i); if(el) el.value=''; });
+  document.getElementById('cli-plano').value    = 'premium';
   document.getElementById('cli-segmento').value = 'restaurante';
   document.getElementById('cli-ativo').value  = 'true';
   document.getElementById('cli-id').value     = id||'';
@@ -3052,6 +3022,7 @@ async function _abrirModalClienteAsync(id) {
       document.getElementById('cli-expira').value = c.expires_at ? String(c.expires_at).slice(0,10) : '';
       document.getElementById('cli-ativo').value    = String(c.ativo);
       document.getElementById('cli-segmento').value = c.segmento || 'restaurante';
+      document.getElementById('cli-valor-personalizado').value = (c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? c.valor_mensalidade : '';
     }
     try {
       const r = await fetch('/api/admin-backup/ia-config?tenant_id='+id, { headers: adminAuthHeader() });
@@ -3085,12 +3056,14 @@ async function salvarCliente() {
   const gestorNome = document.getElementById('cli-gestor-nome').value.trim();
   const email      = document.getElementById('cli-email').value.trim().toLowerCase();
   const senha      = document.getElementById('cli-senha').value;
+  const valorPersonalizadoRaw = document.getElementById('cli-valor-personalizado').value;
+  const valorPersonalizado = valorPersonalizadoRaw === '' ? null : parseFloat(valorPersonalizadoRaw);
   if (!nome||!slug) { toast('err','Preencha nome e slug'); return; }
   if (!id && (!gestorNome||!email||!senha)) { toast('err','Preencha todos os dados do gestor'); return; }
   let error;
   if (id) {
-    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo, expires_at: expira, segmento }).eq('id',id));
-    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo,expires_at:expira,segmento}; }
+    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo, expires_at: expira, segmento, valor_mensalidade: valorPersonalizado }).eq('id',id));
+    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo,expires_at:expira,segmento,valor_mensalidade:valorPersonalizado}; }
     const iaKeyVal = (document.getElementById('cli-ia-key')?.value || '').trim();
     if (!error && iaKeyVal && !iaKeyVal.startsWith('•')) {
       try {
@@ -3112,7 +3085,7 @@ async function salvarCliente() {
     }
   } else {
     try {
-      const res = await fetch('/api/criar-tenant', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ nome, slug, email, senha, nomeGestor: gestorNome, plano, role:'gestor', segmento, expires_at: expira }) });
+      const res = await fetch('/api/criar-tenant', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ nome, slug, email, senha, nomeGestor: gestorNome, plano, role:'gestor', segmento, expires_at: expira, valor_mensalidade: valorPersonalizado }) });
       const data = await res.json();
       if (!res.ok) { error = { message: data.error || 'Erro ao criar restaurante' }; }
       else { await loadAll(); }
@@ -3406,8 +3379,8 @@ function gerarCobrancaCliente(tenantId) {
   if (!c) return;
   _cbTenantAtual = c;
   document.getElementById('cb-titulo').textContent = `💳 Cobrar — ${c.nome}`;
-  document.getElementById('cb-info').innerHTML = `Vencimento atual: <strong>${c.expires_at?adminFormatDate(c.expires_at):'Sem data'}</strong>`;
-  document.getElementById('cb-plano').value = (c.plano==='premium') ? 'premium' : (c.plano==='fiscal' ? 'fiscal' : 'essencial');
+  document.getElementById('cb-info').innerHTML = `Vencimento atual: <strong>${c.expires_at?adminFormatDate(c.expires_at):'Sem data'}</strong>` + ((c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? `<br><span style="color:var(--success)">💰 Preço personalizado deste cliente: R$ ${parseFloat(c.valor_mensalidade).toFixed(2)}/mês</span>` : '');
+  document.getElementById('cb-plano').value = 'premium';
   document.getElementById('cb-meses').value = '1';
   document.getElementById('cb-metodo').value = 'pix';
   cbRecalcular();
@@ -3416,8 +3389,10 @@ function gerarCobrancaCliente(tenantId) {
 function cbRecalcular() {
   const plano = document.getElementById('cb-plano').value;
   const meses = parseInt(document.getElementById('cb-meses').value) || 1;
-  const valor = _precoPlano(plano) * meses;
-  document.getElementById('cb-valor').value = valor.toFixed(2);
+  // Se o cliente tem preço individual (promoção/desconto) e não é cobrança fiscal, usa o preço dele
+  const temCustom = _cbTenantAtual && _cbTenantAtual.valor_mensalidade !== null && _cbTenantAtual.valor_mensalidade !== undefined;
+  const base = (temCustom && plano !== 'fiscal') ? parseFloat(_cbTenantAtual.valor_mensalidade) : _precoPlano(plano);
+  document.getElementById('cb-valor').value = (base * meses).toFixed(2);
 }
 document.addEventListener('change', e => {
   if (e.target && e.target.id === 'cb-plano') cbRecalcular();

@@ -758,6 +758,10 @@ function _iniciarAutoCobrancaJob(ctx) {
         try {
           const plano = (t.plano === 'premium') ? 'premium' : (t.plano === 'fiscal' ? 'fiscal' : 'essencial')
           let valor = (plano === 'premium') ? precoPre : (plano === 'fiscal' ? precoFiscal : precoEss)
+          // Preço individual do tenant (promoção/desconto) tem prioridade sobre o preço do plano
+          if (plano !== 'fiscal' && t.valor_mensalidade !== null && t.valor_mensalidade !== undefined) {
+            valor = parseFloat(t.valor_mensalidade)
+          }
           let obsFatura = 'Gerada automaticamente (3 dias antes do vencimento)'
           if (plano === 'fiscal') {
             const fiscal = _adminFiscalCobrancaAtual(db, t.id, {
@@ -3888,6 +3892,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const { nome, plano, slug, email, senha, role, nomeGestor, segmento } = body
     const expiresAtRaw = String(body.expires_at || '').trim()
     const expiresAt = /^\d{4}-\d{2}-\d{2}$/.test(expiresAtRaw) ? expiresAtRaw : null
+    const valorMensalidade = (body.valor_mensalidade !== undefined && body.valor_mensalidade !== null && body.valor_mensalidade !== '')
+      ? parseFloat(body.valor_mensalidade) : null
     if (!nome || !email || !senha) { send(res, 400, { error: 'nome, email e senha obrigatórios' }); return true }
     try {
       const hash     = crypto.createHash('sha256').update(senha).digest('hex')
@@ -3897,7 +3903,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (slug && slugFinal !== slug) { send(res, 400, { error: `Slug "${slug}" já em uso. Sugerimos: "${slugFinal}"` }); return true }
       if (db.prepare('SELECT id FROM sys_users WHERE email=?').get(email)) { send(res, 400, { error: `E-mail "${email}" já cadastrado.` }); return true }
       const seg = ['restaurante','acougue'].includes(segmento) ? segmento : 'restaurante'
-      db.prepare('INSERT INTO tenants (nome,plano,slug,segmento,expires_at) VALUES (?,?,?,?,?)').run(nome, plano || 'basic', slugFinal, seg, expiresAt)
+      db.prepare('INSERT INTO tenants (nome,plano,slug,segmento,expires_at,valor_mensalidade) VALUES (?,?,?,?,?,?)').run(nome, plano || 'basic', slugFinal, seg, expiresAt, valorMensalidade)
       const t = db.prepare('SELECT id FROM tenants WHERE slug=?').get(slugFinal)
       db.prepare('INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)').run(t.id)
       // Define offset = max(id) atual para que o 1º pedido deste tenant comece em #1
@@ -7993,6 +7999,10 @@ module.exports = async function handleRoutes(req, res, ctx) {
         if (!tenant) { falhas++; erros.push({ id, erro: 'tenant não encontrado' }); continue }
         const plano = (tenant.plano === 'premium') ? 'premium' : (tenant.plano === 'fiscal' ? 'fiscal' : 'essencial')
         let valor = (plano === 'premium') ? precoPre : (plano === 'fiscal' ? precoFiscal : precoEss)
+        // Preço individual do tenant (promoção/desconto) tem prioridade sobre o preço do plano
+        if (plano !== 'fiscal' && tenant.valor_mensalidade !== null && tenant.valor_mensalidade !== undefined) {
+          valor = parseFloat(tenant.valor_mensalidade)
+        }
         let obsFiscal = null
         if (plano === 'fiscal') {
           const fiscal = _adminFiscalCobrancaAtual(db, tenant.id, {

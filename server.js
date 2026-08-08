@@ -1151,6 +1151,10 @@ const MIGRATIONS = [
   { version:70, description:'nome customizado da mesa (garcom pode renomear)', up:
     `ALTER TABLE mesas ADD COLUMN nome TEXT`
   },
+  { version:71, description:'plano unico com tudo incluso (essencial/premium/fiscal viram um so) + valor de mensalidade personalizado por tenant', up:[
+    `ALTER TABLE tenants ADD COLUMN valor_mensalidade REAL`,
+    `UPDATE tenants SET plano='premium' WHERE plano != 'premium'`
+  ] },
 ]
 
 function runMigrations() {
@@ -1961,7 +1965,7 @@ try {
 agendarResetDiarioPedidos()
 
 const TABLE_COLS = {
-  tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at'],
+  tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
   store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
