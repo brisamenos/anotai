@@ -4018,7 +4018,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         enabled: !!body.enabled,
         bot_token: String(body.bot_token || '').trim(),
         chat_id: String(body.chat_id || '').trim(),
-        interval_minutes: Math.max(15, parseInt(body.interval_minutes) || 60)
+        interval_minutes: Math.max(5, parseInt(body.interval_minutes) || 60)
       }
       try {
         db.prepare("UPDATE store_config SET telegram_backup_config=? WHERE tenant_id='_global'").run(JSON.stringify(cfg))

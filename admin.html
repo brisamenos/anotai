@@ -1260,8 +1260,8 @@ td{padding:12px 16px;color:#dce6f7}
               <input type="text" id="tg-chat-id" placeholder="-1001234567890" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ccc">
             </div>
             <div>
-              <label style="font-size:12px;color:var(--muted,#888)">Intervalo (minutos, mín. 15)</label>
-              <input type="number" id="tg-interval" min="15" value="60" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ccc">
+              <label style="font-size:12px;color:var(--muted,#888)">Intervalo (minutos, mín. 5)</label>
+              <input type="number" id="tg-interval" min="5" value="60" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ccc">
             </div>
             <div style="display:flex;align-items:flex-end;gap:8px">
               <label style="display:flex;align-items:center;gap:6px;font-size:13px">
@@ -4079,11 +4079,16 @@ async function salvarTelegramBackupConfig() {
     enabled: document.getElementById('tg-enabled').checked,
     bot_token: document.getElementById('tg-bot-token').value.trim(),
     chat_id: document.getElementById('tg-chat-id').value.trim(),
-    interval_minutes: Math.max(15, parseInt(document.getElementById('tg-interval').value) || 60)
+    interval_minutes: Math.max(5, parseInt(document.getElementById('tg-interval').value) || 60)
   };
   try {
-    const { error } = await sb.from('store_config').upsert({ tenant_id: '_global', telegram_backup_config: JSON.stringify(cfg) });
-    if (error) throw error;
+    const r = await fetch('/api/admin-backup/telegram-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...adminAuthHeader() },
+      body: JSON.stringify(cfg)
+    });
+    const data = await r.json().catch(() => null);
+    if (!r.ok || !data?.ok) throw new Error(data?.error || `Erro ${r.status}`);
     toast('ok', '✅ Configuração do backup via Telegram salva!');
     telegramBackupCarregar();
   } catch(e) { toast('err', 'Erro: ' + (e.message || JSON.stringify(e))); }
