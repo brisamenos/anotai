@@ -630,14 +630,14 @@ async function abrirChatPedidoWA(id) {
   waOpenPanel();
   await new Promise(resolve => setTimeout(resolve, 120));
 
+  // Tenta achar o chat já carregado em memória (rápido, sem rede).
+  // IMPORTANTE: NÃO chamamos mais waLoadChats() aqui — isso baixava a lista INTEIRA
+  // de conversas da Evolution API (pode ter centenas/milhares) só pra achar 1 número,
+  // e era a causa da demora ao clicar em "WhatsApp" num pedido específico.
+  // Em vez disso, montamos o JID direto do telefone e abrimos a conversa na hora —
+  // waOpenConv já mostra o cache local instantâneo e busca só as mensagens DESSE
+  // contato (findMessages filtrado por remoteJid), que é rápido.
   let chat = _pedidoWaFindChatByPhone(number);
-  if (!chat && typeof waLoadChats === 'function') {
-    try {
-      await waLoadChats();
-      chat = _pedidoWaFindChatByPhone(number);
-    } catch(e) {}
-  }
-
   const jid = chat?._jid || (number + '@s.whatsapp.net');
   const nome = chat?._name || o.client || number;
   try {
@@ -652,6 +652,28 @@ async function abrirChatPedidoWA(id) {
       if (typeof waOnTyping === 'function') waOnTyping(inp);
     }
   }, 120);
+
+  // Sincroniza a lista completa de chats em SEGUNDO PLANO (não bloqueia a abertura).
+  // Serve pra popular a coluna da esquerda do painel e, se achar um nome/foto melhor
+  // pra esse contato, atualiza a conversa que já está aberta sem precisar recarregar.
+  if (!chat && typeof waLoadChats === 'function') {
+    waLoadChats().then(() => {
+      if (WA?.activeJid !== jid) return; // usuário já trocou de conversa, ignora
+      const found = _pedidoWaFindChatByPhone(number);
+      if (found && (found._name || found._pic)) {
+        const nameEl = document.getElementById('wa-conv-name');
+        if (nameEl && found._name) nameEl.textContent = found._name;
+        const avatarEl = document.getElementById('wa-conv-avatar');
+        if (avatarEl && found._pic) {
+          const proxied = `/api/wa/avatar?url=${encodeURIComponent(found._pic)}`;
+          avatarEl.style.backgroundImage = `url('${proxied}')`;
+          avatarEl.style.backgroundSize  = 'cover';
+          avatarEl.style.backgroundPosition = 'center';
+          avatarEl.textContent = '';
+        }
+      }
+    }).catch(() => {});
+  }
 }
 
 
@@ -853,6 +875,8 @@ function openOrderDetail(id) {
   setEl('od-client-phone', o.phone || '');
   const _odChatAction = document.getElementById('od-chat-action');
   if (_odChatAction) _odChatAction.style.display = o.phone ? 'flex' : 'none';
+  const _odWaAction = document.getElementById('od-wa-action');
+  if (_odWaAction) _odWaAction.style.display = o.phone ? 'flex' : 'none';
   _carregarPedidosClienteNoDetalhe(o.phone);
 
   // Tipo de entrega (helper unificado)
