@@ -783,17 +783,35 @@ function openOrderDetail(id) {
   }
 
   // Troco
+  const _odTotalFinal = parseFloat(o.total || 0) + parseFloat(o.taxa || 0);
   const trocoRow = document.getElementById('od-troco-row');
+  // Linha extra "Devolver ao cliente" — criada dinamicamente logo após od-troco-row
+  let devolverRow = document.getElementById('od-troco-devolver-row');
+  if (!devolverRow && trocoRow) {
+    devolverRow = document.createElement('div');
+    devolverRow.id = 'od-troco-devolver-row';
+    devolverRow.className = 'od-subtotal-row';
+    trocoRow.parentNode.insertBefore(devolverRow, trocoRow.nextSibling);
+  }
   if (trocoRow) {
     if (o.pag === 'dinheiro' || o.pag === 'Dinheiro') {
       trocoRow.style.display = '';
-      trocoRow.innerHTML = o.troco > 0
-        ? `<span>Troco para</span><span style="color:var(--accent3);font-weight:600">${fmt(o.troco)}</span>`
-        : o.troco === -1
+      if (o.troco > 0) {
+        const _odDevolver = Math.max(0, o.troco - _odTotalFinal);
+        trocoRow.innerHTML = `<span>Troco para</span><span style="color:var(--accent3);font-weight:600">${fmt(o.troco)}</span>`;
+        if (devolverRow) {
+          devolverRow.style.display = '';
+          devolverRow.innerHTML = `<span>Devolver ao cliente</span><span style="color:var(--accent3);font-weight:700">${fmt(_odDevolver)}</span>`;
+        }
+      } else {
+        trocoRow.innerHTML = o.troco === -1
           ? `<span>Troco solicitado</span><span style="color:var(--muted)">Valor não informado</span>`
           : `<span>Sem troco</span><span style="color:var(--muted)">Valor exato</span>`;
+        if (devolverRow) devolverRow.style.display = 'none';
+      }
     } else {
       trocoRow.style.display = 'none';
+      if (devolverRow) devolverRow.style.display = 'none';
     }
   }
 
@@ -842,7 +860,7 @@ function openOrderDetail(id) {
   else if (o.pag !== 'dinheiro' && o.pag !== 'mesa') pagLabel += ' <span style="font-size:10px;background:rgba(196,149,106,.12);color:#c4956a;padding:1px 6px;border-radius:99px;font-weight:700">PENDENTE</span>';
   { const e = document.getElementById('od-pag'); if (e) e.innerHTML = pagLabel; }
   setEl('od-pag-sub', o.pag === 'dinheiro' || o.pag === 'Dinheiro'
-    ? (o.troco > 0 ? 'Troco: ' + fmt(o.troco) : 'Valor exato') : '');
+    ? (o.troco > 0 ? `Troco p/ ${fmt(o.troco)} · Devolver ${fmt(Math.max(0, o.troco - _odTotalFinal))}` : o.troco === -1 ? 'Precisa troco (valor não informado)' : 'Valor exato') : '');
 
   // Origem
   const origemEl = document.getElementById('od-origem-row');

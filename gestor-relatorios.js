@@ -3275,7 +3275,7 @@ function _buildTicketHtml(order, cfg) {
 
   // Troco — deixa explícito quanto o cliente vai pagar e quanto devolver
   let trocoLine = '';
-  if (order.pag === 'dinheiro') {
+  if ((order.pag || '').toLowerCase() === 'dinheiro') {
     if (order.troco > 0) {
       // Cliente informou o valor que vai entregar — calcula o troco a devolver
       const devolver = Math.max(0, order.troco - total);
@@ -3916,7 +3916,7 @@ function _buildEscPos(order, cfg, cols = 32) {
   bytes(0x1B, 0x45, 0x00);
 
   // Troco — deixa explícito quanto o cliente vai pagar e quanto devolver
-  if (order.pag === 'dinheiro') {
+  if ((order.pag || '').toLowerCase() === 'dinheiro') {
     if (order.troco > 0) {
       // Cliente informou o valor que vai entregar — calcula e destaca o troco a devolver
       const devolver = Math.max(0, order.troco - total);
