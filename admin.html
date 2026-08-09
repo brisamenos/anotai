@@ -1242,6 +1242,42 @@ td{padding:12px 16px;color:#dce6f7}
           </div>
         </div>
 
+        <!-- Backup automático via Telegram -->
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-head">
+            <div>
+              <div class="card-title">📤 Backup Automático via Telegram</div>
+              <div class="card-sub">Envia o backup.json pra fora do servidor periodicamente — protege contra perda total do volume</div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div>
+              <label style="font-size:12px;color:var(--muted,#888)">Bot Token</label>
+              <input type="text" id="tg-bot-token" placeholder="123456:ABC-DEF..." style="width:100%;padding:8px;border-radius:6px;border:1px solid #ccc">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted,#888)">Chat ID</label>
+              <input type="text" id="tg-chat-id" placeholder="-1001234567890" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ccc">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted,#888)">Intervalo (minutos, mín. 15)</label>
+              <input type="number" id="tg-interval" min="15" value="60" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ccc">
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:8px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+                <input type="checkbox" id="tg-enabled"> Ativado
+              </label>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <button class="btn bp" onclick="salvarTelegramBackupConfig()">Salvar</button>
+            <button class="btn bg2" onclick="testarTelegramBackup()">Enviar teste agora</button>
+          </div>
+          <div id="tg-backup-info" class="infobox infobox-blue" style="font-size:12.5px;margin-top:12px">
+            Crie um bot com o @BotFather, pegue o token, adicione o bot num chat/canal privado e use o ID desse chat aqui.
+          </div>
+        </div>
+
         <div class="grid-2" style="align-items:start">
           <!-- Backup por Gestor -->
           <div class="tw" style="margin-bottom:0">
@@ -2369,7 +2405,7 @@ function navTo(id) {
   titles.comunicados = 'Comunicados';
   document.getElementById('topbar-title').textContent = titles[id] || id;
   if (id==='ia')          { iaAdminCarregar(); }
-  if (id==='backup')      { renderBackupList(); }
+  if (id==='backup')      { renderBackupList(); telegramBackupCarregar(); }
   if (id==='saques')      { carregarSaquesAdmin(); carregarSaquesAdmin('pago'); carregarMpConfig(); carregarCobrancaWA(); conectarAdminSSE(); }
   if (id==='planos')      { carregarPrecosPlanos(); carregarAdminPhone(); carregarLeads(); }
   if (id==='comunicados') { renderComunicadoTargetsAdmin(); carregarComunicadosAdmin(); }
@@ -4019,6 +4055,48 @@ async function iaSalvarConfigAdmin() {
     if (keyEl && ia.openai_key) keyEl.value = '••••••••' + ia.openai_key.slice(-4);
     iaAdminCarregar();
   } catch(e) { toast('err','Erro: '+(e.message||JSON.stringify(e))); }
+}
+
+// ── BACKUP AUTOMÁTICO VIA TELEGRAM ──────────────────────
+async function telegramBackupCarregar() {
+  const info = document.getElementById('tg-backup-info');
+  try {
+    const r = await fetch('/api/admin-backup/telegram-config', { headers: adminAuthHeader() });
+    if (!r.ok) return;
+    const cfg = await r.json();
+    document.getElementById('tg-enabled').checked  = !!cfg.enabled;
+    document.getElementById('tg-bot-token').value   = cfg.bot_token || '';
+    document.getElementById('tg-chat-id').value     = cfg.chat_id || '';
+    document.getElementById('tg-interval').value    = cfg.interval_minutes || 60;
+    const kb = Math.round((cfg.backup_size || 0) / 1024);
+    const ultimo = cfg.last_send ? new Date(cfg.last_send).toLocaleString('pt-BR') : 'nunca enviado desde o último restart';
+    if (info) info.innerHTML = `Backup local atual: <strong>${kb} KB</strong> · Último envio ao Telegram: <strong>${ultimo}</strong>`;
+  } catch(e) {}
+}
+
+async function salvarTelegramBackupConfig() {
+  const cfg = {
+    enabled: document.getElementById('tg-enabled').checked,
+    bot_token: document.getElementById('tg-bot-token').value.trim(),
+    chat_id: document.getElementById('tg-chat-id').value.trim(),
+    interval_minutes: Math.max(15, parseInt(document.getElementById('tg-interval').value) || 60)
+  };
+  try {
+    const { error } = await sb.from('store_config').upsert({ tenant_id: '_global', telegram_backup_config: JSON.stringify(cfg) });
+    if (error) throw error;
+    toast('ok', '✅ Configuração do backup via Telegram salva!');
+    telegramBackupCarregar();
+  } catch(e) { toast('err', 'Erro: ' + (e.message || JSON.stringify(e))); }
+}
+
+async function testarTelegramBackup() {
+  toast('ok', '📤 Enviando backup de teste...');
+  try {
+    const r = await fetch('/api/admin-backup/telegram-test', { method: 'POST', headers: adminAuthHeader() });
+    const data = await r.json();
+    if (data.ok) { toast('ok', '✅ Backup enviado ao Telegram com sucesso!'); telegramBackupCarregar(); }
+    else toast('err', '❌ Falha ao enviar: ' + (data.motivo || 'verifique bot_token/chat_id'));
+  } catch(e) { toast('err', 'Erro: ' + e.message); }
 }
 
 // ── BACKUP ─────────────────────────────────────────────

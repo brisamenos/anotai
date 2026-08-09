@@ -1443,12 +1443,16 @@ try {
 // BACKUP / RESTORE
 // ════════════════════════════════════════════════════════
 const TABELAS_BACKUP = ['tenants','sys_users','store_config','categories','menu_items',
-  'cupons','mesas','garcons','orders','movimentos','estoque','estoque_receitas','estoque_movimentos','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','stamp_progress',
+  'cupons','mesas','garcons','orders','movimentos','estoque','estoque_receitas','estoque_movimentos','fidelidade','customers','customer_enderecos','pagamentos_pix','saques','pagamentos_cartao','stamp_progress','ratings',
   'entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens','order_status_history',
   'chat_threads','chat_messages','order_chat_threads','order_chat_messages','order_chat_drafts',
-  'indicadores','leads_indicacao','comissoes','indicador_tutorial_videos','indicador_tutorial_progress','admin_alerts','plano_assinaturas',
-  'fiscal_config','fiscal_nfce']
-  // wa_messages excluída — pode conter muita mídia e estourar JSON.stringify
+  'indicadores','leads_indicacao','comissoes','indicador_tutorial_videos','indicador_tutorial_progress','admin_alerts','admin_audit_log','plano_assinaturas',
+  'fiscal_config','fiscal_nfce','contas_pagar','faturas','fornecedores']
+  // wa_messages, radio_messages excluídas — mídia/áudio pode estourar JSON.stringify
+  // sessions (admin/indicador/entregador), print_jobs, ia_pausa, addons_esgotados —
+  // dados transitórios/operacionais, não fazem sentido restaurar
+  // ⚠️ Lista única — reutilizada em TODOS os backups/restores (Telegram, global, por-tenant, gestor).
+  // Nunca duplicar essa lista em outro lugar do código — sempre importar TABELAS_BACKUP daqui.
 
 let _dirty = false
 function marcarDirty() { _dirty = true }
@@ -1524,6 +1528,44 @@ function criarFinanceAccess(row, sessionUserId) {
   return { token, expires_at, ttl_ms: FINANCE_AUTH_TTL }
 }
 
+// ── Envio automático do backup para o Telegram (cópia fora do volume) ──
+async function enviarBackupTelegram(forcar = false) {
+  try {
+    const cfgRow = db.prepare("SELECT telegram_backup_config FROM store_config WHERE tenant_id='_global'").get()
+    let cfg = {}
+    try { cfg = JSON.parse(cfgRow?.telegram_backup_config || '{}') } catch { cfg = {} }
+    if (!cfg.enabled || !cfg.bot_token || !cfg.chat_id) return { ok:false, motivo:'nao_configurado' }
+
+    const intervalMs = Math.max(15, Number(cfg.interval_minutes) || 60) * 60 * 1000
+    const agora = Date.now()
+    if (!forcar && enviarBackupTelegram._lastSend && (agora - enviarBackupTelegram._lastSend) < intervalMs) {
+      return { ok:false, motivo:'intervalo_nao_atingido' }
+    }
+    if (!fs.existsSync(BACKUP_PATH)) return { ok:false, motivo:'backup_inexistente' }
+
+    const buf   = fs.readFileSync(BACKUP_PATH)
+    const stamp = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+    const form  = new FormData()
+    form.append('chat_id', String(cfg.chat_id))
+    form.append('caption', `💾 Backup Anotai — ${stamp} (${(buf.length / 1024).toFixed(0)} KB)`)
+    form.append('document', new Blob([buf], { type: 'application/json' }), `backup-${new Date().toISOString().slice(0, 10)}.json`)
+
+    const resp = await fetch(`https://api.telegram.org/bot${cfg.bot_token}/sendDocument`, { method: 'POST', body: form })
+    const data = await resp.json().catch(() => null)
+    if (!resp.ok || !data?.ok) {
+      log('❌', 'Erro envio backup Telegram:', { status: resp.status, error: data?.description })
+      return { ok:false, motivo: data?.description || `http_${resp.status}` }
+    }
+    enviarBackupTelegram._lastSend = agora
+    log('📤', 'Backup enviado ao Telegram com sucesso')
+    return { ok:true }
+  } catch (e) {
+    log('❌', 'Erro envio backup Telegram:', { error: e.message })
+    return { ok:false, motivo: e.message }
+  }
+}
+enviarBackupTelegram._lastSend = 0
+
 function fazerBackup(forcar = false) {
   if (!forcar && !_dirty) return
   _dirty = false
@@ -1557,6 +1599,7 @@ function fazerBackup(forcar = false) {
         try { fs.renameSync(BACKUP_PATH + '.tmp', BACKUP_PATH) } catch {}
         log('💾', `Backup salvo (${total} registros)`)
         fazerBackup._running = false
+        enviarBackupTelegram().catch(() => {})
       })
       ws.on('error', (e) => {
         log('❌', 'Erro backup write:', { error: e.message })
@@ -4863,7 +4906,7 @@ const server = http.createServer(async (req,res) => {
 
   // ── Rotas especiais — todas em routes.js ───────────────────────────────────
   const _routeCtx = { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
-    validarSessaoAdmin, criarSessaoAdmin, validarFinanceAccess, fazerBackup, restaurarBackup, getTenantId,
+    validarSessaoAdmin, criarSessaoAdmin, validarFinanceAccess, fazerBackup, restaurarBackup, enviarBackupTelegram, TABELAS_BACKUP, getTenantId,
     MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
     EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano,
     aplicarBaixaEstoquePedido,

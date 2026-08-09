@@ -879,7 +879,7 @@ function _iniciarAutoCobrancaJob(ctx) {
 
 module.exports = async function handleRoutes(req, res, ctx) {
   const { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
-          validarSessaoAdmin, criarSessaoAdmin, validarFinanceAccess, fazerBackup, restaurarBackup, getTenantId,
+          validarSessaoAdmin, criarSessaoAdmin, validarFinanceAccess, fazerBackup, restaurarBackup, enviarBackupTelegram, TABELAS_BACKUP, getTenantId,
           MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
           EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano,
           aplicarBaixaEstoquePedido,
@@ -3992,6 +3992,52 @@ module.exports = async function handleRoutes(req, res, ctx) {
   if (upath.startsWith('/api/admin-backup')) {
     if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado. Faça login no painel admin.' }); return true }
 
+    // ── Lê config do backup automático via Telegram ──
+    if (req.method === 'GET' && upath === '/api/admin-backup/telegram-config') {
+      try {
+        const row = db.prepare("SELECT telegram_backup_config FROM store_config WHERE tenant_id='_global'").get()
+        let cfg = {}
+        try { cfg = JSON.parse(row?.telegram_backup_config || '{}') } catch { cfg = {} }
+        const size = fs.existsSync(BACKUP_PATH) ? fs.statSync(BACKUP_PATH).size : 0
+        send(res, 200, {
+          enabled: !!cfg.enabled,
+          bot_token: cfg.bot_token || '',
+          chat_id: cfg.chat_id || '',
+          interval_minutes: cfg.interval_minutes || 60,
+          last_send: enviarBackupTelegram._lastSend || null,
+          backup_size: size
+        })
+      } catch(e) { send(res, 500, { error: e.message }) }
+      return true
+    }
+
+    // ── Salva config do backup automático via Telegram ──
+    if (req.method === 'POST' && upath === '/api/admin-backup/telegram-config') {
+      const body = await readBody(req)
+      const cfg = {
+        enabled: !!body.enabled,
+        bot_token: String(body.bot_token || '').trim(),
+        chat_id: String(body.chat_id || '').trim(),
+        interval_minutes: Math.max(15, parseInt(body.interval_minutes) || 60)
+      }
+      try {
+        db.prepare("UPDATE store_config SET telegram_backup_config=? WHERE tenant_id='_global'").run(JSON.stringify(cfg))
+        send(res, 200, { ok: true })
+      } catch(e) { send(res, 500, { error: e.message }) }
+      return true
+    }
+
+    // ── Dispara um envio de teste imediato pro Telegram ──
+    // Usa o backup.json já existente (no máx. ~5min desatualizado) — suficiente
+    // pra validar bot_token/chat_id sem esperar a escrita assíncrona de um novo snapshot.
+    if (req.method === 'POST' && upath === '/api/admin-backup/telegram-test') {
+      try {
+        const resultado = await enviarBackupTelegram(true)
+        send(res, 200, resultado)
+      } catch(e) { send(res, 500, { error: e.message }) }
+      return true
+    }
+
     // ── Lê ia_config de um tenant (usado pelo painel IA) ──
     if (req.method === 'GET' && upath === '/api/admin-backup/ia-config') {
       const tid = params.get('tenant_id') || '_global'
@@ -4032,10 +4078,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
       try {
         const body = await readBody(req)
         if (!body?.tabelas) { send(res, 400, { error: 'JSON inválido (falta "tabelas")' }); return true }
-        // Lista deve casar com a do backup pra que o restore consiga restaurar tudo.
-        // Antes faltavam pagamentos_pix, saques, pagamentos_cartao e stamp_progress —
-        // se o backup tivesse essas tabelas, eram silenciosamente descartadas no restore.
-        const TABS = ['tenants', 'sys_users', 'store_config', 'categories', 'menu_items', 'cupons', 'mesas', 'garcons', 'orders', 'movimentos', 'estoque', 'estoque_receitas', 'estoque_movimentos', 'fidelidade', 'customers', 'pagamentos_pix', 'saques', 'pagamentos_cartao', 'plano_assinaturas', 'stamp_progress', 'ratings', 'entregadores', 'entregas', 'rotas_entrega', 'entregador_locations', 'entrega_mensagens']
+        // Lista centralizada em TABELAS_BACKUP (server.js) — nunca duplicar aqui.
+        const TABS = TABELAS_BACKUP
         let totalOk = 0, totalFail = 0
         for (const t of TABS) {
           const rows = body.tabelas?.[t]; if (!rows?.length) continue
@@ -4066,7 +4110,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     // Comprime com gzip pra reduzir tráfego (backup pode passar de 50MB sem compressão).
     if (req.method === 'GET' && upath === '/api/admin-backup-global-imagens') {
       try {
-        const TABS = ['tenants','sys_users','store_config','categories','menu_items','cupons','mesas','garcons','orders','movimentos','estoque','estoque_receitas','estoque_movimentos','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','plano_assinaturas','stamp_progress','ratings','entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens']
+        const TABS = TABELAS_BACKUP
         const snapshot = { ts: new Date().toISOString(), tipo: 'global', tabelas: {}, imagens: {} }
         let totalRegs = 0
         for (const t of TABS) {
@@ -4082,10 +4126,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
           }
         }
 
-        // Coleta nomes de imagens referenciadas em menu_items e store_config
+        // Coleta nomes de imagens e vídeos referenciados em menu_items e store_config
         const imageUrls = new Set()
         for (const item of (snapshot.tabelas.menu_items || [])) {
           if (item.image_url) imageUrls.add(item.image_url)
+          if (item.video_url) imageUrls.add(item.video_url)
         }
         for (const cfg of (snapshot.tabelas.store_config || [])) {
           if (cfg.store_logo_url)   imageUrls.add(cfg.store_logo_url)
@@ -4101,7 +4146,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
             if (fs.existsSync(fpath)) {
               const buf  = fs.readFileSync(fpath)
               const ext  = (path.extname(fname).slice(1) || 'jpeg').toLowerCase()
-              const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : ext === 'svg' ? 'image/svg+xml' : 'image/jpeg'
+              const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : ext === 'svg' ? 'image/svg+xml' : ext === 'mp4' ? 'video/mp4' : ext === 'mov' ? 'video/quicktime' : ext === 'webm' ? 'video/webm' : 'image/jpeg'
               snapshot.imagens[fname] = { mime, data: buf.toString('base64') }
               imgOk++
             } else {
@@ -4145,7 +4190,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(tid)
         if (!tenant) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
         // Tabelas que têm tenant_id (todas exceto a tabela tenants em si)
-        const TABS = ['sys_users','store_config','categories','menu_items','cupons','mesas','garcons','orders','movimentos','estoque','estoque_receitas','estoque_movimentos','fidelidade','customers','pagamentos_pix','saques','pagamentos_cartao','plano_assinaturas','stamp_progress','ratings','entregadores','entregas','rotas_entrega','entregador_locations','entrega_mensagens']
+        const TABS = TABELAS_BACKUP.filter(t => t !== 'tenants')
         const snapshot = {
           ts: new Date().toISOString(),
           tipo: 'tenant',
@@ -4164,10 +4209,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
             snapshot.tabelas[t] = []
           }
         }
-        // Coleta imagens referenciadas SOMENTE pelo tenant
+        // Coleta imagens e vídeos referenciados SOMENTE pelo tenant
         const imageUrls = new Set()
         for (const item of (snapshot.tabelas.menu_items || [])) {
           if (item.image_url) imageUrls.add(item.image_url)
+          if (item.video_url) imageUrls.add(item.video_url)
         }
         for (const cfg of (snapshot.tabelas.store_config || [])) {
           if (cfg.store_logo_url)   imageUrls.add(cfg.store_logo_url)
@@ -4181,7 +4227,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
             if (fs.existsSync(fpath)) {
               const buf  = fs.readFileSync(fpath)
               const ext  = (path.extname(fname).slice(1) || 'jpeg').toLowerCase()
-              const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : ext === 'svg' ? 'image/svg+xml' : 'image/jpeg'
+              const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : ext === 'svg' ? 'image/svg+xml' : ext === 'mp4' ? 'video/mp4' : ext === 'mov' ? 'video/quicktime' : ext === 'webm' ? 'video/webm' : 'image/jpeg'
               snapshot.imagens[fname] = { mime, data: buf.toString('base64') }
               imgOk++
             }
@@ -4214,11 +4260,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const tenant = db.prepare('SELECT id,nome,slug FROM tenants WHERE id=?').get(tid)
     if (!tenant) { send(res, 404, { error: 'Tenant não encontrado' }); return true }
     try {
-      const TABS     = ['sys_users', 'store_config', 'categories', 'menu_items', 'cupons', 'mesas', 'garcons', 'orders', 'movimentos', 'estoque', 'estoque_receitas', 'estoque_movimentos', 'fidelidade', 'customers', 'ratings', 'entregadores', 'entregas', 'rotas_entrega', 'entregador_locations', 'entrega_mensagens']
+      const TABS     = TABELAS_BACKUP.filter(t => t !== 'tenants')
       const snapshot = { ts: new Date().toISOString(), tenant_id: tid, tenant_nome: tenant.nome, tabelas: { tenants: [tenant] }, imagens: {} }
       for (const t of TABS) { try { snapshot.tabelas[t] = db.prepare(`SELECT * FROM "${t}" WHERE tenant_id=?`).all(tid) } catch { snapshot.tabelas[t] = [] } }
       const imageUrls = new Set()
-      ;(snapshot.tabelas.menu_items || []).forEach(r => { if (r.image_url) imageUrls.add(r.image_url) })
+      ;(snapshot.tabelas.menu_items || []).forEach(r => { if (r.image_url) imageUrls.add(r.image_url); if (r.video_url) imageUrls.add(r.video_url) })
       const cfg = (snapshot.tabelas.store_config || [])[0]
       if (cfg) { if (cfg.store_logo_url) imageUrls.add(cfg.store_logo_url); if (cfg.store_banner_url) imageUrls.add(cfg.store_banner_url) }
       for (const url of imageUrls) {
@@ -4226,14 +4272,14 @@ module.exports = async function handleRoutes(req, res, ctx) {
         const fpath = path.join(UPLOADS_DIR, fname)
         if (fs.existsSync(fpath)) {
           const ext  = (path.extname(fname).slice(1) || 'jpeg').toLowerCase()
-          const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg'
+          const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : ext === 'mp4' ? 'video/mp4' : ext === 'mov' ? 'video/quicktime' : ext === 'webm' ? 'video/webm' : 'image/jpeg'
           snapshot.imagens[fname] = { mime, data: fs.readFileSync(fpath).toString('base64') }
         }
       }
       const json  = JSON.stringify(snapshot)
       const slug  = tenant.slug || tid
       const fname = `backup-completo-${slug}-${new Date().toISOString().slice(0, 10)}.json`
-      log('💾', `Backup completo gestor: ${slug} (${imageUrls.size} imagem(ns), ${Math.round(json.length / 1024)}KB)`)
+      log('💾', `Backup completo gestor: ${slug} (${imageUrls.size} arquivo(s) de mídia, ${Math.round(json.length / 1024)}KB)`)
       zlib.gzip(Buffer.from(json, 'utf8'), (err, compressed) => {
         if (err) {
           res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="${fname}"`, 'Content-Length': Buffer.byteLength(json) })
