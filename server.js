@@ -1543,12 +1543,21 @@ async function enviarBackupTelegram(forcar = false) {
     }
     if (!fs.existsSync(BACKUP_PATH)) return { ok:false, motivo:'backup_inexistente' }
 
-    const buf   = fs.readFileSync(BACKUP_PATH)
-    const stamp = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+    const rawBuf = fs.readFileSync(BACKUP_PATH)
+    const buf    = zlib.gzipSync(rawBuf)
+    const stamp  = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+
+    // Limite do Telegram Bot API pra sendDocument: 50MB
+    const TELEGRAM_MAX_BYTES = 50 * 1024 * 1024
+    if (buf.length > TELEGRAM_MAX_BYTES) {
+      log('❌', 'Backup Telegram: arquivo excede 50MB mesmo comprimido', { kb: Math.round(buf.length/1024) })
+      return { ok:false, motivo:'arquivo_excede_limite_telegram', tamanho_kb: Math.round(buf.length/1024) }
+    }
+
     const form  = new FormData()
     form.append('chat_id', String(cfg.chat_id))
-    form.append('caption', `💾 Backup Anotai — ${stamp} (${(buf.length / 1024).toFixed(0)} KB)`)
-    form.append('document', new Blob([buf], { type: 'application/json' }), `backup-${new Date().toISOString().slice(0, 10)}.json`)
+    form.append('caption', `💾 Backup Anotai — ${stamp} (${(rawBuf.length / 1024).toFixed(0)} KB → ${(buf.length / 1024).toFixed(0)} KB gzip)`)
+    form.append('document', new Blob([buf], { type: 'application/gzip' }), `backup-${new Date().toISOString().slice(0, 10)}.json.gz`)
 
     const resp = await fetch(`https://api.telegram.org/bot${cfg.bot_token}/sendDocument`, { method: 'POST', body: form })
     const data = await resp.json().catch(() => null)
