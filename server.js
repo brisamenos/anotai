@@ -1536,7 +1536,7 @@ async function enviarBackupTelegram(forcar = false) {
     try { cfg = JSON.parse(cfgRow?.telegram_backup_config || '{}') } catch { cfg = {} }
     if (!cfg.enabled || !cfg.bot_token || !cfg.chat_id) return { ok:false, motivo:'nao_configurado' }
 
-    const intervalMs = Math.max(15, Number(cfg.interval_minutes) || 60) * 60 * 1000
+    const intervalMs = Math.max(5, Number(cfg.interval_minutes) || 60) * 60 * 1000
     const agora = Date.now()
     if (!forcar && enviarBackupTelegram._lastSend && (agora - enviarBackupTelegram._lastSend) < intervalMs) {
       return { ok:false, motivo:'intervalo_nao_atingido' }
@@ -1559,7 +1559,18 @@ async function enviarBackupTelegram(forcar = false) {
     form.append('caption', `💾 Backup Anotai — ${stamp} (${(rawBuf.length / 1024).toFixed(0)} KB → ${(buf.length / 1024).toFixed(0)} KB gzip)`)
     form.append('document', new Blob([buf], { type: 'application/gzip' }), `backup-${new Date().toISOString().slice(0, 10)}.json.gz`)
 
-    const resp = await fetch(`https://api.telegram.org/bot${cfg.bot_token}/sendDocument`, { method: 'POST', body: form })
+    // Serializa o FormData num Buffer fixo e envia com Content-Length explícito.
+    // O envio direto de FormData/Blob pelo fetch nativo do Node pode truncar uploads
+    // grandes, e o Telegram responde "Bad Request: incomplete input" quando isso ocorre.
+    const formResponse = new Response(form)
+    const contentType  = formResponse.headers.get('content-type')
+    const bodyBuf       = Buffer.from(await formResponse.arrayBuffer())
+
+    const resp = await fetch(`https://api.telegram.org/bot${cfg.bot_token}/sendDocument`, {
+      method: 'POST',
+      body: bodyBuf,
+      headers: { 'Content-Type': contentType, 'Content-Length': String(bodyBuf.length) }
+    })
     const data = await resp.json().catch(() => null)
     if (!resp.ok || !data?.ok) {
       log('❌', 'Erro envio backup Telegram:', { status: resp.status, error: data?.description })
