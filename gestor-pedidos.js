@@ -2096,6 +2096,8 @@ function noRenderCart() {
   if (footEl)  footEl.textContent  = 'R$ ' + total.toFixed(2).replace('.', ',');
   if (btn)     btn.disabled = false;
   if (btnLabel) btnLabel.textContent = `Criar pedido (${totalQty})`;
+  // Recalcula info de troco (total pode ter mudado)
+  if (typeof noAtualizarInfoTroco === 'function') noAtualizarInfoTroco();
 }
 
 // ── Config de taxa carregada ao abrir o modal ──
@@ -2187,6 +2189,77 @@ function noResetTaxaAuto() {
   if (typeof sbToast === 'function') sbToast('ok', 'Taxa recalculada pelo bairro');
 }
 
+// ─────────────────────────────────────────
+// TROCO (Novo Pedido — PDV do gestor)
+// ─────────────────────────────────────────
+let _noTrocoEscolha = 'nao'; // 'nao' | 'sim'
+
+// Mostra/esconde o bloco de troco conforme a forma de pagamento
+function noAtualizarTroco() {
+  const pag = document.getElementById('order-pag')?.value || 'PIX';
+  const wrap = document.getElementById('order-troco-wrap');
+  if (!wrap) return;
+  if (pag === 'Dinheiro') {
+    wrap.style.display = 'block';
+    noTrocoEscolha(_noTrocoEscolha);
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+function noTrocoEscolha(tipo) {
+  _noTrocoEscolha = tipo;
+  const btnNao = document.getElementById('order-troco-btn-nao');
+  const btnSim = document.getElementById('order-troco-btn-sim');
+  const valorWrap = document.getElementById('order-troco-valor-wrap');
+  if (btnNao) {
+    btnNao.style.background = (tipo === 'nao') ? 'var(--accent)' : 'var(--surface)';
+    btnNao.style.color      = (tipo === 'nao') ? '#fff' : 'var(--text)';
+    btnNao.style.border     = (tipo === 'nao') ? 'none' : '1px solid var(--border)';
+  }
+  if (btnSim) {
+    btnSim.style.background = (tipo === 'sim') ? 'var(--accent)' : 'var(--surface)';
+    btnSim.style.color      = (tipo === 'sim') ? '#fff' : 'var(--text)';
+    btnSim.style.border     = (tipo === 'sim') ? 'none' : '1px solid var(--border)';
+  }
+  if (valorWrap) valorWrap.style.display = (tipo === 'sim') ? 'block' : 'none';
+  if (tipo === 'sim') {
+    setTimeout(() => document.getElementById('order-troco-valor')?.focus(), 100);
+  }
+  noAtualizarInfoTroco();
+}
+
+// Calcula e exibe quanto será devolvido ao cliente em tempo real
+function noAtualizarInfoTroco() {
+  const info = document.getElementById('order-troco-info');
+  if (!info) return;
+  const v = parseFloat(document.getElementById('order-troco-valor')?.value || '0');
+  const subtotal = (typeof _noCart !== 'undefined' ? _noCart : []).reduce((s, c) => s + c.price * c.qty, 0);
+  const taxaAtual = parseFloat(document.getElementById('no-taxa-val')?.value) || 0;
+  const isDelivery = (typeof _noDelivery !== 'undefined' && _noDelivery === 'delivery');
+  const tot = subtotal + (isDelivery ? taxaAtual : 0);
+  if (v > 0 && tot > 0) {
+    if (v < tot) {
+      info.textContent = `⚠️ Valor menor que o total (R$ ${tot.toFixed(2).replace('.', ',')})`;
+      info.style.color = '#ef4444';
+    } else {
+      const dev = v - tot;
+      info.textContent = `Devolver ao cliente: R$ ${dev.toFixed(2).replace('.', ',')}`;
+      info.style.color = 'var(--muted)';
+    }
+  } else {
+    info.textContent = '';
+  }
+}
+
+// Reseta o estado de troco (chamado ao abrir o modal de Novo Pedido)
+function noResetTroco() {
+  _noTrocoEscolha = 'nao';
+  const el = document.getElementById('order-troco-valor');
+  if (el) el.value = '';
+  noAtualizarTroco();
+}
+
 // ── Autocomplete de bairros (quando config = por_bairro) ──
 function noOnBairroInput(input) {
   noUpdateTaxaAuto();
@@ -2260,6 +2333,8 @@ async function noOpenModal() {
   if (taxaInfo) taxaInfo.textContent = '';
   const mesaSelect = document.getElementById('order-mesa');
   if (mesaSelect) mesaSelect.value = '';
+  document.getElementById('order-pag').value = 'PIX';
+  noResetTroco();
   document.getElementById('no-search').value = '';
   _noCatFilter = null; // reset filtro de categoria
   noSetDelivery('delivery');
@@ -2368,6 +2443,21 @@ async function createOrder() {
     taxa = 0;
   }
 
+  // ── Troco (só relevante se pagamento = Dinheiro) ──
+  // null = paga exato / não se aplica (não-dinheiro) · -1 = precisa troco mas não informou valor · >0 = valor que o cliente vai entregar
+  let troco = null;
+  if (pag === 'Dinheiro' && _noTrocoEscolha === 'sim') {
+    const vTroco = parseFloat(document.getElementById('order-troco-valor')?.value || '0');
+    const subtotalAtual = _noCart.reduce((s, c) => s + c.price * c.qty, 0);
+    const totalComTaxa = subtotalAtual + (_noDelivery === 'delivery' ? taxa : 0);
+    if (vTroco > 0 && vTroco < totalComTaxa) {
+      window._pdvCriandoPedido = false;
+      sbToast('err', 'Valor para troco menor que o total do pedido');
+      return;
+    }
+    troco = (vTroco > 0) ? vTroco : -1;
+  }
+
   if (!_noCart.length) { window._pdvCriandoPedido = false; sbToast('err', 'Adicione pelo menos um produto'); return; }
 
   // ── PEDIDO DE MESA — segue o mesmo formato do garçom (status: 'mesa_aberta',
@@ -2466,7 +2556,8 @@ async function createOrder() {
           session_ref: mesaAtual?.opened_at || _now,
           status: 'mesa_aberta',
           time,
-          pag: pag || 'Mesa'
+          pag: pag || 'Mesa',
+          troco
         }).select().single();
         if (error) throw error;
         savedOrder = data;
@@ -2546,7 +2637,7 @@ async function createOrder() {
       mesa_num: mesaNum,
       // Pedido criado pelo gestor no PDV já entra em produção (pula análise)
       status: 'producao',
-      time, pag
+      time, pag, troco
     }).select().single();
 
     if (oErr) { sbLoading(false); sbToast('err', 'Erro ao criar pedido'); console.error(oErr); return; }
