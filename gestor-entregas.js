@@ -50,9 +50,18 @@ function entEmpty(text) {
 function entWhen(value) {
   if (!value) return '';
   try {
-    const d = new Date(String(value).replace(' ', 'T'));
+    // Mesma correção de fuso aplicada em odDateTime/_parseCreatedAt: valor vem em UTC
+    // sem "Z" do SQLite, então forçamos interpretação UTC antes de converter pra Brasília.
+    const s = String(value).trim();
+    let d;
+    if (/(Z|[+-]\d{2}:?\d{2})$/.test(s)) {
+      d = new Date(s);
+    } else {
+      const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+      d = m ? new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6])) : new Date(s);
+    }
     if (isNaN(d.getTime())) return String(value).slice(11, 16);
-    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
   } catch {
     return String(value).slice(11, 16);
   }

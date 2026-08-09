@@ -1329,7 +1329,16 @@ async function renderRelatorios() {
 
     // ─── Financeiro: movimentos ───────────────────────────
     // movimentos.time usa formato SQLite 'YYYY-MM-DD HH:MM:SS' — normaliza para ISO
-    const normDate = s => s ? new Date(s.replace(' ', 'T')) : null;
+    // Timestamp do SQLite vem em UTC sem "Z" (ex: "2026-08-09 18:07:00") — new Date()
+    // sem timezone explícita seria interpretado como horário LOCAL do navegador, causando
+    // erro de 3h em Brasília. Forçamos interpretação UTC quando não houver timezone na string.
+    const normDate = s => {
+      if (!s) return null;
+      const str = String(s).trim();
+      if (/(Z|[+-]\d{2}:?\d{2})$/.test(str)) return new Date(str);
+      const m = str.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+      return m ? new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6])) : new Date(str);
+    };
     const movsFiltrados = (movsFromDB||[]).filter(m=>{
       const t = normDate(m.created_at||m.time);
       return t && t >= range.inicio && t < range.fim;
@@ -1524,7 +1533,16 @@ async function relImprimirCaixa() {
     });
 
     // ── Entradas e saídas (movimentos) ───────────────────
-    const normDate = s => s ? new Date(s.replace(' ', 'T')) : null;
+    // Timestamp do SQLite vem em UTC sem "Z" (ex: "2026-08-09 18:07:00") — new Date()
+    // sem timezone explícita seria interpretado como horário LOCAL do navegador, causando
+    // erro de 3h em Brasília. Forçamos interpretação UTC quando não houver timezone na string.
+    const normDate = s => {
+      if (!s) return null;
+      const str = String(s).trim();
+      if (/(Z|[+-]\d{2}:?\d{2})$/.test(str)) return new Date(str);
+      const m = str.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+      return m ? new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6])) : new Date(str);
+    };
     const movsFiltrados = (movsRaw||[]).filter(m => {
       const t = normDate(m.created_at||m.time);
       return t && t >= range.inicio && t < range.fim;

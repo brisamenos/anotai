@@ -947,9 +947,20 @@ function odStatusLabel(status) {
 function odDateTime(value) {
   if (!value) return '';
   try {
-    const d = new Date(String(value).replace(' ', 'T'));
+    // SQLite datetime('now') retorna UTC sem sufixo "Z" (ex: "2026-08-09 18:07:00").
+    // new Date(string) sem "Z" é interpretado como horário LOCAL do navegador → bug de 3h em Brasília.
+    // Aqui forçamos interpretação UTC quando a string não trouxer timezone explícita,
+    // depois exibimos já convertido pro horário de Brasília.
+    const s = String(value).trim();
+    let d;
+    if (/(Z|[+-]\d{2}:?\d{2})$/.test(s)) {
+      d = new Date(s);
+    } else {
+      const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+      d = m ? new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6])) : new Date(s);
+    }
     if (isNaN(d.getTime())) return String(value).slice(0, 16);
-    return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   } catch {
     return String(value).slice(0, 16);
   }
