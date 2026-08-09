@@ -655,6 +655,38 @@ async function abrirChatPedidoWA(id) {
 }
 
 
+// Busca (e cacheia por telefone) quantos pedidos esse cliente já fez NESSE tenant.
+// Sempre manda x-tenant-id — o backend filtra por tenant_id, então nunca mistura lojas.
+const _pedidosClienteCache = {};
+async function _carregarPedidosClienteNoDetalhe(phone) {
+  const el = document.getElementById('od-client-pedidos-count');
+  if (!el) return;
+  el.textContent = '';
+  if (!phone || !_sessao?.tenant_id) return;
+  const _idAoAbrir = window._currentDetailId; // evita mostrar resultado de pedido já fechado/trocado
+  const cacheKey = _sessao.tenant_id + ':' + phone;
+  if (_pedidosClienteCache[cacheKey] != null) {
+    if (window._currentDetailId === _idAoAbrir) _renderPedidosClienteCount(el, _pedidosClienteCache[cacheKey]);
+    return;
+  }
+  try {
+    const r = await fetch(`/api/cliente-pedidos-count?phone=${encodeURIComponent(phone)}`, {
+      headers: { 'x-tenant-id': _sessao.tenant_id }
+    });
+    if (!r.ok) return;
+    const d = await r.json().catch(() => null);
+    const count = d?.count || 0;
+    _pedidosClienteCache[cacheKey] = count;
+    if (window._currentDetailId === _idAoAbrir) _renderPedidosClienteCount(el, count);
+  } catch (e) {
+    console.warn('[od-client-pedidos-count] erro:', e.message);
+  }
+}
+function _renderPedidosClienteCount(el, count) {
+  if (count <= 1) el.textContent = '🆕 1º pedido nesta loja';
+  else el.textContent = `🔁 ${count}º pedido nesta loja`;
+}
+
 function openOrderDetail(id) {
   let o = ordersKanban.find(x => x.id === id);
   // Se não encontrou no kanban, busca no cache de mesas (pedidos mesa_aberta)
@@ -821,6 +853,7 @@ function openOrderDetail(id) {
   setEl('od-client-phone', o.phone || '');
   const _odChatAction = document.getElementById('od-chat-action');
   if (_odChatAction) _odChatAction.style.display = o.phone ? 'flex' : 'none';
+  _carregarPedidosClienteNoDetalhe(o.phone);
 
   // Tipo de entrega (helper unificado)
   const _tipoDet = (window._detectOrderType ? window._detectOrderType(o) : 'delivery');

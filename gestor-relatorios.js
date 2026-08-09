@@ -3318,6 +3318,11 @@ function _buildTicketHtml(order, cfg) {
     ? D('margin-top:1px', 'Telefone: ' + order.phone)
     : '';
 
+  // ── Quantidade de pedidos desse cliente nesta loja (opcional) ──
+  const pedidosClienteLine = (order.phone && Number.isFinite(order.pedidos_count))
+    ? D('margin-top:1px', order.pedidos_count <= 1 ? '🆕 1º pedido nesta loja' : order.pedidos_count + 'º pedido nesta loja')
+    : '';
+
   // ══════════════════════════════════════════════════════
   // VIA PRINCIPAL — Layout estilo Anota AI
   // ══════════════════════════════════════════════════════
@@ -3343,6 +3348,7 @@ function _buildTicketHtml(order, cfg) {
       SECTION('Cliente'),
       D('margin-top:1px', 'Nome: ' + (order.client || '—')),
       phoneLine,
+      pedidosClienteLine,
       addrLine ? D('margin-top:3px', (isRetira ? 'Retirada: ' : 'Entrega: ') + _addrParts.full) : '',
       refLine,
       HR(),
@@ -3865,6 +3871,9 @@ function _buildEscPos(order, cfg, cols = 32) {
   bytes(0x1B, 0x45, 0x00);
   push('Nome: ' + (order.client || '—') + '\n');
   if (order.phone) push('Telefone: ' + order.phone + '\n');
+  if (order.phone && Number.isFinite(order.pedidos_count)) {
+    push((order.pedidos_count <= 1 ? '1o pedido nesta loja' : order.pedidos_count + 'o pedido nesta loja') + '\n');
+  }
   if (cfg.addr && _addrPartsEsc.full && !_escIsMesa) {
     _wrapText((_escIsRetirada ? 'Retirada: ' : 'Entrega: ') + _addrPartsEsc.full, cols, '').forEach(l => push(l + '\n'));
     if (_addrPartsEsc.referencia) {
@@ -4112,6 +4121,23 @@ async function _syncOrderPaymentBeforePrint(order) {
   }
 }
 
+// Busca quantos pedidos esse cliente (telefone) já fez NESSE tenant e anexa em order.pedidos_count,
+// pra sair na comanda impressa. Sempre manda x-tenant-id — nunca mistura dados de outra loja.
+async function _syncClienteOrdersCount(order) {
+  if (!order?.phone || !_sessao?.tenant_id) return order;
+  try {
+    const r = await fetch(`/api/cliente-pedidos-count?phone=${encodeURIComponent(order.phone)}`, {
+      headers: { 'x-tenant-id': _sessao.tenant_id }
+    });
+    if (!r.ok) return order;
+    const d = await r.json().catch(() => null);
+    return { ...order, pedidos_count: d?.count || 0 };
+  } catch (e) {
+    console.warn('[PRINT] Falha ao buscar contagem de pedidos do cliente:', e.message);
+    return order;
+  }
+}
+
 function _printHasSetorRoutesConfigured() {
   try {
     return Object.values(_getPrintSetoresCategoria() || {}).some(Boolean);
@@ -4260,6 +4286,7 @@ async function _printAskReprintChoice(ticket) {
 
 async function printOrder(order, opts = {}) {
   order = await _syncOrderPaymentBeforePrint(order);
+  order = await _syncClienteOrdersCount(order);
   const cfg    = _getPrintConfig();
   const fmt    = localStorage.getItem('printFormat') || _printFormat || '80mm';
 

@@ -5070,6 +5070,31 @@ module.exports = async function handleRoutes(req, res, ctx) {
   }
 
   // ── Vincula PIX ao pedido ────────────────────────────
+  // Quantidade de pedidos que um cliente (por telefone) já fez NESSE tenant.
+  // Usa sufixo de 8 dígitos do telefone pra tolerar diferenças de formatação
+  // (com/sem DDI, com/sem espaços etc.) — mesmo critério já usado em /api/clientes-gestor.
+  // IMPORTANTE: sempre filtra por tenant_id pra nunca misturar dados entre lojas.
+  if (req.method === 'GET' && upath === '/api/cliente-pedidos-count') {
+    const tid = req.headers['x-tenant-id'] || ''
+    const phoneRaw = params.get('phone') || ''
+    if (!tid) { send(res, 400, { error: 'x-tenant-id obrigatório' }); return true }
+    const digits = phoneRaw.replace(/\D/g, '')
+    const last8 = digits.slice(-8)
+    if (!last8) { send(res, 200, { count: 0 }); return true }
+    try {
+      const row = db.prepare(
+        `SELECT COUNT(*) as c FROM orders
+         WHERE tenant_id=? AND status NOT IN ('cancelado','aguardando_pix')
+           AND phone LIKE ?`
+      ).get(tid, '%' + last8)
+      send(res, 200, { count: row?.c || 0 })
+    } catch (e) {
+      log('❌', '/api/cliente-pedidos-count erro:', e.message)
+      send(res, 500, { error: e.message })
+    }
+    return true
+  }
+
   if (req.method === 'GET' && upath === '/api/pix/order-sync') {
     const tid = req.headers['x-tenant-id'] || ''
     const orderId = parseInt(params.get('order_id') || '0', 10)
