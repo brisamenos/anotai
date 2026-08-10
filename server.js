@@ -4071,18 +4071,7 @@ async function handleIAWebhook(req, res) {
     }
     if (!msg||!from) { send(res,200,{ok:true}); return }
     const phone = phoneUtils.cleanWhatsappJid(from)
-    if (!phone) {
-      // Evolution API 2.7 às vezes manda o webhook só com JID em formato @lid
-      // (sem remoteJidAlt/sender com o telefone real) — nesse caso não dá pra
-      // saber o telefone e a msg é descartada. Loga os JIDs brutos pra
-      // conseguirmos ver no log o que realmente chegou nesses casos.
-      log('⚠️', '[wa_track] mensagem sem telefone resolvível (provável @lid sem alt) — ignorada', {
-        remoteJid: data?.key?.remoteJid, remoteJidAlt: data?.key?.remoteJidAlt,
-        participant: data?.key?.participant, participantAlt: data?.key?.participantAlt,
-        sender: data?.sender, tenantId
-      })
-      send(res,200,{ok:true}); return
-    }
+    if (!phone) { send(res,200,{ok:true}); return }
     if (!tenantId) { send(res,200,{ok:true}); return }
     const cfg = db.prepare("SELECT ia_config,evo_instance,store_name,store_descricao,store_whatsapp,store_tempo_entrega,store_tempo_retirada,delivery_fee_config,horarios_config,store_open,order_num_offset FROM store_config WHERE tenant_id=?").get(tenantId)
     if (!cfg) { send(res,200,{ok:true}); return }
