@@ -152,6 +152,7 @@ async function evoCriarInstancia() {
       sbToast('ok', `Instância "${instName}" já existe. Usando existente...`);
       sbLoading(false);
       await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: instName });
+      iaRegistrarWebhook();
       evoConectar();
       return;
     }
@@ -163,6 +164,7 @@ async function evoCriarInstancia() {
 
   sbLoading(false);
   await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: instName });
+  iaRegistrarWebhook();
   sbToast('ok', `Instância "${instName}" criada!`);
 
   // v2: QR pode vir direto na resposta de criação
@@ -240,7 +242,7 @@ function _iniciarPollingConexao() {
     tries++;
     const s = await EVO.req('GET', `/instance/connectionState/${EVO.instance}`);
     const state = s.data?.instance?.state||s.data?.state||'close';
-    if (state==='open') { clearInterval(evoQrInterval); evoConnected=true; _evoSetStatus('connected','Conectado'); _evoShowConnected(s.data?.instance?.profileName||'WhatsApp'); sbToast('ok',' WhatsApp conectado!'); }
+    if (state==='open') { clearInterval(evoQrInterval); evoConnected=true; _evoSetStatus('connected','Conectado'); _evoShowConnected(s.data?.instance?.profileName||'WhatsApp'); sbToast('ok',' WhatsApp conectado!'); iaRegistrarWebhook(); }
     if (tries>30) clearInterval(evoQrInterval);
   }, 4000);
 }
@@ -1790,16 +1792,19 @@ async function iaRegistrarWebhook(webhookUrl) {
       const slug = (_slugRes4?.ok ? (await _slugRes4.json().catch(()=>({}))).slug : '') || _sessao?.tenant_id || '';
       webhookUrl = `${window.location.origin}/webhook/${slug}`;
     }
-    // Chama o proxy /api/evo para setar o webhook na instância
-    await EVO.req('POST', `/webhook/set/${inst}`, {
-      webhook: {
-        enabled: true,
-        url: webhookUrl,
-        webhookByEvents: false,
-        webhookBase64: false,
-        events: ['MESSAGES_UPSERT']
-      }
-    });
+    // Evolution API v2.7: /webhook/set/{instance} espera o payload SEM envelope "webhook"
+    const payload = {
+      enabled: true,
+      url: webhookUrl,
+      webhookByEvents: false,
+      webhookBase64: false,
+      events: ['MESSAGES_UPSERT']
+    };
+    let r = await EVO.req('POST', `/webhook/set/${inst}`, payload);
+    // Fallback: caso a instância rode uma versão mais antiga que exija o formato envelopado
+    if (!r.ok) {
+      await EVO.req('POST', `/webhook/set/${inst}`, { webhook: payload });
+    }
   } catch(e) {
     console.warn('iaRegistrarWebhook:', e);
   }
