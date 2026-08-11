@@ -69,6 +69,12 @@ function _normAddon(s) {
 function _isAddonEsgotado(nome) {
   return _addonsEsgotadosSet.has(_normAddon(nome));
 }
+// ── Adicional indisponível pelo dia da semana configurado (dom=0..sáb=6) ──
+function _addonIndisponivelHoje(dias) {
+  if (!Array.isArray(dias) || dias.length !== 7) return false; // sem config = disponível todos os dias
+  const idxHoje = new Date().getDay();
+  return !dias[idxHoje];
+}
 
 // ── PIX ──
 let _pixPollTimer    = null;

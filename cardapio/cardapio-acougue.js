@@ -184,7 +184,9 @@ function _renderImGruposNow(item) {
           : `<span class="grp-optional-badge">Opcional</span>`;
         const optsHtml = (g.opcoes || []).map(o => {
           const esgotado = _isAddonEsgotado(o.nome);
-          const priceLabel = esgotado
+          const indisponivelHoje = !esgotado && _addonIndisponivelHoje(o.dias);
+          const bloqueado = esgotado || indisponivelHoje;
+          const priceLabel = bloqueado
             ? `<span class="grp-opt-price" style="color:var(--muted);text-decoration:line-through">+ R$ ${fmt(o.preco||0)}</span>`
             : (o.preco > 0
               ? `<span class="grp-opt-price">+ R$ ${fmt(o.preco)}</span>`
@@ -192,7 +194,7 @@ function _renderImGruposNow(item) {
           const indicator = g.tipo === 'checkbox'
             ? `<div class="grp-opt-indicator multi"></div>`
             : `<div class="grp-opt-indicator"></div>`;
-          const qtyEl = g.tipo === 'checkbox' && !esgotado
+          const qtyEl = g.tipo === 'checkbox' && !bloqueado
             ? `<div class="grp-opt-qty" id="gqty_${_slug(g.nome)}_${_slug(o.nome)}">
                  <button class="grp-qty-btn" onclick="event.stopPropagation();grpQty('${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},-1)">−</button>
                  <span class="grp-qty-num" id="gqnum_${_slug(g.nome)}_${_slug(o.nome)}">1</span>
@@ -200,10 +202,12 @@ function _renderImGruposNow(item) {
                </div>` : '';
           const esgBadge = esgotado
             ? `<span class="grp-esg-badge" style="background:var(--s2);color:var(--muted);padding:3px 8px;border-radius:6px;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--border)">Esgotado</span>`
-            : '';
-          const clickAttr = esgotado ? '' : `onclick="grpToggle(this,'${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},'${g.tipo}',${g.max||1})"`;
-          const styleAttr = esgotado ? 'opacity:.5;cursor:not-allowed;pointer-events:none' : '';
-          return `<div class="grp-opt-item${esgotado?' esgotado':''}" data-grupo="${_escape(g.nome)}" data-nome="${_escape(o.nome)}" data-preco="${o.preco||0}" data-tipo="${g.tipo}" ${clickAttr} style="${styleAttr}">
+            : (indisponivelHoje
+              ? `<span class="grp-esg-badge" style="background:var(--s2);color:var(--muted);padding:3px 8px;border-radius:6px;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--border)">Indisponível hoje</span>`
+              : '');
+          const clickAttr = bloqueado ? '' : `onclick="grpToggle(this,'${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},'${g.tipo}',${g.max||1})"`;
+          const styleAttr = bloqueado ? 'opacity:.5;cursor:not-allowed;pointer-events:none' : '';
+          return `<div class="grp-opt-item${bloqueado?' esgotado':''}" data-grupo="${_escape(g.nome)}" data-nome="${_escape(o.nome)}" data-preco="${o.preco||0}" data-tipo="${g.tipo}" ${clickAttr} style="${styleAttr}">
             <div class="grp-opt-left">${indicator}<span class="grp-opt-name">${o.nome}</span></div>
             <div style="display:flex;align-items:center;gap:8px">${esgBadge || priceLabel}${qtyEl}</div>
           </div>`;
@@ -273,7 +277,9 @@ function _renderGenericGruposHtml(genericGrupos) {
       : `<span class="grp-optional-badge">Opcional</span>`;
     const optsHtml = (g.opcoes || []).map(o => {
       const esgotado = _isAddonEsgotado(o.nome);
-      const priceLabel = esgotado
+      const indisponivelHoje = !esgotado && _addonIndisponivelHoje(o.dias);
+      const bloqueado = esgotado || indisponivelHoje;
+      const priceLabel = bloqueado
         ? `<span class="grp-opt-price" style="color:var(--muted);text-decoration:line-through">+ R$ ${fmt(o.preco||0)}</span>`
         : (o.preco > 0
           ? `<span class="grp-opt-price">+ R$ ${fmt(o.preco)}</span>`
@@ -281,7 +287,7 @@ function _renderGenericGruposHtml(genericGrupos) {
       const indicator = g.tipo === 'checkbox'
         ? `<div class="grp-opt-indicator multi"></div>`
         : `<div class="grp-opt-indicator"></div>`;
-      const qtyEl = g.tipo === 'checkbox' && !esgotado
+      const qtyEl = g.tipo === 'checkbox' && !bloqueado
         ? `<div class="grp-opt-qty" id="gqty_${_slug(g.nome)}_${_slug(o.nome)}">
              <button class="grp-qty-btn" onclick="event.stopPropagation();grpQty('${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},-1)">−</button>
              <span class="grp-qty-num" id="gqnum_${_slug(g.nome)}_${_slug(o.nome)}">1</span>
@@ -289,10 +295,12 @@ function _renderGenericGruposHtml(genericGrupos) {
            </div>` : '';
       const esgBadge = esgotado
         ? `<span class="grp-esg-badge" style="background:var(--s2);color:var(--muted);padding:3px 8px;border-radius:6px;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--border)">Esgotado</span>`
-        : '';
-      const clickAttr = esgotado ? '' : `onclick="grpToggle(this,'${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},'${g.tipo}',${g.max||1})"`;
-      const styleAttr = esgotado ? 'opacity:.5;cursor:not-allowed;pointer-events:none' : '';
-      return `<div class="grp-opt-item${esgotado?' esgotado':''}" data-grupo="${_escape(g.nome)}" data-nome="${_escape(o.nome)}" data-preco="${o.preco||0}" data-tipo="${g.tipo}" ${clickAttr} style="${styleAttr}">
+        : (indisponivelHoje
+          ? `<span class="grp-esg-badge" style="background:var(--s2);color:var(--muted);padding:3px 8px;border-radius:6px;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--border)">Indisponível hoje</span>`
+          : '');
+      const clickAttr = bloqueado ? '' : `onclick="grpToggle(this,'${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},'${g.tipo}',${g.max||1})"`;
+      const styleAttr = bloqueado ? 'opacity:.5;cursor:not-allowed;pointer-events:none' : '';
+      return `<div class="grp-opt-item${bloqueado?' esgotado':''}" data-grupo="${_escape(g.nome)}" data-nome="${_escape(o.nome)}" data-preco="${o.preco||0}" data-tipo="${g.tipo}" ${clickAttr} style="${styleAttr}">
         <div class="grp-opt-left">${indicator}<span class="grp-opt-name">${o.nome}</span></div>
         <div style="display:flex;align-items:center;gap:8px">${esgBadge || priceLabel}${qtyEl}</div>
       </div>`;
@@ -902,6 +910,11 @@ function grpToggle(el, grupoNome, optNome, preco, tipo, maxSel) {
   // Defesa: se o adicional foi marcado como esgotado, ignora o clique
   if (typeof _isAddonEsgotado === 'function' && _isAddonEsgotado(optNome)) {
     if (typeof toast === 'function') toast('warn', `${optNome} está esgotado`);
+    return;
+  }
+  // Defesa: se o adicional está indisponível hoje (dia da semana), ignora o clique
+  if (el.classList.contains('esgotado')) {
+    if (typeof toast === 'function') toast('warn', `${optNome} indisponível hoje`);
     return;
   }
   if (!_imGruposState[grupoNome]) _imGruposState[grupoNome] = [];
