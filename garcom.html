@@ -2566,6 +2566,12 @@ function _normAddon(s) {
 function _isAddonEsgotado(nome) {
   return _addonsEsgotadosSet.has(_normAddon(nome));
 }
+// ── Adicional indisponível pelo dia da semana configurado (dom=0..sáb=6) ──
+function _addonIndisponivelHoje(dias) {
+  if (!Array.isArray(dias) || dias.length !== 7) return false; // sem config = disponível todos os dias
+  const idxHoje = new Date().getDay();
+  return !dias[idxHoje];
+}
 async function loadAddonsEsgotados() {
   if (!_garcomTenantId) return;
   try {
@@ -3637,7 +3643,9 @@ function renderImGrupos(item) {
       : `<span class="grp-optional-badge">Opcional</span>`;
     const optsHtml = (g.opcoes || []).map(o => {
       const esgotado = _isAddonEsgotado(o.nome);
-      const priceLabel = esgotado
+      const indisponivelHoje = !esgotado && _addonIndisponivelHoje(o.dias);
+      const bloqueado = esgotado || indisponivelHoje;
+      const priceLabel = bloqueado
         ? `<span class="grp-opt-price" style="color:var(--muted);text-decoration:line-through">+ R$ ${fmtMoney(o.preco||0)}</span>`
         : (o.preco > 0
           ? `<span class="grp-opt-price">+ R$ ${fmtMoney(o.preco)}</span>`
@@ -3645,7 +3653,7 @@ function renderImGrupos(item) {
       const indicator = g.tipo === 'checkbox'
         ? `<div class="grp-opt-indicator multi"></div>`
         : `<div class="grp-opt-indicator"></div>`;
-      const qtyEl = g.tipo === 'checkbox' && !esgotado
+      const qtyEl = g.tipo === 'checkbox' && !bloqueado
         ? `<div class="grp-opt-qty" id="gqty_${_slug(g.nome)}_${_slug(o.nome)}">
              <button class="grp-qty-btn" onclick="event.stopPropagation();grpQty('${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},-1)">−</button>
              <span class="grp-qty-num" id="gqnum_${_slug(g.nome)}_${_slug(o.nome)}">1</span>
@@ -3653,10 +3661,12 @@ function renderImGrupos(item) {
            </div>` : '';
       const esgBadge = esgotado
         ? `<span style="background:var(--surface2);color:var(--muted);padding:3px 8px;border-radius:6px;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--border)">Esgotado</span>`
-        : '';
-      const clickAttr = esgotado ? '' : `onclick="grpToggle(this,'${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},'${g.tipo}',${g.max||1})"`;
-      const styleAttr = esgotado ? 'opacity:.5;cursor:not-allowed;pointer-events:none' : '';
-      return `<div class="grp-opt-item${esgotado?' esgotado':''}" ${clickAttr} style="${styleAttr}">
+        : (indisponivelHoje
+          ? `<span style="background:var(--surface2);color:var(--muted);padding:3px 8px;border-radius:6px;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--border)">Indisponível hoje</span>`
+          : '');
+      const clickAttr = bloqueado ? '' : `onclick="grpToggle(this,'${_escape(g.nome)}','${_escape(o.nome)}',${o.preco||0},'${g.tipo}',${g.max||1})"`;
+      const styleAttr = bloqueado ? 'opacity:.5;cursor:not-allowed;pointer-events:none' : '';
+      return `<div class="grp-opt-item${bloqueado?' esgotado':''}" ${clickAttr} style="${styleAttr}">
         <div class="grp-opt-left">${indicator}<span class="grp-opt-name">${o.nome}</span></div>
         <div style="display:flex;align-items:center;gap:8px">${esgBadge || priceLabel}${qtyEl}</div>
       </div>`;
@@ -3670,6 +3680,7 @@ function renderImGrupos(item) {
 
 function grpToggle(el, grupoNome, optNome, preco, tipo, maxSel) {
   if (_isAddonEsgotado(optNome)) { return; } // defesa: bloqueia se esgotado
+  if (el.classList.contains('esgotado')) { return; } // defesa: bloqueia se indisponível hoje (ou esgotado)
   if (!_imGruposState[grupoNome]) _imGruposState[grupoNome] = [];
   const state = _imGruposState[grupoNome];
   if (tipo === 'radio') {

@@ -742,13 +742,63 @@ function _optHtml(o) {
     ? '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M5 3l8 5-8 5V3z" fill="currentColor"/></svg>'
     : '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor"/><rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor"/></svg>';
 
-  var html = '<div class="grp-opt-row" data-nome-norm="' + nomeNorm + '">';
+  // Dias disponíveis do adicional — default: todos os dias ligados
+  var dias = (Array.isArray(o.dias) && o.dias.length === 7) ? o.dias : [1,1,1,1,1,1,1];
+  var diasCustom = dias.some(function(d){ return !d; });
+  var diasStyle = diasCustom
+    ? 'background:rgba(249,115,22,.15);color:var(--accent);border:1px solid var(--accent)'
+    : 'background:none;color:var(--muted);border:1px solid var(--border)';
+  var diasTitle = diasCustom ? 'Dias disponíveis (personalizado)' : 'Dias disponíveis (todos os dias)';
+
+  var html = '<div class="grp-opt-row" data-nome-norm="' + nomeNorm + '" data-dias=\'' + JSON.stringify(dias) + '\'>';
+  html += '<div class="grp-opt-row-main">';
   html += '<input class="grp-opt-name" placeholder="Nome da opção" value="' + (o.nome||'').replace(/"/g,'&quot;') + '" onchange="_atualizarPauseBtnRow(this)">';
   html += '<input class="grp-opt-price" type="number" step="0.01" min="0" placeholder="+R$" value="' + (o.preco||'') + '">';
+  html += '<button type="button" class="grp-opt-dias-btn" title="' + diasTitle + '" style="width:28px;height:28px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;' + diasStyle + '" onclick="toggleOptDiasPanel(this)">📅</button>';
   html += '<button type="button" class="grp-opt-pause" title="' + pauseTitle + '" style="width:28px;height:28px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;' + pauseStyle + '" onclick="_togglePauseRow(this)">' + pauseIcon + '</button>';
   html += '<button type="button" class="grp-opt-del" onclick="delGrupoOpt(this)">×</button>';
   html += '</div>';
+  html += '<div class="grp-opt-dias-panel" style="display:none">' + _optDiasHtml(dias) + '</div>';
+  html += '</div>';
   return html;
+}
+
+// ── Gera os 7 toggles de dia (dom..sáb) para uma opção/adicional ──
+function _optDiasHtml(dias) {
+  var d = (Array.isArray(dias) && dias.length === 7) ? dias : [1,1,1,1,1,1,1];
+  var labels = ['D','S','T','Q','Q','S','S'];
+  return d.map(function(on, i) {
+    return '<div class="dp' + (on ? ' on' : '') + '" onclick="_toggleOptDia(this,' + i + ')">' + labels[i] + '</div>';
+  }).join('');
+}
+
+// ── Abre/fecha o painel de dias de UM adicional ──
+function toggleOptDiasPanel(btn) {
+  var row = btn.closest('.grp-opt-row');
+  if (!row) return;
+  var panel = row.querySelector('.grp-opt-dias-panel');
+  if (!panel) return;
+  panel.style.display = (panel.style.display === 'none') ? 'flex' : 'none';
+}
+
+// ── Alterna um dia específico de UM adicional e atualiza o data-dias da linha ──
+function _toggleOptDia(el, idx) {
+  el.classList.toggle('on');
+  var row = el.closest('.grp-opt-row');
+  if (!row) return;
+  var panel = row.querySelector('.grp-opt-dias-panel');
+  var dias = Array.from(panel.querySelectorAll('.dp')).map(function(d) { return d.classList.contains('on') ? 1 : 0; });
+  row.dataset.dias = JSON.stringify(dias);
+  var btn = row.querySelector('.grp-opt-dias-btn');
+  if (!btn) return;
+  var allOn = dias.every(function(d) { return d === 1; });
+  if (allOn) {
+    btn.style.background = 'none'; btn.style.color = 'var(--muted)'; btn.style.border = '1px solid var(--border)';
+    btn.title = 'Dias disponíveis (todos os dias)';
+  } else {
+    btn.style.background = 'rgba(249,115,22,.15)'; btn.style.color = 'var(--accent)'; btn.style.border = '1px solid var(--accent)';
+    btn.title = 'Dias disponíveis (personalizado)';
+  }
 }
 
 // ── Atualiza o botão de pausa de UMA linha (chamado quando o usuário muda o nome do adicional) ──
@@ -910,7 +960,12 @@ function readGrupos(ctx) {
     var opcoes  = Array.from(wrap.querySelectorAll('.grp-opt-row')).map(function(row) {
       var n = (row.querySelector('.grp-opt-name') || {}).value || '';
       var p = parseFloat((row.querySelector('.grp-opt-price') || {}).value) || 0;
-      return { nome: n.trim(), preco: p };
+      var dias;
+      try { dias = JSON.parse(row.dataset.dias || '[]'); } catch(e) { dias = []; }
+      if (!Array.isArray(dias) || dias.length !== 7) dias = [1,1,1,1,1,1,1];
+      var opt = { nome: n.trim(), preco: p };
+      if (dias.some(function(d){ return !d; })) opt.dias = dias; // só grava se for personalizado (economiza espaço/compat)
+      return opt;
     }).filter(function(o){ return o.nome; });
     var reqEl = wrap.querySelector('.grp-required');
     return {
