@@ -4059,6 +4059,122 @@ async function unpairUsbPrinter() {
   sbToast('ok', 'Impressora USB removida.');
 }
 
+// ══════════════════════════════════════════════════════════════
+// ESC/POS via Web Bluetooth — imprime direto na térmica pelo
+// celular (Android/Chrome), sem PC e sem Print Agent.
+// iOS/Safari não suporta Web Bluetooth — nesse caso a impressora
+// precisa ser cadastrada como Print Agent ou USB num PC/Electron.
+// ══════════════════════════════════════════════════════════════
+let _btDevice = null;      // BluetoothDevice pareado
+let _btChar   = null;      // characteristic GATT usada para escrita
+
+// UUIDs de serviço mais comuns em impressoras térmicas BLE baratas
+// (genéricas "China ESC/POS"). Tentamos nessa ordem até achar uma
+// characteristic gravável.
+const _BT_PRINTER_SERVICES = [
+  '000018f0-0000-1000-8000-00805f9b34fb', // serviço genérico de impressora BLE
+  '0000ff00-0000-1000-8000-00805f9b34fb',
+  '0000ffe0-0000-1000-8000-00805f9b34fb', // HM-10 / serial genérico
+  '49535343-fe7d-4ae5-8fa9-9fafd205e455', // ISSC serial genérico
+];
+
+async function _btFindWritableChar(server) {
+  const services = await server.getPrimaryServices().catch(() => []);
+  for (const service of services) {
+    const chars = await service.getCharacteristics().catch(() => []);
+    const writable = chars.find(c => c.properties.write || c.properties.writeWithoutResponse);
+    if (writable) return writable;
+  }
+  return null;
+}
+
+// Conecta (ou reutiliza) a impressora Bluetooth pareada
+async function _btConnect() {
+  if (_btDevice?.gatt?.connected && _btChar) return _btChar;
+
+  if (!_btDevice) {
+    // Tenta reconectar silenciosamente a um device já autorizado (Chrome
+    // recente permite navigator.bluetooth.getDevices() sem gesto do usuário
+    // quando a permissão já foi concedida antes).
+    try {
+      const known = await navigator.bluetooth.getDevices();
+      const saved = localStorage.getItem('escpos_bt_name');
+      _btDevice = known.find(d => !saved || d.name === saved) || known[0] || null;
+    } catch {}
+  }
+
+  if (!_btDevice) {
+    // Pede pareamento ao usuário (só na primeira vez / sem device salvo)
+    _btDevice = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: _BT_PRINTER_SERVICES,
+    });
+    localStorage.setItem('escpos_bt_name', _btDevice.name || '');
+  }
+
+  const server = await _btDevice.gatt.connect();
+  const char = await _btFindWritableChar(server);
+  if (!char) throw new Error('Nenhuma característica gravável encontrada na impressora');
+  _btChar = char;
+  _btDevice.addEventListener('gattserverdisconnected', () => { _btChar = null; });
+  return _btChar;
+}
+
+async function _printViaBluetooth(order, cfg) {
+  if (!navigator.bluetooth) throw new Error('Web Bluetooth não suportado neste navegador (use Chrome no Android)');
+  console.log('[BT] Conectando impressora Bluetooth...');
+  const char = await _btConnect();
+  console.log('[BT] Impressora conectada:', _btDevice?.name || '(sem nome)');
+  const fmt  = localStorage.getItem('printFormat') || _printFormat || '80mm';
+  const cols = fmt === '58mm' ? 32 : 48;
+  const data = _buildEscPos(order, cfg, cols);
+  console.log('[BT] Dados ESC/POS gerados | bytes:', data.length, '| colunas:', cols);
+  // BLE tem MTU pequeno — envia em pedacinhos de 20 bytes com leve intervalo
+  // para não estourar o buffer de impressoras baratas.
+  const CHUNK = 20;
+  const write = char.properties.writeWithoutResponse
+    ? (b) => char.writeValueWithoutResponse(b)
+    : (b) => char.writeValue(b);
+  for (let i = 0; i < data.length; i += CHUNK) {
+    const chunk = new Uint8Array(data.slice(i, Math.min(i + CHUNK, data.length)));
+    await write(chunk);
+    await new Promise(r => setTimeout(r, 15));
+  }
+  console.log('[BT] Impressão concluída!');
+}
+
+// Pareia a impressora Bluetooth (chamado pelo botão na tela de configuração)
+async function pairBluetoothPrinter() {
+  if (!navigator.bluetooth) {
+    sbToast('err', '❌ Web Bluetooth não suportado. Use o Chrome no Android.');
+    return;
+  }
+  try {
+    const dev = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: _BT_PRINTER_SERVICES,
+    });
+    localStorage.setItem('escpos_bt_name', dev.name || '');
+    _btDevice = dev;
+    _btChar = null; // força reconexão/rebusca de characteristic na próxima impressão
+    sbToast('ok', '✅ Impressora "' + (dev.name || 'Bluetooth') + '" pareada! Impressão direto pelo celular.');
+  } catch (e) {
+    if (e.name === 'NotFoundError') sbToast('warn', 'Nenhuma impressora selecionada.');
+    else sbToast('err', 'Erro ao parear: ' + e.message);
+  }
+}
+
+// Desconecta e remove pareamento
+async function unpairBluetoothPrinter() {
+  if (_btDevice?.gatt?.connected) {
+    try { _btDevice.gatt.disconnect(); } catch {}
+  }
+  _btDevice = null;
+  _btChar = null;
+  localStorage.removeItem('escpos_bt_name');
+  sbToast('ok', 'Impressora Bluetooth removida.');
+}
+
 // ── Cache de Print Agent ativo ──────────────────────────────────────
 // Evita perguntar /api/print-queue/status toda vez que vai imprimir (latência)
 // e protege contra falhas momentâneas de rede: se o printestima foi visto
@@ -4396,6 +4512,15 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
     } catch (e) { console.warn('[PRINT] USB falhou:', e.message); }
   }
 
+  // 2️⃣b Bluetooth ESC/POS — celular sem PC, impressora térmica pareada
+  if (navigator.bluetooth && (_btDevice || localStorage.getItem('escpos_bt_name'))) {
+    try {
+      await _printViaBluetooth(order, cfg);
+      sbToast('ok', '🖨️ Impresso (Bluetooth)!');
+      return;
+    } catch (e) { console.warn('[PRINT] Bluetooth falhou:', e.message); }
+  }
+
   // 3️⃣ Print Agent (printestima) — prioritário se o agent está ativo
   // Quando o agent foi visto nos últimos 90s, sempre usa essa rota e
   // evita os fallbacks 4/5/6 que abririam diálogos no navegador.
@@ -4433,6 +4558,18 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
         return;
       }
     } catch (e) { console.warn('[PRINT] USB auto-connect falhou:', e.message); }
+  }
+
+  // 4️⃣b Bluetooth auto-connect — dispositivo já autorizado antes nesta sessão
+  if (navigator.bluetooth && !_btDevice) {
+    try {
+      const devices = await navigator.bluetooth.getDevices();
+      if (devices.length > 0) {
+        await _printViaBluetooth(order, cfg);
+        sbToast('ok', '🖨️ Impresso (Bluetooth)!');
+        return;
+      }
+    } catch (e) { console.warn('[PRINT] Bluetooth auto-connect falhou:', e.message); }
   }
 
   // ── Se o printestima está ativo, NÃO cai nos fallbacks abaixo ──
@@ -4784,9 +4921,9 @@ function _loadImpressoras() {
   }
   list.innerHTML = _impressoras.map((imp, idx) => {
     const isElectronType = imp.tipo === 'electron' || (imp.tipo === 'usb' && !!window.ElectronPrint);
-    const statusColor = isElectronType ? '#10b981' : (imp.tipo === 'agent' ? '#3b82f6' : imp.tipo === 'usb' ? '#10b981' : '#f59e0b');
-    const statusText  = isElectronType ? 'Conectado' : (imp.tipo === 'agent' ? 'Agent' : imp.tipo === 'usb' ? 'USB' : 'Navegador');
-    const tipoLabel   = imp.printerName || (isElectronType ? 'Windows' : imp.tipo === 'agent' ? 'Print Agent' : 'Navegador');
+    const statusColor = isElectronType ? '#10b981' : (imp.tipo === 'agent' ? '#3b82f6' : imp.tipo === 'usb' ? '#10b981' : imp.tipo === 'bluetooth' ? '#06b6d4' : '#f59e0b');
+    const statusText  = isElectronType ? 'Conectado' : (imp.tipo === 'agent' ? 'Agent' : imp.tipo === 'usb' ? 'USB' : imp.tipo === 'bluetooth' ? 'Bluetooth' : 'Navegador');
+    const tipoLabel   = imp.printerName || (isElectronType ? 'Windows' : imp.tipo === 'agent' ? 'Print Agent' : imp.tipo === 'bluetooth' ? 'Bluetooth' : 'Navegador');
     const larguraLabel = imp.largura === 48 ? '80mm (48 col)' : '58mm (32 col)';
     const vinculados = _modelos.filter(m => m.ativo && m.impressora_idx === idx).map(m => m.nome).join(', ');
     return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px 20px">
@@ -4867,6 +5004,7 @@ function toggleImpTipo() {
 
   if (tipo === 'usb') {
     document.getElementById('imp-usb-wrap').style.display = '';
+    document.getElementById('imp-bt-wrap').style.display = 'none';
     document.getElementById('imp-printer-wrap').style.display = 'none';
     const usbSt = document.getElementById('imp-usb-status');
     if (usbSt) {
@@ -4874,8 +5012,24 @@ function toggleImpTipo() {
       usbSt.textContent = saved ? '✅ Pareada: ' + saved : 'Nenhuma impressora USB pareada';
       usbSt.style.color = saved ? '#10b981' : 'var(--muted)';
     }
+  } else if (tipo === 'bluetooth') {
+    document.getElementById('imp-usb-wrap').style.display = 'none';
+    document.getElementById('imp-bt-wrap').style.display = '';
+    document.getElementById('imp-printer-wrap').style.display = 'none';
+    const btSt = document.getElementById('imp-bt-status');
+    if (btSt) {
+      if (!navigator.bluetooth) {
+        btSt.textContent = '⚠️ Este navegador não suporta Bluetooth — use Chrome no Android';
+        btSt.style.color = '#f59e0b';
+      } else {
+        const saved = localStorage.getItem('escpos_bt_name');
+        btSt.textContent = saved ? '✅ Pareada: ' + saved : 'Nenhuma impressora Bluetooth pareada';
+        btSt.style.color = saved ? '#10b981' : 'var(--muted)';
+      }
+    }
   } else if (tipo === 'agent') {
     document.getElementById('imp-usb-wrap').style.display = 'none';
+    document.getElementById('imp-bt-wrap').style.display = 'none';
     document.getElementById('imp-printer-wrap').style.display = '';
     const hint = document.getElementById('imp-printer-hint');
     if (hint) hint.textContent = 'Impressora do servidor (Print Agent)';
@@ -4886,12 +5040,17 @@ function toggleImpTipo() {
     });
   } else {
     document.getElementById('imp-usb-wrap').style.display = 'none';
+    document.getElementById('imp-bt-wrap').style.display = 'none';
     document.getElementById('imp-printer-wrap').style.display = 'none';
   }
 }
 
 async function pairUsbForModal() {
   try { await pairUsbPrinter(); toggleImpTipo(); } catch(e) { sbToast('err', 'Erro ao parear: ' + e.message); }
+}
+
+async function pairBluetoothForModal() {
+  try { await pairBluetoothPrinter(); toggleImpTipo(); } catch(e) { sbToast('err', 'Erro ao parear: ' + e.message); }
 }
 
 function salvarImpressora() {
@@ -4910,6 +5069,8 @@ function salvarImpressora() {
     tipo = document.getElementById('imp-tipo').value;
     if (tipo === 'usb') {
       printerName = localStorage.getItem('escpos_usb_name') || 'USB';
+    } else if (tipo === 'bluetooth') {
+      printerName = localStorage.getItem('escpos_bt_name') || 'Bluetooth';
     } else if (tipo === 'agent') {
       printerName = document.getElementById('imp-printer-select')?.value || '';
     }
@@ -4964,6 +5125,9 @@ async function testImpressora(idx) {
   if (imp.tipo === 'usb') {
     try { const cfg = _getPrintConfig(); await _printViaUsb(ex, cfg); sbToast('ok', '🖨️ Teste USB enviado!'); }
     catch(e) { sbToast('err', 'Erro USB: ' + e.message); }
+  } else if (imp.tipo === 'bluetooth') {
+    try { const cfg = _getPrintConfig(); await _printViaBluetooth(ex, cfg); sbToast('ok', '🖨️ Teste Bluetooth enviado!'); }
+    catch(e) { sbToast('err', 'Erro Bluetooth: ' + e.message); }
   } else { await printOrder(ex); sbToast('ok', '🖨️ Teste enviado!'); }
 }
 
