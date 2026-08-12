@@ -1801,6 +1801,8 @@ async function submitGarcomOrder() {
 
   sbLoading(true);
   try {
+    if (!_sessao?.tenant_id) throw new Error('Sessão sem tenant');
+
     // Garante opened_at na mesa
     const _mesa = tables.find(t => t.num === garcomMesa);
     if (_mesa && (_mesa.status !== 'busy' || !_mesa.opened_at)) {
@@ -1811,55 +1813,85 @@ async function submitGarcomOrder() {
       _mesa.status = 'busy'; if (_payload.opened_at) _mesa.opened_at = _ot; _mesa.updated_at = _ot;
     }
 
-    // 1. Itens de cozinha → kanban (analise/producao)
-    if (itensCozinha.length > 0) {
-      if (!_sessao?.tenant_id) throw new Error('Sessão sem tenant');
-      const itemsArr = itensCozinha.map(c => ({
-        id: c.id || null,
-        qty: c.qty,
-        name: c.name,
-        price: c.price,
-        cat: c.cat || '',
-        cat_key: c.cat_key || c.catKey || c.cat || '',
-        obs: c.obs || ''
-      }));
-      const { data: orderData, error: oErr } = await sb.from('orders').insert({
+    // ── Monta os itens no MESMO formato usado pelo garçom (comanda única
+    // status 'mesa_aberta', com item_status por item) — é isso que faz o
+    // app do garçom enxergar o lançamento. Itens de cozinha nascem
+    // 'producao' (aparecem em "Em preparo"); bebidas prontas nascem
+    // 'pronto' (aparecem em "Pronto p/ servir", aguardando o garçom servir).
+    const _ts = Date.now();
+    let _seq = 0;
+    const newItems = [
+      ...itensCozinha.map(c => ({
+        id: c.id || null, qty: c.qty, name: c.name, price: c.price,
+        cat: c.cat || '', cat_key: c.cat_key || c.catKey || c.cat || '', obs: c.obs || '',
+        emoji: c.emoji || '', item_status: 'producao',
+        item_id: `${_ts}_g${_seq++}`, added_at: new Date().toISOString(),
+        garcom_id: null, garcom_nome: 'Gestor'
+      })),
+      ...itensImediatos.map(c => ({
+        id: c.id || null, qty: c.qty, name: c.name, price: c.price,
+        cat: c.cat || '', cat_key: c.cat_key || c.catKey || c.cat || '', obs: c.obs || '',
+        emoji: c.emoji || '', item_status: 'pronto', drink: true,
+        item_id: `${_ts}_g${_seq++}`, added_at: new Date().toISOString(),
+        garcom_id: null, garcom_nome: 'Gestor'
+      }))
+    ];
+
+    // Busca comanda mesa_aberta já existente para esta sessão da mesa
+    const { data: existingArr } = await sb.from('orders')
+      .select('*')
+      .eq('mesa_num', garcomMesa)
+      .eq('status', 'mesa_aberta')
+      .order('id', { ascending: false })
+      .limit(5);
+    const existing = (Array.isArray(existingArr) ? existingArr : []).find(o =>
+      typeof mesaOrderBelongsToSession === 'function' ? mesaOrderBelongsToSession(o, _mesa) : true
+    ) || null;
+
+    let savedOrder;
+    if (existing) {
+      // Acrescenta à comanda existente (UPDATE)
+      const existingItems = (() => {
+        if (Array.isArray(existing.items)) return existing.items;
+        try { return JSON.parse(existing.items || '[]'); } catch { return []; }
+      })();
+      const updatedItems = [...existingItems, ...newItems];
+      const newTotal = updatedItems
+        .filter(i => i.item_status !== 'cancelado')
+        .reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+      const { data, error } = await sb.from('orders')
+        .update({ items: updatedItems, total: newTotal, updated_at: new Date().toISOString() })
+        .eq('id', existing.id)
+        .select()
+        .single();
+      if (error) throw error;
+      savedOrder = data;
+    } else {
+      // Cria nova comanda mesa_aberta (INSERT)
+      const newTotal = newItems.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+      const { data, error } = await sb.from('orders').insert({
         tenant_id: _sessao.tenant_id,
         client: `Mesa ${garcomMesa}`, phone: '', addr: `Mesa ${garcomMesa}`,
-        mesa_num: garcomMesa, items: itemsArr, total: totCozinha, taxa: 0,
+        mesa_num: garcomMesa, items: newItems, total: newTotal, taxa: 0,
         session_ref: _mesa?.opened_at || null,
-        status: mesaAutoAccept ? 'producao' : 'analise', time, pag: 'Mesa'
+        status: 'mesa_aberta', time, pag: 'Mesa'
       }).select().single();
-      if (oErr) throw oErr;
-      if (!mesaOrdersCache.find(o => o.id === orderData.id)) mesaOrdersCache.unshift(orderData);
-      ordersKanban.push(mapOrder(orderData));
+      if (error) throw error;
+      savedOrder = data;
     }
 
-    // 2. Itens imediatos (bebidas, etc) → direto como entregue (só billing, não vão ao kanban)
-    if (itensImediatos.length > 0) {
-      if (!_sessao?.tenant_id) throw new Error('Sessão sem tenant');
-      const itemsArrImediato = itensImediatos.map(c => ({
-        id: c.id || null,
-        qty: c.qty,
-        name: c.name,
-        price: c.price,
-        cat: c.cat || '',
-        cat_key: c.cat_key || c.catKey || c.cat || '',
-        obs: c.obs || ''
-      }));
-      const { data: billingData, error: bErr } = await sb.from('orders').insert({
-        tenant_id: _sessao.tenant_id,
-        client: `Mesa ${garcomMesa}`, phone: '', addr: `Mesa ${garcomMesa}`,
-        mesa_num: garcomMesa, items: itemsArrImediato, total: totImediato, taxa: 0,
-        session_ref: _mesa?.opened_at || null,
-        status: 'entregue', time, pag: 'Mesa'
-      }).select().single();
-      if (bErr) throw bErr;
-      // Adiciona ao cache para billing mas não ao kanban
-      if (billingData && !mesaOrdersCache.find(o => o.id === billingData.id)) {
-        mesaOrdersCache.unshift(billingData);
-      }
-    }
+    // Atualiza cache local de mesas (mesaOrdersCache) — comanda de mesa
+    // não vai pro ordersKanban (mesmo padrão do "Novo Pedido" manual)
+    const enriched = {
+      ...savedOrder,
+      items: (() => {
+        if (Array.isArray(savedOrder.items)) return savedOrder.items;
+        try { return JSON.parse(savedOrder.items || '[]'); } catch { return []; }
+      })()
+    };
+    const cacheIdx = mesaOrdersCache.findIndex(o => o.id === savedOrder.id);
+    if (cacheIdx !== -1) mesaOrdersCache[cacheIdx] = enriched;
+    else mesaOrdersCache.unshift(enriched);
 
     if (t) { t.status = 'busy'; t.guests = t.guests || 2; }
     closeModal('modal-garcom-mesa');
@@ -1868,14 +1900,10 @@ async function submitGarcomOrder() {
     playOrderSound();
 
     // ── Impressão automática do pedido recém-adicionado ─────────────
-    // IMPORTANTE: itens de cozinha (itensCozinha) NÃO são impressos aqui.
-    // Eles entram na tabela `orders` com status 'analise'/'producao' e já
-    // são impressos automaticamente pelo listener padrão de "novo pedido"
-    // (subscribeOrders → printOrder, em gestor-core.js). Imprimir de novo
-    // aqui causava a 2ª via duplicada mesmo com "via única" configurada.
-    // Só os itens imediatos (bebidas industrializadas, status 'entregue')
-    // precisam de impressão explícita aqui, pois esse status é ignorado
-    // pelo listener padrão e nunca dispararia impressão sozinho.
+    // Como agora TUDO entra numa comanda 'mesa_aberta' (não gera mais
+    // pedido separado 'analise'/'producao' no kanban), o listener padrão
+    // de impressão não dispara sozinho — por isso imprimimos aqui, na
+    // hora, tanto a via da cozinha quanto a via do bar (se houver).
     try {
       const _autoPrintOn = (window._printMode || _printMode || 'auto') === 'auto';
       const _printerCaixa = (typeof _printPrinter !== 'undefined' && _printPrinter) || localStorage.getItem('printPrinter') || '';
@@ -1904,21 +1932,27 @@ async function submitGarcomOrder() {
         </div>`;
       };
 
-      const _htmlBar = _renderViaHtml('VIA DO BAR', itensImediatos);
-
-      // Toggle "Imprimir bebida industrializada sozinha" — se desligado, pula.
-      const _printBebidaSolo = localStorage.getItem('printBebidaSolo') !== '0';
-      console.log('[GESTOR MESA PRINT] auto:', _autoPrintOn, '| toggle bebida:', _printBebidaSolo, '| tem bebida:', !!_htmlBar, '| caixa:', _printerCaixa || '(padrão)');
-      if (_autoPrintOn && _htmlBar && _printBebidaSolo) {
+      const _printJob = async (html, tipo) => {
+        if (!html) return;
         const _printerUnica = _printerCaixa || '';
         if (window.ElectronPrint?.printHtml) {
-          await window.ElectronPrint.printHtml(_htmlBar, { printer: _printerUnica, paperWidth: _pw }).catch(()=>{});
+          await window.ElectronPrint.printHtml(html, { printer: _printerUnica, paperWidth: _pw }).catch(()=>{});
         } else {
           const _tid = _sessao?.tenant_id;
           if (_tid) {
-            await fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ html: _htmlBar, format: _fmt, printer: _printerUnica || undefined, tipo: 'caixa' }) }).catch(()=>{});
+            await fetch('/api/print-queue/job', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ html, format: _fmt, printer: _printerUnica || undefined, tipo }) }).catch(()=>{});
           }
         }
+      };
+
+      if (_autoPrintOn) {
+        const _htmlCozinha = _renderViaHtml('VIA DA COZINHA', itensCozinha);
+        if (_htmlCozinha) await _printJob(_htmlCozinha, 'cozinha');
+
+        // Toggle "Imprimir bebida industrializada sozinha" — se desligado, pula.
+        const _printBebidaSolo = localStorage.getItem('printBebidaSolo') !== '0';
+        const _htmlBar = _renderViaHtml('VIA DO BAR', itensImediatos);
+        if (_htmlBar && _printBebidaSolo) await _printJob(_htmlBar, 'caixa');
       }
     } catch (printErr) {
       console.warn('[GESTOR MESA] Erro na impressão:', printErr.message);
