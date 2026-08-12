@@ -797,6 +797,7 @@ function openOrderDetail(id) {
       </div>
       <div style="display:flex;align-items:center;gap:6px">
         <div class="od-item-price">R$&nbsp;${(item.price).toFixed(2).replace('.', ',')}</div>
+        ${canCancel ? `<button onclick="editarItemGenerico(${window._currentDetailId}, ${itemIndexToPass}, ${_isMesaDetalhe})" title="Editar item" style="width:22px;height:22px;border-radius:6px;border:1px solid rgba(99,102,241,.35);background:rgba(99,102,241,.1);color:#818cf8;font-size:12px;line-height:1;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0">✏️</button>` : ''}
         ${canCancel ? `<button onclick="cancelarItemGenerico(${window._currentDetailId}, ${itemIndexToPass}, ${_isMesaDetalhe})" title="Cancelar item" style="width:22px;height:22px;border-radius:6px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.1);color:#f87171;font-size:13px;line-height:1;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0">✕</button>` : ''}
       </div>
     </div>`;
@@ -1205,6 +1206,190 @@ async function cancelarItemGenerico(orderId, itemIndex, isMesaOrder) {
   } catch(e) {
     console.error('[cancelarItemGenerico]', e);
     alert('Erro ao cancelar item: ' + (e.message || e));
+  }
+}
+
+// ── Editar item já lançado no pedido (qty, preço, observação, +adicionais) ──
+let _odEditCtx = null; // { orderId, itemIndex, isMesaOrder, item, catalogItem, grupos }
+
+function editarItemGenerico(orderId, itemIndex, isMesaOrder) {
+  // Busca o pedido correto (mesa ou kanban)
+  let o = null;
+  if (isMesaOrder) {
+    o = mesaOrdersCache.find(x => x.id === orderId);
+  } else {
+    o = ordersKanban.find(x => x.id === orderId);
+  }
+  if (!o) return;
+
+  const allItems = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? (() => { try { return JSON.parse(o.items); } catch { return []; } })() : []);
+  const item = allItems[itemIndex];
+  if (!item || item.item_status === 'cancelado') return;
+
+  // Tenta achar o produto no catálogo (pra oferecer adicionais extras)
+  const catalogItem = (item.id != null) ? items.find(i => i.id === item.id) : null;
+  const grupos = catalogItem ? _pedidoGruposSelecionaveis(catalogItem) : [];
+
+  _odEditCtx = { orderId, itemIndex, isMesaOrder, item, catalogItem, grupos };
+
+  document.getElementById('modal-od-edit-item-bg')?.remove();
+
+  const _TIPO_LABEL = { radio: 'Escolha', checkbox: 'Adicional', opcional: 'Adicional', adicionais: 'Adicional', obrigatorio: 'Escolha obrigatória', sabor: 'Sabor' };
+  const gruposHtml = grupos.map((g, gi) => {
+    const opcoes = g.opcoes || g.valores || [];
+    if (!opcoes.length) return '';
+    const tipo = g.tipo || 'opcional';
+    const isSingle = ['radio', 'obrigatorio', 'sabor'].includes(tipo);
+    const inputType = isSingle ? 'radio' : 'checkbox';
+    const label = g.nome || g.name || _TIPO_LABEL[tipo] || 'Adicional';
+    return `<div style="margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">${label}</div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        ${opcoes.map((op, oi) => {
+          const nome = op?.nome || op?.name || (typeof op === 'string' ? op : '') || '';
+          const preco = parseFloat(op?.preco || op?.price || 0);
+          const precoLabel = preco > 0 ? ` <span style="color:var(--success);font-size:11px">+R$ ${preco.toFixed(2).replace('.', ',')}</span>` : '';
+          return `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;cursor:pointer">
+            <input type="${inputType}" name="od-edit-grp-${gi}" data-nome="${String(nome).replace(/"/g, '&quot;')}" data-preco="${preco}" onchange="_odEditAtualizarPreview()" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
+            <span style="font-size:13px;font-weight:500;flex:1">${nome}${precoLabel}</span>
+          </label>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  const bg = document.createElement('div');
+  bg.id = 'modal-od-edit-item-bg';
+  bg.className = 'modal-bg on';
+  bg.style.zIndex = '99999';
+  bg.innerHTML = `
+    <div class="modal" style="max-width:480px;width:92vw;padding:0;max-height:88vh;overflow-y:auto">
+      <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div>
+          <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px">✏️ Editar item</div>
+          <div style="font-size:16px;font-weight:700;margin-top:2px">${item.name}</div>
+        </div>
+        <button onclick="document.getElementById('modal-od-edit-item-bg')?.remove()" style="width:30px;height:30px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:14px">✕</button>
+      </div>
+      <div style="padding:16px 22px">
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+          <div style="flex:1">
+            <label style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:block">Quantidade</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button type="button" onclick="_odEditChangeQty(-1)" style="width:32px;height:32px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;font-size:16px;font-weight:700">−</button>
+              <span id="od-edit-qty" style="font-size:15px;font-weight:800;min-width:24px;text-align:center">${item.qty || 1}</span>
+              <button type="button" onclick="_odEditChangeQty(1)" style="width:32px;height:32px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;font-size:16px;font-weight:700">+</button>
+            </div>
+          </div>
+          <div style="flex:1">
+            <label style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:block">Preço unitário</label>
+            <input type="number" id="od-edit-price" value="${parseFloat(item.price || 0).toFixed(2)}" step="0.01" min="0" oninput="_odEditAtualizarPreview()"
+              style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:14px;font-weight:700;box-sizing:border-box;font-family:inherit">
+          </div>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:block">Observação</label>
+          <textarea id="od-edit-obs" rows="2" placeholder="Ex: sem cebola, borda recheada..."
+            style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;font-family:inherit;resize:none;box-sizing:border-box">${item.obs || ''}</textarea>
+        </div>
+        ${grupos.length ? `<div style="margin-bottom:6px">
+          <div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:10px">➕ Marque para acrescentar mais adicionais a este item</div>
+          ${gruposHtml}
+        </div>` : ''}
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);margin-bottom:14px">
+          <div style="font-size:11px;color:var(--muted)">Novo total do item</div>
+          <div id="od-edit-total-preview" style="font-size:16px;font-weight:800;color:var(--success)">R$ ${(parseFloat(item.price || 0) * (item.qty || 1)).toFixed(2).replace('.', ',')}</div>
+        </div>
+        <button onclick="_odEditSalvar()" style="width:100%;padding:13px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Salvar alterações</button>
+      </div>
+    </div>`;
+  document.body.appendChild(bg);
+  bg.addEventListener('click', e => { if (e.target === bg) bg.remove(); });
+  window._odEditQty = item.qty || 1;
+}
+
+function _odEditChangeQty(delta) {
+  window._odEditQty = Math.max(1, (window._odEditQty || 1) + delta);
+  const el = document.getElementById('od-edit-qty');
+  if (el) el.textContent = window._odEditQty;
+  _odEditAtualizarPreview();
+}
+
+function _odEditAtualizarPreview() {
+  const priceInp = document.getElementById('od-edit-price');
+  const totalEl = document.getElementById('od-edit-total-preview');
+  if (!priceInp || !totalEl) return;
+  let unit = parseFloat(priceInp.value) || 0;
+  document.querySelectorAll('#modal-od-edit-item-bg input:checked').forEach(inp => {
+    unit += parseFloat(inp.dataset.preco || 0);
+  });
+  const qty = window._odEditQty || 1;
+  totalEl.textContent = 'R$ ' + (unit * qty).toFixed(2).replace('.', ',');
+}
+
+async function _odEditSalvar() {
+  const ctx = _odEditCtx;
+  if (!ctx) return;
+  const { orderId, itemIndex, isMesaOrder } = ctx;
+
+  let o = isMesaOrder ? mesaOrdersCache.find(x => x.id === orderId) : ordersKanban.find(x => x.id === orderId);
+  if (!o) return;
+
+  const allItems = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? (() => { try { return JSON.parse(o.items); } catch { return []; } })() : []);
+  const item = allItems[itemIndex];
+  if (!item) return;
+
+  const qty = window._odEditQty || 1;
+  let unitPrice = parseFloat(document.getElementById('od-edit-price')?.value) || 0;
+  let obs = (document.getElementById('od-edit-obs')?.value || '').trim();
+
+  // Adicionais extras marcados — soma no preço e anexa descrição na observação
+  const novosAdicionais = [];
+  document.querySelectorAll('#modal-od-edit-item-bg input:checked').forEach(inp => {
+    const nome = inp.dataset.nome || '';
+    const preco = parseFloat(inp.dataset.preco || 0);
+    unitPrice += preco;
+    if (nome) novosAdicionais.push(nome + (preco > 0 ? ` (+R$ ${preco.toFixed(2).replace('.', ',')})` : ''));
+  });
+  if (novosAdicionais.length) {
+    obs = [obs, novosAdicionais.join(', ')].filter(Boolean).join(' · ');
+  }
+
+  const updatedItems = allItems.map((i, idx) => idx === itemIndex ? { ...i, qty, price: unitPrice, obs } : i);
+
+  const newTotal = updatedItems
+    .filter(i => (i.item_status || 'active') !== 'cancelado')
+    .reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+
+  try {
+    const { error } = await sb.from('orders')
+      .update({ items: updatedItems, total: newTotal, updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+    if (error) throw error;
+
+    if (isMesaOrder) {
+      const idx = mesaOrdersCache.findIndex(x => x.id === orderId);
+      if (idx !== -1) {
+        mesaOrdersCache[idx] = { ...mesaOrdersCache[idx], items: updatedItems, total: newTotal };
+        window._detailMesaAllItems = updatedItems;
+      }
+    } else {
+      const idx = ordersKanban.findIndex(x => x.id === orderId);
+      if (idx !== -1) {
+        ordersKanban[idx] = { ...ordersKanban[idx], items: updatedItems, total: newTotal };
+        window._detailKanbanOrder = ordersKanban[idx];
+      }
+    }
+
+    document.getElementById('modal-od-edit-item-bg')?.remove();
+    closeModal('modal-order-detail');
+    setTimeout(() => openOrderDetail(orderId), 80);
+    renderKanban();
+    if (isMesaOrder) _renderMesaPageFromCache();
+    sbToast('ok', 'Item atualizado!');
+  } catch (e) {
+    console.error('[_odEditSalvar]', e);
+    alert('Erro ao editar item: ' + (e.message || e));
   }
 }
 
