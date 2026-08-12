@@ -3570,6 +3570,17 @@ async function handleOrderStatus(req, res) {
     if (!order) return send(res,404,{ok:false,error:'Pedido não encontrado'})
     const oldStatus = order.status
     db.prepare("UPDATE orders SET status=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?").run(new_status,order_id,tid)
+    // Pedido cancelado não pode entrar no financeiro de forma nenhuma. Faz isso aqui
+    // no servidor (não depende do gestor estar com a área financeira destravada no
+    // navegador) — remove de vez qualquer entrada já lançada pra esse pedido.
+    if (new_status === 'cancelado' && oldStatus !== 'cancelado') {
+      try {
+        const cfgCanc = db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tid)
+        const numCanc = numeroPedidoComOffset(order, cfgCanc?.order_num_offset)
+        db.prepare(`DELETE FROM movimentos WHERE tenant_id=? AND tipo='entrada' AND (description LIKE ? OR description LIKE ?)`)
+          .run(tid, `Pedido #${numCanc} –%`, `Pedido #${numCanc} -%`)
+      } catch(e) { log('warn', '[order-status] remoção do movimento financeiro falhou:', e.message) }
+    }
     if (!pedidoOnlineAguardandoPagamento({ ...order, status: new_status }) && !order.order_num) {
       try { atribuirOrderNumSeNecessario(tid, order_id) } catch(e) { log('âš ï¸', 'order_num ao mudar status falhou:', e.message) }
     }
@@ -4656,6 +4667,58 @@ const server = http.createServer(async (req,res) => {
     return
   }
 
+  // ── Excluir pedido do histórico (irreversível) ──
+  // Protegido pela senha do gestor (mesma trava da área financeira, x-finance-auth).
+  // Remove o pedido por completo E qualquer lançamento financeiro (movimentos)
+  // ligado a ele, pra garantir que nunca mais conte em nenhum relatório —
+  // seja o pedido cancelado, entregue ou finalizado.
+  if(req.method==='POST'&&upath==='/api/historico-pedidos/excluir'){
+    const tid=req.headers['x-tenant-id']||params.get('tenant_id')||''
+    if(!tid){send(res,400,{error:'x-tenant-id obrigatório'});return}
+    const finAuth=validarFinanceAccess(req,tid)
+    if(!finAuth){sendFinanceLocked(res);return}
+    const body=await readBody(req)
+    const orderId=parseInt(body.order_id)||0
+    if(!orderId){send(res,400,{error:'order_id obrigatório'});return}
+    try{
+      const order=db.prepare('SELECT * FROM orders WHERE id=? AND tenant_id=?').get(orderId,tid)
+      if(!order){send(res,404,{error:'Pedido não encontrado'});return}
+
+      const cfg=db.prepare('SELECT order_num_offset FROM store_config WHERE tenant_id=?').get(tid)
+      const numPedido=numeroPedidoComOffset(order,cfg?.order_num_offset)
+
+      // Remove qualquer movimento financeiro ligado a esse pedido (entrada original
+      // e eventuais estornos), pra não sobrar rastro nenhum no financeiro.
+      const movsApagados=db.prepare(
+        `DELETE FROM movimentos WHERE tenant_id=? AND (
+           (tipo='entrada' AND (description LIKE ? OR description LIKE ?))
+           OR (description LIKE ?)
+         )`
+      ).run(tid, `Pedido #${numPedido} –%`, `Pedido #${numPedido} -%`, `Estorno — Pedido #${numPedido}%`)
+
+      // Reverte estatísticas do cliente, se contabilizadas
+      if(order.customer_id){
+        const valorPago=parseFloat(order.total||0)+parseFloat(order.taxa||0)
+        db.prepare(`UPDATE customers SET orders_count = MAX(0, orders_count - 1),
+                    total_spent = MAX(0, total_spent - ?) WHERE id=?`).run(valorPago,order.customer_id)
+      }
+
+      db.prepare('DELETE FROM order_status_history WHERE tenant_id=? AND order_id=?').run(tid,orderId)
+      db.prepare('DELETE FROM orders WHERE id=? AND tenant_id=?').run(orderId,tid)
+
+      // Log de auditoria em arquivo — quem excluiu, quando, e o que foi removido.
+      try{
+        const linha=`${new Date().toISOString()} | tenant=${tid} | user=${req.headers['x-user-id']||finAuth.session_user_id||'?'} | pedido #${numPedido} (id=${orderId}) | status_era=${order.status} | valor=R$${(parseFloat(order.total||0)+parseFloat(order.taxa||0)).toFixed(2)} | movimentos_removidos=${movsApagados.changes}\n`
+        fs.appendFileSync(path.join(path.dirname(DB_PATH),'exclusoes-pedidos.log'),linha)
+      }catch(e){ log('⚠️','[hist-excluir] log de auditoria falhou:',e.message) }
+
+      marcarDirty()
+      sseBroadcast(`orders-rt:${tid}`,'orders:DELETE',{id:orderId})
+      send(res,200,{ok:true,movimentos_removidos:movsApagados.changes})
+    }catch(e){ send(res,500,{error:e.message}) }
+    return
+  }
+
   // ── Exportar relatório CSV completo ──
   if(req.method==='GET'&&upath==='/api/exportar-relatorio'){
     const tid=req.headers['x-tenant-id']||params.get('tenant_id')||''
@@ -4943,7 +5006,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history'])
+  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/'))||upath.startsWith('/rest/v1/')){
     const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
     await handleREST(req,res,table,params,body);return

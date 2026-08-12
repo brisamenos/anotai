@@ -2687,23 +2687,9 @@ async function cancelOrderById(id) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erro');
     ordersKanban = ordersKanban.filter(x => x.id !== id);
-    // Pedido cancelado NÃO pode entrar no financeiro de forma nenhuma.
-    // Antes: lançava uma "saída" de estorno pra compensar a entrada (o saldo líquido
-    // ficava certo, mas o total de "Entradas" continuava inflado e o histórico
-    // mostrava as duas linhas). Agora: remove a entrada original por completo.
-    if (o) {
-      try {
-        // Usa separador " –" para evitar match de prefixo (ex: #3 pegando #31).
-        // Se a descrição do movimento mudar, ajustar aqui junto com finishOrderById.
-        const { data: movs } = await sb.from('movimentos')
-          .select('id')
-          .ilike('description', `Pedido #${o.num} –%`)
-          .eq('tipo', 'entrada');
-        for (const m of (movs || [])) {
-          await sb.from('movimentos').delete().eq('id', m.id);
-        }
-      } catch(e) { console.warn('[cancelOrder] remoção do movimento financeiro falhou (não-fatal):', e.message); }
-    }
+    // A remoção do movimento financeiro do pedido cancelado agora é feita no
+    // servidor (endpoint /api/order-status), de forma garantida — não depende
+    // da área financeira estar destravada aqui no navegador.
   } catch(e) {
     sbToast('err', 'Erro ao cancelar pedido: ' + e.message); return;
   }

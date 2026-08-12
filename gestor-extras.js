@@ -99,6 +99,7 @@ async function _histBuscar() {
           <td style="padding:10px 6px;white-space:nowrap">
             <button class="btn bg" style="font-size:10.5px;padding:3px 8px" onclick="histDetalhe(${o.id})">Ver</button>
             <button class="btn bg" style="font-size:10.5px;padding:3px 8px" title="Imprimir novamente" onclick="histReimprimir(${o.id})">🖨️</button>
+            <button class="btn bg" style="font-size:10.5px;padding:3px 8px;color:var(--danger);border-color:rgba(239,68,68,.35)" title="Excluir pedido (irreversível)" onclick="histExcluir(${o.id})">🗑️</button>
           </td>
         </tr>`;
       }).join('')}
@@ -111,6 +112,54 @@ async function _histBuscar() {
 function histPrev() { if (_histPage > 1) { _histPage--; _histBuscar(); } }
 function histNext() { _histPage++; _histBuscar(); }
 function histFiltrar() { _histPage = 1; _histBuscar(); }
+
+// ── Excluir pedido do histórico (irreversível) ──────────────────────────────
+// Remove o pedido por completo e qualquer lançamento financeiro ligado a ele
+// (não conta mais em nenhum relatório). Exige a senha do gestor — reaproveita
+// a mesma trava usada pra liberar a área financeira.
+function histExcluir(orderId) {
+  const o = _histData.find(x => x.id === orderId);
+  if (!o) return;
+  const num = o.order_num || o.id;
+  const total = _money(parseFloat(o.total||0) + parseFloat(o.taxa||0));
+  const confirmMsg = `Excluir o pedido #${num} (${total}) do histórico?\n\n` +
+    `Esta ação NÃO pode ser desfeita. O pedido some do sistema e nenhum valor dele\n` +
+    `entra em relatório ou financeiro nunca mais.`;
+  if (!confirm(confirmMsg)) return;
+
+  const executar = () => _histExcluirConfirmado(orderId);
+  if (typeof financeIsUnlocked === 'function' && financeIsUnlocked()) {
+    executar();
+  } else if (typeof financeOpenUnlockModal === 'function') {
+    financeOpenUnlockModal(executar);
+  } else {
+    sbToast('err', 'Não foi possível verificar a senha do gestor.');
+  }
+}
+
+async function _histExcluirConfirmado(orderId) {
+  try {
+    const headers = { 'Content-Type': 'application/json', 'x-tenant-id': _tid() };
+    if (typeof financeAuthHeaders === 'function') Object.assign(headers, financeAuthHeaders());
+    const res = await fetch('/api/historico-pedidos/excluir', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ order_id: orderId })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 403 && data.error === 'FINANCE_LOCKED') {
+      if (typeof financeOpenUnlockModal === 'function') {
+        financeOpenUnlockModal(() => _histExcluirConfirmado(orderId));
+      }
+      return;
+    }
+    if (!res.ok) throw new Error(data.error || 'Erro ao excluir');
+    sbToast('ok', 'Pedido excluído do histórico.');
+    _histBuscar();
+  } catch(e) {
+    sbToast('err', 'Erro ao excluir pedido: ' + (e.message || e));
+  }
+}
 
 // Reimprime um pedido do histórico usando o mesmo fluxo padrão de impressão
 // (respeita via única/separada, impressora configurada, formato, etc.)
