@@ -4792,6 +4792,7 @@ async function openCobrancaParcial(num) {
 
 // Chips de atalho: "clientes" cadastrados na mesa que têm itens em aberto,
 // permitindo ao garçom selecionar de uma vez tudo o que uma pessoa consumiu.
+// Cada chip já mostra quanto essa pessoa ainda deve, pra facilitar a cobrança.
 function renderCobrancaParcialClientesBar() {
   const bar = document.getElementById('cobranca-parcial-clientes-bar');
   if (!bar) return;
@@ -4803,10 +4804,15 @@ function renderCobrancaParcialClientesBar() {
     return;
   }
 
+  const totalPorRef = ref => _cobrancaParcialItens
+    .filter(it => it.cliente_ref === ref)
+    .reduce((s, it) => s + it.price * it.qty, 0);
+  const fmtR = v => 'R$ ' + v.toFixed(2).replace('.', ',');
+
   const clientes = _mesaClientes(_cobrancaParcialMesaNum).filter(c => refsComItem.has(c.id));
   const chips = [
     `<button type="button" class="mesa-cliente-chip ${!_cobrancaParcialClienteAtivo ? 'on' : ''}" onclick="selecionarClienteCobrancaParcial('')">Selecionar todos</button>`,
-    ...clientes.map(c => `<button type="button" class="mesa-cliente-chip ${_cobrancaParcialClienteAtivo === c.id ? 'on' : ''}" onclick="selecionarClienteCobrancaParcial('${_garcomHtmlEscape(c.id)}')">${_garcomHtmlEscape(c.nome)}</button>`)
+    ...clientes.map(c => `<button type="button" class="mesa-cliente-chip ${_cobrancaParcialClienteAtivo === c.id ? 'on' : ''}" onclick="selecionarClienteCobrancaParcial('${_garcomHtmlEscape(c.id)}')">${_garcomHtmlEscape(c.nome)} · ${fmtR(totalPorRef(c.id))}</button>`)
   ].join('');
   bar.innerHTML = chips;
   bar.style.display = 'flex';
@@ -4825,20 +4831,70 @@ function selecionarClienteCobrancaParcial(ref) {
   renderCobrancaParcialLista();
 }
 
+// Renderiza a lista agrupada por pessoa (quando a mesa tem divisão por cliente),
+// cada grupo com subtotal e um atalho "marcar todos" — sem precisar rolar até
+// os chips no topo. Itens sem cliente atribuído ficam em "Mesa toda".
 function renderCobrancaParcialLista() {
   const lista = document.getElementById('cobranca-parcial-lista');
-  lista.innerHTML = _cobrancaParcialItens.map((it, i) => `
-    <label style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer">
-      <input type="checkbox" ${it.selecionado ? 'checked' : ''} onchange="toggleItemCobrancaParcial(${i})"
-        style="width:19px;height:19px;accent-color:var(--green);cursor:pointer;flex-shrink:0">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600">${it.qty}× ${_garcomHtmlEscape(it.name)}</div>
-        ${it.cliente_nome ? `<div style="font-size:11px;color:var(--muted)">${_garcomHtmlEscape(it.cliente_nome)}</div>` : ''}
+
+  const temDivisaoCliente = _cobrancaParcialItens.some(it => it.cliente_nome);
+  if (!temDivisaoCliente) {
+    lista.innerHTML = _cobrancaParcialItens.map((it, i) => _cobrancaParcialItemRow(it, i)).join('');
+    atualizarTotalCobrancaParcial();
+    return;
+  }
+
+  // Agrupa mantendo os índices originais (necessários pro checkbox de cada item)
+  const grupos = new Map(); // key -> { nome, itens: [{it,i}] }
+  _cobrancaParcialItens.forEach((it, i) => {
+    const key = it.cliente_ref || '__mesa';
+    const nome = it.cliente_nome || 'Mesa toda (sem divisão)';
+    if (!grupos.has(key)) grupos.set(key, { key, nome, itens: [] });
+    grupos.get(key).itens.push({ it, i });
+  });
+
+  lista.innerHTML = [...grupos.values()].map(g => {
+    const subtotal = g.itens.reduce((s, {it}) => s + it.price * it.qty, 0);
+    const todosMarcados = g.itens.every(({it}) => it.selecionado);
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0 4px">
+        <span style="font-size:11px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.3px">👤 ${_garcomHtmlEscape(g.nome)}</span>
+        <button type="button" onclick="toggleGrupoCobrancaParcial('${_garcomHtmlEscape(g.key)}')"
+          style="font-size:10.5px;font-weight:700;color:${todosMarcados ? 'var(--muted)' : 'var(--green)'};background:none;border:none;cursor:pointer;padding:2px 4px">
+          ${todosMarcados ? 'Desmarcar todos' : 'Marcar todos'}
+        </button>
       </div>
-      <div style="font-size:13px;font-weight:700;color:var(--amber);flex-shrink:0">R$ ${(it.price * it.qty).toFixed(2).replace('.',',')}</div>
-    </label>
-  `).join('');
+      ${g.itens.map(({it, i}) => _cobrancaParcialItemRow(it, i)).join('')}
+      <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--muted);padding-top:2px">
+        <span>Subtotal ${_garcomHtmlEscape(g.nome)}</span>
+        <span>R$ ${subtotal.toFixed(2).replace('.',',')}</span>
+      </div>
+    </div>`;
+  }).join('');
+
   atualizarTotalCobrancaParcial();
+}
+
+function _cobrancaParcialItemRow(it, i) {
+  return `<label style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer">
+    <input type="checkbox" ${it.selecionado ? 'checked' : ''} onchange="toggleItemCobrancaParcial(${i})"
+      style="width:19px;height:19px;accent-color:var(--green);cursor:pointer;flex-shrink:0">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:600">${it.qty}× ${_garcomHtmlEscape(it.name)}</div>
+    </div>
+    <div style="font-size:13px;font-weight:700;color:var(--amber);flex-shrink:0">R$ ${(it.price * it.qty).toFixed(2).replace('.',',')}</div>
+  </label>`;
+}
+
+// Marca/desmarca todos os itens de um grupo (pessoa) direto na lista,
+// sem precisar usar os chips do topo.
+function toggleGrupoCobrancaParcial(key) {
+  const itensGrupo = _cobrancaParcialItens.filter(it => (it.cliente_ref || '__mesa') === key);
+  const todosMarcados = itensGrupo.every(it => it.selecionado);
+  itensGrupo.forEach(it => { it.selecionado = !todosMarcados; });
+  _cobrancaParcialClienteAtivo = ''; // marcação manual quebra o filtro rápido dos chips
+  renderCobrancaParcialClientesBar();
+  renderCobrancaParcialLista();
 }
 
 function toggleItemCobrancaParcial(i) {
@@ -4938,19 +4994,32 @@ async function confirmarCobrancaParcial() {
 
     // Ainda há itens em aberto na mesa — registra o pagamento no histórico
     // e mantém a mesa ocupada normalmente.
-    // Se todos os itens cobrados agora são do mesmo cliente cadastrado na mesa,
-    // grava o cliente_ref/nome no pagamento — assim o gestor também enxerga
-    // corretamente quanto já foi pago por cada pessoa (mesaPagoPorCliente).
-    const refsSelecionados = [...new Set(selecionados.map(it => it.cliente_ref || '').filter(Boolean))];
-    const clienteRefPagamento = refsSelecionados.length === 1 ? refsSelecionados[0] : '';
-    const clienteNomePagamento = clienteRefPagamento
-      ? (selecionados.find(it => it.cliente_ref === clienteRefPagamento)?.cliente_nome || '')
-      : '';
-    const pagamentos = _mesaClientesParse(mesa?.pagamentos_json);
-    pagamentos.push({
-      data: agora, valor: totalPago, forma: formaPagamento, garcom: currentGarcom?.nome || '',
-      cliente_ref: clienteRefPagamento, cliente_nome: clienteNomePagamento,
-      itens: selecionados.map(it => `${it.qty}x ${it.name}`)
+    // Grava UM registro de pagamento por pessoa (mesmo quando o garçom cobra
+    // várias pessoas de uma vez, ex: "Selecionar todos"). Isso é essencial
+    // pra mesaPagoPorCliente() continuar correto no painel do gestor — se
+    // agrupássemos tudo num único registro sem cliente_ref, o "Pago/Falta"
+    // por pessoa ficaria errado mesmo com os itens corretamente marcados.
+    const porClientePagamento = new Map(); // key -> { cliente_ref, cliente_nome, valor, itens }
+    selecionados.forEach(it => {
+      const ref  = it.cliente_ref || '';
+      const nome = it.cliente_nome || '';
+      const key  = ref || '__mesa';
+      if (!porClientePagamento.has(key)) porClientePagamento.set(key, { cliente_ref: ref, cliente_nome: nome, valor: 0, itens: [] });
+      const g = porClientePagamento.get(key);
+      g.valor += it.price * it.qty;
+      g.itens.push(`${it.qty}x ${it.name}`);
+    });
+
+    // IMPORTANTE: usar _parseItems aqui (parser genérico de array), não
+    // _mesaClientesParse — essa última é feita pro formato de clientes_json
+    // ({id,nome}) e descartava (filtrava) todo o histórico de pagamentos_json
+    // por não ter o campo "nome", apagando pagamentos parciais anteriores.
+    const pagamentos = _parseItems(mesa?.pagamentos_json);
+    porClientePagamento.forEach(g => {
+      pagamentos.push({
+        data: agora, valor: g.valor, forma: formaPagamento, garcom: currentGarcom?.nome || '',
+        cliente_ref: g.cliente_ref, cliente_nome: g.cliente_nome, itens: g.itens
+      });
     });
     await sb.from('mesas').update({ pagamentos_json: pagamentos }).eq('num', num).eq('tenant_id', _garcomTenantId);
     if (mesa) mesa.pagamentos_json = pagamentos;
@@ -5727,7 +5796,8 @@ async function confirmarTransfer(toNum) {
     // Marca mesa destino como ocupada (herda opened_at da origem)
     const mesaOrigem = tables.find(t => t.num === fromNum);
     const clientesOrigem = _mesaClientesParse(mesaOrigem?.clientes_json);
-    const pagamentosOrigem = _mesaClientesParse(mesaOrigem?.pagamentos_json);
+    // _parseItems aqui, não _mesaClientesParse — ver nota em confirmarCobrancaParcial()
+    const pagamentosOrigem = _parseItems(mesaOrigem?.pagamentos_json);
     const { error: errTo } = await sb.from('mesas')
       .update({ status: 'busy', opened_at: mesaOrigem?.opened_at || now, clientes_json: clientesOrigem, pagamentos_json: pagamentosOrigem, updated_at: now })
       .eq('num', toNum);

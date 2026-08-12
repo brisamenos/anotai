@@ -139,6 +139,40 @@ function histDetalhe(id) {
   // e timeZone força exibição em Brasília independente do dispositivo.
   const dt = o.created_at ? new Date(o.created_at.replace(' ', 'T') + 'Z').toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}) : '';
   const subtotal = items.reduce((s,i) => s + (parseFloat(i.price||0) * (i.qty||1)), 0);
+  const esc = typeof _printHtmlEscape === 'function' ? _printHtmlEscape : (s => String(s ?? ''));
+
+  // Se o garçom dividiu a mesa por pessoa (cliente_nome no item), agrupa os
+  // itens por quem consumiu — mesmo tratamento do Relatório de Mesas.
+  const temDivisaoCliente = items.some(i => String(i?.cliente_nome || '').trim());
+  let itensHtml;
+  if (!temDivisaoCliente) {
+    itensHtml = items.map(i => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+      <span>${i.qty}x ${esc(i.name)}${i.obs?' <span style="color:var(--muted);font-size:11px">('+esc(i.obs)+')</span>':''}</span>
+      <span style="font-weight:600">${_money(parseFloat(i.price||0)*(i.qty||1))}</span>
+    </div>`).join('');
+  } else {
+    const porCliente = new Map();
+    items.forEach(i => {
+      const nomeCliente = String(i.cliente_nome || '').trim() || 'Mesa toda (sem divisão)';
+      if (!porCliente.has(nomeCliente)) porCliente.set(nomeCliente, []);
+      porCliente.get(nomeCliente).push(i);
+    });
+    itensHtml = [...porCliente.entries()].map(([nomeCliente, lista]) => {
+      const subtotalCliente = lista.reduce((s,i) => s + (parseFloat(i.price||0) * (i.qty||1)), 0);
+      const rows = lista.map(i => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+        <span>${i.qty}x ${esc(i.name)}${i.obs?' <span style="color:var(--muted);font-size:11px">('+esc(i.obs)+')</span>':''}</span>
+        <span style="font-weight:600">${_money(parseFloat(i.price||0)*(i.qty||1))}</span>
+      </div>`).join('');
+      return `<div style="margin-bottom:10px">
+        <div style="font-size:11px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px">👤 ${esc(nomeCliente)}</div>
+        ${rows}
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;padding-top:4px">
+          <span>Subtotal ${esc(nomeCliente)}</span>
+          <span>${_money(subtotalCliente)}</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
 
   const html = `<div style="padding:20px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
@@ -157,10 +191,7 @@ function histDetalhe(id) {
       ${o.garcom_nome?`<div><div style="font-size:11px;color:var(--muted)">Garçom</div><div>${o.garcom_nome}</div></div>`:''}
     </div>
     <div style="font-size:12px;font-weight:700;margin-bottom:8px">Itens</div>
-    ${items.map(i => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
-      <span>${i.qty}x ${i.name}${i.obs?' <span style="color:var(--muted);font-size:11px">('+i.obs+')</span>':''}</span>
-      <span style="font-weight:600">${_money(parseFloat(i.price||0)*(i.qty||1))}</span>
-    </div>`).join('')}
+    ${itensHtml}
     <div style="margin-top:12px;padding-top:10px;border-top:2px solid var(--border)">
       ${parseFloat(o.taxa||0)>0?`<div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px"><span>Subtotal</span><span>${_money(subtotal)}</span></div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px"><span>Taxa</span><span>${_money(o.taxa)}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;font-weight:800;font-size:14px"><span>TOTAL</span><span style="color:var(--success)">${_money(parseFloat(o.total||0)+parseFloat(o.taxa||0))}</span></div>
