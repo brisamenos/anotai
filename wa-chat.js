@@ -834,7 +834,7 @@ async function waSendMessage() {
     else {
       // Pausa a IA: humano assumiu esta conversa
       const _phone = waSendNum(WA.activeJid);
-      const _tid   = (()=>{ try { return JSON.parse(localStorage.getItem('sys_session')||'{}').tenant_id||'' } catch(e){ return '' } })();
+      const _tid   = (()=>{ try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||'' } catch(e){ return '' } })();
       if (_phone && _tid) fetch('/api/ia-humano-assumiu', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ phone: _phone, tenant_id: _tid }) }).catch(()=>{});
       setTimeout(() => waLoadMessages(true), 2000);
     }
@@ -908,7 +908,7 @@ async function waSendMedia() {
       if (r.ok) {
         // Pausa a IA: humano assumiu esta conversa
         const _phone = waSendNum(WA.activeJid);
-        const _tid   = (()=>{ try { return JSON.parse(localStorage.getItem('sys_session')||'{}').tenant_id||'' } catch(e){ return '' } })();
+        const _tid   = (()=>{ try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||'' } catch(e){ return '' } })();
         if (_phone && _tid) fetch('/api/ia-humano-assumiu', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ phone: _phone, tenant_id: _tid }) }).catch(()=>{});
         waSbToast('ok','Enviado!'); setTimeout(()=>waLoadMessages(true),2000);
       } else waSbToast('err', r.data?.message||r.data?.error||'Erro ao enviar mídia');
@@ -961,7 +961,7 @@ async function waStopAudio() {
       if(r.ok){
         // Pausa a IA: humano assumiu esta conversa
         const _phone = waSendNum(WA.activeJid);
-        const _tid   = (()=>{ try { return JSON.parse(localStorage.getItem('sys_session')||'{}').tenant_id||'' } catch(e){ return '' } })();
+        const _tid   = (()=>{ try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||'' } catch(e){ return '' } })();
         if (_phone && _tid) fetch('/api/ia-humano-assumiu', { method:'POST', headers:{'Content-Type':'application/json','x-tenant-id':_tid}, body: JSON.stringify({ phone: _phone, tenant_id: _tid }) }).catch(()=>{});
         waSbToast('ok','Áudio enviado!'); setTimeout(()=>waLoadMessages(true),2000);
       }

@@ -26,7 +26,7 @@
   }
 
   function sess() {
-    try { return window._sessao || JSON.parse(localStorage.getItem('sys_session') || '{}') || {}; } catch { return {}; }
+    try { return window._sessao || JSON.parse(sessionStorage.getItem('sys_session') || '{}') || {}; } catch { return {}; }
   }
 
   function setupIdentity() {

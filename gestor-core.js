@@ -43,9 +43,9 @@ window.isBillingLocked = billingIsLocked;
 
 function billingSaveSessionPatch(patch) {
   try {
-    const sess = JSON.parse(localStorage.getItem('sys_session') || '{}');
+    const sess = JSON.parse(sessionStorage.getItem('sys_session') || '{}');
     Object.assign(sess, patch);
-    localStorage.setItem('sys_session', JSON.stringify(sess));
+    sessionStorage.setItem('sys_session', JSON.stringify(sess));
     _sessao = sess;
     _billingLocked = !!sess.billing_locked;
     if (window.ElectronPrint?.saveSession) window.ElectronPrint.saveSession(sess).catch(()=>{});
@@ -190,9 +190,9 @@ async function _carregarPlano() {
 
     // Atualiza a sessão com o plano correto para futuras verificações
     try {
-      const sess = JSON.parse(localStorage.getItem('sys_session') || '{}');
+      const sess = JSON.parse(sessionStorage.getItem('sys_session') || '{}');
       sess.plano = _planoAtual;
-      localStorage.setItem('sys_session', JSON.stringify(sess));
+      sessionStorage.setItem('sys_session', JSON.stringify(sess));
     } catch(e) { console.warn('[gestor-core] silent error:', e?.message || e); }
 
     // Atualiza badge do botão Robô na sidebar
@@ -205,17 +205,17 @@ async function _carregarPlano() {
 
 function _verificarSessao() {
   try {
-    const raw = localStorage.getItem('sys_session');
+    const raw = sessionStorage.getItem('sys_session');
     if (!raw) { window.location.href = 'login.html'; return false; }
     _sessao = JSON.parse(raw);
     _billingLocked = !!_sessao.billing_locked;
     if (Date.now() - _sessao.ts > 8 * 60 * 60 * 1000) {
-      localStorage.removeItem('sys_session');
+      sessionStorage.removeItem('sys_session');
       // No Electron a sessão é renovada automaticamente — não expirar aqui
       if (!window.ElectronPrint) { window.location.href = 'login.html'; return false; }
       // Se Electron: renova o ts para mais 30 dias e continua
       _sessao.ts = Date.now();
-      localStorage.setItem('sys_session', JSON.stringify(_sessao));
+      sessionStorage.setItem('sys_session', JSON.stringify(_sessao));
       if (window.ElectronPrint?.saveSession) window.ElectronPrint.saveSession(_sessao).catch(()=>{});
     }
     const nome = _sessao.nome || 'Usuário';
@@ -238,7 +238,7 @@ function _verificarSessao() {
 
 function confirmarLogout() {
   if (confirm('Sair do sistema?')) {
-    localStorage.removeItem('sys_session');
+    sessionStorage.removeItem('sys_session');
     sessionStorage.removeItem('finance_auth');
     // Remove sessão salva no Electron (sem auto-login na próxima abertura)
     if (window.ElectronPrint?.clearSession) window.ElectronPrint.clearSession().catch(()=>{});
@@ -251,7 +251,7 @@ const FINANCE_LOCKED_PAGES = new Set(['caixa','saques','relatorios','dre','conta
 function financeGetAuth() {
   try {
     const fin = JSON.parse(sessionStorage.getItem('finance_auth') || '{}');
-    const sess = JSON.parse(localStorage.getItem('sys_session') || '{}');
+    const sess = JSON.parse(sessionStorage.getItem('sys_session') || '{}');
     if (!fin?.token || !fin.expires_at || fin.expires_at <= Date.now()) {
       sessionStorage.removeItem('finance_auth');
       return null;
@@ -275,7 +275,7 @@ function financeAuthHeaders() {
   const fin = financeGetAuth();
   if (!fin) return {};
   let userId = '';
-  try { userId = JSON.parse(localStorage.getItem('sys_session') || '{}').id || ''; } catch(e) {}
+  try { userId = JSON.parse(sessionStorage.getItem('sys_session') || '{}').id || ''; } catch(e) {}
   return {
     'x-finance-auth': fin.token,
     ...(userId ? { 'x-user-id': String(userId) } : {})
@@ -375,7 +375,7 @@ function financeOpenUnlockModal(afterUnlock) {
       return;
     }
     let sess = {};
-    try { sess = JSON.parse(localStorage.getItem('sys_session') || '{}'); } catch(e) {}
+    try { sess = JSON.parse(sessionStorage.getItem('sys_session') || '{}'); } catch(e) {}
     btn.disabled = true;
     btn.textContent = 'Validando...';
     err.style.display = 'none';
@@ -1028,7 +1028,7 @@ async function _printComandaMesa(mesaNum, mesaData) {
 
   // Envia SOMENTE para impressora do caixa — sem via de cozinha
   // Usa cascata direta sem passar por _printJobCascade (que tem USB path que reconstrói ticket)
-  const tid = (() => { try { return JSON.parse(localStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+  const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
 
   // 1. Electron
   if (window.ElectronPrint) {
@@ -1109,7 +1109,7 @@ async function _gestorImprimirJobCaixa(job) {
 
   _printJobsEmProcesso.add(job.id);
   try {
-    const tid = (() => { try { return JSON.parse(localStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
     if (!tid) return;
 
     // Se o Print Agent está ativo, ele é o dono da fila e evita impressão duplicada no gestor.

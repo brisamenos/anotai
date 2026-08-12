@@ -14,7 +14,7 @@ var entregasState = {
 
 function entTenantId() {
   return _sessao?.tenant_id || (() => {
-    try { return JSON.parse(localStorage.getItem('sys_session') || '{}').tenant_id || ''; }
+    try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; }
     catch { return ''; }
   })();
 }

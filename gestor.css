@@ -1100,8 +1100,7 @@ td:first-child{padding-left:18px}
     overflow-x:hidden!important;
     -webkit-overflow-scrolling:touch!important;
     overscroll-behavior-y:contain!important;
-    /* Espaço extra embaixo pra não ficar coberto pelo botão flutuante do chat (m-wa-fab) */
-    padding:14px 14px calc(90px + env(safe-area-inset-bottom,0px))!important;
+    padding:14px 14px 24px!important;
     display:none!important;
   }
   .page.on{ display:block!important; }

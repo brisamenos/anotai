@@ -847,7 +847,7 @@ async function _carregarEsgotadosBg() {
   _esgotadosBgFetched = true;
   try {
     var tid = '';
-    try { tid = JSON.parse(localStorage.getItem('sys_session')||'{}').tenant_id||''; } catch(e) {}
+    try { tid = JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||''; } catch(e) {}
     if (!tid) { _esgotadosBgFetched = false; return; }
     var r = await fetch('/api/addons-esgotados', { headers: { 'x-tenant-id': tid } });
     if (!r.ok) { _esgotadosBgFetched = false; return; }
@@ -892,7 +892,7 @@ async function _togglePauseRow(btn) {
 
   try {
     var tid = '';
-    try { tid = JSON.parse(localStorage.getItem('sys_session')||'{}').tenant_id||''; } catch(e) {}
+    try { tid = JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||''; } catch(e) {}
     if (!tid) throw new Error('sem tenant');
     var url = '/api/addons-esgotados' + (!ativando ? '?nome=' + encodeURIComponent(nome) : '');
     var r = await fetch(url, {
@@ -1016,7 +1016,7 @@ async function cliCarregar() {
   try {
     // Endpoint dedicado: faz JOIN com orders e fidelidade no servidor
     const tid = (() => {
-      try { return JSON.parse(localStorage.getItem('sys_session') || '{}').tenant_id || null; } catch { return null; }
+      try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || null; } catch { return null; }
     })();
 
     const res = await fetch('/api/clientes-gestor', {

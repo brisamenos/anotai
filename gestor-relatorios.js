@@ -755,7 +755,7 @@ async function renderRelatorios() {
         .gte('created_at', anoIn).order('created_at', { ascending: true }),
       sb.from('movimentos').select('*').order('id', { ascending: false }).limit(200),
       sb.from('ratings').select('*').order('created_at', { ascending: false }),
-      fetch('/api/clientes-gestor', { headers: { 'Content-Type':'application/json', 'x-tenant-id': (() => { try { return JSON.parse(localStorage.getItem('sys_session')||'{}').tenant_id||'' } catch{return''} })() } }).then(r=>r.ok?r.json():[]).then(d=>({data:d})).catch(()=>({data:[]}))
+      fetch('/api/clientes-gestor', { headers: { 'Content-Type':'application/json', 'x-tenant-id': (() => { try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||'' } catch{return''} })() } }).then(r=>r.ok?r.json():[]).then(d=>({data:d})).catch(()=>({data:[]}))
     ]);
 
     const mesPedidos = periodOrdersRaw || [];
@@ -1697,7 +1697,7 @@ async function relImprimirCaixa() {
     html += `</div>`;
 
     // ── Envia para impressora ─────────────────────────────
-    const tid = (() => { try { return JSON.parse(localStorage.getItem('sys_session')||'{}').tenant_id||''; } catch { return ''; } })();
+    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||''; } catch { return ''; } })();
     const fmt = localStorage.getItem('printFormat') || '80mm';
 
     // 1. Print Agent
@@ -3565,7 +3565,7 @@ async function loadPrinters() {
 async function _printViaAgent(html) {
   const printer = document.getElementById('print-printer-select')?.value || _printPrinter || '';
   const format  = document.getElementById('print-format-select')?.value  || _printFormat  || '80mm';
-  const tid = (() => { try { return JSON.parse(localStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+  const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
   const res = await fetch('/api/print-queue/job', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
@@ -3582,7 +3582,7 @@ async function _printViaServer(html) {
   const format  = document.getElementById('print-format-select')?.value  || _printFormat  || '80mm';
   _printPrinter = printer; localStorage.setItem('printPrinter', printer);
   _printFormat  = format;  localStorage.setItem('printFormat',  format);
-  const tid = (() => { try { return JSON.parse(localStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+  const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
   const res = await fetch('/api/print', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },
@@ -4143,34 +4143,6 @@ async function _printViaBluetooth(order, cfg) {
   console.log('[BT] Impressão concluída!');
 }
 
-// ── RawBT — Bluetooth CLÁSSICO (SPP) via app ponte no Android ──────────
-// A maioria das térmicas 58/80mm baratas usa Bluetooth clássico, não BLE.
-// O navegador (Web Bluetooth) só fala com BLE, por isso a impressão acima
-// pode "parear" e mesmo assim nunca imprimir, sem erro nenhum.
-// RawBT é um app grátis que aparece como impressora do sistema e faz a
-// ponte: recebe os bytes ESC/POS por uma URL "rawbt:" e envia pro
-// Bluetooth clássico já pareado dentro dele mesmo (não no Android nem no
-// app). Reaproveita o mesmo gerador de ESC/POS usado no Bluetooth direto.
-function _bytesToBase64(bytes) {
-  let binary = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
-
-async function _printViaRawBT(order, cfg) {
-  const fmt  = localStorage.getItem('printFormat') || _printFormat || '80mm';
-  const cols = fmt === '58mm' ? 32 : 48;
-  const data = _buildEscPos(order, cfg, cols);
-  const b64  = _bytesToBase64(new Uint8Array(data));
-  console.log('[RawBT] Enviando ESC/POS | bytes:', data.length, '| colunas:', cols);
-  // Abre o app RawBT (instalado no celular) com os bytes prontos — ele
-  // já sabe qual impressora Bluetooth usar (configurada dentro dele).
-  window.location.href = 'rawbt:base64,' + b64;
-}
-
 // Pareia a impressora Bluetooth (chamado pelo botão na tela de configuração)
 async function pairBluetoothPrinter() {
   if (!navigator.bluetooth) {
@@ -4213,7 +4185,7 @@ let _printAgentInitial = null; // promessa da primeira checagem ao carregar
 
 async function _checkPrintAgent(tipo = '') {
   try {
-    const tid = (() => { try { return JSON.parse(localStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
     const route = String(tipo || '').trim().toLowerCase();
     if (!tid) return route ? { active: false, last_seen: 0, printer: '', tipo: route } : _printAgentCache;
     const qs = route ? `?tipo=${encodeURIComponent(route)}` : '';
@@ -4540,16 +4512,7 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
     } catch (e) { console.warn('[PRINT] USB falhou:', e.message); }
   }
 
-  // 2️⃣a RawBT — Bluetooth clássico (SPP), a maioria das térmicas baratas
-  if (localStorage.getItem('escpos_rawbt') === '1') {
-    try {
-      await _printViaRawBT(order, cfg);
-      sbToast('ok', '🖨️ Enviado ao RawBT!');
-      return;
-    } catch (e) { console.warn('[PRINT] RawBT falhou:', e.message); }
-  }
-
-  // 2️⃣b Bluetooth ESC/POS (BLE) — celular sem PC, impressora térmica pareada
+  // 2️⃣b Bluetooth ESC/POS — celular sem PC, impressora térmica pareada
   if (navigator.bluetooth && (_btDevice || localStorage.getItem('escpos_bt_name'))) {
     try {
       await _printViaBluetooth(order, cfg);
@@ -4562,7 +4525,7 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
   // Quando o agent foi visto nos últimos 90s, sempre usa essa rota e
   // evita os fallbacks 4/5/6 que abririam diálogos no navegador.
   try {
-    const tid = (() => { try { return JSON.parse(localStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
     if (tid) {
       // Espera a primeira checagem do agent terminar (evita cair no fallback
       // web em pedidos que chegam logo após o login). Em re-imprimir/etc
@@ -4621,7 +4584,7 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
 
   // 5️⃣ Servidor PDF + iframe (iframe único por job, espera afterprint)
   try {
-    const tid = (() => { try { return JSON.parse(localStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
     if (tid) {
       const r = await fetch('/api/print', {
         method: 'POST',
@@ -5042,8 +5005,6 @@ function toggleImpTipo() {
   if (tipo === 'usb') {
     document.getElementById('imp-usb-wrap').style.display = '';
     document.getElementById('imp-bt-wrap').style.display = 'none';
-    const rawbtWrapU = document.getElementById('imp-rawbt-wrap');
-    if (rawbtWrapU) rawbtWrapU.style.display = 'none';
     document.getElementById('imp-printer-wrap').style.display = 'none';
     const usbSt = document.getElementById('imp-usb-status');
     if (usbSt) {
@@ -5054,8 +5015,6 @@ function toggleImpTipo() {
   } else if (tipo === 'bluetooth') {
     document.getElementById('imp-usb-wrap').style.display = 'none';
     document.getElementById('imp-bt-wrap').style.display = '';
-    const rawbtWrapB = document.getElementById('imp-rawbt-wrap');
-    if (rawbtWrapB) rawbtWrapB.style.display = 'none';
     document.getElementById('imp-printer-wrap').style.display = 'none';
     const btSt = document.getElementById('imp-bt-status');
     if (btSt) {
@@ -5068,17 +5027,9 @@ function toggleImpTipo() {
         btSt.style.color = saved ? '#10b981' : 'var(--muted)';
       }
     }
-  } else if (tipo === 'rawbt') {
-    document.getElementById('imp-usb-wrap').style.display = 'none';
-    document.getElementById('imp-bt-wrap').style.display = 'none';
-    const rawbtWrapR = document.getElementById('imp-rawbt-wrap');
-    if (rawbtWrapR) rawbtWrapR.style.display = '';
-    document.getElementById('imp-printer-wrap').style.display = 'none';
   } else if (tipo === 'agent') {
     document.getElementById('imp-usb-wrap').style.display = 'none';
     document.getElementById('imp-bt-wrap').style.display = 'none';
-    const rawbtWrapA = document.getElementById('imp-rawbt-wrap');
-    if (rawbtWrapA) rawbtWrapA.style.display = 'none';
     document.getElementById('imp-printer-wrap').style.display = '';
     const hint = document.getElementById('imp-printer-hint');
     if (hint) hint.textContent = 'Impressora do servidor (Print Agent)';
@@ -5090,8 +5041,6 @@ function toggleImpTipo() {
   } else {
     document.getElementById('imp-usb-wrap').style.display = 'none';
     document.getElementById('imp-bt-wrap').style.display = 'none';
-    const rawbtWrapE = document.getElementById('imp-rawbt-wrap');
-    if (rawbtWrapE) rawbtWrapE.style.display = 'none';
     document.getElementById('imp-printer-wrap').style.display = 'none';
   }
 }
@@ -5122,9 +5071,6 @@ function salvarImpressora() {
       printerName = localStorage.getItem('escpos_usb_name') || 'USB';
     } else if (tipo === 'bluetooth') {
       printerName = localStorage.getItem('escpos_bt_name') || 'Bluetooth';
-    } else if (tipo === 'rawbt') {
-      printerName = 'RawBT';
-      localStorage.setItem('escpos_rawbt', '1');
     } else if (tipo === 'agent') {
       printerName = document.getElementById('imp-printer-select')?.value || '';
     }
@@ -5134,7 +5080,6 @@ function salvarImpressora() {
   if (_editImpIdx >= 0) _impressoras[_editImpIdx] = { ..._impressoras[_editImpIdx], ...obj };
   else _impressoras.push(obj);
   _saveImpressoras();
-  _syncRawbtFlag();
 
   // Sincroniza formato do papel globalmente
   const pw = largura <= 32 ? 58 : 80;
@@ -5154,21 +5099,11 @@ function salvarImpressora() {
   sbToast('ok', 'Impressora salva!');
 }
 
-// Recalcula a flag global do RawBT a partir das impressoras cadastradas —
-// evita que ela fique "presa" em 1 depois de excluir/trocar o tipo da
-// impressora que a ligou.
-function _syncRawbtFlag() {
-  const temRawbt = _impressoras.some(imp => imp.tipo === 'rawbt');
-  if (temRawbt) localStorage.setItem('escpos_rawbt', '1');
-  else localStorage.removeItem('escpos_rawbt');
-}
-
 function deletarImpressora() {
   if (!confirm('Excluir esta impressora?')) return;
   _impressoras.splice(_editImpIdx, 1);
   _modelos.forEach(m => { if (m.impressora_idx >= _impressoras.length) m.impressora_idx = 0; });
   _saveImpressoras(); _saveModelos();
-  _syncRawbtFlag();
   closeModal('modal-impressora');
   _loadImpressoras(); _loadModelos();
   sbToast('ok', 'Impressora removida');
@@ -5179,7 +5114,6 @@ function deletarImpressoraDir(idx) {
   _impressoras.splice(idx, 1);
   _modelos.forEach(m => { if (m.impressora_idx >= _impressoras.length) m.impressora_idx = 0; });
   _saveImpressoras(); _saveModelos();
-  _syncRawbtFlag();
   _loadImpressoras(); _loadModelos();
   sbToast('ok', 'Impressora removida');
 }
@@ -5194,9 +5128,6 @@ async function testImpressora(idx) {
   } else if (imp.tipo === 'bluetooth') {
     try { const cfg = _getPrintConfig(); await _printViaBluetooth(ex, cfg); sbToast('ok', '🖨️ Teste Bluetooth enviado!'); }
     catch(e) { sbToast('err', 'Erro Bluetooth: ' + e.message); }
-  } else if (imp.tipo === 'rawbt') {
-    try { const cfg = _getPrintConfig(); await _printViaRawBT(ex, cfg); sbToast('ok', '🖨️ Teste enviado ao RawBT!'); }
-    catch(e) { sbToast('err', 'Erro RawBT: ' + e.message); }
   } else { await printOrder(ex); sbToast('ok', '🖨️ Teste enviado!'); }
 }
 
