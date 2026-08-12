@@ -2072,7 +2072,7 @@ function noAddToCartDireto(item, name, price, obs, grupos) {
   sbToast('ok', name + ' adicionado!');
 }
 
-function noAbrirModalAdicionais(item, grupos, isKg) {
+function noAbrirModalAdicionais(item, grupos, isKg, editCtx) {
   document.getElementById('modal-no-adicionais-bg')?.remove();
 
   const priceStr = parseFloat(item.price || 0).toFixed(2).replace('.', ',');
@@ -2117,16 +2117,17 @@ function noAbrirModalAdicionais(item, grupos, isKg) {
     </div>`;
   }).join('');
 
+  const _kgDefault = (editCtx && editCtx.kg) ? editCtx.kg : 0.5;
   const kgHtml = isKg ? `
     <div style="margin-bottom:16px">
       <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px">Quantidade (kg)</div>
       <div style="display:flex;align-items:center;gap:12px">
-        <input type="number" id="no-kg-input" min="0.1" step="0.1" value="0.5"
+        <input type="number" id="no-kg-input" min="0.1" step="0.1" value="${_kgDefault}"
           style="flex:1;padding:10px;border:1px solid var(--border);border-radius:9px;background:var(--surface2);color:var(--text);font-size:18px;font-weight:700;text-align:center;outline:none;font-family:inherit"
           oninput="document.getElementById('no-kg-total').textContent='R$ '+((parseFloat(this.value)||0)*${parseFloat(item.price || 0)}).toFixed(2).replace('.',',')">
         <span style="font-size:12px;color:var(--muted)">kg</span>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-top:6px">Total: <strong id="no-kg-total">R$ ${(0.5 * parseFloat(item.price || 0)).toFixed(2).replace('.', ',')}</strong></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px">Total: <strong id="no-kg-total">R$ ${(_kgDefault * parseFloat(item.price || 0)).toFixed(2).replace('.', ',')}</strong></div>
     </div>` : '';
 
   const modal = document.createElement('div');
@@ -2139,6 +2140,7 @@ function noAbrirModalAdicionais(item, grupos, isKg) {
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
         <div style="font-size:32px">${item.emoji || '🍽️'}</div>
         <div>
+          ${editCtx ? '<div style="font-size:11px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">✏️ Editando item</div>' : ''}
           <div style="font-size:16px;font-weight:800">${item.name}</div>
           <div style="font-size:13px;color:var(--success);font-weight:700">R$ ${priceStr}${isKg ? ' /kg' : ''}</div>
         </div>
@@ -2158,7 +2160,7 @@ function noAbrirModalAdicionais(item, grupos, isKg) {
         <span id="no-modal-total-label" style="font-size:14px;font-weight:700;color:var(--success);margin-left:auto"></span>
       </div>
       <button onclick="noConfirmarAdicionais(${item.id})" style="width:100%;padding:14px;border-radius:14px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">
-        Adicionar ao pedido
+        ${editCtx ? 'Salvar alterações' : 'Adicionar ao pedido'}
       </button>
     </div>`;
   document.body.appendChild(modal);
@@ -2167,7 +2169,25 @@ function noAbrirModalAdicionais(item, grupos, isKg) {
   modal._item = item;
   modal._grupos = grupos;
   modal._isKg = isKg;
-  window._noModalQtyVal = 1;
+  modal._editIndex = editCtx ? editCtx.cartIndex : null;
+  window._noModalQtyVal = editCtx ? (editCtx.qty || 1) : 1;
+  const _qtyEl = document.getElementById('no-modal-qty');
+  if (_qtyEl) _qtyEl.textContent = window._noModalQtyVal;
+
+  if (editCtx) {
+    const obsEl = document.getElementById('no-obs-input');
+    if (obsEl) obsEl.value = editCtx.obsLivre || '';
+    // Pré-seleciona os adicionais que já estavam marcados neste item
+    (editCtx.sel || []).forEach(s => {
+      const inp = modal.querySelector(`input[data-grp="${s.grp}"][data-idx="${s.idx}"]`);
+      if (inp) {
+        inp.checked = true;
+        const lbl = inp.closest('label');
+        if (lbl) { lbl.style.borderColor = 'var(--accent)'; lbl.style.background = 'rgba(var(--accent-rgb,249,115,22),.08)'; }
+      }
+    });
+  }
+
   noAtualizarTotalModal(item, isKg);
 }
 
@@ -2261,11 +2281,15 @@ function noConfirmarAdicionais(itemId) {
   const isKg   = modal._isKg;
   const grupos = Array.isArray(modal._grupos) ? modal._grupos : [];
   const qty    = window._noModalQtyVal || 1;
+  const editIndex = modal._editIndex;
 
-  // Calcula extra (preço somado dos adicionais)
+  // Calcula extra (preço somado dos adicionais) e guarda quais foram marcados
+  // (pra poder reabrir esse mesmo item pra edição depois, com tudo pré-selecionado)
   let extra = 0;
+  const sel = [];
   modal.querySelectorAll('input:checked').forEach(inp => {
     extra += parseFloat(inp.dataset.preco || 0);
+    sel.push({ grp: parseInt(inp.dataset.grp), idx: parseInt(inp.dataset.idx) });
   });
 
   let price = parseFloat(item.price || 0) + extra;
@@ -2275,20 +2299,56 @@ function noConfirmarAdicionais(itemId) {
   // Monta obs no formato esperado pelo parser de impressão (com nome do grupo)
   const obs = _pedidoObsComKit(item, _noFmtObsAdicionais(modal, grupos, obsLivre));
 
+  let kgVal = null;
   if (isKg) {
-    const kg = parseFloat(document.getElementById('no-kg-input')?.value || 1);
-    price = price * kg;
-    name = item.name + ' ' + kg.toFixed(3).replace('.', ',') + 'kg';
-    _noCart.push({ id: item.id, name, qty: 1, price, emoji: item.emoji || '🍽️', obs });
+    kgVal = parseFloat(document.getElementById('no-kg-input')?.value || 1);
+    price = price * kgVal;
+    name = item.name + ' ' + kgVal.toFixed(3).replace('.', ',') + 'kg';
+  }
+
+  // ── Modo edição: substitui o item já lançado no carrinho, em vez de criar outro ──
+  if (editIndex != null && editIndex >= 0 && editIndex < _noCart.length) {
+    _noCart[editIndex] = {
+      id: item.id, name, qty: isKg ? 1 : qty, price,
+      emoji: item.emoji || '🍽️', obs,
+      _sel: sel, _obsLivre: obsLivre, _kg: kgVal
+    };
+    noRenderCart();
+    modal.remove();
+    sbToast('ok', 'Item atualizado!');
+    return;
+  }
+
+  if (isKg) {
+    _noCart.push({ id: item.id, name, qty: 1, price, emoji: item.emoji || '🍽️', obs, _sel: sel, _obsLivre: obsLivre, _kg: kgVal });
   } else {
     const existing = _noCart.find(c => c.id === item.id && c.obs === obs && c.name === item.name);
     if (existing) existing.qty += qty;
-    else _noCart.push({ id: item.id, name, qty, price, emoji: item.emoji || '🍽️', obs });
+    else _noCart.push({ id: item.id, name, qty, price, emoji: item.emoji || '🍽️', obs, _sel: sel, _obsLivre: obsLivre });
   }
 
   noRenderCart();
   modal.remove();
   sbToast('ok', name + ' adicionado!');
+}
+
+// Reabre o modal de adicionais de um item já lançado no carrinho do "Novo Pedido",
+// pré-selecionando tudo que já tinha sido marcado — permite acrescentar mais
+// adicionais (ou tirar algum) sem precisar remover e relançar o item do zero.
+function noEditarItemCarrinho(idx) {
+  const c = _noCart[idx];
+  if (!c || c.id == null) return;
+  const catalogItem = items.find(i => i.id === c.id);
+  if (!catalogItem) { sbToast('err', 'Produto não encontrado no cardápio'); return; }
+  const grupos = _pedidoGruposSelecionaveis(catalogItem);
+  const isKg = catalogItem.itemType === 'kg' || catalogItem.item_type === 'kg';
+  noAbrirModalAdicionais(catalogItem, grupos, isKg, {
+    cartIndex: idx,
+    sel: c._sel || [],
+    obsLivre: c._obsLivre || '',
+    qty: c.qty || 1,
+    kg: c._kg || 1
+  });
 }
 
 function noChangeQty(itemId, delta) {
@@ -2335,7 +2395,15 @@ function noRenderCart() {
   if (counter) counter.textContent = `${totalQty} ${totalQty === 1 ? 'item' : 'itens'}`;
 
   const frag = document.createDocumentFragment();
-  _noCart.forEach(c => {
+  _noCart.forEach((c, idx) => {
+    // Só oferece editar (✏️) quando dá pra reabrir o modal de adicionais desse
+    // produto de forma confiável: precisa existir no cardápio e ter adicionais
+    // ou ser item por kg. Pizza fica de fora (meio a meio tem modal próprio).
+    const catalogItem = (c.id != null) ? items.find(i => i.id === c.id) : null;
+    const _grupos = catalogItem ? _pedidoGruposSelecionaveis(catalogItem) : [];
+    const _isKgItem = catalogItem && (catalogItem.itemType === 'kg' || catalogItem.item_type === 'kg');
+    const canEdit = !!catalogItem && !_noEhPizza(catalogItem) && (_grupos.length > 0 || _isKgItem);
+
     const div = document.createElement('div');
     div.className = 'no-cart-row';
     div.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid var(--border)';
@@ -2345,6 +2413,7 @@ function noRenderCart() {
         <div style="font-size:12.5px;font-weight:600;line-height:1.3;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:1px">R$ ${parseFloat(c.price).toFixed(2).replace('.', ',')} cada</div>
       </div>
+      ${canEdit ? `<button onclick="noEditarItemCarrinho(${idx})" title="Editar adicionais" style="width:24px;height:24px;border-radius:6px;border:1px solid rgba(99,102,241,.35);background:rgba(99,102,241,.1);color:#818cf8;font-size:12px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0">✏️</button>` : ''}
       <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
         <button onclick="noChangeQty(${c.id},-1)" style="width:24px;height:24px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">−</button>
         <span style="font-size:13px;font-weight:700;min-width:18px;text-align:center">${c.qty}</span>
