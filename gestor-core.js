@@ -2,6 +2,39 @@
 // CLIENTE REST — ESTIMA FOOD
 // ═══════════════════════════════════════════════════════
 
+// ── Login persistente ────────────────────────────────────
+// sessionStorage é apagado automaticamente quando o navegador/aba fecha
+// — por isso o gestor "desconectava" toda vez que saía e voltava. Aqui a
+// gente espelha as chaves de sessão também na localStorage (que sobrevive
+// a fechar o navegador) e restaura na sessionStorage assim que a página
+// carrega. Isso é transparente pro resto do código: todo lugar que já usa
+// sessionStorage.getItem/setItem('sys_session'/'finance_auth') continua
+// funcionando igual, sem precisar mexer em mais nada.
+(function _persistSessionAcrossRestarts() {
+  const KEYS = ['sys_session', 'finance_auth'];
+  KEYS.forEach(k => {
+    const sVal = sessionStorage.getItem(k);
+    if (sVal) {
+      // Sessão já existe nesta aba (ex: acabou de logar em login.html e
+      // navegou pra cá) — garante que também fique salva na localStorage.
+      localStorage.setItem('_persist_' + k, sVal);
+    } else {
+      const saved = localStorage.getItem('_persist_' + k);
+      if (saved) sessionStorage.setItem(k, saved);
+    }
+  });
+  const _origSet    = sessionStorage.setItem.bind(sessionStorage);
+  const _origRemove = sessionStorage.removeItem.bind(sessionStorage);
+  sessionStorage.setItem = function (key, value) {
+    _origSet(key, value);
+    if (KEYS.includes(key)) localStorage.setItem('_persist_' + key, value);
+  };
+  sessionStorage.removeItem = function (key) {
+    _origRemove(key);
+    if (KEYS.includes(key)) localStorage.removeItem('_persist_' + key);
+  };
+})();
+
 // ── Pré-inicialização de window._printMode ─────────────────
 // gestor-relatorios.js declara `let _printMode` que lê de window._printMode.
 // Como a ordem de carregamento dos <script> não é estritamente garantida em
@@ -209,11 +242,15 @@ function _verificarSessao() {
     if (!raw) { window.location.href = 'login.html'; return false; }
     _sessao = JSON.parse(raw);
     _billingLocked = !!_sessao.billing_locked;
-    if (Date.now() - _sessao.ts > 8 * 60 * 60 * 1000) {
+    // Sessão dura 30 dias (antes eram só 8h) — como agora ela sobrevive a
+    // fechar o navegador, faz sentido durar bem mais, tipo "continuar
+    // logado" de verdade, e não só dentro do mesmo dia.
+    const SESSION_TTL = 30 * 24 * 60 * 60 * 1000;
+    if (Date.now() - _sessao.ts > SESSION_TTL) {
       sessionStorage.removeItem('sys_session');
       // No Electron a sessão é renovada automaticamente — não expirar aqui
       if (!window.ElectronPrint) { window.location.href = 'login.html'; return false; }
-      // Se Electron: renova o ts para mais 30 dias e continua
+      // Se Electron: renova o ts e continua
       _sessao.ts = Date.now();
       sessionStorage.setItem('sys_session', JSON.stringify(_sessao));
       if (window.ElectronPrint?.saveSession) window.ElectronPrint.saveSession(_sessao).catch(()=>{});

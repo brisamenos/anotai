@@ -4105,10 +4105,21 @@ const _BT_PRINTER_SERVICES = [
   '0000ff00-0000-1000-8000-00805f9b34fb',
   '0000ffe0-0000-1000-8000-00805f9b34fb', // HM-10 / serial genérico
   '49535343-fe7d-4ae5-8fa9-9fafd205e455', // ISSC serial genérico
+  '0000fee7-0000-1000-8000-00805f9b34fb', // algumas impressoras BLE chinesas
+  'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // impressoras com módulo Espressif/custom
+  '0000fff0-0000-1000-8000-00805f9b34fb', // variação comum de módulos seriais BLE
 ];
 
 async function _btFindWritableChar(server) {
   const services = await server.getPrimaryServices().catch(() => []);
+  // Nenhum serviço encontrado: forte indício de que a impressora NÃO é BLE
+  // (é Bluetooth clássico/SPP) — o navegador nunca vai conseguir falar com
+  // ela, por mais UUIDs que a gente tente. Isso é uma limitação da própria
+  // impressora/tecnologia, não um bug do app.
+  if (!services.length) {
+    const err = new Error('CLASSICO'); // marcador interno p/ mensagem amigável depois
+    throw err;
+  }
   for (const service of services) {
     const chars = await service.getCharacteristics().catch(() => []);
     const writable = chars.find(c => c.properties.write || c.properties.writeWithoutResponse);
@@ -4150,9 +4161,18 @@ async function _btConnect() {
 }
 
 async function _printViaBluetooth(order, cfg) {
-  if (!navigator.bluetooth) throw new Error('Web Bluetooth não suportado neste navegador (use Chrome no Android)');
+  if (!navigator.bluetooth) throw new Error('Este navegador não suporta Bluetooth (use o Chrome no Android — Safari/iPhone não funciona)');
   console.log('[BT] Conectando impressora Bluetooth...');
-  const char = await _btConnect();
+  let char;
+  try {
+    char = await _btConnect();
+  } catch (e) {
+    if (e.message === 'CLASSICO') {
+      throw new Error('Essa impressora não é compatível — ela usa Bluetooth clássico, e o navegador só consegue falar com impressoras Bluetooth de baixa energia (BLE). Pareamento no Android não resolve isso.');
+    }
+    throw e;
+  }
+  if (!char) throw new Error('Impressora conectada, mas não encontrei nela um jeito de mandar os dados de impressão (característica gravável ausente).');
   console.log('[BT] Impressora conectada:', _btDevice?.name || '(sem nome)');
   const fmt  = localStorage.getItem('printFormat') || _printFormat || '80mm';
   const cols = fmt === '58mm' ? 32 : 48;
@@ -4186,7 +4206,24 @@ async function pairBluetoothPrinter() {
     localStorage.setItem('escpos_bt_name', dev.name || '');
     _btDevice = dev;
     _btChar = null; // força reconexão/rebusca de characteristic na próxima impressão
-    sbToast('ok', '✅ Impressora "' + (dev.name || 'Bluetooth') + '" pareada! Impressão direto pelo celular.');
+
+    // Testa a conexão na hora do pareamento, pra avisar já se a impressora
+    // não é compatível (em vez do cliente só descobrir depois, imprimindo).
+    try {
+      await _btConnect();
+      sbToast('ok', '✅ Impressora "' + (dev.name || 'Bluetooth') + '" pareada e testada! Impressão direto pelo celular.');
+    } catch (testErr) {
+      if (testErr.message === 'CLASSICO') {
+        // Incompatibilidade permanente (impressora não é BLE) — não adianta
+        // ficar tentando de novo em todo pedido, então remove o pareamento.
+        unpairBluetoothPrinter();
+        sbToast('err', '❌ "' + (dev.name || 'Essa impressora') + '" usa Bluetooth clássico, incompatível com o navegador. Ela precisa ser BLE (Bluetooth de baixa energia) pra funcionar aqui — veja no manual/anúncio se ela é "BLE".');
+      } else {
+        // Pode ser algo temporário (fora de alcance, desligada) — mantém o
+        // pareamento salvo, só avisa que o teste agora não funcionou.
+        sbToast('err', '⚠️ Pareou, mas não consegui conectar agora: ' + testErr.message);
+      }
+    }
   } catch (e) {
     if (e.name === 'NotFoundError') sbToast('warn', 'Nenhuma impressora selecionada.');
     else sbToast('err', 'Erro ao parear: ' + e.message);
@@ -4547,7 +4584,12 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
       await _printViaBluetooth(order, cfg);
       sbToast('ok', '🖨️ Impresso (Bluetooth)!');
       return;
-    } catch (e) { console.warn('[PRINT] Bluetooth falhou:', e.message); }
+    } catch (e) {
+      console.warn('[PRINT] Bluetooth falhou:', e.message);
+      // Avisa na tela (não só no console) — sem PC/agent, o cliente não tem
+      // outro jeito de saber que a impressão não saiu.
+      sbToast('err', '❌ Bluetooth: ' + e.message);
+    }
   }
 
   // 3️⃣ Print Agent (printestima) — prioritário se o agent está ativo
@@ -4598,7 +4640,10 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
         sbToast('ok', '🖨️ Impresso (Bluetooth)!');
         return;
       }
-    } catch (e) { console.warn('[PRINT] Bluetooth auto-connect falhou:', e.message); }
+    } catch (e) {
+      console.warn('[PRINT] Bluetooth auto-connect falhou:', e.message);
+      sbToast('err', '❌ Bluetooth: ' + e.message);
+    }
   }
 
   // ── Se o printestima está ativo, NÃO cai nos fallbacks abaixo ──
@@ -4626,7 +4671,12 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
         const blob  = new Blob([bytes], { type: 'application/pdf' });
         const url   = URL.createObjectURL(blob);
         const frame = document.createElement('iframe');
-        frame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;visibility:hidden';
+        // IMPORTANTE: width/height 0 faz o Chrome no Android simplesmente
+        // ignorar o print() (nada acontece, sem erro nenhum — foi
+        // provavelmente essa a causa do "não sai nada" no celular). Um
+        // iframe com tamanho real, só posicionado fora da tela, funciona
+        // de forma confiável e ainda fica invisível pro usuário.
+        frame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:320px;height:480px;border:none;opacity:0;pointer-events:none';
         document.body.appendChild(frame);
         if (printer) sbToast('info', '🖨️ Selecione: ' + printer);
         frame.src = url;
