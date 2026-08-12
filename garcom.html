@@ -1140,6 +1140,10 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
       <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       Adicionar mesa
     </button>
+    <button onclick="openHistoricoMesas()" style="display:flex;align-items:center;justify-content:center;gap:6px;width:calc(100% - 32px);margin:0 16px 14px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v3l2 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Histórico de mesas
+    </button>
     <div class="mesa-grid" id="mesa-grid">
       <div style="grid-column:span 3;text-align:center;padding:24px"><div class="spinner" style="margin:0 auto"></div></div>
     </div>
@@ -1422,6 +1426,32 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
     </div>
   </div>
 </div>
+
+<!-- ══ MODAL HISTÓRICO DE MESAS (mesas já fechadas — ver quem consumiu o quê) ══ -->
+<div class="sheet-bg" id="sheet-historico-mesas" onclick="if(event.target===this)closeHistoricoMesas()" style="z-index:9200">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <div class="sheet-title">Histórico de mesas</div>
+      <button class="sheet-close" onclick="closeHistoricoMesas()">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <div style="flex:1">
+          <label style="font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:5px">De</label>
+          <input type="date" id="hist-mesas-de" style="width:100%;height:38px;border-radius:9px;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-size:12.5px;padding:0 9px;outline:none">
+        </div>
+        <div style="flex:1">
+          <label style="font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:5px">Até</label>
+          <input type="date" id="hist-mesas-ate" style="width:100%;height:38px;border-radius:9px;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-size:12.5px;padding:0 9px;outline:none">
+        </div>
+      </div>
+      <button onclick="buscarHistoricoMesas()" style="width:100%;padding:10px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;margin-bottom:14px">Buscar</button>
+      <div id="hist-mesas-lista"><div class="empty"><div class="empty-icon">🗂️</div>Escolha um período e toque em Buscar</div></div>
+    </div>
+  </div>
+</div>
+
 
 <!-- ══ MODAL IMPRIMIR COMANDA (ao finalizar mesa) ══ -->
 <div id="print-comanda-bg" onclick="if(event.target===this)closePrintComandaModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9300;align-items:center;justify-content:center;backdrop-filter:blur(5px)">
@@ -5031,6 +5061,237 @@ async function confirmarCobrancaParcial() {
   } catch(e) {
     console.error('[confirmarCobrancaParcial]', e);
     showToast('Erro ao registrar recebimento: ' + (e.message || e));
+  }
+}
+
+// ══ HISTÓRICO DE MESAS — mesas já fechadas, pra ver quem consumiu o quê ═══
+// Reaproveita o endpoint /api/historico-pedidos (mesmo usado no gestor) e
+// filtra só os pedidos de mesa (mesa_num), agrupando itens por cliente
+// quando o garçom dividiu a conta por pessoa — igual ao relatório do gestor.
+let _histMesasData = [];
+
+function openHistoricoMesas() {
+  const hoje = new Date();
+  const seteDiasAtras = new Date(hoje.getTime() - 6 * 86400000);
+  const toISODate = d => d.toISOString().slice(0, 10);
+  const deEl = document.getElementById('hist-mesas-de');
+  const ateEl = document.getElementById('hist-mesas-ate');
+  if (deEl && !deEl.value) deEl.value = toISODate(seteDiasAtras);
+  if (ateEl && !ateEl.value) ateEl.value = toISODate(hoje);
+  document.getElementById('sheet-historico-mesas').classList.add('on');
+  buscarHistoricoMesas();
+}
+
+function closeHistoricoMesas() {
+  document.getElementById('sheet-historico-mesas').classList.remove('on');
+}
+
+async function buscarHistoricoMesas() {
+  const lista = document.getElementById('hist-mesas-lista');
+  const de  = document.getElementById('hist-mesas-de')?.value || '';
+  const ate = document.getElementById('hist-mesas-ate')?.value || '';
+  lista.innerHTML = '<div class="empty"><div class="spinner" style="margin:0 auto"></div></div>';
+
+  try {
+    // Duas buscas (mesas fechadas terminam como "entregue" ou "finalizado"),
+    // mesclando o resultado — o endpoint só aceita 1 status por chamada.
+    const buscaStatus = async status => {
+      const params = new URLSearchParams({ page: 1, limit: 200, status });
+      if (de) params.set('de', de + 'T00:00:00');
+      if (ate) params.set('ate', ate);
+      const res = await fetch('/api/historico-pedidos?' + params, { headers: { 'x-tenant-id': _garcomTenantId || '' } });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.orders || [];
+    };
+    const [entregues, finalizados] = await Promise.all([buscaStatus('entregue'), buscaStatus('finalizado')]);
+    const todos = [...entregues, ...finalizados].filter(o => o.mesa_num);
+    // Dedup por id (caso um pedido apareça nas duas buscas) e ordena mais recente primeiro
+    const vistos = new Set();
+    _histMesasData = todos.filter(o => !vistos.has(o.id) && vistos.add(o.id))
+      .sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0));
+
+    if (!_histMesasData.length) {
+      lista.innerHTML = '<div class="empty"><div class="empty-icon">🗂️</div>Nenhuma mesa fechada nesse período</div>';
+      return;
+    }
+
+    const fmtDataHoraBR = ts => {
+      if (!ts) return '—';
+      try {
+        let s = String(ts).trim();
+        if (s.includes(' ') && !s.includes('T')) s = s.replace(' ', 'T');
+        if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s += 'Z';
+        const d = new Date(s);
+        if (isNaN(d.getTime())) return String(ts);
+        return d.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo' });
+      } catch(e) { return String(ts); }
+    };
+
+    const agruparPorNome = itens => {
+      const map = {};
+      itens.forEach(i => {
+        const key = i.name || '';
+        if (!map[key]) map[key] = { qty: 0, price: parseFloat(i.price)||0 };
+        map[key].qty += parseInt(i.qty) || 1;
+      });
+      return Object.entries(map).map(([nome, v]) => `
+        <div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0">
+          <span>${v.qty}× ${_garcomHtmlEscape(nome)}</span>
+          <span style="color:var(--muted)">R$ ${(v.price*v.qty).toFixed(2).replace('.',',')}</span>
+        </div>`).join('');
+    };
+
+    lista.innerHTML = _histMesasData.map(o => {
+      const itens = (Array.isArray(o.items) ? o.items : []).filter(i => (i?.item_status || 'active') !== 'cancelado');
+      const temDivisaoCliente = itens.some(i => String(i.cliente_nome || '').trim());
+      const mesaInfo = tables.find(t => String(t.num) === String(o.mesa_num));
+      const nomeMesa = mesaInfo?.nome ? ` · ${_garcomHtmlEscape(mesaInfo.nome)}` : '';
+
+      let itensHtml;
+      if (!temDivisaoCliente) {
+        itensHtml = agruparPorNome(itens) || '<div style="font-size:11.5px;color:var(--muted)">Sem itens</div>';
+      } else {
+        const porCliente = new Map();
+        itens.forEach(i => {
+          const nomeCliente = String(i.cliente_nome || '').trim() || 'Mesa toda (sem divisão)';
+          if (!porCliente.has(nomeCliente)) porCliente.set(nomeCliente, []);
+          porCliente.get(nomeCliente).push(i);
+        });
+        itensHtml = [...porCliente.entries()].map(([nomeCliente, lst]) => {
+          const subtotal = lst.reduce((s,i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
+          return `<div style="margin-bottom:8px">
+            <div style="font-size:10.5px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px">👤 ${_garcomHtmlEscape(nomeCliente)}</div>
+            ${agruparPorNome(lst)}
+            <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;padding-top:2px;border-top:1px dashed var(--border);margin-top:2px">
+              <span>Subtotal ${_garcomHtmlEscape(nomeCliente)}</span>
+              <span>R$ ${subtotal.toFixed(2).replace('.',',')}</span>
+            </div>
+          </div>`;
+        }).join('') || '<div style="font-size:11.5px;color:var(--muted)">Sem itens</div>';
+      }
+
+      const total = parseFloat(o.total||0) + parseFloat(o.taxa||0);
+      const mesaAgora = tables.find(t => Number(t.num) === Number(o.mesa_num));
+      const podeReabrir = mesaAgora && mesaAgora.status === 'free';
+      const btnReabrir = podeReabrir
+        ? `<button onclick="reabrirMesaHistorico(${o.id})" style="margin-top:10px;width:100%;padding:9px;border-radius:9px;border:1.5px solid rgba(59,130,246,.35);background:rgba(59,130,246,.08);color:#93c5fd;font-size:12px;font-weight:700;cursor:pointer">↩️ Reabrir esta mesa para corrigir</button>`
+        : `<div style="margin-top:10px;font-size:11px;color:var(--muted);text-align:center">Mesa ${_garcomHtmlEscape(String(o.mesa_num))} está ocupada agora — libere-a pra poder reabrir este pedido</div>`;
+      return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+          <div>
+            <div style="font-weight:700;font-size:13.5px">Mesa ${_garcomHtmlEscape(String(o.mesa_num))}${nomeMesa}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">${fmtDataHoraBR(o.created_at)}${o.garcom_nome ? ' · ' + _garcomHtmlEscape(o.garcom_nome) : ''}</div>
+          </div>
+          <div style="font-size:15px;font-weight:800;color:var(--green);flex-shrink:0">R$ ${total.toFixed(2).replace('.',',')}</div>
+        </div>
+        <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+          ${itensHtml}
+        </div>
+        ${btnReabrir}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    console.error('[buscarHistoricoMesas]', e);
+    lista.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div>Erro ao buscar histórico: ${e.message||e}</div>`;
+  }
+}
+
+// Reabre uma mesa já fechada (histórico) pra corrigir algo que passou errado.
+// Regras importantes de segurança financeira:
+//  • Só permite reabrir se a mesa estiver LIVRE agora (evita conflitar com um
+//    atendimento atual usando o mesmo número de mesa).
+//  • O pedido volta para "mesa_aberta" (editável de novo: dá pra adicionar,
+//    cancelar item, etc, do jeito normal).
+//  • Como o fechamento anterior já gerou uma ENTRADA no caixa (movimentos),
+//    é registrado um ESTORNO (saída) do mesmo valor, pra não ficar duplicado.
+//    O lançamento original NÃO é apagado — fica tudo auditável no caixa.
+//  • Quando a mesa for finalizada de novo (já corrigida), uma nova entrada
+//    é criada normalmente com o valor certo. Resultado líquido: só o valor
+//    corrigido conta no financeiro, nada é somado em duplicidade.
+async function reabrirMesaHistorico(orderId) {
+  const histItem = _histMesasData.find(o => o.id === orderId);
+  if (!histItem) { showToast('Pedido não encontrado no histórico.'); return; }
+  const numMesa = Number(histItem.mesa_num);
+
+  const mesaAgora = tables.find(t => Number(t.num) === numMesa);
+  if (!mesaAgora || mesaAgora.status !== 'free') {
+    showToast(`Mesa ${numMesa} está ocupada agora — não é possível reabrir este pedido antigo.`);
+    return;
+  }
+
+  const totalOriginal = parseFloat(histItem.total||0) + parseFloat(histItem.taxa||0);
+  const ok = confirm(
+    `Reabrir Mesa ${numMesa} (pedido #${histItem.order_num || histItem.id})?\n\n` +
+    `• A mesa volta para "ocupada" com os itens desse pedido, pra você corrigir.\n` +
+    `• Um estorno de R$ ${totalOriginal.toFixed(2).replace('.',',')} será registrado no caixa (pra não contar 2x).\n` +
+    `• Finalize a mesa de novo depois de corrigir, com o valor certo.`
+  );
+  if (!ok) return;
+
+  try {
+    // Busca o pedido fresco no banco (evita reabrir com dado desatualizado do histórico)
+    const { data: orderFresco, error: errOrder } = await sb.from('orders').select('*').eq('id', orderId).single();
+    if (errOrder || !orderFresco) throw new Error('Não foi possível carregar o pedido original.');
+
+    const itens = _parseItems(orderFresco.items);
+    // Reconstrói a lista de "clientes da mesa" a partir dos itens que já tinham
+    // cliente_ref/cliente_nome atribuído, pra manter a divisão por pessoa ao reabrir.
+    const clientesMap = new Map();
+    itens.forEach(i => {
+      if (i.cliente_ref && i.cliente_nome && !clientesMap.has(i.cliente_ref)) {
+        clientesMap.set(i.cliente_ref, { id: i.cliente_ref, nome: i.cliente_nome });
+      }
+    });
+    const clientesReconstruidos = [...clientesMap.values()];
+
+    const agora = new Date().toISOString();
+
+    // 1) Pedido volta a ficar editável
+    const { error: errUpd } = await sb.from('orders')
+      .update({ status: 'mesa_aberta', updated_at: agora })
+      .eq('id', orderId)
+      .eq('tenant_id', _garcomTenantId);
+    if (errUpd) throw errUpd;
+
+    // 2) Mesa volta a ficar ocupada, ligada a esse pedido reaberto
+    const { error: errMesa } = await sb.from('mesas').update({
+      status: 'busy',
+      total: null,
+      taxa_servico: null,
+      pag_forma: null,
+      opened_at: orderFresco.session_ref || orderFresco.created_at || agora,
+      clientes_json: clientesReconstruidos,
+      pagamentos_json: [],
+      updated_at: agora
+    }).eq('num', numMesa).eq('tenant_id', _garcomTenantId);
+    if (errMesa) throw errMesa;
+
+    // 3) Estorno no caixa — anula a entrada que foi lançada no fechamento
+    //    anterior, sem apagar o registro original (fica tudo auditável).
+    if (totalOriginal > 0.005) {
+      const time = new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+      try {
+        await sb.from('movimentos').insert({
+          tenant_id: _garcomTenantId,
+          description: `Mesa ${numMesa} - Estorno (reabertura p/ correção) - pedido #${orderFresco.order_num || orderFresco.id}${currentGarcom?.nome ? ' - ' + currentGarcom.nome : ''}`,
+          tipo: 'saida', val: totalOriginal, pag: histItem.pag || '—', time
+        });
+      } catch (movErr) {
+        console.warn('[reabrirMesaHistorico] estorno nao registrado:', movErr?.message || movErr);
+      }
+    }
+
+    closeHistoricoMesas();
+    const { data: mesas } = await sb.from('mesas').select('*').order('num');
+    if (mesas) tables = mesas;
+    switchTab('mesas');
+    renderMesas();
+    await openMesaDetail(numMesa);
+    showToast(`Mesa ${numMesa} reaberta — corrija e finalize novamente.`);
+  } catch(e) {
+    console.error('[reabrirMesaHistorico]', e);
+    showToast('Erro ao reabrir mesa: ' + (e.message || e));
   }
 }
 
