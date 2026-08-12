@@ -2687,25 +2687,22 @@ async function cancelOrderById(id) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erro');
     ordersKanban = ordersKanban.filter(x => x.id !== id);
-    // Estorno: se existir movimento financeiro deste pedido, cria saída para anular
+    // Pedido cancelado NÃO pode entrar no financeiro de forma nenhuma.
+    // Antes: lançava uma "saída" de estorno pra compensar a entrada (o saldo líquido
+    // ficava certo, mas o total de "Entradas" continuava inflado e o histórico
+    // mostrava as duas linhas). Agora: remove a entrada original por completo.
     if (o) {
       try {
         // Usa separador " –" para evitar match de prefixo (ex: #3 pegando #31).
         // Se a descrição do movimento mudar, ajustar aqui junto com finishOrderById.
         const { data: movs } = await sb.from('movimentos')
-          .select('id,val,pag')
+          .select('id')
           .ilike('description', `Pedido #${o.num} –%`)
-          .eq('tipo', 'entrada')
-          .limit(1);
-        if (movs?.length && _sessao?.tenant_id) {
-          await sb.from('movimentos').insert({
-            tenant_id: _sessao.tenant_id,
-            description: `Estorno — Pedido #${o.num} cancelado`,
-            tipo: 'saida', val: movs[0].val,
-            pag: o.pag || 'Estorno', time
-          });
+          .eq('tipo', 'entrada');
+        for (const m of (movs || [])) {
+          await sb.from('movimentos').delete().eq('id', m.id);
         }
-      } catch(e) { console.warn('[cancelOrder] estorno falhou (não-fatal):', e.message); }
+      } catch(e) { console.warn('[cancelOrder] remoção do movimento financeiro falhou (não-fatal):', e.message); }
     }
   } catch(e) {
     sbToast('err', 'Erro ao cancelar pedido: ' + e.message); return;
