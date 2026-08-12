@@ -8,7 +8,7 @@
   function fiscalTenantId() {
     try {
       if (typeof _sessao !== 'undefined' && _sessao?.tenant_id) return _sessao.tenant_id;
-      return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || '';
+      return JSON.parse(localStorage.getItem('sys_session') || '{}').tenant_id || '';
     } catch (e) { return ''; }
   }
 

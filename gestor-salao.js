@@ -2329,7 +2329,7 @@ async function gestorImprimirContaMesa() {
       <div style="text-align:center;font-size:0.85em">Obrigado pela preferência!</div>
     </div>`;
 
-  const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+  const tid = (() => { try { return JSON.parse(localStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
   const fmt = localStorage.getItem('printFormat') || '80mm';
 
   // 1. Tenta Print Agent com tipo 'caixa'

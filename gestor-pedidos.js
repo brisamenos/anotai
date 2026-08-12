@@ -415,7 +415,7 @@ async function _kanbanHistSearch(numQ, clientQ) {
 
   try {
     const params = new URLSearchParams({ page: 1, limit: 10, q });
-    const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+    const tid = (() => { try { return JSON.parse(localStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
     const res = await fetch('/api/historico-pedidos?' + params, {
       headers: { 'x-tenant-id': tid }
     });
@@ -3217,7 +3217,7 @@ function selecionarModelo(tipo) {
 // ── Limpa todo o cardápio do tenant ──────────────────
 function _cardapioTenantAtual() {
   const tid = _sessao?.tenant_id || (() => {
-    try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; }
+    try { return JSON.parse(localStorage.getItem('sys_session') || '{}').tenant_id || ''; }
     catch { return ''; }
   })();
   if (!tid) throw new Error('Sessao sem tenant. Recarregue o gestor.');

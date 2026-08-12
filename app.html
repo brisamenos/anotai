@@ -1431,17 +1431,17 @@ let _rtCh = null;
 // ── Sessão ────────────────────────────────────────────
 function verificarSessao() {
   try {
-    const raw = sessionStorage.getItem('sys_session');
+    const raw = localStorage.getItem('sys_session');
     if (!raw) { window.location.href = '/login.html'; return false; }
     _sess = JSON.parse(raw);
-    if (Date.now() - _sess.ts > 8 * 60 * 60 * 1000) { sessionStorage.removeItem('sys_session'); window.location.href = '/login.html'; return false; }
+    if (Date.now() - _sess.ts > 8 * 60 * 60 * 1000) { localStorage.removeItem('sys_session'); window.location.href = '/login.html'; return false; }
     _tid = _sess.tenant_id;
     return true;
   } catch(e) { window.location.href = '/login.html'; return false; }
 }
 
 function confirmarLogout() {
-  if (confirm('Sair do sistema?')) { sessionStorage.removeItem('sys_session'); window.location.href = '/login.html'; }
+  if (confirm('Sair do sistema?')) { localStorage.removeItem('sys_session'); window.location.href = '/login.html'; }
 }
 
 // ── Toast ─────────────────────────────────────────────
@@ -1519,7 +1519,7 @@ function abrirNotif() { toast('Nenhuma notificação nova', 'info'); }
 
 // ── Helpers ───────────────────────────────────────────
 const R = v => 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ',');
-function ordNum(id) { try { const s = JSON.parse(sessionStorage.getItem('sys_session') || '{}'); return String(Math.max(1, id - (parseInt(s._offset) || 0))).padStart(3, '0'); } catch { return String(id).padStart(3, '0'); } }
+function ordNum(id) { try { const s = JSON.parse(localStorage.getItem('sys_session') || '{}'); return String(Math.max(1, id - (parseInt(s._offset) || 0))).padStart(3, '0'); } catch { return String(id).padStart(3, '0'); } }
 function fmtDate(d) { if (!d) return ''; return new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
 function fmtHora(d) { if (!d) return ''; return new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
 function itmList(items) { return Array.isArray(items) ? items.map(i => `${i.qty || 1}× ${i.name}`).join(', ') : (typeof items === 'string' ? ((() => { try { return JSON.parse(items).map(i => `${i.qty || 1}× ${i.name}`).join(', '); } catch { return items; } })()) : ''); }

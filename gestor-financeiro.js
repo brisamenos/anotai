@@ -1663,7 +1663,7 @@ function imprimirComprovanteMesa() {
 
     // 2. Print Agent (agente silencioso via servidor)
     try {
-      const tid = (() => { try { return JSON.parse(sessionStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
+      const tid = (() => { try { return JSON.parse(localStorage.getItem('sys_session') || '{}').tenant_id || ''; } catch { return ''; } })();
       if (tid) {
         const statusRes = await fetch('/api/print-queue/status', { headers: { 'x-tenant-id': tid } });
         const statusData = await statusRes.json();

@@ -79,7 +79,7 @@
     const tid = getTenantId();
     if (tid) h['x-tenant-id'] = tid;
     try {
-      const sess = JSON.parse(sessionStorage.getItem('sys_session') || '{}');
+      const sess = JSON.parse(localStorage.getItem('sys_session') || '{}');
       const fin = JSON.parse(sessionStorage.getItem('finance_auth') || '{}');
       if (fin && fin.token && fin.expires_at > Date.now() && (!tid || fin.tenant_id === tid)) {
         h['x-finance-auth'] = fin.token;

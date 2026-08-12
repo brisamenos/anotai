@@ -3,7 +3,7 @@
 //                DRE Simplificado, Exportação de Relatórios
 // ═══════════════════════════════════════════════════════════
 
-const _tid = () => { try { return JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id||'' } catch{return''} };
+const _tid = () => { try { return JSON.parse(localStorage.getItem('sys_session')||'{}').tenant_id||'' } catch{return''} };
 const _money = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
 
 // ─────────────────────────────────────────

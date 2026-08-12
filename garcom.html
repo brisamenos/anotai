@@ -1730,7 +1730,7 @@ function _aplicarTenant(info, slug) {
 
   // Salva no localStorage para não precisar digitar de novo
   localStorage.setItem('garcom_tenant_slug', _garcomSlug);
-  sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _garcomTenantId, ts: Date.now() }));
+  localStorage.setItem('sys_session', JSON.stringify({ tenant_id: _garcomTenantId, ts: Date.now() }));
 
   // Atualiza UI
   const nomeEl = document.getElementById('login-store-name');
@@ -6051,7 +6051,7 @@ function _radioPlayBlob(blob, nome) {
 // ── Carrega lista de garçons ─────────────────────
 async function _radioLoadGarcons() {
   try {
-    const tid = _garcomTenantId || JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id || '';
+    const tid = _garcomTenantId || JSON.parse(localStorage.getItem('sys_session')||'{}').tenant_id || '';
     const res = await fetch('/api/radio/garcons', { headers: { 'x-tenant-id': tid } });
     _radioGarconsList = await res.json();
   } catch { _radioGarconsList = []; }
@@ -6133,7 +6133,7 @@ async function _radioStartRecording() {
       reader.onloadend = async () => {
         const base64 = reader.result.split(',')[1];
         try {
-          const tid = _garcomTenantId || JSON.parse(sessionStorage.getItem('sys_session')||'{}').tenant_id || '';
+          const tid = _garcomTenantId || JSON.parse(localStorage.getItem('sys_session')||'{}').tenant_id || '';
           const sendRes = await fetch('/api/radio/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-tenant-id': tid },

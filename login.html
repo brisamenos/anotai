@@ -315,7 +315,7 @@ const sb = window.AppAPI;
 
 (function(){
   try {
-    const s = JSON.parse(sessionStorage.getItem('sys_session') || 'null');
+    const s = JSON.parse(localStorage.getItem('sys_session') || 'null');
     if (s && s.tenant_id && Date.now() - s.ts < 8*60*60*1000) {
       window.location.href = s.billing_locked ? 'gestor.html?billing=1' : 'gestor.html';
     }
@@ -431,7 +431,7 @@ async function doLogin() {
       }
     }
 
-    sessionStorage.setItem('sys_session', JSON.stringify({
+    localStorage.setItem('sys_session', JSON.stringify({
       id:        u.id,
       nome:      u.nome,
       email:     u.email,
