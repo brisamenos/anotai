@@ -703,12 +703,12 @@ async function init() {
     // Grava sys_session SOMENTE se não houver sessão de gestor/admin válida
     // (garante compatibilidade com versões antigas do api-client.js)
     try {
-      const _ex = JSON.parse(localStorage.getItem('sys_session') || 'null');
+      const _ex = JSON.parse(sessionStorage.getItem('sys_session') || 'null');
       if (!_ex || !(_ex.nome || _ex.role)) {
-        localStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
+        sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
       }
     } catch(e) {
-      localStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
+      sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _tenantId, ts: Date.now() }));
     }
     applyBranding(info.branding, info.nome);
 
