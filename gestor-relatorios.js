@@ -4137,6 +4137,7 @@ async function _btConnect() {
     // recente permite navigator.bluetooth.getDevices() sem gesto do usuário
     // quando a permissão já foi concedida antes).
     try {
+      if (typeof navigator.bluetooth.getDevices !== 'function') throw new Error('getDevices indisponível');
       const known = await navigator.bluetooth.getDevices();
       const saved = localStorage.getItem('escpos_bt_name');
       _btDevice = known.find(d => !saved || d.name === saved) || known[0] || null;
@@ -4632,7 +4633,7 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
   }
 
   // 4️⃣b Bluetooth auto-connect — dispositivo já autorizado antes nesta sessão
-  if (navigator.bluetooth && !_btDevice) {
+  if (navigator.bluetooth && typeof navigator.bluetooth.getDevices === 'function' && !_btDevice) {
     try {
       const devices = await navigator.bluetooth.getDevices();
       if (devices.length > 0) {
