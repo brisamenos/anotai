@@ -4089,157 +4089,54 @@ async function unpairUsbPrinter() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ESC/POS via Web Bluetooth — imprime direto na térmica pelo
-// celular (Android/Chrome), sem PC e sem Print Agent.
-// iOS/Safari não suporta Web Bluetooth — nesse caso a impressora
-// precisa ser cadastrada como Print Agent ou USB num PC/Electron.
+// Bluetooth — impressoras térmicas Bluetooth (principalmente as baratas,
+// que quase sempre são Bluetooth clássico/SPP e não BLE) não são
+// controláveis via Web Bluetooth: o navegador só fala com BLE, então a
+// tentativa de GATT falhava para a maioria das impressoras pareadas.
+//
+// Em vez disso, usamos o diálogo de impressão nativo do sistema
+// (window.print()): no Android, esse diálogo já enxerga impressoras
+// Bluetooth pareadas (via driver do fabricante ou serviço de impressão
+// do sistema) como uma opção normal de impressora — igual ao diálogo
+// que o app do iFood abre. Não precisa parear nada aqui, só ativar.
 // ══════════════════════════════════════════════════════════════
-let _btDevice = null;      // BluetoothDevice pareado
-let _btChar   = null;      // characteristic GATT usada para escrita
 
-// UUIDs de serviço mais comuns em impressoras térmicas BLE baratas
-// (genéricas "China ESC/POS"). Tentamos nessa ordem até achar uma
-// characteristic gravável.
-const _BT_PRINTER_SERVICES = [
-  '000018f0-0000-1000-8000-00805f9b34fb', // serviço genérico de impressora BLE
-  '0000ff00-0000-1000-8000-00805f9b34fb',
-  '0000ffe0-0000-1000-8000-00805f9b34fb', // HM-10 / serial genérico
-  '49535343-fe7d-4ae5-8fa9-9fafd205e455', // ISSC serial genérico
-  '0000fee7-0000-1000-8000-00805f9b34fb', // algumas impressoras BLE chinesas
-  'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // impressoras com módulo Espressif/custom
-  '0000fff0-0000-1000-8000-00805f9b34fb', // variação comum de módulos seriais BLE
-];
-
-async function _btFindWritableChar(server) {
-  const services = await server.getPrimaryServices().catch(() => []);
-  // Nenhum serviço encontrado: forte indício de que a impressora NÃO é BLE
-  // (é Bluetooth clássico/SPP) — o navegador nunca vai conseguir falar com
-  // ela, por mais UUIDs que a gente tente. Isso é uma limitação da própria
-  // impressora/tecnologia, não um bug do app.
-  if (!services.length) {
-    const err = new Error('CLASSICO'); // marcador interno p/ mensagem amigável depois
-    throw err;
-  }
-  for (const service of services) {
-    const chars = await service.getCharacteristics().catch(() => []);
-    const writable = chars.find(c => c.properties.write || c.properties.writeWithoutResponse);
-    if (writable) return writable;
-  }
-  return null;
+function _printViaBluetooth(html, fmt) {
+  return new Promise((resolve) => {
+    let area = document.getElementById('_print_area');
+    if (!area) { area = document.createElement('div'); area.id = '_print_area'; document.body.appendChild(area); }
+    area.innerHTML = html;
+    let st = document.getElementById('_print_style');
+    if (!st) { st = document.createElement('style'); st.id = '_print_style'; document.head.appendChild(st); }
+    st.innerHTML = `@media print {
+      @page { margin: ${_printMarginV}mm ${_printMarginH}mm; size: ${fmt} auto; }
+      body > *:not(#_print_area):not(#_print_style) { display: none !important; }
+      #_print_area { display: block !important; position: static !important; }
+    }`;
+    window.addEventListener('afterprint', function onAfter() {
+      window.removeEventListener('afterprint', onAfter);
+      resolve();
+    }, { once: true });
+    window.print();
+    setTimeout(resolve, 30000);
+  }).then(() => {
+    setTimeout(() => { const a = document.getElementById('_print_area'); if (a) a.innerHTML = ''; }, 1500);
+  });
 }
 
-// Conecta (ou reutiliza) a impressora Bluetooth pareada
-async function _btConnect() {
-  if (_btDevice?.gatt?.connected && _btChar) return _btChar;
-
-  if (!_btDevice) {
-    // Tenta reconectar silenciosamente a um device já autorizado (Chrome
-    // recente permite navigator.bluetooth.getDevices() sem gesto do usuário
-    // quando a permissão já foi concedida antes).
-    try {
-      if (typeof navigator.bluetooth.getDevices !== 'function') throw new Error('getDevices indisponível');
-      const known = await navigator.bluetooth.getDevices();
-      const saved = localStorage.getItem('escpos_bt_name');
-      _btDevice = known.find(d => !saved || d.name === saved) || known[0] || null;
-    } catch {}
-  }
-
-  if (!_btDevice) {
-    // Pede pareamento ao usuário (só na primeira vez / sem device salvo)
-    _btDevice = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: _BT_PRINTER_SERVICES,
-    });
-    localStorage.setItem('escpos_bt_name', _btDevice.name || '');
-  }
-
-  const server = await _btDevice.gatt.connect();
-  const char = await _btFindWritableChar(server);
-  if (!char) throw new Error('Nenhuma característica gravável encontrada na impressora');
-  _btChar = char;
-  _btDevice.addEventListener('gattserverdisconnected', () => { _btChar = null; });
-  return _btChar;
+// Ativa/desativa a impressão via diálogo Bluetooth (chamado pelo toggle na
+// tela de configuração). Não precisa de nenhum pareamento via Web Bluetooth
+// — a impressora deve estar pareada normalmente nas configurações Bluetooth
+// do Android, e escolhida no diálogo de impressão a cada impressão.
+function pairBluetoothPrinter() {
+  localStorage.setItem('escpos_bt_name', '1');
+  sbToast('ok', '✅ Impressão via Bluetooth ativada! O diálogo de impressão do celular vai abrir a cada pedido — escolha a impressora pareada nele.');
 }
 
-async function _printViaBluetooth(order, cfg) {
-  if (!navigator.bluetooth) throw new Error('Este navegador não suporta Bluetooth (use o Chrome no Android — Safari/iPhone não funciona)');
-  console.log('[BT] Conectando impressora Bluetooth...');
-  let char;
-  try {
-    char = await _btConnect();
-  } catch (e) {
-    if (e.message === 'CLASSICO') {
-      throw new Error('Essa impressora não é compatível — ela usa Bluetooth clássico, e o navegador só consegue falar com impressoras Bluetooth de baixa energia (BLE). Pareamento no Android não resolve isso.');
-    }
-    throw e;
-  }
-  if (!char) throw new Error('Impressora conectada, mas não encontrei nela um jeito de mandar os dados de impressão (característica gravável ausente).');
-  console.log('[BT] Impressora conectada:', _btDevice?.name || '(sem nome)');
-  const fmt  = localStorage.getItem('printFormat') || _printFormat || '80mm';
-  const cols = fmt === '58mm' ? 32 : 48;
-  const data = _buildEscPos(order, cfg, cols);
-  console.log('[BT] Dados ESC/POS gerados | bytes:', data.length, '| colunas:', cols);
-  // BLE tem MTU pequeno — envia em pedacinhos de 20 bytes com leve intervalo
-  // para não estourar o buffer de impressoras baratas.
-  const CHUNK = 20;
-  const write = char.properties.writeWithoutResponse
-    ? (b) => char.writeValueWithoutResponse(b)
-    : (b) => char.writeValue(b);
-  for (let i = 0; i < data.length; i += CHUNK) {
-    const chunk = new Uint8Array(data.slice(i, Math.min(i + CHUNK, data.length)));
-    await write(chunk);
-    await new Promise(r => setTimeout(r, 15));
-  }
-  console.log('[BT] Impressão concluída!');
-}
-
-// Pareia a impressora Bluetooth (chamado pelo botão na tela de configuração)
-async function pairBluetoothPrinter() {
-  if (!navigator.bluetooth) {
-    sbToast('err', '❌ Web Bluetooth não suportado. Use o Chrome no Android.');
-    return;
-  }
-  try {
-    const dev = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: _BT_PRINTER_SERVICES,
-    });
-    localStorage.setItem('escpos_bt_name', dev.name || '');
-    _btDevice = dev;
-    _btChar = null; // força reconexão/rebusca de characteristic na próxima impressão
-
-    // Testa a conexão na hora do pareamento, pra avisar já se a impressora
-    // não é compatível (em vez do cliente só descobrir depois, imprimindo).
-    try {
-      await _btConnect();
-      sbToast('ok', '✅ Impressora "' + (dev.name || 'Bluetooth') + '" pareada e testada! Impressão direto pelo celular.');
-    } catch (testErr) {
-      if (testErr.message === 'CLASSICO') {
-        // Incompatibilidade permanente (impressora não é BLE) — não adianta
-        // ficar tentando de novo em todo pedido, então remove o pareamento.
-        unpairBluetoothPrinter();
-        sbToast('err', '❌ "' + (dev.name || 'Essa impressora') + '" usa Bluetooth clássico, incompatível com o navegador. Ela precisa ser BLE (Bluetooth de baixa energia) pra funcionar aqui — veja no manual/anúncio se ela é "BLE".');
-      } else {
-        // Pode ser algo temporário (fora de alcance, desligada) — mantém o
-        // pareamento salvo, só avisa que o teste agora não funcionou.
-        sbToast('err', '⚠️ Pareou, mas não consegui conectar agora: ' + testErr.message);
-      }
-    }
-  } catch (e) {
-    if (e.name === 'NotFoundError') sbToast('warn', 'Nenhuma impressora selecionada.');
-    else sbToast('err', 'Erro ao parear: ' + e.message);
-  }
-}
-
-// Desconecta e remove pareamento
-async function unpairBluetoothPrinter() {
-  if (_btDevice?.gatt?.connected) {
-    try { _btDevice.gatt.disconnect(); } catch {}
-  }
-  _btDevice = null;
-  _btChar = null;
+// Desativa a impressão via diálogo Bluetooth
+function unpairBluetoothPrinter() {
   localStorage.removeItem('escpos_bt_name');
-  sbToast('ok', 'Impressora Bluetooth removida.');
+  sbToast('ok', 'Impressão via Bluetooth desativada.');
 }
 
 // ── Cache de Print Agent ativo ──────────────────────────────────────
@@ -4579,16 +4476,17 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
     } catch (e) { console.warn('[PRINT] USB falhou:', e.message); }
   }
 
-  // 2️⃣b Bluetooth ESC/POS — celular sem PC, impressora térmica pareada
-  if (navigator.bluetooth && (_btDevice || localStorage.getItem('escpos_bt_name'))) {
+  // 2️⃣b Bluetooth — celular sem PC, impressora térmica pareada nas
+  // configurações do Android. Abre o diálogo nativo de impressão (igual ao
+  // diálogo do iFood): a impressora Bluetooth pareada aparece como opção.
+  if (localStorage.getItem('escpos_bt_name')) {
     try {
-      await _printViaBluetooth(order, cfg);
+      if (printer) sbToast('info', '🖨️ Selecione a impressora Bluetooth');
+      await _printViaBluetooth(html, fmt);
       sbToast('ok', '🖨️ Impresso (Bluetooth)!');
       return;
     } catch (e) {
       console.warn('[PRINT] Bluetooth falhou:', e.message);
-      // Avisa na tela (não só no console) — sem PC/agent, o cliente não tem
-      // outro jeito de saber que a impressão não saiu.
       sbToast('err', '❌ Bluetooth: ' + e.message);
     }
   }
@@ -4630,21 +4528,6 @@ async function _printJobCascade(html, fmt, printer, order, cfg, tipo) {
         return;
       }
     } catch (e) { console.warn('[PRINT] USB auto-connect falhou:', e.message); }
-  }
-
-  // 4️⃣b Bluetooth auto-connect — dispositivo já autorizado antes nesta sessão
-  if (navigator.bluetooth && typeof navigator.bluetooth.getDevices === 'function' && !_btDevice) {
-    try {
-      const devices = await navigator.bluetooth.getDevices();
-      if (devices.length > 0) {
-        await _printViaBluetooth(order, cfg);
-        sbToast('ok', '🖨️ Impresso (Bluetooth)!');
-        return;
-      }
-    } catch (e) {
-      console.warn('[PRINT] Bluetooth auto-connect falhou:', e.message);
-      sbToast('err', '❌ Bluetooth: ' + e.message);
-    }
   }
 
   // ── Se o printestima está ativo, NÃO cai nos fallbacks abaixo ──
@@ -5098,14 +4981,9 @@ function toggleImpTipo() {
     document.getElementById('imp-printer-wrap').style.display = 'none';
     const btSt = document.getElementById('imp-bt-status');
     if (btSt) {
-      if (!navigator.bluetooth) {
-        btSt.textContent = '⚠️ Este navegador não suporta Bluetooth — use Chrome no Android';
-        btSt.style.color = '#f59e0b';
-      } else {
-        const saved = localStorage.getItem('escpos_bt_name');
-        btSt.textContent = saved ? '✅ Pareada: ' + saved : 'Nenhuma impressora Bluetooth pareada';
-        btSt.style.color = saved ? '#10b981' : 'var(--muted)';
-      }
+      const ativo = !!localStorage.getItem('escpos_bt_name');
+      btSt.textContent = ativo ? '✅ Impressão Bluetooth ativada' : 'Impressão Bluetooth desativada';
+      btSt.style.color = ativo ? '#10b981' : 'var(--muted)';
     }
   } else if (tipo === 'agent') {
     document.getElementById('imp-usb-wrap').style.display = 'none';
@@ -5129,8 +5007,12 @@ async function pairUsbForModal() {
   try { await pairUsbPrinter(); toggleImpTipo(); } catch(e) { sbToast('err', 'Erro ao parear: ' + e.message); }
 }
 
-async function pairBluetoothForModal() {
-  try { await pairBluetoothPrinter(); toggleImpTipo(); } catch(e) { sbToast('err', 'Erro ao parear: ' + e.message); }
+function pairBluetoothForModal() {
+  try {
+    if (localStorage.getItem('escpos_bt_name')) unpairBluetoothPrinter();
+    else pairBluetoothPrinter();
+    toggleImpTipo();
+  } catch(e) { sbToast('err', 'Erro: ' + e.message); }
 }
 
 function salvarImpressora() {
@@ -5150,7 +5032,8 @@ function salvarImpressora() {
     if (tipo === 'usb') {
       printerName = localStorage.getItem('escpos_usb_name') || 'USB';
     } else if (tipo === 'bluetooth') {
-      printerName = localStorage.getItem('escpos_bt_name') || 'Bluetooth';
+      if (!localStorage.getItem('escpos_bt_name')) pairBluetoothPrinter();
+      printerName = 'Bluetooth (diálogo)';
     } else if (tipo === 'agent') {
       printerName = document.getElementById('imp-printer-select')?.value || '';
     }
@@ -5206,8 +5089,13 @@ async function testImpressora(idx) {
     try { const cfg = _getPrintConfig(); await _printViaUsb(ex, cfg); sbToast('ok', '🖨️ Teste USB enviado!'); }
     catch(e) { sbToast('err', 'Erro USB: ' + e.message); }
   } else if (imp.tipo === 'bluetooth') {
-    try { const cfg = _getPrintConfig(); await _printViaBluetooth(ex, cfg); sbToast('ok', '🖨️ Teste Bluetooth enviado!'); }
-    catch(e) { sbToast('err', 'Erro Bluetooth: ' + e.message); }
+    try {
+      const cfg = _getPrintConfig();
+      const fmt = localStorage.getItem('printFormat') || _printFormat || '80mm';
+      const ticket = _buildTicketHtml(ex, cfg);
+      await _printViaBluetooth(ticket.singleSheet || ticket.principal, fmt);
+      sbToast('ok', '🖨️ Teste Bluetooth enviado!');
+    } catch(e) { sbToast('err', 'Erro Bluetooth: ' + e.message); }
   } else { await printOrder(ex); sbToast('ok', '🖨️ Teste enviado!'); }
 }
 

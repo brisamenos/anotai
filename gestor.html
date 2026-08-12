@@ -3356,7 +3356,7 @@ Use no seu próximo pedido.</textarea>
         <label class="form-label">Tipo de conexão</label>
         <select class="form-input" id="imp-tipo" onchange="toggleImpTipo()">
           <option value="usb">USB Direto (ESC/POS)</option>
-          <option value="bluetooth">Bluetooth Direto (ESC/POS) — celular</option>
+          <option value="bluetooth">Bluetooth (diálogo do celular)</option>
           <option value="agent">Print Agent (servidor)</option>
           <option value="browser">Navegador (diálogo)</option>
         </select>
@@ -3366,9 +3366,9 @@ Use no seu próximo pedido.</textarea>
         <div id="imp-usb-status" style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center"></div>
       </div>
       <div id="imp-bt-wrap" style="display:none">
-        <button onclick="pairBluetoothForModal()" class="btn bp" style="width:100%;justify-content:center;padding:10px">📶 Parear impressora Bluetooth</button>
+        <button onclick="pairBluetoothForModal()" class="btn bp" style="width:100%;justify-content:center;padding:10px">📶 Ativar impressão Bluetooth</button>
         <div id="imp-bt-status" style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center"></div>
-        <div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.4">Ligue a impressora térmica e pareie pelo celular (Chrome Android). Funciona sem PC e sem cabo — a impressão sai direto do celular.</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.4">Pareie a impressora térmica normalmente nas configurações Bluetooth do celular (fora do app). A cada pedido, o diálogo de impressão do sistema abre — igual ao diálogo do iFood — e você escolhe a impressora pareada nele.</div>
       </div>
       <div id="imp-printer-wrap">
         <label class="form-label">Impressora</label>
