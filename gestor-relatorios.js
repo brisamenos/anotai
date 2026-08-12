@@ -799,19 +799,48 @@ async function renderRelatorios() {
         const mesaInfo = (typeof tables !== 'undefined' ? tables : []).find(t => String(t.num) === String(numMesa));
         const nomeMesa = mesaInfo?.nome ? ` · ${_printHtmlEscape(mesaInfo.nome)}` : '';
 
-        // Itens realmente consumidos (exclui cancelados), agrupados por nome
+        // Itens realmente consumidos (exclui cancelados), agrupados por cliente da mesa
+        // (quando o garçom atribuiu o item a uma pessoa) e, dentro de cada um, por nome do item.
         const itens = _parseItemsAtivos(o.items);
-        const itemMap = {};
-        itens.forEach(i => {
-          const key = i.name || '';
-          if (!itemMap[key]) itemMap[key] = { qty: 0, price: parseFloat(i.price)||0 };
-          itemMap[key].qty += parseInt(i.qty) || 1;
-        });
-        const itensHtml = Object.entries(itemMap).map(([nome, v]) => `
-          <div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0">
-            <span>${v.qty}× ${_printHtmlEscape(nome)}</span>
-            <span style="color:var(--muted)">R$ ${(v.price*v.qty).toFixed(2).replace('.',',')}</span>
-          </div>`).join('') || '<div style="font-size:11.5px;color:var(--muted)">Sem itens</div>';
+        const temDivisaoCliente = itens.some(i => String(i.cliente_nome || '').trim());
+
+        const agruparPorNome = lista => {
+          const map = {};
+          lista.forEach(i => {
+            const key = i.name || '';
+            if (!map[key]) map[key] = { qty: 0, price: parseFloat(i.price)||0 };
+            map[key].qty += parseInt(i.qty) || 1;
+          });
+          return Object.entries(map).map(([nome, v]) => `
+            <div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0">
+              <span>${v.qty}× ${_printHtmlEscape(nome)}</span>
+              <span style="color:var(--muted)">R$ ${(v.price*v.qty).toFixed(2).replace('.',',')}</span>
+            </div>`).join('');
+        };
+
+        let itensHtml;
+        if (!temDivisaoCliente) {
+          itensHtml = agruparPorNome(itens) || '<div style="font-size:11.5px;color:var(--muted)">Sem itens</div>';
+        } else {
+          // Agrupa por cliente (mantendo "Mesa toda" para itens sem cliente atribuído)
+          const porCliente = new Map();
+          itens.forEach(i => {
+            const nomeCliente = String(i.cliente_nome || '').trim() || 'Mesa toda (sem divisão)';
+            if (!porCliente.has(nomeCliente)) porCliente.set(nomeCliente, []);
+            porCliente.get(nomeCliente).push(i);
+          });
+          itensHtml = [...porCliente.entries()].map(([nomeCliente, lista]) => {
+            const subtotal = lista.reduce((s,i) => s + (parseFloat(i.price)||0) * (parseInt(i.qty)||1), 0);
+            return `<div style="margin-bottom:8px">
+              <div style="font-size:10.5px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px">👤 ${_printHtmlEscape(nomeCliente)}</div>
+              ${agruparPorNome(lista)}
+              <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;padding-top:2px;border-top:1px dashed var(--border);margin-top:2px">
+                <span>Subtotal ${_printHtmlEscape(nomeCliente)}</span>
+                <span>R$ ${subtotal.toFixed(2).replace('.',',')}</span>
+              </div>
+            </div>`;
+          }).join('') || '<div style="font-size:11.5px;color:var(--muted)">Sem itens</div>';
+        }
 
         const total = parseFloat(o.total||0) + parseFloat(o.taxa||0);
         // Horário de abertura real da sessão: session_ref (quando existe) é mais preciso
