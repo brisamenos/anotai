@@ -2317,8 +2317,13 @@ async function handleREST(req, res, table, params, body) {
   }
   const tenantId        = getTenantId(req, params)
   const tenantScoped    = cols.includes('tenant_id') && !NO_TENANT_FILTER.has(table)
-  if (tenantScoped && !tenantId && ['PATCH','DELETE'].includes(req.method)) {
-    return send(res, 400, { error: 'x-tenant-id obrigatório para alterar dados do tenant' })
+  // ISOLAMENTO TOTAL: qualquer operação (inclusive GET) numa tabela com tenant_id
+  // exige x-tenant-id/_tenant. Sem isso, buildWhere() não filtraria por tenant
+  // e a query devolveria/afetaria linhas de TODOS os tenants misturadas.
+  // Antes só PATCH/DELETE eram bloqueados — GET sem tenant vazava pedidos/mesas
+  // de outras lojas quando a sessão do cliente ainda não tinha carregado o tenant_id.
+  if (tenantScoped && !tenantId) {
+    return send(res, 400, { error: 'x-tenant-id obrigatório' })
   }
   if (FINANCE_REST_RULES[table]?.has(req.method) && !validarFinanceAccess(req, tenantId)) {
     return sendFinanceLocked(res)

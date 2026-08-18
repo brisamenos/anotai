@@ -180,10 +180,25 @@
       this._destroyed = false;
 
       const tid = getTenantId();
-      const channel = tid ? `${this._name}:${tid}` : this._name;
+      // ISOLAMENTO TOTAL: nunca abre um canal SEM o sufixo do tenant.
+      // Um canal "pelado" (ex: "orders-rt") não recebe nada útil hoje, mas
+      // se a sessão carregar tid errado momentaneamente (ex: troca de aba
+      // entre gestor de um tenant e cardápio de outro) o canal teria que
+      // refletir isso corretamente — nunca ficar sem o tenant. Se ainda não
+      // há tid (sessão não carregou), adia a inscrição em vez de abrir um
+      // canal incorreto/genérico.
+      const self = this;
+      if (!tid) {
+        if (self._reconnectTimer) clearTimeout(self._reconnectTimer);
+        self._reconnectTimer = setTimeout(() => {
+          self._reconnectTimer = null;
+          if (!self._destroyed) self.subscribe();
+        }, 300);
+        return this;
+      }
+      const channel = `${this._name}:${tid}`;
       const url = `${BASE}/sse/${encodeURIComponent(channel)}`;
       this._sse = new EventSource(url);
-      const self = this;
 
       this._sse.onopen = () => {
         // Cancela qualquer timer de reconexão pendente ao conectar com sucesso
