@@ -795,14 +795,13 @@ async function init() {
     }
 
     // _pixAtivoGestor decide se o fluxo tenta gerar QR online (vs cair pro PIX
-    // manual). Antes considerava só pix_ativo_gestor, que só vira true quando o
-    // GESTOR salva um token MP próprio (/api/gestor/mp-config). Quando o MP
-    // configurado é o da conta global (admin, via /api/admin/mp-config), esse
-    // flag nunca era setado no tenant — resultado: mesmo com a conta MP global
-    // funcionando, o checkout nunca chamava /api/pix/criar e caía direto pro
-    // PIX manual (ou sumia, se não tivesse chave manual configurada), sem erro.
-    // Agora usa a mesma regra de "MP está configurado" (tenant OU global).
-    _pixAtivoGestor    = pixCfgR.pix_ativo_gestor === true || pixCfgR.mp_configurado === true;
+    // manual). Cai pro "MP configurado" (tenant OU global) SÓ quando o gestor
+    // nunca mexeu no toggle (pix_ativo_definido === false) — ou seja, nunca
+    // escolheu explicitamente "Manual". Se ele escolheu Manual de propósito
+    // (pix_ativo === false, salvo por togglePixOnline), isso é respeitado
+    // sempre, mesmo com uma conta MP global disponível na plataforma.
+    _pixAtivoGestor    = pixCfgR.pix_ativo_gestor === true
+                       || (pixCfgR.pix_ativo_definido !== true && pixCfgR.mp_configurado === true);
     _pixKeyManual      = pixCfgR.pix_key_manual      || '';
     _pixKeyManualTipo  = pixCfgR.pix_key_manual_tipo  || 'aleatoria';
     _pixKeyManualBanco = pixCfgR.pix_key_manual_banco || '';
