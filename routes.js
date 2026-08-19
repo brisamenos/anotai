@@ -5194,6 +5194,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const _mpResolv = _resolveMpForTenant(db, tid, MP_TOKEN)
       const mpConfigurado  = !!_mpResolv.mp_token
       const pixAtivo       = ia.pix_ativo === true
+      // Diferencia "nunca configurado" (undefined) de "desativado de propósito"
+      // (false explícito, via togglePixOnline -> Manual). O front usa isso pra
+      // só cair no fallback da conta MP global quando o gestor NUNCA escolheu
+      // manual — se ele escolheu manual de propósito, isso tem que ser respeitado
+      // mesmo com uma conta MP global disponível na plataforma.
+      const pixAtivoDefinido = Object.prototype.hasOwnProperty.call(ia, 'pix_ativo')
       const pagOnlineAtivo = ia.pag_online_ativo !== false
       // Cartão disponível se a conta resolvida (tenant ou global) tem public key
       const cartaoDisponivel   = !!_mpResolv.mp_public_key
@@ -5201,6 +5207,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       send(res, 200, {
         pix_ativo:            pixAtivo,
         pix_ativo_gestor:     pixAtivo,
+        pix_ativo_definido:   pixAtivoDefinido,
         mp_configurado:       mpConfigurado,
         // Quando tenant tem conta própria, taxa da plataforma não se aplica
         taxa_pix:             _mpResolv.source === 'tenant' ? 0 :
