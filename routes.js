@@ -4905,6 +4905,26 @@ module.exports = async function handleRoutes(req, res, ctx) {
     let valor = body.valor
     if (!valor || valor <= 0) { send(res, 400, { error: 'valor inválido' }); return true }
 
+    // ── Guarda server-side do modo PIX manual ───────────────────────────────
+    // O front-end (cardápio) já evita chamar esta rota quando o gestor
+    // desativou o PIX online (usa _pixAtivoGestor), mas isso não é garantia:
+    // cache de JS antigo no navegador do cliente, outro canal, ou qualquer
+    // chamada direta a esta API ainda geravam a cobrança PIX online/global
+    // mesmo com o tenant configurado como manual. A fonte da verdade tem que
+    // ser o servidor. Se o gestor escolheu manual de propósito (pix_ativo
+    // === false, salvo explicitamente via togglePixOnline), bloqueia aqui —
+    // sem exceção, independente de quem chamou a rota.
+    try {
+      const _cfgPixRow = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
+      const _iaPixCfg  = _cfgPixRow?.ia_config ? JSON.parse(_cfgPixRow.ia_config) : {}
+      const _pixModoDefinido = Object.prototype.hasOwnProperty.call(_iaPixCfg, 'pix_ativo')
+      if (_pixModoDefinido && _iaPixCfg.pix_ativo === false) {
+        log('🚫', `PIX online bloqueado tenant=${tid}: modo manual ativo (pix_ativo=false)`)
+        send(res, 403, { error: 'PIX online está desativado para esta loja (modo manual ativo). Use a chave PIX manual.' })
+        return true
+      }
+    } catch (e) { log('⚠️', 'Erro ao checar modo PIX manual:', e.message) }
+
     // ── Validações anti-fraude server-side ────────────────────────────────
     // (a) order_id deve pertencer ao tenant
     // (b) valor deve bater com total+taxa do pedido (anti-downgrade)
