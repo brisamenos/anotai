@@ -558,6 +558,10 @@ async function _doSubmitOrder(addr, troco) {
     const { data: order, error } = await sb.from('orders').insert({
       tenant_id: _tenantId,
       client_request_id: _clientRequestId,
+      // Marca a origem como cardápio público — backend usa isso pra recusar
+      // o pedido se a loja estiver fechada (validação server-side; não é
+      // coluna real, é descartada antes do INSERT). Ver server.js.
+      origem_pedido: 'cardapio_publico',
       client: name, phone, addr,
       items, total: grandTotal(), taxa: getTaxa(),
       status: selectedPay === 'pix' ? 'aguardando_pix'
