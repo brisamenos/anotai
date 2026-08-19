@@ -1964,6 +1964,82 @@ function brasiliaDateString(date = new Date()) {
   return `${p.year}-${p.month}-${p.day}`
 }
 
+// ── Loja aberta? (validação SERVER-SIDE) ──────────────────────────────────
+// Porte fiel da lógica de cardapio-core.js (isLojaAberta / _horarioAbertoNoMinuto
+// / _horaParaMinutos etc). Antes, "loja fechada" só era checado no JS do
+// cardápio (client-side) — ou seja, dava pra criar pedido com a loja fechada
+// bastando chamar POST /api/orders direto (sem passar pela tela). Agora o
+// próprio backend recusa o pedido nesse caso, igual já faz com bairro
+// bloqueado / delivery pausado logo abaixo.
+function _storeOpenAtivoServer(store_open) {
+  if (store_open === false || store_open === 0) return false
+  if (typeof store_open === 'string') {
+    const v = store_open.trim().toLowerCase()
+    if (v === 'false' || v === '0' || v === 'fechado') return false
+  }
+  return true
+}
+function _horarioAtivoServer(cfg) {
+  if (!cfg) return false
+  if (cfg.ativo === true || cfg.ativo === 1) return true
+  if (typeof cfg.ativo === 'string') {
+    const v = cfg.ativo.trim().toLowerCase()
+    return v === 'true' || v === '1' || v === 'sim'
+  }
+  return false
+}
+function _horaParaMinutosServer(valor) {
+  const raw = String(valor || '').trim().toLowerCase().replace(/\s+/g, '')
+  const match = raw.match(/^(\d{1,2})(?:(?::|h)(\d{1,2}))?h?$/)
+  if (!match) return null
+  const h = parseInt(match[1], 10)
+  const m = match[2] === undefined ? 0 : parseInt(match[2], 10)
+  if (h === 24 && m === 0) return 1440
+  if (h < 0 || h > 23 || m < 0 || m > 59) return null
+  return h * 60 + m
+}
+function _janelasDiaServer(cfg) {
+  if (!cfg) return []
+  if (Array.isArray(cfg.janelas) && cfg.janelas.length) return cfg.janelas
+  if (cfg.abertura || cfg.fechamento) return [{ abertura: cfg.abertura, fechamento: cfg.fechamento }]
+  return []
+}
+function _horarioAbertoNoMinutoServer(cfg, minutoAtual, usandoDiaAnterior) {
+  if (!_horarioAtivoServer(cfg)) return false
+  const janelas = _janelasDiaServer(cfg)
+  if (!janelas.length) return false
+  return janelas.some(j => {
+    const abertura = _horaParaMinutosServer(j.abertura) ?? 0
+    const fechamento = _horaParaMinutosServer(j.fechamento) ?? 1439
+    if (abertura === fechamento) return true
+    if (fechamento > abertura) return !usandoDiaAnterior && minutoAtual >= abertura && minutoAtual < fechamento
+    return usandoDiaAnterior ? minutoAtual < fechamento : minutoAtual >= abertura
+  })
+}
+// Retorna { aberto, motivo } — motivo só preenchido quando aberto=false, pra
+// devolver uma mensagem clara no erro 503.
+function isLojaAbertaServer(tenantId) {
+  try {
+    const cfg = db.prepare('SELECT store_open, horarios_config FROM store_config WHERE tenant_id=?').get(tenantId)
+    if (!cfg) return { aberto: true } // sem config cadastrada — não bloqueia (comportamento anterior)
+    if (!_storeOpenAtivoServer(cfg.store_open)) return { aberto: false, motivo: 'Loja fechada no momento.' }
+    let horarios = null
+    try { horarios = cfg.horarios_config ? JSON.parse(cfg.horarios_config) : null } catch(e) { horarios = null }
+    if (!horarios || !Object.keys(horarios).length) return { aberto: true } // sem horário configurado — só respeita o toggle manual
+    const agora = new Date(new Date().toLocaleString('en-US', { timeZone: BRASILIA_TZ }))
+    const dias = ['dom','seg','ter','qua','qui','sex','sab']
+    const idxHoje = agora.getDay()
+    const minutoAtual = agora.getHours() * 60 + agora.getMinutes()
+    const abertoHoje  = _horarioAbertoNoMinutoServer(horarios[dias[idxHoje]], minutoAtual, false)
+    const abertoOntem = _horarioAbertoNoMinutoServer(horarios[dias[(idxHoje + 6) % 7]], minutoAtual, true)
+    if (abertoHoje || abertoOntem) return { aberto: true }
+    return { aberto: false, motivo: 'Loja fechada no momento — fora do horário de funcionamento.' }
+  } catch(e) {
+    log('⚠️', 'isLojaAbertaServer erro:', e.message)
+    return { aberto: true } // falha na checagem não deve travar pedidos legítimos
+  }
+}
+
 function msUntilNextBrasiliaMidnight(now = new Date()) {
   const p = brasiliaParts(now)
   let targetUtc = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day) + 1, 3, 0, 5)
@@ -2415,6 +2491,21 @@ async function handleREST(req, res, table, params, body) {
       //          (b) downgrade de taxa fixa via cliente malicioso;
       //          (c) cobrança indevida em retirada/mesa.
       if (table === 'orders' && tenantId) {
+        // Loja fechada: recusa o pedido no servidor mesmo que o front (JS do
+        // cardápio) não tenha bloqueado — ver isLojaAbertaServer() acima.
+        // IMPORTANTE: só aplica pra pedidos que vêm do cardápio público
+        // (marcados com origem_pedido='cardapio_publico' pelo cardapio-checkout.js).
+        // PDV (gestor-caixa), garçom/salão e mesa NÃO mandam esse campo — o
+        // gestor tem que poder lançar pedido internamente mesmo com o
+        // cardápio online marcado como fechado. origem_pedido não é coluna
+        // real da tabela, então é descartado automaticamente antes do INSERT.
+        if (payload.origem_pedido === 'cardapio_publico') {
+          const _chk = isLojaAbertaServer(tenantId)
+          if (!_chk.aberto) {
+            return send(res, 503, { error: _chk.motivo || 'Loja fechada no momento.' })
+          }
+        }
+
         const addrRaw = String(payload.addr || '').trim()
         const isMesa     = (payload.mesa_num != null && payload.mesa_num !== '') || /^Mesa\b/i.test(addrRaw)
         const isRetirada = /^Retirada\b/i.test(addrRaw)
