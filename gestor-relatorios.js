@@ -3142,7 +3142,7 @@ function _buildTicketHtml(order, cfg) {
   const tipoHeader = CENTER(tipoTxt, 'font-weight:bold;font-size:0.95em;letter-spacing:0.5px;margin-bottom:2px');
 
   // ── Pagamento (sem banner colorido, estilo Anota AI) ───
-  const _pagMap  = { dinheiro:'Dinheiro', cartao:'Cartão', credito:'Crédito', debito:'Débito', pix:'PIX', pix_mp:'PIX Online', cartao_mp:'Crédito Online', mesa:'Conta da Mesa' };
+  const _pagMap  = { dinheiro:'Dinheiro', cartao:'Cartão', credito:'Crédito', debito:'Débito', pix:'PIX', pix_manual:'PIX', pix_mp:'PIX Online', cartao_mp:'Crédito Online', mesa:'Conta da Mesa' };
   const pagNome  = _pagMap[order.pag] || order.pag || '—';
   // Detecta se o pedido já foi pago. Cobre 3 cenários:
   //   1. pag='pix_mp' / 'cartao_mp'  → pagamento online MP confirmado pelo webhook (servidor já atualizou pag).
@@ -3935,7 +3935,7 @@ function _buildEscPos(order, cfg, cols = 32) {
   bytes(0x1B, 0x45, 0x00);
   const _escPagLabels = {
     dinheiro:'Dinheiro', cartao:'Cartao', credito:'Credito', debito:'Debito',
-    pix:'PIX', pix_mp:'PIX Online', cartao_mp:'Credito Online', mesa:'Conta Mesa'
+    pix:'PIX', pix_manual:'PIX', pix_mp:'PIX Online', cartao_mp:'Credito Online', mesa:'Conta Mesa'
   };
   const _escPagNome = _escPagLabels[order.pag] || order.pag || '---';
   // Mesma lógica de detecção do HTML — ver comentário lá pra explicação completa.

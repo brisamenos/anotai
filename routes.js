@@ -5259,6 +5259,14 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (body.cartao_online_ativo !== undefined)   ia.cartao_online_ativo  = body.cartao_online_ativo !== false
       db.prepare('INSERT INTO store_config (tenant_id,ia_config) VALUES (?,?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config').run(tid, JSON.stringify(ia))
       marcarDirty()
+      // Notifica o cardápio em tempo real (SSE) — sem isso, um cliente com a
+      // página já aberta ficava com o estado antigo de PIX em memória até
+      // recarregar, e o pedido dele ainda tentava gerar QR online da conta
+      // global mesmo depois do gestor salvar "Manual".
+      try {
+        const _rowPix = db.prepare('SELECT * FROM store_config WHERE tenant_id=?').get(tid)
+        if (typeof emit === 'function' && _rowPix) emit(tid, 'store_config', _rowPix, 'UPDATE')
+      } catch (e) { log('⚠️', 'emit store_config (pix) falhou:', e.message) }
       log('⚙️', `PIX/pagamentos config salva tenant=${tid} pix_ativo=${ia.pix_ativo} pag_online=${ia.pag_online_ativo}`)
       send(res, 200, { ok: true, pix_ativo: ia.pix_ativo, pix_key_manual: ia.pix_key_manual || '', pag_online_ativo: ia.pag_online_ativo !== false, cartao_online_ativo: ia.cartao_online_ativo !== false })
     } catch (e) { send(res, 500, { error: e.message }) }
