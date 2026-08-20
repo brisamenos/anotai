@@ -870,8 +870,14 @@ function setupPlanFeatures() {
 // ══════════════════════════════════════════
 // ── Aplica a config de PIX (chamada no load inicial e no resync em tempo real) ──
 function _aplicarPixCfg(pixCfgR) {
+  // Se já existe chave PIX manual salva e o gestor nunca ligou o online
+  // de propósito (pix_ativo_gestor !== true), respeita a chave manual —
+  // mesmo com MP configurado (conta global/tenant). Sem essa checagem,
+  // tenant que configurou a chave manual mas nunca clicou no toggle
+  // "Online"/"Manual" caía no fallback abaixo e gerava QR online mesmo assim.
+  const _temChaveManual = !!(pixCfgR.pix_key_manual && String(pixCfgR.pix_key_manual).trim());
   _pixAtivoGestor    = pixCfgR.pix_ativo_gestor === true
-                     || (pixCfgR.pix_ativo_definido !== true && pixCfgR.mp_configurado === true);
+                     || (pixCfgR.pix_ativo_definido !== true && pixCfgR.mp_configurado === true && !_temChaveManual);
   _pixKeyManual      = pixCfgR.pix_key_manual      || '';
   _pixKeyManualTipo  = pixCfgR.pix_key_manual_tipo  || 'aleatoria';
   _pixKeyManualBanco = pixCfgR.pix_key_manual_banco || '';
