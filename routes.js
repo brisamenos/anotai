@@ -4918,13 +4918,20 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const _cfgPixRow = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
       const _iaPixCfg  = _cfgPixRow?.ia_config ? JSON.parse(_cfgPixRow.ia_config) : {}
       const _pixModoDefinido = Object.prototype.hasOwnProperty.call(_iaPixCfg, 'pix_ativo')
+      // Além do toggle explícito, trata como manual quando o gestor já tem
+      // uma chave PIX manual salva e NUNCA ligou o online de propósito.
+      // Sem isso, um tenant que configurou a chave manual mas nunca clicou
+      // no toggle "Online"/"Manual" (pix_ativo fica undefined) caía no
+      // fallback de "MP configurado → online", ignorando a chave manual.
+      const _temChaveManual = !!(_iaPixCfg.pix_key_manual && String(_iaPixCfg.pix_key_manual).trim())
+      const _pixOnlineExplicito = _pixModoDefinido && _iaPixCfg.pix_ativo === true
       // Log incondicional (roda sempre, bloqueando ou não) — serve pra provar
       // em produção se este código está mesmo no ar e qual o valor real salvo
       // pra esse tenant, sem precisar adivinhar entre "não fez deploy" e
       // "pix_ativo não está false no banco".
-      log('🔎', `PIX guard tenant=${tid} pix_ativo=${_iaPixCfg.pix_ativo} definido=${_pixModoDefinido}`)
-      if (_pixModoDefinido && _iaPixCfg.pix_ativo === false) {
-        log('🚫', `PIX online bloqueado tenant=${tid}: modo manual ativo (pix_ativo=false)`)
+      log('🔎', `PIX guard tenant=${tid} pix_ativo=${_iaPixCfg.pix_ativo} definido=${_pixModoDefinido} chave_manual=${_temChaveManual}`)
+      if ((_pixModoDefinido && _iaPixCfg.pix_ativo === false) || (!_pixOnlineExplicito && _temChaveManual)) {
+        log('🚫', `PIX online bloqueado tenant=${tid}: modo manual ativo (pix_ativo=${_iaPixCfg.pix_ativo}, chave_manual=${_temChaveManual})`)
         send(res, 403, { error: 'PIX online está desativado para esta loja (modo manual ativo). Use a chave PIX manual.' })
         return true
       }
