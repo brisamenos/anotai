@@ -4918,6 +4918,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const _cfgPixRow = db.prepare('SELECT ia_config FROM store_config WHERE tenant_id=?').get(tid)
       const _iaPixCfg  = _cfgPixRow?.ia_config ? JSON.parse(_cfgPixRow.ia_config) : {}
       const _pixModoDefinido = Object.prototype.hasOwnProperty.call(_iaPixCfg, 'pix_ativo')
+      // Log incondicional (roda sempre, bloqueando ou não) — serve pra provar
+      // em produção se este código está mesmo no ar e qual o valor real salvo
+      // pra esse tenant, sem precisar adivinhar entre "não fez deploy" e
+      // "pix_ativo não está false no banco".
+      log('🔎', `PIX guard tenant=${tid} pix_ativo=${_iaPixCfg.pix_ativo} definido=${_pixModoDefinido}`)
       if (_pixModoDefinido && _iaPixCfg.pix_ativo === false) {
         log('🚫', `PIX online bloqueado tenant=${tid}: modo manual ativo (pix_ativo=false)`)
         send(res, 403, { error: 'PIX online está desativado para esta loja (modo manual ativo). Use a chave PIX manual.' })
@@ -5767,6 +5772,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
         delete ia.mp_public_key
         log('⚙️', `MP gestor LIMPO tenant=${tid}`)
       } else {
+        let _tokenNovoSalvoAgora = false
         // Validação básica do formato (token MP começa com APP_USR ou TEST)
         if (mp_token !== undefined) {
           // Sanitização agressiva: remove aspas, espaços, quebras de linha invisíveis,
@@ -5818,6 +5824,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
               log('⚠️', `MP gestor tenant=${tid} validação online falhou (rede?):`, testErr.message)
             }
             ia.mp_token = tk
+            _tokenNovoSalvoAgora = true
           }
         }
         if (mp_public_key !== undefined) {
@@ -5832,11 +5839,16 @@ module.exports = async function handleRoutes(req, res, ctx) {
             ia.mp_public_key = pk
           }
         }
-        // Auto-ativa PIX/cartão quando o gestor salva MP próprio.
-        // Faz sentido: ele só configurou MP próprio porque quer receber online.
-        // Antes ele tinha que ir em "Pagamentos Online" e ativar manualmente —
-        // resultado era PIX não aparecer no cardápio mesmo com MP configurado.
-        if (ia.mp_token) {
+        // Auto-ativa PIX/cartão SÓ quando um token NOVO é colado e salvo agora
+        // nesta chamada (_tokenNovoSalvoAgora) — faz sentido nesse caso, porque
+        // o gestor confirmou no modal que quer ativar recebimento online.
+        // ANTES isso checava `ia.mp_token` (valor já salvo de antes), então
+        // QUALQUER chamada futura a essa rota — mesmo só atualizando a public
+        // key, ou qualquer outro save incidental — reativava pix_ativo=true
+        // de novo, derrubando silenciosamente uma escolha de "Manual" feita
+        // depois. Isso é o bug do "funciona pra uns tenant e não pra outros":
+        // só afetava quem já tinha MP próprio configurado alguma vez.
+        if (_tokenNovoSalvoAgora) {
           ia.pix_ativo = true
           // Cartão só faz sentido se tem public key
           if (ia.mp_public_key) {
