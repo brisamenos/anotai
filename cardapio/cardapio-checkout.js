@@ -327,6 +327,10 @@ async function submitOrder() {
   if (!phone) { toast('⚠️','Informe seu WhatsApp');  return; }
   if (!cart.length) { toast('⚠️','Carrinho vazio');  return; }
   if (!_lojaAberta) { toast('🔴','Loja fechada');     return; }
+  // Sem isso, cancelar a modal de troco (dinheiro) ou a modal "pagar agora/
+  // na entrega" (crédito/débito) zera selectedPay, e o pedido seguia sem
+  // forma de pagamento nenhuma — imprimia "Forma de Pagamento: -" na comanda.
+  if (!selectedPay) { toast('⚠️','Escolha uma forma de pagamento'); return; }
 
   // Valida pedido mínimo para delivery
   if (deliveryType === 'delivery' && _pedidoMinimo > 0) {
@@ -568,7 +572,10 @@ async function _doSubmitOrder(addr, troco) {
             : selectedPay === 'cartao_mp' ? 'aguardando_cartao'
             : 'analise',
       time,
-      pag: selectedPay === 'pix' && !_pixAtivoGestor ? 'pix_manual' : selectedPay,
+      // Fallback de segurança: mesmo com as validações acima, nunca grava
+      // pag vazio — se por algum motivo selectedPay chegar aqui sem valor,
+      // assume dinheiro em vez de deixar a comanda sem forma de pagamento.
+      pag: selectedPay === 'pix' && !_pixAtivoGestor ? 'pix_manual' : (selectedPay || 'dinheiro'),
       pag_momento: (selectedPay === 'cartao_mp') ? 'online'
                  : (selectedPay === 'pix')       ? 'online'
                  : (selectedPay === 'credito' || selectedPay === 'debito') ? 'entrega'
@@ -999,6 +1006,7 @@ async function _iniciarSubmit() {
   if (!phone) { toast('⚠️','Informe seu WhatsApp');  return; }
   if (!cart.length) { toast('⚠️','Carrinho vazio');  return; }
   if (!_lojaAberta) { toast('🔴','Loja fechada');     return; }
+  if (!selectedPay) { toast('⚠️','Escolha uma forma de pagamento'); return; }
 
   if (deliveryType === 'delivery' && _pedidoMinimo > 0) {
     const sub = cart.reduce((s, i) => s + (i.price * (i.qty||1)), 0);

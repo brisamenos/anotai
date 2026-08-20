@@ -800,23 +800,7 @@ async function init() {
     // escolheu explicitamente "Manual". Se ele escolheu Manual de propósito
     // (pix_ativo === false, salvo por togglePixOnline), isso é respeitado
     // sempre, mesmo com uma conta MP global disponível na plataforma.
-    _pixAtivoGestor    = pixCfgR.pix_ativo_gestor === true
-                       || (pixCfgR.pix_ativo_definido !== true && pixCfgR.mp_configurado === true);
-    _pixKeyManual      = pixCfgR.pix_key_manual      || '';
-    _pixKeyManualTipo  = pixCfgR.pix_key_manual_tipo  || 'aleatoria';
-    _pixKeyManualBanco = pixCfgR.pix_key_manual_banco || '';
-
-    // Mostra PIX se: pix_ativo OU chave manual OU conta MP configurada (tenant/global).
-    // A última condição é defesa contra estado inconsistente: se MP está configurado
-    // tecnicamente o PIX online deveria funcionar, mesmo que o toggle pix_ativo
-    // esteja false por algum motivo.
-    const podeMostrarPix = pixCfgR.pix_ativo === true
-                        || !!_pixKeyManual
-                        || pixCfgR.mp_configurado === true;
-    if (!podeMostrarPix) {
-      const pixBtn = document.querySelector('[data-pay="pix"]');
-      if (pixBtn) pixBtn.style.display = 'none';
-    }
+    _aplicarPixCfg(pixCfgR);
 
     // Cartão online (cartao_mp) bloqueado no cardápio — fica só cartão na entrega.
     // (bloco de ativação do cartão online desabilitado propositalmente)
@@ -884,6 +868,42 @@ function setupPlanFeatures() {
 // ══════════════════════════════════════════
 //  REALTIME
 // ══════════════════════════════════════════
+// ── Aplica a config de PIX (chamada no load inicial e no resync em tempo real) ──
+function _aplicarPixCfg(pixCfgR) {
+  _pixAtivoGestor    = pixCfgR.pix_ativo_gestor === true
+                     || (pixCfgR.pix_ativo_definido !== true && pixCfgR.mp_configurado === true);
+  _pixKeyManual      = pixCfgR.pix_key_manual      || '';
+  _pixKeyManualTipo  = pixCfgR.pix_key_manual_tipo  || 'aleatoria';
+  _pixKeyManualBanco = pixCfgR.pix_key_manual_banco || '';
+
+  // Mostra PIX se: pix_ativo OU chave manual OU conta MP configurada (tenant/global).
+  // A última condição é defesa contra estado inconsistente: se MP está configurado
+  // tecnicamente o PIX online deveria funcionar, mesmo que o toggle pix_ativo
+  // esteja false por algum motivo.
+  const podeMostrarPix = pixCfgR.pix_ativo === true
+                      || !!_pixKeyManual
+                      || pixCfgR.mp_configurado === true;
+  const pixBtn = document.querySelector('[data-pay="pix"]');
+  if (pixBtn) pixBtn.style.display = podeMostrarPix ? '' : 'none';
+}
+
+// ── Rebusca /api/pix/config e reaplica ─────────────────────────────────
+// Sem isso, um cliente com o cardápio já aberto numa aba ficava com o
+// estado antigo de _pixAtivoGestor em memória: se o gestor mudasse pra
+// Manual DEPOIS que o cliente abriu a página, o pedido dele ainda tentava
+// gerar QR Code online da conta global, porque o front nunca recarregava
+// essa config sozinho. Chamada pelo listener de realtime do store_config.
+let _pixResyncEmAndamento = false;
+async function _resyncPixConfig() {
+  if (_pixResyncEmAndamento || !_tenantId) return;
+  _pixResyncEmAndamento = true;
+  try {
+    const r = await fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } });
+    if (r.ok) _aplicarPixCfg(await r.json());
+  } catch (e) { console.warn('[pix] resync falhou:', e.message); }
+  finally { _pixResyncEmAndamento = false; }
+}
+
 function subscribeRealtime() {
   sb.channel('menu-rt')
     .on('postgres_changes',{event:'*',table:'menu_items'},()=>reloadMenu())
@@ -901,6 +921,9 @@ function subscribeRealtime() {
       }
       // Branding completo — atualiza logo, banner, cor, nome, etc. em tempo real
       applyBrandingLive(cfg);
+      // PIX manual/online — reflete na hora qualquer mudança feita pelo gestor,
+      // mesmo que o cliente já esteja com o cardápio aberto.
+      _resyncPixConfig();
     })
     .subscribe();
 }
