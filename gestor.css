@@ -399,8 +399,13 @@ body{
 .oc-total{font-weight:700;font-size:12.5px;color:var(--accent);white-space:nowrap}
 .oc-time{font-size:10px;color:var(--muted);white-space:nowrap}
 .oc-addr{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
-.oc-actions{display:flex;gap:4px;margin-top:8px}
+.oc-actions{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
 .oc-btn{flex:1;border:none;border-radius:7px;padding:5px 6px;font-size:10.5px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .15s;white-space:nowrap}
+.oc-btn-icon{flex:0 0 auto;width:28px;height:28px;padding:0!important;display:inline-flex;align-items:center;justify-content:center}
+.oc-btn-wa{background:rgba(37,211,102,.12);color:#16a34a;border:1px solid rgba(37,211,102,.28)}
+.oc-btn-wa:hover{background:rgba(37,211,102,.22)}
+.oc-btn-chat{background:rgba(14,165,233,.12);color:#0ea5e9;border:1px solid rgba(14,165,233,.28)}
+.oc-btn-chat:hover{background:rgba(14,165,233,.22)}
 .oc-btn-ok{background:rgba(52,211,153,.12);color:#6ee7b7;border:1px solid rgba(52,211,153,.22)}.oc-btn-ok:hover{background:rgba(52,211,153,.22)}
 .oc-btn-no{background:rgba(251,113,133,.1);color:#fda4af;border:1px solid rgba(251,113,133,.18)}.oc-btn-no:hover{background:rgba(251,113,133,.2)}
 .oc-btn-fin{background:rgba(14,165,233,.12);color:#7dd3fc;border:1px solid rgba(14,165,233,.22)}.oc-btn-fin:hover{background:rgba(14,165,233,.22)}
