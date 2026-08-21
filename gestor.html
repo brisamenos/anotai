@@ -6225,6 +6225,8 @@ Use no seu próximo pedido.</textarea>
   border-right:1px solid #d1d7db;
   background:#ffffff;
 }
+/* Modo mini: abre direto na conversa de 1 contato, sem a lista geral */
+.wa-list-col.wa-mini-hide{display:none}
 .wa-list-head{
   display:flex;align-items:center;justify-content:space-between;
   padding:10px 16px;
@@ -6582,7 +6584,18 @@ Use no seu próximo pedido.</textarea>
 .od-timeline-status{font-size:12.5px;font-weight:800;color:var(--text);line-height:1.25}
 .od-timeline-note{font-size:11px;color:var(--muted);line-height:1.35;margin-top:2px;word-break:break-word}
 .od-timeline-time{font-size:11px;color:var(--muted);white-space:nowrap}
-@media(max-width:520px){.od-info-row{grid-template-columns:1fr 1fr}.od-header{gap:7px}}
+@media(max-width:520px){
+  .od-info-row{grid-template-columns:1fr 1fr}
+  .od-header{gap:7px}
+  /* Empurra o grupo de botões de ação pra linha de baixo, inteiro,
+     em vez de deixar só o último (avançar/confirmar) estourar a linha */
+  .od-actions{flex-basis:100%;justify-content:flex-end;margin-left:0;margin-top:6px}
+  .od-timer{margin-left:auto}
+}
+@media(max-width:360px){
+  .od-action-btn{width:30px;height:30px;border-radius:9px}
+  .od-actions{gap:5px}
+}
 </style>
 
 <script>

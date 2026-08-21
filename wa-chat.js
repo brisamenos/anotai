@@ -168,7 +168,50 @@ function waClosePanel() {
   const el = document.getElementById('wa-panel');
   if (el) el.style.display = 'none';
   WA.open = false;
+  WA.mini = false;
+  document.getElementById('wa-list-col')?.classList.remove('wa-mini-hide');
+  document.getElementById('wa-mini-back')?.remove();
   if (WA.pollTimer) { clearInterval(WA.pollTimer); WA.pollTimer = null; }
+}
+
+// ── Abre o painel em modo "mini": mostra direto a conversa de 1 contato,
+// SEM disparar waCheckConn()/waLoadChats() (busca de TODAS as conversas).
+// Usado pelo botão "WhatsApp" nos pedidos — abrir 1 conversa não deve
+// competir com a Evolution API por uma busca pesada da lista inteira.
+function waOpenPanelMini() {
+  const el = document.getElementById('wa-panel');
+  if (!el) return;
+  el.style.display = 'flex';
+  WA.open = true;
+  WA.mini = true;
+  if (typeof closeNotif === 'function') closeNotif();
+
+  // Esconde a coluna de lista — não carregamos ela nesse modo
+  document.getElementById('wa-list-col')?.classList.add('wa-mini-hide');
+
+  // Botão "ver todas as conversas" — só aí, sob demanda, carrega a lista geral
+  const header = document.querySelector('#wa-conv-active .wa-conv-header');
+  if (header && !document.getElementById('wa-mini-back')) {
+    const btn = document.createElement('button');
+    btn.id = 'wa-mini-back';
+    btn.className = 'wa-ibtn';
+    btn.title = 'Ver todas as conversas';
+    btn.style.order = '-1';
+    btn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    btn.onclick = () => {
+      WA.mini = false;
+      document.getElementById('wa-list-col')?.classList.remove('wa-mini-hide');
+      btn.remove();
+      if (WA.chats.length === 0) waCheckConn().then(() => waLoadChats());
+    };
+    header.prepend(btn);
+  }
+
+  if (!WA.pollTimer) {
+    WA.pollTimer = setInterval(() => {
+      if (WA.open && WA.activeJid) waLoadMessages(true);
+    }, 12000);
+  }
 }
 
 function waBackToList() {

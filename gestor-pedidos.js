@@ -622,12 +622,16 @@ async function abrirChatPedidoWA(id) {
     if (typeof sbToast === 'function') sbToast('err', 'Configure a instancia da Evolution API no Robo WA.');
     return;
   }
-  if (typeof waOpenPanel !== 'function' || typeof waOpenConv !== 'function') {
+  if (typeof waOpenConv !== 'function') {
     if (typeof sbToast === 'function') sbToast('err', 'Chat WhatsApp ainda nao carregou.');
     return;
   }
 
-  waOpenPanel();
+  // Modo mini: abre direto a conversa desse cliente, sem carregar a lista
+  // inteira de conversas (waLoadChats) — evita concorrer com a Evolution
+  // API e travar a tela por causa disso.
+  if (typeof waOpenPanelMini === 'function') waOpenPanelMini();
+  else if (typeof waOpenPanel === 'function') waOpenPanel();
   await new Promise(resolve => setTimeout(resolve, 120));
 
   // Tenta achar o chat já carregado em memória (rápido, sem rede).
@@ -653,27 +657,12 @@ async function abrirChatPedidoWA(id) {
     }
   }, 120);
 
-  // Sincroniza a lista completa de chats em SEGUNDO PLANO (não bloqueia a abertura).
-  // Serve pra popular a coluna da esquerda do painel e, se achar um nome/foto melhor
-  // pra esse contato, atualiza a conversa que já está aberta sem precisar recarregar.
-  if (!chat && typeof waLoadChats === 'function') {
-    waLoadChats().then(() => {
-      if (WA?.activeJid !== jid) return; // usuário já trocou de conversa, ignora
-      const found = _pedidoWaFindChatByPhone(number);
-      if (found && (found._name || found._pic)) {
-        const nameEl = document.getElementById('wa-conv-name');
-        if (nameEl && found._name) nameEl.textContent = found._name;
-        const avatarEl = document.getElementById('wa-conv-avatar');
-        if (avatarEl && found._pic) {
-          const proxied = `/api/wa/avatar?url=${encodeURIComponent(found._pic)}`;
-          avatarEl.style.backgroundImage = `url('${proxied}')`;
-          avatarEl.style.backgroundSize  = 'cover';
-          avatarEl.style.backgroundPosition = 'center';
-          avatarEl.textContent = '';
-        }
-      }
-    }).catch(() => {});
-  }
+  // OBS: antes, aqui rodava um waLoadChats() "em segundo plano" pra só polir
+  // nome/foto do contato — mas isso disparava a mesma busca PESADA (lista
+  // inteira de conversas) em paralelo com o findMessages desse chat, brigando
+  // pelos mesmos recursos da Evolution API. Removido de propósito: no modo
+  // mini a lista completa só é buscada se o usuário clicar em "ver todas as
+  // conversas" (botão adicionado pelo waOpenPanelMini).
 }
 
 
