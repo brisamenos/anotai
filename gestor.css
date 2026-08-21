@@ -399,8 +399,10 @@ body{
 .oc-total{font-weight:700;font-size:12.5px;color:var(--accent);white-space:nowrap}
 .oc-time{font-size:10px;color:var(--muted);white-space:nowrap}
 .oc-addr{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
-.oc-actions{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
-.oc-btn{flex:1;border:none;border-radius:7px;padding:5px 6px;font-size:10.5px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .15s;white-space:nowrap}
+.oc-actions{display:flex;flex-direction:column;gap:5px;margin-top:8px}
+.oc-actions-icons{display:flex;gap:4px}
+.oc-actions-main{display:flex;flex-wrap:wrap;gap:4px;min-width:0}
+.oc-btn{flex:1;min-width:0;border:none;border-radius:7px;padding:5px 6px;font-size:10.5px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .oc-btn-icon{flex:0 0 auto;width:28px;height:28px;padding:0!important;display:inline-flex;align-items:center;justify-content:center}
 .oc-btn-wa{background:rgba(37,211,102,.12);color:#16a34a;border:1px solid rgba(37,211,102,.28)}
 .oc-btn-wa:hover{background:rgba(37,211,102,.22)}
@@ -1936,6 +1938,15 @@ body{
   transform:translateY(-1px);
 }
 
+/* Identidade visual por tipo de pedido — borda + leve gradiente,
+   reaproveitando as mesmas cores dos badges (Delivery/Retirada/Mesa) */
+.order-card.card-delivery{border-left:3px solid #1397e8;background:linear-gradient(180deg,rgba(19,151,232,.05),#fff 46%)}
+.order-card.card-retirada{border-left:3px solid #d98a1f;background:linear-gradient(180deg,rgba(217,138,31,.06),#fff 46%)}
+.order-card.card-mesa{border-left:3px solid #1f9d55;background:linear-gradient(180deg,rgba(31,157,85,.06),#fff 46%)}
+.order-card.card-delivery:hover{background:linear-gradient(180deg,rgba(19,151,232,.09),#fff 46%)}
+.order-card.card-retirada:hover{background:linear-gradient(180deg,rgba(217,138,31,.1),#fff 46%)}
+.order-card.card-mesa:hover{background:linear-gradient(180deg,rgba(31,157,85,.1),#fff 46%)}
+
 .oc-id{
   color:var(--text);
 }
@@ -2518,6 +2529,10 @@ tbody tr:hover{
   border-color:var(--accent)!important;
   box-shadow:0 6px 20px var(--accent-glow)!important;
 }
+
+:root[data-gestor-theme-type="dark"] .order-card.card-delivery{border-left:3px solid #38bdf8!important;background:linear-gradient(180deg,rgba(56,189,248,.1),var(--surface) 46%)!important}
+:root[data-gestor-theme-type="dark"] .order-card.card-retirada{border-left:3px solid #fbbf24!important;background:linear-gradient(180deg,rgba(251,191,36,.1),var(--surface) 46%)!important}
+:root[data-gestor-theme-type="dark"] .order-card.card-mesa{border-left:3px solid #34d399!important;background:linear-gradient(180deg,rgba(52,211,153,.1),var(--surface) 46%)!important}
 
 :root[data-gestor-theme-type="dark"] .oc-id,
 :root[data-gestor-theme-type="dark"] .oc-client,

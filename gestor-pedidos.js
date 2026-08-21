@@ -344,13 +344,15 @@ function renderKanban() {
           ? '<div class="oc-wa-notif" onclick="event.stopPropagation();abrirRespostaWA(' + o.id + ')" title="Cliente respondeu no WhatsApp">💬 Cliente respondeu!</div>'
           : '';
 
+        const _tipoClass = isMesa ? ' card-mesa' : isRetirada ? ' card-retirada' : ' card-delivery';
+
         const _cardStyle = o._pixPendente
           ? ' style="border-left:3px solid rgba(249,115,22,.7);background:rgba(249,115,22,.04)"'
           : o._waResposta
             ? ' style="border-left:3px solid rgba(34,197,94,.7);background:rgba(34,197,94,.03)"'
             : '';
 
-        return '<div class="order-card"' + _cardStyle + ' onclick="openOrderDetail(' + o.id + ')">' +
+        return '<div class="order-card' + _tipoClass + '"' + _cardStyle + ' onclick="openOrderDetail(' + o.id + ')">' +
           '<div class="oc-top"><span class="oc-id">#' + o.num + '</span>' + _tipoBadge + '<span class="oc-time">⏱ ' + o.time + '</span>' + _acougueBtn + '</div>' +
           _waNotif +
           '<div class="oc-client">' + o.client + (o.phone ? ' · ' + o.phone : '') + '</div>' +
@@ -360,7 +362,10 @@ function renderKanban() {
           (o.addr && !isMesa ? '<span class="oc-addr">' + o.addr + '</span>' : '') +
           '</div>' +
           _pagBadge +
-          '<div class="oc-actions">' + _chatBtn + _waBtn + actionBtn + '</div>' +
+          '<div class="oc-actions">' +
+            ((_chatBtn || _waBtn) ? '<div class="oc-actions-icons">' + _chatBtn + _waBtn + '</div>' : '') +
+            '<div class="oc-actions-main">' + actionBtn + '</div>' +
+          '</div>' +
           '</div>';
       }).join('');
     }
