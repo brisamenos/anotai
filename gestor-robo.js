@@ -128,6 +128,23 @@ async function evoCarregarInstancia() {
   } catch(e) {}
 }
 
+// Salva o nome da instância no banco e CONFIRMA a gravação lendo de volta,
+// em vez de simplesmente assumir que o upsert funcionou (silenciosamente
+// falhava antes, deixando o webhook configurado pro nome errado/antigo).
+async function _salvarEvoInstanceConfirmado(instName) {
+  const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: instName });
+  if (error) {
+    sbToast('err', `Falha ao salvar a instância "${instName}" no banco: ${error.message || 'erro desconhecido'}. O robô pode não responder.`);
+    return false;
+  }
+  const { data: confirmacao } = await sb.from('store_config').select('evo_instance').single();
+  if (confirmacao?.evo_instance !== instName) {
+    sbToast('err', `A instância salva ("${confirmacao?.evo_instance || 'nenhuma'}") não bate com "${instName}". Tente criar de novo.`);
+    return false;
+  }
+  return true;
+}
+
 async function evoCriarInstancia() {
   const instName = EVO.instance;
   if (!instName) { sbToast('err', 'Informe o nome da instância antes de criar.'); return; }
@@ -151,7 +168,8 @@ async function evoCriarInstancia() {
     if (isDuplicate || r.status === 500) {
       sbToast('ok', `Instância "${instName}" já existe. Usando existente...`);
       sbLoading(false);
-      await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: instName });
+      const salvou = await _salvarEvoInstanceConfirmado(instName);
+      if (!salvou) return;
       const whOk = await iaRegistrarWebhook();
       if (whOk) sbToast('ok', 'Webhook configurado com sucesso.');
       evoConectar();
@@ -164,7 +182,8 @@ async function evoCriarInstancia() {
   }
 
   sbLoading(false);
-  await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: instName });
+  const salvou = await _salvarEvoInstanceConfirmado(instName);
+  if (!salvou) return;
   const whOk = await iaRegistrarWebhook();
   sbToast('ok', `Instância "${instName}" criada!${whOk ? '' : ' (verifique o webhook manualmente)'}`);
 
