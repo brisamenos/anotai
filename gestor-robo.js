@@ -131,8 +131,11 @@ async function evoCarregarInstancia() {
 // Salva o nome da instância no banco e CONFIRMA a gravação lendo de volta,
 // em vez de simplesmente assumir que o upsert funcionou (silenciosamente
 // falhava antes, deixando o webhook configurado pro nome errado/antigo).
+// IMPORTANTE: não manda tenant_id no corpo — só o header conta (evita
+// "tenant_id do body não bate com o header" quando há várias abas abertas
+// logadas em restaurantes diferentes e a sessão em memória fica desatualizada).
 async function _salvarEvoInstanceConfirmado(instName) {
-  const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: instName });
+  const { error } = await sb.from('store_config').upsert({ evo_instance: instName });
   if (error) {
     sbToast('err', `Falha ao salvar a instância "${instName}" no banco: ${error.message || 'erro desconhecido'}. O robô pode não responder.`);
     return false;
