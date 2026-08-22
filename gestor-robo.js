@@ -152,7 +152,8 @@ async function evoCriarInstancia() {
       sbToast('ok', `Instância "${instName}" já existe. Usando existente...`);
       sbLoading(false);
       await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: instName });
-      iaRegistrarWebhook();
+      const whOk = await iaRegistrarWebhook();
+      if (whOk) sbToast('ok', 'Webhook configurado com sucesso.');
       evoConectar();
       return;
     }
@@ -164,8 +165,8 @@ async function evoCriarInstancia() {
 
   sbLoading(false);
   await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, evo_instance: instName });
-  iaRegistrarWebhook();
-  sbToast('ok', `Instância "${instName}" criada!`);
+  const whOk = await iaRegistrarWebhook();
+  sbToast('ok', `Instância "${instName}" criada!${whOk ? '' : ' (verifique o webhook manualmente)'}`);
 
   // v2: QR pode vir direto na resposta de criação
   const qrBase64 = r.data?.qrcode?.base64 || r.data?.base64;
@@ -1782,11 +1783,12 @@ function temaApply(vars, save) { _aplicarVars(vars); }
 })();
 
 // ── Registra webhook na Evolution API automaticamente ──
+// Retorna true/false pra quem chamar poder avisar o usuário se falhou.
 async function iaRegistrarWebhook(webhookUrl) {
   try {
     const { data: cfg } = await sb.from('store_config').select('evo_instance').single();
     const inst = cfg?.evo_instance;
-    if (!inst) return; // instância ainda não criada, nada a fazer
+    if (!inst) return false; // instância ainda não criada, nada a fazer
     if (!webhookUrl) {
       const _slugRes4 = await fetch('/api/tenant-slug', { headers: { 'Content-Type': 'application/json', 'x-tenant-id': _sessao?.tenant_id || '' } }).catch(()=>null);
       const slug = (_slugRes4?.ok ? (await _slugRes4.json().catch(()=>({}))).slug : '') || _sessao?.tenant_id || '';
@@ -1803,9 +1805,17 @@ async function iaRegistrarWebhook(webhookUrl) {
     let r = await EVO.req('POST', `/webhook/set/${inst}`, payload);
     // Fallback: caso a instância rode uma versão mais antiga que exija o formato envelopado
     if (!r.ok) {
-      await EVO.req('POST', `/webhook/set/${inst}`, { webhook: payload });
+      r = await EVO.req('POST', `/webhook/set/${inst}`, { webhook: payload });
     }
+    if (!r.ok) {
+      console.error('iaRegistrarWebhook: FALHOU nas duas tentativas para instância', inst, r);
+      sbToast('err', `Não foi possível configurar o webhook da instância "${inst}". O WhatsApp pode não responder mensagens. Tente novamente em "Verificar webhook".`);
+      return false;
+    }
+    return true;
   } catch(e) {
     console.warn('iaRegistrarWebhook:', e);
+    sbToast('err', 'Erro ao configurar webhook: ' + e.message);
+    return false;
   }
 }

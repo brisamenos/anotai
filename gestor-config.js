@@ -628,8 +628,41 @@ function _renderPixHistorico(pagamentos) {
         <div style="font-weight:600;font-size:13px">${_fmtR(p.valor)} <span style="font-weight:400;color:var(--muted);font-size:12px">→ líquido ${_fmtR(p.valor_liquido)}</span></div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${p.payer_name||'—'} · Pedido #${_orderNum(p.order_id||0)} · ${new Date(p.created_at).toLocaleDateString('pt-BR')}</div>
       </div>
-      <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;${badge[p.status]||badge.pendente}">${p.status}</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;${badge[p.status]||badge.pendente}" id="pix-status-${p.mp_payment_id}">${p.status}</span>
+        ${p.status==='pendente' ? `<button onclick="_verificarPixAgora('${p.mp_payment_id}', this)" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);cursor:pointer;white-space:nowrap">🔄 Verificar agora</button>` : ''}
+      </div>
     </div>`).join('');
+}
+
+// Reconsulta um pagamento PIX específico direto no Mercado Pago, sem esperar
+// o webhook ou o job de 60s. Útil quando o cliente já pagou mas o pedido
+// ficou preso em "aguardando pagamento" (webhook não chegou por algum motivo).
+async function _verificarPixAgora(mpPaymentId, btnEl) {
+  const tid = _sessao?.tenant_id;
+  if (!tid || !mpPaymentId) return;
+  const textoOriginal = btnEl.textContent;
+  btnEl.disabled = true;
+  btnEl.textContent = 'Verificando...';
+  try {
+    const r = await fetch('/api/pix/status?mp_payment_id=' + encodeURIComponent(mpPaymentId), {
+      headers: { 'x-tenant-id': tid }
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Erro ao verificar');
+    if (d.status === 'aprovado') {
+      sbToast('ok', 'Pagamento confirmado! O pedido já entrou no Kanban.');
+    } else if (d.status === 'pendente') {
+      sbToast('err', 'Ainda pendente no Mercado Pago (status real: ' + (d.mp_status||'pendente') + '). Confira no seu extrato MP.');
+    } else {
+      sbToast('err', 'Status no Mercado Pago: ' + (d.mp_status||d.status));
+    }
+    await carregarCarteira();
+  } catch (e) {
+    sbToast('err', 'Erro: ' + e.message);
+    btnEl.disabled = false;
+    btnEl.textContent = textoOriginal;
+  }
 }
 
 function _renderCartaoHistorico(pagamentos) {
