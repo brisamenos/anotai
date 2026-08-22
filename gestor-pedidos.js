@@ -1762,12 +1762,9 @@ function noAddItem(itemId) {
 
   const isKg = item.itemType === 'kg' || item.item_type === 'kg';
 
-  if (grupos.length > 0 || isKg) {
-    noAbrirModalAdicionais(item, grupos, isKg);
-    return;
-  }
-  // Sem adicionais — adiciona direto
-  noAddToCartDireto(item, item.name, parseFloat(item.price || 0), _pedidoObsComKit(item, ''), []);
+  // Sempre abre o modal — mesmo sem adicionais/grupos — pra permitir digitar uma
+  // observação no item (igual ao cardápio do cliente), antes de lançar no pedido.
+  noAbrirModalAdicionais(item, grupos, isKg);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -2390,13 +2387,12 @@ function noRenderCart() {
 
   const frag = document.createDocumentFragment();
   _noCart.forEach((c, idx) => {
-    // Só oferece editar (✏️) quando dá pra reabrir o modal de adicionais desse
-    // produto de forma confiável: precisa existir no cardápio e ter adicionais
-    // ou ser item por kg. Pizza fica de fora (meio a meio tem modal próprio).
+    // Oferece editar (✏️) sempre que dá pra reabrir o modal desse produto de forma
+    // confiável: precisa existir no cardápio. Pizza fica de fora (meio a meio tem
+    // modal próprio). Agora todo item abre modal (com observação), mesmo sem
+    // grupos de adicionais — então não restringe mais a grupos/kg.
     const catalogItem = (c.id != null) ? items.find(i => i.id === c.id) : null;
-    const _grupos = catalogItem ? _pedidoGruposSelecionaveis(catalogItem) : [];
-    const _isKgItem = catalogItem && (catalogItem.itemType === 'kg' || catalogItem.item_type === 'kg');
-    const canEdit = !!catalogItem && !_noEhPizza(catalogItem) && (_grupos.length > 0 || _isKgItem);
+    const canEdit = !!catalogItem && !_noEhPizza(catalogItem);
 
     const div = document.createElement('div');
     div.className = 'no-cart-row';

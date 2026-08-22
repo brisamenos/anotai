@@ -722,6 +722,7 @@ function addGrupo(ctx) {
   div.className = 'grp-wrap';
   div.innerHTML = _grupoHtml({nome:'', tipo:'radio', min:0, max:1, required:false, opcoes:[]});
   list.appendChild(div);
+  _refreshGrupoMoveBtns(list);
 }
 
 function _grupoHtml(g) {
@@ -730,6 +731,10 @@ function _grupoHtml(g) {
   var optsHtml = (g.opcoes||[]).map(_optHtml).join('');
   var html = '<div class="grp-header">';
   html += '<input class="grp-title-input" placeholder="Nome do grupo" value="' + (g.nome||'').replace(/"/g,'&quot;') + '">';
+  html += '<div class="grp-move-btns">';
+  html += '<button type="button" class="grp-move grp-move-up" title="Mover grupo para cima" onclick="moveGrupo(this,-1)">▲</button>';
+  html += '<button type="button" class="grp-move grp-move-down" title="Mover grupo para baixo" onclick="moveGrupo(this,1)">▼</button>';
+  html += '</div>';
   html += '<button type="button" class="grp-del" onclick="delGrupo(this)">×</button>';
   html += '</div>';
   html += '<div class="grp-type-row">';
@@ -951,8 +956,40 @@ async function _togglePauseRow(btn) {
   }
 }
 
-function delGrupo(btn)    { btn.closest('.grp-wrap').remove(); }
+function delGrupo(btn)    {
+  var list = btn.closest('.grp-wrap') && btn.closest('.grp-wrap').parentElement;
+  btn.closest('.grp-wrap').remove();
+  if (list) _refreshGrupoMoveBtns(list);
+}
 function delGrupoOpt(btn) { btn.closest('.grp-opt-row').remove(); }
+
+// ── Move um grupo (bloco de adicionais) uma posição pra cima (-1) ou pra baixo (+1) ──
+function moveGrupo(btn, dir) {
+  var wrap = btn.closest('.grp-wrap');
+  if (!wrap) return;
+  var list = wrap.parentElement;
+  if (!list) return;
+  if (dir < 0) {
+    var prev = wrap.previousElementSibling;
+    if (prev) list.insertBefore(wrap, prev);
+  } else {
+    var next = wrap.nextElementSibling;
+    if (next) list.insertBefore(next, wrap);
+  }
+  _refreshGrupoMoveBtns(list);
+}
+
+// ── Desabilita a seta ▲ do primeiro grupo e a ▼ do último ──
+function _refreshGrupoMoveBtns(list) {
+  if (!list) return;
+  var wraps = Array.from(list.querySelectorAll('.grp-wrap'));
+  wraps.forEach(function(w, i) {
+    var up   = w.querySelector('.grp-move-up');
+    var down = w.querySelector('.grp-move-down');
+    if (up)   up.disabled   = (i === 0);
+    if (down) down.disabled = (i === wraps.length - 1);
+  });
+}
 
 function setGrupoTipo(btn, tipo) {
   var wrap = btn.closest('.grp-wrap');
@@ -979,6 +1016,7 @@ function renderGrupos(ctx, grupos) {
     div.innerHTML = _grupoHtml(g);
     list.appendChild(div);
   });
+  _refreshGrupoMoveBtns(list);
 }
 
 function readGrupos(ctx) {

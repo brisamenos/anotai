@@ -6057,9 +6057,13 @@ Use no seu próximo pedido.</textarea>
 <style>
 /* ── Grupos de customização ── */
 .grp-wrap{background:rgba(59,130,246,.05);border:1px solid rgba(59,130,246,.2);border-radius:12px;padding:14px;margin-bottom:8px}
-.grp-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.grp-header{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:10px}
 .grp-title-input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;font-weight:700;outline:none}
 .grp-title-input:focus{border-color:var(--accent)}
+.grp-move-btns{display:flex;flex-direction:column;gap:2px;flex-shrink:0}
+.grp-move{background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:9px;cursor:pointer;padding:1px 6px;line-height:1.6;border-radius:4px}
+.grp-move:hover:not(:disabled){color:var(--accent);border-color:var(--accent)}
+.grp-move:disabled{opacity:.3;cursor:default}
 .grp-del{background:none;border:none;color:#ef4444;font-size:19px;cursor:pointer;padding:0 4px;line-height:1;flex-shrink:0}
 .grp-opts-list{display:flex;flex-direction:column;gap:5px;margin-bottom:8px}
 .grp-opt-row{display:flex;flex-direction:column;gap:0}
