@@ -3163,7 +3163,7 @@ async function salvarCliente() {
     }
   } else {
     try {
-      const res = await fetch('/api/criar-tenant', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ nome, slug, email, senha, nomeGestor: gestorNome, plano, role:'gestor', segmento, expires_at: expira, valor_mensalidade: valorPersonalizado, valor_mensalidade_expira_em: valorExpira }) });
+      const res = await fetch('/api/criar-tenant', { method:'POST', headers: adminAuthHeader(), body: JSON.stringify({ nome, slug, email, senha, nomeGestor: gestorNome, plano, role:'gestor', segmento, expires_at: expira, valor_mensalidade: valorPersonalizado, valor_mensalidade_expira_em: valorExpira }) });
       const data = await res.json();
       if (!res.ok) { error = { message: data.error || 'Erro ao criar restaurante' }; }
       else { await loadAll(); }

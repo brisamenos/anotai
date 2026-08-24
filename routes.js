@@ -3967,8 +3967,18 @@ module.exports = async function handleRoutes(req, res, ctx) {
 
   // ── Criar tenant ─────────────────────────────────────
   if (req.method === 'POST' && upath === '/api/criar-tenant') {
+    // CRÍTICO: essa rota cria um restaurante novo (tenant) + a primeira conta
+    // de gestor dele — só o superadmin deve poder fazer isso (é assim que o
+    // admin.html sempre usou). Faltava essa checagem: sem ela, qualquer
+    // pessoa sem login nenhum conseguia chamar essa rota direto e, pior,
+    // definir role:'superadmin' no corpo da requisição pra criar uma conta
+    // de administrador da PLATAFORMA INTEIRA pra si mesma.
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado. Faça login no painel admin.' }); return true }
     const body = await readBody(req)
-    const { nome, plano, slug, email, senha, role, nomeGestor, segmento } = body
+    const { nome, plano, slug, email, senha, nomeGestor, segmento } = body
+    // Nunca confia no "role" vindo do cliente — a única conta criada aqui é
+    // sempre um gestor comum do novo tenant, mesmo com sessão de admin válida.
+    const role = 'gestor'
     const expiresAtRaw = String(body.expires_at || '').trim()
     const expiresAt = /^\d{4}-\d{2}-\d{2}$/.test(expiresAtRaw) ? expiresAtRaw : null
     const valorMensalidade = (body.valor_mensalidade !== undefined && body.valor_mensalidade !== null && body.valor_mensalidade !== '')
