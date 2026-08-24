@@ -1753,6 +1753,19 @@ async function buscarRestaurante(slugOverride) {
   }
 }
 
+// Grava o token de sessão do garçom junto do tenant_id — o api-client.js
+// (AppAPI) usa esse token no header Authorization em toda chamada, provando
+// pro servidor que quem está mandando a requisição realmente fez login como
+// garçom deste restaurante (antes só o tenant_id, público, era enviado).
+function _salvarSessaoGarcom(token) {
+  try {
+    const cur = JSON.parse(sessionStorage.getItem('sys_session') || '{}');
+    sessionStorage.setItem('sys_session', JSON.stringify({ ...cur, tenant_id: _garcomTenantId, token, ts: Date.now() }));
+  } catch (e) {
+    sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _garcomTenantId, token, ts: Date.now() }));
+  }
+}
+
 function _aplicarTenant(info, slug) {
   _garcomTenantId = info.id;
   _garcomSlug = info.slug || slug;
@@ -1761,6 +1774,7 @@ function _aplicarTenant(info, slug) {
   // Salva no localStorage para não precisar digitar de novo
   localStorage.setItem('garcom_tenant_slug', _garcomSlug);
   sessionStorage.setItem('sys_session', JSON.stringify({ tenant_id: _garcomTenantId, ts: Date.now() }));
+
 
   // Atualiza UI
   const nomeEl = document.getElementById('login-store-name');
@@ -1861,6 +1875,7 @@ function trocarRestaurante() {
     const data = await res.json().catch(() => null);
     if (res.ok && data?.id) {
       currentGarcom = { id: data.id, nome: data.nome, usuario: data.usuario };
+      _salvarSessaoGarcom(data.token);
       document.getElementById('topbar-garcom-name').textContent = '👤 ' + data.nome;
       document.getElementById('screen-login').style.display = 'none';
       document.getElementById('screen-app').classList.add('show');
@@ -1999,6 +2014,7 @@ async function doLogin() {
       err.style.display = 'block';
     } else {
       currentGarcom = { id: data.id, nome: data.nome, usuario: data.usuario };
+      _salvarSessaoGarcom(data.token);
       localStorage.setItem('garcom_session', JSON.stringify({
         usuario: user.toLowerCase(), senha: btoa(pass),
         tenant_id: _garcomTenantId, ts: Date.now()
