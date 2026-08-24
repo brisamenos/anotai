@@ -255,11 +255,20 @@ function showToast(icon,msg){
 // TAXA DE ENTREGA
 // ─────────────────────────────────────────
 let _taxaConfig = { tipo: 'fixo', valor: 5, faixas: [] };
+// Só true depois que a config REAL do servidor carregou com sucesso.
+// Enquanto for false, saveTaxaConfig() bloqueia o salvamento — isso evita
+// que uma falha silenciosa de rede ao abrir a aba sobrescreva a configuração
+// real (ex: "por_km") pelo fallback hardcoded acima (fixo, R$5).
+let _taxaConfigLoaded = false;
 
 async function renderTaxaPage() {
+  _taxaConfigLoaded = false;
+  const errBox = document.getElementById('taxa-load-error');
+  if (errBox) errBox.style.display = 'none';
   try {
     const { data } = await sb.from('store_config').select('delivery_fee_config,store_lat,store_lng').single();
-    if (data?.delivery_fee_config) _taxaConfig = data.delivery_fee_config;
+    _taxaConfig = (data && data.delivery_fee_config) ? data.delivery_fee_config : { tipo: 'fixo', valor: 5, faixas: [] };
+    _taxaConfigLoaded = true;
     // Atualiza aviso de localização
     const locStatus = document.getElementById('taxa-loc-status');
     if (locStatus) {
@@ -269,7 +278,19 @@ async function renderTaxaPage() {
         : '⚠️ Localização ainda não configurada — os clientes verão as faixas mas sem cálculo automático.';
       locStatus.style.color = hasLoc ? '#16a34a' : '#b45309';
     }
-  } catch(e) {}
+  } catch(e) {
+    // CRÍTICO: não deixa _taxaConfigLoaded como true aqui. Se a config real
+    // não carregou, a tela vai mostrar o fallback "fixo, R$5", mas o botão
+    // salvar fica bloqueado (ver saveTaxaConfig) pra não gravar esse
+    // fallback por cima da configuração real (ex: por_km) que só não
+    // carregou por causa dessa falha de rede/servidor.
+    if (errBox) {
+      errBox.style.display = 'block';
+      errBox.textContent = '⚠️ Não foi possível carregar a taxa de entrega atual do servidor. Os valores abaixo NÃO refletem sua configuração real — recarregue a página antes de salvar, ou o salvamento vai sobrescrever sua config por este padrão (fixo R$5).';
+    } else {
+      alert('Não foi possível carregar a taxa de entrega atual do servidor. Recarregue a página antes de salvar — para sua segurança, o salvamento foi bloqueado nesta tela até o recarregamento funcionar.');
+    }
+  }
 
   const tipo = _taxaConfig.tipo || 'fixo';
   document.getElementById('taxa-tipo-fixo').checked   = tipo === 'fixo';
@@ -350,6 +371,74 @@ function _addBairroRow(bairro, taxa) {
 
 function addTaxaBairroRow() { _addBairroRow('', ''); }
 
+// ── Exportar / Importar lista de bairros ──
+// Serve pra reaproveitar a mesma lista de bairros de uma cidade em outra
+// loja: exporta só os NOMES (zera a taxa de propósito, já que a taxa é
+// específica de cada loja) e permite importar essa lista pronta noutra
+// loja, restando só preencher os valores.
+function exportTaxaBairros() {
+  const bairros = getTaxaBairrosFromDOM();
+  if (!bairros.length) { sbToast('err', 'Adicione ao menos um bairro antes de exportar'); return; }
+  const payload = {
+    tipo: 'anotai_bairros_entrega',
+    versao: 1,
+    exportado_em: new Date().toISOString(),
+    bairros: bairros.map(b => ({ bairro: b.bairro, taxa: 0 }))
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const nomeArq = (window._sessao?.store_name || 'loja').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'loja';
+  a.href = url;
+  a.download = `bairros-${nomeArq}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  sbToast('ok', `${bairros.length} bairro(s) exportado(s)`);
+}
+
+function importTaxaBairros(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let parsed;
+    try {
+      parsed = JSON.parse(reader.result);
+    } catch (e) {
+      sbToast('err', 'Arquivo inválido — não é um .json de bairros');
+      return;
+    }
+    const lista = Array.isArray(parsed) ? parsed : parsed?.bairros;
+    if (!Array.isArray(lista) || !lista.length) {
+      sbToast('err', 'Arquivo não contém uma lista de bairros');
+      return;
+    }
+    const bairrosValidos = lista
+      .map(b => ({ bairro: (b?.bairro || '').trim(), taxa: parseFloat(b?.taxa) || 0 }))
+      .filter(b => b.bairro);
+    if (!bairrosValidos.length) {
+      sbToast('err', 'Nenhum bairro válido encontrado no arquivo');
+      return;
+    }
+    const jaTemBairros = getTaxaBairrosFromDOM().length > 0;
+    if (jaTemBairros) {
+      const substituir = confirm(
+        `Importar ${bairrosValidos.length} bairro(s)?\n\nOK = substitui a lista atual\nCancelar = adiciona no final da lista atual`
+      );
+      if (substituir) {
+        document.getElementById('taxa-bairros-list').innerHTML = '';
+      }
+    }
+    bairrosValidos.forEach(b => _addBairroRow(b.bairro, b.taxa || ''));
+    sbToast('ok', `${bairrosValidos.length} bairro(s) importado(s) — agora é só preencher as taxas`);
+  };
+  reader.onerror = () => sbToast('err', 'Erro ao ler o arquivo');
+  reader.readAsText(file);
+}
+
 function _addBairroBloqueadoRow(bairro) {
   const list = document.getElementById('taxa-bairros-bloqueados-list');
   if (!list) return;
@@ -424,6 +513,15 @@ function updateTaxaPreview() {
 }
 
 async function saveTaxaConfig() {
+  // Trava de segurança: se a config real nunca chegou a carregar do
+  // servidor nesta visita à aba, os campos na tela vêm do fallback
+  // hardcoded (fixo, R$5) e NÃO da configuração real do tenant. Salvar
+  // aqui sobrescreveria silenciosamente um "por_km"/"por_bairro" já
+  // configurado. Bloqueia e manda recarregar em vez de arriscar isso.
+  if (!_taxaConfigLoaded) {
+    sbToast('err', 'Não deu para confirmar a config atual — recarregue a página e tente salvar de novo');
+    return;
+  }
   const tipo = document.querySelector('input[name="taxa-tipo"]:checked').value;
   const config = { tipo };
   if (tipo === 'fixo') {

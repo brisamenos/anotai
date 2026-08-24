@@ -1001,6 +1001,8 @@ function temaToggleRapido() {
     </button>
   </div>
 
+  <div id="taxa-load-error" style="display:none;margin-bottom:16px;padding:12px 14px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:9px;font-size:12.5px;color:#b91c1c;font-weight:600"></div>
+
   <!-- Modo -->
   <div class="card" style="margin-bottom:16px">
     <div class="card-title">Tipo de cobrança</div>
@@ -1031,11 +1033,16 @@ function temaToggleRapido() {
 
   <!-- POR BAIRRO -->
   <div class="card" id="taxa-bairro-block" style="display:none;margin-bottom:16px">
-    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
       Bairros e taxas
-      <button class="btn bp" style="font-size:11px;padding:4px 10px" onclick="addTaxaBairroRow()">+ Adicionar bairro</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn" style="font-size:11px;padding:4px 10px" onclick="exportTaxaBairros()" title="Baixa um arquivo .json só com os nomes dos bairros (sem os valores), pra reaproveitar em outra loja da mesma cidade">⬇ Exportar bairros</button>
+        <button class="btn" style="font-size:11px;padding:4px 10px" onclick="document.getElementById('taxa-bairros-import-input').click()" title="Carrega uma lista de bairros já exportada de outra loja">⬆ Importar bairros</button>
+        <input type="file" id="taxa-bairros-import-input" accept="application/json,.json" style="display:none" onchange="importTaxaBairros(this.files[0]); this.value='';">
+        <button class="btn bp" style="font-size:11px;padding:4px 10px" onclick="addTaxaBairroRow()">+ Adicionar bairro</button>
+      </div>
     </div>
-    <p style="font-size:12px;color:var(--muted);margin:8px 0 14px">Cadastre cada bairro e sua taxa. O cliente digita o nome no campo de bairro e o sistema reconhece automaticamente.</p>
+    <p style="font-size:12px;color:var(--muted);margin:8px 0 14px">Cadastre cada bairro e sua taxa. O cliente digita o nome no campo de bairro e o sistema reconhece automaticamente. Já tem os bairros de outra loja na mesma cidade? Exporte lá e importe aqui — os nomes vêm prontos, só falta preencher os valores desta loja.</p>
     <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px">
       <span style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Bairro</span>
       <span style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Taxa (R$)</span>
