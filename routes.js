@@ -3779,12 +3779,66 @@ module.exports = async function handleRoutes(req, res, ctx) {
   // ── Login admin ──────────────────────────────────────
   if (req.method === 'POST' && upath === '/api/admin-login') {
     const body = await readBody(req)
-    const { email, senha_hash } = body
-    if (!email || !senha_hash) { send(res, 400, { error: 'email e senha_hash obrigatórios' }); return true }
-    const u = db.prepare("SELECT id,nome,email,role FROM sys_users WHERE email=? AND senha_hash=? AND ativo=1 AND role IN ('superadmin','admin')").get(email.toLowerCase().trim(), senha_hash)
-    if (!u) { send(res, 401, { error: 'Acesso negado. Credenciais inválidas.' }); return true }
+    const { email, senha, senha_hash } = body
+    const plain = senha || senha_hash // aceita senha em texto puro (novo) ou hash legado, pra não quebrar admin.html velho em cache
+    if (!email || !plain) { send(res, 400, { error: 'email e senha obrigatórios' }); return true }
+    if (!checkRateLimit('admin-login:' + clientIp(req), 10, 5 * 60 * 1000)) {
+      send(res, 429, { error: 'Muitas tentativas. Aguarde alguns minutos.' }); return true
+    }
+    const u = db.prepare("SELECT id,nome,email,role,senha_hash FROM sys_users WHERE email=? AND ativo=1 AND role IN ('superadmin','admin')").get(email.toLowerCase().trim())
+    // Aceita tanto senha em texto puro quanto o hash sha256 legado calculado no
+    // cliente (compatibilidade com telas antigas em cache) — verifyPassword só
+    // aceita texto puro contra o hash real; se vier um hash pronto, compara
+    // direto contra o valor salvo (suporta o formato antigo apenas).
+    const ok = u && (verifyPassword(plain, u.senha_hash) || (senha_hash && u.senha_hash === senha_hash))
+    if (!ok) { send(res, 401, { error: 'Acesso negado. Credenciais inválidas.' }); return true }
+    if (senha && precisaMigrarHash(u.senha_hash)) {
+      try { db.prepare('UPDATE sys_users SET senha_hash=? WHERE id=?').run(hashPassword(senha), u.id) } catch(_) {}
+    }
     const token = criarSessaoAdmin(u)
     send(res, 200, { ok: true, id: u.id, nome: u.nome, email: u.email, role: u.role, token })
+    return true
+  }
+
+  // ── Login gestor (painel normal, por tenant) ──────────
+  // Antes disso o login.html fazia um SELECT direto na tabela sys_users pelo
+  // motor REST genérico — sem senha verificada no servidor de forma real e
+  // sem emitir nenhum token de sessão. Esse endpoint é o único jeito
+  // correto de logar como gestor agora: verifica a senha no servidor e
+  // devolve um token que autoriza as próximas chamadas (ver gestor_sessions).
+  if (req.method === 'POST' && upath === '/api/gestor-login') {
+    const body = await readBody(req)
+    const { email, senha } = body
+    if (!email || !senha) { send(res, 400, { error: 'email e senha obrigatórios' }); return true }
+    if (!checkRateLimit('gestor-login:' + clientIp(req), 10, 5 * 60 * 1000)) {
+      send(res, 429, { error: 'Muitas tentativas. Aguarde alguns minutos.' }); return true
+    }
+    const u = db.prepare(`
+      SELECT su.id,su.nome,su.email,su.role,su.ativo,su.senha_hash,su.tenant_id,
+             t.nome as t_nome, t.ativo as t_ativo, t.expires_at as t_expires_at, t.plano as t_plano
+      FROM sys_users su LEFT JOIN tenants t ON su.tenant_id=t.id
+      WHERE su.email=?
+    `).get(email.toLowerCase().trim())
+    if (!u || !verifyPassword(senha, u.senha_hash)) { send(res, 401, { error: 'Email ou senha incorretos.' }); return true }
+    if (!u.ativo) { send(res, 403, { error: 'Sua conta está desativada. Fale com o administrador.' }); return true }
+    if (precisaMigrarHash(u.senha_hash)) {
+      try { db.prepare('UPDATE sys_users SET senha_hash=? WHERE id=?').run(hashPassword(senha), u.id) } catch(_) {}
+    }
+    try { db.prepare('UPDATE sys_users SET ultimo_acesso=? WHERE id=?').run(new Date().toISOString(), u.id) } catch(_) {}
+    const token = criarSessaoGestor(u)
+    send(res, 200, {
+      ok: true, id: u.id, nome: u.nome, email: u.email, role: u.role, tenant_id: u.tenant_id, token,
+      tenant: { nome: u.t_nome, ativo: u.t_ativo === 1, expires_at: u.t_expires_at, plano: u.t_plano }
+    })
+    return true
+  }
+
+  // ── Logout gestor ─────────────────────────────────────
+  if (req.method === 'POST' && upath === '/api/gestor-logout') {
+    const auth  = req.headers['authorization'] || ''
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+    if (token) db.prepare('DELETE FROM gestor_sessions WHERE token=?').run(token)
+    send(res, 200, { ok: true })
     return true
   }
 
@@ -6984,6 +7038,9 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const { usuario, senha } = body
     if (!usuario || !senha) { send(res, 400, { error: 'Usuário e senha obrigatórios' }); return true }
     if (!tid)               { send(res, 400, { error: 'Tenant não identificado' }); return true }
+    if (!checkRateLimit('garcom-login:' + clientIp(req), 15, 5 * 60 * 1000)) {
+      send(res, 429, { error: 'Muitas tentativas. Aguarde alguns minutos.' }); return true
+    }
     try {
       // Senha pode estar em plain text (legado) ou SHA256 (novo).
       // Aceita ambos e, ao detectar plain text, migra automaticamente para hash.
@@ -7001,7 +7058,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (!isHash) {
         try { db.prepare('UPDATE garcons SET senha=? WHERE id=?').run(hashSenha, row.id); log('🔐', `[MIGRACAO] Senha do garçom ${row.usuario} migrada para hash`) } catch(_) {}
       }
-      send(res, 200, { id: row.id, tenant_id: row.tenant_id, nome: row.nome, usuario: row.usuario, ativo: true })
+      const token = criarSessaoGarcom(row)
+      send(res, 200, { id: row.id, tenant_id: row.tenant_id, nome: row.nome, usuario: row.usuario, ativo: true, token })
     } catch(e) { send(res, 500, { error: e.message }) }
     return true
   }
