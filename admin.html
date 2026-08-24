@@ -744,6 +744,9 @@ td{padding:12px 16px;color:#dce6f7}
       </button>
     </nav>
     <div class="sb-foot">
+      <button type="button" onclick="abrirModalTrocarSenha()" style="width:100%;display:flex;align-items:center;gap:6px;justify-content:center;background:none;border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--muted);font-size:11.5px;cursor:pointer;margin-bottom:8px">
+        🔑 Trocar minha senha
+      </button>
       <div class="sb-user" onclick="doLogout()">
         <div class="sb-av" id="adm-av">A</div>
         <div class="sb-user-info">
@@ -755,6 +758,36 @@ td{padding:12px 16px;color:#dce6f7}
     </div>
   </aside>
   <div class="admin-nav-backdrop" onclick="toggleAdminNav(false)"></div>
+
+  <!-- ── Trocar minha senha (superadmin) ── -->
+  <div class="modal-bg" id="m-trocar-senha">
+    <div class="modal" style="width:400px">
+      <div class="modal-head">
+        <div class="modal-title">🔑 Trocar minha senha</div>
+        <button class="modal-close" onclick="fecharModal('m-trocar-senha')">×</button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:11px">
+        <div class="fg">
+          <label>Senha atual</label>
+          <input type="password" id="ts-senha-atual" autocomplete="current-password">
+        </div>
+        <div class="fg">
+          <label>Nova senha</label>
+          <input type="password" id="ts-senha-nova" autocomplete="new-password">
+        </div>
+        <div class="fg">
+          <label>Confirmar nova senha</label>
+          <input type="password" id="ts-senha-confirma" autocomplete="new-password">
+        </div>
+        <div id="ts-err" style="display:none;color:var(--red,#ef4444);font-size:12.5px"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn bg2" onclick="fecharModal('m-trocar-senha')">Cancelar</button>
+        <button class="btn" id="ts-btn-salvar" onclick="salvarTrocaSenha()">Salvar nova senha</button>
+      </div>
+    </div>
+  </div>
+
 
   <!-- ── Main ── -->
   <main class="main">
@@ -2191,10 +2224,9 @@ async function doLogin() {
   const err   = document.getElementById('lg-err');
   if (!email||!senha) { err.textContent='Preencha email e senha'; err.classList.add('on'); return; }
   err.classList.remove('on');
-  const hash = await sha256(senha);
   let u;
   try {
-    const r = await fetch('/api/admin-login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, senha_hash: hash }) });
+    const r = await fetch('/api/admin-login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, senha }) });
     const json = await r.json();
     if (!r.ok || !json.ok) { err.textContent = json.error || 'Acesso negado.'; err.classList.add('on'); return; }
     u = json;
@@ -3325,12 +3357,11 @@ async function salvarUsuario() {
   let error;
   if (id) {
     const payload = { nome, email, role, ativo: true };
-    if (senha) payload.senha_hash = await sha256(senha);
+    if (senha) payload.senha = senha;
     ({ error } = await sb.from('sys_users').update(payload).eq('id', id));
-    if (!error) { const i=_usuarios.findIndex(u=>u.id===id); if(i>=0) _usuarios[i]={..._usuarios[i],...payload}; }
+    if (!error) { const i=_usuarios.findIndex(u=>u.id===id); if(i>=0) _usuarios[i]={..._usuarios[i],...payload,senha:undefined}; }
   } else {
-    const hash = await sha256(senha);
-    const payload = { nome, email, tenant_id: tenant, role, ativo: true, senha_hash: hash };
+    const payload = { nome, email, tenant_id: tenant, role, ativo: true, senha };
     const { data, error:e2 } = await sb.from('sys_users').insert(payload).select('*,tenants(nome)').single();
     error = e2;
     if (!error && data) _usuarios.unshift(data);
@@ -3368,6 +3399,55 @@ async function deletarUsuario(id, nome) {
 // ── HELPERS ────────────────────────────────────────────
 function abrirModal(id)  { document.getElementById(id).classList.add('on'); }
 function fecharModal(id) { document.getElementById(id).classList.remove('on'); }
+
+function abrirModalTrocarSenha() {
+  document.getElementById('ts-senha-atual').value = '';
+  document.getElementById('ts-senha-nova').value = '';
+  document.getElementById('ts-senha-confirma').value = '';
+  document.getElementById('ts-err').style.display = 'none';
+  abrirModal('m-trocar-senha');
+}
+
+async function salvarTrocaSenha() {
+  const atual    = document.getElementById('ts-senha-atual').value;
+  const nova     = document.getElementById('ts-senha-nova').value;
+  const confirma = document.getElementById('ts-senha-confirma').value;
+  const errEl    = document.getElementById('ts-err');
+  const btn      = document.getElementById('ts-btn-salvar');
+  const showErr  = (msg) => { errEl.textContent = msg; errEl.style.display = 'block'; };
+  errEl.style.display = 'none';
+
+  if (!atual || !nova || !confirma) { showErr('Preencha todos os campos.'); return; }
+  if (nova.length < 8) { showErr('A nova senha precisa ter pelo menos 8 caracteres.'); return; }
+  if (nova !== confirma) { showErr('A confirmação não bate com a nova senha.'); return; }
+
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = 'Salvando...';
+  try {
+    // Confirma a senha atual reautenticando contra /api/admin-login — só
+    // depois disso troca de fato, pra ninguém trocar a senha de alguém
+    // que deixou o painel aberto sem digitar a senha de novo.
+    const email = (_sessao && _sessao.email) || '';
+    const check = await fetch('/api/admin-login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, senha: atual })
+    });
+    if (!check.ok) { showErr('Senha atual incorreta.'); btn.disabled = false; btn.textContent = label; return; }
+
+    const { error } = await sb.from('sys_users').update({ senha: nova }).eq('id', _sessao.id);
+    if (error) { showErr('Erro ao salvar: ' + (error.message || 'tente novamente')); btn.disabled = false; btn.textContent = label; return; }
+
+    fecharModal('m-trocar-senha');
+    toast('ok', 'Senha alterada com sucesso!');
+  } catch (e) {
+    showErr('Erro de conexão. Tente novamente.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
 
 function toast(type, msg) {
   const c = document.getElementById('toast');
