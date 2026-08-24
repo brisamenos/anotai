@@ -1469,56 +1469,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS indicador_sessions (
   nome TEXT, email TEXT, codigo TEXT,
   ts INTEGER NOT NULL
 )`)
-// ── Sessões de Gestor por tenant (login normal do painel, não-superadmin) ──
-// Antes o login do gestor (login.html) fazia um SELECT direto na tabela
-// sys_users pelo motor REST genérico, sem nunca emitir um token de sessão —
-// ou seja, depois de "logar" o navegador só guardava o tenant_id e nada mais
-// era verificado no servidor em cada chamada seguinte. Qualquer requisição
-// com o x-tenant-id certo (visível publicamente no cardápio) passava como
-// se fosse o gestor autenticado. Essa tabela + as funções abaixo consertam
-// isso: agora existe um token de sessão real, criado só após validar a
-// senha no servidor, e as tabelas sensíveis do painel passam a exigi-lo.
-db.exec(`CREATE TABLE IF NOT EXISTS gestor_sessions (
-  token TEXT PRIMARY KEY,
-  user_id TEXT, tenant_id TEXT, nome TEXT, email TEXT, role TEXT,
-  ts INTEGER NOT NULL
-)`)
-// ── Sessões de garçom (app garcom.html) ──
-// Mesma lógica: antes o app do garçom também só guardava tenant_id depois do
-// login, sem token nenhum. Sessão de garçom autoriza escrita só nas tabelas
-// que o app realmente usa no dia a dia (comandas/mesas) — não vale pra
-// mexer no cardápio, estoque, cupons etc.
-db.exec(`CREATE TABLE IF NOT EXISTS garcom_sessions (
-  token TEXT PRIMARY KEY,
-  garcom_id INTEGER, tenant_id TEXT, nome TEXT, usuario TEXT,
-  ts INTEGER NOT NULL
-)`)
-const GARCOM_SESSION_TTL = 30 * 24 * 60 * 60 * 1000 // 30 dias — o app já guardava login local por 30 dias
-const GARCOM_SESSION_TABLES = new Set(['orders','mesas'])
-function criarSessaoGarcom(row) {
-  const token = crypto.randomBytes(32).toString('hex')
-  const ts = Date.now()
-  db.prepare('DELETE FROM garcom_sessions WHERE ts < ?').run(ts - GARCOM_SESSION_TTL)
-  db.prepare('INSERT OR REPLACE INTO garcom_sessions (token,garcom_id,tenant_id,nome,usuario,ts) VALUES (?,?,?,?,?,?)').run(token,row.id,row.tenant_id,row.nome,row.usuario,ts)
-  return token
-}
-function validarSessaoGarcom(req, tenantId, table) {
-  if (!GARCOM_SESSION_TABLES.has(table)) return null
-  const auth = req.headers['authorization'] || ''
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
-  if (!token) return null
-  const s = db.prepare('SELECT * FROM garcom_sessions WHERE token=?').get(token)
-  if (!s) return null
-  if (Date.now() - s.ts > GARCOM_SESSION_TTL) { db.prepare('DELETE FROM garcom_sessions WHERE token=?').run(token); return null }
-  if (tenantId && String(s.tenant_id) !== String(tenantId)) return null
-  return s
-}
-const ADMIN_SESSION_TTL  = 8 * 60 * 60 * 1000
-// 30 dias — alinhado com a duração de sessão "continuar logado" que o
-// gestor.html já promete no navegador (ver _verificarSessao em
-// gestor-core.js). Se ficasse menor, o painel pareceria logado mas toda
-// escrita passaria a falhar sem aviso depois de algumas horas.
-const GESTOR_SESSION_TTL = 30 * 24 * 60 * 60 * 1000
+const ADMIN_SESSION_TTL = 8 * 60 * 60 * 1000
 function criarSessaoAdmin(user) {
   const token = crypto.randomBytes(32).toString('hex')
   const ts = Date.now()
@@ -1535,88 +1486,6 @@ function validarSessaoAdmin(req) {
   if (Date.now() - s.ts > ADMIN_SESSION_TTL) { db.prepare('DELETE FROM admin_sessions WHERE token=?').run(token); return null }
   return s
 }
-function criarSessaoGestor(user) {
-  const token = crypto.randomBytes(32).toString('hex')
-  const ts = Date.now()
-  db.prepare('DELETE FROM gestor_sessions WHERE ts < ?').run(ts - GESTOR_SESSION_TTL)
-  db.prepare('INSERT OR REPLACE INTO gestor_sessions (token,user_id,tenant_id,nome,email,role,ts) VALUES (?,?,?,?,?,?,?)').run(token,user.id,user.tenant_id,user.nome,user.email,user.role,ts)
-  return token
-}
-// Valida sessão de gestor. Se tenantId for informado, a sessão só é aceita
-// se pertencer àquele tenant (evita que o token de um restaurante seja
-// usado pra escrever nos dados de outro). Sessão de admin/superadmin
-// (validarSessaoAdmin) sempre passa também, como fallback administrativo.
-function validarSessaoGestor(req, tenantId, table) {
-  const admin = validarSessaoAdmin(req)
-  if (admin) return admin
-  const auth = req.headers['authorization'] || ''
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
-  if (token) {
-    const s = db.prepare('SELECT * FROM gestor_sessions WHERE token=?').get(token)
-    if (s) {
-      if (Date.now() - s.ts > GESTOR_SESSION_TTL) { db.prepare('DELETE FROM gestor_sessions WHERE token=?').run(token) }
-      else if (!tenantId || String(s.tenant_id) === String(tenantId)) return s
-    }
-  }
-  // Garçom não tem privilégio de gestor completo — só cobre comandas/mesas
-  return validarSessaoGarcom(req, tenantId, table)
-}
-
-// ── Hash de senha (scrypt nativo do Node — sem depender de pacote externo) ──
-// Formato novo: "scrypt$<saltHex>$<hashHex>". Mantém compatibilidade com o
-// hash antigo (SHA-256 puro, sem salt, 64 caracteres hex) só para permitir
-// login de contas antigas — no primeiro login bem-sucedido a senha é
-// re-hasheada automaticamente pro formato novo (migração silenciosa).
-function hashPassword(plain) {
-  const salt = crypto.randomBytes(16).toString('hex')
-  const hash = crypto.scryptSync(String(plain), salt, 64).toString('hex')
-  return `scrypt$${salt}$${hash}`
-}
-function verifyPassword(plain, stored) {
-  if (!stored) return false
-  if (stored.startsWith('scrypt$')) {
-    const [, salt, hash] = stored.split('$')
-    if (!salt || !hash) return false
-    try {
-      const calc = crypto.scryptSync(String(plain), salt, 64)
-      const orig = Buffer.from(hash, 'hex')
-      return calc.length === orig.length && crypto.timingSafeEqual(calc, orig)
-    } catch { return false }
-  }
-  // Formato legado: SHA-256 sem salt (senha_hash calculado direto)
-  if (/^[a-f0-9]{64}$/i.test(stored)) {
-    const calc = crypto.createHash('sha256').update(String(plain)).digest('hex')
-    try {
-      return crypto.timingSafeEqual(Buffer.from(calc, 'hex'), Buffer.from(stored, 'hex'))
-    } catch { return false }
-  }
-  return false
-}
-function precisaMigrarHash(stored) { return !!stored && !stored.startsWith('scrypt$') }
-
-// ── Rate limiting simples em memória (sem dependência externa) ──
-// Protege endpoints de login/senha contra força bruta e o servidor como um
-// todo contra flood de requisições. Não sobrevive a restart do processo —
-// suficiente pra mitigar abuso automatizado; não substitui um WAF/proxy
-// dedicado em produção de alto tráfego.
-const _rateBuckets = new Map()
-function checkRateLimit(key, maxAttempts, windowMs) {
-  const now = Date.now()
-  let b = _rateBuckets.get(key)
-  if (!b || now - b.start > windowMs) { b = { start: now, count: 0 }; _rateBuckets.set(key, b) }
-  b.count++
-  return b.count <= maxAttempts
-}
-setInterval(() => {
-  const now = Date.now()
-  for (const [k, b] of _rateBuckets) { if (now - b.start > 30 * 60 * 1000) _rateBuckets.delete(k) }
-}, 5 * 60 * 1000)
-function clientIp(req) {
-  const xf = req.headers['x-forwarded-for']
-  if (xf) return String(xf).split(',')[0].trim()
-  return req.socket?.remoteAddress || 'unknown'
-}
-
 
 const FINANCE_AUTH_TTL = 30 * 60 * 1000
 const financeAuthTokens = new Map()
@@ -1786,18 +1655,10 @@ function restaurarBackup() {
 if (!_dbExistia) { log('♻️', 'Banco novo — tentando restaurar backup...'); restaurarBackup() }
 
 if (!db.prepare("SELECT id FROM sys_users WHERE role='superadmin' LIMIT 1").get()) {
-  // Nunca mais senha fixa no código-fonte. Usa ADMIN_BOOTSTRAP_PASSWORD do
-  // ambiente se existir; senão gera uma senha aleatória forte e imprime só
-  // esta vez no log — troque-a assim que entrar pela primeira vez.
-  const bootstrapPass = process.env.ADMIN_BOOTSTRAP_PASSWORD || crypto.randomBytes(12).toString('base64url')
-  const hash = hashPassword(bootstrapPass)
+  const hash = crypto.createHash('sha256').update('Igor@18129512').digest('hex')
   db.prepare("INSERT OR IGNORE INTO tenants (id,nome,plano,slug) VALUES ('system','Sistema Admin','premium','admin')").run()
   db.prepare("INSERT INTO sys_users (nome,email,senha_hash,role,tenant_id) VALUES (?,?,?,?,?)").run('Administrador','admin@estimafood.com',hash,'superadmin','system')
-  if (process.env.ADMIN_BOOTSTRAP_PASSWORD) {
-    log('🔑','Superadmin criado: admin@estimafood.com (senha definida via ADMIN_BOOTSTRAP_PASSWORD)')
-  } else {
-    log('🔑',`Superadmin criado: admin@estimafood.com / ${bootstrapPass}  ⚠️ ANOTE E TROQUE A SENHA AGORA — não será mostrada de novo.`)
-  }
+  log('🔑','Superadmin criado: admin@estimafood.com / Igor@18129512')
 }
 db.prepare("INSERT OR IGNORE INTO tenants (id,nome,plano,slug) VALUES ('_global','Global Config','premium','_global')").run()
 db.prepare("INSERT OR IGNORE INTO store_config (tenant_id) VALUES ('_global')").run()
@@ -2287,17 +2148,6 @@ const STRIP_FROM_OUTPUT = {
 }
 
 const NO_TENANT_FILTER = new Set(['tenants','sys_users','admin_audit_log','admin_alerts'])
-// Tabelas em NO_TENANT_FILTER são dados de plataforma (contas de gestor de
-// TODOS os restaurantes, tenants, auditoria) — nunca devem ser acessíveis
-// sem sessão de admin válida, em nenhum método, nem GET.
-const ADMIN_ONLY_TABLES = NO_TENANT_FILTER
-// Tabelas tenant-scoped que o CARDÁPIO PÚBLICO (cliente, sem login) precisa
-// escrever normalmente: cadastro/login de cliente, endereço salvo, criar/
-// atualizar o próprio pedido, avaliar o pedido. Todo o resto das tabelas do
-// painel (cardápio/gestão, caixa, estoque, mesas, entregadores, etc.) passa
-// a exigir sessão de gestor válida para POST/PATCH/DELETE.
-const CUSTOMER_WRITABLE_TABLES = new Set(['orders','ratings','customers','customer_enderecos'])
-
 const FINANCE_REST_RULES = {
   movimentos:   new Set(['GET','PATCH','DELETE']),
   contas_pagar: new Set(['GET','POST','PATCH','DELETE']),
@@ -2486,13 +2336,6 @@ function sanitize(v) {
 
 function serialize(table, body) {
   const out = { ...body }
-  // sys_users: nunca aceita senha_hash vindo do cliente (não dá pra saber
-  // se foi calculado com o esquema forte certo) — só senha em texto puro,
-  // que o servidor mesmo hasheia com scrypt antes de gravar.
-  if (table === 'sys_users') {
-    delete out.senha_hash
-    if (out.senha) { out.senha_hash = hashPassword(String(out.senha)); delete out.senha }
-  }
   const jf  = JSON_FIELDS[table]
   if (jf) for (const f of jf) { if (f in out && typeof out[f] !== 'string') out[f] = JSON.stringify(out[f]) }
   return out
@@ -2557,20 +2400,6 @@ async function handleREST(req, res, table, params, body) {
   // de outras lojas quando a sessão do cliente ainda não tinha carregado o tenant_id.
   if (tenantScoped && !tenantId) {
     return send(res, 400, { error: 'x-tenant-id obrigatório' })
-  }
-  // Tabelas de plataforma (contas de gestor, tenants, auditoria): exigem
-  // sessão de admin válida em QUALQUER método, sem exceção.
-  if (ADMIN_ONLY_TABLES.has(table) && !validarSessaoAdmin(req)) {
-    return send(res, 401, { error: 'Sessão de administrador inválida ou ausente' })
-  }
-  // Demais tabelas do painel (tudo que não é escrita segura do cardápio
-  // público): POST/PATCH/DELETE exigem sessão de gestor válida do próprio
-  // tenant. Antes bastava saber o tenant_id (visível no cardápio público)
-  // pra criar/editar/apagar qualquer coisa — cardápio, estoque, mesas, etc.
-  if (!ADMIN_ONLY_TABLES.has(table) && !CUSTOMER_WRITABLE_TABLES.has(table) &&
-      ['POST','PATCH','DELETE'].includes(req.method) &&
-      !validarSessaoGestor(req, tenantId, table)) {
-    return send(res, 401, { error: 'Sessão de gestor inválida ou expirada. Faça login novamente.' })
   }
   if (FINANCE_REST_RULES[table]?.has(req.method) && !validarFinanceAccess(req, tenantId)) {
     return sendFinanceLocked(res)
@@ -4824,25 +4653,7 @@ function send(res, status, data) {
   res.writeHead(status); res.end(body)
 }
 
-const MAX_BODY_BYTES = 8 * 1024 * 1024 // 8MB — protege a memória do processo contra POST/PATCH gigantes
-function readBody(req) {
-  return new Promise((ok, err) => {
-    let b = '', bytes = 0, aborted = false
-    req.on('data', c => {
-      if (aborted) return
-      bytes += c.length
-      if (bytes > MAX_BODY_BYTES) {
-        aborted = true
-        req.destroy()
-        err(new Error('Corpo da requisição excede o limite permitido'))
-        return
-      }
-      b += c
-    })
-    req.on('end', () => { if (!aborted) { try { ok(b ? JSON.parse(b) : {}) } catch { ok({}) } } })
-    req.on('error', err)
-  })
-}
+function readBody(req) { return new Promise((ok,err)=>{let b='';req.on('data',c=>b+=c);req.on('end',()=>{try{ok(b?JSON.parse(b):{})}catch{ok({})}});req.on('error',err)}) }
 
 const etagCache = new Map()
 function getEtag(fpath) {
@@ -4879,17 +4690,8 @@ const server = http.createServer(async (req,res) => {
   const upath  = url.pathname.replace(/\/$/,'')||'/'
   const params = url.searchParams
 
-  // Rate limit global básico por IP — não se aplica a SSE (conexão longa) nem
-  // a arquivos estáticos, só a chamadas de API. Mitiga flood/DoS simples.
-  if (upath.startsWith('/api/') || upath.startsWith('/rest/v1/')) {
-    if (!checkRateLimit('flood:' + clientIp(req), 300, 60 * 1000)) {
-      send(res, 429, { error: 'Muitas requisições. Tente novamente em instantes.' }); return
-    }
-  }
-
   if(upath.startsWith('/sse/')){sseSubscribe(decodeURIComponent(upath.slice(5)),res);return}
   if(req.method==='GET'&&upath==='/api/tenant-info'){const info=handleTenantInfo(params);send(res,info.error?404:200,info);return}
-
 
   if(req.method==='POST'&&upath==='/api/finance-auth/verify'){
     const tid=req.headers['x-tenant-id']||''
@@ -5300,15 +5102,10 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/gestor-login','/api/gestor-logout','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history'])
+  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/'))||upath.startsWith('/rest/v1/')){
-    try {
-      const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
-      await handleREST(req,res,table,params,body)
-    } catch(e) {
-      if (!res.writableEnded) send(res, e.message?.includes('excede o limite') ? 413 : 500, { error: e.message || 'Erro interno' })
-    }
-    return
+    const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
+    await handleREST(req,res,table,params,body);return
   }
 
   if(req.method==='POST'&&upath.startsWith('/storage/v1/object/')){

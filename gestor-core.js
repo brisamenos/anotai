@@ -275,12 +275,6 @@ function _verificarSessao() {
 
 function confirmarLogout() {
   if (confirm('Sair do sistema?')) {
-    // Avisa o servidor pra invalidar o token — sem isso, quem tivesse esse
-    // token continuava autorizado a fazer chamadas até expirar sozinho.
-    try {
-      const sess = JSON.parse(sessionStorage.getItem('sys_session') || '{}');
-      if (sess.token) fetch('/api/gestor-logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + sess.token } }).catch(()=>{});
-    } catch(e) {}
     sessionStorage.removeItem('sys_session');
     sessionStorage.removeItem('finance_auth');
     // Remove sessão salva no Electron (sem auto-login na próxima abertura)

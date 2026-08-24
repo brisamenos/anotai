@@ -80,17 +80,6 @@
     if (tid) h['x-tenant-id'] = tid;
     try {
       const sess = JSON.parse(sessionStorage.getItem('sys_session') || '{}');
-      // Token de sessão (gestor ou garçom) — provado no servidor a cada
-      // chamada, em vez de confiar só no tenant_id (que é público).
-      if (sess && sess.token && (!tid || sess.tenant_id === tid || !sess.tenant_id)) {
-        h['Authorization'] = 'Bearer ' + sess.token;
-      }
-      // admin.html (superadmin) guarda a sessão numa chave separada
-      // (adm_session) — cobre as tabelas de plataforma (sys_users, tenants).
-      if (!h['Authorization']) {
-        const adm = JSON.parse(sessionStorage.getItem('adm_session') || '{}');
-        if (adm && adm.token) h['Authorization'] = 'Bearer ' + adm.token;
-      }
       const fin = JSON.parse(sessionStorage.getItem('finance_auth') || '{}');
       if (fin && fin.token && fin.expires_at > Date.now() && (!tid || fin.tenant_id === tid)) {
         h['x-finance-auth'] = fin.token;

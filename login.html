@@ -394,27 +394,32 @@ async function doLogin() {
   };
 
   try {
-    // Login agora vai direto pro servidor verificar a senha (não é mais um
-    // SELECT aberto na tabela de usuários) — ele já devolve um token de
-    // sessão, que autoriza as próximas chamadas do gestor.
-    const res = await fetch('/api/gestor-login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, senha })
-    });
-    const u = await res.json().catch(() => null);
+    const hash = await sha256(senha);
 
-    if (!res.ok || !u || !u.ok) {
-      showErr((u && u.error) || 'Email ou senha incorretos.');
+    const { data: u, error } = await sb
+      .from('sys_users')
+      .select('id,nome,email,role,ativo,tenant_id,tenants(nome,ativo,expires_at,plano)')
+      .eq('email', email)
+      .eq('senha_hash', hash)
+      .single();
+
+    if (error || !u) {
+      showErr('Email ou senha incorretos.');
       restoreBtn();
       return;
     }
 
-    const tenant = u.tenant;
+    if (!u.ativo) {
+      showErr('Sua conta está desativada. Fale com o administrador.');
+      restoreBtn();
+      return;
+    }
+
+    const tenant = u.tenants;
     let billingLocked = false;
     let billingExpiredAt = null;
 
-    if (tenant && tenant.ativo === false) {
+    if (tenant && !tenant.ativo) {
       showErr('Acesso suspenso. Entre em contato com o suporte.');
       restoreBtn();
       return;
@@ -440,7 +445,6 @@ async function doLogin() {
       email:     u.email,
       role:      u.role,
       tenant_id: u.tenant_id,
-      token:     u.token,
       plano:     tenant?.plano || 'pro',
       tenant_ativo: tenant?.ativo !== false,
       tenant_expires_at: tenant?.expires_at || null,
@@ -449,6 +453,8 @@ async function doLogin() {
       billing_expired_at: billingExpiredAt,
       ts:        Date.now()
     }));
+
+    await sb.from('sys_users').update({ ultimo_acesso: new Date().toISOString() }).eq('id', u.id);
 
     window.location.href = billingLocked ? 'gestor.html?billing=1' : 'gestor.html';
 
