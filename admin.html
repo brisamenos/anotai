@@ -3895,7 +3895,9 @@ async function reenviarCobranca(id) {
     const r = await fetch('/api/admin/cobranca/reenviar', {
       method:'POST', headers: adminAuthHeader(), body: JSON.stringify({ id })
     });
-    if (!r.ok) throw new Error((await r.json()).error || 'Falha');
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Falha');
+    if (d.wa && d.wa.enviado === false) throw new Error(d.wa.motivo || 'WhatsApp não confirmou o envio');
     toast('ok','📲 Reenviada por WhatsApp');
   } catch(e) { toast('err','Erro: '+e.message); }
 }

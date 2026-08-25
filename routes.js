@@ -8265,7 +8265,12 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const msg = linhas.join('\n')
 
       const instCob = _getInstanciaCobranca(db, EVO_INST)
-      await sendWA(telefone, msg, instCob)
+      const r = await sendWA(telefone, msg, instCob)
+      if (!r.ok) {
+        const motivo = r.data?.message || r.data?.error || r.error || 'Evolution API recusou o envio'
+        log('⚠️', `Cobrança WA FALHOU: tenant=${tenant.nome} fatura=${fatura.id} tel=${telefone} (instância: ${instCob}) — ${motivo}`)
+        return { enviado: false, telefone, instance: instCob, motivo }
+      }
       log('📨', `Cobrança WA enviada: tenant=${tenant.nome} fatura=${fatura.id} tel=${telefone} (instância: ${instCob})`)
       return { enviado: true, telefone, instance: instCob }
     } catch (e) {
