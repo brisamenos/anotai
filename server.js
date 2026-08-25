@@ -2708,26 +2708,68 @@ async function handleREST(req, res, table, params, body) {
               }
             }
 
+            // Os 3 bloqueios de "config incompleta" abaixo (422) só valem pro
+            // cardápio público. Pedido criado pelo próprio gestor/PDV/garçom
+            // (origem_pedido não vem preenchido nesses casos) precisa continuar
+            // podendo lançar entrega manual mesmo pra bairro fora da lista ou
+            // com a taxa ainda não configurada — é uma decisão da loja, não
+            // um bug. Sem essa distinção, isso quebraria o PDV interno.
+            const _origemPublica = payload.origem_pedido === 'cardapio_publico'
+
+            // Config nunca foi salva de verdade pra essa loja (delivery_fee_config
+            // vazio no banco). O painel do gestor mostra "Fixo, R$5" por padrão
+            // mesmo nesse caso, então o dono pode achar que está configurado
+            // quando na real não está. Sem essa checagem, nenhum dos branches
+            // abaixo (fixo/por_bairro/por_km) entra em ação e o servidor aceita
+            // de graça o que o cliente mandar.
+            if (_origemPublica && !['fixo', 'por_km', 'por_bairro'].includes(cfg.tipo)) {
+              return send(res, 422, { error: 'A taxa de entrega ainda não foi configurada pela loja.' })
+            }
+
             // Anti-downgrade: taxa fixa não pode ser menor que o configurado
             if (cfg.tipo === 'fixo') {
               const taxaConf  = parseFloat(cfg.valor) || 0
               const taxaEnvio = parseFloat(payload.taxa) || 0
               if (taxaEnvio < taxaConf) payload.taxa = taxaConf
             }
-            // Anti-downgrade: por_bairro — se algum bairro cadastrado bate, força a taxa correta
-            else if (cfg.tipo === 'por_bairro' && Array.isArray(cfg.bairros) && cfg.bairros.length) {
-              const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()
-              const addrNorm = norm(addrRaw)
-              for (const b of cfg.bairros) {
-                const bNorm = norm(b.bairro)
-                if (bNorm && addrNorm.includes(bNorm)) {
-                  const taxaConf = parseFloat(b.taxa) || 0
-                  if ((parseFloat(payload.taxa)||0) < taxaConf) payload.taxa = taxaConf
-                  break
+            // por_bairro — se algum bairro cadastrado bate, força a taxa correta.
+            // Se a lista estiver vazia OU nenhum bairro do endereço bater, a
+            // loja está com a área de entrega mal configurada (ou o cliente
+            // digitou um endereço fora da área) — ANTES isso deixava passar
+            // com a taxa que o cliente mandou (podendo ser R$0). Agora recusa
+            // o pedido do cardápio público em vez de aceitar de graça
+            // silenciosamente (pedido do gestor/PDV segue liberado).
+            else if (cfg.tipo === 'por_bairro') {
+              const bairrosCfg = Array.isArray(cfg.bairros) ? cfg.bairros : []
+              if (!bairrosCfg.length) {
+                if (_origemPublica) return send(res, 422, { error: 'A área de entrega ainda não foi configurada pela loja para cobrança por bairro.' })
+              } else {
+                const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()
+                const addrNorm = norm(addrRaw)
+                let bateu = false
+                for (const b of bairrosCfg) {
+                  const bNorm = norm(b.bairro)
+                  if (bNorm && addrNorm.includes(bNorm)) {
+                    bateu = true
+                    const taxaConf = parseFloat(b.taxa) || 0
+                    if ((parseFloat(payload.taxa)||0) < taxaConf) payload.taxa = taxaConf
+                    break
+                  }
+                }
+                if (!bateu && _origemPublica) {
+                  return send(res, 422, { error: 'Não foi possível confirmar a taxa de entrega para o bairro informado. Confira o endereço ou fale com a loja.' })
                 }
               }
             }
-            // por_km: não há como recalcular sem GPS no servidor — confia no front
+            // por_km: não há como recalcular a distância sem GPS no servidor,
+            // mas se a loja nem tem faixas cadastradas é config incompleta —
+            // isso não deve virar entrega grátis por acidente no cardápio público.
+            else if (cfg.tipo === 'por_km') {
+              const faixasCfg = Array.isArray(cfg.faixas) ? cfg.faixas : []
+              if (!faixasCfg.length && _origemPublica) {
+                return send(res, 422, { error: 'A área de entrega ainda não foi configurada pela loja para cobrança por distância.' })
+              }
+            }
           } catch(e) { log('⚠️', 'validação de delivery falhou:', e.message) }
         }
       }

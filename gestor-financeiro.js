@@ -388,7 +388,7 @@ function exportTaxaBairros() {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  const nomeArq = (window._sessao?.store_name || 'loja').toLowerCase()
+  const nomeArq = (window._tenantStoreName || 'loja').toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'loja';
   a.href = url;
