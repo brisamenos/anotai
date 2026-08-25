@@ -296,10 +296,79 @@ const _MENU_COBRANCA = [
   `👋 Olá! Bem-vindo ao atendimento do *Estima Food*.`,
   ``,
   `Escolha uma opção digitando o número:`,
-  `1️⃣ *Financeiro* (pagar fatura / 2ª via)`,
-  `2️⃣ *Suporte*`,
-  `3️⃣ *Falar com atendente*`
+  `1️⃣ *Assinar plano*`,
+  `2️⃣ *Falar com atendente*`,
+  `3️⃣ *Suporte*`,
+  `4️⃣ *Financeiro* (pagar fatura / 2ª via)`
 ].join('\n')
+
+function _precosPlanosBot(db) {
+  const g = _cobrancaConfigGlobal(db)
+  const essencial = g.preco_essencial !== undefined ? parseFloat(g.preco_essencial) : 79.99
+  const premium   = g.preco_premium   !== undefined ? parseFloat(g.preco_premium)   : 99.90
+  return { essencial, premium }
+}
+
+// Calcula um delay (em ms) proporcional ao tamanho da mensagem, pra simular
+// o tempo real de digitação. Repassado como parâmetro "delay" pro Evolution
+// API, que mostra "digitando..." no WhatsApp do cliente antes de entregar.
+function _delayDigitando(text) {
+  const len = String(text || '').length
+  const ms = 500 + len * 25
+  return Math.max(900, Math.min(ms, 4000))
+}
+
+// Envia mensagem pro cliente já calculando o delay de "digitando..." automaticamente.
+async function _sendWaBot(sendWA, phone, text, inst) {
+  return sendWA(phone, text, inst, _delayDigitando(text))
+}
+
+// Gera cobrança PIX simples (sem opção de cartão) pra uso pelo chatbot.
+// Espelha _gerarCobrancaMP (routes.js dentro de handleRoutes), mas fica
+// no escopo do módulo pra poder ser chamada de dentro de _handleCobrancaBot.
+async function _gerarCobrancaBotPix(ctx, tenant, opts) {
+  const { db, MP_TOKEN, marcarDirty } = ctx
+  const { plano, valor, meses } = opts
+  const _valorMpBot = _mpValor(valor)
+  if (_valorMpBot === null) throw new Error('Valor da cobrança inválido')
+
+  const mpToken = _resolveMpGlobal(db, MP_TOKEN)
+  if (!mpToken) throw new Error('Token Mercado Pago não configurado em /admin → Saques PIX')
+
+  const extRef = `assinatura-bot-${tenant.id.slice(0, 8)}-${plano}-${Date.now()}`
+  const venceEm = new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString() // expira em 3d
+  const descricao = `Plano ${_planoSaasLabel(plano)} — ${meses} ${meses === 1 ? 'mês' : 'meses'} — ${tenant.nome}`
+
+  const mpResp = await fetch('https://api.mercadopago.com/v1/payments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${mpToken}`, 'X-Idempotency-Key': extRef },
+    body: JSON.stringify({
+      transaction_amount: _valorMpBot,
+      description: descricao,
+      payment_method_id: 'pix',
+      external_reference: extRef,
+      date_of_expiration: venceEm.replace('Z', '-03:00'),
+      payer: { email: 'cobranca@estimafood.com', first_name: tenant.nome.split(' ')[0] || 'Cliente' }
+    })
+  })
+  const mpData = await mpResp.json()
+  if (!mpResp.ok) throw new Error(mpData.message || 'Falha ao criar PIX no Mercado Pago')
+
+  const qrCode       = mpData.point_of_interaction?.transaction_data?.qr_code || null
+  const qrCodeBase64 = mpData.point_of_interaction?.transaction_data?.qr_code_base64 || null
+  const linkPagamento = mpData.point_of_interaction?.transaction_data?.ticket_url || null
+
+  const info = db.prepare(`INSERT INTO faturas
+    (tenant_id, plano, valor, meses, metodo, status, link_pagamento, mp_payment_id, mp_external_ref, qr_code, qr_code_base64, vence_em, obs)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      tenant.id, plano, parseFloat(valor), parseInt(meses) || 1, 'pix', 'pendente',
+      linkPagamento, mpData.id ? String(mpData.id) : null, extRef,
+      qrCode, qrCodeBase64, venceEm, 'Assinatura via chatbot WhatsApp'
+    )
+  marcarDirty()
+  const fatura = db.prepare('SELECT * FROM faturas WHERE id=?').get(info.lastInsertRowid)
+  return { fatura, link: linkPagamento, qr_code: qrCode, qr_code_base64: qrCodeBase64 }
+}
 
 async function _handleCobrancaBot(ctx, body) {
   const { db, log, EVO_INST, sendWA, sendWAImage, _pausaHumano } = ctx
@@ -338,9 +407,27 @@ async function _handleCobrancaBot(ctx, body) {
     const gConfig = _cobrancaConfigGlobal(db)
     const atendenteWa = (gConfig.cobranca_atendente_whatsapp || '').replace(/\D/g, '') || null
 
-    // Comprovante enviado a qualquer momento → avisa o atendente e pausa o bot
+    let state = _cobrancaBotState.get(phone) || { step: 'menu', tentativas: 0 }
+
+    // Cliente está no fluxo de suporte aguardando detalhes → repassa texto/imagem pro atendente
+    if (state.step === 'suporte_aguardando_info' && (texto || temImagem)) {
+      await _sendWaBot(sendWA, phone, 'Recebido! ✅ Repassei pro nosso suporte, já te retornam por aqui. 🙏', inst)
+      _cobrancaBotState.delete(phone)
+      _pausaHumano.set(pausaKey, Date.now())
+      if (atendenteWa) {
+        try {
+          const partes = [`🆘 *Novo chamado de suporte*`, ``, `De: ${phone}`]
+          if (texto) partes.push(``, `Mensagem: ${texto}`)
+          if (temImagem) partes.push(``, `📎 Cliente enviou uma imagem — confira o WhatsApp de cobranças.`)
+          await sendWA(atendenteWa, partes.join('\n'), inst)
+        } catch {}
+      }
+      continue
+    }
+
+    // Comprovante enviado a qualquer momento (fora do fluxo de suporte) → avisa o atendente e pausa o bot
     if (temImagem) {
-      await sendWA(phone, '📎 Recebi seu comprovante! Vou repassar pro financeiro conferir e te aviso por aqui assim que confirmarmos. 🙏', inst)
+      await _sendWaBot(sendWA, phone, '📎 Recebi seu comprovante! Vou repassar pro financeiro conferir e te aviso por aqui assim que confirmarmos. 🙏', inst)
       _pausaHumano.set(pausaKey, Date.now())
       if (atendenteWa) {
         try {
@@ -356,7 +443,6 @@ async function _handleCobrancaBot(ctx, body) {
 
     if (!texto) continue
 
-    let state = _cobrancaBotState.get(phone) || { step: 'menu', tentativas: 0 }
     const txt = texto.toLowerCase()
     const isGreeting = /^(oi+|ol[aá]+|bom dia|boa tarde|boa noite|menu|in[ií]cio|come[cç]ar)\b/.test(txt)
 
@@ -364,35 +450,66 @@ async function _handleCobrancaBot(ctx, body) {
     if (isGreeting || state.step === 'novo') {
       state = { step: 'menu', tentativas: 0 }
       _cobrancaBotState.set(phone, state)
-      await sendWA(phone, _MENU_COBRANCA, inst)
+      await _sendWaBot(sendWA, phone, _MENU_COBRANCA, inst)
       continue
     }
 
     if (state.step === 'menu') {
-      if (/^1|financeiro|fatura|pagar/.test(txt)) {
+      if (/^1|assinar|plano|contratar/.test(txt)) {
+        state = { step: 'assinar_segmento', tentativas: 0 }
+        _cobrancaBotState.set(phone, state)
+        await _sendWaBot(sendWA, phone, '🍽️ O *Estima Food* é um sistema completo de delivery e gestão pro seu restaurante: cardápio digital, PDV, gestão de mesas e app de garçom, tudo em um só lugar.', inst)
+        await new Promise(r => setTimeout(r, 1200))
+        await _sendWaBot(sendWA, phone, [
+          `🚀 *Alguns benefícios:*`,
+          ``,
+          `✅ Cardápio online personalizado, sem taxa por pedido`,
+          `✅ Pedidos recebidos direto pelo WhatsApp`,
+          `✅ PIX integrado com confirmação automática`,
+          `🤖 Inteligência Artificial no atendimento — responde clientes, tira dúvidas e ajuda a fechar pedidos sozinha`,
+          `✅ Painel completo de gestão (financeiro, estoque, relatórios)`,
+          `✅ App de garçom pra mesas e comandas`
+        ].join('\n'), inst)
+        await new Promise(r => setTimeout(r, 1200))
+        await _sendWaBot(sendWA, phone, '💡 Você configura em poucos minutos e já começa a vender — com suporte sempre que precisar.', inst)
+        await new Promise(r => setTimeout(r, 1200))
+        await _sendWaBot(sendWA, phone, 'Pra eu te indicar o melhor plano, me conta: *qual o seu segmento?* (ex: pizzaria, hamburgueria, doceria, marmitaria, açaiteria...)', inst)
+      } else if (/^2|atendente|igor|humano/.test(txt)) {
+        _cobrancaBotState.delete(phone)
+        _pausaHumano.set(pausaKey, Date.now())
+        await _sendWaBot(sendWA, phone, 'Vou te transferir para a atendente, já já ela te retorna por aqui. Aguarde só um instante! 👤', inst)
+        if (atendenteWa) await sendWA(atendenteWa, `👤 *Cliente pediu atendimento* — ${phone}`, inst)
+      } else if (/^3|suporte/.test(txt)) {
+        state = { step: 'suporte_aguardando_info', tentativas: 0 }
+        _cobrancaBotState.set(phone, state)
+        await _sendWaBot(sendWA, phone, 'Beleza! 🙂 Pra te ajudar mais rápido, me conta o que está acontecendo (pode mandar prints ou fotos também, se ajudar a explicar).', inst)
+      } else if (/^4|financeiro|fatura|pagar/.test(txt)) {
         state = { step: 'aguardando_telefone', tentativas: 0 }
         _cobrancaBotState.set(phone, state)
-        await sendWA(phone, 'Certo! ✅ Pra localizar sua fatura, me informa o número de telefone cadastrado no sistema (com DDD).\n\nEx: 85991234567', inst)
-      } else if (/^2|suporte/.test(txt)) {
-        _cobrancaBotState.delete(phone)
-        _pausaHumano.set(pausaKey, Date.now())
-        await sendWA(phone, 'Beleza! Encaminhei sua conversa pro nosso suporte — já te retornam por aqui. 🙂', inst)
-        if (atendenteWa) await sendWA(atendenteWa, `🆘 *Suporte solicitado* — cliente: ${phone}`, inst)
-      } else if (/^3|atendente|igor|humano/.test(txt)) {
-        _cobrancaBotState.delete(phone)
-        _pausaHumano.set(pausaKey, Date.now())
-        await sendWA(phone, 'Vou te transferir para o atendente, só um instante! 👤', inst)
-        if (atendenteWa) await sendWA(atendenteWa, `👤 *Cliente pediu atendimento* — ${phone}`, inst)
+        await _sendWaBot(sendWA, phone, 'Certo! ✅ Pra localizar sua fatura, me informa o número de telefone cadastrado no sistema (com DDD).\n\nEx: 85991234567', inst)
       } else {
-        await sendWA(phone, 'Não entendi 🤔\n\n' + _MENU_COBRANCA, inst)
+        await _sendWaBot(sendWA, phone, 'Não entendi 🤔\n\n' + _MENU_COBRANCA, inst)
       }
+      continue
+    }
+
+    // ── Assinar plano: cliente respondeu o segmento → agora pede o telefone ──
+    if (state.step === 'assinar_segmento') {
+      const segmento = texto.trim().slice(0, 80)
+      if (!segmento) {
+        await _sendWaBot(sendWA, phone, 'Não entendi 🤔 Me conta rapidinho qual o seu segmento (ex: pizzaria, hamburgueria, doceria...).', inst)
+        continue
+      }
+      state = { step: 'assinar_telefone', segmento, tentativas: 0 }
+      _cobrancaBotState.set(phone, state)
+      await _sendWaBot(sendWA, phone, 'Anotado! ✅ Agora me informa um telefone com DDD — o mesmo cadastrado no sistema, se você já for cliente, ou qualquer telefone de contato caso ainda não seja.\n\nEx: 85991234567', inst)
       continue
     }
 
     if (state.step === 'aguardando_telefone') {
       const digitado = texto.replace(/\D/g, '')
       if (digitado.length < 8) {
-        await sendWA(phone, 'Não consegui identificar um número válido. Manda só os números, com DDD (ex: 85991234567).', inst)
+        await _sendWaBot(sendWA, phone, 'Não consegui identificar um número válido. Manda só os números, com DDD (ex: 85991234567).', inst)
         continue
       }
       const tenant = db.prepare(`
@@ -407,11 +524,11 @@ async function _handleCobrancaBot(ctx, body) {
         if (state.tentativas >= 3) {
           _cobrancaBotState.delete(phone)
           _pausaHumano.set(pausaKey, Date.now())
-          await sendWA(phone, 'Não encontrei esse número no sistema. Vou te encaminhar pro atendente pra te ajudar. 👤', inst)
+          await _sendWaBot(sendWA, phone, 'Não encontrei esse número no sistema. Vou te encaminhar pro atendente pra te ajudar. 👤', inst)
           if (atendenteWa) await sendWA(atendenteWa, `⚠️ *Telefone não reconhecido no bot de cobrança* — cliente: ${phone}, informou: ${digitado}`, inst)
         } else {
           _cobrancaBotState.set(phone, state)
-          await sendWA(phone, 'Não encontrei esse número no sistema. Confere se digitou certo, com DDD (ex: 85991234567).', inst)
+          await _sendWaBot(sendWA, phone, 'Não encontrei esse número no sistema. Confere se digitou certo, com DDD (ex: 85991234567).', inst)
         }
         continue
       }
@@ -419,7 +536,7 @@ async function _handleCobrancaBot(ctx, body) {
       const fatura = db.prepare(`SELECT * FROM faturas WHERE tenant_id=? AND status='pendente' ORDER BY created_at DESC LIMIT 1`).get(tenant.id)
       if (!fatura) {
         _cobrancaBotState.delete(phone)
-        await sendWA(phone, `Verifiquei aqui e não há nenhuma fatura em aberto pra *${tenant.nome}* no momento. Você está em dia! ✅`, inst)
+        await _sendWaBot(sendWA, phone, `Verifiquei aqui e não há nenhuma fatura em aberto pra *${tenant.nome}* no momento. Você está em dia! ✅`, inst)
         continue
       }
 
@@ -433,15 +550,128 @@ async function _handleCobrancaBot(ctx, body) {
         ``,
         `💸 Pague via PIX com o código Copia e Cola abaixo, ou pelo QR Code que vou te enviar:`
       ].join('\n')
-      await sendWA(phone, msg, inst)
+      await _sendWaBot(sendWA, phone, msg, inst)
       if (fatura.qr_code) {
         await new Promise(r => setTimeout(r, 1000))
-        await sendWA(phone, fatura.qr_code, inst)
+        await _sendWaBot(sendWA, phone, fatura.qr_code, inst)
       }
       if (fatura.qr_code_base64) {
         await sendWAImage(phone, fatura.qr_code_base64, `📱 QR Code PIX — R$ ${valorTxt}`, inst)
       }
       _cobrancaBotState.delete(phone)
+      continue
+    }
+
+    // ── Assinar plano: primeiro identifica se é tenant existente ou lead novo ──
+    if (state.step === 'assinar_telefone') {
+      const digitado = texto.replace(/\D/g, '')
+      if (digitado.length < 8) {
+        await _sendWaBot(sendWA, phone, 'Não consegui identificar um número válido. Manda só os números, com DDD (ex: 85991234567).', inst)
+        continue
+      }
+      const precos = _precosPlanosBot(db)
+      const essTxt = precos.essencial.toFixed(2).replace('.', ',')
+      const preTxt = precos.premium.toFixed(2).replace('.', ',')
+      const tenant = db.prepare(`
+        SELECT t.*, sc.store_whatsapp FROM tenants t
+        LEFT JOIN store_config sc ON sc.tenant_id = t.id
+        WHERE (t.telefone_cobranca IS NOT NULL AND t.telefone_cobranca != '')
+           OR (sc.store_whatsapp IS NOT NULL AND sc.store_whatsapp != '')
+      `).all().find(t => phonesMatch(t.telefone_cobranca || t.store_whatsapp, digitado))
+
+      if (tenant) {
+        state = { step: 'assinar_escolha_plano', tenantId: tenant.id, segmento: state.segmento, tentativas: 0 }
+        _cobrancaBotState.set(phone, state)
+        await _sendWaBot(sendWA, phone, `Encontrei seu cadastro, *${tenant.nome}*! Seu plano atual é *${_planoSaasLabel(tenant.plano)}*.\n\nQual plano você quer assinar?\n1️⃣ *Essencial* — R$ ${essTxt}/mês\n2️⃣ *Premium* — R$ ${preTxt}/mês`, inst)
+      } else {
+        state = { step: 'lead_escolha_plano', telefoneLead: digitado, segmento: state.segmento, tentativas: 0 }
+        _cobrancaBotState.set(phone, state)
+        await _sendWaBot(sendWA, phone, `Ainda não encontrei seu cadastro — sem problema, vamos começar! 🙌\n\nQual plano você tem interesse em assinar?\n1️⃣ *Essencial* — R$ ${essTxt}/mês\n2️⃣ *Premium* — R$ ${preTxt}/mês`, inst)
+      }
+      continue
+    }
+
+    // ── Tenant existente escolheu o plano → gera PIX na hora e envia ──
+    if (state.step === 'assinar_escolha_plano') {
+      let planoEsc = null
+      if (/^1|essencial/.test(txt)) planoEsc = 'essencial'
+      else if (/^2|premium/.test(txt)) planoEsc = 'premium'
+      if (!planoEsc) {
+        await _sendWaBot(sendWA, phone, 'Não entendi 🤔 Responde só com *1* (Essencial) ou *2* (Premium).', inst)
+        continue
+      }
+      const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(state.tenantId)
+      if (!tenant) {
+        _cobrancaBotState.delete(phone)
+        _pausaHumano.set(pausaKey, Date.now())
+        await _sendWaBot(sendWA, phone, 'Ops, tive um problema pra localizar seu cadastro. Vou te encaminhar pro atendente. 👤', inst)
+        if (atendenteWa) await sendWA(atendenteWa, `⚠️ *Erro assinar plano* — tenant não encontrado (id=${state.tenantId}), cliente: ${phone}`, inst)
+        continue
+      }
+      const precos = _precosPlanosBot(db)
+      const valorEsc = planoEsc === 'premium' ? precos.premium : precos.essencial
+      try {
+        const result = await _gerarCobrancaBotPix(ctx, tenant, { plano: planoEsc, valor: valorEsc, meses: 1 })
+        const valorTxt = valorEsc.toFixed(2).replace('.', ',')
+        const msg = [
+          `🧾 *Assinatura Plano ${_planoSaasLabel(planoEsc)}*`,
+          ``,
+          `💰 *Valor:* R$ ${valorTxt}/mês`,
+          ``,
+          `💸 Pague via PIX com o código Copia e Cola abaixo, ou pelo QR Code que vou te enviar:`
+        ].join('\n')
+        await _sendWaBot(sendWA, phone, msg, inst)
+        if (result.qr_code) {
+          await new Promise(r => setTimeout(r, 1000))
+          await _sendWaBot(sendWA, phone, result.qr_code, inst)
+        }
+        if (result.qr_code_base64) {
+          await sendWAImage(phone, result.qr_code_base64, `📱 QR Code PIX — R$ ${valorTxt}`, inst)
+        }
+        if (atendenteWa) await sendWA(atendenteWa, `💳 *Assinatura solicitada via bot* — ${tenant.nome} escolheu o plano ${_planoSaasLabel(planoEsc)}${state.segmento ? ` (segmento informado: ${state.segmento})` : ''}`, inst)
+      } catch (eBot) {
+        log('⚠️', 'Assinar plano (bot) erro:', eBot.message)
+        _pausaHumano.set(pausaKey, Date.now())
+        await _sendWaBot(sendWA, phone, 'Tive um problema pra gerar o PIX agora. Vou te encaminhar pro atendente pra finalizar. 👤', inst)
+        if (atendenteWa) await sendWA(atendenteWa, `⚠️ *Falha ao gerar PIX de assinatura* — tenant: ${tenant.nome}, plano: ${planoEsc}, erro: ${eBot.message}`, inst)
+      }
+      _cobrancaBotState.delete(phone)
+      continue
+    }
+
+    // ── Lead novo escolheu o plano → pede nome do estabelecimento ──
+    if (state.step === 'lead_escolha_plano') {
+      let planoEsc = null
+      if (/^1|essencial/.test(txt)) planoEsc = 'essencial'
+      else if (/^2|premium/.test(txt)) planoEsc = 'premium'
+      if (!planoEsc) {
+        await _sendWaBot(sendWA, phone, 'Não entendi 🤔 Responde só com *1* (Essencial) ou *2* (Premium).', inst)
+        continue
+      }
+      state = { step: 'lead_nome', telefoneLead: state.telefoneLead, segmento: state.segmento, planoEsc, tentativas: 0 }
+      _cobrancaBotState.set(phone, state)
+      await _sendWaBot(sendWA, phone, 'Perfeito! Só mais uma coisa — qual o nome do seu restaurante/estabelecimento?', inst)
+      continue
+    }
+
+    // ── Lead novo informou o nome → encaminha pro time comercial ──
+    if (state.step === 'lead_nome') {
+      const nomeRestaurante = texto.trim().slice(0, 120)
+      _cobrancaBotState.delete(phone)
+      _pausaHumano.set(pausaKey, Date.now())
+      await _sendWaBot(sendWA, phone, `Perfeito, *${nomeRestaurante}*! 🎉 Um consultor do Estima Food vai te chamar por aqui em breve pra finalizar seu cadastro e liberar seu acesso. Obrigado pelo interesse! 🙌`, inst)
+      if (atendenteWa) {
+        await sendWA(atendenteWa, [
+          `🆕 *Novo lead via bot*`,
+          ``,
+          `Telefone: ${phone}`,
+          `Estabelecimento: ${nomeRestaurante}`,
+          `Segmento: ${state.segmento || '-'}`,
+          `Plano de interesse: ${_planoSaasLabel(state.planoEsc)}`,
+          ``,
+          `Entre em contato pra finalizar o cadastro.`
+        ].join('\n'), inst)
+      }
       continue
     }
   }
