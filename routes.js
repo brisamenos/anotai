@@ -8226,12 +8226,16 @@ module.exports = async function handleRoutes(req, res, ctx) {
         ORDER BY created_at ASC LIMIT 1
       `).get(tenant.id)
 
-      // Tenta achar telefone: prioriza store_config.store_whatsapp do tenant
-      let telefone = null
-      try {
-        const cfg = db.prepare('SELECT store_whatsapp FROM store_config WHERE tenant_id=?').get(tenant.id)
-        if (cfg?.store_whatsapp) telefone = String(cfg.store_whatsapp).replace(/\D/g, '')
-      } catch {}
+      // Tenta achar telefone: prioriza telefone_cobranca cadastrado no super admin;
+      // se não houver, cai pro WhatsApp da loja (store_config) — mesma prioridade
+      // usada pelo job de auto-cobrança e pela confirmação de pagamento.
+      let telefone = tenant.telefone_cobranca ? String(tenant.telefone_cobranca).replace(/\D/g, '') : null
+      if (!telefone) {
+        try {
+          const cfg = db.prepare('SELECT store_whatsapp FROM store_config WHERE tenant_id=?').get(tenant.id)
+          if (cfg?.store_whatsapp) telefone = String(cfg.store_whatsapp).replace(/\D/g, '')
+        } catch {}
+      }
       if (!telefone) {
         log('⚠️', `Cobrança WA: tenant ${tenant.nome} sem telefone — link gerado mas não enviado`)
         return { enviado: false, motivo: 'telefone_nao_configurado' }
