@@ -49,23 +49,23 @@ const _AC_CORTES_CATALOG = [
 
 // Catálogo de preparos com ícones do S3
 const _AC_PREPAROS_CATALOG = [
-  { id:'churrasco',  nome:'Churrasco',  icon:'https://onbeef.s3.amazonaws.com/tags/icons/churrasco.png' },
-  { id:'grelhar',    nome:'Grelhar',    icon:'https://onbeef.s3.amazonaws.com/tags/icons/grellhar.png' },
-  { id:'frigideira', nome:'Frigideira', icon:'https://onbeef.s3.amazonaws.com/tags/icons/frigideira.png' },
-  { id:'forno',      nome:'Forno',      icon:'https://onbeef.s3.amazonaws.com/tags/icons/forno.png' },
-  { id:'airfryer',   nome:'Airfryer',   icon:'https://onbeef.s3.amazonaws.com/tags/icons/airfryer.png' },
-  { id:'panela',     nome:'Panela',     icon:'https://onbeef.s3.amazonaws.com/tags/icons/panela.png' },
-  { id:'ensopado',   nome:'Ensopado',   icon:'https://onbeef.s3.amazonaws.com/tags/icons/ensopado.png' },
-  { id:'espeto',     nome:'Espeto',     icon:'https://onbeef.s3.amazonaws.com/tags/icons/espeto.png' },
-  { id:'defumado',   nome:'Defumado',   icon:'https://onbeef.s3.amazonaws.com/tags/icons/smoker.png' },
-  { id:'dia_a_dia',  nome:'Dia a dia',  icon:'https://onbeef.s3.amazonaws.com/tags/icons/dia_a_dia.png' },
-  { id:'resfriado',  nome:'Resfriado',  icon:'https://onbeef.s3.amazonaws.com/tags/icons/wind.png' },
+  { id:'churrasco',  nome:'Churrasco',  icon:'/cardapio/img/tags/churrasco.png' },
+  { id:'grelhar',    nome:'Grelhar',    icon:'/cardapio/img/tags/grellhar.png' },
+  { id:'frigideira', nome:'Frigideira', icon:'/cardapio/img/tags/frigideira.png' },
+  { id:'forno',      nome:'Forno',      icon:'/cardapio/img/tags/forno.png' },
+  { id:'airfryer',   nome:'Airfryer',   icon:'/cardapio/img/tags/airfryer.png' },
+  { id:'panela',     nome:'Panela',     icon:'/cardapio/img/tags/panela.png' },
+  { id:'ensopado',   nome:'Ensopado',   icon:'/cardapio/img/tags/ensopado.png' },
+  { id:'espeto',     nome:'Espeto',     icon:'/cardapio/img/tags/espeto.png' },
+  { id:'defumado',   nome:'Defumado',   icon:'/cardapio/img/tags/smoker.png' },
+  { id:'dia_a_dia',  nome:'Dia a dia',  icon:'/cardapio/img/tags/dia_a_dia.png' },
+  { id:'resfriado',  nome:'Resfriado',  icon:'/cardapio/img/tags/wind.png' },
 ];
 
 // Catálogo de tipo de ocasião
 const _AC_OCASIAO_CATALOG = [
-  { id:'churrasco',       nome:'Churrasco',        icon:'https://onbeef.s3.amazonaws.com/tags/icons/churrasco.png' },
-  { id:'dia_a_dia',       nome:'Dia a dia',         icon:'https://onbeef.s3.amazonaws.com/tags/icons/dia_a_dia.png' },
+  { id:'churrasco',       nome:'Churrasco',        icon:'/cardapio/img/tags/churrasco.png' },
+  { id:'dia_a_dia',       nome:'Dia a dia',         icon:'/cardapio/img/tags/dia_a_dia.png' },
   { id:'final_semana',    nome:'Final de semana',   icon:null },
   { id:'festas',          nome:'Festas',            icon:null },
   { id:'especial',        nome:'Ocasião especial',  icon:null },
@@ -74,7 +74,7 @@ const _AC_OCASIAO_CATALOG = [
 
 // Catálogo de armazenamento
 const _AC_ARMAZENAMENTO_CATALOG = [
-  { id:'resfriado',        nome:'Resfriado',          icon:'https://onbeef.s3.amazonaws.com/tags/icons/wind.png' },
+  { id:'resfriado',        nome:'Resfriado',          icon:'/cardapio/img/tags/wind.png' },
   { id:'congelado',        nome:'Congelado',           icon:null },
   { id:'refrigerado',      nome:'Refrigerado',         icon:null },
   { id:'temp_ambiente',    nome:'Temperatura ambiente', icon:null },
