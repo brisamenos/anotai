@@ -254,10 +254,26 @@ function validarDelivery() {
     }
   }
 
+  // Config nunca foi salva de verdade pra essa loja (delivery_fee_config
+  // vazio no banco) — o painel do gestor MOSTRA "Fixo, R$5" por padrão
+  // mesmo nesse caso (_taxaConfig.tipo || 'fixo'), então o dono pode achar
+  // que está configurado quando na real não está. Sem essa checagem, o
+  // getTaxa() cai no fallback final e cobra R$0 silenciosamente.
+  const _tiposValidos = ['fixo', 'por_km', 'por_bairro'];
+  if (!_tiposValidos.includes(feeConfig?.tipo)) {
+    return { ok: false, motivo: 'A taxa de entrega ainda não foi configurada pela loja. Avise o restaurante antes de finalizar o pedido.' };
+  }
+
   // por_bairro: bairro precisa existir na lista
   if (feeConfig?.tipo === 'por_bairro') {
     const bairros = Array.isArray(feeConfig.bairros) ? feeConfig.bairros : [];
-    if (!bairros.length) return { ok: true }; // sem lista — sem cobrança, permite
+    if (!bairros.length) {
+      // ANTES: return { ok: true } aqui liberava o pedido de graça sempre
+      // que a loja escolhia "por_bairro" mas ainda não tinha cadastrado
+      // nenhum bairro — a taxa saía R$0 sem ninguém perceber. Bloqueia até
+      // a loja configurar ao menos um bairro.
+      return { ok: false, motivo: 'A área de entrega ainda não foi configurada pela loja. Entre em contato para confirmar se atendemos seu endereço.' };
+    }
     const digitadoRaw = (document.getElementById('f-bairro')?.value || '').trim();
     if (!digitadoRaw) return { ok: false, motivo: 'Informe o bairro para calcular a taxa de entrega' };
     const match = _matchBairro(digitadoRaw, bairros);
@@ -281,15 +297,18 @@ function validarDelivery() {
   // por_km: exige GPS confirmado e dentro da maior faixa
   if (feeConfig?.tipo === 'por_km') {
     const faixas = Array.isArray(feeConfig.faixas) ? feeConfig.faixas : [];
-    if (faixas.length) {
-      // GPS ainda não respondeu ou foi negado — bloqueia até confirmar localização
-      if (typeof _geoDistKm !== 'number' || _geoDistKm <= 0) {
-        return { ok: false, motivo: '📍 Precisamos confirmar sua localização. Permita o acesso ao GPS e aguarde.' };
-      }
-      const maiorFaixa = parseFloat(faixas[faixas.length - 1]?.ate_km || 0);
-      if (_geoDistKm > maiorFaixa + 0.001) {
-        return { ok: false, motivo: `🚫 Você está a ${_geoDistKm.toFixed(1).replace('.', ',')} km — fora da área de entrega (até ${maiorFaixa} km).` };
-      }
+    if (!faixas.length) {
+      // ANTES: lista vazia caía direto no "return {ok:true}" final e
+      // liberava o pedido com taxa R$0 — mesma falha do caso por_bairro.
+      return { ok: false, motivo: 'A área de entrega ainda não foi configurada pela loja. Entre em contato para confirmar se atendemos seu endereço.' };
+    }
+    // GPS ainda não respondeu ou foi negado — bloqueia até confirmar localização
+    if (typeof _geoDistKm !== 'number' || _geoDistKm <= 0) {
+      return { ok: false, motivo: '📍 Precisamos confirmar sua localização. Permita o acesso ao GPS e aguarde.' };
+    }
+    const maiorFaixa = parseFloat(faixas[faixas.length - 1]?.ate_km || 0);
+    if (_geoDistKm > maiorFaixa + 0.001) {
+      return { ok: false, motivo: `🚫 Você está a ${_geoDistKm.toFixed(1).replace('.', ',')} km — fora da área de entrega (até ${maiorFaixa} km).` };
     }
   }
   return { ok: true };
