@@ -1399,30 +1399,31 @@ td{padding:12px 16px;color:#dce6f7}
               <div class="card-title">📲 WhatsApp para cobranças (admin)</div>
               <div class="card-sub" id="cob-wa-status-txt">Número que envia cobranças/lembretes para os gestores dos restaurantes (seus clientes SaaS)</div>
             </div>
-            <button class="btn bp bsm" onclick="salvarCobrancaWA()">💾 Salvar</button>
           </div>
 
           <div class="form-group" style="margin-bottom:14px">
             <label class="form-label">Nome da instância na Evolution API</label>
             <input class="minput" id="cob-wa-instance" type="text" placeholder="estima-admin" autocomplete="off" style="font-family:monospace">
             <div class="form-hint">
-              Crie uma instância separada na Evolution para não misturar cobranças com mensagens dos clientes finais.
-              Deixe vazio para usar a instância padrão (mesma dos pedidos).
+              Dê um nome pra instância dedicada de cobranças (ex: <code style="background:rgba(0,0,0,.3);padding:1px 6px;border-radius:4px">estima-admin</code>) e clique em criar/conectar abaixo — sem precisar sair do painel.
             </div>
           </div>
 
-          <div class="infobox infobox-blue" style="font-size:12.5px;display:flex;align-items:flex-start;gap:10px">
-            <div style="font-size:18px;flex-shrink:0">💡</div>
-            <div>
-              <div style="font-weight:700;margin-bottom:3px">Como configurar:</div>
-              <ol style="margin:0;padding-left:18px;line-height:1.7">
-                <li>Acesse o painel da sua Evolution API e crie uma instância nova (ex: <code style="background:rgba(0,0,0,.3);padding:1px 6px;border-radius:4px">estima-admin</code>)</li>
-                <li>Escaneie o QR Code com o WhatsApp do número que vai cobrar</li>
-                <li>Digite o nome da instância no campo acima e salve</li>
-                <li>Pronto — todas as cobranças e lembretes vão sair desse número</li>
-              </ol>
-            </div>
+          <div class="form-group" style="margin-bottom:14px">
+            <label class="form-label">WhatsApp do atendente <span style="color:var(--muted);font-weight:400">(opcional)</span></label>
+            <input class="minput" id="cob-wa-atendente" type="text" placeholder="Ex: 85991234567" oninput="this.value=this.value.replace(/\D/g,'').slice(0,11)">
+            <div class="form-hint">Número que recebe os avisos quando um cliente escolhe "Suporte", "Falar com atendente" ou envia um comprovante no chatbot.</div>
           </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+            <button class="btn bp bsm" onclick="cobWaCriarInstancia()">🔌 Criar / Conectar instância</button>
+            <button class="btn bg2 bsm" onclick="cobWaVerificarStatus()">🔄 Verificar status</button>
+            <button class="btn bg2 bsm" onclick="salvarCobrancaWA()">💾 Salvar</button>
+          </div>
+
+          <div id="cob-wa-status-badge" style="margin-bottom:14px"></div>
+
+          <div id="cob-wa-qr-area" style="text-align:center;padding:10px 0"></div>
         </div>
 
         <!-- Estatísticas de saques -->
@@ -2059,6 +2060,13 @@ td{padding:12px 16px;color:#dce6f7}
       <div class="mrow" style="margin:0">
         <label class="mlabel">Valor personalizado (R$)</label>
         <input class="minput" id="cli-valor-personalizado" type="number" step="0.01" min="0" placeholder="deixe em branco p/ usar o preço padrão">
+      </div>
+    </div>
+    <div class="mrow2" style="margin-top:12px">
+      <div class="mrow" style="margin:0">
+        <label class="mlabel">Telefone p/ cobrança automática <span style="color:var(--muted);font-weight:400">(opcional)</span></label>
+        <input class="minput" id="cli-telefone-cobranca" type="text" placeholder="Ex: 85991234567 (DDD + 9 dígitos)" oninput="this.value=this.value.replace(/\D/g,'').slice(0,11)">
+        <span style="font-size:11.5px;color:var(--muted)">Número que vai receber os lembretes automáticos de vencimento e o QR Code do PIX. Se deixar em branco, usa o WhatsApp da loja.</span>
       </div>
     </div>
     <div class="mrow2" style="margin-top:12px" id="cli-valor-validade-row">
@@ -3076,7 +3084,7 @@ function autoSlug() {
 function abrirModalCliente(id) { _abrirModalClienteAsync(id); }
 async function _abrirModalClienteAsync(id) {
   document.getElementById('m-cli-titulo').textContent = id ? '✏️ Editar Cliente' : '➕ Novo Cliente';
-  ['cli-id','cli-nome','cli-slug','cli-email','cli-senha','cli-gestor-nome','cli-expira','cli-valor-personalizado','cli-valor-expira'].forEach(i => { const el=document.getElementById(i); if(el) el.value=''; });
+  ['cli-id','cli-nome','cli-slug','cli-email','cli-senha','cli-gestor-nome','cli-expira','cli-valor-personalizado','cli-valor-expira','cli-telefone-cobranca'].forEach(i => { const el=document.getElementById(i); if(el) el.value=''; });
   document.getElementById('cli-plano').value    = 'premium';
   document.getElementById('cli-segmento').value = 'restaurante';
   document.getElementById('cli-ativo').value  = 'true';
@@ -3099,6 +3107,7 @@ async function _abrirModalClienteAsync(id) {
       document.getElementById('cli-segmento').value = c.segmento || 'restaurante';
       document.getElementById('cli-valor-personalizado').value = (c.valor_mensalidade !== null && c.valor_mensalidade !== undefined) ? c.valor_mensalidade : '';
       document.getElementById('cli-valor-expira').value = c.valor_mensalidade_expira_em ? String(c.valor_mensalidade_expira_em).slice(0,10) : '';
+      document.getElementById('cli-telefone-cobranca').value = c.telefone_cobranca || '';
     }
     try {
       const r = await fetch('/api/admin-backup/ia-config?tenant_id='+id, { headers: adminAuthHeader() });
@@ -3136,12 +3145,15 @@ async function salvarCliente() {
   const valorPersonalizado = valorPersonalizadoRaw === '' ? null : parseFloat(valorPersonalizadoRaw);
   // Validade só faz sentido se houver um valor personalizado definido
   const valorExpira = (valorPersonalizado !== null) ? (document.getElementById('cli-valor-expira').value || null) : null;
+  const telefoneCobrancaRaw = (document.getElementById('cli-telefone-cobranca').value || '').replace(/\D/g,'');
+  if (telefoneCobrancaRaw && telefoneCobrancaRaw.length !== 10 && telefoneCobrancaRaw.length !== 11) { toast('err','Telefone de cobrança inválido — use DDD + número (10 ou 11 dígitos)'); return; }
+  const telefoneCobranca = telefoneCobrancaRaw || null;
   if (!nome||!slug) { toast('err','Preencha nome e slug'); return; }
   if (!id && (!gestorNome||!email||!senha)) { toast('err','Preencha todos os dados do gestor'); return; }
   let error;
   if (id) {
-    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo, expires_at: expira, segmento, valor_mensalidade: valorPersonalizado, valor_mensalidade_expira_em: valorExpira }).eq('id',id));
-    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo,expires_at:expira,segmento,valor_mensalidade:valorPersonalizado,valor_mensalidade_expira_em:valorExpira}; }
+    ({ error } = await sb.from('tenants').update({ nome, slug, plano, ativo, expires_at: expira, segmento, valor_mensalidade: valorPersonalizado, valor_mensalidade_expira_em: valorExpira, telefone_cobranca: telefoneCobranca }).eq('id',id));
+    if (!error) { const i=_clientes.findIndex(c=>c.id===id); if(i>=0) _clientes[i]={..._clientes[i],nome,slug,plano,ativo,expires_at:expira,segmento,valor_mensalidade:valorPersonalizado,valor_mensalidade_expira_em:valorExpira,telefone_cobranca:telefoneCobranca}; }
     const iaKeyVal = (document.getElementById('cli-ia-key')?.value || '').trim();
     if (!error && iaKeyVal && !iaKeyVal.startsWith('•')) {
       try {
@@ -3163,7 +3175,7 @@ async function salvarCliente() {
     }
   } else {
     try {
-      const res = await fetch('/api/criar-tenant', { method:'POST', headers: adminAuthHeader(), body: JSON.stringify({ nome, slug, email, senha, nomeGestor: gestorNome, plano, role:'gestor', segmento, expires_at: expira, valor_mensalidade: valorPersonalizado, valor_mensalidade_expira_em: valorExpira }) });
+      const res = await fetch('/api/criar-tenant', { method:'POST', headers: adminAuthHeader(), body: JSON.stringify({ nome, slug, email, senha, nomeGestor: gestorNome, plano, role:'gestor', segmento, expires_at: expira, valor_mensalidade: valorPersonalizado, valor_mensalidade_expira_em: valorExpira, telefone_cobranca: telefoneCobranca }) });
       const data = await res.json();
       if (!res.ok) { error = { message: data.error || 'Erro ao criar restaurante' }; }
       else { await loadAll(); }
@@ -4382,14 +4394,18 @@ async function carregarCobrancaWA() {
     const d = await r.json();
     const inp = document.getElementById('cob-wa-instance');
     const st  = document.getElementById('cob-wa-status-txt');
+    const at  = document.getElementById('cob-wa-atendente');
     if (inp) inp.value = d.instance || '';
+    if (at)  at.value  = d.atendente_whatsapp || '';
     if (st)  st.innerHTML = d.instance
       ? `<span style="color:var(--success)">✅ Instância configurada: <code style="background:rgba(0,0,0,.3);padding:1px 6px;border-radius:4px">${d.instance}</code></span>`
       : `<span style="color:var(--muted)">Número que envia cobranças/lembretes para os gestores dos restaurantes (seus clientes SaaS)</span>`;
+    if (d.instance) cobWaVerificarStatus();
   } catch(e) {}
 }
 async function salvarCobrancaWA() {
   const instance = (document.getElementById('cob-wa-instance')?.value || '').trim();
+  const atendente = (document.getElementById('cob-wa-atendente')?.value || '').trim();
   // Valida nome de instância: só letras, números, hífen, underscore
   if (instance && !/^[a-zA-Z0-9_-]+$/.test(instance)) {
     toast('err', 'Nome da instância inválido (use só letras, números, - e _)');
@@ -4398,15 +4414,161 @@ async function salvarCobrancaWA() {
   try {
     const r = await fetch('/api/admin/cobranca-wa', {
       method: 'POST', headers: adminAuthHeader(),
-      body: JSON.stringify({ instance })
+      body: JSON.stringify({ instance, atendente_whatsapp: atendente })
     });
     if (r.status === 401) { toast('err','Sessão expirada'); setTimeout(doLogout,1500); return; }
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
-    await auditLog('config.cobranca_wa', null, { instance });
-    toast('ok', instance ? '✅ Instância de cobrança salva!' : '✅ Voltou para instância padrão');
+    await auditLog('config.cobranca_wa', null, { instance, atendente_whatsapp: atendente });
+    toast('ok', instance ? '✅ Configuração de cobrança salva!' : '✅ Voltou para instância padrão');
     carregarCobrancaWA();
   } catch(e) { toast('err', 'Erro: ' + e.message); }
+}
+
+// ── Proxy admin p/ Evolution API (criar/conectar instância direto do painel) ──
+async function _cobWaEvoReq(method, action, body) {
+  const r = await fetch('/api/admin/evo' + action, {
+    method, headers: adminAuthHeader(),
+    body: method === 'GET' ? undefined : JSON.stringify(body || {})
+  });
+  const data = await r.json().catch(()=>({}));
+  if (r.status === 401) { toast('err','Sessão expirada'); setTimeout(doLogout,1500); }
+  return { ok: r.ok, status: r.status, data };
+}
+
+let _cobWaQrInterval = null;
+
+function _cobWaSetBadge(status, texto) {
+  const el = document.getElementById('cob-wa-status-badge');
+  if (!el) return;
+  const cores = { connected:'var(--success)', disconnected:'var(--danger)', loading:'var(--muted)' };
+  el.innerHTML = `<span style="color:${cores[status]||'var(--muted)'};font-size:12.5px;font-weight:600">${texto}</span>`;
+}
+
+async function _cobWaRegistrarWebhook(instName) {
+  try {
+    const webhookUrl = `${window.location.origin}/webhook/cobranca-admin`;
+    const payload = { enabled: true, url: webhookUrl, webhookByEvents: false, webhookBase64: false, events: ['MESSAGES_UPSERT'] };
+    let r = await _cobWaEvoReq('POST', `/webhook/set/${instName}`, payload);
+    if (!r.ok) r = await _cobWaEvoReq('POST', `/webhook/set/${instName}`, { webhook: payload });
+    if (!r.ok) toast('err', `Instância criada, mas não consegui configurar o webhook do chatbot. Tente "Verificar status" depois.`);
+    return r.ok;
+  } catch(e) { return false; }
+}
+
+async function cobWaCriarInstancia() {
+  const instName = (document.getElementById('cob-wa-instance')?.value || '').trim();
+  if (!instName) { toast('err','Informe o nome da instância antes de criar.'); return; }
+  if (!/^[a-zA-Z0-9_-]+$/.test(instName)) { toast('err','Nome da instância inválido (use só letras, números, - e _)'); return; }
+  _cobWaSetBadge('loading','Criando instância...');
+
+  let r = await _cobWaEvoReq('POST', '/instance/create', { instanceName: instName, qrcode: true, integration: 'WHATSAPP-BAILEYS' });
+
+  if (!r.ok) {
+    const msg = r.data?.message || '';
+    const msgStr = Array.isArray(msg) ? msg.join(' ') : String(msg);
+    const isDuplicate = r.status === 409 || (r.status === 500 && /already|exist|duplicate/i.test(msgStr));
+    if (isDuplicate) {
+      toast('ok', `Instância "${instName}" já existe. Conectando...`);
+      await salvarCobrancaWA();
+      await _cobWaRegistrarWebhook(instName);
+      cobWaConectar();
+      return;
+    }
+    _cobWaSetBadge('disconnected', 'Erro ao criar instância');
+    toast('err', 'Erro: ' + (msgStr || `HTTP ${r.status}`));
+    return;
+  }
+
+  toast('ok', `Instância "${instName}" criada! Salvando como instância de cobrança...`);
+  await salvarCobrancaWA();
+  await _cobWaRegistrarWebhook(instName);
+
+  const qrBase64 = r.data?.qrcode?.base64 || r.data?.base64;
+  if (qrBase64) {
+    _cobWaMostrarQR(qrBase64);
+  } else {
+    cobWaConectar();
+  }
+}
+
+function _cobWaMostrarQR(qrB64) {
+  const area = document.getElementById('cob-wa-qr-area');
+  if (!area) return;
+  area.innerHTML = `
+    <div style="font-size:13px;font-weight:600;margin-bottom:12px">Escaneie com o WhatsApp que vai enviar as cobranças</div>
+    <img src="${qrB64}" style="width:220px;height:220px;border-radius:12px;border:3px solid var(--accent);margin-bottom:12px">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">QR Code expira rápido — clique abaixo se precisar de um novo</div>
+    <div><button class="btn bg bsm" onclick="cobWaConectar()">Gerar novo QR Code</button></div>
+  `;
+  _cobWaSetBadge('loading', 'Aguardando leitura do QR Code...');
+  _cobWaIniciarPolling();
+}
+
+async function cobWaConectar() {
+  const instName = (document.getElementById('cob-wa-instance')?.value || '').trim();
+  if (!instName) { toast('err','Informe o nome da instância.'); return; }
+  const area = document.getElementById('cob-wa-qr-area');
+  if (area) area.innerHTML = '<div style="font-size:13px;color:var(--muted)">Gerando QR Code... aguarde</div>';
+
+  let r = null;
+  for (let tentativa = 1; tentativa <= 10; tentativa++) {
+    r = await _cobWaEvoReq('GET', `/instance/connect/${instName}`);
+    const temQR = r.ok && (r.data?.base64 || r.data?.code);
+    if (temQR) break;
+    if (tentativa < 10) {
+      if (area) area.innerHTML = `<div style="font-size:13px;color:var(--muted)">Gerando QR Code... (${tentativa}/10)</div>`;
+      await new Promise(res => setTimeout(res, 3000));
+    }
+  }
+
+  const qrB64  = r?.data?.base64 || r?.data?.qrcode?.base64;
+  const qrCode = r?.data?.code   || r?.data?.qrcode?.code;
+
+  if (!r?.ok || (!qrB64 && !qrCode)) {
+    if (area) area.innerHTML = `<div style="font-size:13px;color:var(--danger);margin-bottom:12px">${r?.data?.message || 'Erro ao gerar QR. Verifique se a instância existe.'}</div>`;
+    _cobWaSetBadge('disconnected','Não foi possível gerar o QR Code');
+    return;
+  }
+  if (qrB64) { _cobWaMostrarQR(qrB64); return; }
+  if (area) area.innerHTML = `<div style="font-size:12px;word-break:break-all;padding:10px;background:var(--surface2);border-radius:8px;margin-bottom:12px;color:var(--muted)">${qrCode.slice(0,80)}...</div><button class="btn bg bsm" onclick="cobWaConectar()">Gerar novo QR</button>`;
+  _cobWaIniciarPolling();
+}
+
+function _cobWaIniciarPolling() {
+  const instName = (document.getElementById('cob-wa-instance')?.value || '').trim();
+  if (!instName) return;
+  if (_cobWaQrInterval) clearInterval(_cobWaQrInterval);
+  let tries = 0;
+  _cobWaQrInterval = setInterval(async () => {
+    tries++;
+    const s = await _cobWaEvoReq('GET', `/instance/connectionState/${instName}`);
+    const state = s.data?.instance?.state || s.data?.state || 'close';
+    if (state === 'open') {
+      clearInterval(_cobWaQrInterval);
+      _cobWaSetBadge('connected', '✅ Conectado');
+      const area = document.getElementById('cob-wa-qr-area');
+      if (area) area.innerHTML = '';
+      toast('ok', 'WhatsApp de cobrança conectado!');
+    }
+    if (tries > 30) clearInterval(_cobWaQrInterval);
+  }, 4000);
+}
+
+async function cobWaVerificarStatus() {
+  const instName = (document.getElementById('cob-wa-instance')?.value || '').trim();
+  if (!instName) { toast('err','Informe o nome da instância.'); return; }
+  _cobWaSetBadge('loading','Verificando...');
+  const r = await _cobWaEvoReq('GET', `/instance/connectionState/${instName}`);
+  if (!r.ok) { _cobWaSetBadge('disconnected','Desconectado ou instância não encontrada'); return; }
+  const state = r.data?.instance?.state || r.data?.state || 'close';
+  if (state === 'open') {
+    _cobWaSetBadge('connected', '✅ Conectado');
+    const area = document.getElementById('cob-wa-qr-area');
+    if (area) area.innerHTML = '';
+  } else {
+    _cobWaSetBadge('disconnected', '⚠️ Desconectado — clique em "Criar / Conectar instância"');
+  }
 }
 
 async function carregarSaquesAdmin(statusFiltro = 'pendente') {

@@ -1158,6 +1158,9 @@ const MIGRATIONS = [
   { version:72, description:'validade do preco promocional/personalizado do tenant (expira e volta pro valor geral automaticamente)', up:
     `ALTER TABLE tenants ADD COLUMN valor_mensalidade_expira_em TEXT`
   },
+  { version:73, description:'telefone dedicado para cobranca automatica (admin cadastra por tenant, separado do whatsapp da loja)', up:
+    `ALTER TABLE tenants ADD COLUMN telefone_cobranca TEXT`
+  },
 ]
 
 function runMigrations() {
@@ -2246,7 +2249,7 @@ try {
 agendarResetDiarioPedidos()
 
 const TABLE_COLS = {
-  tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade','valor_mensalidade_expira_em'],
+  tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade','valor_mensalidade_expira_em','telefone_cobranca'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
   store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','sort_order','ativo'],
@@ -3238,6 +3241,26 @@ async function sendWA(phone, text, inst, delayMs) {
     if (r2.ok) { log('📤',`Enviado para ${number} (retry)`); return { ok:true, data:data2 } }
     return { ok:false, data:data2 }
   } catch(e) { log('❌','Erro WA:',{error:e.message}); return { ok:false, error:e.message } }
+}
+
+// Envia uma imagem (ex: QR Code do PIX) via Evolution API.
+// imageBase64 aceita tanto data URL completa ("data:image/png;base64,...")
+// quanto o base64 puro — normaliza antes de enviar.
+async function sendWAImage(phone, imageBase64, caption, inst) {
+  const instance = inst || EVO_INST
+  const num      = phone.replace(/\D/g,'')
+  const number   = num.startsWith('55') ? num : `55${num}`
+  const headers  = { 'Content-Type':'application/json', apikey: EVO_KEY }
+  const media    = String(imageBase64 || '').replace(/^data:image\/\w+;base64,/, '')
+  if (!media) return { ok:false, error:'imagem vazia' }
+  const body = { number, mediatype:'image', mimetype:'image/png', media, caption: caption || '', fileName: 'pix-qrcode.png' }
+  try {
+    const r = await fetch(`${EVO_URL}/message/sendMedia/${instance}`, { method:'POST', headers, body:JSON.stringify(body) })
+    const data = await r.json().catch(()=>({}))
+    log('📬', `sendWAImage [${r.status}]:`, JSON.stringify(data).slice(0,200))
+    if (r.ok) { log('📤',`Imagem enviada para ${number}`); return { ok:true, data } }
+    return { ok:false, data }
+  } catch(e) { log('❌','Erro WA imagem:',{error:e.message}); return { ok:false, error:e.message } }
 }
 
 // Marca mensagem do cliente como "lida" (✓✓ azul) na Evolution API.
@@ -5329,7 +5352,7 @@ const server = http.createServer(async (req,res) => {
     hashPassword, verifyPassword, precisaMigrarHash, checkRateLimit, clientIp,
     validarFinanceAccess, fazerBackup, restaurarBackup, enviarBackupTelegram, TABELAS_BACKUP, getTenantId,
     MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
-    EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano,
+    EVO_URL, EVO_KEY, EVO_INST, sendWA, sendWAImage, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano,
     aplicarBaixaEstoquePedido,
     chatNormalizePhone, chatPhoneMatches, chatStatusLabel, chatOrderPublic, chatThreadPublic, chatMessagePublic,
     chatEnsureThreadFromOrder, chatEnsureThreadFromLead, chatAddMessageFromOrder, chatAddMessageToThread,

@@ -13,7 +13,7 @@ const path   = require('path')
 const zlib   = require('zlib')
 const crypto = require('crypto')
 const { buildOrderTrackingMessage } = require('./order-message')
-const { phoneLookupArgs, phoneLookupSql } = require('./phone-utils')
+const { phoneLookupArgs, phoneLookupSql, phonesMatch } = require('./phone-utils')
 
 // ── Helper: notifica cliente quando PIX é confirmado (online ou manual) ──────
 function _notificarPixConfirmado(tid, order, sendWA, fillVars, EVO_INST, db) {
@@ -275,6 +275,176 @@ function _getInstanciaCobranca(db, fallbackInst) {
     }
   } catch {}
   return fallbackInst
+}
+
+// ═══════════════════════════════════════════════════════
+// CHATBOT DE COBRANÇA — instância admin (Saques PIX)
+// Menu simples: Financeiro / Suporte / Falar com atendente.
+// Estado em memória por telefone (perde-se em restart — aceitável,
+// o cliente só recebe o menu de novo).
+// ═══════════════════════════════════════════════════════
+const _cobrancaBotState = new Map() // phone -> { step, tentativas }
+
+function _cobrancaConfigGlobal(db) {
+  try {
+    const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+    return c?.ia_config ? JSON.parse(c.ia_config) : {}
+  } catch { return {} }
+}
+
+const _MENU_COBRANCA = [
+  `👋 Olá! Bem-vindo ao atendimento do *Estima Food*.`,
+  ``,
+  `Escolha uma opção digitando o número:`,
+  `1️⃣ *Financeiro* (pagar fatura / 2ª via)`,
+  `2️⃣ *Suporte*`,
+  `3️⃣ *Falar com atendente*`
+].join('\n')
+
+async function _handleCobrancaBot(ctx, body) {
+  const { db, log, EVO_INST, sendWA, sendWAImage, _pausaHumano } = ctx
+  const event = body?.event || ''
+  if (event !== 'messages.upsert' && event !== 'message.upsert') return
+
+  const msgs = Array.isArray(body?.data?.messages) ? body.data.messages : (body?.data ? [body.data] : [])
+  const inst = _getInstanciaCobranca(db, EVO_INST)
+
+  for (const m of msgs) {
+    const fromMe = m?.key?.fromMe === true || m?.key?.fromMe === 'true'
+    const jid    = m?.key?.remoteJid || ''
+    if (!jid || jid.startsWith('status@') || jid.endsWith('@lid') || jid.includes('@g.us')) continue
+    const phone = jid.replace('@s.whatsapp.net', '').replace('@c.us', '')
+    if (!phone) continue
+
+    const pausaKey = `pausa:_cobranca:${phone}`
+
+    // Admin/Igor respondeu manualmente pelo próprio WhatsApp → pausa o bot pra esse contato
+    if (fromMe) {
+      _pausaHumano.set(pausaKey, Date.now())
+      continue
+    }
+
+    // Bot pausado (conversa sendo levada por humano) — não interfere por 30min
+    const pausaAt = _pausaHumano.get(pausaKey)
+    if (pausaAt && (Date.now() - pausaAt) < 30 * 60 * 1000) continue
+
+    const texto = String(
+      m?.message?.conversation ||
+      m?.message?.extendedTextMessage?.text ||
+      ''
+    ).trim()
+    const temImagem = !!(m?.message?.imageMessage)
+
+    const gConfig = _cobrancaConfigGlobal(db)
+    const atendenteWa = (gConfig.cobranca_atendente_whatsapp || '').replace(/\D/g, '') || null
+
+    // Comprovante enviado a qualquer momento → avisa o atendente e pausa o bot
+    if (temImagem) {
+      await sendWA(phone, '📎 Recebi seu comprovante! Vou repassar pro financeiro conferir e te aviso por aqui assim que confirmarmos. 🙏', inst)
+      _pausaHumano.set(pausaKey, Date.now())
+      if (atendenteWa) {
+        try {
+          const tCli = db.prepare(`
+            SELECT id, nome FROM tenants
+            WHERE telefone_cobranca IS NOT NULL AND telefone_cobranca != ''
+          `).all().find(t => phonesMatch(t.telefone_cobranca, phone))
+          await sendWA(atendenteWa, `📎 *Novo comprovante recebido*\n\nDe: ${phone}${tCli ? `\nCliente: ${tCli.nome}` : ''}\n\nConfira o WhatsApp de cobranças.`, inst)
+        } catch {}
+      }
+      continue
+    }
+
+    if (!texto) continue
+
+    let state = _cobrancaBotState.get(phone) || { step: 'menu', tentativas: 0 }
+    const txt = texto.toLowerCase()
+    const isGreeting = /^(oi+|ol[aá]+|bom dia|boa tarde|boa noite|menu|in[ií]cio|come[cç]ar)\b/.test(txt)
+
+    // Saudação a qualquer momento reseta pro menu
+    if (isGreeting || state.step === 'novo') {
+      state = { step: 'menu', tentativas: 0 }
+      _cobrancaBotState.set(phone, state)
+      await sendWA(phone, _MENU_COBRANCA, inst)
+      continue
+    }
+
+    if (state.step === 'menu') {
+      if (/^1|financeiro|fatura|pagar/.test(txt)) {
+        state = { step: 'aguardando_telefone', tentativas: 0 }
+        _cobrancaBotState.set(phone, state)
+        await sendWA(phone, 'Certo! ✅ Pra localizar sua fatura, me informa o número de telefone cadastrado no sistema (com DDD).\n\nEx: 85991234567', inst)
+      } else if (/^2|suporte/.test(txt)) {
+        _cobrancaBotState.delete(phone)
+        _pausaHumano.set(pausaKey, Date.now())
+        await sendWA(phone, 'Beleza! Encaminhei sua conversa pro nosso suporte — já te retornam por aqui. 🙂', inst)
+        if (atendenteWa) await sendWA(atendenteWa, `🆘 *Suporte solicitado* — cliente: ${phone}`, inst)
+      } else if (/^3|atendente|igor|humano/.test(txt)) {
+        _cobrancaBotState.delete(phone)
+        _pausaHumano.set(pausaKey, Date.now())
+        await sendWA(phone, 'Vou te transferir para o atendente, só um instante! 👤', inst)
+        if (atendenteWa) await sendWA(atendenteWa, `👤 *Cliente pediu atendimento* — ${phone}`, inst)
+      } else {
+        await sendWA(phone, 'Não entendi 🤔\n\n' + _MENU_COBRANCA, inst)
+      }
+      continue
+    }
+
+    if (state.step === 'aguardando_telefone') {
+      const digitado = texto.replace(/\D/g, '')
+      if (digitado.length < 8) {
+        await sendWA(phone, 'Não consegui identificar um número válido. Manda só os números, com DDD (ex: 85991234567).', inst)
+        continue
+      }
+      const tenant = db.prepare(`
+        SELECT t.*, sc.store_whatsapp FROM tenants t
+        LEFT JOIN store_config sc ON sc.tenant_id = t.id
+        WHERE (t.telefone_cobranca IS NOT NULL AND t.telefone_cobranca != '')
+           OR (sc.store_whatsapp IS NOT NULL AND sc.store_whatsapp != '')
+      `).all().find(t => phonesMatch(t.telefone_cobranca || t.store_whatsapp, digitado))
+
+      if (!tenant) {
+        state.tentativas = (state.tentativas || 0) + 1
+        if (state.tentativas >= 3) {
+          _cobrancaBotState.delete(phone)
+          _pausaHumano.set(pausaKey, Date.now())
+          await sendWA(phone, 'Não encontrei esse número no sistema. Vou te encaminhar pro atendente pra te ajudar. 👤', inst)
+          if (atendenteWa) await sendWA(atendenteWa, `⚠️ *Telefone não reconhecido no bot de cobrança* — cliente: ${phone}, informou: ${digitado}`, inst)
+        } else {
+          _cobrancaBotState.set(phone, state)
+          await sendWA(phone, 'Não encontrei esse número no sistema. Confere se digitou certo, com DDD (ex: 85991234567).', inst)
+        }
+        continue
+      }
+
+      const fatura = db.prepare(`SELECT * FROM faturas WHERE tenant_id=? AND status='pendente' ORDER BY created_at DESC LIMIT 1`).get(tenant.id)
+      if (!fatura) {
+        _cobrancaBotState.delete(phone)
+        await sendWA(phone, `Verifiquei aqui e não há nenhuma fatura em aberto pra *${tenant.nome}* no momento. Você está em dia! ✅`, inst)
+        continue
+      }
+
+      const valorTxt = parseFloat(fatura.valor).toFixed(2).replace('.', ',')
+      const venceTxt = fatura.vence_em ? new Date(fatura.vence_em).toLocaleDateString('pt-BR') : '-'
+      const msg = [
+        `🧾 *Fatura em aberto — ${tenant.nome}*`,
+        ``,
+        `💰 *Valor:* R$ ${valorTxt}`,
+        `⏰ *Vencimento:* ${venceTxt}`,
+        ``,
+        `💸 Pague via PIX com o código Copia e Cola abaixo, ou pelo QR Code que vou te enviar:`
+      ].join('\n')
+      await sendWA(phone, msg, inst)
+      if (fatura.qr_code) {
+        await new Promise(r => setTimeout(r, 1000))
+        await sendWA(phone, fatura.qr_code, inst)
+      }
+      if (fatura.qr_code_base64) {
+        await sendWAImage(phone, fatura.qr_code_base64, `📱 QR Code PIX — R$ ${valorTxt}`, inst)
+      }
+      _cobrancaBotState.delete(phone)
+      continue
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -714,7 +884,7 @@ let _autoCobrancaJobIniciado = false
 function _iniciarAutoCobrancaJob(ctx) {
   if (_autoCobrancaJobIniciado) return
   _autoCobrancaJobIniciado = true
-  const { db, log, MP_TOKEN, EVO_URL, EVO_KEY, EVO_INST, sendWA, marcarDirty } = ctx
+  const { db, log, MP_TOKEN, EVO_URL, EVO_KEY, EVO_INST, sendWA, sendWAImage, marcarDirty } = ctx
   log('🔄', 'Auto-cobrança job iniciado (intervalo: 6h)')
 
   async function tick() {
@@ -737,13 +907,13 @@ function _iniciarAutoCobrancaJob(ctx) {
       const mpToken = _resolveMpGlobal(db, MP_TOKEN)
       if (!mpToken) return // sem token, pula silenciosamente
 
-      // Tenants ativos vencendo em 3 dias (janela: hoje+2 a hoje+4 para evitar timing)
+      // Tenants ativos vencendo em 2 dias (janela: hoje+1 a hoje+2 para evitar perder por timing do job)
       const tenants = db.prepare(`
         SELECT * FROM tenants
         WHERE ativo=1
           AND slug NOT IN ('_admin','_global','admin')
           AND expires_at IS NOT NULL
-          AND date(expires_at) BETWEEN date('now','+2 days') AND date('now','+4 days')
+          AND date(expires_at) BETWEEN date('now','+1 days') AND date('now','+2 days')
       `).all()
       if (!tenants.length) return
 
@@ -781,7 +951,7 @@ function _iniciarAutoCobrancaJob(ctx) {
           if (plano !== 'fiscal' && t.valor_mensalidade !== null && t.valor_mensalidade !== undefined) {
             valor = parseFloat(t.valor_mensalidade)
           }
-          let obsFatura = 'Gerada automaticamente (3 dias antes do vencimento)'
+          let obsFatura = 'Gerada automaticamente (2 dias antes do vencimento)'
           if (plano === 'fiscal') {
             const fiscal = _adminFiscalCobrancaAtual(db, t.id, {
               mes: _adminFiscalMesAtual(),
@@ -835,11 +1005,14 @@ function _iniciarAutoCobrancaJob(ctx) {
           }
           marcarDirty()
 
-          // Manda WA
+          // Manda WA — prioriza o telefone de cobrança cadastrado no super admin;
+          // se não houver, cai pro WhatsApp da loja (store_config)
           try {
-            let telefone = null
-            const cfg = db.prepare('SELECT store_whatsapp FROM store_config WHERE tenant_id=?').get(t.id)
-            if (cfg?.store_whatsapp) telefone = String(cfg.store_whatsapp).replace(/\D/g, '')
+            let telefone = t.telefone_cobranca ? String(t.telefone_cobranca).replace(/\D/g, '') : null
+            if (!telefone) {
+              const cfg = db.prepare('SELECT store_whatsapp FROM store_config WHERE tenant_id=?').get(t.id)
+              if (cfg?.store_whatsapp) telefone = String(cfg.store_whatsapp).replace(/\D/g, '')
+            }
             if (telefone && (telefone.length === 11 || telefone.length === 10)) telefone = '55' + telefone
             if (telefone) {
               const valorTxt = parseFloat(valor).toFixed(2).replace('.', ',')
@@ -848,18 +1021,24 @@ function _iniciarAutoCobrancaJob(ctx) {
               const msg = [
                 `🧾 *Lembrete: sua mensalidade vence em breve*`,
                 ``,
-                `Olá! Seu plano *${planoNome}* do Estima Food vence em *3 dias*.`,
+                `Olá! Seu plano *${planoNome}* do Estima Food vence em *2 dias*.`,
                 ``,
                 `💰 *Valor:* R$ ${valorTxt}`,
                 `⏰ *Pague até:* ${venceEmTxt}`,
                 ``,
-                `💸 *Pague agora via PIX:*`,
-                link || '(link indisponível)',
+                `💸 *Pague agora via PIX* — escaneie o QR Code que vou te enviar ou use o código Copia e Cola abaixo:`,
                 ``,
                 `_O pagamento renova seu acesso automaticamente._ ✅`
               ].join('\n')
               const instCob = _getInstanciaCobranca(db, EVO_INST)
               await sendWA(telefone, msg, instCob)
+              if (qr) {
+                await new Promise(r => setTimeout(r, 1000))
+                await sendWA(telefone, qr, instCob) // mensagem separada — facilita copiar o código
+              }
+              if (qrB64) {
+                await sendWAImage(telefone, qrB64, `📱 QR Code PIX — R$ ${valorTxt}`, instCob)
+              }
             }
           } catch (eWa) { log('⚠️', `Auto-cobrança WA falhou tenant=${t.nome}: ${eWa.message}`) }
 
@@ -883,7 +1062,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
           hashPassword, verifyPassword, precisaMigrarHash, checkRateLimit, clientIp,
           validarFinanceAccess, fazerBackup, restaurarBackup, enviarBackupTelegram, TABELAS_BACKUP, getTenantId,
           MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
-          EVO_URL, EVO_KEY, EVO_INST, sendWA, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano,
+          EVO_URL, EVO_KEY, EVO_INST, sendWA, sendWAImage, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano,
           aplicarBaixaEstoquePedido,
           chatNormalizePhone, chatPhoneMatches, chatStatusLabel, chatOrderPublic, chatThreadPublic, chatMessagePublic,
           chatEnsureThreadFromOrder, chatEnsureThreadFromLead, chatAddMessageFromOrder, chatAddMessageToThread,
@@ -3987,6 +4166,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
     // Validade só faz sentido junto de um preço personalizado; sem preço, ignora a data
     const valorMensalidadeExpira = (valorMensalidade !== null && /^\d{4}-\d{2}-\d{2}$/.test(valorMensalidadeExpiraRaw))
       ? valorMensalidadeExpiraRaw : null
+    const telefoneCobrancaRaw = String(body.telefone_cobranca || '').replace(/\D/g, '')
+    const telefoneCobranca = (telefoneCobrancaRaw.length === 10 || telefoneCobrancaRaw.length === 11) ? telefoneCobrancaRaw : null
     if (!nome || !email || !senha) { send(res, 400, { error: 'nome, email e senha obrigatórios' }); return true }
     try {
       const hash     = crypto.createHash('sha256').update(senha).digest('hex')
@@ -3996,7 +4177,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (slug && slugFinal !== slug) { send(res, 400, { error: `Slug "${slug}" já em uso. Sugerimos: "${slugFinal}"` }); return true }
       if (db.prepare('SELECT id FROM sys_users WHERE email=?').get(email)) { send(res, 400, { error: `E-mail "${email}" já cadastrado.` }); return true }
       const seg = ['restaurante','acougue'].includes(segmento) ? segmento : 'restaurante'
-      db.prepare('INSERT INTO tenants (nome,plano,slug,segmento,expires_at,valor_mensalidade,valor_mensalidade_expira_em) VALUES (?,?,?,?,?,?,?)').run(nome, plano || 'basic', slugFinal, seg, expiresAt, valorMensalidade, valorMensalidadeExpira)
+      db.prepare('INSERT INTO tenants (nome,plano,slug,segmento,expires_at,valor_mensalidade,valor_mensalidade_expira_em,telefone_cobranca) VALUES (?,?,?,?,?,?,?,?)').run(nome, plano || 'basic', slugFinal, seg, expiresAt, valorMensalidade, valorMensalidadeExpira, telefoneCobranca)
       const t = db.prepare('SELECT id FROM tenants WHERE slug=?').get(slugFinal)
       db.prepare('INSERT OR IGNORE INTO store_config (tenant_id) VALUES (?)').run(t.id)
       // Define offset = max(id) atual para que o 1º pedido deste tenant comece em #1
@@ -5534,11 +5715,13 @@ module.exports = async function handleRoutes(req, res, ctx) {
           // Notifica gestor por WhatsApp
           ;(async () => {
             try {
-              let telefone = null
-              try {
-                const cfg = db.prepare('SELECT store_whatsapp FROM store_config WHERE tenant_id=?').get(tenant.id)
-                if (cfg?.store_whatsapp) telefone = String(cfg.store_whatsapp).replace(/\D/g, '')
-              } catch {}
+              let telefone = tenant.telefone_cobranca ? String(tenant.telefone_cobranca).replace(/\D/g, '') : null
+              if (!telefone) {
+                try {
+                  const cfg = db.prepare('SELECT store_whatsapp FROM store_config WHERE tenant_id=?').get(tenant.id)
+                  if (cfg?.store_whatsapp) telefone = String(cfg.store_whatsapp).replace(/\D/g, '')
+                } catch {}
+              }
               if (telefone && (telefone.length === 11 || telefone.length === 10)) telefone = '55' + telefone
               if (telefone) {
                 const planoNome = _planoSaasLabel(planoNovo)
@@ -6072,6 +6255,17 @@ module.exports = async function handleRoutes(req, res, ctx) {
       if (evoPath.startsWith('/instance/create') && r.ok && body.instanceName) db.prepare('UPDATE store_config SET evo_instance=? WHERE tenant_id=?').run(body.instanceName, tenantId)
       send(res, r.status, data)
     } catch (e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Webhook do chatbot de cobrança (instância admin) ──
+  // Registrado automaticamente ao criar/conectar a instância em Admin → Saques PIX.
+  // Fica separado do webhook multi-tenant (linha abaixo) porque a instância de
+  // cobrança não pertence a nenhum tenant — é do super admin.
+  if (req.method === 'POST' && upath === '/webhook/cobranca-admin') {
+    const body = await readBody(req)
+    try { await _handleCobrancaBot(ctx, body) } catch (e) { log('⚠️', 'Bot cobrança erro:', e.message) }
+    send(res, 200, { ok: true })
     return true
   }
 
@@ -8308,8 +8502,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
     try {
       const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
       const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
-      send(res, 200, { instance: g.cobranca_wa_instance || '' })
-    } catch(e) { send(res, 200, { instance: '' }) }
+      send(res, 200, { instance: g.cobranca_wa_instance || '', atendente_whatsapp: g.cobranca_atendente_whatsapp || '' })
+    } catch(e) { send(res, 200, { instance: '', atendente_whatsapp: '' }) }
     return true
   }
 
@@ -8324,20 +8518,50 @@ module.exports = async function handleRoutes(req, res, ctx) {
       send(res, 400, { error: 'Nome da instância inválido (use apenas letras, números, - e _)' })
       return true
     }
+    const atendenteRaw = String(body?.atendente_whatsapp || '').replace(/\D/g, '')
+    if (atendenteRaw && atendenteRaw.length !== 10 && atendenteRaw.length !== 11) {
+      send(res, 400, { error: 'WhatsApp do atendente inválido (use DDD + número)' })
+      return true
+    }
     try {
       const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
       const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
       g.cobranca_wa_instance = instance || null
+      g.cobranca_atendente_whatsapp = atendenteRaw || null
       db.prepare("INSERT INTO store_config (tenant_id, ia_config) VALUES ('_global', ?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config")
         .run(JSON.stringify(g))
       marcarDirty()
       _registrarAudit(sess, {
         acao: 'config.cobranca_wa',
         alvo_tipo: null, alvo_id: null, alvo_nome: null,
-        detalhes: { instance: instance || null }
+        detalhes: { instance: instance || null, atendente_whatsapp: atendenteRaw || null }
       }, req.headers)
-      send(res, 200, { ok: true, instance: instance || null })
+      send(res, 200, { ok: true, instance: instance || null, atendente_whatsapp: atendenteRaw || null })
     } catch(e) { send(res, 500, { error: e.message }) }
+    return true
+  }
+
+  // ── Proxy Evolution API para o super admin (/api/admin/evo/*) ──
+  // Usado pra criar/conectar a instância dedicada de cobranças direto do
+  // painel, sem precisar entrar no painel da Evolution API manualmente.
+  if (upath.startsWith('/api/admin/evo')) {
+    if (!validarSessaoAdmin(req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    const body   = ['POST', 'DELETE'].includes(req.method) ? await readBody(req) : {}
+    const action = upath.replace('/api/admin/evo', '')
+    try {
+      const r    = await fetch(`${EVO_URL}${action}`, { method: req.method, headers: { 'Content-Type': 'application/json', apikey: EVO_KEY }, body: req.method !== 'GET' ? JSON.stringify(body) : undefined })
+      const data = await r.json().catch(() => ({}))
+      // Ao criar a instância com sucesso, já salva como instância de cobranças
+      if (action.startsWith('/instance/create') && r.ok && body.instanceName) {
+        const c = db.prepare("SELECT ia_config FROM store_config WHERE tenant_id='_global'").get()
+        const g = c?.ia_config ? JSON.parse(c.ia_config) : {}
+        g.cobranca_wa_instance = body.instanceName
+        db.prepare("INSERT INTO store_config (tenant_id, ia_config) VALUES ('_global', ?) ON CONFLICT(tenant_id) DO UPDATE SET ia_config=excluded.ia_config")
+          .run(JSON.stringify(g))
+        marcarDirty()
+      }
+      send(res, r.status, data)
+    } catch (e) { send(res, 500, { error: e.message }) }
     return true
   }
 
