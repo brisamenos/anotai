@@ -4992,16 +4992,24 @@ const server = http.createServer(async (req,res) => {
     const body=await readBody(req)
     const senha=String(body.senha||'')
     if(!senha){send(res,400,{error:'Informe a senha'});return}
-    const senhaHash=crypto.createHash('sha256').update(senha).digest('hex')
-    const user=db.prepare(`
-      SELECT id,nome,email,role,tenant_id
+    // Usa a MESMA verificação do login normal (verifyPassword), que aceita
+    // tanto o formato novo (scrypt$salt$hash) quanto o legado (SHA256 puro).
+    // Antes comparava só SHA256 direto na query — funcionava apenas
+    // enquanto a senha nunca tivesse sido migrada; assim que o gestor
+    // logava uma vez no painel (o que migra a senha pro formato novo),
+    // a senha "parava de funcionar" aqui mesmo estando correta.
+    const candidatos=db.prepare(`
+      SELECT id,nome,email,role,tenant_id,senha_hash
       FROM sys_users
-      WHERE tenant_id=? AND senha_hash=? AND ativo=1
+      WHERE tenant_id=? AND ativo=1
         AND role IN ('gestor','admin','superadmin')
       ORDER BY CASE role WHEN 'gestor' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END
-      LIMIT 1
-    `).get(tid,senhaHash)
+    `).all(tid)
+    const user=candidatos.find(u=>verifyPassword(senha,u.senha_hash))
     if(!user){send(res,401,{error:'Senha do gestor incorreta'});return}
+    if(precisaMigrarHash(user.senha_hash)){
+      try{ db.prepare('UPDATE sys_users SET senha_hash=? WHERE id=?').run(hashPassword(senha),user.id) }catch(_){}
+    }
     const access=criarFinanceAccess(user, body.user_id || req.headers['x-user-id'] || '')
     send(res,200,{ok:true,token:access.token,expires_at:access.expires_at,ttl_ms:access.ttl_ms,authorized_by:user.nome||'Gestor'})
     return
