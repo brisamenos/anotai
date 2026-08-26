@@ -2481,6 +2481,30 @@ input,textarea{font-family:inherit}
   .rating-title{ font-size:21px !important; }
 }
 
+/* ══════════════════════════════════════════
+   ÍCONES DO MODO AÇOUGUE — cor adaptável ao tema + animação
+   Servidos localmente (cardapio/img/). Cada ícone tem 2 arquivos
+   (normal = tinta escura, "-claro" = tinta clara); o JS escolhe
+   qual usar lendo var(--text) do tema ativo (função em
+   cardapio-acougue.js), então funciona em qualquer tema, não só
+   dark/light. Aqui só cuida da animação de entrada + hover.
+══════════════════════════════════════════ */
+.ac-ico{
+  display:inline-block;
+  animation:acIcoPop .5s cubic-bezier(.34,1.56,.64,1) both;
+  transition:transform .18s ease;
+}
+.ac-ico:hover{ transform:scale(1.14) rotate(-4deg); }
+@keyframes acIcoPop{
+  0%{ opacity:0; transform:scale(.5) rotate(-10deg); }
+  70%{ opacity:1; }
+  100%{ opacity:1; transform:scale(1) rotate(0deg); }
+}
+@media (prefers-reduced-motion: reduce){
+  .ac-ico{ animation:none; }
+  .ac-ico:hover{ transform:none; }
+}
+
 
 </style>
 <script src="/api-client.js"></script>
