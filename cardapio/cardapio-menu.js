@@ -67,7 +67,11 @@ function buildCats() {
       b.className = 'cat-btn';
       b.dataset.key = c.name;
       b.onclick = () => filterCat(b, c.name);
-      b.textContent = (c.emoji ? c.emoji + ' ' : '') + (c.label || c.name);
+      if (c.image_url) {
+        b.innerHTML = `<span class="cat-btn-pill-icon"><img src="${c.image_url}" alt="" loading="lazy" decoding="async"></span>${c.label || c.name}`;
+      } else {
+        b.textContent = (c.emoji ? c.emoji + ' ' : '') + (c.label || c.name);
+      }
       scroll.appendChild(b);
     });
   }
