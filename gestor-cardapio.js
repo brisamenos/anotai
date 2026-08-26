@@ -1321,6 +1321,22 @@ function _statusIcon(status) {
   if (status === 'esgotado') return '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
   return '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M6 5h1.5v6H6zM8.5 5H10v6H8.5z" fill="currentColor"/></svg>';
 }
+// Detecta se o erro devolvido pelo api-client é de sessão de gestor
+// inválida/expirada (401), pra avisar o usuário de forma clara em vez de
+// deixar a escrita falhar silenciosamente (o cliente REST não lança
+// exceção em 4xx, ele só devolve { error }, então quem chama precisa
+// checar o campo explicitamente).
+function _isSessaoExpiradaError(error) {
+  if (!error) return false;
+  if (error.status === 401) return true;
+  const msg = String(error.message || '').toLowerCase();
+  return msg.includes('sessão') && (msg.includes('inválida') || msg.includes('expirada'));
+}
+function _avisarSessaoExpirada() {
+  sbToast('err', 'Sua sessão expirou. Faça login novamente para salvar as alterações.');
+  setTimeout(() => { if (typeof confirmarLogout === 'function') window.location.href = 'login.html'; }, 2500);
+}
+
 async function quickToggleStatus(id, el) {
   const it = items.find(i => i.id === id);
   if (!it) return;
@@ -1342,15 +1358,17 @@ async function quickToggleStatus(id, el) {
     );
   }
   try {
-    await sb.from('menu_items').update({ status: next.key }).eq('id', id);
+    const { error } = await sb.from('menu_items').update({ status: next.key }).eq('id', id);
+    if (error) throw error;
     sbToast('ok', `"${it.name}" → ${next.label}`);
   } catch(e) {
-    sbToast('err', 'Erro ao salvar status');
     it.status = _SC[cur].key;
+    if (_isSessaoExpiradaError(e)) _avisarSessaoExpirada();
+    else sbToast('err', 'Erro ao salvar status: ' + (e?.message || 'tente novamente'));
   }
   renderTable();
 }
-function cycleStatus(id, el) {
+async function cycleStatus(id, el) {
   const it = items.find(i => i.id === id);
   if (!it) return;
   const cur  = _SC.findIndex(s => s.key === it.status);
@@ -1359,7 +1377,17 @@ function cycleStatus(id, el) {
   _SC.forEach(s => el.classList.remove(s.cls));
   el.classList.add(next.cls);
   el.innerHTML = `<div class="stdot"></div>&nbsp;${next.label}`;
-  sb.from('menu_items').update({ status: next.key }).eq('id', id);
+  try {
+    const { error } = await sb.from('menu_items').update({ status: next.key }).eq('id', id);
+    if (error) throw error;
+  } catch(e) {
+    it.status = _SC[cur].key;
+    el.classList.remove(next.cls);
+    el.classList.add(_SC[cur].cls);
+    el.innerHTML = `<div class="stdot"></div>&nbsp;${_SC[cur].label}`;
+    if (_isSessaoExpiradaError(e)) _avisarSessaoExpirada();
+    else sbToast('err', 'Erro ao salvar status: ' + (e?.message || 'tente novamente'));
+  }
 }
 
 function setPizzaMax(ctx, val, el) {

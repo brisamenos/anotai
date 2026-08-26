@@ -1545,6 +1545,13 @@ function criarSessaoGestor(user) {
   db.prepare('INSERT OR REPLACE INTO gestor_sessions (token,user_id,tenant_id,nome,email,role,ts) VALUES (?,?,?,?,?,?,?)').run(token,user.id,user.tenant_id,user.nome,user.email,user.role,ts)
   return token
 }
+// Sessão de gestor é renovada (sliding expiration) enquanto estiver em uso,
+// em vez de expirar sempre 30 dias após o login original. Sem isso, um
+// gestor que usa o painel todo dia era deslogado no dia 31 do mesmo jeito
+// que um que nunca mais voltou — e a escrita falhava silenciosamente até
+// ele perceber e logar de novo. Throttle de 1h pra não escrever no banco
+// a cada requisição.
+const GESTOR_SESSION_RENEW_INTERVAL = 60 * 60 * 1000
 // Valida sessão de gestor. Se tenantId for informado, a sessão só é aceita
 // se pertencer àquele tenant (evita que o token de um restaurante seja
 // usado pra escrever nos dados de outro). Sessão de admin/superadmin
@@ -1558,7 +1565,12 @@ function validarSessaoGestor(req, tenantId, table) {
     const s = db.prepare('SELECT * FROM gestor_sessions WHERE token=?').get(token)
     if (s) {
       if (Date.now() - s.ts > GESTOR_SESSION_TTL) { db.prepare('DELETE FROM gestor_sessions WHERE token=?').run(token) }
-      else if (!tenantId || String(s.tenant_id) === String(tenantId)) return s
+      else if (!tenantId || String(s.tenant_id) === String(tenantId)) {
+        if (Date.now() - s.ts > GESTOR_SESSION_RENEW_INTERVAL) {
+          db.prepare('UPDATE gestor_sessions SET ts=? WHERE token=?').run(Date.now(), token)
+        }
+        return s
+      }
     }
   }
   // Garçom não tem privilégio de gestor completo — só cobre comandas/mesas
