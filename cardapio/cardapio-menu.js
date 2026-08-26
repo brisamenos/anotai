@@ -488,7 +488,7 @@ function itemCard(i) {
     : `R$ ${fmt(i.price)}${isKg ? '<span style="font-size:10px;font-weight:400;color:var(--muted)">/kg</span>' : ''}`;
 
   return `
-  <div class="item-card" ${click} style="${esg?'opacity:.55;cursor:not-allowed':''}">
+  <div class="item-card${isKg && _segmento==='acougue' ? ' item-card-kg' : ''}" ${click} style="${esg?'opacity:.55;cursor:not-allowed':''}">
     <div class="item-body">
       <div class="item-name">${i.name}</div>
       ${i.description ? `<div class="item-desc">${i.description}</div>` : ''}
