@@ -469,6 +469,11 @@ function setDelivery(type) {
   });
   document.getElementById('addr-block').style.display       = type==='delivery' ? '' : 'none';
   document.getElementById('mesa-block').style.display       = type==='mesa'     ? '' : 'none';
+  // O card "Entrega" (título + moldura) só existe pra dar contexto ao
+  // endereço/mesa — sem isso, escolher "Retirada" deixava um card vazio
+  // sobrando na tela, sem nenhum campo dentro.
+  const entregaSection = document.getElementById('checkout-entrega-section');
+  if (entregaSection) entregaSection.style.display = (type==='delivery' || type==='mesa') ? '' : 'none';
 
   // Endereço de retirada — simples (sem filiais extras) ou seletor de filial
   const retBlock    = document.getElementById('retirada-addr-block');
