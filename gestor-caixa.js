@@ -1047,13 +1047,26 @@ async function toggleStatus(){
   const pill = document.getElementById('pill-status');
   const on  = st.textContent === 'Online';
   const newOpen = !on;
-  st.textContent = newOpen ? 'Online' : 'Offline';
-  if (dot)  dot.style.background  = newOpen ? 'var(--success)' : 'var(--danger)';
-  if (pill) { pill.style.background = newOpen ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'; pill.style.borderColor = newOpen ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'; pill.style.color = newOpen ? 'var(--success)' : 'var(--danger)'; }
-  sbToast('ok', newOpen?'Loja aberta para pedidos!':'Loja pausada');
+  const _aplicarVisual = (open) => {
+    st.textContent = open ? 'Online' : 'Offline';
+    if (dot)  dot.style.background  = open ? 'var(--success)' : 'var(--danger)';
+    if (pill) { pill.style.background = open ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'; pill.style.borderColor = open ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'; pill.style.color = open ? 'var(--success)' : 'var(--danger)'; }
+  };
+  _aplicarVisual(newOpen);
   try {
-    await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, store_open: newOpen });
-  } catch(e) { console.warn('store_config sync:', e); }
+    const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, store_open: newOpen });
+    if (error) throw error;
+    sbToast('ok', newOpen?'Loja aberta para pedidos!':'Loja pausada');
+  } catch(e) {
+    // Reverte o visual — a mudança não foi salva de verdade, então não pode
+    // ficar mostrando um status diferente do que está no banco.
+    _aplicarVisual(on);
+    if (typeof _isSessaoExpiradaError === 'function' && _isSessaoExpiradaError(e)) {
+      _avisarSessaoExpirada();
+    } else {
+      sbToast('err', 'Erro ao salvar status da loja: ' + (e?.message || 'tente novamente'));
+    }
+  }
 }
 
 // ── Histórico de mesas do dia ─────────────────────────────────────────────────

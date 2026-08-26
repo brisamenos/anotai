@@ -940,7 +940,7 @@ function renderGestor(){
             <span class="cat-badge">${catItems.length} ite${catItems.length===1?'m':'ns'}</span>
           </div>
           <div class="cat-actions">
-            <div class="sw"><select onclick="event.stopPropagation()" style="font-size:11.5px;padding:4px 22px 4px 9px" onchange="handleCatAction(${cat.id},this.value,this)"><option value="">Ações ▾</option><option value="edit">Editar</option><option value="duplicate">Duplicar</option><option value="pause">Pausar</option><option value="delete">Excluir</option></select></div>
+            <div class="sw"><select onclick="event.stopPropagation()" style="font-size:11.5px;padding:4px 22px 4px 9px" onchange="handleCatAction(${cat.id},this.value,this)"><option value="">Ações ▾</option><option value="edit">Editar</option><option value="duplicate">Duplicar</option><option value="pause">Pausar todos os itens</option><option value="unpause">Despausar todos os itens</option><option value="delete">Excluir</option></select></div>
             <div class="cat-toggle${cat.open?' open':''}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
           </div>
         </div>
@@ -1107,8 +1107,44 @@ function handleCatAction(id, action, selectEl) {
   } else if (action === 'delete') {
     deleteCatById(id);
   } else if (action === 'pause') {
-    sbToast('ok', 'Categoria pausada!');
+    _pausarTodosItensCategoria(cat, true);
+  } else if (action === 'unpause') {
+    _pausarTodosItensCategoria(cat, false);
   }
+}
+
+// Pausa (ou despausa) todos os itens de uma categoria de uma vez.
+// Antes esse botão só mostrava "Categoria pausada!" sem alterar nada —
+// agora atualiza cada item de verdade e só confirma sucesso depois de
+// checar se a gravação realmente aconteceu (mesmo cuidado de sempre com
+// sessão expirada: erro 4xx não lança exceção, precisa checar {error}).
+async function _pausarTodosItensCategoria(cat, pausar) {
+  const alvo = items.filter(i => i.catKey === cat.name || i.cat === cat.name);
+  if (!alvo.length) { sbToast('err', 'Nenhum item encontrado nessa categoria'); return; }
+  const novoStatus = pausar ? 'pausado' : 'active';
+  // Ao despausar, só mexe em quem estava pausado — não sobrescreve quem
+  // já estava "esgotado" de propósito.
+  const alvoFiltrado = pausar ? alvo : alvo.filter(i => i.status === 'pausado');
+  if (!alvoFiltrado.length) { sbToast('ok', 'Nenhum item pausado nessa categoria'); return; }
+  const statusAnteriores = alvoFiltrado.map(i => i.status);
+  alvoFiltrado.forEach(i => { i.status = novoStatus; });
+  renderGestor();
+  sbLoading(true);
+  const results = await Promise.all(alvoFiltrado.map(i => sb.from('menu_items').update({ status: novoStatus }).eq('id', i.id)));
+  sbLoading(false);
+  const falhou = results.find(r => r?.error);
+  if (falhou) {
+    // Reverte só os que realmente falharam seria ideal, mas como o
+    // Promise.all não diz qual item corresponde a qual erro nessa forma
+    // simples, reverte todos pra evitar mostrar um estado que não bate
+    // com o banco — mais seguro do que arriscar inconsistência.
+    alvoFiltrado.forEach((i, idx) => { i.status = statusAnteriores[idx]; });
+    renderGestor();
+    if (_isSessaoExpiradaError(falhou.error)) _avisarSessaoExpirada();
+    else sbToast('err', 'Erro ao ' + (pausar?'pausar':'despausar') + ' categoria: ' + (falhou.error.message || 'tente novamente'));
+    return;
+  }
+  sbToast('ok', `${alvoFiltrado.length} item(ns) ${pausar?'pausado(s)':'reativado(s)'}!`);
 }
 
 // ── Duplicar categoria (cria cópia com todos os itens) ────
@@ -1391,20 +1427,33 @@ function filterSt(v){filters.status=v;renderTable();}
 function filterSearch(v){filters.search=v;renderTable();}
 async function saveAll() {
   sbLoading(true);
-  const updates = items.map(it =>
+  const results = await Promise.all(items.map(it =>
     sb.from('menu_items').update({
       price: it.price, status: it.status, days: it.days
     }).eq('id', it.id)
-  );
-  await Promise.all(updates);
+  ));
   sbLoading(false);
+  const falhou = results.find(r => r?.error);
+  if (falhou) {
+    if (_isSessaoExpiradaError(falhou.error)) _avisarSessaoExpirada();
+    else sbToast('err', 'Algumas alterações não foram salvas: ' + (falhou.error.message || 'erro desconhecido'));
+    return;
+  }
   showToast(_ICON_SAV,'Alterações salvas no banco!');
 }
 
 function updatePrice(id, val) {
   const n = parseFloat(val.replace('R$','').replace(',','.').trim());
   const it = items.find(i => i.id === id);
-  if (it && !isNaN(n)) { it.price = n; sb.from('menu_items').update({price:n}).eq('id',id); }
+  if (it && !isNaN(n)) {
+    it.price = n;
+    sb.from('menu_items').update({price:n}).eq('id',id).then(({ error }) => {
+      if (error) {
+        if (_isSessaoExpiradaError(error)) _avisarSessaoExpirada();
+        else sbToast('err', 'Erro ao salvar preço: ' + (error.message || 'tente novamente'));
+      }
+    });
+  }
 }
 
 function toggleDay(id,dayIdx,el){
