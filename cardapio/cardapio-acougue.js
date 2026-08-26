@@ -15,82 +15,79 @@ let _acougueAtual   = null;
 let _acouguePesos   = [];
 let _pesoConfirmadoPeloUsuario = false;
 
-// Ilustrações SVG estilo sketch para cada tipo de corte
-// ── Imagens de cortes servidas localmente (/uploads/cortes/) ──
-const _C = 'https://onbeef.s3.amazonaws.com/imagens-cortes';
+// Ilustrações dos cortes e ícones de preparo — servidos localmente pelo
+// próprio servidor (sem depender de link externo por questão de direitos autorais).
+// Arquivos ficam em:
+//   cardapio/img/cortes/<nome>.png   (ilustração de cada corte)
+//   cardapio/img/tags/<nome>.png     (ícone de cada modo de preparo)
+const _IMG_CORTES = '/cardapio/img/cortes';
+const _IMG_TAGS   = '/cardapio/img/tags';
 
 const _corteImgMap = {
-  moido:      'https://onbeef.s3.amazonaws.com/imagens-cortes/moida-2x.png',
-  moido2x:    'https://onbeef.s3.amazonaws.com/imagens-cortes/moida-2x.png',
-  tiras:      'https://onbeef.s3.amazonaws.com/imagens-cortes/tiras.png',
-  tirinha:    'https://onbeef.s3.amazonaws.com/imagens-cortes/tirinhas.png',
-  tirinhas:   'https://onbeef.s3.amazonaws.com/imagens-cortes/tirinhas.png',
-  strogonoff: 'https://onbeef.s3.amazonaws.com/imagens-cortes/strogonoff.png',
-  inteiro:    'https://onbeef.s3.amazonaws.com/imagens-cortes/inteira.png',
-  inteira:    'https://onbeef.s3.amazonaws.com/imagens-cortes/inteira.png',
-  espeto:     'https://onbeef.s3.amazonaws.com/imagens-cortes/espeto.png',
-  cubos:      'https://onbeef.s3.amazonaws.com/imagens-cortes/cubos.png',
-  picado:     'https://onbeef.s3.amazonaws.com/imagens-cortes/picado.png',
-  grelha:     'https://onbeef.s3.amazonaws.com/imagens-cortes/grelha.png',
-  peca:       'https://onbeef.s3.amazonaws.com/imagens-cortes/peca.png',
-  bife:       'https://onbeef.s3.amazonaws.com/imagens-cortes/bifemedio.png',
-  bifefino:   'https://onbeef.s3.amazonaws.com/imagens-cortes/bifefino.png',
-  bifemedio:  'https://onbeef.s3.amazonaws.com/imagens-cortes/bifemedio.png',
-  bifegrosso: 'https://onbeef.s3.amazonaws.com/imagens-cortes/bifegrosso.png',
-  postas:     'https://onbeef.s3.amazonaws.com/imagens-cortes/postas.png',
-  default:    'https://onbeef.s3.amazonaws.com/imagens-cortes/bifemedio.png',
+  moido:      `${_IMG_CORTES}/moida-2x.png`,
+  moido2x:    `${_IMG_CORTES}/moida-2x.png`,
+  tiras:      `${_IMG_CORTES}/tiras.png`,
+  tirinha:    `${_IMG_CORTES}/tirinhas.png`,
+  tirinhas:   `${_IMG_CORTES}/tirinhas.png`,
+  strogonoff: `${_IMG_CORTES}/strogonoff.png`,
+  inteiro:    `${_IMG_CORTES}/inteira.png`,
+  inteira:    `${_IMG_CORTES}/inteira.png`,
+  espeto:     `${_IMG_CORTES}/espeto.png`,
+  cubos:      `${_IMG_CORTES}/cubos.png`,
+  picado:     `${_IMG_CORTES}/picado.png`,
+  grelha:     `${_IMG_CORTES}/grelha.png`,
+  peca:       `${_IMG_CORTES}/peca.png`,
+  bife:       `${_IMG_CORTES}/bifemedio.png`,
+  bifefino:   `${_IMG_CORTES}/bifefino.png`,
+  bifemedio:  `${_IMG_CORTES}/bifemedio.png`,
+  bifegrosso: `${_IMG_CORTES}/bifegrosso.png`,
+  postas:     `${_IMG_CORTES}/postas.png`,
+  default:    `${_IMG_CORTES}/bifemedio.png`,
 };
 
 const _preparoImgMap = {
-  dia_a_dia:  'https://onbeef.s3.amazonaws.com/tags/icons/dia_a_dia.png',
-  churrasco:  'https://onbeef.s3.amazonaws.com/tags/icons/churrasco.png',
-  resfriado:  'https://onbeef.s3.amazonaws.com/tags/icons/wind.png',
-  grelhar:    'https://onbeef.s3.amazonaws.com/tags/icons/grellhar.png',
-  grelhado:   'https://onbeef.s3.amazonaws.com/tags/icons/grellhar.png',
-  grelha:     'https://onbeef.s3.amazonaws.com/tags/icons/grellhar.png',
-  defumado:   'https://onbeef.s3.amazonaws.com/tags/icons/smoker.png',
-  frigideira: 'https://onbeef.s3.amazonaws.com/tags/icons/frigideira.png',
-  forno:      'https://onbeef.s3.amazonaws.com/tags/icons/forno.png',
-  airfryer:   'https://onbeef.s3.amazonaws.com/tags/icons/airfryer.png',
-  panela:     'https://onbeef.s3.amazonaws.com/tags/icons/panela.png',
-  ensopado:   'https://onbeef.s3.amazonaws.com/tags/icons/ensopado.png',
-  espeto:     'https://onbeef.s3.amazonaws.com/tags/icons/espeto.png',
+  dia_a_dia:  `${_IMG_TAGS}/dia_a_dia.png`,
+  churrasco:  `${_IMG_TAGS}/churrasco.png`,
+  resfriado:  `${_IMG_TAGS}/wind.png`,
+  grelhar:    `${_IMG_TAGS}/grellhar.png`,
+  grelhado:   `${_IMG_TAGS}/grellhar.png`,
+  grelha:     `${_IMG_TAGS}/grellhar.png`,
+  defumado:   `${_IMG_TAGS}/smoker.png`,
+  frigideira: `${_IMG_TAGS}/frigideira.png`,
+  forno:      `${_IMG_TAGS}/forno.png`,
+  airfryer:   `${_IMG_TAGS}/airfryer.png`,
+  panela:     `${_IMG_TAGS}/panela.png`,
+  ensopado:   `${_IMG_TAGS}/ensopado.png`,
+  espeto:     `${_IMG_TAGS}/espeto.png`,
 };
 
-// Mapa de fallback direto pro S3 original
-const _S3fallback = {
-  'moida-2x': 'https://onbeef.s3.amazonaws.com/imagens-cortes/moida-2x.png',
-  moida:      'https://onbeef.s3.amazonaws.com/imagens-cortes/moida-2x.png',
-  tiras:      'https://onbeef.s3.amazonaws.com/imagens-cortes/tiras.png',
-  tirinhas:   'https://onbeef.s3.amazonaws.com/imagens-cortes/tirinhas.png',
-  inteira:    'https://onbeef.s3.amazonaws.com/imagens-cortes/inteira.png',
-  espeto:     'https://onbeef.s3.amazonaws.com/imagens-cortes/espeto.png',
-  cubos:      'https://onbeef.s3.amazonaws.com/imagens-cortes/cubos.png',
-  grelha:     'https://onbeef.s3.amazonaws.com/imagens-cortes/grelha.png',
-  peca:       'https://onbeef.s3.amazonaws.com/imagens-cortes/peca.png',
-  bifefino:   'https://onbeef.s3.amazonaws.com/imagens-cortes/bifefino.png',
-  bifemedio:  'https://onbeef.s3.amazonaws.com/imagens-cortes/bifemedio.png',
-  bifegrosso: 'https://onbeef.s3.amazonaws.com/imagens-cortes/bifegrosso.png',
-  strogonoff: 'https://onbeef.s3.amazonaws.com/imagens-cortes/strogonoff.png',
-  postas:     'https://onbeef.s3.amazonaws.com/imagens-cortes/postas.png',
-  picado:     'https://onbeef.s3.amazonaws.com/imagens-cortes/picado.png',
-  dia_a_dia:  'https://onbeef.s3.amazonaws.com/tags/icons/dia_a_dia.png',
-  churrasco:  'https://onbeef.s3.amazonaws.com/tags/icons/churrasco.png',
-  resfriado:  'https://onbeef.s3.amazonaws.com/tags/icons/wind.png',
-  grellhar:   'https://onbeef.s3.amazonaws.com/tags/icons/grellhar.png',
-  defumado:   'https://onbeef.s3.amazonaws.com/tags/icons/smoker.png',
-  frigideira: 'https://onbeef.s3.amazonaws.com/tags/icons/frigideira.png',
-  forno:      'https://onbeef.s3.amazonaws.com/tags/icons/forno.png',
-  airfryer:   'https://onbeef.s3.amazonaws.com/tags/icons/airfryer.png',
-};
+// Cada ícone tem 2 arquivos: "nome.png" (tinta escura, pra tema claro)
+// e "nome-claro.png" (tinta clara, pra tema escuro). Decidimos qual usar
+// lendo a cor de var(--text) do tema ativo — funciona em qualquer tema
+// do cardápio (não só "dark"/"classico"), inclusive temas novos que
+// forem criados depois, sem precisar mexer aqui.
+function _acIconeClaro() {
+  try {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
+    const m = raw.match(/^#?([0-9a-f]{6})$/i);
+    if (!m) return false;
+    const hex = m[1];
+    const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+    // --text claro (alta luminância) ⇒ o fundo do tema é escuro
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55;
+  } catch { return false; }
+}
 
-function _imgTag(url, alt, size) {
+function _acIconUrl(baseUrl) {
+  return _acIconeClaro() ? baseUrl.replace(/\.png$/i, '-claro.png') : baseUrl;
+}
+
+// alt = texto alternativo (acessibilidade); size = px
+// A classe "ac-ico" cuida da animação de entrada + hover (CSS, em index.html).
+function _imgTag(baseUrl, alt, size) {
   const s = size || 60;
-  // Pega a chave do nome do arquivo sem extensão para o fallback
-  const key = url.split('/').pop().replace('.png','');
-  const fb = _S3fallback[key] || '';
-  const onerror = fb ? `onerror="if(this.src!=='${fb}')this.src='${fb}'"` : '';
-  return `<img src="${url}" alt="${alt}" width="${s}" height="${s}" style="object-fit:contain;display:block" ${onerror}>`;
+  const src = _acIconUrl(baseUrl);
+  return `<img class="ac-ico" src="${src}" alt="${alt}" width="${s}" height="${s}" style="object-fit:contain;display:block" onerror="this.onerror=null;this.src='${baseUrl}'">`;
 }
 
 function _getCorteIlus(nome) {
