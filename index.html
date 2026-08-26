@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="dns-prefetch" href="https://sdk.mercadopago.com">
 <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@700;900&family=DM+Sans:wght@400;500;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
 <style>
 /* ═══════════════════════════════════════
    TOKENS
@@ -232,152 +232,148 @@
   background:#fff5f5; border-bottom:1px solid rgba(239,68,68,.15); color:#b91c1c;
 }
 
-/* ══════════════════════════════════════════
-   EFEITO 3D — Cards do Açougue
-   Ativo apenas quando body[data-segmento="acougue"]
-══════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════
+   IDENTIDADE VISUAL — AÇOUGUE
+   Ativa apenas quando body[data-segmento="acougue"].
+   Regra de ouro: cor de fundo/texto/destaque vem do TEMA escolhido
+   no painel (funciona igual pros outros segmentos) — o que é fixo
+   aqui é só o "material" da identidade açougue (latão, textura de
+   grão, tipografia dos selos, profundidade 3D), não a cor.
+══════════════════════════════════════════════════════════ */
+body[data-segmento="acougue"] {
+  --acg-brass:      #c1903f;
+  --acg-brass-l:    #e3c17f;
+  --acg-charcoal:   #241a12; /* só do selo KG — carimbo tem cor fixa, como um selo de verdade */
+  /* Textura ambiente sutil — usa a cor de destaque do TEMA/loja (--accent-rgb),
+     não uma cor própria fixa, pra mudar junto com o tema escolhido. */
+  background:
+    radial-gradient(38% 30% at 12% 8%,  rgba(var(--accent-rgb,125,31,20),.12) 0%, rgba(var(--accent-rgb,125,31,20),0) 70%),
+    radial-gradient(30% 26% at 88% 92%, rgba(193,144,63,.10) 0%, rgba(193,144,63,0) 70%),
+    var(--bg);
+}
 
-/* Perspectiva no container para habilitar 3D */
-body[data-segmento="acougue"] .item-grid {
+/* ── Selo de peso (KG) — carimbo de açougue de verdade ──
+   Aplicado via classe .item-card-kg (cardapio-menu.js) só nos
+   itens vendidos por peso — é informação real, não decoração.
+   Cor fixa de propósito: um carimbo tem a mesma cor não importa
+   o papel em que é carimbado. */
+body[data-segmento="acougue"] .item-card-kg .item-img::before {
+  content: 'KG';
+  position: absolute; top: 7px; right: 7px; z-index: 3;
+  background: var(--acg-brass-l); color: var(--acg-charcoal);
+  font: 400 11px/1 'Bebas Neue', sans-serif; letter-spacing: 1px;
+  padding: 4px 7px 3px; border-radius: 5px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.3);
+  transform: rotate(3deg);
+}
+
+/* ── Hero: textura de "veios" por cima do fundo do TEMA escolhido ──
+   Cada tema já define um fundo de hero próprio (claro/escuro/tropical/
+   etc) — aqui só somamos a textura de grão/veios por cima, sem trocar
+   a cor base, pra continuar reagindo à troca de tema. */
+body[data-segmento="acougue"] .hero {
+  /* padding-top de 1px (imperceptível) impede o margin-top do cartão de
+     "colapsar" com o hero — sem isso, o espaço reservado pro fundo escapa
+     pra FORA do hero (vira espaçamento da página) em vez de ficar visível
+     dentro dele, e o efeito nunca aparece quando não há banner de foto. */
+  padding-top: 1px;
+  background-image:
+    radial-gradient(120% 140% at 12% -10%, rgba(var(--accent-rgb,125,31,20),.30) 0%, rgba(var(--accent-rgb,125,31,20),0) 46%),
+    radial-gradient(90% 120% at 92% 112%, rgba(193,144,63,.22) 0%, rgba(193,144,63,0) 52%),
+    repeating-linear-gradient(112deg, rgba(128,128,128,.06) 0 2px, rgba(0,0,0,0) 2px 8px);
+}
+/* Sem banner de foto: em vez de sobrepor o cartão (que exigiria margem
+   NEGATIVA maior que a própria altura do hero, cobrindo o fundo inteiro —
+   foi o bug da primeira tentativa), damos um espaço POSITIVO generoso
+   antes do cartão. Esse espaço é o que fica visível como fundo. */
+body[data-segmento="acougue"] .hero-banner:not(.show) + .hero-inner {
+  margin-top: 88px;
+}
+body[data-segmento="acougue"] .hero-inner {
+  box-shadow: 0 14px 30px rgba(0,0,0,.28), 0 2px 0 var(--acg-brass) inset;
+}
+body[data-segmento="acougue"] .hero-logo { border: 2px solid var(--acg-brass); }
+body[data-segmento="acougue"] .hero-status-btn {
+  font-family: 'Bebas Neue', sans-serif; letter-spacing: .6px; font-size: 14px;
+}
+
+/* ── Categorias — anel de latão no ícone (o resto segue o tema) ── */
+body[data-segmento="acougue"] .cats-scroll.carousel .cat-btn-icon {
+  border: 1.5px solid var(--acg-brass);
+}
+
+/* ── Título de seção — traço latão/destaque à esquerda, marca o corte ── */
+body[data-segmento="acougue"] .section-label {
+  position: relative; padding-left: 28px;
+}
+body[data-segmento="acougue"] .section-label::before {
+  content: ''; position: absolute; left: 16px; top: 50%; transform: translateY(-42%);
+  width: 4px; height: 16px; border-radius: 2px;
+  background: linear-gradient(180deg, var(--accent), var(--acg-brass));
+}
+
+/* ── Perspectiva 3D nos carrosséis (mantida — dá profundidade real) ── */
+body[data-segmento="acougue"] .item-grid,
+body[data-segmento="acougue"] .item-grid.carousel {
   perspective: 900px;
   perspective-origin: 50% 30%;
 }
 
-/* Card base — transição suave */
-body[data-segmento="acougue"] .item-card {
-  transition: transform 0.22s ease, box-shadow 0.22s ease, background 0.15s;
+/* ── Cards de item: grão sutil por cima do fundo do tema + selo de latão ── */
+body[data-segmento="acougue"] .item-grid.carousel .item-card {
+  transition: transform .22s ease, box-shadow .22s ease;
   transform-style: preserve-3d;
   will-change: transform;
   border-radius: 14px !important;
-  border: none !important;
-  background: var(--s1) !important;
-  box-shadow:
-    0 2px 0px rgba(0,0,0,.18),
-    0 4px 8px rgba(0,0,0,.12),
-    0 1px 0px rgba(255,255,255,.6) inset;
-  position: relative;
-  overflow: visible !important;
-  margin-bottom: 6px;
-}
-
-/* Borda inferior "espessura" — cria ilusão de profundidade */
-body[data-segmento="acougue"] .item-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 14px;
-  box-shadow:
-    0 6px 0 -1px rgba(0,0,0,.22),
-    0 7px 0 -1px rgba(0,0,0,.12);
-  pointer-events: none;
-  z-index: 0;
-  transition: box-shadow 0.22s ease;
-}
-
-/* Reflexo de luz no topo */
-body[data-segmento="acougue"] .item-card::before {
-  content: '';
-  display: block !important;
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 50%;
-  border-radius: 14px 14px 0 0;
-  background: linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,0) 100%);
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* Hover — levanta e inclina o card */
-body[data-segmento="acougue"] .item-card:hover {
-  transform: translateY(-5px) rotateX(3deg) scale(1.012);
-  box-shadow:
-    0 2px 0px rgba(0,0,0,.18),
-    0 12px 28px rgba(0,0,0,.18),
-    0 4px 8px rgba(0,0,0,.10),
-    0 1px 0px rgba(255,255,255,.7) inset;
-}
-
-body[data-segmento="acougue"] .item-card:hover::after {
-  box-shadow:
-    0 10px 0 -2px rgba(0,0,0,.18),
-    0 12px 0 -3px rgba(0,0,0,.08);
-}
-
-/* Active — pressiona o card para baixo */
-body[data-segmento="acougue"] .item-card:active {
-  transform: translateY(2px) rotateX(-1deg) scale(0.99) !important;
-  box-shadow:
-    0 1px 0px rgba(0,0,0,.22),
-    0 2px 6px rgba(0,0,0,.10),
-    0 1px 0px rgba(255,255,255,.5) inset !important;
-}
-
-body[data-segmento="acougue"] .item-card:active::after {
-  box-shadow:
-    0 2px 0 -1px rgba(0,0,0,.18),
-    0 3px 0 -2px rgba(0,0,0,.08) !important;
-}
-
-/* Imagem — garante que fica acima do reflexo */
-body[data-segmento="acougue"] .item-img {
-  position: relative;
-  z-index: 2;
-}
-
-/* Body do card acima do reflexo */
-body[data-segmento="acougue"] .item-body {
-  position: relative;
-  z-index: 2;
-}
-
-/* Carousel do açougue — perspectiva individual */
-body[data-segmento="acougue"] .item-grid.carousel {
-  perspective: 800px;
-}
-
-body[data-segmento="acougue"] .item-grid.carousel .item-card {
-  border-radius: 14px !important;
   overflow: hidden !important;
+  background-image:
+    radial-gradient(circle at 22% 24%, rgba(128,128,128,.07) 0, rgba(128,128,128,0) 2.4px);
+  background-size: 13px 13px;
   box-shadow:
-    4px 6px 0 0 rgba(0,0,0,.20),
+    4px 6px 0 0 rgba(0,0,0,.18),
     0 8px 16px rgba(0,0,0,.14),
     0 1px 0 rgba(255,255,255,.5) inset;
-  transition: transform 0.22s ease, box-shadow 0.22s ease;
 }
-
 body[data-segmento="acougue"] .item-grid.carousel .item-card:hover {
   transform: translateY(-6px) rotateY(-4deg) scale(1.03);
   box-shadow:
-    6px 10px 0 0 rgba(0,0,0,.18),
-    0 16px 32px rgba(0,0,0,.18),
+    6px 10px 0 0 rgba(0,0,0,.16),
+    0 16px 32px rgba(0,0,0,.2),
     0 1px 0 rgba(255,255,255,.6) inset;
 }
-
 body[data-segmento="acougue"] .item-grid.carousel .item-card:active {
-  transform: translateY(1px) rotateY(0deg) scale(0.98) !important;
-  box-shadow:
-    2px 2px 0 0 rgba(0,0,0,.20),
-    0 2px 6px rgba(0,0,0,.12) !important;
+  transform: translateY(1px) rotateY(0deg) scale(.98) !important;
+  box-shadow: 2px 2px 0 0 rgba(0,0,0,.2), 0 2px 6px rgba(0,0,0,.14) !important;
+}
+body[data-segmento="acougue"] .item-grid.carousel .item-name {
+  font-family: 'Fraunces', serif; font-weight: 800;
+}
+body[data-segmento="acougue"] .item-grid.carousel .item-porcao-ref {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(193,144,63,.14); border: 1px solid var(--acg-brass);
+  color: var(--accent); padding: 2px 8px; border-radius: 20px;
+  font-family: 'Bebas Neue', sans-serif; letter-spacing: .5px; font-size: 11px;
+}
+body[data-segmento="acougue"] .item-grid.carousel .item-esgotado-overlay {
+  font-family: 'Bebas Neue', sans-serif; letter-spacing: .6px;
 }
 
-/* Destaque cards do açougue também ganham 3D */
+/* ── Destaques — mesma profundidade 3D, cor segue o tema ── */
 body[data-segmento="acougue"] .dest-card {
-  transition: transform 0.22s ease, box-shadow 0.22s ease;
-  box-shadow:
-    3px 5px 0 0 rgba(0,0,0,.18),
-    0 6px 14px rgba(0,0,0,.12);
+  transition: transform .22s ease, box-shadow .22s ease;
+  box-shadow: 3px 5px 0 0 rgba(0,0,0,.16), 0 6px 14px rgba(0,0,0,.12);
 }
-
 body[data-segmento="acougue"] .dest-card:hover {
   transform: translateY(-5px) rotateY(-3deg) scale(1.03);
-  box-shadow:
-    5px 9px 0 0 rgba(0,0,0,.16),
-    0 14px 28px rgba(0,0,0,.16);
+  box-shadow: 5px 9px 0 0 rgba(0,0,0,.14), 0 14px 28px rgba(0,0,0,.16);
 }
-
 body[data-segmento="acougue"] .dest-card:active {
-  transform: scale(0.97) translateY(1px) !important;
-  box-shadow: 1px 2px 0 0 rgba(0,0,0,.18) !important;
+  transform: scale(.97) translateY(1px) !important;
+  box-shadow: 1px 2px 0 0 rgba(0,0,0,.16) !important;
+}
+body[data-segmento="acougue"] .dest-name { font-family: 'Fraunces', serif; }
+body[data-segmento="acougue"] .dest-promo-badge {
+  font-family: 'Bebas Neue', sans-serif; letter-spacing: .6px;
 }
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -547,8 +543,8 @@ input,textarea{font-family:inherit}
   min-width:64px;text-align:center;flex-shrink:0;
 }
 .cats-scroll.carousel .cat-btn.on{color:var(--accent);border-color:var(--accent);background:rgba(var(--accent-rgb,249,115,22),.08)}
-.cat-btn-icon{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:rgba(255,255,255,.06);flex-shrink:0;overflow:hidden}
-.cat-btn-icon img{width:24px;height:24px;object-fit:contain}
+.cat-btn-icon{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(255,255,255,.06);flex-shrink:0;overflow:hidden}
+.cat-btn-icon img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 
 /* ═══════════════════════════════════════
    MENU

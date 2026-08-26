@@ -4754,6 +4754,20 @@ Use no seu próximo pedido.</textarea>
   <div class="modal" style="width:420px">
     <button class="modal-close" onclick="closeModal('modal-add-cat')"></button>
     <h2>Nova Categoria</h2>
+    <div class="form-row"><label class="form-label">Ícone (opcional)</label>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div id="cat-img-preview" style="width:56px;height:56px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--s2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center">
+          <img id="cat-img-thumb" style="width:100%;height:100%;object-fit:cover;display:none">
+          <span id="cat-img-placeholder" style="font-size:22px;opacity:.35">🖼️</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <button type="button" class="btn bg" style="font-size:12px;padding:6px 12px" onclick="document.getElementById('cat-img-input').click()">Escolher imagem</button>
+          <button type="button" id="cat-img-remove" class="btn bg" style="font-size:11px;padding:4px 10px;display:none;color:var(--danger)" onclick="removeAddCatImage()">Remover</button>
+        </div>
+        <input type="file" id="cat-img-input" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none" onchange="handleAddCatImageSelect(this)">
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px">Aparece como ícone redondo na barra de categorias do cardápio do cliente. Sem imagem, usa o emoji/ícone padrão.</div>
+    </div>
     <div class="form-row"><label class="form-label">Nome da categoria</label><input class="form-input" id="cat-name-input" placeholder="Ex: Pizzas, Combos, Sobremesas"></div>
     <div class="form-row"><label class="form-label">Tipo</label>
       <div class="sw" style="width:100%"><select id="cat-type-input" class="form-input" style="width:100%">
@@ -4779,6 +4793,20 @@ Use no seu próximo pedido.</textarea>
     <button class="modal-close" onclick="closeModal('modal-edit-cat')"></button>
     <h2>Editar Categoria</h2>
     <input type="hidden" id="edit-cat-id">
+    <div class="form-row"><label class="form-label">Ícone (opcional)</label>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div id="edit-cat-img-preview" style="width:56px;height:56px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--s2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center">
+          <img id="edit-cat-img-thumb" style="width:100%;height:100%;object-fit:cover;display:none">
+          <span id="edit-cat-img-placeholder" style="font-size:22px;opacity:.35">🖼️</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <button type="button" class="btn bg" style="font-size:12px;padding:6px 12px" onclick="document.getElementById('edit-cat-img-input').click()">Trocar imagem</button>
+          <button type="button" id="edit-cat-img-remove" class="btn bg" style="font-size:11px;padding:4px 10px;display:none;color:var(--danger)" onclick="removeEditCatImage()">Remover</button>
+        </div>
+        <input type="file" id="edit-cat-img-input" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none" onchange="handleEditCatImageSelect(this)">
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px">Aparece como ícone redondo na barra de categorias do cardápio do cliente. Sem imagem, usa o emoji/ícone padrão.</div>
+    </div>
     <div class="form-row"><label class="form-label">Nome da categoria</label><input class="form-input" id="edit-cat-name" placeholder="Nome da categoria"></div>
     <div class="form-row"><label class="form-label">Tipo</label>
       <div class="sw" style="width:100%"><select id="edit-cat-type" class="form-input" style="width:100%">

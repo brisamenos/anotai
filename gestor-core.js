@@ -682,7 +682,7 @@ async function loadAllData(silent = false) {
     if (itemsRes.data?.length)    items         = itemsRes.data.map(mapItem);
     if (catsRes.data?.length)     categories    = catsRes.data.map(c => ({
       id: c.id, name: c.name, label: c.label || c.name,
-      type: c.type||'Itens principais', promo:!!c.promo, open:false
+      type: c.type||'Itens principais', promo:!!c.promo, imageUrl: c.image_url || null, open:false
     }));
     // Merge pedidos ativos + pedidos entregue recentes
     const _ordersAtivosRaw = ordersRes?.data || [];
@@ -2589,6 +2589,26 @@ async function uploadItemImage(file, itemId) {
   const publicUrl = data?.publicUrl || data?.url || bucket.getPublicUrl(filePath).data.publicUrl;
   if (!publicUrl) throw new Error('Upload sem URL pública');
   _invalidateImgGalleryCache(); // nova imagem disponível na galeria
+  return publicUrl;
+}
+
+// Imagem de categoria — mesmo bucket do menu, pasta separada. Usada como
+// ícone redondo na barra de categorias do cardápio do cliente (alternativa
+// ao emoji), ver .cat-btn-icon em cardapio-menu.js / index.html.
+async function uploadCategoryImage(file, catId) {
+  if (file.size > 2 * 1024 * 1024) throw new Error('Imagem muito grande. Use uma imagem de até 2MB.');
+  const extFromType = {
+    'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png',
+    'image/webp': 'webp', 'image/gif': 'gif'
+  };
+  const ext = extFromType[file.type] || (String(file.name || '').split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+  const safeCat = String(catId || 'nova').replace(/[^a-zA-Z0-9_-]/g, '');
+  const filePath = `categories/${safeCat}-${Date.now()}.${ext}`;
+  const bucket = sb.storage.from('menu-images');
+  const { data, error } = await bucket.upload(filePath, file, { upsert: true });
+  if (error) throw new Error(error.message || error.error || 'Falha ao enviar imagem');
+  const publicUrl = data?.publicUrl || data?.url || bucket.getPublicUrl(filePath).data.publicUrl;
+  if (!publicUrl) throw new Error('Upload sem URL pública');
   return publicUrl;
 }
 

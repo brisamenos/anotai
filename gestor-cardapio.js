@@ -1011,8 +1011,66 @@ function _populateCatPrinterSelect(selectId, catKey) {
 
 function prepareAddCategoryModal() {
   _populateCatPrinterSelect('cat-printer-input', '');
+  _newCatImageFile = null;
+  const thumb = document.getElementById('cat-img-thumb');
+  const placeholder = document.getElementById('cat-img-placeholder');
+  const removeBtn = document.getElementById('cat-img-remove');
+  if (thumb) { thumb.src = ''; thumb.style.display = 'none'; }
+  if (placeholder) placeholder.style.display = 'block';
+  if (removeBtn) removeBtn.style.display = 'none';
 }
 window.prepareAddCategoryModal = prepareAddCategoryModal;
+
+let _newCatImageFile = null;
+function handleAddCatImageSelect(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  _newCatImageFile = file;
+  const thumb = document.getElementById('cat-img-thumb');
+  const placeholder = document.getElementById('cat-img-placeholder');
+  const removeBtn = document.getElementById('cat-img-remove');
+  const url = URL.createObjectURL(file);
+  if (thumb) { thumb.src = url; thumb.style.display = 'block'; }
+  if (placeholder) placeholder.style.display = 'none';
+  if (removeBtn) removeBtn.style.display = 'inline-flex';
+  inputEl.value = '';
+}
+function removeAddCatImage() {
+  _newCatImageFile = null;
+  const thumb = document.getElementById('cat-img-thumb');
+  const placeholder = document.getElementById('cat-img-placeholder');
+  const removeBtn = document.getElementById('cat-img-remove');
+  if (thumb) { thumb.src = ''; thumb.style.display = 'none'; }
+  if (placeholder) placeholder.style.display = 'block';
+  if (removeBtn) removeBtn.style.display = 'none';
+}
+
+let _editCatImageFile = null;
+let _editCatImageRemove = false;
+function handleEditCatImageSelect(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  _editCatImageFile = file;
+  _editCatImageRemove = false;
+  const thumb = document.getElementById('edit-cat-img-thumb');
+  const placeholder = document.getElementById('edit-cat-img-placeholder');
+  const removeBtn = document.getElementById('edit-cat-img-remove');
+  const url = URL.createObjectURL(file);
+  if (thumb) { thumb.src = url; thumb.style.display = 'block'; }
+  if (placeholder) placeholder.style.display = 'none';
+  if (removeBtn) removeBtn.style.display = 'inline-flex';
+  inputEl.value = '';
+}
+function removeEditCatImage() {
+  _editCatImageFile = null;
+  _editCatImageRemove = true;
+  const thumb = document.getElementById('edit-cat-img-thumb');
+  const placeholder = document.getElementById('edit-cat-img-placeholder');
+  const removeBtn = document.getElementById('edit-cat-img-remove');
+  if (thumb) { thumb.src = ''; thumb.style.display = 'none'; }
+  if (placeholder) placeholder.style.display = 'block';
+  if (removeBtn) removeBtn.style.display = 'none';
+}
 
 function _saveCatPrinterRoute(catKey, printer) {
   if (!catKey || typeof window.setPrintSetorCategoria !== 'function') return;
@@ -1029,6 +1087,20 @@ function handleCatAction(id, action, selectEl) {
     document.getElementById('edit-cat-name').value = cat.label;
     document.getElementById('edit-cat-type').value = cat.type || 'Itens principais';
     _populateCatPrinterSelect('edit-cat-printer', cat.name);
+    _editCatImageFile = null;
+    _editCatImageRemove = false;
+    const thumb = document.getElementById('edit-cat-img-thumb');
+    const placeholder = document.getElementById('edit-cat-img-placeholder');
+    const removeBtn = document.getElementById('edit-cat-img-remove');
+    if (cat.imageUrl) {
+      if (thumb) { thumb.src = cat.imageUrl; thumb.style.display = 'block'; }
+      if (placeholder) placeholder.style.display = 'none';
+      if (removeBtn) removeBtn.style.display = 'inline-flex';
+    } else {
+      if (thumb) { thumb.src = ''; thumb.style.display = 'none'; }
+      if (placeholder) placeholder.style.display = 'block';
+      if (removeBtn) removeBtn.style.display = 'none';
+    }
     openModal('modal-edit-cat');
   } else if (action === 'duplicate') {
     duplicateCategory(id);
@@ -1053,11 +1125,12 @@ async function duplicateCategory(id) {
       label:      novoLabel,
       type:       cat.type  || 'Itens principais',
       promo:      false,
+      image_url:  cat.imageUrl || null,
       sort_order: categories.length + 1
     }).select().single();
     if (catErr || !newCat) throw new Error(catErr?.message || 'Erro ao criar categoria');
 
-    categories.push({ id: newCat.id, name: newCat.name, label: newCat.label, type: newCat.type, promo: false, open: false });
+    categories.push({ id: newCat.id, name: newCat.name, label: newCat.label, type: newCat.type, promo: false, imageUrl: newCat.image_url || null, open: false });
 
     // 2. Duplica todos os itens desta categoria
     const catItems = items.filter(i => i.catKey === cat.name || i.cat === cat.name);
@@ -1145,11 +1218,28 @@ async function saveEditCategory() {
   const { error } = await sb.from('categories').update({
     label: name, type
   }).eq('id', id);
-  sbLoading(false);
-  if (error) { sbToast('err','Erro ao salvar'); return; }
+  if (error) { sbLoading(false); sbToast('err','Erro ao salvar'); return; }
   const cat = categories.find(c => c.id === id);
   if (cat) { cat.label = name; cat.type = type; }
   if (cat) _saveCatPrinterRoute(cat.name, printer);
+
+  // Imagem: nova imagem selecionada, remoção pedida, ou nada muda
+  if (_editCatImageFile) {
+    try {
+      const url = await uploadCategoryImage(_editCatImageFile, id);
+      await sb.from('categories').update({ image_url: url }).eq('id', id);
+      if (cat) cat.imageUrl = url;
+    } catch (e) { sbToast('err', 'Categoria salva, mas erro ao enviar imagem: ' + (e.message || '')); }
+  } else if (_editCatImageRemove) {
+    try {
+      await sb.from('categories').update({ image_url: null }).eq('id', id);
+      if (cat) cat.imageUrl = null;
+    } catch (e) { sbToast('err', 'Categoria salva, mas erro ao remover imagem'); }
+  }
+  _editCatImageFile = null;
+  _editCatImageRemove = false;
+
+  sbLoading(false);
   closeModal('modal-edit-cat');
   renderGestor();
   populateCatSelects();
@@ -1214,15 +1304,27 @@ async function addCategory() {
   }
 
   console.log('[ADD-CAT] ✅ categoria criada id:', data.id);
-  categories.push({
+  const novaCategoria = {
     id:    data.id,
     name:  data.name,
     label: data.label || name,
     type:  data.type  || type,
     promo: false,
+    imageUrl: null,
     open:  false
-  });
+  };
+  categories.push(novaCategoria);
   if (printer) _saveCatPrinterRoute(data.name, printer);
+
+  // Se uma imagem foi escolhida, faz o upload agora que já existe um ID real
+  if (_newCatImageFile) {
+    try {
+      const url = await uploadCategoryImage(_newCatImageFile, data.id);
+      await sb.from('categories').update({ image_url: url }).eq('id', data.id);
+      novaCategoria.imageUrl = url;
+    } catch (e) { sbToast('err', 'Categoria criada, mas erro ao enviar imagem: ' + (e.message || '')); }
+    _newCatImageFile = null;
+  }
 
   closeModal('modal-add-cat');
   if (nameEl) nameEl.value = '';
