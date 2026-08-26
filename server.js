@@ -1622,6 +1622,24 @@ function checkRateLimit(key, maxAttempts, windowMs) {
   b.count++
   return b.count <= maxAttempts
 }
+// ── Rate limit de login (só conta tentativa ERRADA) ──────
+// Diferente de checkRateLimit (que conta toda chamada, usada pro flood geral
+// da API), aqui a chave já deve incluir IP + identificador da conta (email/
+// usuário/tenant) — assim um IP compartilhado (várias pessoas da mesma loja/
+// Wi-Fi) não trava por causa da tentativa de outra pessoa, só quem estiver
+// de fato errando a senha repetidamente naquela conta específica.
+function loginRateLimited(key, maxAttempts, windowMs) {
+  const now = Date.now()
+  const b = _rateBuckets.get(key)
+  if (!b || now - b.start > windowMs) return false // sem tentativas recentes: liberado
+  return b.count >= maxAttempts
+}
+function registrarLoginFalho(key, windowMs) {
+  const now = Date.now()
+  let b = _rateBuckets.get(key)
+  if (!b || now - b.start > windowMs) { b = { start: now, count: 0 }; _rateBuckets.set(key, b) }
+  b.count++
+}
 setInterval(() => {
   const now = Date.now()
   for (const [k, b] of _rateBuckets) { if (now - b.start > 30 * 60 * 1000) _rateBuckets.delete(k) }
@@ -5362,6 +5380,7 @@ const server = http.createServer(async (req,res) => {
   const _routeCtx = { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
     validarSessaoAdmin, criarSessaoAdmin, validarSessaoGestor, criarSessaoGestor, criarSessaoGarcom,
     hashPassword, verifyPassword, precisaMigrarHash, checkRateLimit, clientIp,
+    loginRateLimited, registrarLoginFalho,
     validarFinanceAccess, fazerBackup, restaurarBackup, enviarBackupTelegram, TABELAS_BACKUP, getTenantId,
     MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
     EVO_URL, EVO_KEY, EVO_INST, sendWA, sendWAImage, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano,

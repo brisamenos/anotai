@@ -1290,6 +1290,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
   const { upath, params, db, send, readBody, log, sseBroadcast, marcarDirty,
           validarSessaoAdmin, criarSessaoAdmin, validarSessaoGestor, criarSessaoGestor, criarSessaoGarcom,
           hashPassword, verifyPassword, precisaMigrarHash, checkRateLimit, clientIp,
+          loginRateLimited, registrarLoginFalho,
           validarFinanceAccess, fazerBackup, restaurarBackup, enviarBackupTelegram, TABELAS_BACKUP, getTenantId,
           MP_TOKEN, TAXA_PIX, BACKUP_PATH, UPLOADS_DIR,
           EVO_URL, EVO_KEY, EVO_INST, sendWA, sendWAImage, fillVars, sleep, checarAniv, handleIAWebhook, _pausaHumano,
@@ -3322,15 +3323,23 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const ref = String(body.tenant_id || body.tenant || body.slug || req.headers['x-tenant-id'] || '').trim()
     const phone = _digits(body.telefone || body.phone || '')
     if (!ref || !phone) { send(res, 400, { error: 'Loja e telefone obrigatorios' }); return true }
+    // Login só por telefone (sem senha) — mais fácil de tentar vários números
+    // em sequência pra descobrir um entregador válido, então o limite aqui é
+    // por IP+loja (não dá pra travar por telefone individual, já que é
+    // justamente o que se está tentando adivinhar).
+    const _rlKeyEntregador = 'entregador-login:' + clientIp(req) + ':' + ref
+    if (loginRateLimited(_rlKeyEntregador, 8, 5 * 60 * 1000)) {
+      send(res, 429, { error: 'Muitas tentativas. Aguarde alguns minutos.' }); return true
+    }
     try {
       const tenant = db.prepare('SELECT id,nome,slug FROM tenants WHERE id=? OR slug=? LIMIT 1').get(ref, ref)
-      if (!tenant) { send(res, 404, { error: 'Loja nao encontrada' }); return true }
+      if (!tenant) { registrarLoginFalho(_rlKeyEntregador, 5 * 60 * 1000); send(res, 404, { error: 'Loja nao encontrada' }); return true }
       const entregadores = db.prepare('SELECT * FROM entregadores WHERE tenant_id=? AND ativo=1').all(tenant.id)
       const driver = entregadores.find(d => {
         const dPhone = _digits(d.telefone || '')
         return dPhone && (dPhone === phone || dPhone.slice(-8) === phone.slice(-8))
       })
-      if (!driver) { send(res, 401, { error: 'Entregador nao encontrado ou inativo' }); return true }
+      if (!driver) { registrarLoginFalho(_rlKeyEntregador, 5 * 60 * 1000); send(res, 401, { error: 'Entregador nao encontrado ou inativo' }); return true }
       const token = crypto.randomBytes(32).toString('hex')
       const ts = Date.now()
       db.prepare('DELETE FROM entregador_sessions WHERE ts < ?').run(ts - ENTREGADOR_SESSION_TTL)
@@ -4193,7 +4202,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const { email, senha, senha_hash } = body
     const plain = senha || senha_hash // aceita senha em texto puro (novo) ou hash legado, pra não quebrar admin.html velho em cache
     if (!email || !plain) { send(res, 400, { error: 'email e senha obrigatórios' }); return true }
-    if (!checkRateLimit('admin-login:' + clientIp(req), 10, 5 * 60 * 1000)) {
+    const _rlKeyAdmin = 'admin-login:' + clientIp(req) + ':' + email.toLowerCase().trim()
+    if (loginRateLimited(_rlKeyAdmin, 8, 5 * 60 * 1000)) {
       send(res, 429, { error: 'Muitas tentativas. Aguarde alguns minutos.' }); return true
     }
     const u = db.prepare("SELECT id,nome,email,role,senha_hash FROM sys_users WHERE email=? AND ativo=1 AND role IN ('superadmin','admin')").get(email.toLowerCase().trim())
@@ -4202,7 +4212,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
     // aceita texto puro contra o hash real; se vier um hash pronto, compara
     // direto contra o valor salvo (suporta o formato antigo apenas).
     const ok = u && (verifyPassword(plain, u.senha_hash) || (senha_hash && u.senha_hash === senha_hash))
-    if (!ok) { send(res, 401, { error: 'Acesso negado. Credenciais inválidas.' }); return true }
+    if (!ok) { registrarLoginFalho(_rlKeyAdmin, 5 * 60 * 1000); send(res, 401, { error: 'Acesso negado. Credenciais inválidas.' }); return true }
     if (senha && precisaMigrarHash(u.senha_hash)) {
       try { db.prepare('UPDATE sys_users SET senha_hash=? WHERE id=?').run(hashPassword(senha), u.id) } catch(_) {}
     }
@@ -4221,7 +4231,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const body = await readBody(req)
     const { email, senha } = body
     if (!email || !senha) { send(res, 400, { error: 'email e senha obrigatórios' }); return true }
-    if (!checkRateLimit('gestor-login:' + clientIp(req), 10, 5 * 60 * 1000)) {
+    const _rlKeyGestor = 'gestor-login:' + clientIp(req) + ':' + email.toLowerCase().trim()
+    if (loginRateLimited(_rlKeyGestor, 8, 5 * 60 * 1000)) {
       send(res, 429, { error: 'Muitas tentativas. Aguarde alguns minutos.' }); return true
     }
     const u = db.prepare(`
@@ -4230,7 +4241,7 @@ module.exports = async function handleRoutes(req, res, ctx) {
       FROM sys_users su LEFT JOIN tenants t ON su.tenant_id=t.id
       WHERE su.email=?
     `).get(email.toLowerCase().trim())
-    if (!u || !verifyPassword(senha, u.senha_hash)) { send(res, 401, { error: 'Email ou senha incorretos.' }); return true }
+    if (!u || !verifyPassword(senha, u.senha_hash)) { registrarLoginFalho(_rlKeyGestor, 5 * 60 * 1000); send(res, 401, { error: 'Email ou senha incorretos.' }); return true }
     if (!u.ativo) { send(res, 403, { error: 'Sua conta está desativada. Fale com o administrador.' }); return true }
     if (precisaMigrarHash(u.senha_hash)) {
       try { db.prepare('UPDATE sys_users SET senha_hash=? WHERE id=?').run(hashPassword(senha), u.id) } catch(_) {}
@@ -7474,7 +7485,8 @@ module.exports = async function handleRoutes(req, res, ctx) {
     const { usuario, senha } = body
     if (!usuario || !senha) { send(res, 400, { error: 'Usuário e senha obrigatórios' }); return true }
     if (!tid)               { send(res, 400, { error: 'Tenant não identificado' }); return true }
-    if (!checkRateLimit('garcom-login:' + clientIp(req), 15, 5 * 60 * 1000)) {
+    const _rlKeyGarcom = 'garcom-login:' + clientIp(req) + ':' + tid + ':' + usuario.trim().toLowerCase()
+    if (loginRateLimited(_rlKeyGarcom, 8, 5 * 60 * 1000)) {
       send(res, 429, { error: 'Muitas tentativas. Aguarde alguns minutos.' }); return true
     }
     try {
@@ -7485,11 +7497,11 @@ module.exports = async function handleRoutes(req, res, ctx) {
       const row = db.prepare(
         'SELECT id, tenant_id, nome, usuario, senha, ativo FROM garcons WHERE tenant_id=? AND usuario=? AND ativo=1'
       ).get(tid, user)
-      if (!row) { send(res, 401, { error: 'Usuário ou senha incorretos' }); return true }
+      if (!row) { registrarLoginFalho(_rlKeyGarcom, 5 * 60 * 1000); send(res, 401, { error: 'Usuário ou senha incorretos' }); return true }
       const stored = row.senha || ''
       const isHash = /^[a-f0-9]{64}$/i.test(stored)
       const match = isHash ? (stored === hashSenha) : (stored === senha)
-      if (!match) { send(res, 401, { error: 'Usuário ou senha incorretos' }); return true }
+      if (!match) { registrarLoginFalho(_rlKeyGarcom, 5 * 60 * 1000); send(res, 401, { error: 'Usuário ou senha incorretos' }); return true }
       // Migração lazy: se estava em plain text, atualiza para hash
       if (!isHash) {
         try { db.prepare('UPDATE garcons SET senha=? WHERE id=?').run(hashSenha, row.id); log('🔐', `[MIGRACAO] Senha do garçom ${row.usuario} migrada para hash`) } catch(_) {}
