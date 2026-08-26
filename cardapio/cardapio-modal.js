@@ -1130,6 +1130,60 @@ function toggleIngr(chip) {
   }
 }
 
+// Efeito "voando até o carrinho" — mede se o carrinho realmente cresceu
+// (imConfirm tem várias saídas antecipadas de validação: grupo obrigatório
+// faltando, peso do açougue não selecionado, etc.) em vez de assumir que
+// todo clique adicionou algo. Não toca em nenhuma lógica de imConfirm().
+function imConfirmWithFly(btnEl) {
+  const beforeQty = cart.reduce((s, c) => s + c.qty, 0);
+  const rect = btnEl?.getBoundingClientRect ? btnEl.getBoundingClientRect() : null;
+  const imgEl = document.getElementById('im-img')?.querySelector('img');
+  const imgSrc = imgEl ? imgEl.src : null;
+  imConfirm();
+  const afterQty = cart.reduce((s, c) => s + c.qty, 0);
+  if (afterQty > beforeQty && rect) {
+    _flyToCartFromRect(rect, imgSrc);
+  }
+}
+
+function _flyToCartFromRect(startRect, imgSrc) {
+  const cartFloat = document.getElementById('cart-float');
+  const cartBadge = document.getElementById('cart-badge');
+  if (!cartFloat) return;
+  const endRect = cartFloat.getBoundingClientRect();
+  const size = 46;
+  const el = document.createElement('div');
+  el.className = 'fly-to-cart';
+  el.style.width = size + 'px';
+  el.style.height = size + 'px';
+  el.style.left = (startRect.left + startRect.width/2 - size/2) + 'px';
+  el.style.top  = (startRect.top  + startRect.height/2 - size/2) + 'px';
+  if (imgSrc) {
+    el.style.backgroundImage = `url("${imgSrc}")`;
+  } else {
+    el.style.background = 'var(--accent-g, var(--accent))';
+  }
+  document.body.appendChild(el);
+  // força um reflow antes de animar, senão o navegador agrupa os estilos
+  // inicial+final numa única atualização e não anima nada
+  void el.offsetWidth;
+  const dx = (endRect.left + endRect.width/2)  - (startRect.left + startRect.width/2);
+  const dy = (endRect.top  + endRect.height/2) - (startRect.top  + startRect.height/2);
+  el.style.transform = `translate(${dx}px, ${dy}px) scale(.15)`;
+  el.style.opacity = '0.15';
+  el.style.width = '14px';
+  el.style.height = '14px';
+  setTimeout(() => {
+    el.remove();
+    cartBadge?.classList.add('bump');
+    cartFloat.classList.add('bump');
+    setTimeout(() => {
+      cartBadge?.classList.remove('bump');
+      cartFloat.classList.remove('bump');
+    }, 400);
+  }, 560);
+}
+
 function imConfirm() {
   const i   = allItems.find(x => x.id === _imItemId);
   if (!i) return;

@@ -934,6 +934,25 @@ function subscribeRealtime() {
     .subscribe();
 }
 
+// ── Reforço contra conexão SSE "morta" em segundo plano ──
+// Em celular, o navegador pode suspender/matar a conexão em tempo real
+// quando a tela bloqueia ou o app vai pra segundo plano, sem disparar
+// nenhum erro perceptível — a aba fica "viva" mas para de receber
+// atualizações (por isso mudanças no gestor às vezes não aparecem pro
+// cliente que já estava com o cardápio aberto). Ao voltar a ficar visível,
+// busca os dados direto do servidor, independente do estado da conexão.
+let _lastFocusRefetch = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  const now = Date.now();
+  if (now - _lastFocusRefetch < 4000) return; // evita refetch duplicado se disparar 2x seguidas
+  _lastFocusRefetch = now;
+  try { if (typeof reloadMenu === 'function') reloadMenu(); } catch(e) {}
+  sb.from('store_config').select('*').single().then(({ data, error }) => {
+    if (!error && data) applyBrandingLive(data);
+  }).catch(() => {});
+});
+
 // ── Recarrega lista de adicionais esgotados e atualiza UI em tempo real ──
 // Cliente pode estar com modal aberto vendo o produto — re-renderiza grupos pra
 // mostrar os adicionais como esgotados (ou disponíveis) na hora que o gestor pausa/libera.

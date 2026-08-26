@@ -274,6 +274,17 @@ function _restoreConfirmButton() {
   btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirmar Pedido';
 }
 
+// Celebração de tela cheia pra pedidos confirmados na hora (dinheiro,
+// cartão/pix na entrega) — PIX online e cartão MP já têm a própria
+// celebração ligada à confirmação real do pagamento, essa aqui não mexe
+// nelas. Autocontida: não depende do carrinho estar aberto ou fechado.
+function _celebrarPedidoConfirmado() {
+  const el = document.getElementById('order-celebrate');
+  if (!el) return;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1700);
+}
+
 function _orderPayAmount(order) {
   return (parseFloat(order?.total || 0) || 0) + (parseFloat(order?.taxa || 0) || 0);
 }
@@ -585,6 +596,14 @@ async function _doSubmitOrder(addr, troco) {
     }).select().single();
 
     if (error) throw error;
+
+    // Celebração imediata só pra formas de pagamento já confirmadas na hora
+    // (dinheiro/crédito/débito na entrega). PIX e cartão online têm sua
+    // própria celebração, disparada quando o pagamento é confirmado de
+    // verdade — não quando o pedido é só criado.
+    if (selectedPay !== 'pix' && selectedPay !== 'cartao_mp') {
+      _celebrarPedidoConfirmado();
+    }
 
     // ── Debitar cashback se cliente usou ──────────────
     if (_cbUsar && _cbSaldo > 0 && _cbDesconto > 0) {
