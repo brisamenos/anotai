@@ -678,6 +678,15 @@ input,textarea{font-family:inherit}
   background:var(--s2);
   display:flex;align-items:center;justify-content:center;font-size:32px;position:relative;
 }
+/* Brilho suave enquanto a foto do produto carrega (só quando tem foto de
+   verdade — item sem foto/emoji não precisa disso). A foto opaca cobre o
+   brilho assim que carrega, então não precisa de JS pra "desligar". */
+.item-img.has-photo,.dest-img.has-photo{
+  background:linear-gradient(100deg,var(--s2) 30%,var(--s3) 50%,var(--s2) 70%);
+  background-size:200% 100%;animation:imgShimmer 1.4s ease-in-out infinite;
+}
+@keyframes imgShimmer{0%{background-position:120% 0}100%{background-position:-20% 0}}
+@media (prefers-reduced-motion: reduce){.item-img.has-photo,.dest-img.has-photo{animation:none}}
 .item-img img,.item-img video{width:100%;height:100%;object-fit:cover}
 .item-promo-badge{
   position:absolute;top:4px;left:4px;
@@ -1631,6 +1640,60 @@ input,textarea{font-family:inherit}
   .pix-paid-ring,.pix-paid-ring::after,.pix-paid-icon,.pix-paid-icon svg,.pix-paid-dot{animation:none}
   .pix-paid-icon svg{stroke-dashoffset:0}
 }
+
+/* ═══════════════════════════════════════
+   CELEBRAÇÃO — pedido confirmado (tela cheia, breve)
+═══════════════════════════════════════ */
+.order-celebrate{
+  position:fixed;inset:0;z-index:9999;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+  background:rgba(0,0,0,.5);backdrop-filter:blur(3px);
+  opacity:0;pointer-events:none;transition:opacity .25s ease;
+}
+.order-celebrate.show{opacity:1;pointer-events:auto}
+.oc-burst{width:132px;height:132px;position:relative;display:grid;place-items:center}
+.oc-ring{position:absolute;inset:14px;border-radius:50%;border:2px solid rgba(var(--accent-rgb,249,115,22),.4);animation:ocRing 1.3s ease-out infinite}
+.oc-ring::after{content:'';position:absolute;inset:-14px;border-radius:inherit;border:1px solid rgba(var(--accent-rgb,249,115,22),.2);animation:ocRing 1.3s ease-out .18s infinite}
+.oc-icon{
+  width:86px;height:86px;border-radius:50%;background:var(--accent-g,linear-gradient(135deg,#f97316,#ea580c));
+  display:grid;place-items:center;color:#fff;box-shadow:0 16px 38px rgba(var(--accent-rgb,249,115,22),.4);
+  animation:ocPop .5s cubic-bezier(.2,1.45,.4,1) both;
+}
+.oc-icon svg{width:44px;height:44px;stroke-dasharray:44;stroke-dashoffset:44;animation:ocCheck .45s ease-out .28s forwards}
+.oc-dot{position:absolute;width:9px;height:9px;border-radius:50%;opacity:0;animation:ocDot 1s ease-out .16s both}
+.oc-dot.d1{top:2px;left:50%;background:var(--accent);--dx:0;--dy:-20px}
+.oc-dot.d2{right:6px;top:20px;background:#38bdf8;--dx:22px;--dy:-9px;animation-delay:.22s}
+.oc-dot.d3{right:12px;bottom:12px;background:#facc15;--dx:18px;--dy:19px;animation-delay:.3s}
+.oc-dot.d4{left:12px;bottom:10px;background:#34d399;--dx:-19px;--dy:18px;animation-delay:.2s}
+.oc-dot.d5{left:4px;top:26px;background:#fb7185;--dx:-22px;--dy:-10px;animation-delay:.26s}
+.oc-dot.d6{left:50%;top:-2px;background:var(--accent);--dx:8px;--dy:-24px;animation-delay:.14s}
+.oc-dot.d7{right:0;top:50%;background:#a78bfa;--dx:26px;--dy:2px;animation-delay:.34s}
+.oc-dot.d8{left:0;top:50%;background:#38bdf8;--dx:-26px;--dy:2px;animation-delay:.28s}
+@keyframes ocPop{0%{transform:scale(.55);opacity:0}70%{transform:scale(1.1);opacity:1}100%{transform:scale(1)}}
+@keyframes ocCheck{to{stroke-dashoffset:0}}
+@keyframes ocRing{0%{transform:scale(.76);opacity:.85}100%{transform:scale(1.35);opacity:0}}
+@keyframes ocDot{0%{transform:translate(0,0) scale(.5);opacity:0}30%{opacity:1}100%{transform:translate(var(--dx,0),var(--dy,0)) scale(1);opacity:0}}
+.oc-title{font-family:'Fraunces',serif;font-size:20px;font-weight:800;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.4);
+  animation:ocTitleIn .4s ease-out .3s both}
+@keyframes ocTitleIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@media (prefers-reduced-motion: reduce){
+  .oc-ring,.oc-ring::after,.oc-icon,.oc-icon svg,.oc-dot,.oc-title{animation:none}
+  .oc-icon svg{stroke-dashoffset:0}
+}
+
+/* ═══════════════════════════════════════
+   ADICIONAR AO CARRINHO — item "voando" até o ícone
+═══════════════════════════════════════ */
+.fly-to-cart{
+  position:fixed;z-index:9998;border-radius:50%;pointer-events:none;
+  background-size:cover;background-position:center;
+  box-shadow:0 6px 18px rgba(0,0,0,.25);
+  transition:transform .55s cubic-bezier(.34,.08,.64,1), opacity .55s ease .15s, width .55s ease, height .55s ease;
+}
+.cart-badge.bump{animation:cartBadgeBump .38s cubic-bezier(.34,1.56,.64,1)}
+@keyframes cartBadgeBump{0%{transform:scale(1)}40%{transform:scale(1.45)}100%{transform:scale(1)}}
+.cart-float.bump .cart-btn{animation:cartFloatBump .38s ease}
+@keyframes cartFloatBump{0%{transform:scale(1)}35%{transform:scale(1.04)}100%{transform:scale(1)}}
 
 /* ═══════════════════════════════════════
    GRUPOS DE CUSTOMIZAÇÃO (modal steps)
@@ -2655,6 +2718,22 @@ input,textarea{font-family:inherit}
   </button>
 </div>
 
+<!-- ══════════════ CELEBRAÇÃO — pedido confirmado (dinheiro/cartão na entrega) ══════════════
+     PIX e cartão online já têm sua própria confirmação (pix-paid-wrap /
+     cartao-result-wrap), ligada ao pagamento de verdade — não mexi nelas.
+     Esta é só pra quando o pedido já está confirmado na hora (sem espera
+     de pagamento), que hoje não tinha nenhuma celebração. -->
+<div class="order-celebrate" id="order-celebrate" aria-hidden="true">
+  <div class="oc-burst">
+    <span class="oc-dot d1"></span><span class="oc-dot d2"></span><span class="oc-dot d3"></span>
+    <span class="oc-dot d4"></span><span class="oc-dot d5"></span><span class="oc-dot d6"></span>
+    <span class="oc-dot d7"></span><span class="oc-dot d8"></span>
+    <div class="oc-ring"></div>
+    <div class="oc-icon"><svg viewBox="0 0 48 48" fill="none"><path d="M14 25.5l7 7L35 16" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  </div>
+  <div class="oc-title">Pedido confirmado!</div>
+</div>
+
 <!-- TOAST AREA -->
 <div id="toast-area"></div>
 
@@ -2745,7 +2824,7 @@ input,textarea{font-family:inherit}
       <!-- ── Grupos de customização (renderizados via JS) ── -->
       <div id="im-grupos-wrap"></div>
 
-      <button class="im-add-btn" id="im-add-btn" onclick="imConfirm()">
+      <button class="im-add-btn" id="im-add-btn" onclick="imConfirmWithFly(this)">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2h1.5l1.8 7.5h6.5l1.2-5H5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="13" r="1" fill="currentColor"/><circle cx="12" cy="13" r="1" fill="currentColor"/></svg> Adicionar ao carrinho
       </button>
 
