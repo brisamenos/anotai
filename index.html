@@ -408,6 +408,14 @@ input,textarea{font-family:inherit}
 }
 .hero-banner.show{ display:block }
 .hero-banner img{ width:100%;height:100%;object-fit:cover;display:block }
+/* Degradê no rodapé do banner, pra imagem se dissolver suavemente no fundo
+   do tema (var(--bg)) em vez de terminar com uma quina seca ao lado do
+   cartão flutuante. Fica entre o banner (atrás) e o cartão (na frente). */
+.hero-banner.show::after{
+  content:'';position:absolute;left:0;right:0;bottom:0;height:70px;
+  background:linear-gradient(to bottom, rgba(0,0,0,0), var(--bg));
+  pointer-events:none;z-index:2;
+}
 .hero-banner-slides{ position:relative;width:100%;height:100%; }
 .hero-banner-slide{
   position:absolute;inset:0;opacity:0;transition:opacity .5s ease;pointer-events:none;
@@ -2056,6 +2064,11 @@ body[data-segmento="acougue"] .promo-banner.show{display:block}
   width:62px;height:62px;object-fit:contain;
   filter:brightness(0) invert(1);
 }
+/* Foto real enviada pelo admin (não o ícone de linha padrão) — sem filtro,
+   senão a foto colorida vira um quadrado branco. */
+.preparo-filter-card-icon img.preparo-foto{
+  filter:none;object-fit:cover;border-radius:12px;
+}
 .preparo-filter-card-icon video{
   width:62px;height:62px;object-fit:cover;border-radius:12px;
 }
@@ -2100,6 +2113,9 @@ body[data-segmento="acougue"] .promo-banner.show{display:block}
 .preparo-filter-active-banner-icon img{
   width:18px;height:18px;object-fit:contain;
   filter:brightness(0) invert(1);
+}
+.preparo-filter-active-banner-icon img.preparo-foto{
+  filter:none;object-fit:cover;border-radius:6px;
 }
 .preparo-filter-active-banner-icon video{
   width:100%;height:100%;object-fit:cover;border-radius:6px;

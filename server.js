@@ -5527,7 +5527,12 @@ const server = http.createServer(async (req,res) => {
     // videoTags: quais "formas de preparo" têm vídeo customizado no lugar
     // do ícone estático — o front usa isso pra decidir <video> vs <img>.
     const videoTags = ICONES_VIDEO_TAGS_KEYS.filter(k => fs.existsSync(path.join(ICONES_PADRAO_DIR,'tags',`${k}.mp4`)))
-    send(res,200,{version:_iconesVersion,videoTags}); return
+    // photoTags: preparos cujo admin já subiu uma FOTO real (PNG) no lugar do
+    // ícone padrão (linha preta simples) — o front usa isso pra não aplicar
+    // o filtro brightness(0)+invert(1) (pensado só pro ícone de linha) em
+    // cima de uma foto colorida, senão ela vira um quadrado branco.
+    const photoTags = ICONES_VIDEO_TAGS_KEYS.filter(k => fs.existsSync(path.join(ICONES_PADRAO_DIR,'tags',`${k}.png`)))
+    send(res,200,{version:_iconesVersion,videoTags,photoTags}); return
   }
 
   if(req.method==='POST'&&upath==='/api/admin/icone-padrao'){
