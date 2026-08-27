@@ -898,7 +898,7 @@ let _cpBanners   = []; // [{type:'image'|'video', url}] — até 5, formam slide
 
 async function loadCardapioPublico() {
   const { data } = await sb.from('store_config').select(
-    'store_name,store_descricao,store_logo_url,store_banner_url,store_banners,store_cor,store_tema,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega,delivery_fee_config,pickup_addresses'
+    'store_name,store_descricao,store_logo_url,store_banner_url,store_banners,store_cor,store_tema,store_tempo_entrega,store_avaliacao,store_whatsapp,horarios_config,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega,delivery_fee_config,pickup_addresses,mostrar_indicacao_preparo'
   ).single();
   if (!data) return;
 
@@ -959,15 +959,26 @@ async function loadCardapioPublico() {
   const catsCarrossel = !!data.cats_carrossel;
   const catsEl = document.getElementById('cp-cats-carrossel');
   if (catsEl) { catsEl.checked = catsCarrossel; cpToggleCatsCarrossel(catsCarrossel); }
+  // Indicação de preparo (robozinho "Não sabe qual carne escolher?") — só açougue.
+  // Sem essa coluna configurada ainda (null/undefined), considera ligado
+  // por padrão, pra bater com o comportamento atual de quem nunca mexeu nisso.
+  const indicacaoPreparoOn = data.mostrar_indicacao_preparo !== 0 && data.mostrar_indicacao_preparo !== false;
+  const indicacaoEl = document.getElementById('cp-indicacao-preparo');
+  if (indicacaoEl) { indicacaoEl.checked = indicacaoPreparoOn; cpToggleIndicacaoPreparo(indicacaoPreparoOn); }
   // Oculta opção de carrossel se for açougue (já usa por padrão)
   // Busca segmento direto para não depender de window._segmento que pode não ter carregado
   const catsWrap = document.getElementById('cp-cats-modo-wrap');
+  const indicacaoWrap = document.getElementById('cp-indicacao-preparo-wrap');
   if (catsWrap) {
     const _tid = _sessao?.tenant_id;
     if (_tid) {
       fetch('/api/tenant-segmento', { headers: { 'x-tenant-id': _tid } })
         .then(r => r.json())
-        .then(d => { catsWrap.style.display = d.segmento === 'acougue' ? 'none' : 'block'; })
+        .then(d => {
+          const isAcougue = d.segmento === 'acougue';
+          catsWrap.style.display = isAcougue ? 'none' : 'block';
+          if (indicacaoWrap) indicacaoWrap.style.display = isAcougue ? 'block' : 'none';
+        })
         .catch(() => { catsWrap.style.display = 'block'; });
     } else {
       catsWrap.style.display = 'block';
@@ -1283,6 +1294,13 @@ function cpToggleCatsCarrossel(on) {
   if (thumb) { thumb.style.background = on ? '#fff' : 'var(--muted)'; thumb.style.left = on ? '22px' : '2px'; }
 }
 
+function cpToggleIndicacaoPreparo(on) {
+  const track = document.getElementById('cp-indicacao-preparo-track');
+  const thumb = document.getElementById('cp-indicacao-preparo-thumb');
+  if (track) track.style.background = on ? 'var(--accent)' : 'var(--surface2)';
+  if (thumb) { thumb.style.background = on ? '#fff' : 'var(--muted)'; thumb.style.left = on ? '22px' : '2px'; }
+}
+
 function cpSelecionarTema(tema) {
   if (!document.querySelector('#cp-temas-grid .cp-theme-card')) cpRenderTemasGrid();
   // Atualiza borda visual de cada card
@@ -1471,6 +1489,7 @@ async function salvarCardapioPublico() {
       store_cor_texto:     document.getElementById('cp-cor-texto')?.value           || null,
       store_tema:          document.getElementById('cp-tema-value')?.value          || 'classico',
       cats_carrossel:      document.getElementById('cp-cats-carrossel')?.checked ? 1 : 0,
+      mostrar_indicacao_preparo: document.getElementById('cp-indicacao-preparo')?.checked ? 1 : 0,
       horarios_config:     JSON.stringify(cpGetHorarios()),
       pedido_minimo:       parseFloat(document.getElementById('cp-pedido-minimo')?.value) || 0,
       store_address:       document.getElementById('cp-store-address')?.value.trim() || null,

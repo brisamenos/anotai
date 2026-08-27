@@ -5751,6 +5751,22 @@ Use no seu próximo pedido.</textarea>
     </div>
   </div>
 
+  <!-- Indicação de preparo (só açougue) -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;display:none" id="cp-indicacao-preparo-wrap">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:13px;font-weight:700">🔥 "Não sabe qual carne escolher?"</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">Mostra no cardápio o robozinho que indica carnes por forma de preparo</div>
+      </div>
+      <label style="position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0">
+        <input type="checkbox" id="cp-indicacao-preparo" onchange="cpToggleIndicacaoPreparo(this.checked)" style="opacity:0;width:0;height:0">
+        <span style="position:absolute;cursor:pointer;inset:0;background:var(--surface2);border:1px solid var(--border);border-radius:99px;transition:.2s" id="cp-indicacao-preparo-track">
+          <span style="position:absolute;width:18px;height:18px;left:2px;bottom:2px;background:var(--muted);border-radius:50%;transition:.2s" id="cp-indicacao-preparo-thumb"></span>
+        </span>
+      </label>
+    </div>
+  </div>
+
   <!-- Tema do cardápio -->
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
     <div style="font-size:13px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:7px">
