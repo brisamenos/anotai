@@ -5,6 +5,12 @@
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">
+<!-- Impede que o Chrome/Android "invente" um modo escuro sozinho quando o
+     celular está com economia de bateria ou tema escuro do sistema ligado.
+     Sem isso, o navegador tenta escurecer trechos que ele julga serem só
+     fundo decorativo (como a área com degradê atrás do cartão da loja) e
+     pinta de preto — mesmo o cardápio sendo 100% tema claro por design. -->
+<meta name="color-scheme" content="light">
 <meta name="theme-color" content="#f8f9fb">
 <title>Cardápio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -277,10 +283,10 @@ body[data-segmento="acougue"] .hero {
      pra FORA do hero (vira espaçamento da página) em vez de ficar visível
      dentro dele, e o efeito nunca aparece quando não há banner de foto. */
   padding-top: 1px;
-  background-image:
-    radial-gradient(120% 140% at 12% -10%, rgba(var(--accent-rgb,125,31,20),.30) 0%, rgba(var(--accent-rgb,125,31,20),0) 46%),
-    radial-gradient(90% 120% at 92% 112%, rgba(193,144,63,.22) 0%, rgba(193,144,63,0) 52%),
-    repeating-linear-gradient(112deg, rgba(128,128,128,.06) 0 2px, rgba(0,0,0,0) 2px 8px);
+  /* Removido: tinha gradientes radiais + textura de grão por cima da cor
+     do tema, que apareciam como um efeito "cortando" o fundo. Agora o
+     hero fica só na cor pura do tema (var(--bg), herdada da regra base
+     .hero{background:var(--bg)}), sem nenhuma textura por cima. */
 }
 /* Sem banner de foto: em vez de sobrepor o cartão (que exigiria margem
    NEGATIVA maior que a própria altura do hero, cobrindo o fundo inteiro —
@@ -290,7 +296,10 @@ body[data-segmento="acougue"] .hero-banner:not(.show) + .hero-inner {
   margin-top: 88px;
 }
 body[data-segmento="acougue"] .hero-inner {
-  box-shadow: 0 14px 30px rgba(0,0,0,.28), 0 2px 0 var(--acg-brass) inset;
+  /* Removida — era uma sombra (box-shadow) que aparecia como uma faixa
+     escura "cortando" entre o banner e o cartão. Sem sombra nenhuma
+     agora, o espaço ao redor do cartão fica só na cor do tema. */
+  box-shadow: none;
 }
 body[data-segmento="acougue"] .hero-logo { border: 2px solid var(--acg-brass); }
 body[data-segmento="acougue"] .hero-status-btn {
@@ -2089,6 +2098,38 @@ body[data-segmento="acougue"] .promo-banner.show{display:block}
   transition:background .18s;
 }
 .preparo-filter-clear:active{ background:rgba(255,255,255,.35) }
+
+/* ── Modal "Qual é o preparo de hoje?" — header premium ── */
+@keyframes preparoModalUp{ from{ transform:translateY(24px); opacity:0 } to{ transform:translateY(0); opacity:1 } }
+@keyframes preparoCardIn{ from{ transform:translateY(10px) scale(.92); opacity:0 } to{ transform:translateY(0) scale(1); opacity:1 } }
+#preparo-icons-overlay > div{ animation:preparoModalUp .32s cubic-bezier(.22,.9,.32,1.15) both; }
+#preparo-icons-overlay .preparo-filter-card,
+#preparo-icons-overlay .preparo-filter-clear{
+  animation:preparoCardIn .38s cubic-bezier(.22,.9,.32,1.15) both;
+  animation-delay:calc(var(--pf-i, 0) * 35ms);
+}
+.preparo-modal-header{
+  position:relative;overflow:hidden;
+  padding:22px 20px 18px;flex-shrink:0;
+  background:
+    radial-gradient(120% 160% at 8% -20%, rgba(var(--accent-rgb,249,115,22),.22) 0%, rgba(var(--accent-rgb,249,115,22),0) 55%),
+    radial-gradient(90% 140% at 100% 120%, rgba(var(--accent-rgb,249,115,22),.14) 0%, rgba(var(--accent-rgb,249,115,22),0) 55%),
+    var(--s2);
+  border-bottom:1px solid var(--border);
+}
+.preparo-modal-badge{
+  width:46px;height:46px;border-radius:14px;flex-shrink:0;
+  background:var(--accent-g,var(--accent));
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 6px 16px rgba(var(--accent-rgb,249,115,22),.38);
+  transform:rotate(-4deg);
+}
+.preparo-modal-title-row{ display:flex;align-items:center;gap:12px }
+.preparo-modal-title{
+  font-family:'Fraunces',serif;font-weight:900;font-size:19px;
+  color:var(--text);line-height:1.15;letter-spacing:-.2px;
+}
+.preparo-modal-sub{ font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.4 }
 /* ── Fim seção preparo filter ── */
 
 /* Banner de filtro de preparo ativo */
