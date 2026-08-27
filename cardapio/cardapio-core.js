@@ -888,6 +888,7 @@ async function init() {
     renderMenu();
     subscribeRealtime();
     loadCustomerSession();
+    if (typeof loadFavoritos === 'function') loadFavoritos();
     if (typeof loadRepeatOrderBanner === 'function') loadRepeatOrderBanner();
     setupPlanFeatures();
     applyTiposEntrega();
@@ -1253,7 +1254,7 @@ function bnavGoPedidos() {
   }
 }
 
-// Botão "Favoritos" — não exige login, guardado no dispositivo.
+// Botão "Favoritos" — agora exige conta; sem login, mostra convite pra criar.
 function bnavGoFavoritos() {
   setBnavActive('bnav-favoritos');
   openFavoritos();

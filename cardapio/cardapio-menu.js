@@ -563,38 +563,91 @@ function addChecklistToCart(clId) {
 }
 
 // ══════════════════════════════════════════
-//  FAVORITOS — guardados no dispositivo, não exige login
+//  FAVORITOS — exige conta (salvo no servidor, por cliente)
 // ══════════════════════════════════════════
-function _favoritosKey() {
-  return 'ef_favoritos_' + (typeof _tenantId !== 'undefined' ? _tenantId : 'x');
-}
-function _lerFavoritos() {
-  try { return JSON.parse(localStorage.getItem(_favoritosKey()) || '[]'); } catch(e) { return []; }
-}
+let _favoritosCache = [];   // ids favoritados do cliente logado, carregado do servidor
+let _favoritosCarregados = false;
+let _pendingFavoritoId = null; // item que o cliente tentou favoritar antes de logar
+
 function isFavorito(id) {
-  return _lerFavoritos().includes(id);
+  return _favoritosCache.includes(id);
 }
-function toggleFavorito(id) {
-  let favs = _lerFavoritos();
-  const jaTem = favs.includes(id);
-  favs = jaTem ? favs.filter(x => x !== id) : [...favs, id];
-  try { localStorage.setItem(_favoritosKey(), JSON.stringify(favs)); } catch(e) {}
-  // Atualiza o coração na tela sem precisar re-renderizar tudo
-  document.querySelectorAll(`.item-fav-btn`).forEach(btn => {
-    if (btn.getAttribute('onclick')?.includes(`toggleFavorito(${id})`)) {
-      btn.classList.toggle('on', !jaTem);
-      btn.querySelector('svg').setAttribute('fill', !jaTem ? 'currentColor' : 'none');
-    }
+
+// Carrega os favoritos do cliente logado a partir do servidor. Chamado ao
+// abrir o cardápio (se já tinha sessão salva) e logo após login/registro.
+async function loadFavoritos() {
+  if (!_customer?.id) { _favoritosCache = []; _favoritosCarregados = false; return; }
+  try {
+    const res = await fetch(`/api/favoritos?customer_id=${_customer.id}`, {
+      headers: { 'x-tenant-id': _tenantId, 'Authorization': 'Bearer ' + (_customer.token||'') }
+    });
+    if (res.ok) _favoritosCache = await res.json();
+  } catch(e) {}
+  _favoritosCarregados = true;
+  _atualizarCoracoesNaTela();
+  if (document.getElementById('favoritos-overlay')?.classList.contains('on')) renderFavoritosPage();
+  // Se o cliente tentou favoritar antes de logar, aplica agora
+  if (_pendingFavoritoId != null) {
+    const id = _pendingFavoritoId;
+    _pendingFavoritoId = null;
+    if (!isFavorito(id)) toggleFavorito(id);
+  }
+}
+
+function _atualizarCoracoesNaTela() {
+  document.querySelectorAll('.item-fav-btn').forEach(btn => {
+    const m = btn.getAttribute('onclick')?.match(/toggleFavorito\((\d+)\)/);
+    if (!m) return;
+    const on = isFavorito(parseInt(m[1]));
+    btn.classList.toggle('on', on);
+    btn.querySelector('svg')?.setAttribute('fill', on ? 'currentColor' : 'none');
   });
-  if (typeof toast === 'function') toast(jaTem ? 'info' : 'ok', jaTem ? 'Removido dos favoritos' : 'Adicionado aos favoritos!');
-  // Se a tela de favoritos estiver aberta, atualiza a lista na hora
-  if (document.getElementById('page-favoritos')?.classList.contains('on')) renderFavoritosPage();
 }
+
+async function toggleFavorito(id) {
+  // Sem conta: pede pra criar/entrar antes de favoritar, e guarda a intenção
+  // pra aplicar automaticamente assim que o login concluir.
+  if (!_customer?.id) {
+    _pendingFavoritoId = id;
+    if (typeof toast === 'function') toast('info', 'Crie uma conta para favoritar');
+    if (typeof openAuth === 'function') openAuth('register');
+    return;
+  }
+  const jaTem = isFavorito(id);
+  // Atualização otimista da tela
+  _favoritosCache = jaTem ? _favoritosCache.filter(x => x !== id) : [..._favoritosCache, id];
+  _atualizarCoracoesNaTela();
+  try {
+    const res = await fetch('/api/favoritos/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tenant-id': _tenantId, 'Authorization': 'Bearer ' + (_customer.token||'') },
+      body: JSON.stringify({ customer_id: _customer.id, item_id: id })
+    });
+    if (!res.ok) throw new Error('falhou');
+    if (typeof toast === 'function') toast(jaTem ? 'info' : 'ok', jaTem ? 'Removido dos favoritos' : 'Adicionado aos favoritos!');
+  } catch(e) {
+    // Reverte a atualização otimista se a chamada falhou
+    _favoritosCache = jaTem ? [..._favoritosCache, id] : _favoritosCache.filter(x => x !== id);
+    _atualizarCoracoesNaTela();
+    if (typeof toast === 'function') toast('err', 'Não foi possível salvar o favorito. Tente novamente.');
+    return;
+  }
+  // Se a tela de favoritos estiver aberta, atualiza a lista na hora
+  if (document.getElementById('favoritos-overlay')?.classList.contains('on')) renderFavoritosPage();
+}
+
 function renderFavoritosPage() {
   const wrap = document.getElementById('favoritos-list');
   if (!wrap) return;
-  const favIds = _lerFavoritos();
-  const favItems = (allItems || []).filter(i => favIds.includes(i.id));
+  if (!_customer?.id) {
+    wrap.innerHTML = `<div class="empty-state">
+      <div class="empty-state-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M12 20.5s-7.5-4.6-10-9.3C.5 7.8 2.3 4 6 4c2.1 0 3.7 1.2 6 3.5C14.3 5.2 15.9 4 18 4c3.7 0 5.5 3.8 4 7.2-2.5 4.7-10 9.3-10 9.3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
+      <div class="empty-state-text">Crie uma conta ou entre na sua pra favoritar itens e ver sua lista aqui.</div>
+      <button onclick="closeFavoritos();openAuth('register')" style="margin-top:14px;padding:11px 22px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit">Criar conta / Entrar</button>
+    </div>`;
+    return;
+  }
+  const favItems = (allItems || []).filter(i => _favoritosCache.includes(i.id));
   if (!favItems.length) {
     wrap.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M12 20.5s-7.5-4.6-10-9.3C.5 7.8 2.3 4 6 4c2.1 0 3.7 1.2 6 3.5C14.3 5.2 15.9 4 18 4c3.7 0 5.5 3.8 4 7.2-2.5 4.7-10 9.3-10 9.3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></div><div class="empty-state-text">Nenhum favorito ainda.<br>Toque no coração de um item pra guardar aqui.</div></div>';
     return;

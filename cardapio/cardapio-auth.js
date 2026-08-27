@@ -186,6 +186,7 @@ async function doLogin() {
     toast('👋', `Olá, ${data.name.split(' ')[0]}!`);
     fillCartForm();
     if (typeof loadRepeatOrderBanner === 'function') loadRepeatOrderBanner();
+    if (typeof loadFavoritos === 'function') loadFavoritos();
     // Sincroniza com programa de fidelidade (caso ainda não esteja cadastrado)
     fetch('/api/fidelidade/sync', {
       method: 'POST',
@@ -231,6 +232,7 @@ async function doRegister() {
     closeAuth();
     toast('🎉', `Bem-vindo, ${data.name.split(' ')[0]}!`);
     fillCartForm();
+    if (typeof loadFavoritos === 'function') loadFavoritos();
     // Sincroniza com programa de fidelidade
     fetch('/api/fidelidade/sync', {
       method: 'POST',
@@ -255,6 +257,9 @@ function doLogout() {
   closeAccount();
   const banner = document.getElementById('repeat-order-banner');
   if (banner) { banner.style.display = 'none'; banner.innerHTML = ''; }
+  if (typeof _favoritosCache !== 'undefined') _favoritosCache = [];
+  if (typeof _atualizarCoracoesNaTela === 'function') _atualizarCoracoesNaTela();
+  if (typeof renderFavoritosPage === 'function' && document.getElementById('favoritos-overlay')?.classList.contains('on')) renderFavoritosPage();
   toast('👋','Você saiu da conta');
 }
 
