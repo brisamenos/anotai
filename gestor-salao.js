@@ -127,6 +127,11 @@ async function _filtrarClientes(inputEl, dropdown, query) {
 }
 
 // Inicializa autocomplete num input. Passa os IDs dos campos a preencher.
+// Idempotente: se o modal que contém esse input for reaberto várias vezes
+// (ex: "Novo Pedido" no mesmo turno), sem essa proteção cada reabertura
+// registrava MAIS um ouvinte de digitação no mesmo campo, acumulando
+// verificações duplicadas rodando em paralelo a cada letra digitada —
+// o que deixava o campo instável/lento depois de várias aberturas.
 function initClienteAutocomplete(inputId, opts) {
   const inp = document.getElementById(inputId);
   if (!inp) return;
@@ -137,6 +142,8 @@ function initClienteAutocomplete(inputId, opts) {
     // Callback extra
     if (opts.onSelect) opts.onSelect(cliente);
   });
+  if (inp._cliAutocompleteReady) return; // já tem os ouvintes — não duplica
+  inp._cliAutocompleteReady = true;
   let _debounce;
   inp.addEventListener('input', () => {
     clearTimeout(_debounce);

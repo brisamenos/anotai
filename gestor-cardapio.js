@@ -1086,6 +1086,8 @@ function handleCatAction(id, action, selectEl) {
     document.getElementById('edit-cat-id').value   = id;
     document.getElementById('edit-cat-name').value = cat.label;
     document.getElementById('edit-cat-type').value = cat.type || 'Itens principais';
+    const _promoChk = document.getElementById('edit-cat-promo');
+    if (_promoChk) _promoChk.checked = !!cat.promo;
     _populateCatPrinterSelect('edit-cat-printer', cat.name);
     _editCatImageFile = null;
     _editCatImageRemove = false;
@@ -1248,15 +1250,16 @@ async function saveEditCategory() {
   const name = document.getElementById('edit-cat-name').value.trim();
   const type = document.getElementById('edit-cat-type').value;
   const printer = document.getElementById('edit-cat-printer')?.value || '';
+  const promo = document.getElementById('edit-cat-promo')?.checked || false;
   if (!name) { sbToast('err','Informe o nome'); return; }
   sbLoading(true);
-  // Só atualiza 'label' e 'type' — nunca muda 'name' (chave interna usada pelo catKey dos itens)
+  // Só atualiza 'label', 'type' e 'promo' — nunca muda 'name' (chave interna usada pelo catKey dos itens)
   const { error } = await sb.from('categories').update({
-    label: name, type
+    label: name, type, promo
   }).eq('id', id);
   if (error) { sbLoading(false); sbToast('err','Erro ao salvar'); return; }
   const cat = categories.find(c => c.id === id);
-  if (cat) { cat.label = name; cat.type = type; }
+  if (cat) { cat.label = name; cat.type = type; cat.promo = promo; }
   if (cat) _saveCatPrinterRoute(cat.name, printer);
 
   // Imagem: nova imagem selecionada, remoção pedida, ou nada muda
@@ -1617,6 +1620,7 @@ function togglePizzaOptions(ctx) {
 
   if (pizzaBox)   pizzaBox.style.display = val === 'pizza' ? '' : 'none';
   if (kitBox)     kitBox.style.display   = val === 'kit'   ? '' : 'none';
+  if (val === 'kit') renderKitCatsPicker(ctx);
 
   // Abre o painel açougue para kg E kit
   const isAcougue = val === 'kg' || val === 'kit';
@@ -1730,6 +1734,28 @@ function readKitItens(ctx) {
   const raw = document.getElementById(`${ctx}-kit-itens`)?.value || '';
   return raw.split('\n').map(s => s.trim()).filter(Boolean);
 }
+
+// ── Kit montável — cliente escolhe os cortes das categorias liberadas ──
+function renderKitCatsPicker(ctx, selecionadas) {
+  const wrap = document.getElementById(`${ctx}-kit-cats`);
+  if (!wrap) return;
+  const sel = new Set(selecionadas || []);
+  if (!categories.length) {
+    wrap.innerHTML = '<div style="font-size:11px;color:var(--muted)">Nenhuma categoria cadastrada ainda</div>';
+    return;
+  }
+  wrap.innerHTML = categories.map(c => `
+    <label style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--s2);border:1.5px solid ${sel.has(c.name)?'var(--accent)':'var(--border)'};border-radius:8px;cursor:pointer;font-size:12px;font-weight:600">
+      <input type="checkbox" class="${ctx}-kit-cat-chk" value="${c.name.replace(/"/g,'&quot;')}" ${sel.has(c.name)?'checked':''}
+        onchange="this.closest('label').style.borderColor=this.checked?'var(--accent)':'var(--border)'"
+        style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">
+      ${c.label}
+    </label>
+  `).join('');
+}
+function readKitCats(ctx) {
+  return Array.from(document.querySelectorAll(`.${ctx}-kit-cat-chk:checked`)).map(el => el.value);
+}
 function populateCatSelects() {
   const opts = categories.length
     ? categories.map(c => `<option value="${c.name}">${c.label}</option>`).join('')
@@ -1790,6 +1816,8 @@ async function addItem() {
   if (itemTypeNew === 'kit') {
     const kitItens = readKitItens('new');
     if (kitItens.length) customGroups.push({ tipo: 'kit_itens', itens: kitItens });
+    const kitCats = readKitCats('new');
+    if (kitCats.length) customGroups.push({ tipo: 'kit_categorias', categorias: kitCats });
   }
 
   console.log('[ADD-ITEM] campos | catKey:', catKey, '| catLabel:', catLabel, '| price:', price, '| emoji:', emoji, '| status:', status);
@@ -1980,6 +2008,8 @@ function openEditItem(id) {
     const kitGroup = cg.find(g => g.tipo === 'kit_itens');
     const el = document.getElementById('edit-kit-itens');
     if (el) el.value = kitGroup?.itens?.join('\n') || '';
+    const kitCatsGroup = cg.find(g => g.tipo === 'kit_categorias');
+    renderKitCatsPicker('edit', kitCatsGroup?.categorias || []);
   } else {
     const el = document.getElementById('edit-kit-itens'); if (el) el.value = '';
   }
@@ -2052,6 +2082,8 @@ async function saveEditItem() {
   if (it.itemType === 'kit') {
     const kitItens = readKitItens('edit');
     if (kitItens.length) it.customGroups.push({ tipo: 'kit_itens', itens: kitItens });
+    const kitCats = readKitCats('edit');
+    if (kitCats.length) it.customGroups.push({ tipo: 'kit_categorias', categorias: kitCats });
   }
 
   const selEmo = document.querySelector('#edit-emoji-grid .emo-btn.on');

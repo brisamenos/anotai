@@ -1440,6 +1440,53 @@ function subscribeOrders() {
     })
     .subscribe();
 
+  // Cardápio (itens e categorias) — faltava esse canal: sem ele, o painel só
+  // atualizava a lista de produtos quando a página era recarregada. Se um
+  // item fosse excluído/criado/editado em outra aba, outro dispositivo, ou
+  // pelo próprio cardápio automático, esta sessão continuava com a lista
+  // antiga na memória — daí itens excluídos "sobrevivendo" na tela de Novo
+  // Pedido, ou itens novos não aparecendo até dar F5.
+  // Busca tudo de novo em vez de tentar remendar pelo payload do evento:
+  // o servidor não informa o id de quem foi excluído num DELETE (só avisa
+  // "algo mudou"), então a única forma confiável é buscar o estado atual
+  // de verdade — mesma estratégia já usada no cardápio do cliente.
+  let _cardapioRefetchTimer = null;
+  function _refetchCardapioGestor() {
+    clearTimeout(_cardapioRefetchTimer);
+    _cardapioRefetchTimer = setTimeout(async () => {
+      try {
+        const [itemsRes, catsRes] = await Promise.all([
+          sb.from('menu_items').select('*'),
+          sb.from('categories').select('*').order('sort_order'),
+        ]);
+        if (itemsRes.data) items = itemsRes.data.map(mapItem);
+        if (catsRes.data) categories = catsRes.data.map(c => ({
+          id: c.id, name: c.name, label: c.label || c.name,
+          type: c.type || 'Itens principais', promo: !!c.promo, imageUrl: c.image_url || null, open: false
+        }));
+        if (typeof renderTable === 'function') renderTable();
+        if (typeof renderGestor === 'function') renderGestor();
+        if (typeof renderPDV === 'function') renderPDV();
+        if (typeof noRenderCategoriasChips === 'function') noRenderCategoriasChips();
+        if (typeof noFilterItems === 'function') noFilterItems(document.getElementById('no-search')?.value || '');
+        if (typeof populateCatSelects === 'function') populateCatSelects();
+      } catch(e) {}
+    }, 250); // pequeno debounce: uma edição normal dispara vários eventos seguidos
+  }
+  const chCardapio = sb.channel('cardapio-gestor-rt')
+    .on('postgres_changes', {event:'*', schema:'public', table:'menu_items'}, _refetchCardapioGestor)
+    .on('postgres_changes', {event:'*', schema:'public', table:'categories'}, _refetchCardapioGestor)
+    .subscribe();
+  // Mesmo reforço usado no cardápio do cliente: em celular/tablet, a conexão
+  // em tempo real pode "morrer" silenciosamente quando a tela bloqueia. Ao
+  // voltar a ficar visível, busca os dados direto do servidor de novo.
+  if (!window._cardapioGestorVisHandlerSet) {
+    window._cardapioGestorVisHandlerSet = true;
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) _refetchCardapioGestor();
+    });
+  }
+
   const chEstoque = sb.channel('estoque-rt')
     .on('postgres_changes', {event:'*', schema:'public', table:'estoque'}, p => {
       const row = p.new || {};
@@ -1476,7 +1523,7 @@ function subscribeOrders() {
     catch(e){}
   }, 25000);
 
-  _rtChannels = [chOrders, chMesas, chPrintJobs, chConfig, chEstoque];
+  _rtChannels = [chOrders, chMesas, chPrintJobs, chConfig, chCardapio, chEstoque];
 
   // ── Rádio garçom → gestor (push-to-talk via SSE) ──────────────
   _subscribeRadio();

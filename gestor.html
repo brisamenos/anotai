@@ -3717,6 +3717,13 @@ Use no seu próximo pedido.</textarea>
           <div class="form-row" style="margin:0"><label class="form-label">Telefone</label><input class="form-input" id="order-phone" placeholder="(99) 99999-0000"></div>
         </div>
 
+        <!-- Histórico de pedidos do cliente selecionado — só aparece quando
+             o cliente é identificado (autocomplete ou telefone já cadastrado) -->
+        <div id="no-historico-wrap" style="display:none;margin-bottom:14px">
+          <label class="form-label" style="margin-bottom:6px;display:block">Últimos pedidos deste cliente</label>
+          <div id="no-historico-list" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+
         <!-- Tipo de entrega — tabs grandes coloridas -->
         <div style="margin-bottom:14px">
           <label class="form-label" style="margin-bottom:6px;display:block">Tipo de entrega</label>
@@ -4144,8 +4151,12 @@ Use no seu próximo pedido.</textarea>
     <div id="new-kit-options" style="display:none;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.2);border-radius:10px;padding:14px 16px;margin-bottom:4px">
       <div style="font-size:11px;font-weight:700;color:#6366f1;letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px">📦 Conteúdo do Kit</div>
       <div class="form-row">
-        <label class="form-label">Itens do kit <span style="color:var(--muted);font-size:10px">(um por linha)</span></label>
+        <label class="form-label">Itens do kit <span style="color:var(--muted);font-size:10px">(um por linha — usado só se não montar abaixo)</span></label>
         <textarea class="form-input" id="new-kit-itens" rows="4" placeholder="500g Bife de Patinho&#10;500g Barriguinha Cubos&#10;500g Coxa Sobrecoxa&#10;500g File de Frango em Bife" style="margin-top:4px"></textarea>
+      </div>
+      <div class="form-row" style="margin-top:10px">
+        <label class="form-label">Ou deixe o cliente montar o próprio kit <span style="color:var(--muted);font-size:10px">(marque as categorias liberadas)</span></label>
+        <div id="new-kit-cats" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
       </div>
     </div>
 
@@ -4364,8 +4375,12 @@ Use no seu próximo pedido.</textarea>
     <div id="edit-kit-options" style="display:none;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.2);border-radius:10px;padding:14px 16px;margin-bottom:4px">
       <div style="font-size:11px;font-weight:700;color:#6366f1;letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px">📦 Conteúdo do Kit</div>
       <div class="form-row">
-        <label class="form-label">Itens do kit <span style="color:var(--muted);font-size:10px">(um por linha)</span></label>
+        <label class="form-label">Itens do kit <span style="color:var(--muted);font-size:10px">(um por linha — usado só se não montar abaixo)</span></label>
         <textarea class="form-input" id="edit-kit-itens" rows="4" placeholder="500g Bife de Patinho&#10;..." style="margin-top:4px"></textarea>
+      </div>
+      <div class="form-row" style="margin-top:10px">
+        <label class="form-label">Ou deixe o cliente montar o próprio kit <span style="color:var(--muted);font-size:10px">(marque as categorias liberadas)</span></label>
+        <div id="edit-kit-cats" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
       </div>
     </div>
 
@@ -4812,6 +4827,13 @@ Use no seu próximo pedido.</textarea>
       <div class="sw" style="width:100%"><select id="edit-cat-type" class="form-input" style="width:100%">
         <option>Itens principais</option><option>Bebidas</option><option>Adicionais</option><option value="checklist">Complementos (lista)</option>
       </select></div>
+    </div>
+    <div class="form-row">
+      <label style="display:flex;align-items:center;gap:9px;cursor:pointer;padding:10px 12px;background:var(--s2);border:1px solid var(--border);border-radius:10px">
+        <input type="checkbox" id="edit-cat-promo" style="width:17px;height:17px;accent-color:var(--accent);cursor:pointer">
+        <span style="font-size:13px;font-weight:600">⭐ Destacar categoria inteira no cardápio</span>
+      </label>
+      <div style="font-size:10px;color:var(--muted);margin-top:5px;padding-left:2px">Todos os itens desta categoria aparecem também na seção de Destaques, sem precisar marcar item por item.</div>
     </div>
     <div class="form-row"><label class="form-label">Impressora desta categoria</label>
       <div class="sw" style="width:100%"><select id="edit-cat-printer" class="form-input" style="width:100%">
@@ -5510,6 +5532,30 @@ Use no seu próximo pedido.</textarea>
     <input id="cp-tempo" class="form-input" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;margin-bottom:12px;transition:border-color .18s" placeholder="Ex: 30-45 min">
     <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Avaliação exibida</label>
     <input id="cp-avaliacao" class="form-input" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;transition:border-color .18s" placeholder="Ex: 4.8">
+
+    <!-- BANNER PROMOCIONAL (tipo "Kit Churrasco") -->
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <label style="display:flex;align-items:center;gap:9px;cursor:pointer;margin-bottom:12px">
+        <input type="checkbox" id="cp-promo-ativo" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+        <span style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">🔥 Banner promocional no cardápio</span>
+      </label>
+      <div style="display:flex;gap:10px;margin-bottom:10px">
+        <div id="cp-promo-preview" style="width:70px;height:70px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;opacity:.4">🖼️</div>
+        <div style="display:flex;flex-direction:column;justify-content:center;gap:6px">
+          <button type="button" class="btn bg" style="font-size:12px;padding:7px 14px" onclick="document.getElementById('cp-promo-input').click()">Escolher foto</button>
+          <input type="file" id="cp-promo-input" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none" onchange="cpUploadPromoBannerImagem(this)">
+        </div>
+      </div>
+      <input id="cp-promo-titulo" class="form-input" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;margin-bottom:8px" placeholder="Título — ex: Kit">
+      <input id="cp-promo-destaque" class="form-input" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;margin-bottom:8px" placeholder="Palavra em destaque — ex: Churrasco">
+      <input id="cp-promo-subtitulo" class="form-input" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;margin-bottom:8px" placeholder="Subtítulo — ex: Tudo que você precisa para um churrasco perfeito!">
+      <input id="cp-promo-cta" class="form-input" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;margin-bottom:8px" placeholder="Texto do botão — ex: Comprar agora">
+      <input id="cp-promo-selo" class="form-input" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;margin-bottom:8px" placeholder="Selo (opcional) — ex: EXCLUSIVO CORTES">
+      <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Ao tocar no banner, abrir categoria</label>
+      <div class="sw" style="width:100%"><select id="cp-promo-categoria" class="form-input" style="width:100%">
+        <option value="">Nenhuma (não abre categoria)</option>
+      </select></div>
+    </div>
 
     <!-- PEDIDO MÍNIMO -->
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">

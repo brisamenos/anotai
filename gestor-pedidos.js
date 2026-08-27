@@ -2097,7 +2097,7 @@ function noAbrirModalAdicionais(item, grupos, isKg, editCtx) {
         ${opcoes.map((op, oi) => {
       const nome = op.nome || op.name || (typeof op === 'string' ? op : '');
       const preco = parseFloat(op.preco || op.price || 0);
-      const icon = op.icon ? `<span style="font-size:16px">${op.icon}</span>` : '';
+      const icon = op.icon ? `<img src="${op.icon}" style="width:22px;height:22px;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'">` : '';
       const precoLabel = preco > 0 ? ` <span style="color:var(--success);font-size:11px">+R$ ${preco.toFixed(2).replace('.', ',')}</span>` : '';
       return `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;cursor:pointer" onclick="noToggleOpc(this)">
             <input type="${inputType}" name="no-grp-${gi}" value="${oi}" data-grp="${gi}" data-idx="${oi}" data-nome="${nome.replace(/"/g, '&quot;')}" data-preco="${preco}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
@@ -2350,6 +2350,69 @@ function noChangeQty(itemId, delta) {
   noRenderCart();
 }
 
+// ── Histórico de pedidos do cliente, dentro de "Novo Pedido" ──────────
+// Busca os últimos pedidos do telefone informado e mostra num painel
+// logo abaixo dos campos de cliente. Puramente informativo/auxiliar —
+// não interfere em nada do fluxo de criação normal do pedido.
+let _noHistoricoReqId = 0;
+async function noCarregarHistoricoCliente(phone) {
+  const wrap = document.getElementById('no-historico-wrap');
+  const list = document.getElementById('no-historico-list');
+  if (!wrap || !list) return;
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (digits.length < 10) { wrap.style.display = 'none'; return; }
+  const reqId = ++_noHistoricoReqId; // evita mostrar resultado de uma busca antiga se o telefone mudar rápido
+  try {
+    // O telefone é salvo do jeito que foi digitado (com parênteses/traço),
+    // não só números — por isso não dá pra comparar direto no banco.
+    // Busca um lote recente e compara os dígitos aqui, igual o autocomplete
+    // de clientes já faz.
+    const { data, error } = await sb.from('orders')
+      .select('id,order_num,phone,items,total,taxa,status,created_at')
+      .order('created_at', { ascending: false })
+      .limit(300);
+    if (reqId !== _noHistoricoReqId) return; // resposta obsoleta, ignora
+    const doCliente = (!error && data) ? data.filter(o => String(o.phone || '').replace(/\D/g, '') === digits).slice(0, 5) : [];
+    if (!doCliente.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    list.innerHTML = doCliente.map(o => {
+      const itensArr = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? (JSON.parse(o.items || '[]')) : []);
+      const resumo = itensArr.map(i => `${i.qty}x ${i.name}`).join(', ');
+      const total = parseFloat(o.total || 0) + parseFloat(o.taxa || 0);
+      const data_ = new Date(o.created_at);
+      const dataStr = isNaN(data_) ? '' : data_.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
+      return `<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:9px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11.5px;color:var(--muted);font-weight:600">#${o.order_num || o.id} · ${dataStr} · R$ ${total.toFixed(2).replace('.', ',')}</div>
+          <div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">${resumo || 'sem itens'}</div>
+        </div>
+        <button type="button" onclick='noRepetirPedido(${JSON.stringify(itensArr).replace(/'/g, "&#39;")})' style="flex-shrink:0;padding:6px 12px;border-radius:8px;border:1.5px solid var(--accent);background:rgba(var(--accent-rgb,249,115,22),.08);color:var(--accent);font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Repetir</button>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    if (reqId === _noHistoricoReqId) wrap.style.display = 'none';
+  }
+}
+
+// Copia os itens de um pedido antigo pro carrinho do pedido novo, que
+// ainda está sendo montado — o gestor pode ajustar quantidade/remover
+// antes de criar, igual faria com itens adicionados na hora.
+function noRepetirPedido(itensArr) {
+  if (!Array.isArray(itensArr) || !itensArr.length) return;
+  itensArr.forEach(i => {
+    _noCart.push({
+      id: i.id != null ? i.id : null,
+      name: i.name || 'Item',
+      qty: parseInt(i.qty) || 1,
+      price: parseFloat(i.price) || 0,
+      emoji: i.emoji || '🍽️',
+      obs: i.obs || '',
+    });
+  });
+  noRenderCart();
+  sbToast('ok', `${itensArr.length} item(ns) do pedido anterior adicionados — revise antes de criar!`);
+}
+
 function noRenderCart() {
   const el = document.getElementById('no-cart');
   const empty = document.getElementById('no-cart-empty');
@@ -2402,6 +2465,7 @@ function noRenderCart() {
       <div style="flex:1;min-width:0">
         <div style="font-size:12.5px;font-weight:600;line-height:1.3;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:1px">R$ ${parseFloat(c.price).toFixed(2).replace('.', ',')} cada</div>
+        ${c.obs ? `<div style="font-size:10.5px;color:var(--accent);margin-top:2px;line-height:1.3;white-space:normal;word-break:break-word">${c.obs.replace(/</g,'&lt;')}</div>` : ''}
       </div>
       ${canEdit ? `<button onclick="noEditarItemCarrinho(${idx})" title="Editar adicionais" style="width:24px;height:24px;border-radius:6px;border:1px solid rgba(99,102,241,.35);background:rgba(99,102,241,.1);color:#818cf8;font-size:12px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0">✏️</button>` : ''}
       <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
@@ -2661,6 +2725,8 @@ async function noOpenModal() {
   });
   const taxaInfo = document.getElementById('no-taxa-info');
   if (taxaInfo) taxaInfo.textContent = '';
+  const historicoWrap = document.getElementById('no-historico-wrap');
+  if (historicoWrap) historicoWrap.style.display = 'none';
   const mesaSelect = document.getElementById('order-mesa');
   if (mesaSelect) mesaSelect.value = '';
   document.getElementById('order-pag').value = 'PIX';
@@ -2678,12 +2744,33 @@ async function noOpenModal() {
   // Inicializa autocomplete de clientes — quando seleciona um cliente com endereço,
   // tenta separar em campos. Se não der, joga tudo em "rua".
   const onSelectCliente = (cliente) => {
-    if (!cliente?.addr) return;
-    _noPreencherAddrCampos(cliente.addr);
-    setTimeout(noUpdateTaxaAuto, 50);
+    if (cliente?.addr) {
+      _noPreencherAddrCampos(cliente.addr);
+      setTimeout(noUpdateTaxaAuto, 50);
+    }
+    if (cliente?.phone) noCarregarHistoricoCliente(cliente.phone);
   };
   initClienteAutocomplete('order-client', { nameId: 'order-client', phoneId: 'order-phone', onSelect: onSelectCliente });
   initClienteAutocomplete('order-phone',  { nameId: 'order-client', phoneId: 'order-phone', onSelect: onSelectCliente });
+  // Também busca o histórico se o gestor digitar/colar um telefone completo
+  // direto, sem passar pelo autocomplete (ex: veio de outra tela já com o
+  // número em mãos).
+  const _phoneInputEl = document.getElementById('order-phone');
+  if (_phoneInputEl && !_phoneInputEl._noHistoricoHook) {
+    _phoneInputEl._noHistoricoHook = true;
+    let _histDebounce;
+    _phoneInputEl.addEventListener('input', () => {
+      clearTimeout(_histDebounce);
+      _histDebounce = setTimeout(() => {
+        const digits = (_phoneInputEl.value || '').replace(/\D/g, '');
+        if (digits.length >= 10) noCarregarHistoricoCliente(_phoneInputEl.value);
+        else {
+          const wrap = document.getElementById('no-historico-wrap');
+          if (wrap) wrap.style.display = 'none';
+        }
+      }, 400);
+    });
+  }
 
   // Atalho Ctrl+Enter para criar pedido (ativo enquanto o modal está aberto)
   if (!window._noKbdHook) {

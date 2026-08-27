@@ -698,6 +698,15 @@ input,textarea{font-family:inherit}
   width:18px;height:18px;border-radius:50%;
   background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;
 }
+.item-fav-btn{
+  position:absolute;top:4px;right:4px;z-index:2;
+  width:24px;height:24px;border-radius:50%;border:none;
+  background:rgba(0,0,0,.4);color:#fff;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:transform .15s ease;
+}
+.item-fav-btn:active{transform:scale(.85)}
+.item-fav-btn.on{color:#ef4444;background:rgba(255,255,255,.9)}
 .item-esgotado-overlay{
   position:absolute;inset:0;background:rgba(0,0,0,.65);
   display:flex;align-items:center;justify-content:center;
@@ -1333,6 +1342,77 @@ input,textarea{font-family:inherit}
   padding:12px 16px;display:none;align-items:center;gap:10px;font-size:13px;
 }
 .closed-banner.on{display:flex}
+
+/* ═══════════════════════════════════════
+   AÇOUGUE PREMIUM — barra de confiança + banner grande de fechada
+   Estrutura fixa, cor sempre do tema ativo (var(--s2)/--text/--border/--accent).
+═══════════════════════════════════════ */
+.trust-bar{
+  display:none;margin:0 16px 10px;padding:14px 8px;
+  background:var(--s2);border:1px solid var(--border);border-radius:14px;
+  align-items:center;justify-content:space-around;
+}
+body[data-segmento="acougue"] .trust-bar{display:flex}
+.trust-item{display:flex;align-items:center;gap:7px;color:var(--accent);flex:1;justify-content:center;min-width:0}
+.trust-label{font-size:9.5px;color:var(--muted);font-weight:600;line-height:1.2;white-space:nowrap}
+.trust-val{font-size:11.5px;color:var(--text);font-weight:800;line-height:1.25;white-space:nowrap}
+.trust-sep{width:1px;height:28px;background:var(--border);flex-shrink:0}
+
+.closed-banner-lg{
+  display:none;margin:0 16px 10px;padding:14px 16px;
+  background:var(--s2);border:1px solid var(--border);border-radius:14px;
+  align-items:center;gap:12px;cursor:pointer;
+}
+body[data-segmento="acougue"] .closed-banner-lg.show{display:flex}
+.closed-banner-lg-icon{
+  width:42px;height:42px;border-radius:50%;flex-shrink:0;
+  background:rgba(239,68,68,.12);color:var(--red,#ef4444);
+  display:flex;align-items:center;justify-content:center;
+}
+.closed-banner-lg-txt{flex:1;min-width:0}
+.closed-banner-lg-title{font-size:14px;font-weight:800;color:var(--text)}
+.closed-banner-lg-sub{font-size:12px;color:var(--muted);margin-top:1px}
+.closed-banner-lg-btn{
+  flex-shrink:0;padding:9px 16px;border-radius:99px;border:none;
+  background:var(--accent);color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;
+}
+
+.cats-showcase-title{
+  padding:2px 16px 10px;font-family:'Fraunces',serif;font-size:16px;font-weight:800;color:var(--text);
+}
+.cats-showcase-scroll{display:flex;gap:12px;overflow-x:auto;padding:0 16px 14px;scrollbar-width:none}
+.cats-showcase-scroll::-webkit-scrollbar{display:none}
+.cats-showcase-card{flex-shrink:0;width:88px;text-align:center;cursor:pointer}
+.cats-showcase-card img{
+  width:88px;height:88px;object-fit:cover;border-radius:16px;border:1px solid var(--border);
+  display:block;transition:transform .15s ease;
+}
+.cats-showcase-card:active img{transform:scale(.95)}
+.cats-showcase-name{margin-top:6px;font-size:11.5px;font-weight:700;color:var(--text);line-height:1.25}
+
+.promo-banner{
+  display:none;position:relative;margin:0 16px 14px;border-radius:16px;overflow:hidden;
+  min-height:150px;background-size:cover;background-position:center;background-color:var(--s2);
+}
+body[data-segmento="acougue"] .promo-banner.show{display:block}
+.promo-banner-overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(90deg,rgba(0,0,0,.75) 0%,rgba(0,0,0,.35) 55%,rgba(0,0,0,.05) 100%);
+}
+.promo-banner-content{position:relative;padding:20px;max-width:70%}
+.promo-banner-title{font-family:'Fraunces',serif;font-size:19px;font-weight:800;color:#fff;line-height:1.25}
+.promo-banner-destaque{color:var(--accent)}
+.promo-banner-sub{font-size:12.5px;color:rgba(255,255,255,.85);margin-top:6px;line-height:1.4}
+.promo-banner-btn{
+  margin-top:14px;padding:10px 18px;border-radius:99px;border:none;
+  background:var(--accent);color:#fff;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;
+}
+.promo-banner-selo{
+  position:absolute;top:14px;right:14px;width:56px;height:56px;border-radius:50%;
+  border:1.5px solid var(--accent);background:rgba(0,0,0,.55);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;text-align:center;
+  font-size:8.5px;font-weight:800;line-height:1.2;padding:4px;
+}
 
 /* ═══════════════════════════════════════
    RESPONSIVE
@@ -2656,9 +2736,48 @@ input,textarea{font-family:inherit}
   </div>
 </div>
 
+<!-- VITRINE DE CATEGORIAS COM FOTO — só no açougue -->
+<div id="cats-showcase"></div>
+
+<!-- BANNER PROMOCIONAL — configurável pelo gestor, só no açougue -->
+<div class="promo-banner" id="promo-banner"></div>
+
+<!-- BARRA DE CONFIANÇA — só no açougue (identidade "loja premium") -->
+<div class="trust-bar" id="trust-bar">
+  <div class="trust-item">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3l2 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+    <div><div class="trust-label">Entrega</div><div class="trust-val" id="trust-tempo">30-45 min</div></div>
+  </div>
+  <div class="trust-sep"></div>
+  <div class="trust-item">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1.5l1.9 4.2 4.5.5-3.4 3.1.9 4.5L8 11.6l-3.9 2.2.9-4.5-3.4-3.1 4.5-.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+    <div><div class="trust-label">Avaliação</div><div class="trust-val" id="trust-aval">5.0</div></div>
+  </div>
+  <div class="trust-sep"></div>
+  <div class="trust-item">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1.5l5.5 2v4c0 3.5-2.3 5.9-5.5 7-3.2-1.1-5.5-3.5-5.5-7v-4z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5.5 8l1.7 1.7L10.5 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div><div class="trust-label">Compra</div><div class="trust-val">100% Segura</div></div>
+  </div>
+  <div class="trust-sep"></div>
+  <div class="trust-item">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="4" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 9.5L4.5 14.5 8 12.5l3.5 2-1-5" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+    <div><div class="trust-label">Qualidade</div><div class="trust-val">Premium</div></div>
+  </div>
+</div>
+
 <!-- BANNER LOJA FECHADA -->
 <div class="closed-banner" id="closed-banner" style="display:none;margin:0 16px 8px;border-radius:12px">
   <span style="color:var(--red);font-size:10px">●</span> Esta loja está fechada. Você pode ver o cardápio, mas pedidos não são aceitos.
+</div>
+<div class="closed-banner-lg" id="closed-banner-lg" style="display:none" onclick="openStoreInfoModal()">
+  <div class="closed-banner-lg-icon">
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="none"><path d="M2 6l.7-3h10.6l.7 3M2 6v6.5A1.5 1.5 0 0 0 3.5 14h9a1.5 1.5 0 0 0 1.5-1.5V6M2 6h12M5 9.5a2 2 0 0 0 4 0" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+  </div>
+  <div class="closed-banner-lg-txt">
+    <div class="closed-banner-lg-title">Loja fechada</div>
+    <div class="closed-banner-lg-sub">Deixe seu pedido agendado</div>
+  </div>
+  <button type="button" class="closed-banner-lg-btn" onclick="event.stopPropagation();openStoreInfoModal()">Ver horários</button>
 </div>
 
 <!-- STICKY: BUSCA (retrátil, aberta pelo botão "Busca" do menu inferior) + CATEGORIAS -->
@@ -2700,6 +2819,10 @@ input,textarea{font-family:inherit}
   <button class="bnav-item" id="bnav-pedidos" type="button" onclick="bnavGoPedidos()">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 3h1.8l2.16 9.5h9.28l1.56-6.5H6.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9.5" cy="18.5" r="1.4" fill="currentColor"/><circle cx="16" cy="18.5" r="1.4" fill="currentColor"/></svg>
     <span>Pedidos</span>
+  </button>
+  <button class="bnav-item" id="bnav-favoritos" type="button" onclick="bnavGoFavoritos()">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 20.5s-7.5-4.6-10-9.3C.5 7.8 2.3 4 6 4c2.1 0 3.7 1.2 6 3.5C14.3 5.2 15.9 4 18 4c3.7 0 5.5 3.8 4 7.2-2.5 4.7-10 9.3-10 9.3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+    <span>Favoritos</span>
   </button>
   <button class="bnav-item" id="profile-fab" type="button" onclick="onProfileFabClick()" aria-label="Cadastro ou login">
     <span class="profile-fab-av icon" id="profile-fab-av">
@@ -3443,6 +3566,18 @@ input,textarea{font-family:inherit}
     </div>
 
     <button class="account-logout" onclick="doLogout()">🚪 Sair da conta</button>
+  </div>
+</div>
+
+<!-- ══════════════ FAVORITOS ══════════════ -->
+<div class="account-overlay" id="favoritos-overlay" onclick="if(event.target===this)closeFavoritos()">
+  <div class="account-sheet">
+    <div class="im-handle" style="margin-top:12px"></div>
+    <div class="account-head">
+      <div class="account-title">Favoritos</div>
+      <button class="account-x" onclick="closeFavoritos()">✕</button>
+    </div>
+    <div id="favoritos-list" style="padding:4px 16px 24px"></div>
   </div>
 </div>
 

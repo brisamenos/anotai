@@ -52,6 +52,12 @@ db.pragma('cache_size = -16384')
 db.pragma('temp_store = MEMORY')
 db.pragma('mmap_size = 134217728')
 db.pragma('foreign_keys = ON')
+// Sem isso, quando duas escritas chegam quase juntas (ex: dois dispositivos
+// salvando ao mesmo tempo), a segunda falha na hora com "database is locked"
+// em vez de simplesmente esperar a primeira terminar (que leva milissegundos)
+// e seguir normalmente. 5s é bem mais que suficiente pra qualquer escrita
+// individual — só evita a falha de corrida entre dispositivos.
+db.pragma('busy_timeout = 5000')
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS tenants (
@@ -1163,6 +1169,16 @@ const MIGRATIONS = [
   },
   { version:74, description:'imagem de categoria (icone redondo no cardapio, alem do emoji)', up:
     `ALTER TABLE categories ADD COLUMN image_url TEXT`
+  },
+  { version:75, description:'banner promocional configuravel no cardapio (tipo "Kit Churrasco")', up:
+    [`ALTER TABLE store_config ADD COLUMN promo_banner_ativo INTEGER DEFAULT 0`,
+     `ALTER TABLE store_config ADD COLUMN promo_banner_titulo TEXT`,
+     `ALTER TABLE store_config ADD COLUMN promo_banner_destaque TEXT`,
+     `ALTER TABLE store_config ADD COLUMN promo_banner_subtitulo TEXT`,
+     `ALTER TABLE store_config ADD COLUMN promo_banner_cta_texto TEXT`,
+     `ALTER TABLE store_config ADD COLUMN promo_banner_image_url TEXT`,
+     `ALTER TABLE store_config ADD COLUMN promo_banner_selo TEXT`,
+     `ALTER TABLE store_config ADD COLUMN promo_banner_categoria TEXT`]
   },
 ]
 
@@ -2284,7 +2300,7 @@ agendarResetDiarioPedidos()
 const TABLE_COLS = {
   tenants:      ['id','nome','plano','ativo','slug','segmento','expires_at','updated_at','created_at','valor_mensalidade','valor_mensalidade_expira_em','telefone_cobranca'],
   sys_users:    ['id','tenant_id','nome','email','senha_hash','role','ativo','ultimo_acesso','created_at'],
-  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config'],
+  store_config: ['id','tenant_id','store_open','caixa_open','delivery_fee_config','fid_config','evo_automacoes','evo_aniv_last','wa_server_url','sidebar_state','evo_instance','store_name','store_descricao','store_logo_url','store_banner_url','store_banners','store_cor','store_cor_texto','store_tema','cats_carrossel','store_tempo_entrega','store_tempo_retirada','store_avaliacao','store_whatsapp','gestor_tema','ia_config','horarios_config','order_num_offset','order_auto_reset_daily','order_auto_reset_last_date','cashback_config','pedido_minimo','store_address','store_lat','store_lng','tipos_entrega','print_config','taxa_servico_pct','stamp_config','pickup_addresses','telegram_backup_config','promo_banner_ativo','promo_banner_titulo','promo_banner_destaque','promo_banner_subtitulo','promo_banner_cta_texto','promo_banner_image_url','promo_banner_selo','promo_banner_categoria'],
   categories:   ['id','tenant_id','name','label','type','promo','emoji','image_url','sort_order','ativo'],
   menu_items:   ['id','tenant_id','name','description','price','price_old','category_id','cat','cat_key','emoji','image_url','video_url','promo','status','item_type','allow_half','max_flavors','days','ingredients','custom_groups','destaque','sort_order','fiscal_ncm','fiscal_cfop','fiscal_icms_origem','fiscal_icms_situacao','fiscal_cest','fiscal_unidade','fiscal_codigo_produto','fiscal_pis_situacao','fiscal_cofins_situacao','created_at'],
   cupons:       ['id','tenant_id','code','type','value','min_order','uses_left','ativo','expires_at'],
@@ -3084,7 +3100,7 @@ function handleTenantInfo(params) {
     : id ? db.prepare('SELECT id,nome,slug FROM tenants WHERE id=? AND ativo=1').get(id)
     : db.prepare('SELECT id,nome,slug FROM tenants WHERE ativo=1 ORDER BY id ASC LIMIT 1').get()
   if (!t) return { error: 'Restaurante não encontrado' }
-  const cfg = db.prepare('SELECT store_name,store_descricao,store_logo_url,store_banner_url,store_banners,store_cor,store_cor_texto,store_tema,cats_carrossel,store_tempo_entrega,store_tempo_retirada,store_avaliacao,store_whatsapp FROM store_config WHERE tenant_id=?').get(t.id)
+  const cfg = db.prepare('SELECT store_name,store_descricao,store_logo_url,store_banner_url,store_banners,store_cor,store_cor_texto,store_tema,cats_carrossel,store_tempo_entrega,store_tempo_retirada,store_avaliacao,store_whatsapp,promo_banner_ativo,promo_banner_titulo,promo_banner_destaque,promo_banner_subtitulo,promo_banner_cta_texto,promo_banner_image_url,promo_banner_selo,promo_banner_categoria FROM store_config WHERE tenant_id=?').get(t.id)
   return { ...t, branding: cfg || {} }
 }
 
