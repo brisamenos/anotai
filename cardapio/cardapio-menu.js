@@ -135,13 +135,9 @@ function _getPreparoFilterNome(id) {
   return map[id] || (id.charAt(0).toUpperCase() + id.slice(1));
 }
 
-function renderPreparoFilterSection() {
-  const el = document.getElementById('preparo-filter-section');
-  if (!el) return;
-  if (_segmento !== 'acougue') { el.style.display = 'none'; return; }
-
-  // Coleta todos os preparos disponíveis dos itens
-  const allPreparos = new Map(); // id -> nome
+// Coleta todos os preparos disponíveis nos itens do cardápio: id -> nome
+function _collectAllPreparos() {
+  const allPreparos = new Map();
   allItems.forEach(i => {
     const cgs = i.custom_groups || [];
     const grp = cgs.find(g => g.tipo === 'preparos');
@@ -152,35 +148,100 @@ function renderPreparoFilterSection() {
       });
     }
   });
+  return allPreparos;
+}
 
+// Ícone de um preparo, com cache-busting. Usado tanto no card do modal
+// quanto no banner de filtro ativo. Não troca variante clara/escura porque
+// o CSS já força o ícone pra branco (filter invert) nesses contextos.
+function _preparoCardIconHtml(id, nome) {
+  const _prepV = (typeof _iconesVer !== 'undefined' && _iconesVer) ? ('?v=' + _iconesVer) : '';
+  return _preparoImgMap[id]
+    ? `<img src="${_preparoImgMap[id]}${_prepV}" alt="${nome}" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='${_preparoImgMap[id]}'">`
+    : `<svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M10 22c-2-2-3-5-1.5-8s5-4.5 8-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M22 10c2 1 3 4 1.5 7S19 21 16 20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="16" cy="16" r="3" stroke="currentColor" stroke-width="1.4"/></svg>`;
+}
+
+// Seção do início agora é só o robozinho com a placa — toque abre o modal
+// com os ícones de preparo (openPreparoIconsModal).
+function renderPreparoFilterSection() {
+  const el = document.getElementById('preparo-filter-section');
+  if (!el) return;
+  if (_segmento !== 'acougue') { el.style.display = 'none'; return; }
+
+  const allPreparos = _collectAllPreparos();
   if (allPreparos.size === 0) { el.style.display = 'none'; return; }
 
   el.style.display = '';
+  el.innerHTML = `
+    <div class="preparo-robot-wrap" onclick="openPreparoIconsModal()">
+      <div class="preparo-robot-scene">
+        <div class="preparo-robot">
+          <div class="preparo-robot-antenna"></div>
+          <div class="preparo-robot-head">
+            <div class="preparo-robot-eye"></div>
+            <div class="preparo-robot-eye"></div>
+          </div>
+          <div class="preparo-robot-body">
+            <div class="preparo-robot-arm preparo-robot-arm-l"></div>
+            <div class="preparo-robot-arm preparo-robot-arm-r"></div>
+          </div>
+        </div>
+        <div class="preparo-robot-sign">
+          <div class="preparo-robot-sign-pole"></div>
+          <div class="preparo-robot-sign-board">Indicação</div>
+        </div>
+      </div>
+      <div class="preparo-robot-caption">Não sabe qual carne escolher? Toque aqui</div>
+    </div>
+  `;
+}
+
+// Modal com os ícones de preparo (o que antes ficava direto no início).
+function openPreparoIconsModal() {
+  document.getElementById('preparo-icons-overlay')?.remove();
+  const allPreparos = _collectAllPreparos();
+  if (!allPreparos.size) return;
+
   let cards = '';
   allPreparos.forEach((nome, id) => {
-    // Nota: esta seção força o ícone pra branco via CSS (filter invert), então
-    // usamos sempre a URL base (sem variante -claro), só com cache-busting.
-    const _prepV = (typeof _iconesVer !== 'undefined' && _iconesVer) ? ('?v=' + _iconesVer) : '';
-    const icon = _preparoImgMap[id] ? `<img src="${_preparoImgMap[id]}${_prepV}" alt="${nome}" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='${_preparoImgMap[id]}'">` : `<svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M10 22c-2-2-3-5-1.5-8s5-4.5 8-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M22 10c2 1 3 4 1.5 7S19 21 16 20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="16" cy="16" r="3" stroke="currentColor" stroke-width="1.4"/></svg>`;
     const isOn = _filterPreparo === id;
-    cards += `<div class="preparo-filter-card${isOn ? ' on' : ''}" onclick="setFilterPreparo('${id}')">
-      <div class="preparo-filter-card-icon">${icon}</div>
+    cards += `<div class="preparo-filter-card${isOn ? ' on' : ''}" onclick="setFilterPreparo('${id}');closePreparoIconsModal();">
+      <div class="preparo-filter-card-icon">${_preparoCardIconHtml(id, nome)}</div>
       <div class="preparo-filter-card-label">${nome}</div>
     </div>`;
   });
-
-  // Botão limpar filtro (aparece só quando há seleção)
   if (_filterPreparo) {
-    cards += `<div class="preparo-filter-clear" onclick="setFilterPreparo('')" title="Limpar filtro">
+    cards += `<div class="preparo-filter-clear" onclick="setFilterPreparo('');closePreparoIconsModal();" title="Limpar filtro" style="align-self:center">
       <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
     </div>`;
   }
 
-  el.innerHTML = `
-    <div class="section-label">Não sabe qual carne escolher?</div>
-    <div class="section-sublabel">Selecione como quer preparar e veja nossas indicações.</div>
-    <div class="preparo-filter-scroll">${cards}</div>
-  `;
+  const overlay = document.createElement('div');
+  overlay.id = 'preparo-icons-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:8500;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(3px)';
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.innerHTML = `<div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:540px;max-height:82vh;display:flex;flex-direction:column">
+    <div style="padding:12px 20px 0;flex-shrink:0">
+      <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div>
+    </div>
+    <div style="padding:16px 20px 4px;flex-shrink:0">
+      <div class="section-label" style="padding:0">Não sabe qual carne escolher?</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">Selecione como quer preparar e veja nossas indicações.</div>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:14px 20px 6px;display:flex;flex-wrap:wrap;gap:10px">
+      ${cards}
+    </div>
+    <div style="padding:14px 20px;flex-shrink:0;border-top:1px solid var(--border)">
+      <button onclick="closePreparoIconsModal()" style="width:100%;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;color:var(--text);font-family:inherit">Fechar</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(overlay);
+}
+
+function closePreparoIconsModal() {
+  document.getElementById('preparo-icons-overlay')?.remove();
 }
 
 function setFilterPreparo(id) {
@@ -266,9 +327,8 @@ function renderMenu() {
   if (_filterPreparo) {
     const nomePrep = _getPreparoFilterNome(_filterPreparo);
     const iconPrep = _preparoImgMap[_filterPreparo];
-    const _prepV2 = (typeof _iconesVer !== 'undefined' && _iconesVer) ? ('?v=' + _iconesVer) : '';
     const iconHtml = iconPrep
-      ? `<div class="preparo-filter-active-banner-icon"><img src="${iconPrep}${_prepV2}" alt="${nomePrep}" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='${iconPrep}'"></div>`
+      ? `<div class="preparo-filter-active-banner-icon">${_preparoCardIconHtml(_filterPreparo, nomePrep)}</div>`
       : '';
     const totalFiltrado = normalItems.length;
     html += `<div class="preparo-filter-active-banner" id="preparo-active-banner">
