@@ -893,6 +893,7 @@ function cpHorarioChanged() { /* placeholder para futuros listeners */ }
 
 
 let _cpLogoUrl   = '';
+let _cpPromoBannerUrl = '';
 let _cpBannerUrl = '';
 let _cpBanners   = []; // [{type:'image'|'video', url}] — até 5, formam slide no cardápio
 
@@ -1344,6 +1345,33 @@ async function cpUploadImagem(input) {
     setTimeout(() => cpRecarregarIframe(), 600);
   } catch(e) {
     console.error('cpUploadImagem:', e);
+    sbToast('err', 'Erro ao enviar imagem: ' + (e.message || ''));
+  } finally {
+    sbLoading(false);
+  }
+}
+
+async function cpUploadPromoBannerImagem(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { sbToast('err', 'Imagem muito grande. Use uma imagem de até 2MB.'); return; }
+  sbLoading(true);
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+      reader.readAsDataURL(file);
+    });
+    _cpPromoBannerUrl = dataUrl;
+    const prev = document.getElementById('cp-promo-preview');
+    if (prev) { prev.innerHTML = ''; prev.style.backgroundImage = `url(${dataUrl})`; prev.style.backgroundSize = 'cover'; prev.style.backgroundPosition = 'center'; }
+    const { error } = await sb.from('store_config').upsert({ tenant_id: _sessao?.tenant_id, promo_banner_image_url: dataUrl });
+    if (error) throw new Error(error.message || JSON.stringify(error));
+    sbToast('ok', 'Foto do banner enviada e salva!');
+    setTimeout(() => cpRecarregarIframe(), 600);
+  } catch(e) {
+    console.error('cpUploadPromoBannerImagem:', e);
     sbToast('err', 'Erro ao enviar imagem: ' + (e.message || ''));
   } finally {
     sbLoading(false);

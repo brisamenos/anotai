@@ -1687,7 +1687,7 @@ function noFilterItems(q) {
     i.status !== 'pausado' &&
     (!_noCatFilter || (i.cat || i.cat_key) === _noCatFilter) &&
     (!search || i.name.toLowerCase().includes(search) || (i.desc || '').toLowerCase().includes(search))
-  ).slice(0, 50);
+  );
   if (!filtered.length) {
     list.innerHTML = '<div style="padding:18px;text-align:center;color:var(--muted);font-size:12.5px">Nenhum produto encontrado</div>';
     return;

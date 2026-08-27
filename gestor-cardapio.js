@@ -1009,6 +1009,67 @@ function _populateCatPrinterSelect(selectId, catKey) {
   sel.innerHTML = _catPrinterOptionsHtml(current);
 }
 
+// ── Banner promocional (tipo "Kit Churrasco") — modal do Gestor de Produtos ──
+async function openPromoBannerModal() {
+  openModal('modal-promo-banner');
+  // Busca os dados atuais direto do banco — o SELECT usado em outros pontos
+  // do gestor não trazia essas colunas, então antes o formulário sempre
+  // abria em branco mesmo depois de já ter salvo algo (parecia que não
+  // tinha salvado, mas só não estava sendo lido de volta).
+  try {
+    const { data, error } = await sb.from('store_config').select(
+      'promo_banner_ativo,promo_banner_titulo,promo_banner_destaque,promo_banner_subtitulo,promo_banner_cta_texto,promo_banner_image_url,promo_banner_selo,promo_banner_categoria'
+    ).single();
+    if (error) { sbToast('err', 'Erro ao carregar banner: ' + error.message); return; }
+    const d = data || {};
+    const _chk = document.getElementById('cp-promo-ativo'); if (_chk) _chk.checked = !!d.promo_banner_ativo;
+    const _set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+    _set('cp-promo-titulo', d.promo_banner_titulo);
+    _set('cp-promo-destaque', d.promo_banner_destaque);
+    _set('cp-promo-subtitulo', d.promo_banner_subtitulo);
+    _set('cp-promo-cta', d.promo_banner_cta_texto);
+    _set('cp-promo-selo', d.promo_banner_selo);
+    _cpPromoBannerUrl = d.promo_banner_image_url || '';
+    const prev = document.getElementById('cp-promo-preview');
+    if (prev) {
+      if (_cpPromoBannerUrl) { prev.innerHTML = ''; prev.style.backgroundImage = `url(${_cpPromoBannerUrl})`; prev.style.backgroundSize = 'cover'; prev.style.backgroundPosition = 'center'; }
+      else { prev.innerHTML = '🖼️'; prev.style.backgroundImage = 'none'; }
+    }
+    const catSel = document.getElementById('cp-promo-categoria');
+    if (catSel) {
+      catSel.innerHTML = '<option value="">Nenhuma (não abre categoria)</option>' + (categories || []).map(c => `<option value="${c.name}">${c.label || c.name}</option>`).join('');
+      catSel.value = d.promo_banner_categoria || '';
+    }
+  } catch (e) {
+    sbToast('err', 'Erro ao carregar banner: ' + (e.message || ''));
+  }
+}
+
+async function salvarPromoBanner() {
+  sbLoading(true);
+  try {
+    const payload = {
+      tenant_id: _sessao?.tenant_id,
+      promo_banner_ativo:     document.getElementById('cp-promo-ativo')?.checked ? 1 : 0,
+      promo_banner_titulo:    document.getElementById('cp-promo-titulo')?.value.trim() || null,
+      promo_banner_destaque:  document.getElementById('cp-promo-destaque')?.value.trim() || null,
+      promo_banner_subtitulo: document.getElementById('cp-promo-subtitulo')?.value.trim() || null,
+      promo_banner_cta_texto: document.getElementById('cp-promo-cta')?.value.trim() || null,
+      promo_banner_selo:      document.getElementById('cp-promo-selo')?.value.trim() || null,
+      promo_banner_categoria: document.getElementById('cp-promo-categoria')?.value || null,
+    };
+    if (_cpPromoBannerUrl) payload.promo_banner_image_url = _cpPromoBannerUrl;
+    const { error } = await sb.from('store_config').upsert(payload);
+    if (error) throw error;
+    sbToast('ok', 'Banner promocional salvo!');
+    closeModal('modal-promo-banner');
+  } catch (e) {
+    sbToast('err', 'Erro ao salvar banner: ' + (e.message || 'tente novamente'));
+  } finally {
+    sbLoading(false);
+  }
+}
+
 function prepareAddCategoryModal() {
   _populateCatPrinterSelect('cat-printer-input', '');
   _newCatImageFile = null;

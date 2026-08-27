@@ -4982,6 +4982,41 @@ function serveStatic(req,res,fpath,ext) {
   } catch{res.writeHead(404);res.end('Not found')}
 }
 
+// ── Ícones padrão de açougue (cortes/preparo) — compartilhados por TODOS
+// os tenants, servidos como arquivo estático de cardapio/img/. Editáveis
+// só pelo superadmin (não por tenant). _iconesVersion muda a cada upload
+// e a cada reinício do servidor, servindo de cache-buster (os arquivos
+// estáticos têm cache de 7 dias no navegador — sem isso, a troca de um
+// ícone não apareceria pra quem já tinha visitado o cardápio antes).
+let _iconesVersion = Date.now()
+const ICONES_PADRAO_VALIDOS = new Set([
+  'cortes/bifefino.png','cortes/bifefino-claro.png',
+  'cortes/bifegrosso.png','cortes/bifegrosso-claro.png',
+  'cortes/bifemedio.png','cortes/bifemedio-claro.png',
+  'cortes/cubos.png','cortes/cubos-claro.png',
+  'cortes/espeto.png','cortes/espeto-claro.png',
+  'cortes/grelha.png','cortes/grelha-claro.png',
+  'cortes/inteira.png','cortes/inteira-claro.png',
+  'cortes/moida-2x.png','cortes/moida-2x-claro.png',
+  'cortes/peca.png','cortes/peca-claro.png',
+  'cortes/picado.png','cortes/picado-claro.png',
+  'cortes/postas.png','cortes/postas-claro.png',
+  'cortes/strogonoff.png','cortes/strogonoff-claro.png',
+  'cortes/tiras.png','cortes/tiras-claro.png',
+  'cortes/tirinhas.png','cortes/tirinhas-claro.png',
+  'tags/airfryer.png','tags/airfryer-claro.png',
+  'tags/churrasco.png','tags/churrasco-claro.png',
+  'tags/dia_a_dia.png','tags/dia_a_dia-claro.png',
+  'tags/ensopado.png','tags/ensopado-claro.png',
+  'tags/espeto.png','tags/espeto-claro.png',
+  'tags/forno.png','tags/forno-claro.png',
+  'tags/frigideira.png','tags/frigideira-claro.png',
+  'tags/grellhar.png','tags/grellhar-claro.png',
+  'tags/panela.png','tags/panela-claro.png',
+  'tags/smoker.png','tags/smoker-claro.png',
+  'tags/wind.png','tags/wind-claro.png',
+])
+
 const server = http.createServer(async (req,res) => {
   res.req = req
   res.setHeader('Access-Control-Allow-Origin','*')
@@ -5425,7 +5460,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/gestor-login','/api/gestor-logout','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history'])
+  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/gestor-login','/api/gestor-logout','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history','/api/icones-version','/api/admin/icone-padrao'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/'))||upath.startsWith('/rest/v1/')){
     try {
       const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
@@ -5455,6 +5490,29 @@ const server = http.createServer(async (req,res) => {
       if (fs.existsSync(fpath)) fs.unlinkSync(fpath)
       log('🗑️', `Upload removido: ${fname}`)
       send(res,200,{ok:true})
+    } catch(e) { send(res,500,{error:e.message}) }
+    return
+  }
+
+  if(req.method==='GET'&&upath==='/api/icones-version'){
+    send(res,200,{version:_iconesVersion}); return
+  }
+
+  if(req.method==='POST'&&upath==='/api/admin/icone-padrao'){
+    if (!validarSessaoAdmin(req)) { send(res,401,{error:'Não autorizado'}); return }
+    try {
+      const body = await readBody(req)
+      const arquivo = String(body.arquivo||'')
+      if (!ICONES_PADRAO_VALIDOS.has(arquivo)) { send(res,400,{error:'Ícone inválido'}); return }
+      const base64 = String(body.data||'').split(',').pop()
+      const buffer = Buffer.from(base64,'base64')
+      if (!buffer.length) { send(res,400,{error:'Imagem vazia'}); return }
+      if (buffer.length > 2*1024*1024) { send(res,413,{error:'Imagem muito grande (máx 2MB)'}); return }
+      const fpath = path.join(__dirname,'cardapio','img',arquivo)
+      fs.writeFileSync(fpath, buffer)
+      _iconesVersion = Date.now()
+      log('🖼️', `Ícone padrão atualizado por admin: ${arquivo}`)
+      send(res,200,{ok:true,version:_iconesVersion})
     } catch(e) { send(res,500,{error:e.message}) }
     return
   }
