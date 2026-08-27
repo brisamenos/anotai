@@ -101,9 +101,15 @@ async function _filtrarClientes(inputEl, dropdown, query) {
   if (!query || query.length < 2) { dropdown.style.display = 'none'; return; }
   const clientes = await _carregarClientesCache();
   const q = query.toLowerCase();
+  // Dígitos da busca — só usados pra comparar telefone. Se a busca não tem
+  // nenhum número (ex: "Igor Lima"), isso vira '' — e '' está "contido" em
+  // QUALQUER string em JS, então sem essa checagem o filtro de telefone
+  // acabava aceitando todo mundo que tinha telefone cadastrado, mesmo sem
+  // bater o nome (era por isso que apareciam clientes sem nenhuma relação).
+  const qDigits = q.replace(/\D/g, '');
   const filtrados = clientes.filter(c =>
     (c.name && c.name.toLowerCase().includes(q)) ||
-    (c.phone && c.phone.replace(/\D/g, '').includes(q.replace(/\D/g, '')))
+    (qDigits && c.phone && c.phone.replace(/\D/g, '').includes(qDigits))
   ).slice(0, 8);
 
   if (!filtrados.length) { dropdown.style.display = 'none'; return; }
