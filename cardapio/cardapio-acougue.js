@@ -84,9 +84,22 @@ function _acIconUrl(baseUrl) {
 
 // alt = texto alternativo (acessibilidade); size = px
 // A classe "ac-ico" cuida da animação de entrada + hover (CSS, em index.html).
+let _iconesVer = null;
+(function _carregarIconesVersion(){
+  fetch('/api/icones-version').then(r => r.ok ? r.json() : null).then(d => {
+    if (d?.version) {
+      _iconesVer = d.version;
+      // Se os ícones já apareceram na tela antes da versão chegar, atualiza
+      // a src deles agora pra garantir que não ficou uma versão em cache.
+      document.querySelectorAll('img.ac-ico').forEach(img => {
+        if (!img.src.includes('?v=')) img.src += '?v=' + _iconesVer;
+      });
+    }
+  }).catch(() => {});
+})();
 function _imgTag(baseUrl, alt, size) {
   const s = size || 60;
-  const src = _acIconUrl(baseUrl);
+  const src = _acIconUrl(baseUrl) + (_iconesVer ? ('?v=' + _iconesVer) : '');
   return `<img class="ac-ico" src="${src}" alt="${alt}" width="${s}" height="${s}" style="object-fit:contain;display:block" onerror="this.onerror=null;this.src='${baseUrl}'">`;
 }
 
