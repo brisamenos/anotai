@@ -5042,6 +5042,15 @@ const ICONES_PADRAO_VALIDOS = new Set([
 const ICONES_VIDEO_TAGS_KEYS = ['airfryer','churrasco','dia_a_dia','ensopado','espeto','forno','frigideira','grellhar','panela','smoker','wind']
 const ICONES_VIDEO_VALIDOS = new Set(ICONES_VIDEO_TAGS_KEYS.map(k => `tags/${k}.mp4`))
 for (const v of ICONES_VIDEO_VALIDOS) ICONES_PADRAO_VALIDOS.add(v)
+// Alguns preparos têm o nome do ARQUIVO (histórico, com erro de digitação)
+// diferente do ID usado nos itens do cardápio — hoje só "grellhar.png/mp4"
+// (arquivo) vs "grelhar" (id real usado em _AC_PREPAROS_CATALOG e nos
+// itens). Sem esse mapa, /api/icones-version reporta "grellhar" como tendo
+// vídeo/foto, mas o front-end nunca reconhece porque procura por "grelhar"
+// — o preparo cai sempre no <img> filtrado (fica branco) mesmo com vídeo
+// enviado.
+const ICONES_TAG_KEY_TO_PREPARO_ID = { grellhar: 'grelhar' }
+const _iconeKeyParaPreparoId = k => ICONES_TAG_KEY_TO_PREPARO_ID[k] || k
 const MAX_ICONE_VIDEO_BYTES = 10 * 1024 * 1024 // 10MB
 // Corpo em base64 fica ~37% maior que o arquivo original + folga pro resto do JSON
 const MAX_ICONE_VIDEO_BODY_BYTES = Math.ceil(MAX_ICONE_VIDEO_BYTES * 1.4) + 64 * 1024
@@ -5526,12 +5535,18 @@ const server = http.createServer(async (req,res) => {
   if(req.method==='GET'&&upath==='/api/icones-version'){
     // videoTags: quais "formas de preparo" têm vídeo customizado no lugar
     // do ícone estático — o front usa isso pra decidir <video> vs <img>.
-    const videoTags = ICONES_VIDEO_TAGS_KEYS.filter(k => fs.existsSync(path.join(ICONES_PADRAO_DIR,'tags',`${k}.mp4`)))
+    // Convertido pro ID real do preparo (ex.: "grellhar" -> "grelhar"),
+    // que é o que o front-end de fato procura.
+    const videoTags = ICONES_VIDEO_TAGS_KEYS
+      .filter(k => fs.existsSync(path.join(ICONES_PADRAO_DIR,'tags',`${k}.mp4`)))
+      .map(_iconeKeyParaPreparoId)
     // photoTags: preparos cujo admin já subiu uma FOTO real (PNG) no lugar do
     // ícone padrão (linha preta simples) — o front usa isso pra não aplicar
     // o filtro brightness(0)+invert(1) (pensado só pro ícone de linha) em
     // cima de uma foto colorida, senão ela vira um quadrado branco.
-    const photoTags = ICONES_VIDEO_TAGS_KEYS.filter(k => fs.existsSync(path.join(ICONES_PADRAO_DIR,'tags',`${k}.png`)))
+    const photoTags = ICONES_VIDEO_TAGS_KEYS
+      .filter(k => fs.existsSync(path.join(ICONES_PADRAO_DIR,'tags',`${k}.png`)))
+      .map(_iconeKeyParaPreparoId)
     send(res,200,{version:_iconesVersion,videoTags,photoTags}); return
   }
 
