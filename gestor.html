@@ -4770,32 +4770,17 @@ Use no seu próximo pedido.</textarea>
 <!-- Add Category -->
 <!-- BANNER PROMOCIONAL (tipo "Kit Churrasco") — dentro do Gestor de Produtos -->
 <div class="modal-bg" id="modal-promo-banner">
-  <div class="modal" style="width:440px">
+  <div class="modal" style="width:440px;max-height:88vh;overflow-y:auto">
     <button class="modal-close" onclick="closeModal('modal-promo-banner')"></button>
     <h2>🔥 Banner promocional</h2>
-    <div style="font-size:11.5px;color:var(--muted);margin-bottom:14px">Aparece em destaque no topo do cardápio (modo açougue), tipo "Kit Churrasco".</div>
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:14px">Aparece em destaque no cardápio (modo açougue), tipo "Kit Churrasco". Pode ter até 5 banners, alternando automaticamente a cada 4 segundos.</div>
     <label style="display:flex;align-items:center;gap:9px;cursor:pointer;margin-bottom:14px;padding:10px 12px;background:var(--s2);border:1px solid var(--border);border-radius:10px">
       <input type="checkbox" id="cp-promo-ativo" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
-      <span style="font-size:13px;font-weight:600">Ativar banner no cardápio</span>
+      <span style="font-size:13px;font-weight:600">Ativar banner(s) no cardápio</span>
     </label>
-    <div class="form-row"><label class="form-label">Foto do banner</label>
-      <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
-        <div id="cp-promo-preview" style="width:70px;height:70px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;opacity:.4">🖼️</div>
-        <button type="button" class="btn bg" style="font-size:12px;padding:7px 14px" onclick="document.getElementById('cp-promo-input').click()">Escolher foto</button>
-        <input type="file" id="cp-promo-input" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none" onchange="cpUploadPromoBannerImagem(this)">
-      </div>
-    </div>
-    <div class="form-row"><label class="form-label">Título</label><input id="cp-promo-titulo" class="form-input" placeholder="Ex: Kit"></div>
-    <div class="form-row"><label class="form-label">Palavra em destaque</label><input id="cp-promo-destaque" class="form-input" placeholder="Ex: Churrasco"></div>
-    <div class="form-row"><label class="form-label">Subtítulo</label><input id="cp-promo-subtitulo" class="form-input" placeholder="Ex: Tudo que você precisa para um churrasco perfeito!"></div>
-    <div class="form-row"><label class="form-label">Texto do botão</label><input id="cp-promo-cta" class="form-input" placeholder="Ex: Comprar agora"></div>
-    <div class="form-row"><label class="form-label">Selo (opcional)</label><input id="cp-promo-selo" class="form-input" placeholder="Ex: EXCLUSIVO CORTES"></div>
-    <div class="form-row"><label class="form-label">Ao tocar no banner, abrir categoria</label>
-      <div class="sw" style="width:100%"><select id="cp-promo-categoria" class="form-input" style="width:100%">
-        <option value="">Nenhuma (não abre categoria)</option>
-      </select></div>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:16px">
+    <div id="promo-banners-list"></div>
+    <button type="button" id="promo-banner-add-btn" class="btn bg" style="width:100%;justify-content:center;margin-bottom:16px" onclick="addPromoBanner()">+ Adicionar banner</button>
+    <div style="display:flex;gap:8px">
       <button class="btn bg" style="flex:1;justify-content:center" onclick="closeModal('modal-promo-banner')">Cancelar</button>
       <button class="btn bp" style="flex:1;justify-content:center" onclick="salvarPromoBanner()">Salvar</button>
     </div>

@@ -1009,59 +1009,103 @@ function _populateCatPrinterSelect(selectId, catKey) {
   sel.innerHTML = _catPrinterOptionsHtml(current);
 }
 
-// ── Banner promocional (tipo "Kit Churrasco") — modal do Gestor de Produtos ──
+// ── Banner(s) promocional(is) (tipo "Kit Churrasco") — modal do Gestor de Produtos ──
+// Até 5 banners, com rotação automática no cardápio (implementado em
+// cardapio-core.js / _applyPromoBanner). Cada banner tem seus próprios
+// campos — não é mais um banner único fixo.
+const PROMO_BANNER_MAX = 5;
+let _promoBanners = [];
+
 async function openPromoBannerModal() {
   openModal('modal-promo-banner');
-  // Busca os dados atuais direto do banco — o SELECT usado em outros pontos
-  // do gestor não trazia essas colunas, então antes o formulário sempre
-  // abria em branco mesmo depois de já ter salvo algo (parecia que não
-  // tinha salvado, mas só não estava sendo lido de volta).
   try {
-    const { data, error } = await sb.from('store_config').select(
-      'promo_banner_ativo,promo_banner_titulo,promo_banner_destaque,promo_banner_subtitulo,promo_banner_cta_texto,promo_banner_image_url,promo_banner_selo,promo_banner_categoria'
-    ).single();
-    if (error) { sbToast('err', 'Erro ao carregar banner: ' + error.message); return; }
+    const { data, error } = await sb.from('store_config').select('promo_banner_ativo,promo_banners').single();
+    if (error) { sbToast('err', 'Erro ao carregar banners: ' + error.message); return; }
     const d = data || {};
     const _chk = document.getElementById('cp-promo-ativo'); if (_chk) _chk.checked = !!d.promo_banner_ativo;
-    const _set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
-    _set('cp-promo-titulo', d.promo_banner_titulo);
-    _set('cp-promo-destaque', d.promo_banner_destaque);
-    _set('cp-promo-subtitulo', d.promo_banner_subtitulo);
-    _set('cp-promo-cta', d.promo_banner_cta_texto);
-    _set('cp-promo-selo', d.promo_banner_selo);
-    _cpPromoBannerUrl = d.promo_banner_image_url || '';
-    const prev = document.getElementById('cp-promo-preview');
-    if (prev) {
-      if (_cpPromoBannerUrl) { prev.innerHTML = ''; prev.style.backgroundImage = `url(${_cpPromoBannerUrl})`; prev.style.backgroundSize = 'cover'; prev.style.backgroundPosition = 'center'; }
-      else { prev.innerHTML = '🖼️'; prev.style.backgroundImage = 'none'; }
-    }
-    const catSel = document.getElementById('cp-promo-categoria');
-    if (catSel) {
-      catSel.innerHTML = '<option value="">Nenhuma (não abre categoria)</option>' + (categories || []).map(c => `<option value="${c.name}">${c.label || c.name}</option>`).join('');
-      catSel.value = d.promo_banner_categoria || '';
-    }
+    try {
+      const raw = d.promo_banners;
+      _promoBanners = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []);
+    } catch(e) { _promoBanners = []; }
+    if (!Array.isArray(_promoBanners)) _promoBanners = [];
+    renderPromoBannersList();
   } catch (e) {
-    sbToast('err', 'Erro ao carregar banner: ' + (e.message || ''));
+    sbToast('err', 'Erro ao carregar banners: ' + (e.message || ''));
+  }
+}
+
+function renderPromoBannersList() {
+  const list = document.getElementById('promo-banners-list');
+  const addBtn = document.getElementById('promo-banner-add-btn');
+  if (!list) return;
+  list.innerHTML = _promoBanners.map((b, i) => `
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Banner ${i + 1}</span>
+        <button type="button" class="btn bg" style="padding:4px 10px;font-size:10.5px;color:var(--danger)" onclick="removePromoBanner(${i})">Remover</button>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+        <div id="pb-preview-${i}" style="width:56px;height:56px;border-radius:8px;background:${b.image_url ? `url('${b.image_url}') center/cover` : 'var(--surface2)'};border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;${b.image_url ? '' : 'opacity:.4'}">${b.image_url ? '' : '🖼️'}</div>
+        <button type="button" class="btn bg" style="font-size:11px;padding:7px 14px" onclick="document.getElementById('pb-input-${i}').click()">Escolher foto</button>
+        <input type="file" id="pb-input-${i}" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none" onchange="uploadPromoBannerImg(this,${i})">
+      </div>
+      <input class="form-input" style="margin-bottom:6px" placeholder="Título — ex: Kit" value="${(b.titulo || '').replace(/"/g, '&quot;')}" oninput="_promoBanners[${i}].titulo=this.value">
+      <input class="form-input" style="margin-bottom:6px" placeholder="Palavra em destaque — ex: Churrasco" value="${(b.destaque || '').replace(/"/g, '&quot;')}" oninput="_promoBanners[${i}].destaque=this.value">
+      <input class="form-input" style="margin-bottom:6px" placeholder="Subtítulo" value="${(b.subtitulo || '').replace(/"/g, '&quot;')}" oninput="_promoBanners[${i}].subtitulo=this.value">
+      <input class="form-input" style="margin-bottom:6px" placeholder="Texto do botão — ex: Comprar agora" value="${(b.cta_texto || '').replace(/"/g, '&quot;')}" oninput="_promoBanners[${i}].cta_texto=this.value">
+      <input class="form-input" style="margin-bottom:6px" placeholder="Selo (opcional) — ex: EXCLUSIVO CORTES" value="${(b.selo || '').replace(/"/g, '&quot;')}" oninput="_promoBanners[${i}].selo=this.value">
+      <div class="sw" style="width:100%"><select class="form-input" style="width:100%" onchange="_promoBanners[${i}].categoria=this.value">
+        <option value="">Ao tocar, não abre categoria</option>
+        ${(categories || []).map(c => `<option value="${c.name}" ${b.categoria === c.name ? 'selected' : ''}>${c.label || c.name}</option>`).join('')}
+      </select></div>
+    </div>
+  `).join('') || `<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px">Nenhum banner ainda. Clique em "+ Adicionar banner" abaixo.</div>`;
+  if (addBtn) addBtn.style.display = _promoBanners.length >= PROMO_BANNER_MAX ? 'none' : '';
+}
+
+function addPromoBanner() {
+  if (_promoBanners.length >= PROMO_BANNER_MAX) { sbToast('err', `Máximo de ${PROMO_BANNER_MAX} banners.`); return; }
+  _promoBanners.push({ titulo: '', destaque: '', subtitulo: '', cta_texto: '', image_url: '', selo: '', categoria: '' });
+  renderPromoBannersList();
+}
+
+function removePromoBanner(i) {
+  _promoBanners.splice(i, 1);
+  renderPromoBannersList();
+}
+
+async function uploadPromoBannerImg(input, i) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { sbToast('err', 'Imagem muito grande. Use uma imagem de até 2MB.'); input.value = ''; return; }
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+      reader.readAsDataURL(file);
+    });
+    if (_promoBanners[i]) _promoBanners[i].image_url = dataUrl;
+    renderPromoBannersList();
+  } catch (e) {
+    sbToast('err', 'Erro ao ler imagem: ' + (e.message || ''));
+  } finally {
+    input.value = '';
   }
 }
 
 async function salvarPromoBanner() {
   sbLoading(true);
   try {
+    const validos = _promoBanners.filter(b => b.titulo && b.titulo.trim());
     const payload = {
       tenant_id: _sessao?.tenant_id,
-      promo_banner_ativo:     document.getElementById('cp-promo-ativo')?.checked ? 1 : 0,
-      promo_banner_titulo:    document.getElementById('cp-promo-titulo')?.value.trim() || null,
-      promo_banner_destaque:  document.getElementById('cp-promo-destaque')?.value.trim() || null,
-      promo_banner_subtitulo: document.getElementById('cp-promo-subtitulo')?.value.trim() || null,
-      promo_banner_cta_texto: document.getElementById('cp-promo-cta')?.value.trim() || null,
-      promo_banner_selo:      document.getElementById('cp-promo-selo')?.value.trim() || null,
-      promo_banner_categoria: document.getElementById('cp-promo-categoria')?.value || null,
+      promo_banner_ativo: document.getElementById('cp-promo-ativo')?.checked ? 1 : 0,
+      promo_banners: JSON.stringify(validos),
     };
-    if (_cpPromoBannerUrl) payload.promo_banner_image_url = _cpPromoBannerUrl;
     const { error } = await sb.from('store_config').upsert(payload);
     if (error) throw error;
-    sbToast('ok', 'Banner promocional salvo!');
+    sbToast('ok', 'Banners salvos!');
     closeModal('modal-promo-banner');
   } catch (e) {
     sbToast('err', 'Erro ao salvar banner: ' + (e.message || 'tente novamente'));
