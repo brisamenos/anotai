@@ -793,7 +793,7 @@ async function init() {
       sb.from('menu_items').select('*').not('status','eq','pausado').order('sort_order', { nullsFirst: false }).order('id'),
       sb.from('categories').select('*').eq('ativo', true).order('sort_order'),
       sb.from('cupons').select('*').eq('ativo', true),
-      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp,order_num_offset,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega,pickup_addresses,store_tempo_entrega,store_tempo_retirada').single(),
+      sb.from('store_config').select('store_open,horarios_config,delivery_fee_config,store_whatsapp,order_num_offset,pedido_minimo,store_address,store_lat,store_lng,tipos_entrega,pickup_addresses,store_tempo_entrega,store_tempo_retirada,mostrar_indicacao_preparo').single(),
       fetch('/api/pix/config', { headers: { 'x-tenant-id': _tenantId } }).then(r => r.ok ? r.json() : {}).catch(() => ({}))
     ]);
 
@@ -832,6 +832,10 @@ async function init() {
       _storeAddress = c.store_address || '';
       _storeLat     = parseFloat(c.store_lat) || null;
       _storeLng     = parseFloat(c.store_lng) || null;
+      // Seção "Não sabe qual carne escolher?" — liga/desliga pelo gestor.
+      // Sem essa coluna configurada ainda (null/undefined), mantém ligada
+      // por padrão pra não sumir de quem nunca mexeu nessa opção.
+      _mostrarIndicacaoPreparo = c.mostrar_indicacao_preparo !== 0 && c.mostrar_indicacao_preparo !== false;
       _tiposEntrega = Array.isArray(c.tipos_entrega) ? c.tipos_entrega : ['delivery','retirada','mesa'];
       // Múltiplos endereços de retirada
       try {

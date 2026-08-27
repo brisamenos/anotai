@@ -174,6 +174,7 @@ function renderPreparoFilterSection() {
   const el = document.getElementById('preparo-filter-section');
   if (!el) return;
   if (_segmento !== 'acougue') { el.style.display = 'none'; return; }
+  if (!_mostrarIndicacaoPreparo) { el.style.display = 'none'; return; }
 
   const allPreparos = _collectAllPreparos();
   if (allPreparos.size === 0) { el.style.display = 'none'; return; }

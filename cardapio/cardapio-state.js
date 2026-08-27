@@ -36,6 +36,9 @@ let _storeLng     = null;
 let _tiposEntrega = ['delivery','retirada','mesa'];
 let _pickupAddresses    = [];  // lista de { nome, endereco } — endereços adicionais de retirada
 let _selectedPickupIdx  = 0;   // índice do endereço de retirada selecionado pelo cliente
+// Seção "Não sabe qual carne escolher?" (robozinho + modal de preparo) —
+// liga/desliga pelo gestor em Configurações. true até a config carregar.
+let _mostrarIndicacaoPreparo = true;
 
 // ── Segmento ──
 let _segmento      = 'restaurante'; // 'restaurante' | 'acougue'
