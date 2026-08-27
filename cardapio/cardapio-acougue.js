@@ -85,6 +85,13 @@ function _acIconUrl(baseUrl) {
 // alt = texto alternativo (acessibilidade); size = px
 // A classe "ac-ico" cuida da animação de entrada + hover (CSS, em index.html).
 let _iconesVer = null;
+// Alguns preparos têm o nome do ARQUIVO (histórico, com erro de digitação)
+// diferente do ID usado nos itens do cardápio — hoje só "grellhar"
+// (arquivo em /api/icones-version) vs "grelhar" (id real usado em
+// _preparoImgMap e nos itens). Sem isso, o vídeo/foto sobe certinho no
+// admin mas o cardápio do cliente nunca reconhece porque procura por
+// "grelhar" — o preparo cai sempre no <img> de fallback (fica branco).
+const _ICONE_TAG_KEY_TO_PREPARO_ID = { grellhar: 'grelhar' };
 // Chaves de "forma de preparo" que têm vídeo customizado no lugar do ícone
 // estático (só existe pra tags, nunca pra cortes) — vem de /api/icones-version.
 let _preparoVideoTags = new Set();
@@ -96,8 +103,15 @@ let _preparoPhotoTags = new Set();
   fetch('/api/icones-version').then(r => r.ok ? r.json() : null).then(d => {
     if (d?.version) {
       _iconesVer = d.version;
-      _preparoVideoTags = new Set(d.videoTags || []);
-      _preparoPhotoTags = new Set(d.photoTags || []);
+      // Inclui tanto a chave de arquivo quanto o id real do preparo (quando
+      // diferentes), pra bater com o id usado nos itens do cardápio.
+      const _comAlias = (lista) => {
+        const s = new Set(lista || []);
+        (lista || []).forEach(k => { if (_ICONE_TAG_KEY_TO_PREPARO_ID[k]) s.add(_ICONE_TAG_KEY_TO_PREPARO_ID[k]); });
+        return s;
+      };
+      _preparoVideoTags = _comAlias(d.videoTags);
+      _preparoPhotoTags = _comAlias(d.photoTags);
       // Se os ícones já apareceram na tela antes da versão chegar, atualiza
       // a src deles agora pra garantir que não ficou uma versão em cache.
       document.querySelectorAll('img.ac-ico').forEach(img => {
