@@ -158,7 +158,10 @@ function renderPreparoFilterSection() {
   el.style.display = '';
   let cards = '';
   allPreparos.forEach((nome, id) => {
-    const icon = _preparoImgMap[id] ? _imgTag(_preparoImgMap[id], nome, 62) : `<svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M10 22c-2-2-3-5-1.5-8s5-4.5 8-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M22 10c2 1 3 4 1.5 7S19 21 16 20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="16" cy="16" r="3" stroke="currentColor" stroke-width="1.4"/></svg>`;
+    // Nota: esta seção força o ícone pra branco via CSS (filter invert), então
+    // usamos sempre a URL base (sem variante -claro), só com cache-busting.
+    const _prepV = (typeof _iconesVer !== 'undefined' && _iconesVer) ? ('?v=' + _iconesVer) : '';
+    const icon = _preparoImgMap[id] ? `<img src="${_preparoImgMap[id]}${_prepV}" alt="${nome}" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='${_preparoImgMap[id]}'">` : `<svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M10 22c-2-2-3-5-1.5-8s5-4.5 8-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M22 10c2 1 3 4 1.5 7S19 21 16 20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="16" cy="16" r="3" stroke="currentColor" stroke-width="1.4"/></svg>`;
     const isOn = _filterPreparo === id;
     cards += `<div class="preparo-filter-card${isOn ? ' on' : ''}" onclick="setFilterPreparo('${id}')">
       <div class="preparo-filter-card-icon">${icon}</div>
@@ -263,8 +266,9 @@ function renderMenu() {
   if (_filterPreparo) {
     const nomePrep = _getPreparoFilterNome(_filterPreparo);
     const iconPrep = _preparoImgMap[_filterPreparo];
+    const _prepV2 = (typeof _iconesVer !== 'undefined' && _iconesVer) ? ('?v=' + _iconesVer) : '';
     const iconHtml = iconPrep
-      ? `<div class="preparo-filter-active-banner-icon">${_imgTag(iconPrep, nomePrep, 18)}</div>`
+      ? `<div class="preparo-filter-active-banner-icon"><img src="${iconPrep}${_prepV2}" alt="${nomePrep}" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='${iconPrep}'"></div>`
       : '';
     const totalFiltrado = normalItems.length;
     html += `<div class="preparo-filter-active-banner" id="preparo-active-banner">
