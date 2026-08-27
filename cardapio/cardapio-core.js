@@ -421,6 +421,8 @@ function applyBranding(b, nome) {
     if (badge) { badge.style.display = ''; }
     const sep = document.getElementById('sep-tempo');
     if (sep) sep.style.display = '';
+    const trustEl = document.getElementById('trust-tempo');
+    if (trustEl) trustEl.textContent = b.store_tempo_entrega;
   }
 
   // Avaliação
@@ -431,6 +433,8 @@ function applyBranding(b, nome) {
     if (badge) badge.style.display = '';
     const sep = document.getElementById('sep-aval');
     if (sep) sep.style.display = '';
+    const trustEl = document.getElementById('trust-aval');
+    if (trustEl) trustEl.textContent = b.store_avaliacao;
   }
 
   // WhatsApp
@@ -438,6 +442,34 @@ function applyBranding(b, nome) {
     _waNumero = b.store_whatsapp.replace(/\D/g, '');
     if (_waNumero.length <= 11) _waNumero = '55' + _waNumero;
   }
+
+  _applyPromoBanner(b);
+}
+
+// ── Banner promocional configurável (tipo "Kit Churrasco") ──
+// Só aparece no visual do açougue (CSS controla), configurado pelo gestor.
+function _applyPromoBanner(cfg) {
+  const wrap = document.getElementById('promo-banner');
+  if (!wrap) return;
+  const ativo = cfg?.promo_banner_ativo && cfg?.promo_banner_titulo;
+  if (!ativo) { wrap.classList.remove('show'); return; }
+  const titulo    = (cfg.promo_banner_titulo || '').replace(/</g, '&lt;');
+  const destaque  = (cfg.promo_banner_destaque || '').replace(/</g, '&lt;');
+  const subtitulo = (cfg.promo_banner_subtitulo || '').replace(/</g, '&lt;');
+  const ctaTexto  = (cfg.promo_banner_cta_texto || 'Comprar agora').replace(/</g, '&lt;');
+  const selo      = (cfg.promo_banner_selo || '').replace(/</g, '&lt;');
+  const categoria = cfg.promo_banner_categoria || '';
+  wrap.style.backgroundImage = cfg.promo_banner_image_url ? `url("${cfg.promo_banner_image_url}")` : 'none';
+  wrap.innerHTML = `
+    <div class="promo-banner-overlay"></div>
+    <div class="promo-banner-content">
+      <div class="promo-banner-title">${titulo}${destaque ? ` <span class="promo-banner-destaque">${destaque}</span>` : ''}</div>
+      ${subtitulo ? `<div class="promo-banner-sub">${subtitulo}</div>` : ''}
+      <button type="button" class="promo-banner-btn" onclick="${categoria ? `verMaisCat('${categoria.replace(/'/g,"\\'")}')` : ''}">${ctaTexto}</button>
+    </div>
+    ${selo ? `<div class="promo-banner-selo">${selo}</div>` : ''}
+  `;
+  wrap.classList.add('show');
 }
 
 // Mostra pedido mínimo e endereço no hero após carregar store_config
@@ -657,7 +689,11 @@ function applyStatus(store_open, horarios) {
     txt.textContent = _lojaAberta ? 'Aberto' : 'Fechado';
     txt.className = 'hero-meta-status ' + (_lojaAberta ? 'open' : 'closed');
   }
-  if (ban) ban.style.display = _lojaAberta ? 'none' : 'flex';
+  if (ban) ban.style.display = (_lojaAberta || _segmento === 'acougue') ? 'none' : 'flex';
+  // Versão maior do banner de fechada (só aparece no visual do açougue,
+  // controlado via CSS — aqui só liga/desliga a classe).
+  const banLg = document.getElementById('closed-banner-lg');
+  if (banLg) banLg.classList.toggle('show', !_lojaAberta);
   // Atualiza botão de status do novo layout
   const statusBtn = document.getElementById('hero-status-btn');
   const statusBtnTxt = document.getElementById('hero-status-btn-txt');
@@ -806,6 +842,7 @@ async function init() {
     // (bloco de ativação do cartão online desabilitado propositalmente)
 
     buildCats();
+    buildCategoriaShowcase();
     renderPreparoFilterSection();
     renderMenu();
     subscribeRealtime();
@@ -1032,18 +1069,26 @@ function applyBrandingLive(cfg) {
     if (badge) { badge.style.display = ''; }
     const sep = document.getElementById('sep-tempo');
     if (sep) sep.style.display = '';
+    const trustEl = document.getElementById('trust-tempo');
+    if (trustEl) trustEl.textContent = cfg.store_tempo_entrega;
   }
   if (cfg.store_avaliacao) {
     const el = document.getElementById('hero-aval');
     if (el) { el.textContent = cfg.store_avaliacao; }
     const badge = document.getElementById('badge-aval');
     if (badge) badge.style.display = '';
+    const trustEl = document.getElementById('trust-aval');
+    if (trustEl) trustEl.textContent = cfg.store_avaliacao;
   }
 
   // WhatsApp
   if (cfg.store_whatsapp) {
     _waNumero = cfg.store_whatsapp.replace(/\D/g, '');
     if (_waNumero.length <= 11) _waNumero = '55' + _waNumero;
+  }
+
+  if (cfg.promo_banner_ativo !== undefined || cfg.promo_banner_titulo !== undefined) {
+    _applyPromoBanner(cfg);
   }
 
   // Estimativa dinâmica de tempo (ajusta conforme backlog atual)
@@ -1057,6 +1102,8 @@ function applyBrandingLive(cfg) {
         el.textContent = d.tempo_estimado;
         if (d.alta_demanda) el.title = '⚠ Alta demanda agora';
       }
+      const trustEl = document.getElementById('trust-tempo');
+      if (trustEl) trustEl.textContent = d.tempo_estimado;
       const badge = document.getElementById('badge-tempo');
       if (badge) badge.textContent = d.tempo_estimado;
       // Banner discreto de alta demanda
@@ -1095,6 +1142,7 @@ async function reloadMenu() {
   } catch(e) {}
   await loadAddonsEsgotados();
   buildCats();
+  buildCategoriaShowcase();
   renderPreparoFilterSection();
   renderMenu();
 }
@@ -1162,6 +1210,20 @@ function bnavGoPedidos() {
   } else {
     openAuth('register');
   }
+}
+
+// Botão "Favoritos" — não exige login, guardado no dispositivo.
+function bnavGoFavoritos() {
+  setBnavActive('bnav-favoritos');
+  openFavoritos();
+}
+function openFavoritos() {
+  if (typeof renderFavoritosPage === 'function') renderFavoritosPage();
+  document.getElementById('favoritos-overlay')?.classList.add('on');
+}
+function closeFavoritos() {
+  document.getElementById('favoritos-overlay')?.classList.remove('on');
+  setBnavActive('bnav-cardapio');
 }
 
 // ── Bootstrap ──

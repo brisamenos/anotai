@@ -1304,10 +1304,31 @@ function imConfirm() {
   // ── Kit: monta descrição com todos os itens do kit ──
   if (_isKitItem(i)) {
     const groups = i.custom_groups || [];
-    const _kitGrp = groups.find(g => g.tipo === 'kit_itens');
-    if (_kitGrp?.itens?.length) {
-      const _kitDesc = 'Kit: ' + _kitGrp.itens.join(' · ');
-      cartObs = [_kitDesc, cartObs].filter(Boolean).join(' | ');
+    const _kitCatsGrp = groups.find(g => g.tipo === 'kit_categorias');
+    if (_kitCatsGrp?.categorias?.length) {
+      // Kit montável: cliente escolheu os cortes na tela — preço real,
+      // somado pelo peso escolhido de cada corte (não é preço fixo).
+      const escolhidos = Object.entries(_kitMontavelSel || {}).filter(([, peso]) => peso > 0);
+      if (!escolhidos.length) {
+        toast('warn', 'Escolha ao menos um corte para montar o kit!');
+        return;
+      }
+      let precoTotal = 0;
+      const partesDesc = escolhidos.map(([idStr, peso]) => {
+        const itCorte = (typeof allItems !== 'undefined' ? allItems : []).find(x => x.id === parseInt(idStr));
+        if (!itCorte) return null;
+        precoTotal += (peso / 1000) * parseFloat(itCorte.price || 0);
+        const pesoLabel = peso >= 1000 ? (peso / 1000).toFixed(1).replace('.', ',') + 'kg' : peso + 'g';
+        return `${pesoLabel} ${itCorte.name}`;
+      }).filter(Boolean);
+      cartObs = ['Kit: ' + partesDesc.join(' · '), cartObs].filter(Boolean).join(' | ');
+      cartPrice = precoTotal;
+    } else {
+      const _kitGrp = groups.find(g => g.tipo === 'kit_itens');
+      if (_kitGrp?.itens?.length) {
+        const _kitDesc = 'Kit: ' + _kitGrp.itens.join(' · ');
+        cartObs = [_kitDesc, cartObs].filter(Boolean).join(' | ');
+      }
     }
     // Chips informativos do kit (preparo/ocasião/armazenamento) — antes
     // ficavam só na tela como visualização e não chegavam na comanda.

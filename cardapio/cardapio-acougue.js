@@ -90,6 +90,32 @@ function _imgTag(baseUrl, alt, size) {
   return `<img class="ac-ico" src="${src}" alt="${alt}" width="${s}" height="${s}" style="object-fit:contain;display:block" onerror="this.onerror=null;this.src='${baseUrl}'">`;
 }
 
+// Acha a foto de um produto real do cardápio comparando pelo nome — usado
+// pela lista de texto do kit ("500g Bife de Patinho"), que é só texto
+// digitado pelo gestor e não referencia o item de verdade diretamente.
+function _normalizarNome(s) {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').trim();
+}
+function _buscarFotoPorNome(nome) {
+  const fonte = (typeof allItems !== 'undefined' && Array.isArray(allItems)) ? allItems : [];
+  if (!fonte.length) return null;
+  const alvo = _normalizarNome(nome);
+  if (!alvo) return null;
+  // 1) match exato do nome normalizado
+  let achado = fonte.find(i => i.image_url && _normalizarNome(i.name) === alvo);
+  // 2) um nome contém o outro (ex: "bife de patinho" dentro de "bife de patinho grelha")
+  // — só aceita se o menor dos dois tiver pelo menos 5 caracteres, senão nomes
+  // curtos tipo "carne" combinariam com qualquer coisa e pegaria foto errada.
+  if (!achado) achado = fonte.find(i => {
+    if (!i.image_url) return false;
+    const n = _normalizarNome(i.name);
+    const menor = Math.min(n.length, alvo.length);
+    if (menor < 5) return false;
+    return alvo.includes(n) || n.includes(alvo);
+  });
+  return achado ? achado.image_url : null;
+}
+
 function _getCorteIlus(nome) {
   const n = (nome||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   let key = 'default';
@@ -321,23 +347,131 @@ function _renderGenericGruposHtml(genericGrupos) {
   }).join('');
 }
 
+// ── Kit montável: cliente escolhe cortes das categorias liberadas ──
+// Cada corte escolhido tem seu próprio peso; preço final = soma de cada
+// corte pelo peso escolhido (preço real por kg daquele corte).
+let _kitMontavelSel = {}; // { itemId: pesoEmGramas }
+
+function _buildKitMontavelHtml(kitItem, categoriasPermitidas) {
+  _kitMontavelSel = {};
+  const catsSet = new Set(categoriasPermitidas);
+  const fonte = (typeof allItems !== 'undefined' && Array.isArray(allItems)) ? allItems : [];
+  const elegiveis = fonte.filter(i =>
+    i.id !== kitItem.id &&
+    i.status !== 'pausado' && i.status !== 'esgotado' &&
+    !_isKitItem(i) &&
+    (catsSet.has(i.cat_key) || catsSet.has(i.cat))
+  );
+  if (!elegiveis.length) {
+    return `<div class="ac-section"><div style="font-size:12.5px;color:var(--muted);text-align:center;padding:12px">Nenhum corte disponível nas categorias configuradas.</div></div>`;
+  }
+  const cards = elegiveis.map(i => {
+    const isKgIt = i.item_type === 'kg' || i.itemType === 'kg';
+    const precoLabel = 'R$ ' + parseFloat(i.price || 0).toFixed(2).replace('.', ',') + (isKgIt ? '/kg' : '');
+    const ilustracao = i.image_url
+      ? `<img src="${i.image_url}" alt="${i.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`
+      : `<span style="font-size:28px">${i.emoji || '🥩'}</span>`;
+    return `<div class="corte-card" id="kitmv-card-${i.id}" onclick="_kitMontavelToggle(${i.id})">
+      <div class="corte-card-illus">${ilustracao}</div>
+      <div class="corte-card-name">${i.name}</div>
+      <div class="corte-card-hint" id="kitmv-hint-${i.id}">${precoLabel}</div>
+      <div id="kitmv-stepper-${i.id}" style="display:none;align-items:center;justify-content:center;gap:6px;margin-top:6px" onclick="event.stopPropagation()">
+        <button type="button" onclick="_kitMontavelAjustarPeso(${i.id},-100)" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-size:14px;cursor:pointer">−</button>
+        <span id="kitmv-peso-${i.id}" style="font-size:11.5px;font-weight:700;min-width:44px;text-align:center">500g</span>
+        <button type="button" onclick="_kitMontavelAjustarPeso(${i.id},100)" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-size:14px;cursor:pointer">+</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div class="ac-section">
+    <div class="ac-section-title">Monte seu kit — toque nos cortes que quiser</div>
+    <div class="corte-grid">${cards}</div>
+    <div id="kitmv-resumo" style="margin-top:12px;padding:11px 13px;background:var(--s2);border:1px solid var(--border);border-radius:12px;font-size:12.5px;color:var(--muted)">
+      Nenhum corte selecionado ainda
+    </div>
+  </div>`;
+}
+
+function _kitMontavelToggle(itemId) {
+  const card = document.getElementById(`kitmv-card-${itemId}`);
+  const stepper = document.getElementById(`kitmv-stepper-${itemId}`);
+  const hint = document.getElementById(`kitmv-hint-${itemId}`);
+  if (!card) return;
+  if (_kitMontavelSel[itemId]) {
+    // já selecionado — desmarca
+    delete _kitMontavelSel[itemId];
+    card.classList.remove('on');
+    if (stepper) stepper.style.display = 'none';
+    if (hint) hint.style.display = '';
+  } else {
+    _kitMontavelSel[itemId] = 500; // peso inicial padrão
+    card.classList.add('on');
+    if (stepper) stepper.style.display = 'flex';
+    if (hint) hint.style.display = 'none';
+    const pesoEl = document.getElementById(`kitmv-peso-${itemId}`);
+    if (pesoEl) pesoEl.textContent = '500g';
+  }
+  _kitMontavelAtualizarResumo();
+}
+
+function _kitMontavelAjustarPeso(itemId, delta) {
+  const atual = _kitMontavelSel[itemId] || 500;
+  const novo = Math.max(100, atual + delta);
+  _kitMontavelSel[itemId] = novo;
+  const pesoEl = document.getElementById(`kitmv-peso-${itemId}`);
+  if (pesoEl) pesoEl.textContent = novo >= 1000 ? (novo/1000).toFixed(1).replace('.',',')+'kg' : novo+'g';
+  _kitMontavelAtualizarResumo();
+}
+
+function _kitMontavelAtualizarResumo() {
+  const el = document.getElementById('kitmv-resumo');
+  if (!el) return;
+  const fonte = (typeof allItems !== 'undefined' && Array.isArray(allItems)) ? allItems : [];
+  const entradas = Object.entries(_kitMontavelSel);
+  if (!entradas.length) { el.style.color = 'var(--muted)'; el.textContent = 'Nenhum corte selecionado ainda'; return; }
+  let total = 0;
+  const linhas = entradas.map(([idStr, peso]) => {
+    const it = fonte.find(x => x.id === parseInt(idStr));
+    if (!it) return null;
+    total += (peso/1000) * parseFloat(it.price || 0);
+    const pesoLabel = peso >= 1000 ? (peso/1000).toFixed(1).replace('.',',')+'kg' : peso+'g';
+    return `${pesoLabel} ${it.name}`;
+  }).filter(Boolean);
+  el.style.color = 'var(--text)';
+  el.innerHTML = linhas.join(', ') + `<div style="margin-top:4px;font-weight:800;color:var(--accent);font-size:14px">Total: R$ ${total.toFixed(2).replace('.', ',')}</div>`;
+}
+
 // ── Renderiza modal de kit com ícones e lista de itens ──
 function _renderKitGrupos(item, wrap, grupos) {
   const kitGrp        = grupos.find(g => g.tipo === 'kit_itens');
+  const kitCatsGrp     = grupos.find(g => g.tipo === 'kit_categorias');
   const preparosGrp   = grupos.find(g => g.tipo === 'preparos');
   const ocasiaoGrp    = grupos.find(g => g.tipo === 'ocasiao');
   const armazenGrp    = grupos.find(g => g.tipo === 'armazenamento');
   let html = '';
 
-  // ── Conteúdo do kit ──────────────────────────────────────
-  if (kitGrp?.itens?.length) {
+  // ── Kit montável: cliente escolhe os cortes das categorias liberadas ──
+  // Tem prioridade sobre a lista fixa (kit_itens) — se o gestor configurou
+  // categorias, o cliente monta o próprio kit; senão, cai na lista fixa de
+  // sempre (compatível com kits já cadastrados antes dessa função existir).
+  if (kitCatsGrp?.categorias?.length) {
+    html += _buildKitMontavelHtml(item, kitCatsGrp.categorias);
+  } else if (kitGrp?.itens?.length) {
     const rows = kitGrp.itens.map(item => {
       // Tenta extrair quantidade e nome: "500g Bife de Patinho" → qty="500g", nome="Bife de Patinho"
       const match = item.match(/^(\d+\s*(?:g|kg|un|pç|pc|L|ml|x)?\s*)/i);
       const qty   = match ? match[1].trim() : '';
       const nome  = match ? item.slice(match[1].length).trim() : item;
+      // Tenta achar a foto real do produto casando pelo nome (a lista do kit
+      // é só texto digitado pelo gestor, sem link direto pro item do cardápio,
+      // então o jeito é comparar os nomes).
+      const fotoUrl = _buscarFotoPorNome(nome);
+      const ilustracao = fotoUrl
+        ? `<img src="${fotoUrl}" alt="${nome}" style="width:36px;height:36px;object-fit:cover;border-radius:9px" onerror="this.parentElement.innerHTML=this.parentElement.dataset.fallback">`
+        : `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M17 7c2 1.5 3.5 5 2 8s-5 5-8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.4"/></svg>`;
+      const fallbackSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M17 7c2 1.5 3.5 5 2 8s-5 5-8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.4"/></svg>`;
       return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
-        <div style="width:36px;height:36px;border-radius:9px;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.2);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M17 7c2 1.5 3.5 5 2 8s-5 5-8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.4"/></svg></div>
+        <div style="width:36px;height:36px;border-radius:9px;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.2);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;overflow:hidden" data-fallback='${fallbackSvg.replace(/'/g,"&#39;")}'>${ilustracao}</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:600;color:var(--text)">${nome}</div>
           ${qty ? `<div style="font-size:11.5px;color:var(--accent);font-weight:700;margin-top:1px">${qty}</div>` : ''}

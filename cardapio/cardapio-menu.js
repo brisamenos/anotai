@@ -96,6 +96,27 @@ function verMaisCat(key) {
   if (bar) bar.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+// ── Vitrine "Compre por categoria" — cards grandes com foto ──
+// Só aparece no visual do açougue (CSS controla isso), reaproveita as
+// mesmas categorias e o mesmo filtro dos chips de sempre.
+function buildCategoriaShowcase() {
+  const wrap = document.getElementById('cats-showcase');
+  if (!wrap) return;
+  const cats = (allCats || []).filter(c => c.type !== 'checklist' && c.image_url);
+  if (!cats.length || _segmento !== 'acougue') { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `
+    <div class="cats-showcase-title">Compre por categoria</div>
+    <div class="cats-showcase-scroll">
+      ${cats.map(c => `
+        <div class="cats-showcase-card" onclick="verMaisCat('${c.name.replace(/'/g,"\\'")}')">
+          <img src="${c.image_url}" alt="${c.label || c.name}" loading="lazy" decoding="async">
+          <div class="cats-showcase-name">${c.label || c.name}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
 function onSearch(val) {
   searchQ = val.trim().toLowerCase();
   renderMenu();
@@ -208,8 +229,12 @@ function renderMenu() {
   let html = '<div>';
 
   // ── Seção Destaques — açougue: acima das indicações; restaurante: posição normal ──
+  // Um item entra em Destaques se: foi marcado individualmente (i.destaque)
+  // OU pertence a uma categoria marcada inteira como destaque (cat.promo).
+  const _catsPromo = new Set(allCats.filter(c => c.promo).map(c => c.name));
+  const _ehDestaque = (i) => i.destaque || _catsPromo.has(i.cat_key) || _catsPromo.has(i.cat);
   if (_segmento === 'acougue' && !searchQ && !activeCat && !_filterPreparo) {
-    const destItems = normalItems.filter(i => i.destaque);
+    const destItems = normalItems.filter(_ehDestaque);
     if (destItems.length) {
       html += `<div class="destaques-wrap"><div class="section-label">Destaques</div>`;
       html += `<div class="destaques-scroll">`;
@@ -279,7 +304,7 @@ function renderMenu() {
   // Renderiza grupos normais
   // ── Destaques para restaurante (posição original, entre filtro e grupos) ──
   if (_segmento !== 'acougue' && !searchQ && !activeCat) {
-    const destItems = normalItems.filter(i => i.destaque);
+    const destItems = normalItems.filter(_ehDestaque);
     if (destItems.length) {
       html += `<div class="destaques-wrap"><div class="section-label">Mais Pedidos</div><div class="destaques-scroll">`;
       destItems.forEach(i => {
@@ -473,6 +498,47 @@ function addChecklistToCart(clId) {
   toast('ok', 'Itens adicionados ao carrinho!');
 }
 
+// ══════════════════════════════════════════
+//  FAVORITOS — guardados no dispositivo, não exige login
+// ══════════════════════════════════════════
+function _favoritosKey() {
+  return 'ef_favoritos_' + (typeof _tenantId !== 'undefined' ? _tenantId : 'x');
+}
+function _lerFavoritos() {
+  try { return JSON.parse(localStorage.getItem(_favoritosKey()) || '[]'); } catch(e) { return []; }
+}
+function isFavorito(id) {
+  return _lerFavoritos().includes(id);
+}
+function toggleFavorito(id) {
+  let favs = _lerFavoritos();
+  const jaTem = favs.includes(id);
+  favs = jaTem ? favs.filter(x => x !== id) : [...favs, id];
+  try { localStorage.setItem(_favoritosKey(), JSON.stringify(favs)); } catch(e) {}
+  // Atualiza o coração na tela sem precisar re-renderizar tudo
+  document.querySelectorAll(`.item-fav-btn`).forEach(btn => {
+    if (btn.getAttribute('onclick')?.includes(`toggleFavorito(${id})`)) {
+      btn.classList.toggle('on', !jaTem);
+      btn.querySelector('svg').setAttribute('fill', !jaTem ? 'currentColor' : 'none');
+    }
+  });
+  if (typeof toast === 'function') toast(jaTem ? 'info' : 'ok', jaTem ? 'Removido dos favoritos' : 'Adicionado aos favoritos!');
+  // Se a tela de favoritos estiver aberta, atualiza a lista na hora
+  if (document.getElementById('page-favoritos')?.classList.contains('on')) renderFavoritosPage();
+}
+function renderFavoritosPage() {
+  const wrap = document.getElementById('favoritos-list');
+  if (!wrap) return;
+  const favIds = _lerFavoritos();
+  const favItems = (allItems || []).filter(i => favIds.includes(i.id));
+  if (!favItems.length) {
+    wrap.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M12 20.5s-7.5-4.6-10-9.3C.5 7.8 2.3 4 6 4c2.1 0 3.7 1.2 6 3.5C14.3 5.2 15.9 4 18 4c3.7 0 5.5 3.8 4 7.2-2.5 4.7-10 9.3-10 9.3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></div><div class="empty-state-text">Nenhum favorito ainda.<br>Toque no coração de um item pra guardar aqui.</div></div>';
+    return;
+  }
+  const gridClass = (_segmento === 'acougue' || _catsCarrossel) ? 'item-grid carousel' : 'item-grid';
+  wrap.innerHTML = `<div class="${gridClass}">${favItems.map(itemCard).join('')}</div>`;
+}
+
 function itemCard(i) {
   const esg  = i.status === 'esgotado';
   const click= esg ? '' : `onclick="openItemModal(${i.id})"`;
@@ -510,6 +576,9 @@ function itemCard(i) {
       ${i.video_url ? `<span class="item-video-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></span>` : ''}
       ${i.promo||i.price_old ? '<span class="item-promo-badge">PROMO</span>' : ''}
       ${esg ? '<div class="item-esgotado-overlay">Esgotado</div>' : ''}
+      <button class="item-fav-btn${isFavorito(i.id)?' on':''}" onclick="event.stopPropagation();toggleFavorito(${i.id})" aria-label="Favoritar">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="${isFavorito(i.id)?'currentColor':'none'}"><path d="M12 20.5s-7.5-4.6-10-9.3C.5 7.8 2.3 4 6 4c2.1 0 3.7 1.2 6 3.5C14.3 5.2 15.9 4 18 4c3.7 0 5.5 3.8 4 7.2-2.5 4.7-10 9.3-10 9.3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      </button>
     </div>
   </div>`;
 }
