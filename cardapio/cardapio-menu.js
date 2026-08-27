@@ -235,7 +235,7 @@ function openPreparoIconsModal() {
       <div class="section-label" style="padding:0">Não sabe qual carne escolher?</div>
       <div style="font-size:12px;color:var(--muted);margin-top:4px">Selecione como quer preparar e veja nossas indicações.</div>
     </div>
-    <div style="overflow-y:auto;flex:1;padding:14px 20px 6px;display:flex;flex-wrap:wrap;gap:10px">
+    <div style="overflow-y:auto;flex:1;padding:14px 20px 6px;display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;justify-items:center">
       ${cards}
     </div>
     <div style="padding:14px 20px;flex-shrink:0;border-top:1px solid var(--border)">
