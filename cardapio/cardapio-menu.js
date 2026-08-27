@@ -210,15 +210,16 @@ function openPreparoIconsModal() {
   if (!allPreparos.size) return;
 
   let cards = '';
+  let _pfIdx = 0;
   allPreparos.forEach((nome, id) => {
     const isOn = _filterPreparo === id;
-    cards += `<div class="preparo-filter-card${isOn ? ' on' : ''}" onclick="setFilterPreparo('${id}');closePreparoIconsModal();">
+    cards += `<div class="preparo-filter-card${isOn ? ' on' : ''}" style="--pf-i:${_pfIdx++}" onclick="setFilterPreparo('${id}');closePreparoIconsModal();">
       <div class="preparo-filter-card-icon">${_preparoCardIconHtml(id, nome)}</div>
       <div class="preparo-filter-card-label">${nome}</div>
     </div>`;
   });
   if (_filterPreparo) {
-    cards += `<div class="preparo-filter-clear" onclick="setFilterPreparo('');closePreparoIconsModal();" title="Limpar filtro" style="align-self:center">
+    cards += `<div class="preparo-filter-clear" style="align-self:center;--pf-i:${_pfIdx++}" onclick="setFilterPreparo('');closePreparoIconsModal();" title="Limpar filtro">
       <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
     </div>`;
   }
@@ -228,19 +229,26 @@ function openPreparoIconsModal() {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:8500;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(3px)';
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
-  overlay.innerHTML = `<div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:540px;max-height:82vh;display:flex;flex-direction:column">
+  overlay.innerHTML = `<div onclick="event.stopPropagation()" style="background:var(--s1);border-radius:20px 20px 0 0;width:100%;max-width:540px;max-height:82vh;display:flex;flex-direction:column;overflow:hidden">
     <div style="padding:12px 20px 0;flex-shrink:0">
       <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div>
     </div>
-    <div style="padding:16px 20px 4px;flex-shrink:0">
-      <div class="section-label" style="padding:0">Não sabe qual carne escolher?</div>
-      <div style="font-size:12px;color:var(--muted);margin-top:4px">Selecione como quer preparar e veja nossas indicações.</div>
+    <div class="preparo-modal-header">
+      <div class="preparo-modal-title-row">
+        <div class="preparo-modal-badge">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 3c-3 3.5-4.5 6-4.5 8.5a4.5 4.5 0 1 0 9 0c0-1-.3-2-1-3-.2 1.2-.8 2-1.5 2.2.4-2-.2-4-2-5.7z" fill="#fff"/></svg>
+        </div>
+        <div>
+          <div class="preparo-modal-title">Qual é o preparo de hoje?</div>
+          <div class="preparo-modal-sub">Toque numa opção e a gente indica as melhores carnes pra ela.</div>
+        </div>
+      </div>
     </div>
     <div style="overflow-y:auto;flex:1;padding:14px 20px 6px;display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;justify-items:center">
       ${cards}
     </div>
     <div style="padding:14px 20px;flex-shrink:0;border-top:1px solid var(--border)">
-      <button onclick="closePreparoIconsModal()" style="width:100%;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;color:var(--text);font-family:inherit">Fechar</button>
+      <button onclick="closePreparoIconsModal()" style="width:100%;padding:12px;background:var(--s2);border:1px solid var(--border);border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;color:var(--text);font-family:inherit">Fechar</button>
     </div>
   </div>`;
 
