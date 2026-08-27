@@ -4945,7 +4945,7 @@ async function handleIAWebhook(req, res) {
 // ════════════════════════════════════════════════════════
 // HTTP SERVER
 // ════════════════════════════════════════════════════════
-const MIME = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon','.svg':'image/svg+xml','.json':'application/json'}
+const MIME = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon','.svg':'image/svg+xml','.json':'application/json','.mp4':'video/mp4','.webm':'video/webm'}
 
 function send(res, status, data) {
   const body = JSON.stringify(data)
@@ -4958,13 +4958,14 @@ function send(res, status, data) {
 }
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024 // 8MB — protege a memória do processo contra POST/PATCH gigantes
-function readBody(req) {
+function readBody(req, maxBytes) {
+  const limit = maxBytes || MAX_BODY_BYTES
   return new Promise((ok, err) => {
     let b = '', bytes = 0, aborted = false
     req.on('data', c => {
       if (aborted) return
       bytes += c.length
-      if (bytes > MAX_BODY_BYTES) {
+      if (bytes > limit) {
         aborted = true
         req.destroy()
         err(new Error('Corpo da requisição excede o limite permitido'))
@@ -5035,6 +5036,15 @@ const ICONES_PADRAO_VALIDOS = new Set([
   'tags/smoker.png','tags/smoker-claro.png',
   'tags/wind.png','tags/wind-claro.png',
 ])
+// Vídeos das "Formas de preparo" (tags) — recurso exclusivo dessa seção,
+// não existe pra cortes. Um único arquivo por preparo (sem variante
+// claro/escuro: filmagem real não faz sentido invertida pro tema escuro).
+const ICONES_VIDEO_TAGS_KEYS = ['airfryer','churrasco','dia_a_dia','ensopado','espeto','forno','frigideira','grellhar','panela','smoker','wind']
+const ICONES_VIDEO_VALIDOS = new Set(ICONES_VIDEO_TAGS_KEYS.map(k => `tags/${k}.mp4`))
+for (const v of ICONES_VIDEO_VALIDOS) ICONES_PADRAO_VALIDOS.add(v)
+const MAX_ICONE_VIDEO_BYTES = 10 * 1024 * 1024 // 10MB
+// Corpo em base64 fica ~37% maior que o arquivo original + folga pro resto do JSON
+const MAX_ICONE_VIDEO_BODY_BYTES = Math.ceil(MAX_ICONE_VIDEO_BYTES * 1.4) + 64 * 1024
 
 const server = http.createServer(async (req,res) => {
   res.req = req
@@ -5514,26 +5524,48 @@ const server = http.createServer(async (req,res) => {
   }
 
   if(req.method==='GET'&&upath==='/api/icones-version'){
-    send(res,200,{version:_iconesVersion}); return
+    // videoTags: quais "formas de preparo" têm vídeo customizado no lugar
+    // do ícone estático — o front usa isso pra decidir <video> vs <img>.
+    const videoTags = ICONES_VIDEO_TAGS_KEYS.filter(k => fs.existsSync(path.join(ICONES_PADRAO_DIR,'tags',`${k}.mp4`)))
+    send(res,200,{version:_iconesVersion,videoTags}); return
   }
 
   if(req.method==='POST'&&upath==='/api/admin/icone-padrao'){
     if (!validarSessaoAdmin(req)) { send(res,401,{error:'Não autorizado'}); return }
     try {
-      const body = await readBody(req)
+      const body = await readBody(req, MAX_ICONE_VIDEO_BODY_BYTES)
       const arquivo = String(body.arquivo||'')
       if (!ICONES_PADRAO_VALIDOS.has(arquivo)) { send(res,400,{error:'Ícone inválido'}); return }
+      const ehVideo = ICONES_VIDEO_VALIDOS.has(arquivo)
       const base64 = String(body.data||'').split(',').pop()
       const buffer = Buffer.from(base64,'base64')
-      if (!buffer.length) { send(res,400,{error:'Imagem vazia'}); return }
-      if (buffer.length > 2*1024*1024) { send(res,413,{error:'Imagem muito grande (máx 2MB)'}); return }
+      if (!buffer.length) { send(res,400,{error: ehVideo ? 'Vídeo vazio' : 'Imagem vazia'}); return }
+      const limiteBytes = ehVideo ? MAX_ICONE_VIDEO_BYTES : 2*1024*1024
+      if (buffer.length > limiteBytes) { send(res,413,{error: ehVideo ? 'Vídeo muito grande (máx 10MB)' : 'Imagem muito grande (máx 2MB)'}); return }
       // Grava no volume persistente (ICONES_PADRAO_DIR), não em cardapio/img —
       // essa pasta faz parte do código-fonte e some a cada novo deploy.
       const fpath = path.join(ICONES_PADRAO_DIR,arquivo)
       fs.mkdirSync(path.dirname(fpath), { recursive: true })
       fs.writeFileSync(fpath, buffer)
       _iconesVersion = Date.now()
-      log('🖼️', `Ícone padrão atualizado por admin: ${arquivo}`)
+      log('🖼️', `${ehVideo ? 'Vídeo' : 'Ícone'} padrão atualizado por admin: ${arquivo}`)
+      send(res,200,{ok:true,version:_iconesVersion})
+    } catch(e) { send(res,e.message?.includes('excede o limite') ? 413 : 500,{error:e.message}) }
+    return
+  }
+
+  if(req.method==='DELETE'&&upath==='/api/admin/icone-padrao'){
+    if (!validarSessaoAdmin(req)) { send(res,401,{error:'Não autorizado'}); return }
+    try {
+      const body = await readBody(req)
+      const arquivo = String(body.arquivo||(req.headers['x-arquivo']||''))
+      // Só permite remover vídeos (a remoção de imagem padrão não faz
+      // sentido — sempre tem que existir um ícone base pra cada preparo).
+      if (!ICONES_VIDEO_VALIDOS.has(arquivo)) { send(res,400,{error:'Arquivo inválido'}); return }
+      const fpath = path.join(ICONES_PADRAO_DIR,arquivo)
+      if (fs.existsSync(fpath)) fs.unlinkSync(fpath)
+      _iconesVersion = Date.now()
+      log('🗑️', `Vídeo padrão removido por admin: ${arquivo}`)
       send(res,200,{ok:true,version:_iconesVersion})
     } catch(e) { send(res,500,{error:e.message}) }
     return
