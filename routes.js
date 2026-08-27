@@ -4087,6 +4087,55 @@ module.exports = async function handleRoutes(req, res, ctx) {
     return true
   }
 
+  // ── Favoritos do cliente — exige conta (customer_id + token) ──────────
+  // Reaproveita o mesmo esquema de token do /api/customer-orders:
+  // token = base64("customerId:tenantId:hashPrefixDaSenha")
+  const _validarTokenCliente = (tid, cid, req) => {
+    const auth = req.headers['authorization'] || ''
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+    if (!token) return false
+    try {
+      const decoded = Buffer.from(token, 'base64').toString()
+      const [tkCid, tkTid, tkHashPrefix] = decoded.split(':')
+      if (String(tkCid) !== String(cid) || String(tkTid) !== String(tid)) return false
+      const custRow = db.prepare('SELECT senha_hash FROM customers WHERE id=? AND tenant_id=?').get(cid, tid)
+      if (!custRow || !custRow.senha_hash || custRow.senha_hash.slice(0, 16) !== tkHashPrefix) return false
+      return true
+    } catch (e) { return false }
+  }
+
+  if (req.method === 'GET' && upath === '/api/favoritos') {
+    const tid = getTenantId(req, params)
+    const cid = params.get('customer_id')
+    if (!tid || !cid) { send(res, 400, { error: 'Parâmetros faltando' }); return true }
+    if (!_validarTokenCliente(tid, cid, req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    try {
+      const rows = db.prepare('SELECT item_id FROM customer_favoritos WHERE tenant_id=? AND customer_id=?').all(tid, cid)
+      send(res, 200, rows.map(r => r.item_id))
+    } catch (e) { send(res, 400, { error: e.message }) }
+    return true
+  }
+
+  if (req.method === 'POST' && upath === '/api/favoritos/toggle') {
+    const tid = getTenantId(req, params)
+    const body = await readBody(req)
+    const cid = body.customer_id
+    const itemId = parseInt(body.item_id)
+    if (!tid || !cid || !itemId) { send(res, 400, { error: 'Parâmetros faltando' }); return true }
+    if (!_validarTokenCliente(tid, cid, req)) { send(res, 401, { error: 'Não autorizado' }); return true }
+    try {
+      const existente = db.prepare('SELECT id FROM customer_favoritos WHERE tenant_id=? AND customer_id=? AND item_id=?').get(tid, cid, itemId)
+      if (existente) {
+        db.prepare('DELETE FROM customer_favoritos WHERE id=?').run(existente.id)
+        send(res, 200, { ok: true, favorito: false })
+      } else {
+        db.prepare('INSERT INTO customer_favoritos (tenant_id,customer_id,item_id) VALUES (?,?,?)').run(tid, cid, itemId)
+        send(res, 200, { ok: true, favorito: true })
+      }
+    } catch (e) { send(res, 400, { error: e.message }) }
+    return true
+  }
+
   // ── Cancelamento de pedido pelo cliente ──────────────
   // Endpoint dedicado (em vez de PATCH genérico) — valida:
   //   - Tenant do pedido bate com o header

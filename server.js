@@ -25,10 +25,15 @@ const DB_PATH     = process.env.DB_PATH        || (process.platform === 'win32' 
 const MP_TOKEN    = process.env.MP_ACCESS_TOKEN || ''   // Token do Mercado Pago (prod ou test)
 const TAXA_PIX    = parseFloat(process.env.TAXA_PIX || '1.00')  // R$1,00 fixo por pagamento
 const UPLOADS_DIR = process.env.UPLOADS_DIR    || (process.platform === 'win32' ? path.join(LOCAL_DATA_DIR, 'uploads') : '/app/data/uploads')
+// Ícones padrão de açougue customizados pelo admin ficam aqui — dentro do
+// volume persistente /app/data, e não em cardapio/img (que faz parte do
+// código-fonte e é sobrescrito a cada deploy).
+const ICONES_PADRAO_DIR = path.join(UPLOADS_DIR, 'icones-padrao')
 const BACKUP_PATH = path.join(path.dirname(DB_PATH), 'backup.json')
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true })
 fs.mkdirSync(UPLOADS_DIR, { recursive: true })
+fs.mkdirSync(ICONES_PADRAO_DIR, { recursive: true })
 
 function log(emoji, msg, data) {
   const t = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
@@ -1182,6 +1187,17 @@ const MIGRATIONS = [
   },
   { version:76, description:'banners promocionais viram lista (ate 5, com rotacao automatica no cardapio)', up:
     `ALTER TABLE store_config ADD COLUMN promo_banners TEXT`
+  },
+  { version:77, description:'favoritos do cliente exigem conta (tabela customer_favoritos)', up:
+    `CREATE TABLE IF NOT EXISTS customer_favoritos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      customer_id INTEGER NOT NULL,
+      item_id INTEGER NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, customer_id, item_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_customer_favoritos_cliente ON customer_favoritos(tenant_id, customer_id);`
   },
 ]
 
@@ -5463,7 +5479,7 @@ const server = http.createServer(async (req,res) => {
 
   // Rotas especiais — não passam pelo REST engine genérico
   // (inclui rotas dos arquivos routes-*.js + as tratadas diretamente aqui)
-  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/gestor-login','/api/gestor-logout','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history','/api/icones-version','/api/admin/icone-padrao'])
+  const _specialApis=new Set(['/api/tenant-info','/api/manifest-garcom','/api/tenant-slug','/api/tenant-info-gestor','/api/order-status','/api/addons-esgotados','/api/customer-register','/api/customer-login','/api/customer-orders','/api/tempo-estimado','/api/criar-tenant','/api/backup','/api/restore','/api/admin-login','/api/gestor-login','/api/gestor-logout','/api/admin-logout','/api/ia-humano-assumiu','/api/rastreio-wa','/api/backup-completo-gestor','/api/pix/criar','/api/pix/status','/api/pix/vincular','/api/pix/config','/api/pix/gestor-config','/api/carteira','/api/saques/solicitar','/api/saques/meus','/api/admin/saques','/api/admin/saques/atualizar','/api/admin/mp-config','/api/gestor/mp-config','/api/admin/pix-toggle','/api/cashback/config','/api/cashback/saldo','/api/cashback/usar','/api/cashback/ajustar','/api/stamp/config','/api/stamp/check','/api/stamp/usar','/api/fidelidade/sync','/api/cupom/validar','/api/cartao/criar','/api/cartao/status','/api/cartao/public-key','/api/garcom-login','/api/entregador-login','/api/entregador/me','/api/entregador/entregas','/api/entregador/disponiveis','/api/entregador/adicionar-entregas','/api/entregador/entregas/ordem','/api/entregador/status','/api/entregador/mensagem','/api/entregador/localizacao','/api/radio/send','/api/radio/garcons','/api/radio/messages','/api/radio/audio/','/api/tenant-segmento','/api/print','/api/printers','/api/print-queue/heartbeat','/api/print-queue/pending','/api/print-queue/status','/api/print-queue/job','/api/print-queue/pdf','/api/historico-pedidos','/api/historico-pedidos/excluir','/api/exportar-relatorio','/api/entregadores/salvar','/api/entregas/dashboard','/api/entregas/atribuir','/api/entregas/status','/api/rotas-entrega/criar','/api/rotas-entrega/status','/api/order-status-history','/api/icones-version','/api/admin/icone-padrao','/api/favoritos','/api/favoritos/toggle'])
   if((upath.startsWith('/api/')&&!_specialApis.has(upath)&&!upath.startsWith('/api/evo')&&!upath.startsWith('/api/radio/audio/'))||upath.startsWith('/rest/v1/')){
     try {
       const table=upath.split('/')[upath.startsWith('/rest/v1/')?3:2],body=['POST','PATCH'].includes(req.method)?await readBody(req):{}
@@ -5511,13 +5527,27 @@ const server = http.createServer(async (req,res) => {
       const buffer = Buffer.from(base64,'base64')
       if (!buffer.length) { send(res,400,{error:'Imagem vazia'}); return }
       if (buffer.length > 2*1024*1024) { send(res,413,{error:'Imagem muito grande (máx 2MB)'}); return }
-      const fpath = path.join(__dirname,'cardapio','img',arquivo)
+      // Grava no volume persistente (ICONES_PADRAO_DIR), não em cardapio/img —
+      // essa pasta faz parte do código-fonte e some a cada novo deploy.
+      const fpath = path.join(ICONES_PADRAO_DIR,arquivo)
+      fs.mkdirSync(path.dirname(fpath), { recursive: true })
       fs.writeFileSync(fpath, buffer)
       _iconesVersion = Date.now()
       log('🖼️', `Ícone padrão atualizado por admin: ${arquivo}`)
       send(res,200,{ok:true,version:_iconesVersion})
     } catch(e) { send(res,500,{error:e.message}) }
     return
+  }
+
+  // Serve ícones padrão de açougue: se o admin já customizou, o arquivo
+  // persistido em ICONES_PADRAO_DIR tem prioridade; senão cai pro arquivo
+  // padrão do código-fonte via rota estática genérica, mais abaixo.
+  if(req.method==='GET'&&upath.startsWith('/cardapio/img/')){
+    const rel = upath.slice('/cardapio/img/'.length)
+    if (ICONES_PADRAO_VALIDOS.has(rel)) {
+      const customPath = path.join(ICONES_PADRAO_DIR, rel)
+      if (fs.existsSync(customPath)) { serveStatic(req,res,customPath,path.extname(customPath)); return }
+    }
   }
 
   if(req.method==='GET'&&(upath.startsWith('/uploads/')||upath.startsWith('/storage/v1/object/public/'))){
