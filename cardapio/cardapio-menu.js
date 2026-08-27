@@ -245,6 +245,9 @@ function openPreparoIconsModal() {
   </div>`;
 
   document.body.appendChild(overlay);
+  // iOS Safari não dá autoplay em <video> injetado via innerHTML sem isso —
+  // era por isso que nenhum vídeo tocava nesse modal no iPhone.
+  fixIosVideoAutoplay(overlay);
 }
 
 function closePreparoIconsModal() {
