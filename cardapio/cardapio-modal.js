@@ -89,137 +89,145 @@ function openItemModal(id) {
   }
 
   // ── Grupos de customização ──
-  _imGruposState = {};
-  _acougueCortes = {};
-  _acougueAtual  = null;
-  _pesoConfirmadoPeloUsuario = false;
-  renderImGrupos(i);
-  // Açougue: pré-seleciona peso somente se NÃO tem cortes (cliente escolhe o corte)
-  if (_isAcougueItem(i) && !_isKitItem(i)) {
-    const cortesGrp = (i.custom_groups || []).find(g => g.tipo === 'cortes');
-    const temCortes  = !!cortesGrp?.opcoes?.length;
-    if (!temCortes) {
-      // Sem cortes: mostra peso padrão na pill de porção mas não pré-confirma
-      const pesosGrp   = (i.custom_groups || []).find(g => g.tipo === 'pesos');
-      const pesoPadrao = pesosGrp?.valores?.[0] || 0;
-      if (pesoPadrao > 0) _autoSelecionarPorcaoRef('Inteiro', pesoPadrao, false);
+  // Blindado com try/catch: qualquer erro nos dados de um item específico
+  // (ex.: grupo de customização com formato inesperado) não pode impedir
+  // o modal de abrir — antes, um erro aqui travava a função inteira e o
+  // clique parecia "não fazer nada".
+  try {
+    _imGruposState = {};
+    _acougueCortes = {};
+    _acougueAtual  = null;
+    _pesoConfirmadoPeloUsuario = false;
+    renderImGrupos(i);
+    // Açougue: pré-seleciona peso somente se NÃO tem cortes (cliente escolhe o corte)
+    if (_isAcougueItem(i) && !_isKitItem(i)) {
+      const cortesGrp = (i.custom_groups || []).find(g => g.tipo === 'cortes');
+      const temCortes  = !!cortesGrp?.opcoes?.length;
+      if (!temCortes) {
+        // Sem cortes: mostra peso padrão na pill de porção mas não pré-confirma
+        const pesosGrp   = (i.custom_groups || []).find(g => g.tipo === 'pesos');
+        const pesoPadrao = pesosGrp?.valores?.[0] || 0;
+        if (pesoPadrao > 0) _autoSelecionarPorcaoRef('Inteiro', pesoPadrao, false);
+      }
+      // Com cortes: nada é pré-selecionado — cliente escolhe corte e peso
     }
-    // Com cortes: nada é pré-selecionado — cliente escolhe corte e peso
-  }
-  // Pré-carrega imagens dos cortes para evitar delay no modal (só kg)
-  if (_isAcougueItem(i) && !_isKitItem(i)) {
-    const grupos = i.custom_groups || [];
-    const cortesGrp = grupos.find(g => g.tipo === 'cortes');
-    if (cortesGrp?.opcoes) {
-      cortesGrp.opcoes.forEach(o => {
-        const n = (o.nome||o.id||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
-        let key = 'default';
-        if      (n.includes('strogon'))  key = 'strogonoff';
-        else if (n.includes('posta'))    key = 'postas';
-        else if (n.includes('tirinha'))  key = 'tirinha';
-        else if (n.includes('tira'))     key = 'tiras';
-        else if (n.includes('moido') && n.includes('2')) key = 'moido2x';
-        else if (n.includes('moido') || n.includes('moida')) key = 'moido';
-        else if (n.includes('cubo'))     key = 'cubos';
-        else if (n.includes('picado'))   key = 'picado';
-        else if (n.includes('grelha'))   key = 'grelha';
-        else if (n.includes('peca'))     key = 'peca';
-        else if (n.includes('fino'))     key = 'bifefino';
-        else if (n.includes('grosso'))   key = 'bifegrosso';
-        else if (n.includes('bife'))     key = 'bife';
-        else if (n.includes('espeto'))   key = 'espeto';
-        else if (n.includes('inteiro') || n.includes('inteira')) key = 'inteiro';
-        const url = (o.icon || o.image || o.img || o.image_url) || (_corteImgMap[key] || _corteImgMap.default);
-        const preload = new Image(); preload.src = url;
-      });
+    // Pré-carrega imagens dos cortes para evitar delay no modal (só kg)
+    if (_isAcougueItem(i) && !_isKitItem(i)) {
+      const grupos = i.custom_groups || [];
+      const cortesGrp = grupos.find(g => g.tipo === 'cortes');
+      if (cortesGrp?.opcoes) {
+        cortesGrp.opcoes.forEach(o => {
+          const n = (o.nome||o.id||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+          let key = 'default';
+          if      (n.includes('strogon'))  key = 'strogonoff';
+          else if (n.includes('posta'))    key = 'postas';
+          else if (n.includes('tirinha'))  key = 'tirinha';
+          else if (n.includes('tira'))     key = 'tiras';
+          else if (n.includes('moido') && n.includes('2')) key = 'moido2x';
+          else if (n.includes('moido') || n.includes('moida')) key = 'moido';
+          else if (n.includes('cubo'))     key = 'cubos';
+          else if (n.includes('picado'))   key = 'picado';
+          else if (n.includes('grelha'))   key = 'grelha';
+          else if (n.includes('peca'))     key = 'peca';
+          else if (n.includes('fino'))     key = 'bifefino';
+          else if (n.includes('grosso'))   key = 'bifegrosso';
+          else if (n.includes('bife'))     key = 'bife';
+          else if (n.includes('espeto'))   key = 'espeto';
+          else if (n.includes('inteiro') || n.includes('inteira')) key = 'inteiro';
+          const url = (o.icon || o.image || o.img || o.image_url) || (_corteImgMap[key] || _corteImgMap.default);
+          const preload = new Image(); preload.src = url;
+        });
+      }
     }
-  }
-  renderImXsell(i);
+    renderImXsell(i);
 
-  // ── Abas "Informações do Produto" (exclusivo açougue) ──
-  const imGruposWrap = document.getElementById('im-grupos-wrap');
-  const existingTabs = document.getElementById('im-info-tabs-wrap');
-  if (existingTabs) existingTabs.remove();
+    // ── Abas "Informações do Produto" (exclusivo açougue) ──
+    const imGruposWrap = document.getElementById('im-grupos-wrap');
+    const existingTabs = document.getElementById('im-info-tabs-wrap');
+    if (existingTabs) existingTabs.remove();
 
-  if (_isAcougueItem(i) && !_isKitItem(i)) {
-    const cgs            = i.custom_groups || [];
-    const ocasiaoGrp     = cgs.find(g => g.tipo === 'ocasiao');
-    const armazenGrp     = cgs.find(g => g.tipo === 'armazenamento');
-    const preparosGrp    = cgs.find(g => g.tipo === 'preparos');
-    const hasInfoTab = ocasiaoGrp?.opcoes?.length || armazenGrp?.opcoes?.length || preparosGrp?.opcoes?.length;
+    if (_isAcougueItem(i) && !_isKitItem(i)) {
+      const cgs            = i.custom_groups || [];
+      const ocasiaoGrp     = cgs.find(g => g.tipo === 'ocasiao');
+      const armazenGrp     = cgs.find(g => g.tipo === 'armazenamento');
+      const preparosGrp    = cgs.find(g => g.tipo === 'preparos');
+      const hasInfoTab = ocasiaoGrp?.opcoes?.length || armazenGrp?.opcoes?.length || preparosGrp?.opcoes?.length;
 
-    if (hasInfoTab) {
-      const _chipHtml = (lista, titulo) => {
-        if (!lista?.length) return '';
-        const chips = lista.map(o => {
-          const nome = o.nome || o.id || '';
-          const icon = o.icon
-            ? `<img src="${o.icon}" style="width:32px;height:32px;object-fit:contain;display:block" onerror="this.style.display='none'">`
-            : `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" opacity=".5"/></svg>`;
-          return `<div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 12px;background:var(--s2,#1a1a1a);border:1.5px solid var(--border,#2a2a2a);border-radius:12px;min-width:70px;max-width:90px;text-align:center;flex-shrink:0">
-            <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.04);border-radius:10px">${icon}</div>
-            <span style="font-size:11px;font-weight:600;color:var(--text);line-height:1.2">${nome}</span>
+      if (hasInfoTab) {
+        const _chipHtml = (lista, titulo) => {
+          if (!lista?.length) return '';
+          const chips = lista.map(o => {
+            const nome = o.nome || o.id || '';
+            const icon = o.icon
+              ? `<img src="${o.icon}" style="width:32px;height:32px;object-fit:contain;display:block" onerror="this.style.display='none'">`
+              : `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" opacity=".5"/></svg>`;
+            return `<div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 12px;background:var(--s2,#1a1a1a);border:1.5px solid var(--border,#2a2a2a);border-radius:12px;min-width:70px;max-width:90px;text-align:center;flex-shrink:0">
+              <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.04);border-radius:10px">${icon}</div>
+              <span style="font-size:11px;font-weight:600;color:var(--text);line-height:1.2">${nome}</span>
+            </div>`;
+          }).join('');
+          return `<div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;margin-bottom:8px">${titulo}</div>
+            <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;scrollbar-width:none">${chips}</div>
           </div>`;
-        }).join('');
-        return `<div style="margin-bottom:14px">
-          <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;margin-bottom:8px">${titulo}</div>
-          <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;scrollbar-width:none">${chips}</div>
-        </div>`;
-      };
+        };
 
-      const preparoContent = [
-        _chipHtml(ocasiaoGrp?.opcoes,     'Tipo de ocasião'),
-        _chipHtml(armazenGrp?.opcoes,     'Armazenamento'),
-        _chipHtml(preparosGrp?.opcoes,    'Forma de preparo'),
-      ].join('');
+        const preparoContent = [
+          _chipHtml(ocasiaoGrp?.opcoes,     'Tipo de ocasião'),
+          _chipHtml(armazenGrp?.opcoes,     'Armazenamento'),
+          _chipHtml(preparosGrp?.opcoes,    'Forma de preparo'),
+        ].join('');
 
-      const tabsWrap = document.createElement('div');
-      tabsWrap.id = 'im-info-tabs-wrap';
-      tabsWrap.style.cssText = 'margin-bottom:16px';
-      tabsWrap.innerHTML = `
-        <div style="font-size:13px;font-weight:700;margin-bottom:10px">Informações do produto</div>
-        <div style="display:flex;gap:6px;margin-bottom:14px" id="im-tab-btns">
-          <button onclick="imSwitchTab('detalhes')" id="im-tab-btn-detalhes" style="flex:1;padding:8px 12px;border-radius:10px;border:1.5px solid var(--accent,#f97316);background:var(--accent,#f97316);color:#000;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">Detalhes</button>
-          <button onclick="imSwitchTab('preparo')"  id="im-tab-btn-preparo"  style="flex:1;padding:8px 12px;border-radius:10px;border:1.5px solid var(--border,#2a2a2a);background:transparent;color:var(--muted);font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">Preparo</button>
-        </div>
-        <div id="im-tab-panel-detalhes" style="display:block">
-          <div style="font-size:13px;color:var(--muted2);line-height:1.6">${i.description || 'Sem descrição adicional.'}</div>
-        </div>
-        <div id="im-tab-panel-preparo" style="display:none">${preparoContent}</div>
-      `;
-      imGruposWrap.parentNode.insertBefore(tabsWrap, imGruposWrap);
+        const tabsWrap = document.createElement('div');
+        tabsWrap.id = 'im-info-tabs-wrap';
+        tabsWrap.style.cssText = 'margin-bottom:16px';
+        tabsWrap.innerHTML = `
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px">Informações do produto</div>
+          <div style="display:flex;gap:6px;margin-bottom:14px" id="im-tab-btns">
+            <button onclick="imSwitchTab('detalhes')" id="im-tab-btn-detalhes" style="flex:1;padding:8px 12px;border-radius:10px;border:1.5px solid var(--accent,#f97316);background:var(--accent,#f97316);color:#000;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">Detalhes</button>
+            <button onclick="imSwitchTab('preparo')"  id="im-tab-btn-preparo"  style="flex:1;padding:8px 12px;border-radius:10px;border:1.5px solid var(--border,#2a2a2a);background:transparent;color:var(--muted);font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">Preparo</button>
+          </div>
+          <div id="im-tab-panel-detalhes" style="display:block">
+            <div style="font-size:13px;color:var(--muted2);line-height:1.6">${i.description || 'Sem descrição adicional.'}</div>
+          </div>
+          <div id="im-tab-panel-preparo" style="display:none">${preparoContent}</div>
+        `;
+        imGruposWrap.parentNode.insertBefore(tabsWrap, imGruposWrap);
 
-      // Oculta a descrição duplicada acima (já está na aba Detalhes)
-      const descEl = document.getElementById('im-desc');
-      if (descEl) descEl.style.display = 'none';
+        // Oculta a descrição duplicada acima (já está na aba Detalhes)
+        const descEl = document.getElementById('im-desc');
+        if (descEl) descEl.style.display = 'none';
+      } else {
+        // Sem dados de preparo — mantém descrição normal
+        const descEl = document.getElementById('im-desc');
+        if (descEl) descEl.style.display = '';
+      }
     } else {
-      // Sem dados de preparo — mantém descrição normal
       const descEl = document.getElementById('im-desc');
       if (descEl) descEl.style.display = '';
     }
-  } else {
-    const descEl = document.getElementById('im-desc');
-    if (descEl) descEl.style.display = '';
-  }
 
-  // ── Ingredientes selecionáveis ──
-  const ingrSection = document.getElementById('im-ingr-section');
-  const ingrGrid    = document.getElementById('im-ingr-grid');
-  const ingrs = Array.isArray(i.ingredients) ? i.ingredients.filter(Boolean) : [];
-  if (ingrs.length > 0) {
-    ingrGrid.innerHTML = ingrs.map(ingr => `
-      <div class="im-ingr-chip" onclick="toggleIngr(this)">
-        <div class="chip-dot"></div>
-        <span>${ingr}</span>
-      </div>`).join('');
-    document.getElementById('im-ingr-count').textContent = '0';
-    document.getElementById('im-ingr-count').classList.remove('show');
-    ingrSection.style.display = '';
-    document.getElementById('im-obs').placeholder = 'Observação adicional (opcional)';
-  } else {
-    ingrSection.style.display = 'none';
-    ingrGrid.innerHTML = '';
-    document.getElementById('im-obs').placeholder = 'Observação';
+    // ── Ingredientes selecionáveis ──
+    const ingrSection = document.getElementById('im-ingr-section');
+    const ingrGrid    = document.getElementById('im-ingr-grid');
+    const ingrs = Array.isArray(i.ingredients) ? i.ingredients.filter(Boolean) : [];
+    if (ingrs.length > 0) {
+      ingrGrid.innerHTML = ingrs.map(ingr => `
+        <div class="im-ingr-chip" onclick="toggleIngr(this)">
+          <div class="chip-dot"></div>
+          <span>${ingr}</span>
+        </div>`).join('');
+      document.getElementById('im-ingr-count').textContent = '0';
+      document.getElementById('im-ingr-count').classList.remove('show');
+      ingrSection.style.display = '';
+      document.getElementById('im-obs').placeholder = 'Observação adicional (opcional)';
+    } else {
+      ingrSection.style.display = 'none';
+      ingrGrid.innerHTML = '';
+      document.getElementById('im-obs').placeholder = 'Observação';
+    }
+  } catch (e) {
+    console.error('openItemModal: erro ao montar detalhes do item, abrindo mesmo assim', e);
   }
 
   document.getElementById('item-modal-bg').classList.add('on');

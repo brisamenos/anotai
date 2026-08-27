@@ -307,7 +307,7 @@ function renderMenu() {
   if (_segmento === 'acougue' && !searchQ && !activeCat && !_filterPreparo) {
     const destItems = normalItems.filter(_ehDestaque);
     if (destItems.length) {
-      html += `<div class="destaques-wrap"><div class="section-label">Destaques</div>`;
+      html += `<div class="destaques-wrap"><div class="section-label">Mais Pedidos</div>`;
       html += `<div class="destaques-scroll">`;
       destItems.forEach(i => {
         const esg = i.status === 'esgotado';
