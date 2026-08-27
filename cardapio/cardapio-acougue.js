@@ -192,7 +192,16 @@ function _isAcougueItem(item) {
 }
 
 function _isKitItem(item) {
-  return (item.item_type === 'kit' || item.itemType === 'kit' || item.tipo === 'kit');
+  if (item.item_type === 'kit' || item.itemType === 'kit' || item.tipo === 'kit') return true;
+  // Fallback: mesma robustez do lado do gestor (_pedidoIsKitItem em
+  // gestor-pedidos.js) — se o item tem um grupo kit_itens/kit_categorias
+  // configurado mas o campo item_type ficou como "normal" (item antigo,
+  // editado antes do seletor "Kit / Combo" existir, etc.), ainda assim
+  // trata como kit. Sem isso a seção "Itens inclusos no kit" nunca
+  // aparecia pro cliente e o conteúdo do kit não ia pro obs — a comanda
+  // saía sem os itens inclusos.
+  const cgs = item.custom_groups || item.customGroups || [];
+  return Array.isArray(cgs) && cgs.some(g => g?.tipo === 'kit_itens' || g?.tipo === 'kit_categorias');
 }
 
 function renderImGrupos(item) {
