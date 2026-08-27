@@ -446,30 +446,71 @@ function applyBranding(b, nome) {
   _applyPromoBanner(b);
 }
 
-// ── Banner promocional configurável (tipo "Kit Churrasco") ──
+// ── Banner(s) promocional(is) configurável(is) (tipo "Kit Churrasco") ──
 // Só aparece no visual do açougue (CSS controla), configurado pelo gestor.
+// Suporta até 5 banners em rotação automática a cada 4s (mesmo espírito do
+// carrossel de fotos do topo — dots + troca automática).
+let _promoBannerTimer = null;
 function _applyPromoBanner(cfg) {
   const wrap = document.getElementById('promo-banner');
   if (!wrap) return;
-  const ativo = cfg?.promo_banner_ativo && cfg?.promo_banner_titulo;
-  if (!ativo) { wrap.classList.remove('show'); return; }
-  const titulo    = (cfg.promo_banner_titulo || '').replace(/</g, '&lt;');
-  const destaque  = (cfg.promo_banner_destaque || '').replace(/</g, '&lt;');
-  const subtitulo = (cfg.promo_banner_subtitulo || '').replace(/</g, '&lt;');
-  const ctaTexto  = (cfg.promo_banner_cta_texto || 'Comprar agora').replace(/</g, '&lt;');
-  const selo      = (cfg.promo_banner_selo || '').replace(/</g, '&lt;');
-  const categoria = cfg.promo_banner_categoria || '';
-  wrap.style.backgroundImage = cfg.promo_banner_image_url ? `url("${cfg.promo_banner_image_url}")` : 'none';
-  wrap.innerHTML = `
-    <div class="promo-banner-overlay"></div>
-    <div class="promo-banner-content">
-      <div class="promo-banner-title">${titulo}${destaque ? ` <span class="promo-banner-destaque">${destaque}</span>` : ''}</div>
-      ${subtitulo ? `<div class="promo-banner-sub">${subtitulo}</div>` : ''}
-      <button type="button" class="promo-banner-btn" onclick="${categoria ? `verMaisCat('${categoria.replace(/'/g,"\\'")}')` : ''}">${ctaTexto}</button>
-    </div>
-    ${selo ? `<div class="promo-banner-selo">${selo}</div>` : ''}
-  `;
+  clearInterval(_promoBannerTimer);
+  _promoBannerTimer = null;
+
+  // Formato novo: array em promo_banners. Formato antigo (1 banner só nos
+  // campos promo_banner_*) continua funcionando pra quem salvou antes da
+  // atualização — só não dá pra editar mais ele na tela nova.
+  let lista = [];
+  try {
+    const raw = cfg?.promo_banners;
+    lista = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []);
+  } catch(e) { lista = []; }
+  if (!lista.length && cfg?.promo_banner_titulo) {
+    lista = [{
+      titulo: cfg.promo_banner_titulo, destaque: cfg.promo_banner_destaque,
+      subtitulo: cfg.promo_banner_subtitulo, cta_texto: cfg.promo_banner_cta_texto,
+      image_url: cfg.promo_banner_image_url, selo: cfg.promo_banner_selo,
+      categoria: cfg.promo_banner_categoria,
+    }];
+  }
+  lista = lista.filter(b => b && b.titulo).slice(0, 5);
+
+  const ativo = cfg?.promo_banner_ativo && lista.length;
+  if (!ativo) { wrap.classList.remove('show'); wrap.innerHTML = ''; return; }
+
+  const _esc = (s) => String(s || '').replace(/</g, '&lt;');
+  const slidesHtml = lista.map((b, i) => {
+    const titulo    = _esc(b.titulo);
+    const destaque  = _esc(b.destaque);
+    const subtitulo = _esc(b.subtitulo);
+    const ctaTexto  = _esc(b.cta_texto || 'Comprar agora');
+    const selo      = _esc(b.selo);
+    const categoria = b.categoria || '';
+    const bg = b.image_url ? `background-image:url('${b.image_url}')` : '';
+    return `<div class="promo-banner-slide${i===0?' active':''}" style="${bg}" data-i="${i}">
+      <div class="promo-banner-overlay"></div>
+      <div class="promo-banner-content">
+        <div class="promo-banner-title">${titulo}${destaque ? ` <span class="promo-banner-destaque">${destaque}</span>` : ''}</div>
+        ${subtitulo ? `<div class="promo-banner-sub">${subtitulo}</div>` : ''}
+        <button type="button" class="promo-banner-btn" onclick="${categoria ? `verMaisCat('${categoria.replace(/'/g,"\\'")}')` : ''}">${ctaTexto}</button>
+      </div>
+      ${selo ? `<div class="promo-banner-selo">${selo}</div>` : ''}
+    </div>`;
+  }).join('');
+  const dotsHtml = lista.length > 1
+    ? `<div class="promo-banner-dots">${lista.map((_,i)=>`<span class="promo-banner-dot${i===0?' on':''}" data-i="${i}"></span>`).join('')}</div>`
+    : '';
+  wrap.innerHTML = slidesHtml + dotsHtml;
   wrap.classList.add('show');
+
+  if (lista.length > 1) {
+    let idx = 0;
+    _promoBannerTimer = setInterval(() => {
+      idx = (idx + 1) % lista.length;
+      wrap.querySelectorAll('.promo-banner-slide').forEach(el => el.classList.toggle('active', Number(el.dataset.i) === idx));
+      wrap.querySelectorAll('.promo-banner-dot').forEach(el => el.classList.toggle('on', Number(el.dataset.i) === idx));
+    }, 4000);
+  }
 }
 
 // Mostra pedido mínimo e endereço no hero após carregar store_config
@@ -1087,7 +1128,7 @@ function applyBrandingLive(cfg) {
     if (_waNumero.length <= 11) _waNumero = '55' + _waNumero;
   }
 
-  if (cfg.promo_banner_ativo !== undefined || cfg.promo_banner_titulo !== undefined) {
+  if (cfg.promo_banner_ativo !== undefined || cfg.promo_banners !== undefined) {
     _applyPromoBanner(cfg);
   }
 
