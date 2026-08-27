@@ -85,10 +85,14 @@ function _acIconUrl(baseUrl) {
 // alt = texto alternativo (acessibilidade); size = px
 // A classe "ac-ico" cuida da animação de entrada + hover (CSS, em index.html).
 let _iconesVer = null;
+// Chaves de "forma de preparo" que têm vídeo customizado no lugar do ícone
+// estático (só existe pra tags, nunca pra cortes) — vem de /api/icones-version.
+let _preparoVideoTags = new Set();
 (function _carregarIconesVersion(){
   fetch('/api/icones-version').then(r => r.ok ? r.json() : null).then(d => {
     if (d?.version) {
       _iconesVer = d.version;
+      _preparoVideoTags = new Set(d.videoTags || []);
       // Se os ícones já apareceram na tela antes da versão chegar, atualiza
       // a src deles agora pra garantir que não ficou uma versão em cache.
       document.querySelectorAll('img.ac-ico').forEach(img => {
@@ -101,6 +105,16 @@ function _imgTag(baseUrl, alt, size) {
   const s = size || 60;
   const src = _acIconUrl(baseUrl) + (_iconesVer ? ('?v=' + _iconesVer) : '');
   return `<img class="ac-ico" src="${src}" alt="${alt}" width="${s}" height="${s}" style="object-fit:contain;display:block" onerror="this.onerror=null;this.src='${baseUrl}'">`;
+}
+// Ícone (ou vídeo) de uma forma de preparo. Se o admin subiu um vídeo pra
+// esse preparo, mostra <video> em loop mudo em vez da imagem estática —
+// recurso exclusivo de "Formas de preparo" (tags), cortes nunca têm vídeo.
+function _preparoMediaHtml(key, baseUrl, alt, size) {
+  if (key && _preparoVideoTags.has(key)) {
+    const v = _iconesVer ? ('?v=' + _iconesVer) : '';
+    return `<video class="ac-ico" src="${_IMG_TAGS}/${key}.mp4${v}" autoplay muted loop playsinline disablepictureinpicture aria-label="${alt}"></video>`;
+  }
+  return baseUrl ? _imgTag(baseUrl, alt, size) : null;
 }
 
 // Acha a foto de um produto real do cardápio comparando pelo nome — usado
@@ -164,7 +178,8 @@ function _getPreparoIcon(nome) {
   else if (n.includes('forno'))      key = 'forno';
   else if (n.includes('airfryer') || n.includes('air fryer')) key = 'airfryer';
   if (key && _preparoImgMap[key]) {
-    return _imgTag(_preparoImgMap[key], nome, 20);
+    const html = _preparoMediaHtml(key, _preparoImgMap[key], nome, 20);
+    if (html) return html;
   }
   // fallback SVG genérico
   return `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4"/></svg>`;
@@ -974,6 +989,8 @@ function openPreparoDetail(preparoId) {
     ? _getPreparoFilterNome(preparoId)
     : (preparoId.charAt(0).toUpperCase() + preparoId.slice(1));
   const iconPreparo = _preparoImgMap[preparoId] || null;
+  const temVideoPreparo = _preparoVideoTags.has(preparoId);
+  const _vv = _iconesVer ? ('?v=' + _iconesVer) : '';
 
   document.getElementById('preparo-detail-overlay')?.remove();
 
@@ -1023,7 +1040,11 @@ function openPreparoDetail(preparoId) {
     <!-- Header -->
     <div style="padding:14px 20px 12px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:14px">
       <div style="width:48px;height:48px;border-radius:12px;background:var(--surface2);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">
-        ${iconPreparo ? `<img src="${iconPreparo}" style="width:36px;height:36px;object-fit:contain" onerror="this.parentElement.innerHTML='<svg width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\'><path d=\'M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5\' stroke=\'currentColor\' stroke-width=\'1.5\' stroke-linecap=\'round\'/><circle cx=\'12\' cy=\'12\' r=\'3\' stroke=\'currentColor\' stroke-width=\'1.4\'/></svg>'">` : '<svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.4"/></svg>'}
+        ${temVideoPreparo
+          ? `<video src="${_IMG_TAGS}/${preparoId}.mp4${_vv}" style="width:36px;height:36px;object-fit:cover;border-radius:8px" autoplay muted loop playsinline disablepictureinpicture></video>`
+          : (iconPreparo
+              ? `<img src="${iconPreparo}" style="width:36px;height:36px;object-fit:contain" onerror="this.parentElement.innerHTML='<svg width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\'><path d=\'M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5\' stroke=\'currentColor\' stroke-width=\'1.5\' stroke-linecap=\'round\'/><circle cx=\'12\' cy=\'12\' r=\'3\' stroke=\'currentColor\' stroke-width=\'1.4\'/></svg>'">`
+              : '<svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M7 17c-2-2-3-5-1.5-8.5S11 3.5 15 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.4"/></svg>')}
       </div>
       <div style="flex:1">
         <div style="font-weight:800;font-size:16px">${nomePreparo}</div>
