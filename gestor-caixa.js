@@ -512,8 +512,11 @@ function pdvbAddItem(id){
     _pdvbAbrirModalItem(it, grupos, isKg);
     return;
   }
-  const ci=pdvbCart.find(c=>c.id===id&&!c.obs);
-  if(ci)ci.qty++;else pdvbCart.push({...it,qty:1,obs:''});
+  // Kit sem outros adicionais (só kit_itens/porcao_ref, por isso "grupos" veio
+  // vazio acima) — sem isso o conteúdo do kit nunca ia pro obs e sumia da comanda.
+  const obsKit = (typeof _pedidoObsComKit === 'function') ? _pedidoObsComKit(it, '') : '';
+  const ci=pdvbCart.find(c=>c.id===id&&(c.obs||'')===obsKit);
+  if(ci)ci.qty++;else pdvbCart.push({...it,qty:1,obs:obsKit});
   pdvbRenderOrder();sbToast('ok',`${it.name} adicionado!`);
 }
 
@@ -790,7 +793,11 @@ function _pdvbConfirmar(itemId) {
     if (opcoes.length) partesObs.push(`${grpNome}: ${opcoes.join(', ')}`);
   }
   if (obsLivre) partesObs.push(obsLivre);
-  const obs = partesObs.join(' · ');
+  let obs = partesObs.join(' · ');
+  // Kit: acrescenta "Kit: item1 · item2 | Forma de preparo: ..." — o grupo
+  // kit_itens foi filtrado lá em cima (não é um adicional selecionável), mas
+  // o conteúdo do kit precisa ir pro obs pra aparecer na comanda impressa.
+  if (typeof _pedidoObsComKit === 'function') obs = _pedidoObsComKit(it, obs);
 
   if (isKg) {
     const kg = parseFloat(document.getElementById('pdvb-kg-input')?.value || 1);
