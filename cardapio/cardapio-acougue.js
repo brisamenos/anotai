@@ -88,11 +88,16 @@ let _iconesVer = null;
 // Chaves de "forma de preparo" que têm vídeo customizado no lugar do ícone
 // estático (só existe pra tags, nunca pra cortes) — vem de /api/icones-version.
 let _preparoVideoTags = new Set();
+// Chaves de "forma de preparo" que têm FOTO customizada (PNG real, não o
+// ícone de linha padrão) — usadas pra pular o filtro brightness(0)+invert(1)
+// que deixaria a foto toda branca. Vem de /api/icones-version.
+let _preparoPhotoTags = new Set();
 (function _carregarIconesVersion(){
   fetch('/api/icones-version').then(r => r.ok ? r.json() : null).then(d => {
     if (d?.version) {
       _iconesVer = d.version;
       _preparoVideoTags = new Set(d.videoTags || []);
+      _preparoPhotoTags = new Set(d.photoTags || []);
       // Se os ícones já apareceram na tela antes da versão chegar, atualiza
       // a src deles agora pra garantir que não ficou uma versão em cache.
       document.querySelectorAll('img.ac-ico').forEach(img => {

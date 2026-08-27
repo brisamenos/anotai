@@ -860,7 +860,19 @@ async function init() {
       }
       try {
         const segR = await fetch('/api/tenant-segmento', { headers: { 'x-tenant-id': _tenantId } });
-        if (segR.ok) { const segD = await segR.json(); if (segD.segmento === 'acougue') { _segmento = 'acougue'; _tiposEntrega = _tiposEntrega.filter(t => t !== 'mesa'); document.body.setAttribute('data-segmento','acougue'); } }
+        if (segR.ok) {
+          const segD = await segR.json();
+          if (segD.segmento === 'acougue') {
+            _segmento = 'acougue';
+            _tiposEntrega = _tiposEntrega.filter(t => t !== 'mesa');
+            document.body.setAttribute('data-segmento','acougue');
+            // applyStatus já rodou antes do segmento ser conhecido (linha acima),
+            // então o banner "Esta loja está fechada..." pode ter ficado visível
+            // por engano no açougue (que já mostra o status no cartão da loja).
+            // Reaplica agora que _segmento está definido, sem refazer a request.
+            applyStatus();
+          }
+        }
       } catch(e) {}
       // Sincroniza offset de numeração com o gestor
       _orderNumOffset = parseInt(c.order_num_offset) || 0;
