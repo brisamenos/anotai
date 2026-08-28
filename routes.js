@@ -1119,6 +1119,15 @@ function _iniciarAutoCobrancaJob(ctx) {
 
   async function tick() {
     try {
+      // Só dispara em horário comercial, às 9h de Brasília — antes o job
+      // rodava a cada 6h desde o boot do servidor, sem horário fixo, e
+      // podia mandar a cobrança de madrugada. O intervalo ficou mais curto
+      // (30min) só pra não perder a janela das 9h; a checagem de fatura já
+      // pendente (mais abaixo) evita mandar a mensagem mais de uma vez no
+      // mesmo dia mesmo rodando várias vezes dentro da mesma hora.
+      const horaBrasilia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })).getHours()
+      if (horaBrasilia !== 9) return
+
       // Reverte preços promocionais/personalizados vencidos para o valor geral
       _expirarPromocoesVencidas(db, log)
 
@@ -1247,18 +1256,24 @@ function _iniciarAutoCobrancaJob(ctx) {
             if (telefone) {
               const valorTxt = parseFloat(valor).toFixed(2).replace('.', ',')
               const planoNome = _planoSaasLabel(plano)
-              const venceEmTxt = new Date(venceEm).toLocaleDateString('pt-BR')
+              // Data real de vencimento do plano (t.expires_at) — não a
+              // validade de 7 dias do código Pix (essa é só uma folga
+              // técnica pro pagamento ficar escaneável, não é o prazo real
+              // que o cliente tem antes do acesso ser suspenso).
+              const venceEmTxt = new Date(t.expires_at + 'T00:00:00').toLocaleDateString('pt-BR')
               const msg = [
                 `🧾 *Lembrete: sua mensalidade vence em breve*`,
                 ``,
-                `Olá! Seu plano *${planoNome}* do Estima Food vence em *2 dias*.`,
+                `Olá, *${t.nome}*! Seu plano *${planoNome}* do Estima Food vence em *2 dias*.`,
                 ``,
                 `💰 *Valor:* R$ ${valorTxt}`,
                 `⏰ *Pague até:* ${venceEmTxt}`,
                 ``,
                 `💸 *Pague agora via PIX* — escaneie o QR Code que vou te enviar ou use o código Copia e Cola abaixo:`,
                 ``,
-                `_O pagamento renova seu acesso automaticamente._ ✅`
+                `_O pagamento renova seu acesso automaticamente._ ✅`,
+                ``,
+                `⚠️ *Atenção:* se o pagamento não for feito até ${venceEmTxt}, o acesso ao sistema será suspenso.`
               ].join('\n')
               const instCob = _getInstanciaCobranca(db, EVO_INST)
               await sendWA(telefone, msg, instCob)
@@ -1281,9 +1296,10 @@ function _iniciarAutoCobrancaJob(ctx) {
     } catch (e) { log('⚠️', 'Auto-cobrança job erro geral:', e.message) }
   }
 
-  // Roda 1x ao iniciar (após 5min para não atrasar startup) e depois a cada 6h
+  // Roda 1x ao iniciar (após 5min para não atrasar startup) e depois a cada
+  // 30min — o próprio tick() decide não fazer nada fora das 9h de Brasília.
   setTimeout(tick, 5 * 60_000)
-  setInterval(tick, 6 * 3600_000)
+  setInterval(tick, 30 * 60_000)
 }
 
 module.exports = async function handleRoutes(req, res, ctx) {

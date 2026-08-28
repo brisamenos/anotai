@@ -310,9 +310,8 @@ select.input{width:auto;margin:0;min-width:150px}
           </div>
           <div>
             <label class="label">Plano</label>
-            <select class="input" id="gestor-plano">
-              <option value="pro">Pro - Sem robo</option>
-              <option value="premium">Premium - Com robo IA</option>
+            <select class="input" id="gestor-plano" disabled style="opacity:.75;cursor:not-allowed">
+              <option value="premium">Anotai — Plano único (tudo incluso)</option>
             </select>
           </div>
           <div>
@@ -699,7 +698,7 @@ async function criarGestorCliente(btn) {
     document.getElementById('gestor-estabelecimento').value = '';
     document.getElementById('gestor-slug').value = '';
     document.getElementById('gestor-slug').dataset.touched = '';
-    document.getElementById('gestor-plano').value = 'pro';
+    document.getElementById('gestor-plano').value = 'premium';
     document.getElementById('gestor-segmento').value = 'restaurante';
     document.getElementById('gestor-nome').value = '';
     document.getElementById('gestor-email').value = '';
